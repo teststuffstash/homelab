@@ -1,0 +1,18 @@
+# homelab#379 leg 2 — coordinator scan ADR-097 footprint hold still works with extracted helper.
+#
+# CONDITION UNDER REPLAY. The touches-check.sh helper (extracted for the reviewer) is sourced
+# by the scan and used to compute footprint conflicts. Test: fp_conflict_multi correctly detects
+# overlapping declared Touches between queued and in-progress issues.
+#
+# THE CONTRACT:
+#   1. touches-check.sh exports fp_norm_entry, fp_pair_conflict, fp_conflict, fp_conflict_multi
+#   2. fp_conflict_multi correctly identifies when a queued issue's touches overlap in-progress
+#   3. The scan uses the SAME logic as the reviewer — zero drift, one home (homelab#379)
+#
+# Parts: bridge.sh (seams: HERE, test via direct function calls) + inline test
+name: scan-touches-footprint-hold
+mode: actions
+source: agents/touches-check.sh
+parts:
+  - file:bridge.sh
+  - file:test.sh

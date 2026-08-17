@@ -241,6 +241,69 @@ fi
 PREP
 )
 
+# ── TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — a POD-SIDE part, quoted heredoc ──────────
+# Runs in the pod AFTER $PREP (so $ISSUE, $CHANGED and $PROMPT already exist there), which is why
+# it is a separate quoted part and not more PREP: inside the unquoted <<PREP heredoc every one of
+# these references would need backslash-escaping to survive to the pod, and round 5 of PR#473
+# proved that class of defect is invisible to CI and replay alike (the block compiled to dead code
+# in the launcher). The helper pair is fetched master-pinned from the public homelab repo — the
+# FU-101 lens pattern — because the review pod only holds the PROJECT's clone; a launcher path
+# like $HERE does not exist here. A safety belt must FAIL OPEN: $PREP's `set -e` is still live in
+# this shell, so every fallible command is guarded, and any fetch/source/compute failure degrades
+# to TOUCHES-ESCAPES: unavailable plus a WARN — never a dead review lane.
+TOUCHESPART=$(cat <<'SNIP'
+# >>>REPLAY:reviewer-touches-check>>>
+TOUCHES_ESCAPES="unavailable"
+if [ -z "${ISSUE:-}" ]; then
+  TOUCHES_ESCAPES="undeclared"
+  echo "→ TOUCHES: undeclared (PR closes no issue)"
+else
+  TOUCHES_BASE="${TOUCHES_BASE:-https://raw.githubusercontent.com/teststuffstash/homelab/master/agents}"
+  _tc_ok=1
+  _tc_dir="$(mktemp -d)" || _tc_ok=0
+  if [ "$_tc_ok" = "1" ]; then
+    for _tc_f in touches-check.sh footprint.sh; do
+      curl -fsS --max-time 10 "$TOUCHES_BASE/$_tc_f" -o "$_tc_dir/$_tc_f" || { _tc_ok=0; break; }
+    done
+  fi
+  if [ "$_tc_ok" = "1" ]; then
+    . "$_tc_dir/touches-check.sh" 2>/dev/null || _tc_ok=0
+  fi
+  if [ "$_tc_ok" = "1" ]; then
+    ISSUE_BODY=$(gh api "repos/$REPO_SLUG/issues/$ISSUE" --jq '.body // ""' 2>/dev/null || true)
+    DECLARED_TOUCHES=$(printf '%s' "$ISSUE_BODY" | grep -iE '^[ \t]*touches:[ \t]*' | sed -E 's/^[ \t]*touches:[ \t]*//i' | tr -d '\r' | head -1)
+    ESCAPES_RAW=$(touches_check "$DECLARED_TOUCHES" "${CHANGED:-}" 2>/dev/null) || { _tc_ok=0; ESCAPES_RAW=""; }
+  fi
+  if [ "$_tc_ok" = "1" ]; then
+    if [ -n "$ESCAPES_RAW" ]; then
+      TOUCHES_ESCAPES=$(printf '%s\n' "$ESCAPES_RAW" | while read -r line; do
+        path="${line%%|*}"; marker="${line#*|}"
+        if [ "$marker" = "governance" ]; then
+          printf '[GOVERNANCE] %s\n' "$path"
+        else
+          printf '%s\n' "$path"
+        fi
+      done | sort)
+      echo "→ TOUCHES: escapes detected (ADR-097 footprint check — homelab#379):"
+      printf '%s\n' "$TOUCHES_ESCAPES" | sed 's/^/  /'
+    else
+      TOUCHES_ESCAPES="none"
+      echo "→ TOUCHES: no escapes (all paths covered by declared footprint)"
+    fi
+  else
+    echo "WARN: touches-check helpers unavailable (fetch/source/compute failed) — TOUCHES-ESCAPES: unavailable; the review proceeds (the belt fails open)"
+  fi
+fi
+export TOUCHES_ESCAPES
+PROMPT="${PROMPT:-}
+
+TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — declared \`Touches:\` footprint against the changed paths:
+  TOUCHES-ESCAPES: $TOUCHES_ESCAPES
+Semantics: \`none\` = every changed path is covered by the closing issue's declared footprint; \`undeclared\` = this PR closes no issue, so there is no footprint to check; \`unavailable\` = the checker could not run — treat it as NO SIGNAL, not as clean; otherwise each listed path fell OUTSIDE the declared footprint. When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`scripts/**\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`) — marked [GOVERNANCE] — the diff is BLOCKING per .agents/review.md §BLOCKING. This is computed fact for your rubric check, not a verdict."
+# <<<REPLAY:reviewer-touches-check<<<
+SNIP
+)
+
 # §A1 transcript capture: the upload function + an EXIT trap are installed BEFORE the prep — so a
 # failed clone/checkout (set -e) still uploads a manifest recording the attempt (the design's
 # "trap, so failures upload too"). Single-quoted heredoc: pure pod-side — values arrive via pod env
@@ -331,7 +394,7 @@ cat /tmp/result.json
 exit $RC
 SNIP
 )
-ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s' "$UPLOADER" "$PREP" "$RUNPART" | jq -Rs .)]"
+ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s\n%s' "$UPLOADER" "$PREP" "$TOUCHESPART" "$RUNPART" | jq -Rs .)]"
 
 # >>>REPLAY:reviewer-go-failover-gate>>>
 # FU-088(a): defer while the subscription is 429-latched (covers the Sensor path too, which

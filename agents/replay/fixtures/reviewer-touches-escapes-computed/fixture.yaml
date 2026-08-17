@@ -1,0 +1,18 @@
+# homelab#379 leg 2 — reviewer Touches-escape detection: escape list computed and injected.
+#
+# CONDITION UNDER REPLAY. PR closes issue #123, the issue has a declared Touches: footprint,
+# and the PR diff includes paths that fall outside that footprint, including governance paths.
+#
+# THE CONTRACT:
+#   1. Touches-check helper is sourced and computes the escape set
+#   2. Escapes into governance paths are marked with [GOVERNANCE]
+#   3. TOUCHES_ESCAPES is set and exported, available to the review prompt
+#   4. The escape list is printed to stderr for debugging
+#
+# Parts: bridge.sh (seams: ISSUE, CHANGED, touches_check) + block:reviewer-touches-check
+name: reviewer-touches-escapes-computed
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-touches-check

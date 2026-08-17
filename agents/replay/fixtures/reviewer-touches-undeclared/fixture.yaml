@@ -1,0 +1,17 @@
+# homelab#379 leg 2 — reviewer Touches-escape detection: undeclared (no issue, no Touches line).
+#
+# CONDITION UNDER REPLAY. Case A: PR closes no issue (ISSUE is empty). Case B: Issue exists but
+# has no Touches: line in its body.
+#
+# THE CONTRACT:
+#   1. When ISSUE is empty or undeclared Touches is detected, TOUCHES_ESCAPES is set to "undeclared"
+#   2. The undeclared message is printed to stderr
+#   3. Exclusive semantics — no paths are checked as escapes (the footprint hold already serialized)
+#
+# Parts: bridge.sh (seams: ISSUE, CHANGED) + block:reviewer-touches-check
+name: reviewer-touches-undeclared
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-touches-check
