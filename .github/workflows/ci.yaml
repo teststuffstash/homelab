@@ -178,6 +178,8 @@ jobs:
       # remaining FU-158 leg.
       - name: PrometheusRule exprs parse (devbox run prometheus-rules-lint)
         run: devbox run prometheus-rules-lint
+      - name: machines/generate.py outputs current (devbox run machines-lint)
+        run: devbox run machines-lint
 
       # tofu paths are CODEOWNERS-gated (a human reads the diff), so CI buys the cheap half only:
       # fmt is free, while `tofu validate` needs a provider download per PR (the FU-130 WAN class).
