@@ -209,9 +209,11 @@ migrate through).
 
 `scripts/claude-model-shim.py` (local rail split: route by body model id, credential per rail,
 oauth never crosses to Go — self-tested + live-proven) · `scripts/claude-go.sh` (claude-or
-pattern; slot map from gitignored `.opencode-go.env`: haiku→glm-5.2, sonnet→kimi-k3,
-opus→deepseek-v4-pro, subagent default glm; main model — fable — stays subscription;
-`CLAUDE_GO_ALL=1` for pure-Go) · claude-jail alias `homelab-go` (upload port 8012). The shim is
+pattern; slot map from gitignored `.opencode-go.env`, operator-set 2026-08-17:
+haiku→deepseek-v4-flash, sonnet→kimi-k3, opus→qwen3.8-max, subagent default
+deepseek-v4-flash; main model — fable — stays subscription; `CLAUDE_GO_ALL=1` for pure-Go.
+Takes effect at the next `claude-go` launch, which also picks up the chunk-G gometer —
+jail Go burn self-meters from there) · claude-jail alias `homelab-go` (upload port 8012). The shim is
 deliberately the M11 rail-split shape so lessons transfer to the proxy.
 
 ## Preconditions before the fleet flip (acceptance criteria)
