@@ -1,3 +1,4 @@
+# witness-only: AgentQueueStalledPre330, GithubActionsMinutesHighPre331, GithubAppPermissionDriftPre331, GithubExporterStalePre313, GithubPaidUsagePre331, GithubRateLimitLowMaxDirection, GithubRateLimitLowPre331, GithubVendorOutagePre331
 # The github-exporter alerts that carry a `for:` window over a single-replica scrape — the "is the
 # loop / the poller alive" three plus the five persistent-condition alerts hardened in homelab#331
 # — lifted VERBATIM out of prometheusrule.yaml (comments stripped, the manifest is their one home).

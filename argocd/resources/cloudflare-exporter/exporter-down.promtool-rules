@@ -1,3 +1,4 @@
+# witness-only: CloudflareExporterDownBridged334
 # CloudflareExporterDown — the one alert in this directory's rule file that spend-belt.promtool-*
 # does NOT cover (FU-158's remaining leg here, #351) — lifted VERBATIM out of prometheusrule.yaml
 # (comments stripped, the manifest is their one home). This is the rules file that
