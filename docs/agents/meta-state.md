@@ -19,6 +19,26 @@ meant to avoid.)
   codeowner gate — corpus-loaded at start, seat merges the small, escalates the big; cluster
   identities still merge nothing. Recorded in adr.md + chainless-redesign §maintenance session;
   the agent-platform-direction memory's "per-PR human tap" reading is superseded.
+- **2026-08-18 wind-down pickup (supersedes the 08-17 bullet below; full story = TICK-LOG):**
+  (1) **wk-03 IN FLIGHT, tree DIRTY on purpose**: the #534 longhorn-flag set (machines.yaml +
+  variables.tf + generated tables) is UNCOMMITTED pending verify-then-commit — check
+  `scratchpad/recover-wk03.log` (a nohup recovery: trims done, pool **60.62%**, recreate was
+  running): manager 2/2 on wk-03 ⇒ commit the set + close #534; failed ⇒ the known failure mode
+  is a PARTIAL DISK IMPORT on VM replace (0.51%-allocated disk, boot-loop; second attempt also
+  died to the pool re-filling from Longhorn rebuild churn — now trimmed). ⚠ Pool reclaim works
+  ONLINE now (discard=on live everywhere; fstrim via privileged kube-system pod, no reboots).
+  (2) ⚠ `kubernetes_labels.longhorn_bulk_zone["wk-metal-04"]` escalated flap→**field-manager
+  CONFLICT** — kills FULL applies (targeted applies fine); chase before the next broad apply.
+  (3) PR watch: #543 (merges itself on green; closes #472) · #544 (#478 ride, mid-cycle) ·
+  queued rides still to surface: #369/#488/#501/#520-follow-ons?/#492/#536/#541/#519(done via
+  #537)/AR#72/73. #420 is probably CLOSABLE (part 1 + leg 2 (#528) merged; residue = the
+  post-reset sonnet re-reviews). (4) Soaks: nix-cache 16g NOW real (rolled + checksum belt
+  #537) — watch devbox-install p50 → ~45s; minRunners readout; #540 gometer (operator: other
+  container `git pull` + relaunch claude-go; the first-use-anchor test at any console reset
+  boundary); 08-25 argo purge; or-op#34. (5) **NEXT SESSION = BUILD session (bootstrap rule:
+  meta-state only, NO corpus): the G01 flip chunk** (App statuses:write click + required
+  sentinel check + workflows push-ruleset + drop the tier-1 scaffold line) **+ the ADR-110
+  paragraph into CLAUDE.md §How changes land.**
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners (operator-direct, pin-guarded
   file) — target ~2-min ci wall (job itself is 2m38s; ~4min was runner spin-up queue). Measure
   run-pickup deltas for a few days; revert to 0 if no win. Remaining setup cost tracked as an

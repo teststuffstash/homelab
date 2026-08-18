@@ -154,6 +154,11 @@ is stale, so it cannot drift the way the prose register did.
 | `doorbell-collapse` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell-fanout` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
+| `fu088-ladder-anthropic` | actions | - | `agents/agent-session.sh` | - |
+| `fu088-ladder-both` | actions | - | `agents/agent-session.sh` | - |
+| `fu088-ladder-go` | actions | - | `agents/agent-session.sh` | - |
+| `fu088-ladder-run-shape` | actions | - | `agents/agent-session.sh` | - |
+| `fu088-ladder-unthreadable` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch-clear` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch-defer` | actions | - | `agents/agent-session.sh` | - |
 | `goal-abandoned` | actions | - | `agents/coordinator-scan.sh` | IL-T21 IL-T22 |

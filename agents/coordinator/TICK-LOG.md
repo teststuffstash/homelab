@@ -4232,3 +4232,37 @@ accounting trusted, the #379 belt needed unparking, the operator wanted a design
   logging reset to warning. ⚠ lesson re-proven: an entity-recreation write bumps last_updated
   with an unchanged value — "fresh timestamps" after a reload proves NOTHING; verify revival by
   VALUE change vs a healthy control, not by staleness clearing.
+
+## 2026-08-18 — the board-clearing marathon (ADR-110's birth session)
+
+Condition → command, compressed by arc; this session ran /design-agents at start and became the
+first live ADR-110 maintenance session before the ADR existed.
+
+- **Morning board sweep** → 3 codeowner merges (#494 closed unmerged — dependencyDashboard OFF
+  at the source instead, ruling in renovate-global.json; #497 phone-home kill; #498 NodeSystemSat
+  scoped off the ephemeral pool); Goal #502 (Renovate, inert) authored; FU-125 absorbed into it.
+- **Triage arcs**: #237 closed (retro fired 08-17; the alert was a pushgateway-wipe false
+  continuation — timestamp restored, rule hardening rides the FU-058 split wave) · #107 closed
+  durably (mirrors→baseline ruling → #520 → PR#535 merged: tier-table egress model, identity-rule
+  primary) · #111 closed (+#508 latest-run semantics) · #103 closed (Composition mirror had
+  shipped 8fefea3) · #529 closed (ARS-roll transient) · #521/#522 incident pair (argo-server OOM
+  4x raise + 293-workflow purge; second sweep ~08-25) · #506 ruled whole-set (prose aligned) ·
+  #365/#369/#371 unparked via the #278 phantom-reservation detach (bucket #295 closed, IL-T19
+  sweep completed) · #472→PR#543 (SandboxChanged folded as OOMController corroboration;
+  talosctl marked node-access-only) · #492 queued w/ remedy doctrine (restart is NOT a remedy).
+- **Capacity day**: wk-03 VM (8vCPU/8G, ephemeral label boot-from-git — the label was imperative
+  before) + minRunners:1 + nix-cache 20G/16g (made REAL by #519→#537 checksum belt after the
+  subPath-inert discovery) + #518 setup-minute legs + the discard=on saga: pool 81%→60.6% via
+  online trims; VM-replace partial-disk-import failure mode found (0.51% disk, boot-loop);
+  longhorn=true flag for wk-03 (#534 — the DS tolerates ephemeral, base image lacked iscsi).
+- **ADR-107 closure**: #499 scout canary merged · #526 (#371) · #527 (#365 class block) ·
+  #528 = #439 leg 2 MERGED — the ONE ladder gates workers/retro; failover story complete ·
+  sleep chain → Go flash (mimo evicted on the 3-strike day; sleep mainRepo → sleep-tracking,
+  unconflating dispatch metrics) · #540 gometer first-use-anchor finding (console 35% vs meter
+  0.77%) · direction 4 (total cost) + M8 feed-4 (workload profiles) banked.
+- **Doctrine**: phone-home kill-at-the-tool + spike-lite intake (PR#503) · replay ambient-env
+  hermeticity (PR#532, 3 same-day sightings) · TOOL_GAP marker (#536) · kmsg→Loki Path A (#541)
+  · or-op#42 author-keyed .agents carve-out (direct) · **ADR-110** (maintenance session = the
+  codeowner gate; G01 flip UNPARKED for next session) · design-agents skill trimmed 145k→110k.
+- Subagent A/B: two clean runs (#486 shim race 30/30-proven; #504 rules-lint values leg with
+  both red probes), zero functional seat findings; one comment-count fixup total.
