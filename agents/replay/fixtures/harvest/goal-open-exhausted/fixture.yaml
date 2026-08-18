@@ -1,0 +1,36 @@
+# ADR-102 / homelab#207 — fixture (b): GOAL OPEN, BUDGET EXHAUSTED → the sprout lands in the
+# bucket INERT.
+#
+# CONDITION UNDER REPLAY. Identical world to fixture (a) with one number changed: the goal's
+# `Budget:` line reads $1 against Σ(spend + reservations) $1.75. The goal is still OPEN, #35 still
+# carries `Base: goal/29-p0-complete`, and under the pre-ADR-102 rule that combination queued.
+# Here it comes out `harvest=inert` (was `selfqueue=no` pre-ADR-106) — the right to queue is a GRANT from a FUNDED goal, and this
+# one has nothing left to grant.
+#
+# WHY THE SAME HELPER AND NOT A SECOND SUM. The ⚖ line on #207 is explicit: the launcher pre-flight
+# stays the enforcing gate and the harvest must not re-derive its arithmetic. The bridge sources
+# agents/goal-budget.sh from the checkout and stubs only its two I/O seams, so this fixture reds if
+# the launcher's accounting and the harvest's ever diverge — which is the whole reason the sum was
+# extracted rather than copied.
+#
+# THE BUCKET ALREADY EXISTS here (the recorded `sub_issues` answers #77), which pins the OTHER half
+# of the idempotency contract fixture (a) pins: no `gh issue create` appears in this stream. One
+# goal, one container, however many closeouts run through it.
+pins:
+  - IL-T15
+  - IL-T17
+name: harvest-goal-open-exhausted
+mode: actions
+world: circles-29-tree
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:harvest-disposition
+  - file:post.sh
+env:
+  - IN_ORG=teststuffstash
+  - IN_REPO=circles
+  - IN_CLAUSE=merged-closeout
+  - IN_ITEM=issue-35
+  - IN_WMODEL=claude/haiku
+  - IN_CAP=2.0000

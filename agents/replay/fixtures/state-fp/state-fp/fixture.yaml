@@ -1,0 +1,17 @@
+# The harness's first fixture, and the reason the harness exists (homelab#201 → #206).
+#
+# mode: suite — this replay was written before the harness and carries its own 88-row assertion
+# table (stability/movement of the fingerprint, the PR#234 five-rides sequence, the fail-open
+# edges). It is registered here, NOT rewritten: `devbox run state-fp-replay` keeps its name and its
+# required status in .github/workflows/ci.yaml, and converting a load-bearing pin into a different
+# vocabulary in the same PR that introduces the vocabulary is how you lose the pin.
+#
+# What registration buys today: `bash agents/replay/run.sh` is the one entry point for every clause
+# pin, so a new fixture cannot be added and forgotten. What it buys next: the suite's own
+# extract()/stub/assertion copies fold onto agents/replay/stubs/ once a fixture in `actions` mode
+# has ridden a few clause changes (ADR-103 — backfill follows fix-density, not big-bang).
+pins:
+  - MP-T11
+name: state-fp
+mode: suite
+entrypoint: agents/state-fp-replay.sh

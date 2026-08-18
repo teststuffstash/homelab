@@ -1,0 +1,40 @@
+# homelab#257 (retro r3 F4) — leg B: the near-miss half. Talking ABOUT the terminal is not the
+# terminal, and an issue a human already blocked is not a C4/C5 candidate at all.
+#
+# CONDITION UNDER REPLAY. The thread of this very issue, which is the worst case by construction:
+# its TITLE is the marker, its body quotes the marker, an operator has quoted a past worker's exit
+# (`> AGENT_INFEASIBLE: …`) and another comment names it mid-sentence. Under an unanchored
+# `contains`-style read every one of those latches, and the loop would park the issue that is
+# building the terminal — the exact defect the fix-debounce lane's `alert-fp:` test was fixed for
+# (homelab#244), one lane over.
+#
+# THE CONTRACT:
+#   1. #66 is READ and draws NO write. Not a label, not a comment. Its verdict is the ordinary one:
+#      a `c4c5-redispatch` unit plus its `v2` report line, byte-identical to the behaviour before
+#      the terminal existed. INFEAS stays empty — the anchor held, and the fixture says so in the
+#      clause's own vocabulary rather than by the absence of lines.
+#   2. #71 carries `agent/in-progress` AND `agent/blocked` — a human blocking a ride mid-flight, or
+#      the terminal itself caught between its two non-atomic label writes. The C4/C5 selector must
+#      drop it BEFORE the comments probe: it appears in this stream NOWHERE — no `CALL gh api …
+#      issues/71/comments`, no unit, no report line. Re-dispatching a human-gated issue is the one
+#      thing this clause must never do, and the old code left it to an ASSUMPTION in a comment
+#      ("blocked issues never carry in-progress") rather than to a guard.
+#   3. #71 is deliberately given no comments recording, but note that is not what catches a
+#      regression: the probe's own `2>/dev/null … || icmt=""` swallows the stub's death and turns
+#      it into a PROBE_FAILED report line. The assertion that bites is the extra CALL and that
+#      extra line in the stream — the same reasoning `arbitrate-first-tick` records for PR #235.
+#
+# Its sibling `c4c5-infeasible-parks` holds the positive half: a real verdict, parked and audited.
+pins:
+  - IL-T06
+  - IL-T26
+name: c4c5-infeasible-quoted-inert
+mode: actions
+world: circles-29-tree
+source: agents/coordinator-scan.sh
+parts:
+  - block:c4c5-selector
+  - file:bridge.sh
+  - block:infeasible-terminal
+  - block:c4c5-derivations
+  - file:post.sh

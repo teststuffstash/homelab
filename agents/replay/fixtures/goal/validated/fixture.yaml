@@ -1,0 +1,32 @@
+# ADR-102 / homelab#208 — fixture (c): the VALIDATED terminal, and the close sweep that is a
+# REPORT and not a batch action.
+#
+# CONDITION UNDER REPLAY. The same post-launch tree as fixture (b) — bucket #77, live sprout #95
+# still `agent/queued` — but production CONFIRMS the idea and a human applies `goal/validated`.
+# The contract, and the interesting half of it is what does NOT happen:
+#   1. the goal closes `--reason completed`. That is the ONLY write in the stream.
+#   2. NOT ONE descendant is touched. Compare with fixture (b), whose identical tree draws two
+#      `gh issue close` calls: same walk, same descendants, different verdict, and the difference
+#      is visible in the action stream rather than argued in prose.
+#   3. the close sweep is surfaced as a REPORT line with a proposed disposition PER descendant —
+#      the bucket flagged CONTAINER, the queued sprout flagged LIVE, inert ones flagged INERT. ⚖
+#      pre-decided on #208: batch disposition becomes legal exactly here, and stays
+#      operator-confirmed until the goal registry panel exists. "Close 14 issues" is the one batch
+#      act nobody can undo by reading a diff, so the machine proposes and a human disposes.
+#
+# The sweep text is pinned VERBATIM (no scrub) — it is the product of this leg, not decoration.
+pins:
+  - IL-T19
+  - IL-T22
+name: goal-validated
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:goal-lane
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles
+scrub:
+  - s|--comment 🤖 goal terminal: \*\*VALIDATED\*\*.*|--comment <goal terminal comment — see agents/coordinator-scan.sh>|
