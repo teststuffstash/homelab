@@ -2,6 +2,12 @@
 # a higher-priority nix substituter; the first miss fetches upstream and caches the (immutable) narinfo
 # + nar to the Longhorn PVC, every run after is LAN-speed. Bodies pass through byte-for-byte, so the
 # upstream cache.nixos.org signatures stay valid — no new trusted key is needed on the clients.
+#
+# ⚠ MAINTENANCE CONTRACT (issue #519): deployment.yaml mounts this file via subPath, so kubelet never
+# live-refreshes it — only a new pod spec rolls. Editing this file requires recomputing the
+# Deployment's `checksum/config` annotation in the SAME commit (`sha256sum
+# argocd/resources/nix-cache/configmap.yaml`), else the old config keeps running with git and the
+# cluster both green (the #500 inert-fix failure mode).
 apiVersion: v1
 kind: ConfigMap
 metadata:

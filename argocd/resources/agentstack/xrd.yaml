@@ -438,9 +438,10 @@ spec:
                               choosing the Docker-capable VM runner over an ephemeral
                               in-cluster runner. Costs: ~5Gi VM per ride (one per node —
                               the 8G-laptop ceiling), in-cluster services ride resolved
-                              endpoint IPs until FU-072, image pulls hit the internet until
-                              FU-073 mirrors land (the egress policy gains the registry
-                              FQDNs while docker=true).
+                              endpoint IPs until FU-072, and the `ghcr.io` FQDN stays on the
+                              egress allowlist because dockerd's `registry-mirrors` is Hub-only
+                              (the docker.io/ghcr pull-through mirrors themselves are BASELINE
+                              egress for every ride — homelab#520 — not gated by docker=true).
                           egress:
                             type: object
                             description: >-
