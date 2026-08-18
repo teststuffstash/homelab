@@ -109,9 +109,24 @@ spec:
         # same hole. It has the LONGEST window in this file, so a 180s scrape gap costs it two whole
         # hours — by "how much window a hole destroys" it is the strongest case here, not the
         # weakest, whatever its severity says.
+        # ⚠ homelab#478: EIGHT BY-DESIGN-STATIC ENTITIES excluded (the #221 re-fire noise half).
+        # Each of these only moves on a slow, deliberate schedule, so a full day without an update
+        # is DESIGN, not a stalled integration — the alert was reading their staleness as a defect
+        # and re-firing on every HA restart. The ids come from the #221 probe comment's class
+        # enumeration, resolved to exact entities on 2026-08-18:
+        #   • sensor.backup_* — the backup-manager state plus the last-attempted /
+        #     last-successful / next-scheduled timestamps; idle between runs.
+        #   • sensor.nord_pool_ee_currency — literally always "EUR".
+        #   • sensor.redmi_note_9_pro_* — companion-app push sensors from a phone that no longer
+        #     reports.
+        # DELIBERATELY NOT EXCLUDED: the irrigation pump counters (sensor.office_plants_irrigation_*).
+        # They were the #221 tally's 9th member but are NOT static by construction — they sit still
+        # only when the soil is wet enough that no watering ran. Excluding them would blind this rule
+        # to the ESPHome irrigation node dying, which is exactly the class this alert exists to
+        # catch. Do not re-add them.
         - alert: HomeAssistantSensorStale
           expr: |
-            time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer).*"}[10m]) > 86400
+            time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer|backup_(backup_manager_state|last_attempted_automatic_backup|last_successful_automatic_backup|next_scheduled_automatic_backup)|nord_pool_ee_currency|redmi_note_9_pro_(battery_level|battery_state|charger_type)).*"}[10m]) > 86400
           for: 2h
           labels:
             severity: info

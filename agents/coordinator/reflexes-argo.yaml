@@ -217,14 +217,16 @@ spec:
             requests: { cpu: "100m", memory: "256Mi" }
             limits: { memory: "512Mi" }
 ---
-# IAC-G04 policy sentinel (FU-106, built 2026-08-03) — v1 SHADOW: evaluates -iac PR heads
-# against homelab-owned rules (policy/iac/ + scripts/iac-sentinel.sh; Kyverno CLI is THE rule
-# engine per operator ruling — admission seat later) and reports to logs + pushgateway. Posts
-# NOTHING to GitHub and blocks nothing; the enforcement flip (statuses:write on the REVIEWER
-# App — never the worker's own identity — + required check) comes after the shadow soak.
-# Tamper-proof by construction even now: rules and engines come from THIS repo's master clone,
-# the PR tree is fetched as a tarball (data, never executed). Runs on the arc-runner image so
-# `devbox run` serves the pinned toolchain (kyverno/gitleaks ride the warm store).
+# IAC-G04 policy sentinel (FU-106, built 2026-08-03; G01 enforcement flip 2026-08-18 —
+# iac-lane.md §L0b): evaluates PR heads of the sentinel repos against homelab-owned rules
+# (policy/iac/ + scripts/iac-sentinel.sh; Kyverno CLI is THE rule engine per operator ruling —
+# admission seat later), reports to logs + pushgateway, and posts the REQUIRED `iac-sentinel`
+# commit status per head under the REVIEWER App identity (never the worker's own — it could
+# pass itself; SENTINEL_STATUS_TOKEN rides the reviewer-git Secret, empty = shadow). */5 so a
+# PR waits ≤ one tick for its status. Tamper-proof by construction: rules, engines, exceptions
+# and the gitleaks config come from THIS repo's master clone, the PR tree is fetched as a
+# tarball (data, never executed). Runs on the arc-runner image so `devbox run` serves the
+# pinned toolchain (kyverno/gitleaks ride the warm store).
 apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
 metadata:
@@ -232,7 +234,7 @@ metadata:
   namespace: agent-coordinator
 spec:
   schedules:
-    - "*/15 * * * *"
+    - "*/5 * * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300
   workflowSpec:
@@ -261,6 +263,11 @@ spec:
             - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc:9091" }
             - name: GH_TOKEN
               valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            # The enforcement write identity — the REVIEWER App's token (reads stay on
+            # coordinator-git above). Optional: absent secret = shadow mode, and until the App
+            # grant carries statuses:write the posts 403 loudly and the flip stays inert.
+            - name: SENTINEL_STATUS_TOKEN
+              valueFrom: { secretKeyRef: { name: reviewer-git, key: GH_TOKEN, optional: true } }
           volumeMounts:
             - { name: work, mountPath: /work }
           resources:
