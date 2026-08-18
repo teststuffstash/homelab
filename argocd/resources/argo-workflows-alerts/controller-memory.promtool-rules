@@ -1,5 +1,7 @@
-# witness-only: (none — WorkflowControllerMemoryNearLimit is DRIFT-PINNED against the CR)
-# The argo-workflows-memory alert, lifted VERBATIM out of prometheusrule.yaml (comments AND
+# No witness-only alerts in this file — WorkflowControllerMemoryNearLimit is DRIFT-PINNED against
+# the CR, so it must NOT appear under a `# witness-only:` declaration (that would let a future CR
+# rename pass the copy→CR walk silently). The argo-workflows-memory alert, lifted VERBATIM out of
+# prometheusrule.yaml (comments AND
 # annotations stripped — the manifest is their one home) — the rules file that
 # controller-memory.promtool-test loads. Not a manifest and not applied to anything: `promtool test
 # rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
