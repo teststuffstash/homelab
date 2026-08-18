@@ -91,7 +91,7 @@ variable "protected_repos" {
     agent-coordinator   = { required_checks = ["ci"], require_code_owner_review = true }
     agent-runtime       = { required_checks = ["ci"], require_code_owner_review = true }
     openrouter-operator = { required_checks = ["ci"], require_code_owner_review = true }
-    oracle-fleet        = { required_checks = ["ci"], require_code_owner_review = true } # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
+    oracle-fleet        = { required_checks = ["ci"], require_code_owner_review = true }                                          # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
     oracle-iac          = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # sleep-iac shape: deploy bumps gate on CI + sentinel, no review
     sleep-iac           = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true }
     sleep-tracking      = { required_checks = ["ci"] }
