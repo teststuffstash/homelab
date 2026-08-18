@@ -1,0 +1,52 @@
+# pve-upgrade — routine IN-MAJOR package maintenance for the Proxmox host.
+# Backup /etc/pve first, then `apt dist-upgrade` (the Proxmox-sanctioned form —
+# plain `apt upgrade` can hold back pve meta-packages and half-apply a stack).
+# NEVER reboots: the reboot belongs to the operator's maintenance window
+# (docs/runbook.md §Proxmox host maintenance window), which sequences guest
+# shutdown -> poweroff -> [wall-plug pull] -> boot. This role only reports
+# whether a reboot is pending.
+---
+- name: Capture pre-upgrade state
+  ansible.builtin.command: pveversion
+  register: pve_pre
+  changed_when: false
+
+- name: Snapshot /etc/pve + host network config
+  ansible.builtin.shell: |
+    set -e
+    ts=$(date +%Y%m%d-%H%M%S)
+    tar czf /root/etc-pve-${ts}.tar.gz -C / etc/pve etc/network/interfaces etc/hosts 2>/dev/null
+    echo /root/etc-pve-${ts}.tar.gz
+  register: pve_backup
+  changed_when: true
+
+- name: Fetch the snapshot to the controller cache
+  ansible.builtin.fetch:
+    src: "{{ pve_backup.stdout_lines[-1] }}"
+    dest: "{{ pve_backup_dest }}/"
+    flat: true
+
+- name: Apt update + dist-upgrade (in-major; sources pin the release)
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: dist
+    autoremove: true
+  register: pve_apt
+
+- name: Determine newest installed kernel vs running
+  ansible.builtin.shell: |
+    running="$(uname -r)"
+    newest="$(ls -1 /boot/vmlinuz-* | sed 's|.*/vmlinuz-||' | sort -V | tail -1)"
+    echo "running=${running} newest=${newest}"
+    [ "$running" = "$newest" ] && echo REBOOT-NOT-REQUIRED || echo REBOOT-PENDING
+  register: pve_kernel
+  changed_when: false
+
+- name: Report
+  ansible.builtin.debug:
+    msg:
+      - "was: {{ pve_pre.stdout }}"
+      - "apt changed: {{ pve_apt.changed }}"
+      - "{{ pve_kernel.stdout_lines }}"
+      - "backup fetched to {{ pve_backup_dest }}/"
+      - "Reboot (if pending) is the WINDOW's job — this play never reboots."
