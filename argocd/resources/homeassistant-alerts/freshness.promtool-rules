@@ -30,7 +30,7 @@ groups:
           severity: warning
       - alert: HomeAssistantSensorStale
         expr: |
-          time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer).*"}[10m]) > 86400
+          time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer|backup_(backup_manager_state|last_attempted_automatic_backup|last_successful_automatic_backup|next_scheduled_automatic_backup)|nord_pool_ee_currency|redmi_note_9_pro_(battery_level|battery_state|charger_type)).*"}[10m]) > 86400
         for: 2h
         labels:
           severity: info

@@ -22,6 +22,10 @@
 #   4. THE LABELS — there is no aggregation here (nothing churns on this target), and `entity` /
 #      `friendly_name` are the entire content of both annotations, so every exp_labels block below
 #      is also the assertion that the bridge did not strip them.
+#   5. THE EXCLUSION (homelab#478) — the by-design-static entities (backup-manager timestamps, the
+#      always-EUR nord pool currency, the dead-phone companion sensors) do NOT fire, while a
+#      genuinely-stale dynamic sensor in the same series still DOES (case 6). An exclusion that
+#      only silenced the noise half would be half a fix.
 #
 # ⚠ `stale` in an input series injects a REAL staleness marker — what Prometheus writes when a
 # scrape fails — so the holes below bite instantly with no 5m-lookback cushion, exactly as the
@@ -34,8 +38,9 @@
 #
 # LABELS are the real live sets read off `homeassistant_last_updated_time_seconds` on 2026-08-12,
 # complete — and the entities are real ones: sensor.plug_pve_power was frozen for 2.45 days at the
-# time of writing (the alert is firing in production), and sensor.nord_pool_ee_currency is one of
-# the entities HomeAssistantSensorStale currently holds.
+# time of writing (the alert is firing in production). sensor.nord_pool_ee_currency is one of the
+# by-design-static entities HomeAssistantSensorStale has EXCLUDED since homelab#478 — case 6
+# asserts both halves of that exclusion.
 rule_files:
   - freshness.promtool-rules
 
@@ -230,10 +235,12 @@ tests:
   # that matters here it is the strongest: the hole is the same three minutes, but the window it
   # destroys is two hours. The un-bridged form loses 103 minutes of detection to a scrape that
   # failed twice — asserted below, at 222m and 223m, against a bridged alert that fired at 120m.
+  # (Entity: the wedged plug — NOT in homelab#478's exclusion, so it still exercises the 2h window.
+  # Case 5 used to ride sensor.nord_pool_ee_currency, but that entity is excluded now.)
   - interval: 1m
     name: a 3m scrape gap costs the un-bridged 2h alert 103 minutes of detection
     input_series:
-      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.nord_pool_ee_currency",friendly_name="Nord Pool EE Currency",instance="192.168.40.10:8123",job="home-assistant"}'
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.plug_pve_power",friendly_name="Plug pve power",instance="192.168.40.10:8123",job="home-assistant"}'
         values: "-86460+0x99 stale _x2 -86460+0x200"
     alert_rule_test:
       - eval_time: 119m
@@ -242,17 +249,17 @@ tests:
       # the bridged alert rode the hole and pages exactly 2h in, as designed
       - eval_time: 120m
         alertname: HomeAssistantSensorStale
-        exp_alerts: &nordpool_alert
+        exp_alerts: &pve_stale_alert
           - exp_labels:
               severity: info
               domain: sensor
-              entity: sensor.nord_pool_ee_currency
-              friendly_name: Nord Pool EE Currency
+              entity: sensor.plug_pve_power
+              friendly_name: Plug pve power
               instance: 192.168.40.10:8123
               job: home-assistant
       - eval_time: 180m
         alertname: HomeAssistantSensorStale
-        exp_alerts: *nordpool_alert
+        exp_alerts: *pve_stale_alert
       # the un-bridged one restarted at t=103 and is still counting here…
       - eval_time: 120m
         alertname: HomeAssistantSensorStalePre336
@@ -267,7 +274,39 @@ tests:
           - exp_labels:
               severity: info
               domain: sensor
-              entity: sensor.nord_pool_ee_currency
-              friendly_name: Nord Pool EE Currency
+              entity: sensor.plug_pve_power
+              friendly_name: Plug pve power
               instance: 192.168.40.10:8123
               job: home-assistant
+
+  # ── 6. THE EXCLUSION (homelab#478): by-design-static entities stay quiet, dynamic stale ones fire ─
+  # The #221 re-fire noise was 8 entities that never update BY DESIGN (backup-manager timestamps, an
+  # always-EUR nord pool currency, dead-phone companion sensors). They are now excluded from the
+  # expr, and the exclusion is asserted here against the half that must survive: a genuinely-stale
+  # DYNAMIC sensor in the same series still fires. All three series below are frozen for a full day
+  # and move not once in the two hours this window needs — the only difference is the label set, i.e.
+  # whether the entity is on the exclusion list. A dynamic stale sensor (the wedged plug — the tuya
+  # class this alert exists to catch) pages; the excluded ones do not.
+  - interval: 1m
+    name: excluded static entities stay quiet while a genuinely-stale dynamic sensor still fires
+    input_series:
+      # excluded (homelab#478): backup-manager state is idle between runs
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.backup_backup_manager_state",friendly_name="Backup Backup manager state",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-86460+0x120"
+      # excluded (homelab#478): nord pool currency is literally always "EUR"
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.nord_pool_ee_currency",friendly_name="Nord Pool EE Currency",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-86460+0x120"
+      # NOT excluded: the wedged plug — frozen for 2.45 days in production (fixture header), the
+      # exact class the rule must keep catching. The irrigation pump counter is the same kind of
+      # deliberately-not-excluded case (see the manifest comment — do not re-add it).
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.plug_pve_power",friendly_name="Plug pve power",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-86460+0x120"
+    alert_rule_test:
+      # the 2h window has not elapsed for any of them
+      - eval_time: 119m
+        alertname: HomeAssistantSensorStale
+        exp_alerts: []
+      # only the non-excluded dynamic sensor fires — both excluded entities are silent
+      - eval_time: 120m
+        alertname: HomeAssistantSensorStale
+        exp_alerts: *pve_stale_alert
