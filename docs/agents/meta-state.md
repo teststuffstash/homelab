@@ -8,6 +8,17 @@ meant to avoid.)
 
 ## Live state (2026-08-11 end-of-pipeline consolidation — history is TICK-LOG's)
 
+- **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
+  buildout → then stacks.** The sentinel G01 flip + Bucket B WAIT for a clear board — no point
+  building on top of failing state, and the in-flight-work navigation cost is real (~100k of the
+  design-agents corpus is in-progress state). Board-clearing sessions are the current mode; the
+  flip/Goal work un-parks when the board is clean.
+- **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners (operator-direct, pin-guarded
+  file) — target ~2-min ci wall (job itself is 2m38s; ~4min was runner spin-up queue). Measure
+  run-pickup deltas for a few days; revert to 0 if no win. Remaining setup cost tracked as an
+  issue (Set-up-job 1m5s: launch.actions.githubusercontent.com DNS retry + per-job action
+  downloads).
+
 - **2026-08-17 overnight pickup (the all-day session's tail — full story in TICK-LOG):**
   (1) **PRs in flight, all machine-owned:** #475 (⏸ inventory re-word — a jail watch applies the
   operator's standing codeowner approval when the bot re-approves; if the session died, approve
