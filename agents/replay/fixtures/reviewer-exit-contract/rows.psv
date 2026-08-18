@@ -1,10 +1,19 @@
 # reviewer-exit-contract — the decision table (family contract in fixture.yaml; per-row intent
-# below). One assert, six arms: the three terminals that let a session exit 0, the silent-green
-# class that must red, the crash-with-no-terminal honesty, and the fail-closed read.
-# id                        | world | patch (relpath @ patches/*.jq)                   | env                       | expect                  | params
-live-verdict-at-head        | clean | gh/pr-view-42.json @ patches/add-verdict.jq    | RC=0                      | live-verdict            |
-standing-aside-at-head      | clean | gh/pr-view-42.json @ patches/add-aside.jq      | RC=0                      | standing-aside          |
-agent-error-present         | clean | gh/pr-view-42.json @ patches/add-agent-error.jq | RC=0                      | agent-error             |
-no-terminal-silent-green   | clean |                                                 | RC=0                      | no-terminal-green       |
-no-terminal-claude-crashed | clean |                                                 | RC=127                     | no-terminal-crashed     |
-state-read-fails           | clean |                                                 | RC=0 STUB_GH_FAIL=1       | state-read-fails        |
+# below). One assert, eight arms: the three terminals that let a session exit 0, the silent-green
+# class that must red, the crash-with-no-terminal honesty, the fail-closed read, and the two
+# conflict-resolution-merge shapes added in round 2 (homelab#560 review finding — the merge-commit
+# filter must catch ALL of GitHub's default merge-message prefixes, not just the update-branch
+# "Merge branch 'x'"). The two conflict-merge rows are ADDITIVE: they pin that a merge as the
+# newest commit still resolves the assert's head to the CONTENT commit — the standing-aside
+# terminal at the content sha (newest_sha8 path) and a verdict between content and merge
+# (newest_commit date path) — both FINAL=0. Under the old startswith("Merge branch ") filter both
+# rows false-red FINAL=10 (a legitimately-posted aside/verdict invisible to the assert).
+# id                                        | world | patch (relpath @ patches/*.jq)                           | env                 | expect              | params
+live-verdict-at-head                        | clean | gh/pr-view-42.json @ patches/add-verdict.jq            | RC=0                | live-verdict        |
+standing-aside-at-head                      | clean | gh/pr-view-42.json @ patches/add-aside.jq              | RC=0                | standing-aside      |
+agent-error-present                         | clean | gh/pr-view-42.json @ patches/add-agent-error.jq        | RC=0                | agent-error         |
+no-terminal-silent-green                    | clean |                                                         | RC=0                | no-terminal-green   |
+no-terminal-claude-crashed                  | clean |                                                         | RC=127               | no-terminal-crashed |
+state-read-fails                            | clean |                                                         | RC=0 STUB_GH_FAIL=1 | state-read-fails    |
+conflict-merge-aside-at-content-sha         | clean | gh/pr-view-42.json @ patches/conflict-merge-aside.jq    | RC=0                | standing-aside      |
+conflict-merge-verdict-between-content-merge| clean | gh/pr-view-42.json @ patches/conflict-merge-verdict.jq  | RC=0                | live-verdict        |

@@ -432,9 +432,15 @@ assert_review_terminal() {
   state="$(gh pr view "${PR_NUMBER}" --repo "${REPO_SLUG}" --json reviews,comments,labels,commits,headRefOid 2>/dev/null)" || {
     echo "exit-contract: review-state re-read FAILED — cannot prove a terminal exists; failing closed" >&2; return 1; }
   # The newest NON-MERGE commit — the content this review was about; matches the STEP-0 aside
-  # marker's head= field and review-reflex.sh's at-head filter.
-  newest_commit="$(printf '%s' "$state" | jq -r '[.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate] | max // ""' 2>/dev/null)" || newest_commit=""
-  newest_sha8="$(printf '%s' "$state" | jq -r '[.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)] | sort_by(.committedDate) | last | .oid // ""' 2>/dev/null | cut -c1-8)" || newest_sha8=""
+  # marker's head= field and review-reflex.sh's at-head filter. A MERGE is skipped by its GitHub
+  # default message shape (homelab#560 round 2): the update-branch "Merge branch 'x'", the
+  # agent-authored conflict-resolution "Merge remote-tracking branch 'origin/x' into y" (this
+  # PR's own newest commit was exactly that — the old startswith("Merge branch ") filter resolved
+  # newest_sha8 to the MERGE sha and hid a legitimately-posted aside), and "Merge pull request #N".
+  # gh pr view --json commits does not expose .parents[], so the message-shape match is the
+  # structural test available on this call (coordinator probe, round-2 dispatch).
+  newest_commit="$(printf '%s' "$state" | jq -r '[.commits[]? | select(((.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "))) | not) | .committedDate] | max // ""' 2>/dev/null)" || newest_commit=""
+  newest_sha8="$(printf '%s' "$state" | jq -r '[.commits[]? | select(((.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "))) | not)] | sort_by(.committedDate) | last | .oid // ""' 2>/dev/null | cut -c1-8)" || newest_sha8=""
   head_ts="${newest_commit:-0000-00-00T00:00:00Z}"
   # TERMINAL 1 — a LIVE (non-DISMISSED, APPROVED/CHANGES_REQUESTED) verdict from our identity
   # submitted at or after the newest non-merge commit (the STEP-0 self-guard's own filter).
