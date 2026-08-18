@@ -59,8 +59,13 @@ spec:
           serviceAnnotations: { lbipam.cilium.io/ips: "192.168.40.24" }
           serviceLabels: { bgp: advertise }
           resources:
-            requests: { cpu: "50m", memory: "64Mi" }
-            limits: { memory: "128Mi" }
+            # 4x raise (homelab#522, 2026-08-18): the #510 sync rolled the server into a pod that
+            # OOMKilled at 128Mi ~2s after start, crash-looping — startup indexes the retained-
+            # Workflow backlog (795 at fix time; the #510 TTL defaults only cover NEW submissions,
+            # the backlog needs its own sweep). Same class + same shape as the controller's #449
+            # fix one row up; server is the lighter component, half the controller's envelope.
+            requests: { cpu: "50m", memory: "256Mi" }
+            limits: { memory: "512Mi" }
   destination:
     server: https://kubernetes.default.svc
     namespace: argo
