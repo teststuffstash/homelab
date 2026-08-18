@@ -119,8 +119,32 @@ spec:
         #      deliberately not wholesale).
         # (vi) PORTED AT A DIFFERENT SIZE: CiDispatchStalled (homelab#335) takes the hole half at
         #      [5m], not [10m], because its `for: 10m` is itself sized on a phantom the bridge
-        #      extends. The range is not free there the way it is here — the arithmetic of that
-        #      interaction is written out at the alert.
+        #      extends. The range is not free there the way it is here — (vii) is the bound that
+        #      sizes it, and this alert's comment carries only its own arithmetic + a pointer.
+        # (vii) THE BRIDGE BOUND (#349) — the derivation for ANY range B on an alert whose `for:`
+        #       is sized on exposition staleness. Written out once, here, because it is a general
+        #       fact about the class (a `for:` window's phantom margin is exactly what a range
+        #       selector spends), not a CiDispatchStalled quirk — and it has now bitten in
+        #       opposite directions:
+        #
+        #           composed phantom = <exposition-cache period> + B      (the tails MAX, they do not add)
+        #           the window survives iff  for: > <exposition-cache period> + B
+        #
+        #       The phantom tail is how long the last stale sample stays READABLE after the
+        #       condition genuinely ends: the exporter's cached exposition keeps the old body up to
+        #       one poll period (<exposition-cache period> — 120s for github-exporter, ZERO for a
+        #       probe-at-scrape-time target like blackbox), and the range selector
+        #       `min_over_time(…[B])` / `max_over_time(…[B])` REPLACES whatever kept the vanished
+        #       series readable afterwards with exactly B — a range vector reads the raw samples in
+        #       (t−B, t] and no lookback applies to it. So the tails MAX rather than add, and the
+        #       bridge spends the window's phantom margin by subtraction. Executed, not argued —
+        #       each case below is pinned in its alert's fixture.
+        #       Cases it has decided: CiDispatchStalled (homelab#335) — 120s cache ⇒ B < 8m at
+        #       `for: 10m`, ships [5m]; EndpointProbeFailing ×2 (homelab#336) — no cache ⇒ the bound
+        #       reads `for: − B`, ZERO at this class's [10m], ships [5m]
+        #       (argocd/resources/blackbox/blackbox.yaml); the HA stale pair (homelab#336) — the
+        #       same bound read with slack (`30m > 10m`, `2h > 10m`), keeps [10m]
+        #       (argocd/resources/homeassistant-alerts/prometheusrule.yaml).
         #
         # FU-098: fires while an App's LIVE permissions differ from docs/github-apps.yaml in
         # EITHER direction. This IS the change flow's turn signal: a permission PR rings it
@@ -226,22 +250,15 @@ spec:
         #
         # ⚠ RESTART-GAP HARDENED (homelab#335) — and NOT by the mechanical port. The identity half
         # shipped with the alert (`max by (owner, runner)` above, #284); this adds the hole half at
-        # [5m] rather than the class's [10m], because the two interact. THE COMPOSITION QUESTION,
-        # ANSWERED: the bridge and the `for:` window neither compose freely nor multiply — the
-        # tails MAX rather than add, and the bridge SPENDS the window's phantom margin.
-        #   • The phantom tail is how long the last stale sample stays READABLE after the run is
-        #     really picked up: ≤120s of cached exposition (the run only leaves the body at the
-        #     next poll), plus whatever keeps the vanished series readable afterwards — nothing in
-        #     production (Prometheus staleness-marks it), the 5m lookback in the fixture's model.
-        #   • `min_over_time(…[B])` REPLACES that second term with exactly B: a range selector
-        #     takes the raw samples in (t−B, t] and no lookback applies to a range vector. So the
-        #     composed phantom is 120s + B — not 120s + 5m + B, and not the 10m + 10m = 20m the
-        #     issue asked about. The alert survives it iff `for:` > 120s + B, i.e. B < 8m here.
-        #   • At the class's [10m] that is 12m > 10m and the false positive #284 made
-        #     UNREPRESENTABLE becomes representable again: a run picked up just under the 30m
-        #     threshold pages ~11 min after CI recovered, when every check in the description below
-        #     reads healthy. Executed, not argued — `witness-bridge-10m` in the .promtool-rules
-        #     copy fires on exactly the pickup where the shipped expr stays silent.
+        # [5m] rather than the class's [10m], because the two interact — the composition bound that
+        # sizes the range is stated ONCE in the class block at the top of this group (item (vii),
+        # homelab#349); here is only this alert's arithmetic against it:
+        #   • Cached exposition of 120s ⇒ B < 8m at `for: 10m` — so the class's [10m] is over the
+        #     line: 12m > 10m and the false positive #284 made UNREPRESENTABLE becomes
+        #     representable again: a run picked up just under the 30m threshold pages ~11 min after
+        #     CI recovered, when every check in the description below reads healthy. Executed, not
+        #     argued — `witness-bridge-10m` in the .promtool-rules copy fires on exactly the pickup
+        #     where the shipped expr stays silent.
         #   • [5m] is the size that costs the window nothing it was not already priced for: it
         #     reproduces EXACTLY the 5m-lookback tail the phantom guard has modelled since #284
         #     (deliberately "a STRICTLY LONGER tail than production can produce"). That guard's
