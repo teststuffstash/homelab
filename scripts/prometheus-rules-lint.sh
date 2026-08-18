@@ -34,7 +34,7 @@ for f in $files; do
 done
 [ "$checked" -gt 0 ] && echo "prometheus-rules-lint: $checked file(s), $rules rule(s) checked$( [ $rc -eq 0 ] && echo ' — all parse' )"
 
-# LEG 2 — Helm-VALUES-defined alerts (homelab#504): the ~40 exprs living in the chart VALUES files
+# LEG 2 — Helm-VALUES-defined alerts (homelab#504): the values-defined exprs (18 at fix time) in chart VALUES files
 # (argocd/platform/values/kube-prometheus-stack.yaml's additionalPrometheusRulesMap: cilium, cnpg,
 # longhorn, node-health, office-plants, ...) were invisible to leg 1's `^kind: PrometheusRule` grep
 # and got ZERO parse protection. The chart inlines each additionalPrometheusRulesMap entry's content
