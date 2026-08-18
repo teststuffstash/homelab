@@ -986,6 +986,35 @@ case "$TASK" in
   *) POD="agent-${PROJECT}-$(date -u +%H%M%S)";;
 esac
 
+# ── FU-042 guard (a): the open-PR-liveness check, as a FUNCTION (sentinel-wrapped) so the
+# clause-replay fixture can drive its five arms without replaying the pre-flight's other guards
+# (WIP cap, session key, devbox.lock — pinned by their own fixtures). homelab#369 narrowed the
+# predicate from a bare `#N` MENTION to a strong link: any prose cross-reference in an unrelated
+# open PR used to park the issue and point the next round at the WRONG branch. The predicate is
+# the C6 strong-link grammar (implements/closes/fixes/resolves, optional colon), the same set the
+# review-flip belt and finalize key on — a sibling-seam mention is not a link. The alternation is
+# anchored left with `\b` so ordinary prose containing a keyword as a SUFFIX (`unresolved`,
+# `prefixes`, `disclose`) cannot false-match: the same failure the guard exists to kill, just
+# triggered by prose instead of a bare mention (reviewer finding, PR #567 round 1). --work-branch
+# == headRef stays the one legitimate fork exemption, unchanged.
+# >>>REPLAY:fu042-guard-a>>>
+fu042_guard_a() {
+  PF_PR_LINE="$(gh pr list --repo "$PF_SLUG" --state open --json number,body,headRefName \
+    --jq "[.[] | select(.body | test(\"(?i)\\\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #${PF_ISSUE}\\\\b\"))][0] | select(.) | \"\(.number) \(.headRefName)\"" 2>/dev/null || true)"
+  if [ -n "$PF_PR_LINE" ]; then
+    PF_PR="${PF_PR_LINE%% *}"; PF_HEAD="${PF_PR_LINE#* }"
+    if [ -z "$WORK_BRANCH" ]; then
+      echo "PREFLIGHT REFUSED: issue #${PF_ISSUE} already has open PR #${PF_PR} (${PF_SLUG}, branch ${PF_HEAD}) — resume it with --work-branch ${PF_HEAD}, don't fork it (FU-042)." >&2
+      exit 3
+    elif [ "$WORK_BRANCH" != "$PF_HEAD" ]; then
+      echo "PREFLIGHT REFUSED: --work-branch ${WORK_BRANCH} does not match open PR #${PF_PR}'s branch ${PF_HEAD} — a resume must land on the PR's own branch (FU-042)." >&2
+      exit 3
+    fi
+    echo "→ pre-flight: resuming open PR #${PF_PR} on its branch ${PF_HEAD} (fix round)"
+  fi
+}
+# <<<REPLAY:fu042-guard-a<<<
+
 # ── Dispatch pre-flight: deterministic guards (FU-042 + the TTL walls, TICK-LOG meta-2 2026-07-09) ──
 # The brief's soft judgment failed each of these live: a second coordinator pass double-dispatched an
 # in-progress issue (sleep-tracking#10 → conflicting PR #12), and three runs died on stale key/token
@@ -995,24 +1024,11 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     PF_ISSUE="${TASK#issue-}"
     PF_SLUG="${REPO_URL#https://github.com/}"; PF_SLUG="${PF_SLUG%.git}"
     # (a) FU-042: an issue with an OPEN agent PR is alive in the merge path — dispatching a fresh
-    # round would fork the work. The legitimate exception is a FIX ROUND resuming that PR's own
-    # branch (--work-branch == the PR's headRef); resuming onto any OTHER branch is still a fork.
-    # (Gap found live by the round-2 coordinator, 2026-07-09: the first cut refused unconditionally
-    # and forced an AGENT_PREFLIGHT=0 workaround.)
+    # round would fork the work. The predicate and the two refusal arms live in fu042_guard_a
+    # (defined above the pre-flight) so the clause-replay fixture can drive them; the legitimate
+    # exception is a FIX ROUND resuming that PR's own branch (--work-branch == the PR's headRef).
     if command -v gh >/dev/null 2>&1; then
-      PF_PR_LINE="$(gh pr list --repo "$PF_SLUG" --state open --json number,body,headRefName \
-        --jq "[.[] | select(.body | test(\"#${PF_ISSUE}\\\\b\"))][0] | select(.) | \"\(.number) \(.headRefName)\"" 2>/dev/null || true)"
-      if [ -n "$PF_PR_LINE" ]; then
-        PF_PR="${PF_PR_LINE%% *}"; PF_HEAD="${PF_PR_LINE#* }"
-        if [ -z "$WORK_BRANCH" ]; then
-          echo "PREFLIGHT REFUSED: issue #${PF_ISSUE} already has open PR #${PF_PR} (${PF_SLUG}, branch ${PF_HEAD}) — resume it with --work-branch ${PF_HEAD}, don't fork it (FU-042)." >&2
-          exit 3
-        elif [ "$WORK_BRANCH" != "$PF_HEAD" ]; then
-          echo "PREFLIGHT REFUSED: --work-branch ${WORK_BRANCH} does not match open PR #${PF_PR}'s branch ${PF_HEAD} — a resume must land on the PR's own branch (FU-042)." >&2
-          exit 3
-        fi
-        echo "→ pre-flight: resuming open PR #${PF_PR} on its branch ${PF_HEAD} (fix round)"
-      fi
+      fu042_guard_a
     fi
     # (b) live-worker cap per project: default WIP=1; a repo with independent TRACK lanes
     # (TRACKS.md) may run one worker per lane — the dispatcher sets AGENT_WIP_LIMIT=<lanes>
