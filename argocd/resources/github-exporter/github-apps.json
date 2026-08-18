@@ -72,8 +72,8 @@
           "why": "reviewer reads CI state (composition loop-reviewer gens)"
         },
         "statuses": {
-          "level": "read",
-          "why": "same"
+          "level": "write",
+          "why": "read: reviewer reads CI state (as checks). WRITE 2026-08-18 (G01 flip, iac-lane.md §L0b): the iac-sentinel posts its required `iac-sentinel` commit status under this identity — never the worker's own, which could pass itself"
         },
         "actions": {
           "level": "read",

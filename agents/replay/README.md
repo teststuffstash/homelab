@@ -531,6 +531,12 @@ Log each instance here, so the next author sees a register rather than a precede
   `f791937` (AWS_REGION in tsenv), `6b1ece6` (harvest runs as root), `4db553e` (bounded worst-K
   slice + pipefail) each touched `retro-argo.yaml` direct-to-master; all observable; the standing
   entry below covers the debt — the first retro-lane fixture family pins ALL of it.
+- **reviewer-git statuses:write (2026-08-18, the G01 flip PR#548)** — one permission field on
+  the ESO `GithubAccessToken` generator (`reviewer-git.yaml`), widening the minted token so the
+  iac-sentinel can post its required commit status under the reviewer identity. Declarative
+  credential minting: no clause reads the manifest and no branch turns on it — the harness
+  observes action streams, and this diff emits none (the sentinel's own posting behavior is
+  script-side, `scripts/iac-sentinel.sh`, which is not a clause file).
 - **guard stderr-fold fix (2026-08-11, homelab#237)** — the guard's busy-probe read kubectl's
   stderr "No resources found" as pod output (`2>&1`), refusing every fire since unsuspend; fixed
   to a split-stream read, both legs verified live from the jail (empty ns → idle, failing probe →

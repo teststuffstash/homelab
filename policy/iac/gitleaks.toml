@@ -1,0 +1,15 @@
+# The sentinel's gitleaks config (scripts/iac-sentinel.sh). Passed with --config from the
+# sentinel's own master clone — NEVER read from the scanned PR tree, where a hostile PR could
+# allowlist its own leak. Per-repo allowlist entries accumulate here (path-scope them), the
+# same central-ownership model as the kyverno exceptions next door.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "documented false positives in the homelab tree"
+regexTarget = "line"
+regexes = [
+  # docs/follow-ups-archive.md FU-057: prose "KEY_HASH end-to-end, NegativeCost/InfraDeathBurst"
+  # trips generic-api-key on entropy alone — it is a metric-name enumeration, not a credential.
+  '''KEY_HASH end-to-end''',
+]
