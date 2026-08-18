@@ -32,8 +32,59 @@ for f in $files; do
   fi
   checked=$((checked+1)); rules=$((rules+n))
 done
-[ "$checked" -gt 0 ] || { echo "prometheus-rules-lint: FAIL — validated nothing" >&2; exit 2; }
-echo "prometheus-rules-lint: $checked file(s), $rules rule(s) checked$( [ $rc -eq 0 ] && echo ' — all parse' )"
+[ "$checked" -gt 0 ] && echo "prometheus-rules-lint: $checked file(s), $rules rule(s) checked$( [ $rc -eq 0 ] && echo ' — all parse' )"
+
+# LEG 2 — Helm-VALUES-defined alerts (homelab#504): the ~40 exprs living in the chart VALUES files
+# (argocd/platform/values/kube-prometheus-stack.yaml's additionalPrometheusRulesMap: cilium, cnpg,
+# longhorn, node-health, office-plants, ...) were invisible to leg 1's `^kind: PrometheusRule` grep
+# and got ZERO parse protection. The chart inlines each additionalPrometheusRulesMap entry's content
+# VERBATIM as a PrometheusRule's spec.groups, so extracting the map with yq and promtool-checking
+# the extracted groups validates byte-identical content — hermetic, NO `helm template`, NO network
+# (a chart pull per CI run is FU-130's WAN class and blows the operator's 2-minute-CI target). The
+# annotations legitimately carry raw Prometheus templating (`{{ $labels.instance }}` etc.) — promtool
+# accepts these natively; nothing here helm-evaluates them.
+vfiles=$(grep -rl "additionalPrometheusRulesMap" argocd/ 2>/dev/null | sort || true)
+vchecked=0; vgroups=0; valerts=0
+for f in $vfiles; do
+  # each top-level key under additionalPrometheusRulesMap is a `groups:`-shaped document
+  if ! entries=$(yq -o=json '.additionalPrometheusRulesMap' "$f" 2>/dev/null | jq -r 'if type=="object" then keys[] else empty end'); then
+    echo "  FAIL $f: yq could not parse additionalPrometheusRulesMap — check the values file YAML" >&2
+    rc=1; continue
+  fi
+  [ -n "$entries" ] || { echo "  FAIL $f: additionalPrometheusRulesMap present but zero entries extracted — must be a non-empty map" >&2; rc=1; continue; }
+  fg=0; fa=0; file_rc=0
+  while IFS= read -r e; do
+    [ -n "$e" ] || continue
+    out="$tmp/$(printf '%s' "$(basename "$f" .yaml)-$e" | tr -c 'A-Za-z0-9._-' '_').json"
+    if ! yq -o=json ".additionalPrometheusRulesMap[\"$e\"]" "$f" > "$out" 2>/dev/null; then
+      echo "  FAIL $f (entry '$e'): yq could not parse — check the values file YAML" >&2
+      rc=1; file_rc=1; continue
+    fi
+    g=$(jq '[.groups[]?] | length' "$out" 2>/dev/null || echo 0)
+    a=$(jq '[.groups[].rules[]? | select(.alert or .record)] | length' "$out" 2>/dev/null || echo 0)
+    fg=$((fg+g)); fa=$((fa+a))
+    if [ "$g" -eq 0 ] || [ "$a" -eq 0 ]; then
+      echo "  FAIL $f (entry '$e'): yielded $g group(s), $a alert(s) — must be ≥1 of each (validated nothing)" >&2
+      rc=1; file_rc=1; continue
+    fi
+    if pout=$(promtool check rules "$out" 2>&1); then
+      echo "  ok  $f (values '$e': $a alert(s))"
+    else
+      echo "  FAIL $f (entry '$e'):"; printf '%s\n' "$pout" | sed 's/^/    /'
+      rc=1; file_rc=1
+    fi
+  done <<EOF
+$entries
+EOF
+  if [ "$file_rc" -eq 0 ] && [ "$fg" -eq 0 ]; then
+    echo "  FAIL $f: additionalPrometheusRulesMap extracted $fg group(s), $fa alert(s) — validated nothing" >&2
+    rc=1; continue
+  fi
+  [ "$file_rc" -eq 0 ] || continue
+  vchecked=$((vchecked+1)); vgroups=$((vgroups+fg)); valerts=$((valerts+fa))
+done
+[ "$vchecked" -gt 0 ] && echo "prometheus-rules-lint: values-defined rules: $vchecked file(s), $vgroups group(s), $valerts alert(s) checked"
+[ "$checked" -gt 0 ] || [ "$vchecked" -gt 0 ] || { echo "prometheus-rules-lint: FAIL — validated nothing" >&2; exit 2; }
 
 # FU-158 behaviour half (PR#310's deferred codeowner hook): run every promtool BEHAVIOUR fixture.
 # Fixture pairs live beside their PrometheusRule as <name>.promtool-{rules,test} (deliberately not
