@@ -58,6 +58,17 @@ spec:
         # On chart upgrades: re-render with containerMode dind and diff against this spec.
         template:
           spec:
+            # ndots:1 — runner jobs talk almost exclusively to EXTERNAL FQDNs; the stock
+            # ClusterFirst ndots:5 expanded every such name through 3 search domains first
+            # (measured fleet-wide 2026-08-18: 1.09M NXDOMAIN vs 448k NOERROR in 24h), 4x-ing
+            # both DNS latency and the exposure window to upstream flaps (#518's Set-up-job
+            # retry landed in the day's single SERVFAIL burst, 08:00-09:00Z). In-cluster
+            # service lookups from CI are rare-to-none; anything that needs one can use the
+            # FQDN. Evidence + diagnosis: #518 thread.
+            dnsConfig:
+              options:
+                - name: ndots
+                  value: "1"
             nodeSelector:
               homelab.io/ephemeral: "true"
             tolerations:
