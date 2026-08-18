@@ -171,7 +171,7 @@ machines:
       Desktop — highest absolute throughput of the tested boxes, but thirsty.
       WoL is not the control path: BIOS is set to power-on after AC loss, so the box never rests
       in S5 (a magic packet sent 2026-06-09 while the plug was ON found it already at full idle
-      draw, ~28 W, not waiting in standby). Remote power = cycle switch.konditsioneer_socket via
+      draw, ~28 W, not waiting in standby). Remote power = cycle switch.tuyalocal_thinkcentre via
       Home Assistant; it boots when AC returns. NIC-level WoL support is therefore unverified
       (Talos ships no ethtool) and moot for this box.
 
@@ -195,7 +195,7 @@ machines:
     # No AVX2 — verified via /proc/cpuinfo.
     talos_metal_node: true
     install_disk: /dev/sda
-    notes: No smart plug — power not measurable from here.
+    notes: On the hp plug (ex-konditsioneer NOUS A1, renamed 2026-08-18) — power measurable as sensor.plug_hp_power; switch.tuyalocal_hp can cycle it, but AC-restore is flaky so WoL is the recovery path.
 
   - name: wk-metal-01
     kind: metal
