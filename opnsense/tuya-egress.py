@@ -56,8 +56,8 @@ HOSTS = [
     ("192.168.2.16",  "Smart plug 2 -> opnsense"),
     ("192.168.2.209", "Smart plug 3 -> laptop3 / wk-metal-01"),
     ("192.168.2.130", "Smart plug 4 -> laptop4 / wk-metal-02"),
-    ("192.168.2.139", "NOUS A1      -> aquarium"),
-    ("192.168.2.80",  "NOUS A1      -> konditsioneer"),
+    ("192.168.2.139", "NOUS A1      -> thinkcentre"),
+    ("192.168.2.80",  "NOUS A1      -> hp"),
     ("192.168.2.243", "Temp-5       -> gaas"),
 ]
 ALIASES = [
