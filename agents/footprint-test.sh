@@ -50,6 +50,18 @@ fi
 # never run in parallel, which IS the old WIP=1 behavior.
 expect 0 "legacy vs legacy stays serial"              "*"                     "*"
 
+# ── the replay-tree exemption (ADR-097 addendum, 2026-08-18) ──────────────────────────────────
+# agents/replay/** entries are stripped before intersection: replay-only footprints hold nothing
+# and are held by nothing — including against the legacy `*` sentinel. Path-boundary aware:
+# agents/replay-foo is a sibling name, NOT exempt.
+expect 1 "replay vs replay never conflicts"           "agents/replay/**"      "agents/replay/**"
+expect 1 "replay entry vs broad agents glob"          "agents/replay/fixtures/x/**" "agents/**"
+expect 1 "replay-only vs the legacy sentinel"         "agents/replay/**"      "*"
+expect 1 "bare agents/replay (no glob) is exempt"     "agents/replay"         "agents/replay/run.sh"
+expect 0 "replay-ADJACENT name is not exempt"         "agents/replay-foo/**"  "agents/replay-foo/x.sh"
+expect 0 "mixed list: non-replay half still holds"    "agents/replay/**, agents/coordinator-scan.sh" "agents/coordinator-scan.sh"
+expect 1 "mixed list: replay half holds nothing"      "agents/replay/**, docs/**" "agents/replay/fixtures/y/**"
+
 if [ "$fails" -gt 0 ]; then
   echo "footprint-test: ${fails} FAILED"
   exit 1

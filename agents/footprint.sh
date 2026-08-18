@@ -17,6 +17,23 @@ fp_norm_entry() {
   printf '%s' "$_e"
 }
 
+# fp_replay_exempt <entry-or-path> → 0 iff it lives under agents/replay/ (path-boundary aware:
+# agents/replay-foo is NOT exempt). ADR-097 addendum (2026-08-18, the FU-167/FU-168 joint call,
+# operator-ruled): the replay tree is EXEMPT from footprint semantics on BOTH sides — the ADR-103
+# ratchet COMPELS a replay touch on every clause PR, so requiring its declaration was ceremony
+# that manufactured the unsatisfiable-footprint class (homelab#270/PR#275) and a governance block
+# on a compelled edit (PR#547), against ZERO real replay conflicts measured over 41 PRs. Content
+# safety is the review rubric's worlds-are-extraordinary rule + the ratchet, never path
+# declaration. ONE predicate, two call sites with deliberately different verbs: fp_conflict
+# STRIPS declared replay entries (no intersection holds), touches_check SKIPS changed replay
+# paths (never an escape) — stripping in only one place would invert the escape direction.
+fp_replay_exempt() {
+  case "$(fp_norm_entry "$1")" in
+    agents/replay | agents/replay/*) return 0 ;;
+  esac
+  return 1
+}
+
 # fp_pair_conflict <entryA> <entryB> → 0 iff the two entries overlap (path-boundary aware:
 # chassis ∩ chassis/api.py = yes; chassis ∩ chassis-x = no)
 fp_pair_conflict() {
@@ -37,8 +54,18 @@ fp_conflict() (
   _la="$(printf '%s' "$1" | tr ',' '\n' | tr -d ' \t')"
   _lb="$(printf '%s' "$2" | tr ',' '\n' | tr -d ' \t')"
   [ -n "$_la" ] && [ -n "$_lb" ] || return 1
-  for _a in $_la; do
-    for _b in $_lb; do
+  # ADR-097 addendum: replay-tree entries are stripped BEFORE pairing — a list that was
+  # replay-only becomes empty and conflicts with nothing (a replay-only issue dispatches beside
+  # anything, including a legacy `*` sentinel issue). The `*` sentinel itself normalizes to ""
+  # and is NOT exempt — legacy-vs-legacy stays serial exactly as before.
+  _fa=""; _fb=""
+  for _a in $_la; do fp_replay_exempt "$_a" || _fa="${_fa}${_a}
+"; done
+  for _b in $_lb; do fp_replay_exempt "$_b" || _fb="${_fb}${_b}
+"; done
+  [ -n "$_fa" ] && [ -n "$_fb" ] || return 1
+  for _a in $_fa; do
+    for _b in $_fb; do
       fp_pair_conflict "$_a" "$_b" && return 0
     done
   done

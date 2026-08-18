@@ -3,7 +3,10 @@
 
 ISSUE="123"
 REPO_SLUG="teststuffstash/homelab"
-# PR diff includes governance and non-governance paths, some inside and some outside declared Touches
+# PR diff includes governance and non-governance paths, some inside and some outside declared
+# Touches. The agents/replay/ path is DELIBERATE and must NOT appear in the expected stream:
+# since the ADR-097 addendum (2026-08-18) the replay tree is exempt from escape computation —
+# this fixture pins both halves at once (replay path silent, sibling governance escape reported).
 CHANGED=$(cat <<'EOF'
 argocd/resources/test.yaml
 agents/touches-check.sh

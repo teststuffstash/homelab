@@ -1202,6 +1202,19 @@ FU-111) ∧ conflicts (footprints) ∧ burn (FU-088 semaphore) are all determini
 judgment happens once, at authoring, where it is reviewable. A worker escaping its declared
 footprint is the residual risk — the reviewer flags escapes (belt, FU-086). Builds: FU-086.
 
+**Addendum — `agents/replay/**` exempt (2026-08-18, the FU-167/FU-168 joint call, operator-ruled).**
+The replay tree is stripped from footprint semantics on both sides: declared entries under it
+create no intersection holds, and changed paths under it are never `Touches:` escapes (one
+predicate — `fp_replay_exempt`, `agents/footprint.sh` — consumed by the scan hold and by
+`touches-check.sh`, which the scan and the reviewer both source). **Why:** the ADR-103 ratchet
+COMPELS a replay touch on every clause PR, so requiring its declaration was ceremony — it
+manufactured the unsatisfiable-footprint class (homelab#270/PR#275) and a governance block on a
+compelled edit (PR#547), against zero real replay conflicts measured over 41 PRs. Content safety
+stays with the review rubric's worlds-are-extraordinary rule, the ratchet itself, and git blame.
+**Considered:** per-family disjoint declarations (FU-167 move 5 still lands, for dedup/ownership
+— but the ceremony would remain); an authoring-side lint enforcing the clause-file↔replay pairing
+(unnecessary once nothing needs declaring — deliberately NOT built).
+
 ### ADR-098 — Recipe validity is a platform gate, not a stack CI check
 
 **Accepted 2026-08-04.** **Decision:** `.agents/*.yaml` recipes are parse-checked **platform-side**
