@@ -32,6 +32,15 @@ for t in awk sed diff jq; do
   command -v "$t" >/dev/null 2>&1 || { echo "clause-replay: needs $t (devbox run -- bash $0)"; exit 2; }
 done
 
+# Ambient-env hermeticity (2026-08-18, third sighting in one day — PR#497/#514/#526 all hit it):
+# a bridge default like `PROJECT="${PROJECT:-test-project}"` silently inherits the POD's own
+# `PROJECT=homelab`, and the fixture asserts against `homelab#42` locally while CI's clean env
+# passes — green-in-CI, red-in-any-pod, the inverted-hermeticity shape. Unset here, at the one
+# choke point every child (composed clauses, bridges, suite entrypoints, stubs) inherits from.
+# A fixture that genuinely needs one of these sets it via its own `env:` field, which applies
+# AFTER this line. Add newly-evidenced leaky vars here, not per-bridge.
+unset PROJECT
+
 # ── fixture.yaml ────────────────────────────────────────────────────────────────────────────────
 # A deliberately tiny YAML subset — `key: value` and `key:` followed by `- item` lines, no nesting.
 # Not laziness: the harness is the thing every other gate leans on, so it depends on nothing but
