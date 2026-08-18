@@ -1473,6 +1473,16 @@ if [ "$HARNESS" = "claude" ]; then
               exit 0;;
           esac
           RUN_CMD="$_new_cmd"
+          # PR#528 review round 3: the threading re-pointed the pod COMMAND, but SUB_LABEL/AGENT_RAIL
+          # (and the manifest's MODEL env) were computed above from the PRE-failover MODEL — the
+          # FU-088 semaphore would still count this Go-served ride against the Anthropic slots it
+          # never draws, and the #158 outage-cost store would not see the Go rail. Override them on
+          # the proven-threaded path only (the un-threadable defer above never reaches here),
+          # mirroring the RAIL_DEGRADED pattern — :418-420 runs before the label block and propagates
+          # cleanly; this failover runs after it, so the overrides must be explicit.
+          MODEL="$rail"
+          SUB_LABEL=', "homelab.teststuff.net/rail": opencode-go'
+          AGENT_RAIL="opencode-go"
           echo "→ Anthropic latched — serving ${PROJECT} on the Go rail ($rail)"
           ;;
       esac;;

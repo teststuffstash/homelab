@@ -195,6 +195,11 @@ STATE
   cat <<'POST'
 echo "REACHED: dispatch"
 echo "RUN_CMD: ${RUN_CMD:-}"
+# #439 leg 2 round 3 (PR#528): the failover arm re-points the pod command AND the downstream
+# signals the manifest renders from (labels SUB_LABEL, AGENT_RAIL env, MODEL env) — observed here
+# post-gate so H2 can assert a Go-served pod is NOT still labelled as an Anthropic-subscription ride.
+echo "SUB_LABEL: ${SUB_LABEL:-}"
+echo "AGENT_RAIL: ${AGENT_RAIL:-}"
 POST
 } > "$TMP/replay.sh"
 bash -n "$TMP/replay.sh" || { echo "rail-degrade-replay: the composed replay is not valid shell — a block boundary is wrong." >&2; exit 1; }
@@ -386,6 +391,9 @@ go
 want    "H2: the degrade happened"                     "RAIL DEGRADE"
 want    "H2: names the Go rail the ride rides"         "serving oracle-iac on the Go rail (opencode-go/deepseek-v4-flash)"
 want    "H2: the pod command ACTUALLY carries the Go rail's model (finding 2)" "--model opencode-go/deepseek-v4-flash"
+want    "H2: the pod carries the rail: opencode-go label (PR#528 round 3)" 'SUB_LABEL: , "homelab.teststuff.net/rail": opencode-go'
+wantnot "H2: the failed-over pod is NOT counted as an Anthropic-subscription ride" "subscription-session: claude"
+want    "H2: AGENT_RAIL=opencode-go (the #158 rail the pod reports)" 'AGENT_RAIL: opencode-go'
 want    "H2: reaches dispatch"                         "REACHED: dispatch"
 wantrc  "H2: exit 0"                                   0
 
