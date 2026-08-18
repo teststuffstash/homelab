@@ -1,0 +1,26 @@
+# board-classification (homelab#493) — the SMOKE pin for agents/board.sh, the operator's
+# who-acts todo view (platform pilot, 2026-08-17).
+#
+# mode: suite — board.sh is a top-level script that runs its work at load time (the scout-*
+# family's shape), and its contract is a RENDER, not an action stream, so the assertions live in
+# the suite (agents/board-test.sh) while this directory carries the recorded world it runs
+# against. The suite drives the REAL board.sh through the real replay stubs
+# (agents/replay/stubs/) with its clock pinned via BOARD_NOW (the seam board.sh declares), then
+# diffs the rendered board against the committed expected/ outputs.
+#
+# WHAT IT PINS, at SMOKE depth (operator scoping, 2026-08-18): one recorded world where each
+# board section classifies known rows — REVIEW, SOLVE, TRIAGE, VERDICT DUE and the BACKLOG
+# aggregate/oldest math — plus the PROBE-FAILED loudness, so it cannot regress fail-open. The
+# defect class that motivated it is a silent jq-predicate break that EMPTIES a section while the
+# board still renders healthy (PR#490's review caught one, the SOLVE/TRIAGE disjointness; the
+# WARN belt cannot see that class, it only covers read failures).
+#
+# WORLD PROVENANCE: CONSTRUCTED, not a live recording. The rows are synthetic on purpose — one
+# labelled issue per classification arm, invented numbers #101..#113 — because pinning the
+# classification needs one row per arm and a live tree rarely carries all of them at once. It is
+# pinned to BOARD_NOW=2026-08-18T12:00:00Z (the suite sets it), so every (age) and the
+# agedays>=1 TRIAGE gate are exact regardless of the real run date.
+name: board-classification
+mode: suite
+source: agents/board.sh
+entrypoint: agents/board-test.sh

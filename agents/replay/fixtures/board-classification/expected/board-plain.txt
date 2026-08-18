@@ -1,0 +1,23 @@
+board — stack platform (1 repos) · 2026-08-18T12:00:00Z
+
+§ REVIEW (codeowner queue)
+circles#201 human gate pending (17d)
+circles#202 awaiting human (17d)
+
+§ SOLVE (parks & latches)
+⛔ circles#101 error latch on gate (17d)
+⛔ circles#103 error and blocked overlap (17d)
+⛔ circles#206 error pr latch (17d)
+⏸ circles#102 blocked on external (17d)
+
+§ TRIAGE
+circles#104 bot sprout issue (16d)
+circles#105 stray zero-label issue (17d)
+
+§ VERDICT DUE
+circles#107 goal verdict pending (17d)
+
+§ BACKLOG (suitable, unqueued)
+circles: 3 suitable-unqueued (oldest 17d)
+
+totals — review: 2 · solve: 4 · triage: 2 · verdict-due: 1 · backlog: 3
