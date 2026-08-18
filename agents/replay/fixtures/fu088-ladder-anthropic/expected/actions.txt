@@ -1,0 +1,3 @@
+CALL bash ./subscription-latch.sh --pick-rail
+OUT RUN_CMD: claude -p --model haiku --dangerously-skip-permissions --max-turns 200
+RC 0

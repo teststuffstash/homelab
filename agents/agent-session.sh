@@ -1423,7 +1423,10 @@ fi
 # while the egress proxy's 429 latch / utilization threshold / concurrency semaphore says so
 # (OpenRouter harnesses are unaffected). An opencode-go/* ride probes ITS rail's latch instead —
 # the proxy's self-metered Go window (chunk C /opencode-limit; the reviewer failover's gate,
-# transposed). Both probes are fail-open burn-savers: the proxy 429s a genuinely latched window.
+# transposed). Every OTHER claude ride consults the ONE ladder (--pick-rail): Anthropic clear →
+# proceed as dispatched; Anthropic latched but Go clear → FAIL OVER to the Go rail (leg 2, #439 —
+# the worker was the last gate that consulted the Anthropic latch alone); both latched → defer.
+# All three probes are fail-open burn-savers: the proxy 429s a genuinely latched window.
 if [ "$HARNESS" = "claude" ]; then
   case "$MODEL" in
     opencode-go/*)
@@ -1433,10 +1436,31 @@ if [ "$HARNESS" = "claude" ]; then
         exit 0
       fi;;
     *)
-      if ! bash "$HERE/subscription-latch.sh"; then
-        echo "→ ${PROJECT} claude-tier dispatch deferred — subscription limited (FU-088)"
+      # homelab#439 leg 2: the ONE ladder replaces the Anthropic-only probe — when the
+      # subscription is latched but the Go rail is clear, a claude-harness worker/retro ride
+      # FAILS OVER to the Go rail instead of idling (the reviewer #424 and the leg-1 non-worker
+      # sites already do this). Both-latched stays a defer, report-only, exactly as before.
+      # The ladder's stderr is suppressed — this gate's own lines name the outcome (leg-1
+      # pattern). SUBSCRIPTION_TIER=dispatch: same consumer tier the non-worker sites use.
+      rail="$(SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh" --pick-rail 2>/dev/null)" || rail=""
+      if [ -z "$rail" ]; then
+        echo "→ ${PROJECT} claude-tier dispatch deferred — both rails latched (FU-088)"
         exit 0
-      fi;;
+      fi
+      # Go rail picked: thread its model through the PR#407 _claude_model plumbing — the pod
+      # command was baked above with the dispatched model, so re-point it at the Go rail's id
+      # (the pre-override token is captured first: _claude_model takes the rail id below and can
+      # no longer serve as the match pattern; the nounset guard keeps the block composable where
+      # RUN_CMD has not been built — recipe-less /--run dispatches, the replay harnesses).
+      case "$rail" in
+        opencode-go/*)
+          echo "→ Anthropic latched — serving ${PROJECT} on the Go rail ($rail)"
+          _old_model="${_claude_model:-haiku}"
+          _claude_model="$rail"
+          RUN_CMD="${RUN_CMD:-}"
+          RUN_CMD="${RUN_CMD//--model ${_old_model} /--model ${_claude_model} }"
+          ;;
+      esac;;
   esac
 fi
 
