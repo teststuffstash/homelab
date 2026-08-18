@@ -567,6 +567,16 @@ the block needs pruning, not more headings.
       rules on public repos — §L0b has the full state; tier-1 CODEOWNERS scaffold dropped).
       **Next:** the G06 advisory lens; watch the flip soak (deploy-bump latency +≤ one */5
       tick; first real RED status). Relates FU-087/FU-093, FU-176, ADR-084, ADR-076.
+- [ ] **FU-177** — **Make conflicting IP assignment impossible (operator ask, 2026-08-18).**
+      Host IPs live in FOUR uncoordinated homes — `opnsense/dnsmasq-dhcp.py` (reservations),
+      `machines/machines.yaml` (cluster hosts), `tofu/variables.tf` var.nodes (VM statics),
+      `SERVICES.md` (VIPs) — and nothing checks cross-file uniqueness: the U6LiteBasement
+      reservation sat on wk-03's static .63 until it caused a day of readiness flapping
+      (#553; docs/ip-plan.md governs RANGES, not addresses). Next: rung 1 = a `devbox run
+      ip-lint` that parses all four sources and fails CI on any duplicate address (cheap,
+      catches the whole class); rung 2 (the real fix, decide after rung 1) = machines.yaml
+      or a sibling becomes the ONE address book that dnsmasq-dhcp.py + tofu consume, per the
+      machines.yaml generator pattern. Relates ADR-088, FU-049.
 - [ ] **FU-176** — **iac-sentinel wipes its own pushgateway group on a zero-PR tick.**
       `push_metrics` POSTs whatever accumulated in `$METRICS`; a tick with no open PRs pushes an
       EMPTY body, which REPLACES the `job/iac-sentinel` group — `iac_sentinel_engine_seconds`
