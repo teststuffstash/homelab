@@ -72,9 +72,11 @@ the base SHA and aborts if it moved mid-run; six repos hitting it in one pass su
 schedule is colliding with the loop's own push traffic rather than genuine coincidence. Neither is
 diagnosed here; both are stated as observed with the evidence attached.
 
-> **Acceptance for "Renovate works in homelab":** a Dependency Dashboard issue exists, and at least
-> one `renovate/*` PR has been opened, gated and merged. Until then, treat every claim about
-> automated dependency hygiene in this repo as aspirational.
+> **Acceptance for "Renovate works in homelab":** at least one `renovate/*` PR has been opened,
+> gated and merged. Until then, treat every claim about automated dependency hygiene in this repo
+> as aspirational. (The dashboard-issue-exists half of this acceptance was RETIRED 2026-08-18:
+> `dependencyDashboard` is now `false` in the global config by operator ruling — the dashboard is
+> an interactive click-ops surface nothing here reads; liveness is the gauge, next-step 2.)
 
 ---
 
@@ -369,8 +371,9 @@ and then nothing is watching.
    `vulnerabilityAlerts.prPriority`; and either fix or remove the `NIX_VERSION` custom manager. Then
    land the orphaned `renovate/pin-dependencies` branch — SHA-pinning the Actions is the single
    highest-value security item on this page.
-2. **Add a Renovate-liveness signal** so the next silent stall is loud: a dashboard-issue-exists
-   check, or a `renovate_last_pr_timestamp` gauge on the github-exporter beside the FU-108 fix.
+2. **Add a Renovate-liveness signal** so the next silent stall is loud: a
+   `renovate_last_pr_timestamp` gauge on the github-exporter beside the FU-108 fix. (The
+   dashboard-issue-exists option is gone — `dependencyDashboard: false` by ruling, 2026-08-18.)
 3. ✅ **CI gaps closed 2026-08-04** — `manifest-lint` (kubeconform `-strict`) over
    `argocd/resources/*` and `tofu fmt -check -recursive` are both required checks. Two residues by
    decision, not omission: `tofu validate` stays the local `devbox run tf-validate` gate (a provider
