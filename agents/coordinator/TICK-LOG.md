@@ -4211,3 +4211,24 @@ accounting trusted, the #379 belt needed unparking, the operator wanted a design
 - **Breaker audit through the outage:** zero false latches org-wide; #473's infra-red
   arbitration + #475's merge-storm anomaly both adjudicated benign (18 master merges = 18
   branch merges, 1:1; dismissed-review commit re-association = GitHub artifact).
+
+## 2026-08-18 (~10:30–11:30Z) — HA #221: diagnosis corrected — the plugs were never revived; freeze is DEVICE-side
+
+- **Mission: figure out #221 (operator ask: gaas restart knob?).** Answer: NONE — gaas 914
+  re-confirmed on correct key+version (sweep: 914 on 3.4/3.5, 901 on 3.1–3.3), HA entry in
+  `setup_retry` (already auto-retrying), tuya_local's own error says power cycle → breaker only.
+- **The bigger find: the 08-13 "revival" was an illusion.** Re-ran the remedy (probes OK →
+  4× per-entry REST reload); post-reload debug trace on pve showed the receive loop ALIVE,
+  polling ~31s — but every dps payload byte-identical, and fresh jail tinytuya sessions get the
+  SAME frozen values. Prometheus: pve 124.6W / aquarium 29.7W / konditsioneer 34.5W / laptop4
+  8.0W FLAT from retention edge (08-10) to now, through both rounds of reloads (which only
+  bumped last_updated via entity re-creation); laptop3/opnsense (same fence) fluctuate hourly.
+  ⇒ device measurement engines wedged since the 08-08/09 window, sibling of gaas's 914 state.
+  The "freeze at 08-13T08:11–21Z" the thread tracked = the reload writes themselves.
+  Corollary: tuya_local 2026.8.0 upgrade won't unfreeze them (still fixes the separate
+  loop-death bug). Remedy = physical power cycle ×5, operator-sequenced (each plug cycle cuts
+  its load; konditsioneer relay function on a frozen plug UNTESTED — don't toggle live loads).
+- Evidence + full trace on #221 (comment 2026-08-18); meta-state bullet rewritten. Debug
+  logging reset to warning. ⚠ lesson re-proven: an entity-recreation write bumps last_updated
+  with an unchanged value — "fresh timestamps" after a reload proves NOTHING; verify revival by
+  VALUE change vs a healthy control, not by staleness clearing.
