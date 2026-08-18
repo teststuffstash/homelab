@@ -92,6 +92,15 @@ data "talos_machine_configuration" "node" {
     contains(local.avx2_nodes, each.key) ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/cpu-avx2" = "true" } }
     })] : [],
+    # Ephemeral node LABEL (2026-08-18, wk-03): the ARC runner scale set selects on
+    # homelab.io/ephemeral=true — which until now existed only as an IMPERATIVE kubectl label on
+    # wk-metal-01/-02 (the taint is tofu'd in metal.tf, the label never was). Same avx2 pattern:
+    # boot-from-git, applied live. VM path only, deliberately — labeling wk-metal-03/-04 here
+    # would silently widen the runner pool onto the kata-headroom nodes, a policy change with its
+    # own decision (their taint stands regardless via metal.tf).
+    contains(local.ephemeral_nodes, each.key) ? [yamlencode({
+      machine = { nodeLabels = { "homelab.io/ephemeral" = "true" } }
+    })] : [],
     # CNI is cluster-scoped → only patch control-plane nodes. "none" disables the
     # default Flannel so Cilium can be installed instead (see ROADMAP service-exposure).
     each.value.role == "controlplane" ? [

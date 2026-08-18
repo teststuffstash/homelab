@@ -30,6 +30,13 @@ resource "proxmox_virtual_environment_vm" "node" {
     interface   = "scsi0"
     size        = each.value.disk_gb
     file_format = "raw"
+    # discard=on (2026-08-18): the provider default was `ignore`, so guest TRIMs NEVER reached
+    # the LVM thin pool — every byte ever written stayed allocated forever (pool hit its 81%
+    # autoextend threshold with 1G VG free and refused wk-03's volumes; wk-01 held 65G real for
+    # a mostly-stateless worker). Takes effect at the next VM power-cycle; reclaim = fstrim in
+    # the guest afterwards.
+    discard = "on"
+    ssd     = true
   }
 
   network_device {
