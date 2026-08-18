@@ -4327,3 +4327,22 @@ first live ADR-110 maintenance session before the ADR existed.
   morning SERVFAIL burst, and the qm-reset placebo. FU-177 filed (ip-lint / single address
   book). #553 closes after a flap-free soak. Diagnostic first: Proxmox `pvesh … screendump`
   reads the Talos console when apid is dead — now a proven jail-side tool.
+- **The corpus sitting (2026-08-18 ~17:00Z, /design-agents session — the ADR-110 codeowner gate
+  executed on the parked board):** full corpus loaded first, then the four machine PRs read
+  against it. #545 (C4/C5 BODIES probe guard) = byte-faithful to the morning's guard-only ruling,
+  MERGED. #546 (workflow-controller memory alert app) = FU-158-conformant (both-arms fixture,
+  drift-pinned copy, warning severity), MERGED. #549 (review-flip belt / MP-T14) rode the full
+  pipeline post-#545 (updater → 4-min ci — the minRunners:1 trial visibly paying — → fresh bot
+  approval → codeowner approval → auto-merge), MERGED; PR carries a note that the belt's rule-#6
+  HELD branch is mostly fixture-reachable (scan L904 coerces failed reads to `[]`; fail
+  direction = no-flip, safe). #547: the coordinator's arbitration was CORRECT and correctly
+  non-self-serving (it widened #536's Touches but deliberately left verdict + merge to the
+  codeowner) — ruling: the replay-README escape is compelled by the required ADR-103 ratchet,
+  widening sanctioned, stale CHANGES_REQUESTED dismissed with audit, #536 agent/blocked →
+  agent/review; cycle backgrounds to its park. Operator's status.claude.com question answered:
+  nothing scrapes it — githubstatus.com is the only vendor statuspage polled
+  (collect_vendor_status, FU-150 vendor half); filed+queued #555 to add the Anthropic twin
+  (report-only gauge + AnthropicVendorDegraded; never a dispatch input — their-view ≠ our-view,
+  the laguna lesson). Also this sitting: #540 seat comment corrected per operator (second
+  container was pure Anthropic subscription — zero Go draw; today's subagent spend is ALL
+  deepseek-flash, $3.02 — the hypothesis retracted in place).

@@ -22,7 +22,7 @@ meant to avoid.)
   pod with dnsConfig — a 13-min watch saw none, check ArgoCD synced arc-runners) + #540
   reparented under #420 (agent-fix dropped, jail-lane per charter). (3) pve maintenance:
   playbook + runbook recipe MERGED (#554), window executed, kernel 6.8.12-42 live, plug 5/5
-  thawed. (4) Parked for the corpus sitting: #545/#546/#549. (5) Loose: post-window Longhorn
+  thawed. (4) ✅ corpus sitting EXECUTED 2026-08-18 evening (see the sitting bullet below). (5) Loose: post-window Longhorn
   degraded → 0 check; the responder triage budget was exhausted much of today (alert-issue
   intake resumes on window reset).
 - **✅ G01 FLIP COMPLETE + ADR-110 CLAUDE.md paragraph LANDED (2026-08-18 build session; PR#548
@@ -36,9 +36,20 @@ meant to avoid.)
   exclusion, operator-sanctioned infra-only) and shipped PR#551 (Go-rail rides get
   CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 for deepseek-v4-flash — harness assumed 200k, compacted
   ~5x early; operator-reported off #523's ride) — #551 armed, completes on bot approval.
-  **Parked for a corpus-loaded sitting (operator: no agent-loop-design approvals without
-  corpus): #545 (C4/C5 probe guard) · #546 · #549.** Responder triage budget exhausted ~12:49Z
-  (alert-issue intake paused until window reset).
+  **✅ Corpus sitting EXECUTED 2026-08-18 ~17:00Z (/design-agents session, full corpus loaded —
+  the ADR-110 codeowner reads):** #545 (C4/C5 probe guard — exactly the ruled guard-only diff)
+  MERGED · #546 (WorkflowControllerMemoryNearLimit alert app) MERGED · #549 (review-flip belt,
+  MP-T14 — conforms to IL-T16/C6/rule-#6 discipline; note on the PR: the belt's HELD branch is
+  mostly fixture-reachable since scan L904 coerces a failed PR read to `[]`; fail direction is
+  no-flip = safe) MERGED through the full updater→CI→bot→codeowner pipeline. **#547 (TOOL_GAP
+  marker, #536):** the reviewer's TOUCHES-ESCAPES block was ruled premise-cured — the replay-
+  README register entry is COMPELLED by the required ADR-103 ratchet, the coordinator's Touches
+  widening was sanctioned, the stale verdict DISMISSED with audit message; #536 un-parked
+  (`agent/blocked` → `agent/review`); #547 rides the ordinary cycle to its codeowner park —
+  approve+merge it when the board shows it parked. **#555 filed+queued** (Anthropic vendor-status
+  gauge — status.claude.com scrape into the FU-150 vendor pattern; born of the 2026-08-18
+  degraded-performance event; report-only, never a dispatch input). Responder triage budget
+  exhausted ~12:49Z (alert-issue intake paused until window reset).
 - **⚑ ADR-110 ruled 2026-08-18** (the seat-time conversation): maintenance sessions ARE the
   codeowner gate — corpus-loaded at start, seat merges the small, escalates the big; cluster
   identities still merge nothing. Recorded in adr.md + chainless-redesign §maintenance session;
