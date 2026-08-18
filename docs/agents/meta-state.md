@@ -9,12 +9,21 @@ meant to avoid.)
 ## Live state (2026-08-11 end-of-pipeline consolidation — history is TICK-LOG's)
 
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
-  buildout → then stacks.** Board-clearing sessions are the current mode. **The G01 sentinel
-  flip UN-PARKED same evening** (the board-clear precondition was met by the day's sweep) —
-  **build it in a NEW session, first chunk**: reviewer-App `statuses:write` (operator grant
-  click) + the required sentinel check + the workflows push-ruleset (iac-lane §L0b), then drop
-  the tier-1 `argocd/resources/` scaffold CODEOWNERS line. That session also lands the ADR-110
-  maintenance-session paragraph into CLAUDE.md §How changes land. Bucket B still waits.
+  buildout → then stacks.** Board-clearing sessions are the current mode. Bucket B still waits.
+- **✅ G01 FLIP COMPLETE + ADR-110 CLAUDE.md paragraph LANDED (2026-08-18 build session; PR#548
+  + operator grant/apply).** Sentinel ENFORCES on all four repos (required `iac-sentinel`
+  status, reviewer-App identity, */5 tick); homelab baseline exceptions + owned gitleaks config;
+  tier-1 CODEOWNERS scaffold dropped; push guard live on oracle-iac ONLY (GitHub 422s push rules
+  on PUBLIC repos — fix-forward committed, §L0b records it). **Soak watches:** deploy-bump merge
+  latency (+≤ one */5 tick, revisit if it hurts ADR-084 feel) · the first real RED sentinel
+  status · FU-176 (sentinel wipes its own pushgateway group on zero-PR ticks — health of an
+  ENFORCING check is currently blind on quiet boards). Session also merged #544 (HA alert
+  exclusion, operator-sanctioned infra-only) and shipped PR#551 (Go-rail rides get
+  CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 for deepseek-v4-flash — harness assumed 200k, compacted
+  ~5x early; operator-reported off #523's ride) — #551 armed, completes on bot approval.
+  **Parked for a corpus-loaded sitting (operator: no agent-loop-design approvals without
+  corpus): #545 (C4/C5 probe guard) · #546 · #549.** Responder triage budget exhausted ~12:49Z
+  (alert-issue intake paused until window reset).
 - **⚑ ADR-110 ruled 2026-08-18** (the seat-time conversation): maintenance sessions ARE the
   codeowner gate — corpus-loaded at start, seat merges the small, escalates the big; cluster
   identities still merge nothing. Recorded in adr.md + chainless-redesign §maintenance session;
@@ -35,10 +44,8 @@ meant to avoid.)
   post-reset sonnet re-reviews). (4) Soaks: nix-cache 16g NOW real (rolled + checksum belt
   #537) — watch devbox-install p50 → ~45s; minRunners readout; #540 gometer (operator: other
   container `git pull` + relaunch claude-go; the first-use-anchor test at any console reset
-  boundary); 08-25 argo purge; or-op#34. (5) **NEXT SESSION = BUILD session (bootstrap rule:
-  meta-state only, NO corpus): the G01 flip chunk** (App statuses:write click + required
-  sentinel check + workflows push-ruleset + drop the tier-1 scaffold line) **+ the ADR-110
-  paragraph into CLAUDE.md §How changes land.**
+  boundary); 08-25 argo purge; or-op#34. (5) ✅ the G01 flip chunk + ADR-110 paragraph SHIPPED
+  2026-08-18 (the ✅ bullet above owns the residuals).
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners (operator-direct, pin-guarded
   file) — target ~2-min ci wall (job itself is 2m38s; ~4min was runner spin-up queue). Measure
   run-pickup deltas for a few days; revert to 0 if no win. Remaining setup cost tracked as an

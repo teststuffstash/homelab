@@ -560,11 +560,23 @@ the block needs pruning, not more headings.
       IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
       [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).
       Closed: G02/G03/G07 (2026-08-02), G05 rung-0 + G04 sentinel v1 shadow (2026-08-03), G08
-      (2026-08-05). **Next:** the G01 ENFORCEMENT flip after the sentinel shadow soak (operator:
-      reviewer-App statuses:write + tofu push ruleset + required check — plan in §L0b), then G06
-      advisory lens, then extend the G04 sentinel to **homelab** — one step owning THREE residues
-      (tier-1 unowning, the schema-blind kinds, the `agents/coordinator/*.yaml` path gap — all
-      enumerated in the doc §The platform lane). Relates FU-087/FU-093, ADR-084, ADR-076.
+      (2026-08-05), **G01 ENFORCEMENT FLIP 2026-08-18** (PR#548 + operator grant/apply: sentinel
+      posts the required `iac-sentinel` status under the reviewer App on all four repos incl.
+      homelab — the homelab baseline `policy/iac/exceptions/homelab.yaml` + owned gitleaks
+      config made the platform repo clean; push guard live on oracle-iac only, GitHub 422s push
+      rules on public repos — §L0b has the full state; tier-1 CODEOWNERS scaffold dropped).
+      **Next:** the G06 advisory lens; watch the flip soak (deploy-bump latency +≤ one */5
+      tick; first real RED status). Relates FU-087/FU-093, FU-176, ADR-084, ADR-076.
+- [ ] **FU-176** — **iac-sentinel wipes its own pushgateway group on a zero-PR tick.**
+      `push_metrics` POSTs whatever accumulated in `$METRICS`; a tick with no open PRs pushes an
+      EMPTY body, which REPLACES the `job/iac-sentinel` group — `iac_sentinel_engine_seconds`
+      vanished on the 2026-08-18 clean board and the A0 reading rule ("fresh engine rows, else
+      blind") read as blind when the sentinel was in fact healthy. (Distinct from the 08-17
+      emptyDir wipe above — this is the scanner's own push semantics.) Now enforcement-critical:
+      the check gates merges, so its health must stay observable. Next: always push a
+      per-tick heartbeat metric (e.g. `iac_sentinel_last_run_timestamp`) and never send an
+      empty replace; update the A0 reading rule to key freshness on the heartbeat. Relates
+      FU-106, the meta-state "deploy silences an alert" warning class.
 - [ ] **FU-134** — **Web research is now a platform capability — soak, then close.** `POST /search`
       on the egress proxy (an ordinary completion carrying OpenRouter's `openrouter:web_search`
       server tool) returns `{answer, citations[]}` to ANY harness, riding the caller's own key ref
