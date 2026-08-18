@@ -278,8 +278,12 @@ surface (§M8 classes, §M9 chainless stacks, §M13 research pools). Legs, in bu
 4. **Typed verdicts, two sanity rules.** The verdict carries the launcher's `error_class`, not a
    binary exit status. *Contradiction rule*: canary-fail ∧ benchmark-capable ⇒ `suspect-infra`,
    retry once, else `inconclusive` — never `failed` (2026-08-10: ling-3.0-flash, coding 50.6 —
-   above gpt-5.1 — posted `failed` on "echo the README heading"). *Common-cause rule*: N
-   canaries failing identically in one tick = ONE scout-infra datum, zero per-model verdicts.
+   above gpt-5.1 — posted `failed` on "echo the README heading"). *Common-cause rule*: the tick's
+   canaries (≥2) ALL failing identically = ONE scout-infra datum, zero per-model verdicts —
+   whole-set deliberately, never any-subset (#506 ruling, 2026-08-18: a clean sibling refutes
+   the scout-infra hypothesis — the stack demonstrably worked — so partial identical-failure
+   groups stay per-model and ride the contradiction rule's retry; the ci-red/strike fleet rules'
+   any-N≥2 reading does not import here, they have no clean-sibling refuter).
 5. **Pool curation — the §M13 duty.** The scout maintains the named class pools: ranked,
    family-deduped, disjoint bands by convention, deeper than any plausible slot ask, refreshed
    weekly from capability × market (`task_market`) × effective price × rail-compat. Diversity
