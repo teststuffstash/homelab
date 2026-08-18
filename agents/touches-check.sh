@@ -36,10 +36,14 @@ touches_check() {
   local declared="$1" paths="$2"
   local path marker
 
-  # Undeclared Touches (empty string or "*") → all paths escape
+  # Undeclared Touches (empty string or "*") → all paths escape.
+  # ADR-097 addendum (fp_replay_exempt, footprint.sh): a changed path under agents/replay/ is
+  # NEVER an escape — governance or otherwise — in EITHER branch. The ADR-103 ratchet compels
+  # replay touches on every clause PR; flagging the compelled edit is the PR#547 defect.
   if [ -z "$declared" ] || [ "$declared" = "*" ]; then
     while IFS= read -r path; do
       [ -n "$path" ] || continue
+      fp_replay_exempt "$path" && continue
       marker="$(governance_paths "$path")" || marker=""
       if [ -n "$marker" ]; then
         printf '%s|%s\n' "$path" "$marker"
@@ -56,6 +60,10 @@ EOF_PATHS
   # If it doesn't conflict, it's an escape.
   while IFS= read -r path; do
     [ -n "$path" ] || continue
+    # ADR-097 addendum: replay paths are exempt here too — REQUIRED, not belt: fp_conflict
+    # strips replay entries from both lists, so without this skip an exempt changed path would
+    # read as "no conflict" and surface as an ESCAPE, inverting the exemption.
+    fp_replay_exempt "$path" && continue
     # Treat the changed path as a singleton footprint entry and check against declared
     if ! fp_conflict "$declared" "$path"; then
       # Path does not conflict with declared touches → it's escaped

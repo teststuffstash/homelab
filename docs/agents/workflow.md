@@ -290,6 +290,17 @@ predicate gains footprint intersection in place of `lane-free`:
   belt matches); hard per-repo max (default 3) and the ≤3-open-PR bound (updater churn is
   O(open PRs × merges) — oracle TRACKS rule 1) hold regardless of footprints; FU-088 capacity
   semaphore caps globally.
+- **`agents/replay/**` is EXEMPT from footprint semantics on both sides** (ADR-097 addendum,
+  2026-08-18 — the FU-167/FU-168 joint call, operator-ruled): declared replay entries are
+  stripped from the intersection (a replay-only footprint holds nothing and is held by nothing),
+  and changed replay paths are never `Touches:` escapes, governance or otherwise. One predicate
+  (`fp_replay_exempt`, [`agents/footprint.sh`](../../agents/footprint.sh)), consumed by the scan
+  hold and by `touches-check.sh` — which both the scan and the reviewer source, so the two
+  readers cannot diverge. Why: the ADR-103 ratchet COMPELS a replay touch on every clause PR, so
+  requiring its declaration was ceremony — it manufactured the unsatisfiable-footprint class
+  (homelab#270/PR#275) and a governance block on a compelled edit (PR#547), against zero real
+  replay conflicts measured over 41 PRs. Content safety stays with the review rubric's
+  worlds-are-extraordinary rule, the ratchet, and git blame.
 - **Residual risk**: a worker escaping its declaration. Belt: the reviewer flags diff paths
   outside the issue's `Touches:` (a narrow-blocking case, reviewer rubric); TRACKS rule 2 still
   routes shared-file work through its owning concern as a separate issue.
