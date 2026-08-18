@@ -254,6 +254,27 @@ sat as a broken replica for 2.5 days unnoticed (2026-06).
   `kubectl -n <ns> delete pvc <cluster>-N; kubectl -n <ns> delete pod <cluster>-N` (it returns as
   the next instance number, e.g. `-2` → `-3`). If a replica re-diverges, suspect the node it landed on.
 
+## Proxmox host maintenance window (updates + reboot)
+
+The hypervisor is deliberately the one hand-managed box (boot-from-git covers everything above
+it); its routine package maintenance is code anyway: `devbox run -- ansible-playbook
+ansible/pve-upgrade.yml` (ANSIBLE_CONFIG=ansible/ansible.cfg; SSH key is jail-local). The play
+snapshots `/etc/pve` to `~/.claude/homelab-pve-backup/`, runs an IN-MAJOR `apt dist-upgrade`
+(8→9-style major jumps are a separate, sources-edit event), and reports REBOOT-PENDING — it
+never reboots. The reboot is a window (first run: 2026-08-18, ~15 min total outage):
+
+1. **Pre-flight:** Longhorn 0 degraded volumes; no agent rides mid-flight you care about.
+2. **Full-stop, not drain** — cp-01 is the only control plane, so the API goes down either
+   way; metal workloads keep running headless, and a clean stop is just the planned version of
+   the whole-lab power loss the platform already survives (§Power-loss below).
+3. `qm shutdown` workers + ci-runner + `pct shutdown 210` (parallel is fine), **cp-01 LAST**,
+   then `poweroff` on pve. wk-01/wk-02 take longest (Longhorn detach).
+4. All guests + the LXC carry `onboot=1` and the X99 powers on after AC restore — on boot
+   everything self-starts and the cluster reforms with no hands (verified: 10/10 Ready,
+   ~10 min plug-out to all-Ready).
+5. **Post:** `devbox run nodes` all Ready · Longhorn degraded count returns to 0 (replica
+   re-sync is normal for ~minutes) · new kernel active (`uname -r`).
+
 ## Power-loss / ghost-node recovery
 
 Historically, after a **simultaneous cold power-cycle** (whole lab loses power), metal Talos nodes
