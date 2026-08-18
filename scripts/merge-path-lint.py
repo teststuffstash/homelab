@@ -136,7 +136,9 @@ def render(model: dict, model_path: Path, failures: list[str]) -> list[str]:
                 if not (ROOT / rp).exists():
                     failures.append(f"{t['id']}: replay path does not exist: {rp}")
                 if rp.startswith("agents/replay/fixtures/"):
-                    REFERENCED_FIXTURES.add(Path(rp).name)
+                    # keyed by RELPATH (fixtures/<family>/<fixture>) so two families sharing a
+                    # leaf name (probe-fail, both, clear…) never cross-wire in the register
+                    REFERENCED_FIXTURES.add(rp[len("agents/replay/fixtures/"):].rstrip("/"))
             replay_note = f" · replay: {', '.join(Path(rp).name for rp in replay_paths)}"
         elif unreplayed:
             replay_note = f" · ⚠ unreplayed: {unreplayed}"
@@ -182,9 +184,26 @@ def main() -> int:
 
     fixtures_dir = ROOT / "agents/replay/fixtures"
     if fixtures_dir.is_dir():
-        unref = [p.name for p in sorted(fixtures_dir.iterdir())
-                 if p.is_dir() and not p.name.startswith("_selftest")
-                 and p.name not in REFERENCED_FIXTURES]
+        # FU-167 move 5: a fixture lives at depth 1 (table) OR depth 2 (fixtures/<family>/<fixture>).
+        # Unref is keyed by RELPATH so the visibility line names actual fixtures, not family dirs.
+        def is_fixture(p: Path) -> bool:
+            return p.is_dir() and (p / "fixture.yaml").is_file()
+
+        def not_selftest(rel: str) -> bool:
+            return not rel.split("/")[0].startswith("_selftest")
+
+        unref = []
+        for p in sorted(fixtures_dir.iterdir()):
+            if p.is_dir():
+                if is_fixture(p):
+                    rel = p.relative_to(fixtures_dir)
+                    if not_selftest(str(rel)) and str(rel) not in REFERENCED_FIXTURES:
+                        unref.append(str(rel))
+                else:
+                    for leaf in sorted(p.iterdir()):
+                        rel = str(leaf.relative_to(fixtures_dir))
+                        if is_fixture(leaf) and not_selftest(rel) and rel not in REFERENCED_FIXTURES:
+                            unref.append(rel)
         if unref:
             print(f"  ℹ fixtures no FSM transition references (helper-level pins — visibility, "
                   f"not failure): {', '.join(unref)}")

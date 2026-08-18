@@ -1,0 +1,31 @@
+# FU-161 leg 1 / homelab#282 — the arms `scout-variant-batch-rollout` does NOT exercise. Its world
+# is #234's, where every suppressed id was `:batch` AND had a known base, so one rule could have
+# been doing all the work and the fixture would look identical. This one separates them.
+#
+# CONDITION UNDER REPLAY. A synthetic catalog, small and deliberate: six new ids across every
+# branch of the clause, against a two-id snapshot.
+#
+# THE CONTRACT — one new id per branch, and the branch each takes:
+#   `openai/gpt-5-mini:free`  KNOWN base, no `:batch` → suppressed as a variant re-listing. This is
+#                             the arm #234's world leaves at zero, and the one that catches a
+#                             base() that stopped stripping suffixes.
+#   `newco/loud:batch`        `:batch` on a base nothing has ever seen → STILL dropped. The order
+#                             is the assertion: exclusion is outright, not "unless the base is new".
+#   `newco/spark` + `:free`   two variants of ONE new base, both arriving this tick → ONE candidate,
+#                             and the representative is the `:free` listing (cheapest first), so a
+#                             base is never judged on its dearest variant. This collapse is counted
+#                             in the variant total: `variant=2` is 1 known-base + 1 sibling.
+#   `newco/quiet`             new base, no `tools` → dropped by the pre-existing capability filter.
+#   `newco/dear`              new base, $2.00/M → dropped by the pre-existing ceiling.
+#
+# The last two are here to prove leg 1 was inserted BEFORE the v2 filter rather than in place of
+# it: a base-id diff that quietly stopped checking `tools` would put a completion-only model in
+# front of a canary slot.
+name: scout-variant-known-base
+mode: actions
+source: agents/model-scout.sh
+parts:
+  - block:scout-seams
+  - file:../batch-rollout/bridge.sh
+  - block:scout-diff
+  - file:../batch-rollout/observe.sh

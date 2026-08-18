@@ -1,5 +1,0 @@
-CALL cp /tmp/report.md docs/agents/retros/2026-08-11-oracle-r3-opus.md
-OUT WARN: no report markers in $ROOT/agents/replay/fixtures/retro-harvest-one-cell-dead/log-b (cell goose:deepseek/deepseek-v4-pro died or contract broken)
-OUT DEAD_NOTE: names the cell that produced no report
-OUT DEAD_NOTE: warns the reader this is not the cross-checked pair
-RC 0

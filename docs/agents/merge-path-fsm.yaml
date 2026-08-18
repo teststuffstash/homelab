@@ -255,9 +255,9 @@ transitions:
     when: "bot verdicts ≥ ROUNDS_MAX ∧ NOT an impossible-state signature (those stay agent/error)"
     status: guarded
     replay:
-      - agents/replay/fixtures/arbitrate-first-tick
-      - agents/replay/fixtures/arbitrate-probe-unreadable
-      - agents/replay/fixtures/state-fp
+      - agents/replay/fixtures/arbitrate/first-tick
+      - agents/replay/fixtures/arbitrate/probe-unreadable
+      - agents/replay/fixtures/state-fp/state-fp
     guards:
       - desc: "reflex splits rounds-exhausted (escalation → agent/arbitrate) from impossible-state (anomaly → agent/error)"
         anchor: { file: agents/review-reflex.sh, pattern: "ROUNDS EXHAUSTED" }
@@ -277,7 +277,7 @@ transitions:
     when: "armed ∧ CI-red ∧ no Running worker ∧ fix-round attempts < RED_ROUNDS_MAX"
     status: guarded
     replay:
-      - agents/replay/fixtures/ci-red-rounds-two-channels
+      - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-rounds-two-channels
     guards:
       - desc: "content-based: attempts = durable run-stats-comment count (not the old 4h updatedAt timer a no-op comment reset), dispatch cap 2/repo/scan"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red" }
@@ -306,8 +306,8 @@ transitions:
     when: "agent/in-progress ∧ an OPEN PR STRONGLY references it (the C6 grammar — implements/closes/fixes/resolves or the line-anchored Issue: trailer; a bare mention must NOT count) → add agent/review, remove agent/in-progress. The footprint releases at PR-open BY DESIGN (homelab#501 direction (b)): at open the worker's occupation is durable branch state, so the ADR-097 same-file hold has nothing left to gate — and sibling dispatch must not couple to the codeowner's reading latency. Collision absorption is the merge path's own answer to same-file PRs: the ≤3-open-PR cap, strict up-to-date + updater serialization, and the merge-conflict judgment lane — a deterministic flip on the CAUSE side cannot add coupling the merge path already absorbs"
     status: guarded
     replay:
-      - agents/replay/fixtures/review-flip-belt
-      - agents/replay/fixtures/review-flip-belt-probe-fail
+      - agents/replay/fixtures/review-flip-belt/review-flip-belt
+      - agents/replay/fixtures/review-flip-belt/probe-fail
     guards:
       - desc: "STRONG link only, same grammar as C6's goal-child closeout — a sibling-seam bare mention must NOT flip (the circles#36 lesson)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "same grammar as C6" }
