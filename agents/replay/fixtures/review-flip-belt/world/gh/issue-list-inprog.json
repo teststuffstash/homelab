@@ -1,0 +1,30 @@
+[
+  {
+    "number": 60,
+    "title": "scan: the janitor tick drops its exit code",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "task/fix"}],
+    "body": "The janitor cron drops the tick's exit code, so failures look like success.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-18T06:00:00Z"
+  },
+  {
+    "number": 61,
+    "title": "docs: the footprint-release lifecycle",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "task/fix"}],
+    "body": "Document when an issue footprint frees.\n\nTouches: docs/agents/\n",
+    "updatedAt": "2026-08-18T06:05:00Z"
+  },
+  {
+    "number": 62,
+    "title": "machines: ephemeral-tier node",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "task/fix"}],
+    "body": "Add a new ephemeral worker.\n\nTouches: machines/\n",
+    "updatedAt": "2026-08-18T06:10:00Z"
+  },
+  {
+    "number": 63,
+    "title": "network: egress allowlist",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "agent/blocked"}, {"name": "task/fix"}],
+    "body": "Blocked: needs a human decision on the allowlist shape.\n\nTouches: opnsense/\n",
+    "updatedAt": "2026-08-18T06:15:00Z"
+  }
+]

@@ -1,0 +1,8 @@
+CALL gh issue edit 60 --repo teststuffstash/homelab --add-label agent/review
+CALL gh issue edit 60 --repo teststuffstash/homelab --remove-label agent/in-progress
+CALL gh issue view 60 --repo teststuffstash/homelab --json labels --jq [.labels[].name]|join(",")
+CALL gh issue comment 60 --repo teststuffstash/homelab --body 🤖 **`agent/in-progress` → `agent/review` — footprint released at PR-open** (deterministic scan belt, homelab#501 / MP-T14).\n\nAn OPEN PR strongly references `#60` (`implements`/`closes`/`fixes`/`resolves`, or the line-anchored `Issue:` trailer), so this issue's work has left the worker pod and become durable branch state. The issue-label lifecycle moves it to `agent/review` here, deterministically — it no longer depends on a coordinator session happening to visit the item.\n\nThis releases the issue's ADR-097 footprint and its WIP slot. Concurrent same-file PRs are a state the merge path is designed to absorb (strict up-to-date, updater serialization, the merge-conflict judgment lane) — the codeowner gate no longer freezes sibling dispatch.
+OUT FLIP 60 
+OUT ORPHAN [homelab] ✓ issue #60 flipped `agent/in-progress` → `agent/review` (open PR strongly references it — deterministic scan belt, homelab#501/MP-T14): footprint released at PR-open by design
+OUT REACHED: end
+RC 0

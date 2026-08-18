@@ -293,6 +293,29 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red → agent/arbitrate" }
     incidents: ["FU-115: the red loop livelocked forever (no exhaustion edge); this is MP-T11 ported to the CI-red side"]
 
+  - id: MP-T14
+    name: issue → review at PR-open, footprint releases
+    owner: scan review-flip belt (deterministic) + agent-finalize finalize edge (cause)
+    when: "agent/in-progress ∧ an OPEN PR STRONGLY references it (the C6 grammar — implements/closes/fixes/resolves or the line-anchored Issue: trailer; a bare mention must NOT count) → add agent/review, remove agent/in-progress. The footprint releases at PR-open BY DESIGN (homelab#501 direction (b)): at open the worker's occupation is durable branch state, so the ADR-097 same-file hold has nothing left to gate — and sibling dispatch must not couple to the codeowner's reading latency. Collision absorption is the merge path's own answer to same-file PRs: the ≤3-open-PR cap, strict up-to-date + updater serialization, and the merge-conflict judgment lane — a deterministic flip on the CAUSE side cannot add coupling the merge path already absorbs"
+    status: guarded
+    replay:
+      - agents/replay/fixtures/review-flip-belt
+      - agents/replay/fixtures/review-flip-belt-probe-fail
+    guards:
+      - desc: "STRONG link only, same grammar as C6's goal-child closeout — a sibling-seam bare mention must NOT flip (the circles#36 lesson)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "same grammar as C6" }
+      - desc: "write discipline IL-T16 — add agent/review FIRST, remove agent/in-progress SECOND, then re-read and prove the end state (the edit is not atomic; neither-label = invisible to every clause)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "add agent/review FIRST" }
+      - desc: "HUMAN-OWNED states excluded — agent/error (breaker) and agent/blocked (human gate) are never flip candidates"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "HUMAN-OWNED state" }
+      - desc: "probe failure HOLDS and writes nothing (rule #6 — never fail INTO a write)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "review-flip belt HELD" }
+      - desc: "busy_fps stays level-triggered (reads agent/in-progress only) — the flip releases the footprint by construction on the next tick; no second gate to re-derive"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "busy_fps=" }
+      - desc: "the CAUSE — finalize flips the labels at PR-open beside MP-T01 arming (foreign, agent-runtime); this scan belt is the belt over finalize's failures (MP-T01 arm-guard precedent)"
+        anchor: { repo: agent-runtime, file: agent-base/agent-finalize, pattern: "agent/review" }
+    incidents: ["homelab#501 origin: #477/#450 PRs sat 9-10h with issues never flipped to agent/review — footprints held, #478/#479 blocked by an UNUSED half of a Touches declaration while every PR codeowner-parked"]
+
   - id: MP-T09
     name: breaker trip and clear
     owner: any layer (reflex counts / reviewer STEP-0 ANOMALY arm / worker recipe / exporter alerts / human)
