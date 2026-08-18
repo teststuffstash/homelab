@@ -45,6 +45,26 @@ fp_pair_conflict() {
   return 1
 }
 
+# fp_conflict_strict <listA> <listB> → 0 iff ANY entry pair overlaps — NO replay exemption.
+# The pin-only GUARDED pre-dispatch check (coordinator-scan.sh, homelab#309) uses THIS variant:
+# its invariant is "does the declared footprint touch a guarded FILE", and exempting the replay
+# tree there would fail OPEN the day a guarded path lands under agents/replay/ — the issue's own
+# declaration would cover the file while the check reads "no conflict" and dispatches (reviewer
+# catch on PR#557; dormant today, no current GUARDED path is under the tree — pinned by the
+# footprint-test strict rows so it stays a tested property, not a comment).
+fp_conflict_strict() (
+  set -f
+  _la="$(printf '%s' "$1" | tr ',' '\n' | tr -d ' \t')"
+  _lb="$(printf '%s' "$2" | tr ',' '\n' | tr -d ' \t')"
+  [ -n "$_la" ] && [ -n "$_lb" ] || return 1
+  for _a in $_la; do
+    for _b in $_lb; do
+      fp_pair_conflict "$_a" "$_b" && return 0
+    done
+  done
+  return 1
+)
+
 # fp_conflict <listA> <listB> → 0 iff ANY entry pair overlaps. Lists are comma-separated;
 # whitespace around entries is ignored; an empty list never conflicts.
 # Subshell + set -f: the `*` sentinel must never pathname-expand against the cwd (found by

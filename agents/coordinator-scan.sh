@@ -1195,11 +1195,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
 $(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
 EOF_QDECL
         if [ -n "$qdecl" ]; then
-          # fp_conflict, not a grep: the boundary reasoning is the whole point. THIS issue's own
-          # `agents/coordinator-scan.sh` must NOT hit `agents/coordinator/reflexes-argo.yaml`.
+          # fp_conflict_strict, not a grep: the boundary reasoning is the whole point. THIS
+          # issue's own `agents/coordinator-scan.sh` must NOT hit
+          # `agents/coordinator/reflexes-argo.yaml`. STRICT (no replay exemption) on purpose:
+          # this check's invariant is touch-a-guarded-FILE, and the exempting fp_conflict would
+          # fail OPEN the day a guarded path lands under agents/replay/ (PR#557 reviewer catch).
           while IFS= read -r gpath; do
             [ -n "$gpath" ] || continue
-            if fp_conflict "$qdecl" "$gpath"; then ghit="${ghit} ${gpath}"; fi
+            if fp_conflict_strict "$qdecl" "$gpath"; then ghit="${ghit} ${gpath}"; fi
           done <<EOF_GUARDED
 $GUARDED_PATHS
 EOF_GUARDED
