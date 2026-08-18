@@ -10,6 +10,21 @@ meant to avoid.)
 
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
   buildout → then stacks.** Board-clearing sessions are the current mode. Bucket B still waits.
+- **2026-08-18 EVENING WIND-DOWN (the all-day session's pickup; full story = TICK-LOG):**
+  (1) **#553 wk-03 flapping — ROOT CAUSE FIXED, one verify left**: the U6LiteBasement DHCP
+  reservation collided with wk-03's static .63 (our own two configs); moved to .13, applied,
+  **AP confirmed renewed onto .13 at 16:39:17Z** — verify a flap-free interval
+  (`changes(kube_node_status_condition{node="wk-03",condition="Ready",status="true"}[2h])` = 0)
+  then CLOSE #553. FU-177 filed (make IP conflicts impossible: rung 1 = `ip-lint` over the four
+  address homes). (2) Board swept: alert set 4/4 dispositioned (#221+#121+#101 closed w/
+  evidence, #63 folded into FU-155) + #500 closed (nix-cache soak MET, 18–24s) + #518 leg-1
+  diagnosed & ndots:1 shipped (operator-direct on the pin-guarded file; VERIFY: first runner
+  pod with dnsConfig — a 13-min watch saw none, check ArgoCD synced arc-runners) + #540
+  reparented under #420 (agent-fix dropped, jail-lane per charter). (3) pve maintenance:
+  playbook + runbook recipe MERGED (#554), window executed, kernel 6.8.12-42 live, plug 5/5
+  thawed. (4) Parked for the corpus sitting: #545/#546/#549. (5) Loose: post-window Longhorn
+  degraded → 0 check; the responder triage budget was exhausted much of today (alert-issue
+  intake resumes on window reset).
 - **✅ G01 FLIP COMPLETE + ADR-110 CLAUDE.md paragraph LANDED (2026-08-18 build session; PR#548
   + operator grant/apply).** Sentinel ENFORCES on all four repos (required `iac-sentinel`
   status, reviewer-App identity, */5 tick); homelab baseline exceptions + owned gitleaks config;
