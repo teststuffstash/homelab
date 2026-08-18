@@ -57,6 +57,11 @@ unreliable and say so ONCE, not per-finding:
   as contrast.
 - The harness artifacts your process changes may target are excerpted below — cite and edit
   THESE texts; never invent clause or API names beyond them:
+- **Name your tool gaps, once (homelab#536)**: when a NAMED diagnostic or tool is unavailable
+  in-pod (a `gh` verb that 403s, a ledger read that fails, an egress-blocked fetch) and its
+  absence changed what you could verify, emit ONE line in your report whose first characters are
+  exactly `TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>`, once per session per
+  tool — evidence, not lobbying.
 
 {{HARNESS_SRC}}
 
