@@ -12,7 +12,7 @@
       ],
       "mainRepo": "sleep-tracking",
       "coordinatorModel": "sonnet",
-      "workerModel": "xiaomi/mimo-v2.5",
+      "workerModel": "opencode-go/deepseek-v4-flash",
       "workerModelFallbacks": [
         "deepseek/deepseek-v4-flash-0731",
         "tencent/hy3",
