@@ -4300,3 +4300,12 @@ first live ADR-110 maintenance session before the ADR existed.
   Rename PR#552 merged (2 bot rounds: dashboard labels backwards, then 2 stale machines.yaml
   notes — same naming-confusion class the PR fixes, twice reintroduced by my own sed).
   NodeRebooted annotation refreshed (June flapping investigation closed; operator catch).
+- **#221 ROOT CAUSE FOUND (evening): the NOUS A1s wedge behind the FU-038 egress fence.** Long
+  brick pulls left them TCP-open/protocol-dead (tinytuya 902 = rotated-key lookalike; key was
+  fine). Door-open → cloud registration → local protocol up instantly with the old key →
+  door closed, both serve through the fence. thinkcentre 19.8W / hp 48.9W live; recipe in
+  tuya-egress.py header. Freeze onset 08-08/09 = day after fencing, fence-correlated for all 5
+  devices. pve's plug (different family) does NOT thaw on cloud contact — needs its wall cycle
+  at the next pve window. 4/5 recovered. Side-quest: wk-03 wedged twice (kubelet/apid dead,
+  ICMP+node_exporter alive, memory healthy) → qm reset ×1, issue #553. NodeRebooted annotation
+  refreshed. tuya_local loop-death re-observed on entry reload (restart still the fix).
