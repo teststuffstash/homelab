@@ -85,17 +85,24 @@ meant to avoid.)
   2026.8.0 upgrade won't either** (still worth doing for the separate loop-death bug).
   **Remedy for all 5 = physical power cycle — PROVEN 2026-08-18 on laptop4** (wall cycle;
   the X250's battery carried the node so it never left Ready — cordon/drain was belt-only;
-  sensor thawed 8.0-frozen → 9.8 → 17.9 live within minutes). Remaining 3 plugs + gaas, in
-  rising ceremony: ex-aquarium (⚠ RENAMED LOAD — operator says it hosts something else now,
-  ~30W, identify before cycling; plug rename = HA entity registry + a git sweep of the stale
-  alert regex/dashboards/power-measurements, no Tuya cloud needed) → konditsioneer (cuts
-  thinkcentre = Longhorn fast tier; cordon/drain first, node boots on AC restore) → pve
-  (shut down the VMs first) → gaas breaker. Original diagnosis detail:
-  if post-cycle 914 persists → key rotated, re-extract via the tuya-egress.py door; 914
-  re-confirmed 08-18, HA entry sits in setup_retry auto-retrying). The 4 plugs are cyclable at
+  sensor thawed 8.0-frozen → 9.8 → 17.9 live within minutes). **PLUGS RENAMED 2026-08-18**
+  (same session): the NOUS A1s are now `thinkcentre` (ex-aquarium, powers the ThinkCentre,
+  remote power = switch.tuyalocal_thinkcentre) and `hp` (ex-konditsioneer, powers hp-01) —
+  HA registry + git sweep + wallet devices.json + dnsmasq all updated, dead *_corrected
+  sensors deleted. **✅ gaas RESOLVED same afternoon: the operator's breaker cycle cleared the
+  914** — the tuya_local entry loaded (climate.tuyalocal_gaas is a heating thermostat, live
+  measurements verified 24.5°C) — the local key was NEVER rotated; the rotated-key/re-extract
+  contingency is moot. **⚠ thinkcentre + hp bricks STILL FROZEN (29.7 / 34.5)**: both boxes
+  were rebooted 2026-08-18 by cord pulls DOWNSTREAM of the NOUS bricks — neither brick showed
+  an availability gap, so neither actually lost power. Next attempt = pull the WHITE NOUS
+  BRICK ITSELF from the wall ~15-20s (the box's cord rides along); confirmation signal = a
+  30-60s `unavailable` gap on sensor.tuyalocal_{thinkcentre,hp}_power, then moving values.
+  Both boxes drain clean except the Longhorn instance-manager (last-replica PDB — expected;
+  verified safe: no attached engines at cut time, 2-replica volumes had healthy copies on
+  wk-02). hp-01's AC-restore worked fine on its reboot (the "flaky" note may be stale).
+  After the bricks: **pve** (shut down the VMs first). The 4 plugs are cyclable at
   the wall BUT each cycle cuts its load (pve = the hypervisor!) — needs operator sequencing.
-  ⚠ konditsioneer is ADR-013 remote power for thinkcentre — relay function on a frozen plug is
-  UNTESTED (do not test by toggling; live loads). The 9-static-sensor alert exclusion stays
+  The 9-static-sensor alert exclusion stays
   QUEUED as homelab#478 (machine lane owns it now).
 - **ADR-107 / Go-rail chain (charter = [`chainless-redesign.md`](chainless-redesign.md) — its
   §Rollout status is current): PART 1 COMPLETE 2026-08-14 02:25Z** — all chunks merged+live

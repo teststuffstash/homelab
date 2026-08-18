@@ -45,10 +45,10 @@ views:
             name: X240 (wk-metal-01)
           - entity: sensor.plug_laptop4_power
             name: X250 (wk-metal-02)
-          - entity: sensor.plug_konditsioneer_power
-            name: ThinkCentre (Konditsioneer)
-          - entity: sensor.plug_aquarium_power
-            name: Aquarium
+          - entity: sensor.plug_thinkcentre_power
+            name: ThinkCentre
+          - entity: sensor.plug_hp_power
+            name: hp-01
   - title: Irrigation
     path: irrigation
     icon: mdi:sprinkler-variant
