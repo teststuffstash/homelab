@@ -1,0 +1,4 @@
+CALL gh issue view 278 --repo teststuffstash/homelab --json body,labels
+OUT → Goal budget: goal #278 is terminal (goal/validated|reverted|abandoned) — pass-through, no budget gate on a dead goal
+OUT REACHED: the dispatch continued past the pre-flight
+RC 0

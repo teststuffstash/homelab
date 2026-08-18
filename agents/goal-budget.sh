@@ -20,12 +20,20 @@
 #     → GB_BUDGET   the parsed `Budget:` number in USD ('' = no machine-readable line on the goal)
 #       GB_SUM      Σ(actual spend + live/dispatch reservations) across the goal's DESCENDANTS
 #       GB_ROWS     per-child explanation, \n-escaped (printf '%b')
-#       GB_VERDICT  within | exhausted | no-budget
+#       GB_VERDICT  within | exhausted | no-budget | terminal
 #
 # `no-budget` is NOT `within`. The launcher has always treated an unparseable `Budget:` as "gate
 # off" (it is the pre-ADR-102 world, where goals were optional); the harvest treats it as "no
 # self-queue right", because ADR-102 makes the funded goal the thing that GRANTS the right and an
 # unreadable grant is not a grant. Same number, different fail direction, each stated at its caller.
+#
+# `terminal` is NOT `within` either — it is the VERDICT exemption (homelab#509): the goal carries a
+# terminal label (goal/validated | goal/reverted | goal/abandoned), so the gate declines to enforce
+# its `Budget:` at all. After a verdict lands the tree's remaining open work is ordinary master-lane
+# work, and the budget line that survived the goal it was scoped to must not keep spending authority
+# over it. The launcher logs `terminal` as pass-through; the harvest never sees it — since ADR-106
+# the harvest reads the goal's issue STATE (dead goal ⇒ inert), not this verdict, so the two callers
+# agree by different routes.
 #
 # TWO I/O SEAMS, on purpose: `gb_ledger` (the spend ledger) and `gb_cap` (the estimator). Both are
 # plain functions a caller may redefine — which is how agents/replay/fixtures/harvest-* replay the
@@ -132,12 +140,32 @@ goal_budget_read() {   # <slug> <goal-issue> <model> [dispatch-issue]
   _gb_proj="${_gb_slug#*/}"
   GB_BUDGET=""; GB_SUM=0; GB_ROWS=""; GB_VERDICT="no-budget"
 
-  # The grammar is `gb_budget_line` above — ONE home, shared with the ancestor walk (currency
-  # stripping, USD, and why a € sign once disabled the whole gate are all stated there).
+  # ONE view answers two questions now: the `Budget:` line (the grammar is `gb_budget_line` above —
+  # ONE home, shared with the ancestor walk; currency stripping, USD, and why a € sign once disabled
+  # the whole gate are all stated there) AND the goal's verdict labels.
   # ⚠ a REAL jq, not `gh --jq` — the standing rule in this lane, and what lets the #207 replay
-  # fixtures record the actual API payload rather than a post-jq scalar.
-  GB_BUDGET="$(gh issue view "$_gb_goal" --repo "$_gb_slug" --json body 2>/dev/null \
-    | jq -r '.body // ""' 2>/dev/null | gb_budget_line)"
+  # fixtures record the actual API payload rather than a post-jq scalar. `|| true` keeps the
+  # pre-existing fail-soft: the ORIGINAL read piped straight into `gb_budget_line` (exit 0 via
+  # `|| true`), so a transient probe failure degraded to `no-budget` instead of aborting the ride
+  # under `set -e`; the bare assignment would now propagate gh's non-zero and abort the launcher.
+  _gb_view="$(gh issue view "$_gb_goal" --repo "$_gb_slug" --json body,labels 2>/dev/null || true)"
+
+  # TERMINAL VERDICT FIRST (homelab#509) — a goal a human has already ruled terminal gates NOTHING.
+  # `goal/validated` / `goal/reverted` / `goal/abandoned` are ADR-102 terminals: after one lands,
+  # the tree's remaining open work is ordinary master-lane work, and the `Budget:` line that
+  # survived the goal it was scoped to must not keep spending authority over it. Checked HERE, ahead
+  # of the descendant walk, on purpose: it is the same one-probe short-circuit the harvest's dead-
+  # goal read gets (harvest-goal-closed pins it), so a dead goal costs nothing to discover. NOT in
+  # `goal_resolve_ancestor`: that walk is shared with the goal-card injection and the scan's harvest
+  # disposition, and making it skip terminal goals would silently change what those two see. The
+  # walk should still FIND the goal; the gate declines to enforce it.
+  _gb_term="$(printf '%s' "$_gb_view" | jq -r '([.labels[]? | select(.name == "goal/validated" or .name == "goal/reverted" or .name == "goal/abandoned")] | length)' 2>/dev/null || echo 0)"
+  if [ "${_gb_term:-0}" != "0" ]; then
+    GB_VERDICT="terminal"
+    return 0
+  fi
+
+  GB_BUDGET="$(printf '%s' "$_gb_view" | jq -r '.body // ""' 2>/dev/null | gb_budget_line)"
   [ -n "$GB_BUDGET" ] || return 0
 
   # DESCENDANTS, not direct children (2026-08-05). A goal that overruns does it by sprouting

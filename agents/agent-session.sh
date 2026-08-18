@@ -775,6 +775,7 @@ if [ -n "${RECIPE:-}" ]; then
     # the pre-flight is what refuses, comments and exits; the harvest only demotes a label.
     # One `gh issue list` call + one ledger GET, only for a ride that HAS a goal.
     if [ -n "$GOAL_PARENT" ]; then
+      # >>>REPLAY:goal-budget-gate>>>
       goal_budget_read "${ORG:-teststuffstash}/${PROJECT}" "$GOAL_PARENT" "$MODEL" "${ISSUE_N:-}"
       if [ "$GB_VERDICT" = "exhausted" ]; then
         # >>>REPLAY:goal-budget-refusal>>>
@@ -860,7 +861,14 @@ if [ -n "${RECIPE:-}" ]; then
         # <<<REPLAY:goal-budget-refusal<<<
       elif [ "$GB_VERDICT" = "within" ]; then
         echo "→ Goal budget: Σ(spend + reservations) \$${GB_SUM} ≤ Budget \$${GB_BUDGET} on #${GOAL_PARENT} — within funding"
+      elif [ "$GB_VERDICT" = "terminal" ]; then
+        # homelab#509 — a goal a human has already ruled terminal (goal/validated|reverted|abandoned)
+        # gates NOTHING: after a verdict the tree's remaining work is ordinary master-lane work, and
+        # the budget line must not keep spending authority over it. SAID, like `within` — a human
+        # reading the run sees why a funded ancestor did not gate.
+        echo "→ Goal budget: goal #${GOAL_PARENT} is terminal (goal/validated|reverted|abandoned) — pass-through, no budget gate on a dead goal"
       fi
+      # <<<REPLAY:goal-budget-gate<<<
       # GB_VERDICT=no-budget → the goal carries no machine-parsed `Budget:` line, so there is
       # nothing to enforce and the ride proceeds, exactly as before ADR-102. ⚠ The HARVEST reads
       # the same verdict the other way (no grant ⇒ no self-queue right) — see goal-budget.sh.

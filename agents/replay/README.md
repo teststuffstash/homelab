@@ -166,6 +166,7 @@ is stale, so it cannot drift the way the prose register did.
 | `goal-abandoned` | actions | - | `agents/coordinator-scan.sh` | IL-T21 IL-T22 |
 | `goal-ancestor` | table | - | `agents/agent-session.sh` | - |
 | `goal-assembly-complete` | actions | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 |
+| `goal-budget-gate` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal-first-touch` | actions | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal-interleaved` | actions | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal-legacy` | actions | - | `agents/agent-session.sh` | - |

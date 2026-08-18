@@ -1,0 +1,10 @@
+{
+  "number": 278,
+  "title": "Goal: platform FU build-out — the designed-but-unbuilt blitz (FU-165 pilot)",
+  "state": "OPEN",
+  "labels": [
+    { "name": "task/goal" },
+    { "name": "agent-fix" }
+  ],
+  "body": "## Goal\n\nBuild the designed-but-unbuilt platform FUs (FU-165 pilot).\n\n## Acceptance\n\n- each child ships through the full lane\n- the closing sweep re-probes the belts once\n\nBudget: 5\nVerdict-authority: human\n"
+}
