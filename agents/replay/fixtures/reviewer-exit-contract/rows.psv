@@ -1,0 +1,10 @@
+# reviewer-exit-contract — the decision table (family contract in fixture.yaml; per-row intent
+# below). One assert, six arms: the three terminals that let a session exit 0, the silent-green
+# class that must red, the crash-with-no-terminal honesty, and the fail-closed read.
+# id                        | world | patch (relpath @ patches/*.jq)                   | env                       | expect                  | params
+live-verdict-at-head        | clean | gh/pr-view-42.json @ patches/add-verdict.jq    | RC=0                      | live-verdict            |
+standing-aside-at-head      | clean | gh/pr-view-42.json @ patches/add-aside.jq      | RC=0                      | standing-aside          |
+agent-error-present         | clean | gh/pr-view-42.json @ patches/add-agent-error.jq | RC=0                      | agent-error             |
+no-terminal-silent-green   | clean |                                                 | RC=0                      | no-terminal-green       |
+no-terminal-claude-crashed | clean |                                                 | RC=127                     | no-terminal-crashed     |
+state-read-fails           | clean |                                                 | RC=0 STUB_GH_FAIL=1       | state-read-fails        |

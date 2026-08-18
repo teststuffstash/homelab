@@ -105,6 +105,7 @@ transitions:
     status: guarded
     replay:
       - agents/reviewer-optout-replay.sh
+      - agents/replay/fixtures/reviewer-exit-contract
     guards:
       - desc: "bot-approval-at-head over NON-MERGE commits (branch_updated ≠ content_pushed)"
         anchor: { file: agents/review-reflex.sh, pattern: "UPDATER MERGE COMMITS ARE NOT NEW CONTENT" }
@@ -166,6 +167,19 @@ transitions:
         anchor: { file: agents/review-reflex.sh, pattern: "CIRCUIT-BREAKER TELEMETRY" }
       - desc: "out-of-band: AgentReviewLoop / AgentErrorFlagged alerts (different code+token)"
         anchor: { file: argocd/resources/github-exporter/prometheusrule.yaml, pattern: "AgentReviewLoop" }
+      - desc: "in-band EXIT CONTRACT (homelab#560, 2026-08-18): a review session that ends with NO
+          verdict, NO standing-aside comment, and NO agent/error label is a FAILURE — the 2026-08-18
+          outage was a pod that died on a PREP syntax error (the #547 apostrophe), uploaded its
+          transcript via the trap, and still reported Succeeded because the launcher never propagated
+          the pod's exit. The pod re-reads its own review state after claude and asserts one of the
+          three terminals exists at this head (FINAL=0); no terminal + claude crash → claude's RC;
+          no terminal + claude 'green' → FINAL=10 (the silent-green kill); unreadable state → 10,
+          fail-closed. The trap preserves the pre-trap exit; the launcher propagates the pod's
+          terminated exitCode so a dead/terminal-less session reds the Argo workflow. The three
+          legitimate quiet exits (standing-aside posted / agent/error already present / opt-out skip
+          before pod creation) stay 0. Pinned by an executed replay (agents/replay/fixtures/
+          reviewer-exit-contract, six rows)"
+        anchor: { file: agents/reviewer-session.sh, pattern: "EXIT CONTRACT" }
     incidents: ["2026-07-12 oracle-fleet#13 (reviewDecision aliasing, 12 approvals)", "2026-07-21 oracle-fleet#57 (merge-commit staleness, 9 reviews, 88% window burn)"]
 
   - id: MP-T04

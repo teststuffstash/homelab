@@ -1,0 +1,45 @@
+# reviewer-exit-contract (homelab#560) — the pod-side exit contract, as a decision table.
+#
+# THE CONTRACT. A reviewer session that ends with NO verdict, NO standing-aside comment, and NO
+# agent/error label is a FAILURE — the 2026-08-18 outage class was a pod that died on a PREP syntax
+# error (the #547 apostrophe), uploaded its transcript via the trap, and still reported Succeeded
+# (the launcher never propagated the pod's exit, so the workflow container exited 0). The block
+# under replay re-reads the PR's own review state after claude returns and asserts one of the three
+# terminals exists with ${REVIEWER_LOGIN} at this head, computing the FINAL exit code the pod (and
+# through the launcher's pod-exit read, the Argo workflow) exits with.
+#
+# THE TERMINALS (the assert is "one terminal exists", NOT "a verdict exists"):
+#   live-verdict-at-head   an APPROVED/CHANGES_REQUESTED review from our identity submitted at or
+#                          after the newest non-merge commit (the STEP-0 self-guard's own filter).
+#   standing-aside         a comment from our identity carrying the machine marker at THIS content
+#                          head (`<!-- standing-aside head=<sha8> ... -->`).
+#   agent-error-present    the agent/error label already on the PR — someone tripped the breaker;
+#                          the silent stop IS the terminal.
+#
+# THE EXIT POLICY (pinned row by row):
+#   terminal OK                     → FINAL=0, whatever claude did (the review landed; its record
+#                                     is on the PR).
+#   no terminal ∧ claude crashed    → FINAL=<claude's RC> (honest — never paper over a crash).
+#   no terminal ∧ claude "succeeded"→ FINAL=10, the silent-green class this contract exists to
+#                                     kill (the 2026-08-18 shape: a green pod with no record).
+#   review-state re-read FAILED     → FINAL=10, FAIL-CLOSED — a GitHub blip reds one run; a silent
+#                                     green would mask the next outage.
+#
+# WORLDS (family-local; constructed, not recorded — the review state is the fixture's input and
+# no live PR can be pointed at):
+#   clean   one non-merge commit at oid abc1234d (the aside marker's head= and the at-head filter
+#           anchor to it), no reviews, no bot comments, no agent/error label. The rows OVERLAY the
+#           terminal they want onto this clean base via patches/*.jq — a row that adds nothing is
+#           the no-terminal arm by construction.
+#
+# Parts: bridge.sh (seams: function-shadow gh + the launcher vars) + block:reviewer-exit-contract
+# (real pod code) + post.sh (observation point: FINAL + TERMINAL_OK, the two values the pod exits
+# on — a resolution fixture asserts on enforcement it does not run, the goal-ancestor pattern).
+name: reviewer-exit-contract
+mode: table
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-exit-contract
+  - file:post.sh
+rows: rows.psv

@@ -397,7 +397,13 @@ upload_transcripts() {
   s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/manifest.json "$P/manifest.json" || echo "transcripts: manifest upload FAILED (non-fatal)"
   echo "transcripts: uploaded → $P"
 }
-trap upload_transcripts EXIT
+# homelab#560 (upload-always, exit-honest): preserve the ORIGINAL exit code across the trap. A
+# plain `trap fn EXIT` hands the shell's final status to whatever fn's last command did, so a run
+# that aborts before RUNPART (e.g. a PREP syntax error — the 2026-08-18 class) could surface a
+# clean pod exit after a failed session. Capture $? FIRST, upload, then re-exit the captured code
+# so the launcher's pod-exit read (the same contract, launcher leg) has a truthful number to
+# propagate to the Argo workflow.
+trap 'rc=$?; upload_transcripts; exit $rc' EXIT
 SNIP
 )
 # The run tail: claude's result JSON goes to a file (not the live stream), the upload runs (its log
@@ -409,11 +415,67 @@ set +e
 [ "${GO_SERVED:-0}" = "1" ] && record_review_state
 claude -p "$PROMPT" --model "$MODEL" $RUBRIC_FLAG --permission-mode "$PERM_MODE" --output-format json > /tmp/result.json
 RC=$?
-echo "$RC" > /tmp/rc
+# >>>REPLAY:reviewer-exit-contract>>>
+# EXIT CONTRACT (homelab#560): a session that ends with NO verdict, NO standing-aside comment, and
+# NO agent/error label is a FAILURE — the 2026-08-18 outage class was a pod that died on a PREP
+# syntax error (the #547 apostrophe), uploaded its transcript via the trap, and still reported
+# Succeeded (the workflow container exits 0 because the launcher never propagated the pod's exit).
+# After claude returns, re-read the PR's OWN review state and assert one of the three terminals
+# exists with ${REVIEWER_LOGIN} at this head. Fail-CLOSED: an unreadable state is no-terminal (a
+# GitHub blip reds one run; a silent green would mask the next outage). The three legitimate quiet
+# exits — standing-aside posted / agent/error already present / opt-out skip before pod creation
+# (which never reaches here) — stay exit 0: the assert is "one terminal exists", not "a verdict
+# exists".
+assert_review_terminal() {
+  local state newest_commit newest_sha8 head_ts verdict aside error_label
+  [ -n "${REVIEWER_LOGIN:-}" ] || { echo "exit-contract: REVIEWER_LOGIN unset — cannot verify a terminal; failing closed" >&2; return 1; }
+  state="$(gh pr view "${PR_NUMBER}" --repo "${REPO_SLUG}" --json reviews,comments,labels,commits,headRefOid 2>/dev/null)" || {
+    echo "exit-contract: review-state re-read FAILED — cannot prove a terminal exists; failing closed" >&2; return 1; }
+  # The newest NON-MERGE commit — the content this review was about; matches the STEP-0 aside
+  # marker's head= field and review-reflex.sh's at-head filter.
+  newest_commit="$(printf '%s' "$state" | jq -r '[.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate] | max // ""' 2>/dev/null)" || newest_commit=""
+  newest_sha8="$(printf '%s' "$state" | jq -r '[.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)] | sort_by(.committedDate) | last | .oid // ""' 2>/dev/null | cut -c1-8)" || newest_sha8=""
+  head_ts="${newest_commit:-0000-00-00T00:00:00Z}"
+  # TERMINAL 1 — a LIVE (non-DISMISSED, APPROVED/CHANGES_REQUESTED) verdict from our identity
+  # submitted at or after the newest non-merge commit (the STEP-0 self-guard's own filter).
+  verdict="$(printf '%s' "$state" | jq -r --arg bot "$REVIEWER_LOGIN" --arg h "$head_ts" '
+    [ .reviews[]? | select(.author.login == $bot and (.state == "APPROVED" or .state == "CHANGES_REQUESTED")) | select(.submittedAt >= $h) ] | length' 2>/dev/null)" || verdict=""
+  # TERMINAL 2 — a standing-aside comment from our identity carrying the machine marker at THIS
+  # content head (head=<sha8>): `pre` may vary; the head field is what makes it this head's aside.
+  aside="$(printf '%s' "$state" | jq -r --arg bot "$REVIEWER_LOGIN" --arg h "${newest_sha8:-}" '
+    [ .comments[]? | select(.author.login == $bot and (.body | contains("<!-- standing-aside head="))) | select(.body | contains("head=" + $h)) ] | length' 2>/dev/null)" || aside=""
+  # TERMINAL 3 — an agent/error label already present: someone tripped the breaker before us, and
+  # the silent stop IS the terminal (the STEP-0 GENUINE-ANOMALY branch).
+  error_label="$(printf '%s' "$state" | jq -r '[ .labels[]? | select(.name == "agent/error") ] | length' 2>/dev/null)" || error_label=""
+  if [ "${verdict:-0}" -gt 0 ]; then
+    echo "exit-contract: terminal OK — live ${REVIEWER_LOGIN} verdict at this head"
+    return 0
+  fi
+  if [ "${aside:-0}" -gt 0 ]; then
+    echo "exit-contract: terminal OK — ${REVIEWER_LOGIN} standing-aside at this head"
+    return 0
+  fi
+  if [ "${error_label:-0}" -gt 0 ]; then
+    echo "exit-contract: terminal OK — agent/error already present (breaker tripped; silent stop is the terminal)"
+    return 0
+  fi
+  echo "exit-contract: NO TERMINAL — no ${REVIEWER_LOGIN} verdict, no standing-aside, no agent/error at head ${newest_sha8:-unknown} (verdict=$verdict aside=$aside error=$error_label); a green here would mask a dead review plane" >&2
+  return 1
+}
+TERMINAL_OK=0
+if assert_review_terminal; then TERMINAL_OK=1; fi
+# Exit policy: a terminal exists → 0 (even if claude crashed right after posting it — the review
+# landed and its record is on the PR); claude failed with no terminal → claude's own RC (honest);
+# claude "succeeded" with no terminal → 10, the silent-green class this contract exists to kill.
+if [ "${TERMINAL_OK:-0}" = "1" ]; then FINAL=0
+elif [ "${RC:-0}" -ne 0 ]; then FINAL="${RC:-1}"
+else FINAL=10; fi
+# <<<REPLAY:reviewer-exit-contract<<<
+echo "$FINAL" > /tmp/rc
 trap - EXIT
 upload_transcripts
 cat /tmp/result.json
-exit $RC
+exit "$FINAL"
 SNIP
 )
 ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s\n%s' "$UPLOADER" "$PREP" "$TOUCHESPART" "$RUNPART" | jq -Rs .)]"
@@ -502,6 +564,11 @@ spec:
           value: "${GO_SERVED:-0}"
         - name: PERM_MODE
           value: "${PERM_MODE}"
+        # homelab#560: the pod's exit contract asserts on its OWN review-bot identity — re-reading
+        # the PR's reviews/comments/labels and matching reviews[].author.login / aside marker
+        # against this literal (same value the prompt's STEP-0 is injected with; no `[bot]` suffix).
+        - name: REVIEWER_LOGIN
+          value: "${REVIEWER_LOGIN}"
         # A0 standard rail: OTLP metrics+logs → the in-cluster collector (Loki/Prometheus).
         - name: CLAUDE_CODE_ENABLE_TELEMETRY
           value: "1"
@@ -589,23 +656,47 @@ _verdict="$(gh pr view "${PR}" --repo "${REPO_SLUG}" --json reviewDecision -q .r
 echo "    reviewDecision=${_verdict:-unknown}"
 echo "  (APPROVED + CI green ⇒ auto-merge completes the PR; CHANGES_REQUESTED ⇒ back to the worker.)"
 echo "  remove the pod:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete pod ${POD}"
-# FU-085: a verdict is scan-actionable (CHANGES_REQUESTED → round N+1 is the coordinator's move) —
-# ring the doorbell instead of waiting out the */10 cron. Cheap over-approximation: ring on every
-# verdict, the scan re-applies the full predicate. Fail-open off-cluster.
-# FU-080 doorbell routing: carry {stack,loop_ns} for a GRADUATED stack so the coordinator Sensor's
-# per-stack trigger inlines into <loop_ns>; else plain {repo}. Best-effort (miss → */10 cron covers).
-_grad="$(jq -r --arg r "$PROJECT" '.stacks[]|select((.graduated // false)==true)|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
-# FU-085 compound: a CHANGES_REQUESTED verdict IS item-shaped — carry the unit so the Sensor's
-# workflow runs the scan's fast-path (scoped re-validation + dispatch) instead of a full sweep.
-# Computed HERE in script code (never the LLM); any other verdict rings the plain doorbell and
-# the full scan/cron decide. The fast-path re-validates, so a stale unit costs a few gh calls.
-_unit=""
-[ "${_verdict:-}" = "CHANGES_REQUESTED" ] && _unit=",\"unit\":\"changes-requested|${PROJECT}|pr-${PR}\""
-if [ -n "$_grad" ] && [ "$_grad" != "null" ]; then
-  _door="{\"repo\":\"${PROJECT}\",\"stack\":\"${_grad}\",\"loop_ns\":\"${_grad}-agents\"${_unit}}"
-else
-  _door="{\"repo\":\"${PROJECT}\"${_unit}}"
+# ── EXIT CONTRACT (homelab#560), launcher leg ───────────────────────────────────────────────────
+# `logs -f` above returned only after the reviewer container terminated, so the pod's terminated
+# exitCode IS the honest verdict on the run — and the workflow container exits with THIS script's
+# code, which is what Argo reads as Succeeded/Failed. Before this, every pod — including the
+# 2026-08-18 apostrophe aborts, whose transcripts uploaded and whose exit was swallowed by the
+# `logs -f ... || true` above — reported Succeeded. Propagate the pod's code: a session that died
+# on prep, or produced no terminal (the pod-side exit-contract assert), must red the workflow so
+# argo_workflows_* metrics and the UI carry it.
+_pod_rc="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}' 2>/dev/null || true)"
+_pod_phase="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+case "${_pod_phase:-}" in
+  Succeeded) _pod_rc=0;;
+  Failed)    [ -n "${_pod_rc:-}" ] || _pod_rc=1;;
+  *)
+    echo "WARN: cannot confirm ${POD} terminal state (phase=${_pod_phase:-unknown}) — failing closed" >&2
+    [ -n "${_pod_rc:-}" ] || _pod_rc=1;;
+esac
+echo "→ pod exit code: ${_pod_rc}"
+if [ "${_pod_rc}" = "0" ]; then
+  # FU-085: a verdict is scan-actionable (CHANGES_REQUESTED → round N+1 is the coordinator's move) —
+  # ring the doorbell instead of waiting out the */10 cron. Cheap over-approximation: ring on every
+  # verdict, the scan re-applies the full predicate. Fail-open off-cluster.
+  # homelab#560: gated on a successful run. A failed/terminal-less session rings NOTHING — the red
+  # workflow IS the signal, and the level-triggered backstops re-pick at their natural cadence; a
+  # ring→fail→ring loop on a persistent failure is its own anomaly signal, not an accelerator.
+  # FU-080 doorbell routing: carry {stack,loop_ns} for a GRADUATED stack so the coordinator Sensor's
+  # per-stack trigger inlines into <loop_ns>; else plain {repo}. Best-effort (miss → */10 cron covers).
+  _grad="$(jq -r --arg r "$PROJECT" '.stacks[]|select((.graduated // false)==true)|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
+  # FU-085 compound: a CHANGES_REQUESTED verdict IS item-shaped — carry the unit so the Sensor's
+  # workflow runs the scan's fast-path (scoped re-validation + dispatch) instead of a full sweep.
+  # Computed HERE in script code (never the LLM); any other verdict rings the plain doorbell and
+  # the full scan/cron decide. The fast-path re-validates, so a stale unit costs a few gh calls.
+  _unit=""
+  [ "${_verdict:-}" = "CHANGES_REQUESTED" ] && _unit=",\"unit\":\"changes-requested|${PROJECT}|pr-${PR}\""
+  if [ -n "$_grad" ] && [ "$_grad" != "null" ]; then
+    _door="{\"repo\":\"${PROJECT}\",\"stack\":\"${_grad}\",\"loop_ns\":\"${_grad}-agents\"${_unit}}"
+  else
+    _door="{\"repo\":\"${PROJECT}\"${_unit}}"
+  fi
+  curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$_door" \
+    "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
+    >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_door})" || true
 fi
-curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$_door" \
-  "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
-  >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_door})" || true
+exit "${_pod_rc}"
