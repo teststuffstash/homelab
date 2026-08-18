@@ -1,0 +1,35 @@
+# homelab#369 — FU-042 guard (a): the open-PR-liveness predicate, narrowed from a bare `#N`
+# MENTION to a strong link.
+#
+# CONDITION UNDER REPLAY. The launcher pre-flight checks whether issue #PF_ISSUE already has an
+# OPEN PR strongly referencing it. PR #366 in this world is `Fixes #351` and cites #344 once, in
+# prose ("not vacuous" section) — the exact live shape that parked #344 on 2026-08-12 and pointed
+# the next round at the WRONG branch (fix/issue-351-…).
+#
+# THE CONTRACT (five arms, one world — the arms change the bridge variables, never the guard):
+#   1. mention-only — dispatching #344 with no --work-branch must NOT refuse: #366 mentions #344
+#      but does not strong-link it, so the issue is free. (The regression: the old predicate
+#      `#N\b` refused here and pointed at fix/issue-351-….)
+#   2. strong-link — dispatching #351 must refuse, naming #366 and its branch.
+#   3. resume-match — #351 with --work-branch == #366's headRef must pass, printing the resume line.
+#   4. resume-mismatch — #351 with --work-branch of a DIFFERENT branch must refuse (a resume must
+#      land on the PR's own branch; any other branch is still a fork).
+#   5. mid-word — dispatching #352 with no --work-branch must NOT refuse: PR #400's body contains
+#      `unresolved #352`, which is a prose MENTION — the keyword is a suffix of a longer word, so
+#      the left `\b` anchor keeps it from false-matching as a strong link. (The regression this
+#      arm pins: the unanchored alternation `(?i)(implements|…)` matched inside `unresolved`
+#      / `prefixes` / `disclose`, parking the issue and pointing the round at the wrong branch —
+#      the same failure the guard exists to kill, just triggered by prose. Reviewer finding,
+#      PR #567 round 1.)
+#
+# THE PREDICATE IS THE C6 STRONG-LINK GRAMMAR (seat ruling 2026-08-18): the review-flip belt and
+# finalize key on the same set — a sibling-seam mention is not a link, and `Implements #N` (the
+# platform's own ownership marker) still counts. The `--work-branch == headRef` exception is
+# unchanged; arm 3 pins it.
+name: fu042-guard-a
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu042-guard-a
+  - file:cases.sh

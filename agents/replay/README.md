@@ -146,9 +146,7 @@ is stale, so it cannot drift the way the prose register did.
 | `argv-payload/warn-band` | actions | - | `agents/agent-session.sh` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
-| `c4c5-infeasible/parks` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
-| `c4c5-infeasible/probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
-| `c4c5-infeasible/quoted-inert` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
+| `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `depends-on-retired-format/depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
 | `dispatch-phase/scan` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -156,6 +154,7 @@ is stale, so it cannot drift the way the prose register did.
 | `doorbell/collapse` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
+| `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder/anthropic` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder/both` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder/go` | actions | - | `agents/agent-session.sh` | - |
@@ -170,20 +169,11 @@ is stale, so it cannot drift the way the prose register did.
 | `goal-budget-refusal/legacy` | actions | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal/unchanged` | actions | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal/unreadable` | actions | - | `agents/agent-session.sh` | - |
-| `goal/abandoned` | actions | - | `agents/coordinator-scan.sh` | IL-T21 IL-T22 |
-| `goal/assembly-complete` | actions | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 |
-| `goal/checkpoint-due` | actions | - | `agents/coordinator-scan.sh` | IL-T12 |
-| `goal/nonassembly-merge-inert` | actions | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 |
-| `goal/reverted` | actions | - | `agents/coordinator-scan.sh` | IL-T20 IL-T22 |
-| `goal/validated` | actions | - | `agents/coordinator-scan.sh` | IL-T19 IL-T22 |
+| `goal` | table | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 IL-T19 IL-T20 IL-T21 IL-T22 |
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
-| `harvest/deep-sprout` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
-| `harvest/goal-closed` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 |
-| `harvest/goal-open-exhausted` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
-| `harvest/goal-open-funded` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
-| `harvest/master-inert` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
+| `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
 | `opencode-phonehome-killswitch/opencode-phonehome-killswitch` | suite | - | `-` | - |
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |
@@ -211,6 +201,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-currency/behind-skips` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/probe-fail-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-exit-contract` | table | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-go-failover/available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/explicit-model` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/limited` | actions | - | `agents/reviewer-session.sh` | - |

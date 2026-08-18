@@ -1,0 +1,65 @@
+# goal — THE FAMILY, as one decision table (FU-167 move-2 rollout; was 6 copied dirs).
+#
+# THE CONTRACT (ADR-102 / homelab#208, consolidated from the six fixture essays; per-row intent
+# in rows.psv). The scan's goal lane is a pure state machine over ONE open-issue fetch (`openall`)
+# and ONE all-issues fetch (`kidsall` = issue-list): the LLM never picks what a predicate can
+# decide, and the JUDGMENT stays outside the loop entirely — a human (later the KPI unit) applies
+# a verdict label, this block only reacts to it. Six rows, six dispositions of the same tree:
+#   ASSEMBLY-COMPLETE (IL-T18)  a merged PR with a `goal/**` HEAD + a line-anchored
+#     `Assembly-for: #<goal>` trailer → the goal is labelled `goal/post-launch` and STAYS OPEN.
+#     The absence of any `gh issue close 29` is the most load-bearing line in the stream — this
+#     is where the old `Fixes #29` closed circles#17 100 minutes before the operator refuted it.
+#   CHECKPOINT (IL-T12)          the demoted goal-review: a deterministic burn-down line inside
+#     the FINDINGS STORE, plus a `goal-checkpoint` unit ONLY when ≥ GOAL_CHECKPOINT_N findings
+#     are undispositioned (or the child-set completes pre-launch). Burn-down is compare-then-write.
+#   TERMINALS (IL-T19/20/21)     the three verdicts, each with TWO fail-closed gates before any
+#     write: (1) AUTHORITY — `Verdict-authority:` must be `human` (absent ⇒ human, the safe
+#     default); (2) ACTOR — the label's newest `labeled` event actor must be a `User` (the App
+#     holds issues:write, so nothing but this read stops the loop labelling its own goal).
+#     DESCENDANTS FIRST, THE GOAL LAST — the resumability contract: a closed goal leaves `openall`
+#     and the leg never fires again, so a partial pass must leave the goal open to be resumed.
+#       validated → the goal closes `--reason completed`, the close sweep is a REPORT line (batch
+#                   disposition stays operator-confirmed until the goal registry panel exists)
+#       reverted  → every OPEN descendant CLOSES `--reason not planned` (the tree stays readable
+#                   history), then the goal closes `completed`, quoting the DECLARED `Revert:`
+#                   pointer from the goal body
+#       abandoned → descendants are DE-QUEUED but left OPEN (compare-then-write on `agent/queued`),
+#                   goal closes `--reason not planned`
+#
+# WORLDS (family-local — none of these issue numbers exist in the registry circles-29-tree):
+#   terminal  the VALIDATED terminal as the base shape: goal #29 post-launch with the
+#             `goal/validated` label, bucket #77 + live sprout #95 + unrelated #240. The
+#             abandoned/reverted rows jq-patch the goal's openall (label → their verdict, + the
+#             Revert: line for reverted) and overlay their events (the actor-test feed). The
+#             issue-list is SHARED across all three — the descendant walk reads number/state/
+#             parent/labels of DESCENDANTS, never the goal's own verdict label.
+#   open-pre  the PRE-LAUNCH open goal shared by the assembly-complete / checkpoint-due /
+#             nonassembly-merge-inert rows: goal #29 OPEN with no verdict label, closed children
+#             #30/#31, bucket #77, unrelated #240. The checkpoint-due shape is the base (its
+#             findings-store comment with 6 undispositioned findings); assembly-complete overlays
+#             the merged-PR list (the assembly PR #88 + its sub-issues) and nonassembly-merge-inert
+#             overlays an EMPTY findings store.
+pins:
+  - IL-T12
+  - IL-T18
+  - IL-T19
+  - IL-T20
+  - IL-T21
+  - IL-T22
+name: goal
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:goal-lane
+  - file:post.sh
+scrub:
+  # Each terminal's audit-comment prose is the block's own (scrubbed); the computed values are kept.
+  - s|--body 🤖 de-queued: goal .*|--body <de-queue audit comment — see agents/coordinator-scan.sh>|
+  - s|--comment 🤖 goal terminal: \*\*ABANDONED\*\*.*|--comment <goal terminal comment — see agents/coordinator-scan.sh>|
+  - s|--comment 🤖 closed with goal .*|--comment <descendant audit comment — see agents/coordinator-scan.sh>|
+  - s|--comment 🤖 goal terminal: \*\*REVERTED\*\*.*Revert pointer: \(.*\)\. [0-9]* open descendant.*|--comment <goal terminal — revert pointer: \1>|
+  - s|--comment 🤖 goal terminal: \*\*VALIDATED\*\*.*|--comment <goal terminal comment — see agents/coordinator-scan.sh>|
+  # The assembly-complete comment keeps the bucket sentence verbatim (`\1` = the sub-issue name).
+  - s|--body 🤖 \*\*assembly-complete\*\*.*\(\*\*Where post-launch work goes:\*\* [^\\]*\)\\n.*|--body <assembly-complete comment — see agents/coordinator-scan.sh> \1|
+rows: rows.psv
