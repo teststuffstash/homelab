@@ -1,5 +1,10 @@
 # Power measurements
 
+> **Plug rename 2026-08-18:** the two NOUS A1 sockets `aquarium` → **`thinkcentre`** and
+> `konditsioneer` → **`hp`** (the loads moved: ex-aquarium powers the ThinkCentre, ex-konditsioneer
+> powers hp-01). Mentions of the old names below are historical — series under
+> `sensor.plug_{thinkcentre,hp}_*` start 2026-08-18.
+
 _Part of the [homelab docs](README.md). Structured inventory + generated tables:
 [`../machines/`](../machines/README.md). Why the laptops are the compute tier: [`adr.md`](adr.md) ADR-044._
 

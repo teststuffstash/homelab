@@ -150,12 +150,12 @@ machines:
     cpu_cores: 2
     memory_gb: 4
     ip: 192.168.2.53
-    plug: sensor.plug_konditsioneer_power
+    plug: sensor.plug_thinkcentre_power
     idle_w: 27.9
     load_w: 54.5
     singlecore_bogo_s: 1200.4
     multicore_bogo_s: 2231.7
-    remote_power: smart-plug (switch.konditsioneer_socket); auto-boots on AC restore — NOT WoL
+    remote_power: smart-plug (switch.tuyalocal_thinkcentre); auto-boots on AC restore — NOT WoL
     # ThinkCentre Edge — 120GB Kingston SV300S3 SATA SSD. ⚠️ Device name is enumeration-order
     # dependent: it's /dev/sdb when PXE-booting with NO USB stick plugged (the steady state), but
     # was /dev/sdc during the original USB-ISO onboarding (USB took sda). PXE now works reliably
@@ -183,14 +183,15 @@ machines:
     cpu_cores: null
     memory_gb: 8
     ip: 192.168.2.54
-    plug: null
+    plug: sensor.plug_hp_power
     idle_w: null
     load_w: null
     singlecore_bogo_s: null
     multicore_bogo_s: null
-    remote_power: Wake-on-LAN (PXE-booted; no smart plug)
+    remote_power: Wake-on-LAN (PXE-booted); smart plug switch.tuyalocal_hp exists but AC-restore is flaky — prefer WoL
     # HP desktop — 128GB SanDisk SATA SSD. Installs WITH extensions (the metal install image),
-    # so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
+    # so it joins Longhorn-ready. Power: the hp plug (ex-konditsioneer NOUS A1, renamed
+    # 2026-08-18; AC-restore flaky → WoL).
     # No AVX2 — verified via /proc/cpuinfo.
     talos_metal_node: true
     install_disk: /dev/sda

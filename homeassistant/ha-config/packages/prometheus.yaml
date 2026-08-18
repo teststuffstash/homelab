@@ -30,6 +30,4 @@ prometheus:
     # cardinality AND its churn for series that duplicate the plug_* templates exactly.
     exclude_entity_globs:
       - sensor.smart_plug*
-      - sensor.aquarium_*
-      - sensor.konditsioneer_*
       - sensor.tuyalocal_*
