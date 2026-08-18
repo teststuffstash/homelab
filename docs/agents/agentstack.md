@@ -66,21 +66,35 @@ an ephemeral in-cluster runner** — same policy question, same per-project answ
   and stays non-root — the repo brings its own docker/kind CLI via devbox.json. Every sidecar
   accommodation is a spike finding (`docs/spikes/kata-ci-gate.md`): mknod `/dev/kmsg`, cgroup
   nesting via the dind entrypoint, MTU clamp, tmpfs docker-lib.
-- **Egress:** the composed CNP gains a LAN-resolver DNS leg (kata pods run `dnsPolicy: None`,
-  FU-072) and the registry FQDNs — interim until the FU-073 mirrors land, then that block is
-  deleted and the allowlist tightens back.
+- **Egress:** the composed CNP adds the docker-only legs — the kata LAN-resolver DNS leg
+  (`dnsPolicy: None`, FU-072) and the `ghcr.io` FQDN (the dind's own ghcr pulls stay direct until
+  the gate configs route ghcr through the mirror per-tool). The pull-through mirrors themselves are
+  **baseline** tier — open to every ride (§The egress dial).
 - **In-cluster services** (openrouter-proxy, garage, pushgateway) are rewritten to resolved
   endpoint IPs at dispatch (`resolve_ep` in agent-session.sh) — kata guests can't reach service
   VIPs (FU-072); delete the rewrites when that lands.
 
 ## The egress dial (the FU-020 rollout, encoded)
 
-`fixer.egress` renders the worker CNP from **baseline + profile + extraFQDNs**:
+`fixer.egress` renders the worker CNP from **four tiers** — baseline (every ride, every stack),
+capability-gated (docker-mode rides only), the claim-selected ecosystem profile, and harvest-earned
+`extraFQDNs`. This table is the **audit surface** a human or auditor reads; the claim stays the
+per-stack policy surface. Keep it in sync with the composed legs
+([`argocd/resources/agentstack/composition.yaml`](../../argocd/resources/agentstack/composition.yaml))
+leg-by-leg.
 
-- baseline: dns / agent-egress proxy+broker (the only LLM+credential exit) / nix-cache / garage /
-  monitoring / github.com + `*.githubusercontent.com` + cache.nixos.org
-- `profile: python` → + pypi.org, files.pythonhosted.org; `node` → + registry.npmjs.org
-- `extraFQDNs`: earned from a monitor-phase harvest, never speculation
+| tier | legs | rule |
+|---|---|---|
+| **baseline** (every ride, every stack) | kube-apiserver (READ-RBAC visibility, homelab#97) · DNS (kube-dns) · **registry mirrors (docker.io `.40.20`, ghcr `.40.21` — moved here by homelab#520)** · egress proxy + git-cred broker (`agent-egress` — the only LLM+credential exit) · nix-cache · devbox-search · garage · monitoring/pushgateway · github.com + `*.githubusercontent.com` + cache.nixos.org | open to everybody; each leg carries a one-line rationale |
+| **capability-gated** (`fixer.docker: true`) | kata LAN-resolver DNS leg (`192.168.2.1` — `dnsPolicy: None` mechanics, genuinely docker-only) · kata LAN-VIP belt (nix-cache `.40.23` / devbox-search `.40.27` — kata rides install via them) · upstream registry FQDN `ghcr.io` (dockerd's `registry-mirrors` is Hub-only, so the dind's own ghcr pulls go direct until the gate configs route ghcr through the mirror per-tool; then this leg is deleted — the recorded plan) | gated ONLY for risk, cost, or genuine capability-specificity — the gate's reason is written at the leg |
+| **ecosystem profile** | `python` → pypi.org / files.pythonhosted.org · `node` → registry.npmjs.org | claim-selected |
+| **harvest-earned** | `extraFQDNs` | per-stack, monitor-phase evidence, never speculation (unchanged) |
+
+**Why the mirrors are baseline** (homelab#520): read-only in-cluster pull-through caches — no
+exfil surface (nothing writable), content-in parity with baseline's existing github/pypi reach.
+The docker-gate bought no security and cost three triage sessions + a chronically reopening alert
+thread (#107 legs 3/5/8: every mirror pod roll mints a new denied pod IP for `docker: false`
+namespaces).
 
 `enforce: false` (the default — new stacks start here) attaches the policy with
 `enableDefaultDeny.egress: false`: full DNS visibility for the Hubble harvest, nothing blocked.
