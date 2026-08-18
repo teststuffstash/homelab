@@ -202,6 +202,8 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-key-pinned` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key-subscription` | actions | - | `agents/retro-session.sh` | - |
 | `retro-rank-snapshot-exclusion` | suite | - | `-` | - |
+| `review-flip-belt-probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
+| `review-flip-belt` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `reviewer-currency-behind-skips` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency-current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency-probe-fail-proceeds` | actions | - | `agents/reviewer-session.sh` | - |

@@ -816,8 +816,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # ruleset. Design: issue-authoring.md FU-143 section. Probe failures skip LOUDLY (rule #6).
     c6g=""; c6g_nums=""
     # ⚠ Candidate set is DELIBERATELY wider than $inprog: a goal child that lands cleanly in ONE
-    # round ends in `agent/review`, not `agent/in-progress` (the launcher flips on PR-open —
-    # MP-T10). Keying the goal-child leg off $inprog alone made the COMMON case invisible: only a
+    # round ends in `agent/review`, not `agent/in-progress` (the scan's review-flip belt moves it
+    # at PR-open — MP-T14; historically the launcher performed no such flip). Keying the
+    # goal-child leg off $inprog alone made the COMMON case invisible: only a
     # child dragged back to in-progress by a fix round could ever close. circles#32 auto-closed
     # (6 rounds, in-progress) while #40 — one clean round, `agent/review`, PR merged into the goal
     # base — sat open with nothing to claim it. C6's own CLOSED-issue leg has always accepted both
@@ -1757,6 +1758,72 @@ EOF_GUARDED
     # (rule #6); the launcher pre-flight is the double-dispatch belt either way.
     v2=""
     if [ "$(printf '%s' "$inprog" | jq 'length')" -gt 0 ]; then
+      # ── THE REVIEW-FLIP BELT (homelab#501 / MP-T14): in-progress → review at PR-open ──────────
+      # Operator ruling 2026-08-18, direction (b): the footprint releases at PR-open BY DESIGN.
+      # The ADR-097 hold's only job is preventing two LIVE workers in one file; once the PR is open
+      # the worker is dead and the "occupation" is durable branch state, which the merge path is
+      # DESIGNED to absorb (strict up-to-date, updater serialization, the merge-conflict judgment
+      # lane; the ≤3-open-PR cap bounds the churn). The documented lifecycle moves an issue to
+      # `agent/review` at PR-open, and nothing implemented that flip — the release was a coin-flip
+      # on whether a coordinator session happened to visit the item (2026-08-18: #477/#450 held
+      # 9-10h while every PR sat codeowner-parked; the unused half of #477's declaration held
+      # #478/#479 out of dispatch). This belt makes the flip DETERMINISTIC; finalize is the CAUSE
+      # half (agent-runtime, filed separately) and the belt covers finalize failures forever (the
+      # IL-G07 pattern: belt and cause are separate items by design).
+      # The predicate is the STRONG link, same grammar as C6's goal-child closeout: a bare mention
+      # cannot tell "the PR that IMPLEMENTS the issue" from "a PR that NAMES it as a sibling seam"
+      # (the 2026-08-06 circles#36 lesson), so a sibling citation must NOT flip the label. Closed
+      # PRs are invisible here by construction (prsjson is the OPEN list) — a PR merged yesterday
+      # cannot release today's footprint; the merged-closeout clause owns that state.
+      # >>>REPLAY:review-flip-belt>>>
+      # `busy_fps` above already read $inprog, so THIS tick still holds a flipped issue's footprint
+      # (level-triggered: the next scan sees agent/review). C4/C5 below runs on the same stale
+      # $inprog, but its selector already excludes any issue an open PR references (the bare-mention
+      # test) — a strong link IS a bare mention, so a flipped issue falls out of every derivation
+      # with no extra exclusion.
+      # agent/error (human-first breaker) and agent/blocked (human gate) are excluded — a relabel
+      # must never move an issue out of a HUMAN-OWNED state.
+      # ⚠ The re-read proves the END STATE before the audit comment: `gh issue edit` is not atomic,
+      # and with NEITHER label the issue is invisible to every clause (IL-T16's lesson, oracle#193).
+      # `set -euo pipefail`: the `if` + `|| true` keep a refused write a REPORTED write.
+      flip_done=""
+      if printf '%s' "${prsjson:-null}" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        flip_cands="$(printf '%s' "$inprog" | jq -r --argjson prs "$prsjson" '
+          [.[] | (.labels|map(.name)) as $L
+                | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
+                | .number as $n
+                | select([$prs[] | select(((.body // "") | test("(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i"))
+                                   or ((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i")))] | length > 0)
+                | "\($n)"] | .[]')" 2>/dev/null || flip_cands=""
+        for fcn in $flip_cands; do
+          fok=""
+          # IL-T16 write discipline: add agent/review FIRST, remove agent/in-progress SECOND,
+          # then RE-READ and prove the end state — the audit comment is posted only against a
+          # state we verified.
+          if gh issue edit "$fcn" --repo "$slug" --add-label agent/review >/dev/null 2>&1; then
+            gh issue edit "$fcn" --repo "$slug" --remove-label agent/in-progress >/dev/null 2>&1 || true
+          fi
+          fend="$(gh issue view "$fcn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
+          case ",${fend}," in
+            *",agent/review,"*) case ",${fend}," in *",agent/in-progress,"*) : ;; *) fok=1;; esac;;
+          esac
+          if [ -n "$fok" ]; then
+            gh issue comment "$fcn" --repo "$slug" --body "$(printf '%s\n' \
+              "🤖 **\`agent/in-progress\` → \`agent/review\` — footprint released at PR-open** (deterministic scan belt, homelab#501 / MP-T14)." \
+              "" \
+              "An OPEN PR strongly references \`#${fcn}\` (\`implements\`/\`closes\`/\`fixes\`/\`resolves\`, or the line-anchored \`Issue:\` trailer), so this issue's work has left the worker pod and become durable branch state. The issue-label lifecycle moves it to \`agent/review\` here, deterministically — it no longer depends on a coordinator session happening to visit the item." \
+              "" \
+              "This releases the issue's ADR-097 footprint and its WIP slot. Concurrent same-file PRs are a state the merge path is designed to absorb (strict up-to-date, updater serialization, the merge-conflict judgment lane) — the codeowner gate no longer freezes sibling dispatch." )" >/dev/null 2>&1 || true
+            flip_done="${flip_done}${fcn} "
+            orphans="${orphans}[$repo] ✓ issue #${fcn} flipped \`agent/in-progress\` → \`agent/review\` (open PR strongly references it — deterministic scan belt, homelab#501/MP-T14): footprint released at PR-open by design\n"
+          else
+            orphans="${orphans}[$repo] ⛔ review-flip FAILED or landed HALF-APPLIED on issue #${fcn} — labels are now [${fend}]. Fix by hand: it wants \`agent/review\` and NOT \`agent/in-progress\`.\n"
+          fi
+        done
+      else
+        orphans="${orphans}[$repo] ⚠ review-flip belt HELD — the open-PR read is unreadable this tick (rule #6: never fail INTO a write); no flips\n"
+      fi
+      # <<<REPLAY:review-flip-belt<<<
       if PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
             --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
         if [ -z "$PODS" ]; then
