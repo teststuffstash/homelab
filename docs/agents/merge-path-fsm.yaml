@@ -139,15 +139,22 @@ transitions:
     belts:
       - desc: "reviewer STEP-0 self-guard, PRECONDITION arm (homelab#122 / PR #123, master 11c2045,
           2026-08-08): a premise true when the reviewer was QUEUED and false when it EXECUTED —
-          mergeStateStatus DIRTY/UNKNOWN, checks not concluded at head, or ONE verdict of its own
-          identity already at this exact commit — is ordinary semaphore contention, NOT an anomaly:
-          one standing-aside comment, NO label, NO verdict, and the level-triggered path
-          re-dispatches when the state settles"
+          mergeStateStatus DIRTY/UNKNOWN, checks not concluded at head, or one LIVE (non-DISMISSED)
+          verdict of its own identity already at this exact commit — is ordinary semaphore
+          contention, NOT an anomaly: one standing-aside comment, NO label, NO verdict, and the
+          level-triggered path re-dispatches when the state settles. homelab#556 (2026-08-18):
+          the at-head count filters on review state APPROVED/CHANGES_REQUESTED exactly as the
+          reflex's breaker count does — a DISMISSED verdict is an ended round, not a verdict, so
+          the arbitration-dismissal play (homelab#141) no longer leaves STEP-0 refusing the
+          re-dispatch"
         anchor: { file: agents/reviewer-session.sh, pattern: "PRECONDITION FAILURE" }
-      - desc: "the aside is keyed by (head sha, precondition), not by pass — the reviewer reads the
-          comments it already fetched and posts nothing if one of its own asides names this head and
-          this precondition, so a draining queue cannot manufacture the near-identical-comment pile
-          this very guard watches for"
+      - desc: "the aside dedup is keyed by (content commit, precondition) on a MACHINE MARKER
+          (`<!-- standing-aside head=<sha8> pre=<slug> -->`, ADR-103 channel-separation precedent),
+          not by pass and not by prose — the reviewer reads the comments it already fetched and posts
+          nothing if one of its own asides carries the marker for this newest non-merge commit and
+          this precondition. homelab#556 (2026-08-18): the old prose key (head sha) never matched
+          across sessions because the branch tip moved on update-branch merge no-ops, so PR#547
+          piled two near-identical asides 7 minutes apart and risked the anomaly latch"
         anchor: { file: agents/reviewer-session.sh, pattern: "IDEMPOTENT ASIDE" }
       - desc: "reviewer STEP-0 self-guard, ANOMALY arm — only a state re-dispatch CANNOT resolve
           trips the breaker (agent/error + one AGENT_ERROR: comment): MORE THAN ONE own verdict at
