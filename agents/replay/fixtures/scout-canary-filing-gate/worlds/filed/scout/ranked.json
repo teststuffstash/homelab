@@ -1,0 +1,4 @@
+[
+  {"model": "acme/foo:free", "free": true, "headline": 0, "bench": {"benched": true, "intelligence": 42, "coding": 40, "agentic": 38}, "enr": {"price_per_mtok": 0, "price_note": "free tier", "pinned_provider": {"provider": "acme", "uptime": 99.7}, "provider_count": 1}, "score": 38},
+  {"model": "bigco/bar", "free": false, "headline": 0.2, "bench": {"benched": false}, "enr": null, "score": -1}
+]
