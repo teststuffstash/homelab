@@ -1,0 +1,10 @@
+# c4c5-infeasible — the decision table (family contract in fixture.yaml; per-row intent below).
+# id           | world  | patch | env          | expect
+# parks         = the verdict leg: a REAL marker parks + audits #66, #70 beside it keeps its unit
+# probe-fail    = the same inert world, but STUB_GH=fail: the probe is ATTEMPTED (CALL line), NO
+#                 write, PROBE_FAILED reported, #66 keeps today's behaviour completely
+# quoted-inert  = the inert world read normally: the quoted marker latches NOTHING, the
+#                 human-blocked #71 is not even read — both keep today's behaviour
+parks         | verdict |       |                | parks
+probe-fail    | inert   |       | STUB_GH=fail   | probe-fail
+quoted-inert  | inert   |       |                | quoted-inert
