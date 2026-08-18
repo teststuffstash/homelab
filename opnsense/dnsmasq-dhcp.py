@@ -63,7 +63,7 @@ HOSTS = [  # static reservations preserved from ISC
     {"host": "USW-Lite-8-PoE", "hwaddr": "68:d7:9a:5d:bb:48", "ip": "192.168.2.11"},
     {"host": "U6Lite2ndfloor", "hwaddr": "f4:92:bf:aa:1b:08", "ip": "192.168.2.12"},
     {"host": "UAP-AC-LiteOffice", "hwaddr": "e0:63:da:70:2e:28", "ip": "192.168.2.14"},
-    {"host": "U6LiteBasement", "hwaddr": "f4:92:bf:aa:1e:10", "ip": "192.168.2.63"},
+    {"host": "U6LiteBasement", "hwaddr": "f4:92:bf:aa:1e:10", "ip": "192.168.2.13"},  # ⚠ was .63 — COLLIDED with wk-03 (static, tofu) since the reservation was written; the 2026-08-18 flapping root cause (#553)
     # snore-recorder Raspberry Pi — pinned at its leased address so the sleep-iac
     # ArgoCD deploy hook (ansible over SSH) has a stable target; mDNS (.local)
     # doesn't resolve from in-cluster pods. FU-051.
