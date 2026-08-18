@@ -374,7 +374,8 @@ went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merg
   ip-plan ranges (ADR-088), hostname conventions, ADR-076 bucket ownership, tenancy boundaries,
   secret *references-never-values*, `deletionPolicy` guards, workflow-path rules. Every rule kills
   an incident class forever, with a message. This is the decision-table doctrine applied to infra.
-- **L0b — the tamper-proof sentinel (IAC-G04): v1 BUILT 2026-08-03, SHADOW mode.** In-repo CI
+- **L0b — the tamper-proof sentinel (IAC-G04): v1 BUILT 2026-08-03; G01 ENFORCEMENT FLIP BUILT
+  2026-08-18** (soak verdict: -iac repos 15d clean; homelab needed a baseline, below). In-repo CI
   runs the PR's own workflow code, so a required check the PR can rewrite is not a gate against
   the worker itself. The sentinel runs cluster-side (`iac-sentinel` CronWorkflow */15,
   agent-coordinator ns, arc-runner image) with rules and engines from THIS repo's master —
@@ -387,10 +388,23 @@ went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merg
   fleet-standard), and a bash path-rule (worker-authored PRs must not touch
   `.github/workflows/**` — the sleep-iac#28 hole; a GitHub **push ruleset** with restricted
   file paths is the enforcement-grade native version, to verify+tofu at the flip).
-  **Shadow → enforce is the router-rollout pattern**: v1 posts nothing to GitHub (logs +
-  pushgateway `iac_sentinel_violations`/`_engine_seconds`); the flip adds `statuses: write` to
-  the homelab-REVIEWER App (never the worker's own identity — it could pass itself) + a
-  required check on the -iac repos.
+  **Shadow → enforce is the router-rollout pattern**: v1 posted nothing to GitHub (logs +
+  pushgateway `iac_sentinel_violations`/`_engine_seconds`); **the flip (built 2026-08-18)**
+  adds `statuses: write` to the homelab-REVIEWER App (never the worker's own identity — it
+  could pass itself), and the sentinel posts an `iac-sentinel` commit status per evaluated PR
+  head (success/failure; `error` on probe failure — fail-closed, healed next tick) when
+  `SENTINEL_STATUS_TOKEN` is present (the reviewer-git Secret; empty = shadow). The context is
+  REQUIRED on the four sentinel repos (tofu `protected_repos`), the workflow push ruleset
+  (`workflow_push_guard`, `restrict_workflow_pushes`) rejects `.github/workflows/**` pushes by
+  non-bypass actors, and the tick tightened */15 → */5 so a PR waits ≤ one tick.
+  **The homelab baseline that made the platform repo enforceable:** the tenancy policy
+  (no-cluster-scoped) reads differently on the platform repo — there the fence is "only the
+  grants the platform already owns", encoded as `policy/iac/exceptions/homelab.yaml` (a Kyverno
+  PolicyException enumerating every legit cluster-scoped resource BY NAME; a new
+  ClusterRole/Namespace in a PR still goes red until the codeowner-gated `/policy/` list grows).
+  Same central-ownership model for secrets scanning: `policy/iac/gitleaks.toml` (documented-FP
+  allowlist) is passed with `--config` from the sentinel's own master clone — exceptions and
+  scanner config are never read from the scanned PR tree, which a hostile PR controls.
   **Measured overhead (2026-08-03, both -iac repos at master):** fetch ~0.7–1.0s · collect
   ~0.2s · kyverno ~0.7–0.8s (5 policies × 17–25 docs) · gitleaks ~0.14s · **total ~1.8–2.1s
   serial per PR head**. Parallelizing engines saves <1s while ARC job overhead is ~10–30s and
@@ -499,8 +513,10 @@ canaries prove nothing here.
 Tracked on FU-106; the gap register (IAC-G01..G06, `iac-lane-fsm.yaml` — G07 shipped without
 ever entering it) IS the list. The order as EXECUTED: G07 + G02 + G03 (2026-08-02) → G05
 rung-0 (sleep-tracking#113) + G04 sentinel v1 shadow (2026-08-03).
-**Remaining: the G01 ENFORCEMENT flip after the sentinel shadow soak (plan in §L0b), then the
-G06 advisory lens; window rungs 1/2 when oracle's gateway metering (T3c) exists.**
+**The G01 ENFORCEMENT flip: BUILT 2026-08-18 (§L0b — status posting, homelab baseline, required
+check + push ruleset in tofu); activation = the operator's App `statuses:write` grant + the
+host-side `github-tofu apply`. Remaining after that: the G06 advisory lens; window rungs 1/2
+when oracle's gateway metering (T3c) exists.**
 **Historical reprioritization note (2026-08-02, commit-history audit):** G07 pin-follow was the
 biggest *mechanical* win (no LLM, deterministic, the most frequent human commit in oracle-iac)
 and can ship independently of the order above; and once oracle-iac gains a fixer block (the

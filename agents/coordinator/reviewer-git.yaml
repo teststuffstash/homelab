@@ -47,8 +47,15 @@ spec:
     contents: write          #   clone the PR branch + make the bot a repo WRITER so its approval counts
     pull_requests: write     #   submit the review (approve / request-changes) + inline comments
     checks: read             #   independently confirm CI-green on the head it reviews (App grant
-    statuses: read           #   widened by the operator 2026-07-10 — the PR #6 re-review had to
-    actions: read            #   caveat "CI not independently confirmed"; these three close that)
+    statuses: write          #   widened by the operator 2026-07-10 (read) — the PR #6 re-review had
+    actions: read            #   to caveat "CI not independently confirmed"; these three closed that.
+                             #   statuses → WRITE 2026-08-18 (App grant clicked same day): the
+                             #   iac-sentinel posts its required `iac-sentinel` commit status under
+                             #   THIS identity — never the worker's own, which could pass itself
+                             #   (the G01 enforcement flip, iac-lane.md §L0b). ⚠ ordering: the
+                             #   manifest line lands only AFTER the App grant — requesting an
+                             #   ungranted permission 422s the ESO mint and stops the reviewer
+                             #   token refreshing fleet-wide.
   repositories:              #   the repos where agent PRs land (mirror coordinator-git; verify
     - sleep-tracking         #   the exporter /apps page confirms coverage BEFORE adding — ESO 422s otherwise)
     - snore-recorder         #   NB comments in this list go TRAILING — the registration lint's
