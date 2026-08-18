@@ -30,14 +30,21 @@ meant to avoid.)
   stored) but oracle is PARKED (operator 2026-08-11) — pick up at unpark; acceptance =
   drift-free re-plan through the two-zone token. FU-157 opportunistic. ⚠ `dig +short` wraps
   long DS digests — `tr -d ' '` before grepping.
-- **HA #221 (meta lane)**: probe RAN 2026-08-13 — protocol_version hypothesis REFUTED (entries
-  match negotiation); real defect = tuya_local receive loop dies silently, no retry (RECURRED
-  2026-08-17 per the thread). **All 4 plugs REVIVED** by per-entry REST reload while the device
-  answers. Remaining (operator, 2026-08-17): **tuya_local 2026.7.2→2026.8.0 upgrade = a
-  DEDICATED FUTURE SESSION** (operator does it; HA config is imperative-apply per runbook) —
-  the receive-loop death is the bug it may fix; **gaas is HARD-WIRED, no plug to cycle** — a
-  power cycle means finding its breaker (operator, someday; if post-cycle 914 persists → key
-  rotated, re-extract via the tuya-egress.py door); the 9-static-sensor alert exclusion is
+- **HA #221 (meta lane) — DIAGNOSIS CORRECTED 2026-08-18 (jail session, evidence on the
+  thread): the 4 plugs were NEVER revived.** Both the 08-13 reloads and a fresh 08-18 reload
+  only recreated entities (timestamp bump, same value) — pve=124.6W / aquarium=29.7W /
+  konditsioneer=34.5W / laptop4=8.0W are FLAT from the retention edge (08-10) to now, while
+  laptop3/opnsense (same fence) fluctuate hourly. Post-reload debug trace: receive loop ALIVE,
+  polling ~31s, device returns byte-identical dps every poll; fresh jail tinytuya sessions get
+  the SAME frozen dps → **the freeze is DEVICE-side (measurement snapshot wedged since the
+  08-08/09 window), sibling of gaas's 914 state — reloads can't fix it and the tuya_local
+  2026.8.0 upgrade won't either** (still worth doing for the separate loop-death bug).
+  **Remedy for all 5 = physical power cycle**: gaas is HARD-WIRED → breaker (operator, someday;
+  if post-cycle 914 persists → key rotated, re-extract via the tuya-egress.py door; 914
+  re-confirmed 08-18, HA entry sits in setup_retry auto-retrying). The 4 plugs are cyclable at
+  the wall BUT each cycle cuts its load (pve = the hypervisor!) — needs operator sequencing.
+  ⚠ konditsioneer is ADR-013 remote power for thinkcentre — relay function on a frozen plug is
+  UNTESTED (do not test by toggling; live loads). The 9-static-sensor alert exclusion stays
   QUEUED as homelab#478 (machine lane owns it now).
 - **ADR-107 / Go-rail chain (charter = [`chainless-redesign.md`](chainless-redesign.md) — its
   §Rollout status is current): PART 1 COMPLETE 2026-08-14 02:25Z** — all chunks merged+live
