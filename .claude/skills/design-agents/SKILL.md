@@ -19,18 +19,23 @@ Why it exists (operator ruling, 2026-08-10): the agents subsystem is so tightly 
 major change requires the full context anyway — selective closure kept under-reading (the FSM
 `replay:` fields, `model-routing.md` §M1a: both misses were claims about files not read), and the
 per-file grounding list had grown into an audit burden the operator had to verify by memory.
-Fixed cost beats itemized honesty here: ~145k tokens, pre-authorized, paid ONCE per session
+Fixed cost beats itemized honesty here: ~110k tokens, pre-authorized, paid ONCE per session
 (prompt caching amortizes every follow-up question).
 
 ## The read plan
 
 1. **Base layer, in full**: `CONTEXT.md` + `ARCHITECTURE.md` (skip if already read this session).
 2. **The agents corpus, in full, FIRST — one pass, before forming any opinion**:
-   - `docs/agents/*.md` and `docs/agents/*.yaml` — every file, including the FSM YAML sources
-     (the `replay:`/gap fields live there, not in the generated views)
-   - `agents/README.md` (launcher) + `agents/replay/README.md` (harness) +
-     `agents/coordinator/README.md` (the brief — 19k tokens and load-bearing; a docs/agents glob
-     misses it)
+   - `docs/agents/*.md` — every file. **The FSM YAMLs are NOT read** (trim, 2026-08-18): since
+     the orphan gate landed (2026-08-10) the generated `*-fsm.md` views render the `replay:` /
+     `unreplayed:` fields and the gap registers — the exact miss that once justified reading the
+     sources. The YAMLs add only code anchors (file+regex); read one on demand when EDITING a
+     guard/transition, never for a design sitting.
+   - `agents/README.md` (launcher) + `agents/coordinator/README.md` (the brief — 19k tokens and
+     load-bearing; a docs/agents glob misses it)
+   - `agents/replay/README.md` **through the generated index only** (doctrine + cleanup contract
+     + index, ≈ the first third). The per-family essays below the index are touch-time reference
+     — grep-only, the retros rule applied (trim, 2026-08-18).
    - **EXCLUDED: `docs/agents/retros/`** — sediment, grep-only, "history is read when history is
      the subject" (the base skill's layer 4 stands unchanged).
 3. **Glossary** — [`docs/glossary.md`](../../../docs/glossary.md) rules this corpus's vocabulary
