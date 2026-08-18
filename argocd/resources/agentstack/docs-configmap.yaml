@@ -79,7 +79,7 @@ data:
     global-OOMed a node in 2026-07). That is sized to fit the 8G kata laptops with ~1.3Gi spare,
     so those hold ONE ride; wk-metal-04 (16G) is the only node that fits two. Concurrency is
     therefore memory-bound and asymmetric — `REPO_MAX_WIP` counts pods, not the memory they need,
-    registry FQDNs added to the egress allowlist until the pull-through mirrors land (FU-073),
+    the `ghcr.io` FQDN stays on the egress allowlist (dockerd's `registry-mirrors` is Hub-only),
     in-cluster services reached via endpoint IPs until FU-072.
 
     ## The subscription claude tier (`fixer.claudeTier: true`)
