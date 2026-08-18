@@ -4309,3 +4309,9 @@ first live ADR-110 maintenance session before the ADR existed.
   at the next pve window. 4/5 recovered. Side-quest: wk-03 wedged twice (kubelet/apid dead,
   ICMP+node_exporter alive, memory healthy) → qm reset ×1, issue #553. NodeRebooted annotation
   refreshed. tuya_local loop-death re-observed on entry reload (restart still the fix).
+- **pve maintenance window executed same evening (5/5 devices now recovered)**: pve-upgrade
+  playbook born + first-run (228 pkgs, kernel -9 → -42), full-stop window (guests down cp-01
+  last → poweroff → operator wall-pull → onboot=1 + AC-restore self-recovery, 10/10 Ready in
+  ~10 min, zero hands on the way up), pve plug thawed 153.6W. Runbook §Proxmox host
+  maintenance window + PR#554. #221 closable. Control-plane changes deliberately NOT bundled
+  (cp-01 recreate = single-etcd surgery, its own event; topology fix = ROADMAP 3-node HA).
