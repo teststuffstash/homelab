@@ -200,7 +200,7 @@ on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
   | PR → `CHANGES_REQUESTED` (round N+1) | reviewer pod (`reviewer-session.sh` verdict) | reviewer curls after posting the verdict | instant |
   | `merge-conflict` label appears | `update-pr-branch` — GitHub-hosted **by design** (see above); don't move it for this | exporter piggyback, BUILT 2026-08-11 (#285): `maybe_dispatch_conflict` rings `/coordinate` with `{stack, loop_ns}` — the label was already in the 120 s poll, nothing read it (PR#275 waited out the cron) | ≤2 min |
   | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs — `{repo}`-only, which is now ENOUGH: the global scan resolves repo → {stack, loop_ns} and re-rings the stack's own loop (FU-144 receiver-side fan-out, built with A2) | instant (one resolver hop) |
-  | issue gains `agent/queued` | a **jail LLM session** authoring issues from specs (rarely a hand-labelling human) | the authoring session rings the doorbell itself: mono jail → `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`; stack jails → curl `/coordinate` once it exists — the webhook needs **no RBAC into `agent-coordinator`**, exactly the FU-080 airlock shape | instant, author-fired |
+  | issue gains `agent/queued` | whoever applies the label — a **jail LLM session** authoring issues from specs, or a hand-labelling human | **two emitters.** The authoring session rings the doorbell itself: mono jail → `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`; stack jails → curl `/coordinate` once it exists — the webhook needs **no RBAC into `agent-coordinator`**, exactly the FU-080 airlock shape. **Plus** exporter piggyback, BUILT 2026-08-18 (#505): `maybe_dispatch_queued` rings `/coordinate` with a repo-dumb `{repo, number}` on the appearance edge of `agent-fix` ∧ `agent/queued` ∧ ¬`direction-change` ∧ ¬`agent/error` (`queued_dispatchable` mirrors the scan clause label for label) — a hand-applied label rings too (the #459 gap: sleep-tracking#121; homelab#478/479/491) | instant, author-fired; exporter piggyback ≤2 min |
   | a PR MERGES (merged-closeout / the goal chain / sibling platform repos) | GitHub auto-merge — off-cluster by nature, minutes after the last in-cluster actor exited | exporter piggyback, BUILT 2026-08-12 (ADR-106 (6)): `maybe_dispatch_merged` — a number leaving the poll's open set is REST-checked once (`merged` authoritative) and rings with {stack, loop_ns}; before this NOTHING rang on merge anywhere (the v1.1 spike's finding 6 named the sibling repos; the gap was fleet-wide) | ≤2 min |
 
 ⚠ **That last row said `devbox run coordinate-now` until 2026-08-06 and was WRONG for every
@@ -216,19 +216,21 @@ repo-dumb by design — that is the honest payload for anything that edits a rep
 old warning carried stands: a table row naming a mechanism that cannot reach the stack is worse
 than an empty row, because it stops anyone looking.
 
-**Emitter inventory (2026-08-11, checked against `master`).** Everything that rings `/coordinate`
+**Emitter inventory (2026-08-18, checked against `master`).** Everything that rings `/coordinate`
 from this repo's own code now carries `{stack, loop_ns}` for a graduated repo:
 [`agents/agent-session.sh`](../../agents/agent-session.sh),
 [`agents/reviewer-session.sh`](../../agents/reviewer-session.sh),
 [`scripts/coordinate-ring.sh`](../../scripts/coordinate-ring.sh) (`devbox run ring <stack>`),
 `fix-debounce-argo.yaml` (from birth, `83907ea`), `.github/workflows/coordinate-doorbell.yaml`,
-and the github-exporter's four dispatchers — review (FU-100), CI-red (FU-115), `merge-conflict`
-(#285) and, since 2026-08-12, PR-merge (ADR-106 (6)). The `{repo}`-only emitters — `.github/workflows/renovate.yaml`
-(`{"repo":"all"}`) and `.github/workflows/devbox-update.yaml` (`{"repo":"<matrix.repo>"}`) — are
-**served by the FU-144 receiver-side fan-out since 2026-08-12** (the ⚠ block above): repo-dumb
-payloads are the SUPPORTED shape now, and new emitters should prefer them over learning stack
-mechanics. The operator-lane note stands for the files themselves (`.github/**` executes from a
-PR's own branch, so the fixer lane may not edit them), and `devbox run coordinate-now` remains
+and the github-exporter's five dispatchers — review (FU-100), CI-red (FU-115), `merge-conflict`
+(#285), since 2026-08-12 PR-merge (ADR-106 (6)) and, since 2026-08-18, the queued-label edge
+(#505; repo-dumb, grouped below). The `{repo}`-only emitters — `.github/workflows/renovate.yaml`
+(`{"repo":"all"}`), `.github/workflows/devbox-update.yaml` (`{"repo":"<matrix.repo>"}`) and
+`maybe_dispatch_queued` (`{repo, number}`) — are **served by the FU-144 receiver-side fan-out
+since 2026-08-12** (the ⚠ block above): repo-dumb payloads are the SUPPORTED shape now, and new
+emitters should prefer them over learning stack mechanics. The operator-lane note stands for the
+files themselves (`.github/**` executes from a PR's own branch, so the fixer lane may not edit
+them), and `devbox run coordinate-now` remains
 the global reflex's deliberate manual caller — its wakes now fan out too when edge-shaped.
 The old two-readers trap (emitters read the mirror, the scan reads the live claim) is CLOSED for
 this path by construction: the resolver runs inside the scan and reads the same `stacks_json()`
