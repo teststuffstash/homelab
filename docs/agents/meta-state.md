@@ -9,10 +9,16 @@ meant to avoid.)
 ## Live state (2026-08-11 end-of-pipeline consolidation — history is TICK-LOG's)
 
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
-  buildout → then stacks.** The sentinel G01 flip + Bucket B WAIT for a clear board — no point
-  building on top of failing state, and the in-flight-work navigation cost is real (~100k of the
-  design-agents corpus is in-progress state). Board-clearing sessions are the current mode; the
-  flip/Goal work un-parks when the board is clean.
+  buildout → then stacks.** Board-clearing sessions are the current mode. **The G01 sentinel
+  flip UN-PARKED same evening** (the board-clear precondition was met by the day's sweep) —
+  **build it in a NEW session, first chunk**: reviewer-App `statuses:write` (operator grant
+  click) + the required sentinel check + the workflows push-ruleset (iac-lane §L0b), then drop
+  the tier-1 `argocd/resources/` scaffold CODEOWNERS line. That session also lands the ADR-110
+  maintenance-session paragraph into CLAUDE.md §How changes land. Bucket B still waits.
+- **⚑ ADR-110 ruled 2026-08-18** (the seat-time conversation): maintenance sessions ARE the
+  codeowner gate — corpus-loaded at start, seat merges the small, escalates the big; cluster
+  identities still merge nothing. Recorded in adr.md + chainless-redesign §maintenance session;
+  the agent-platform-direction memory's "per-PR human tap" reading is superseded.
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners (operator-direct, pin-guarded
   file) — target ~2-min ci wall (job itself is 2m38s; ~4min was runner spin-up queue). Measure
   run-pickup deltas for a few days; revert to 0 if no win. Remaining setup cost tracked as an

@@ -1360,6 +1360,32 @@ corpus-batch filter stops keying jail-lane on ¬agent-fix; `devbox run board` (t
 operator view, platform pilot) renders backlog as aggregates and lists only human-actionable
 classes.
 
+### ADR-110 — The maintenance session: the codeowner gate is the corpus-loaded SESSION, not the per-PR tap
+
+**Decision** (operator, 2026-08-18, the board-clearing session that proved the shape): for the
+MAINTENANCE stream — no single Goal, reacting to alerts/board items — the human codeowner gate
+is executed by the **operator-started, corpus-loaded jail session**: the seat reads every
+master-bound edit with the design-agents corpus as context, merges when nothing
+operator-significant surfaces, and escalates only the big. The Goal lane keeps its own
+checkpoint model (corpus at decompose/assembly); this is its sibling for goalless streams.
+**The invariant that does NOT move:** the platform (cluster identities) can never approve or
+merge — CODEOWNERS/rulesets unchanged; the seat's authority derives from the human STARTING the
+session (jail == human, the 2026-08-05 ruling extended from labels to merges for this stream).
+**Escalation rubric:** operator contributes on the BIG — design forks, new machinery,
+governance/gate changes, budget semantics, new credentials/egress, anything irreversible or
+ADR-shaped. The seat lands the SMALL — alert-born fixes, thresholds/annotations, doc currency,
+scaffold-tier manifests, fixture/lint upkeep — where "a bit wonky for a couple of days" is
+explicitly acceptable: the alert belts are the net and rework-later is the plan.
+**Considered:** per-PR human taps (measured 2026-08-18: ~12 taps in one day with "nothing
+meaningful to add" — the seat had already done every read); seat auto-approve as a standing
+grant divorced from session context — rejected, the corpus load at session start is what makes
+the read a codeowner read. **Supersedes the per-PR reading** of the 2026-08-08 "gate stays
+human" ruling; the gate stays human — the human's unit changed from tap to session.
+**Consequences:** worker+bot review stays the decorrelated first gate; the seat is
+verdict-writer AND merge-executor in-session; CLAUDE.md §How changes land gains the
+maintenance-session paragraph in the G01-flip session (unparked same day); double-review
+(subagent → seat → bot) unchanged for seat-authored work.
+
 ### ADR-108 — Observability stays out of routing-critical paths; meters push, critical paths never pull Prometheus
 
 **Status:** Accepted (2026-08-13, operator ruling on homelab#438).

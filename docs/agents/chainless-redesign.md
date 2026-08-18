@@ -78,6 +78,16 @@ of documented-against; hardlinked objects keep it worktree-cheap, the warm-devbo
 unchanged, and the seat integrates via `git fetch <clone-path> <branch>`. The operator's
 standing lens: worktrees/submodules only where complexity requires them.
 
+**The MAINTENANCE session (ADR-110, 2026-08-18) — the batch model gains merge authority.** For
+the goalless stream (alerts, board items, fix-flow), the corpus-loaded session IS the codeowner
+gate: the seat reads every master-bound edit against the corpus and merges when nothing
+operator-significant surfaces — escalating the BIG (design forks, governance/gate changes,
+budget semantics, new credentials, anything ADR-shaped) and landing the SMALL (alert-born
+fixes, thresholds, doc currency, scaffold manifests) where wonky-for-days is accepted and the
+alert belts are the net. The invariant: cluster identities still approve/merge NOTHING — the
+seat's authority is the operator having started the session. The Goal lane keeps its own
+checkpoints (corpus at decompose/assembly); this is the sibling for streams with no single goal.
+
 Subagent input is the fixer's three-layer architecture transposed
 ([`fixer-context.md`](fixer-context.md)): **L1** = the versioned
 [`agents/jail-subagent-card.md`](../../agents/jail-subagent-card.md) (the FU-117 "third
