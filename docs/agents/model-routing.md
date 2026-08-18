@@ -314,7 +314,29 @@ splits into three feeds with different time constants, none of which needs "enou
 The /route pick is then: (chain ∩ class-eligible − claim deny − task strikes − health-broken)
 → order by effective price → uniform pick in the 15% jitter band (the exploration budget that
 keeps the outcome feed alive — cells need dozens of samples for a coarse works/flaky/avoid
-verdict, not millions). Benchmark axes map to classes, not one score: **IFBench** ≈ recipe
+verdict, not millions).
+
+⚖ **The FOURTH feed — workload profiles, and the estimator folds into the router (operator
+direction, 2026-08-18 — direction, NOT a build decision).** Smart router, dumb consumers: the
+router learns each class's empirical shape — rounds (janitor ≈ N historically), tokens/round,
+context size, cache-read share — and prices candidates as **expected cost per JOB**, not $/M.
+`estimate_budget.py` is already the formula (`rounds × requests/round × context × eff$/M ×
+(1−cache)`) with hand-tuned static bands launcher-side; router-resident and measured, it
+recomputes automatically when the price table moves — no per-role model preferences hardcoded
+anywhere, no stale "who knows what" tuning. Consequences that fall out rather than being
+policy: rail affinity (a cache-heavy profile prices brutally on the Go rail's list-on-raw draw
+and cheaply on Anthropic's discounted cache — so "low-cache roles prefer Go" is an OUTPUT);
+whole-cycle reservations (retiring the flat $2 cap-tier class behind goal #278's $104 phantom
+— ADR-107 cost-rethink direction 4's mechanism). Refinements pinned at sketch time: split by
+density (context/turn shape = per-CLASS prior, dense; rounds-to-converge = per-CELL correction,
+feed 3's existing data); price per **successful** job (the FU-057 `$/successful-issue` axis) or
+fail-fast models Goodhart the pick; profiles are OFFLINE folds over run_reports + the
+`/generation` harvest + OTLP `claude_code_*` (scout-tick cadence — never per-request inference,
+ADR-094 stands); cold-start falls back to the static bands as priors. Substrate = ADR-107
+flip-acceptance 2's accounting work (rail + per-role attribution) — nothing new to collect,
+one new fold + the pick formula. Benchmarks (feed 1) and canary/strike/retro evidence (feed 3)
+stay filters/corrections on the same pick; family decorrelation (homelab#516) a filter beside
+them. Benchmark axes map to classes, not one score: **IFBench** ≈ recipe
 compliance (coding), **τ²-Bench** ≈ agentic tool loops (the closest public proxy for "can it
 drive goose"), **GPQA/AA-LCR/HLE** ≈ the research/audit reasoning tier. ⚠ Probed 2026-08-02:
 OpenRouter's own benchmark data (`/api/frontend/v1/benchmarks?permaslug=`) is **session-gated**
