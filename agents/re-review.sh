@@ -30,6 +30,13 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/.." && pwd)"
 
+# This tool IS the sonnet benchmark channel — it must never inherit a claude-go shim:
+# under one, ANTHROPIC_BASE_URL remaps the sonnet slot and "sonnet" silently rides the Go
+# rail (live 2026-08-18: one re-review ran as kimi-k3, $0.17, caught on the CONSOLE, not by
+# the platform — the homelab#515 requested≠served class, jail edition). Pin the rail: plain
+# claude auths with the seat's own OAuth straight to the API.
+unset ANTHROPIC_BASE_URL
+
 # Defaults
 PROJECT=""
 PR=""
