@@ -71,7 +71,7 @@ HOSTS = [  # static reservations preserved from ISC
     # named leaf devices referenced by IP elsewhere / worth keeping stable.
     {"host": "lwip0", "hwaddr": "c0:f8:53:db:62:80", "ip": "192.168.2.16"},   # = Tuya "Smart plug 2" (opnsense) — see the tuya block below
     {"host": "rockrobo", "hwaddr": "7c:49:eb:9f:bf:f4", "ip": "192.168.2.26"},
-    {"host": "ESP-1CF343", "hwaddr": "c4:dd:57:1c:f3:43", "ip": "192.168.2.80"},  # = Tuya "Konditsioneer" (NOUS A1)
+    {"host": "ESP-1CF343", "hwaddr": "c4:dd:57:1c:f3:43", "ip": "192.168.2.80"},  # = Tuya "hp" — ex-"Konditsioneer" (NOUS A1, renamed 2026-08-18)
     # --- Tuya smart plugs: MANDATORY reservations, not a nicety (FU-038) ------------
     # tuya-local addresses each device by IP, and these have NO reliable rediscovery path:
     # the four `Smart plug` units (9y0qx7npuny0pnwt, protocol 3.5) never answer UDP discovery
@@ -86,7 +86,7 @@ HOSTS = [  # static reservations preserved from ISC
     {"host": "tuya-plug-pve", "hwaddr": "00:33:7a:d6:88:be", "ip": "192.168.2.215"},      # "K&M black 1"
     {"host": "tuya-plug-laptop3", "hwaddr": "c0:f8:53:83:0a:db", "ip": "192.168.2.209"},  # "Smart plug 3" -> wk-metal-01
     {"host": "tuya-plug-laptop4", "hwaddr": "00:33:7a:d6:ad:76", "ip": "192.168.2.130"},  # "Smart plug 4" -> wk-metal-02
-    {"host": "tuya-aquarium", "hwaddr": "c4:dd:57:1c:f4:87", "ip": "192.168.2.139"},      # NOUS A1
+    {"host": "tuya-thinkcentre", "hwaddr": "c4:dd:57:1c:f4:87", "ip": "192.168.2.139"},      # NOUS A1
     {"host": "tuya-gaas", "hwaddr": "38:a5:c9:39:14:e0", "ip": "192.168.2.243"},          # Temp-5 sensor
 ]
 

@@ -150,12 +150,12 @@ machines:
     cpu_cores: 2
     memory_gb: 4
     ip: 192.168.2.53
-    plug: sensor.plug_konditsioneer_power
+    plug: sensor.plug_thinkcentre_power
     idle_w: 27.9
     load_w: 54.5
     singlecore_bogo_s: 1200.4
     multicore_bogo_s: 2231.7
-    remote_power: smart-plug (switch.konditsioneer_socket); auto-boots on AC restore — NOT WoL
+    remote_power: smart-plug (switch.tuyalocal_thinkcentre); auto-boots on AC restore — NOT WoL
     # ThinkCentre Edge — 120GB Kingston SV300S3 SATA SSD. ⚠️ Device name is enumeration-order
     # dependent: it's /dev/sdb when PXE-booting with NO USB stick plugged (the steady state), but
     # was /dev/sdc during the original USB-ISO onboarding (USB took sda). PXE now works reliably
@@ -171,7 +171,7 @@ machines:
       Desktop — highest absolute throughput of the tested boxes, but thirsty.
       WoL is not the control path: BIOS is set to power-on after AC loss, so the box never rests
       in S5 (a magic packet sent 2026-06-09 while the plug was ON found it already at full idle
-      draw, ~28 W, not waiting in standby). Remote power = cycle switch.konditsioneer_socket via
+      draw, ~28 W, not waiting in standby). Remote power = cycle switch.tuyalocal_thinkcentre via
       Home Assistant; it boots when AC returns. NIC-level WoL support is therefore unverified
       (Talos ships no ethtool) and moot for this box.
 
@@ -183,18 +183,19 @@ machines:
     cpu_cores: null
     memory_gb: 8
     ip: 192.168.2.54
-    plug: null
+    plug: sensor.plug_hp_power
     idle_w: null
     load_w: null
     singlecore_bogo_s: null
     multicore_bogo_s: null
-    remote_power: Wake-on-LAN (PXE-booted; no smart plug)
+    remote_power: Wake-on-LAN (PXE-booted); smart plug switch.tuyalocal_hp exists but AC-restore is flaky — prefer WoL
     # HP desktop — 128GB SanDisk SATA SSD. Installs WITH extensions (the metal install image),
-    # so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
+    # so it joins Longhorn-ready. Power: the hp plug (ex-konditsioneer NOUS A1, renamed
+    # 2026-08-18; AC-restore flaky → WoL).
     # No AVX2 — verified via /proc/cpuinfo.
     talos_metal_node: true
     install_disk: /dev/sda
-    notes: No smart plug — power not measurable from here.
+    notes: On the hp plug (ex-konditsioneer NOUS A1, renamed 2026-08-18) — power measurable as sensor.plug_hp_power; switch.tuyalocal_hp can cycle it, but AC-restore is flaky so WoL is the recovery path.
 
   - name: wk-metal-01
     kind: metal
