@@ -318,7 +318,7 @@ spec:
             # indistinguishable from a drop (2026-07-27 postmortem). (b): a latch defer exits 1
             # so Argo's retryStrategy re-runs THIS workflow — never trust the edge to refire.
             # homelab#439: --pick-rail mode — when ANY rail is clear the triage proceeds.
-            rail="$(SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh --pick-rail 2>/dev/null)" || rail=""
+            rail="$(SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh --pick-rail)" || rail=""
             if [ -z "$rail" ]; then
               jq -r '.alerts[]? | select(.status == "firing") | .fingerprint // empty' /tmp/alerts.json \
                 | while read -r dfp; do [ -n "$dfp" ] && kubectl -n agent-coordinator patch cm responder-seen \

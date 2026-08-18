@@ -107,7 +107,7 @@ log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 #     reviewers; level-triggered, so the next tick simply re-checks).
 #     homelab#439: --pick-rail mode — when ANY rail is clear the tick proceeds; each
 #     reviewer-session it dispatches runs its own #424 ladder downstream.
-rail="$(SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh" --pick-rail 2>/dev/null)" || rail=""
+rail="$(SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh" --pick-rail)" || rail=""
 if [ -z "$rail" ]; then
   log "tick skipped — both rails latched (FU-088 latch)"
   exit 0
