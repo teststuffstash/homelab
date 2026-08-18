@@ -231,6 +231,44 @@ spec:
             summary: "GitHub-side outage: {{ $labels.component }}"
             description: "githubstatus.com reports {{ $labels.component }} at status index {{ $value }} (2=partial_outage, 3=major_outage). Vendor-side — in-cluster CI signals will LOOK broken (idle runners, frozen queues, no failures). Do NOT re-run queued work (re-runs deepen a dead queue) and do NOT change capacity settings off this state. https://www.githubstatus.com"
 
+        # FU-150 (vendor half) — ANTHROPIC, the subscription rail (homelab#555): status.claude.com
+        # as an alert, the sibling of GithubVendorOutage above. The whole coordination/review plane
+        # rides the Anthropic subscription (claude setup-token, agents/coordinator), so a
+        # degraded_performance on the API/Claude Code directly explains slow/failed subscription
+        # sessions — the "is it us or them" a triage session spends its first turns re-deriving
+        # while the FU-088 latch and utilization headers (OUR windows, OUR 429s) stay green.
+        # `triage: none` — vendor status is triage CONTEXT, never a responder target, exactly like
+        # the GitHub half; and REPORT-ONLY end to end: wired into no capacity gate or dispatch
+        # decision (the standing lesson: the vendor's view is THEIR view — "100% up" while we saw
+        # 81% 429s).
+        # `>= 1` where GitHub chose `>= 2`: status.claude.com sets degraded_performance rarely (the
+        # GitHub side sets it weekly) and here it IS the reading that matters — the operator watches
+        # a subscription die, not a page that must first reach partial_outage. Filtered to the
+        # API-ish components, named from the live components.json (probe 2026-08-18 ~19:40Z, all six
+        # rows `group: false`, no banner): "Claude API (api.anthropic.com)" carries every loop
+        # session's request path (egress proxy → api.anthropic.com); "Claude Code" is the harness
+        # surface the coordinator, reviewer and workers all ride. claude.ai (web UI), Claude Console,
+        # Cowork and Government are excluded — not on the loop's request path. The GAUGE still emits
+        # all six (report-only); only the ALERT filters, so a future incident on a component nobody
+        # predicted stays visible on the dashboard without a code change.
+        # ⚠ REGEX: `=~` is anchored and these names carry `(`, `)`, `.`. This expr sits in a `>-`
+        # folded block scalar, where YAML does NO escape processing — so the backslashes below are
+        # SINGLE, not doubled. A doubled `\\(` compiles into a regex that matches NOTHING (a
+        # vacuous-green alert) — which is exactly what the loop-health fixture pins against.
+        # Same #331 persistent-condition bridge as its sibling: a poller roll or a raising
+        # collector empties this family for a poll cycle (replicas: 1) and `max_over_time` rides
+        # that hole for a high-is-bad gauge; `for: 10m` rides out statuspage flaps.
+        - alert: AnthropicVendorDegraded
+          expr: >-
+            max by (component) (max_over_time(anthropic_vendor_component_status{component=~"Claude API \\(api\\.anthropic\\.com\\)|Claude Code"}[10m])) >= 1
+          for: 10m
+          labels:
+            severity: warning
+            triage: none
+          annotations:
+            summary: "Anthropic-side degraded: {{ $labels.component }}"
+            description: "status.claude.com reports {{ $labels.component }} at status index {{ $value }} (1=degraded_performance). Vendor-side — subscription sessions will be slow or failing while our own windows (FU-088 latch, utilization headers) look fine. Do NOT change dispatch/capacity settings off this state; it is triage context, not a gate input. https://status.claude.com"
+
         # FU-150 (the OURS half, homelab#284): "CI cannot dispatch" as QUEUED-AGE — the throughput
         # signal, deliberately CAUSE-AGNOSTIC. GithubWorkflowRunFailed needs a run to FAIL and a
         # queued run never does, which is why 2026-08-07 ran five hours with every belt green; the
