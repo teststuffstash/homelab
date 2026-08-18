@@ -42,7 +42,8 @@ meant to avoid.)
   queued rides still to surface: #369/#488/#501/#520-follow-ons?/#492/#536/#541/#519(done via
   #537)/AR#72/73. #420 is probably CLOSABLE (part 1 + leg 2 (#528) merged; residue = the
   post-reset sonnet re-reviews). (4) Soaks: nix-cache 16g NOW real (rolled + checksum belt
-  #537) — watch devbox-install p50 → ~45s; minRunners readout; #540 gometer (operator: other
+  #537) — ✅ SOAK MET 2026-08-18 evening: post-warm devbox-install runs 18–24s (beats the ~45s
+  target; #500 closed twice, second reopen was the fix-apply churn itself); minRunners readout; #540 gometer (operator: other
   container `git pull` + relaunch claude-go; the first-use-anchor test at any console reset
   boundary); 08-25 argo purge; or-op#34. (5) ✅ the G01 flip chunk + ADR-110 paragraph SHIPPED
   2026-08-18 (the ✅ bullet above owns the residuals).
