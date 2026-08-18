@@ -173,10 +173,16 @@ PRE
   cat "$TMP/block.chainless-guard.sh"
   cat "$TMP/block.model-id-resolution.sh"
   cat <<'BRIDGE'
-# ── bridge ── the two lines the launcher runs between the blocks above and the gates below that
-# this harness must restate: the egress-proxy URL (agent-session.sh derives PROXY_URL from the same
-# env var, next to the goose proxy env) and DOCKER, which only selects the endpoint-IP form.
+# ── bridge ── the state the launcher runs between the blocks above and the gates below that this
+# harness must restate: the egress-proxy URL (agent-session.sh derives PROXY_URL from the same env
+# var, next to the goose proxy env) and DOCKER, which only selects the endpoint-IP form. Also the
+# pod command + PR#407 `_claude_model` the harness-run-cmd block baked ABOVE the gates for the
+# degraded claude ride (agent-session.sh:946/952) — the H2 failover re-points RUN_CMD at the Go
+# rail's model in place, so the replay must present a threadable command or the ride (correctly,
+# #439 finding 2) defers as un-threadable instead of failing over.
 PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+_claude_model="haiku"
+RUN_CMD="claude -p --model haiku --dangerously-skip-permissions --max-turns 200"
 BRIDGE
   cat "$TMP/block.agent-rail.sh"
   cat <<'STATE'
@@ -188,6 +194,7 @@ STATE
   cat "$TMP/block.fu088-gates.sh"
   cat <<'POST'
 echo "REACHED: dispatch"
+echo "RUN_CMD: ${RUN_CMD:-}"
 POST
 } > "$TMP/replay.sh"
 bash -n "$TMP/replay.sh" || { echo "rail-degrade-replay: the composed replay is not valid shell — a block boundary is wrong." >&2; exit 1; }
@@ -378,6 +385,7 @@ STUB_CREDITS="0.17"; STUB_LATCH="latched"; STUB_GO_LATCH="clear"
 go
 want    "H2: the degrade happened"                     "RAIL DEGRADE"
 want    "H2: names the Go rail the ride rides"         "serving oracle-iac on the Go rail (opencode-go/deepseek-v4-flash)"
+want    "H2: the pod command ACTUALLY carries the Go rail's model (finding 2)" "--model opencode-go/deepseek-v4-flash"
 want    "H2: reaches dispatch"                         "REACHED: dispatch"
 wantrc  "H2: exit 0"                                   0
 

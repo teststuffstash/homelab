@@ -1454,11 +1454,26 @@ if [ "$HARNESS" = "claude" ]; then
       # RUN_CMD has not been built — recipe-less /--run dispatches, the replay harnesses).
       case "$rail" in
         opencode-go/*)
-          echo "→ Anthropic latched — serving ${PROJECT} on the Go rail ($rail)"
+          # Thread the Go rail's model into the pod command, and NEVER announce a rail the pod
+          # will not serve: the recipe/worker shape already carries `--model <id> ` (swap it in
+          # place), the --run shape (retro, retro-session.sh:104) has no --model flag at all
+          # (insert one after `claude -p `), and a command that is neither shape DEFERS rather
+          # than dispatch a mis-served pod (#439 leg 2 finding 2 — a no-op substitution used to
+          # send a false 'on the Go rail' ride against the still-latched Anthropic API).
           _old_model="${_claude_model:-haiku}"
           _claude_model="$rail"
-          RUN_CMD="${RUN_CMD:-}"
-          RUN_CMD="${RUN_CMD//--model ${_old_model} /--model ${_claude_model} }"
+          _new_cmd="${RUN_CMD:-}"
+          _new_cmd="${_new_cmd//--model ${_old_model} /--model ${_claude_model} }"
+          case "$_new_cmd" in
+            *"--model ${_claude_model} "*) ;;   # recipe/worker shape: the substitution took
+            *"claude -p "*)                     # --run shape: no --model flag at all — insert one
+              _new_cmd="${_new_cmd/claude -p /claude -p --model ${_claude_model} }";;
+            *)                                  # neither shape: never announce a rail the pod will not serve
+              echo "→ ${PROJECT} claude-tier dispatch deferred — Anthropic latched and the Go rail's model could not be threaded into the pod command (FU-088)"
+              exit 0;;
+          esac
+          RUN_CMD="$_new_cmd"
+          echo "→ Anthropic latched — serving ${PROJECT} on the Go rail ($rail)"
           ;;
       esac;;
   esac

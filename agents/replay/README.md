@@ -152,6 +152,8 @@ is stale, so it cannot drift the way the prose register did.
 | `fu088-ladder-anthropic` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder-both` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder-go` | actions | - | `agents/agent-session.sh` | - |
+| `fu088-ladder-run-shape` | actions | - | `agents/agent-session.sh` | - |
+| `fu088-ladder-unthreadable` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch-clear` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch-defer` | actions | - | `agents/agent-session.sh` | - |
 | `goal-abandoned` | actions | - | `agents/coordinator-scan.sh` | IL-T21 IL-T22 |
