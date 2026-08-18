@@ -1,0 +1,18 @@
+# Deployment config for the Proxmox hypervisor host (group `pve`).
+# Logic in roles/pve-upgrade; values here. The hypervisor is deliberately the one
+# hand-installed box (boot-from-git covers everything ABOVE it — CONTEXT.md); this
+# group exists so its routine PACKAGE maintenance is code, not clicking. Major
+# version jumps (8.x -> 9.x need sources.list edits) are explicitly OUT of scope —
+# plain dist-upgrade stays inside the pinned major.
+
+# --- SSH connection (root via the Proxmox seed key, outside the repo) ---
+ansible_user: root
+ansible_ssh_private_key_file: /home/node/.claude/homelab-pve-ssh/id_ed25519
+ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
+
+# Where the pre-upgrade /etc/pve backup tarball lands on the controller (the
+# jail). Outside the repo — /etc/pve carries key material (corosync, VM configs).
+# This is a rolling local CACHE, not the durable copy; the VM/LXC definitions'
+# durable home is tofu (recreatable), the hypervisor's own config has none —
+# which is exactly why the playbook snapshots it before every touch.
+pve_backup_dest: /home/node/.claude/homelab-pve-backup

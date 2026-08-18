@@ -1,0 +1,10 @@
+# Routine Proxmox host package maintenance. Thin role-caller — logic in
+# roles/pve-upgrade, config (incl. SSH connection + backup dest) in
+# group_vars/pve.yml. In-major only; never reboots (see the role header).
+# Run: devbox run -- ansible-playbook ansible/pve-upgrade.yml
+#      (ANSIBLE_CONFIG=ansible/ansible.cfg; SSH key is jail-local, no creds env)
+- name: Proxmox host package upgrade
+  hosts: pve
+  gather_facts: false
+  roles:
+    - pve-upgrade
