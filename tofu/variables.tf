@@ -133,6 +133,11 @@ variable "nodes" {
     # 2-replica volumes. pve thin pool had 244G free at resize (2026-07-13). Grow-only in place;
     # Talos grows EPHEMERAL into it on the next reboot.
     wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 12288, disk_gb = 240, longhorn = true }
+    # Ephemeral CI/runner tier VM (2026-08-18): 8 cores is deliberate CPU overprovision (host was
+    # 20/28 vCPU allocated at load ~4; CI is burst work, throttling is safe) — memory is the
+    # careful number (host had ~12Gi free; 8Gi leaves ~4Gi buffer). No longhorn flag = plain
+    # image, nothing stateful; removable via drain + destroy when the RAM is needed elsewhere.
+    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 8, memory_mb = 8192, disk_gb = 40 }
   }
 
   validation {
