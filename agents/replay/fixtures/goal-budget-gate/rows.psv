@@ -1,0 +1,8 @@
+# goal-budget-gate — the decision table (family contract in fixture.yaml; per-row intent there).
+# id               | world            | patch (relpath @ patches/*.jq)                        | env             | expect
+terminal-validated| gate-homelab-278 | gh/issue-view-278.json @ patches/add-terminal-validated.jq | GOAL_PARENT=278 | terminal
+terminal-reverted | gate-homelab-278 | gh/issue-view-278.json @ patches/add-terminal-reverted.jq | GOAL_PARENT=278 | terminal
+terminal-abandoned| gate-homelab-278 | gh/issue-view-278.json @ patches/add-terminal-abandoned.jq | GOAL_PARENT=278 | terminal
+post-launch-open  | gate-homelab-278 | gh/issue-view-278.json @ patches/add-post-launch.jq       | GOAL_PARENT=278 | refusal
+open-over-budget  | gate-homelab-278 | gh/issue-view-278.json @ patches/set-budget-1.jq          | GOAL_PARENT=278 | refusal
+open-within       | gate-homelab-278 |                                                           | GOAL_PARENT=278 | within

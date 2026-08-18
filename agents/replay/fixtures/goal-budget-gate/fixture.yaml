@@ -1,0 +1,51 @@
+# goal-budget-gate — THE GATE'S VERDICT DISPATCH, as one decision table (homelab#509).
+#
+# THE CONTRACT. The launcher pre-flight (`goal_budget_read` + the `GB_VERDICT` dispatch at
+# agent-session.sh §budget pre-flight) has four outcomes: `exhausted` (refuse + comment + exit 1,
+# pinned byte-identically since #361 by goal-budget-refusal-*), `within` (pass, said), `no-budget`
+# (pass, unenforced by design), and — NEW in #509 — `terminal` (pass, said). This family pins the
+# DISPATCH itself, which the refusal fixtures could not reach: they replay only the refusal BODY
+# (the block INSIDE the `exhausted` arm) and hard-set the verdict in the bridge, so the `within`
+# and `terminal` arms were asserted by nothing.
+#
+# The subject is the RUNNING of the shipped helper against a recorded world: the terminal exemption
+# lives in goal_budget_read (a terminal LABEL short-circuits before the descendant walk), and the
+# gate's branching is sentinel-extracted, so a refactor that moves the verdict dispatch past the
+# sentinel or a helper edit that drops the terminal arm both go red here.
+#
+# THE WORLD is family-local — no registry world matches. `gate-homelab-278` is homelab's own #278,
+# the goal this issue measured live (a constructed world, CLEAN: real label/body shapes, descendants
+# #1001/#1002 with one settled $3.00 ledger entry and one unridden child). Each row patches ONE
+# thing onto the clean base — a verdict label, a phase label, or a `Budget:` line — which is what
+# makes the base-vs-delta visible. The two refusal rows assert the exact pre-509 numbers
+# (`$3.0 > $1`), so a future fix that over-broadens the exemption reds here before it can ship.
+#
+# ROWS:
+#   terminal-validated  the defect: #278 carries `goal/validated` (a human verdict, ADR-102), still
+#                       has its `Budget:` line, and its descendants sum ABOVE it. Must NOT refuse:
+#                       ONE `issue view` (the label short-circuits the walk), the `terminal` log arm,
+#                       `RC 0`.
+#   terminal-reverted   the same gate, verdict REVERTED. The exemption is a label FAMILY, not one
+#                       verdict — narrowing it to `validated` alone reds this row on its own.
+#   terminal-abandoned  the same gate, verdict ABANDONED. Same argument, third sibling — one row per
+#                       terminal keeps the OR in `goal_budget_read`'s predicate from decaying to AND.
+#   post-launch-open    the regression that matters: an OPEN goal labelled `goal/post-launch` is
+#                       still shipping against the same `Budget:` (ADR-102) and must STILL refuse.
+#                       The patch ADDS the label; the row asserts the refusal holds with the exact
+#                       pre-509 numbers.
+#   open-over-budget    the plain control, no phase label: an OPEN over-budget goal refuses
+#                       identically — the refusal is about the SUM, not about the goal's phase.
+#   open-within         the `within` arm said and passing — the pass-through a budget-respecting
+#                       ride sees, and the log line that makes the gate legible to a human.
+#
+# The harvest's reading of a terminal goal is NOT replayed here: since ADR-106 the harvest reads the
+# goal's issue STATE (dead goal ⇒ findings land inert, harvest-goal-closed pins it), not this
+# verdict — the two callers agree by different routes, exactly as the issue specifies.
+name: goal-budget-gate
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:goal-budget-gate
+  - file:post.sh
+rows: rows.psv
