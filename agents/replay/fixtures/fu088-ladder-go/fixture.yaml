@@ -1,0 +1,18 @@
+# fu088-ladder-go (homelab#439 leg 2) — the fu088-gates `*)` arm, GO-FAILOVER leg.
+#
+# CONDITION UNDER REPLAY: Anthropic latched, Go rail clear — the ladder prints
+# `opencode-go/deepseek-v4-flash` and exits 0.
+#
+# THE CONTRACT: the ride FAILS OVER instead of deferring (the worker is the last gate that used
+# to consult the Anthropic latch alone and idle while the Go window sat empty). The go-rail id is
+# threaded through the PR#407 `_claude_model` plumbing and RUN_CMD — baked above the gate with the
+# dispatched model — is re-pointed at the Go rail's model, so the pod actually serves from Go.
+name: fu088-ladder-go
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu088-gates
+  - file:post.sh
+env:
+  - STUB_RAIL=opencode-go/deepseek-v4-flash
