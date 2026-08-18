@@ -1,0 +1,17 @@
+# goal — the decision table (family contract in fixture.yaml; per-row intent below).
+# id                      | world     | patch (relpath @ patches/*.jq)                   | env                    | expect
+# validated               = the terminal base: goal closes `completed`, sweep is a REPORT line
+# abandoned               = same tree, verdict ABANDONED: de-queued but OPEN, goal closed not-planned
+# reverted                = same tree, verdict REVERTED: descendants CLOSE first, goal last, the
+#                           Revert: pointer from the goal body is quoted verbatim
+# assembly-complete       = pre-launch goal + a merged assembly PR (goal/** HEAD + Assembly-for:)
+#                           → label goal/post-launch, comment, STAYS OPEN (no close)
+# checkpoint-due          = pre-launch goal, findings store 6/1 → ONE goal-checkpoint unit
+# nonassembly-merge-inert = pre-launch goal, a merged goal-CHILD's PR (goal/** BASE) → burn-down
+#                           written, NO per-closure unit, GACTED <none>
+abandoned          | terminal | openall.json @ patches/verdict-abandoned.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | abandoned
+assembly-complete  | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | assembly-complete
+checkpoint-due     | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | checkpoint-due
+nonassembly-merge-inert | open-pre |                                       | IN_SLUG=teststuffstash/circles IN_REPO=circles | nonassembly-merge-inert
+reverted           | terminal | openall.json @ patches/verdict-reverted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | reverted
+validated          | terminal |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | validated

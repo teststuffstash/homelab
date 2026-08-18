@@ -388,9 +388,7 @@ transitions:
       the goal is still open and still shipping."
     status: guarded
     replay:
-      - agents/replay/fixtures/goal/checkpoint-due              # the positive trigger (findings ≥ N)
-      - agents/replay/fixtures/goal/nonassembly-merge-inert     # burn-down written, NO per-closure unit
-      - agents/replay/fixtures/goal/assembly-complete           # …and none for a goal the lifecycle just acted on
+      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row checkpoint-due (the positive trigger, findings ≥ N) / row nonassembly-merge-inert (burn-down written, NO per-closure unit) / row assembly-complete (…and none for a goal the lifecycle just acted on)
     guards:
       - desc: "descendant fixpoint walk (the budget-gate bug-shape, fixed here too)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 6: DESCENDANTS" }
@@ -441,8 +439,7 @@ transitions:
       assembly-complete (naming the bucket and the three verdict labels), and LEAVE THE GOAL OPEN."
     status: guarded
     replay:
-      - agents/replay/fixtures/goal/assembly-complete           # merged assembly → label + comment, no close
-      - agents/replay/fixtures/goal/nonassembly-merge-inert     # a goal CHILD's merge moves nothing
+      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row assembly-complete (merged assembly → label + comment, no close) / row nonassembly-merge-inert (a goal CHILD's merge moves nothing)
     guards:
       - desc: "the goal is never closed here — assembly-complete measures 'built as specified', and only production knows the rest (replay: goal-assembly-complete asserts the ABSENCE of a close call)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ASSEMBLY-COMPLETE → POST-LAUNCH" }
@@ -465,9 +462,9 @@ transitions:
       SURFACE the close sweep as a report line: every open descendant with a proposed disposition."
     status: guarded
     replay:
-      - agents/replay/fixtures/goal/validated                   # closes the goal, touches NO descendant
+      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row validated — closes the goal, touches NO descendant
     guards:
-      - desc: "the sweep is REPORT-first — batch disposition becomes legal here and stays operator-confirmed until the goal registry panel exists (replay: goal-validated pins zero descendant writes)"
+      - desc: "the sweep is REPORT-first — batch disposition becomes legal here and stays operator-confirmed until the goal registry panel exists (replay: goal row validated pins zero descendant writes)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "THE CLOSE SWEEP, REPORT-FIRST" }
       - desc: "the panel already reads the verdict labels — it needed no code change the day they landed"
         anchor: { file: argocd/resources/github-exporter/github-exporter.py, pattern: "_VERDICT_LABELS" }
@@ -481,9 +478,9 @@ transitions:
       squash, which ADR-102 makes the revert unit."
     status: guarded
     replay:
-      - agents/replay/fixtures/goal/reverted                    # descendants close first, goal last
+      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row reverted — descendants close first, goal last
     guards:
-      - desc: "descendants FIRST, the goal LAST — a closed goal leaves `openall` and the leg never fires again, so a partial pass must leave the goal open to be resumed (replay: goal-reverted pins the call order)"
+      - desc: "descendants FIRST, the goal LAST — a closed goal leaves `openall` and the leg never fires again, so a partial pass must leave the goal open to be resumed (replay: goal row reverted pins the call order)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "DESCENDANTS FIRST, THE GOAL LAST" }
       - desc: "descendants are CLOSED, never deleted — the tree stays readable history (⚖ pre-decided, homelab#208)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "the tree stays readable history" }
@@ -500,7 +497,7 @@ transitions:
       may still be worth doing, it just may not spend a budget that is gone."
     status: guarded
     replay:
-      - agents/replay/fixtures/goal/abandoned                   # de-queued but OPEN; goal closed not-planned
+      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row abandoned — de-queued but OPEN; goal closed not-planned
     guards:
       - desc: "de-queued, not closed — a queued descendant of a dead goal burns a ride per tick to be refused by the launcher pre-flight (replay: goal-abandoned, same tree as goal-reverted, opposite disposition)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "descendants inert" }
@@ -513,13 +510,7 @@ transitions:
       refuse+report. `kpi` authority ⇒ refuse+report (a later oracle-side issue, gateway-gated)."
     status: guarded
     replay:
-      - agents/replay/fixtures/goal/validated
-      - agents/replay/fixtures/goal/reverted
-      - agents/replay/fixtures/goal/abandoned
-    replay:
-      - agents/replay/fixtures/goal/validated
-      - agents/replay/fixtures/goal/reverted
-      - agents/replay/fixtures/goal/abandoned
+      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): rows validated / reverted / abandoned — the three verdicts
     guards:
       - desc: "the breaker-#1 actor shape, with more at stake: this transition closes a goal and, on revert, its whole tree — and the App holds issues:write"
         anchor: { file: agents/coordinator-scan.sh, pattern: "TWO FAIL-CLOSED GATES BEFORE ANY TERMINAL WRITE" }
