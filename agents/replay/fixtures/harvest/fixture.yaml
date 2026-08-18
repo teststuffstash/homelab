@@ -1,0 +1,53 @@
+# harvest — THE FAMILY, as one decision table (FU-167 move-2 rollout; was 5 copied dirs).
+#
+# THE CONTRACT (ADR-102 / homelab#207, consolidated from the five fixture essays; per-row intent
+# in rows.psv). The harvest-disposition block decides what a merged-closeout item's dispatch
+# string carries: resolve the item's GOAL ancestor (task/goal label OR a machine-readable
+# `Budget:` line — homelab#367, the SAME walk the launcher pre-flight uses), then find-or-create
+# the ONE `post-launch:` bucket sub-issue under it and link it with the native sub-issue edge.
+# The verdict is DETERMINISTIC and rides `--item`; the play is ordered, never asked. Since
+# ADR-106 the harvest APPENDS to the goal's findings store rather than minting — the queue right
+# moved to the goal-checkpoint play, budget-gated THERE. Three rules are load-bearing:
+#   • GOAL STATE DECIDES, not the sprout's `Base:` line. The old rule queued a sprout whenever
+#     the ORIGINATING issue carried `Base: goal/**` — a body line that survives its goal by
+#     construction. The verdict now comes from the GOAL's live state: OPEN → `harvest=store`,
+#     CLOSED/terminal → `harvest=inert` ("findings from a dead goal land inert").
+#   • THE BUCKET IS A CONTAINER, ONE PER GOAL, found by title in the goal's own sub-issue list
+#     BEFORE any create. An UNPARENTED bucket is worse than none: its children would sit outside
+#     the goal's descendant walk and spend budget the gate cannot see — so a created bucket that
+#     fails to LINK is discarded loudly, never left dangling.
+#   • THE ANCESTOR WALK IS THE SAME ONE THE LAUNCHER PRE-FLIGHT USES (agents/goal-budget.sh,
+#     sourced by the bridge, never transcribed): the per-hop read is `issue view --json
+#     labels,body` (testing for a `Budget:` line beside the task/goal label) then a `/parent`
+#     hop, bounded at 6. The bridge stubs ONLY the helper's two I/O seams — `gb_ledger` (the
+#     pushgateway scrape, absent file = conservative empty) and `gb_cap` (the estimator, fixed
+#     via env) — so a fixture reds if the launcher's accounting and the harvest's ever diverge.
+#   • THE DEPTH PIN (deep-sprout row): the walk must climb as far as a LIVE tree needs — the
+#     recorded circles#29 tree is #75 → #47 → #18 → #29, four issues inspected. The bound ships
+#     at 6 with deliberate headroom for the generation goal-174 grew; this fixture pins `≥ 4`.
+#
+# WORLDS (the goal-* rows ride the REGISTRY `circles-29-tree` — #35's recorded shape, the parent
+# hop, `pr-list-bodies.json` — with their per-row `issue-view-29.json` + `sub_issues` overlays;
+# deep-sprout and master-inert are family-local because their issue numbers do not exist in the
+# registry tree):
+#   circles-29-tree (registry)   the goal-* rows' base: #35 is a merged goal child carrying the
+#                                `Base: goal/**` line, parented to #29.
+#   deep-sprout (family-local)   the LIVE recorded tree — #75 → #47 → #18 → #29, the goal's ten
+#                                real sub-issues, the synthetic #999 bucket (circles#29 has no
+#                                post-launch bucket yet).
+#   master-inert (family-local)  #50, an ordinary master-lane issue: no task/goal label, no
+#                                parent (`null`) — the walk terminates and the block emits NOTHING.
+pins:
+  - IL-T15
+  - IL-T17
+name: harvest
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:harvest-disposition
+  - file:post.sh
+scrub:
+  # The bucket body is prose the block owns; pin its provenance sentence, not its paragraphs.
+  - s|--body Post-launch bucket for goal #29 .*|--body <bucket body — see agents/coordinator-scan.sh>|
+rows: rows.psv

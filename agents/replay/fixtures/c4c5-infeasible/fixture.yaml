@@ -1,0 +1,52 @@
+# c4c5-infeasible — THE FAMILY, as one decision table (FU-167 move-2 rollout; was 3 copied dirs).
+#
+# THE CONTRACT (homelab#257, retro r3 F4 — consolidated from the three fixture essays; per-row
+# intent in rows.psv). A worker's `AGENT_INFEASIBLE:` verdict — one issue COMMENT whose FIRST
+# characters are exactly `AGENT_INFEASIBLE: <path/resource>` — parks the issue on `agent/blocked`
+# and takes it out of `c4c5-redispatch`, while the issue beside it — same state, no marker —
+# keeps today's behaviour exactly. Three properties are load-bearing:
+#   • ANCHORED at the start of a COMMENT body, never a substring. Talking ABOUT the terminal (a
+#     title, a `> quote`, a mid-sentence mention) latches nothing — the fix-debounce lane's
+#     `alert-fp:` lesson, one lane over (homelab#244). ISSUE COMMENTS ONLY, never the body: the
+#     body is written by the human who filed it.
+#   • THE MARKER ALONE SUPPRESSES THE REDISPATCH, whether or not the label write lands. The
+#     write order is load-bearing: add `agent/blocked` FIRST, remove `agent/in-progress`
+#     SECOND, then RE-READ and prove the end state before a single word is commented (`gh issue
+#     edit` is not atomic; with neither label the issue is invisible to every clause). A
+#     failed/half-applied write is reported loudly and the issue still leaves the unit list —
+#     re-riding a task a worker has already proven impossible costs a paid session to re-derive
+#     a known answer.
+#   • AN UNREADABLE PROBE is the other way round (rule #6, never fail INTO a write): an
+#     unreadable comments probe keeps today's behaviour — belt and unit included — plus one
+#     report line naming the issue. `STUB_GH=fail` is the harness's own failure-mode seam
+#     (agents/replay/stubs/gh), not a missing world file.
+#   • A HUMAN-BLOCKED issue (`agent/blocked` ∧ `agent/in-progress`) is dropped by the C4/C5
+#     selector BEFORE the comments probe — it appears NOWHERE in the stream (no CALL, no unit,
+#     no report line): re-dispatching a human-gated issue is the one thing this clause must
+#     never do.
+#
+# WORLDS (family-local; the one shared file, `pr-list-bodies.json` = [], rides in each from the
+# registry `circles-29-tree` — table-mode worlds are one directory, so the registry is referenced
+# by content rather than by name):
+#   verdict  the parked leg: #66's comments carry the REAL marker (its worker named
+#            `.github/workflows/ci.yaml` and ended without pushing); #66 is read → blocked →
+#            in-progress off → re-read → audited, emits NO unit and NO report line; #70 beside it
+#            (no marker) keeps its unit + `v2` report line byte-identical.
+#   inert    the near-miss leg: #66's comments QUOTE the marker and name it mid-sentence but
+#            NONE starts with it (the unanchored latch this clause must not take), and #71 is
+#            human-blocked and never even read. SHARED by the probe-fail and quoted-inert rows —
+#            same world, one row forces the probe down with `STUB_GH=fail`, the other lets it
+#            read and find nothing.
+pins:
+  - IL-T06
+  - IL-T26
+name: c4c5-infeasible
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - block:c4c5-selector
+  - file:bridge.sh
+  - block:infeasible-terminal
+  - block:c4c5-derivations
+  - file:post.sh
+rows: rows.psv
