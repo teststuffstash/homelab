@@ -16,3 +16,7 @@ all:
       hosts:
         matchbox-lxc:
           ansible_host: 192.168.2.30
+    pve:
+      hosts:
+        pve-host:
+          ansible_host: 192.168.2.3
