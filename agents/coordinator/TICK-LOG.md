@@ -4315,3 +4315,15 @@ first live ADR-110 maintenance session before the ADR existed.
   ~10 min, zero hands on the way up), pve plug thawed 153.6W. Runbook §Proxmox host
   maintenance window + PR#554. #221 closable. Control-plane changes deliberately NOT bundled
   (cp-01 recreate = single-etcd surgery, its own event; topology fix = ROADMAP 3-node HA).
+- **Evening board sweep + the wk-03 denouement**: alert set 4/4 dispositioned (#221/#121/#101
+  closed with evidence, #63 → FU-155), #500 closed (nix-cache soak MET: 18–24s post-warm),
+  #518 leg-1 diagnosed (single upstream SERVFAIL burst 08-09Z + ndots:5 4x amplification —
+  ndots:1 shipped operator-direct; leg 2 stays machine-ridable), #540 → sub-issue of #420
+  (agent-fix off, jail-lane). Then the flapping alert re-fired and cracked open: **wk-03's
+  "wedges" were an IP WAR — our own dnsmasq reservation put the basement AP on wk-03's static
+  .63**; evidence = Talos console screendump (dns i/o timeouts to the router behind a Healthy
+  kubelet), router ARP (.63 = wk-03's MAC, hostname U6LiteBasement), the leases API. Moved to
+  .13, applied; AP renewed onto .13 16:39:17Z. Explains the day's ~2-hourly episodes, the
+  morning SERVFAIL burst, and the qm-reset placebo. FU-177 filed (ip-lint / single address
+  book). #553 closes after a flap-free soak. Diagnostic first: Proxmox `pvesh … screendump`
+  reads the Talos console when apid is dead — now a proven jail-side tool.
