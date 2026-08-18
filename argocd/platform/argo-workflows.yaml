@@ -28,11 +28,23 @@ spec:
         controller:
           workflowNamespaces:
             - agent-coordinator
+          # Controller-level retention defaults (#491 — the durable fix deferred from #487).
+          # Every submitted Workflow that doesn't set its own spec.ttlStrategy ages out 7 days
+          # after completion (604800s); completed workflow pods are GC'd at workflow completion.
+          # The coordinator reflex CronWorkflows already set shorter per-workflow TTLs
+          # (3600s–86400s) and those spec-level values win over this default. Only the
+          # etcd-resident Workflow objects age out — S3 artifact retention (ADR-089) is untouched.
+          workflowDefaults:
+            spec:
+              ttlStrategy:
+                secondsAfterCompletion: 604800
+              podGC:
+                strategy: OnWorkflowCompletion
           resources:
             # FU-082 baseline (128Mi/256Mi) OOMKilled the controller 2026-08-15 after ~29 days of
             # slow informer/workflow-state cache growth — 626 retained Workflow objects, no TTL/GC
-            # (issue #449). 4x raise postpones recurrence; the durable fix is workflow retention
-            # (ttlStrategy/GC), called out as a follow-up in the #449 PR body.
+            # (issue #449). The 4x raise (512Mi/1Gi) buys runway; the workflowDefaults block above
+            # caps the informer cache so the raise is the ceiling, not the answer.
             requests: { cpu: "100m", memory: "512Mi" }
             limits: { memory: "1Gi" }
           metricsConfig: { enabled: true }
