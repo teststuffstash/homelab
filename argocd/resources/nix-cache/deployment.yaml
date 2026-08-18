@@ -14,6 +14,12 @@ spec:
   template:
     metadata:
       labels: { app: nixcache }
+      # checksum/config pins the pod to its ConfigMap (issue #519): the nginx.conf mount is subPath,
+      # so kubelet never live-refreshes it and only a new pod spec rolls. Editing configmap.yaml
+      # REQUIRES recomputing this hash in the same commit:
+      #   sha256sum argocd/resources/nix-cache/configmap.yaml
+      annotations:
+        checksum/config: 6f188e50342124de909b4904d5479093771b5b8ff6f01ae5eb5627d98b92448d
     spec:
       securityContext:
         runAsNonRoot: true
