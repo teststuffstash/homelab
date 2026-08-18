@@ -1,0 +1,35 @@
+[
+  {
+    "number": 112,
+    "title": "fix: the janitor tick drops its exit code",
+    "labels": [],
+    "reviewDecision": null,
+    "autoMergeRequest": null,
+    "mergeStateStatus": "CLEAN",
+    "author": {"login": "app/homelab-agents-1234"},
+    "headRefName": "fix/issue-60-janitor-exit",
+    "body": "Implements #60\n\nCloses #60"
+  },
+  {
+    "number": 113,
+    "title": "docs: seam to the sibling",
+    "labels": [],
+    "reviewDecision": null,
+    "autoMergeRequest": null,
+    "mergeStateStatus": "CLEAN",
+    "author": {"login": "app/homelab-agents-1234"},
+    "headRefName": "docs/sibling-seam",
+    "body": "That is the sibling issue (#61), named as a decomposition seam."
+  },
+  {
+    "number": 115,
+    "title": "fix: egress allowlist shape",
+    "labels": [],
+    "reviewDecision": null,
+    "autoMergeRequest": null,
+    "mergeStateStatus": "CLEAN",
+    "author": {"login": "app/homelab-agents-1234"},
+    "headRefName": "fix/issue-63-allowlist",
+    "body": "Fixes #63"
+  }
+]

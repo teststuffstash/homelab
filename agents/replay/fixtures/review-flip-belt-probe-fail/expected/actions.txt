@@ -1,0 +1,4 @@
+OUT FLIP <empty>
+OUT ORPHAN [homelab] ⚠ review-flip belt HELD — the open-PR read is unreadable this tick (rule #6: never fail INTO a write); no flips
+OUT REACHED: end
+RC 0
