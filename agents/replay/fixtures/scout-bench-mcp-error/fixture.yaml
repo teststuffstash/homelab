@@ -8,7 +8,10 @@
 #
 # THE CONTRACT:
 #   1. A JSON-RPC `.error` is NOT bench data and is NOT a crash. Each candidate falls back to
-#      `unbenched` and the tick carries on to the digest — same rule as the keyless path.
+#      `unbenched` and the tick carries on — same rule as the keyless path. (CANARY=0 in this
+#      family, so with every row unbenched AND uncanaried the FU-161 FILING GATE skips `gh issue
+#      create` — the digest the pre-gate version would have posted would have been a zero-graduation
+#      table, which is exactly what the gate exists to stop.)
 #   2. It is LOUD, on the tick log, naming the model and quoting the server's own message. This is
 #      the entire reason the fixture exists: a wrong envelope and a genuinely benchless newcomer
 #      produce the identical digest, so without this line the first live hand-fire would report
