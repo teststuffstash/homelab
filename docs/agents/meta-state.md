@@ -208,7 +208,6 @@ iac-lane.md §governance checkpoint.
    snapshot re-run · ⚠ circles deploy-bump generator writes the app CalVer into the -iac GIT
    targetRevision (broke circles-infra; fix the workflow before the next circles build —
    circles-iac#71/#68)):
-   Composition podSpecPatch mirror (#103 residual leg, ~30 min) ·
    oracle-fleet#255 rework (attended-download constraint stands). The HOST-SIDE 4-step
    jail-read-all sequence: ✅ ALL DONE 2026-08-12 (argo verdict → PR#394; jail-read-all minted,
    verified from the jail, legacy token DELETED; #231's blind leg settled + annotated —
