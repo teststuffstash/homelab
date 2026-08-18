@@ -394,9 +394,13 @@ went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merg
   could pass itself), and the sentinel posts an `iac-sentinel` commit status per evaluated PR
   head (success/failure; `error` on probe failure — fail-closed, healed next tick) when
   `SENTINEL_STATUS_TOKEN` is present (the reviewer-git Secret; empty = shadow). The context is
-  REQUIRED on the four sentinel repos (tofu `protected_repos`), the workflow push ruleset
-  (`workflow_push_guard`, `restrict_workflow_pushes`) rejects `.github/workflows/**` pushes by
-  non-bypass actors, and the tick tightened */15 → */5 so a PR waits ≤ one tick.
+  REQUIRED on the four sentinel repos (tofu `protected_repos`), and the tick tightened
+  */15 → */5 so a PR waits ≤ one tick. The workflow push ruleset (`workflow_push_guard`,
+  `restrict_workflow_pushes`) rejects `.github/workflows/**` pushes by non-bypass actors —
+  but GitHub allows push rules on PRIVATE repos only (422 at the flip apply), so it exists
+  solely on oracle-iac; on the public repos (homelab, sleep-iac, circles-iac) the fence is the
+  required check itself: workflow edits only LAND via a PR (org ruleset), and the sentinel's
+  path-rule reds any worker-authored PR touching `.github/workflows/**`.
   **The homelab baseline that made the platform repo enforceable:** the tenancy policy
   (no-cluster-scoped) reads differently on the platform repo — there the fence is "only the
   grants the platform already owns", encoded as `policy/iac/exceptions/homelab.yaml` (a Kyverno
