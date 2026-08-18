@@ -4293,3 +4293,10 @@ first live ADR-110 maintenance session before the ADR existed.
 - **HA #221 remedy PROVEN (same session, operator at the wall)**: laptop4 plug wall-cycled —
   sensor thawed 8.0-frozen→9.8→17.9 live; the X250's battery carried wk-metal-02 through the
   cut (cordon/drain was belt-only, uncordoned clean). Sequencing for the rest in meta-state.
+- **Wedged-device afternoon (operator at the wall/breaker)**: gaas 914 RESOLVED by breaker
+  cycle (key never rotated — thermostat live at 24.5°C). thinkcentre+hp brick cycles attempted
+  but both pulls were DOWNSTREAM cords (boxes rebooted, bricks never lost power — no
+  availability gap = the tell); bricks still frozen, next attempt pulls the NOUS unit itself.
+  Rename PR#552 merged (2 bot rounds: dashboard labels backwards, then 2 stale machines.yaml
+  notes — same naming-confusion class the PR fixes, twice reintroduced by my own sed).
+  NodeRebooted annotation refreshed (June flapping investigation closed; operator catch).
