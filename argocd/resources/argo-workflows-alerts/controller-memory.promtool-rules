@@ -1,0 +1,30 @@
+# No witness-only alerts in this file — WorkflowControllerMemoryNearLimit is DRIFT-PINNED against
+# the CR, so it must NOT appear under a `# witness-only:` declaration (that would let a future CR
+# rename pass the copy→CR walk silently). The argo-workflows-memory alert, lifted VERBATIM out of
+# prometheusrule.yaml (comments AND
+# annotations stripped — the manifest is their one home) — the rules file that
+# controller-memory.promtool-test loads. Not a manifest and not applied to anything: `promtool test
+# rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
+# `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on purpose —
+# manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest there would fail
+# it.
+#
+# ANNOTATIONS ARE STRIPPED deliberately, following gc-mirrors.promtool-rules: this pins FIRING
+# BEHAVIOUR, not prose. The description is a runbook and changes on its own schedule.
+#
+# ⚠ THIS COPY IS DRIFT-PINNED (homelab#337, bidirectional since #375): the pin compares expr+for
+# BOTH ways against argocd/resources/argo-workflows-alerts/prometheusrule.yaml, so a stale copy
+# fails CI rather than passing vacuously. Re-copy after editing the alert:
+#
+#   yq -o=json '{"groups": [{"name": "argo-workflows-memory", "rules": [.spec.groups[].rules[] | del(.annotations)]}]}' \
+#     argocd/resources/argo-workflows-alerts/prometheusrule.yaml | yq -P '.'
+#   (one line on purpose — a wrapped yq program string is the #344 lexer bug; reason at
+#   argocd/resources/openrouter-proxy/agent-router.promtool-rules)
+groups:
+  - name: argo-workflows-memory
+    rules:
+      - alert: WorkflowControllerMemoryNearLimit
+        expr: container_memory_working_set_bytes{namespace="argo",container="controller"} / on (namespace, pod, container) kube_pod_container_resource_limits{namespace="argo",resource="memory"} > 0.8
+        for: 15m
+        labels:
+          severity: warning

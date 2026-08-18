@@ -1,0 +1,126 @@
+# Behaviour fixture for WorkflowControllerMemoryNearLimit (homelab#492).
+#
+#   devbox run -- promtool test rules argocd/resources/argo-workflows-alerts/controller-memory.promtool-test
+#
+# `devbox run prometheus-rules-lint` runs this in CI (it executes `promtool test rules` over every
+# *.promtool-test under argocd/), so a red fixture here is a red required check. Named
+# .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources — and
+# it has NO schema for PrometheusRule, so it SKIPS the manifest edit these tests exist to check.
+# This file is the gate on that change, not manifest-lint.
+#
+# WHAT IS BEING PINNED:
+#   1. THE FIRE ARM — a sustained ratio > 0.8 fires, and only once `for: 15m` has elapsed
+#      (cases 1 and 4: not a moment before, then on schedule).
+#   2. THE QUIET ARM — a steady ratio under 0.8 never fires (case 2).
+#   3. THE `for:` ITSELF — a brief spike above 0.8 that outlives neither the window nor 15 minutes
+#      does not fire (case 3). The controller's growth is a ~29-day creep, so a 15m sustained
+#      reading is a real trend, not a GC thresh.
+#   4. THE JOIN — the expr is the ContainerMemoryNearLimit shape reused (working-set / on
+#      (namespace,pod,container) limits, pinned to container="controller"); both input metrics must
+#      be present or the series never materialises. The result keeps the on() labels
+#      {namespace,pod,container} (verified against the live query 2026-08-18), so every exp_labels
+#      block asserts those + the rule's own `severity`.
+#
+# LIMITS the inputs are the REAL live values (2026-08-18): the workflow-controller runs on hp-01
+# with a 1Gi memory limit (1073741824 bytes, set by #487) and the working-set steady state was
+# ratio ~0.15 (147–161Mi). The high-arm values (900000000 bytes ≈ 0.838) are the spike this alert
+# exists to catch ~5x up from steady state; the low arm (700000000 ≈ 0.652) sits between steady
+# state and the threshold, proving the rule does not fire on the mere presence of the metric.
+#
+# CLOCK: promtool's clock starts at 0, so eval_time values are minutes since t=0 (evaluation_interval
+# 1m → one sample per minute). `for: 15m` = 15 consecutive evaluations above threshold.
+rule_files:
+  - controller-memory.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1. THE FIRE ARM — sustained above 0.8 fires at exactly 15m, not before ────────────────────
+  # Working set pinned at 900000000 bytes (ratio 0.838) the whole run. At eval 14m the `for` window
+  # has not filled; at 15m it has, and the alert pages with the retained on() labels.
+  - interval: 1m
+    name: ratio sustained at 0.84 fires only after the 15m window
+    input_series:
+      - series: 'container_memory_working_set_bytes{container="controller",namespace="argo",pod="argo-workflows-workflow-controller-559f59c754-5lchc"}'
+        values: "900000000+0x30"
+      - series: 'kube_pod_container_resource_limits{container="controller",namespace="argo",pod="argo-workflows-workflow-controller-559f59c754-5lchc",resource="memory"}'
+        values: "1073741824+0x30"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: &near_limit_alert
+          - exp_labels:
+              severity: warning
+              container: controller
+              namespace: argo
+              pod: argo-workflows-workflow-controller-559f59c754-5lchc
+      - eval_time: 30m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: *near_limit_alert
+
+  # ── 2. THE QUIET ARM — below the threshold, the alert never fires ──────────────────────────────
+  # Working set at 700000000 bytes (ratio 0.652): between the ~0.15 steady state and the 0.8
+  # threshold. Series present, rule present, no page — this is what "no alert on a metric with no
+  # series behind it" plus "does not fire on arrival" look like together.
+  - interval: 1m
+    name: ratio below the threshold never fires
+    input_series:
+      - series: 'container_memory_working_set_bytes{container="controller",namespace="argo",pod="argo-workflows-workflow-controller-559f59c754-5lchc"}'
+        values: "700000000+0x30"
+      - series: 'kube_pod_container_resource_limits{container="controller",namespace="argo",pod="argo-workflows-workflow-controller-559f59c754-5lchc",resource="memory"}'
+        values: "1073741824+0x30"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: []
+
+  # ── 3. THE `for:` — a spike shorter than 15m does not fire ────────────────────────────────────
+  # Working set jumps above 0.8 for five minutes (t=6..10) then recovers. The 15m window never
+  # fills with consecutive high readings, so the alert must stay quiet — the creep this alert is
+  # sized for is the ~29-day climb, not a GC thresh.
+  - interval: 1m
+    name: "a 5m spike above the threshold does not fire (for: 15m)"
+    input_series:
+      - series: 'container_memory_working_set_bytes{container="controller",namespace="argo",pod="argo-workflows-workflow-controller-559f59c754-5lchc"}'
+        values: "700000000+0x5 900000000+0x5 700000000+0x20"
+      - series: 'kube_pod_container_resource_limits{container="controller",namespace="argo",pod="argo-workflows-workflow-controller-559f59c754-5lchc",resource="memory"}'
+        values: "1073741824+0x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: []
+
+  # ── 4. THE CROSSING — the 0.8 boundary is real, and the window counts from the crossing ────────
+  # Working set sits at 0.652, crosses to 0.838 at t=6, and stays there. The `for` window starts
+  # at the crossing, so the page lands at t=21 (15 evaluations later) — not at t=6, not at t=15.
+  # This is the arm that pins the join AND the threshold in one: the limit metric is what turns a
+  # raw byte gauge into a ratio, and both must be present for the alert to exist at all.
+  - interval: 1m
+    name: crossing above 0.8 fires 15m after the crossing
+    input_series:
+      - series: 'container_memory_working_set_bytes{container="controller",namespace="argo",pod="argo-workflows-workflow-controller-559f59c754-5lchc"}'
+        values: "700000000+0x5 900000000+0x25"
+      - series: 'kube_pod_container_resource_limits{container="controller",namespace="argo",pod="argo-workflows-workflow-controller-559f59c754-5lchc",resource="memory"}'
+        values: "1073741824+0x30"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: WorkflowControllerMemoryNearLimit
+        exp_alerts: *near_limit_alert

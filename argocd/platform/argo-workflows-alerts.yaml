@@ -1,0 +1,28 @@
+# Workflow-controller memory early-warning (homelab#492). A tiny app for the same reason
+# longhorn-alerts and homeassistant-alerts are tiny apps: the rules must live somewhere ArgoCD
+# syncs, while argo-workflows itself is a Helm chart (argocd/platform/argo-workflows.yaml). Landing
+# this in the chart's values map would have no PrometheusRule CR beside the fixtures — the
+# prometheus-rules-lint drift pin pairs each *.promtool-rules with the CR in its own directory, so
+# a values-map alert is copy-only, must be declared witness-only, and its behaviour test asserts
+# nothing. As its own CR it carries a real behaviour fixture (controller-memory.promtool-test,
+# both arms) exactly like homeassistant-alerts.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-workflows-alerts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/argo-workflows-alerts
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=false]
