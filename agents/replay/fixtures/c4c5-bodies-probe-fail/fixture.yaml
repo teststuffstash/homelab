@@ -1,0 +1,36 @@
+# homelab#488 — the C4/C5 open-PR body probe fails OPEN: a transient `gh pr list` 503 degraded to
+# `[]`, indistinguishable from "this repo has no open PRs", so the abandoned-ride predicate
+# INVERTED and the IL-T16 belt re-queued + c4c5-redispatch rode work a live PR already owned.
+# Live (homelab#405): the belt fired exactly once at 18:00:53Z while PR #475 — open, green, armed,
+# body referencing `#405` all afternoon — should have excluded it on every tick. A standing
+# predicate error fires every tick; a one-shot fire is a transient probe failure.
+#
+# CONDITION UNDER REPLAY. `STUB_GH=fail`: the open-PR body probe's `gh pr list` is unreadable (the
+# 403/404/network shape the stub uses), exactly as a GitHub 503 window presents it to the real
+# scan. The probe runs ITS OWN `gh pr list` — that is the code under replay — so unlike the
+# selector/infeasible/derivations blocks it is NOT supplied as a recorded file by the bridge.
+#
+# THE CONTRACT:
+#   1. The probe is ATTEMPTED and lands in the stream — a check that silently stopped checking is
+#      a check that silently stopped guarding.
+#   2. NOT ONE WRITE and NOT ONE UNIT: no belt re-queue, no infeasible-terminal park, no
+#      c4c5-redispatch. An empty array must mean "no open PRs", NOTHING else — the guard's whole
+#      point is that a failed read must not read as an empty read.
+#   3. The failure is REPORTED (`⚠ PROBE_FAILED (open PRs)`) and the clause is SKIPPED for the
+#      repo this tick — the same exit the pod-probe and belt-probe siblings take (rule #6: never
+#      fail INTO a write). The predicate is level-triggered, so a skipped clause self-heals on the
+#      next scan ≤30m later.
+#
+# `STUB_GH=fail` is the harness's own failure-mode seam (agents/replay/stubs/gh) rather than a
+# missing world file: an absent recording dies with exit 9, which is a FIXTURE error, not the
+# 503-shaped production failure this probe has to survive.
+name: c4c5-bodies-probe-fail
+mode: actions
+world: circles-29-tree
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:c4c5-bodies-probe
+  - file:post.sh
+env:
+  - STUB_GH=fail
