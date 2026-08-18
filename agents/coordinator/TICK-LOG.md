@@ -4266,3 +4266,27 @@ first live ADR-110 maintenance session before the ADR existed.
   codeowner gate; G01 flip UNPARKED for next session) · design-agents skill trimmed 145k→110k.
 - Subagent A/B: two clean runs (#486 shim race 30/30-proven; #504 rules-lint values leg with
   both red probes), zero functional seat findings; one comment-count fixup total.
+
+## 2026-08-18 (the G01-flip build session — jail, meta-state-only bootstrap)
+- **G01 ENFORCEMENT FLIP SHIPPED end-to-end**: soak read first (A0 rule) found -iac repos 15d
+  clean but homelab red on EVERY head — a standing-tree condition (30 platform-owned
+  cluster-scoped resources + one gitleaks FP in the FU archive), not per-PR regressions. Answer:
+  enumerated Kyverno PolicyException baseline (`policy/iac/exceptions/homelab.yaml`, names only,
+  codeowner-gated growth) + owned gitleaks config, BOTH read from the sentinel's master clone —
+  never the scanned tree (hostile-PR tamper fence). PR#548 (4 CI belts hit in sequence: tofu
+  fmt → ADR-103 ratchet (register entry) → FU-098 apps-lint (registry+exporter sync) → merge);
+  reviewer App statuses:write granted+installed (verified via App JWT before AND after);
+  reviewer-git mint widened; sentinel posts required `iac-sentinel` per head, */5, fail-closed
+  error state; tofu applied host-side. **GitHub lesson: push rules are PRIVATE-repo only** —
+  guard live on oracle-iac alone, public repos fenced by the required check itself (fix-forward
+  direct). Tier-1 CODEOWNERS scaffold dropped per its own condition. ADR-110 paragraph landed
+  in CLAUDE.md. FU-176 filed (sentinel wipes its own pushgateway group on zero-PR ticks).
+- **Bell archaeology**: global `review-reflex-now` reviews NOTHING now (all stacks graduated) —
+  the working bell is per-stack (`reflex-now.sh review-platform platform-agents`); seat PRs must
+  ARM AUTO-MERGE AT OPEN or the reflex never picks them (re-learned live on #548).
+- Operator rulings this session: no PR approvals without the design-agents corpus EXCEPT
+  infra-only PRs unrelated to agent-loop design (→ merged #544; parked #545/#546/#549).
+- **PR#551** (operator-reported off #523's ride): Go-rail claude rides now carry
+  CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 for deepseek-v4-flash — the harness treated the unknown
+  id as 200k and auto-compacted ~5x early. Window table inline in BOTH replay clauses (clauses
+  run self-contained — a top-level helper RC-127'd in the fixtures); 3 fixtures updated, 119/0.
