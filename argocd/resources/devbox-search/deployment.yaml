@@ -12,6 +12,12 @@ spec:
   template:
     metadata:
       labels: { app: devbox-search }
+      # checksum/config pins the pod to its ConfigMap (issue #519): the nginx.conf mount is subPath,
+      # so kubelet never live-refreshes it and only a new pod spec rolls. Editing configmap.yaml
+      # REQUIRES recomputing this hash in the same commit:
+      #   sha256sum argocd/resources/devbox-search/configmap.yaml
+      annotations:
+        checksum/config: d6c52487d54c6bded488ab8aae9a5dcbb381ac45cbacfb562092e078e3fbb8f7
     spec:
       securityContext:
         runAsNonRoot: true

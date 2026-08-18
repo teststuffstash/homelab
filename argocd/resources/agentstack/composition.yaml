@@ -10,7 +10,9 @@
 #                                                cross-stack escalation FU-089 closed); the proxy's
 #                                                TokenReview-gated /git-token serves it (ADR-087 leg B)
 #   4. OpenRouterKey <repo>                    — standing budget key; operator writes <repo>-openrouter
-#   5. agent-worker-egress CiliumNetworkPolicy — FU-020 lockdown, baseline+profile+extraFQDNs, with the
+#   5. agent-worker-egress CiliumNetworkPolicy — FU-020 lockdown, tiered legs (baseline /
+#                                                capability-gated / profile / earned — the tier
+#                                                table in docs/agents/agentstack.md), with the
 #                                                monitor→enforce dial (enableDefaultDeny.egress)
 #   6. agentstack-proxy-session-keys Role+Binding — ADR-087 leg A: the egress proxy resolves opaque
 #                                                refs by reading LABELED session Secrets in this ns.
@@ -1147,6 +1149,12 @@ spec:
                 egress: false
               {{- end }}
               egress:
+                # TIERED legs. The tier table and each leg's rationale live in
+                # docs/agents/agentstack.md §The egress dial — one home per fact; keep this block
+                # in sync with that table leg-by-leg. Baseline legs below are open to every ride
+                # (every stack); the capability-gated legs sit in the docker-gated blocks
+                # (fixer.docker: true) with their reason written at the leg; the claim-selected
+                # profile and the harvest-earned extraFQDNs ride in the toFQDNs block.
                 # The Kubernetes API. Added 2026-08-04 (homelab#97): the platform lane started
                 # granting workers READ RBAC (agent-read-app / agent-read-infra — pods, events,
                 # PVCs, Longhorn volumes) so a fixer can SEE the thing it is fixing, and that
@@ -1177,6 +1185,21 @@ spec:
                       rules:
                         dns:
                           - matchPattern: "*"
+                # Registry mirrors — BASELINE (moved out of the docker gate by homelab#520):
+                # read-only pull-through caches (ADR-091), open to every ride (rationale:
+                # docs/agents/agentstack.md §The egress dial). The identity rule is the primary
+                # match — pod→LB-VIP is DNAT'd to the backend BEFORE policy evaluation,
+                # Hubble-verified 2026-07-14; the VIP CIDRs stay as a belt for any untranslated
+                # path.
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: registry-cache
+                - toCIDR:
+                    - 192.168.40.20/32 # docker.io mirror VIP
+                    - 192.168.40.21/32 # ghcr mirror VIP
+                  toPorts:
+                    - ports:
+                        - { port: "80", protocol: TCP }
                 {{- if $docker }}
                 # docker=true: kata worker pods run dnsPolicy None + the LAN resolver (the FU-072
                 # service-VIP gap), so DNS leaves to the router — keep the L7 dns rule so toFQDNs
@@ -1190,16 +1213,10 @@ spec:
                       rules:
                         dns:
                           - matchPattern: "*"
-                # docker=true: the pull-through registry mirrors (FU-073, registry-cache ns).
-                # Hubble-verified 2026-07-14: even from a kata guest, pod→LB-VIP traffic is
-                # DNAT'd to the backend BEFORE policy evaluation, so the identity rule below is
-                # the one that matches; the VIP CIDRs stay as a belt for any untranslated path.
-                - toEndpoints:
-                    - matchLabels:
-                        k8s:io.kubernetes.pod.namespace: registry-cache
+                # docker=true: kata rides install via the nix-cache/devbox-search LAN-VIPs (the
+                # FU-072 service-VIP gap). The identity rules above cover the DNAT'd path — this
+                # belt is for any untranslated path.
                 - toCIDR:
-                    - 192.168.40.20/32
-                    - 192.168.40.21/32
                     - 192.168.40.23/32 # nix-cache VIP (FU-073e) — kata rides install via it
                     - 192.168.40.27/32 # devbox-search VIP (FU-118b) — kata rides `devbox add` via it
                   toPorts:
