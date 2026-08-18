@@ -238,6 +238,9 @@ resource "github_repository_ruleset" "required_approval_goal" {
 # with the G01 enforcement flip (2026-08-18) alongside the required `iac-sentinel` context; the
 # sentinel's own path-rule stays as the belt (it also covers `scripts/ci*`, which this ruleset
 # leaves alone — those are repo-relative CI entrypoints, not GitHub-executed workflow files).
+# ⚠ GitHub allows push rules on PRIVATE repos only (422 "Source public repos cannot have push
+# rules", learned at the flip apply) — see the restrict_workflow_pushes comment in variables.tf
+# for what carries the fence on public repos. Today this materializes on oracle-iac alone.
 resource "github_repository_ruleset" "workflow_push_guard" {
   for_each = { for k, v in var.protected_repos : k => v if v.restrict_workflow_pushes }
 
