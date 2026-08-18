@@ -20,6 +20,7 @@ bgp_node_ips:                                # Talos nodes that peer (BGP neighb
   - 192.168.2.51   # cp-01
   - 192.168.2.61   # wk-01
   - 192.168.2.62   # wk-02
+  - 192.168.2.63   # wk-03 (VM, ephemeral/CI tier — missed at capacity-day onboarding 2026-08-18)
   # Bare-metal nodes — were never added when onboarded, so they sat BGP `idle` (never peered,
   # never advertised VIPs); the Cilium BGP metrics caught it (2026-06-11). Cilium's nodeSelector
   # is all-nodes, so OPNsense must list every node here (explicit neighbors, not a listen-range).
