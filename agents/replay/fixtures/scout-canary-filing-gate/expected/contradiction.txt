@@ -8,7 +8,7 @@ OUT ROW 1 inclusionai/ling-3.0-flash benched=true canary=inconclusive
 OUT CANARY inclusionai/ling-3.0-flash inconclusive free=false
 ERR canary: riding up to 3 candidate(s) in ns teststuffstash
 ERR canary: dispatching inclusionai/ling-3.0-flash ($0.05 cap)
-ERR canary: inclusionai/ling-3.0-flash — contradiction (bench-capable, rail not clean: auth-storm) — retrying once
+ERR canary: inclusionai/ling-3.0-flash — contradiction (suspect-infra: bench-capable, rail not clean: auth-storm) — retrying once
 ERR canary: inclusionai/ling-3.0-flash — retry auth-storm — inconclusive (bench says capable, rail disagrees twice)
 ERR → posting digest issue on teststuffstash/homelab
 RC 0

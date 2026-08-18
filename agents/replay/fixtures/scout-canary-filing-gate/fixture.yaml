@@ -27,6 +27,12 @@
 #   3. Any row with a benchmark index OR a typed canary verdict ⇒ file as today, rows carrying the
 #      canary column. The `filed` row pins that: one benched + one unbenched-but-clean canary,
 #      the digest posts, the canary column shows both typed verdicts.
+#   4. An UNPARSABLE stats blob is a TYPED verdict, never blank (additive, PR#499 round 2). A
+#      jq parse failure on a non-JSON AGENT_RUN_STATS tail ⇒ `unknown` — the rail DID speak, the
+#      line did not parse; a fact distinct from `no-stats`. The `unparsable` row pins the
+#      silent-degrade the old code caused: an unbenched candidate's EMPTY verdict read as
+#      uncanaried and the gate SKIPPED the digest; with the fix the row is canaried (`unknown`)
+#      and the digest FILES.
 #
 # Worlds are the family's per-row recorded state: ranked.json (post-rank rows, the shape leg 2
 # writes) + the AGENT_RUN_STATS lines the rides would have emitted. `filed` and `contradiction`

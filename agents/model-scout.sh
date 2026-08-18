@@ -349,16 +349,18 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
   # harness-death | auth-storm | budget-403 | timeout | unknown | no-stats | mint-failed |
   # key-never-minted | suspect-infra | inconclusive — never `failed`.
   scout_classify() { # <stats-json-or-empty> → one typed verdict word
-    local stats="$1"
+    local stats="$1" v
     [ -n "$stats" ] || { echo "no-stats"; return 0; }
-    printf '%s' "$stats" | jq -r '
+    v="$(printf '%s' "$stats" | jq -r '
       (.exit_status // "") as $s
       | (.error_class // "") as $ec
       | if $s == "no-artifact" or $s == "clean" then "clean"
         elif $s == "failed" then (if $ec != "" then $ec else "unknown" end)
         elif $s == "" then (if $ec != "" then $ec else "unknown" end)
         elif (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s
-        else $s end'
+        else $s end' 2>/dev/null)" || v=""
+    [ -n "$v" ] || v="unknown"
+    printf '%s\n' "$v"
   }
 
   # Canary one candidate (FU-062/FU-024 + FU-161 legs 3–4). Mints an ephemeral key (seam), rides
@@ -379,7 +381,7 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     # Contradiction rule (leg 4): canary-fail ∧ benchmark-capable ⇒ suspect-infra, retry once,
     # else `inconclusive` — never `failed`. An UNBENCHED model's typed failure stands as-is.
     if [ "$verdict" != "clean" ] && [ "$benched" = "true" ]; then
-      log "canary: $id — contradiction (bench-capable, rail not clean: ${verdict}) — retrying once"
+      log "canary: $id — contradiction (suspect-infra: bench-capable, rail not clean: ${verdict}) — retrying once"
       retry_v="$(scout_classify "$(scout_canary_ride "$id" "$is_free" retry)")"
       if [ "$retry_v" = "clean" ]; then
         verdict="clean"

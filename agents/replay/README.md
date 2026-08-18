@@ -324,8 +324,9 @@ The scout family is the first where the file changed **after** the fixture famil
 legs 3–4 (homelab#469) landed on top of the leg 1–2 fixtures, so the fixture edits here are exactly
 the ADR-103 move: `model-scout.sh` is in the ratchet's clause-file regex since #297, and the
 `scout-bench-*` replays were updated in the SAME commit that changed the digest, not a follow-up.
-`scout-canary-filing-gate` (mode `table`) is the family's decision-table entry — its three rows pin
-the canary rail-probe verdicts, the contradiction retry rule, and the filing-gate skip in one world.
+`scout-canary-filing-gate` (mode `table`) is the family's decision-table entry — its four rows pin
+the canary rail-probe verdicts, the contradiction retry rule, the filing-gate skip, and the
+unparsable-stats→`unknown` fallback in one world.
 
 `fixtures/scan-phase-marker` + `fixtures/scan-wedge-alert` (FU-145, homelab#283) are the seventh
 family and the first **pair split across the two modes**, because the thing under test spans a
