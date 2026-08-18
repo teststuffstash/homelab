@@ -136,6 +136,21 @@ dollars. Three directions replace it (they refine the ledger's per-rail `budgets
    window TRUTH is the global utilization headers, so per-stack draw there is self-metered
    attribution reconciled against header truth. Better stack knobs (posture, budgets, rails),
    better homelab knobs (shares per window), one scheduler.
+4. **Budgets meter TOTAL cost — every role, every rail (operator, 2026-08-18).** A Goal budget
+   that counts only worker spend INVERTS the incentive: a $0.03 worker round that draws a ~$1
+   review round bills as cheap, so the "optimal" composition under worker-only accounting is to
+   ship incorrect code and let the reviewer effectively author the fix across CHANGES_REQUESTED
+   rounds — the most expensive composition the platform has, invisibly. Only total cost gives the
+   right incentive; ROUNDS_MAX bounds the worst case but never prices it. Already measured, three
+   ways: Go-rail review rounds ≈$1 each with a 6-round PR cycle the biggest single window draw
+   (TICK-LOG 2026-08-13); circles#57's worker rounds cost $0.03–0.05 while the review loop they
+   drew was the real spend; goal #278's registry join read **$0 spent** while ~21 coordination
+   sessions billed the pool unmeasured (the FU-165 pilot's cadence finding). Build consequences:
+   reviewer/coordinator session costs gain the same (stack, issue/goal) attribution keys the
+   worker's `agent_run_cost_usd` already carries (the OTLP `claude_code_cost` data exists,
+   unattributed today), typed per rail per direction 1; the goal registry's spend join widens
+   from worker rows to the full role set; and a child's budget reservation prices the EXPECTED
+   WHOLE CYCLE (ride + review rounds + closeout), never the worker cap alone.
 
 Build home: a later wave of #420 (after the reviewer failover ships); the accounting half
 rides #278/FU-131. Nothing here changes chunk A–F scope — the only-free interaction stays the
