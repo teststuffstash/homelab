@@ -94,6 +94,15 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > exactly what's blocking, then move on**. Investigating quietly and then doing nothing is the **one
 > unacceptable outcome**: a blocked issue a human can see beats a silent stall every time.
 >
+> **Name your tool gaps; never leave a capability demand in prose.** When a NAMED diagnostic or
+> tool is unavailable in-pod — RBAC-denied verb, a binary this image lacks, an egress-blocked
+> fetch — and its absence changed what you could verify, emit ONE structured line in your session's
+> normal output surface (issue comment / report): `TOOL_GAP: <tool-or-verb> — <what it was needed
+> for, one clause>`. Anchor it like `AGENT_STRIKE:`/`AGENT_INFEASIBLE:` — first characters of the
+> line, never a substring — once per session per tool, and never as a request for the grant itself:
+> evidence, not lobbying. The janitor's daily tick aggregates these into the operator's inventory
+> (§The janitor tick, sweep #6); a gap already ruled out stays listed with its ruling.
+>
 > **Re-read labels immediately before EVERY label mutation — your read is stale the moment you
 > took it** (live race 2026-07-26, #134/#145: an instance investigated a still-`agent/queued`
 > issue, and by the time it wrote `agent/blocked` a sibling had claimed + dispatched a worker —
@@ -510,7 +519,7 @@ The ~daily REPORT-ONLY session (`janitor-<stack>` CronWorkflow → scan `SCAN_JA
 clauses can't have — ADR-094 kept it precisely because *a clause bug silently starves an item
 class where a browsing LLM might have noticed*. You dispatch NOTHING, claim nothing, change no
 labels or merge state; your one permitted write is INERT spec-gap draft issues (breaker #1,
-issue-authoring leg b). Five sweeps, findings or an explicit "clean" per sweep — the report is
+issue-authoring leg b). Six sweeps, findings or an explicit "clean" per sweep — the report is
 the product:
 
 1. **Starvation** (the headline): queued/reported items with zero movement for days. A starved
@@ -521,6 +530,25 @@ the product:
 4. **Cross-PR smells**: colliding open PRs, stale branches, diffs outside their issue's
    declared `Touches:` footprint (ADR-097).
 5. **Spec gaps**: MAY file inert drafts for genuine `specs/`/TRACKS gaps, deduped first.
+6. **Tool-gap inventory (TOOL_GAP, homelab#536)** — the capability-demand reader. Aggregate the
+   session-issued `TOOL_GAP:` marker lines across the stack's repos (issue comments + PR bodies,
+   trailing ~30d) into a `tool × count × sample-need` inventory, so the operator reads demand
+   instead of prose archaeology. Seed the first report from the known prose record, and keep a gap
+   already RULED listed with its ruling — the point is visibility, not re-litigation:
+   - `talosctl` — the PodSigkilled family (#63/#65/#68/#100/#101/#153/#472) — **ruled
+     out-of-scope by construction**: the agent image carries no devbox and node-level truth (Talos
+     dmesg, machine config) is unreachable by any in-cluster agent whatever its RBAC
+     (`agent-read-rbac.yaml`, CEILING).
+   - `hubble` binary — **solved via the Prometheus-first runbook**: the drop metric already
+     resolves names (`destinationContext=dns|ip`), so the FQDN is a query away; hubble is only for
+     per-flow detail and lives on the cilium agents, not this image.
+   - `pods/portforward` — **declined** (`agent-read-rbac.yaml`): it only pays off pointed at a
+     `hubble` binary the image ships none of.
+   - `services/proxy` — **declined** (`agent-read-rbac.yaml`): Prometheus is already reachable
+     over the pod network (verified 2026-08-08).
+   - `events` — **granted** (`agent-read-rbac.yaml`): the homelab#94 fix.
+   A marker naming a NEW tool is a headline finding for this sweep; a marker on an already-ruled
+   tool changes nothing — the operator sees the whole set either way.
 
 A finding that needs a human is stated loudly in the report, never acted on.
 

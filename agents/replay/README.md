@@ -559,5 +559,13 @@ Log each instance here, so the next author sees a register rather than a precede
   `retro-harvest-slug` is the regression proof that the ordinary path's names did not move. Still
   unpaid, and still this entry's debt: the **guard** (busy-probe legs, ledger delta) and the
   harvest's git/gh half.
+- **homelab#536 (2026-08-18)** — the TOOL_GAP marker instruction (producer briefs + the janitor's
+  sweep #6) touched two clause files: `coordinator/responder-argo.yaml` (HARD RULES) and
+  `reviewer-session.sh` (pod-side `PROMPT`). Both diffs are LLM-PROMPT prose inside the `claude -p`
+  invocations, OUTSIDE every `>>>REPLAY:` sentinel, so no extracted clause changes and no
+  action-stream moves — the harness asserts a clause's `gh`/`kubectl` calls, and prompt text emits
+  none. Evidence rather than assertion: the full suite (119) stayed green byte-identically on the
+  branch. The reader half (janitor sweep in `agents/coordinator-session.sh` + the seeded inventory
+  in the coordinator README) is not a clause file.
 
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.
