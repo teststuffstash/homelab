@@ -93,7 +93,11 @@ follows fix-density per ADR-103, never big-bang):
    FU-167/FU-168's call.
 6. **Hermeticity contract** (homelab#329) — default: a fixture runs anywhere bash+awk+jq exist;
    anything more declares `requires:` and `run.sh` exits 2 naming the tool (the scan-wedge
-   precedent promoted to rule). The 5 non-hermetic fixtures get lines or fixes.
+   precedent promoted to rule). **Ambient env is part of the contract** (2026-08-18, three
+   same-day sightings): `run.sh` unsets vars fixtures are known to default (`PROJECT`) at its
+   top, so the pod's own env cannot leak into a fixture world — a bridge default `${VAR:-x}`
+   is a leak vector; prefer hard values, and add newly-evidenced vars to run.sh's unset line,
+   never per-bridge fixes. The 5 non-hermetic fixtures get lines or fixes.
    **Mechanism LIVE (same PR as move 2):** `requires:` in fixture.yaml, checked before dispatch,
    loud absence. The #329 set is declared (homelab#329): `scan-wedge-alert` declares `yq`+`promtool`,
    the `goal-ancestor` family is hermetic via the `$end`→`$stop` jq rename, and `scout-bench-*`
