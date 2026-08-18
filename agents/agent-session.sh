@@ -992,12 +992,15 @@ esac
 # predicate from a bare `#N` MENTION to a strong link: any prose cross-reference in an unrelated
 # open PR used to park the issue and point the next round at the WRONG branch. The predicate is
 # the C6 strong-link grammar (implements/closes/fixes/resolves, optional colon), the same set the
-# review-flip belt and finalize key on — a sibling-seam mention is not a link. --work-branch ==
-# headRef stays the one legitimate fork exemption, unchanged.
+# review-flip belt and finalize key on — a sibling-seam mention is not a link. The alternation is
+# anchored left with `\b` so ordinary prose containing a keyword as a SUFFIX (`unresolved`,
+# `prefixes`, `disclose`) cannot false-match: the same failure the guard exists to kill, just
+# triggered by prose instead of a bare mention (reviewer finding, PR #567 round 1). --work-branch
+# == headRef stays the one legitimate fork exemption, unchanged.
 # >>>REPLAY:fu042-guard-a>>>
 fu042_guard_a() {
   PF_PR_LINE="$(gh pr list --repo "$PF_SLUG" --state open --json number,body,headRefName \
-    --jq "[.[] | select(.body | test(\"(?i)(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #${PF_ISSUE}\\\\b\"))][0] | select(.) | \"\(.number) \(.headRefName)\"" 2>/dev/null || true)"
+    --jq "[.[] | select(.body | test(\"(?i)\\\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #${PF_ISSUE}\\\\b\"))][0] | select(.) | \"\(.number) \(.headRefName)\"" 2>/dev/null || true)"
   if [ -n "$PF_PR_LINE" ]; then
     PF_PR="${PF_PR_LINE%% *}"; PF_HEAD="${PF_PR_LINE#* }"
     if [ -z "$WORK_BRANCH" ]; then
