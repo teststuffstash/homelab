@@ -373,14 +373,23 @@ gen_index() {
   for y in "$ROOT"/docs/agents/*-fsm.yaml; do
     awk '/^  - id: /{id=$3}
          /agents\/replay\/fixtures\//{
-           line=$0; sub(/.*agents\/replay\/fixtures\//,"",line); sub(/[^A-Za-z0-9_-].*/,"",line)
+           line=$0; sub(/.*agents\/replay\/fixtures\//,"",line); sub(/[ \t#].*/,"",line)
            if (line != "" && id != "") print line "\t" id }' "$y"
   done | sort -u > "$pins"
   printf '| fixture | mode | world | source | pinned by (FSM) |\n|---|---|---|---|---|\n'
-  local d n mode src w ids FXY
-  for d in "$FIXROOT"/*/; do
-    [ -d "$d" ] || continue
-    n="$(basename "$d")"
+  local d rel n mode src w ids FXY
+  # layout-agnostic discovery (FU-167 move 5): a fixture dir is any dir at depth 1 OR 2 holding a
+  # fixture.yaml — tables at `fixtures/<table>/`, family members at `fixtures/<family>/<fixture>/`.
+  # Sorted by relpath so the `_selftest-*` probe-fails still lead the register.
+  local -a rels=()
+  for d in "$FIXROOT"/*/ "$FIXROOT"/*/*/; do
+    [ -f "$d/fixture.yaml" ] || continue
+    rels+=("${d#$FIXROOT/}")
+  done
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    d="$FIXROOT/$rel"; rel="${rel%/}"
+    n="$(basename "$rel")"
     # the harness's OWN parser (PR#381 review): a bespoke awk here would render a future quoted
     # `source: "…"` differently than the harness reads it — one parser, one truth. `local FXY`
     # shadows the global bash-dynamically, so fx_scalar reads this fixture, and a run_fixture
@@ -389,9 +398,12 @@ gen_index() {
     mode="$(fx_scalar mode)"
     src="$(fx_scalar source)"
     w="$(fx_scalar world)"
-    ids="$(awk -F'\t' -v n="$n" '$1==n{print $2}' "$pins" | sort -u | paste -sd' ' -)"
-    printf '| `%s` | %s | %s | `%s` | %s |\n' "$n" "${mode:--}" "${w:--}" "${src:--}" "${ids:--}"
-  done
+    # pins are keyed by RELPATH (e.g. arbitrate/first-tick) so two families with a shared leaf
+    # name (probe-fail, both, …) never cross-wire transitions in the view
+    ids="$(awk -F'\t' -v rel="$rel" '$1==rel{print $2}' "$pins" | sort -u | paste -sd' ' -)"
+    [ -n "$ids" ] || ids="$(awk -F'\t' -v n="$n" '$1==n{print $2}' "$pins" | sort -u | paste -sd' ' -)"
+    printf '| `%s` | %s | %s | `%s` | %s |\n' "$rel" "${mode:--}" "${w:--}" "${src:--}" "${ids:--}"
+  done < <(printf '%s\n' "${rels[@]}" | sort -u)
   rm -f "$pins"
 }
 
@@ -476,7 +488,12 @@ DIRS=()
 if [ $# -gt 0 ]; then
   DIRS=("$@")
 else
-  for d in "$FIXROOT"/*/; do [ -d "$d" ] && DIRS+=("$d"); done
+  # layout-agnostic discovery (FU-167 move 5): any dir at depth 1 OR 2 holding a fixture.yaml —
+  # tables at `fixtures/<table>/`, family members at `fixtures/<family>/<fixture>/`. The globs
+  # stay in bash's own sorted order, so the `_selftest-*` probe-fails still run first.
+  for d in "$FIXROOT"/*/ "$FIXROOT"/*/*/; do
+    [ -f "$d/fixture.yaml" ] && DIRS+=("$d")
+  done
 fi
 [ ${#DIRS[@]} -gt 0 ] || { echo "clause-replay: no fixtures found under $FIXROOT" >&2; exit 2; }
 

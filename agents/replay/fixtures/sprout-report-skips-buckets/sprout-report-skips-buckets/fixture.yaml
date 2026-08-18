@@ -1,0 +1,35 @@
+# ADR-102 / homelab#207 — the 🌱 slice must not report post-launch BUCKETS as untriaged sprouts.
+# Synced with homelab#405: adopted-not-queued class (⏸) now surfaces adopted issues without state.
+#
+# CONDITION UNDER REPLAY. Four open issues, one of each shape the slice has to tell apart:
+#   #80 bot-authored, unlabelled, titled `post-launch:` → a CONTAINER. Must NOT appear.
+#   #81 bot-authored, unlabelled                        → a real inert sprout (🌱). MUST appear.
+#   #82 bot-authored, already carries agent-fix         → adopted-not-queued (⏸). MUST appear in new class.
+#   #83 human-authored                                  → never this slice's business.
+#
+# WHY #80 MATTERS. A bucket is bot-authored and carries no `agent-fix`, so it matches this slice
+# perfectly — and it is not work. Left in, every goal adds a permanent line to a report whose whole
+# job is "these are rotting, go triage them", and the report's own printed instruction (label
+# agent-fix[+queued] to adopt) would dispatch a worker against an issue with nothing to build. This
+# fixture is the difference between a container and a task, asserted rather than assumed.
+#
+# The 🌱 line for #81 is present in full: the point is that the slice still WORKS, not merely that
+# it dropped something. A filter that quietly swallowed real sprouts would also make #80 vanish.
+#
+# 2026-08-09 (homelab#226): the UNBLOCKED-UNLABELED clause now shares this block's ONE `gh issue
+# list`, so the recorded CALL grew `createdAt,blockedBy`. This world stays as recorded — none of
+# these four issues carries a blocked-by edge, so none can reach the new class, and that is the
+# assertion: adding a sharper class did not move a single row of this one. The new class has its
+# own pair (`unblocked-unlabeled-*`).
+pins:
+  - IL-T17
+name: sprout-report-skips-buckets
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:sprout-report
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles
