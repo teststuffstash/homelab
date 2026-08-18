@@ -185,7 +185,9 @@ six OVERSIZE items pointer-ized into
       silent-success class as FU-108/FU-113. Evidence + inventory:
       [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Ground truth".
       **Next:** diff the App's permissions/installations against 07-06 (out-of-jail), then a
-      liveness signal so the next stall is loud; drop the invalid `vulnerabilityAlerts.prPriority`
+      liveness signal so the next stall is loud — the exporter gauge ONLY (`dependencyDashboard:
+      false` by ruling 2026-08-18, click-ops; dashboards closed, PR#494's sprout carve-out closed
+      unneeded); drop the invalid `vulnerabilityAlerts.prPriority`
       + the dead `NIX_VERSION` manager. Relates FU-014 (archived), FU-046, FU-097, FU-016.
 - [ ] **FU-097** — **Write the per-surface ruling table for the surfaces ArgoCD/tofu don't
       reconcile** (OPNsense, Proxmox host, Home Assistant, Matchbox, `tofu/` roots): automate, or

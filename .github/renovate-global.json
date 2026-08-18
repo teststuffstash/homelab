@@ -1,8 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline AND the shared classification enforced on EVERY repo the homelab-renovate App autodiscovers. This is the platform's Renovate policy; a repo needs NO renovate.json to be correctly classified (onboarding:false + requireConfig:optional). A per-repo renovate.json is only for genuine overrides. Implements the S2C2F (consumer) leg of docs/slsa.md; the agentic lanes: docs/renovate.md + docs/agents/merge-path.md (FU-046 open).",
+  "description": "GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline AND the shared classification enforced on EVERY repo the homelab-renovate App autodiscovers. This is the platform's Renovate policy; a repo needs NO renovate.json to be correctly classified (onboarding:false + requireConfig:optional). A per-repo renovate.json is only for genuine overrides. Implements the S2C2F (consumer) leg of docs/slsa.md; the agentic lanes: docs/renovate.md + docs/agents/merge-path.md (FU-046 open). dependencyDashboard is OFF by operator ruling (2026-08-18): the dashboard is an interactive click-ops surface whose approval/rebase checkboxes nothing here uses — every lane keys on labels; Renovate liveness is the exporter-gauge signal (FU-125), never dashboard-issue-exists.",
 
-  "extends": ["config:recommended", ":dependencyDashboard", ":enablePreCommit", "helpers:pinGitHubActionDigests"],
+  "extends": ["config:recommended", ":enablePreCommit", "helpers:pinGitHubActionDigests"],
+
+  "dependencyDashboard": false,
 
   "onboarding": false,
   "requireConfig": "optional",
