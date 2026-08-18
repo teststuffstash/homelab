@@ -1516,6 +1516,13 @@ ${DIND_CONTAINER}
           value: "1"
         - name: DEVBOX_DISABLE_TELEMETRY
           value: "1"
+        # opencode CLI's own phone-home (homelab#456, 2026-08-17): the auto-update check
+        # (registry.npmjs.org, its npm-distributed updater) + model-registry fetch
+        # (models.opencode.ai) were the openrouter-operator POLICY_DENIED pair — the image bundles
+        # opencode for every harness, so kill at the tool for ALL rides, not the allowlist, matching
+        # the devbox/uv precedents above (undocumented but functional — anomalyco/opencode#1793).
+        - name: OPENCODE_DISABLE_AUTOUPDATE
+          value: "1"
         # 2026-08-08 (operator + the homelab#107 21:35Z triage, same conclusion): uv with an
         # unpinned python-preference FETCHES A MANAGED CPython from releases.astral.sh even when
         # devbox already provisions an interpreter satisfying the project's constraint — ~272

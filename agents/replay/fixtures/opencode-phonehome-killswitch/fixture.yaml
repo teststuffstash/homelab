@@ -1,0 +1,20 @@
+# homelab#456 — the pod env card ships the opencode phone-home kill-switch for EVERY ride.
+#
+# CONDITION UNDER REPLAY. The opencode CLI's auto-update check (registry.npmjs.org, its
+# npm-distributed updater) + model-registry fetch (models.opencode.ai) were the openrouter-operator
+# POLICY_DENIED egress pair. The agent-base image bundles opencode for every harness, so the
+# kill-switch must be set UNCONDITIONALLY in the always-rendered env list — beside the
+# devbox/uv precedents, never gated on HARNESS=opencode and never handled by widening the egress
+# allowlist (the CNP correctly denies the WAN call; the tool's own check is the thing to silence).
+#
+# mode: suite — the subject is a STATIC property of the launcher's pod env card, not an action
+# stream: no gh/kubectl calls, nothing to record. The suite reads the var OUT of
+# agents/agent-session.sh at run time (never a transcription, #166) and asserts presence, value,
+# and unconditional placement in the always-on env block.
+name: opencode-phonehome-killswitch
+mode: suite
+entrypoint: agents/replay/fixtures/opencode-phonehome-killswitch/suite.sh
+# hermeticity contract (homelab#329): bash/awk/jq/sed are the harness base; grep is used for the
+# literal line finds, so it is declared — absent grep reports cannot-run-here, not a clause red.
+requires:
+  - grep
