@@ -1,0 +1,3 @@
+CALL bash ./subscription-latch.sh --pick-rail
+OUT → test-project claude-tier dispatch deferred — both rails latched (FU-088)
+RC 0
