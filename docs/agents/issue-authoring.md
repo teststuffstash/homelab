@@ -320,12 +320,14 @@ escaped-diff belt live THERE). Authoring-side semantics: **omitting the line is 
 exclusive** (classic WIP=1); a worker discovering mid-ride that it needs paths outside its
 declaration files a new issue for the owning concern (TRACKS rule 2).
 
-⚠ **A `Touches:` naming an ADR-103 ratchet clause file MUST also declare `agents/replay/**`** —
-the ratchet reds any clause-file diff without a replay-tree touch, so a footprint that names the
-clause file alone is **unsatisfiable, not merely narrow**: every conforming PR arrives with a
-guaranteed scope escape and cannot converge (homelab#270/PR#275, 2026-08-11 — the coordinator's
-arbitration proved no green conforming shape existed and escalated; the human sanctioned the
-wider diff). The ratchet's file list lives in `.github/workflows/ci.yaml` (the `clause=` grep).
+⚠ RETIRED 2026-08-18 (ADR-097 addendum): **a `Touches:` never declares `agents/replay/**` at
+all** — the replay tree is exempt from footprint semantics (stripped from the intersection,
+never an escape; `agents/footprint.sh` `fp_replay_exempt`). The rule this paragraph used to
+carry — a ratchet clause file in the footprint forces an unsatisfiable declaration without the
+replay tree (homelab#270/PR#275; PR#547 was the same class as a governance block) — is
+dissolved rather than enforced: the ADR-103 ratchet still compels the replay TOUCH in the PR
+(`.github/workflows/ci.yaml`, the `clause=` grep); only the declaration ceremony is gone. A
+replay path in a `Touches:` line is harmless dead weight, not an error.
 
 ⚠ **A `Touches:` landing on a `pin-only-lint` GUARDED file is undeliverable by a PR at all** — those
 files take only a pin line, so the scan reports the issue instead of dispatching it

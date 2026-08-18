@@ -50,6 +50,31 @@ fi
 # never run in parallel, which IS the old WIP=1 behavior.
 expect 0 "legacy vs legacy stays serial"              "*"                     "*"
 
+# ── the replay-tree exemption (ADR-097 addendum, 2026-08-18) ──────────────────────────────────
+# agents/replay/** entries are stripped before intersection: replay-only footprints hold nothing
+# and are held by nothing — including against the legacy `*` sentinel. Path-boundary aware:
+# agents/replay-foo is a sibling name, NOT exempt.
+expect 1 "replay vs replay never conflicts"           "agents/replay/**"      "agents/replay/**"
+expect 1 "replay entry vs broad agents glob"          "agents/replay/fixtures/x/**" "agents/**"
+expect 1 "replay-only vs the legacy sentinel"         "agents/replay/**"      "*"
+expect 1 "bare agents/replay (no glob) is exempt"     "agents/replay"         "agents/replay/run.sh"
+expect 0 "replay-ADJACENT name is not exempt"         "agents/replay-foo/**"  "agents/replay-foo/x.sh"
+expect 0 "mixed list: non-replay half still holds"    "agents/replay/**, agents/coordinator-scan.sh" "agents/coordinator-scan.sh"
+expect 1 "mixed list: replay half holds nothing"      "agents/replay/**, docs/**" "agents/replay/fixtures/y/**"
+
+# fp_conflict_strict — the GUARDED-check variant (PR#557 reviewer catch): NO replay exemption.
+# The pin-only pre-dispatch check must read a declared replay footprint as touching a guarded
+# file under agents/replay/ the day one exists there — exempting it would fail OPEN.
+expect_strict() { # expect_strict <0|1> <desc> <listA> <listB>
+  fp_conflict_strict "$3" "$4"; got=$?
+  if [ "$got" -ne "$1" ]; then
+    echo "FAIL: $2 (strict A='$3' B='$4' want=$1 got=$got)"; fails=$((fails + 1))
+  fi
+}
+expect_strict 0 "strict: replay vs replay STILL conflicts"   "agents/replay/**" "agents/replay/run.sh"
+expect_strict 0 "strict: sentinel vs replay conflicts"       "*"                "agents/replay/x"
+expect_strict 1 "strict: disjoint stays disjoint"            "agents/replay/**" "docs/adr.md"
+
 if [ "$fails" -gt 0 ]; then
   echo "footprint-test: ${fails} FAILED"
   exit 1
