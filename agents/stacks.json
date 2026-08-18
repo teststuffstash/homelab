@@ -10,7 +10,7 @@
         "sleep-tracking",
         "snore-recorder"
       ],
-      "mainRepo": "homelab",
+      "mainRepo": "sleep-tracking",
       "coordinatorModel": "sonnet",
       "workerModel": "xiaomi/mimo-v2.5",
       "workerModelFallbacks": [
