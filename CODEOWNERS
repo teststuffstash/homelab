@@ -48,17 +48,11 @@
 # the only thing that matters. This is a merge an agent could otherwise make alone.
 /docs/              @RasmusSoot
 #
-# EXCEPT, for now, argocd/resources/ — see below.
-#
-# ⚠ TEMPORARY, and the whole point of it is to be removed (operator, 2026-08-04). Tier 1 is the one
-#   path where merge IS deploy to the live cluster and no human is in the loop by design, so it is
-#   also the one place "the CODEOWNERS gate will hold" is FALSE. The doctrine's answer for this tier
-#   was never review — it is the IAC-G04 policy sentinel, which today runs in SHADOW mode and is
-#   pointed at the -iac repos, not homelab. Until the sentinel covers homelab (or agent output here
-#   has earned the trust), owning this path makes the gate real while we find out what a fixer
-#   actually produces against real alerts. Cost: review latency on a handful of PRs a week.
-#   REMOVE THIS LINE when IAC-G04 enforces for homelab — it is a scaffold, not a policy.
-/argocd/resources/  @RasmusSoot
+# argocd/resources/ is deliberately UNOWNED (tier 1): merge is deploy, and the gate there was
+# never review — it is the IAC-G04 policy sentinel, ENFORCING for homelab since 2026-08-18 (the
+# required `iac-sentinel` check; iac-lane.md §L0b). The temporary ownership scaffold that held
+# this path from 2026-08-04 was removed the same day enforcement went live, per its own
+# REMOVE-WHEN condition.
 
 # ── Carve-outs, last so they win.
 # The deploy-pin lane is mechanical: the homelab-deploy App bumps this file (ADR-084) and
