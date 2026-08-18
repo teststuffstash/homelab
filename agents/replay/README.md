@@ -146,9 +146,7 @@ is stale, so it cannot drift the way the prose register did.
 | `argv-payload/warn-band` | actions | - | `agents/agent-session.sh` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
-| `c4c5-infeasible/parks` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
-| `c4c5-infeasible/probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
-| `c4c5-infeasible/quoted-inert` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
+| `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `depends-on-retired-format/depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
 | `dispatch-phase/scan` | actions | - | `agents/coordinator-scan.sh` | - |
