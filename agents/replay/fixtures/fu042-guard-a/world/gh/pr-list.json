@@ -1,0 +1,7 @@
+[
+  {
+    "number": 366,
+    "headRefName": "fix/issue-351-exporter-down-fixture",
+    "body": "**Fixes #351**.\n\nNot vacuous: #344 reports three headers whose recipe does not survive a copy-paste, and this one is not a fourth."
+  }
+]
