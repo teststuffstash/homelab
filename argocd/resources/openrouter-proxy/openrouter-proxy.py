@@ -1500,8 +1500,14 @@ class Proxy(BaseHTTPRequestHandler):
             else:
                 stack = "jail"
             if merged["input_tokens"] or merged["output_tokens"]:
+                # homelab#540: the ingest row now carries the cache split (cache_read /
+                # cache_creation) so the ledger can price cache-read tokens at the cR rate
+                # instead of full input price. extract_usage already reads them; they were
+                # dropped at the row boundary before this fix.
                 router.go_usage_add(time.time(), stack, bare_model, usd, draw,
-                                    merged["input_tokens"], merged["output_tokens"])
+                                    merged["input_tokens"], merged["output_tokens"],
+                                    merged.get("cache_read_input_tokens", 0),
+                                    merged.get("cache_creation_input_tokens", 0))
                 if go_leg:
                     log(f"Go usage: {bare_model} stack={stack} tokens={merged['input_tokens']}in/"
                         f"{merged['output_tokens']}out"
@@ -1581,7 +1587,11 @@ class Proxy(BaseHTTPRequestHandler):
             # ZERO launcher changes. The semaphore state rides in the payload under `semaphore`.
             def _go_snapshot(name, win_start, _resets_at):
                 return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
-            status = gometer.go_window_status(time.time(), _go_snapshot)
+            # homelab#540: wire the CHAIN-anchor seam — the 5h window's open epoch comes from
+            # the ledger walk (first-use/expiry-chained), not a fixed grid.
+            def _go_chain(span_s, lookback_s):
+                return router.go_usage_chain_open(span_s, lookback_s)
+            status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
             go_semaphore = _go_semaphore_state()
             payload = json.dumps({
                 "limited": status["limited"] or go_semaphore["limited"],
@@ -1644,7 +1654,11 @@ class Proxy(BaseHTTPRequestHandler):
             # parsing requirement).
             def _go_snapshot(name, win_start, _resets_at):
                 return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
-            go_status = gometer.go_window_status(time.time(), _go_snapshot)
+            # homelab#540: CHAIN-anchor seam (5h window opens at the first request after the
+            # previous window expired; the ledger walk recovers the open epoch).
+            def _go_chain(span_s, lookback_s):
+                return router.go_usage_chain_open(span_s, lookback_s)
+            go_status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
             lines += [
                 "# TYPE opencode_subscription_usage_usd gauge",
                 "# HELP opencode_subscription_usage_usd Go-rail subscription window DRAW usage in USD per window (list price, badge-halved).",
@@ -1653,7 +1667,7 @@ class Proxy(BaseHTTPRequestHandler):
                 "# TYPE opencode_subscription_usage_threshold gauge",
                 "# HELP opencode_subscription_usage_threshold Per-window dispatch-deferral threshold (0-1 fraction).",
                 "# TYPE opencode_subscription_reset_timestamp_seconds gauge",
-                "# HELP opencode_subscription_reset_timestamp_seconds Unix time the window resets (gometer go_window_bounds anchored grid; absent for rolling windows).",
+                "# HELP opencode_subscription_reset_timestamp_seconds Unix time the window resets (gometer go_window_bounds anchored — 5h chain, 7d weekly, 30d monthly; absent for rolling windows).",
             ]
             for w, data in sorted(go_status["windows"].items()):
                 lines.append(f'opencode_subscription_usage_usd{{window="{w}"}} {data["usage_usd_window_draw"]:.6f}')
@@ -2363,6 +2377,18 @@ def main() -> int:
                 tokens_out = int(data["tokens_out"])
                 if tokens_out < 0:
                     raise ValueError("tokens_out must be >= 0")
+            # homelab#540: optional cache split (shim sends it since this fix). Absent (old shims
+            # still running / legacy spool rows) → treated as 0 — the row stores 0 and the
+            # window-draw recompute only improves NEW rows (historical rows lack the split).
+            cache_read, cache_creation = 0, 0
+            if "cache_read" in data:
+                cache_read = int(data["cache_read"])
+                if cache_read < 0:
+                    raise ValueError("cache_read must be >= 0")
+            if "cache_creation" in data:
+                cache_creation = int(data["cache_creation"])
+                if cache_creation < 0:
+                    raise ValueError("cache_creation must be >= 0")
         except (ValueError, KeyError, TypeError, json.JSONDecodeError) as e:
             resp = json.dumps({"error": f"bad body: {e}"}).encode()
             handler.send_response(400)
@@ -2375,7 +2401,8 @@ def main() -> int:
             log(f"go-ingest: 400 bad body: {e}")
             return
         # Accept the row
-        router.go_usage_add(ts, stack, model, usd, usd_draw, tokens_in, tokens_out)
+        router.go_usage_add(ts, stack, model, usd, usd_draw, tokens_in, tokens_out,
+                            cache_read, cache_creation)
         handler.send_response(204)
         handler.send_header("Connection", "close")
         handler.end_headers()
@@ -2892,9 +2919,11 @@ def _self_test() -> int:
     check("5h" in resp["windows"], "/opencode-limit: 5h window present")
     check(resp["by_stack"].get("test", 0) > 0, "/opencode-limit: by_stack includes test")
 
-    # Test 12: real usage extraction + badge halving via stub upstream (non-stream JSON)
+    # Test 12: real usage extraction + badge HALVING via stub upstream (non-stream JSON)
     # Stub returns JSON with usage at END: 1M in + 1M out, deepseek-v4-flash (half=True)
-    # List: 0.14/0.28 $/M → 1M+1M = $0.42 at 1× → $0.21 at half
+    # List: 0.14/0.28 $/M → 1M+1M = $0.42 at 1×.
+    #   billed (by_stack)  = list ×1 = $0.42  (homelab#540: badge models BILL at list ×1)
+    #   draw (by_stack_draw) = list ×0.5 = $0.21  (the badge halving is WINDOW-DRAW only)
     _go_response["type"] = "json"
     _go_response["body"] = json.dumps({
         "id": "gen-test", "model": "deepseek-v4-flash",
@@ -2912,10 +2941,12 @@ def _self_test() -> int:
     r.read()
     c.close()
 
-    # Check ledger shows ~0.21 for jail stack (direct key)
+    # Check ledger: billed $0.42 (list ×1), draw $0.21 (badge-halved) for jail stack
     w = router.go_usage_window(60)
-    check(abs(w["by_stack"].get("jail", 0) - 0.21) < 0.01,
-          f"JSON extraction: jail stack ≈$0.21, got {w['by_stack'].get('jail')}")
+    check(abs(w["by_stack"].get("jail", 0) - 0.42) < 0.01,
+          f"JSON extraction: jail stack billed ≈$0.42 (list ×1), got {w['by_stack'].get('jail')}")
+    check(abs(w["by_stack_draw"].get("jail", 0) - 0.21) < 0.01,
+          f"JSON extraction: jail stack draw ≈$0.21 (badge-halved), got {w['by_stack_draw'].get('jail')}")
 
     # Test 12b: SSE extraction (message_start + message_delta)
     _go_response["type"] = "sse"
@@ -2938,10 +2969,12 @@ data: [DONE]
     r.read()
     c.close()
 
-    # SSE test should also add ~0.21 for sse-stack
+    # SSE test should also add billed $0.42 / draw $0.21 for sse-stack
     w2 = router.go_usage_window(60)
-    check(abs(w2["by_stack"].get("sse-stack", 0) - 0.21) < 0.01,
-          f"SSE extraction: sse-stack ≈$0.21, got {w2['by_stack'].get('sse-stack')}")
+    check(abs(w2["by_stack"].get("sse-stack", 0) - 0.42) < 0.01,
+          f"SSE extraction: sse-stack billed ≈$0.42, got {w2['by_stack'].get('sse-stack')}")
+    check(abs(w2["by_stack_draw"].get("sse-stack", 0) - 0.21) < 0.01,
+          f"SSE extraction: sse-stack draw ≈$0.21, got {w2['by_stack_draw'].get('sse-stack')}")
 
     # Restore default SSE response for remaining tests
     _go_response["type"] = "sse"
@@ -2978,7 +3011,9 @@ data: [DONE]
           f"fallback: fallback-stack ≈${expected}, got {w3['by_stack'].get('fallback-stack')}")
 
     # Test 14b: cache-write pricing — gpt-5.6-luna has cW=0.25 AND half=True (compound case)
-    # Usage: 100k in + 100k out + 1M cache_creation → (0.02 + 0.12 + 0.25) × 0.5 = $0.195
+    # Usage: 100k in + 100k out + 1M cache_creation.
+    #   billed = list ×1 = 0.02 + 0.12 + 0.25 = $0.39  (homelab#540: badge models BILL at list ×1)
+    #   draw   = list ×0.5 = (0.02 + 0.12 + 0.25) × 0.5 = $0.195  (badge halving is DRAW-only)
     # Keep input below 272k threshold to test base rates
     _go_response["body"] = json.dumps({
         "id": "gen-cw", "model": "gpt-5.6-luna",
@@ -2995,9 +3030,12 @@ data: [DONE]
     c.close()
     check(r.status == 200, "cache-write request: HTTP 200 returned")
     w_cw = router.go_usage_window(60)
-    expected_cw = 0.195  # (0.02 + 0.12 + 0.25) × 0.5
+    expected_cw = 0.39   # billed: (0.02 + 0.12 + 0.25) × 1 = 0.39
+    expected_cw_draw = 0.195  # draw: (0.02 + 0.12 + 0.25) × 0.5
     check(abs(w_cw["by_stack"].get("cw-stack", 0) - expected_cw) < 0.01,
-          f"cache-write: cw-stack ≈${expected_cw}, got {w_cw['by_stack'].get('cw-stack')}")
+          f"cache-write: cw-stack billed ≈${expected_cw}, got {w_cw['by_stack'].get('cw-stack')}")
+    check(abs(w_cw["by_stack_draw"].get("cw-stack", 0) - expected_cw_draw) < 0.01,
+          f"cache-write: cw-stack draw ≈${expected_cw_draw}, got {w_cw['by_stack_draw'].get('cw-stack')}")
 
     # Test 14c: long-context pricing — qwen3.7-plus >256k uses 1.20/4.80/0.12/1.50 rates
     # 300k input + 100k output → 300k×1.20/1e6 + 100k×4.80/1e6 = 0.36 + 0.48 = $0.84
@@ -3019,6 +3057,35 @@ data: [DONE]
     expected_long = 0.84  # 300k×1.20/1e6 + 100k×4.80/1e6
     check(abs(w_long["by_stack"].get("long-stack", 0) - expected_long) < 0.01,
           f"long-context: long-stack ≈${expected_long}, got {w_long['by_stack'].get('long-stack')}")
+
+    # Test 14d: the cache SPLIT persists through the proxy row write (homelab#540).
+    # kimi-k3 in 3.00/out 15.00/cR 0.30: 1000 in + 500 cache_read + 100 out →
+    #   billed = 1000×3.00/1e6 + 500×0.30/1e6 + 100×15.00/1e6 = 0.003 + 0.00015 + 0.0015 = $0.00465
+    #   draw   = same (kimi not badged, ×1) = $0.00465
+    # The row's cache_read/cache_creation columns must be stored so the ledger can price the
+    # split instead of charging full input price on every cache-read token.
+    _go_response["body"] = json.dumps({
+        "id": "gen-split", "model": "kimi-k3",
+        "usage": {"input_tokens": 1000, "cache_read_input_tokens": 500, "output_tokens": 100}
+    }).encode()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/kimi-k3",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:split-stack/test-secret"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 200, "cache-split request: HTTP 200 returned")
+    w_split = router.go_usage_window(60)
+    check(abs(w_split["by_stack"].get("split-stack", 0) - 0.00465) < 0.0001,
+          f"cache-split: split-stack billed ≈$0.00465, got {w_split['by_stack'].get('split-stack')}")
+    # The stored row must carry cache_read=500 (the ledger recompute uses it).
+    _split_rows = router._read("SELECT cache_read, cache_creation FROM go_usage "
+                               "WHERE stack='split-stack' ORDER BY ts DESC LIMIT 1")
+    check(_split_rows and _split_rows[0] == (500, 0),
+          f"cache-split: stored row cache_read=500 cache_creation=0 (got {_split_rows})")
 
     # Test 15: ledger prune — rows older than 45d are deleted
     old_ts = now - 50 * 86400
@@ -3139,6 +3206,40 @@ data: [DONE]
     # Expected: by_stack["test-ingest"] == 0.05 (the row we just posted)
     check(abs(by_stack.get("test-ingest", 0) - 0.05) < 0.001,
           f"ingest round-trip: by_stack['test-ingest'] ≈ $0.05 (got {by_stack.get('test-ingest')})")
+
+    # Test 18b: ingest tolerates a payload WITH the cache split and stores it (homelab#540);
+    # the shim has been sending the split since this fix. The row must land with
+    # cache_read=777 / cache_creation=42 so the ledger can price the split.
+    c = http.client.HTTPConnection("127.0.0.1", INGEST_PORT, timeout=10)
+    c.request("POST", "/go-usage-report",
+              body=json.dumps({"ts": time.time(), "stack": "ingest-split",
+                               "model": "kimi-k3", "usd": 0.01,
+                               "cache_read": 777, "cache_creation": 42}),
+              headers={"Content-Type": "application/json",
+                       "X-Ingest-Token": ingest_test_token})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 204, f"ingest with cache split: 204 on valid POST (got {r.status})")
+    _isplit = router._read("SELECT cache_read, cache_creation FROM go_usage "
+                           "WHERE stack='ingest-split' ORDER BY ts DESC LIMIT 1")
+    check(_isplit and _isplit[0] == (777, 42),
+          f"ingest cache split stored: cache_read=777 cache_creation=42 (got {_isplit})")
+    # An OLD shim payload WITHOUT the cache fields must be tolerated (absent → 0), not rejected.
+    c = http.client.HTTPConnection("127.0.0.1", INGEST_PORT, timeout=10)
+    c.request("POST", "/go-usage-report",
+              body=json.dumps({"ts": time.time(), "stack": "ingest-nosplit",
+                               "model": "kimi-k3", "usd": 0.01}),
+              headers={"Content-Type": "application/json",
+                       "X-Ingest-Token": ingest_test_token})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 204, f"ingest without cache fields (old shim): 204 (got {r.status})")
+    _ins = router._read("SELECT cache_read, cache_creation FROM go_usage "
+                        "WHERE stack='ingest-nosplit' ORDER BY ts DESC LIMIT 1")
+    check(_ins and _ins[0] == (0, 0),
+          f"ingest absent cache fields → stored 0/0 (got {_ins})")
 
     # Test 19: 401 on wrong token
     c = http.client.HTTPConnection("127.0.0.1", INGEST_PORT, timeout=10)
