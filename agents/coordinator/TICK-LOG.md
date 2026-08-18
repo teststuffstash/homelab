@@ -4290,3 +4290,6 @@ first live ADR-110 maintenance session before the ADR existed.
   CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 for deepseek-v4-flash — the harness treated the unknown
   id as 200k and auto-compacted ~5x early. Window table inline in BOTH replay clauses (clauses
   run self-contained — a top-level helper RC-127'd in the fixtures); 3 fixtures updated, 119/0.
+- **HA #221 remedy PROVEN (same session, operator at the wall)**: laptop4 plug wall-cycled —
+  sensor thawed 8.0-frozen→9.8→17.9 live; the X250's battery carried wk-metal-02 through the
+  cut (cordon/drain was belt-only, uncordoned clean). Sequencing for the rest in meta-state.
