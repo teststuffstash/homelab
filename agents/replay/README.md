@@ -178,11 +178,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
-| `harvest/deep-sprout` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
-| `harvest/goal-closed` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 |
-| `harvest/goal-open-exhausted` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
-| `harvest/goal-open-funded` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
-| `harvest/master-inert` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
+| `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
 | `opencode-phonehome-killswitch/opencode-phonehome-killswitch` | suite | - | `-` | - |
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |

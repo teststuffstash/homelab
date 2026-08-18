@@ -1,0 +1,18 @@
+# harvest — the decision table (family contract in fixture.yaml; per-row intent below).
+# id                 | world           | patch | env                                                                        | expect
+# goal-open-funded   = GOAL OPEN, BUDGET REMAINS → the walk finds #29 from #35, the bucket is
+#                      CREATED (#77) and LINKED, `harvest=store` — the queue right, grantable
+# goal-open-exhausted= GOAL OPEN, BUDGET EXHAUSTED → same world, bucket ALREADY EXISTS (no
+#                      create), `harvest=store` — the checkpoint gates money, not the harvest
+# goal-closed        = GOAL CLOSED → the sprout lands INERT with NO queue labels; the budget is
+#                      never even read (no `gh issue list` / ledger read — the state check
+#                      short-circuits ahead of the budget read)
+# deep-sprout        = THE DEPTH PIN: the live circles#29 tree, #75 → #47 → #18 → #29 — four
+#                      issues inspected on a tree that exists today (bound ships at 6)
+# master-inert       = THE REGRESSION PIN: a NON-GOAL closeout — the walk terminates, the block
+#                      emits NOTHING (breaker #1: master lane stays human-gated)
+goal-open-funded   | circles-29-tree |       | IN_ORG=teststuffstash IN_REPO=circles IN_CLAUSE=merged-closeout IN_ITEM=issue-35 IN_WMODEL=claude/haiku IN_CAP=2.0000 | goal-open-funded
+goal-open-exhausted| circles-29-tree |       | IN_ORG=teststuffstash IN_REPO=circles IN_CLAUSE=merged-closeout IN_ITEM=issue-35 IN_WMODEL=claude/haiku IN_CAP=2.0000 | goal-open-exhausted
+goal-closed        | circles-29-tree |       | IN_ORG=teststuffstash IN_REPO=circles IN_CLAUSE=merged-closeout IN_ITEM=issue-35 IN_WMODEL=claude/haiku IN_CAP=2.0000 | goal-closed
+deep-sprout        | deep-sprout     |       | IN_ORG=teststuffstash IN_REPO=circles IN_CLAUSE=merged-closeout IN_ITEM=issue-75 IN_WMODEL=claude/haiku IN_CAP=2.0000 | deep-sprout
+master-inert       | master-inert    |       | IN_ORG=teststuffstash IN_REPO=circles IN_CLAUSE=merged-closeout IN_ITEM=issue-50 IN_WMODEL=claude/haiku IN_CAP=2.0000 | master-inert

@@ -538,9 +538,7 @@ transitions:
       play — budget-gated THERE, children parented to the finding's ORIGIN (ADR-106 (2))."
     status: guarded
     replay:
-      - agents/replay/fixtures/harvest/goal-open-funded       # open → store (budget NOT read here anymore)
-      - agents/replay/fixtures/harvest/goal-open-exhausted    # open → store — same verdict, the checkpoint gates money
-      - agents/replay/fixtures/harvest/goal-closed            # closed → inert
+      - agents/replay/fixtures/harvest   # THE TABLE (move-2 rollout): rows goal-open-funded / goal-open-exhausted / goal-closed — open → store, closed → inert
     guards:
       - desc: "the verdict is DETERMINISTIC and rides --item; the play is ordered, never asked (replay: harvest-goal-open-funded / -exhausted / -closed)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "harvest APPENDS, never mints" }
@@ -566,10 +564,7 @@ transitions:
       children base MASTER — the goal branch dies at the assembly squash; goal identity is the issue."
     status: guarded
     replay:
-      - agents/replay/fixtures/harvest/goal-open-funded       # absent → created AND linked
-      - agents/replay/fixtures/harvest/goal-open-exhausted    # present → no create call (idempotent)
-      - agents/replay/fixtures/harvest/master-inert           # no goal → no bucket, breaker #1 intact
-      - agents/replay/fixtures/harvest/deep-sprout            # live circles#29 tree — the walk depth is measured
+      - agents/replay/fixtures/harvest   # THE TABLE (move-2 rollout): rows goal-open-funded (absent → created AND linked) / goal-open-exhausted (present → no create call, idempotent) / master-inert (no goal → no bucket, breaker #1 intact) / deep-sprout (live circles#29 tree — the walk depth is measured)
       - agents/replay/fixtures/sprout-report-skips-buckets/sprout-report-skips-buckets    # the container is not reported as work
     guards:
       - desc: "one container per goal — found by title in the goal's own sub-issue list before any create (replay: harvest-goal-open-exhausted)"
