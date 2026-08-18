@@ -230,3 +230,65 @@ resource "github_repository_ruleset" "required_approval_goal" {
   }
 
 }
+
+# PUSH ruleset — the enforcement-grade native version of the sentinel's path rule (iac-lane.md
+# §L0b; the sleep-iac#28 hole: in-repo CI runs the PR's own workflow code, so a required check
+# the PR can rewrite is not a gate against the worker). A push ruleset evaluates the PUSH, on
+# every branch, before any PR machinery — a worker cannot even stage a workflow edit. Shipped
+# with the G01 enforcement flip (2026-08-18) alongside the required `iac-sentinel` context; the
+# sentinel's own path-rule stays as the belt (it also covers `scripts/ci*`, which this ruleset
+# leaves alone — those are repo-relative CI entrypoints, not GitHub-executed workflow files).
+resource "github_repository_ruleset" "workflow_push_guard" {
+  for_each = { for k, v in var.protected_repos : k => v if v.restrict_workflow_pushes }
+
+  name        = "workflow-push-guard"
+  repository  = each.key
+  target      = "push"
+  enforcement = var.enforcement
+
+  # Push rulesets take no ref conditions — they apply to every push to the repository.
+
+  # Org admins (operator + jail seat) bypass: workflow edits are the operator lane by doctrine
+  # (CLAUDE.md §How changes land — governance files the bot cannot gate).
+  bypass_actors {
+    # actor_id noise: same OrganizationAdmin read-back inconsistency as the three rulesets
+    # above — the lifecycle block ignores this one attribute's drift.
+    actor_id    = 1
+    actor_type  = "OrganizationAdmin"
+    bypass_mode = "always"
+  }
+
+  # homelab-merge (FU-041 updater): update-branch pushes a merge commit onto a PR HEAD, and
+  # that commit carries whatever master changed — including workflow edits — so without a
+  # bypass the updater 422s on any PR open across a workflow-touching master commit (#118's
+  # class). The App pushes only to PR heads; it cannot reach master (org ruleset requires a
+  # PR there and does not list it).
+  bypass_actors {
+    actor_id    = tonumber(var.merge_gh_app_id)
+    actor_type  = "Integration"
+    bypass_mode = "always"
+  }
+
+  # homelab-renovate: its Actions SHA-pinning branches edit `.github/workflows/**` by design.
+  # The PRs still gate on the human codeowner where CODEOWNERS owns that path (homelab) — the
+  # bypass only lets the branch be PUSHED. Conditional: the App id is empty until bootstrapped.
+  dynamic "bypass_actors" {
+    for_each = var.renovate_app_id != "" ? [1] : []
+    content {
+      actor_id    = tonumber(var.renovate_app_id)
+      actor_type  = "Integration"
+      bypass_mode = "always"
+    }
+  }
+
+  rules {
+    file_path_restriction {
+      restricted_file_paths = [".github/workflows/**"]
+    }
+  }
+
+  lifecycle {
+    # same OrganizationAdmin actor_id read-back nondeterminism as the sibling rulesets.
+    ignore_changes = [bypass_actors[0].actor_id]
+  }
+}
