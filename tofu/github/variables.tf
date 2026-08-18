@@ -47,6 +47,12 @@ variable "protected_repos" {
     # every actor except the bypass list (OrgAdmin; Renovate, whose SHA-pinning PRs edit
     # workflows; homelab-merge, whose update-branch merge commits can carry master's workflow
     # edits onto a PR head). The worker App is deliberately NOT bypassed — that is the point.
+    # ⚠ PRIVATE REPOS ONLY — GitHub rejects push rules on public repos outright ("Source
+    # public repos cannot have push rules", 422 at the 2026-08-18 flip apply), so this flag
+    # is a capability statement, not a policy choice: setting it on a public repo can never
+    # apply. On public repos the fence is the required `iac-sentinel` check instead — workflow
+    # edits only LAND via a PR (org ruleset), and the sentinel's path-rule reds any
+    # worker-authored PR touching `.github/workflows/**`.
     restrict_workflow_pushes = optional(bool, false)
   }))
   default = {
@@ -54,7 +60,7 @@ variable "protected_repos" {
     # `iac-sentinel` context — the IAC-G01 enforcement flip (2026-08-18, iac-lane.md §L0b). The
     # status is posted by the sentinel CronWorkflow (*/5) under the homelab-REVIEWER App, so a
     # PR waits ≤ one tick for it; probe failures post `error` (fail-closed) and heal next tick.
-    circles-iac = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # CI-gated deploy target (sleep-iac shape)
+    circles-iac = { required_checks = ["ci", "iac-sentinel"], require_approval = false } # CI-gated deploy target (sleep-iac shape); public → no push ruleset possible
     # circles: codeowner gate ON (2026-08-06, the #29 goal lane) — /specs/ + /.agents/ on Rasmus
     # (CODEOWNERS at the repo root). Master-targeted only after the required-approval split, so
     # child PRs into goal/** stay bot-approved; the goal→master assembly PR (always touches
@@ -79,7 +85,7 @@ variable "protected_repos" {
     #     waits for a human. That is the intended reading of those tiers, not an accident.
     #   • Renovate's Actions SHA-pinning PRs touch .github/workflows/ — OWNED, likewise. Arguably
     #     the single change you most want eyes on (the Trivy-class mitigation, renovate.md).
-    homelab = { required_checks = ["ci", "iac-sentinel"], require_approval = true, require_code_owner_review = true, restrict_workflow_pushes = true }
+    homelab = { required_checks = ["ci", "iac-sentinel"], require_approval = true, require_code_owner_review = true } # public → no push ruleset possible (flag comment above)
     # The three below flipped require_code_owner_review=true 2026-08-11 (the reviewer-enable
     # retrace): with the platform stack's bot reviewer ON, require_approval alone lets a bot
     # approval auto-merge — the codeowner flag is what turns the bot review into input-only on
@@ -92,8 +98,8 @@ variable "protected_repos" {
     agent-runtime       = { required_checks = ["ci"], require_code_owner_review = true }
     openrouter-operator = { required_checks = ["ci"], require_code_owner_review = true }
     oracle-fleet        = { required_checks = ["ci"], require_code_owner_review = true }                                          # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
-    oracle-iac          = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # sleep-iac shape: deploy bumps gate on CI + sentinel, no review
-    sleep-iac           = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true }
+    oracle-iac          = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # sleep-iac shape: CI + sentinel, no review; PRIVATE → the one repo the push guard can exist on
+    sleep-iac           = { required_checks = ["ci", "iac-sentinel"], require_approval = false }                                  # public → no push ruleset possible
     sleep-tracking      = { required_checks = ["ci"] }
     snore-recorder      = { required_checks = ["ci"] } # PR `ci` check confirmed live 2026-07-24 (PR #8 era runs)
     # agent-runtime  = { required_checks = [...] }     # needs a pull_request-triggered check first
