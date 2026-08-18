@@ -92,17 +92,18 @@ meant to avoid.)
   sensors deleted. **✅ gaas RESOLVED same afternoon: the operator's breaker cycle cleared the
   914** — the tuya_local entry loaded (climate.tuyalocal_gaas is a heating thermostat, live
   measurements verified 24.5°C) — the local key was NEVER rotated; the rotated-key/re-extract
-  contingency is moot. **⚠ thinkcentre + hp bricks STILL FROZEN (29.7 / 34.5)**: both boxes
-  were rebooted 2026-08-18 by cord pulls DOWNSTREAM of the NOUS bricks — neither brick showed
-  an availability gap, so neither actually lost power. Next attempt = pull the WHITE NOUS
-  BRICK ITSELF from the wall ~15-20s (the box's cord rides along); confirmation signal = a
-  30-60s `unavailable` gap on sensor.tuyalocal_{thinkcentre,hp}_power, then moving values.
-  Both boxes drain clean except the Longhorn instance-manager (last-replica PDB — expected;
-  verified safe: no attached engines at cut time, 2-replica volumes had healthy copies on
-  wk-02). hp-01's AC-restore worked fine on its reboot (the "flaky" note may be stale).
-  After the bricks: **pve** (shut down the VMs first). The 4 plugs are cyclable at
-  the wall BUT each cycle cuts its load (pve = the hypervisor!) — needs operator sequencing.
-  The 9-static-sensor alert exclusion stays
+  contingency is moot. **✅ thinkcentre + hp bricks RESOLVED 2026-08-18 evening — ROOT CAUSE
+  FOUND: the NOUS A1s WEDGE BEHIND THE FU-038 EGRESS FENCE on cold boot** (long brick pulls
+  alone did NOT fix them: the devices came back TCP-open but protocol-dead, tinytuya 902 —
+  looked like a rotated key, was not). Opening the tuya-egress door let each finish its cloud
+  registration and the local protocol came up IMMEDIATELY with the old key; door re-closed,
+  both serve through the fence (thinkcentre 19.8W live, hp 48.9W live). Full recipe + warning
+  now in opnsense/tuya-egress.py's header — expect a recurrence on any NOUS power loss.
+  The freeze onset (08-08/09) was the day after the fence went up: fence-correlated, all 5
+  devices. hp-01's AC-restore worked fine (the "flaky" note was stale). **Remaining: pve's
+  plug only (4/5 recovered)** — cloud-door alone tested and does NOT thaw the
+  9y0qx7npuny0pnwt family; it needs a laptop4-style wall cycle at the next pve maintenance
+  window (shut down the VMs first). The 9-static-sensor alert exclusion stays
   QUEUED as homelab#478 (machine lane owns it now).
 - **ADR-107 / Go-rail chain (charter = [`chainless-redesign.md`](chainless-redesign.md) — its
   §Rollout status is current): PART 1 COMPLETE 2026-08-14 02:25Z** — all chunks merged+live
