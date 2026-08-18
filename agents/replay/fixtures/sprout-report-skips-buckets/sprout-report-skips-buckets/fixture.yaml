@@ -21,6 +21,8 @@
 # these four issues carries a blocked-by edge, so none can reach the new class, and that is the
 # assertion: adding a sharper class did not move a single row of this one. The new class has its
 # own pair (`unblocked-unlabeled-*`).
+pins:
+  - IL-T17
 name: sprout-report-skips-buckets
 mode: actions
 source: agents/coordinator-scan.sh

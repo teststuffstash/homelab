@@ -21,6 +21,9 @@
 # `STUB_GH=fail` is the harness's own failure-mode seam (agents/replay/stubs/gh) rather than a
 # missing world file: an absent recording dies with exit 9, which is a FIXTURE error, not the
 # 403-shaped production failure this clause has to survive.
+pins:
+  - IL-T06
+  - IL-T26
 name: c4c5-infeasible-probe-fail
 mode: actions
 world: circles-29-tree

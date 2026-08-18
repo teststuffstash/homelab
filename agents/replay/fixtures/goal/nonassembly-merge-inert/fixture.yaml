@@ -22,6 +22,9 @@
 #
 # Without (d), (a) alone is satisfied by a probe that fires on any merged PR citing the goal —
 # which would announce a launch on the merge of its first child.
+pins:
+  - IL-T12
+  - IL-T18
 name: goal-nonassembly-merge-inert
 mode: actions
 source: agents/coordinator-scan.sh

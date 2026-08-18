@@ -32,6 +32,8 @@
 # The verdict is `harvest=inert` (was `selfqueue=no` pre-ADR-106) — goal #29 is closed, so its sprouts get a home but no queue
 # labels. Fixture harvest-goal-closed pins that rule on a constructed world; this one shows it
 # ruling correctly on the real thing.
+pins:
+  - IL-T17
 name: harvest-deep-sprout
 mode: actions
 source: agents/coordinator-scan.sh

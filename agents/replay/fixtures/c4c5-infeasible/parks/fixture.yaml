@@ -25,6 +25,9 @@
 #
 # Its sibling `c4c5-infeasible-quoted-inert` holds the near-miss half: a comment that TALKS about
 # the marker, and an issue a human already blocked. Both must stay inert.
+pins:
+  - IL-T06
+  - IL-T26
 name: c4c5-infeasible-parks
 mode: actions
 world: circles-29-tree

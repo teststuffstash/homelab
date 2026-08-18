@@ -18,6 +18,9 @@
 #      not write-and-hope. An unconditional de-label would show up here as a second edit.
 #   3. the goal closes `--reason "not planned"`, which is the one place the abandoned/refuted
 #      distinction survives a year: fixture (b) closes the same goal `completed`.
+pins:
+  - IL-T21
+  - IL-T22
 name: goal-abandoned
 mode: actions
 source: agents/coordinator-scan.sh

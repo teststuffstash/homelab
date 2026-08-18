@@ -17,6 +17,9 @@
 #
 # Worlds: lifecycle (clean #237 + #229 agent/error + #226 SELFREF) · anchoring (#249 mid-body
 # marker + #226). Currency rows overlay their alert-store/comment state on lifecycle (rows/<id>/).
+pins:
+  - IL-T23
+  - IL-T24
 name: fix-debounce
 mode: table
 source: agents/coordinator/fix-debounce-argo.yaml

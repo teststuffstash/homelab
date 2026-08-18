@@ -25,6 +25,9 @@
 #      extra line in the stream — the same reasoning `arbitrate-first-tick` records for PR #235.
 #
 # Its sibling `c4c5-infeasible-parks` holds the positive half: a real verdict, parked and audited.
+pins:
+  - IL-T06
+  - IL-T26
 name: c4c5-infeasible-quoted-inert
 mode: actions
 world: circles-29-tree

@@ -18,6 +18,8 @@
 #      no `agent/queued` write appears here and must not.
 #   3. So the label churn within one run is deliberate and asserted: three labels off, one back on.
 #      The thread ends inert-but-nominated instead of arriving pre-queued on merged work.
+pins:
+  - IL-T03
 name: responder-reopen-fix-verdict
 mode: actions
 source: agents/coordinator/responder-argo.yaml

@@ -13,6 +13,8 @@
 #   #91 bot-authored, unlabelled, >24h, single OPEN blocker → the ordinary 🌱 row, unchanged.
 #       The issue is not lost while it waits — it is reported as what it is. The promotion in the
 #       fires-fixture removes a row from this list; that removal must be the ONLY difference.
+pins:
+  - IL-T01
 name: unblocked-unlabeled-blocker-open
 mode: actions
 source: agents/coordinator-scan.sh

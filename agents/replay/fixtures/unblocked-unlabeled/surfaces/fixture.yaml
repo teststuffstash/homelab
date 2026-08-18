@@ -28,6 +28,8 @@
 #
 # The 🌱 lines are asserted in full on purpose: a filter that quietly swallowed real sprouts would
 # also make the promotion look like it worked.
+pins:
+  - IL-T01
 name: unblocked-unlabeled-surfaces
 mode: actions
 source: agents/coordinator-scan.sh

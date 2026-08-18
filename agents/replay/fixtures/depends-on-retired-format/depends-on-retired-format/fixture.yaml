@@ -19,6 +19,8 @@
 #
 # No `gh` call appears in the action stream on purpose — the lint rides `openall`, the fetch the
 # repo pass already made.
+pins:
+  - IL-T04
 name: depends-on-retired-format
 mode: actions
 source: agents/coordinator-scan.sh

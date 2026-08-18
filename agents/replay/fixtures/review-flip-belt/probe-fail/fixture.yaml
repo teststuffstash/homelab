@@ -15,6 +15,8 @@
 #      digest, and an invisible hold is how a belt decays.
 #   3. The belt keeps today's behaviour exactly: the issue stays `agent/in-progress` and every
 #      downstream clause (C4/C5, footprint hold, WIP cap) reads it as before.
+pins:
+  - MP-T14
 name: review-flip-belt-probe-fail
 mode: actions
 source: agents/coordinator-scan.sh

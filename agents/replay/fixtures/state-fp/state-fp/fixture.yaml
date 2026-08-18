@@ -10,6 +10,8 @@
 # pin, so a new fixture cannot be added and forgotten. What it buys next: the suite's own
 # extract()/stub/assertion copies fold onto agents/replay/stubs/ once a fixture in `actions` mode
 # has ridden a few clause changes (ADR-103 — backfill follows fix-density, not big-bang).
+pins:
+  - MP-T11
 name: state-fp
 mode: suite
 entrypoint: agents/state-fp-replay.sh

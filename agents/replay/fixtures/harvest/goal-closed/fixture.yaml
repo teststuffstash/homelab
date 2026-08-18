@@ -14,6 +14,8 @@
 # NOTE WHAT IS ABSENT. No `gh issue list` and no ledger read: the state check short-circuits ahead
 # of the budget read, so a closed goal costs one probe rather than a descendant walk. A future
 # refactor that reorders those two would show up here as added CALL lines, which is the point.
+pins:
+  - IL-T15
 name: harvest-goal-closed
 mode: actions
 world: circles-29-tree

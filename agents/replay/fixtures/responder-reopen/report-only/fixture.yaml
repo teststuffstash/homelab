@@ -22,6 +22,8 @@
 #      leaves it inert — no `agent-fix` POST, no `/fix-verdict` bell. The stripped thread stays a
 #      record. Its sibling fixture `responder-reopen-fix-verdict` holds the same world with the one
 #      byte that matters changed, and is the other half of this assertion.
+pins:
+  - IL-T03
 name: responder-reopen-report-only
 mode: actions
 source: agents/coordinator/responder-argo.yaml

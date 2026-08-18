@@ -16,6 +16,9 @@
 # THE BUCKET ALREADY EXISTS here (the recorded `sub_issues` answers #77), which pins the OTHER half
 # of the idempotency contract fixture (a) pins: no `gh issue create` appears in this stream. One
 # goal, one container, however many closeouts run through it.
+pins:
+  - IL-T15
+  - IL-T17
 name: harvest-goal-open-exhausted
 mode: actions
 world: circles-29-tree

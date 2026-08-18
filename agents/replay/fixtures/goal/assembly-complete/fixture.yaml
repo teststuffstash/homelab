@@ -21,6 +21,9 @@
 # LABEL FIRST, COMMENT SECOND is pinned by the call ORDER here, not by prose: the edit is not
 # atomic and this leg is level-triggered, so a landed comment behind a failed label re-comments
 # every tick — the duplicate-bot-comment anomaly the FU-069 breaker exists to catch.
+pins:
+  - IL-T12
+  - IL-T18
 name: goal-assembly-complete
 mode: actions
 source: agents/coordinator-scan.sh

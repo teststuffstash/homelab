@@ -15,6 +15,9 @@
 #      act nobody can undo by reading a diff, so the machine proposes and a human disposes.
 #
 # The sweep text is pinned VERBATIM (no scrub) — it is the product of this leg, not decoration.
+pins:
+  - IL-T19
+  - IL-T22
 name: goal-validated
 mode: actions
 source: agents/coordinator-scan.sh

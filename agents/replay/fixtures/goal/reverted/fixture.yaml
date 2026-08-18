@@ -21,6 +21,9 @@
 # was applied by the Bot and `goal/reverted` by a User — the leg must read the LAST labeled event
 # for the verdict label specifically. The App holds issues:write, so nothing but that read stops
 # the loop labelling its own goal and closing its own tree.
+pins:
+  - IL-T20
+  - IL-T22
 name: goal-reverted
 mode: actions
 source: agents/coordinator-scan.sh

@@ -14,6 +14,8 @@
 #
 # `parts` reaches its bridge/observation files sideways rather than copying them: they name SCAN
 # variables, and two copies of that mapping is two things to keep true.
+pins:
+  - MP-T11
 name: arbitrate-probe-unreadable
 mode: actions
 source: agents/coordinator-scan.sh

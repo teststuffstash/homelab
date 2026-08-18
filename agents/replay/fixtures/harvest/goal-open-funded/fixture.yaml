@@ -20,6 +20,9 @@
 # THE LINK IS LOAD-BEARING, NOT DECORATION. `api ... /sub_issues -F sub_issue_id=9900077` is in the
 # stream because an UNPARENTED bucket puts its children outside the goal's descendant walk — they
 # would then spend budget the gate cannot see, which is the goal-174 failure one level down.
+pins:
+  - IL-T15
+  - IL-T17
 name: harvest-goal-open-funded
 mode: actions
 world: circles-29-tree

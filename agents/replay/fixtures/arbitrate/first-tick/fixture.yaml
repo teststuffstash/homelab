@@ -16,6 +16,8 @@
 # the state-fp suite and depend on the hash value; duplicating them here would give the same
 # invariant two homes that drift apart. This fixture pins the seam the SUITE cannot: the exact
 # `gh` call the clause makes against a recorded world, and the exact action stream it emits.
+pins:
+  - MP-T11
 name: arbitrate-first-tick
 mode: actions
 source: agents/coordinator-scan.sh

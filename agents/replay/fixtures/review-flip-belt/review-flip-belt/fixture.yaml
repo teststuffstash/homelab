@@ -27,6 +27,8 @@
 #
 # Its sibling `review-flip-belt-probe-fail` holds the rule-#6 arm: an unreadable open-PR read
 # writes nothing and reports, leaving today's behaviour whole.
+pins:
+  - MP-T14
 name: review-flip-belt
 mode: actions
 source: agents/coordinator-scan.sh

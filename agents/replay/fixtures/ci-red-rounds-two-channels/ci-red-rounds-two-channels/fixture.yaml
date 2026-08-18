@@ -24,6 +24,8 @@
 #      in the CALL stream. The fast path is a real path, and its absence is asserted for free.
 #   4. Exactly ONE call, the `gh pr view`. The round counter is a READ-ONLY clause: it labels
 #      nothing and comments nothing, and a future edit that makes it write shows up here.
+pins:
+  - MP-T12
 name: ci-red-rounds-two-channels
 mode: actions
 source: agents/coordinator-scan.sh

@@ -14,6 +14,8 @@
 # The recorded parent endpoint answers `null` (no parent). Live GitHub 404s instead; the clause
 # takes the same exit, since the probe is wrapped `2>/dev/null || true` and an empty answer breaks
 # the walk exactly as `null` does.
+pins:
+  - IL-T17
 name: harvest-master-inert
 mode: actions
 source: agents/coordinator-scan.sh

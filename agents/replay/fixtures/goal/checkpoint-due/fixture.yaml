@@ -5,6 +5,8 @@
 # writes NOTHING (the debounce is the comparison; a PATCH would not move createdAt anyway).
 # World is the goal-nonassembly-merge-inert tree (1 open / 2 closed of 3 descendants — child-set
 # NOT complete, so trigger (b) stays quiet and what fires is attributably trigger (a) alone).
+pins:
+  - IL-T12
 name: goal-checkpoint-due
 mode: actions
 source: agents/coordinator-scan.sh
