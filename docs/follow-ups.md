@@ -184,11 +184,12 @@ six OVERSIZE items pointer-ized into
       Dashboard, `renovate/pin-dependencies` (Actions SHA-pinning) orphaned since 07-27. Same
       silent-success class as FU-108/FU-113. Evidence + inventory:
       [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Ground truth".
-      **Next:** diff the App's permissions/installations against 07-06 (out-of-jail), then a
-      liveness signal so the next stall is loud — the exporter gauge ONLY (`dependencyDashboard:
-      false` by ruling 2026-08-18, click-ops; dashboards closed, PR#494's sprout carve-out closed
-      unneeded); drop the invalid `vulnerabilityAlerts.prPriority`
-      + the dead `NIX_VERSION` manager. Relates FU-014 (archived), FU-046, FU-097, FU-016.
+      **Next:** ABSORBED into Goal homelab#502 (inert, 2026-08-18 — Renovate live for the
+      platform stack, sans management box; the App permission diff, liveness gauge, prPriority +
+      `NIX_VERSION` hygiene and the pin-dependencies branch are its acceptance items).
+      `dependencyDashboard: false` by ruling 2026-08-18 (click-ops; dashboards closed; liveness =
+      the exporter gauge ONLY). This item closes when #502 validates.
+      Relates FU-014 (archived), FU-046, FU-097, FU-016.
 - [ ] **FU-097** — **Write the per-surface ruling table for the surfaces ArgoCD/tofu don't
       reconcile** (OPNsense, Proxmox host, Home Assistant, Matchbox, `tofu/` roots): automate, or
       human-applied + a named drift belt. That table is the first deliverable; then implement the
