@@ -1,0 +1,62 @@
+# The homelab (platform-repo) baseline for iac-no-cluster-scoped — the G01 enforcement flip's
+# enabling piece (iac-lane.md §L0b / §The platform lane). The tenancy fence reads "cluster-scoped
+# power objects are platform-owned and arrive via the homelab repo" — so on homelab itself the
+# policy's job changes from "never" to "only the grants the platform already owns". This file IS
+# that ownership list: every cluster-scoped resource homelab ships today, BY NAME. A PR adding a
+# NEW ClusterRole/Namespace/CRD still goes red until the name is added here — and this file lives
+# under /policy/, a tier-3 CODEOWNERS path, so widening the baseline always crosses the operator.
+# The sentinel passes this file per-repo (--exceptions, matched on the repo it evaluates); the
+# scanned PR tree's own copy is never read — rules and exceptions come from homelab master only.
+apiVersion: kyverno.io/v2
+kind: PolicyException
+metadata:
+  name: homelab-platform-baseline
+spec:
+  exceptions:
+    - policyName: iac-no-cluster-scoped
+      ruleNames:
+        - no-cluster-scoped-power-kinds
+  match:
+    any:
+      - resources:
+          kinds:
+            - Namespace
+          names:
+            - agent-coordinator
+            - agent-egress
+            - agent-runtime
+            - arc-runners
+            - cf-api-proxy
+            - circles
+            - circles-iac
+            - homelab
+            - oracle-fleet
+            - oracle-iac
+            - secrets-demo
+            - sleep-iac
+            - sleep-tracking
+            - snore-recorder
+      - resources:
+          kinds:
+            - ClusterRole
+          names:
+            - agent-coordinator
+            - agent-read-app
+            - agent-read-infra
+            - agentstack-claims-read
+            - alloy-logs-reader
+            - crossplane-agentstack-composed
+            - eso-transcripts-reader-ssrr
+            - openrouter-proxy-semaphore
+            - openrouter-proxy-tokenreview
+      - resources:
+          kinds:
+            - ClusterRoleBinding
+          names:
+            - agent-coordinator
+            - agent-coordinator-read-infra
+            - agentstack-loop-read-infra
+            - alloy-logs-reader
+            - eso-transcripts-reader-ssrr
+            - openrouter-proxy-semaphore
+            - openrouter-proxy-tokenreview

@@ -287,6 +287,18 @@ is pure ceremony:
   CODEOWNERS, `.github/workflows/**` — self-gating is impossible, so these are operator-direct
   by necessity, not convenience
 
+**The codeowner gate on machine PRs runs per SESSION, not per PR (ADR-110, 2026-08-18).** For
+the maintenance stream — no Goal, reacting to alerts/board items — the human codeowner read is
+executed by the operator-started, **corpus-loaded** jail session: the seat reads each parked
+master-bound PR with the design-agents corpus as context, merges the small (alert-born fixes,
+thresholds/annotations, doc currency, scaffold-tier manifests, fixture/lint upkeep — "a bit
+wonky for a couple of days" is acceptable; the alert belts are the net), and escalates the big
+(design forks, new machinery, governance/gate changes, budget semantics, new credentials/egress,
+anything irreversible or ADR-shaped). A session that has NOT loaded the corpus does not execute
+the gate — the corpus load at session start is what makes the read a codeowner read. Cluster
+identities still approve and merge nothing; the seat's authority derives from the human starting
+the session (jail == human). The Goal lane keeps its own checkpoint model.
+
 Both lanes keep the standing discipline:
 
 - **Verify, then commit** — never the reverse, and never commit a change that was not applied. An
