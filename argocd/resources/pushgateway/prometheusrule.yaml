@@ -413,11 +413,17 @@ spec:
         #       "no roll observed" — i.e. exactly today's behaviour — never as suppression. A guard
         #       that silenced this alert whenever its own input went missing would trade a rare
         #       false page for an unbounded silent one, and nothing watches the guard.
-        #       Cost of that choice, named rather than hidden: a gateway that is entirely GONE for
-        #       longer than the 5m bridge leaves arm 1 unguarded again. Expressing THAT wants
-        #       `absent()`, which cannot land here — it is true in every fixture that has no
-        #       pushgateway series, so it would turn agents/scan-wedge-alert-test.sh (this alert's
-        #       behaviour home, outside #353's Touches) red. Carried to the PR body; see #352.
+        #       ACCEPTED RESIDUAL — DECIDED 2026-08-18 (homelab#371, operator seat ruling), not left
+        #       implicit: a gateway that is entirely GONE for longer than the 5m bridge leaves arm 1
+        #       unguarded again. Accepted because the same outage fires a TargetDown-class alert, so
+        #       this is a redundant false page during a total gateway outage — never a silent miss
+        #       and never a new operator wake. Closing it with
+        #       `absent(up{job="prometheus-pushgateway"})` was weighed and rejected: the term is true
+        #       in every fixture with no pushgateway series, redding agents/scan-wedge-alert-test.sh
+        #       (this alert's behaviour home, in #371's Touches), for a window that has never
+        #       occurred inside retention — 11461/11461 scrape-minutes present, zero gaps >60s, one
+        #       pod generation (measured 2026-08-12). The `or vector(0)` positive-evidence default
+        #       therefore STANDS, unchanged.
         #   The guard is arm 1's ALONE: arm 2 reads the markers positively, so a lost store silences
         #   it rather than mis-firing it, and there is nothing for a guard to add.
         # ARM 2 — THE CLOCK AND THE GATE, WHICH FAIL **CLOSED** (a missed page). Both are required
