@@ -173,13 +173,32 @@ spec:
             summary: "GitHub App {{ $labels.app }} permissions differ from the declared state"
             description: "Live permissions of {{ $labels.app }} do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"{{ $labels.app }}\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
 
+        # homelab#508: LATEST-RUN semantics, not a consecutive-failure counter. The old unit was
+        # wrong for self-retrying scheduled workflows: a single failed run followed by a clean
+        # success still fired for its whole 1h auto-resolve window — three report-only triages on
+        # #111 in 11d (ARC dispatch-timeout, codeload 429, GraphQL 503), each a GitHub-vendor
+        # transient that self-recovered within the hour, each costing a full responder session.
+        # A failure whose (repo, workflow, branch) has since seen a NEWER successful run is
+        # vendor-blip noise and is suppressed; a failure with NO newer success is exactly the
+        # sustained break this alert exists for and stays loud.
+        # The `unless` matches on the FULL per-run label set — the RHS's `group_right ()` carries
+        # the failing run's own labels — NOT on the (repo, workflow, branch) triple: a coarse
+        # triple-level `unless` lets an OLD blip's newer-success evidence also silence a NEWER
+        # failure in the same triple that has no such evidence (the break the alert must still
+        # see). All three shapes are pinned in loop-health.promtool-test: blip suppressed,
+        # sustained failure firing, and the mixed triple where only the blip goes quiet.
+        # The no-`for:` stance from (v) at the top of this group holds: this is expr semantics,
+        # not a restart-gap bridge, so the 3600 remains the only window.
         - alert: GithubWorkflowRunFailed
-          expr: (time() - github_workflow_run_updated_timestamp{conclusion=~"failure|startup_failure|timed_out", branch=~"master|main"}) < 3600
+          expr: >-
+            (time() - github_workflow_run_updated_timestamp{conclusion=~"failure|startup_failure|timed_out", branch=~"master|main"}) < 3600
+            unless (max by (repo, workflow, branch) (github_workflow_run_updated_timestamp{conclusion="success"})
+            > on (repo, workflow, branch) group_right () github_workflow_run_updated_timestamp{conclusion=~"failure|startup_failure|timed_out"})
           labels:
             severity: warning
           annotations:
             summary: "GitHub workflow {{ $labels.repo }}/{{ $labels.workflow }} failed"
-            description: "Run #{{ $labels.number }} ({{ $labels.event }} on {{ $labels.branch }}) concluded {{ $labels.conclusion }}: https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/actions/runs/{{ $labels.id }} — auto-resolves 1h after the run."
+            description: "Run #{{ $labels.number }} ({{ $labels.event }} on {{ $labels.branch }}) concluded {{ $labels.conclusion }}: https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/actions/runs/{{ $labels.id }} — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
 
         # FU-150 (vendor half): GitHub's OWN status page as an alert, because during the
         # 2026-08-07 Actions outage every in-cluster signal looked like ours (idle runners,

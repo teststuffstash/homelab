@@ -1,7 +1,9 @@
 # witness-only: AgentQueueStalledPre330, GithubActionsMinutesHighPre331, GithubAppPermissionDriftPre331, GithubExporterStalePre313, GithubPaidUsagePre331, GithubRateLimitLowMaxDirection, GithubRateLimitLowPre331, GithubVendorOutagePre331
 # The github-exporter alerts that carry a `for:` window over a single-replica scrape — the "is the
 # loop / the poller alive" three plus the five persistent-condition alerts hardened in homelab#331
-# — lifted VERBATIM out of prometheusrule.yaml (comments stripped, the manifest is their one home).
+# — plus GithubWorkflowRunFailed (homelab#508: the no-`for:` latest-run expr, folded into this
+# fixture so its suppression arms are behaviour-tested) — lifted VERBATIM out of
+# prometheusrule.yaml (comments stripped, the manifest is their one home).
 # This is the rules file that loop-health.promtool-test loads. Not a manifest and not applied to
 # anything: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
 # PrometheusRule keeps them under `.spec`, so the CR cannot be loaded directly. Named
@@ -9,14 +11,14 @@
 # argocd/resources and a non-manifest there would fail it.
 #
 # This is the SECOND fixture over github-exporter's rule file (queued-age.promtool-* was the
-# first, FU-150/#284) and it covers 8 of the file's 13 alerts. The other 5 have no behaviour test
+# first, FU-150/#284) and it covers 9 of the file's 13 alerts. The other 4 have no behaviour test
 # yet — honest remaining work, listed in #331's PR body.
 #
 # ⚠ NOT DRIFT-PINNED (unlike queued-age.promtool-rules, which `devbox run exporter-self-test`
 # checks): the general harness that would extract `.spec.groups` at run time lives in `scripts/**`
 # + `.github/**`, outside the fixer lane's tier (homelab#337). Re-copy after editing an alert:
 #
-#   yq -o=json '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] | select(.alert == "AgentQueueStalled" or .alert == "GithubExporterDown" or .alert == "GithubExporterStale" or .alert == "GithubAppPermissionDrift" or .alert == "GithubVendorOutage" or .alert == "GithubRateLimitLow" or .alert == "GithubPaidUsage" or .alert == "GithubActionsMinutesHigh")]}]}' argocd/resources/github-exporter/prometheusrule.yaml | yq -P '.'
+#   yq -o=json '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] | select(.alert == "AgentQueueStalled" or .alert == "GithubExporterDown" or .alert == "GithubExporterStale" or .alert == "GithubAppPermissionDrift" or .alert == "GithubVendorOutage" or .alert == "GithubRateLimitLow" or .alert == "GithubPaidUsage" or .alert == "GithubActionsMinutesHigh" or .alert == "GithubWorkflowRunFailed")]}]}' argocd/resources/github-exporter/prometheusrule.yaml | yq -P '.'
 #
 # ONE LINE on purpose — yq 4.x's lexer rejects a newline inside the expression ("lexer: invalid
 # input text"), so the pretty-wrapped form this header carried until homelab#344 did not run as
@@ -37,6 +39,16 @@ groups:
         annotations:
           summary: GitHub App {{ $labels.app }} permissions differ from the declared state
           description: 'Live permissions of {{ $labels.app }} do not match docs/github-apps.yaml (github_app_permission_mismatch{app="{{ $labels.app }}"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration.'
+      - alert: GithubWorkflowRunFailed
+        expr: >-
+          (time() - github_workflow_run_updated_timestamp{conclusion=~"failure|startup_failure|timed_out", branch=~"master|main"}) < 3600
+          unless (max by (repo, workflow, branch) (github_workflow_run_updated_timestamp{conclusion="success"})
+          > on (repo, workflow, branch) group_right () github_workflow_run_updated_timestamp{conclusion=~"failure|startup_failure|timed_out"})
+        labels:
+          severity: warning
+        annotations:
+          summary: GitHub workflow {{ $labels.repo }}/{{ $labels.workflow }} failed
+          description: 'Run #{{ $labels.number }} ({{ $labels.event }} on {{ $labels.branch }}) concluded {{ $labels.conclusion }}: https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/actions/runs/{{ $labels.id }} — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip).'
       - alert: GithubVendorOutage
         expr: max by (component) (max_over_time(github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"}[10m])) >= 2
         for: 10m
