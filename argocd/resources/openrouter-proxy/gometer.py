@@ -109,10 +109,16 @@ def _price_row(bare_model: str, in_tokens: int) -> tuple:
 
 
 def price(bare_model: str, merged: dict) -> tuple[float, str | None]:
-    """Compute the BILLED-STYLE USD estimate for a Go-leg completion (cache-read/write tokens
-    priced at their discounted rates, badge-halved). This is the LEDGER/COST-REPORTING number,
-    NOT the window draw — the subscription window draws at LIST price on raw tokens, see
-    `window_draw()` (the 2026-08-17 pricing defect fix).
+    """Compute the BILLED-STYLE USD estimate for a Go-leg completion — the number the PROVIDER
+    CONSOLE BILLS (homelab#540, 2026-08-18 console reconciliation): list price ×1 for every
+    model, badge models included, with cache-read/cache-creation tokens at their discounted
+    rates. This is the LEDGER/COST-REPORTING number, NOT the window draw.
+
+    Contrast with `window_draw()`: the subscription window draws at LIST price on raw tokens
+    and badge-halves EVERYTHING (draw = list on raw, badge-halved); the BILLED estimate here is
+    list ×1 with cache discounts and NO badge halving. The two numbers differ by design and
+    must not be conflated (the 2026-08-17 pricing defect fix split them; homelab#540 corrected
+    the billed side to list ×1).
 
     Args:
         bare_model: The model id without prefix/suffix (e.g. "deepseek-v4-flash").
@@ -126,32 +132,47 @@ def price(bare_model: str, merged: dict) -> tuple[float, str | None]:
     out_tokens = merged.get("output_tokens", 0)
     cr_tokens = merged.get("cache_read_input_tokens", 0)
     cw_tokens = merged.get("cache_creation_input_tokens", 0)
-    in_p, out_p, cr_p, cw_p, half, warning = _price_row(bare_model, in_tokens)
+    in_p, out_p, cr_p, cw_p, _half, warning = _price_row(bare_model, in_tokens)
 
-    # Compute USD: tokens * ($/M) then apply badge halving if applicable
+    # BILLED = list price ×1 for every token class at its own rate (cache reads/writes at their
+    # discounted rates). NO badge halving here — the matrix's console-verified ruling is that
+    # badge models BILL at full list ×1 (docs/spikes/opencode-model-matrix.md); the badge
+    # halving is the WINDOW-DRAW (limit-side) effect only, applied in window_draw().
     usd = (
         in_tokens * in_p / 1e6 +
         out_tokens * out_p / 1e6 +
         (cr_tokens * cr_p / 1e6 if cr_p else 0.0) +
         (cw_tokens * cw_p / 1e6 if cw_p else 0.0)
     )
-    if half:
-        usd *= 0.5
 
     return (usd, warning)
 
 
-def window_draw(bare_model: str, merged: dict) -> float:
+def window_draw(bare_model: str, merged: dict, cache_read: int | None = None,
+                cache_creation: int | None = None) -> float:
     """The price OpenCode's subscription window DRAWS against for one completion: LIST price on
-    RAW tokens, halved for badge models — NO cache assumption at all (the usage blocks on these
-    surfaces carry no cache split). This is the number the window utilization (the latch,
-    /opencode-limit) MUST use. Reconciliation 2026-08-17 (uploads/opencode-go.txt): a 5h window
-    of 50.56M in / 0.488M out of badged deepseek-v4-flash drew ≈ $3.6–3.7 at list, while the
-    billed-style price() above (cache-read discounts) read ≈ $0.15 — a ~30× under-count."""
+    RAW tokens, halved for badge models — the limit-side number the window utilization (the
+    latch, /opencode-limit) MUST use. Reconciliation 2026-08-17 (uploads/opencode-go.txt): a 5h
+    window of 50.56M in / 0.488M out of badged deepseek-v4-flash drew ≈ $3.6–3.7 at list, while
+    the billed-style price() above (cache-read discounts) read ≈ $0.15 — a ~30× under-count.
+
+    CACHE SPLIT (homelab#540): when `cache_read`/`cache_creation` are KNOWN (the Anthropic-compat
+    surface carries them and extract_usage reads them), those tokens draw at their LIST cache
+    rates, badge-halved like the rest — the old docstring claim that "the usage blocks on these
+    surfaces carry no cache split" is FALSE for the Anthropic-compat surface. Tokens WITHOUT a
+    split keep pricing as RAW INPUT (the conservative status quo for HISTORICAL rows, which
+    predate the cache columns — recomputation only improves NEW rows)."""
     in_tokens = int(merged.get("input_tokens") or 0)
     out_tokens = int(merged.get("output_tokens") or 0)
-    in_p, out_p, _cr_p, _cw_p, half, _warning = _price_row(bare_model, in_tokens)
+    cr_tokens = int(cache_read if cache_read is not None else merged.get("cache_read_input_tokens") or 0)
+    cw_tokens = int(cache_creation if cache_creation is not None else merged.get("cache_creation_input_tokens") or 0)
+    in_p, out_p, cr_p, cw_p, half, _warning = _price_row(bare_model, in_tokens)
+    # Raw input+output at LIST, plus cache-read/creation at their LIST rates when the split is
+    # present. Note: rows WITHOUT the split price cache tokens as raw input — the conservative
+    # status quo for historical rows.
     draw = (in_tokens * in_p + out_tokens * out_p) / 1e6
+    draw += (cr_tokens * cr_p / 1e6 if cr_p else 0.0)
+    draw += (cw_tokens * cw_p / 1e6 if cw_p else 0.0)
     if half:
         draw *= 0.5
     return draw
@@ -162,13 +183,18 @@ def window_draw(bare_model: str, merged: dict) -> float:
 # max(now - span, last_reset_epoch), so the sum counts spend since the LAST RESET — never a
 # rolling total that lets LAST week's spend inflate THIS week's utilization).
 #
-# Defaults, MEASURED from the operator's console on 2026-08-17 — two readings, 10:00Z and
-# 12:35Z; the 12:35Z reading supersedes the dispatch's provisional "30d stays rolling":
-#   • 5h  "resets in 3h37m" (~10:00Z) and "resets in 1h02m" (~12:35Z) — both point to a next
-#         boundary of 13:37Z, i.e. a fixed 5h grid whose resets are 217 minutes past each 5h
-#         boundary from midnight UTC: 03:37 / 08:37 / 13:37 / 18:37 / 23:37 UTC daily
-#         (5h does not divide 24h, so the last slot of each day runs 23:37 → 03:37).
-#         → anchor `grid`, offset 217m.
+# Defaults, MEASURED from the operator's console:
+#   • 5h  is FIRST-USE/EXPIRY-CHAINED (`chain`, homelab#540, 2026-08-18). The provider console's
+#         resets ran the x:01 lattice (first request of the day 06:01Z → observed reset 11:01Z),
+#         while the 2026-08-17 `grid:217m` calibration predicted the x:37 lattice (18:37Z). The
+#         old arithmetic was sound on the WRONG model: under CONTINUOUS use an expiry-chained
+#         window degenerates to a span-lattice anchored at the day's first request —
+#         indistinguishable from a fixed grid for one day. Real model: a new 5h window OPENS at
+#         the first request after the previous window expires; reset = open + span; idle > span
+#         ⇒ the next request opens a fresh window. The ledger walk over go_usage.ts recovers the
+#         current open window (router.go_usage_chain_open; gometer's chain_fn seam). Degrade:
+#         an unreadable ledger / no open window falls back to the 5h GRID default (offset 217m),
+#         loudly logged — a failed probe is not a fact.
 #   • 7d  "resets in 6d14h" (~10:00Z) and "resets in 6d11h" (~12:35Z) — boundary
 #         2026-08-24T00:00Z — and 2026-08-24 is a MONDAY (2026-08-17 was Monday, the
 #         operator's own dateline). → anchor `weekly` mon 00:00. (An earlier reading of the
@@ -177,12 +203,12 @@ def window_draw(bare_model: str, merged: dict) -> float:
 #         billing-cycle anchored, day 13 ~11:30 UTC. → anchor `monthly` 13:11:30.
 #
 # GO_WINDOW_ANCHORS overrides any/all of the three, e.g.
-#   GO_WINDOW_ANCHORS="5h=grid:217m,7d=weekly:mon:00:00,30d=monthly:13:11:30"
+#   GO_WINDOW_ANCHORS="5h=chain,7d=weekly:mon:00:00,30d=monthly:13:11:30"
 # Grammar per window: `grid:<offset>` | `weekly:<mon..sun>[:HH[:MM]]` |
-# `monthly:<1..31>[:HH[:MM]]` | `rolling`. Parsing is DEFENSIVE: an unparseable or unknown
-# spec falls back to that window's default with one loud log line — it never crashes the
-# proxy. `rolling` stays a supported value and is the conservative fallback for an anchor
-# nobody has measured yet.
+# `monthly:<1..31>[:HH[:MM]]` | `chain[:<lookback>]` | `rolling`. Parsing is DEFENSIVE: an
+# unparseable or unknown spec falls back to that window's default with one loud log line — it
+# never crashes the proxy. `rolling` stays a supported value and is the conservative fallback
+# for an anchor nobody has measured yet.
 _GO_WINDOW_ORDER = ("5h", "7d", "30d")
 _WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 
@@ -192,7 +218,8 @@ def _golog(msg: str) -> None:
 
 
 _GO_WINDOW_DEFAULTS = {
-    "5h":  {"budget_usd": 12.0, "span_s": 5 * 3600, "anchor": "grid", "grid_offset_min": 217},
+    "5h":  {"budget_usd": 12.0, "span_s": 5 * 3600, "anchor": "chain",
+            "chain_lookback_s": 7 * 86400, "grid_offset_min": 217},
     "7d":  {"budget_usd": 30.0, "span_s": 7 * 86400,
             "anchor": "weekly", "weekday": "mon", "hour": 0, "minute": 0},
     "30d": {"budget_usd": 60.0, "span_s": 30 * 86400,
@@ -212,13 +239,22 @@ def _parse_minutes(val: str) -> int | None:
 
 def _parse_anchor_spec(spec_str: str) -> dict | None:
     """One GO_WINDOW_ANCHORS value → a spec-key override dict, or None when unparseable.
-    Supported: 'rolling', 'grid:<offset>', 'weekly:<day>[:HH[:MM]]', 'monthly:<day>[:HH[:MM]]'."""
+    Supported: 'rolling', 'grid:<offset>', 'chain[:<lookback>]',
+    'weekly:<day>[:HH[:MM]]', 'monthly:<day>[:HH[:MM]]'."""
     s = spec_str.strip().lower()
     if s == "rolling":
         return {"anchor": "rolling"}
     if s.startswith("grid:"):
         minutes = _parse_minutes(s[len("grid:"):])
         return {"anchor": "grid", "grid_offset_min": minutes} if minutes is not None else None
+    if s == "chain" or s.startswith("chain:"):
+        lookback = s[len("chain:"):] if s.startswith("chain:") else ""
+        if lookback:
+            minutes = _parse_minutes(lookback)
+            if minutes is None:
+                return None
+            return {"anchor": "chain", "chain_lookback_s": minutes * 60}
+        return {"anchor": "chain"}
     if s.startswith("weekly:"):
         parts = s[len("weekly:"):].split(":")
         if parts[0] not in _WEEKDAYS or len(parts) > 3:
@@ -296,10 +332,19 @@ def _monthly_epoch(year: int, month: int, day: int, hour: int, minute: int) -> f
                             hour, minute, 0, 0, 0, 0))
 
 
-def go_window_bounds(spec: dict, now: float) -> tuple[float | None, float | None]:
+def go_window_bounds(spec: dict, now: float,
+                     chain_fn=None) -> tuple[float | None, float | None]:
     """(window_start_epoch, resets_at_epoch) for a window spec at `now`.
 
     - rolling:  window_start = now - span_s (pure trailing floor); resets_at = None.
+    - chain:    the window OPENS at the first request after the previous window expired and
+                resets at open + span_s (first-use/expiry-chained, homelab#540). The open epoch
+                is recovered from the LEDGER via the optional `chain_fn(span_s, lookback_s)`
+                callback (returns the current open window's start epoch, or None when there is
+                no open window / the probe failed). A None result DEGRADES to this window's
+                GRID default (offset 217m) with one loud log line — a failed probe is not a
+                fact, and a missing open window (idle > span) means there is no spend to count
+                but the grid boundary is still the best-known next-reset prediction.
     - grid:     resets daily at (midnight UTC + offset + k*span_s), k = 0.. — i.e. for
                 5h/217m the five daily times 03:37/08:37/13:37/18:37/23:37 UTC. The last one
                 at-or-before now and the next after.
@@ -308,6 +353,31 @@ def go_window_bounds(spec: dict, now: float) -> tuple[float | None, float | None
     An unknown anchor type degrades to rolling (never a crash — the conservative floor)."""
     span = float(spec.get("span_s", 0))
     anchor = spec.get("anchor", "rolling")
+    if anchor == "chain" and span > 0:
+        if chain_fn is not None:
+            try:
+                open_epoch = chain_fn(span, float(spec.get("chain_lookback_s", 7 * 86400)))
+            except Exception as e:
+                _golog(f"chain_fn for {anchor} raised {e!r} — degrading to grid default")
+                open_epoch = None
+            if open_epoch is not None:
+                # Convention (documented, pinned in tests): when `now` is still inside the open
+                # window it is [open, open+span); when now is at/after open+span there is NO
+                # open window → usage 0 and the reset metric falls back to the GRID boundary
+                # (best-known next reset for a dormant window), so the payload still carries a
+                # plausible resets_at rather than None.
+                if now < open_epoch + span:
+                    return open_epoch, open_epoch + span
+                _golog(f"chain window {anchor}: open {open_epoch:.0f} + span {span:.0f} <= now "
+                       f"{now:.0f} — no open window (idle past expiry); grid fallback for reset")
+            else:
+                _golog(f"chain window {anchor}: chain_fn returned None (no open window / "
+                       f"unreadable ledger) — degrading to grid default for this probe")
+        else:
+            _golog(f"chain window {anchor}: no chain_fn wired — degrading to grid default")
+        # Degrade to this window's grid default (never a crash, never a silent zero).
+        spec = {**spec, "anchor": "grid"}
+        anchor = "grid"
     if anchor == "rolling" or span <= 0:
         return now - span, None
     if anchor == "grid":
@@ -352,7 +422,7 @@ def go_window_bounds(spec: dict, now: float) -> tuple[float | None, float | None
     return now - span, None
 
 
-def go_window_status(now: float, usage_fn) -> dict:
+def go_window_status(now: float, usage_fn, chain_fn=None) -> dict:
     """The composite /opencode-limit answer (shared home, ADR-108): per-window usage/budget/
     utilization plus the anchored window_start/resets_at epochs, the by_stack breakdown for
     the BINDING window (the one with the highest utilization — the window that drives the
@@ -368,7 +438,13 @@ def go_window_status(now: float, usage_fn) -> dict:
     usage_fn(name, window_start, resets_at) -> the router.go_usage_window(...) snapshot:
       {"total_usd": billed_est, "total_draw_usd": window_draw, "by_stack": {...},
        "by_stack_draw": {...}} — a callback keeps gometer import-free of router; the proxy
-    wires `router.go_usage_window(GO_WINDOWS[name]['span_s'], since=window_start)` in."""
+    wires `router.go_usage_window(GO_WINDOWS[name]['span_s'], since=window_start)` in.
+
+    chain_fn(span_s, lookback_s) -> float | None — the CHAIN-anchor seam (homelab#540): returns
+    the CURRENT open window's start epoch for a `chain`-anchored window, recovered from the
+    ledger's go_usage.ts walk (router.go_usage_chain_open), or None when there is no open
+    window (idle past expiry) / the ledger is unreadable. None DEGRADES that window to its
+    grid default with one loud log line — a failed probe is not a fact."""
     windows: dict[str, dict] = {}
     by_stack: dict[str, float] = {}
     by_stack_window: str | None = None
@@ -376,7 +452,7 @@ def go_window_status(now: float, usage_fn) -> dict:
     best_util = -1.0
     for name in _GO_WINDOW_ORDER:
         spec = GO_WINDOWS[name]
-        win_start, resets_at = go_window_bounds(spec, now)
+        win_start, resets_at = go_window_bounds(spec, now, chain_fn)
         snap = usage_fn(name, win_start, resets_at)
         draw = float(snap.get("total_draw_usd") or 0.0)
         billed = float(snap.get("total_usd") or 0.0)
@@ -390,6 +466,13 @@ def go_window_status(now: float, usage_fn) -> dict:
             "pricing": "window_draw",
             "window_start": round(win_start) if win_start is not None else None,
             "resets_at": round(resets_at) if resets_at is not None else None,
+            # homelab#540: per-window anchor PROVENANCE (the CONFIGURED anchor for this window) —
+            # additive, never a rename/removal of an existing field. `chain` for the 5h
+            # first-use/expiry-chained window; `grid`/`weekly`/`monthly`/`rolling` for the
+            # others. A `chain` window that DEGRADED to grid (unreadable ledger / idle past
+            # expiry) still reports `chain` here; its window_start/resets_at are the grid-derived
+            # bounds (the degrade logs loudly, so the operator can tell the difference).
+            "anchor": spec.get("anchor", "rolling"),
         }
         if util >= GO_UTIL_THRESHOLDS.get(name, GO_UTIL_THRESHOLD):
             limited = True
