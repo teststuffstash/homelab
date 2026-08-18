@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# iac-sentinel — the IAC-G04 tamper-proof policy evaluation (docs/agents/iac-lane.md L0b),
-# v1 SHADOW MODE: evaluates -iac PR heads against homelab-owned rules and REPORTS (logs +
-# pushgateway metrics) — posts nothing to GitHub, blocks nothing. The enforcement flip
-# (statuses:write on the homelab-reviewer App + required-check) comes after the shadow soak,
-# the router-rollout pattern. Engines (operator ruling 2026-08-03: Kyverno is THE rule engine —
+# iac-sentinel — the IAC-G04 tamper-proof policy evaluation (docs/agents/iac-lane.md L0b).
+# Evaluates PR heads against homelab-owned rules and reports to logs + pushgateway metrics.
+# ENFORCEMENT (the G01 flip, 2026-08-18): when SENTINEL_STATUS_TOKEN is set (the reviewer-App
+# token — never the worker's own identity, which could pass itself), each evaluated PR head
+# gets an `iac-sentinel` commit status (success/failure; `error` on probe failure — fail-closed,
+# the next tick heals a transient). The -iac repos' rulesets require that context. Empty token =
+# the original shadow mode. Engines (operator ruling 2026-08-03: Kyverno is THE rule engine —
 # CLI seat now, admission seat later; no engine sprawl):
 #   path-rule  — bash/gh: worker-authored PRs must not touch .github/workflows/** (the
 #                sleep-iac#28 self-merge hole; belt-of-belt for the planned push ruleset)
@@ -22,6 +24,7 @@ SENTINEL_REPOS="${SENTINEL_REPOS:-sleep-iac oracle-iac circles-iac homelab}"  # 
 WORKER_AUTHOR="${WORKER_AUTHOR:-app/homelab-agents-1234}"
 PUSHGATEWAY="${PUSHGATEWAY:-}"   # e.g. http://prometheus-pushgateway.monitoring.svc:9091 — empty = log-only
 POLICY_DIR="${POLICY_DIR:-${HERE}/../policy/iac}"
+STATUS_TOKEN="${SENTINEL_STATUS_TOKEN:-}"  # reviewer-App token; empty = shadow (no GitHub writes)
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -36,6 +39,18 @@ push_metrics() {
   printf '%b' "$METRICS" | curl -fsS --max-time 10 --data-binary @- \
     "${PUSHGATEWAY}/metrics/job/iac-sentinel" >/dev/null 2>&1 \
     || log "pushgateway push failed (metrics stay in logs)"
+}
+
+# post_status <repo> <sha> <state> <description> — the enforcement write. A failed POST is loud
+# but non-fatal: the required check simply stays pending/stale and the next tick retries.
+post_status() {
+  [ -n "$STATUS_TOKEN" ] || return 0
+  if ! curl -fsS --max-time 10 \
+       -H "Authorization: token $STATUS_TOKEN" -H "Accept: application/vnd.github+json" \
+       "https://api.github.com/repos/${ORG}/$1/statuses/$2" \
+       -d "{\"state\":\"$3\",\"context\":\"iac-sentinel\",\"description\":\"$4\"}" >/dev/null 2>&1; then
+    log "[$1@$2] STATUS POST FAILED ($3) — check stays pending, next tick retries"
+  fi
 }
 
 # evaluate <repo> <ref/sha> <pr-number-or-'-'> <author-or-'-'> → violations counted in $VIOLATIONS
@@ -74,7 +89,10 @@ evaluate() {
   while IFS= read -r f; do
     # yq (go) parses what it can; unparseable helm-template yaml is skipped here — the raw pass
     # covers plain manifests, the render pass (v2) will cover templated ones.
-    docs="$(yq eval-all 'select(tag == "!!map" and .apiVersion != null and .kind != null)' "$f" 2>/dev/null || true)"
+    # comments are STRIPPED: yq keeps a file's head comment attached to its first doc, and the
+    # `---` it then emits can strand that comment as a document of its own — which kyverno
+    # refuses to load ("Object 'Kind' is missing"), failing the whole resource file.
+    docs="$(yq eval-all '(select(tag == "!!map" and .apiVersion != null and .kind != null)) | ... comments=""' "$f" 2>/dev/null || true)"
     [ -n "$docs" ] && [ "$docs" != "null" ] \
       && printf -- '---\n%s\n' "$docs" >> "$tree/.sentinel-resources.yaml"
   done < <(find "$tree" \( -name '*.yaml' -o -name '*.yml' \) -not -path '*/.github/*' -not -name '.sentinel-resources.yaml')
@@ -85,7 +103,15 @@ evaluate() {
   # ── kyverno (THE rule engine) ────────────────────────────────────────────────────────
   t0=$(now_ms)
   if [ "$n_docs" -gt 0 ]; then
-    kout="$(kyverno apply "$POLICY_DIR" --resource "$tree/.sentinel-resources.yaml" 2>&1)"
+    # Per-repo baseline exceptions (policy/iac/exceptions/<repo>.yaml) — read from the
+    # sentinel's OWN master clone, never the scanned tree: a hostile PR editing its copy of
+    # the exception list changes nothing here.
+    exc="$POLICY_DIR/exceptions/${repo}.yaml"
+    if [ -f "$exc" ]; then
+      kout="$(kyverno apply "$POLICY_DIR" --resource "$tree/.sentinel-resources.yaml" --exceptions "$exc" 2>&1)"
+    else
+      kout="$(kyverno apply "$POLICY_DIR" --resource "$tree/.sentinel-resources.yaml" 2>&1)"
+    fi
     krc=$?
     if [ $krc -ne 0 ]; then
       nfail="$(printf '%s' "$kout" | grep -oE 'fail: [0-9]+' | grep -oE '[0-9]+' | head -1)"
@@ -99,7 +125,10 @@ evaluate() {
 
   # ── gitleaks (secret values) ─────────────────────────────────────────────────────────
   t0=$(now_ms)
-  if ! gitleaks detect --no-git --source "$tree" --no-banner --exit-code 9 >/dev/null 2>&1; then
+  # --config from the sentinel's own clone: gitleaks would otherwise auto-read the SCANNED
+  # tree's .gitleaks.toml, letting a hostile PR allowlist its own leak.
+  if ! gitleaks detect --no-git --source "$tree" --no-banner --exit-code 9 \
+         --config "$POLICY_DIR/gitleaks.toml" >/dev/null 2>&1; then
     # exit 9 = leaks found (set explicitly so tool errors ≠ findings)
     VIOLATIONS=$((VIOLATIONS + 1))
     log "[$repo#$pr@$ref] VIOLATION gitleaks: secret material in the tree (details withheld from logs)"
@@ -127,7 +156,18 @@ for repo in $SENTINEL_REPOS; do
     log "[$repo] PR list PROBE FAILED — skipped"; continue; }
   [ -n "$prs" ] || { log "[$repo] no open PRs"; continue; }
   while read -r num sha author; do
-    [ -n "$num" ] && evaluate "$repo" "$sha" "$num" "$author"
+    [ -n "$num" ] || continue
+    if evaluate "$repo" "$sha" "$num" "$author"; then
+      if [ "$VIOLATIONS" -eq 0 ]; then
+        post_status "$repo" "$sha" success "0 violations (kyverno + gitleaks + path-rule)"
+      else
+        post_status "$repo" "$sha" failure "$VIOLATIONS violation(s) — details in the iac-sentinel workflow logs"
+      fi
+    else
+      # fetch/probe failure: fail CLOSED (error state), not silently green — transient
+      # failures heal on the next tick, which re-evaluates every open PR head.
+      post_status "$repo" "$sha" error "sentinel probe failed — retries next tick"
+    fi
   done <<EOF2
 $prs
 EOF2
