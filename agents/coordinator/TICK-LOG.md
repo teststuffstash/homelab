@@ -4346,3 +4346,24 @@ first live ADR-110 maintenance session before the ADR existed.
   the laguna lesson). Also this sitting: #540 seat comment corrected per operator (second
   container was pure Anthropic subscription — zero Go draw; today's subagent spend is ALL
   deepseek-flash, $3.02 — the hypothesis retracted in place).
+- **The corpus sitting, evening continuation (2026-08-18 ~17:30–19:30Z — the billing chain +
+  the FU-167 wave under way; operator to sleep, session continues autonomous):** review-plane
+  OUTAGE found via operator board glance and fixed direct (the #547 apostrophe in the reviewer
+  PROMPT single-quote — every reviewer pod 17:37–18:30 died on bash syntax and reported
+  Succeeded; #560 filed for the exit contract). #557 (replay exemption) merged after the
+  reviewer's legitimate GUARDED-check catch (fp_conflict_strict). #565 (gometer: chain-anchored
+  5h + unhalved billed + cache split through ingest) subagent-authored, seat-reviewed, MERGED —
+  reconciliation closed to the cent shape (console $3.79 = $0.84 in/out + $2.95 ≡ 1.05B cached);
+  jail shims need relaunch. Per-jail OTLP identity shipped host-side (claude-jail master:
+  compose single-writer OTEL_RESOURCE_ATTRIBUTES + JAIL_NAME per alias/stack-jail; settings.json
+  copy removed; #566 closed — collector already promotes attrs). #553 closed (wk-03 flap-free
+  150m post-fix). Queued: #508/#515/#555/#556/#560/AR#72; #292 correctly re-parked by my own
+  morning disposition (queue error mine). re-review rail-pin ×2 (shim + CLI slot map — --model
+  sonnet resolved to opencode-go/kimi-k3 even shimless). **Context-visibility ledger opened
+  (operator direction):** corpus-sitting bootstrap ≈ 345k real (nominal 145k × ~2.4 — Read
+  framing + briefs + system prompt); tonight's dense sitting +350k traffic → 693k statusbar;
+  session attribution 284M cacheRead = the earlier all-day sitting, 98M = this one, fleet 573M/8h
+  (~$586 list-value, 99% cacheRead = window × turns); first off-seat datapoint: gometer chunk
+  374k subagent tokens / 93 calls / 29 min vs ~25k seat. FU-167: step 0 merged (#557), step 1
+  subagent in flight (family dirs + pins lint), step 2 batches follow overnight capacity
+  permitting.
