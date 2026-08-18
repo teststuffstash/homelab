@@ -107,6 +107,7 @@ _review_dispatched = set()  # (repo, number, head_sha) already POSTed this proce
 _cired_dispatched = set()   # (repo, number, head_sha) already red-doorbelled this lifetime (FU-115)
 _conflict_dispatched = set()  # (repo, number, head_sha) already conflict-doorbelled this lifetime (FU-144)
 _merged_rung = set()          # (repo, number) already merge-doorbelled this lifetime (ADR-106 (6))
+_queued_prev = {}             # repo -> {dispatchable-queued issue numbers last poll} (#459: the appearance-edge's only memory)
 _open_prs_prev = {}           # repo -> open PR numbers last poll; a vanished number is a merge candidate
 
 
@@ -581,6 +582,63 @@ def maybe_dispatch_merged(repo, vanished):
     return unresolved
 
 
+def queued_dispatchable(labels):
+    """The scan's queued-dispatch clause (coordinator-scan.sh, the `queued` derivation), label for
+    label: agent-fix ∧ agent/queued ∧ ¬direction-change ∧ ¬agent/error. The doorbell mirrors it so
+    a wake the scan then ignores as out-of-predicate is pure waste (#459) — the same doctrine
+    maybe_dispatch_conflict documents for its clause."""
+    return ("agent-fix" in labels and "agent/queued" in labels
+            and "direction-change" not in labels and "agent/error" not in labels)
+
+
+def maybe_dispatch_queued(repo, currently):
+    """#459 label-transition doorbell: an issue newly carrying `agent-fix`+`agent/queued` is the
+    ONE loop transition with no emitter. The ⚑ ALL EVENTS HAVE DOORBELLS table promised an
+    "exporter piggyback" for "issue gains agent/queued" and never built one, so a human directly
+    applying the labels (sleep-tracking#121; homelab#478/479/491) sat unrung until the */30
+    per-stack cron backstop picked it up — the AgentDispatchCronWoken alert (the label is already
+    in this poll's walk; nothing read it, the FU-144 row's exact shape).
+
+    The edge is an APPEARANCE diff over `currently` — the dispatchable-queued issue numbers seen
+    this poll (see queued_dispatchable). An issue newly present is the moment the scan CAN
+    dispatch it: ring then. Staying queued does not re-ring (a scan dispatch applies
+    agent/in-progress and the issue leaves the set); a genuine re-queue re-appears and rings
+    again. Repo-dumb payload per the post-FU-144 emitter doctrine (workflow.md §Triggers ⚠
+    block — new emitters prefer `{repo}` over learning stack mechanics): a plain {repo} POST
+    wakes the global scan, whose receiver-side fan-out resolves repo → {stack, loop_ns} and
+    re-rings the stack's own loop. The exporter's OLDER dispatchers predate that fan-out and
+    carry the pair themselves; this one follows the current guidance.
+
+    Failed POSTs stay OUT of the prev-set so they re-appear as new next poll — the appearance
+    edge has no natural retry (the merged-edge lesson, bot review PR#396). A pod restart
+    re-rings everything still queued, which is correct: those issues are genuinely still
+    waiting. Best-effort — the */30 cron backstop owns misses (and a repo overflowing the
+    GraphQL first:50 agent-issue window)."""
+    unresolved = set()
+    if not COORDINATE_WEBHOOK_URL or not currently:
+        _queued_prev[repo] = currently
+        return unresolved
+    newly = currently - _queued_prev.get(repo, set())
+    if newly:
+        for number in sorted(newly):
+            payload = {"repo": repo, "number": str(number)}
+            body = json.dumps(payload).encode()
+            try:
+                req = urllib.request.Request(
+                    COORDINATE_WEBHOOK_URL, data=body,
+                    headers={"Content-Type": "application/json"}, method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    resp.read()
+                print(f"queued-edge: POST /coordinate for {repo}#{number}", flush=True)
+            except Exception as e:
+                print(f"queued-edge: POST failed for {repo}#{number}: {e} — retrying next poll",
+                      flush=True)
+                unresolved.add(number)
+    _queued_prev[repo] = currently - unresolved
+    return unresolved
+
+
 def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, armed, draft,
                           labels, newest_commit_at="", newest_review_at="", bot_approved_at=""):
     """ADR-093 review edge-trigger: POST a reviewable PR to the Argo Events webhook so a review
@@ -792,14 +850,17 @@ def collect_open_prs(lines):
             # Counted as a SET of issue numbers, not a running += 1: a repo visited twice in one
             # walk would otherwise inflate the gauge, and no exposition-level dedup can repair an
             # already-wrong value (#153). Sets make the count idempotent in the repo dimension.
+            queued_now = set()  # #459: dispatchable-queued issue numbers this poll (the appearance edge)
             for iss in (repo.get("agentIssues") or {}).get("nodes") or []:
                 if not iss:
                     continue
-                for lb in (iss.get("labels") or {}).get("nodes") or []:
-                    lname = (lb or {}).get("name") or ""
+                iss_labels = {lb.get("name") or "" for lb in (iss.get("labels") or {}).get("nodes") or [] if lb}
+                for lname in iss_labels:
                     if lname.startswith("agent/"):
                         _AGENT_ISSUE_NUMBERS.setdefault(
                             (repo["name"], lname), set()).add(iss.get("number"))
+                if queued_dispatchable(iss_labels):
+                    queued_now.add(iss.get("number"))
             open_now = set()
             for pr in (repo.get("pullRequests") or {}).get("nodes") or []:
                 if not pr:
@@ -927,6 +988,9 @@ def collect_open_prs(lines):
             _mdb_unresolved = maybe_dispatch_merged(
                 repo["name"], _open_prs_prev.get(repo["name"], set()) - open_now)
             _open_prs_prev[repo["name"]] = open_now | _mdb_unresolved
+            # #459: issues newly dispatchable-queued since last poll — the label-transition edge.
+            # maybe_dispatch_queued owns the prev-set diff + retry internally.
+            maybe_dispatch_queued(repo["name"], queued_now)
         if not repos["pageInfo"]["hasNextPage"]:
             return
         cursor = repos["pageInfo"]["endCursor"]
@@ -1765,9 +1829,73 @@ def self_test():
     finally:
         urllib.request.urlopen, COORDINATE_WEBHOOK_URL = saved_urlopen, saved_url
 
+    # ── #459 queued label-transition doorbell ─────────────────────────────────────────────────────
+    # The appearance edge the triggers-table row promised and never built: a human applying
+    # agent-fix+agent/queued (sleep-tracking#121, homelab#478/479/491) sat unrung until the */30
+    # cron. Same seam as the conflict edge (recorded urlopen), so the predicate, the diff
+    # semantics, the payload and the failed-POST retry are pinned without a socket.
+    assert queued_dispatchable({"agent-fix", "agent/queued"})
+    assert not queued_dispatchable({"agent/queued"}), "agent-fix is the fixer opt-in"
+    assert not queued_dispatchable({"agent-fix"}), "agent/queued is the ready-to-dispatch state"
+    assert not queued_dispatchable({"agent-fix", "agent/queued", "direction-change"}), \
+        "the scan's direction-change exclusion"
+    assert not queued_dispatchable({"agent-fix", "agent/queued", "agent/error"}), \
+        "the scan's circuit-breaker exclusion"
+    assert queued_dispatchable({"agent-fix", "agent/queued", "task/fix"}), \
+        "other labels (task/fix) do not block dispatch"
+
+    saved_urlopen, saved_url = urllib.request.urlopen, COORDINATE_WEBHOOK_URL
+    urllib.request.urlopen = _record
+    COORDINATE_WEBHOOK_URL = "http://agent-loop.invalid/coordinate"
+    try:
+        def queued(repo, currently):
+            del posted[:]
+            maybe_dispatch_queued(repo, set(currently))
+            return list(posted)
+
+        # The appearance diff: an issue newly dispatchable-queued rings once, payload is {repo,
+        # number} — repo-dumb per the post-FU-144 emitter doctrine (the receiver fans out).
+        fired = queued("sleep-tracking", [121])
+        assert len(fired) == 1, fired
+        assert fired[0][0] == COORDINATE_WEBHOOK_URL
+        assert fired[0][1] == {"repo": "sleep-tracking", "number": "121"}, fired[0][1]
+        # Staying queued does not re-ring (a scan dispatch moves it to agent/in-progress)…
+        assert queued("sleep-tracking", [121]) == []
+        # …a newly-queued sibling rings while the old one stays silent…
+        assert queued("sleep-tracking", [121, 478]) == [
+            (COORDINATE_WEBHOOK_URL, {"repo": "sleep-tracking", "number": "478"})], \
+            "only the NEW member of the set may ring"
+        # …and an issue that leaves the set then re-queues rings again (a genuine re-queue).
+        assert queued("sleep-tracking", []) == []
+        assert queued("sleep-tracking", [121]) == [
+            (COORDINATE_WEBHOOK_URL, {"repo": "sleep-tracking", "number": "121"})]
+        # A repo with nothing queued rings nothing.
+        assert queued("circles", []) == []
+
+        # A failed POST is folded OUT of the prev-set so the issue re-appears as new next poll —
+        # the appearance edge has no natural retry (the merged-edge lesson, bot review PR#396).
+        def _fail_once(req, timeout=None):
+            raise urllib.error.URLError("simulated webhook outage")
+
+        urllib.request.urlopen = _fail_once
+        try:
+            assert maybe_dispatch_queued("retry-repo", {7}) == {7}, "returns the unresolved set"
+            assert _queued_prev.get("retry-repo") == set(), \
+                "a failed POST must not mark the issue rung"
+        finally:
+            urllib.request.urlopen = _record
+        retried = queued("retry-repo", [7])
+        assert len(retried) == 1 and retried[0][1] == {"repo": "retry-repo", "number": "7"}, retried
+
+        # Empty webhook URL = the feature is off (the pre-#459 behaviour).
+        COORDINATE_WEBHOOK_URL = ""
+        assert queued("off-repo", [999]) == []
+    finally:
+        urllib.request.urlopen, COORDINATE_WEBHOOK_URL = saved_urlopen, saved_url
+
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
-          "shape, conflict edge-trigger)")
+          "shape, conflict edge-trigger, queued label-transition edge-trigger)")
     return 0
 
 

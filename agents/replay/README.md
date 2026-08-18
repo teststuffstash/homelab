@@ -138,6 +138,7 @@ is stale, so it cannot drift the way the prose register did.
 | `argv-payload-over-ceiling` | actions | - | `agents/agent-session.sh` | - |
 | `argv-payload-retro-handoff` | actions | - | `agents/retro-session.sh` | - |
 | `argv-payload-warn-band` | actions | - | `agents/agent-session.sh` | - |
+| `board-classification` | suite | - | `agents/board.sh` | - |
 | `c4c5-infeasible-parks` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `c4c5-infeasible-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `c4c5-infeasible-quoted-inert` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |

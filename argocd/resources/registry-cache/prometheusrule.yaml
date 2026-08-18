@@ -92,14 +92,28 @@ spec:
         # once on an alert whose own description says to read it rather than scramble for it.
         # The pushgateway's own durability is a DIFFERENT bug from this class and is carried as a
         # finding in #336's PR body rather than papered over with a range selector here.
+        #
+        # #479 THRESHOLD — every fire of the original `> 0` form was triaged to the same conclusion,
+        # and the evidence is #241's own history: 2026-08-11 mirror-ghcr repaired 1 link (the #241
+        # event itself, the first nonzero in 17 days), 2026-08-16 mirror-docker-io repaired 9 (all
+        # clustered in one repo, no wipe, no pull failures), 2026-08-17 mirror-ghcr repaired 1 again.
+        # Each produced a triage session that re-concluded "expected housekeeping". The 2026-08-11
+        # meta ruling that closed #241 named the ONLY trigger worth paging on, quoted here as the
+        # evidence: "If the repair COUNT ever jumps by an order of magnitude, that is a new
+        # investigation, not this one." Baseline 1, observed routine max 9 → an order-of-magnitude
+        # jump is the ≥10 region, so this fires only at `> 9`.
+        # ⚠ THE GAUGE IS LATCHED, NOT A RATE: store-maintenance.yaml pushes
+        # registry_mirror_dangling_links_repaired once per mirror restart and it only resets at the
+        # next rollout, so the threshold is a comparison on the latched value (`> 9`), never
+        # increase()/rate() over a window — a rate would be a different alert.
         - alert: RegistryMirrorDanglingLinks
-          expr: registry_mirror_dangling_links_repaired > 0
+          expr: registry_mirror_dangling_links_repaired > 9
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "{{ $labels.mirror }} had {{ $value }} dangling layer link(s) repaired at last restart"
-            description: "A repository layer link pointed at a blob that was missing or zero-length — the homelab#116 failure, where the mirror answers HTTP 200 with 0 bytes for a live layer and BuildKit reports 'short read: expected N bytes but got 0'. The links were unlinked so the next pull re-fetches from upstream. The producer is IDENTIFIED as of homelab#240: the REGISTRY_PROXY_TTL scheduler vacuums an expiring blob out of the global content-addressed store without a cross-repo refcount, so any OTHER repository sharing that blob is left holding a link to nothing. Since #240 disabled the in-memory blob-descriptor cache, such a link is self-healing (the Stat misses on disk and the proxy re-fetches), so a non-zero count here is now EXPECTED HOUSEKEEPING rather than an outage — chase it only if it is large or paired with actual pull failures. Still check the store-maintenance init log for a wipe, which produces no dangling links at all and would mean a different cause."
+            description: "A repository layer link pointed at a blob that was missing or zero-length — the homelab#116 failure, where the mirror answers HTTP 200 with 0 bytes for a live layer and BuildKit reports 'short read: expected N bytes but got 0'. The links were unlinked so the next pull re-fetches from upstream. The producer is IDENTIFIED as of homelab#240: the REGISTRY_PROXY_TTL scheduler vacuums an expiring blob out of the global content-addressed store without a cross-repo refcount, so any OTHER repository sharing that blob is left holding a link to nothing. Since #240 disabled the in-memory blob-descriptor cache, such a link is self-healing (the Stat misses on disk and the proxy re-fetches), so counts of 1–9 here are now EXPECTED HOUSEKEEPING rather than an outage and stay silent — this alert fires only at ≥10 (the order-of-magnitude jump #241 reserved for a new investigation), and even then check first whether it is paired with actual pull failures. Still check the store-maintenance init log for a wipe, which produces no dangling links at all and would mean a different cause."
         # The store now reclaims by WIPING when full rather than by selective deletion. A wipe is
         # correct but not free — it forces a cold re-pull herd, which is what left the abandoned
         # _uploads debris in #80. Frequent wipes therefore mean the PVC is undersized, not that

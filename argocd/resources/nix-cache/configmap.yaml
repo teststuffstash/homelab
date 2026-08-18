@@ -15,17 +15,24 @@ data:
     http {
       # immutable content → big cache, long retention; LRU evicts at max_size.
       proxy_cache_path /var/cache/nginx/nixcache levels=1:2 keys_zone=nixcache:50m
-                       max_size=8g inactive=30d use_temp_path=off;
+                       max_size=16g inactive=30d use_temp_path=off;
       proxy_temp_path /tmp/proxy_temp;
       access_log off;
+      # cache.nixos.org (Fastly) publishes AAAA records but the pod net is IPv4-only — a static
+      # proxy_pass hostname resolves at config load and pins the AAAA, wasting a connect() per attempt
+      # (101: Network unreachable, seen continuously 2026-08-09→today). Runtime resolver + ipv6=off
+      # (same shape as cf-api-proxy); valid=30s re-resolves the CDN per-TTL.
+      resolver 10.96.0.10 valid=30s ipv6=off;
       server {
         listen 8080;
         # readiness — cheap, no upstream dependency.
         location = /healthz { return 200 "ok\n"; }
         location / {
-          proxy_pass https://cache.nixos.org;          # resolved via CoreDNS (pod resolv.conf) at start
+          set $nix_upstream https://cache.nixos.org;
+          proxy_pass $nix_upstream;                    # variable → runtime-resolved via resolver above
           proxy_set_header Host cache.nixos.org;
           proxy_ssl_server_name on;
+          proxy_ssl_name cache.nixos.org;              # explicit — variable proxy_pass must not lose SNI
           proxy_http_version 1.1;
           proxy_set_header Connection "";
 

@@ -60,14 +60,24 @@ if [ -z "$repos" ]; then
 fi
 
 # ── per-repo fetch + classification ───────────────────────────────────────────
+# Clock: real by default; BOARD_NOW (epoch seconds) overrides — the replay seam the smoke suite
+# pins age-sensitive predicates through (loud-clock rule, the fix-debounce family: a DEFAULTED
+# clock lets every recorded createdAt silently drift into the past while the suite stays green).
+NOW="$(date +%s)"
+if [ -n "${BOARD_NOW:-}" ]; then NOW="$BOARD_NOW"; fi
+
 # jq preamble prepended to every classification filter (age/label/bot logic in one
 # place). jq takes ONE program string, so the filter text is concatenated after it.
-JQ='def agedays: ((now - (.createdAt | fromdateiso8601)) / 86400 | floor);
+# NOW_EPOCH is substituted for the real epoch just below (shadowing jq's builtin `now`
+# keeps every age/`agedays >= 1` predicate deterministic under BOARD_NOW).
+JQ='def now: NOW_EPOCH;
+def agedays: ((now - (.createdAt | fromdateiso8601)) / 86400 | floor);
 def age: agedays as $d | if $d < 1 then "<1d" else "\($d)d" end;
 def lab: [.labels[]?.name];
 def haslab($l): lab | index($l) != null;
 def isbot: (.author.is_bot == true) or (.author.login | test("\\[bot\\]")) or (.author.login | startswith("app/"));
 '
+JQ="${JQ/NOW_EPOCH/$NOW}"
 
 sec_review=""; sec_solve=""; sec_triage=""; sec_verdict=""; sec_backlog=""; nback=0; nfail=0
 for repo in $repos; do
@@ -147,7 +157,8 @@ done
 
 # ── render ────────────────────────────────────────────────────────────────────
 mrepos="$(printf '%s' "$repos" | wc -w | tr -d ' ')"
-echo "board — stack $stack ($mrepos repos) · $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+if [ -n "${BOARD_NOW:-}" ]; then hdr="$(date -u -d "@$BOARD_NOW" +%Y-%m-%dT%H:%M:%SZ)"; else hdr="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; fi
+echo "board — stack $stack ($mrepos repos) · $hdr"
 
 [ -n "$sec_review" ] && { printf '\n§ REVIEW (codeowner queue)\n'; printf '%s' "$sec_review"; }
 [ -n "$sec_solve" ] && { printf '\n§ SOLVE (parks & latches)\n'; printf '%s' "$sec_solve"; }
