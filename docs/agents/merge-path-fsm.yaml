@@ -157,10 +157,10 @@ transitions:
           piled two near-identical asides 7 minutes apart and risked the anomaly latch"
         anchor: { file: agents/reviewer-session.sh, pattern: "IDEMPOTENT ASIDE" }
       - desc: "reviewer STEP-0 self-guard, ANOMALY arm — only a state re-dispatch CANNOT resolve
-          trips the breaker (agent/error + one AGENT_ERROR: comment): MORE THAN ONE own verdict at
-          head, a pile of near-identical bot reviews or comments, a review history irreconcilable
-          with the commit history, contradictory labels; an agent/error already present still means
-          touch nothing and stop silently"
+          trips the breaker (agent/error + one AGENT_ERROR: comment): MORE THAN ONE LIVE
+          (non-DISMISSED) verdict at head, a pile of near-identical bot reviews or comments, a review
+          history irreconcilable with the commit history, contradictory labels; an agent/error already
+          present still means touch nothing and stop silently"
         anchor: { file: agents/reviewer-session.sh, pattern: "GENUINE ANOMALY" }
       - desc: "in-band breaker: impossible verdict counts trip agent/error"
         anchor: { file: agents/review-reflex.sh, pattern: "CIRCUIT-BREAKER TELEMETRY" }
