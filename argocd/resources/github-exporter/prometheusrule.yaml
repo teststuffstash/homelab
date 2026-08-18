@@ -613,3 +613,105 @@ spec:
           annotations:
             summary: "Codeowner park: {{ $labels.repo }}#{{ $labels.number }} bot-approved + green for 30m+"
             description: "PR {{ $labels.repo }}#{{ $labels.number }} is bot-APPROVED with CI green, yet reviewDecision stays REVIEW_REQUIRED — a CODEOWNERS path needs the delegated human read; no machinery can move it (the reflex refuses approved heads by design). https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }}"
+
+    # ── ADR-107 flip-acceptance 1: the requested≠served model drift belt (homelab#515) ──────────
+    # PR#407's class — every claude/haiku worker ride silently running the CLI default
+    # (opus-5[1m]) for 23 days — was visible in data already collected, and nothing joined the two
+    # sides. Chainless makes drift MORE likely (per-ride alias remapping: slot maps, failover
+    # ladders, --pick-rail), so the belt is a flip prerequisite.
+    #
+    # The join: REQUESTED = launcher truth, the model the dispatch resolved to (post-ladder,
+    # post-failover). SERVED exists per rail: the router store's /generation harvest carries
+    # served model+provider for OpenRouter rides (router_run_model_drift_total, exported from
+    # openrouter-proxy/router.py — the requested≠served join over the router's OWN tables, which
+    # is the deterministic core); the OTLP claude_code_* metrics carry the model label for
+    # claude-harness rides (the CLI's --model flag — if the CLI ran its DEFAULT, THAT is the
+    # served model, which is exactly PR#407's class). THIS GROUP is the claude-harness/OTLP arm:
+    # it joins the launcher's requested model (agent_run_total{model=…}) to the OTLP served
+    # model, normalised to a FAMILY so a healthy ride (requested haiku, served claude-haiku-4-5)
+    # never mints false drift.
+    #
+    # ⚠ THE SERVED SIDE IS NOT A SCRAPE. claude_code_* is emitted by the OTel collector only when
+    # the ride exported telemetry; a ride that never exported (an OTLP failure, a harness death
+    # before export) has NO served series. Absence is counted, never matched against nothing —
+    # the FU-108/FU-125 silent-success class. Two rules split the two distinct readings:
+    #   agent_model_drift        — served telemetry EXISTS for the (project, role) but not for
+    #                              the requested family (PR#407: claude-haiku requested, only
+    #                              claude-opus served). The family the ride was actually served as
+    #                              is visible on the collector; the requested family is absent.
+    #   agent_model_unverifiable — NO served telemetry at all for the (project, role). This is
+    #                              its own count; a rise here means the belt is going blind (OTLP
+    #                              down), which is exactly the silent-success class.
+    #
+    # TIME-BOUNDING — the two halves of "within a DAY", per the issue's requirement:
+    #  - The REQUESTED side is gated to the trailing hour on the pushgateway's push_time_seconds
+    #    (the same freshness idiom as AgentRunInfraDeathBurst) — a stale pushgateway residue from
+    #    a previous ride must not keep counting as "currently requested".
+    #  - The SERVED side is gated to `increase(claude_code_*[1h]) > 0` — a collector COUNTER only
+    #    "proves served" when it actually ROSE in the last hour. A lingering claude-haiku series
+    #    from a ride two days ago is still present (counters keep their last value), and without
+    #    the increase gate it would mask today's drift. Both gates are the reason the belt is a
+    #    within-a-day signal rather than archaeology.
+    - name: agent-model-drift
+      rules:
+        # The claude-harness arm. REQUESTED family: the launcher's run-stats model label, which
+        # for claude rides is the bare alias (haiku/sonnet/opus) — normalised by label_replace to
+        # the family it serves as (claude-haiku). SERVED family: the OTLP claude_code_* model
+        # label (claude-opus-5[1m] → claude-opus, claude-haiku-4-5 → claude-haiku,
+        # claude-3-5-sonnet → claude-sonnet — the (haiku|sonnet|opus) alternation is what makes
+        # the version-prefixed ids collapse to the family they serve as). The join key is
+        # (project, role, family): agent_run carries project+role, the OTLP collector carries
+        # project+role as resource attributes (the same keys the dashboards group by).
+        #
+        # CONCRETE DRIFT: a requested family with no served evidence of ITSELF in the last hour,
+        # in a (project, role) that DOES have served telemetry (the `and on (project, role)`
+        # guard). The requested family was not served — the CLI ran something else.
+        - record: agent_model_drift
+          expr: |-
+            count by (project, role, family) (
+              label_replace(
+                agent_run_total{harness="claude", model=~"(haiku|sonnet|opus)"}
+                  and on (project, issue, round, role)
+                    (time() - push_time_seconds{job="agent_run"}) < 3600,
+                "family", "claude-$1", "model", "(haiku|sonnet|opus)")
+            )
+            unless on (project, role, family) (
+              label_replace(
+                increase(claude_code_token_usage_tokens_total[1h]) > 0,
+                "family", "claude-$1", "model", "claude-(?:[a-z0-9-]*)(haiku|sonnet|opus).*")
+            )
+            and on (project, role) (
+              count by (project, role) (increase(claude_code_token_usage_tokens_total[1h]) > 0)
+            )
+        # UNVERIFIABLE: a requested family in a (project, role) with NO served telemetry in the
+        # last hour. The `unless on (project, role)` keeps only requested families whose
+        # (project, role) has no collector series in the window — absence reads as absence,
+        # never as agreement.
+        - record: agent_model_unverifiable
+          expr: |-
+            count by (project, role, family) (
+              label_replace(
+                agent_run_total{harness="claude", model=~"(haiku|sonnet|opus)"}
+                  and on (project, issue, round, role)
+                    (time() - push_time_seconds{job="agent_run"}) < 3600,
+                "family", "claude-$1", "model", "(haiku|sonnet|opus)")
+            )
+            unless on (project, role) (
+              count by (project, role) (increase(claude_code_token_usage_tokens_total[1h]) > 0)
+            )
+        - alert: AgentModelDrift
+          expr: max by (project, role) (max_over_time(agent_model_drift[10m])) > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Claude-harness rides requested a model family that was NOT served ({{ $labels.project }}/{{ $labels.role }})"
+            description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose family never appeared on the SERVED side (OTLP claude_code_*) for 30m. Check the launcher''s resolved model and whether `model_family()` normalizes both ids — the PR#407 class is what this belt exists to catch (a claude/haiku dispatch served claude-opus for 23 days). Offending families: agent_model_drift{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Rides whose (project, role) produced NO telemetry at all are NOT this alert — they are agent_model_unverifiable, its own count.'
+        - alert: AgentModelUnverifiable
+          expr: max by (project, role) (max_over_time(agent_model_unverifiable[10m])) > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Claude-harness rides have NO served-side telemetry ({{ $labels.project }}/{{ $labels.role }})"
+            description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose (project, role) produced NO OTLP claude_code_* telemetry for 30m. The belt is blind to what served them. Absence never reads as agreement (the FU-108/FU-125 silent-success class): check the otel-collector ServiceMonitor for export failures, or assume rides died before exporting. Offending families: agent_model_unverifiable{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Concrete requested≠served mismatch is AgentModelDrift, the sibling alert.'

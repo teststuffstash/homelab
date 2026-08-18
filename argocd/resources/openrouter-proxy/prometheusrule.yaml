@@ -231,3 +231,38 @@ spec:
           annotations:
             summary: "OpenRouter account is capacity-down"
             description: 'OpenRouter account-scope capacity has been latched for 30m — worker dispatch is degrading to the haiku subscription rail or deferring the OpenRouter rail. Probe: GET openrouter-proxy.agent-egress:8080/router-status → .openrouter_capacity (reason / remaining_s / recent_429_models) names which leg latched. The credit leg reads the openrouter-operator''s openrouter_account_credit_usd gauge (openrouter-operator-metrics.openrouter-operator:9090), NOT OpenRouter directly — .credit_poll_failures climbing there, or router_openrouter_credit_poll_failures_total here, means that leg is blind and only the data-plane legs (hard-402 / cross-model 429s) can still fire (homelab#180).'
+
+        # ── ADR-107 flip-acceptance 1: the requested≠served model drift belt (homelab#515) ───────
+        # The router holds BOTH sides for the OpenRouter and Go rails: run_reports / the
+        # forwarded request's model id (requested) and the /generation harvest's served_model +
+        # provider (served), or the go_usage self-metered rows (Go). `router_run_model_drift_total`
+        # counts (7d) runs whose SERVED family differs from the REQUESTED family; the
+        # `unverifiable` twin counts runs whose rail had NO served evidence (a harvest miss, an
+        # OTLP failure — absence never reads as agreement, the FU-108/FU-125 class).
+        #
+        # ⚠ RESTART-GAP BRIDGED (homelab#332): both counters are COMPUTED from the PVC-backed
+        # store at scrape time, so a proxy roll re-computes them from the same rows and the
+        # condition outlives the roll — `max_over_time([10m])` carries the identity collapse the
+        # single-replica hole needs. [10m] is the #288 measured size.
+        - alert: RouterRunModelDrift
+          expr: >-
+            max by (rail, stack, role, requested, served) (
+              max_over_time(router_run_model_drift_total[10m])
+            ) > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "OpenRouter/Go rides served a model different from the one requested ({{ $labels.stack }}/{{ $labels.role }})"
+            description: '{{ $value }} OpenRouter/Go ride(s) on {{ $labels.stack }} requested {{ $labels.requested }} but the /generation harvest (or Go ledger) shows they were SERVED as {{ $labels.served }}. Check the launcher''s resolved model and whether `model_family()` normalizes both ids before assuming a redirect — the PR#407 class is what this belt exists to catch. Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert.'
+        - alert: RouterRunModelUnverifiable
+          expr: >-
+            max by (rail, stack, role, requested) (
+              max_over_time(router_run_model_unverifiable_total[10m])
+            ) > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "OpenRouter/Go rides have NO served-side evidence ({{ $labels.stack }}/{{ $labels.role }})"
+            description: '{{ $value }} OpenRouter/Go ride(s) on {{ $labels.stack }} requested {{ $labels.requested }} with NO served-side record in the router store for 30m — a /generation harvest miss, a Go ledger gap, or a ride that never produced telemetry. Absence never reads as agreement (the FU-108/FU-125 silent-success class): the belt is blind to what served them. Check openrouter_generation_harvest_total{outcome="missed"} (a rising ratio = the harvest is half-blind) before assuming the rides were healthy.'
