@@ -1,0 +1,8 @@
+groups:
+  - name: agent-model-drift
+    rules:
+      - record: served_family_check
+        expr: |-
+          label_replace(
+            increase(claude_code_token_usage_tokens_total[1h]) > 0,
+            "family", "claude-$1", "model", "claude-(?:[a-z0-9-]*)(haiku|sonnet|opus).*")

@@ -1,0 +1,19 @@
+rule_files:
+  - drift-check.promtool-rules
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    name: served family for version-prefixed ids
+    input_series:
+      - series: 'claude_code_token_usage_tokens_total{job="otel-collector",model="claude-3-5-sonnet",project="sleep",role="worker"}'
+        values: "100+10x10"
+      - series: 'claude_code_token_usage_tokens_total{job="otel-collector",model="claude-haiku-4-5",project="homelab",role="worker"}'
+        values: "100+10x10"
+    promql_expr_test:
+      - expr: served_family_check
+        eval_time: 5m
+        exp_samples:
+          - labels: 'served_family_check{family="claude-sonnet",job="otel-collector",model="claude-3-5-sonnet",project="sleep",role="worker"}'
+            value: 55
+          - labels: 'served_family_check{family="claude-haiku",job="otel-collector",model="claude-haiku-4-5",project="homelab",role="worker"}'
+            value: 55

@@ -559,3 +559,80 @@ tests:
             exp_annotations:
               summary: "Router store is running ephemeral (:memory:)"
               description: "The openrouter-proxy router store failed to open its PVC and degraded to :memory: — strikes, provider events, generation costs and the persisted 429 latch are lost on every restart. Check the openrouter-proxy-data PVC / Longhorn volume in ns agent-egress."
+
+  # ══ ADR-107 flip-acceptance 1 (homelab#515): the requested≠served drift belt ───────────────────
+  # Both counters are COMPUTED from the PVC-backed store at scrape time (router.py
+  # model_drift_rows), so a roll re-computes them from the same rows — the condition outlives
+  # the roll and the max_over_time([10m]) bridge is what the two alerts need (the #288/#313
+  # single-replica class, persisted arm). These cases assert the bridge holds AND the honest
+  # split between drift (served evidence exists but differs) and unverifiable (absent served
+  # side — absence never reads as agreement).
+
+  # ── D1 — a concrete drift count fires, and the [10m] bridge survives the roll ────────────────
+  # OpenRouter ride requested deepseek-v4-flash but the /generation harvest shows it served
+  # kimi-k3. router_run_model_drift_total is 1 on the PVC-backed store; a roll re-computes the
+  # same 1 from the same rows (the persisted arm).
+  - interval: 1m
+    name: D1 drift — a requested≠served count fires and survives a roll
+    input_series:
+      - series: 'router_run_model_drift_total{container="proxy",endpoint="http",instance="10.244.3.15:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-rrr-18",service="openrouter-proxy",rail="openrouter",stack="sleep",role="worker",requested="deepseek/deepseek-v4-flash",served="moonshotai/kimi-k3",provider="Moonshot"}'
+        values: "1+0x40"
+      - series: 'router_run_model_drift_total{container="proxy",endpoint="http",instance="10.244.3.16:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-sss-19",service="openrouter-proxy",rail="openrouter",stack="sleep",role="worker",requested="deepseek/deepseek-v4-flash",served="moonshotai/kimi-k3",provider="Moonshot"}'
+        values: "_x43 1+0x80"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: RouterRunModelDrift
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: RouterRunModelDrift
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              rail: openrouter
+              stack: sleep
+              role: worker
+              requested: deepseek/deepseek-v4-flash
+              served: moonshotai/kimi-k3
+            exp_annotations:
+              summary: "OpenRouter/Go rides served a model different from the one requested (sleep/worker)"
+              description: "1 OpenRouter/Go ride(s) on sleep requested deepseek/deepseek-v4-flash but the /generation harvest (or Go ledger) shows they were SERVED as moonshotai/kimi-k3 — a silent model redirect, the PR#407 class (a claude/haiku dispatch ran the CLI default opus for 23 days). Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert."
+      # the roll (last sample 40m, first of the new pod at 43m) — the bridge holds
+      - eval_time: 50m
+        alertname: RouterRunModelDrift
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              rail: openrouter
+              stack: sleep
+              role: worker
+              requested: deepseek/deepseek-v4-flash
+              served: moonshotai/kimi-k3
+            exp_annotations:
+              summary: "OpenRouter/Go rides served a model different from the one requested (sleep/worker)"
+              description: "1 OpenRouter/Go ride(s) on sleep requested deepseek/deepseek-v4-flash but the /generation harvest (or Go ledger) shows they were SERVED as moonshotai/kimi-k3 — a silent model redirect, the PR#407 class (a claude/haiku dispatch ran the CLI default opus for 23 days). Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert."
+
+  # ── D2 — the UNVERIFIABLE count is its own alert, and absent evidence is never agreement ──────
+  # An OpenRouter ride requested tencent/hy3 with no /generation record in the store. This is NOT
+  # drift (we cannot know what served it) — it is unverifiable, a distinct count with a distinct
+  # alert, so a blind harvest can never read as a healthy run.
+  - interval: 1m
+    name: D2 unverifiable — a ride with no served evidence is its own count, never agreement
+    input_series:
+      - series: 'router_run_model_unverifiable_total{container="proxy",endpoint="http",instance="10.244.3.17:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-ttt-20",service="openrouter-proxy",rail="openrouter",stack="circles",role="worker",requested="tencent/hy3"}'
+        values: "1+0x40"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: RouterRunModelUnverifiable
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: RouterRunModelUnverifiable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              rail: openrouter
+              stack: circles
+              role: worker
+              requested: tencent/hy3
+            exp_annotations:
+              summary: "OpenRouter/Go rides have NO served-side evidence (circles/worker)"
+              description: "1 OpenRouter/Go ride(s) on circles requested tencent/hy3 with NO served-side record in the router store for 30m — a /generation harvest miss, a Go ledger gap, or a ride that never produced telemetry. Absence never reads as agreement (the FU-108/FU-125 silent-success class): the belt is blind to what served them. Check openrouter_generation_harvest_total{outcome=\"missed\"} (a rising ratio = the harvest is half-blind) before assuming the rides were healthy."
