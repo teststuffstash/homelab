@@ -44,7 +44,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `cp-01` (VM) | 192.168.2.51 | k8s control plane |
 | `wk-01` (VM) | 192.168.2.61 | k8s worker |
 | `wk-02` (VM) | 192.168.2.62 | k8s worker + Longhorn (bulk tier) |
-| `wk-03` (VM) | 192.168.2.63 | k8s worker, ephemeral/CI-runner tier (tainted; removable — no Longhorn, no kata) |
+| `wk-03` (VM) | 192.168.2.63 | k8s worker, ephemeral/CI-runner tier (tainted; removable — no Longhorn disks, no kata) |
 | `thinkcentre` (metal, PXE) | 192.168.2.53 | k8s worker + Longhorn (+ 2×Optane fast tier) |
 | `hp-01` (metal, PXE) | 192.168.2.54 | k8s worker + Longhorn (WoL-capable) |
 | `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier |

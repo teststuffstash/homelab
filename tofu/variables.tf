@@ -137,7 +137,12 @@ variable "nodes" {
     # 20/28 vCPU allocated at load ~4; CI is burst work, throttling is safe) — memory is the
     # careful number (host had ~12Gi free; 8Gi leaves ~4Gi buffer). No longhorn flag = plain
     # image, nothing stateful; removable via drain + destroy when the RAM is needed elsewhere.
-    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 8, memory_mb = 8192, disk_gb = 40 }
+    # longhorn=true added same day (#534): the longhorn-manager DS tolerates the ephemeral
+    # taint (metal ephemeral nodes serve bulk replicas + kata scratch), so it lands here too and
+    # crashlooped on the base image. The flag is PLUMBING (iscsi/util-linux in the image), not a
+    # storage role — wk-03 gets no disk registration and serves nothing; the flip replaces the VM
+    # (file_id change), which is fine: the node is cattle by design.
+    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 8, memory_mb = 8192, disk_gb = 40, longhorn = true }
   }
 
   validation {
