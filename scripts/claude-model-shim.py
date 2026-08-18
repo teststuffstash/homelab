@@ -288,7 +288,14 @@ def _meter_usage(model: str, rail: str, head: bytes, tail: bytes) -> None:
         row = {"ts": __import__("time").time(), "stack": "jail", "model": bare_model,
                "usd": usd, "usd_draw": draw,
                "tokens_in": merged.get("input_tokens", 0),
-               "tokens_out": merged.get("output_tokens", 0)}
+               "tokens_out": merged.get("output_tokens", 0),
+               # homelab#540: carry the cache split through the ingest payload — extract_usage
+               # already reads cache_read_input_tokens / cache_creation_input_tokens; they
+               # were DROPPED at the payload boundary, so the ledger priced every cache-read
+               # token at full input price. The server tolerates their absence (old shims /
+               # spool rows still running — absent = 0).
+               "cache_read": merged.get("cache_read_input_tokens", 0),
+               "cache_creation": merged.get("cache_creation_input_tokens", 0)}
         if _push_usage(row):
             # Success — drain spool opportunistically
             threading.Thread(target=_spool_drain, daemon=True).start()
