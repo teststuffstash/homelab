@@ -83,7 +83,14 @@ meant to avoid.)
   the SAME frozen dps → **the freeze is DEVICE-side (measurement snapshot wedged since the
   08-08/09 window), sibling of gaas's 914 state — reloads can't fix it and the tuya_local
   2026.8.0 upgrade won't either** (still worth doing for the separate loop-death bug).
-  **Remedy for all 5 = physical power cycle**: gaas is HARD-WIRED → breaker (operator, someday;
+  **Remedy for all 5 = physical power cycle — PROVEN 2026-08-18 on laptop4** (wall cycle;
+  the X250's battery carried the node so it never left Ready — cordon/drain was belt-only;
+  sensor thawed 8.0-frozen → 9.8 → 17.9 live within minutes). Remaining 3 plugs + gaas, in
+  rising ceremony: ex-aquarium (⚠ RENAMED LOAD — operator says it hosts something else now,
+  ~30W, identify before cycling; plug rename = HA entity registry + a git sweep of the stale
+  alert regex/dashboards/power-measurements, no Tuya cloud needed) → konditsioneer (cuts
+  thinkcentre = Longhorn fast tier; cordon/drain first, node boots on AC restore) → pve
+  (shut down the VMs first) → gaas breaker. Original diagnosis detail:
   if post-cycle 914 persists → key rotated, re-extract via the tuya-egress.py door; 914
   re-confirmed 08-18, HA entry sits in setup_retry auto-retrying). The 4 plugs are cyclable at
   the wall BUT each cycle cuts its load (pve = the hypervisor!) — needs operator sequencing.
