@@ -948,8 +948,17 @@ if [ -n "${RECIPE:-}" ]; then
   # egress proxy keys the Go rail on the prefix (reviewer-proven wire shape, PR#437). Every OTHER
   # slash-id collapses to haiku exactly as before (the PR#407 vendor-slash rationale above).
   case "$_claude_model" in opencode-go/*) ;; */*) _claude_model="haiku";; esac
+  # opencode-go/* ids are UNKNOWN to the claude CLI, which assumes a 200k context window and
+  # auto-compacts a 1M-window model ~5x early (#523 ride, 2026-08-18). Emit the harness's own
+  # remedy for unknown ids — CLAUDE_CODE_MAX_CONTEXT_TOKENS — as a command prefix; the
+  # [1m]-suffix alternative would leak into the model string the egress proxy keys the rail on.
+  # An unmapped Go model emits NOTHING (keeps the harness's conservative default, never
+  # inherits another model's window). ⚠ Window table DUPLICATED in the --pick-rail ladder's
+  # threading clause below — replay clauses run self-contained, so a shared helper defined at
+  # the script top is invisible to them (proven by RC-127 in the first fixture run).
+  case "$_claude_model" in opencode-go/deepseek-v4-flash) _go_ctx="CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 ";; *) _go_ctx="";; esac
   case "$HARNESS" in
-    claude) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; claude -p --model ${_claude_model} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
+    claude) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}claude -p --model ${_claude_model} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
     goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}";;
   esac
   # <<<REPLAY:harness-run-cmd<<<
@@ -1472,6 +1481,17 @@ if [ "$HARNESS" = "claude" ]; then
               echo "→ ${PROJECT} claude-tier dispatch deferred — Anthropic latched and the Go rail's model could not be threaded into the pod command (FU-088)"
               exit 0;;
           esac
+          # The pre-failover command was baked without the Go window env (the dispatched model
+          # was Anthropic-known); prepend it now so the threaded ride doesn't auto-compact at
+          # the harness's 200k unknown-model default. ⚠ Window table DUPLICATED from the
+          # harness-run-cmd clause (rationale there) — replay clauses run self-contained.
+          case "$rail" in opencode-go/deepseek-v4-flash) _ctx_env="CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 ";; *) _ctx_env="";; esac
+          if [ -n "$_ctx_env" ]; then
+            case "$_new_cmd" in
+              *CLAUDE_CODE_MAX_CONTEXT_TOKENS=*) ;;
+              *) _new_cmd="${_new_cmd/claude -p /${_ctx_env}claude -p }";;
+            esac
+          fi
           RUN_CMD="$_new_cmd"
           # PR#528 review round 3: the threading re-pointed the pod COMMAND, but SUB_LABEL/AGENT_RAIL
           # (and the manifest's MODEL env) were computed above from the PRE-failover MODEL — the
