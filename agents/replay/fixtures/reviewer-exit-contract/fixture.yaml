@@ -35,6 +35,8 @@
 # Parts: bridge.sh (seams: function-shadow gh + the launcher vars) + block:reviewer-exit-contract
 # (real pod code) + post.sh (observation point: FINAL + TERMINAL_OK, the two values the pod exits
 # on — a resolution fixture asserts on enforcement it does not run, the goal-ancestor pattern).
+pins:
+  - MP-T03
 name: reviewer-exit-contract
 mode: table
 source: agents/reviewer-session.sh

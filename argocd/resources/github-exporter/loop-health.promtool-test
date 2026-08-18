@@ -280,6 +280,171 @@ tests:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
 
+  # ── GithubWorkflowRunFailed 1/3 — latest-run semantics: a newer success is a vendor blip ──────
+  # homelab#508: the old unit (a bare 1h window on the failure's timestamp) rang for the whole
+  # auto-resolve window even after the SAME (repo, workflow, branch) had a newer successful run —
+  # three report-only responder triages on #111 in 11d (ARC dispatch-timeout, codeload 429,
+  # GraphQL 503), each a GitHub-vendor transient that self-recovered within the hour. The expr now
+  # `unless`es a failure series when a newer run of its (repo, workflow, branch) has succeeded.
+  # This first arm is the blip shape: the failure FIRES until the success exists (the alert keeps
+  # its old behaviour for the minutes a transient is genuinely current), then goes silent for the
+  # rest of its window. The success's timestamp (900) must be LATER than the failure's (300) —
+  # the RHS is a strict `>` comparison, so a same-instant pair would not suppress.
+  - interval: 1m
+    name: "a failure with a newer successful run on the same branch is suppressed"
+    input_series:
+      - series: 'github_workflow_run_updated_timestamp{owner="teststuffstash",repo="homelab",workflow="ci",branch="master",event="schedule",number="100",attempt="1",id="1000",status="completed",conclusion="failure",runner="hosted"}'
+        values: "300+0x120"
+      - series: 'github_workflow_run_updated_timestamp{owner="teststuffstash",repo="homelab",workflow="ci",branch="master",event="schedule",number="101",attempt="1",id="1001",status="completed",conclusion="success",runner="hosted"}'
+        values: "_x9 900+0x120"
+    alert_rule_test:
+      # before the success exists (t<10m) the failure is loud — unchanged from the old unit
+      - eval_time: 8m
+        alertname: GithubWorkflowRunFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: teststuffstash
+              repo: homelab
+              workflow: ci
+              branch: master
+              event: schedule
+              number: "100"
+              attempt: "1"
+              id: "1000"
+              status: completed
+              conclusion: failure
+              runner: hosted
+            exp_annotations:
+              summary: "GitHub workflow homelab/ci failed"
+              description: "Run #100 (schedule on master) concluded failure: https://github.com/teststuffstash/homelab/actions/runs/1000 — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
+      # from the moment the newer success exists, the failure is suppressed for its whole window
+      - eval_time: 10m
+        alertname: GithubWorkflowRunFailed
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: GithubWorkflowRunFailed
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: GithubWorkflowRunFailed
+        exp_alerts: []
+
+  # ── GithubWorkflowRunFailed 2/3 — the sustained break: no newer success, stays loud ───────────
+  # The invariant's other half: a failure with NO newer successful run in its (repo, workflow,
+  # branch) is exactly the sustained break the alert exists for, and must keep ringing for its
+  # full 1h auto-resolve window. This is the pre-#508 behaviour, pinned so the `unless` cannot
+  # silently over-suppress.
+  - interval: 1m
+    name: "a failure with no newer success keeps firing for its whole window"
+    input_series:
+      - series: 'github_workflow_run_updated_timestamp{owner="teststuffstash",repo="homelab",workflow="ci",branch="master",event="schedule",number="200",attempt="1",id="2000",status="completed",conclusion="failure",runner="hosted"}'
+        values: "300+0x120"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: GithubWorkflowRunFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: teststuffstash
+              repo: homelab
+              workflow: ci
+              branch: master
+              event: schedule
+              number: "200"
+              attempt: "1"
+              id: "2000"
+              status: completed
+              conclusion: failure
+              runner: hosted
+            exp_annotations:
+              summary: "GitHub workflow homelab/ci failed"
+              description: "Run #200 (schedule on master) concluded failure: https://github.com/teststuffstash/homelab/actions/runs/2000 — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
+      - eval_time: 60m
+        alertname: GithubWorkflowRunFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: teststuffstash
+              repo: homelab
+              workflow: ci
+              branch: master
+              event: schedule
+              number: "200"
+              attempt: "1"
+              id: "2000"
+              status: completed
+              conclusion: failure
+              runner: hosted
+            exp_annotations:
+              summary: "GitHub workflow homelab/ci failed"
+              description: "Run #200 (schedule on master) concluded failure: https://github.com/teststuffstash/homelab/actions/runs/2000 — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
+
+  # ── GithubWorkflowRunFailed 3/3 — the mixed triple: an old blip's success must not silence a ──
+  # NEWER failure. The `unless` matches on the FULL per-run label set (the RHS's `group_right ()`
+  # carries each failing run's own labels), NOT on the (repo, workflow, branch) triple: a coarse
+  # triple-level `unless` would let the success that evidences the OLD blip also silence a NEWER
+  # failure in the same triple that has no such evidence. Here the three runs share one triple:
+  # blip F1 (updated 300) evidenced by success S (updated 900, born t=10m), then a genuinely
+  # broken F2 (updated 1500, born t=20m). At t=12m the triple has a success newer than F1, so F1
+  # is quiet — and F2 does not exist yet, so nothing fires. From t=20m F2 exists with no success
+  # newer than ITS OWN timestamp, so it fires for the rest of the window. This is the shape that
+  # separates #508's expr from the issue's original sketch, and it is pinned here so it cannot
+  # regress to the coarse form.
+  - interval: 1m
+    name: "an old blip's success does not silence a NEWER failure in the same triple"
+    input_series:
+      - series: 'github_workflow_run_updated_timestamp{owner="teststuffstash",repo="homelab",workflow="ci",branch="master",event="schedule",number="100",attempt="1",id="1000",status="completed",conclusion="failure",runner="hosted"}'
+        values: "300+0x120"
+      - series: 'github_workflow_run_updated_timestamp{owner="teststuffstash",repo="homelab",workflow="ci",branch="master",event="schedule",number="101",attempt="1",id="1001",status="completed",conclusion="success",runner="hosted"}'
+        values: "_x9 900+0x120"
+      - series: 'github_workflow_run_updated_timestamp{owner="teststuffstash",repo="homelab",workflow="ci",branch="master",event="schedule",number="102",attempt="1",id="1002",status="completed",conclusion="failure",runner="hosted"}'
+        values: "_x19 1500+0x120"
+    alert_rule_test:
+      # F1 quiet (its success is newer), F2 unborn — nothing fires
+      - eval_time: 12m
+        alertname: GithubWorkflowRunFailed
+        exp_alerts: []
+      # F2 exists with no success newer than its own timestamp — it fires, despite the triple's
+      # success being newer than F1
+      - eval_time: 25m
+        alertname: GithubWorkflowRunFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: teststuffstash
+              repo: homelab
+              workflow: ci
+              branch: master
+              event: schedule
+              number: "102"
+              attempt: "1"
+              id: "1002"
+              status: completed
+              conclusion: failure
+              runner: hosted
+            exp_annotations:
+              summary: "GitHub workflow homelab/ci failed"
+              description: "Run #102 (schedule on master) concluded failure: https://github.com/teststuffstash/homelab/actions/runs/1002 — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
+      - eval_time: 30m
+        alertname: GithubWorkflowRunFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: teststuffstash
+              repo: homelab
+              workflow: ci
+              branch: master
+              event: schedule
+              number: "102"
+              attempt: "1"
+              id: "1002"
+              status: completed
+              conclusion: failure
+              runner: hosted
+            exp_annotations:
+              summary: "GitHub workflow homelab/ci failed"
+              description: "Run #102 (schedule on master) concluded failure: https://github.com/teststuffstash/homelab/actions/runs/1002 — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
+
   # ── GithubExporterDown — scrape liveness, `for: 15m` ─────────────────────────────────────────
   # The companion to GithubExporterStale: a dead pod has no last_success gauge to age, so only
   # `up == 0` can see that case. Both are needed and neither covers the other.
