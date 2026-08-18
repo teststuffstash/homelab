@@ -30,6 +30,18 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/.." && pwd)"
 
+# This tool IS the sonnet benchmark channel — it must never inherit a claude-go jail's
+# rail plumbing. That plumbing is TWO layers, and both must go (live 2026-08-18, one hour
+# apart): the shim (ANTHROPIC_BASE_URL) routed "sonnet" to kimi-k3 on the Go rail ($0.17,
+# caught on the CONSOLE — the homelab#515 requested≠served class, jail edition), and the
+# CLI-side slot map (ANTHROPIC_DEFAULT_*_MODEL) kept resolving --model sonnet to the literal
+# id `opencode-go/kimi-k3` even with the shim unset — which api.anthropic.com 404s, so the
+# "clean" re-run failed every invocation. Pin the rail: strip both layers; plain claude then
+# auths with the seat's own OAuth straight to the API and sonnet means claude-sonnet-5.
+unset ANTHROPIC_BASE_URL ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL \
+      ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL \
+      ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_SUBAGENT_MODEL
+
 # Defaults
 PROJECT=""
 PR=""
