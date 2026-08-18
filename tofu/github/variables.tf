@@ -41,9 +41,20 @@ variable "protected_repos" {
     # path are unaffected: bot approval + green CI still auto-merge. Only meaningful where
     # require_approval=true (the rule rides the required-approval ruleset's pull_request block).
     require_code_owner_review = optional(bool, false)
+    # restrict_workflow_pushes=true → a PUSH ruleset rejects any push touching
+    # `.github/workflows/**` (iac-lane.md §L0b: the enforcement-grade native version of the
+    # sentinel's path rule — the sleep-iac#28 self-merge hole). Applies to every branch and
+    # every actor except the bypass list (OrgAdmin; Renovate, whose SHA-pinning PRs edit
+    # workflows; homelab-merge, whose update-branch merge commits can carry master's workflow
+    # edits onto a PR head). The worker App is deliberately NOT bypassed — that is the point.
+    restrict_workflow_pushes = optional(bool, false)
   }))
   default = {
-    circles-iac = { required_checks = ["ci"], require_approval = false } # CI-gated deploy target (sleep-iac shape)
+    # The four sentinel repos (SENTINEL_REPOS in scripts/iac-sentinel.sh) carry the required
+    # `iac-sentinel` context — the IAC-G01 enforcement flip (2026-08-18, iac-lane.md §L0b). The
+    # status is posted by the sentinel CronWorkflow (*/5) under the homelab-REVIEWER App, so a
+    # PR waits ≤ one tick for it; probe failures post `error` (fail-closed) and heal next tick.
+    circles-iac = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # CI-gated deploy target (sleep-iac shape)
     # circles: codeowner gate ON (2026-08-06, the #29 goal lane) — /specs/ + /.agents/ on Rasmus
     # (CODEOWNERS at the repo root). Master-targeted only after the required-approval split, so
     # child PRs into goal/** stay bot-approved; the goal→master assembly PR (always touches
@@ -68,7 +79,7 @@ variable "protected_repos" {
     #     waits for a human. That is the intended reading of those tiers, not an accident.
     #   • Renovate's Actions SHA-pinning PRs touch .github/workflows/ — OWNED, likewise. Arguably
     #     the single change you most want eyes on (the Trivy-class mitigation, renovate.md).
-    homelab = { required_checks = ["ci"], require_approval = true, require_code_owner_review = true }
+    homelab = { required_checks = ["ci", "iac-sentinel"], require_approval = true, require_code_owner_review = true, restrict_workflow_pushes = true }
     # The three below flipped require_code_owner_review=true 2026-08-11 (the reviewer-enable
     # retrace): with the platform stack's bot reviewer ON, require_approval alone lets a bot
     # approval auto-merge — the codeowner flag is what turns the bot review into input-only on
@@ -81,8 +92,8 @@ variable "protected_repos" {
     agent-runtime       = { required_checks = ["ci"], require_code_owner_review = true }
     openrouter-operator = { required_checks = ["ci"], require_code_owner_review = true }
     oracle-fleet        = { required_checks = ["ci"], require_code_owner_review = true } # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
-    oracle-iac          = { required_checks = ["ci"], require_approval = false }         # same shape as sleep-iac: deploy-bump PRs gate on CI only
-    sleep-iac           = { required_checks = ["ci"], require_approval = false }
+    oracle-iac          = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # sleep-iac shape: deploy bumps gate on CI + sentinel, no review
+    sleep-iac           = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true }
     sleep-tracking      = { required_checks = ["ci"] }
     snore-recorder      = { required_checks = ["ci"] } # PR `ci` check confirmed live 2026-07-24 (PR #8 era runs)
     # agent-runtime  = { required_checks = [...] }     # needs a pull_request-triggered check first
