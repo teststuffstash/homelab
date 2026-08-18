@@ -15,6 +15,11 @@
 # agent whatever its RBAC — which is one reason the BestEffort-OOM class (#57, #63–#69, fixed by a
 # kubelet reservation in tofu/metal.tf) stayed operator work. Grant reads that `kubectl` and `curl`
 # can actually use; anything below the kubelet is out of scope by construction, not by permission.
+# CARVE-OUT (homelab#541): kernel LOG truth is now platform-shipped via Loki — the kmsg-reader
+# DaemonSet (argocd/resources/loki/kmsg-reader.yaml) puts each node's /dev/kmsg into the log stack,
+# so any session with LogQL access reads kernel-log lines (`{container="kmsg-reader", node="<node>"}`)
+# with NO new RBAC, NO talosctl. The API-level ceiling stands: machine config, oomactions (a
+# Sensitivity: Sensitive resource), and the rest of the Talos API remain out of reach.
 #
 # NEVER GRANTED, in either role: `secrets`. The platform's standing boundary is that agents wire
 # secret REFERENCES, never values (iac-lane.md). `configmaps` is also withheld — most are harmless,
