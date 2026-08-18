@@ -100,11 +100,14 @@ meant to avoid.)
   both serve through the fence (thinkcentre 19.8W live, hp 48.9W live). Full recipe + warning
   now in opnsense/tuya-egress.py's header — expect a recurrence on any NOUS power loss.
   The freeze onset (08-08/09) was the day after the fence went up: fence-correlated, all 5
-  devices. hp-01's AC-restore worked fine (the "flaky" note was stale). **Remaining: pve's
-  plug only (4/5 recovered)** — cloud-door alone tested and does NOT thaw the
-  9y0qx7npuny0pnwt family; it needs a laptop4-style wall cycle at the next pve maintenance
-  window (shut down the VMs first). The 9-static-sensor alert exclusion stays
-  QUEUED as homelab#478 (machine lane owns it now).
+  devices. hp-01's AC-restore worked fine (the "flaky" note was stale). **✅ 5/5 RESOLVED
+  2026-08-18 evening — the pve maintenance window ran the same day** (operator + jail):
+  ansible/pve-upgrade.yml first run (228 pkgs, kernel 6.8.12-9 → -42), clean guest shutdown →
+  poweroff → wall-plug cycle → unattended self-recovery to 10/10 Ready in ~10 min; pve plug
+  thawed (153.6W boot draw vs frozen 124.6). Recipe now runbook §Proxmox host maintenance
+  window (PR#554). #221 can be CLOSED with this evidence — the machine/meta lane's call.
+  Residual watch: Longhorn degraded count → 0 post-window. The 9-static-sensor alert
+  exclusion shipped as #544 (was queued as homelab#478).
 - **ADR-107 / Go-rail chain (charter = [`chainless-redesign.md`](chainless-redesign.md) — its
   §Rollout status is current): PART 1 COMPLETE 2026-08-14 02:25Z** — all chunks merged+live
   (PRs #429/#433–#437/#440–#443; every chunk issue closed w/ evidence; #420 = the status
