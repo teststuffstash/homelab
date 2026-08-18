@@ -595,7 +595,7 @@ tests:
               served: moonshotai/kimi-k3
             exp_annotations:
               summary: "OpenRouter/Go rides served a model different from the one requested (sleep/worker)"
-              description: "1 OpenRouter/Go ride(s) on sleep requested deepseek/deepseek-v4-flash but the /generation harvest (or Go ledger) shows they were SERVED as moonshotai/kimi-k3 — a silent model redirect, the PR#407 class (a claude/haiku dispatch ran the CLI default opus for 23 days). Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert."
+              description: "1 OpenRouter/Go ride(s) on sleep requested deepseek/deepseek-v4-flash but the /generation harvest (or Go ledger) shows they were SERVED as moonshotai/kimi-k3. Check the launcher's resolved model and whether `model_family()` normalizes both ids before assuming a redirect — the PR#407 class is what this belt exists to catch. Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert."
       # the roll (last sample 40m, first of the new pod at 43m) — the bridge holds
       - eval_time: 50m
         alertname: RouterRunModelDrift
@@ -609,7 +609,7 @@ tests:
               served: moonshotai/kimi-k3
             exp_annotations:
               summary: "OpenRouter/Go rides served a model different from the one requested (sleep/worker)"
-              description: "1 OpenRouter/Go ride(s) on sleep requested deepseek/deepseek-v4-flash but the /generation harvest (or Go ledger) shows they were SERVED as moonshotai/kimi-k3 — a silent model redirect, the PR#407 class (a claude/haiku dispatch ran the CLI default opus for 23 days). Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert."
+              description: "1 OpenRouter/Go ride(s) on sleep requested deepseek/deepseek-v4-flash but the /generation harvest (or Go ledger) shows they were SERVED as moonshotai/kimi-k3. Check the launcher's resolved model and whether `model_family()` normalizes both ids before assuming a redirect — the PR#407 class is what this belt exists to catch. Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert."
 
   # ── D2 — the UNVERIFIABLE count is its own alert, and absent evidence is never agreement ──────
   # An OpenRouter ride requested tencent/hy3 with no /generation record in the store. This is NOT

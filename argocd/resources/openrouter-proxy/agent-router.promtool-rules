@@ -78,7 +78,7 @@ groups:
           severity: warning
         annotations:
           summary: OpenRouter/Go rides served a model different from the one requested ({{ $labels.stack }}/{{ $labels.role }})
-          description: '{{ $value }} OpenRouter/Go ride(s) on {{ $labels.stack }} requested {{ $labels.requested }} but the /generation harvest (or Go ledger) shows they were SERVED as {{ $labels.served }} — a silent model redirect, the PR#407 class (a claude/haiku dispatch ran the CLI default opus for 23 days). Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert.'
+          description: '{{ $value }} OpenRouter/Go ride(s) on {{ $labels.stack }} requested {{ $labels.requested }} but the /generation harvest (or Go ledger) shows they were SERVED as {{ $labels.served }}. Check the launcher''s resolved model and whether `model_family()` normalizes both ids before assuming a redirect — the PR#407 class is what this belt exists to catch. Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert.'
       - alert: RouterRunModelUnverifiable
         expr: |-
           max by (rail, stack, role, requested) (

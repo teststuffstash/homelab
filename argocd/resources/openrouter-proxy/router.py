@@ -439,7 +439,7 @@ def record_provider_event(model: str, provider: str, status: int) -> None:
 # /generation harvest's served_model + provider (served). The claude-harness/subscription rail's
 # served side is the OTLP claude_code_* metrics (an in-cluster collector), which the router does
 # not see — that arm lives in github-exporter's prometheusrule.yaml (agent-model-drift group).
-_MODEL_FAMILY_SUFFIX_RE = re.compile(r"-\d{6,8}$")
+_MODEL_FAMILY_SUFFIX_RE = re.compile(r"-(\d{4}|\d{6,8})$")
 
 
 def model_family(model: str) -> str:
@@ -448,8 +448,9 @@ def model_family(model: str) -> str:
     stamps (deepseek/deepseek-v4-flash-0731, …-20260423), context brackets (claude-opus-5[1m]),
     rail prefixes (opencode-go/, anthropic/, claude/) and claude aliases (haiku →
     claude-haiku). Stripping to the family is what keeps a healthy ride from minting false
-    drift; an unrecognised shape stays whole so an unknown model reads as itself rather than
-    being silently folded into a family it is not."""
+    drift; date/version stamps are stripped to their family even when the model does not match
+    a vendor/model pattern (e.g. a bare opencode-go/deepseek-v4-flash-0731 after prefix strip),
+    so a model's identity is preserved and no unknown id is silently folded."""
     raw = (model or "").strip()
     raw = raw.split(":")[0]                     # drop a :free / :tag suffix
     raw = re.sub(r"\[[^\]]*\]", "", raw)        # drop [1m] / [2m] context brackets
@@ -465,7 +466,7 @@ def model_family(model: str) -> str:
     m = re.match(r"^([^/]+)/([a-z0-9][a-z0-9._-]*)", raw)  # vendor/model[-stamp] → vendor/model
     if m:
         return f"{m.group(1)}/{_MODEL_FAMILY_SUFFIX_RE.sub('', m.group(2))}"
-    return raw
+    return _MODEL_FAMILY_SUFFIX_RE.sub("", raw)
 
 
 def model_drift_rows(window_s: int = 7 * 86400) -> tuple[list, list]:
@@ -1534,12 +1535,16 @@ def self_test() -> int:
     assert model_family("deepseek/deepseek-v4-flash") == "deepseek/deepseek-v4-flash"
     assert model_family("deepseek/deepseek-v4-flash-20260423") == "deepseek/deepseek-v4-flash", \
         "a date-stamped served id must collapse to its family"
+    assert model_family("deepseek/deepseek-v4-flash-0731") == "deepseek/deepseek-v4-flash", \
+        "a 4-digit MMDD-stamped served id must collapse to its family"
     assert model_family("claude-opus-5[1m]") == "claude-opus", \
         "a [1m] context-bracketed id must collapse to its family"
     assert model_family("haiku") == "claude-haiku", "the claude alias must expand to its family"
     assert model_family("claude/haiku") == "claude-haiku", "the claude/ alias must expand too"
     assert model_family("opencode-go/deepseek-v4-flash") == "deepseek-v4-flash", \
         "the opencode-go/ rail prefix must be stripped"
+    assert model_family("opencode-go/deepseek-v4-flash-0731") == "deepseek-v4-flash", \
+        "a bare id with 4-digit stamp and prefix must still collapse to family"
     assert model_family("moonshotai/kimi-k3") == "moonshotai/kimi-k3", \
         "an already-canonical id must pass through unchanged"
     # The join: a run_report on the openrouter rail whose requested family differs from the

@@ -668,7 +668,7 @@ spec:
             severity: warning
           annotations:
             summary: "Claude-harness rides requested a model family that was NOT served ({{ $labels.project }}/{{ $labels.role }})"
-            description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose family never appeared on the SERVED side (OTLP claude_code_*) for 30m — the CLI ran a different model than dispatched, the PR#407 class (a claude/haiku dispatch served claude-opus for 23 days). Offending families: agent_model_drift{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Rides whose (project, role) produced NO telemetry at all are NOT this alert — they are agent_model_unverifiable, its own count.'
+            description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose family never appeared on the SERVED side (OTLP claude_code_*) for 30m. Check the launcher''s resolved model and whether `model_family()` normalizes both ids — the PR#407 class is what this belt exists to catch (a claude/haiku dispatch served claude-opus for 23 days). Offending families: agent_model_drift{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Rides whose (project, role) produced NO telemetry at all are NOT this alert — they are agent_model_unverifiable, its own count.'
         - alert: AgentModelUnverifiable
           expr: max by (project, role) (max_over_time(agent_model_unverifiable[10m])) > 0
           for: 30m
@@ -676,4 +676,4 @@ spec:
             severity: warning
           annotations:
             summary: "Claude-harness rides have NO served-side telemetry ({{ $labels.project }}/{{ $labels.role }})"
-            description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose (project, role) produced NO OTLP claude_code_* telemetry for 30m — the belt cannot see what served them. Absence never reads as agreement (the FU-108/FU-125 silent-success class): either OTLP export is failing (check the otel-collector ServiceMonitor) or rides died before exporting. Offending families: agent_model_unverifiable{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Concrete requested≠served mismatch is AgentModelDrift, the sibling alert.'
+            description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose (project, role) produced NO OTLP claude_code_* telemetry for 30m. The belt is blind to what served them. Absence never reads as agreement (the FU-108/FU-125 silent-success class): check the otel-collector ServiceMonitor for export failures, or assume rides died before exporting. Offending families: agent_model_unverifiable{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Concrete requested≠served mismatch is AgentModelDrift, the sibling alert.'
