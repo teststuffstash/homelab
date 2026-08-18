@@ -155,6 +155,10 @@ resource "proxmox_virtual_environment_vm" "ci_runner" {
     # local-lvm is LVM-thin → raw is the ONLY format; Proxmox silently ignores qcow2 here,
     # so declaring it drifts forever.
     file_format = "raw"
+    # discard=on (2026-08-18) — same thin-pool reclaim fix as proxmox.tf; effective at next
+    # power-cycle + an in-guest fstrim.
+    discard = "on"
+    ssd     = true
   }
 
   network_device {
