@@ -570,5 +570,13 @@ Log each instance here, so the next author sees a register rather than a precede
   none. Evidence rather than assertion: the full suite (119) stayed green byte-identically on the
   branch. The reader half (janitor sweep in `agents/coordinator-session.sh` + the seeded inventory
   in the coordinator README) is not a clause file.
+- **homelab#556 (2026-08-18)** — the reviewer STEP-0 prompt-text fix in `reviewer-session.sh`:
+  the own-verdict-at-head precondition now counts only LIVE (non-DISMISSED) reviews
+  (APPROVED/CHANGES_REQUESTED, the reflex breaker's filter), and the standing-aside dedup is
+  re-keyed on a machine marker (`<!-- standing-aside head=<content-sha8> pre=<slug> -->`)
+  instead of prose. Same shape as the #536 entry: LLM-PROMPT prose inside the `claude -p`
+  invocation, OUTSIDE every `>>>REPLAY:` sentinel (the currency-gate and touches-check blocks
+  extract byte-identically before/after), so no extracted clause changes and no action-stream
+  moves — the harness asserts a clause's `gh`/`kubectl` calls, and prompt text emits none.
 
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.
