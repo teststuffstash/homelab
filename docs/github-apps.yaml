@@ -52,7 +52,7 @@ apps:
       contents: { level: write, why: "the approval must COUNT — GitHub only counts reviews from a repo writer (contents:read ⇒ authorAssociation NONE, ignored)" }
       pull_requests: { level: write, why: "submit reviews" }
       checks: { level: read, why: "reviewer reads CI state (composition loop-reviewer gens)" }
-      statuses: { level: read, why: "same" }
+      statuses: { level: write, why: "FU-106 G01 enforcement flip (docs/agents/iac-lane-fsm.md IAC-G04) — the iac-sentinel required-check posts commit statuses from this App's token (agents/coordinator/reflexes-argo.yaml SENTINEL_STATUS_TOKEN, scripts/iac-sentinel.sh). Declared to match the operator's grant click (docs/agents/meta-state.md 2026-08-18 G01 flip bullet); the required-check + push-ruleset legs of that flip are still pending." }
       actions: { level: read, why: "reviewer reads run logs on private repos (loop-reviewer gens)" }
       code_quality: { level: read, why: "OPERATOR RULING 2026-07-26: deliberate future-proof read — a reviewer probing a surface that 422s mid-review reads as 'something is there'; harmless reads are pre-granted so review probes fail honest-empty, not permission-denied" }
       discussions: { level: read, why: "same ruling — deliberate future-proof reviewer read" }
