@@ -132,7 +132,7 @@ machines:
   - name: wk-03
     kind: vm
     label: "`wk-03` (VM)"
-    role: k8s worker, ephemeral/CI-runner tier (tainted; removable — no Longhorn, no kata)
+    role: k8s worker, ephemeral/CI-runner tier (tainted; removable — no Longhorn disks, no kata)
     hardware: Talos VM on pve
     ip: 192.168.2.63
     avx2: true           # same host CPU as wk-01/wk-02
