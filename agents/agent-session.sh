@@ -987,7 +987,7 @@ case "$TASK" in
 esac
 
 # ── FU-042 guard (a): the open-PR-liveness check, as a FUNCTION (sentinel-wrapped) so the
-# clause-replay fixture can drive its four arms without replaying the pre-flight's other guards
+# clause-replay fixture can drive its five arms without replaying the pre-flight's other guards
 # (WIP cap, session key, devbox.lock — pinned by their own fixtures). homelab#369 narrowed the
 # predicate from a bare `#N` MENTION to a strong link: any prose cross-reference in an unrelated
 # open PR used to park the issue and point the next round at the WRONG branch. The predicate is
