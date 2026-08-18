@@ -131,7 +131,7 @@ additionalPrometheusRulesMap:
         rules:
           - alert: NodeRebooted
             annotations:
-              description: '{{ $labels.instance }} booted {{ $value | humanizeDuration }} ago. Metal-node flapping is under investigation (2026-06-19) — note which node + time.'
+              description: '{{ $labels.instance }} booted {{ $value | humanizeDuration }} ago. Sentinel alert — kept after the 2026-06 metal-flapping investigation CLOSED (root cause: bad NIC cable + qemu-guest-agent hanging metal boots, docs/incidents/). An unexpected reboot here means power loss, a crash, or an operator power-cycle: check which, and correlate with the smart-plug power series (sensor.plug_*_power) before suspecting the node.'
               summary: Node {{ $labels.instance }} rebooted
             expr: (time() - node_boot_time_seconds) < 600
             for: 0m
