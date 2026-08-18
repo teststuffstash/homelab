@@ -88,7 +88,8 @@ CREATE TABLE IF NOT EXISTS task_market(
   PRIMARY KEY(tag, model));
 CREATE TABLE IF NOT EXISTS go_usage(
   ts REAL, stack TEXT, model TEXT, usd REAL, usd_draw REAL,
-  tokens_in INTEGER, tokens_out INTEGER);
+  tokens_in INTEGER, tokens_out INTEGER,
+  cache_read INTEGER DEFAULT 0, cache_creation INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS ix_go_usage_ts ON go_usage(ts);
 CREATE TABLE IF NOT EXISTS cell_start_tier(
   class TEXT, urgency TEXT, start_tier INTEGER, clean INTEGER, degraded INTEGER,
@@ -154,6 +155,17 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                 # the stored billed usd (acknowledged under-count, self-corrects as windows
                 # roll — uploads/opencode-go.txt reconciliation).
                 for _gocol in ("usd_draw REAL", "tokens_in INTEGER", "tokens_out INTEGER"):
+                    try:
+                        conn.execute(f"ALTER TABLE go_usage ADD COLUMN {_gocol}")
+                    except sqlite3.OperationalError:
+                        pass  # duplicate column — schema already current
+                # homelab#540: go_usage grew the CACHE SPLIT columns (cache_read, cache_creation)
+                # — the fleet's flash workload is cacheRead-DOMINATED and the ingest row was
+                # losing the split, so the ledger priced every cache-read token at full input
+                # price (2026-08-18 reconciliation: kimi-k3 priced $0.1978 vs console $0.1701).
+                # Same LAST-column discipline; old rows default to 0 → recomputation only
+                # improves NEW rows (historical rows lack the split).
+                for _gocol in ("cache_read INTEGER DEFAULT 0", "cache_creation INTEGER DEFAULT 0"):
                     try:
                         conn.execute(f"ALTER TABLE go_usage ADD COLUMN {_gocol}")
                     except sqlite3.OperationalError:
@@ -518,20 +530,59 @@ def key_refs() -> list[str]:
 
 def go_usage_add(ts: float, stack: str, model: str, usd: float,
                  usd_draw: float | None = None,
-                 tokens_in: int | None = None, tokens_out: int | None = None) -> bool:
+                 tokens_in: int | None = None, tokens_out: int | None = None,
+                 cache_read: int | None = None, cache_creation: int | None = None) -> bool:
     """One Go-rail completion → the usage ledger. In-memory degrade = no-op, never a crash.
 
-    `usd` is the BILLED-STYLE estimate (gometer.price — cache discounts applied); `usd_draw` is
-    the WINDOW-DRAW price (gometer.window_draw — list price on raw tokens, badge-halved, the
-    number the window utilization reads). Both are stored so they cannot be conflated; tokens
-    are kept for audit/recompute. Rows written without `usd_draw` (legacy ingest/shim) store
-    NULL and their draw falls back to `usd` (acknowledged under-count, self-corrects as
-    windows roll)."""
-    ok = _write("INSERT INTO go_usage VALUES(?,?,?,?,?,?,?)",
-                (ts, stack, model, usd, usd_draw, tokens_in, tokens_out))
+    `usd` is the BILLED-STYLE estimate (gometer.price — list ×1 with cache discounts, NO badge
+    halving, homelab#540); `usd_draw` is the WINDOW-DRAW price (gometer.window_draw — list price
+    on raw tokens, badge-halved, the number the window utilization reads). Both are stored so
+    they cannot be conflated; tokens are kept for audit/recompute. Rows written without
+    `usd_draw` (legacy ingest/shim) store NULL and their draw falls back to `usd`
+    (acknowledged under-count, self-corrects as windows roll).
+
+    `cache_read` / `cache_creation` are the cache-split token counts (homelab#540). Absent →
+    stored as 0 (old shims / spool rows without the fields); the window-draw recompute only
+    improves NEW rows because HISTORICAL rows lack the split."""
+    ok = _write("INSERT INTO go_usage VALUES(?,?,?,?,?,?,?,?,?)",
+                (ts, stack, model, usd, usd_draw, tokens_in, tokens_out,
+                 cache_read, cache_creation))
     # Prune rows older than 45d (30d window + 15d slack) — prevents unbounded growth.
     _write("DELETE FROM go_usage WHERE ts < ?", (ts - 45 * 86400,))
     return ok
+
+
+def go_usage_chain_open(span_s: float, lookback_s: float = 7 * 86400,
+                        now: float | None = None) -> float | None:
+    """Recover the CURRENT open window's start epoch for a CHAIN-anchored window (homelab#540).
+
+    The 5h window OPENS at the first request after the previous window expired and resets at
+    open + span; idle > span ⇒ the next request opens a fresh window. Over go_usage.ts rows in
+    the last `lookback_s` (ascending): open = the earliest ts that is >= the previous open +
+    span. After the walk: if now < open + span there IS an open window [open, open+span) and we
+    return `open`; otherwise there is NO open window (idle past expiry) and we return None —
+    gometer.go_window_bounds then degrades to the grid default for the reset metric.
+
+    `now` is injectable for deterministic tests (defaults to time.time()); the gometer
+    chain_fn seam calls it positionally as chain_fn(span_s, lookback_s), so the extra kwarg is
+    invisible to the callback contract.
+
+    Returns None on an unreadable ledger (never raises) — the caller logs and degrades, never
+    crashes and never silently reports zero usage."""
+    if now is None:
+        now = time.time()
+    rows = _read("SELECT ts FROM go_usage WHERE ts > ? ORDER BY ts ASC",
+                 (now - float(lookback_s),))
+    open_epoch: float | None = None
+    for (ts,) in rows:
+        ts = float(ts)
+        if open_epoch is None or ts >= open_epoch + float(span_s):
+            open_epoch = ts
+    if open_epoch is None:
+        return None
+    if now < open_epoch + float(span_s):
+        return open_epoch
+    return None
 
 
 def go_usage_window(seconds: float, since: float | None = None) -> dict:
@@ -552,8 +603,13 @@ def go_usage_window(seconds: float, since: float | None = None) -> dict:
     rows stay in the ledger — they just fall outside the anchored window."""
     now = time.time()
     floor = max(now - seconds, since) if since is not None else (now - seconds)
+    # homelab#540: `>=` (not `>`). The anchored-floor convention is "spend since the LAST RESET"
+    # — inclusive of the reset/floor epoch — and a CHAIN-anchored window is [open, open+span),
+    # where `open` IS the first request that opened the window and must be counted. Existing
+    # boundary tests seed rows ±60 from boundaries (never exactly on them) so `>=` vs `>` is
+    # invisible there; the chain open-row case is what `>=` fixes.
     rows = _read(
-        "SELECT stack, usd, usd_draw FROM go_usage WHERE ts > ?",
+        "SELECT stack, usd, usd_draw FROM go_usage WHERE ts >= ?",
         (floor,))
     total = total_draw = 0.0
     by_stack: dict[str, float] = {}
@@ -1393,18 +1449,55 @@ def self_test() -> int:
     _raw_merge = {"input_tokens": 50560000, "output_tokens": 488000}
     _cal = gometer.window_draw("deepseek-v4-flash", _raw_merge)
     assert 3.5 <= _cal <= 3.75, f"window_draw calibration: {_cal} (expected ≈3.61 from list prices)"
+    # ── homelab#540: price() is BILLED = list ×1, badge models included, NO halving ──
+    # The matrix's console-verified ruling (docs/spikes/opencode-model-matrix.md): billed Cost =
+    # list ×1 for EVERY model, badged included; the badge halving is the WINDOW-DRAW
+    # (limit-side) effect only. deepseek-v4-flash (half=True) 1M in + 1M out:
+    #   billed = 1e6×0.14/1e6 + 1e6×0.28/1e6 = 0.14 + 0.28 = $0.42  (NOT $0.21)
+    _bill_merge = {"input_tokens": 1000000, "output_tokens": 1000000}
+    _bill = gometer.price("deepseek-v4-flash", _bill_merge)[0]
+    assert abs(_bill - 0.42) < 1e-9, f"price() must bill badge models at list ×1: {_bill} != 0.42"
+    # and the DRAW of the SAME physical completion IS badge-halved: 0.42 × 0.5 = $0.21.
+    _draw_same = gometer.window_draw("deepseek-v4-flash", _bill_merge)
+    assert abs(_draw_same - 0.21) < 1e-9, f"window_draw must badge-halve the same completion: {_draw_same}"
     # The OLD meter's view — the same physical input reported as cache-read (the "assumes
-    # cache-read pricing" bug): 50.56M at the cR rate 0.0028/M → cents, not dollars.
+    # cache-read pricing" bug): 50.56M at the cR rate 0.0028/M → cents, not dollars. The billed
+    # side is now list ×1, so the cache-read view prices at the cR rate ×1 (no halving).
     _old_view = {"input_tokens": 0, "cache_read_input_tokens": 50560000,
                  "output_tokens": 488000}
     _billed_old = gometer.price("deepseek-v4-flash", _old_view)[0]
-    assert _billed_old < 0.5, f"the old cache-priced meter must read cents, got {_billed_old}"
+    assert _billed_old < 0.5, f"the cache-read-meter view must still read cents, got {_billed_old}"
+    # ── homelab#540: the cache-split formula (2026-08-18 reconciliation shape, clean numbers) ──
+    # kimi-k3 rates in $/M: in 3.00, out 15.00, cR 0.30. A synthetic split row:
+    #   in = 41,745  (full price)   → 41745×3.00/1e6 = 0.125235
+    #   cache_read = 10,000         → 10000×0.30/1e6 = 0.003
+    #   out = 2,653                 → 2653×15.00/1e6 = 0.039795
+    #   billed = 0.125235 + 0.003 + 0.039795 = $0.16803  (the 2026-08-18 kimi-k3 shape: 51,745
+    #   total input = 41,745 full + 10,000 cache-read; previously the ledger priced all 51,745
+    #   at full price = 0.155235 + ... = the over-count the fix removes).
+    _kimi = {"input_tokens": 41745, "cache_read_input_tokens": 10000, "output_tokens": 2653}
+    _kimi_bill = gometer.price("kimi-k3", _kimi)[0]
+    assert abs(_kimi_bill - 0.16803) < 1e-9, f"cache-split billed: {_kimi_bill} != 0.16803"
+    # The window-draw of the same split row: cache-read at the cR LIST rate, badge-halved (kimi
+    # is not badged, so ×1): 0.125235 + 0.003 + 0.039795 = 0.16803.
+    _kimi_draw = gometer.window_draw("kimi-k3", _kimi)
+    assert abs(_kimi_draw - 0.16803) < 1e-9, f"cache-split draw: {_kimi_draw} != 0.16803"
+    # Tokens WITHOUT a split keep pricing as RAW INPUT (the conservative status quo for
+    # historical rows): a row with only cache_read present prices it as raw input at the cR
+    # rate only if the split is KNOWN; with no split at all, window_draw prices raw in+out only.
+    _kimi_nosplit = {"input_tokens": 1000, "output_tokens": 0}
+    assert abs(gometer.window_draw("kimi-k3", _kimi_nosplit) - 0.003) < 1e-9, \
+        "window_draw without a split prices raw in only (conservative status quo)"
     # ── gometer window ANCHORS (2026-08-17): epoch-anchored vs pure-rolling floors ──
     # Pure-boundary unit tests with a FIXED now (deterministic — fail if the anchor arithmetic
     # is wrong). fixed_now = 2026-08-17 12:22:16 UTC (a Monday).
     spec7u, spec5u, spec30u = (gometer.GO_WINDOWS[w] for w in ("7d", "5h", "30d"))
     assert spec7u["anchor"] == "weekly" and spec7u["weekday"] == "mon", spec7u
-    assert spec5u["anchor"] == "grid" and spec5u["grid_offset_min"] == 217, spec5u
+    # homelab#540: the 5h default is now CHAIN-anchored (first-use/expiry-chained — the console's
+    # x:01 reset lattice proves the 2026-08-17 grid:217m calibration was the wrong model). The
+    # grid offset 217m is retained as the DEGRADE fallback when the ledger is unreadable / no
+    # window is open.
+    assert spec5u["anchor"] == "chain" and spec5u["grid_offset_min"] == 217, spec5u
     assert spec30u["anchor"] == "monthly" and spec30u["month_day"] == 13, spec30u
     w7u, w7un = gometer.go_window_bounds(spec7u, 1786969336.0)
     # weekly mon 00:00: 2026-08-17T12:22Z IS a Monday, 12h22m past its own boundary →
@@ -1424,6 +1517,59 @@ def self_test() -> int:
     # (1783942200), next = 2026-08-13 11:30 (1786620600).
     m30p, m30pn = gometer.go_window_bounds(spec30u, 1786536000.0)
     assert m30p == 1783942200.0 and m30pn == 1786620600.0, (m30p, m30pn)
+    # ── homelab#540: CHAIN-anchor (first-use/expiry-chained) window recovery ──
+    # The 5h default is `chain`: a new window OPENS at the first request after the previous
+    # window expired; reset = open + span; idle > span ⇒ the next request opens a fresh window.
+    # The ledger walk (go_usage_chain_open) recovers the CURRENT open window. Cases use a fixed
+    # `now` (2027-01-13 00:00:00 UTC) with rows seeded around it; the real-time rows above are
+    # cleared first so the walk sees ONLY the synthetic lattice.
+    _cnow = 1800000000.0
+    _cspan = 500.0
+    _c_look = 7 * 86400
+    # (a) continuous use → the lattice anchored at the FIRST ts (the degenerate case the
+    #     2026-08-17 grid:217m calibration measured — indistinguishable from a fixed grid for
+    #     one day). Rows every 100s from _cnow-1000, span 500 → windows open at -1000, -500, 0.
+    _write("DELETE FROM go_usage", ())
+    go_usage_add(_cnow - 1000, "chain", "kimi-k3", 0.01)
+    go_usage_add(_cnow - 900,  "chain", "kimi-k3", 0.01)
+    go_usage_add(_cnow - 500,  "chain", "kimi-k3", 0.01)
+    go_usage_add(_cnow - 400,  "chain", "kimi-k3", 0.01)
+    go_usage_add(_cnow - 0,    "chain", "kimi-k3", 0.01)
+    assert go_usage_chain_open(_cspan, _c_look, now=_cnow) == _cnow, \
+        f"chain continuous lattice must open at the first ts + span steps ({_cnow})"
+    _ba, _ba_reset = gometer.go_window_bounds(
+        {"anchor": "chain", "span_s": _cspan, "chain_lookback_s": _c_look}, _cnow,
+        chain_fn=lambda s, lb: go_usage_chain_open(s, lb, now=_cnow))
+    assert (_ba, _ba_reset) == (_cnow, _cnow + _cspan), (_ba, _ba_reset)
+    # (b) idle gap > span → the fresh window opens at the POST-GAP ts (NOT a fixed-grid lattice
+    #     point). Gap from -900 to -300 is 600 > 500, so the -300 row opens a fresh window.
+    _write("DELETE FROM go_usage", ())
+    go_usage_add(_cnow - 1000, "chain", "kimi-k3", 0.01)
+    go_usage_add(_cnow - 900,  "chain", "kimi-k3", 0.01)
+    go_usage_add(_cnow - 300,  "chain", "kimi-k3", 0.01)   # 600 > 500 after the previous window
+    assert go_usage_chain_open(_cspan, _c_look, now=_cnow) == _cnow - 300, \
+        "chain idle-gap must open the fresh window at the post-gap ts (not a grid lattice point)"
+    # (c) now past open+span → NO open window (idle past expiry) → chain_fn returns None, and
+    #     go_window_bounds DEGRADES to this window's GRID default (loud log, never a crash,
+    #     never a silent zero).
+    _write("DELETE FROM go_usage", ())
+    go_usage_add(_cnow - 1000, "chain", "kimi-k3", 0.01)
+    go_usage_add(_cnow - 500,  "chain", "kimi-k3", 0.01)
+    assert go_usage_chain_open(_cspan, _c_look, now=_cnow) is None, \
+        "chain: now >= open+span must mean NO open window"
+    _gspec = {"anchor": "chain", "span_s": 5 * 3600, "grid_offset_min": 217,
+              "chain_lookback_s": _c_look}
+    _g_spec = {"anchor": "grid", "span_s": 5 * 3600, "grid_offset_min": 217}
+    _deg, _deg_reset = gometer.go_window_bounds(_gspec, _cnow, chain_fn=lambda s, lb: None)
+    _gx, _gx_reset = gometer.go_window_bounds(_g_spec, _cnow)
+    assert (_deg, _deg_reset) == (_gx, _gx_reset), \
+        f"chain None-fallback must equal the grid default: {(_deg, _deg_reset)} != {(_gx, _gx_reset)}"
+    _deg2, _deg2_reset = gometer.go_window_bounds(_gspec, _cnow)  # no chain_fn wired
+    assert (_deg2, _deg2_reset) == (_gx, _gx_reset), \
+        "chain without chain_fn must degrade to the grid default"
+    # Restore the ledger — the chain cases above leave synthetic 2027 rows that would otherwise
+    # pollute the real-time (2026) LEDGER integration windows below.
+    _write("DELETE FROM go_usage", ())
     # LEDGER integration — the 7d anchored window (boundary Sunday 00:00 UTC, ALWAYS within
     # [now−7d, now], so the anchored floor is exactly the boundary): seed PRE-reset rows ($24 —
     # the false-latch sum that pushed platform Go-flash dispatches back to claude/haiku) and
