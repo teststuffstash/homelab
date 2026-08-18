@@ -654,7 +654,10 @@ the block needs pruning, not more headings.
       `talosctl get oomactions` capture BEFORE any upgrade. Victim-surface shrunk 2026-08-17:
       the two biggest UNLIMITED pods got limits (#485 Prometheus 8Gi marker-limit, #487
       workflow-controller 1Gi) — the OOMController's preferred-victim set no longer contains
-      them. Relates FU-139/FU-112, ADR-044.
+      them. ⚠ Still IN the preferred-victim set: `cilium-agent` runs BestEffort
+      (`resources: {}`; homelab#63's evidence — closed into this item 2026-08-18, ≥4 restarts
+      on wk-metal-03 alone). Whether to give it requests is part of this item's tune-vs-accept
+      ruling — the spike's Talos-pin experiment comes first. Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
