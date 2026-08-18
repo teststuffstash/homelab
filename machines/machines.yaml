@@ -129,6 +129,19 @@ machines:
     ip: 192.168.2.62
     avx2: true           # Xeon E5-2680 v4 (Broadwell) — verified via /proc/cpuinfo
 
+  - name: wk-03
+    kind: vm
+    label: "`wk-03` (VM)"
+    role: k8s worker, ephemeral/CI-runner tier (tainted; removable — no Longhorn, no kata)
+    hardware: Talos VM on pve
+    ip: 192.168.2.63
+    avx2: true           # same host CPU as wk-01/wk-02
+    ephemeral: true      # taint (metal.tf for_each) + nodeLabel (talos.tf patch) — ARC runners
+                         # select on the LABEL; added 2026-08-18 to double CI runner capacity
+                         # (2→4 slots). Deliberately a VM: CI needs no metal (no kata/KVM — that
+                         # is the RIDE pool's requirement), and reclaiming the RAM later is
+                         # drain + tofu destroy of this one VM (nothing stateful lands here).
+
   - name: thinkcentre
     kind: metal
     label: "`thinkcentre` (metal, PXE)"
