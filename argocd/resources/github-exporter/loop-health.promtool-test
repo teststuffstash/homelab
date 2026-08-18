@@ -944,6 +944,114 @@ tests:
         alertname: GithubVendorOutagePre331
         exp_alerts: []
 
+  # ── AnthropicVendorDegraded (homelab#555) — the status.claude.com sibling ─────────────────────
+  # Same #331 bridge and `for: 10m` as GithubVendorOutage, but the alert is THRESHOLD-SENSITIVE in
+  # a way the GitHub one is not: it fires at `>= 1` (a status.claude.com degraded_performance is
+  # the reading that explains slow/failed subscription sessions — unlike GitHub, where degraded is
+  # set weekly and `>= 2` was chosen). So the component FILTER is the whole ballgame: the regex
+  # `Claude API \(api\.anthropic\.com\)|Claude Code` must match the real component names and
+  # NOTHING else. In a `>-` folded block scalar YAML does no escape processing, so these are SINGLE
+  # backslashes — a doubled `\\(` compiles into a matcher that matches nothing, i.e. an alert that
+  # can never fire, and the out-of-filter arm below (claude.ai degraded at 1, silent) is what
+  # would catch it. The first three arms mirror the class: fires only after `for:`, the #331
+  # poller-roll bridge, and — the arm the issue asked for — a SHORT flap does not fire.
+  - interval: 1m
+    name: "AnthropicVendorDegraded fires only after for: 10m on a persistent degraded_performance"
+    input_series:
+      - series: 'anthropic_vendor_component_status{component="Claude API (api.anthropic.com)",job="github-exporter",namespace="monitoring"}'
+        values: "1+0x400"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AnthropicVendorDegraded
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: AnthropicVendorDegraded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              component: Claude API (api.anthropic.com)
+            exp_annotations:
+              summary: "Anthropic-side degraded: Claude API (api.anthropic.com)"
+              description: "status.claude.com reports Claude API (api.anthropic.com) at status index 1 (1=degraded_performance). Vendor-side — subscription sessions will be slow or failing while our own windows (FU-088 latch, utilization headers) look fine. Do NOT change dispatch/capacity settings off this state; it is triage context, not a gate input. https://status.claude.com"
+      # stays firing while the degradation lasts (a subscription vendor incident outlives any roll)
+      - eval_time: 6h
+        alertname: AnthropicVendorDegraded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              component: Claude API (api.anthropic.com)
+            exp_annotations:
+              summary: "Anthropic-side degraded: Claude API (api.anthropic.com)"
+              description: "status.claude.com reports Claude API (api.anthropic.com) at status index 1 (1=degraded_performance). Vendor-side — subscription sessions will be slow or failing while our own windows (FU-088 latch, utilization headers) look fine. Do NOT change dispatch/capacity settings off this state; it is triage context, not a gate input. https://status.claude.com"
+
+  - interval: 1m
+    name: "a poller roll no longer re-clocks AnthropicVendorDegraded's for: 10m"
+    input_series:
+      - series: 'anthropic_vendor_component_status{component="Claude Code",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "1+0x5 stale"
+      - series: 'anthropic_vendor_component_status{component="Claude Code",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "_x8 1+0x60"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AnthropicVendorDegraded
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: AnthropicVendorDegraded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              component: Claude Code
+            exp_annotations:
+              summary: "Anthropic-side degraded: Claude Code"
+              description: "status.claude.com reports Claude Code at status index 1 (1=degraded_performance). Vendor-side — subscription sessions will be slow or failing while our own windows (FU-088 latch, utilization headers) look fine. Do NOT change dispatch/capacity settings off this state; it is triage context, not a gate input. https://status.claude.com"
+
+  - interval: 1m
+    name: "a single-sample status.claude.com flap does not fire"
+    input_series:
+      - series: 'anthropic_vendor_component_status{component="Claude Code",job="github-exporter",namespace="monitoring"}'
+        values: "0+0x19 1+0x1 0+0x400"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: AnthropicVendorDegraded
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: AnthropicVendorDegraded
+        exp_alerts: []
+      - eval_time: 33m
+        alertname: AnthropicVendorDegraded
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: AnthropicVendorDegraded
+        exp_alerts: []
+
+  - interval: 1m
+    name: "operational, and an out-of-filter component degrading, are both quiet"
+    input_series:
+      - series: 'anthropic_vendor_component_status{component="Claude API (api.anthropic.com)",job="github-exporter",namespace="monitoring"}'
+        values: "0+0x400"
+      # claude.ai is deliberately NOT in the filter (web UI, not the loop's request path) — its
+      # degraded_performance must not ring this alert. This arm pins the regex escaping: if the
+      # `\\(` / `\\.` became doubled or the filter widened, this series would start matching.
+      - series: 'anthropic_vendor_component_status{component="claude.ai",job="github-exporter",namespace="monitoring"}'
+        values: "1+0x400"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AnthropicVendorDegraded
+        exp_alerts: []
+      - eval_time: 6h
+        alertname: AnthropicVendorDegraded
+        exp_alerts: []
+    promql_expr_test:
+      # the filter matches the API-ish component and reads its (operational) value…
+      - expr: 'max by (component) (max_over_time(anthropic_vendor_component_status{component=~"Claude API \\(api\\.anthropic\\.com\\)|Claude Code"}[10m]))'
+        eval_time: 30m
+        exp_samples:
+          - labels: '{component="Claude API (api.anthropic.com)"}'
+            value: 0
+
   # ── GithubRateLimitLow 1/3 — the hole half only, and the shortest `for:` of the five ─────────
   # `min by (token, resource)` already dropped pod/instance before #331, so this alert's identity
   # never churned — but the vector still EMPTIES at `replicas: 1` (and whenever collect_rate_limits
