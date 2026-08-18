@@ -1427,8 +1427,32 @@ def collect_rate_limits(lines):
 
 
 GITHUBSTATUS_URL = "https://www.githubstatus.com/api/v2/components.json"
+ANTHROPICSTATUS_URL = "https://status.claude.com/api/v2/components.json"
 # statuspage.io status strings, worst-last — the gauge is the index, so `>= 2` = partial outage+.
 VENDOR_STATUS_SCALE = ["operational", "degraded_performance", "partial_outage", "major_outage"]
+
+
+def vendor_status_value(status):
+    """statuspage.io status string → gauge index. Unknown → 4 (worse than major_outage): a
+    threshold that assumes the scale must not silently read a new status string as healthy."""
+    return VENDOR_STATUS_SCALE.index(status) if status in VENDOR_STATUS_SCALE else 4
+
+
+def _emit_vendor_status(lines, series, help_text, url):
+    """Fetch ONE statuspage.io components.json and emit `series{component=…}` gauges. Group rows
+    and "Visit …" banner rows are skipped — they duplicate their members / are not components. A
+    failed fetch raises; the poller's per-collector try/except handles it (that vendor's family
+    vanishes for a poll cycle, which is exactly the hole the alerts' max_over_time bridge rides,
+    #331)."""
+    req = urllib.request.Request(url, headers={"User-Agent": "homelab-github-exporter"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        components = json.loads(resp.read()).get("components", [])
+    lines += [f"# TYPE {series} gauge", f"# HELP {series} {help_text}"]
+    for c in components:
+        name = c.get("name") or ""
+        if not name or c.get("group") or name.startswith("Visit "):
+            continue
+        lines.append(metric(series, {"component": name}, vendor_status_value(c.get("status") or "")))
 
 
 def collect_vendor_status(lines):
@@ -1437,20 +1461,23 @@ def collect_vendor_status(lines):
     failures — a queued run never FAILS) and the operator had to check githubstatus.com by hand.
     Unauthenticated statuspage.io endpoint — no token, no rate-limit pool. A component we don't
     recognize maps to 4 (worse than major_outage): unknown is not okay."""
-    req = urllib.request.Request(GITHUBSTATUS_URL, headers={"User-Agent": "homelab-github-exporter"})
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        components = json.loads(resp.read()).get("components", [])
-    lines += [
-        "# TYPE github_vendor_component_status gauge",
-        "# HELP github_vendor_component_status githubstatus.com component state: 0 operational, 1 degraded_performance, 2 partial_outage, 3 major_outage, 4 unrecognized.",
-    ]
-    for c in components:
-        name = c.get("name") or ""
-        if not name or c.get("group") or name.startswith("Visit "):  # group rows duplicate
-            continue  # their members; "Visit www.githubstatus.com…" is a banner, not a component
-        status = c.get("status") or ""
-        value = VENDOR_STATUS_SCALE.index(status) if status in VENDOR_STATUS_SCALE else 4
-        lines.append(metric("github_vendor_component_status", {"component": name}, value))
+    _emit_vendor_status(lines, "github_vendor_component_status",
+                        "githubstatus.com component state: 0 operational, 1 degraded_performance, 2 partial_outage, 3 major_outage, 4 unrecognized.",
+                        GITHUBSTATUS_URL)
+
+
+def collect_anthropic_status(lines):
+    """homelab#555: Anthropic's OWN view of Anthropic, the sibling of collect_vendor_status. The
+    whole coordination/review plane rides the Anthropic subscription (agents/coordinator), so
+    status.claude.com is the "is it us or them" gauge for slow/failed subscription sessions while
+    our own windows (the FU-088 latch, utilization headers) stay green. Canonical URL =
+    status.claude.com, probed 2026-08-18 ~19:40Z (serves statuspage JSON; status.anthropic.com
+    301-redirects to it). The gauge emits ALL components — report-only, six series — so a future
+    incident on a component nobody predicted is still visible; only the alert filters
+    (prometheusrule.yaml AnthropicVendorDegraded)."""
+    _emit_vendor_status(lines, "anthropic_vendor_component_status",
+                        "status.claude.com component state: 0 operational, 1 degraded_performance, 2 partial_outage, 3 major_outage, 4 unrecognized.",
+                        ANTHROPICSTATUS_URL)
 
 
 def poll_forever():
@@ -1460,7 +1487,7 @@ def poll_forever():
         ok = True
         for collector in (collect_workflow_runs, collect_open_prs, collect_agent_issues, collect_goals,
                           collect_billing, collect_rate_limits, collect_app_permission_drift,
-                          collect_vendor_status):
+                          collect_vendor_status, collect_anthropic_status):
             try:
                 collector(lines)
             except Exception as exc:  # keep the other collector alive; alert rides the metrics below
@@ -1893,9 +1920,20 @@ def self_test():
     finally:
         urllib.request.urlopen, COORDINATE_WEBHOOK_URL = saved_urlopen, saved_url
 
+    # ── FU-150 vendor half (#555): the status→index mapping both vendor gauges and the alerts'
+    # thresholds assume. unknown → 4, never a silent 0 — a threshold that assumed the scale would
+    # read an unrecognized string as healthy is the vacuous-green class.
+    assert vendor_status_value("operational") == 0
+    assert vendor_status_value("degraded_performance") == 1
+    assert vendor_status_value("partial_outage") == 2
+    assert vendor_status_value("major_outage") == 3
+    assert vendor_status_value("under_maintenance") == 4, "unknown must read WORSE, not healthy"
+    assert vendor_status_value("") == 4
+
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
-          "shape, conflict edge-trigger, queued label-transition edge-trigger)")
+          "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
+          "scale)")
     return 0
 
 
