@@ -99,6 +99,26 @@ positive control: a deliberate forbidden egress from a labeled pod in oracle-fle
 as predicted and landed as `hubble_drop_total{source="oracle-fleet",reason="POLICY_DENIED"}` in
 Prometheus.
 
+**Phone-home class: kill at the TOOL, never the allowlist** (codified 2026-08-18 — the third
+instance crossed the ≥2-pattern bar). A bundled tool calling home — update checks, telemetry,
+registry fetches — is not a workload dependency: the CNP denying it is the system *working*, and
+widening `extraFQDNs` for it would codify noise as a dependency. The remedy is the tool's own
+kill-switch in the launcher's always-on env block (`agents/agent-session.sh`, the
+devbox/uv/opencode precedent block), set **unconditionally** — the image bundles every harness, so
+the emitter rides along whichever harness a stack uses. Instances: devbox's update check; uv
+fetching a managed CPython from releases.astral.sh (homelab#107, ~272 drops); opencode's
+auto-update + model-registry pair (homelab#456). Auto-update is also a **pin violation**, not just
+egress noise: ADR-107's harness monoculture is mitigated by version-pinned images, and a
+self-updating binary defeats that even where egress would allow it.
+
+**New-binary intake (spike-lite):** a new binary entering agent-base or the env card gets ONE
+monitor-mode probe ride with a drop read (`hubble_drop_total{reason="POLICY_DENIED"}` by
+destination) before fleet exposure — new destinations either earn their FQDN via the harvest rule
+above or get killed at the tool. The `AgentWorkerEgressDropped` alert stays the regression belt
+for the conditional paths a single probe misses (all three instances above were caught by the
+belt, not by a probe — the belt is the reliable layer; the probe only buys the days of alert
+noise back).
+
 ## Consumption + migration state
 
 `coordinator-scan.sh`'s `stacks_json()` (the ONE swap-point) reads
