@@ -1,0 +1,39 @@
+# Workflow-controller memory early-warning (homelab#492).
+#
+# WHY THIS EXISTS. #487 raised the controller from 128Mi/256Mi to 512Mi/1Gi after a ~29-day slow
+# climb into the old cap OOMKilled it (#449). The 4x buffer buys runway; it does not observe it.
+# Until this rule, the only signal that the buffer was being consumed was `PodSigkilled` — which
+# fires AFTER the controller has died and dropped its workflow-state cache. The controller's memory
+# IS its informer cache, sized by the COUNT of retained Workflow objects, not by load — so this
+# alert is the BELT for the leak class the #510 ttl/podGC defaults structurally cannot touch: TTL
+# fires only after completion, so workflows stuck Running/Pending forever accumulate ungoverned, and
+# a submitter with an explicit spec-level ttlStrategy bypasses the controller default. A restart is
+# NOT a remedy (it re-lists everything and refills within minutes) — the description carries the
+# actual diagnostic (the count + the oldest non-terminal), not a restart instruction.
+#
+# SHAPE. The generic ContainerMemoryNearLimit (argocd/platform/values/kube-prometheus-stack.yaml,
+# node-health group) is namespace-pinned to kube-system|longhorn-system and FU-112(b) daemon-
+# specific (cilium-agent / longhorn-manager), so it does not cover `argo`. Deliberately NOT solved
+# by widening its selector — a shared generic description cannot hold the retention diagnostic this
+# rule needs. The join shape (working-set / on (namespace,pod,container) limits) is reused verbatim.
+# Threshold 0.8 vs the measured steady state (2026-08-18, ratio 0.144→0.158, ~147→161Mi of the 1Gi
+# raised by #487) leaves ~5x headroom, so the rule does not fire on arrival.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: argo-workflows-controller-memory
+  namespace: monitoring
+  labels:
+    app: argo-workflows-alerts
+spec:
+  groups:
+    - name: argo-workflows-memory
+      rules:
+        - alert: WorkflowControllerMemoryNearLimit
+          expr: container_memory_working_set_bytes{namespace="argo",container="controller"} / on (namespace, pod, container) kube_pod_container_resource_limits{namespace="argo",resource="memory"} > 0.8
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "argo-workflows controller at {{ $value | humanizePercentage }} of its memory limit"
+            description: "The argo-workflows controller has sat at {{ $value | humanizePercentage }} of its 1Gi limit for 15m — the early warning before a #449-class OOM, not the after-the-fact PodSigkilled. The controller's memory is its informer cache, sized by the COUNT of retained Workflow objects, not by load, so diagnose the COUNT, not the pod: `kubectl get workflows -A --no-headers | wc -l` against the ~7d TTL bound (workflowDefaults, #510) of ~590 (measured 2026-08-18) — a reading well above that, or with OLD non-terminal (Running/Pending) workflows (`kubectl get workflows -A` shows age; TTL fires only after completion), is a retention leak: clear the stuck non-terminals / fix the submitter whose spec-level ttlStrategy bypasses the controller default. Legit volume growth instead means RAISE the limit (requests/limits in argocd/platform/argo-workflows.yaml, last raised to 512Mi/1Gi by #487). A restart only buys minutes — it re-lists everything and refills within minutes."
