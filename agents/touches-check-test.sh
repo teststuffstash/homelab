@@ -101,6 +101,27 @@ test_escapes "multiple governance tiers" \
   "$(printf 'docs/file.md\nagents/file.sh\nscripts/file.sh\npolicy/rule.rego\n.github/workflow.yaml\ntofu/github/main.tf\ntofu/cloudflare/dns.tf\n')" \
   "$(printf 'agents/file.sh|governance\nscripts/file.sh|governance\npolicy/rule.rego|governance\n.github/workflow.yaml|governance\ntofu/github/main.tf|governance\ntofu/cloudflare/dns.tf|governance\n')"
 
+# ── CASE 11: the replay-tree exemption (ADR-097 addendum, 2026-08-18) ──────────────────────
+# A changed path under agents/replay/ is NEVER an escape: the ADR-103 ratchet COMPELS a replay
+# touch on every clause PR, and flagging the compelled edit as a governance escape is the
+# PR#547 defect. Non-replay escapes in the same diff still report.
+test_escapes "replay paths are never escapes" \
+  "agents/coordinator-scan.sh" \
+  "$(printf 'agents/coordinator-scan.sh\nagents/replay/fixtures/new/fixture.yaml\nagents/replay/README.md\nagents/model-scout.sh\n')" \
+  "agents/model-scout.sh|governance"
+
+# ── CASE 12: replay exempt even with an UNDECLARED footprint ────────────────────────────────
+test_escapes "replay exempt in the undeclared branch too" \
+  "" \
+  "$(printf 'agents/replay/fixtures/x/bridge.sh\ndocs/new.md\n')" \
+  "docs/new.md"
+
+# ── CASE 13: replay-ADJACENT names still escape with the governance marker ──────────────────
+test_escapes "replay-adjacent path is not exempt" \
+  "docs/**" \
+  "$(printf 'agents/replay-foo/file.sh\n')" \
+  "agents/replay-foo/file.sh|governance"
+
 if [ "$fails" -gt 0 ]; then
   echo "touches-check-test: ${fails} FAILED"
   exit 1

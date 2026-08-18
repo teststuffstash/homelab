@@ -87,10 +87,12 @@ follows fix-density per ADR-103, never big-bang):
    does not generate either side.
 5. **Families become directories** — `fixtures/<family>/…`, shared bridges at family root (ends
    the 19 `../` reaches and the 48 script copies). One mechanical rename commit + FSM path
-   updates. This is also FU-167 leg (b): per-family footprint paths make clause-issue
-   `Touches:` declarations disjoint; the companion scan-side option (exempt `agents/replay/**`
-   from the footprint intersection outright — zero real conflicts measured over 41 PRs) is
-   FU-167/FU-168's call.
+   updates. This is also FU-167 leg (b) — though its footprint half is now moot: **the
+   companion option DECIDED 2026-08-18 (operator): `agents/replay/**` is EXEMPT from footprint
+   semantics outright** (ADR-097 addendum — `fp_replay_exempt` in `agents/footprint.sh`,
+   consumed by both the scan hold and the reviewer's `touches-check.sh`; the 41-PR
+   zero-conflict measurement was the evidence). `Touches:` lines stop declaring this tree
+   entirely; family dirs still land for dedup/ownership, not for declaration disjointness.
 6. **Hermeticity contract** (homelab#329) — default: a fixture runs anywhere bash+awk+jq exist;
    anything more declares `requires:` and `run.sh` exits 2 naming the tool (the scan-wedge
    precedent promoted to rule). **Ambient env is part of the contract** (2026-08-18, three
