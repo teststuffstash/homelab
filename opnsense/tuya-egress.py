@@ -28,6 +28,18 @@ Plain NTP is unauthenticated (no NTS in this firmware), so the spoof is transpar
 address it silently leaves the fence — which is the same failure that would break tuya_local, so
 both depend on those reservations.
 
+⚠ NOUS A1 COLD-BOOT WEDGE (learned 2026-08-18, the #221 resolution): the two NOUS A1 sockets
+(product m6ei1t46nqn0p0p9) WEDGE behind this fence — the frozen-measurement state that hit all
+5 Tuya devices started the day after the fence went up (08-08/09), and a fenced COLD BOOT
+leaves a NOUS A1 half-alive: TCP 6668 accepts but the local protocol never answers (tinytuya
+err 902, looks exactly like a rotated key — it is not; the key survives). Recovery recipe,
+verified live: open the door for the device (below), wait ≤1 min for its cloud registration
+retry — the local protocol comes up IMMEDIATELY with the OLD key — then close the door; the
+device keeps serving locally through the re-applied fence. The 9y0qx7npuny0pnwt plugs
+(pve/opnsense/laptop3/laptop4) tolerate fenced cold boots but their measurement task can freeze
+the same way; a bare wall cycle cleared laptop4's. Expect a NOUS wedge again on any power loss:
+door-open + close is the fix, no re-extraction needed.
+
 TO PAIR A NEW DEVICE (or re-extract a rotated local_key): remove its IP from HOSTS below and
 re-run, pair/extract, then put it back and re-run. Re-extraction needs the cloud too, so it is the
 same door for both.
