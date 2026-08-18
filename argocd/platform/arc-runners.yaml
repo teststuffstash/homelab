@@ -35,7 +35,11 @@ spec:
           namespace: arc-systems
           name: arc-controller-gha-rs-controller
         runnerScaleSetName: homelab-ephemeral
-        minRunners: 0
+        # minRunners 0→1 TRIAL (operator, 2026-08-18, toward a ~2-min ci wall): scale-from-zero made
+        # every first job pay pod spin-up + registration — measured runs spent ~4min queued against a
+        # 2m38s job. One warm runner ≈ 2.5Gi resident on the ephemeral tier. Measure via run
+        # startedAt→job-start deltas; revert to 0 if the win doesn't show or the tier needs the RAM.
+        minRunners: 1
         # 2 ephemeral nodes (wk-metal-01/-02, ~4 CPU + 7 GB each). Since 2026-08-11 runner pods carry
         # memory REQUESTS (~2.5Gi/pod incl. dind) + a soft hostname spread (see the template comment), so
         # packing is honest and ~2 land per node — but THIS cap remains the concurrency contract
