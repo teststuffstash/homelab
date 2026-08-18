@@ -22,7 +22,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"
-FIX="$ROOT/agents/replay/fixtures/board-classification"
+FIX="$ROOT/agents/replay/fixtures/board-classification/board-classification"
 STUBS="$ROOT/agents/replay/stubs"
 NOW=1787054400   # 2026-08-18T12:00:00Z — the world's pinned clock (world/ createdAt rows, fixture.yaml)
 

@@ -136,7 +136,9 @@ def render(model: dict, model_path: Path, failures: list[str]) -> list[str]:
                 if not (ROOT / rp).exists():
                     failures.append(f"{t['id']}: replay path does not exist: {rp}")
                 if rp.startswith("agents/replay/fixtures/"):
-                    REFERENCED_FIXTURES.add(Path(rp).name)
+                    # keyed by RELPATH (fixtures/<family>/<fixture>) so two families sharing a
+                    # leaf name (probe-fail, both, clear…) never cross-wire in the register
+                    REFERENCED_FIXTURES.add(rp[len("agents/replay/fixtures/"):].rstrip("/"))
             replay_note = f" · replay: {', '.join(Path(rp).name for rp in replay_paths)}"
         elif unreplayed:
             replay_note = f" · ⚠ unreplayed: {unreplayed}"
@@ -166,6 +168,106 @@ def render(model: dict, model_path: Path, failures: list[str]) -> list[str]:
     return lines
 
 
+def read_fixture_pins(path: Path) -> set[str]:
+    """Read the `pins:` list from a fixture.yaml using the harness's OWN subset rules.
+
+    A fixture.yaml is deliberately NOT full YAML — the harness parses only `key: value` scalars
+    and `- item` lists (run.sh's parse_fixture), and the `scrub:` sed patterns contain `: ` which
+    yq/pyyaml reject. So this mirrors parse_fixture's two line shapes for the ONE key the
+    bidirectional lint needs: `pins:` followed by `- <id>` items (the block-list form the harness
+    parser emits as `L pins <id>`), plus the inline `pins: [A, B]` scalar form. Anything else is
+    ignored — this is a narrow field read, not a reimplementation of the harness.
+    """
+    pins: set[str] = set()
+    cur: str | None = None
+    with open(path) as f:
+        for raw in f:
+            s = raw.strip()
+            if not s or s.startswith("#"):
+                continue
+            m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):(.*)$", s)
+            if m:
+                cur, rest = m.group(1), m.group(2).strip()
+                if cur == "pins" and rest.startswith("[") and rest.endswith("]"):
+                    for item in rest[1:-1].split(","):
+                        item = item.strip().strip("\"'")
+                        if item:
+                            pins.add(item)
+                continue
+            m = re.match(r"^-(.*)$", s)
+            if m and cur == "pins":
+                v = m.group(1).strip().strip("\"'")
+                if v:
+                    pins.add(v)
+    return pins
+
+
+def check_pins_agreement(fixtures_dir: Path, failures: list[str]) -> None:
+    """FU-167 move 4, direction B: the bidirectional `pins:` ↔ FSM `replay:` agreement lint.
+
+    The FSM stays the model home — this checks agreement, it never generates either side.
+    Direction A (replay: paths must exist) lives in render(); here we add direction B:
+      * every fixture declaring `pins: [X]` must be named by transition X's `replay:` list;
+      * every fixture named by a transition's `replay:` list must declare that transition in
+        its `pins:`.
+    Disagreement in either direction is a red with BOTH sides printed. A fixture with no
+    `pins:` is legal (not everything pins a transition). Tables (mode: table) carry pins on
+    the family fixture.yaml, so they are covered here like any other fixture.
+    """
+    if not fixtures_dir.is_dir():
+        return
+    # transition id -> sorted fixture relpaths, from the FSM replay: lists
+    fsm: dict[str, set[str]] = {}
+    for y in sorted((ROOT / "docs/agents").glob("*-fsm.yaml")):
+        model = load_model(y)
+        for t in model["transitions"]:
+            for rp in t.get("replay") or []:
+                if rp.startswith("agents/replay/fixtures/"):
+                    fsm.setdefault(t["id"], set()).add(rp[len("agents/replay/fixtures/"):].rstrip("/"))
+
+    # fixture relpath -> set of declared pins (from fixture.yaml)
+    declared: dict[str, set[str]] = {}
+    for p in sorted(fixtures_dir.iterdir()):
+        if not p.is_dir():
+            continue
+        if (p / "fixture.yaml").is_file():
+            cands = [p]
+        else:
+            cands = [c for c in sorted(p.iterdir()) if (c / "fixture.yaml").is_file()]
+        for c in cands:
+            rel = str(c.relative_to(fixtures_dir))
+            pins = read_fixture_pins(c / "fixture.yaml")
+            if pins:
+                declared[rel] = pins
+
+    # direction B1: fixture pins:X ⇒ X's replay: list names the fixture
+    for rel, pins in sorted(declared.items()):
+        for tid in sorted(pins):
+            if tid not in fsm:
+                failures.append(
+                    f"pins agreement ({rel}): declares pins: [{tid}] but no FSM transition "
+                    f"{tid} has a replay: list — the transition id is unknown or unpinned")
+                continue
+            if rel not in fsm[tid]:
+                failures.append(
+                    f"pins agreement ({rel}): declares pins: [{tid}] but {tid}'s replay: list "
+                    f"does not name {rel}\n"
+                    f"    fixture says: pins: [{', '.join(sorted(pins))}]\n"
+                    f"    {tid} says:    replay: [fixtures/{rel}] is NOT among "
+                    f"{', '.join(sorted('fixtures/' + r for r in fsm[tid]))}")
+
+    # direction B2: FSM replay: names a fixture ⇒ that fixture declares the transition in pins:
+    for tid, rels in sorted(fsm.items()):
+        for rel in sorted(rels):
+            fx_pins = declared.get(rel, set())
+            if tid not in fx_pins:
+                failures.append(
+                    f"pins agreement (fsm {tid}): {tid}'s replay: list names "
+                    f"fixtures/{rel}, but that fixture does not declare pins: [{tid}]\n"
+                    f"    {tid} says:    replay: [fixtures/{rel}]\n"
+                    f"    fixture says: pins: [{', '.join(sorted(fx_pins)) or '—'}]")
+
+
 def main() -> int:
     failures: list[str] = []
     totals = {"transitions": 0, "gaps": 0}
@@ -182,12 +284,32 @@ def main() -> int:
 
     fixtures_dir = ROOT / "agents/replay/fixtures"
     if fixtures_dir.is_dir():
-        unref = [p.name for p in sorted(fixtures_dir.iterdir())
-                 if p.is_dir() and not p.name.startswith("_selftest")
-                 and p.name not in REFERENCED_FIXTURES]
+        # FU-167 move 5: a fixture lives at depth 1 (table) OR depth 2 (fixtures/<family>/<fixture>).
+        # Unref is keyed by RELPATH so the visibility line names actual fixtures, not family dirs.
+        def is_fixture(p: Path) -> bool:
+            return p.is_dir() and (p / "fixture.yaml").is_file()
+
+        def not_selftest(rel: str) -> bool:
+            return not rel.split("/")[0].startswith("_selftest")
+
+        unref = []
+        for p in sorted(fixtures_dir.iterdir()):
+            if p.is_dir():
+                if is_fixture(p):
+                    rel = p.relative_to(fixtures_dir)
+                    if not_selftest(str(rel)) and str(rel) not in REFERENCED_FIXTURES:
+                        unref.append(str(rel))
+                else:
+                    for leaf in sorted(p.iterdir()):
+                        rel = str(leaf.relative_to(fixtures_dir))
+                        if is_fixture(leaf) and not_selftest(rel) and rel not in REFERENCED_FIXTURES:
+                            unref.append(rel)
         if unref:
             print(f"  ℹ fixtures no FSM transition references (helper-level pins — visibility, "
                   f"not failure): {', '.join(unref)}")
+
+    # FU-167 move 4, direction B: the bidirectional pins: ↔ replay: agreement lint
+    check_pins_agreement(fixtures_dir, failures)
 
     if failures:
         print("merge-path-lint FAILURES:")

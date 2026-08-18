@@ -1,0 +1,42 @@
+# homelab#226 — an issue whose blockers have ALL closed, still unlabelled, must get its own line
+# class instead of a row buried in the generic 🌱 list.
+#
+# THE LIVE MISS THIS PINS. oracle-fleet#225 + oracle-iac#322 were filed 2026-08-08 unlabelled,
+# sequenced behind oracle-fleet#215. #215 closed at 04:23Z on 2026-08-09 and nothing fired for 12h:
+# the needs-meta `unlabeled >24h` clause covers PLATFORM repos only, and the 🌱 slice reports an
+# unlabelled stack issue identically before and after its blockers close. Nothing anywhere said
+# "the gate this issue was waiting on is gone".
+#
+# THE SIX SHAPES, one per thing the clause has to tell apart:
+#   #90 JAIL-authored (a real user login), unlabelled, one CLOSED blocker, >24h  → 🔓 UNBLOCKED-UNLABELED
+#       This is the live shape. The 🌱 slice is bot-only and could never see it — which is exactly
+#       why this clause is not author-filtered.
+#   #91 bot-authored, unlabelled, TWO closed blockers, >24h                      → 🔓 …, and NOT in 🌱
+#       The promotion is the point: one issue, one line, the sharper one.
+#   #92 bot-authored, unlabelled, closed blocker, but createdAt in the FUTURE    → 🌱 only
+#       The age leg. Recorded worlds only get OLDER, so a "young" timestamp recorded as a real past
+#       date would silently age past the cutoff and this row would stop testing anything within a
+#       day. A future date is the only recording that stays young — deliberate, not a typo.
+#   #93 bot-authored, unlabelled, NO blocked-by edges at all                     → 🌱 only
+#       Never blocked ⇒ nothing was resolved. This is what keeps the new class from degenerating
+#       into "every unlabelled issue", which is the 🌱 slice's job and the needs-meta clause's.
+#   #94 carries agent-fix/agent/queued, closed blocker                           → neither list
+#       A labelled issue is reachable by some clause; this report is about the unreachable ones.
+#   #95 carries `bug` only, closed blocker, >24h                                 → 🔓 …
+#       "Unlabelled" means NO `agent*` label — the same predicate meta-needs-attention.sh clause 3
+#       uses — not "no labels". A taxonomy label makes no clause able to reach it.
+#
+# The 🌱 lines are asserted in full on purpose: a filter that quietly swallowed real sprouts would
+# also make the promotion look like it worked.
+pins:
+  - IL-T01
+name: unblocked-unlabeled-surfaces
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:sprout-report
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

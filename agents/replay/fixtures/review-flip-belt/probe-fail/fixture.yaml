@@ -1,0 +1,26 @@
+# homelab#501 — the review-flip belt's rule-#6 arm: an UNREADABLE open-PR read writes nothing and
+# reports, leaving today's behaviour whole. `prsjson` is the one source of truth for "does an open
+# PR strongly reference this issue" — if it is not a readable array, the belt must not guess that
+# the answer is "no" (a flip is a label write; never fail INTO a write).
+#
+# CONDITION UNDER REPLAY. One in-progress issue (#60, which in the main fixture's world flips on
+# the strong link of PR #112), and an open-PR read that is GARBAGE — the shape a dead probe leaves
+# behind before the scan's own zeroing, and the shape the belt validates for itself rather than
+# trusting the caller.
+#
+# THE CONTRACT:
+#   1. NOTHING is written: no `--add-label agent/review`, no `--remove-label agent/in-progress`,
+#      no comment. The absence of CALL lines in the stream is the assertion.
+#   2. The hold is REPORTED, not silent — the belt's owner is the operator reading the orphans
+#      digest, and an invisible hold is how a belt decays.
+#   3. The belt keeps today's behaviour exactly: the issue stays `agent/in-progress` and every
+#      downstream clause (C4/C5, footprint hold, WIP cap) reads it as before.
+pins:
+  - MP-T14
+name: review-flip-belt-probe-fail
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:review-flip-belt
+  - file:post.sh

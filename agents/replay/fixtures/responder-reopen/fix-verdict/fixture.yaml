@@ -1,0 +1,32 @@
+# homelab#228 — leg B: the SAME reopen, a `fix` verdict, and the queue re-earned from scratch.
+#
+# CONDITION UNDER REPLAY. Byte-for-byte the world of `responder-reopen-report-only` — same alert,
+# same two closed candidates, same stale label set on homelab#103, same reopen — with exactly one
+# line changed: the verdict this session recorded on #103's body is `fix-verdict: fix` instead of
+# `report-only`. Holding the world constant across the pair is the point: the ONLY thing that may
+# move the dispatch is the fresh diagnosis, so the difference has to show up in the CALL stream.
+#
+# THE CONTRACT:
+#   1. The strip is IDENTICAL to leg A's, and that is the operator's pre-decision on #228 made
+#      executable: strip on EVERY subject-reopen regardless of verdict, then let the verdict
+#      re-add. A conditional keep — "this issue is going to be queued anyway, leave `agent-fix` on"
+#      — is how the next contradiction ships, and it would show up here as a missing edit.
+#   2. The verdict half then re-applies `agent-fix` and rings `/fix-verdict`, off the body line it
+#      just read — exactly what it does for an issue filed today. `agent-fix` alone is INERT by the
+#      scan's own predicate (dispatch needs `agent-fix ∧ agent/queued`, coordinator-scan.sh:8); the
+#      other half of the queue pair is the debouncer's to apply after its set-pass, which is why
+#      no `agent/queued` write appears here and must not.
+#   3. So the label churn within one run is deliberate and asserted: three labels off, one back on.
+#      The thread ends inert-but-nominated instead of arriving pre-queued on merged work.
+pins:
+  - IL-T03
+name: responder-reopen-fix-verdict
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:../report-only/bridge.sh
+  - block:responder-reopen-presnap
+  - file:../report-only/session.sh
+  - block:responder-reopen-strip
+  - block:responder-verdict-dispatch
+  - file:../report-only/post.sh

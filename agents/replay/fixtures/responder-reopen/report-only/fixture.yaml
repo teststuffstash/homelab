@@ -1,0 +1,36 @@
+# homelab#228 — leg A: a REPORT-ONLY subject-reopen leaves a RECORD, and dispatches nothing.
+#
+# CONDITION UNDER REPLAY. The live 2026-08-09 failure. NodeDiskIOSaturation fires on wk-01; the
+# subject `node:wk-01` already has homelab#103, CLOSED, and #103 is wearing its previous life's
+# whole label set — `agent-fix` + `agent/queued` from a CPU fix that already MERGED, plus
+# `agent/done` from its closeout. The FU-133 subject belt reopens it, and GitHub restores the labels
+# with the thread. On the day, the next queued-dispatch unit met `agent/queued ∧ agent/done` on
+# merged work and refused via the FU-069 breaker — correct, and the wrong place for it: a
+# reopen-of-a-completed-issue is not an anomaly, it is what two belts will do again next week.
+#
+# THE CONTRACT:
+#   1. BOTH belts are snapshotted before the session — subject AND alert-fp. The live case came in
+#      on the subject one, and a guard that only watched the fingerprint would have missed it.
+#   2. #103 came back OPEN, so its whole lifecycle set is stripped in ONE edit:
+#      `agent/queued,agent/done,agent-fix`. Unconditional, per the operator's pre-decision on #228
+#      — no verdict is consulted, and the labels are not filtered for "probably still true".
+#   3. #77 was a candidate and stayed CLOSED, so it draws NO call at all. Compare-then-write: the
+#      guard fires on a REOPEN, not on the mere existence of a marker-carrying closed thread.
+#   4. NO comment anywhere. The reopened thread stays open, so a machine comment on it is never the
+#      last word and repeats once per flap cycle (#148). The workflow log is the audit trail.
+#   5. NO DISPATCH. The verdict half then reads #103's body, finds `fix-verdict: report-only`, and
+#      leaves it inert — no `agent-fix` POST, no `/fix-verdict` bell. The stripped thread stays a
+#      record. Its sibling fixture `responder-reopen-fix-verdict` holds the same world with the one
+#      byte that matters changed, and is the other half of this assertion.
+pins:
+  - IL-T03
+name: responder-reopen-report-only
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-reopen-presnap
+  - file:session.sh
+  - block:responder-reopen-strip
+  - block:responder-verdict-dispatch
+  - file:post.sh
