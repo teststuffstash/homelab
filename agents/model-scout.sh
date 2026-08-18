@@ -406,8 +406,12 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
           jq -cn --arg m "$cid" --arg v "$verdict" --argjson f "$cfree" \
             '{model:$m, canary_verdict:$v, free:$f}' >> "$WORK/canary.jsonl"
         done
-    # Common-cause (leg 4): N≥2 identical NON-clean verdicts in one tick ⇒ the rail is the common
-    # factor, not the models — post ONE scout-infra datum, suppress every per-model verdict.
+    # Common-cause (leg 4): the WHOLE tick's verdicts (≥2 of them) identical and non-clean ⇒ the
+    # scout's own plumbing is the common factor, not the models — ONE scout-infra datum, zero
+    # per-model verdicts. Deliberately whole-set, NOT any-subset (homelab#506 ruling, 2026-08-18):
+    # a clean sibling REFUTES the scout-infra hypothesis by construction (the stack demonstrably
+    # completed a loop), so a partial identical-failure group stays per-model and rides the
+    # contradiction rule's retry instead. The founding case (#234) was all-canaries-bogus.
     COMMON_CAUSE="$(jq -s -r '
       map(.canary_verdict) as $v
       | if ($v | length) >= 2 and (all($v[]; . == $v[0])) and ($v[0] != "clean") then $v[0]
