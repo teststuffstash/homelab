@@ -1,0 +1,5 @@
+CALL gh pr view 42 --repo teststuffstash/test-project --json reviews,comments,labels,commits,headRefOid
+OUT FINAL: 10
+OUT TERMINAL_OK: 0
+ERR exit-contract: review-state re-read FAILED — cannot prove a terminal exists; failing closed
+RC 10
