@@ -93,7 +93,10 @@ meant to avoid.)
   ~0.87–0.89). No new Goal until the v1.2 machinery (ADR-106 checkpoints + FU-168 famine fixes)
   is complete AND the budget recovers; Bucket B's launch gate inherits this as a further
   precondition. Current mode instead: fast double-reviewed subagent chunks (bullet above).
-- **Soaks**: iac-sentinel shadow (FU-106); router shadow (FU-095); retro first UNATTENDED fire
+- **Soaks**: argo-workflows SECOND backlog sweep ~2026-08-25 (#521: purged 293 of 798 on 08-18;
+  the remaining ~500 completed pre-default workflows never self-delete — re-run the purge once
+  they cross 7d, then the #510 defaults own the curve alone) · minRunners:1 trial readout
+  (run-pickup deltas vs the ~4min scale-from-zero baseline) · iac-sentinel shadow (FU-106); router shadow (FU-095); retro first UNATTENDED fire
   2026-08-17 (FU-058); FU-148 acceptance (first organic env-red self-retry); FU-149 datum
   ~08-20; or-op#34 (first daily-429); renovate-approve fix (#114) = next Renovate wave shows
   ONE approval per head; check-#3 shadow warnings stay zero.
