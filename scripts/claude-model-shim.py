@@ -625,9 +625,7 @@ def self_test() -> int:
     ANTHROPIC_BASE, GO_BASE, ZEN_BASE, GO_KEY, PORT = \
         "http://127.0.0.1:18191", "http://127.0.0.1:18192/zen/go", "http://127.0.0.1:18193/zen", \
         "go-test-key", 18190
-    stub("anthropic", 18191)
-    stub("go", 18192)
-    stub("zen", 18193)
+    stubs = [stub("anthropic", 18191), stub("go", 18192), stub("zen", 18193)]
     threading.Thread(target=serve, daemon=True).start()
     import time
     time.sleep(0.3)
@@ -728,9 +726,23 @@ def self_test() -> int:
     st, _ = call("opencode/nemotron-3-ultra-free")
     check(st == 502, "zen leg without a key: refused loudly (502), never forwarded")
 
+    for s in stubs:  # stop the stub accept loops so nothing races the exit (homelab#486)
+        s.shutdown()
     print(("self-test: PASS" if not fails else f"self-test: {len(fails)} FAILURES"))
     return 0 if not fails else 1
 
 
 if __name__ == "__main__":
-    sys.exit(self_test() if "--self-test" in sys.argv else serve())
+    if "--self-test" in sys.argv:
+        rc = self_test()
+        # homelab#486: the self-test exits through os._exit, NOT sys.exit — CPython's
+        # interpreter finalization races the buffered-stderr lock still held by the
+        # self-test's daemon threads (stub servers, the shim's own serve loop, the
+        # fire-and-forget metering threads), aborting _enter_buffered_busy AFTER
+        # "self-test: PASS" and making the CI gate exit 134. os._exit skips
+        # finalization entirely. Deliberately self-test-only: the serve() path keeps
+        # sys.exit so the interpreter stays in charge of its own shutdown.
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(rc)
+    sys.exit(serve())
