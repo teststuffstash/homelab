@@ -85,12 +85,14 @@ meant to avoid.)
   2026.8.0 upgrade won't either** (still worth doing for the separate loop-death bug).
   **Remedy for all 5 = physical power cycle — PROVEN 2026-08-18 on laptop4** (wall cycle;
   the X250's battery carried the node so it never left Ready — cordon/drain was belt-only;
-  sensor thawed 8.0-frozen → 9.8 → 17.9 live within minutes). Remaining 3 plugs + gaas, in
-  rising ceremony: ex-aquarium (⚠ RENAMED LOAD — operator says it hosts something else now,
-  ~30W, identify before cycling; plug rename = HA entity registry + a git sweep of the stale
-  alert regex/dashboards/power-measurements, no Tuya cloud needed) → konditsioneer (cuts
-  thinkcentre = Longhorn fast tier; cordon/drain first, node boots on AC restore) → pve
-  (shut down the VMs first) → gaas breaker. Original diagnosis detail:
+  sensor thawed 8.0-frozen → 9.8 → 17.9 live within minutes). **PLUGS RENAMED 2026-08-18**
+  (same session): the NOUS A1s are now `thinkcentre` (ex-aquarium, powers the ThinkCentre,
+  remote power = switch.tuyalocal_thinkcentre) and `hp` (ex-konditsioneer, powers hp-01) —
+  HA registry + git sweep + wallet devices.json + dnsmasq all updated, dead *_corrected
+  sensors deleted. Remaining cycles, rising ceremony: **thinkcentre plug** (cordon/drain the
+  ThinkCentre first — Longhorn fast tier; box auto-boots on AC restore) → **hp plug**
+  (cordon/drain hp-01; AC-restore flaky → WoL to bring it back) → **pve** (shut down the VMs
+  first) → **gaas breaker**. Original diagnosis detail:
   if post-cycle 914 persists → key rotated, re-extract via the tuya-egress.py door; 914
   re-confirmed 08-18, HA entry sits in setup_retry auto-retrying). The 4 plugs are cyclable at
   the wall BUT each cycle cuts its load (pve = the hypervisor!) — needs operator sequencing.
