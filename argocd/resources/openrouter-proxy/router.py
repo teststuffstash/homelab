@@ -25,6 +25,7 @@ import json
 import math
 import os
 import random
+import re
 import sqlite3
 import sys
 import threading
@@ -427,6 +428,107 @@ def record_provider_event(model: str, provider: str, status: int) -> None:
              "5xx" if status >= 500 else "other")
     _write("INSERT INTO provider_events VALUES(?,?,?,?,?)",
            (time.time(), model, provider or "", status, klass))
+
+
+# ── ADR-107 flip-acceptance 1: the requested≠served model drift belt (homelab#515) ─────────────
+# PR#407's class — every claude/haiku worker ride silently running the CLI default
+# (opus-5[1m]) for 23 days — was visible in data already collected, and nothing joined the two
+# sides. Chainless makes drift MORE likely (per-ride alias remapping: slot maps, failover
+# ladders, --pick-rail), so the belt is a flip prerequisite. The router holds BOTH sides for the
+# OpenRouter and Go rails: run_reports / the forwarded request's model id (requested) and the
+# /generation harvest's served_model + provider (served). The claude-harness/subscription rail's
+# served side is the OTLP claude_code_* metrics (an in-cluster collector), which the router does
+# not see — that arm lives in github-exporter's prometheusrule.yaml (agent-model-drift group).
+_MODEL_FAMILY_SUFFIX_RE = re.compile(r"-(\d{4}|\d{6,8})$")
+
+
+def model_family(model: str) -> str:
+    """The FAMILY of a model id, the level at which requested and served are compared. The raw
+    ids legitimately differ across the two sides even when a ride is healthy — date/version
+    stamps (deepseek/deepseek-v4-flash-0731, …-20260423), context brackets (claude-opus-5[1m]),
+    rail prefixes (opencode-go/, anthropic/, claude/) and claude aliases (haiku →
+    claude-haiku). Stripping to the family is what keeps a healthy ride from minting false
+    drift; date/version stamps are stripped to their family even when the model does not match
+    a vendor/model pattern (e.g. a bare opencode-go/deepseek-v4-flash-0731 after prefix strip),
+    so a model's identity is preserved and no unknown id is silently folded."""
+    raw = (model or "").strip()
+    raw = raw.split(":")[0]                     # drop a :free / :tag suffix
+    raw = re.sub(r"\[[^\]]*\]", "", raw)        # drop [1m] / [2m] context brackets
+    for prefix in ("opencode-go/", "openrouter/", "opencode/", "claude/", "anthropic/", "openai/"):
+        if raw.startswith(prefix):
+            raw = raw[len(prefix):]
+            break
+    if raw in ("haiku", "sonnet", "opus"):      # the claude aliases → the family they serve as
+        return f"claude-{raw}"
+    cm = re.match(r"^(claude)-([a-z0-9]+)", raw)  # claude-opus-5[1m] → claude-opus
+    if cm:
+        return f"{cm.group(1)}-{cm.group(2)}"
+    m = re.match(r"^([^/]+)/([a-z0-9][a-z0-9._-]*)", raw)  # vendor/model[-stamp] → vendor/model
+    if m:
+        return f"{m.group(1)}/{_MODEL_FAMILY_SUFFIX_RE.sub('', m.group(2))}"
+    return _MODEL_FAMILY_SUFFIX_RE.sub("", raw)
+
+
+def model_drift_rows(window_s: int = 7 * 86400) -> tuple[list, list]:
+    """The requested≠served join over the router's OWN tables, per rail (homelab#515).
+
+    Returns (drift, unverifiable) — drift rows are (rail, stack, role, requested, served,
+    provider, n) where the SERVED family differs from the REQUESTED family; unverifiable rows
+    are (rail, stack, role, requested, n) where a requested run has NO served-side evidence in
+    the store. Absence is counted, never matched against nothing — a run whose served side is
+    missing (a harvest miss, an OTLP failure, a harness death before export) must not read as
+    agreement, the FU-108/FU-125 silent-success class.
+
+    Rail handling is deliberate: the OpenRouter rail's served side is the /generation harvest
+    (generations.requested_model → served_model + provider — the M5 'served model' the ledger
+    wanted); the Go rail's served side is the self-metered go_usage rows (the proxy strips the
+    opencode-go/ prefix and sends the bare id, so a Go ride's requested and served ids are the
+    SAME string — the verifiable signal is presence of a ledger row, not a family match); the
+    subscription/claude rail's served side is OTLP claude_code_* which the router cannot see,
+    so it is excluded here (the github-exporter arm owns it).
+    """
+    now = time.time()
+    since = now - window_s
+    # OpenRouter served-side ground truth: requested → served per harvested generation.
+    gen = _read(
+        "SELECT requested_model, served_model, provider, COUNT(*) FROM generations "
+        "WHERE ts > ? GROUP BY requested_model, served_model, provider", (since,))
+    by_req_fam: dict[str, list] = {}
+    for req, served, provider, n in gen:
+        rf = model_family(req)
+        if served:
+            by_req_fam.setdefault(rf, []).append((model_family(served), served, provider, n))
+    drift: list = []
+    unver: list = []
+    reports = _read(
+        "SELECT model, rail, stack, role, COUNT(*) FROM run_reports "
+        "WHERE ts > ? AND rail != '' GROUP BY model, rail, stack, role", (since,))
+    for model, rail, stack, role, n in reports:
+        rf = model_family(model)
+        if rail == "opencode-go":
+            # The Go rail's served side is the self-metered go_usage ledger (bare model ids,
+            # prefix stripped at the proxy). A requested family must appear among the stack's
+            # served families; absent that, either the stack has NO ledger rows (unverifiable —
+            # absence never reads as agreement) or it served a DIFFERENT family (drift, e.g. a
+            # slot map redirected the requested flash to kimi-k3).
+            served = _read(
+                "SELECT DISTINCT model FROM go_usage WHERE ts > ? AND stack = ?", (since, stack))
+            if not served:
+                unver.append(("opencode-go", stack, role, model, n))
+            elif not any(model_family(m) == rf for m, in served):
+                # A request that rode the Go rail with a different family than requested.
+                served_fams = sorted({model_family(m) for m, in served})
+                for sf in served_fams:
+                    drift.append(("opencode-go", stack, role, model, sf, "", n))
+        elif rail == "openrouter":
+            fam_rows = by_req_fam.get(rf)
+            if not fam_rows:
+                unver.append(("openrouter", stack, role, model, n))
+            else:
+                for sf, served, provider, cnt in sorted(fam_rows):
+                    if sf != rf:
+                        drift.append(("openrouter", stack, role, model, served, provider, cnt))
+    return drift, unver
 
 
 def record_rotation(source: str, entries: list) -> int:
@@ -1291,6 +1393,31 @@ def metrics_lines() -> list[str]:
                            (now - 7 * 86400,)):
         if tp:
             lines.append(f'router_observed_cache_hit{{model="{m}"}} {(tc or 0) / tp:.3f}')
+    # ── ADR-107 flip-acceptance 1 (homelab#515): the requested≠served drift belt ──
+    # The join lives in Python (model_family) over the router's own store, so it is deterministic
+    # and needs no new collector. `router_run_model_drift_total` is a COUNTER over the 7d window
+    # per (rail, stack, role, requested, served, provider) — a run whose served family differs
+    # from the requested family. `router_run_model_unverifiable_total` counts runs whose rail had
+    # NO served evidence in the window (harvest miss / no ledger row) — absence never reads as
+    # agreement. Both reset on a pod roll (computed from the store at scrape time), so an alert
+    # needs the max_over_time bridge — the #288/#313 single-replica class.
+    drift, unver = model_drift_rows()
+    lines += ["# TYPE router_run_model_drift_total counter",
+              "# HELP router_run_model_drift_total Runs (7d) whose SERVED model family differs from the REQUESTED one, per rail (ADR-107 flip-acceptance 1)."]
+    if drift:
+        for rail, stack, role, req, served, provider, n in drift:
+            lines.append(f'router_run_model_drift_total{{rail="{rail}",stack="{stack}",role="{role}",'
+                         f'requested="{req}",served="{served}",provider="{provider}"}} {n}')
+    else:
+        lines.append("router_run_model_drift_total 0")
+    lines += ["# TYPE router_run_model_unverifiable_total counter",
+              "# HELP router_run_model_unverifiable_total Runs (7d) with NO served-side evidence in the store — absence must not read as agreement (homelab#515)."]
+    if unver:
+        for rail, stack, role, req, n in unver:
+            lines.append(f'router_run_model_unverifiable_total{{rail="{rail}",stack="{stack}",'
+                         f'role="{role}",requested="{req}"}} {n}')
+    else:
+        lines.append("router_run_model_unverifiable_total 0")
     # ── M11 shadow (homelab#159): what the cross-rail ladder WOULD have done, per cell ──
     lines += ["# TYPE router_shadow_decisions_total counter",
               "# HELP router_shadow_decisions_total Would-be ladder picks per rung/urgency, and whether they matched the SERVED pick (agrees=0 is the divergence the M11 soak reviews).",
@@ -1401,6 +1528,76 @@ def self_test() -> int:
             or [(0,)])[0][0] == 2000, "generation_time must round-trip (homelab#22)"
     assert any("router_observed_decode_tps" in ln and "10.00" in ln
                for ln in metrics_lines()), "decode tok/s gauge (20 tok / 2s = 10.00)"
+    # ── ADR-107 flip-acceptance 1 (homelab#515): the requested≠served drift belt ──
+    # Family normalisation — the level at which requested and served are compared. These are the
+    # shapes the fleet actually produces: date-stamped served ids, [1m] context brackets, the
+    # claude aliases, rail prefixes. A raw-equality join would mint false drift on every one.
+    assert model_family("deepseek/deepseek-v4-flash") == "deepseek/deepseek-v4-flash"
+    assert model_family("deepseek/deepseek-v4-flash-20260423") == "deepseek/deepseek-v4-flash", \
+        "a date-stamped served id must collapse to its family"
+    assert model_family("deepseek/deepseek-v4-flash-0731") == "deepseek/deepseek-v4-flash", \
+        "a 4-digit MMDD-stamped served id must collapse to its family"
+    assert model_family("claude-opus-5[1m]") == "claude-opus", \
+        "a [1m] context-bracketed id must collapse to its family"
+    assert model_family("haiku") == "claude-haiku", "the claude alias must expand to its family"
+    assert model_family("claude/haiku") == "claude-haiku", "the claude/ alias must expand too"
+    assert model_family("opencode-go/deepseek-v4-flash") == "deepseek-v4-flash", \
+        "the opencode-go/ rail prefix must be stripped"
+    assert model_family("opencode-go/deepseek-v4-flash-0731") == "deepseek-v4-flash", \
+        "a bare id with 4-digit stamp and prefix must still collapse to family"
+    assert model_family("moonshotai/kimi-k3") == "moonshotai/kimi-k3", \
+        "an already-canonical id must pass through unchanged"
+    # The join: a run_report on the openrouter rail whose requested family differs from the
+    # harvested generation's served family is drift; a run with NO harvested evidence is
+    # unverifiable (absent served side must never read as agreement — the FU-108/FU-125 class).
+    record_report({"session": "drift-1", "task": "issue-99", "stack": "sleep", "role": "worker",
+                   "model": "deepseek/deepseek-v4-flash", "rail": "openrouter", "outcome": "pr"})
+    # total_cost 0.0 on purpose: generations_24h orders by cost DESC and the self-test asserts
+    # the FIRST row is gen-test-1 (cache hit 0.8) — a paid drift fixture would sort above it.
+    record_generation("gen-drift-1", "deepseek/deepseek-v4-flash", {
+        "model": "moonshotai/kimi-k3", "provider_name": "Moonshot",
+        "native_tokens_prompt": 1, "native_tokens_completion": 1,
+        "native_tokens_cached": 0, "total_cost": 0.0, "latency": 500,
+        "generation_time": 1000, "finish_reason": "stop"})
+    record_report({"session": "unver-1", "task": "issue-98", "stack": "circles", "role": "worker",
+                   "model": "tencent/hy3", "rail": "openrouter", "outcome": "pr"})
+    drift, unver = model_drift_rows()
+    assert drift == [("openrouter", "sleep", "worker", "deepseek/deepseek-v4-flash",
+                      "moonshotai/kimi-k3", "Moonshot", 1)], \
+        f"drift must be exactly the requested≠served row: {drift}"
+    # gen-test-1's pairing (requested deepseek/deepseek-v4-flash, served
+    # deepseek/deepseek-v4-flash-20260423 — same FAMILY) must NOT appear in drift — that is the
+    # date-stamp-collapse the family comparison exists for.
+    assert all(r[4] != "deepseek/deepseek-v4-flash-20260423" for r in drift), \
+        f"a same-family requested/served pair must not be drift: {drift}"
+    assert any(r[0] == "openrouter" and r[3] == "tencent/hy3" for r in unver), \
+        f"a run with no generation evidence must be unverifiable: {unver}"
+    # The Go rail: a requested opencode-go/deepseek-v4-flash ride whose stack served only
+    # kimi-k3 (a slot-map redirect) is drift; a Go ride with NO ledger rows for its stack is
+    # unverifiable. go_usage rows are written with the BARE model id (prefix stripped at the
+    # proxy), so requested and served ids are the same string — the family comparison is what
+    # catches a slot map that redirected one model to another.
+    _now = time.time()
+    record_report({"session": "go-drift-1", "task": "issue-97", "stack": "sleep", "role": "worker",
+                   "model": "opencode-go/deepseek-v4-flash", "rail": "opencode-go", "outcome": "pr"})
+    # Timestamp ~1h ago (inside the 7d drift window but OUTSIDE the later 5m/300s ledger window
+    # tests) so the drift section's synthetic ledger row cannot pollute go_usage_window's sums.
+    go_usage_add(_now - 3600, "sleep", "kimi-k3", 0.01)  # the stack served kimi-k3, not flash
+    record_report({"session": "go-unver-1", "task": "issue-96", "stack": "circles", "role": "worker",
+                   "model": "opencode-go/deepseek-v4-flash", "rail": "opencode-go", "outcome": "pr"})
+    drift, unver = model_drift_rows()
+    assert any(r[0] == "opencode-go" and r[3] == "opencode-go/deepseek-v4-flash"
+               and r[4] == "kimi-k3" for r in drift), \
+        f"a Go ride served a different family than requested must be drift: {drift}"
+    assert any(r[0] == "opencode-go" and r[3] == "opencode-go/deepseek-v4-flash"
+               and r[1] == "circles" for r in unver), \
+        f"a Go ride with no ledger rows must be unverifiable: {unver}"
+    body = "\n".join(metrics_lines())
+    assert 'router_run_model_drift_total{rail="openrouter",stack="sleep",role="worker",' \
+           'requested="deepseek/deepseek-v4-flash",served="moonshotai/kimi-k3",provider="Moonshot"} 1' \
+           in body, "the drift counter must surface in /metrics"
+    assert 'router_run_model_unverifiable_total{rail="openrouter",stack="circles",role="worker",' \
+           'requested="tencent/hy3"} 1' in body, "the unverifiable counter must surface in /metrics"
     assert record_rotation("scout-canary",
                            [{"model": "moonshotai/kimi-k3", "canary_verdict": "clean"}]) == 1
     # Addendum 3: reliability aggregate + free-canary derivation + circuit events + key refs
@@ -1873,7 +2070,7 @@ def self_test() -> int:
     assert 'router_circuit_open_total{class="auth"} 1' in body
     assert 'router_decisions_total{decision="dispatch"' in body
     assert status_summary()["decisions_24h"], "decisions must surface in status"
-    assert (_read("SELECT COUNT(*) FROM generations") or [(0,)])[0][0] == 1
+    assert (_read("SELECT COUNT(*) FROM generations") or [(0,)])[0][0] == 2  # gen-test-1 + gen-drift-1
     assert 'router_generations_total{model="deepseek/deepseek-v4-flash",provider="Fireworks"} 1' in body
     summary_gen = status_summary()["generations_24h"]
     assert summary_gen and summary_gen[0]["observed_cache_hit"] == 0.8, \
@@ -1887,7 +2084,7 @@ def self_test() -> int:
     # 8 run_reports (t-1 is INSERT OR REPLACE'd, + t-2 clean, + t-3 the real producer shape,
     # + the 5 M11 ladder-cell fixtures) and 3 strikes (issue-9/sleep from the vocabulary fixture,
     # issue-19/circles from the real one, issue-42/sleep from the ladder's degradation step).
-    assert summary["rows"]["run_reports"] == 8 and summary["rows"]["strikes"] == 3
+    assert summary["rows"]["run_reports"] == 12 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():

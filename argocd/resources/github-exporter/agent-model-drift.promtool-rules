@@ -1,0 +1,66 @@
+# The `agent-model-drift` group — ADR-107 flip-acceptance 1 (homelab#515), the requested≠served
+# model drift belt for the claude-harness/subscription rail — lifted VERBATIM out of
+# prometheusrule.yaml (comments stripped, the manifest is their one home). The rules file that
+# agent-model-drift.promtool-test loads. Not a manifest and not applied to anything: `promtool
+# test rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them
+# under `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on
+# purpose — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest
+# there would fail it.
+#
+# ⚠ NOT DRIFT-PINNED BY exporter-self-test (the general harness lives in scripts/** + .github/**,
+# CI-invoked paths outside the fixer lane's tier): re-copy after editing a rule — a stale copy
+# tests the OLD expr and passes vacuously (the FU-125/FU-108 class). Regenerate:
+#
+#   yq '{"groups": [.spec.groups[] | select(.name == "agent-model-drift")]}' \
+#     argocd/resources/github-exporter/prometheusrule.yaml
+#
+# …then re-attach this header. The ONE-LINE constraint from the other fixtures applies (yq 4.x
+# rejects a newline inside the expression).
+groups:
+  - name: agent-model-drift
+    rules:
+      - record: agent_model_drift
+        expr: |-
+          count by (project, role, family) (
+            label_replace(
+              agent_run_total{harness="claude", model=~"(haiku|sonnet|opus)"}
+                and on (project, issue, round, role)
+                  (time() - push_time_seconds{job="agent_run"}) < 3600,
+              "family", "claude-$1", "model", "(haiku|sonnet|opus)")
+          )
+          unless on (project, role, family) (
+            label_replace(
+              increase(claude_code_token_usage_tokens_total[1h]) > 0,
+              "family", "claude-$1", "model", "claude-(?:[a-z0-9-]*)(haiku|sonnet|opus).*")
+          )
+          and on (project, role) (
+            count by (project, role) (increase(claude_code_token_usage_tokens_total[1h]) > 0)
+          )
+      - record: agent_model_unverifiable
+        expr: |-
+          count by (project, role, family) (
+            label_replace(
+              agent_run_total{harness="claude", model=~"(haiku|sonnet|opus)"}
+                and on (project, issue, round, role)
+                  (time() - push_time_seconds{job="agent_run"}) < 3600,
+              "family", "claude-$1", "model", "(haiku|sonnet|opus)")
+          )
+          unless on (project, role) (
+            count by (project, role) (increase(claude_code_token_usage_tokens_total[1h]) > 0)
+          )
+      - alert: AgentModelDrift
+        expr: max by (project, role) (max_over_time(agent_model_drift[10m])) > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Claude-harness rides requested a model family that was NOT served ({{ $labels.project }}/{{ $labels.role }})
+          description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose family never appeared on the SERVED side (OTLP claude_code_*) for 30m. Check the launcher''s resolved model and whether `model_family()` normalizes both ids — the PR#407 class is what this belt exists to catch (a claude/haiku dispatch served claude-opus for 23 days). Offending families: agent_model_drift{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Rides whose (project, role) produced NO telemetry at all are NOT this alert — they are agent_model_unverifiable, its own count.'
+      - alert: AgentModelUnverifiable
+        expr: max by (project, role) (max_over_time(agent_model_unverifiable[10m])) > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Claude-harness rides have NO served-side telemetry ({{ $labels.project }}/{{ $labels.role }})
+          description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose (project, role) produced NO OTLP claude_code_* telemetry for 30m. The belt is blind to what served them. Absence never reads as agreement (the FU-108/FU-125 silent-success class): check the otel-collector ServiceMonitor for export failures, or assume rides died before exporting. Offending families: agent_model_unverifiable{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Concrete requested≠served mismatch is AgentModelDrift, the sibling alert.'

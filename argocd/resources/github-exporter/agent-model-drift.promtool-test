@@ -1,0 +1,155 @@
+# Behaviour fixture for the `agent-model-drift` group (homelab#515 — ADR-107 flip-acceptance 1):
+# the requested≠served model drift belt for the claude-harness/subscription rail.
+#
+#   devbox run -- promtool test rules agent-model-drift.promtool-test
+#   devbox run prometheus-rules-lint      # CI-enforced since 2026-08-11; finds this file itself
+#
+# The group turns the PR#407 class — every claude/haiku worker ride silently running the CLI
+# default (opus-5[1m]) — into a standing alert. It joins the launcher's REQUESTED model
+# (agent_run_total{model=…}, freshness-gated on the pushgateway's push_time_seconds) to the
+# SERVED model visible on the OTLP collector (claude_code_token_usage_tokens_total), normalised
+# to a FAMILY so a healthy ride (requested haiku, served claude-haiku-4-5) never mints false
+# drift. Two distinct readings are split:
+#   agent_model_drift        — the (project, role) HAS served telemetry but NOT for the requested
+#                              family (the CLI ran something else).
+#   agent_model_unverifiable — the (project, role) has NO served telemetry at all. Absence never
+#                              reads as agreement (the FU-108/FU-125 silent-success class).
+#
+# CLOCK: promtool's clock starts at 0. push_time_seconds 0 = "pushed at test start" (fresh).
+# The `increase(claude_code_token_usage_tokens_total[1h]) > 0` arm needs the collector series to
+# GAIN within a 1h window — the 100+10x10 ramp below does that.
+#
+# LABELS are the real pushed/served sets (job="agent_run" for the gateway, job="otel-collector"
+# for the collector), plus the join keys the group reads (project/issue/round/role on agent_run;
+# project/role on claude_code_*).
+rule_files:
+  - agent-model-drift.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── Case 1 — the healthy shape: requested haiku IS served as claude-haiku ────────────────────
+  # The family comparison is the whole point: a raw label-equality join would flag this healthy
+  # ride (agent_run says haiku, the collector says claude-haiku-4-5) as drift. It must NOT be.
+  - interval: 1m
+    name: requested haiku served as claude-haiku — no drift, no unverifiable
+    input_series:
+      - series: 'agent_run_total{harness="claude",issue="101",job="agent_run",model="haiku",project="homelab",role="worker",round="1"}'
+        values: "1+0x10"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="101",role="worker",round="1"}'
+        values: "0+0x10"
+      - series: 'claude_code_token_usage_tokens_total{job="otel-collector",model="claude-haiku-4-5",project="homelab",role="worker"}'
+        values: "100+10x10"
+    promql_expr_test:
+      - expr: agent_model_drift
+        eval_time: 5m
+        exp_samples: []
+      - expr: agent_model_unverifiable
+        eval_time: 5m
+        exp_samples: []
+
+  # ── Case 2 — PR#407's exact class: requested haiku, only opus served ─────────────────────────
+  # The CLI ran its DEFAULT (opus) instead of the dispatched haiku. The collector shows
+  # claude-opus-5 for this (project, role) — so served telemetry EXISTS, but the requested
+  # claude-haiku family is absent from it. That is concrete drift.
+  - interval: 1m
+    name: requested haiku, served as claude-opus — the PR#407 class is drift
+    input_series:
+      - series: 'agent_run_total{harness="claude",issue="201",job="agent_run",model="haiku",project="circles",role="worker",round="1"}'
+        values: "1+0x10"
+      - series: 'push_time_seconds{job="agent_run",project="circles",issue="201",role="worker",round="1"}'
+        values: "0+0x10"
+      - series: 'claude_code_token_usage_tokens_total{job="otel-collector",model="claude-opus-5",project="circles",role="worker"}'
+        values: "100+10x10"
+    promql_expr_test:
+      - expr: agent_model_drift
+        eval_time: 5m
+        exp_samples:
+          - labels: 'agent_model_drift{family="claude-haiku",project="circles",role="worker"}'
+            value: 1
+      - expr: agent_model_unverifiable
+        eval_time: 5m
+        exp_samples: []
+
+  # ── Case 3 — version-prefixed served ids collapse to the family (claude-3-5-sonnet) ──────────
+  # The served id legitimately carries a version. A requested sonnet ride served as
+  # claude-3-5-sonnet is the SAME family — not drift.
+  - interval: 1m
+    name: requested sonnet served as claude-3-5-sonnet — same family, not drift
+    input_series:
+      - series: 'agent_run_total{harness="claude",issue="301",job="agent_run",model="sonnet",project="sleep",role="worker",round="1"}'
+        values: "1+0x10"
+      - series: 'push_time_seconds{job="agent_run",project="sleep",issue="301",role="worker",round="1"}'
+        values: "0+0x10"
+      - series: 'claude_code_token_usage_tokens_total{job="otel-collector",model="claude-3-5-sonnet",project="sleep",role="worker"}'
+        values: "100+10x10"
+    promql_expr_test:
+      - expr: agent_model_drift
+        eval_time: 5m
+        exp_samples: []
+      - expr: agent_model_unverifiable
+        eval_time: 5m
+        exp_samples: []
+
+  # ── Case 4 — the unverifiable class: requested haiku, NO served telemetry at all ─────────────
+  # A ride whose (project, role) produced no OTLP series is UNVERIFIABLE, not drift — the belt
+  # is blind, and absence must be its own count, never agreement.
+  - interval: 1m
+    name: requested haiku with no telemetry at all — unverifiable, not drift
+    input_series:
+      - series: 'agent_run_total{harness="claude",issue="401",job="agent_run",model="haiku",project="oracle",role="worker",round="1"}'
+        values: "1+0x10"
+      - series: 'push_time_seconds{job="agent_run",project="oracle",issue="401",role="worker",round="1"}'
+        values: "0+0x10"
+    promql_expr_test:
+      - expr: agent_model_drift
+        eval_time: 5m
+        exp_samples: []
+      - expr: agent_model_unverifiable
+        eval_time: 5m
+        exp_samples:
+          - labels: 'agent_model_unverifiable{family="claude-haiku",project="oracle",role="worker"}'
+            value: 1
+
+  # ── Case 5 — the alerts fire on the recording rules ──────────────────────────────────────────
+  # The concrete-drift and unverifiable recordings become AgentModelDrift / AgentModelUnverifiable
+  # warnings after 30m. Both ride max_over_time([10m]) over the single-replica scrape hole.
+  - interval: 1m
+    name: the drift and unverifiable alerts fire on their counts
+    input_series:
+      # drift shape: circles, haiku requested, only opus served
+      - series: 'agent_run_total{harness="claude",issue="501",job="agent_run",model="haiku",project="circles",role="worker",round="1"}'
+        values: "1+0x60"
+      - series: 'push_time_seconds{job="agent_run",project="circles",issue="501",role="worker",round="1"}'
+        values: "0+0x60"
+      - series: 'claude_code_token_usage_tokens_total{job="otel-collector",model="claude-opus-5",project="circles",role="worker"}'
+        values: "100+10x60"
+      # unverifiable shape: oracle, haiku requested, no telemetry
+      - series: 'agent_run_total{harness="claude",issue="502",job="agent_run",model="haiku",project="oracle",role="worker",round="1"}'
+        values: "1+0x60"
+      - series: 'push_time_seconds{job="agent_run",project="oracle",issue="502",role="worker",round="1"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: AgentModelDrift
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: AgentModelDrift
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              project: circles
+              role: worker
+            exp_annotations:
+              summary: "Claude-harness rides requested a model family that was NOT served (circles/worker)"
+              description: "circles worker has 1 requested claude model(s) whose family never appeared on the SERVED side (OTLP claude_code_*) for 30m. Check the launcher's resolved model and whether `model_family()` normalizes both ids — the PR#407 class is what this belt exists to catch (a claude/haiku dispatch served claude-opus for 23 days). Offending families: agent_model_drift{project=\"circles\",role=\"worker\"}. Rides whose (project, role) produced NO telemetry at all are NOT this alert — they are agent_model_unverifiable, its own count."
+      - eval_time: 31m
+        alertname: AgentModelUnverifiable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              project: oracle
+              role: worker
+            exp_annotations:
+              summary: "Claude-harness rides have NO served-side telemetry (oracle/worker)"
+              description: "oracle worker has 1 requested claude model(s) whose (project, role) produced NO OTLP claude_code_* telemetry for 30m. The belt is blind to what served them. Absence never reads as agreement (the FU-108/FU-125 silent-success class): check the otel-collector ServiceMonitor for export failures, or assume rides died before exporting. Offending families: agent_model_unverifiable{project=\"oracle\",role=\"worker\"}. Concrete requested≠served mismatch is AgentModelDrift, the sibling alert."
