@@ -516,7 +516,9 @@ the block needs pruning, not more headings.
       route or drop the dark jail-$/day KPI), stack retros SECOND with briefs authored against
       the platform retro's coverage (non-overlap).** **Next:** the rename/access/self-check
       build wave (§B2 The split); r4's 3 new ledger blind spots join the emitter-gaps leg;
-      MCP slices (§B2); **the RetroReportOverdue rule rides the same wave** (operator,
+      MCP slices (§B2); homelab#292's identical-cells slug hole rides the wave's filename
+      rename (third round on the overwrite class — disambiguate byte-identical cells by index,
+      extend the slug-collision fixtures); **the RetroReportOverdue rule rides the same wave** (operator,
       2026-08-18): harden `max(metric)` → `max_over_time(...[8d])` (the restart-gap idiom — a
       pushgateway emptyDir wipe on 2026-08-17 ~11:50Z erased the one-shot success push and
       false-fired the alert for 19h AFTER r4's report landed; seat re-pushed PR#454's merge
