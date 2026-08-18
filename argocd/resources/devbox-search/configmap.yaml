@@ -6,6 +6,12 @@
 # in-band, WAN-free. The resolver RETURNS the store path (recorded in devbox.lock), so this ONE
 # endpoint closes the loop — the LAN nix cache (argocd/resources/nix-cache/) already serves the binary.
 # Same nginx pull-through shape as nix-cache; tuned for a tiny JSON resolver, not big nars.
+#
+# ⚠ MAINTENANCE CONTRACT (issue #519): deployment.yaml mounts this file via subPath, so kubelet never
+# live-refreshes it — only a new pod spec rolls. Editing this file requires recomputing the
+# Deployment's `checksum/config` annotation in the SAME commit (`sha256sum
+# argocd/resources/devbox-search/configmap.yaml`), else the old config keeps running with git and the
+# cluster both green (the #500 inert-fix failure mode).
 apiVersion: v1
 kind: ConfigMap
 metadata:
