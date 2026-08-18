@@ -1,0 +1,4 @@
+CALL bash ./subscription-latch.sh --pick-rail
+OUT → Anthropic latched — serving test-project on the Go rail (opencode-go/deepseek-v4-flash)
+OUT RUN_CMD: printf '%s' 'Zm9v' | base64 -d > /tmp/retro-brief.md; claude -p --model opencode-go/deepseek-v4-flash --dangerously-skip-permissions --max-turns 200 'write the session retro'
+RC 0

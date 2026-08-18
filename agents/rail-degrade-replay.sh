@@ -132,7 +132,23 @@ EOF
 cat > "$STUBHOME/subscription-latch.sh" <<'EOF'
 #!/bin/bash
 # The FU-088(a) probe: exit 0 = clear, exit 1 = deferred. Real one talks to the egress proxy.
+# homelab#439 leg 2: --pick-rail mode — print the rail name when ANY rail is clear, exit 1 only
+# when BOTH are latched. STUB_GO_LATCH selects the Go rail's state once the Anthropic latch holds
+# (default clear, so a STUB_LATCH=latched scenario that does not name a Go state FAILS OVER — the
+# same default the real ladder's fail-open Go probe produces).
 printf '%s\n' "subscription-latch $*" >> "$CALLS"
+if [ "${1:-}" = "--pick-rail" ]; then
+  if [ "${STUB_LATCH:-clear}" = "latched" ]; then
+    if [ "${STUB_GO_LATCH:-clear}" = "latched" ]; then
+      echo "→ both rails latched (stub)" >&2
+      exit 1
+    fi
+    echo "opencode-go/deepseek-v4-flash"
+    exit 0
+  fi
+  echo "anthropic"
+  exit 0
+fi
 [ "${STUB_LATCH:-clear}" = "latched" ] && { echo "→ subscription limited (stub: 429 latch)" >&2; exit 1; }
 exit 0
 EOF
@@ -157,10 +173,16 @@ PRE
   cat "$TMP/block.chainless-guard.sh"
   cat "$TMP/block.model-id-resolution.sh"
   cat <<'BRIDGE'
-# ── bridge ── the two lines the launcher runs between the blocks above and the gates below that
-# this harness must restate: the egress-proxy URL (agent-session.sh derives PROXY_URL from the same
-# env var, next to the goose proxy env) and DOCKER, which only selects the endpoint-IP form.
+# ── bridge ── the state the launcher runs between the blocks above and the gates below that this
+# harness must restate: the egress-proxy URL (agent-session.sh derives PROXY_URL from the same env
+# var, next to the goose proxy env) and DOCKER, which only selects the endpoint-IP form. Also the
+# pod command + PR#407 `_claude_model` the harness-run-cmd block baked ABOVE the gates for the
+# degraded claude ride (agent-session.sh:946/952) — the H2 failover re-points RUN_CMD at the Go
+# rail's model in place, so the replay must present a threadable command or the ride (correctly,
+# #439 finding 2) defers as un-threadable instead of failing over.
 PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+_claude_model="haiku"
+RUN_CMD="claude -p --model haiku --dangerously-skip-permissions --max-turns 200"
 BRIDGE
   cat "$TMP/block.agent-rail.sh"
   cat <<'STATE'
@@ -172,6 +194,12 @@ STATE
   cat "$TMP/block.fu088-gates.sh"
   cat <<'POST'
 echo "REACHED: dispatch"
+echo "RUN_CMD: ${RUN_CMD:-}"
+# #439 leg 2 round 3 (PR#528): the failover arm re-points the pod command AND the downstream
+# signals the manifest renders from (labels SUB_LABEL, AGENT_RAIL env, MODEL env) — observed here
+# post-gate so H2 can assert a Go-served pod is NOT still labelled as an Anthropic-subscription ride.
+echo "SUB_LABEL: ${SUB_LABEL:-}"
+echo "AGENT_RAIL: ${AGENT_RAIL:-}"
 POST
 } > "$TMP/replay.sh"
 bash -n "$TMP/replay.sh" || { echo "rail-degrade-replay: the composed replay is not valid shell — a block boundary is wrong." >&2; exit 1; }
@@ -190,7 +218,7 @@ scenario() {
   IN_HARNESS_SET=""; IN_MODEL_SET=""; IN_TASK="issue-166"
   IN_SROW='{"name":"oracle","workerModel":"xiaomi/mimo-v2.5","workerModelFallbacks":["qwen/qwen3-coder:free"]}'
   IN_ROUTER_MODE="shadow"; IN_ROUTER_DEFER=""; IN_RWHY=""; IN_VERDICT=""; IN_RMODEL=""
-  STUB_CREDITS="12.40"; STUB_LATCH="clear"
+  STUB_CREDITS="12.40"; STUB_LATCH="clear"; STUB_GO_LATCH="clear"
   # The freshness pair the launcher honours instead of re-deriving (homelab#190): a balance the
   # proxy is holding past its own credit_max_age_s is NOT a balance.
   STUB_CREDIT_AGE="540"; STUB_CREDIT_MAX_AGE="1800"
@@ -199,7 +227,7 @@ scenario() {
   STUB_CAPACITY_LATCHED_TOTAL="0"
 }
 go() {
-  CALLS="$CALLS" STUB_CREDITS="$STUB_CREDITS" STUB_LATCH="$STUB_LATCH" \
+  CALLS="$CALLS" STUB_CREDITS="$STUB_CREDITS" STUB_LATCH="$STUB_LATCH" STUB_GO_LATCH="$STUB_GO_LATCH" \
   STUB_CREDIT_AGE="$STUB_CREDIT_AGE" STUB_CREDIT_MAX_AGE="$STUB_CREDIT_MAX_AGE" \
   STUB_CAPACITY_DOWN="$STUB_CAPACITY_DOWN" STUB_CAPACITY_REASON="$STUB_CAPACITY_REASON" \
   STUB_CAPACITY_REMAINING="$STUB_CAPACITY_REMAINING" \
@@ -345,13 +373,29 @@ wantnot "G2: a shadow defer does not degrade"          "RAIL DEGRADE"
 want    "G2: dispatch proceeds unchanged"              "REACHED: dispatch"
 
 # ── H ── the degraded ride is still bounded by FU-088(a) ─────────────────────────────────────────
-scenario "H — degraded ride + latched subscription → defers"
-STUB_CREDITS="0.17"; STUB_LATCH="latched"
+# homelab#439 leg 2: "bounded" is now the FULL ladder — the Anthropic latch alone no longer
+# defers a ride that could fail over to the Go rail. H keeps the both-latched row (Go must be
+# latched too, else the ride fails over), H2 pins the new failover leg.
+scenario "H — degraded ride + BOTH rails latched → defers"
+STUB_CREDITS="0.17"; STUB_LATCH="latched"; STUB_GO_LATCH="latched"
 go
 want    "H: the degrade happened"                      "RAIL DEGRADE"
-want    "H: and the FU-088(a) latch still binds it"    "claude-tier dispatch deferred — subscription limited (FU-088)"
+want    "H: and the FU-088(a) latch still binds it"    "claude-tier dispatch deferred — both rails latched (FU-088)"
 wantrc  "H: defers (exit 0)"                           0
 wantnot "H: never reaches dispatch"                    "REACHED: dispatch"
+
+# ── H2 ── the leg-2 failover: Anthropic latched but the Go window clear → serve on the Go rail ──
+scenario "H2 — degraded ride + latched subscription + Go clear → fails over to the Go rail (leg 2)"
+STUB_CREDITS="0.17"; STUB_LATCH="latched"; STUB_GO_LATCH="clear"
+go
+want    "H2: the degrade happened"                     "RAIL DEGRADE"
+want    "H2: names the Go rail the ride rides"         "serving oracle-iac on the Go rail (opencode-go/deepseek-v4-flash)"
+want    "H2: the pod command ACTUALLY carries the Go rail's model (finding 2)" "--model opencode-go/deepseek-v4-flash"
+want    "H2: the pod carries the rail: opencode-go label (PR#528 round 3)" 'SUB_LABEL: , "homelab.teststuff.net/rail": opencode-go'
+wantnot "H2: the failed-over pod is NOT counted as an Anthropic-subscription ride" "subscription-session: claude"
+want    "H2: AGENT_RAIL=opencode-go (the #158 rail the pod reports)" 'AGENT_RAIL: opencode-go'
+want    "H2: reaches dispatch"                         "REACHED: dispatch"
+wantrc  "H2: exit 0"                                   0
 
 # ── I ── everything that did not degrade still hits the FU-088(b) floor ──────────────────────────
 scenario "I — no degrade (opted out) → defers on the credit floor exactly as before"

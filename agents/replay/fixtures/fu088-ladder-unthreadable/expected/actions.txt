@@ -1,0 +1,3 @@
+CALL bash ./subscription-latch.sh --pick-rail
+OUT → test-project claude-tier dispatch deferred — Anthropic latched and the Go rail's model could not be threaded into the pod command (FU-088)
+RC 0
