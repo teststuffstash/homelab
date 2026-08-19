@@ -1,4 +1,4 @@
-→ oracle r3 cell goose:opus — brief /tmp/retro-brief-Kpg4.md (18342 bytes)
+→ oracle r3 cell claude:opus (leg B) — brief /tmp/retro-brief-Kpg4.md (18342 bytes)
 → harvest: report goes to docs/agents/retros/2026-08-11-oracle-r3-<model>.md via PR
 → pod agent-oracle-fleet-retro-r3-r2 created in ns oracle-fleet
 → streaming pod log
