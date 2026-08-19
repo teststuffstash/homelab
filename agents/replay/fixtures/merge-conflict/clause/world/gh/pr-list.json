@@ -1,0 +1,6 @@
+[
+  {"number":502,"title":"chainless §Rollout: part 1 closed at the #420 closeout, acceptance 1 landed","labels":[{"name":"merge-conflict"}],"reviewDecision":"REVIEW_REQUIRED","author":{"login":"RasmusSoot"}},
+  {"number":600,"title":"fixture: a worker fix round","labels":[{"name":"merge-conflict"}],"reviewDecision":"REVIEW_REQUIRED","author":{"login":"app/homelab-agents-1234"}},
+  {"number":601,"title":"fixture: worker PR already arbitrated","labels":[{"name":"merge-conflict"},{"name":"agent/arbitrate"}],"reviewDecision":"REVIEW_REQUIRED","author":{"login":"app/homelab-agents-1234"}},
+  {"number":602,"title":"fixture: worker PR latched error","labels":[{"name":"merge-conflict"},{"name":"agent/error"}],"reviewDecision":"REVIEW_REQUIRED","author":{"login":"app/homelab-agents-1234"}}
+]

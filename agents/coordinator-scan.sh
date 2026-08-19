@@ -196,8 +196,9 @@ NOOP_ROUND_JQ="${STATS_TS_DEF}"'
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
 
 # ── PR STATE FINGERPRINT (homelab#198) ────────────────────────────────────────────────────────
-# The arbitrate and ci-red DISPATCH legs are level-triggered off a label / a red rollup, so they
-# re-emit their unit every scan for as long as that condition holds — existence, not currency.
+# The arbitrate, ci-red and merge-conflict (homelab#595) DISPATCH legs are level-triggered off a
+# label / a red rollup, so they re-emit their unit every scan for as long as that condition holds
+# — existence, not currency.
 # Live 2026-08-09 (oracle-fleet PR#234): five coordinator rides in ~30 minutes against BYTE-
 # IDENTICAL state (same head, same red `e2e`, same stale CHANGES_REQUESTED, a `gh run rerun` 403),
 # each correctly ruling "no change, escalation stands" and exiting. The anomaly breaker latched
@@ -1734,9 +1735,30 @@ EOF_GUARDED
       fi
       units="${units}changes-requested|${repo}|pr-${u}\n"
     done
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED"))|.number'); do
+    # merge-conflict (MP-T06, homelab#595): the updater labels a PR `merge-conflict` when its
+    # update-branch API call 422s on a DIRTY head. WORKER_AUTHOR-scoped, mirroring the
+    # changes-requested clause above (671a053): the fix-round play only has a mandate over
+    # WORKER-authored PRs — a seat-authored (operator-lane) conflict is the author's own push to
+    # resolve, and every re-dispatch is a session that re-concludes exactly that. Live 2026-08-19:
+    # #585's wave→stint rename ran #586 DIRTY and burned one ride per tick (09:13:35Z, 09:36Z) on
+    # byte-identical state, preempting queued work each time. The seat-authored case stays on the
+    # report surface (orphans here + the board's §FIX) so scoping it out of the unit list makes it
+    # visible rather than merely undispatched. The worker-authored case carries the #198 currency
+    # check (same fingerprint pair as arbitrate/ci-red), so an unchanged conflict emits a report
+    # line instead of a ride.
+    # >>>REPLAY:merge-conflict-gate>>>
+    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author != null) and (.author.login != $wa))|.number'); do
+      orphans="${orphans}[$repo] ⚠ merge-conflict PR #${u} is seat-authored (operator lane) — the author's own push is the next mover; no machine fix-round mandate (homelab#595)\n"
+    done
+    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author.login==$wa))|.number'); do
+      mfp="$(pr_state_fp_pair "$slug" "$u")"; mfp_prev="${mfp#*|}"; mfp_cur="${mfp%%|*}"
+      if [ -n "$mfp_cur" ] && [ "$mfp_cur" = "$mfp_prev" ]; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last merge-conflict dispatch (\`state-fp:${mfp_cur}\`, homelab#198). The conflict stands and a round was already dispatched at this exact input — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
+        continue
+      fi
       units="${units}merge-conflict|${repo}|pr-${u}\n"
     done
+    # <<<REPLAY:merge-conflict-gate<<<
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (.reviewDecision!="CHANGES_REQUESTED") and (($L|index("merge-conflict"))|not))|.number'); do
       units="${units}unarmed-major|${repo}|pr-${u}\n"
     done
@@ -2543,16 +2565,17 @@ EOF_GUARDED
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
     uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | head -1)"
     case "${uwip:-}" in ''|*[!0-9]*) uwip=1;; esac
-    # homelab#198: RECORD the fingerprint of the state this ride is about to read, for the two
-    # clauses whose emission is gated on it. Here and not at emission because this is the one place
-    # a unit is known to be THE dispatched one; and BEFORE the spawn because the session's own work
-    # (a pushed fix round, a dismissal, a rerun) is exactly the state change that must re-open the
-    # gate — recording afterwards would fingerprint the outcome and debounce the follow-up ride.
-    # A refused write only costs the debounce (the clause re-emits next scan, i.e. today's
-    # behaviour), so it WARNs and dispatches; it never blocks the ride it is annotating.
+    # homelab#198: RECORD the fingerprint of the state this ride is about to read, for the three
+    # clauses whose emission is gated on it (arbitrate, ci-red, and merge-conflict since homelab#595).
+    # Here and not at emission because this is the one place a unit is known to be THE dispatched
+    # one; and BEFORE the spawn because the session's own work (a pushed fix round, a dismissal, a
+    # rerun) is exactly the state change that must re-open the gate — recording afterwards would
+    # fingerprint the outcome and debounce the follow-up ride. A refused write only costs the
+    # debounce (the clause re-emits next scan, i.e. today's behaviour), so it WARNs and dispatches;
+    # it never blocks the ride it is annotating.
     # >>>REPLAY:dispatch-marker>>>
     case "${uclause}:${uitem}" in
-      arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*)
+      arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*|merge-conflict:pr-*)
         dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "${uitem#pr-}")"; dfp="${dfp%%|*}"
         if [ -z "$dfp" ]; then
           echo "  WARN: state fingerprint unreadable for ${urepo} ${uitem} — dispatching anyway; the ${uclause} debounce cannot arm this pass (homelab#198)" >&2

@@ -1,0 +1,28 @@
+# merge-conflict/debounced (homelab#595) — the #198 currency half of the merge-conflict clause:
+# a WORKER-authored conflict PR that a previous dispatch already recorded a state-fp marker for,
+# on state that has NOT moved, emits a report line instead of a ride.
+#
+# CONDITION UNDER REPLAY. PR #600 (worker-authored) carries `merge-conflict`, and the thread
+# carries a `state-fp:` marker written by a previous merge-conflict dispatch. The state the clause
+# probes — head, checks, reviewDecision, newest verdict — is byte-identical to what that marker
+# hashed (the fingerprint in this world is the sha256 of its own state). The contract: the clause
+# emits the ⏳ DEBOUNCED orphan line and NO unit. A second ride at this exact input cannot read
+# anything new.
+#
+# The failing-open control (no marker recorded, or the probe unreadable) is the clause leg: with
+# nothing recorded the pair's second half is empty and the clause EMITS, exactly as #198's fail-open
+# doctrine demands for the arbitrate/ci-red siblings.
+pins:
+  - MP-T06
+name: merge-conflict-debounced
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:merge-conflict-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
