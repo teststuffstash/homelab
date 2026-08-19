@@ -1096,6 +1096,21 @@ if [ -n "${NO_ARM:-}" ]; then
   ARM_ENV=$'        - name: AGENT_ARM_PR\n          value: "0"'
 fi
 
+# homelab#587 leg 2 (§B2 The split): a ~1h READ-ONLY fleet-wide token for the platform retro ride
+# ONLY — deliberately NOT GH_TOKEN (the ADR-087 leg B broker's per-repo token path stays
+# untouched; this rides alongside it, never replaces it). The narrowest seam: emitted into the
+# pod env ONLY when the LAUNCHER's own environment already carries it (retro-argo.yaml's
+# retro-cell step exports it from the retro-git Secret before calling retro-session.sh, which
+# execs this script — plain env inheritance, no CLI flag). Visible in the pod spec like every
+# other env entry here; accepted by the platform stack's own namespaces (the retro rides in
+# agent-coordinator) — an ordinary fixer namespace has no retro-git mount to source this from.
+# >>>REPLAY:retro-gh-token-env>>>
+RETRO_GH_TOKEN_ENV=""
+if [ -n "${RETRO_GH_TOKEN:-}" ]; then
+  RETRO_GH_TOKEN_ENV=$'        - name: RETRO_GH_TOKEN\n          value: "'"$RETRO_GH_TOKEN"'"'
+fi
+# <<<REPLAY:retro-gh-token-env<<<
+
 GOOSE_PROXY_ENV=""; PROXY_URL=""
 PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
 if [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
@@ -1826,6 +1841,9 @@ ${CRED_BROKER_ENV}
         # Empty ⇒ the entrypoint forks a fresh agent/<ts> branch from BASE_REF as before.
 ${WORK_BRANCH_ENV}
 ${ARM_ENV}
+        # platform retro ride only (homelab#587 leg 2): fleet-wide READ-ONLY token, emitted only
+        # when the launcher's own environment carries it. See RETRO_GH_TOKEN_ENV above.
+${RETRO_GH_TOKEN_ENV}
         # docker mode only: the repo's own docker CLI (devbox.json) talks to the dind sidecar.
 ${DOCKER_ENV}
         # claude harness only (FU-066): proxy base URL + the opaque session ref — no real creds.

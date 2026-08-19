@@ -198,6 +198,8 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-selfref/unlabelled` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `retro-cell-report/missing` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/present` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
+| `retro-gh-token-env/set` | actions | - | `agents/agent-session.sh` | - |
+| `retro-gh-token-env/unset` | actions | - | `agents/agent-session.sh` | - |
 | `retro-harvest/cell-errored` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-harvest/one-cell-dead` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-harvest/slug-collision` | actions | - | `agents/coordinator/retro-argo.yaml` | - |

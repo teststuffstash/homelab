@@ -1,0 +1,23 @@
+# homelab#587 leg 2: pins the RETRO_GH_TOKEN_ENV fragment agent-session.sh emits into the pod
+# manifest — the >>>REPLAY:retro-gh-token-env>>> block is the SAME `${AFFINITY}`/`${KATA_BLOCK}`
+# shape as WORK_BRANCH_ENV/ARM_ENV: a variable that is either empty or a well-indented env-entry
+# string, inserted verbatim into the manifest heredoc. This leg: the launcher's OWN environment
+# (retro-argo.yaml's retro-cell step exports RETRO_GH_TOKEN before exec'ing into this script via
+# retro-session.sh) carries the token — the fragment must render it as a real pod env entry.
+#
+# Reaches only the fragment-construction seam, not the `kubectl create -f -` STDIN further down
+# this same script — that heredoc has no >>>REPLAY:<<< sentinel of its own and no existing
+# agent-session.sh fixture reaches it (verified: no `retro-gh-token-env` sibling in
+# harness-run-cmd/fu042-guard-a/argv-payload/run-phase-metric touches it either), because doing so
+# would mean bridging the entire dispatch preflight (IMAGE/POD/NS/ARGS/KUBECTL/kube.sh) for a diff
+# that is otherwise a pure additive insertion at a fixed line. See docs/agents/retros/BRIEF.md's
+# neighbour section in the register (README.md "When a clause file changes and no fixture can
+# apply") for the same class of gap on this file's podSpecPatch precedent (homelab#103).
+name: retro-gh-token-env-set
+mode: actions
+source: agents/agent-session.sh
+env:
+  - RETRO_GH_TOKEN=ghs_faketoken123
+parts:
+  - block:retro-gh-token-env
+  - file:post.sh

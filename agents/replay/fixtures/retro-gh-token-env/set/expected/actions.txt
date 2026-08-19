@@ -1,0 +1,4 @@
+OUT RETRO_GH_TOKEN_ENV (non-empty):
+OUT         - name: RETRO_GH_TOKEN
+OUT           value: "ghs_faketoken123"
+RC 0

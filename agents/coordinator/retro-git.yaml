@@ -1,0 +1,73 @@
+# Retro fleet-read git token (homelab#587 leg 2, §B2 The split). The scheduled retro's
+# deep-dives read issues/PRs across the FLEET (the pain-rank is fleet-wide) — but the ride pod's
+# git token was the per-repo broker token of the namespace it rides in (ADR-087 leg B), so
+# run 4 left sleep-tracking dark: 2 of 8 deep-dives untrailable. Operator ruling: access tracks
+# the QUESTIONS — the retro gets its OWN fleet-wide READ-ONLY token, App-minted, same ESO shape
+# as agents/coordinator/git-token.yaml's coordinator-git (read that file first). Same App, same
+# installation, same private-key Secret — NOT a second copy of that ExternalSecret, just a second
+# generator + a second minted Secret with a narrower (read-only) permission set.
+#
+# ⚠️ SCAFFOLD — prereqs: apply AFTER agents/coordinator/git-token.yaml (which creates the
+# `agents-github-app` Secret this generator's privateKey references) and AFTER rbac.yaml:
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/git-token.yaml
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/retro-git.yaml
+---
+# The generator: mint an installation token across the SAME fleet repos as coordinator-git, but
+# READ-ONLY across the board — the retro is evidence-gathering, it writes nothing (its report
+# lands via the harvest step's separate coordinator-git identity, which still does the PR write).
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: retro-git-gen
+  namespace: agent-coordinator
+spec:
+  appID: "4150968"          # same App as coordinator-git — from `github-app-bootstrap.sh homelab-agents secrets` output
+  installID: "142724430"    # the teststuffstash installation
+  auth:
+    privateKey:
+      secretRef: { name: agents-github-app, key: privateKey }  # the SAME Secret git-token.yaml's ExternalSecret writes — not duplicated here
+  permissions:                     # ALL read — this identity never writes to a repo
+    contents: read
+    issues: read
+    pull_requests: read
+    checks: read
+    statuses: read
+    actions: read
+  repositories:                    # mirrors coordinator-git's list VERBATIM (agents/coordinator/git-token.yaml) —
+                                    # the two lists must move together; add/remove a stack repo in BOTH files.
+    - sleep-tracking
+    - snore-recorder
+    - sleep-iac
+    - openrouter-operator
+    - oracle-fleet
+    - oracle-iac
+    - agent-runtime
+    - agent-coordinator
+    - allure-behavior-snippets
+    - circles
+    - circles-iac
+    - homelab
+---
+# Drive the generator → write the Secret the retro cell reads as GH_TOKEN. Same remap pattern as
+# coordinator-git's ExternalSecret (generator yields key `token`).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: retro-git
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 45m             # token lives ~1h; refresh before expiry
+  target:
+    name: retro-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        GH_TOKEN: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: retro-git-gen

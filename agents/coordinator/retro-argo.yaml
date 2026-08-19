@@ -206,6 +206,17 @@ spec:
               export AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_READER_SECRET"
               s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cat "s3://$AGENT_TS_BUCKET/_ledger.jsonl" > /tmp/ledger.jsonl
               python3 agents/retro-rank.py /tmp/ledger.jsonl /tmp/ledger-ranked.json 40
+              # homelab#587 leg 2 (§B2 The split): the pain-rank is FLEET-WIDE, but this pod's own git
+              # identity is the stack's per-repo broker token — without a fleet-wide read, a deep-dive
+              # whose trail lives in a sibling stack's repo is untrailable (run 4: sleep-tracking dark,
+              # 2/8 deep-dives). retro-git.yaml mints a ~1h READ-ONLY fleet token for exactly this;
+              # degrade LOUDLY rather than die when the mount is absent (a fresh cluster / not-yet-applied
+              # scaffold), matching the optional-secret convention below.
+              if [ -f /var/run/retro-git/GH_TOKEN ]; then
+                export RETRO_GH_TOKEN="$(cat /var/run/retro-git/GH_TOKEN)"
+              else
+                echo "WARN: retro-git secret absent — fleet deep-dives will be dark"
+              fi
               # Only the OVERRIDE is passed through. Unset, the launcher mints this cell's own
               # capped key (homelab#270) — the empty default used to mean the ride quietly fell
               # back to the stack fixer's standing key, which is what run 3's dead cell-b spent.
@@ -240,6 +251,8 @@ spec:
               fi
               # <<<REPLAY:retro-cell-marker-selfcheck<<<
           env: *tsenv
+          volumeMounts:
+            - { name: retro-git, mountPath: /var/run/retro-git, readOnly: true }
           resources:
             requests: { cpu: "100m", memory: "256Mi" }
             limits: { memory: "1Gi" }
@@ -358,3 +371,7 @@ spec:
             limits: { memory: "512Mi" }
     volumes:
       - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+      # homelab#587 leg 2: the retro-cell's fleet-wide READ-ONLY token (agents/coordinator/retro-git.yaml).
+      # optional: true, same convention as coordinator-git above — a missing mount degrades (WARN in
+      # the retro-cell step), it never wedges the DAG.
+      - { name: retro-git, secret: { secretName: retro-git, optional: true } }
