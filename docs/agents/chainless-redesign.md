@@ -116,14 +116,14 @@ standing SEATPR source — built 2026-08-12 from exactly this class — sat unar
   scripts and the seat — deterministic filter → judgment seat, the scan→coordinator shape; a
   recurring mechanical reaction graduates into the script/reflex itself (the ≥2-pattern rule).
 
-**The jail wave (operator direction, 2026-08-19 — the Goal SHAPE without the Goal machinery).**
-A bounded container for multi-session jail work: a parent issue titled `wave: <slug>`, label-inert
+**The jail stint (operator direction, 2026-08-19 — the Goal SHAPE without the Goal machinery; renamed from "wave" same day, operator catch: three existing senses).**
+A bounded container for multi-session jail work: a parent issue titled `stint: <slug>`, label-inert
 (never `task/goal`, never `agent/*` — the scan and the goal lane must not see it), with the work
 as **native sub-issues**. Three rules carry the whole design:
 
-- **Everything binds to the parent.** Every sprout harvested during wave work is sub-issued under
-  the wave (provenance line naming the PR/issue it fell out of) — a wave session never ends with
-  free-floating harvests, and nothing from wave work may outlive the parent unlinked. The parent
+- **Everything binds to the parent.** Every sprout harvested during stint work is sub-issued under
+  the stint (provenance line naming the PR/issue it fell out of) — a stint session never ends with
+  free-floating harvests, and nothing from stint work may outlive the parent unlinked. The parent
   IS the bound on the sprout tail the Goal lane needed a budget for.
 - **Sizing is session-multiples, not budgets.** A `Size: N sessions` body line (1 / 2 / 3 — the
   natural pricepoints; a corpus-session arc is the unit, per §Session types above). No `Budget:`,
@@ -131,17 +131,17 @@ as **native sub-issues**. Three rules carry the whole design:
   closeout. (Context-tier sizing was considered and simplified away 2026-08-19: the session IS
   the natural quantum.)
 - **Closeouts are MULTIPLE, and the first one is a full sweep, not a wind-down note.** Closeout 1
-  fires when all ORIGINAL sub-issues (the set at wave start — snapshotted by the meta-events WAVE
+  fires when all ORIGINAL sub-issues (the set at stint start — snapshotted by the meta-events STINT
   source, which emits the burn-down and the `CLOSEOUT-DUE` edge) are done: a corpus sitting runs
   docs-cleanup over the touched surfaces, the FU sweep (file genuine leftovers, archive resolved),
   a built-vs-left-behind analysis as ONE parent comment (shipped / dropped / still open), and
-  disposes every open sprout (do-now · keep as wave children · release to ordinary backlog with
+  disposes every open sprout (do-now · keep as stint children · release to ordinary backlog with
   links · drop with a reason). ⚠ The release disposition has a hard exclusion (operator, the
   #420/#540 pilot catch, 2026-08-19): **a BUG in what the stint built is never released** — a
   post-originals defect sprout binds to the container and holds it open; release is for work
   that merely FELL OUT of the stint, not for defects IN its deliverables. Later closeouts repeat
   per sprout batch; the parent CLOSES at the
-  final one, when the tree is empty — that close is the bound. Mixed execution is fine: a wave
+  final one, when the tree is empty — that close is the bound. Mixed execution is fine: a stint
   child that is fixer-shaped may be labeled `agent-fix`+`agent/queued` and ride the cluster loop;
   only the parent stays inert.
 

@@ -105,7 +105,7 @@ absent "disjoint: TRIAGE excludes the error+blocked overlap"              "circl
 absent "disjoint: TRIAGE excludes a queued (state-labelled) issue"        "circles#110" "$SEC_TRIAGE"
 absent "disjoint: a bot issue with agent-fix is BACKLOG, not TRIAGE"      "circles#113" "$SEC_TRIAGE"
 absent "triage: post-launch buckets are containers, not work"             "circles#112" "$SEC_TRIAGE"
-absent "triage: wave: parents are containers, not strays (2026-08-19)"    "circles#115" "$SEC_TRIAGE"
+absent "triage: stint: parents are containers, not strays (2026-08-19)"   "circles#115" "$SEC_TRIAGE"
 absent "triage: a zero-label issue younger than a day waits"              "circles#106" "$SEC_TRIAGE"
 # Half-labeled (2026-08-19, oracle-fleet#260): queued WITHOUT agent-fix is invisible to every
 # dispatch clause and every other board section — TRIAGE surfaces it with a ⚠ repair line.

@@ -65,9 +65,17 @@ spec:
             - cat
             - /dev/kmsg
           securityContext:
-            privileged: true          # required to open /dev/kmsg (CAP_SYSLOG); baseline PSS rejects
+            # privileged WITHOUT allowPrivilegeEscalation: the original pair was API-REJECTED
+            # unconditionally (cross-field admission rule kubeconform's schema pass cannot see —
+            # #541's C6 found the merge never applied and the logging app sat OutOfSync behind
+            # it). APE is implied true under privileged; stating false is the contradiction.
+            # ⚠ The narrower CAP_SYSLOG-only form was LIVE-TESTED 2026-08-19 and FAILS at
+            # runtime: a non-privileged container's device cgroup refuses the /dev/kmsg open
+            # ("Operation not permitted") regardless of capabilities — privileged is what opens
+            # the device allowlist, not just the capability set. Admission dry-run passes both
+            # forms; only the live probe told them apart.
+            privileged: true
             readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
           volumeMounts:
             - { name: kmsg, mountPath: /dev/kmsg, readOnly: true }
           resources:
