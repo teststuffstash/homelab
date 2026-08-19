@@ -13,6 +13,16 @@ meant to avoid.)
   unattended fire, the build wave's organic acceptance** (full report per cell, content floor
   holding, distinct files for identical cells, no false RetroReportOverdue). Post-fire read =
   next session's first item; a failed fire is a defect on FU-058's Next.
+- **⚑ Board close-out afternoon (2026-08-19, operator-driven): the ring-heavy day's residue.**
+  Landed: #631 (exit-3 absorption + FU-121 drain — the famine class fix; watch the Failed pile
+  STOP growing and TTL out by ~Aug-22), #626 (blind-ride abort), #634+#633 (marker anchoring +
+  env-card rule), #632 (meta-events NEWISSUE source — per-repo REST walk, act rule: platform
+  repos only), #628 re-scoped as the throughput CONTAINER (legs #636 queued/#637 filed; leg 3 =
+  generalize agent-goals machinery, operator pointer in body). Queue at close: #629 (strike
+  model field — riding), #635 (stats_ts anchoring — riding), #636/#639/#640 behind them; their
+  PRs hit the codeowner gate — next session merges via the gate reads. Lineage: #629→#622→#607→
+  #600→#420 now fully native (#607's missing edge was the break). GithubRateLimitLow +
+  AgentRunInfraDeathBurst today = demand bursts, both self-resolved/accounted.
 - **⚑ Go rail EXHAUSTED for the month (console 100%/30d, resets Sep-13 ~11:30Z; weekly 99% →
   Mon 00Z).** The 429→same-round-haiku belt is LIVE and organically proven (#607→PR#615); latch
   persistence landed (#618→#621) AFTER the first fire, so the NEXT Go dispatch burns one 429 to
