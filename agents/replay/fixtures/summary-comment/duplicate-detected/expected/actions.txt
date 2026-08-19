@@ -1,0 +1,19 @@
+CALL gh api repos/teststuffstash/circles/issues/43/comments --paginate
+CALL gh api --method PATCH repos/teststuffstash/circles/issues/comments/5231000042 -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-19T10:40:38Z` · **run stats** — `claude/haiku` · $0 · 402s · ci=false · [logs](https://grafana.teststuff.net/explore?...) · `s3://agent-transcripts/circles/issue-43-r1/` <!-- agent-event kind=stats ts=2026-08-19T10:40:38Z -->\n- `2026-08-19T11:00:00Z` · **run stats (round 3)** — `claude/opus` · $150 · 600s · ci=true <!-- agent-event kind=stats ts=2026-08-19T11:00:00Z -->
+OUT === TEST: mc_event with duplicate marked comments (homelab#607) ===
+OUT 
+OUT Scenario: Issue #43 carries TWO agent-summary comments (race condition)
+OUT   - 5231000042 @ 10:40:38Z (oldest; agent-session.sh, via mc_event)
+OUT   - 5231000099 @ 10:55:48Z (second writer, direct post, no mc_event)
+OUT 
+OUT Action: mc_event appends a third event
+OUT 
+OUT 
+OUT === RESULT ===
+OUT mc_event exit code: 0
+OUT RETURN 0
+OUT 
+OUT REACHED: end
+ERR mc_event: WARNING — teststuffstash/circles#43 carries multiple agent-summary comments (ADR-103 invariant; target oldest for append, homelab#607)
+ERR   primary (appending to): 5231000042
+ERR   extra (will converge to primary on next event): 5231000099RC 0
