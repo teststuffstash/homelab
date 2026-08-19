@@ -233,10 +233,7 @@ is stale, so it cannot drift the way the prose register did.
 | `session-belt/queued` | actions | - | `agents/coordinator-scan.sh` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
-| `summary-comment/append` | actions | - | `-` | - |
-| `summary-comment/duplicate-detected` | actions | - | `-` | - |
-| `summary-comment/first-touch` | actions | - | `-` | - |
-| `summary-comment/quoted-inert` | actions | - | `-` | - |
+| `summary-comment` | table | - | `-` | - |
 | `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
 | `unblocked-unlabeled/blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unblocked-unlabeled/surfaces` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
@@ -417,18 +414,15 @@ The block under replay is `agent-session.sh`'s budget pre-flight refusal, which 
 through that helper's three I/O seams, and those go to the PATH-shim `gh` — so find-or-create lands
 in the action stream for free and no seam needs shadowing. Two things worth copying:
 
-- **Hold the invocation constant and vary the WORLD.** Every row's bridge sets the same six
-  launcher variables (`mode: table` since #661 made this literal — one shared bridge, five
-  `rows/<id>/` overlays); what differs is what the goal's timeline already carries. That is where
-  the bug was (the dedup read only the LAST comment, so one interleaved `goal-review` re-admitted
-  the refusal), and a family that varied the call instead would have pinned five call sites and no
-  world.
+- **Hold the invocation constant and vary the WORLD.** All five bridges set the same six launcher
+  variables; what differs is what the goal's timeline already carries. That is where the bug was
+  (the dedup read only the LAST comment, so one interleaved `goal-review` re-admitted the refusal),
+  and a family that varied the call instead would have pinned five call sites and no world.
 - **A level-triggered clause needs its SILENT arms pinned, not just its loud one.** The interesting
   streams here are the four that add no comment: the edit when the numbers move, the adoption of a
   pre-marker refusal left by the old code, the no-op when nothing moved, and the fail-closed when
-  the timeline is unreadable (`STUB_GH=fail`, hence no `rows/unreadable/` overlay — there is
-  nothing to record for a call that never returns). Pin only the first-touch create and every
-  re-spam regression is free to come back.
+  the timeline is unreadable (`STUB_GH=fail`, hence no `world/` in that directory). Pin only the
+  first-touch create and every re-spam regression is free to come back.
 
 `fixtures/goal-ancestor-*` (homelab#367) are the eleventh family and the first whose subject is a
 LOOKUP rather than a computation: which of a ride's ancestors is the goal, walked by
