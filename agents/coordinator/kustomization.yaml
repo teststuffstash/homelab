@@ -34,6 +34,7 @@ resources:
   - responder-budget-alerts.yaml
   - responder-budget-dashboard.yaml
   - retro-argo.yaml
+  - retro-git.yaml
   - review-argo.yaml
   - reviewer-git.yaml
   - scout-account-key.yaml
