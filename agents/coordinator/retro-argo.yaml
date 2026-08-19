@@ -225,15 +225,21 @@ spec:
               # misclassification class), the ride exited 0, and only the harvest's report count
               # ever knew (homelab#248). pipefail above catches a session that DIED; it cannot catch
               # one that died CLEAN, because at the exit code those are the same event.
-              # The test is the HARVEST'S OWN extraction, verbatim (the other copy is in the harvest
-              # step below) — "would the harvest find a report in this log?", never a weaker proxy.
-              sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' "$RIDE_LOG" | sed '1d;$d' > /tmp/cell-report.md
-              if [ -s /tmp/cell-report.md ]; then
+              # A cell that DID die clean can still pass a bare non-empty check: the 2026-08-17
+              # unattended fire's deepseek cell shipped a 9-line skeleton (the report template's
+              # section headings, never filled in) between valid markers — `-s` was satisfied,
+              # the cell read Succeeded, and a human opened a content-free file (fixes homelab#590).
+              # The test is now the HARVEST'S OWN extraction PLUS its content floor, both via ONE
+              # helper (agents/retro-report-floor.sh) shared with the harvest step below and with
+              # retro-session.sh's --review gate — structurally one home, never three copies that
+              # can drift apart.
+              if bash agents/retro-report-floor.sh "$RIDE_LOG" /tmp/cell-report.md 2>/tmp/cell-report-reason; then
                 echo "cell self-check: ${CELL} produced a report ($(wc -c < /tmp/cell-report.md) bytes)"
               else
                 echo "CELL FAILED: no BEGIN/END-RETRO-REPORT block in this cell's OWN ride log (${CELL})." >&2
                 echo "  The ride exited 0, so the session died CLEAN — at the exit code a provider" >&2
                 echo "  error before the first turn is indistinguishable from a finished run." >&2
+                echo "  floor check: $(cat /tmp/cell-report-reason)" >&2
                 echo "  The log is still harvested as an artifact and the sibling cell + harvest" >&2
                 echo "  still run (continueOn), so a surviving report still lands." >&2
                 exit 1
@@ -309,12 +315,11 @@ spec:
                   A) src="$LOG_A"; cell="$CELL_A"; model="$SLUG_A" ;;
                   B) src="$LOG_B"; cell="$CELL_B"; model="$SLUG_B" ;;
                 esac
-                if sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' "$src" | sed '1d;$d' > /tmp/report.md \
-                   && [ -s /tmp/report.md ]; then
+                if bash agents/retro-report-floor.sh "$src" /tmp/report.md 2>/tmp/report-reason; then
                   N=$((N+1))
                   cp /tmp/report.md "docs/agents/retros/${DATE}-${STACK}-${RUN}-${model}.md"
                 else
-                  echo "WARN: no report markers in $src (cell ${cell} died or contract broken)"
+                  echo "WARN: no report markers in $src (cell ${cell} died or contract broken) — $(cat /tmp/report-reason)"
                   DEAD="${DEAD:+$DEAD, }${cell}"
                 fi
               done

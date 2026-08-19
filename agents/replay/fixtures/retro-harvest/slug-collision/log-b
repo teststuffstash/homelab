@@ -7,5 +7,40 @@ BEGIN-RETRO-REPORT
 
 ## Summary (≤5 lines)
 - Same brief, different harness: the round cost differs, the ranking mostly does not.
+
+## Findings (ranked, ≤6)
+- Finding 1: this harness's ride ran roughly 30% faster wall-clock than cell-a's.
+- Finding 2: infra rounds outnumber code rounds on the worst-ranked tasks.
+- Finding 3: two tasks re-fetched the same ledger slice from cold cache.
+- Finding 4: the argv ceiling warn band fired once, never crossed.
+- Finding 5: the slug derivation collided with cell-a's on the bare model name.
+- Finding 6: no report floor existed before this run.
+
+## Proposed process changes
+- Cache the ledger slice per run, not per task.
+- Disambiguate the harvest slug by harness on collision only.
+- Add a content floor to the marker self-check, not just a non-empty check.
+
+## Task granularity
+- Task 12 was chunked right: one round, clean report, no rework.
+- Task 19 should have been split: three rounds against one file, evidence of thrash.
+- Task 24 fan-out was correct: three independent files, three clean rounds in parallel.
+
+## Wins to codify
+- The argv guard's warn band caught a growing brief before it hit the ceiling.
+- The per-cell OpenRouter key mint kept this ride's spend off the fixer budget.
+
+## Platform KPIs
+- bucket-A count 4, jail $/day 1.10, trend flat, next gate unchanged.
+
+## Predecessor score
+- No merged predecessor changes this run.
+
+## Evidence confidence
+- Could not verify the pushgateway metric directly; inferred from the PR timestamps.
+- Cost figures are per-run, not per-task; task-level attribution was not available.
+- The harness comparison ran on the same model, so ranking deltas are harness-only.
+- No blocked tasks were skipped by the pain-rank slice this run.
+- The fixer WIP slot idled for roughly a third of the retro window.
 END-RETRO-REPORT
 AGENT_RUN_STATS {"task":"retro-r3","exit_status":"clean","wall_time_s":771,"rounds":1}

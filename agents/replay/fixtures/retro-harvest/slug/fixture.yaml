@@ -7,6 +7,11 @@
 # misfile under that parse — "(1M context)" → `context`, and the r2-precedent goose heading
 # "(backing model not exposed in-env)" → `in-env` — so the fixture reds if the sniff ever returns.
 #
+# homelab#590: the extraction now runs through agents/retro-report-floor.sh's content floor, so
+# both `log-a` and `log-b`'s report bodies were grown well past its 20-content-line threshold
+# (22 each) — real growth, not padding for its own sake: a report this short would now fail the
+# floor and this fixture would stop pinning the both-cells-delivered path it exists for.
+#
 # THE CONTRACT:
 #   1. The slug comes off the workflow's own `cellA`/`cellB` parameters, through the same A/B
 #      pairing that picks the log. `claude:opus` → `opus`; `goose:deepseek/deepseek-v4-pro` →

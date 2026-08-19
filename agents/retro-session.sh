@@ -66,6 +66,17 @@ done
 BRIEF=$(mktemp /tmp/retro-brief-XXXX.md)
 if [ -n "$REVIEW" ]; then
   [ -f "$REVIEW" ] || { echo "FATAL: --review $REVIEW not found" >&2; exit 2; }
+  # Content floor (homelab#590, shared with retro-argo.yaml's self-check + harvest — ONE helper,
+  # three callers): a cross-review dispatched against a content-free report reviews nothing, and
+  # the empty-skeleton shape (a landed report that is only the template's headings) would sail
+  # straight past a bare `[ -f ]` check and spend a paid ride reviewing nine lines of nothing.
+  REVIEW_FLOOR_OUT="$(mktemp)"; REVIEW_FLOOR_REASON="$(mktemp)"
+  if ! bash "$HERE/retro-report-floor.sh" "$REVIEW" "$REVIEW_FLOOR_OUT" 2>"$REVIEW_FLOOR_REASON"; then
+    echo "FATAL: --review $REVIEW does not meet the content floor ($(cat "$REVIEW_FLOOR_REASON")) — a cross-review of it would review nothing." >&2
+    rm -f "$REVIEW_FLOOR_OUT" "$REVIEW_FLOOR_REASON"
+    exit 1
+  fi
+  rm -f "$REVIEW_FLOOR_OUT" "$REVIEW_FLOOR_REASON"
   python3 - "$RETROS/CROSS-REVIEW.md" "$BRIEF" "$STACK" "$RUN_ID" "$MAIN_REPO" "$REVIEW" <<'PY'
 import sys
 tpl, out, stack, run_id, repo, report = sys.argv[1:]
