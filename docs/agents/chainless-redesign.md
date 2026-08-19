@@ -297,10 +297,12 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
 
 ## Preconditions before the fleet flip (acceptance criteria)
 
-1. **Requested≠served belt** — a deterministic drift check joining the launcher's requested model
-   to the served model (OTLP/generation records). PR#407's class was visible for 6 days in data
-   already collected; alias remapping per ride makes silent drift MORE likely. No existing FU
-   covers it (grep negative, 2026-08-13).
+1. ✅ **Requested≠served belt — LANDED 2026-08-19** (PR#573, fixes #515; an overnight fixer
+   ride): the deterministic drift check joining the launcher's requested model to the served
+   model, with `RouterRunModelUnverifiable` as its own coverage alert (unverifiable runs are
+   surfaced, never silently passed — first firings are the belt's teething, homelab#577 covers
+   its self-test gap). PR#407's class was visible for 6 days in data already collected; alias
+   remapping per ride made silent drift MORE likely, which is why this went first.
 2. **Rail-aware accounting** — `AGENT_RAIL` folded into stats/`run_reports` (M12's
    declared-unconsumed surfaces), then #278's summation across three currencies (window-draw /
    usage-value / USD). FU-131's sweep relates.
@@ -362,6 +364,12 @@ path joined verbatim → opencode.ai's SPA 404 served as 200 HTML (and the self-
 that join). First organic Go-served review: PR#437 (kimi-k3, input snapshot recorded to the
 transcripts bucket). Weekly latch back at 0.95 with the failover carrying latched weeks. Meter
 scope: cluster-dispatched only until #438 lands (jail self-metering + push per
-[ADR-108](../adr.md)). Open: E (#425 time-travel re-review), F (#426 dashboards + doc currency),
-G (#438 jail self-metering), H (#439 automatic-role failover; coordinators stay latched by
-ruling).
+[ADR-108](../adr.md)).
+
+**Part 1 CLOSED 2026-08-19 (the #420 closeout — the first stint-ritual pilot).** E–H all shipped
+in the 2026-08-14 completion wave (PRs #440–#443; E = time-travel re-review via
+`agents/re-review.sh`, G = the ADR-108 gometer, H = automatic-role failover with coordinators
+staying latched by ruling), #439 leg 2 (#528) merged, and flip-acceptance 1 landed 2026-08-19
+(the list above). Left on the table at closeout: homelab#540 (the gometer first-use-anchor
+verify — operator console-reset test), the post-reset sonnet re-reviews (fired at closeout),
+flip-acceptance 2–4, and the FU-170/FU-171/FU-172 residues on their own tracker items.
