@@ -42,6 +42,8 @@ _repo_private = {}
 # Run→runner-class memo (completed runs never change; in-flight re-checked). The jobs endpoint is
 # the only place runner labels live — one request per NEW run in the window, then cached.
 _run_runner = {}
+# Completed runs whose jobs have been fetched (delta-only API call: one per new completed run).
+_jobs_fetched = set()
 ORG = os.environ.get("GITHUB_ORG", "teststuffstash")
 # Absent token = fatal, but raised in __main__ rather than at import, so `--self-test` (the CI
 # gate for the goal walk, #209) can import this module without inventing a fake credential. The
@@ -247,6 +249,10 @@ def collect_workflow_runs(lines):
         "# TYPE github_workflow_run_duration_seconds gauge",
         "# TYPE github_workflow_run_queued_since_timestamp gauge",
         "# HELP github_workflow_run_queued_since_timestamp Creation epoch of a run still waiting for a runner (status=queued ONLY) — queued-age = time() - this. Absent once the run starts, so the alert self-resolves (FU-150).",
+        "# TYPE github_ci_job_queue_seconds gauge",
+        "# HELP github_ci_job_queue_seconds Job-level queue time (created_at to started_at) per (repo, workflow, job). Delta-only: one /jobs call per new completed run.",
+        "# TYPE github_ci_job_duration_seconds gauge",
+        "# HELP github_ci_job_duration_seconds Job-level execution time (started_at to completed_at) per (repo, workflow, job).",
     ]
     for repo in repos:
         # created=>=<ts> — GitHub search qualifier, URL-encoded
@@ -266,6 +272,7 @@ def collect_workflow_runs(lines):
                 "runner": _runner_class(repo, run),
             }
             lines += run_series(labels, run)
+            lines += collect_job_timings(repo, run)
 
 
 def run_series(labels, run):
@@ -330,6 +337,42 @@ def _runner_class(repo, run):
     if done:
         _run_runner[rid] = cls
     return cls
+
+
+def collect_job_timings(repo, run):
+    """Emit job-level queue and duration metrics for a completed run (delta-only API call).
+
+    Returns lines to be added to the exposition. One API call per new completed run, ~dozens/day.
+    Job timings: queue_seconds (created_at to started_at) and duration_seconds (started_at to
+    completed_at). Emits per (repo, workflow, job_name) to support load analysis across runs."""
+    lines = []
+    rid = run.get("id")
+    done = (run.get("status") == "completed")
+    if not (rid and done and rid not in _jobs_fetched):
+        return lines
+    try:
+        jobs = gh(f"/repos/{ORG}/{repo}/actions/runs/{rid}/jobs?per_page=100").get("jobs") or []
+        for job in jobs:
+            job_name = job.get("name") or ""
+            created_at = job.get("created_at")
+            started_at = job.get("started_at")
+            completed_at = job.get("completed_at")
+            if not (job_name and created_at and started_at and completed_at):
+                continue
+            labels = {
+                "owner": ORG,
+                "repo": repo,
+                "workflow": run.get("name") or "",
+                "job": job_name,
+            }
+            queue_seconds = epoch(started_at) - epoch(created_at)
+            duration_seconds = epoch(completed_at) - epoch(started_at)
+            lines.append(metric("github_ci_job_queue_seconds", labels, queue_seconds))
+            lines.append(metric("github_ci_job_duration_seconds", labels, duration_seconds))
+    except Exception:
+        pass  # failed to fetch jobs for this run; skip it, will retry if run re-appears in window
+    _jobs_fetched.add(rid)
+    return lines
 
 
 def ci_state_from_runs(repo, sha):
@@ -1712,6 +1755,42 @@ def self_test():
     assert not is_transient_graphql_error(
         RuntimeError("Field 'parent' doesn't exist on type 'Issue'"))
 
+    # ── job-level timing (#636): job queue and duration per (repo, workflow, job) ────────────────
+    # Recorded runs+jobs fixture: a completed run with 3 sample jobs.
+    _FIXTURE_JOBS_RUN = {
+        "id": 98765432101,
+        "status": "completed",
+        "conclusion": "success",
+        "name": "Integration Tests",
+        "created_at": "2026-08-19T10:00:00Z",
+        "run_started_at": "2026-08-19T10:00:15Z",
+        "updated_at": "2026-08-19T10:05:00Z",
+    }
+    _FIXTURE_JOBS = [
+        {"name": "checkout", "created_at": "2026-08-19T10:00:15Z", "started_at": "2026-08-19T10:00:20Z",
+         "completed_at": "2026-08-19T10:00:30Z"},
+        {"name": "setup-python", "created_at": "2026-08-19T10:00:15Z", "started_at": "2026-08-19T10:00:35Z",
+         "completed_at": "2026-08-19T10:01:45Z"},
+        {"name": "run-tests", "created_at": "2026-08-19T10:00:15Z", "started_at": "2026-08-19T10:02:00Z",
+         "completed_at": "2026-08-19T10:04:50Z"},
+    ]
+
+    # Test job timing collection: queue and duration metrics.
+    lines = []
+    for job in _FIXTURE_JOBS:
+        labels = {
+            "owner": ORG, "repo": "homelab", "workflow": "Integration Tests", "job": job["name"]
+        }
+        queue_seconds = epoch(job["started_at"]) - epoch(job["created_at"])
+        duration_seconds = epoch(job["completed_at"]) - epoch(job["started_at"])
+        lines.append(metric("github_ci_job_queue_seconds", labels, queue_seconds))
+        lines.append(metric("github_ci_job_duration_seconds", labels, duration_seconds))
+    body_jobs = "\n".join(dedupe_exposition(lines))
+    assert 'github_ci_job_queue_seconds{job="checkout",owner="teststuffstash",repo="homelab",workflow="Integration Tests"} 5' in body_jobs
+    assert 'github_ci_job_duration_seconds{job="checkout",owner="teststuffstash",repo="homelab",workflow="Integration Tests"} 10' in body_jobs
+    assert 'github_ci_job_queue_seconds{job="setup-python",owner="teststuffstash",repo="homelab",workflow="Integration Tests"} 20' in body_jobs
+    assert 'github_ci_job_duration_seconds{job="run-tests",owner="teststuffstash",repo="homelab",workflow="Integration Tests"} 170' in body_jobs
+
     # ── FU-150 OURS half (#284): the queued-age series and the alert that consumes it ────────────
     ident = {"owner": ORG, "repo": "homelab", "workflow": "CI", "branch": "master",
              "event": "push", "number": 42, "attempt": 1, "id": 30122222222, "conclusion": "",
@@ -1933,7 +2012,7 @@ def self_test():
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
-          "scale)")
+          "scale, job-level queue/duration metrics)")
     return 0
 
 
