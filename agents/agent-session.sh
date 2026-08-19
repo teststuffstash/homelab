@@ -1558,6 +1558,7 @@ if [ "$HARNESS" = "claude" ]; then
                   # window), so override them exactly as the M12 degrade leaves them
                   # (:1149-1155 subscription-session:claude + rail:subscription-fallback, :1303).
                   MODEL="$_degrade_model"
+                  GOOSE_MODEL="$_degrade_model"
                   SUB_LABEL=', "homelab.teststuff.net/subscription-session": claude, "homelab.teststuff.net/rail": subscription-fallback'
                   AGENT_RAIL="subscription-fallback"
                 else

@@ -3,6 +3,6 @@ OUT → homelab#158: Go-rail capacity limited [go-limited:window-weekly] but the
 OUT RUN_CMD: claude -p --model opencode-go/deepseek-v4-flash --dangerously-skip-permissions --max-turns 200
 OUT RAIL_DEGRADED=''
 OUT MODEL='opencode-go/deepseek-v4-flash'
-OUT AGENT_RAIL=''
+OUT AGENT_RAIL='subscription'
 OUT SUB_LABEL=''
 RC 0

@@ -166,6 +166,7 @@ is stale, so it cannot drift the way the prose register did.
 | `go-rail-latch/defer` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/reroute-deny` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/reroute-envoptout` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/reroute-model-mismatch` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/reroute-nonfix` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/reroute-optout` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/reroute-run-shape` | actions | - | `agents/agent-session.sh` | - |
