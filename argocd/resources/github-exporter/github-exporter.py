@@ -109,6 +109,7 @@ _body = "# poller has not completed a cycle yet\n"
 _errors = 0
 _last_success = 0
 _dupes = 0  # duplicate sample lines collapsed by dedupe_exposition (#153) — 0 in a healthy poller
+_first_successful_poll = True  # homelab#648: skip job timings backfill on first poll to avoid ~25m startup delay
 _review_dispatched = set()  # (repo, number, head_sha) already POSTed this process lifetime
 _cired_dispatched = set()   # (repo, number, head_sha) already red-doorbelled this lifetime (FU-115)
 _conflict_dispatched = set()  # (repo, number, head_sha) already conflict-doorbelled this lifetime (FU-144)
@@ -243,10 +244,13 @@ def dedupe_exposition(lines):
 
 
 def collect_workflow_runs(lines):
+    global _first_successful_poll
     since = (datetime.now(timezone.utc) - timedelta(hours=WINDOW_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     all_repos = [r for r in gh_paged(f"/orgs/{ORG}/repos?type=all", None) if not r["archived"]]
     repos = [r["name"] for r in all_repos]
     _repo_private.update({r["name"]: bool(r.get("private")) for r in all_repos})
+    if _first_successful_poll:
+        print("First poll: skipping job timings backfill to keep startup under 2m (homelab#648)", flush=True)
     lines += [
         "# TYPE github_workflow_run_updated_timestamp gauge",
         "# HELP github_workflow_run_updated_timestamp Last update (epoch s) of each workflow run in the window; conclusion/status ride as labels.",
@@ -276,7 +280,8 @@ def collect_workflow_runs(lines):
                 "runner": _runner_class(repo, run),
             }
             lines += run_series(labels, run)
-            lines += collect_job_timings(repo, run)
+            if not _first_successful_poll:
+                lines += collect_job_timings(repo, run)
 
 
 def run_series(labels, run):
@@ -1537,7 +1542,7 @@ def collect_anthropic_status(lines):
 
 
 def poll_forever():
-    global _body, _errors, _last_success
+    global _body, _errors, _last_success, _first_successful_poll
     while True:
         lines = []
         ok = True
@@ -1552,6 +1557,7 @@ def poll_forever():
                 print(f"{collector.__name__} failed: {exc}", flush=True)
         if ok:
             _last_success = int(time.time())
+            _first_successful_poll = False
         # Last gate before the body is published: no series may appear twice in one exposition
         # (#153). Runs BEFORE the self-metrics below so it can report its own collapse count.
         before = _dupes
