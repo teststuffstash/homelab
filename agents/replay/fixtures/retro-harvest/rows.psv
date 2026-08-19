@@ -1,0 +1,7 @@
+# retro-harvest — the decision table (family contract in fixture.yaml; per-row intent below).
+# id                        | world | patch | env                                                                                        | expect             | params
+slug                        |       |       |                                                                                            | delivered           | a_dest=opus b_dest=deepseek-v4-pro
+slug-collision               |       |       | CELL_B=goose:opus LOG_B_NAME=goose-opus-report                                            | delivered           | a_dest=claude-opus b_dest=goose-opus
+slug-collision-identical     |       |       | CELL_B=claude:opus LOG_B_NAME=claude-opus-legb-report                                     | delivered           | a_dest=claude-opus-a b_dest=claude-opus-b
+one-cell-dead                |       |       | LOG_B_NAME=goose-death DEAD_CELL=goose:deepseek/deepseek-v4-pro                           | dead-cell-missing   |
+cell-errored                 |       |       | RUN=r4 LOG_A_NAME=errored-opus-report LOG_B_NAME=never-written DECLARE_CONTINUEON=1 DEAD_CELL=goose:deepseek/deepseek-v4-pro | dead-cell-errored |

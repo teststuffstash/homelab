@@ -1,0 +1,6 @@
+# summary-comment — the decision table (family contract in fixture.yaml; per-row intent below).
+# id                   | world | patch | env                                        | expect              | params
+first-touch            |       |       | MC_NOW=2026-08-09T12:09:52Z IN_NUMBER=42 KIND=dispatch | first-touch |
+append                 |       |       | MC_NOW=2026-08-09T13:30:00Z                | append              |
+duplicate-detected     |       |       | MC_NOW=2026-08-19T11:00:00Z NARRATE=1       | duplicate-detected  |
+quoted-inert           |       |       | MC_NOW=2026-08-19T11:05:00Z IN_NUMBER=630   | quoted-inert        |
