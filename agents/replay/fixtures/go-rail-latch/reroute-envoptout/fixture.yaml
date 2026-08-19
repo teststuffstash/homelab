@@ -1,0 +1,19 @@
+# The FU-088 gate's Go arm, CAPACITY-limited + AGENT_SUBSCRIPTION_FALLBACK=0 env opt-out leg
+# (homelab#600).
+#
+# CONDITION UNDER REPLAY: an opencode-go/* dispatch while the Go window is capacity-latched
+# (reason "window-weekly"), task is an issue-fix ride, the stack row ENABLES the fallback, but
+# the per-run env opt-out AGENT_SUBSCRIPTION_FALLBACK=0 is set.
+#
+# THE CONTRACT: the M12 env opt-out binds on the reroute path too — a run that says
+# AGENT_SUBSCRIPTION_FALLBACK=0 strictly waits, no degrade. Same strict-wait shape as the
+# subscriptionFallback:false row, but the _fb_why names the env knob.
+name: go-rail-latch-reroute-envoptout
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu088-gates
+  - file:post.sh
+env:
+  - AGENT_SUBSCRIPTION_FALLBACK=0

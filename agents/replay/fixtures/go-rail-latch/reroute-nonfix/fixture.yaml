@@ -1,0 +1,15 @@
+# The FU-088 gate's Go arm, CAPACITY-limited + NON-FIX task leg (homelab#600).
+#
+# CONDITION UNDER REPLAY: an opencode-go/* dispatch while the Go window is capacity-latched
+# (reason "window-weekly"), but the task is NOT an issue-fix ride (adhoc — no TASK).
+#
+# THE CONTRACT: the M12 class=fix bound binds on the reroute path too — a research/adhoc ride
+# keeps deferring (the M12 non-fix line, :438 shape). No RAIL_DEGRADED, no MODEL change, no
+# RUN_CMD re-point.
+name: go-rail-latch-reroute-nonfix
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu088-gates
+  - file:post.sh
