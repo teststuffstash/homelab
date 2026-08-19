@@ -32,8 +32,8 @@
 #                             fact — that distinction changes the hole's SIZE, not the verdict;
 #                             see that alert's comment.)
 # NOT bridged, deliberately, because the condition is in-memory state a roll genuinely resets:
-#   SubscriptionDispatchLimited, RouterDbEphemeral, OpenRouterCapacityDown. Each carries a
-#   one-line pointer back here, and their behaviour ACROSS a roll is pinned in
+#   SubscriptionDispatchLimited, RouterDbEphemeral, OpenRouterCapacityDown, GoCapacityLatched.
+#   Each carries a one-line pointer back here, and their behaviour ACROSS a roll is pinned in
 #   agent-router.promtool-test as well — so "deliberately not bridged" is executed, not asserted.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -231,6 +231,35 @@ spec:
           annotations:
             summary: "OpenRouter account is capacity-down"
             description: 'OpenRouter account-scope capacity has been latched for 30m — worker dispatch is degrading to the haiku subscription rail or deferring the OpenRouter rail. Probe: GET openrouter-proxy.agent-egress:8080/router-status → .openrouter_capacity (reason / remaining_s / recent_429_models) names which leg latched. The credit leg reads the openrouter-operator''s openrouter_account_credit_usd gauge (openrouter-operator-metrics.openrouter-operator:9090), NOT OpenRouter directly — .credit_poll_failures climbing there, or router_openrouter_credit_poll_failures_total here, means that leg is blind and only the data-plane legs (hard-402 / cross-model 429s) can still fire (homelab#180).'
+
+        # homelab#600 (FU-170 leg d): the Go rail's OWN capacity latch, the transpose of the
+        # OpenRouter one above. An observed GO_UPSTREAM 429/402 is ground truth the self-metered
+        # ledger cannot see (homelab#540: the opencode console read monthly 95% / weekly 90% while
+        # /opencode-limit's ledger read 62%/24% — the whole pre-relaunch jail burn was invisible to
+        # it), so while this holds the gate defers Go dispatch AT the real wall: /opencode-limit
+        # serves `limited: true` with the typed reason (`observed-429`/`observed-402`) and every
+        # consumer already probes it and acts on `limited`.
+        # `for: 30m` is the same judgment call the OpenRouter mirror above made, from the latch's
+        # own arithmetic: a 429 hold is Retry-After else GO_CAPACITY_HOLD_S=900s, a 402 hold is
+        # GO_CAPACITY_402_HOLD_S=1800s — so a single 429 blip self-expires at 15m and a single 402
+        # at 30m, neither can complete a 30m `for:` window on its own. Staying latched that long
+        # means the hold was RE-engaged mid-window (or the upstream set a long Retry-After), i.e.
+        # the condition is persisting — which is the "sustained Go-rail latch" this alert exists to
+        # page. A 2xx clears the latch early, so a healthy rail never even approaches the window.
+        #
+        # ⚠ Deliberately NOT restart-gap bridged (homelab#332) — the paragraph above IS the same
+        # in-memory arm as OpenRouterCapacityDown: `_go_cap` is THIS pod's observed latch, a roll
+        # forgets it, and the fresh pod's 0 is a true reading, not a hole. The cost is the reverse
+        # ~30m re-arm blank after a roll during an ongoing outage — pinned in agent-router.promtool-test.
+        - alert: GoCapacityLatched
+          expr: router_go_capacity_latched == 1
+          for: 30m
+          labels:
+            severity: warning
+            triage: none # capacity fact — the deferral IS the correct behavior, and a triage ride would defer on this same latch
+          annotations:
+            summary: "Go rail capacity latch is held"
+            description: 'GO_UPSTREAM returned a 429/402 and the Go-rail observed-capacity latch has held for 30m — Go worker dispatch is deferring at the real wall (/opencode-limit serves limited=true with the typed reason observed-429/observed-402). Probe: GET openrouter-proxy.agent-egress:8080/opencode-limit → .capacity (reason / code / remaining_s / latched_total) names which code latched. A 429 is rate pressure (Retry-After sizes the hold); a 402 means the window is SPENT (the longer default hold). The self-metered ledger reads LOW while this is latched — the observed wall is ground truth (FU-170 leg d).'
 
         # ── ADR-107 flip-acceptance 1: the requested≠served model drift belt (homelab#515) ───────
         # The router holds BOTH sides for the OpenRouter and Go rails: run_reports / the
