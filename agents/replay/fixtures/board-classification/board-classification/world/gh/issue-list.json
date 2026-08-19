@@ -187,5 +187,15 @@
       "is_bot": false,
       "login": "RasmusSoot"
     }
+  },
+  {
+    "number": 115,
+    "title": "wave: fixture cleanup",
+    "labels": [],
+    "createdAt": "2026-08-01T00:00:00Z",
+    "author": {
+      "is_bot": false,
+      "login": "RasmusSoot"
+    }
   }
 ]
