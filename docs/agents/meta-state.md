@@ -8,20 +8,18 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ NEXT SESSION: the FU-058 stint — parent homelab#587, legs #588–#591 (+#292 via leg 1's
-  Fixes). Deadline: the retro cron self-fires Mon 2026-08-24 05:00 UTC = the organic
-  acceptance.** Build-session bootstrap (this file + §Re-arm — no corpus; the legs are
-  mechanical-with-pattern, subagent chunks welcome). At start: `echo teststuffstash/homelab#587
-  > ~/.claude/meta-events/stint` and arm a FRESH meta-events monitor (running monitors predate
-  src_stint — the gometer running-process rule). FU-167 batches 2–4 ride as slack-time subagent
-  chunks (replay tree footprint-exempt). Stint subagents ride PLAIN claude/Anthropic (35%/60%
-  at 2026-08-19 11:00 — headroom real; Go = console-truth, monthly 95%). #420 is OPEN
-  post-originals; its final closeout waits on: #540 (operator parity check, clean 5h window) +
-  the #600 subtree (#604/#605/#606 queued to the loop) + the #610 reroute merge. The 429 BELT:
-  latch LIVE (proxy 11:07, #603), reroute riding (#610) — latched capacity → same-round haiku;
-  the organic first fire is the acceptance, watch `router_go_capacity_latched`. EPIC contract
-  landed (#612 riding): lineage rules live ONCE in issue-authoring §The lineage contract.
-  In-flight at close: #610/#612 armed+riding (bot completes), loop queue #604–#607.
+- **⚑ FU-058 stint DONE (2026-08-19, one session — #587 at final closeout; closes when docs
+  PR#624 lands). WATCH: the Mon 2026-08-24 05:00 UTC retro cron = the platform series' first
+  unattended fire, the build wave's organic acceptance** (full report per cell, content floor
+  holding, distinct files for identical cells, no false RetroReportOverdue). Post-fire read =
+  next session's first item; a failed fire is a defect on FU-058's Next.
+- **⚑ Go rail EXHAUSTED for the month (console 100%/30d, resets Sep-13 ~11:30Z; weekly 99% →
+  Mon 00Z).** The 429→same-round-haiku belt is LIVE and organically proven (#607→PR#615); latch
+  persistence landed (#618→#621) AFTER the first fire, so the NEXT Go dispatch burns one 429 to
+  latch and the hold now survives proxy rolls — verify `router_go_capacity_latched` stays 1
+  across the next deploy. Meter-vs-console parity datum posted on #540 (draw under-count ~4×/7d
+  — the anchoring halves match now; the volume-parity check on a clean 5h window is still the
+  operator's).
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
   buildout → then stacks.** The forward plan lives in **ROADMAP §The platform work map**
   (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
@@ -41,7 +39,7 @@ meant to avoid.)
   the next functional proxy change), the five EXPIRY-HELD archive ids ruling · stack leftovers:
   circles#77 ci-red triage, oracle-fleet#259 rework per the seat read, circles-iac deploy-bump
   generator fix before the next circles build (circles-iac#71/#68).
-- **Soaks** (each owned by an FU/issue — this line is only the calendar): argo second backlog
+- **Soaks** (each owned by an FU/issue — this line is only the calendar): platform-retro first unattended fire Mon 08-24 05:00Z (FU-058 acceptance) · argo second backlog
   sweep ~2026-08-25 (#521) · minRunners readout · iac-sentinel first real RED + FU-176 ·
   router shadow/elastic cells (FU-095, PR#408) · FU-148 acceptance · FU-149 datum ~08-20 ·
   or-op#34 first daily-429 · renovate-approve one-approval-per-head (#114) · #540 volume-parity (the clean 5h window).
