@@ -121,10 +121,12 @@ A bounded container for multi-session jail work: a parent issue titled `stint: <
 (never `task/goal`, never `agent/*` — the scan and the goal lane must not see it), with the work
 as **native sub-issues**. Three rules carry the whole design:
 
-- **Everything binds to the parent.** Every sprout harvested during stint work is sub-issued under
-  the stint (provenance line naming the PR/issue it fell out of) — a stint session never ends with
-  free-floating harvests, and nothing from stint work may outlive the parent unlinked. The parent
-  IS the bound on the sprout tail the Goal lane needed a budget for.
+- **Everything binds to the parent — per the EPIC lineage contract**
+  ([issue-authoring.md](issue-authoring.md) §The lineage contract, the ONE home of the rules the
+  stint shares with the Goal: bind-at-filing regardless of door, defects-never-release,
+  originals/sprouts, single-parent absorption, close-at-tree-empty). Stint-specific on top:
+  sprouts carry a provenance line naming the PR/issue they fell out of, and the parent IS the
+  bound on the sprout tail the Goal lane needed a budget for.
 - **Sizing is session-multiples, not budgets.** A `Size: N sessions` body line (1 / 2 / 3 — the
   natural pricepoints; a corpus-session arc is the unit, per §Session types above). No `Budget:`,
   no launcher gate, no reader — an authoring-time thinking aid, compared against actuals at
@@ -136,12 +138,10 @@ as **native sub-issues**. Three rules carry the whole design:
   docs-cleanup over the touched surfaces, the FU sweep (file genuine leftovers, archive resolved),
   a built-vs-left-behind analysis as ONE parent comment (shipped / dropped / still open), and
   disposes every open sprout (do-now · keep as stint children · release to ordinary backlog with
-  links · drop with a reason). ⚠ The release disposition has a hard exclusion (operator, the
-  #420/#540 pilot catch, 2026-08-19): **a BUG in what the stint built is never released** — a
-  post-originals defect sprout binds to the container and holds it open; release is for work
-  that merely FELL OUT of the stint, not for defects IN its deliverables. Later closeouts repeat
-  per sprout batch; the parent CLOSES at the
-  final one, when the tree is empty — that close is the bound. Mixed execution is fine: a stint
+  links · drop with a reason). The release and close semantics are the lineage contract's
+  ([issue-authoring.md](issue-authoring.md) §The lineage contract, rules 4 and 6 — defects in
+  the stint's deliverables never release; the parent closes only when the tree is empty), not
+  restated here. Later closeouts repeat per sprout batch. Mixed execution is fine: a stint
   child that is fixer-shaped may be labeled `agent-fix`+`agent/queued` and ride the cluster loop;
   only the parent stays inert.
 

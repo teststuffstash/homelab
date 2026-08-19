@@ -94,6 +94,46 @@ That target is already partly real: the alert lane self-queues from the responde
 The remaining work is on the merge side — tier 1 dropping back to unowned once the IAC-G04 sentinel
 covers homelab — **not** on adding more checks before the launch.
 
+## The lineage contract — what being an EPIC means (operator ruling, 2026-08-19)
+
+An **epic** is an issue whose native sub-issue tree bounds a body of work through its lifecycle.
+Two KINDS exist — the **Goal** (ADR-102/106, cluster-autonomous, budget-gated) and the **stint**
+([chainless-redesign §The jail stint](chainless-redesign.md), jail-seat, session-sized) — and
+this section is the ONE home of the rules they share, so a lifecycle correction lands once
+instead of twice in parallel (both 2026-08-19 pilot catches were corrected in stint prose while
+ADR-102 already carried the Goal half). **Scope: issue LINEAGE and LIFECYCLE only.** Merge
+mechanics (goal/** branches, the assembly PR, the codeowner tax, per-PR-to-master), budget/
+sizing enforcement (`Budget:` gates vs the advisory `Size:` line), dispatch machinery
+(checkpoints, the findings store) and verdict terminals are KIND rules and stay in their kind's
+docs.
+
+The epic rules:
+
+1. **The tree is the bound.** Work and its defect tail live as native sub-issues of the parent;
+   nothing from epic work outlives the parent unlinked.
+2. **Originals vs sprouts.** The initial child set is distinguished from later arrivals;
+   originals-done is the epic's MIDPOINT, never its close (the Goal calls the phase post-launch,
+   the stint post-originals — one state, two names).
+3. **Bind at filing, regardless of door.** A defect in the epic's deliverables parents into the
+   epic when it is filed — whether it arrives via harvest, a design conversation, or an alert
+   (the #600/#420 catch: it was filed standalone because it came through the design door).
+4. **Defects never release.** Release-to-backlog is for work that merely fell OUT of the epic; a
+   defect IN its deliverables binds and holds the parent open (the #540 catch).
+5. **Single-parent absorption.** An existing issue absorbed by an epic keeps its origin parent
+   (GitHub single-parent); the absorbing child carries the `Fixes` link, and the burn-down
+   counts the child, not the absorbed issue (the #292 rule).
+6. **Close = tree-empty**, at a final closeout/terminal — and the close IS the bound.
+7. **The depth guard is an epic rule already**: the reviewer walks the native parent chain of
+   any issue its PR closes and emits no `Follow-ups:` at depth ≥2 — implemented lineage-generic
+   in `reviewer-session.sh`, so it fires for stint children exactly as for Goal children.
+
+⚠ **`task/goal`-keyed machinery is GOAL-kind machinery by definition** (operator caution,
+2026-08-19): the scan's goal clauses, budget walks and terminals key on that label, and a rule
+implemented behind it is NOT automatically an epic rule — deciding whether one generalizes
+requires the corpus read, never a relabel. The inverse guard already stands: a stint parent
+NEVER wears `task/goal` (it would summon the Goal machinery at a container that has none of its
+gates).
+
 ## Author at the last moment, queue at once (soft rule — operator, 2026-08-19)
 
 An issue is for work that gets solved SOON: **create it at the last possible moment, and queue
