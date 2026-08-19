@@ -438,6 +438,20 @@ index_check() {   # red when the committed block is stale — same ratchet spiri
   rm -f "$idx" "$cur"
 }
 
+families_currency_check() {   # red when families.tsv breaks alphabetical-by-fixture-dir order
+  local sorted="$TMP/families.sorted" families="$ROOT/agents/replay/families.tsv"
+  awk -F'\t' '!/^#/ && NF>=1 && $0 !~ /^[[:space:]]*$/ {print $1}' "$families" | sort > "$sorted"
+  awk -F'\t' '!/^#/ && NF>=1 && $0 !~ /^[[:space:]]*$/ {print $1}' "$families" > "$TMP/families.current"
+  if ! diff -u "$sorted" "$TMP/families.current" > "$TMP/families.diff" 2>&1; then
+    FAIL=$((FAIL+1)); FAILED+=("families-currency (agents/replay/families.tsv §fixture-dir order is alphabetical)")
+    printf '  \033[31m✗\033[0m families-currency — fixture-dir column is not alphabetically ordered:\n'
+    sed 's/^/      /' "$TMP/families.diff" | head -15
+  else
+    ok "families-currency (agents/replay/families.tsv §fixture-dir entries are alphabetically ordered)"
+  fi
+  rm -f "$sorted" "$TMP/families.current"
+}
+
 # ── record / re-record (cleanup move 1, the maintenance half) ──────────────────────────────────
 # `--record <world> <relpath> -- <cmd...>` runs the command, stores its stdout as the world file,
 # and appends a machine `recorded:` block to provenance.yaml — capture and provenance are one act.
@@ -501,6 +515,7 @@ printf '\033[1mclause-replay\033[0m — %s fixture(s) under %s\n' "${#DIRS[@]}" 
 for d in "${DIRS[@]}"; do run_fixture "$d"; done
 # index currency rides the FULL run only — a single-fixture invocation is an author's inner loop
 [ $# -eq 0 ] && index_check
+[ $# -eq 0 ] && families_currency_check
 
 printf '\n  %s passed, %s failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -gt 0 ]; then
