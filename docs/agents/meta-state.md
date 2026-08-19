@@ -14,10 +14,14 @@ meant to avoid.)
   mechanical-with-pattern, subagent chunks welcome). At start: `echo teststuffstash/homelab#587
   > ~/.claude/meta-events/stint` and arm a FRESH meta-events monitor (running monitors predate
   src_stint — the gometer running-process rule). FU-167 batches 2–4 ride as slack-time subagent
-  chunks (replay tree footprint-exempt). #420 is OPEN post-originals (#540 = the bound bug
-  sprout: anchors VERIFIED 2026-08-19, volume parity awaits the first clean post-relaunch 5h
-  window; ⚠ the Go monthly axis is effectively ungated meanwhile — console 93%, meter 62%,
-  failovers are the net).
+  chunks (replay tree footprint-exempt). Stint subagents ride PLAIN claude/Anthropic (35%/60%
+  at 2026-08-19 11:00 — headroom real; Go = console-truth, monthly 95%). #420 is OPEN
+  post-originals; its final closeout waits on: #540 (operator parity check, clean 5h window) +
+  the #600 subtree (#604/#605/#606 queued to the loop) + the #610 reroute merge. The 429 BELT:
+  latch LIVE (proxy 11:07, #603), reroute riding (#610) — latched capacity → same-round haiku;
+  the organic first fire is the acceptance, watch `router_go_capacity_latched`. EPIC contract
+  landed (#612 riding): lineage rules live ONCE in issue-authoring §The lineage contract.
+  In-flight at close: #610/#612 armed+riding (bot completes), loop queue #604–#607.
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
   buildout → then stacks.** The forward plan lives in **ROADMAP §The platform work map**
   (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
