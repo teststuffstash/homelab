@@ -33,7 +33,8 @@ echo ">>> Case 4: Real concatenation in PREP (fixed form with trailing separator
 # LOOP_FETCH ends with "; export GH_TOKEN; " (trailing semicolon + space before the closing quote).
 # When used in PREP="set -e; ${LOOP_FETCH}touch /work/marker; ...", it must parse as separate commands.
 LOOP_FETCH='GH_TOKEN="$(echo faketoken)" || { echo FATAL; exit 1; }; export GH_TOKEN; '
-PREP="set -e; ${LOOP_FETCH}touch /work/marker; echo REACHED"
+MARKER_DIR="$(mktemp -d)"
+PREP="set -e; ${LOOP_FETCH}touch ${MARKER_DIR}/marker; echo REACHED"
 set +e
 bash -c "$PREP" 2>&1
 RC4=$?
