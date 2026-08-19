@@ -153,6 +153,7 @@ is stale, so it cannot drift the way the prose register did.
 | `dispatch-phase/session` | actions | - | `agents/coordinator-session.sh` | - |
 | `doorbell/collapse` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout` | actions | - | `agents/coordinator-scan.sh` | - |
+| `env-card-machine-markers/env-card-machine-markers-capture` | actions | - | `agents/agent-session.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder/anthropic` | actions | - | `agents/agent-session.sh` | - |
