@@ -71,6 +71,10 @@
 - Report: outcome · `git diff --stat` · verification transcript tails · any deviation from the
   prompt · anything you lacked or guessed at (verbatim — it becomes a decomposition rule in
   `docs/spikes/subagent-handover-misses.md`).
-- If granted the PR flow: arm-and-wait with `devbox run pr-wait -- <n>` **in background
-  fashion** (poll, don't spin); exit 2 → fix in your context and re-wait (max 2 rounds);
-  exit 3/4/5 or a repeated finding → stop and report to the seat.
+- If granted the PR flow: **the cycle is yours to a TERMINAL** — never report done at PR-open,
+  and never hand-roll a poll (a watch that only sees merge is how a changes-requested sat
+  overnight on 2026-08-18). Arm-and-wait with `devbox run pr-wait -- <n>` **in background
+  fashion** (poll, don't spin — its typed exits cover every terminal); exit 2 → fix in your
+  context and re-wait (max 2 rounds); exit 3/4/5 or a repeated finding → stop and **report the
+  terminal to the seat**. The seat hears terminals only; the standing session watches are the
+  belt behind you, not your primary reader (meta-state §Re-arm).

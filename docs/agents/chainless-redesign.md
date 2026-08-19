@@ -88,6 +88,34 @@ alert belts are the net. The invariant: cluster identities still approve/merge N
 seat's authority is the operator having started the session. The Goal lane keeps its own
 checkpoints (corpus at decompose/assembly); this is the sibling for streams with no single goal.
 
+**Session types & the watch contract (operator, 2026-08-19 — the watches-for-codeowner-sessions
+sitting).** Three flows, now named: `/meta-coordinate` survives only to resume the coordination
+ROLE (meta-state's session-type rule); the jail's day-to-day runs as two session types — the
+**maintenance session** (the mechanical stream: pve, alerts, cilium/longhorn; agents issues only
+when mechanical) and the **corpus session** (design-agents corpus loaded: codeowner reads, FU
+build, subagent waves). Both arm the SAME standing watch set at bootstrap
+([`meta-state.md`](meta-state.md) §Re-arm owns the arming practice and the cadence numbers); the
+type sets only the act rule and the heartbeat cadence. The contract, distilled from the
+2026-08-18 stall (PR#568's changes-requested sat overnight behind an ad-hoc watch while the
+standing SEATPR source — built 2026-08-12 from exactly this class — sat unarmed):
+
+- **A monitor costs nothing while silent; a DELIVERED event costs a tick of the session's whole
+  context.** So events are placed by who must act: the main thread receives only seat-actionable,
+  edge-collapsed events (the standing set + subagent terminals); everything else stays
+  subagent-local or nowhere.
+- **The standing set is the level-triggered layer; ad-hoc per-PR watches are edge triggers on
+  top** and must cover EVERY terminal (new changes-requested, CI-red, breaker labels) — never
+  merge alone. A stall only the operator catches is an arming defect, not bad luck.
+- **On the corpus session, cache economics and the stall belt are ONE mechanism**: a wake within
+  the ~1h prompt-cache TTL is a ~0.1× cache read, past it a full context re-read
+  ([observability-and-retro.md](observability-and-retro.md) §Part A″ — a wait bills the context
+  holding it). So the corpus heartbeat runs UNDER the TTL and doubles as the keep-warm; an
+  expected past-TTL wait with nothing in flight is a deliberate wind-down, never an idle.
+- **Mechanical reactions are delegated down, never executed up**: the seat's tick carries the
+  judgment ("which reaction"), a subagent executes it. And no triage-brain sits between the watch
+  scripts and the seat — deterministic filter → judgment seat, the scan→coordinator shape; a
+  recurring mechanical reaction graduates into the script/reflex itself (the ≥2-pattern rule).
+
 Subagent input is the fixer's three-layer architecture transposed
 ([`fixer-context.md`](fixer-context.md)): **L1** = the versioned
 [`agents/jail-subagent-card.md`](../../agents/jail-subagent-card.md) (the FU-117 "third
