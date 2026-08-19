@@ -4480,3 +4480,10 @@ first live ADR-110 maintenance session before the ADR existed.
   GoCapacityLatched fires until Sep-13 by design (triage:none — operator may want an
   Alertmanager silence). Session ended by the ctx wind-down rule (~815k/1M) with #643/#640/#636
   machine-owned in flight — the pickup is meta-state's board close-out bullet.
+  ↳ (evening tail, same window) #643 merged (both GOOSE_MODEL arms, seat-fixed in-arbitration);
+  #647 merged (AGENT_RAIL hermeticity); #649 merged (throughput leg 2 — lifecycle series; its
+  25-min re-review gap filed evidence-first as #652); #651 merged (exporter cold-start bound,
+  fixes #648); iac-sentinel */5→*/2 direct (binding merge wait post-CI-speedup; the edge is
+  #650); strike-comment store ruling recorded in model-routing §M1 (as-is on homelab, named
+  chainless-consumer debt). Board at true close: #650 + #652 queued, nothing in flight.
+
