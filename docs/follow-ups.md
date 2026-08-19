@@ -537,28 +537,17 @@ the block needs pruning, not more headings.
       operator requirement), which also delivers context-repos.md's measurement sweep.
       Relates FU-117, FU-163, FU-058, FU-140.
 
-- [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
-      unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
-      §B2. ⚠ CORRECTED 2026-08-11: the "guard-refused, pod running" reading of the 08-10 fire
-      was FALSE — five latent lane bugs (guard read kubectl's stderr as pods; AWS_REGION;
-      root-owned artifacts; whole-ledger 146KB brief > argv cap; tee ate cell death), the lane
-      had NEVER run end-to-end; all fixed + hand-fired green, **first report DELIVERED**
-      (PR#246 merged; single-cell — cell-b mechanics = homelab#248; belt's first firing = real).
-      First UNATTENDED fire 2026-08-17 (PR#454: opus report full; deepseek cell = empty
-      template — self-check has no content floor). **SPLIT RULED 2026-08-17 (operator, §B2):
-      platform retro FIRST (rename the lane to what r4 proved it is: fleet-wide worst-K,
-      cross-repo structural reads by design; access re-scoped — fleet read token, Prometheus
-      route or drop the dark jail-$/day KPI), stack retros SECOND with briefs authored against
-      the platform retro's coverage (non-overlap).** **Next:** the rename/access/self-check
-      build wave (§B2 The split); r4's 3 new ledger blind spots join the emitter-gaps leg;
-      MCP slices (§B2); homelab#292's identical-cells slug hole rides the wave's filename
-      rename (third round on the overwrite class — disambiguate byte-identical cells by index,
-      extend the slug-collision fixtures); **the RetroReportOverdue rule rides the same wave** (operator,
-      2026-08-18): harden `max(metric)` → `max_over_time(...[8d])` (the restart-gap idiom — a
-      pushgateway emptyDir wipe on 2026-08-17 ~11:50Z erased the one-shot success push and
-      false-fired the alert for 19h AFTER r4's report landed; seat re-pushed PR#454's merge
-      epoch to clear it) + rename the series/grouping to the platform-retro naming in one
-      touch. Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
+- [ ] **FU-058** — **Retro P3: POINTER.** Design, run history, the 2026-08-17 SPLIT ruling
+      (platform retro first, stack retros second) and the 2026-08-19 platform-series build
+      (the #587 stint: rename + ride-ns guard + fleet read token + KPI drop + content floor +
+      RetroReportOverdue restart-gap hardening — PRs #619/#620/#623):
+      [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2.
+      **Next:** the Mon 2026-08-24 05:00 UTC cron is the platform series' first unattended
+      fire = the build wave's organic acceptance (full report per cell, distinct files for
+      byte-identical cells, cross-review refuses nothing silently, no false
+      RetroReportOverdue); then the ledger emitter gaps (brief-v2(b) + r4's three blind
+      spots), MCP transcript slices, and stack retros authored against the platform
+      coverage (non-overlap). Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
       the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
