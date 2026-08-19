@@ -1,0 +1,27 @@
+# goal-budget-refusal — THE FAMILY (homelab#361), as one decision table (5 dirs → 1 family).
+#
+# THE CONTRACT: `agent-session.sh`'s budget pre-flight refusal is ONE COMMENT per goal, EDITED IN
+# PLACE — option 3 of homelab#361, chosen over dedup-on-prefix (numbers freeze stale) and
+# dedup-on-full-marker (one comment per distinct sum, i.e. constantly on this platform's busiest
+# thread). The marker is an HTML comment (`<!-- agent-budget-refusal -->`), never the
+# `AGENT_BUDGET_REFUSED:` prefix alone — that prefix is prose that appears in issues, dispatch
+# notices and reviews ABOUT this mechanism (fix-debounce's quoted-marker lesson, paid for again
+# here), so lookup is `contains($marker) or startswith("AGENT_BUDGET_REFUSED:")` (the `startswith`
+# arm ADOPTS the shipped code's pre-marker format, patching the marker in rather than duplicating
+# it — `legacy`). Ties break on the OLDEST matching comment's `created_at`, which is the whole
+# regression fix (`interleaved`): the shipped code read `[.comments[].body] | last`, so an
+# interleaved `goal-review` comment hid the refusal and every scan posted a new one. The refusal
+# still `exit 1`s after commenting (or not commenting) either way — the comment is where a human
+# looks, the exit is what stops the dispatch, and neither substitutes for the other.
+#
+# All five rows hold the INVOCATION constant (bridge.sh) and vary only the WORLD — the goal's
+# existing comment timeline — because that is where the bug lived. `unreadable` fails closed
+# (`STUB_GH=fail`, no `rows/` overlay: there is nothing to record for a call that never returns).
+name: goal-budget-refusal
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:goal-budget-refusal
+  - file:post.sh
+rows: rows.psv

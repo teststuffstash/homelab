@@ -1,0 +1,1 @@
+claude -p --model haiku --dangerously-skip-permissions --max-turns 200

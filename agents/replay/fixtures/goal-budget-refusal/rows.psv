@@ -1,0 +1,7 @@
+# goal-budget-refusal — the decision table (family contract in fixture.yaml; homelab#361).
+# id           | world | patch (relpath @ patches/*.jq) | env           | expect      | params
+first-touch    |       |                                 |               | created     |
+interleaved    |       |                                 |               | patched     |
+legacy         |       |                                 |               | patched     |
+unchanged      |       |                                 |               | unchanged   |
+unreadable     |       |                                 | STUB_GH=fail  | unreadable  |
