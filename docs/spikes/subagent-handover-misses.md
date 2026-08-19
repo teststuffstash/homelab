@@ -74,7 +74,7 @@ everything derivable once the transcript link exists. The rules that keep it che
 | 2026-08-18 | #572 | FU-167 step 2 batch 1: c4c5-infeasible + harvest + goal families → table mode (14 dirs → 3 tables, −1233 lines) | subagent wave · slot-default deepseek-v4-flash UNVERIFIED (backfilled) · 278k tok / 185 calls / 76 min; seat ≈20k (brief+review+integration) | 5c13317 | unrecorded | 0 (merged r1) | (lag) | — | — (pre-sync) |
 | 2026-08-19 | #578 | session types & the watch contract (chainless + card) | seat | c01967f | — | 0 (merged r1) | (lag) | — | pending first sync |
 | 2026-08-19 | #579 | board § FIX row (seat CR PRs) + suite | seat | c01967f | — | (riding) | — | — | pending first sync |
-| 2026-08-19 | #580 | jail-transcripts bucket + sync script | seat | c01967f | — | (riding) | — | — | pending first sync |
+| 2026-08-19 | #580 | jail-transcripts bucket + sync script | seat | c01967f | — | 0 (merged r1) | 1 — the new Workspace manifest was never registered in `kustomization.yaml` `resources:`, so ArgoCD applied NOTHING (found by the seat's post-merge Secret-wait timing out; the kustomization header warns about exactly this). Survived author + bot | a new manifest in a kustomize-rendered dir is TWO edits — the file AND its `resources:` line; the end-state check (does the object exist?) is what caught it, not any review | pending first sync |
 
 ## Standing observations (promote to rules as they recur)
 

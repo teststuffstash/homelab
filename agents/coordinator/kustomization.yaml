@@ -27,6 +27,7 @@ resources:
   - fix-debounce-argo.yaml
   - garage-workspace.yaml
   - git-token.yaml
+  - jail-transcripts-workspace.yaml
   - rbac.yaml
   - reflexes-argo.yaml
   - responder-argo.yaml
