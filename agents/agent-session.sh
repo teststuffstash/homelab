@@ -1102,8 +1102,9 @@ fi
 # pod env ONLY when the LAUNCHER's own environment already carries it (retro-argo.yaml's
 # retro-cell step exports it from the retro-git Secret before calling retro-session.sh, which
 # execs this script — plain env inheritance, no CLI flag). Visible in the pod spec like every
-# other env entry here; accepted by the platform stack's own namespaces (the retro rides in
-# agent-coordinator) — an ordinary fixer namespace has no retro-git mount to source this from.
+# other env entry here; accepted for the platform retro's RIDE namespace (a platform-stack fixer
+# ns — the retro-cell step in agent-coordinator is the only place that can source the value; an
+# ordinary fixer dispatch has no retro-git mount, so this fragment stays empty there).
 # >>>REPLAY:retro-gh-token-env>>>
 RETRO_GH_TOKEN_ENV=""
 if [ -n "${RETRO_GH_TOKEN:-}" ]; then
