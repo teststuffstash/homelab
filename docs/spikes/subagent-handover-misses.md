@@ -22,7 +22,7 @@ fable-authored code — PR#407, #412 — both by tool-grounded verification). Bu
 been the guard against the A/B's dangerous class: context-poverty defects that pass BOTH reviews
 and surface later. Until the post-merge column has data, the seat read stays on every chunk.
 
-## The ledger
+## The ledger — v1 rows (2026-08-12..13; schema frozen 2026-08-19, new rows go to v2 below)
 
 One row per PR. `author` = seat (baseline arm) | subagent (trial arm). Catch-points: **seat**
 (pre-push diff read) · **bot** (review reflex) · **post-merge** (anything found after — the
@@ -45,6 +45,36 @@ handover lesson, or `—` if clean.
 | 2026-08-13 | #435 (r1–r2) | reviewer Go failover + snapshots (chunk D) | **subagent** (kimi sonnet slot) | r1: 2 — fixtures COPIED the gate logic into bridge.sh instead of `block:` composition (green fixture that can't see drift; sentinels added but unused), HEADSHA fallback unreachable (pipeline `|| ` after `cut`) · report: "9 pre-existing replay failures, unrelated" asserted WITHOUT a baseline (master 81/0 green; its clone's reds were its own mid-work state) — and round 2 DOUBLED DOWN on the claim | 1 — `${MODEL}` baked into PREP at build time while the failover reassigns it later: Go-served reviews would stamp the wrong model into the never-scrubbed TICK-LOG (one-char escape fix) | — | (a) "pre-existing" is a claim that requires a master-baseline run IN the report; (b) heredoc quoting discipline: anything a later gate can mutate must be escaped into runtime expansion — "what does this line see at POD time?" joins the loop-re-entry question as a named handover check |
 | 2026-08-13 | #436 | Go-leg surface-path map | seat | — | 0 (merged r1) | root cause was chunk A's (#429): `GO_UPSTREAM + self.path` VERBATIM → opencode.ai SPA 404 as 200 HTML — and chunk A's self-test ASSERTED the buggy join (expected value derived from the code, not the upstream contract). Second live-DOA in the same leg (first: no User-Agent → Cloudflare 1010, fixed in #434 r2). Both invisible to stubs, both predicted by the matrix, both found ONLY by the seat's post-merge live probe | stubs prove OUR half only: an upstream-facing chunk is closed by a SEAT live probe, never by a green stub suite — and a self-test expectation must cite the contract source it encodes (the matrix row), or it will happily pin the bug |
 
+
+## The ledger — v2 (2026-08-19 →): comparison keys + transcript links
+
+The schema change the corpus/model-comparison question forced (operator, 2026-08-19): rows gain
+the bucketing keys a "did the deepseek→haiku swap move the distribution" grep needs, and shed
+everything derivable once the transcript link exists. The rules that keep it cheap and honest:
+
+- **The row is written in the same act as the verdict** — the seat's pre-push read (subagent
+  arms) or the bot verdict/merge (seat arms). Deferring rows is the archaeology tax: the wave
+  rows below were reconstructed from PR metadata after the drafting session died, and their
+  seat/model cells are permanently `unrecorded`.
+- **`arm`** = author (seat | subagent) · **SERVED model, never the slot alias** (the PR#407
+  lesson — "haiku" through the shim was not haiku) · subagent tokens.
+- **`corpus`** = `git log -1 --format=%h -- docs/agents agents/jail-subagent-card.md` at the
+  session's corpus read — the bucketing key for corpus-change comparisons.
+- **`transcript`** = `s3://jail-transcripts/projects/<slug>/<session-id>.jsonl` (the PR#580
+  sync). Timings, bounces, tokens-per-round and the play-by-play live THERE, not in the row.
+- **Clean rows are sacred** — they are the denominators; a findings-only ledger cannot tell
+  "the model improved" from "the seat stopped looking". The seat's own baseline (2/6 leak to
+  bot, v1 observations) is the yardstick either way.
+- Optional GitHub-side mirror: one `Seat pre-push read: clean | N findings (<classes>)` line in
+  the PR body at push — greppable parity with bot verdicts; the file stays the analysis store.
+
+| date | PR | chunk | arm | corpus | seat | bot | post-merge | rule derived | transcript |
+|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-18 | #569 | FU-167 step 1: family dirs + bidirectional pins: lint (moves 4+5) | unrecorded (backfilled — drafting session died with its scratchpad) | 5c13317 | unrecorded | 0 (merged r1) | (lag) | main-checkout push worked first try — the #429 clone-origin lesson HELD (a rule that stuck) | — (pre-sync) |
+| 2026-08-18 | #572 | FU-167 step 2 batch 1: c4c5-infeasible + harvest + goal families → table mode (14 dirs → 3 tables, −1233 lines) | subagent wave · slot-default deepseek-v4-flash UNVERIFIED (backfilled) · 278k tok / 185 calls / 76 min; seat ≈20k (brief+review+integration) | 5c13317 | unrecorded | 0 (merged r1) | (lag) | — | — (pre-sync) |
+| 2026-08-19 | #578 | session types & the watch contract (chainless + card) | seat | c01967f | — | 0 (merged r1) | (lag) | — | pending first sync |
+| 2026-08-19 | #579 | board § FIX row (seat CR PRs) + suite | seat | c01967f | — | (riding) | — | — | pending first sync |
+| 2026-08-19 | #580 | jail-transcripts bucket + sync script | seat | c01967f | — | (riding) | — | — | pending first sync |
 
 ## Standing observations (promote to rules as they recur)
 
