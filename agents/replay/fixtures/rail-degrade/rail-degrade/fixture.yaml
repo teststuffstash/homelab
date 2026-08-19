@@ -1,0 +1,21 @@
+# FU-167 move 7 (stint #661) — the standalone homelab#158 rail-degrade harness registers so
+# "executed replay" has one runner and one index.
+#
+# mode: suite — behavioural pin for the invariant that a dispatch already on the subscription
+# rail proceeds with ZERO OpenRouter key-API calls even while the operator's OpenRouter account
+# is dead (#158 leg 1), extended by #190 (distinguishable fail-open failure modes on
+# /router-status) and #194 (the latched `.openrouter_capacity.down` trigger, outranking the
+# credit read). The suite (agents/rail-degrade-replay.sh) EXTRACTS the launcher blocks under test
+# straight out of agents/agent-session.sh at run time via `>>>REPLAY:<name>>>>` sentinels — never
+# a transcription — composes them in the launcher's own order, and stubs `curl` as an on-$PATH
+# recorder so "probed 0 times" is assertable and a call to the retired management-only
+# /api/v1/credits fails loud. No cluster, no credentials, no network. Registered, not rewritten:
+# it keeps its own file and its own devbox task (`devbox run rail-degrade-replay`, wired into CI
+# at .github/workflows/ci.yaml).
+#
+# hermeticity contract (homelab#329): needs `python3` — present under devbox, absent outside it.
+name: rail-degrade
+mode: suite
+entrypoint: agents/rail-degrade-replay.sh
+requires:
+  - python3

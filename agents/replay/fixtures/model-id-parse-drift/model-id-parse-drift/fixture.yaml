@@ -1,0 +1,19 @@
+# FU-167 move 7 (stint #661) — the standalone FU-127 model-id harness registers so "executed
+# replay" has one runner and one index.
+#
+# mode: suite — the subject is a parser CONTRACT plus a cross-file DRIFT PIN, not an action
+# stream. The egress proxy runs from a ConfigMap in a different deployment unit
+# (argocd/resources/openrouter-proxy/openrouter-proxy.py) and cannot import agents/model_id.py, so
+# its `normalize_model` must RESTATE the rail-namespace half — the suite
+# (agents/model-id-test.sh) executes BOTH the real agents/model_id.py parser and the proxy's
+# restated function and asserts they agree on every case, so a divergence goes red instead of
+# silently shipping two parsers. Registered, not rewritten: it keeps its own file and its own
+# devbox task (`devbox run model-id-test`, wired into CI at .github/workflows/ci.yaml).
+#
+# hermeticity contract (homelab#329): needs `python3` (both functions execute under it) —
+# present under devbox, absent outside it.
+name: model-id-parse-drift
+mode: suite
+entrypoint: agents/model-id-test.sh
+requires:
+  - python3
