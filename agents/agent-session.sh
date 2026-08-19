@@ -478,6 +478,7 @@ eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
 [ -z "$MODEL_HARNESS" ] || [ -n "${HARNESS_SET:-}" ] || HARNESS="$MODEL_HARNESS"
 MODEL="$MODEL_MODEL"
 # <<<REPLAY:model-id-resolution<<<
+# >>>REPLAY:struck-model-init>>>
 # Track the originally attempted model for strike attribution (FU-062 / issue#660): when we degrade
 # to a fallback, MODEL is rewritten but STRUCK_MODEL remains at the original chain entry, so the
 # strike comment records which model was attempted and failed (not which fallback was used).
