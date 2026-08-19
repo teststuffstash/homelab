@@ -21,6 +21,7 @@ dispatch-phase-session	dispatch-phase
 doorbell-collapse	doorbell
 doorbell-fanout	doorbell
 env-card-machine-markers-capture	env-card-machine-markers
+footprint-conflict-predicate	footprint-conflict-predicate
 fu088-ladder-anthropic	fu088-ladder
 fu088-ladder-both	fu088-ladder
 fu088-ladder-go	fu088-ladder
@@ -48,10 +49,12 @@ harvest-goal-open-exhausted	harvest
 harvest-goal-open-funded	harvest
 harvest-master-inert	harvest
 ledger-emitter-rounds	ledger-emitter-rounds
+model-id-parse-drift	model-id-parse-drift
 opencode-phonehome-killswitch	opencode-phonehome-killswitch
 pick-rail-both	pick-rail
 pick-rail-clear	pick-rail
 pick-rail-go	pick-rail
+rail-degrade	rail-degrade
 reflex-tick-proceed	reflex-tick
 reflex-tick-skip	reflex-tick
 research-draw-roster	research-draw-roster
@@ -77,6 +80,7 @@ reviewer-currency-probe-fail-proceeds	reviewer-currency
 reviewer-go-failover-available	reviewer-go-failover
 reviewer-go-failover-explicit-model	reviewer-go-failover
 reviewer-go-failover-limited	reviewer-go-failover
+reviewer-optout	reviewer-optout
 reviewer-touches-escapes-computed	reviewer-touches
 reviewer-touches-escapes-none	reviewer-touches
 reviewer-touches-unavailable	reviewer-touches
@@ -103,6 +107,7 @@ sprout-report-skips-buckets	sprout-report-skips-buckets
 state-fp	state-fp
 summary-comment-append	summary-comment
 summary-comment-first-touch	summary-comment
+touches-check-predicate	touches-check-predicate
 unblocked-unlabeled-blocker-open	unblocked-unlabeled
 unblocked-unlabeled-surfaces	unblocked-unlabeled
 unit-fast-path-author	unit-fast-path-author

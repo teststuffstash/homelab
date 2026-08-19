@@ -1,0 +1,15 @@
+# FU-167 move 7 (stint #661) — the standalone ADR-097 escape-set harness registers so "executed
+# replay" has one runner and one index.
+#
+# mode: suite — synthetic cases over the EXACT predicate the reviewer and scan source
+# (agents/touches-check.sh), which computes which PR paths fall outside a declared `Touches:`
+# footprint (the escape set) so the reviewer can flag governance-path escapes as BLOCKING
+# findings per .agents/review.md (homelab#379). The suite (agents/touches-check-test.sh) sources
+# the REAL agents/touches-check.sh and asserts its verdict directly — never a copy of the glob
+# logic. Distinct from `reviewer-touches` (the reviewer's rendered escape LIST) and
+# `scan-touches-footprint-hold` (the scan-level hold behaviour) — this pins the predicate itself.
+# Registered, not rewritten: it keeps its own file and its own devbox task
+# (`devbox run touches-check-test`, wired into CI at .github/workflows/ci.yaml).
+name: touches-check-predicate
+mode: suite
+entrypoint: agents/touches-check-test.sh

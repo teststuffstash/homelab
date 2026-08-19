@@ -1,0 +1,21 @@
+# FU-167 move 7 (stint #661) — the standalone homelab#204 reviewer-dispatch opt-out harness
+# registers so "executed replay" has one runner and one index.
+#
+# mode: suite — behavioural pin for the MP-T03 gate: on 2026-08-09 the platform stack's claim
+# said `reviewer.enabled: false` and agent-runtime#57 was bot-reviewed, approved and auto-merged
+# anyway, because the knob was read in only ONE of three dispatch sites while the working reader
+# kept printing the reassuring skip line. The assertion is therefore "NEITHER PATH DISPATCHES",
+# not "the knob works": the suite (agents/reviewer-optout-replay.sh) extracts the reflex tick's
+# repo filter and the reviewer session's shell guard straight out of the shipped scripts at run
+# time via `>>>REPLAY:<name>>>>` sentinels (never a transcription) and runs agents/reviewer-optout.sh
+# itself whole (it IS the shared read). `kubectl` is a stub on $PATH serving the claim shapes
+# (present/false/absent, object vs bare-string repos, Forbidden/fail/garbage reads); any kubectl
+# call that is not the claims read aborts the harness, so an escaping dispatch cannot pass
+# silently. No cluster, no credentials, no network. Registered, not rewritten: it keeps its own
+# file. Per its own header it is NOT wired into a devbox task / CI status yet — that wiring is
+# `.github/workflows/ci.yaml` + `devbox.json`, both NEVER-TOUCH from the fixer lane, so it follows
+# in the operator lane (the #133 / #184 / #199 / state-fp-replay pattern); this registration only
+# folds it into the one runner/index, it does not add the CI gate.
+name: reviewer-optout
+mode: suite
+entrypoint: agents/reviewer-optout-replay.sh
