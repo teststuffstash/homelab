@@ -1601,8 +1601,8 @@ def collect_issue_lifecycle(lines):
                     continue
                 # Get label timeline for this issue to find first agent/queued application
                 try:
-                    events = gh(f"/repos/{ORG}/{repo}/issues/{number}/events?per_page=100")
-                    if not isinstance(events, list):
+                    events = list(gh_paged(f"/repos/{ORG}/{repo}/issues/{number}/events?", None))
+                    if not events:
                         continue
                     queued_at = None
                     for event in events:
@@ -2280,6 +2280,10 @@ def self_test():
             # The Issues List endpoint returns a bare array, so key must be None
             assert key is None, f"Issues List endpoint must use key=None (not key={key!r}) to avoid batch[key] indexing on bare arrays"
             yield _FIXTURE_CLOSED_ISSUE
+        elif "/events" in path:
+            # The Issue Events endpoint returns a bare array too, so key must be None
+            assert key is None, f"Issue events endpoint must use key=None (not key={key!r}) to avoid batch[key] indexing on bare arrays"
+            yield from _FIXTURE_ISSUE_LIFECYCLE_EVENTS
         elif "/repos?" in path:
             assert key is None, f"Repos endpoint must use key=None (not key={key!r})"
             yield {"name": "homelab", "archived": False, "private": False}
