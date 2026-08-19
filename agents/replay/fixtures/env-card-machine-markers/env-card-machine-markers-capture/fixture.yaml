@@ -1,0 +1,9 @@
+# ADR-103 (#600, #607, #622): machine markers are launcher/scan-owned control flow.
+# The worker model must never author them. This fixture pins the hard rule in render_env_card(),
+# the L1 environment context injected into every ride's prompt on both harnesses.
+name: env-card-machine-markers
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:render_env_card
+  - file:post.sh
