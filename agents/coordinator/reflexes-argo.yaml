@@ -234,7 +234,12 @@ metadata:
   namespace: agent-coordinator
 spec:
   schedules:
-    - "*/5 * * * *"
+    # */2 since 2026-08-19 (was */5, tightened from */15 at the G01 flip): with ci at ~1m
+    # post-minRunners, the sentinel tick became the binding wait on EVERY push — the operator
+    # watched heads sit at "Expected" behind a fast-green ci. Tick cost is ~20s, so */2 is
+    # ~17% duty; the real fix is an EDGE (ALL EVENTS HAVE DOORBELLS — a status the cron
+    # services is a defect with an id): homelab#650 tracks the head-changed ring.
+    - "*/2 * * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300
   workflowSpec:
