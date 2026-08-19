@@ -2,6 +2,7 @@
 # meta-events.sh — THE consolidated meta-seat event loop (FU-166 leg (b), 2026-08-12).
 #
 # One Monitor arms this; it polls cheap on a 120s tick, diffs each source against durable state,
+# Sources: needsmeta · newissue (org-wide, 24h window) · seatpr · goalcmt · alert · famine · stint.
 # and prints ONLY deltas — a quiet loop wakes nobody (a Monitor line is what wakes the seat, so
 # edge-detection IS the token economy). ~2-min worst-case latency on the classes the seat serves.
 #
@@ -65,6 +66,42 @@ src_needsmeta() {
     hold_source needsmeta "meta-needs-attention.sh failed"
   fi
   rm -f "$tmp" "$tmp.set" 2>/dev/null
+}
+
+
+# NEW ISSUES, trailing 24h — the source the 2026-08-19 sitting was missing: three bot-filed
+# issues (#616/#617/#629) reached the seat only when the operator pasted their URLs.
+# PER-REPO REST LIST, deliberately NOT search (PR#632 r1): the search index under a fine-grained
+# PAT can silently drop private-repo results with a clean 200 (the FU-108 exporter class) — a
+# per-repo `gh issue list` either answers for that repo or FAILS for it, and a failed repo read
+# holds state loudly (rule #6) instead of looking healthy while blind. Cost: one REST call per
+# repo per tick (~13 × 30/hr against the PAT's 5000/hr pool). The repo set = the claim
+# universe (stacks.json mirror — the build-time consumer it exists for) + SEAT_REPOS, so an
+# unmirrored repo is the one gap; org-wide-by-search bought silence, not coverage.
+# The set is the trailing-24h window: an issue emits ONCE on first sight and CLEARs when it
+# closes or ages out (the src_seatpr window shape). All authors deliberately included: bot
+# filings are the motivating class, and an operator filing is a session pickup, not noise.
+# ACT RULE (operator, 2026-08-19): the seat TRIAGES platform-claim repos only; a stack-repo
+# event is the stack's own loop/jail's to act on — record it, skip it, unless the operator
+# points at it. The watch stays fleet-wide because operator-lane strays have no machine owner.
+src_newissue() {
+  local tmp since r ok=1 repos
+  tmp="$(mktemp)"; : > "$tmp"
+  since="$(date -u -d '-24 hours' +%Y-%m-%dT%H:%M:%SZ)"
+  # The claim-universe read FAILS LOUDLY (PR#632 r2 — the r1 class one level up): SEAT_REPOS is
+  # always non-empty, so a swallowed jq failure here would silently shrink the watch to 4 repos
+  # while every tick reports success. An unreadable mirror holds the source instead.
+  local stack_repos
+  if ! stack_repos="$(jq -r '.stacks[].repos[]' "$HERE/stacks.json" 2>/dev/null)" || [ -z "$stack_repos" ]; then
+    hold_source newissue "stacks.json repo universe unreadable"; rm -f "$tmp"; return
+  fi
+  repos="$(printf '%s\n%s\n' "$stack_repos" "$(printf '%s\n' $SEAT_REPOS)" | sort -u)"
+  for r in $repos; do
+    gh issue list -R "$ORG/$r" --state open --limit 25 --json number,author,title,createdAt       --jq ".[] | select(.createdAt >= \"$since\") | \"NEWISSUE|$r#\(.number)|\(.author.login)|\(.title[0:70])\""       >> "$tmp" 2>/dev/null || ok=0
+  done
+  if [ "$ok" = 1 ]; then diff_source newissue "$tmp"
+  else hold_source newissue "issue list failed for ≥1 repo"; fi
+  rm -f "$tmp"
 }
 
 src_goalcmt() {
@@ -207,6 +244,7 @@ WAVEIDS
 tick() {
   TICK=$((TICK+1))
   [ $((TICK % 2)) -eq 1 ] && src_needsmeta
+  src_newissue
   src_seatpr
   src_goalcmt
   src_alert
