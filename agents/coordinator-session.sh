@@ -436,7 +436,7 @@ spec:
           value: "${MODEL}"
         # ADR-106 (5) detach: the pod pushes its own session row and rings the launcher-resolved
         # completion doorbell (detach_post). CS_DOORBELL_JSON is empty on streamed/non-item runs,
-        # which no-ops the in-pod block. The gateway var mirrors the scan's `-` default (an
+        # which no-ops the in-pod block. The gateway var mirrors the scan's '-' default (an
         # explicitly EMPTY value stays a disable, only unset gets the cluster default).
         - name: AGENT_PUSHGATEWAY_URL
           value: "${AGENT_PUSHGATEWAY_URL-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
