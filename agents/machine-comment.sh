@@ -85,7 +85,7 @@ mc_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # never fatal here — this is bookkeeping, and no caller may lose its real work over a comment.
 mc_event() {   # mc_event <slug> <number> <kind> <line-markdown>
   local slug="$1" num="$2" kind="$3" line="$4"
-  local ts entry listed id body
+  local ts entry listed id body ids extra_ids
   ts="$(mc_now)"
   entry="- \`${ts}\` · ${line} <!-- agent-event kind=${kind} ts=${ts} -->"
 
@@ -97,8 +97,23 @@ mc_event() {   # mc_event <slug> <number> <kind> <line-markdown>
     printf 'mc_event: could not read comments on %s#%s — no summary line written\n' "$slug" "$num" >&2
     return 1
   fi
-  id="$(printf '%s' "$listed" | jq -r --arg m "$MC_MARKER" \
-        '[ .[] | select((.body // "") | contains($m)) ] | sort_by(.created_at) | .[0].id // empty' 2>/dev/null)" || id=''
+  # ADR-103 tie-break: target the OLDEST marked comment. If multiple exist (a race), they
+  # converge back onto the first rather than alternating. Append-only: never replace.
+  ids="$(printf '%s' "$listed" | jq -r --arg m "$MC_MARKER" \
+        '[ .[] | select((.body // "") | contains($m)) | .id ] | sort_by(.)' 2>/dev/null)" || ids=''
+  id="$(printf '%s' "$ids" | head -1)"
+
+  # Detect extra marked comments (ADR-103 invariant leak — homelab#607). If a second marked
+  # comment exists (a second writer, a race), report it. Do not try to consolidate here: that
+  # is a rare edge case and a consolidation race could make it worse. The reader (coordinator-scan,
+  # fix-debounce) knows how to handle the UNION of shapes and tolerates the presence.
+  # Marked here so a future reader understands this was observed and accepted, not a silent bug.
+  extra_ids="$(printf '%s' "$ids" | tail -n +2)"
+  if [ -n "$extra_ids" ]; then
+    printf 'mc_event: WARNING — %s#%s carries multiple agent-summary comments (ADR-103 invariant; target oldest for append, homelab#607)\n' "$slug" "$num" >&2
+    printf '  primary (appending to): %s\n' "$id" >&2
+    printf '%s' "$extra_ids" | sed 's/^/  extra (will converge to primary on next event): /' >&2
+  fi
 
   if [ -n "$id" ]; then
     body="$(printf '%s' "$listed" | jq -r --argjson i "$id" '.[] | select(.id == $i) | .body')"

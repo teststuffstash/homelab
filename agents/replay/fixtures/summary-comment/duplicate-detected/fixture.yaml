@@ -1,0 +1,34 @@
+# ADR-103 / homelab#607 — detection of duplicate marked comments (rare race condition).
+#
+# CONDITION UNDER REPLAY. An issue has TWO `<!-- agent-summary -->` comments created by different
+# writers (finalize legs running in parallel, or a timing race). This tests that mc_event:
+#   1. Detects the duplicate
+#   2. Warns about it (stderr)
+#   3. Still appends to the OLDEST one (tie-break)
+#   4. Does NOT create a third comment
+#
+# THE SCENARIOS. These comments are created by different writers:
+#   - 10:40:38Z (id 5231000042) — agent-session.sh fallback emitter, via mc_event
+#   - 10:55:48Z (id 5231000099) — a second writer (candidate: coordinator-scan finalize,
+#     finalize-by-pod, or fix-debounce) posted directly, bypassing mc_event (homelab#607 sighting)
+#
+# THE FIX. Route the second writer through mc_event so both go through the same find-or-create
+# logic, or improve mc_event to consolidate duplicates after the fact. For now, detection +
+# convergence onto the oldest is sufficient: the next event appends only to the primary,
+# converging the timeline.
+#
+# THE TEST:
+#   1. Read the timeline (already carries two marked comments)
+#   2. Call mc_event to append a third event
+#   3. Verify ONE PATCH (update to oldest), NO POST (create)
+#   4. Verify stderr reports the duplicate + which one is primary
+#   5. Verify the body contains the new event + the pre-existing round-1 markers
+#   6. Verify the count of marked comments stays at 2 (no third is created by mc_event)
+#
+name: summary-comment-duplicate-detected
+mode: actions
+parts:
+  - file: bridge.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_NUMBER=43
