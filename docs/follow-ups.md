@@ -14,6 +14,8 @@ tracker.
   **FU-141 burned** — filed 2026-08-05 for un-reaped ephemeral OpenRouterKey CRs, retracted the
   same day: already **openrouter-operator#10**, and a fixer-enabled repo's own issue is where that
   belongs (routing table) — the prior-art grep covered this tracker but not the repo's issues.
+  **FU-175 burned** — skipped in numbering, never issued: FU-176/FU-177 were filed without
+  touching the counter (found by the PR#596 review reconciling it, 2026-08-19).
 - **An archive entry may stamp the date after the id or at the end of the entry** — both
   `- **FU-NNN** *(archived YYYY-MM-DD)* — …` and `- **FU-NNN** — … *(archived YYYY-MM-DD)*` are
   read by the freshness check. Prefer the first; it sorts and scans better.
@@ -231,7 +233,7 @@ the block needs pruning, not more headings.
       scan reads the live cluster claim** — a claim change (chain redirect, knob flip) reaches
       the scan in minutes and the doorbell side only when someone remembers to sync the file
       (found live 2026-08-02: a redispatch rode the file's stale chain two hours after the claim
-      moved). Rescued 2026-08-19 (the class-C sweep — its only home was a meta-state durable
+      moved). Rescued 2026-08-19 (the untracked-work sweep — its only home was a meta-state durable
       warning). **Next:** doorbell-side callers (`coordinator-session.sh`, `agent-session.sh`,
       `coordinate-ring.sh`) read the cluster with the file as the probe-failed belt — the same
       merge `stacks_json()` already does; or extract that seam for the launchers. Relates
@@ -443,7 +445,7 @@ the block needs pruning, not more headings.
       since 2026-08-07, enforcement deliberately OFF).** [`model-routing.md`](agents/model-routing.md)
       §M1a: the flaky-cheap-model evidence (3 deaths vs 3 clean retries on `lg` work) does not
       support blacklist-on-strike; the open policy fork is blacklist vs retry-serially vs
-      fan-out-N-keep-first-survivor. Rescued from prose 2026-08-19 (the class-C sweep — the
+      fan-out-N-keep-first-survivor. Rescued from prose 2026-08-19 (the untracked-work sweep — the
       "do not flip without deciding" line had no owner). **Next:** read the accumulated strike
       table (weeks of data now exist), decide the policy in a routing sitting, then flip or
       retire the env. Natural G-A (every-role-routes) scope. Relates FU-095, ADR-096.
