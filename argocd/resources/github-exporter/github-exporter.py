@@ -39,6 +39,33 @@ API = "https://api.github.com"
 # repos — public-repo hosted minutes are free (found 2026-07-24: dashboard said 2927, the GitHub
 # meter 1436 = exactly the private subset). Billing metrics carry visibility=<private|public>.
 _repo_private = {}
+
+
+def _is_transient_http_error(exc):
+    """True when an HTTP error is transient (5xx) and worth retrying within a poll window."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return 500 <= exc.code < 600
+    return False
+
+
+def _urlopen_with_retry(req, timeout=30, max_retries=3, backoff_base=0.1):
+    """Wrapper around urllib.request.urlopen that retries on transient 5xx errors.
+
+    Retries up to `max_retries` times with exponential backoff (base^attempt seconds).
+    Transient errors (502, 504, etc.) are retried; other errors propagate immediately."""
+    for attempt in range(max_retries):
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        except urllib.error.HTTPError as exc:
+            if not _is_transient_http_error(exc):
+                raise
+            if attempt < max_retries - 1:
+                wait = backoff_base * (2 ** attempt)
+                print(f"HTTP {exc.code} (transient) on attempt {attempt + 1}/{max_retries}; "
+                      f"retrying in {wait:.1f}s", flush=True)
+                time.sleep(wait)
+            else:
+                raise
 # Run→runner-class memo (completed runs never change; in-flight re-checked). The jobs endpoint is
 # the only place runner labels live — one request per NEW run in the window, then cached.
 _run_runner = {}
@@ -128,7 +155,7 @@ def gh(path, token=None):
             "User-Agent": "homelab-github-exporter",
         },
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with _urlopen_with_retry(req, timeout=30) as resp:
         return json.loads(resp.read())
 
 
@@ -143,7 +170,7 @@ def graphql(query, variables):
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with _urlopen_with_retry(req, timeout=30) as resp:
         payload = json.loads(resp.read())
     data = payload.get("data")
     errors = payload.get("errors")
@@ -1604,7 +1631,7 @@ def poll_forever():
     while True:
         lines = []
         ok = True
-        for collector in (collect_workflow_runs, collect_open_prs, collect_agent_issues, collect_goals,
+        for collector in (collect_open_prs, collect_workflow_runs, collect_agent_issues, collect_goals,
                           collect_issue_lifecycle, collect_billing, collect_rate_limits,
                           collect_app_permission_drift, collect_vendor_status, collect_anthropic_status):
             try:
@@ -1831,6 +1858,66 @@ def self_test():
     assert is_transient_graphql_error(RuntimeError("Something went wrong, please try again"))
     assert not is_transient_graphql_error(
         RuntimeError("Field 'parent' doesn't exist on type 'Issue'"))
+
+    # ── transient HTTP error retry (homelab#652): exponential backoff for 5xx errors ──────────────
+    # Test that transient 5xx errors are retried within a poll, but persistent errors fail fast.
+    assert _is_transient_http_error(urllib.error.HTTPError(None, 502, "Bad Gateway", {}, None))
+    assert _is_transient_http_error(urllib.error.HTTPError(None, 504, "Gateway Timeout", {}, None))
+    assert not _is_transient_http_error(urllib.error.HTTPError(None, 400, "Bad Request", {}, None))
+    assert not _is_transient_http_error(urllib.error.HTTPError(None, 403, "Forbidden", {}, None))
+    assert not _is_transient_http_error(RuntimeError("some error"))
+
+    # Mock Request and responses for retry testing
+    _retry_attempt_count = [0]
+    def _make_failing_request(code, max_attempts=2):
+        """Return a callable that simulates HTTP errors then success."""
+        def _mock_request(req, timeout=30):
+            _retry_attempt_count[0] += 1
+            if _retry_attempt_count[0] < max_attempts:
+                raise urllib.error.HTTPError(None, code, f"HTTP {code}", {}, None)
+            class MockResp:
+                def read(self):
+                    return b'{"data": "success"}'
+                def __enter__(self):
+                    return self
+                def __exit__(self, *args):
+                    pass
+            return MockResp()
+        return _mock_request
+
+    saved_urlopen_for_retry = urllib.request.urlopen
+    try:
+        # Test: 502 error on first attempt, success on retry
+        _retry_attempt_count[0] = 0
+        urllib.request.urlopen = _make_failing_request(502, max_attempts=2)
+        req = urllib.request.Request("http://example.com")
+        resp = _urlopen_with_retry(req, timeout=5, max_retries=3, backoff_base=0.01)
+        assert resp is not None, "should succeed after retry"
+        assert _retry_attempt_count[0] == 2, f"should retry once (2 attempts total), got {_retry_attempt_count[0]}"
+
+        # Test: permanent error (400) fails immediately without retry
+        _retry_attempt_count[0] = 0
+        urllib.request.urlopen = lambda req, timeout=30: \
+            (_ for _ in ()).throw(urllib.error.HTTPError(None, 400, "Bad Request", {}, None))
+        try:
+            _urlopen_with_retry(req, timeout=5, max_retries=3, backoff_base=0.01)
+            assert False, "should have raised for 400 error"
+        except urllib.error.HTTPError as e:
+            assert e.code == 400
+            assert _retry_attempt_count[0] == 0, "should not retry on 400"
+
+        # Test: exhausts max retries on persistent 503
+        _retry_attempt_count[0] = 0
+        urllib.request.urlopen = _make_failing_request(503, max_attempts=10)
+        try:
+            _urlopen_with_retry(req, timeout=5, max_retries=2, backoff_base=0.01)
+            assert False, "should fail after exhausting retries"
+        except urllib.error.HTTPError as e:
+            assert e.code == 503
+            assert _retry_attempt_count[0] == 2, f"should exhaust max_retries (2), got {_retry_attempt_count[0]}"
+
+    finally:
+        urllib.request.urlopen = saved_urlopen_for_retry
 
     # ── job-level timing (#636): job queue and duration per (repo, workflow, job) ────────────────
     # Recorded runs+jobs fixture: a completed run with 3 sample jobs.
