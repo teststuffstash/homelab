@@ -200,6 +200,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-cell-report/present` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-harvest/cell-errored` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-harvest/one-cell-dead` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
+| `retro-harvest/slug-collision-identical` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-harvest/slug-collision` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-harvest/slug` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-key/minted` | actions | - | `agents/retro-session.sh` | - |

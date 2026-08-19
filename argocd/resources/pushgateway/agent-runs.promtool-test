@@ -2,8 +2,10 @@
 #
 #   devbox run -- promtool test rules argocd/resources/pushgateway/agent-runs.promtool-test
 #
-# `devbox run prometheus-rules-lint` checks that every alert PARSES; this checks that these five
+# `devbox run prometheus-rules-lint` checks that every alert PARSES; this checks that these four
 # fire on the shapes they were written for and stay quiet on the shapes that look like them —
+# (RetroReportOverdue moved to its own retro-report.promtool-rules/-test, homelab#591 — see this
+# directory's agent-runs.promtool-rules header) —
 # above all the PUSHGATEWAY-RESIDUE class, where a rule that merely parses is exactly how
 # sleep-tracking#20's 3-day-old auth-storm kept AgentRunInfraDeathBurst ringing for two days
 # (FU-021, found 2026-07-12). It IS wired into CI as of 2026-08-11: the codeowner's follow-on
@@ -28,59 +30,6 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
-  # ── RetroReportOverdue — the `or vector(0)` branch: a belt that NEVER succeeded ──────────────
-  # The failure this alert exists for is silence, not a bad value: the 2026-08-10 Monday cron
-  # fired, guard-refused, pushed nothing, and nothing said so for 13 hours. With a bare
-  # `max(...)` an absent series makes the whole expr empty and the alert can never fire — which
-  # is why `or vector(0)` is there, and why it needs a test: the series below has ZERO samples.
-  - interval: 1h
-    name: no retro report has EVER landed — fires at 8d+6h, not before
-    input_series:
-      - series: 'retro_report_last_success_timestamp{job="retro-session",stack="oracle"}'
-        values: "_x260"
-    alert_rule_test:
-      - eval_time: 190h
-        alertname: RetroReportOverdue
-        exp_alerts: []
-      # 8d = 192h is when the condition turns true; `for: 6h` still holds it here
-      - eval_time: 197h
-        alertname: RetroReportOverdue
-        exp_alerts: []
-      - eval_time: 199h
-        alertname: RetroReportOverdue
-        exp_alerts: &retro_overdue_alert
-          - exp_labels:
-              severity: warning
-              platform_machinery: "true"
-            exp_annotations:
-              summary: "No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data"
-              description: "The Monday 05:00Z retro-session CronWorkflow has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). The cron may be firing and guard-refusing — check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
-      # and it does not self-resolve while the belt stays silent
-      - eval_time: 250h
-        alertname: RetroReportOverdue
-        exp_alerts: *retro_overdue_alert
-
-  # ── RetroReportOverdue — a report lands, ages out, and a fresh one clears it ─────────────────
-  # `max(...)` over the gauge means the NEWEST report wins even if the metric ever carries more
-  # than one `stack`, and the alert clears on its own the moment a report lands.
-  - interval: 1h
-    name: a report ages out at 8d and the next one clears the alert
-    input_series:
-      # landed at t=0 …then re-pushed at t=221h with that hour's timestamp (221 * 3600)
-      - series: 'retro_report_last_success_timestamp{job="retro-session",stack="oracle"}'
-        values: "0+0x220 795600+0x40"
-    alert_rule_test:
-      - eval_time: 190h
-        alertname: RetroReportOverdue
-        exp_alerts: []
-      - eval_time: 199h
-        alertname: RetroReportOverdue
-        exp_alerts: *retro_overdue_alert
-      # the Monday report lands at 221h — one evaluation later the alert is gone
-      - eval_time: 222h
-        alertname: RetroReportOverdue
-        exp_alerts: []
-
   # ── AgentRunNegativeCost — a data-quality bug, no `for:`, fires on the first evaluation ──────
   # The positive-cost run in the same push window is the discriminator: this must be a sign test,
   # not a "cost looks odd" test.

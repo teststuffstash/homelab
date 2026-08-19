@@ -1,4 +1,4 @@
-# The five agent-runs alerts this fixture exercises, lifted VERBATIM out of prometheusrule.yaml
+# The four agent-runs alerts this fixture exercises, lifted VERBATIM out of prometheusrule.yaml
 # (comments stripped — the manifest is their one home) — the rules file that
 # agent-runs.promtool-test loads. Not a manifest and not applied to anything: `promtool test
 # rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
@@ -6,21 +6,25 @@
 # purpose — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest
 # there would fail it. (Same shape as github-exporter/queued-age.promtool-rules, FU-150/#284.)
 #
-# COVERAGE — this copy holds FIVE of the file's seven alerts, and the two it omits are omitted on
-# purpose, not by oversight:
+# COVERAGE — this copy holds FOUR of the file's seven alerts, and the three it omits are omitted
+# on purpose, not by oversight:
 #   - AgentCoordinateScanWedged is already pinned as an executed test by
 #     `agents/scan-wedge-alert-test.sh` (a clause-replay fixture, FU-145/#283); duplicating it
 #     here would give it two homes and one of them would rot.
 #   - AgentWorkerEgressDropped has NO behaviour fixture yet — a plain `rate(...) > 0` with
 #     `for: 2m`, and the honest reason it is uncovered is budget, not design. Named in homelab#288's
 #     PR body so it is a known hole rather than an assumed pass.
+#   - RetroReportOverdue MOVED OUT (homelab#591, 2026-08-19): the restart-gap harden gave it a
+#     dedicated behaviour home, retro-report.promtool-rules/-test, in the same directory —
+#     leaving it here too would be the exact two-homes-and-one-rots shape
+#     AgentCoordinateScanWedged is already excluded for above.
 #
 # ⚠ THIS COPY IS NOT DRIFT-PINNED. github-exporter's twin is, by `devbox run exporter-self-test`;
 # the general harness that would extract `.spec.groups` at run time and delete the hand copies
 # lives in `scripts/**` + `.github/**` — CI-invoked paths outside the fixer lane's tier, so it is
 # the codeowner's follow-on. Until then: re-copy after editing an alert.
 #
-#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "RetroReportOverdue" or .alert == "AgentRunNegativeCost" or .alert == "AgentRunInfraDeathBurst" or .alert == "AgentRunPhaseSlow" or .alert == "AgentEventInfraSpinning")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "AgentRunNegativeCost" or .alert == "AgentRunInfraDeathBurst" or .alert == "AgentRunPhaseSlow" or .alert == "AgentEventInfraSpinning")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
 #
 # ONE LINE on purpose — yq 4.x's lexer rejects a newline inside the expression ("lexer: invalid
 # input text"), so the pretty-wrapped form this header carried until homelab#344 did not run as
@@ -29,15 +33,6 @@
 groups:
   - name: agent-runs
     rules:
-      - alert: RetroReportOverdue
-        expr: (time() - (max(retro_report_last_success_timestamp) or vector(0))) > 8 * 86400
-        for: 6h
-        labels:
-          severity: warning
-          platform_machinery: "true"
-        annotations:
-          summary: No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data
-          description: 'The Monday 05:00Z retro-session CronWorkflow has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). The cron may be firing and guard-refusing — check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058.'
       - alert: AgentRunNegativeCost
         expr: agent_run_cost_usd < 0
         labels:
