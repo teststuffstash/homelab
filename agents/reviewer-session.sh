@@ -572,7 +572,7 @@ spec:
           value: "${PERM_MODE}"
         # homelab#560: the pod's exit contract asserts on its OWN review-bot identity — re-reading
         # the PR's reviews/comments/labels and matching reviews[].author.login / aside marker
-        # against this literal (same value the prompt's STEP-0 is injected with; no `[bot]` suffix).
+        # against this literal (same value the prompt's STEP-0 is injected with; no [bot] suffix).
         - name: REVIEWER_LOGIN
           value: "${REVIEWER_LOGIN}"
         # A0 standard rail: OTLP metrics+logs → the in-cluster collector (Loki/Prometheus).
