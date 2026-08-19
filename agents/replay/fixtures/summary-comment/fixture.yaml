@@ -1,0 +1,31 @@
+# summary-comment — THE FAMILY, as one decision table (FU-167 cleanup move 2; stint #661 batch 4;
+# was four fixture dirs: append, duplicate-detected, first-touch, quoted-inert).
+#
+# THE CONTRACT (consolidated from the four fixture essays; the per-row intent is the rows file):
+# ADR-103 / homelab#210 sets the bar — a PR timeline carries at MOST one `<!-- agent-summary -->`
+# comment, and every later machine event either CREATES it (first touch) or EDITS it in place
+# (every touch after). `mc_event` (agents/machine-comment.sh) is the one callable that decides
+# which: read the timeline, find the OLDEST comment carrying the marker ANCHORED to the body's
+# start (homelab#630 — a comment that merely QUOTES the marker inline is not a match), then POST
+# if none exists or PATCH the oldest match, appending one `<!-- agent-event kind=… ts=… -->` line.
+# Two marked comments on one timeline (a race between writers, homelab#607) converge on the OLDEST
+# rather than ping-ponging or forking a third.
+#
+# Rows: `first-touch` (no marker yet → ONE read, ONE create) · `append` (one marker, one decoy
+# posted AFTER it → PATCH the older, never the decoy) · `duplicate-detected` (two GENUINE marked
+# comments, a real race → PATCH the oldest, stderr names both, no third comment) · `quoted-inert`
+# (one real marker + one comment that only MENTIONS the marker inline → the inline mention is not
+# a match at all, ordinary single-marker append).
+#
+# The clock is the bridge's, not the machine's (`mc_now`) — a wall-clock timestamp in the action
+# stream would make every row red once per second. Every other seam (the `gh` reads/writes) stays
+# real, through the PATH-shim, which is what puts the find-or-create decision under assertion.
+name: summary-comment
+mode: table
+parts:
+  - file:bridge.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_NUMBER=43
+  - KIND=stats
+rows: rows.psv
