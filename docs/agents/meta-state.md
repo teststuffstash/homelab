@@ -8,6 +8,18 @@ meant to avoid.)
 
 ## Live state (2026-08-11 end-of-pipeline consolidation — history is TICK-LOG's)
 
+- **⚑ NEXT SESSION: the FU-058 stint — parent homelab#587, legs #588–#591 (+#292 via leg 1's
+  Fixes). Deadline: the retro cron self-fires Mon 2026-08-24 05:00 UTC = the organic
+  acceptance.** Build-session bootstrap (this worklog + §Re-arm — no corpus; the legs are
+  mechanical-with-pattern, subagent chunks welcome). At start: `echo teststuffstash/homelab#587
+  > ~/.claude/meta-events/stint` and arm a FRESH meta-events monitor (running monitors predate
+  src_stint — the gometer running-process rule). FU-167 batches 2–4 ride as slack-time subagent
+  chunks (replay tree footprint-exempt; the contention win shipped 2026-08-18 — sequencing
+  ruled 2026-08-19: FU-058 first). #420's FIRST closeout ran 2026-08-19 and the container is OPEN in its
+  post-originals phase (operator correction: #540 is a post-originals BUG sprout in the
+  stint's own deliverable — binds, holds the parent; final closeout when it resolves).
+  Post-reset sonnet re-reviews COMPLETE 2026-08-19.
+
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
   buildout → then stacks.** Board-clearing sessions are the current mode. Bucket B still waits.
 - **2026-08-18 EVENING WIND-DOWN (the all-day session's pickup; full story = TICK-LOG):**
