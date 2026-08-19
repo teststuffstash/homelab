@@ -411,10 +411,32 @@ iac-lane.md §governance checkpoint.
 
 ## Re-arm on a fresh session
 
+⚑ **Per-SESSION-TYPE since 2026-08-19 (operator direction, the watches-for-codeowner-sessions
+sitting).** Both jail session types — the mechanical MAINTENANCE session and the CORPUS session
+(design-agents corpus loaded: codeowner reads + FU build + subagent waves) — arm the SAME
+standing set below; what differs is cadence and the act rule:
+
+- **Cadence**: the corpus session's heartbeat runs UNDER the ~1h Anthropic cache TTL —
+  **2700s**, not 7200 — so the belt that catches a stall is also what keeps the big context
+  cache-warm (a wake within TTL is a ~0.1× cache read; past it, a full re-read — the Part A″
+  arithmetic, [observability-and-retro.md](observability-and-retro.md) §Part A″). Maintenance
+  sessions keep 7200s (light context, cold wakes are cheap). An expected wait past the TTL with
+  nothing in flight = WIND DOWN deliberately (write the pickup, kill monitors by process, exit).
+- **Act rule**: a watch event outside the session's type is RECORDED for the other type (board /
+  a meta-state row), never acted on — design-shaped events don't get improvised without the
+  corpus (the /design ruling applied to watch events); agents-lane events don't derail a
+  mechanical sweep.
+- **Subagent waves**: the standing set is the level-triggered layer; ad-hoc per-PR watches are
+  edge triggers on top and must cover EVERY terminal (new changes-requested, CI-red, breaker
+  labels — not just merge). A subagent granted the PR flow owns its own cycle
+  (`agents/jail-subagent-card.md`); the seat hears terminals only.
+
 - **meta-events loop (REQUIRED, replaces the standalone needs-meta arm)**: `Monitor` (persistent)
   `bash agents/meta-events.sh` — the FU-166(b) consolidated 120s edge-detected loop (needs-meta
   absorbed as a source via `--once`, + goal-thread User comments, aggregated alert set, doorbell
-  famine gauge). Cold state re-emits the standing set = the fresh-session bootstrap view.
+  famine gauge). Cold state re-emits the standing set = the fresh-session bootstrap view. The
+  SEATPR source is the anti-stall piece for seat PRs (PR#568 sat changes-requested overnight on
+  2026-08-18 with only an ad-hoc watch armed — the standing set would have surfaced it in ≤120s).
 - **needs-meta watch (legacy standalone — do NOT double-arm beside meta-events)**: `Monitor` (persistent) `bash agents/meta-needs-attention.sh`
   — unreviewed platform PRs, `agent/blocked` issues, unlabeled>24h, AND (clause 4, 2026-08-08)
   stack-repo codeowner parks (bot-approved+green+REVIEW_REQUIRED on oracle-fleet/circles — it
