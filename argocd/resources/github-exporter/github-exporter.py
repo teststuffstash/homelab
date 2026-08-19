@@ -16,10 +16,9 @@ the org each poll, so new repos need no config. Budget: (repos + 2) requests per
 hundred/hour against the 5000/h PAT limit.
 
 Config (env): GITHUB_TOKEN (fine-grained PAT: org Administration:read for billing + repo
-Actions:read + Metadata:read + Pull requests:read, all repos —
-scripts/github-exporter-pat-bootstrap.sh; Pull requests:read is the one NEW scope feeding
-collect_open_prs / the stall detector, FU-063 — absent it that one collector is skipped, the rest
-keep flowing), GITHUB_ORG,
+Actions:read + Issues:read + Metadata:read + Pull requests:read, all repos —
+scripts/github-exporter-pat-bootstrap.sh; Pull requests:read feeds collect_open_prs / the stall
+detector (FU-063), Issues:read feeds collect_agent_issues / collect_issue_lifecycle), GITHUB_ORG,
 POLL_INTERVAL_SECONDS (120), RUN_WINDOW_HOURS (24 — also bounds series cardinality: one series per run in window).
 """
 
@@ -1578,6 +1577,7 @@ def collect_issue_lifecycle(lines):
 
     Uses server-side `since` filter on `updated_at` to reduce API quota usage (GitHub's Issues
     List endpoint filters by updated_at, and closing an issue updates it)."""
+    global _errors
     since = (datetime.now(timezone.utc) - timedelta(hours=WINDOW_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     all_repos = [r for r in gh_paged(f"/orgs/{ORG}/repos?type=all", None) if not r["archived"]]
     repos = [r["name"] for r in all_repos]
@@ -1623,10 +1623,12 @@ def collect_issue_lifecycle(lines):
                         }
                         lines.append(metric("github_issue_queued_at", labels, queued_at))
                         lines.append(metric("github_issue_done_at", labels, epoch(closed_at)))
-                except Exception:
-                    pass  # failed to fetch events for this issue; skip it
-        except Exception:
-            pass  # failed to fetch issues for this repo; continue to next repo
+                except Exception as exc:
+                    _errors += 1
+                    print(f"collect_issue_lifecycle: failed to fetch events for {ORG}/{repo}#{number}: {exc}", flush=True)
+        except Exception as exc:
+            _errors += 1
+            print(f"collect_issue_lifecycle: failed to fetch issues for {ORG}/{repo}: {exc}", flush=True)
 
 
 def poll_forever():
