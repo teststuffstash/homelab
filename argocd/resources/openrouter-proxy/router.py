@@ -1334,6 +1334,30 @@ def latch_load() -> dict | None:
     return None
 
 
+def go_latch_save(latch: dict) -> None:
+    """Persist the Go capacity latch so a proxy roll doesn't forget an active 429/402 hold.
+    Keeps until, reason, code for the resumed latch; expired latches are not resurrected
+    on load."""
+    keep = {k: latch.get(k) for k in ("until", "reason", "code")}
+    _write("INSERT OR REPLACE INTO latch_state VALUES('go_latch', ?)", (json.dumps(keep),))
+
+
+def go_latch_load() -> dict | None:
+    """Load a persisted Go capacity latch, ignoring it if the hold has expired (until_epoch
+    in the past loads as clear)."""
+    rows = _read("SELECT v FROM latch_state WHERE k='go_latch'")
+    if rows:
+        try:
+            latch = json.loads(rows[0][0])
+            now = time.time()
+            # Don't resurrect expired latches — a restart after the hold expired means we're clear
+            if latch.get("until", 0.0) > now:
+                return latch
+        except ValueError:
+            pass
+    return None
+
+
 def status_summary() -> dict:
     """GET /router-status — the human/debug view."""
     now = time.time()
@@ -2181,6 +2205,23 @@ def self_test() -> int:
     assert parse_account_credit("", _OP_TS, 1800)[0] is None
     # The proxy's OWN same-named-prefix series must never be mistaken for the operator's gauge.
     assert _prom_sample(f"{ACCOUNT_CREDIT_GAUGE}_bogus 1.0\n", ACCOUNT_CREDIT_GAUGE) is None
+    # ── homelab#618: Go capacity latch persistence — survives restarts ──
+    # Round-trip: latch → save → load → check it's still there
+    now = time.time()
+    go_latch_save({"until": now + 1000.0, "reason": "observed-429", "code": 429})
+    loaded = go_latch_load()
+    assert loaded is not None and loaded["code"] == 429, "go latch round-trip"
+    assert loaded["until"] > now, "go latch until_epoch is in the future"
+    # Expired latch is not resurrected (until_epoch in the past loads as clear)
+    expired_latch = {"until": now - 100.0, "reason": "observed-402", "code": 402}
+    go_latch_save(expired_latch)
+    expired_loaded = go_latch_load()
+    assert expired_loaded is None, "expired go latch must not be resurrected"
+    # Active latch clears persisted state (early-clear path)
+    go_latch_save({"until": now + 1000.0, "reason": "observed-429", "code": 429})
+    go_latch_save({"until": 0.0, "reason": "", "code": 0})  # simulate early clear
+    cleared_loaded = go_latch_load()
+    assert cleared_loaded is None, "cleared go latch must not persist"
     body = "\n".join(metrics_lines())
     assert "router_db_persistent 0" in body, "self-test store is ephemeral by construction"
     assert 'router_strikes_total{error_class="harness-death"} 1' in body
