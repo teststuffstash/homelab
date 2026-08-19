@@ -1,4 +1,8 @@
 # homelab#248 — the other half of the marker self-check: a cell that DID produce a report passes.
+# Extended homelab#590 (fixes homelab#590): the check now runs through agents/retro-report-floor.sh
+# (shared with the harvest step and retro-session.sh --review), so this report body was grown from
+# a 1-line stub past the helper's 20-content-line floor — its sibling `skeleton/` pins the case this
+# growth exists to catch (markers present, floor NOT met).
 #
 # CONDITION UNDER REPLAY. Run 3's cell-a, the ride that actually delivered (its report is committed
 # at docs/agents/retros/2026-08-11-oracle-r3-context.md — misfiled by the slug bug this PR also
@@ -12,8 +16,10 @@
 #   2. The success line names the CELL and the extracted SIZE. The size is the assertion that the
 #      check extracted the report body — a grep for the marker word alone would pass on a log that
 #      merely mentioned it, and would have passed on the brief being echoed back.
-#   3. 155 bytes is the block BETWEEN the markers (`sed '1d;$d'` strips them) — the same bytes the
-#      harvest commits. If the two extractions ever diverge, this number moves.
+#   3. 1772 bytes is the block BETWEEN the markers (`sed '1d;$d'` strips them) — the same bytes the
+#      harvest commits. If the two extractions ever diverge, this number moves. It carries exactly
+#      20 content lines (non-blank, non-heading) — the helper's floor is `>=`, so this pins the
+#      boundary itself: one line fewer and this fixture would have to move to `skeleton/`'s side.
 name: retro-cell-report-present
 mode: actions
 source: agents/coordinator/retro-argo.yaml

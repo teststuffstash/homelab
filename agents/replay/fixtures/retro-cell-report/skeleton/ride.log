@@ -1,0 +1,16 @@
+→ oracle r4 cell goose:deepseek/deepseek-v4-pro — brief /tmp/retro-brief-r4.md (21118 bytes)
+→ harvest: report goes to docs/agents/retros/2026-08-17-oracle-r4-<model>.md via PR
+→ pod agent-oracle-fleet-retro-r4-r1 created in ns oracle-fleet
+→ streaming pod log
+BEGIN-RETRO-REPORT
+# oracle loop retro r4 — <your model name>
+## Summary (≤5 lines)
+## Findings (ranked, ≤6)
+## Proposed process changes (table: change | artifact | expected saving | confidence)
+## Task granularity (per deep-dive task: chunked-right / should-have-been-one / fan-out — evidence)
+## Wins to codify (or "none observed")
+## Platform KPIs (bucket-A count · jail $/day · trend · proposed next gate)
+## Predecessor score (or "no merged predecessor changes")
+## Evidence confidence (what you could NOT verify and why)
+END-RETRO-REPORT
+AGENT_RUN_STATS {"task":"retro-r4","exit_status":"clean","wall_time_s":614,"rounds":1}

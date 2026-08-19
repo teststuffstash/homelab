@@ -1,0 +1,17 @@
+# PR#620 review r1's suggested pin (homelab#590): a cell that dies/wanders WITHOUT ever emitting
+# a BEGIN/END-RETRO-REPORT pair leaves a marker-less RAW transcript — and a session that ran for a
+# while produces plenty of non-blank, non-heading lines (banners, tool calls, streamed reasoning).
+# This log carries 34 content lines — well past the >=20 floor — so under the first cut's
+# auto-detect fallback ("no markers => treat as an already-extracted report, floor-check as-is")
+# the self-check would have PASSED and the harvest would have committed the raw transcript as the
+# report: the exact failure class homelab#590 set out to close, reintroduced through the one shape
+# the short `missing` log could not exercise. With the caller-declared `log` mode the helper
+# answers `no-markers` regardless of length; this fixture is what makes that scoping load-bearing
+# instead of incidental.
+name: retro-cell-report-longlog
+mode: actions
+source: agents/coordinator/retro-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:retro-cell-marker-selfcheck
+  - file:post.sh

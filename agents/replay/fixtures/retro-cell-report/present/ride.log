@@ -7,5 +7,38 @@ BEGIN-RETRO-REPORT
 
 ## Summary (≤5 lines)
 - 40 ranked tasks; the dominant waste is infra rounds, not code difficulty.
+- Three tasks needed a re-dispatch after a transient provider 429.
+- The fixer WIP slot idled for roughly a third of the window.
+
+## Findings (ranked, ≤6)
+- Finding 1: infra rounds outnumber code rounds 3:1 on the worst-ranked tasks.
+- Finding 2: two tasks re-fetched the same ledger slice from cold cache.
+- Finding 3: the argv ceiling warn band fired twice, never crossed.
+- Finding 4: one goose cell died clean on a provider retry, unnoticed by exit code.
+- Finding 5: the harvest's slug derivation collided once on a harness A/B run.
+- Finding 6: no report floor existed before this run — the direct cause of this fixture's sibling.
+
+## Proposed process changes
+- Cache the ledger slice per run, not per task: cuts the cold-cache refetch to zero.
+- Pin the goose provider retry to a bounded backoff instead of an instant clean exit.
+- Add a content floor to the marker self-check, not just a non-empty check.
+
+## Task granularity
+- Task 12 was chunked right: one round, clean report, no rework.
+- Task 19 should have been split: three rounds against one file, evidence of thrash.
+- Task 24 fan-out was correct: three independent files, three clean rounds in parallel.
+
+## Wins to codify
+- The argv guard's warn band caught a growing brief before it hit the ceiling.
+- The per-cell OpenRouter key mint kept a dead cell's spend off the fixer budget.
+
+## Platform KPIs
+- bucket-A count 4, jail $/day 1.10, trend flat, next gate unchanged.
+
+## Predecessor score
+- No merged predecessor changes this run.
+
+## Evidence confidence
+- Could not verify the pushgateway metric directly; inferred from the PR timestamps.
 END-RETRO-REPORT
 AGENT_RUN_STATS {"task":"retro-r3","exit_status":"clean","wall_time_s":1042,"rounds":1}

@@ -11,7 +11,10 @@
 #      the good cell its report — the `continueOn: failed:true` this pairs with exists for exactly
 #      that, and one `cp` in the stream (not zero, not two) is the assertion.
 #   2. The dead cell is NAMED in the WARN — `$src` alone was the old text, and a path called
-#      /work/log-b does not tell an operator which model died.
+#      /work/log-b does not tell an operator which model died. homelab#590: the WARN also carries
+#      the floor helper's own reason (`— no-markers (log mode — a marker-less log is never floor-checked as a report, PR#620 r1)` here) — this log has
+#      no markers at all, so agents/retro-report-floor.sh falls back to floor-checking it as-is,
+#      the same fallback the `--review` gate uses on an already-extracted report.
 #   3. `DEAD_NOTE` carries into the PR body. It is rendered by PREDICATE (post.sh), not diffed
 #      verbatim: it is prose that will legitimately be reworded, and a fixture that pinned it
 #      byte-for-byte would red on every copy-edit. What must not move is that the note EXISTS when
