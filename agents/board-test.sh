@@ -108,6 +108,14 @@ absent "triage: post-launch buckets are containers, not work"             "circl
 absent "triage: a zero-label issue younger than a day waits"              "circles#106" "$SEC_TRIAGE"
 # Within SOLVE, a blocked issue already flagged agent/error shows ⛔ only (FU-069), never ⏸ too.
 absent "solve: agent/error overrides agent/blocked (no double line)"      "⏸ circles#103" "$SEC_SOLVE"
+# ── the FIX row (2026-08-19): seat-authored changes-requested PRs are the seat's own queue ───
+# (an operator-lane PR has no machine owner — the between-sessions backstop for the PR#568 class)
+SEC_FIX="$(section '§ FIX (seat PRs awaiting your fix round)' "$BOARD_OUT")"
+present "fix: a seat-authored changes-requested PR lists"           "circles#207" "$SEC_FIX"
+absent  "fix: a bot-authored changes-requested PR is machine-owned" "circles#203" "$SEC_FIX"
+absent  "fix: agent/error stays SOLVE's line (no double list)"      "circles#208" "$SEC_FIX"
+absent  "fix: major/awaiting-human stays REVIEW's"                  "circles#202" "$SEC_FIX"
+present "solve: the error-latched seat PR shows under SOLVE"        "⛔ circles#208" "$SEC_SOLVE"
 # Backlog aggregate counts only agent-fix issues with no agent/* state label.
 present "backlog: aggregate pins count + oldest math" \
   "circles: 3 suitable-unqueued (oldest 17d)" "$SEC_BACKLOG"

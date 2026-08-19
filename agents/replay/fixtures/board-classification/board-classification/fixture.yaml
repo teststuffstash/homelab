@@ -9,8 +9,9 @@
 # diffs the rendered board against the committed expected/ outputs.
 #
 # WHAT IT PINS, at SMOKE depth (operator scoping, 2026-08-18): one recorded world where each
-# board section classifies known rows — REVIEW, SOLVE, TRIAGE, VERDICT DUE and the BACKLOG
-# aggregate/oldest math — plus the PROBE-FAILED loudness, so it cannot regress fail-open. The
+# board section classifies known rows — REVIEW, FIX (seat CR PRs, 2026-08-19), SOLVE, TRIAGE,
+# VERDICT DUE and the BACKLOG aggregate/oldest math — plus the PROBE-FAILED loudness, so it
+# cannot regress fail-open. The
 # defect class that motivated it is a silent jq-predicate break that EMPTIES a section while the
 # board still renders healthy (PR#490's review caught one, the SOLVE/TRIAGE disjointness; the
 # WARN belt cannot see that class, it only covers read failures).
