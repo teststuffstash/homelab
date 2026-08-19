@@ -478,6 +478,11 @@ eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
 [ -z "$MODEL_HARNESS" ] || [ -n "${HARNESS_SET:-}" ] || HARNESS="$MODEL_HARNESS"
 MODEL="$MODEL_MODEL"
 # <<<REPLAY:model-id-resolution<<<
+# Track the originally attempted model for strike attribution (FU-062 / issue#660): when we degrade
+# to a fallback, MODEL is rewritten but STRUCK_MODEL remains at the original chain entry, so the
+# strike comment records which model was attempted and failed (not which fallback was used).
+STRUCK_MODEL="$MODEL"
+# <<<REPLAY:struck-model-init<<<
 
 # Without an explicit --task (interactive/ad-hoc runs) the transcript still lands somewhere findable.
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -2038,6 +2043,8 @@ if [ -n "$RUN_CMD" ]; then
         ERR_CLASS="timeout"
       elif grep -qiE -e '-32602|EOF while parsing|response may have been truncated|context_length_exceeded|panicked at' "$RUNLOG"; then
         ERR_CLASS="harness-death"
+      elif grep -qiE '429.*quota|429.*limit|monthly.*limit.*reached|rate limit exceeded' "$RUNLOG"; then
+        ERR_CLASS="quota"
       elif grep -qiE 'insufficient (credit|quota|fund)|402 payment|payment required|quota exceeded|budget exceeded|key limit exceeded|out of credit' "$RUNLOG"; then
         ERR_CLASS="budget-403"
       elif [ "$(grep -ciE 'authentication failed|401 unauthorized|403 forbidden|invalid api key|no auth credentials' "$RUNLOG")" -ge 3 ]; then
@@ -2048,7 +2055,7 @@ if [ -n "$RUN_CMD" ]; then
         ERR_CLASS="unknown"
       fi
     fi
-    STRIKE_LINE="AGENT_STRIKE: model=${MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+    STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
     echo "→ no PR opened — ${STRIKE_LINE}"
     ISSUE_N=""
     case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
