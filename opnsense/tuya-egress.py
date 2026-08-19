@@ -68,9 +68,17 @@ HOSTS = [
     ("192.168.2.16",  "Smart plug 2 -> opnsense"),
     ("192.168.2.209", "Smart plug 3 -> laptop3 / wk-metal-01"),
     ("192.168.2.130", "Smart plug 4 -> laptop4 / wk-metal-02"),
+    ("192.168.2.243", "Temp-5       -> gaas"),
+]
+# UNFENCED BY OPERATOR RULING (2026-08-19, homelab#121): the two NOUS A1s wedge behind the fence
+# on every cold boot (the ⚠ above) and both power CLUSTER NODES — a node that cannot be
+# power-cycled remotely because its plug is protocol-dead defeats the plug's purpose. They roam
+# the internet until REPLACED (the standing decision: swap them for plugs that tolerate a fenced
+# cold boot; the 9y0qx7npuny0pnwt family does). Kept here, not deleted, so the fence re-admits
+# them by moving the lines back up when the replacements land.
+UNFENCED = [
     ("192.168.2.139", "NOUS A1      -> thinkcentre"),
     ("192.168.2.80",  "NOUS A1      -> hp"),
-    ("192.168.2.243", "Temp-5       -> gaas"),
 ]
 ALIASES = [
     {"name": "rfc1918", "type": "network",
