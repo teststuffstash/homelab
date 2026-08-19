@@ -1,0 +1,27 @@
+# FU-146 dispatch loop (homelab#625) — the scan-side ABSORBER of exit-3 racing refusals.
+#
+# When coordinator-session.sh exits with code 3, a racing dispatcher has won the (repo, item)
+# key — the refusal is CORRECT (prevents fork), but rendering it as a red workflow buried 4 real
+# failures under 34 noise workflows in 16 hours. The loop absorbs exit 3, reports loudly, and
+# picks the next dispatchable unit (or exits 0 if none). Any other non-zero code still propagates.
+#
+# CONDITION UNDER REPLAY. The dispatch loop is wrapped around a call to coordinator-session.sh.
+# Two arms:
+#   1. EXIT 3 (racing refusal) → report line printed, tried_units updated, next unit picked,
+#      scan exits 0 when no more units
+#   2. EXIT 1 (real error) → propagates as the scan's exit code, not absorbed
+#
+# THE CONTRACT:
+#   1. On exit 3: "FU-146: exit 3 — ... taken by racing dispatcher; trying next unit" printed
+#   2. On exit 3: tried_units list grows, next unit discovered, loop continues
+#   3. On exit 3 with no more units: dispatch_succeeded=1, loop exits, scan returns 0
+#   4. On exit 1: dispatch_rc=$? captures it, the elif branch catches it, scan exits 1
+#
+# The coordinator-session.sh call is mocked via bridge.sh so each arm gets a different exit code.
+name: fu146-dispatch-loop
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:fu146-dispatch-loop
+  - file:cases.sh

@@ -2490,25 +2490,41 @@ EOF_GUARDED
       scan_phase deterministic
       continue
     fi
-    unit=""
+    # ── FU-146 dispatch retry loop: absorb exit-3 racing refusals ────────────────────────────
+    # A racing dispatcher can win the (repo, item) key even after the scan's atomic gate passes.
+    # Retry from the priority loop until a dispatch succeeds, no units remain, or a real error
+    # occurs. Exit code 3 is NORMAL at-least-once delivery; other non-zero codes propagate.
+    # >>>REPLAY:fu146-dispatch-loop>>>
+    tried_units=""
+    dispatch_succeeded=""
     # FU-110: pinned queued-dispatch units go FIRST WITHIN their clause — prepending is safe
     # because the clause loop below greps by clause name, so higher-priority clauses (in-flight
     # recovery etc.) still win regardless of position.
     units="${punits}${units}"
-    # Priority: in-flight recovery first, then merge-path exceptions, then CLOSE loops on merged
-    # work (C6 — cheap bookkeeping that keeps state honest), and only then open NEW work.
-    # goal-decompose sits just BEFORE queued-dispatch: it opens new work like a queued issue does,
-    # but it must win over it when a repo has both, because a goal left undecomposed is what makes
-    # its children exist at all (leg (c), 2026-08-05). It stays BELOW every recovery and merge-path
-    # clause — an in-flight failure is always more urgent than planning the next thing.
-    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout goal-checkpoint goal-decompose queued-dispatch; do
-      unit="$(printf '%b' "$units" | grep -m1 "^${clause}|" || true)"
-      [ -n "$unit" ] && break
-    done
-    if [ -z "$unit" ]; then
-      echo "  actionable items but no dispatchable unit (context-only repos / gated) — report-only."
-      continue
-    fi
+    while [ -z "$dispatch_succeeded" ]; do
+      unit=""
+      # Priority: in-flight recovery first, then merge-path exceptions, then CLOSE loops on merged
+      # work (C6 — cheap bookkeeping that keeps state honest), and only then open NEW work.
+      # goal-decompose sits just BEFORE queued-dispatch: it opens new work like a queued issue does,
+      # but it must win over it when a repo has both, because a goal left undecomposed is what makes
+      # its children exist at all (leg (c), 2026-08-05). It stays BELOW every recovery and merge-path
+      # clause — an in-flight failure is always more urgent than planning the next thing.
+      for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout goal-checkpoint goal-decompose queued-dispatch; do
+        # First candidate of THIS clause not yet tried this pass (PR#631 r1: `grep -m1` against
+        # the unmodified $units re-found the same skipped line forever, so a clause with two
+        # units never drained past its first — the loop fell through to lower-priority clauses
+        # while same-clause work sat dispatchable). The subshell only READS tried_units.
+        unit="$(printf '%b' "$units" | grep "^${clause}|" | while IFS= read -r cand; do
+          case " $tried_units " in *" $cand "*) continue;; esac
+          printf '%s\n' "$cand"; break
+        done || true)"
+        [ -n "$unit" ] && break
+      done
+      if [ -z "$unit" ]; then
+        echo "  actionable items but no dispatchable unit (context-only repos / gated) — report-only."
+        dispatch_succeeded=1
+        continue
+      fi
     uclause="${unit%%|*}"; rest="${unit#*|}"; urepo="${rest%%|*}"; rest2="${rest#*|}"
     # FU-114 L3: 4-field units (queued-dispatch, c4c5-redispatch) carry the task class from the
     # issue's task/* label — the recipe choice is DETERMINISTIC (never the session "figuring it
@@ -2532,7 +2548,13 @@ EOF_GUARDED
     if [ "$uclause" = "c4c5-redispatch" ]; then
       fresh_state="$(gh issue view "${uitem#issue-}" --repo "${ORG}/${urepo}" --json state --jq .state 2>/dev/null || echo PROBE-FAILED)"
       if [ "$fresh_state" = "CLOSED" ]; then
-        echo "  FU-121: ${urepo} ${uitem} closed since the list snapshot — redispatch skipped."
+        # PR#631 r2: inside the FU-146 retry loop this `continue` targets the NEW `while`, no
+        # longer the outer stacks loop — unmarked, it would re-select this same closed unit
+        # forever (an unbounded tight loop of live probes). Mark it tried: the skip becomes a
+        # bounded drain to the next unit, which is strictly better than master's whole-stack
+        # abort — a raced close should not cost the pass its dispatch.
+        tried_units="${tried_units} ${unit}"
+        echo "  FU-121: ${urepo} ${uitem} closed since the list snapshot — redispatch skipped; trying next unit"
         continue
       fi
     fi
@@ -2706,18 +2728,37 @@ EOF_GUARDED
         ;;
     esac
     # <<<REPLAY:harvest-disposition<<<
-    echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
-    # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
-    # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
-    # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
-    # spin-up, not the streamed ride, and the `coordinator-scan` mutex now spans only the
-    # deterministic pass (the pod uploads, pushes its own session row, rings the doorbell itself).
-    dispatch_phase "$mainrepo"   # FU-160: the ring→scan and scan rows close on the same boundary
-    scan_phase dispatch
-    bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
-      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
-      --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uharvest}"
-    scan_phase deterministic
+      echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
+      # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
+      # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
+      # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
+      # spin-up, not the streamed ride, and the `coordinator-scan` mutex now spans only the
+      # deterministic pass (the pod uploads, pushes its own session row, rings the doorbell itself).
+      dispatch_phase "$mainrepo"   # FU-160: the ring→scan and scan rows close on the same boundary
+      scan_phase dispatch
+      # ── FU-146 exit-3 dispatch gate (racing dispatcher won): report, retry next unit ─────────
+      # When `coordinator-session.sh` exits with 3, the item pod exists and a racing dispatcher
+      # won the (repo, item) key. The refusal is CORRECT; its rendering as a red workflow is
+      # the problem — 34 red workflows in 16h bury 4 real failures. Retry the next unit (or
+      # exit 0 if none); never propagate exit 3 as the scan's exit code.
+      dispatch_rc=0
+      bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
+        --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
+        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uharvest}" \
+        || dispatch_rc=$?
+      if [ $dispatch_rc -eq 3 ]; then
+        echo "  FU-146: exit 3 — ${name}/${urepo}/${uitem} taken by racing dispatcher; trying next unit"
+        tried_units="${tried_units} ${unit}"
+        # Continue the retry loop (stay in while, re-find a unit)
+      elif [ $dispatch_rc -ne 0 ]; then
+        exit $dispatch_rc
+      else
+        # Success
+        dispatch_succeeded=1
+      fi
+      scan_phase deterministic
+    done
+    # <<<REPLAY:fu146-dispatch-loop<<<
   else
     echo "  run it (interactive, supervised):"
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"
