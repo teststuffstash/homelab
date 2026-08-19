@@ -136,7 +136,11 @@ as **native sub-issues**. Three rules carry the whole design:
   docs-cleanup over the touched surfaces, the FU sweep (file genuine leftovers, archive resolved),
   a built-vs-left-behind analysis as ONE parent comment (shipped / dropped / still open), and
   disposes every open sprout (do-now · keep as stint children · release to ordinary backlog with
-  links · drop with a reason). Later closeouts repeat per sprout batch; the parent CLOSES at the
+  links · drop with a reason). ⚠ The release disposition has a hard exclusion (operator, the
+  #420/#540 pilot catch, 2026-08-19): **a BUG in what the stint built is never released** — a
+  post-originals defect sprout binds to the container and holds it open; release is for work
+  that merely FELL OUT of the stint, not for defects IN its deliverables. Later closeouts repeat
+  per sprout batch; the parent CLOSES at the
   final one, when the tree is empty — that close is the bound. Mixed execution is fine: a stint
   child that is fixer-shaped may be labeled `agent-fix`+`agent/queued` and ride the cluster loop;
   only the parent stays inert.
@@ -297,10 +301,12 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
 
 ## Preconditions before the fleet flip (acceptance criteria)
 
-1. **Requested≠served belt** — a deterministic drift check joining the launcher's requested model
-   to the served model (OTLP/generation records). PR#407's class was visible for 6 days in data
-   already collected; alias remapping per ride makes silent drift MORE likely. No existing FU
-   covers it (grep negative, 2026-08-13).
+1. ✅ **Requested≠served belt — LANDED 2026-08-19** (PR#573, fixes #515; an overnight fixer
+   ride): the deterministic drift check joining the launcher's requested model to the served
+   model, with `RouterRunModelUnverifiable` as its own coverage alert (unverifiable runs are
+   surfaced, never silently passed — first firings are the belt's teething, homelab#577 covers
+   its self-test gap). PR#407's class was visible for 6 days in data already collected; alias
+   remapping per ride made silent drift MORE likely, which is why this went first.
 2. **Rail-aware accounting** — `AGENT_RAIL` folded into stats/`run_reports` (M12's
    declared-unconsumed surfaces), then #278's summation across three currencies (window-draw /
    usage-value / USD). FU-131's sweep relates.
@@ -362,6 +368,15 @@ path joined verbatim → opencode.ai's SPA 404 served as 200 HTML (and the self-
 that join). First organic Go-served review: PR#437 (kimi-k3, input snapshot recorded to the
 transcripts bucket). Weekly latch back at 0.95 with the failover carrying latched weeks. Meter
 scope: cluster-dispatched only until #438 lands (jail self-metering + push per
-[ADR-108](../adr.md)). Open: E (#425 time-travel re-review), F (#426 dashboards + doc currency),
-G (#438 jail self-metering), H (#439 automatic-role failover; coordinators stay latched by
-ruling).
+[ADR-108](../adr.md)).
+
+**Part 1's FIRST closeout ran 2026-08-19 (#420 — the stint-ritual pilot; the container stays
+OPEN in its post-originals phase, operator correction same day: #540 is a post-originals BUG
+sprout in the stint's own deliverable, so it binds and holds the parent).** E–H all shipped
+in the 2026-08-14 completion wave (PRs #440–#443; E = time-travel re-review via
+`agents/re-review.sh`, G = the ADR-108 gometer, H = automatic-role failover with coordinators
+staying latched by ruling), #439 leg 2 (#528) merged, and flip-acceptance 1 landed 2026-08-19
+(the list above). Bound at closeout: homelab#540 (the gometer 5h-window anchoring bug — the post-originals
+sprout that keeps #420 open until its final closeout). Outside the container: the post-reset
+sonnet re-reviews (fired at closeout, complete same day), flip-acceptance 2–4, and the
+FU-170/FU-171/FU-172 residues on their own tracker items.
