@@ -491,18 +491,19 @@ is needed for this.
 **⚖ THE SPLIT (operator ruling, 2026-08-17, from the r4 evidence): the retro divides into the
 PLATFORM retro and per-stack retros — built in that order.**
 
-1. **The platform retro FIRST — the current lane, renamed to what it already is.** r4 ("oracle
-   r4", PR#454) proved the shape: the pain-rank step reads the WHOLE `_ledger.jsonl` with no
-   stack filter (retro-argo.yaml), the worst-K landed on circles/homelab/openrouter-operator/
-   sleep rows while oracle sat quiet, and every finding targets a PLATFORM artifact (recipes,
-   the coordinator brief, the ledger emitter). That is correct, not a bug — **structural
-   problems require looking into the stack repos; no way around it** (operator). What follows
-   is that ACCESS tracks the questions instead of the oracle nameplate: a fleet read token
-   (sleep-tracking was dark — 2 of 8 deep-dives untrailable, two runs in a row), and the
-   jail-$/day KPI either gets a read-only Prometheus route or leaves the brief (a known-dark
-   query burned every run; r4 quoted the exact RBAC refusals). Mechanical legs: the workflow
-   `stack` param / run numbering / report filenames rename to the platform series; the
-   WIP-slot check moves off oracle's fixer ns.
+1. **The platform retro FIRST — BUILT 2026-08-19 (the #587 stint, legs on #588/#589/#590/#591).**
+   r4 ("oracle r4", PR#454) proved the shape: the pain-rank reads the WHOLE `_ledger.jsonl` with
+   no stack filter, the worst-K landed on circles/homelab/openrouter-operator/sleep rows while
+   oracle sat quiet, and every finding targets a PLATFORM artifact. That is correct, not a bug —
+   **structural problems require looking into the stack repos; no way around it** (operator).
+   As built: the workflow's `stack` param defaults `platform` (series `platform-rN`, ride ns =
+   the platform stack's fixer ns via `agents/retro-project.sh` — the ONE stack→ns map, shared
+   with the guard, whose busy-probe now checks only the ride namespace: WIP-slot locality);
+   ACCESS tracks the questions — a fleet-wide READ-ONLY `retro-git` token (App-minted, delivered
+   by the FU-080 (a) mirror pattern, never as manifest text — PR#619) reaches the ride as
+   `RETRO_GH_TOKEN`; the jail-$/day KPI LEFT the brief (route-or-drop ruled DROP — its home is
+   the operator's Grafana subscription/gometer dashboards, and the query was dark from the pod
+   on every run).
 2. **Stack retros SECOND, their briefs authored AGAINST the platform retro's coverage** —
    deliberately non-overlapping: stack-local concerns only (recipe quality, spec adherence,
    the stack's own model cells), never the cross-cutting classes the platform retro already
@@ -510,10 +511,11 @@ PLATFORM retro and per-stack retros — built in that order.**
    ruled 2026-07-25; the non-overlap contract is authored INTO the stack brief template when
    the first stack graduates, with the platform reports in hand.
 
-Two r4 lane defects ride the same build wave: the cell report-marker self-check passes on bare
-template headers (the deepseek-v4-pro cell shipped a 9-line empty skeleton as its "report" —
-the check needs a content floor, not a header grep), and the swapped-cell cross-review must
-refuse an empty report as its input.
+The two r4 lane defects shipped with the same wave (PR#620): the cell report-marker self-check
+now runs a ≥20-content-line floor via `agents/retro-report-floor.sh` (ONE helper, three callers
+— self-check, harvest, `--review`; caller-declared `log|report` mode so a marker-less raw
+transcript can never pass as a report), and the swapped-cell cross-review refuses an
+under-floor report before dispatching a paid ride at it.
 
 **A retro process change with a platform half and a per-repo half files as one issue PER
 repo, never as a clause delegated to "the next recipe touch" (r4 F3).** The contrast is
@@ -534,8 +536,12 @@ scoring, three new ledger blind spots, a proposed replay gate; the deepseek cell
 empty template, the self-check gap in §The split); the swapped-cell cross-review is still
 unrun and must skip the empty report. Standing lane bounds from the
 first real pass: the brief is a bounded worst-K ledger slice (never the whole ledger), and the
-cell pipeline runs `pipefail`. Remaining FU-058 legs: ledger emitter gaps (brief-v2(b)), MCP
-transcript slices.
+cell pipeline runs `pipefail`. **The platform-series build wave landed 2026-08-19** (the #587
+stint: rename + ride-ns guard #623, fleet read token + KPI drop #619, content floor #620,
+RetroReportOverdue restart-gap hardening #623) — the first unattended PLATFORM fire is the
+Mon 2026-08-24 05:00 UTC cron, the wave's organic acceptance. Remaining FU-058 legs: ledger
+emitter gaps (brief-v2(b) + r4's three blind spots), MCP transcript slices, stack retros
+second (§The split point 2).
 
 #### The multi-model pilot — runs 1+2 (2026-07-25) and what they taught
 
