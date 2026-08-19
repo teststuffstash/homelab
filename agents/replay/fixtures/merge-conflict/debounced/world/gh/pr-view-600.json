@@ -1,0 +1,13 @@
+{
+  "headRefOid": "faba0fd111111111111111111111111111111111",
+  "reviewDecision": "REVIEW_REQUIRED",
+  "statusCheckRollup": [
+    {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"},
+    {"__typename":"CheckRun","name":"manifest-lint","status":"COMPLETED","conclusion":"SUCCESS"}
+  ],
+  "reviews": [],
+  "comments": [
+    {"body":"🤖 `state-fp:a10d92af08ec` — deterministic scan dispatching a `merge-conflict` unit at 2026-08-19T09:36:00Z. Machine-readable debounce marker (homelab#198), written by `agents/coordinator-scan.sh`, not by the session that follows.","createdAt":"2026-08-19T09:36:00Z"},
+    {"body":"the DIRTY head is blocking the merge","createdAt":"2026-08-19T09:10:00Z"}
+  ]
+}

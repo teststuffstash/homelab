@@ -119,6 +119,8 @@ absent "solve: agent/error overrides agent/blocked (no double line)"      "⏸ c
 SEC_FIX="$(section '§ FIX (seat PRs awaiting your fix round)' "$BOARD_OUT")"
 present "fix: a seat-authored changes-requested PR lists"           "circles#207" "$SEC_FIX"
 absent  "fix: a bot-authored changes-requested PR is machine-owned" "circles#203" "$SEC_FIX"
+present "fix: a seat-authored merge-conflict PR lists (homelab#595)" "circles#209" "$SEC_FIX"
+absent  "fix: a bot-authored merge-conflict PR is machine-owned"    "circles#210" "$SEC_FIX"
 absent  "fix: agent/error stays SOLVE's line (no double list)"      "circles#208" "$SEC_FIX"
 absent  "fix: major/awaiting-human stays REVIEW's"                  "circles#202" "$SEC_FIX"
 present "solve: the error-latched seat PR shows under SOLVE"        "⛔ circles#208" "$SEC_SOLVE"
