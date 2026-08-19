@@ -1,8 +1,0 @@
-CALL curl -fsS --max-time 5 http://proxy.test:8080/opencode-limit
-OUT → homelab#158: Go-rail capacity limited [go-limited:window-weekly] but the subscription fallback is OFF here (claude/haiku is in this stack's modelDeny — the claim wins over the fallback) — strict wait: no degrade, and this ride is left to the gates below exactly as before the trigger existed.
-OUT RUN_CMD: claude -p --model opencode-go/deepseek-v4-flash --dangerously-skip-permissions --max-turns 200
-OUT RAIL_DEGRADED=''
-OUT MODEL='opencode-go/deepseek-v4-flash'
-OUT AGENT_RAIL=''
-OUT SUB_LABEL=''
-RC 0

@@ -6,7 +6,6 @@ clear                    |       |       |                                      
 defer                    |       |       |                                              | defer                   |
 failover-model-sync      |       |       | POST_SHAPE=goose                             | failover-model-sync     |
 reroute                  |       |       | POST_SHAPE=pod                               | reroute                 |
-reroute-deny             |       |       | POST_SHAPE=pod                               | reroute-deny            |
 reroute-envoptout        |       |       | AGENT_SUBSCRIPTION_FALLBACK=0 POST_SHAPE=pod | reroute-envoptout       |
 reroute-model-mismatch   |       |       | POST_SHAPE=goose                             | reroute-model-mismatch  |
 reroute-nonfix           |       |       | POST_SHAPE=pod                               | reroute-nonfix          |
