@@ -184,7 +184,7 @@ scan_phase() {   # $1 = dispatch | deterministic — record a phase transition f
 # not before, and not by assuming the timeline is clean.
 # >>>REPLAY:round-evidence>>>
 STATS_TS_DEF='def stats_ts: [ .comments[]? | (.body // "") as $b
-  | if ($b | test("<!-- agent-summary -->"))
+  | if ($b | startswith("<!-- agent-summary -->"))
     then [ $b | scan("<!-- agent-event kind=stats ts=([^ ]+) -->")[0] ]
     elif ($b | test("Agent run stats")) then [ .createdAt ]
     else [] end | .[] ];'
