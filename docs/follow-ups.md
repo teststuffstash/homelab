@@ -610,16 +610,6 @@ the block needs pruning, not more headings.
       catches the whole class); rung 2 (the real fix, decide after rung 1) = machines.yaml
       or a sibling becomes the ONE address book that dnsmasq-dhcp.py + tofu consume, per the
       machines.yaml generator pattern. Relates ADR-088, FU-049.
-- [ ] **FU-176** — **iac-sentinel wipes its own pushgateway group on a zero-PR tick.**
-      `push_metrics` POSTs whatever accumulated in `$METRICS`; a tick with no open PRs pushes an
-      EMPTY body, which REPLACES the `job/iac-sentinel` group — `iac_sentinel_engine_seconds`
-      vanished on the 2026-08-18 clean board and the A0 reading rule ("fresh engine rows, else
-      blind") read as blind when the sentinel was in fact healthy. (Distinct from the 08-17
-      emptyDir wipe above — this is the scanner's own push semantics.) Now enforcement-critical:
-      the check gates merges, so its health must stay observable. Next: always push a
-      per-tick heartbeat metric (e.g. `iac_sentinel_last_run_timestamp`) and never send an
-      empty replace; update the A0 reading rule to key freshness on the heartbeat. Relates
-      FU-106, the meta-state "deploy silences an alert" warning class.
 - [ ] **FU-134** — **Web research is now a platform capability — soak, then close.** `POST /search`
       on the egress proxy (an ordinary completion carrying OpenRouter's `openrouter:web_search`
       server tool) returns `{answer, citations[]}` to ANY harness, riding the caller's own key ref

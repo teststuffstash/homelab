@@ -297,7 +297,7 @@ Bucket A/B enumeration in `docs/agents/meta-state.md`.
 |---|---|---|
 | S1 | platform retro split — **parent #587 authored**, next session, deadline Mon 08-24 (organic acceptance = the cron fire) | FU-058 |
 | S2 | replay cleanup completion: table-mode batches 2–4, suite fold-in, the #354 adversarial acceptance | FU-167 |
-| S3 | belts & lint upkeep: sentinel pushgateway blind, transport-lint signatures (in flight), ratchet unreplayed backfill | FU-176, homelab#564, the FSM `unreplayed` rows |
+| S3 | belts & lint upkeep — sentinel pushgateway blind: DONE 2026-08-19 (FU-176 archived); transport-lint signatures: DONE (homelab#564 closed 2026-08-19); remaining: ratchet `unreplayed` backfill, by fix-density | the FSM `unreplayed` rows |
 | S4 | context & vocabulary: the role×context×source dedup + the mission rename sweep | FU-117, FU-163 |
 | S5 | corpus diet: doc-heat + measured trimming (`scripts/session-ctx.sh --big` is the instrument) | FU-164 |
 
