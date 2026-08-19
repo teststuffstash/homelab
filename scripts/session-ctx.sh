@@ -33,7 +33,13 @@ DIR="${SESSION_CTX_DIR:-$HOME/.claude/projects/-workspace-homelab}"
 MODE="now"; BIG=20000; SID=""
 while [ $# -gt 0 ]; do case "$1" in
   --turns) MODE=turns; shift;;
-  --big) MODE=big; BIG="${2:-20000}"; shift 2;;
+  --big)
+    # optional numeric N: bare `--big` keeps the 20000 default. NEVER `shift 2` here — with
+    # only `--big` left, bash's shift-past-end is an unchanged-args NO-OP (nonzero, uncaught
+    # without -e), so $1 stays `--big` and the while loop busy-hangs (bot catch, PR#584 r1).
+    MODE=big; shift
+    case "${1:-}" in ''|*[!0-9]*) : ;; *) BIG="$1"; shift ;; esac
+    ;;
   --session) SID="$2"; shift 2;;
   *) echo "session-ctx: unknown flag $1" >&2; exit 64;;
 esac; done
