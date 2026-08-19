@@ -1541,14 +1541,72 @@ def collect_anthropic_status(lines):
                         ANTHROPICSTATUS_URL)
 
 
+def collect_issue_lifecycle(lines):
+    """Leg 2 of #628: issue-lifecycle series (queued→done wall) per closed issue.
+
+    For issues CLOSED since the last poll, emit `github_issue_queued_at` / `github_issue_done_at`
+    per (repo, issue) from the label-event timeline. The agent/queued first-applied timestamp is
+    the queued_at; the close time is the done_at. Re-queues keep the FIRST queued epoch (the
+    platform throughput board joins this against agent_run_* for LLM-vs-platform split)."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=WINDOW_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    all_repos = [r for r in gh_paged(f"/orgs/{ORG}/repos?type=all", None) if not r["archived"]]
+    repos = [r["name"] for r in all_repos]
+    lines += [
+        "# TYPE github_issue_queued_at gauge",
+        "# HELP github_issue_queued_at Epoch when the issue first received agent/queued label.",
+        "# TYPE github_issue_done_at gauge",
+        "# HELP github_issue_done_at Epoch when the issue was closed (the wall time for queued→done).",
+    ]
+    for repo in repos:
+        # Fetch closed issues and filter by window client-side (closed param not supported on this endpoint)
+        path = f"/repos/{ORG}/{repo}/issues?state=closed&sort=updated&direction=desc"
+        try:
+            window_cutoff = epoch(since)
+            for issue in gh_paged(path, None):
+                if not issue or issue.get("pull_request"):
+                    continue  # skip PRs (they appear in issues list too)
+                number = issue.get("number")
+                closed_at = issue.get("closed_at")
+                if not (number and closed_at):
+                    continue
+                # Filter to window: only issues closed within WINDOW_HOURS
+                if epoch(closed_at) < window_cutoff:
+                    continue
+                # Get label timeline for this issue to find first agent/queued application
+                try:
+                    events = gh(f"/repos/{ORG}/{repo}/issues/{number}/events?per_page=100")
+                    if not isinstance(events, list):
+                        continue
+                    queued_at = None
+                    for event in events:
+                        if (event.get("event") == "labeled" and
+                            (event.get("label") or {}).get("name") == "agent/queued"):
+                            # First labeled event with agent/queued — record the epoch and stop
+                            created = event.get("created_at")
+                            if created and not queued_at:
+                                queued_at = epoch(created)
+                    if queued_at is not None:
+                        labels = {
+                            "owner": ORG,
+                            "repo": repo,
+                            "number": number,
+                        }
+                        lines.append(metric("github_issue_queued_at", labels, queued_at))
+                        lines.append(metric("github_issue_done_at", labels, epoch(closed_at)))
+                except Exception:
+                    pass  # failed to fetch events for this issue; skip it
+        except Exception:
+            pass  # failed to fetch issues for this repo; continue to next repo
+
+
 def poll_forever():
     global _body, _errors, _last_success, _first_successful_poll
     while True:
         lines = []
         ok = True
         for collector in (collect_workflow_runs, collect_open_prs, collect_agent_issues, collect_goals,
-                          collect_billing, collect_rate_limits, collect_app_permission_drift,
-                          collect_vendor_status, collect_anthropic_status):
+                          collect_issue_lifecycle, collect_billing, collect_rate_limits,
+                          collect_app_permission_drift, collect_vendor_status, collect_anthropic_status):
             try:
                 collector(lines)
             except Exception as exc:  # keep the other collector alive; alert rides the metrics below
@@ -2096,10 +2154,68 @@ def self_test():
     assert vendor_status_value("under_maintenance") == 4, "unknown must read WORSE, not healthy"
     assert vendor_status_value("") == 4
 
+    # ── leg 2 #628: issue lifecycle series (queued→done wall) with re-queue first-epoch rule ───────
+    # A fixture issue with a re-queue: first agent/queued application at T1, removed at T2,
+    # re-applied at T3. Only T1 should be recorded (first-epoch rule). Closed at T4.
+    _FIXTURE_ISSUE_LIFECYCLE_EVENTS = [
+        {"event": "labeled", "label": {"name": "agent/queued"}, "created_at": "2026-08-19T08:00:00Z"},
+        {"event": "unlabeled", "label": {"name": "agent/queued"}, "created_at": "2026-08-19T08:30:00Z"},
+        {"event": "labeled", "label": {"name": "agent/queued"}, "created_at": "2026-08-19T09:00:00Z"},
+        {"event": "closed", "created_at": "2026-08-19T10:00:00Z"},
+    ]
+    _FIXTURE_CLOSED_ISSUE = {
+        "number": 637,
+        "state": "closed",
+        "closed_at": "2026-08-19T10:00:00Z",
+        "pull_request": None,
+    }
+
+    saved_gh_for_issue = globals()['gh']
+    saved_gh_paged_for_issue = globals()['gh_paged']
+    issue_fetch_calls = []
+
+    def _mock_gh_issue_lifecycle(path, token=None):
+        """Mock gh() for issue lifecycle testing."""
+        issue_fetch_calls.append(path)
+        if "/events" in path:
+            return _FIXTURE_ISSUE_LIFECYCLE_EVENTS
+        return {}
+
+    def _mock_gh_paged_issue_lifecycle(path, key):
+        """Mock gh_paged() for issue lifecycle testing."""
+        if "/issues?" in path and "state=closed" in path:
+            # The Issues List endpoint returns a bare array, so key must be None
+            assert key is None, f"Issues List endpoint must use key=None (not key={key!r}) to avoid batch[key] indexing on bare arrays"
+            yield _FIXTURE_CLOSED_ISSUE
+        elif "/repos?" in path:
+            assert key is None, f"Repos endpoint must use key=None (not key={key!r})"
+            yield {"name": "homelab", "archived": False, "private": False}
+
+    globals()['gh'] = _mock_gh_issue_lifecycle
+    globals()['gh_paged'] = _mock_gh_paged_issue_lifecycle
+    try:
+        lifecycle_lines = []
+        collect_issue_lifecycle(lifecycle_lines)
+        lifecycle_body = "\n".join(dedupe_exposition(lifecycle_lines))
+
+        # Verify the first queued_at is recorded (first-epoch rule: T1, not T3)
+        first_queued_epoch = str(epoch("2026-08-19T08:00:00Z"))
+        done_epoch = str(epoch("2026-08-19T10:00:00Z"))
+        has_queued = f'github_issue_queued_at{{number="637",owner="teststuffstash",repo="homelab"}} {first_queued_epoch}'
+        has_done = f'github_issue_done_at{{number="637",owner="teststuffstash",repo="homelab"}} {done_epoch}'
+        assert has_queued in lifecycle_body, \
+            f"first queued_at must be T1 (first-epoch rule), not T3 (re-queue). Got:\n{lifecycle_body}"
+        assert has_done in lifecycle_body, \
+            f"done_at must record close time. Got:\n{lifecycle_body}"
+    finally:
+        globals()['gh'] = saved_gh_for_issue
+        globals()['gh_paged'] = saved_gh_paged_for_issue
+
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
-          "scale, job-level queue/duration metrics + caching + retry on API failure)")
+          "scale, job-level queue/duration metrics + caching + retry on API failure, issue "
+          "lifecycle series with re-queue first-epoch rule)")
     return 0
 
 
