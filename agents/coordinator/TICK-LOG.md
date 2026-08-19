@@ -4420,3 +4420,19 @@ first live ADR-110 maintenance session before the ADR existed.
   NOUS pair — the laptop4 attribution (stale title, not live labels) corrected on-thread.
   Vendor gauge (#574, built overnight) caught a live Anthropic degradation on day one. Session
   end board: solve=1 (#292 → stint S1 leg 1), triage=1 (or-op#34 soak), backlog aggregate 6.
+
+- **2026-08-19 final arc (session close ~11:35Z).** The 429-belt SHIPPED end-to-end in one
+  sitting: #600 filed+queued → loop built+merged+deployed the observed-429/402 latch in ~40 min
+  (#603, WITH dashboard panels beyond spec) → the launcher reroute (subagent, Anthropic rail —
+  Go preserved for the organic first fire) riding as #610: latched capacity → same-round haiku
+  flip, semaphore/untyped still defer. #603's review harvest → 3 sprouts (#604/605/606) + #607
+  (ADR-103 second-writer leak) + #602 → ALL queued same hour; #602 fixed+merged (#609, null
+  author = report-only, lane unknowable — codeowner read done). #601 seat-direct (#608 merged:
+  ADR-097 addendum 2, compelled siblings exempt, depth-guarded). LINEAGE corrected on operator
+  catch: #600+subtree bound under #420 (bind-at-filing regardless of door). **EPIC coined**
+  (operator): the shared lineage/lifecycle contract landed (#612 riding) — 7 rules, one home,
+  task/goal-keyed machinery = Goal-kind by definition. Go capacity truth: console 5h25/w90/m95
+  vs meter — anchors VERIFIED, volume parity awaits the clean window; Anthropic 35%/60% = the
+  FU-058 stint rides there. #420 final closeout now waits: #540 parity + #600 subtree + #610.
+  Session totals: ~20 PRs merged, 3 subagent chunks, 2 stall/latch incidents caught by the
+  session's own new watches, 2 epic-lifecycle rules minted by pilot catches.
