@@ -1,0 +1,36 @@
+# merge-conflict/clause (homelab#595) — the merge-conflict clause's WORKER_AUTHOR scope and its
+# first-tick emit, pinned.
+#
+# CONDITION UNDER REPLAY. homelab PR #586 is a *seat-authored* (operator) docs PR that went DIRTY
+# when #585's wave→stint rename landed on the paragraph it edits. The updater labelled it
+# `merge-conflict`, and the scan's merge-conflict clause (MP-T06) dispatched a coordinator ride at
+# it on byte-identical state at least twice (09:13:35Z, 09:36Z, same head faba0fd) — both
+# re-concluding "the loop has no mandate here: a cluster worker must not push to the jail seat's
+# working branch". Pre-fix, the clause had NO author predicate: every tick spent a session to
+# re-derive a conclusion the previous session already wrote.
+#
+# THE CONTRACT, mirroring the changes-requested clause (671a053, the snore#15 per-tick leak):
+#   1. a SEAT-authored merge-conflict PR emits an ORPHAN report line ("the author's own push is
+#      the next mover") and never a unit — no `gh pr view`, no session, no ride. PR #502 is that
+#      case; it appears NOWHERE in the unit stream and the action stream has no CALL for it.
+#   2. a WORKER-authored merge-conflict PR passes the state-fingerprint check (the #198 currency,
+#      the homelab#595 candidate fix 2) and EMITS on first tick (nothing recorded yet).
+#   3. `agent/error` and `agent/arbitrate` PRs are excluded by the breaker/label guard, and a
+#      CHANGES_REQUESTED PR stays with the changes-requested clause (which owns that state).
+#
+# The debounce half (a worker PR with a RECORDED matching marker) is `merge-conflict/debounced`,
+# and the marker WRITE for merge-conflict units is pinned by state-fp-replay §8 (W1b).
+pins:
+  - MP-T06
+name: merge-conflict-clause
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:merge-conflict-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab

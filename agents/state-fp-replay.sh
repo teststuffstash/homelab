@@ -4,11 +4,11 @@
 #
 #   bash agents/state-fp-replay.sh          # or: devbox run -- bash agents/state-fp-replay.sh
 #
-# WHY THIS EXISTS (homelab#201). #198 shipped CURRENCY for the two level-triggered clauses
-# (arbitrate, ci-red): a condition that holds over unchanged PR state is a report line, not a fresh
-# unit. It was verified by a throwaway sentinel-extraction harness — the PR#234 sequence plus the
-# fingerprint stability/movement table and the fail-open edges — and that harness was never
-# committed, so the guard shipped pinned by nothing. The failure mode it leaves open is quiet and
+# WHY THIS EXISTS (homelab#201). #198 shipped CURRENCY for the level-triggered clauses (arbitrate,
+# ci-red, and merge-conflict since homelab#595): a condition that holds over unchanged PR state is
+# a report line, not a fresh unit. It was verified by a throwaway sentinel-extraction harness — the
+# PR#234 sequence plus the fingerprint stability/movement table and the fail-open edges — and that
+# harness was never committed, so the guard shipped pinned by nothing. The failure mode it leaves open is quiet and
 # expensive: a fingerprint that MOVES ON ITS OWN (a jq field added to the hash input, a sort
 # dropped, `.comments` accidentally entering the hash) silently restores the five-rides-on-frozen-
 # state churn #198 removed, and the only thing that would notice is the FU-069 anomaly breaker —
@@ -502,12 +502,14 @@ want     "F6: the clause EMITS rather than debouncing blind"         "UNITS arbi
 survives "F6: arbitrate"
 STUB_HASH="ok"
 
-# ── 8 ── WHICH UNITS GET A MARKER. The case is the whole gate on the write side: three PR clauses
-# in, everything else out. An issue unit fingerprinted as a PR would probe a PR number that is an
-# issue number — a different object, and a silent one.
-section "8 — the marker is written for PR units of the three currency-gated clauses only"
+# ── 8 ── WHICH UNITS GET A MARKER. The case is the whole gate on the write side: the four PR
+# clauses in, everything else out. An issue unit fingerprinted as a PR would probe a PR number
+# that is an issue number — a different object, and a silent one.
+section "8 — the marker is written for PR units of the four currency-gated clauses only"
 fx_base; UCLAUSE=infra-enrich _go mark
 eq       "W1: infra-enrich (a ci-red sibling) is marked"             "$(markers)" "1"
+fx_base; UCLAUSE=merge-conflict _go mark
+eq       "W1b: merge-conflict (MP-T06, homelab#595) is marked"        "$(markers)" "1"
 fx_base; UCLAUSE=goal-decompose _go mark
 eq       "W2: an unrelated clause is NOT marked"                     "$(markers)" "0"
 fx_base; UCLAUSE=arbitrate UITEM="issue-77" _go mark
