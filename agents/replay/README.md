@@ -233,6 +233,7 @@ is stale, so it cannot drift the way the prose register did.
 | `session-belt/queued` | actions | - | `agents/coordinator-scan.sh` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
+| `strike-quota-classifier/strike-quota-classifier` | actions | - | `agents/agent-session.sh` | - |
 | `summary-comment` | table | - | `-` | - |
 | `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
 | `unblocked-unlabeled/blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |

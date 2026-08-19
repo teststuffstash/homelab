@@ -1,0 +1,18 @@
+# Issue #687 leg 2: Replay coverage for the 429-quota error_class classifier
+#
+# THE CONTRACT:
+#   A runlog containing a 429 quota/rate-limit message flows through the classifier
+#   (agents/agent-session.sh the raw-log fallback branch) and asserts that error_class=quota
+#   reaches the AGENT_STRIKE line.
+#
+# CONDITION UNDER REPLAY. The classifier sits in the path where finalize never ran (no AGENT_RUN_STATS
+# line, pod died hard / wait timed out). The pod's status.reason is read via kubectl, and patterns
+# are grepped from the RUNLOG. A runlog with quota patterns triggers the quota error_class arm.
+#
+name: strike-quota-classifier
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:strike-quota-classifier
+  - file:cases.sh
