@@ -1,0 +1,31 @@
+# merge-conflict/null-author (homelab#602) — the THIRD leg of the merge-conflict clause: a PR
+# whose `.author` is `null` (deleted/suspended GitHub account) matches NEITHER the seat-authored
+# predicate (`.author != null`) NOR the worker leg (`.author.login == $wa`), so without this
+# catch-all it falls out of BOTH the orphans report and unit dispatch — a merge-conflict PR that
+# no surface tracks.
+#
+# CONDITION UNDER REPLAY. PR #603 carries `merge-conflict` with `author: null` in the recorded
+# world (the shape `gh pr list --json author` returns for a deleted account). The contract: the
+# clause emits the ⚠ NULL-author ORPHAN line and NOTHING else — no `gh pr view` probe, no unit,
+# no marker write. The account's lane is unknowable, so dispatching would risk the #595 per-tick
+# leak on a PR that might have been seat-authored; report-only keeps it in a human's sight. Pre-
+# homelab#602 the single unscoped loop would have dispatched this PR as a unit every scan despite
+# the author being gone.
+#
+# The OTHER legs are pinned by `merge-conflict/clause` (seat-authored report + worker first-tick
+# emit + breaker/label exclusions) and `merge-conflict/debounced` (the #198 currency check); this
+# fixture pins only the leg that is new — the null-author world must be CLEAN of any CALL or UNIT.
+pins:
+  - MP-T06
+name: merge-conflict-null-author
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:merge-conflict-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
