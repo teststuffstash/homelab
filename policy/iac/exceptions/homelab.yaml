@@ -57,6 +57,7 @@ spec:
             - agent-coordinator-read-infra
             - agentstack-loop-read-infra
             - alloy-logs-reader
+            - eso-retro-git-reader-ssrr
             - eso-transcripts-reader-ssrr
             - openrouter-proxy-semaphore
             - openrouter-proxy-tokenreview
