@@ -216,6 +216,7 @@ transitions:
     replay:
       - agents/replay/fixtures/merge-conflict/clause
       - agents/replay/fixtures/merge-conflict/debounced
+      - agents/replay/fixtures/merge-conflict/null-author
     guards:
       - desc: "scan emits the merge-conflict clause as a work unit"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merge-conflict\|' }
@@ -223,6 +224,8 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: 'homelab#595' }
       - desc: "unchanged-state debounce on the worker-authored leg (the #198 fingerprint pair)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "merge-conflict DEBOUNCED" }
+      - desc: "null-author catch-all (homelab#602): a conflict PR whose `.author` is null (deleted/suspended account) matches neither the seat nor the worker predicate and emits a report line, never a unit — it cannot vanish from both surfaces"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'homelab#602' }
 
   - id: MP-T07
     name: fix round on the PR's own branch
