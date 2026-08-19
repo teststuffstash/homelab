@@ -19,6 +19,11 @@
       "author": { "login": "homelab-agents-1234" },
       "createdAt": "2026-08-09T08:29:00Z",
       "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T08:29:00Z` · **round 2 dispatched** — retry on the e2e assertion <!-- agent-event kind=dispatch ts=2026-08-09T08:29:00Z -->\n- `2026-08-09T08:30:00Z` · **run stats** — `claude/haiku` · $0 · 402s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T08:30:00Z -->\n- `2026-08-09T10:14:00Z` · **round 3 dispatched** — retry on the e2e assertion <!-- agent-event kind=dispatch ts=2026-08-09T10:14:00Z -->\n- `2026-08-09T10:15:00Z` · **run stats** — `claude/haiku` · $0 · 388s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T10:15:00Z -->"
+    },
+    {
+      "author": { "login": "RasmusSoot" },
+      "createdAt": "2026-08-09T10:20:00Z",
+      "body": "Discussed this PR's status with the team. The marker <!-- agent-summary --> should only appear at comment start per ADR-103, not quoted like <!-- agent-event kind=stats ts=2026-08-09T10:20:00Z --> here."
     }
   ],
   "commits": [
