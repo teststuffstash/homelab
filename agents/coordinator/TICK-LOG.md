@@ -4460,3 +4460,23 @@ first live ADR-110 maintenance session before the ADR existed.
   MAIN worktree (the #428 escape class hit by the seat itself — repaired, ledger row context).
   Closeout: docs PR#624, FU-058 → pointer, built-vs-left on #587, miss-ledger rows ×4. Organic
   acceptance = Mon 08-24 05:00Z platform retro fire.
+
+- **2026-08-19 board close-out arc (operator-driven, same session as the FU-058 stint).** The
+  operator used the post-stint window to clear the board; the session served gates + triage.
+  Landed via loop+gate: #626 (blind-ride abort — export-masking root cause seat-sharpened),
+  #634 (mc_event marker anchoring), #633 (env-card machine-marker rule), #641 (stats_ts
+  anchoring — the #630 class's third member), #642 (families.tsv order + enforcement), #632
+  (meta-events NEWISSUE source: 3 review rounds — search→per-repo REST walk for the FU-108
+  silent-drop class, then fail-loud repo enumeration), and **#631 (the exit-3/famine fix; TWO
+  seat fix rounds inside the arbitrate escalation: same-clause drain + the FU-121 retargeted
+  continue — the review cycle caught both, the fleet Failed-pile growth stops here)**. #628
+  re-scoped to the operator's direction: throughput CONTAINER (big board + drilldowns,
+  queued→done lifecycle with LLM-vs-platform split, container-level measurement over trees —
+  legs #636/#637; leg 3 generalizes the agent-goals machinery per the operator's pointer).
+  Lineage repairs: #629→…→#420 made fully native (#607's missing edge); #616 closed superseded
+  (it witnessed the 90s latch-wipe window); #420+#540 closed per operator with FU-181 as the
+  post-Sep-13 comeback. Ops notes: GithubRateLimitLow (coordinator-git GraphQL, demand burst,
+  hourly reset) and AgentRunInfraDeathBurst (post-famine drain retry storm) both self-resolved;
+  GoCapacityLatched fires until Sep-13 by design (triage:none — operator may want an
+  Alertmanager silence). Session ended by the ctx wind-down rule (~815k/1M) with #643/#640/#636
+  machine-owned in flight — the pickup is meta-state's board close-out bullet.

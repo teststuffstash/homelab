@@ -18,9 +18,9 @@ meant to avoid.)
   STOP growing and TTL out by ~Aug-22), #626 (blind-ride abort), #634+#633 (marker anchoring +
   env-card rule), #632 (meta-events NEWISSUE source — per-repo REST walk, act rule: platform
   repos only), #628 re-scoped as the throughput CONTAINER (legs #636 queued/#637 filed; leg 3 =
-  generalize agent-goals machinery, operator pointer in body). Queue at close: #629 (strike
-  model field — riding), #635 (stats_ts anchoring — riding), #636/#639/#640 behind them; their
-  PRs hit the codeowner gate — next session merges via the gate reads. Lineage: #629→#622→#607→
+  generalize agent-goals machinery, operator pointer in body). At session end: #641(#635)+#642(#639)
+  merged via gate reads; #643 (fixes #629 — strike model field) in its review cycle, #640
+  riding, #636 queued behind it — all machine-owned; the next session's gate reads finish them. Lineage: #629→#622→#607→
   #600→#420 now fully native (#607's missing edge was the break). GithubRateLimitLow +
   AgentRunInfraDeathBurst today = demand bursts, both self-resolved/accounted.
 - **⚑ Go rail EXHAUSTED for the month (console 100%/30d, resets Sep-13 ~11:30Z; weekly 99% →
