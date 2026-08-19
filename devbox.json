@@ -316,6 +316,9 @@
       ],
       "storage-ledger": [
         "bash scripts/storage-ledger-check.sh"
+      ],
+      "ci-timing": [
+        "bash scripts/ci-timing.sh"
       ]
     }
   }
