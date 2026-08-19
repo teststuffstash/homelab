@@ -15,4 +15,5 @@ source: agents/agent-session.sh
 parts:
   - file:bridge.sh
   - block:strike-quota-classifier
+  - block:strike-line-format
   - file:cases.sh
