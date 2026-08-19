@@ -1,0 +1,168 @@
+# Behaviour fixture for RetroReportOverdue's restart-gap harden (homelab#591, 2026-08-19).
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/retro-report.promtool-test
+#   (and in CI: `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/)
+#
+# WHY THIS ALERT HAS ITS OWN FILE, not a slot in agent-runs.promtool-test: see
+# retro-report.promtool-rules' header. In short — RetroReportOverdue moved out of that shared
+# file so its restart-gap contract has one home instead of drifting a stale copy in two places.
+#
+# THE INCIDENT THIS FIXTURE EXISTS FOR: on 2026-08-17 a pushgateway emptyDir/PVC wipe erased the
+# gauge's one-shot success push. The series went ABSENT from the CURRENT scrape, the old bare
+# `max(retro_report_last_success_timestamp)` returned nothing, `or vector(0)` fell back to epoch
+# 0, and `time() - 0` is always > 8 days on any real calendar date — so the alert false-fired for
+# 19h even though the actual last success was well under a day old. The harden reads
+# `max_over_time(...[8d])` instead: Prometheus's OWN 8-day retention still holds the erased
+# sample, so a genuinely <8d-old success survives the wipe.
+#
+# LABELS reflect the RENAMED push-site grouping key (homelab#588/#591's harvest change):
+# job="platform-retro", series="platform" — was job="retro-session", stack="oracle" before this
+# PR. The metric NAME is unchanged and the expr's bare `max(...)` (inside the `max_over_time`)
+# aggregates across every label set regardless, so this relabeling is cosmetic realism, not a
+# behaviour dependency — nothing here asserts on the job/series labels themselves.
+#
+# CLOCK: promtool's test clock starts at 0 (same idiom as agent-runs.promtool-test and
+# scan-wedge-pgw-witness.promtool-test). A PUSH VALUE is always the epoch the push happened at —
+# so "pushed at test-hour H" is literally the number `H*3600` — and `time() - value` at any later
+# eval is the true age of that success, in seconds.
+#
+# ⚠ THE GAP IS WRITTEN `stale`, NOT `_` (the #352/#353 lesson, restated because it is exactly as
+# load-bearing here as it is in scan-wedge-pgw-witness.promtool-test): a `_` token is only a
+# missing SAMPLE, and an unbridged instant selector still resolves it out of Prometheus' default
+# 5m lookback — so a `_`-shaped gap goes green with or without the bridge and pins nothing. A
+# pushgateway that goes away inserts a STALE marker into every series it was serving; `stale`
+# reproduces that marker at the written step, ending an instant selector's resolution on the spot
+# while `max_over_time(...[8d])` reads straight past it, exactly like the real event.
+#
+# CASE (b) IS THE ONE THAT FALSE-FIRED, VERIFIED BY RUNNING THE OLD EXPR (not asserted here —
+# a second alert in this file would need its own witness rules copy, and one alert's worth of
+# manual verification does not earn that permanent upkeep). Swapping this file's rules copy back
+# to the pre-#591 expr, `(time() - (max(retro_report_last_success_timestamp) or vector(0))) > 8 *
+# 86400`, and re-running `promtool test rules` against case (b) below REDS at its 198h assertion
+# — `exp_alerts: []` fails because the old expr fires (fallback-to-epoch-0 plus `time()` past 8d
+# in absolute test-clock terms, regardless of how recent the real, now-invisible push was). Cases
+# (a) and (c) are unaffected by the swap: neither one ever has an absent CURRENT sample, so the
+# bridge changes nothing about them. Restoring the shipped expr immediately after is what makes
+# this file green again.
+rule_files:
+  - retro-report.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── (a) a success pushed 10 minutes ago is nowhere near overdue ──────────────────────────────
+  - interval: 1m
+    name: "(a) a success pushed 10 minutes ago stays quiet"
+    input_series:
+      - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
+        values: "0+0x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RetroReportOverdue
+        exp_alerts: []
+
+  # ── (b) THE RESTART GAP — the exact 2026-08-17 shape ─────────────────────────────────────────
+  # A success lands at test-hour 185 (value 666000 = 185*3600) and the pushgateway is wiped one
+  # hour later (`stale` at hour 186, nothing pushed again for the rest of the test — the store
+  # stays empty until the NEXT weekly retro, which for this fixture's purposes never comes). At
+  # every eval below the real success is well under 8 days old (13h, then 20h) — the bridge must
+  # read straight through the wipe and stay quiet regardless of how far raw test-clock `time()`
+  # has drifted past its own epoch-0 origin.
+  - interval: 1h
+    name: "(b) a pushgateway wipe of a <8d-old success must not page"
+    input_series:
+      - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
+        values: "_x185 666000 stale"
+    alert_rule_test:
+      # before the wipe's own 1h gap has even mattered: raw time() is still under 8d absolute,
+      # so both the old and the new expr agree here regardless of the bridge.
+      - eval_time: 190h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      # 198h: real success age is 198-185 = 13h. Old bare-max reads the wipe as "never
+      # succeeded" (or vector(0)) and — verified above — FIRES here (time() alone crossed 8d at
+      # 192h, `for: 6h` completed at 198h, and staleness has held throughout). The bridge finds
+      # the real 666000 sample inside its 8d lookback window and stays quiet.
+      - eval_time: 198h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      # 205h: real success age is now 20h — still comfortably <8d. Sustained correctness, not a
+      # one-shot pass: the bridge does not degrade as raw time() drifts further from epoch 0.
+      - eval_time: 205h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+
+  # ── (c) a genuinely stale success, no gap involved — fires after the 6h for-window ───────────
+  # No wipe here: the series is CONTINUOUSLY present (no staleness marker), pushed once at t=0
+  # and never updated. This is the ordinary "nobody re-fired the retro in over a week" case the
+  # alert exists for in the first place, and the harden must not touch its timing.
+  - interval: 1h
+    name: "(c) a continuously-present success ages past 8d and fires after for:6h"
+    input_series:
+      - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
+        values: "0+0x260"
+    alert_rule_test:
+      - eval_time: 190h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      # 8d = 192h is when the condition turns true; `for: 6h` still holds it pending here
+      - eval_time: 197h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      - eval_time: 199h
+        alertname: RetroReportOverdue
+        exp_alerts: &retro_overdue_alert
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+            exp_annotations:
+              summary: "No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data"
+              description: "The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
+      # and it does not self-resolve while the belt stays silent
+      - eval_time: 250h
+        alertname: RetroReportOverdue
+        exp_alerts: *retro_overdue_alert
+
+  # ── BONUS (ported from agent-runs.promtool-test, unchanged behaviour) — never pushed at all ──
+  # `max_over_time` over a series with ZERO samples anywhere is exactly as empty as bare `max()`
+  # over one — the `or vector(0)` fallback path itself is untouched by the harden.
+  - interval: 1h
+    name: "no retro report has EVER landed — fires at 8d+6h, not before"
+    input_series:
+      - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
+        values: "_x260"
+    alert_rule_test:
+      - eval_time: 190h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      - eval_time: 197h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      - eval_time: 199h
+        alertname: RetroReportOverdue
+        exp_alerts: *retro_overdue_alert
+      - eval_time: 250h
+        alertname: RetroReportOverdue
+        exp_alerts: *retro_overdue_alert
+
+  # ── BONUS (ported from agent-runs.promtool-test, unchanged behaviour) — ages out, then clears ─
+  # No gap here either (constant value 0 held every hour, then updated) — `max_over_time` and
+  # bare `max()` agree on any series with no staleness marker, so a fresh report still clears the
+  # alert exactly as it did before the harden.
+  - interval: 1h
+    name: a report ages out at 8d and the next one clears the alert
+    input_series:
+      # landed at t=0 …then re-pushed at t=221h with that hour's timestamp (221 * 3600)
+      - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
+        values: "0+0x220 795600+0x40"
+    alert_rule_test:
+      - eval_time: 190h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      - eval_time: 199h
+        alertname: RetroReportOverdue
+        exp_alerts: *retro_overdue_alert
+      # the Monday report lands at 221h — one evaluation later the alert is gone
+      - eval_time: 222h
+        alertname: RetroReportOverdue
+        exp_alerts: []

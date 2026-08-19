@@ -14,7 +14,11 @@
 # Pinned by agents/replay/fixtures/retro-cell-report-* and retro-harvest-*.
 #
 # Ownership: platform mechanism (observability-and-retro.md §B2); per-stack graduation = an
-# AgentStack `retro` knob later. Params below default to the oracle stack.
+# AgentStack `retro` knob later. Params below default to the PLATFORM stack (homelab#588,
+# operator ruling 2026-08-17): run 4 proved the pain-rank reads the WHOLE ledger with no stack
+# filter and its findings target platform artifacts, so the lane is fleet-wide despite being
+# born as the oracle retro. oracle/sleep stay selectable via `stack` — the mapping lives in
+# agents/retro-project.sh, sourced by both this guard and agents/retro-session.sh.
 apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
 metadata:
@@ -43,7 +47,7 @@ spec:
     entrypoint: main
     arguments:
       parameters:
-        - { name: stack, value: "oracle" }
+        - { name: stack, value: "platform" }
         - { name: cellA, value: "claude:opus" }
         - { name: cellB, value: "goose:deepseek/deepseek-v4-pro" }
         # A PRE-MINTED OpenRouterKey Secret to pin for the API cell. Empty (the default) no longer
@@ -120,21 +124,34 @@ spec:
               git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
               cd /work/homelab
               STACK="{{workflow.parameters.stack}}"
-              # fixer busy? (both cells hold the stack's WIP slot — refuse, don't contend).
-              # Per-ns checks (the coordinator SA has pod-read in stack namespaces, not -A);
-              # a FAILED check counts as busy, never as idle (rule #6).
+              # fixer busy? (both cells hold the RIDE namespace's WIP slot — refuse, don't
+              # contend). homelab#588: this used to iterate EVERY repo in the stack's
+              # agents/stacks.json entry as a namespace — for the platform stack that list is
+              # [agent-runtime, agent-coordinator, homelab, openrouter-operator], all four of
+              # which DO have live namespaces (homelab's own fixer lane runs agent-session pods
+              # in ns `homelab` right now), so this was never the missing-namespace failure it
+              # first looked like. The real defect is WIP-SLOT LOCALITY: the retro pod only ever
+              # rides in — and only ever contends for the WIP slot of — the ONE namespace
+              # agents/retro-project.sh names as PROJECT (openrouter-operator for the platform
+              # series); a busy fixer in a SIBLING platform namespace (homelab, agent-runtime) is
+              # harmless to the retro and must not refuse the weekly fire. With the platform
+              # stack's own issue traffic, an all-repos probe would starve the Monday retro
+              # behind ordinary fixer activity in namespaces the retro never touches.
+              # Per-ns check (the coordinator SA has pod-read in stack namespaces, not -A);
+              # a FAILED check counts as busy, never as idle (rule #6) — the ride namespace
+              # exists, so a failure there is a real signal, not a false "unverifiable" read.
               # ⚠ stderr must NOT fold into $out: on zero matches kubectl exits 0 and prints
               # "No resources found in <ns> namespace." to STDERR — a 2>&1 here made every
               # EMPTY namespace read as busy, so the guard refused every fire since unsuspend
               # (found 2026-08-11 via the RetroReportOverdue belt, homelab#237).
+              . agents/retro-project.sh
+              retro_project "$STACK" || exit 1
               BUSY=0
-              for ns in $(python3 -c "import json; s=json.load(open('agents/stacks.json')); print(' '.join(r for st in s.get('stacks',[]) if st.get('name')=='${STACK}' for r in st.get('repos',[])))" 2>/dev/null); do
-                if ! out=$(kubectl get pods -n "$ns" -l app=agent-session --no-headers 2>/tmp/guard-err); then
-                  echo "GUARD: pod check failed in $ns ($(cat /tmp/guard-err)) — treating as busy"; BUSY=1
-                fi
-                [ -n "$out" ] && BUSY=1
-              done
-              [ "$BUSY" -eq 0 ] || { echo "GUARD REFUSED: agent-session pod(s) running (or unverifiable) — retro would contend for the fixer WIP slot"; exit 1; }
+              if ! out=$(kubectl get pods -n "$PROJECT" -l app=agent-session --no-headers 2>/tmp/guard-err); then
+                echo "GUARD: pod check failed in $PROJECT ($(cat /tmp/guard-err)) — treating as busy"; BUSY=1
+              fi
+              [ -n "$out" ] && BUSY=1
+              [ "$BUSY" -eq 0 ] || { echo "GUARD REFUSED: agent-session pod(s) running (or unverifiable) in ${PROJECT} — retro would contend for the fixer WIP slot"; exit 1; }
               # ledger delta since the last harvested report for this stack
               export AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_READER_SECRET"
               s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cat "s3://$AGENT_TS_BUCKET/_ledger.jsonl" > /tmp/ledger.jsonl
@@ -319,6 +336,20 @@ spec:
                 SLUG_A="${HARNESS_A:+${HARNESS_A}-}${SLUG_A}"
                 SLUG_B="${HARNESS_B:+${HARNESS_B}-}${SLUG_B}"
               fi
+              # Pass 3, the SAME-HARNESS collision (homelab#292): pass 2 disambiguates by
+              # HARNESS, but a pure A/B repeat — the same harness AND the same model, e.g. a
+              # rerun of "claude:opus" against "claude:opus" to sample variance on one cell —
+              # joins the identical harness onto both slugs and they are STILL equal, so the
+              # second `cp` below silently overwrote the first exactly as pass 2's own bug did.
+              # There is nothing left in the dispatch parameters to disambiguate with except
+              # WHICH leg produced it, so suffix by cell index on collision only — the ordinary
+              # path (and the harness-collision path) stay byte-identical, fixture-pinned by
+              # retro-harvest-slug / retro-harvest-slug-collision; only the doubly-collided case
+              # gets `-a`/`-b`.
+              if [ "$SLUG_A" = "$SLUG_B" ]; then
+                SLUG_A="${SLUG_A}-a"
+                SLUG_B="${SLUG_B}-b"
+              fi
               N=0; DEAD=""
               for leg in A B; do
                 case "$leg" in
@@ -360,9 +391,15 @@ spec:
               # signal — the cron trigger counter increments on guard-refused runs too (the 08-10
               # Monday fired, refused, and nothing said so for 13h). RetroReportOverdue alerts on
               # this timestamp going stale (argocd/resources/pushgateway/prometheusrule.yaml).
+              # GROUPING renamed to the platform-series naming (homelab#588/#591): job/platform-
+              # retro/series/${STACK}, was job/retro-session/stack/${STACK}. The METRIC NAME is
+              # UNCHANGED — RetroReportOverdue aggregates with a bare `max(...)` across every
+              # label set pushgateway is holding, so an old `job=retro-session` group's stale
+              # sample can never mask a fresher `job=platform-retro` one; the rename only tidies
+              # the grouping key, it does not need a migration step.
               printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
                 | curl -s --max-time 10 --data-binary @- \
-                  "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/retro-session/stack/${STACK}" \
+                  "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/${STACK}" \
                 || echo "WARN: pushgateway push failed — the RetroReportOverdue belt goes stale"
           env:
             - { name: HOME, value: "/home/node" }

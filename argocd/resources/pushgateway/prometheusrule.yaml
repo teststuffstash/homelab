@@ -16,10 +16,28 @@ spec:
         # 05:00Z, was refused, and nothing said so until the operator read meta-state 13h later).
         # `or vector(0)` makes never-pushed read as epoch 0, so a retro that has never succeeded
         # fires rather than staying silent forever. severity=warning (info is inhibited
-        # cluster-wide); first datum expected 2026-08-17 (operator 2026-08-10: wait for next
-        # Monday) — until then this alert states a KNOWN gap, triage is report-only.
+        # cluster-wide); first datum landed 2026-08-17 as expected.
+        #
+        # ── RESTART-GAP HARDENED (homelab#591, 2026-08-19) ──────────────────────────────────────
+        # The lane it belongs to is renamed the PLATFORM retro (homelab#588) and its harvest now
+        # pushes under job/platform-retro/series/${STACK} (was job/retro-session/stack/${STACK});
+        # the metric NAME here is unchanged, so this expr keeps aggregating both old and new
+        # grouping keys with `max(...)` and needs no migration step.
+        # A bare `max(retro_report_last_success_timestamp)` reads the CURRENT scrape only — the
+        # 2026-08-17 pushgateway emptyDir/PVC wipe erased the gauge's one-shot push (the store is
+        # destroyed on a reschedule, AgentRunPhaseSlow's header documents the same dependency),
+        # the series went ABSENT, `max(...)` returned nothing, `or vector(0)` fell back to epoch
+        # 0, and `time() - 0` is always > 8 days on any real calendar date — so the alert false-
+        # fired for 19h even though the last success was under a day old. `max_over_time(...[8d])`
+        # reads Prometheus's OWN 8-day retention instead of the live scrape: a genuinely <8d-old
+        # success SURVIVES a gateway wipe (the sample is still in the TSDB, just no longer being
+        # re-served by the gateway), and only a success that is ACTUALLY >8d stale — pushed
+        # nothing at all, or pushed something that has since aged out of the 8d window too — still
+        # falls through to the `or vector(0)` branch. Behaviour pinned as an executed test:
+        # retro-report.promtool-test (case (b) is the restart-gap shape, verified to RED on the
+        # old bare-`max` expr before this hardening — see that file's header).
         - alert: RetroReportOverdue
-          expr: (time() - (max(retro_report_last_success_timestamp) or vector(0))) > 8 * 86400
+          expr: (time() - (max(max_over_time(retro_report_last_success_timestamp[8d])) or vector(0))) > 8 * 86400
           for: 6h
           labels:
             severity: warning
@@ -34,7 +52,7 @@ spec:
             platform_machinery: "true"
           annotations:
             summary: "No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data"
-            description: "The Monday 05:00Z retro-session CronWorkflow has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). The cron may be firing and guard-refusing — check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
+            description: "The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
         # A negative cost is a DATA-QUALITY bug, never a discount — the probe-fails-into-a-value
         # class (agent-runtime#12 fixed the known instance; this alert catches regressions and any
         # new path that subtracts against a failed read).

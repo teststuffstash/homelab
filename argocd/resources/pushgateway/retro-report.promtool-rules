@@ -1,0 +1,38 @@
+# RetroReportOverdue, lifted VERBATIM out of prometheusrule.yaml (comments stripped — the
+# manifest is its one home) — the rules file that retro-report.promtool-test loads. Not a
+# manifest and not applied to anything: `promtool test rules` needs upstream-format rules
+# (top-level `groups:`), and a PrometheusRule keeps them under `.spec`, so the CR cannot be
+# loaded directly. Named .promtool-rules rather than .yaml on purpose — manifest-lint
+# kubeconforms EVERY *.yaml under argocd/resources and a non-manifest there would fail it.
+#
+# ONE ALERT, its OWN file (homelab#591, 2026-08-19): RetroReportOverdue used to be one of the
+# five alerts hand-copied into agent-runs.promtool-rules. The restart-gap harden below is a
+# DIFFERENCE-shaped contract — "the alert must survive a pushgateway wipe of a <8d-old success,
+# and must still fire on a genuinely >8d-stale one" — which is exactly the kind of thing that
+# needs its own dedicated behaviour fixture rather than sharing a file with four unrelated
+# alerts (the AgentCoordinateScanWedged precedent in agent-runs.promtool-rules' own header:
+# "duplicating it here would give it two homes and one of them would rot"). Moved out, not
+# duplicated — agent-runs.promtool-rules/-test no longer mention RetroReportOverdue at all.
+#
+# ⚠ THIS COPY IS NOT DRIFT-PINNED beyond `devbox run prometheus-rules-lint`'s bidirectional CR↔copy
+# pin (homelab#337/#375, see that script) — re-copy after editing the alert.
+#
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "RetroReportOverdue")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+#
+# ONE LINE on purpose — yq 4.x's lexer rejects a newline inside the expression ("lexer: invalid
+# input text"); the group name stays "agent-runs" because that is the CR's group the alert lives
+# in (`.spec.groups[].rules[]` is `select()`-filtered by alert name only, not moved to a new
+# group). Verified by RUNNING the line above on 2026-08-19: its output is byte-identical to the
+# body below.
+groups:
+  - name: agent-runs
+    rules:
+      - alert: RetroReportOverdue
+        expr: (time() - (max(max_over_time(retro_report_last_success_timestamp[8d])) or vector(0))) > 8 * 86400
+        for: 6h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data
+          description: 'The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus''s own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058.'
