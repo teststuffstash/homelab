@@ -52,10 +52,6 @@ responder-selfref-platform-machinery	responder-selfref
 responder-selfref-unlabelled	responder-selfref
 retro-cell-report-missing	retro-cell-report
 retro-cell-report-present	retro-cell-report
-retro-harvest-cell-errored	retro-harvest
-retro-harvest-one-cell-dead	retro-harvest
-retro-harvest-slug	retro-harvest
-retro-harvest-slug-collision	retro-harvest
 retro-key-minted	retro-key
 retro-key-pinned	retro-key
 retro-key-subscription	retro-key

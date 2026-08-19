@@ -1,4 +1,0 @@
-CALL cp /tmp/report.md docs/agents/retros/2026-08-11-oracle-r3-opus.md
-CALL cp /tmp/report.md docs/agents/retros/2026-08-11-oracle-r3-deepseek-v4-pro.md
-OUT DEAD_NOTE: empty — nothing appended to the PR body
-RC 0
