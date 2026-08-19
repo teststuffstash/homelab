@@ -283,7 +283,12 @@ the block needs pruning, not more headings.
       explicit in the deployment; composed into `/opencode-limit` limited, gauges + board panel), (b) **jail-ingest
       freshness gauge** (age of last `stack=jail` go_usage row — the 2026-08-17 stale-shim
       under-metering, detection half), (c) **Go 429 counter + near-threshold alerts** (zero
-      opencode-window alert rules exist today). Dashboard parity panels ride each piece.
+      opencode-window alert rules exist today), (d) **observed-429/402 LATCH correcting the
+      blind ledger** (operator-sanctioned 2026-08-19 at console 95%/meter 62% — queued as
+      homelab#600, M12's `_or_capacity_*` transposed; delivers (c)'s counter half), (e) **the
+      launcher REROUTE** — a latched Go-primary dispatches the `claude/haiku` fallback
+      same-round instead of defer-forever (semaphore still defers; seat chunk in flight
+      2026-08-19). Dashboard parity panels ride each piece.
 - [ ] **FU-174** — **Reasoning effort is unmodeled fleet-wide (operator, 2026-08-17).** The DeepSWE
       numbers behind the flash slot ran `[max]`; the fleet runs provider defaults — the jail shim
       even DROPS `thinking` on translated legs, so no Go model ever sees an effort signal.
