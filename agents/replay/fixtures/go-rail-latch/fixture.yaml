@@ -34,6 +34,8 @@ mode: table
 source: agents/agent-session.sh
 parts:
   - file:bridge.sh
+  - block:struck-model-init
+  - block:tier-default-struck-model-sync
   - block:fu088-gates
   - file:post.sh
 rows: rows.psv
