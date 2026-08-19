@@ -49,6 +49,7 @@ if qs and ds:
     tot=[a+b for a,b in zip(qs,ds)]
     print(f"--- n={len(ds)} queue p50={st.median(qs):.0f}s max={max(qs):.0f}s | "
           f"job p50={st.median(ds):.0f}s max={max(ds):.0f}s | total p50={st.median(tot):.0f}s")
-elif not qs: print("--- no completed jobs matched (job name filter? -j)")
+elif qs: print(f"--- n={len(qs)} all RUNNING: queue p50={st.median(qs):.0f}s max={max(qs):.0f}s (no durations yet)")
+else: print("--- no jobs matched (job name filter? -j)")
 if fails: sys.exit(3)
 '
