@@ -121,10 +121,12 @@ A bounded container for multi-session jail work: a parent issue titled `stint: <
 (never `task/goal`, never `agent/*` — the scan and the goal lane must not see it), with the work
 as **native sub-issues**. Three rules carry the whole design:
 
-- **Everything binds to the parent.** Every sprout harvested during stint work is sub-issued under
-  the stint (provenance line naming the PR/issue it fell out of) — a stint session never ends with
-  free-floating harvests, and nothing from stint work may outlive the parent unlinked. The parent
-  IS the bound on the sprout tail the Goal lane needed a budget for.
+- **Everything binds to the parent — per the EPIC lineage contract**
+  ([issue-authoring.md](issue-authoring.md) §The lineage contract, the ONE home of the rules the
+  stint shares with the Goal: bind-at-filing regardless of door, defects-never-release,
+  originals/sprouts, single-parent absorption, close-at-tree-empty). Stint-specific on top:
+  sprouts carry a provenance line naming the PR/issue they fell out of, and the parent IS the
+  bound on the sprout tail the Goal lane needed a budget for.
 - **Sizing is session-multiples, not budgets.** A `Size: N sessions` body line (1 / 2 / 3 — the
   natural pricepoints; a corpus-session arc is the unit, per §Session types above). No `Budget:`,
   no launcher gate, no reader — an authoring-time thinking aid, compared against actuals at
