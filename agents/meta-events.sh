@@ -88,8 +88,14 @@ src_newissue() {
   local tmp since r ok=1 repos
   tmp="$(mktemp)"; : > "$tmp"
   since="$(date -u -d '-24 hours' +%Y-%m-%dT%H:%M:%SZ)"
-  repos="$( { jq -r '.stacks[].repos[]' "$HERE/stacks.json" 2>/dev/null; printf '%s\n' $SEAT_REPOS; } | sort -u)"
-  [ -n "$repos" ] || { hold_source newissue "empty repo universe (stacks.json unreadable?)"; rm -f "$tmp"; return; }
+  # The claim-universe read FAILS LOUDLY (PR#632 r2 — the r1 class one level up): SEAT_REPOS is
+  # always non-empty, so a swallowed jq failure here would silently shrink the watch to 4 repos
+  # while every tick reports success. An unreadable mirror holds the source instead.
+  local stack_repos
+  if ! stack_repos="$(jq -r '.stacks[].repos[]' "$HERE/stacks.json" 2>/dev/null)" || [ -z "$stack_repos" ]; then
+    hold_source newissue "stacks.json repo universe unreadable"; rm -f "$tmp"; return
+  fi
+  repos="$(printf '%s\n%s\n' "$stack_repos" "$(printf '%s\n' $SEAT_REPOS)" | sort -u)"
   for r in $repos; do
     gh issue list -R "$ORG/$r" --state open --limit 25 --json number,author,title,createdAt       --jq ".[] | select(.createdAt >= \"$since\") | \"NEWISSUE|$r#\(.number)|\(.author.login)|\(.title[0:70])\""       >> "$tmp" 2>/dev/null || ok=0
   done
