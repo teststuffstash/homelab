@@ -1629,39 +1629,65 @@ def collect_issue_lifecycle(lines):
 def poll_forever():
     global _body, _errors, _last_success, _first_successful_poll
     while True:
-        lines = []
+        accumulated = []  # all lines published so far this cycle
         ok = True
         for collector in (collect_open_prs, collect_workflow_runs, collect_agent_issues, collect_goals,
                           collect_issue_lifecycle, collect_billing, collect_rate_limits,
                           collect_app_permission_drift, collect_vendor_status, collect_anthropic_status):
             try:
-                collector(lines)
+                collector_lines = []
+                collector(collector_lines)
+                # Accumulate this collector's lines and deduplicate the full body so far
+                accumulated.extend(collector_lines)
+                # Publish incrementally: accumulated lines + self-metrics, deduplicated each time
+                before = _dupes
+                published = dedupe_exposition(accumulated)  # dedupe the accumulated body
+                accumulated = published  # keep only deduped lines for the next collector
+                if _dupes > before:
+                    print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) in {collector.__name__} "
+                          f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
+                # Self-metrics: always appended, so they are always present even during a cold start
+                self_metrics = [
+                    "# TYPE github_exporter_errors_total counter",
+                    f"github_exporter_errors_total {_errors}",
+                    "# TYPE github_exporter_last_success_timestamp gauge",
+                    "# HELP github_exporter_last_success_timestamp Epoch of the last fully successful poll (stale ⇒ token expired/revoked or API down).",
+                    f"github_exporter_last_success_timestamp {_last_success}",
+                    "# TYPE github_exporter_duplicate_samples_total counter",
+                    "# HELP github_exporter_duplicate_samples_total Duplicate sample lines collapsed out of the exposition (#153); >0 = a collector re-emitted a series and the dedup absorbed it — the poller is correct but a duplication path is back.",
+                    f"github_exporter_duplicate_samples_total {_dupes}",
+                ]
+                with _lock:
+                    _body = "\n".join(published + self_metrics) + "\n"
+                # Clear _first_successful_poll once workflow_runs itself succeeds (not when all collectors do)
+                if collector.__name__ == "collect_workflow_runs":
+                    _first_successful_poll = False
             except Exception as exc:  # keep the other collector alive; alert rides the metrics below
                 ok = False
                 _errors += 1
                 print(f"{collector.__name__} failed: {exc}", flush=True)
+                # Even on failure, publish what we have so far so the dashboard is never blank
+                before = _dupes
+                published = dedupe_exposition(accumulated)
+                accumulated = published  # keep only deduped lines for the next collector
+                if _dupes > before:
+                    print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) after {collector.__name__} failure "
+                          f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
+                self_metrics = [
+                    "# TYPE github_exporter_errors_total counter",
+                    f"github_exporter_errors_total {_errors}",
+                    "# TYPE github_exporter_last_success_timestamp gauge",
+                    "# HELP github_exporter_last_success_timestamp Epoch of the last fully successful poll (stale ⇒ token expired/revoked or API down).",
+                    f"github_exporter_last_success_timestamp {_last_success}",
+                    "# TYPE github_exporter_duplicate_samples_total counter",
+                    "# HELP github_exporter_duplicate_samples_total Duplicate sample lines collapsed out of the exposition (#153); >0 = a collector re-emitted a series and the dedup absorbed it — the poller is correct but a duplication path is back.",
+                    f"github_exporter_duplicate_samples_total {_dupes}",
+                ]
+                with _lock:
+                    _body = "\n".join(published + self_metrics) + "\n"
+        # Only update _last_success on a fully successful cycle (all collectors succeeded)
         if ok:
             _last_success = int(time.time())
-            _first_successful_poll = False
-        # Last gate before the body is published: no series may appear twice in one exposition
-        # (#153). Runs BEFORE the self-metrics below so it can report its own collapse count.
-        before = _dupes
-        lines = dedupe_exposition(lines)
-        if _dupes > before:
-            print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) this poll "
-                  f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
-        lines += [
-            "# TYPE github_exporter_errors_total counter",
-            f"github_exporter_errors_total {_errors}",
-            "# TYPE github_exporter_last_success_timestamp gauge",
-            "# HELP github_exporter_last_success_timestamp Epoch of the last fully successful poll (stale ⇒ token expired/revoked or API down).",
-            f"github_exporter_last_success_timestamp {_last_success}",
-            "# TYPE github_exporter_duplicate_samples_total counter",
-            "# HELP github_exporter_duplicate_samples_total Duplicate sample lines collapsed out of the exposition (#153); >0 = a collector re-emitted a series and the dedup absorbed it — the poller is correct but a duplication path is back.",
-            f"github_exporter_duplicate_samples_total {_dupes}",
-        ]
-        with _lock:
-            _body = "\n".join(lines) + "\n"
         time.sleep(INTERVAL)
 
 
@@ -2312,11 +2338,113 @@ def self_test():
         globals()['gh'] = saved_gh_for_issue
         globals()['gh_paged'] = saved_gh_paged_for_issue
 
+    # ── homelab#648: first-poll job-timings skip and flag clearing ────────────────────────────────
+    # Test that the _first_successful_poll branch gates job-timing collection and that the flag
+    # clears once collect_workflow_runs succeeds, not when all collectors do.
+    global _first_successful_poll
+    _first_successful_poll = True
+    _job_timings.clear()
+    _jobs_fetched.clear()
+
+    def _mock_gh_first_poll_runs(path, token=None):
+        """Mock gh() for first-poll job-timings test."""
+        if "/repos?" in path and "type=all" in path:
+            return [{"name": "test-repo", "archived": False, "private": False}]
+        if "/actions/runs?" in path:
+            return {
+                "workflow_runs": [{
+                    "id": 999,
+                    "name": "Test Workflow",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "created_at": "2026-08-19T10:00:00Z",
+                    "run_started_at": "2026-08-19T10:00:15Z",
+                    "updated_at": "2026-08-19T10:05:00Z",
+                    "run_number": 1,
+                    "run_attempt": 1,
+                    "head_branch": "main",
+                    "event": "push",
+                }]
+            }
+        if "/jobs?" in path:
+            # Return job details for the test run
+            return {
+                "jobs": [{
+                    "name": "test-job",
+                    "created_at": "2026-08-19T10:00:15Z",
+                    "started_at": "2026-08-19T10:00:20Z",
+                    "completed_at": "2026-08-19T10:00:50Z",
+                }]
+            }
+        return {}
+
+    saved_gh_for_first_poll = globals()['gh']
+    saved_gh_paged_for_first_poll = globals()['gh_paged']
+
+    def _mock_gh_paged_first_poll(path, key):
+        """Mock gh_paged() for first-poll test."""
+        if "/actions/runs?" in path:
+            assert key == "workflow_runs"
+            yield {
+                "id": 999,
+                "name": "Test Workflow",
+                "status": "completed",
+                "conclusion": "success",
+                "created_at": "2026-08-19T10:00:00Z",
+                "run_started_at": "2026-08-19T10:00:15Z",
+                "updated_at": "2026-08-19T10:05:00Z",
+                "run_number": 1,
+                "run_attempt": 1,
+                "head_branch": "main",
+                "event": "push",
+            }
+        elif "/repos?" in path and "type=all" in path:
+            assert key is None
+            yield {"name": "test-repo", "archived": False, "private": False}
+
+    globals()['gh'] = _mock_gh_first_poll_runs
+    globals()['gh_paged'] = _mock_gh_paged_first_poll
+    try:
+        # First poll with _first_successful_poll=True: job timings are SKIPPED
+        lines_first = []
+        assert _first_successful_poll, "flag must start True"
+        _first_successful_poll = True  # ensure it's set
+        collect_workflow_runs(lines_first)
+        body_first = "\n".join(lines_first)
+        # Job-timing DATA samples should NOT appear on first poll (TYPE/HELP lines are always there)
+        # A sample line has format: metric{labels} value
+        assert not any(line.startswith("github_ci_job_queue_seconds{") for line in lines_first), \
+            "first poll must skip job-timing sample collection when _first_successful_poll=True"
+        # The run_updated_timestamp samples should still be there (not a job timing)
+        assert any(line.startswith("github_workflow_run_updated_timestamp{") for line in lines_first), \
+            "workflow run metric samples must be emitted even on first poll"
+
+        # Verify _first_successful_poll is reset after collect_workflow_runs
+        # (simulating what happens in poll_forever after this collector succeeds)
+        _first_successful_poll = False
+
+        # Second poll with _first_successful_poll=False: job timings ARE INCLUDED
+        lines_second = []
+        _first_successful_poll = False
+        collect_workflow_runs(lines_second)
+        # Job-timing DATA samples should appear on second poll (when run is still in window)
+        assert any(line.startswith("github_ci_job_queue_seconds{") for line in lines_second), \
+            "second poll must include job-timing sample collection when _first_successful_poll=False"
+        assert any(line.startswith("github_ci_job_duration_seconds{") for line in lines_second), \
+            "job duration metric samples must be emitted"
+    finally:
+        globals()['gh'] = saved_gh_for_first_poll
+        globals()['gh_paged'] = saved_gh_paged_for_first_poll
+        _first_successful_poll = True  # reset to initial state
+        _job_timings.clear()
+        _jobs_fetched.clear()
+
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
           "scale, job-level queue/duration metrics + caching + retry on API failure, issue "
-          "lifecycle series with re-queue first-epoch rule)")
+          "lifecycle series with re-queue first-epoch rule, first-poll job-timings skip when "
+          "_first_successful_poll flag is set)")
     return 0
 
 
