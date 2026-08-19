@@ -469,6 +469,59 @@ def model_family(model: str) -> str:
     return _MODEL_FAMILY_SUFFIX_RE.sub("", raw)
 
 
+def _repo_from_session(session: str) -> str | None:
+    """Recover the repo name from a launcher pod-name session.
+
+    agent-session.sh names worker pods `agent-<PROJECT>-<task>-r<round>` (PROJECT = the repo,
+    which may itself contain dashes) or `agent-<PROJECT>-<HHMMSS>` for non-issue launches. The
+    task slug is one of `issue-<n>` / `pr-<n>` (optionally followed by `-r<round>`) or a 6-digit
+    timestamp. Returns None when the session is not a launcher pod name (router fixtures,
+    coordinator/reviewer sessions, anything hand-written)."""
+    if not session or not session.startswith("agent-"):
+        return None
+    rest = session[len("agent-"):]
+    for marker in (re.compile(r"-issue-\d+"), re.compile(r"-pr-\d+"), re.compile(r"-\d{6}(?:-r\d+)?$")):
+        m = marker.search(rest)
+        if m and m.start() > 0:
+            return rest[:m.start()]
+    return None
+
+
+def _stack_repos() -> dict[str, str]:
+    """repo namespace → owning AgentStack, the reverse of stacks.json's `repos` lists.
+
+    The Go rail's served ledger is keyed by the credential-injection NAMESPACE (`ref:<ns>/<secret>`
+    → stack = `<ns>`, the repo name, ADR-087), while run_reports.stack is the AgentStack name the
+    launcher resolved (agent-session.sh /report). The join in model_drift_rows() needs this reverse
+    map. Two sources, merged (the first seen wins — stacks.json is authoritative where both know a
+    repo):
+
+      • `agents/stacks.json` when readable — the committed mirror of the AgentStack claims
+        (CI/jail: the deployed proxy pod does NOT mount the repo, so this is absent there).
+      • the router's OWN run_reports: `session` encodes the repo (`agent-<repo>-…`) and the
+        `stack` column is the AgentStack name — the only source the deployed pod has, complete
+        for any stack whose repos have ridden within retention.
+    A repo in neither list keeps its identity (the circles repo==stack case, an unstacked
+    namespace) — callers fall back to `stack = repo`."""
+    m: dict[str, str] = {}
+    stacks_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "agents", "stacks.json")
+    if os.path.exists(stacks_path):
+        try:
+            with open(stacks_path) as fh:
+                stacks = json.load(fh).get("stacks") or []
+            for st in stacks:
+                name = str(st.get("name") or "")
+                for r in st.get("repos") or []:
+                    m.setdefault(str(r), name)
+        except (OSError, ValueError) as e:
+            _log(f"stacks.json read failed ({stacks_path}): {e}")
+    for session, stack in _read("SELECT session, stack FROM run_reports"):
+        repo = _repo_from_session(session)
+        if repo and stack:
+            m.setdefault(repo, stack)
+    return m
+
+
 def model_drift_rows(window_s: int = 7 * 86400) -> tuple[list, list]:
     """The requested≠served join over the router's OWN tables, per rail (homelab#515).
 
@@ -489,6 +542,11 @@ def model_drift_rows(window_s: int = 7 * 86400) -> tuple[list, list]:
     """
     now = time.time()
     since = now - window_s
+    # homelab#575: the repo-namespace → AgentStack reverse map, resolved ONCE for the whole join
+    # (go_usage rows are keyed by the credential-injection namespace, run_reports by the stack
+    # name). Derived from stacks.json where readable (CI/jail) and from run_reports.session in
+    # the deployed pod — see _stack_repos().
+    stack_repos = _stack_repos()
     # OpenRouter served-side ground truth: requested → served per harvested generation.
     gen = _read(
         "SELECT requested_model, served_model, provider, COUNT(*) FROM generations "
@@ -511,8 +569,20 @@ def model_drift_rows(window_s: int = 7 * 86400) -> tuple[list, list]:
             # served families; absent that, either the stack has NO ledger rows (unverifiable —
             # absence never reads as agreement) or it served a DIFFERENT family (drift, e.g. a
             # slot map redirected the requested flash to kimi-k3).
+            #
+            # homelab#575: go_usage.stack is the credential-injection NAMESPACE (the repo name),
+            # while run_reports.stack is the AgentStack name — for any multi-repo stack whose
+            # repos don't equal the stack name (platform, sleep, oracle), the plain `stack = ?`
+            # join could never match, so 100% of those rides read as unverifiable. Resolve the
+            # stack's repo namespaces (reverse of stacks.json's repos list, derived from
+            # run_reports.session in the deployed pod where the file is not mounted) and look
+            # there too. The literal stack name stays in the set so legacy/synthetic rows and
+            # the circles repo==stack case keep working.
+            repos = {r for r, s in stack_repos.items() if s == stack}
+            terms = sorted({stack, *repos})
             served = _read(
-                "SELECT DISTINCT model FROM go_usage WHERE ts > ? AND stack = ?", (since, stack))
+                f"SELECT DISTINCT model FROM go_usage WHERE ts > ? AND stack IN ({','.join('?' * len(terms))})",
+                (since, *terms))
             if not served:
                 unver.append(("opencode-go", stack, role, model, n))
             elif not any(model_family(m) == rf for m, in served):
@@ -1592,6 +1662,19 @@ def self_test() -> int:
     assert any(r[0] == "opencode-go" and r[3] == "opencode-go/deepseek-v4-flash"
                and r[1] == "circles" for r in unver), \
         f"a Go ride with no ledger rows must be unverifiable: {unver}"
+    # homelab#575: the platform-stack shape — go_usage served rows land under the REPO namespace
+    # (homelab is one of platform's repos; none of them equals "platform"), so the old `stack = ?`
+    # join read every platform Go ride as unverifiable. The join now resolves repo namespaces back
+    # to the owning AgentStack via _stack_repos(); a ride served under a repo namespace is
+    # verifiable, not unverifiable.
+    record_report({"session": "agent-homelab-issue-575-r1", "task": "issue-575",
+                   "stack": "platform", "role": "worker",
+                   "model": "opencode-go/deepseek-v4-flash", "rail": "opencode-go", "outcome": "pr"})
+    go_usage_add(_now - 3600, "homelab", "deepseek-v4-flash", 0.01)  # served under the repo ns
+    drift, unver = model_drift_rows()
+    assert not any(r[0] == "opencode-go" and r[1] == "platform"
+                   and r[3] == "opencode-go/deepseek-v4-flash" for r in unver), \
+        f"a platform Go ride served under its repo ns must be VERIFIABLE, not unverifiable: {unver}"
     body = "\n".join(metrics_lines())
     assert 'router_run_model_drift_total{rail="openrouter",stack="sleep",role="worker",' \
            'requested="deepseek/deepseek-v4-flash",served="moonshotai/kimi-k3",provider="Moonshot"} 1' \
@@ -2084,7 +2167,7 @@ def self_test() -> int:
     # 8 run_reports (t-1 is INSERT OR REPLACE'd, + t-2 clean, + t-3 the real producer shape,
     # + the 5 M11 ladder-cell fixtures) and 3 strikes (issue-9/sleep from the vocabulary fixture,
     # issue-19/circles from the real one, issue-42/sleep from the ladder's degradation step).
-    assert summary["rows"]["run_reports"] == 12 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1
+    assert summary["rows"]["run_reports"] == 13 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
