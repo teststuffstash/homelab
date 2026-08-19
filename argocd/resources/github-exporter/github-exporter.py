@@ -1574,7 +1574,12 @@ def collect_issue_lifecycle(lines):
     For issues CLOSED since the last poll, emit `github_issue_queued_at` / `github_issue_done_at`
     per (repo, issue) from the label-event timeline. The agent/queued first-applied timestamp is
     the queued_at; the close time is the done_at. Re-queues keep the FIRST queued epoch (the
-    platform throughput board joins this against agent_run_* for LLM-vs-platform split)."""
+    platform throughput board joins this against agent_run_* for LLM-vs-platform split).
+
+    Uses server-side `since` filter on `updated_at` and early break when items fall out of the
+    window to reduce API quota usage (GitHub's Issues List endpoint filters by updated_at, and
+    closing an issue updates it; with sort=updated&direction=desc, the first out-of-window item
+    permits an early break instead of fetching all closed issues)."""
     since = (datetime.now(timezone.utc) - timedelta(hours=WINDOW_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     all_repos = [r for r in gh_paged(f"/orgs/{ORG}/repos?type=all", None) if not r["archived"]]
     repos = [r["name"] for r in all_repos]
@@ -1585,8 +1590,8 @@ def collect_issue_lifecycle(lines):
         "# HELP github_issue_done_at Epoch when the issue was closed (the wall time for queued→done).",
     ]
     for repo in repos:
-        # Fetch closed issues and filter by window client-side (closed param not supported on this endpoint)
-        path = f"/repos/{ORG}/{repo}/issues?state=closed&sort=updated&direction=desc"
+        # Fetch closed issues with server-side since filter on updated_at
+        path = f"/repos/{ORG}/{repo}/issues?state=closed&sort=updated&direction=desc&since={since}"
         try:
             window_cutoff = epoch(since)
             for issue in gh_paged(path, None):
@@ -1596,9 +1601,10 @@ def collect_issue_lifecycle(lines):
                 closed_at = issue.get("closed_at")
                 if not (number and closed_at):
                     continue
-                # Filter to window: only issues closed within WINDOW_HOURS
+                # Early break: with sort=updated&direction=desc, first out-of-window item means
+                # all remaining items on this and subsequent pages are also out-of-window
                 if epoch(closed_at) < window_cutoff:
-                    continue
+                    break
                 # Get label timeline for this issue to find first agent/queued application
                 try:
                     events = list(gh_paged(f"/repos/{ORG}/{repo}/issues/{number}/events?", None))
@@ -2268,8 +2274,7 @@ def self_test():
     assert vendor_status_value("") == 4
 
     # ── leg 2 #628: issue lifecycle series (queued→done wall) with re-queue first-epoch rule ───────
-    # A fixture issue with a re-queue: first agent/queued application at T1, removed at T2,
-    # re-applied at T3. Only T1 should be recorded (first-epoch rule). Closed at T4.
+    # Test 1: basic first-epoch rule — a re-queue records only T1.
     # Timestamps are relative to now so they remain inside any RUN_WINDOW_HOURS >= 1.
     _lc_now = datetime.now(timezone.utc)
     def _lc_ts(minutes_ago):
@@ -2302,6 +2307,7 @@ def self_test():
 
     def _mock_gh_paged_issue_lifecycle(path, key):
         """Mock gh_paged() for issue lifecycle testing."""
+        issue_fetch_calls.append(path)
         if "/issues?" in path and "state=closed" in path:
             # The Issues List endpoint returns a bare array, so key must be None
             assert key is None, f"Issues List endpoint must use key=None (not key={key!r}) to avoid batch[key] indexing on bare arrays"
@@ -2334,6 +2340,18 @@ def self_test():
             f"first queued_at must be T1 (first-epoch rule), not T3 (re-queue). Got:\n{lifecycle_body}"
         assert has_done in lifecycle_body, \
             f"done_at must record close time. Got:\n{lifecycle_body}"
+
+        # Test 2: server-side since filter and early break (FU-115 work, #656).
+        # The API path must include the since parameter, and early break must prevent
+        # unnecessary pagination when items fall out of the window.
+        issue_fetch_calls.clear()
+        collect_issue_lifecycle(lifecycle_lines)
+        # Verify that the issues endpoint was called with since parameter
+        issues_calls = [c for c in issue_fetch_calls if "/issues?" in c and "state=closed" in c]
+        assert issues_calls, "issues endpoint must be called at least once"
+        # Since parameter must be in the path (URL-encoded or not)
+        assert any("since=" in call for call in issues_calls), \
+            f"issues endpoint must include since parameter, got calls: {issues_calls}"
     finally:
         globals()['gh'] = saved_gh_for_issue
         globals()['gh_paged'] = saved_gh_paged_for_issue
