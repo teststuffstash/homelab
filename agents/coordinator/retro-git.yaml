@@ -1,0 +1,169 @@
+# Retro fleet-read git token (homelab#587 leg 2, §B2 The split). The scheduled retro's
+# deep-dives read issues/PRs across the FLEET (the pain-rank is fleet-wide) — but the ride pod's
+# git token was the per-repo broker token of the namespace it rides in (ADR-087 leg B), so
+# run 4 left sleep-tracking dark: 2 of 8 deep-dives untrailable. Operator ruling: access tracks
+# the QUESTIONS — the retro gets its OWN fleet-wide READ-ONLY token, App-minted, same ESO shape
+# as agents/coordinator/git-token.yaml's coordinator-git (read that file first). Same App, same
+# installation, same private-key Secret — NOT a second copy of that ExternalSecret, just a second
+# generator + a second minted Secret with a narrower (read-only) permission set.
+#
+# Synced by the agent-coordinator ArgoCD app (registered in kustomization.yaml — FU-152 renders
+# this directory via kustomize with prune, so an unlisted manifest is never created). The kubectl
+# lines below are the pre-ArgoCD / disaster-recovery path only; ordering there matters:
+# apply AFTER git-token.yaml (which creates the `agents-github-app` Secret this generator's
+# privateKey references) and AFTER rbac.yaml:
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/git-token.yaml
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/retro-git.yaml
+---
+# The generator: mint an installation token across the SAME fleet repos as coordinator-git, but
+# READ-ONLY across the board — the retro is evidence-gathering, it writes nothing (its report
+# lands via the harvest step's separate coordinator-git identity, which still does the PR write).
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: retro-git-gen
+  namespace: agent-coordinator
+spec:
+  appID: "4150968"          # same App as coordinator-git — from `github-app-bootstrap.sh homelab-agents secrets` output
+  installID: "142724430"    # the teststuffstash installation
+  auth:
+    privateKey:
+      secretRef: { name: agents-github-app, key: privateKey }  # the SAME Secret git-token.yaml's ExternalSecret writes — not duplicated here
+  permissions:                     # ALL read — this identity never writes to a repo
+    contents: read
+    issues: read
+    pull_requests: read
+    checks: read
+    statuses: read
+    actions: read
+  repositories:                    # mirrors coordinator-git's list VERBATIM (agents/coordinator/git-token.yaml) —
+                                    # the two lists must move together; add/remove a stack repo in BOTH files.
+    - sleep-tracking
+    - snore-recorder
+    - sleep-iac
+    - openrouter-operator
+    - oracle-fleet
+    - oracle-iac
+    - agent-runtime
+    - agent-coordinator
+    - allure-behavior-snippets
+    - circles
+    - circles-iac
+    - homelab
+---
+# Drive the generator → write the Secret the retro cell reads as GH_TOKEN. Same remap pattern as
+# coordinator-git's ExternalSecret (generator yields key `token`).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: retro-git
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 45m             # token lives ~1h; refresh before expiry
+  target:
+    name: retro-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        GH_TOKEN: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: retro-git-gen
+---
+# ── The FU-080 (a) mirror: the token reaches the RIDE namespace as a Secret, never as text ──────
+# Review r2 on PR#619: the first cut exported the raw token in the retro-cell step and spliced it
+# as a literal env `value:` into the ride pod's manifest — the exact cross-namespace env-value
+# injection FU-080 (a) eliminated for the transcripts S3 key. Same remedy as there
+# (argocd/resources/agentstack/transcripts-store.yaml, the donor): a ClusterSecretStore whose
+# kubernetes-provider SA can read exactly ONE secret in agent-coordinator, and a per-ride-ns
+# ExternalSecret mirror the pod secretKeyRefs IN-NAMESPACE. No launcher or workflow step ever
+# reads the value; the pod spec carries a reference, not the token.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso-retro-git-reader
+  namespace: agent-coordinator
+---
+# Exactly one secret readable, by name.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: eso-retro-git-reader
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["retro-git"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eso-retro-git-reader
+  namespace: agent-coordinator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: eso-retro-git-reader
+subjects:
+  - kind: ServiceAccount
+    name: eso-retro-git-reader
+    namespace: agent-coordinator
+---
+# ESO's kubernetes provider validates itself with a SelfSubjectRulesReview — reuse the generic
+# ClusterRole the transcripts store ships (transcripts-store.yaml), bind this SA to it.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: eso-retro-git-reader-ssrr
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: eso-transcripts-reader-ssrr
+subjects:
+  - kind: ServiceAccount
+    name: eso-retro-git-reader
+    namespace: agent-coordinator
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: retro-git
+spec:
+  provider:
+    kubernetes:
+      remoteNamespace: agent-coordinator
+      server:
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          key: ca.crt
+          namespace: agent-coordinator
+      auth:
+        serviceAccount:
+          name: eso-retro-git-reader
+          namespace: agent-coordinator
+---
+# The per-ride-namespace mirror. Hand-written for the PLATFORM series ride ns
+# (openrouter-operator — agents/retro-project.sh is the map's one home); a second stack's retro
+# graduation adds its own mirror here, or the AgentStack Composition renders it per claim knob
+# (the transcripts-store precedent) when retro graduates per-stack.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: retro-git
+  namespace: openrouter-operator
+spec:
+  refreshInterval: 45m
+  secretStoreRef: { name: retro-git, kind: ClusterSecretStore }
+  target:
+    name: retro-git
+    creationPolicy: Owner
+  data:
+    - secretKey: GH_TOKEN
+      remoteRef: { key: retro-git, property: GH_TOKEN }

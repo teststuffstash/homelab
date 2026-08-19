@@ -1096,6 +1096,22 @@ if [ -n "${NO_ARM:-}" ]; then
   ARM_ENV=$'        - name: AGENT_ARM_PR\n          value: "0"'
 fi
 
+# homelab#587 leg 2 (§B2 The split): a ~1h READ-ONLY fleet-wide token for the platform retro ride
+# ONLY — deliberately NOT GH_TOKEN (the ADR-087 leg B broker's per-repo token path stays
+# untouched; this rides alongside it, never replaces it). The launcher is handed a Secret NAME
+# (RETRO_GH_SECRET, set by retro-argo.yaml's retro-cell step) and renders a secretKeyRef the pod
+# resolves against the IN-NAMESPACE mirror (retro-git.yaml's FU-080 (a) ClusterSecretStore +
+# per-ride-ns ExternalSecret) — the raw value never appears in any manifest or any launcher env
+# (PR#619 r2: literal cross-namespace env values are the pattern FU-080 (a) exists to forbid).
+# optional: true — a namespace without the mirror (every ordinary fixer dispatch) resolves to an
+# unset var, and the brief tells the model to name unreachable repos rather than guess.
+# >>>REPLAY:retro-gh-token-env>>>
+RETRO_GH_TOKEN_ENV=""
+if [ -n "${RETRO_GH_SECRET:-}" ]; then
+  RETRO_GH_TOKEN_ENV=$'        - name: RETRO_GH_TOKEN\n          valueFrom:\n            secretKeyRef: { name: "'"$RETRO_GH_SECRET"'", key: GH_TOKEN, optional: true }'
+fi
+# <<<REPLAY:retro-gh-token-env<<<
+
 GOOSE_PROXY_ENV=""; PROXY_URL=""
 PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
 if [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
@@ -1826,6 +1842,9 @@ ${CRED_BROKER_ENV}
         # Empty ⇒ the entrypoint forks a fresh agent/<ts> branch from BASE_REF as before.
 ${WORK_BRANCH_ENV}
 ${ARM_ENV}
+        # platform retro ride only (homelab#587 leg 2): fleet-wide READ-ONLY token, emitted only
+        # when the launcher's own environment carries it. See RETRO_GH_TOKEN_ENV above.
+${RETRO_GH_TOKEN_ENV}
         # docker mode only: the repo's own docker CLI (devbox.json) talks to the dind sidecar.
 ${DOCKER_ENV}
         # claude harness only (FU-066): proxy base URL + the opaque session ref — no real creds.

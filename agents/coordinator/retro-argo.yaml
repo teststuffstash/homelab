@@ -223,6 +223,16 @@ spec:
               export AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_READER_SECRET"
               s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cat "s3://$AGENT_TS_BUCKET/_ledger.jsonl" > /tmp/ledger.jsonl
               python3 agents/retro-rank.py /tmp/ledger.jsonl /tmp/ledger-ranked.json 40
+              # homelab#587 leg 2 (§B2 The split): the pain-rank is FLEET-WIDE, but the ride pod's own
+              # git identity is the stack's per-repo broker token — without a fleet-wide read, a
+              # deep-dive whose trail lives in a sibling stack's repo is untrailable (run 4:
+              # sleep-tracking dark, 2/8 deep-dives). retro-git.yaml mints a ~1h READ-ONLY fleet
+              # token and MIRRORS it into the ride namespace (the FU-080 (a) pattern — PR#619 r2:
+              # the value must never cross namespaces as manifest text). This step passes only the
+              # Secret NAME; the launcher renders a secretKeyRef and the pod resolves it in-ns.
+              # An absent mirror degrades pod-side (optional secretKeyRef → the env var is simply
+              # unset, and the brief tells the model to name unreachable repos rather than guess).
+              export RETRO_GH_SECRET=retro-git
               # Only the OVERRIDE is passed through. Unset, the launcher mints this cell's own
               # capped key (homelab#270) — the empty default used to mean the ride quietly fell
               # back to the stack fixer's standing key, which is what run 3's dead cell-b spent.
