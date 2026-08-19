@@ -68,6 +68,15 @@ groups:
         annotations:
           summary: OpenRouter account is capacity-down
           description: 'OpenRouter account-scope capacity has been latched for 30m — worker dispatch is degrading to the haiku subscription rail or deferring the OpenRouter rail. Probe: GET openrouter-proxy.agent-egress:8080/router-status → .openrouter_capacity (reason / remaining_s / recent_429_models) names which leg latched. The credit leg reads the openrouter-operator''s openrouter_account_credit_usd gauge (openrouter-operator-metrics.openrouter-operator:9090), NOT OpenRouter directly — .credit_poll_failures climbing there, or router_openrouter_credit_poll_failures_total here, means that leg is blind and only the data-plane legs (hard-402 / cross-model 429s) can still fire (homelab#180).'
+      - alert: GoCapacityLatched
+        expr: router_go_capacity_latched == 1
+        for: 30m
+        labels:
+          severity: warning
+          triage: none
+        annotations:
+          summary: Go rail capacity latch is held
+          description: 'GO_UPSTREAM returned a 429/402 and the Go-rail observed-capacity latch has held for 30m — Go worker dispatch is deferring at the real wall (/opencode-limit serves limited=true with the typed reason observed-429/observed-402). Probe: GET openrouter-proxy.agent-egress:8080/opencode-limit → .capacity (reason / code / remaining_s / latched_total) names which code latched. A 429 is rate pressure (Retry-After sizes the hold); a 402 means the window is SPENT (the longer default hold). The self-metered ledger reads LOW while this is latched — the observed wall is ground truth (FU-170 leg d).'
       - alert: RouterRunModelDrift
         expr: |-
           max by (rail, stack, role, requested, served) (
