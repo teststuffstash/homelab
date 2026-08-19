@@ -79,7 +79,7 @@ def isbot: (.author.is_bot == true) or (.author.login | test("\\[bot\\]")) or (.
 '
 JQ="${JQ/NOW_EPOCH/$NOW}"
 
-sec_review=""; sec_solve=""; sec_triage=""; sec_verdict=""; sec_backlog=""; nback=0; nfail=0
+sec_review=""; sec_fix=""; sec_solve=""; sec_triage=""; sec_verdict=""; sec_backlog=""; nback=0; nfail=0
 for repo in $repos; do
   case "$repo" in */*) slug="$repo";; *) slug="$ORG/$repo";; esac
   issues="$(gh issue list --repo "$slug" --state open --limit 200 --json number,title,labels,createdAt,author 2>/dev/null)" || issues=""
@@ -88,7 +88,7 @@ for repo in $repos; do
     echo "WARN board: $slug issue list PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" >&2
     issues='[]'; nfail=$((nfail + 1))
   fi
-  prs="$(gh pr list --repo "$slug" --state open --limit 100 --json number,title,labels,createdAt,reviewDecision,isDraft,autoMergeRequest,latestReviews 2>/dev/null)" || prs=""
+  prs="$(gh pr list --repo "$slug" --state open --limit 100 --json number,title,labels,createdAt,reviewDecision,isDraft,autoMergeRequest,latestReviews,author 2>/dev/null)" || prs=""
   jq -e . >/dev/null 2>&1 <<<"${prs:-null}" || prs=""
   if [ -z "$prs" ]; then
     echo "WARN board: $slug PR list PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" >&2
@@ -104,6 +104,20 @@ for repo in $repos; do
         or (haslab("major/awaiting-human")))
       | "\($repo)#\(.number) \(.title) (\(age))" ] | unique | .[]')"
   [ -n "$rline" ] && sec_review="${sec_review}${rline}"$'\n'
+
+  # § FIX — seat-authored (non-bot) PRs sitting CHANGES_REQUESTED: only the seat's own fix
+  # round moves them (an operator-lane PR has NO machine owner — the scan's changes-requested
+  # clause is WORKER_AUTHOR-scoped by design; the meta-state durable warning's class, made a
+  # board row 2026-08-19 after PR#568 sat overnight). agent/error stays SOLVE's line;
+  # major/awaiting-human stays REVIEW's. A PR whose fix round is already pushed lists until the
+  # bot's re-review replaces the verdict — accepted: tightening that needs per-PR commit reads,
+  # and the read-only contract is ONE PR list per repo.
+  fline="$(printf '%s' "$prs" | jq -r --arg repo "$repo" "$JQ"'[
+      .[] | select(.isDraft == false) | select(.author != null) | select(isbot | not)
+      | select(.reviewDecision == "CHANGES_REQUESTED")
+      | select(haslab("agent/error") | not) | select(haslab("major/awaiting-human") | not)
+      | "\($repo)#\(.number) \(.title) (\(age))" ] | unique | .[]')"
+  [ -n "$fline" ] && sec_fix="${sec_fix}${fline}"$'\n'
 
   # § SOLVE — agent/error anomaly breakers (issues + PRs, FU-069 human-first) and
   # agent/blocked gates (issues); a blocked issue already flagged agent/error shows ⛔ only.
@@ -161,15 +175,16 @@ if [ -n "${BOARD_NOW:-}" ]; then hdr="$(date -u -d "@$BOARD_NOW" +%Y-%m-%dT%H:%M
 echo "board — stack $stack ($mrepos repos) · $hdr"
 
 [ -n "$sec_review" ] && { printf '\n§ REVIEW (codeowner queue)\n'; printf '%s' "$sec_review"; }
+[ -n "$sec_fix" ] && { printf '\n§ FIX (seat PRs awaiting your fix round)\n'; printf '%s' "$sec_fix"; }
 [ -n "$sec_solve" ] && { printf '\n§ SOLVE (parks & latches)\n'; printf '%s' "$sec_solve"; }
 [ -n "$sec_triage" ] && { printf '\n§ TRIAGE\n'; printf '%s' "$sec_triage"; }
 [ -n "$sec_verdict" ] && { printf '\n§ VERDICT DUE\n'; printf '%s' "$sec_verdict"; }
 [ -n "$sec_backlog" ] && { printf '\n§ BACKLOG (suitable, unqueued)\n'; printf '%s' "$sec_backlog"; }
 
 cnt() { printf '%s' "$1" | grep -c '[^[:space:]]' 2>/dev/null || true; }
-nreview="$(cnt "$sec_review")"; nsolve="$(cnt "$sec_solve")"; ntriage="$(cnt "$sec_triage")"; nverdict="$(cnt "$sec_verdict")"
-printf '\ntotals — review: %s · solve: %s · triage: %s · verdict-due: %s · backlog: %s\n' \
-  "$nreview" "$nsolve" "$ntriage" "$nverdict" "$nback"
+nreview="$(cnt "$sec_review")"; nfix="$(cnt "$sec_fix")"; nsolve="$(cnt "$sec_solve")"; ntriage="$(cnt "$sec_triage")"; nverdict="$(cnt "$sec_verdict")"
+printf '\ntotals — review: %s · fix: %s · solve: %s · triage: %s · verdict-due: %s · backlog: %s\n' \
+  "$nreview" "$nfix" "$nsolve" "$ntriage" "$nverdict" "$nback"
 if [ "$nfail" -gt 0 ]; then
   echo "⚠ $nfail repo fetch(es) failed — the totals above may be incomplete (see WARN on stderr)"
 fi
