@@ -31,6 +31,7 @@ Two needs, one substrate:
 | coordinator | Claude Code JSONL on the `coordinator-transcripts` RWX PVC | **yes** (PVC) |
 | worker (goose) | `/tmp/run.log` (tee'd stdout → Loki) + goose's own session file | **no** (Loki keeps stdout only; goose session lost) |
 | reviewer | `--output-format json` single result; its `~/.claude` transcript | **no** |
+| jail seat (2026-08-19) | Claude Code JSONL on the host bind-mount (`.claude-data/`), pushed by `scripts/jail-transcripts-sync.sh` (heartbeat + wind-down) to the **separate `jail-transcripts` bucket** | host + bucket — and the bucket is deliberately OUTSIDE the viewer/retro read set: jail transcripts can carry wallet VALUES, so no cluster role reads them (`agents/coordinator/jail-transcripts-workspace.yaml`) |
 
 The irreplaceable artifact is the transcript. Everything else (dashboards, retros) can be built
 *later* over captured data — **capture is the only blocker before firing more coordinators.**

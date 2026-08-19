@@ -1,0 +1,55 @@
+# Garage bucket + key for JAIL seat-session transcripts — the missing jail leg of the §A1
+# capture contract (docs/agents/observability-and-retro.md §Part A; added 2026-08-19).
+#
+# DELIBERATELY A SEPARATE BUCKET from agent-transcripts, and deliberately NO reader key:
+# jail sessions run with the operator's full context and can echo wallet/secret VALUES into
+# their transcripts verbatim (a `keepassxc-cli … -a Password` read lands in the JSONL), while
+# agent-transcripts is READ by cluster machinery (the transcripts viewer sync, the platform
+# retro). Nothing cluster-side may read this bucket: ONE rw key (the jail's sync needs
+# list+put), whose connection Secret is readable only by cluster-admin (the coordinator SA has
+# no Secret-value access — rbac.yaml), no viewer sync registration, no retro grant. Adding a
+# reader key here, or registering this bucket in the viewer sync, is a credential-airlock
+# change — operator decision, never a convenience edit.
+#
+# Consumer: scripts/jail-transcripts-sync.sh (jail-side, best-effort, reads the connection
+# Secret at sync time through the jail's own kubeconfig — no wallet entry, nothing stored
+# jail-side). CREATE-pattern like the agent-transcripts workspace beside this file.
+apiVersion: tf.upbound.io/v1beta1
+kind: Workspace
+metadata:
+  name: jail-transcripts-garage
+  namespace: agent-coordinator
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    source: Inline
+    module: |
+      resource "garage_bucket" "jail" {
+        global_alias = "jail-transcripts"
+        max_size     = 21474836480 # 20Gi — ADR-089 quota-as-contract; ~60× actual (327MiB measured 2026-08-19; jail sessions are fat and rebuild-from-git does not apply to transcripts, so headroom over reclamation)
+      }
+
+      resource "garage_key" "rw" { name = "jail-transcripts-rw" }
+
+      resource "garage_bucket_permission" "rw" {
+        bucket_id     = garage_bucket.jail.id
+        access_key_id = garage_key.rw.id
+        read  = true
+        write = true
+        owner = false
+      }
+
+      output "bucket" {
+        value = garage_bucket.jail.global_alias
+      }
+      output "rw_access_key_id" {
+        value = garage_key.rw.id
+      }
+      output "rw_secret_access_key" {
+        value     = garage_key.rw.secret_access_key
+        sensitive = true
+      }
+  writeConnectionSecretToRef:
+    namespace: agent-coordinator
+    name: jail-transcripts-s3
