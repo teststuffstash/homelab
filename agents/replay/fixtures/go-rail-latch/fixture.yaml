@@ -1,0 +1,39 @@
+# go-rail-latch — THE FAMILY, as one decision table (stint #661 batch 2; was 11 copied dirs).
+#
+# THE CONTRACT (consolidated from the eleven fixture essays; the per-leg intent is the rows file):
+# FU-088(a)'s Go arm — an opencode-go/* dispatch probes ITS OWN rail's self-metered window
+# (`curl .../opencode-limit`) instead of the one Anthropic-subscription latch every other claude
+# ride consults. clear: limited:false falls through untouched. semaphore (or an untyped reply):
+# TRANSIENT — defer, report-only, exit 0 (the #158 inversion: a Go ride must never burn
+# subscription capacity on a condition that resolves in minutes). A CAPACITY reason
+# (`window-<span>`, homelab#600's observed-429/observed-402) instead REROUTES through the M12
+# degrade path (docs/agents/model-routing.md §M12): dispatch AGENT_SUBSCRIPTION_FALLBACK_MODEL
+# (claude/haiku) on the subscription, with the SAME bounds as the Anthropic-side block — class=fix
+# only (reroute-nonfix), subscriptionFallback:false / AGENT_SUBSCRIPTION_FALLBACK=0 opt-outs
+# (reroute-optout / reroute-envoptout), modelDeny binds over the fallback (reroute-deny) — and the
+# resulting ride carries rail=subscription-fallback (SUB_LABEL + AGENT_RAIL), RUN_CMD re-pointed
+# at the fallback model IN PLACE (the recipe/worker `--model <id> ` shape swaps it,
+# reroute-run-shape's bare `--run` shape inserts one after `claude -p `, and a shape that is
+# NEITHER defers rather than mis-serve a pod announcing a rail it cannot thread —
+# reroute-unthreadable, the finding-2 ratchet), with the Go model's 1M context env stripped so a
+# haiku fallback isn't declared at a window it doesn't have. failover-model-sync and
+# reroute-model-mismatch pin the sibling `*)` default arm (an Anthropic-primary MODEL, Anthropic
+# latched, Go clear): the ride FAILS OVER via `subscription-latch.sh --pick-rail`, and
+# GOOSE_MODEL/MODEL must move together (#629, PR#643 r1) — the pod-manifest divergence a strike
+# comment would otherwise report a fallback name the ride never served.
+#
+# The Anthropic latch is a TRIPWIRE in every leg but the two `*)` failover rows: `bash` shadowed
+# to record-and-exit-9 unless the row supplies `$BASH_PICK_RAIL` — a Go-primary ride that ever
+# reaches subscription-latch.sh is exactly the homelab#158 inversion this family exists to catch.
+#
+# Not FSM-pinned (no `docs/agents/*-fsm.yaml` `replay:` list references any go-rail-latch* path —
+# confirmed against the generated README index, which showed `-` in the pinned-by column for all
+# eleven pre-table fixtures).
+name: go-rail-latch
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu088-gates
+  - file:post.sh
+rows: rows.psv
