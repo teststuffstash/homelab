@@ -6,6 +6,7 @@ ROUNDS_MAX=3
 HARNESS="claude"
 EGRESS_ENFORCE="true"
 DOCKER=""
+BASE_REF="master"
 
 # Call the function
 render_env_card
