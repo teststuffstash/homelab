@@ -1641,7 +1641,8 @@ def poll_forever():
                 accumulated.extend(collector_lines)
                 # Publish incrementally: accumulated lines + self-metrics, deduplicated each time
                 before = _dupes
-                published = dedupe_exposition(accumulated[:])  # dedupe the accumulated body
+                published = dedupe_exposition(accumulated)  # dedupe the accumulated body
+                accumulated = published  # keep only deduped lines for the next collector
                 if _dupes > before:
                     print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) in {collector.__name__} "
                           f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
@@ -1667,7 +1668,8 @@ def poll_forever():
                 print(f"{collector.__name__} failed: {exc}", flush=True)
                 # Even on failure, publish what we have so far so the dashboard is never blank
                 before = _dupes
-                published = dedupe_exposition(accumulated[:])
+                published = dedupe_exposition(accumulated)
+                accumulated = published  # keep only deduped lines for the next collector
                 if _dupes > before:
                     print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) after {collector.__name__} failure "
                           f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
