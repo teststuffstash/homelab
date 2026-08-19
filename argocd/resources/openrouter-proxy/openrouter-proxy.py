@@ -1240,6 +1240,26 @@ def _go_capacity_snapshot(now: float) -> dict:
         }
 
 
+def _go_limit_reason(status: dict, go_semaphore: dict, go_capacity: dict) -> str | None:
+    """The /opencode-limit top-level `reason` — names WHY `limited` is true. An ACTIVE capacity
+    latch wins (the observed-429/402 ground truth, homelab#600); otherwise the window threshold
+    (`status["limited"]`) or the Go semaphore (`go_semaphore["limited"]`) names the cause
+    (homelab#605). When NOT limited the raw capacity field is still echoed — it stays populated
+    after the hold expires until a 2xx clears it, and consumers key on `limited`, never on
+    `reason != null` (CAP5/M12, the rail-degrade-replay contract)."""
+    if go_capacity["limited"]:
+        return go_capacity["reason"]
+    if status["limited"]:
+        # Name the crossing window (any window at/over its threshold) — `utilization-<w>`,
+        # the same shape the anthropic leg types (`_dispatch_verdict` returns
+        # `utilization-{w}`).
+        return next((f"utilization-{w}" for w, d in status["windows"].items()
+                     if d["utilization"] >= status["thresholds"][w]), "utilization")
+    if go_semaphore["limited"]:
+        return "semaphore"
+    return go_capacity["reason"] or None
+
+
 # homelab#180: where the balance comes from. The operator's metrics Service (PR #32 shipped it as
 # a DEDICATED Service — `openrouter-operator-metrics`, NOT the operator Deployment's own name),
 # reached over in-cluster service DNS per the #138 ruling. ClusterIP→ClusterIP: it does not transit
@@ -1701,9 +1721,13 @@ class Proxy(BaseHTTPRequestHandler):
             status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
             go_semaphore = _go_semaphore_state()
             go_capacity = _go_capacity_snapshot(time.time())
+            limited = status["limited"] or go_semaphore["limited"] or go_capacity["limited"]
             payload = json.dumps({
-                "limited": status["limited"] or go_semaphore["limited"] or go_capacity["limited"],
-                "reason": go_capacity["reason"],
+                "limited": limited,
+                # homelab#605: the top-level `reason` names WHY `limited` is true — the capacity
+                # latch, the window threshold, or the semaphore — not just the latch's field.
+                # CAP5 still holds: consumers key on `limited`, never on `reason != null`.
+                "reason": _go_limit_reason(status, go_semaphore, go_capacity),
                 "thresholds": status["thresholds"],
                 "pricing": status["pricing"],
                 "windows": status["windows"],
@@ -3026,11 +3050,13 @@ def _self_test() -> int:
     check(lim["capacity"]["limited"] is False, "go-capacity: capacity.limited false on expiry (CAP5)")
     check(lim["capacity"]["remaining_s"] == 0, "go-capacity: capacity.remaining_s 0 on expiry (CAP5)")
 
-    # Restore the stub default + leave the latch in its expired (harmless) state. The semaphore
-    # tests below re-arm the ONLY state they care about (_semaphore_caches), so an expired
-    # go-capacity latch with a stale reason cannot bleed into them.
+    # Restore the stub default + clear the capacity latch. The semaphore + window tests below
+    # re-arm the ONLY state they care about (_semaphore_caches / the ledger); an expired latch's
+    # STALE reason (CAP5, pinned by A5 above) must not bleed into their top-level `reason`
+    # assertions (homelab#605 — `reason` now names whatever cause made `limited` true).
     _go_response.pop("status", None)
     _go_response.pop("retry_after", None)
+    _go_reset_latch()
 
     print("\n=== Only-free guardrail test (Go via /anthropic path) ===")
     # Test 9: only-free guardrail MUST deny Go-leg requests through /anthropic path.
@@ -3083,6 +3109,8 @@ def _self_test() -> int:
     c.close()
     check(resp["limited"] is True,
           f"semaphore-full: limited={resp['limited']} (running 3 >= max 3, windows under threshold → True)")
+    check(resp["reason"] == "semaphore",
+          f"semaphore-full: top-level reason typed for the semaphore cause (homelab#605; got {resp['reason']})")
     check(resp["semaphore"] == {"running": 3, "max": 3, "limited": True},
           f"semaphore-full: semaphore dict running=3 max=3 limited=True (got {resp['semaphore']})")
 
@@ -3097,6 +3125,8 @@ def _self_test() -> int:
     c.close()
     check(resp["limited"] is False,
           f"semaphore-fail-open: limited={resp['limited']} (running None, windows under threshold → False)")
+    check(resp["reason"] is None,
+          f"semaphore-fail-open: no limited cause → reason None (homelab#605; got {resp['reason']})")
     check(resp["semaphore"] == {"running": None, "max": 3, "limited": False},
           f"semaphore-fail-open: semaphore dict running=None limited=False (got {resp['semaphore']})")
 
@@ -3114,6 +3144,8 @@ def _self_test() -> int:
     OPENCODE_MAX_RUNNING = _old_go_max
     check(resp["limited"] is False,
           f"semaphore-disabled: limited={resp['limited']} (OPENCODE_MAX_RUNNING=0, running 3 → disabled)")
+    check(resp["reason"] is None,
+          f"semaphore-disabled: no limited cause → reason None (homelab#605; got {resp['reason']})")
     check(resp["semaphore"] == {"running": 3, "max": 0, "limited": False},
           f"semaphore-disabled: semaphore dict max=0 limited=False (got {resp['semaphore']})")
     # Leave the slot empty so later /opencode-limit + /metrics calls see the natural fail-open.
@@ -3130,6 +3162,8 @@ def _self_test() -> int:
     resp = json.loads(r.read())
     c.close()
     check(resp["limited"] is True, f"/opencode-limit: limited={resp['limited']} (should be True at 83%)")
+    check(resp["reason"] == "utilization-5h",
+          f"/opencode-limit: top-level reason names the crossing window (homelab#605; got {resp['reason']})")
     check("5h" in resp["windows"], "/opencode-limit: 5h window present")
     check(resp["by_stack"].get("test", 0) > 0, "/opencode-limit: by_stack includes test")
 
