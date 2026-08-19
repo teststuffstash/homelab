@@ -2075,7 +2075,9 @@ if [ -n "$RUN_CMD" ]; then
       fi
       # <<<REPLAY:strike-quota-classifier<<<
     fi
+    # >>>REPLAY:strike-line-format>>>
     STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+    # <<<REPLAY:strike-line-format<<<
     echo "→ no PR opened — ${STRIKE_LINE}"
     ISSUE_N=""
     case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac

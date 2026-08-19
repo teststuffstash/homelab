@@ -8,9 +8,8 @@ if [ "$ERR_CLASS" != "quota" ]; then
 fi
 
 # Verify that error_class=quota reaches the AGENT_STRIKE line
-TEST_STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
-if ! printf '%s' "$TEST_STRIKE_LINE" | grep -q "error_class=quota"; then
-  printf 'FAIL: STRIKE_LINE would be missing error_class=quota: %s\n' "$TEST_STRIKE_LINE" >&2
+if ! printf '%s' "$STRIKE_LINE" | grep -q "error_class=quota"; then
+  printf 'FAIL: STRIKE_LINE missing error_class=quota: %s\n' "$STRIKE_LINE" >&2
   exit 1
 fi
 
