@@ -65,9 +65,14 @@ spec:
   # for Go rides since PR#458, canary-proven same day). REVERT to claude/haiku primary once the
   # stack chains ride Go flash (the independence ruling's reasoning returns then: platform rides
   # are the ones that can break the Go cap mechanics they'd depend on).
+  # GO-FLASH DOGFOOD PARKED 2026-08-19: the Go rail is MONTH-exhausted (console 100%/30d,
+  # resets ~2026-09-13 — "Monthly usage limit reached. Resets in 24 days" on every dispatch),
+  # so entry #1 burned a 429 + strike + a whole recovery coordinator session per dispatch
+  # (8 issues / 3 repos in 24h — homelab#652's fleet finding). haiku primary until the reset;
+  # the post-reset readout + re-flip decision ride FU-181.
   modelDeny: [deepseek/deepseek-v4-flash-0731]
-  workerModel: opencode-go/deepseek-v4-flash
-  workerModelFallbacks: [claude/haiku]
+  workerModel: claude/haiku
+  workerModelFallbacks: []
   repos:
     # agent-runtime: FIXER ENABLED 2026-08-08 — the 2026-07-16 "No fixer: these build the
     # agent images" ruling (kept for agent-coordinator below) was superseded for THIS repo by
