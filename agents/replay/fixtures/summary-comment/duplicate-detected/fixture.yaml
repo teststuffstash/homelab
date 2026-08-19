@@ -28,7 +28,7 @@
 name: summary-comment-duplicate-detected
 mode: actions
 parts:
-  - file: bridge.sh
+  - file:bridge.sh
 env:
   - IN_SLUG=teststuffstash/circles
   - IN_NUMBER=43

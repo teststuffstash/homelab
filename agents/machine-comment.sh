@@ -100,7 +100,7 @@ mc_event() {   # mc_event <slug> <number> <kind> <line-markdown>
   # ADR-103 tie-break: target the OLDEST marked comment. If multiple exist (a race), they
   # converge back onto the first rather than alternating. Append-only: never replace.
   ids="$(printf '%s' "$listed" | jq -r --arg m "$MC_MARKER" \
-        '[ .[] | select((.body // "") | contains($m)) | .id ] | sort_by(.)' 2>/dev/null)" || ids=''
+        '[ .[] | select((.body // "") | contains($m)) ] | sort_by(.created_at) | .[].id' 2>/dev/null)" || ids=''
   id="$(printf '%s' "$ids" | head -1)"
 
   # Detect extra marked comments (ADR-103 invariant leak — homelab#607). If a second marked
