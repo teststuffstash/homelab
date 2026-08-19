@@ -105,16 +105,16 @@ for repo in $repos; do
       | "\($repo)#\(.number) \(.title) (\(age))" ] | unique | .[]')"
   [ -n "$rline" ] && sec_review="${sec_review}${rline}"$'\n'
 
-  # § FIX — seat-authored (non-bot) PRs sitting CHANGES_REQUESTED: only the seat's own fix
-  # round moves them (an operator-lane PR has NO machine owner — the scan's changes-requested
-  # clause is WORKER_AUTHOR-scoped by design; the meta-state durable warning's class, made a
-  # board row 2026-08-19 after PR#568 sat overnight). agent/error stays SOLVE's line;
-  # major/awaiting-human stays REVIEW's. A PR whose fix round is already pushed lists until the
-  # bot's re-review replaces the verdict — accepted: tightening that needs per-PR commit reads,
-  # and the read-only contract is ONE PR list per repo.
+  # § FIX — seat-authored (non-bot) PRs sitting CHANGES_REQUESTED, plus seat-authored `merge-conflict`
+  # PRs (MP-T06, homelab#595): only the seat's own push moves them (an operator-lane PR has NO
+  # machine owner — the scan's changes-requested clause is WORKER_AUTHOR-scoped by design and the
+  # merge-conflict clause is scoped the same way, so the seat case lands here as the board row).
+  # agent/error stays SOLVE's line; major/awaiting-human stays REVIEW's. A PR whose fix round is
+  # already pushed lists until the bot's re-review replaces the verdict — accepted: tightening
+  # that needs per-PR commit reads, and the read-only contract is ONE PR list per repo.
   fline="$(printf '%s' "$prs" | jq -r --arg repo "$repo" "$JQ"'[
       .[] | select(.isDraft == false) | select(.author != null) | select(isbot | not)
-      | select(.reviewDecision == "CHANGES_REQUESTED")
+      | select((.reviewDecision == "CHANGES_REQUESTED") or haslab("merge-conflict"))
       | select(haslab("agent/error") | not) | select(haslab("major/awaiting-human") | not)
       | "\($repo)#\(.number) \(.title) (\(age))" ] | unique | .[]')"
   [ -n "$fline" ] && sec_fix="${sec_fix}${fline}"$'\n'

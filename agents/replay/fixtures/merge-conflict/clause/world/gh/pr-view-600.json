@@ -1,0 +1,12 @@
+{
+  "headRefOid": "faba0fd111111111111111111111111111111111",
+  "reviewDecision": "REVIEW_REQUIRED",
+  "statusCheckRollup": [
+    {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"},
+    {"__typename":"CheckRun","name":"manifest-lint","status":"COMPLETED","conclusion":"SUCCESS"}
+  ],
+  "reviews": [],
+  "comments": [
+    {"body":"the DIRTY head is blocking the merge","createdAt":"2026-08-19T09:10:00Z"}
+  ]
+}

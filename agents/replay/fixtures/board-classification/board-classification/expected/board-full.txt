@@ -6,6 +6,7 @@ circles#202 awaiting human (17d)
 
 § FIX (seat PRs awaiting your fix round)
 circles#207 seat pr awaiting fix (2d)
+circles#209 seat pr merge conflict (2d)
 
 § SOLVE (parks & latches)
 ⛔ circles#101 error latch on gate (17d)
@@ -28,4 +29,4 @@ circles: 3 suitable-unqueued (oldest 17d)
   circles#109 suitable backlog newer (16d)
   circles#113 bot queued fix (17d)
 
-totals — review: 2 · fix: 1 · solve: 5 · triage: 3 · verdict-due: 1 · backlog: 3
+totals — review: 2 · fix: 2 · solve: 5 · triage: 3 · verdict-due: 1 · backlog: 3
