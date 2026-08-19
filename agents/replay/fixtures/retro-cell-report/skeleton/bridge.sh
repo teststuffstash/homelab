@@ -1,7 +1,8 @@
-# ── bridge ── the two variables retro-argo.yaml's retro-cell sets immediately above the block:
-# the ride-log path (also the template's output-artifact path) and the cell it was dispatched as.
-# $PWD is the fixture directory — run.sh cds into it — so the committed log stands in for the one
-# `tee` wrote in the pod.
+# ── bridge ── same two retro-cell variables as its siblings, pointing at a log that carries the
+# BEGIN/END markers but only the report TEMPLATE's bare section headings between them — the exact
+# shape of the 2026-08-17 unattended fire's deepseek cell (docs/agents/retros/2026-08-17-oracle-r4-
+# deepseek-v4-pro.md, 9 lines, all headings). `-s` passed on this shape before homelab#590; the
+# floor is the fix.
 RIDE_LOG="$PWD/ride.log"
 CELL="goose:deepseek/deepseek-v4-pro"
 

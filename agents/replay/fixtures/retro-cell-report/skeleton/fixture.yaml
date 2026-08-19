@@ -1,0 +1,28 @@
+# homelab#590 (fixes homelab#590) — the case `present`/`missing` couldn't tell apart: markers
+# present, `-s` satisfied, and STILL not a report.
+#
+# CONDITION UNDER REPLAY. The 2026-08-17 unattended fire's deepseek cell (run r4). Its ride log
+# carried a valid BEGIN/END-RETRO-REPORT block, but the model never filled in the report TEMPLATE
+# — the committed artifact is docs/agents/retros/2026-08-17-oracle-r4-deepseek-v4-pro.md, nine
+# lines, every one of them a section heading. Before this PR, the self-check's own extraction
+# (`sed ... | sed '1d;$d'` into a 9-line, ~400-byte file) passed `[ -s ]` exactly as happily as a
+# real report — the cell read Succeeded, and a human opened a content-free file.
+#
+# THE CONTRACT:
+#   1. The cell exits NON-ZERO on its own log, same as `missing/` — `REACHED:` is absent from the
+#      stream, and diff asserts that absence for free.
+#   2. The refusal reason is `under-floor: 0 content lines < 20`, not `no-markers` — the markers
+#      ARE there and DO extract cleanly (this is what `present/` and `missing/` together couldn't
+#      distinguish: `missing/`'s ride log has no markers at all, this one has a complete, valid
+#      pair with nothing real inside them). Naming the reason correctly matters: an operator
+#      reading a red DAG needs to know whether the model produced NOTHING or produced a stub.
+#   3. Same downstream behaviour as `missing/`: the sibling cell and the harvest still run
+#      (`continueOn: failed:true`), and the CELL FAILED prose stays — this fixture only pins that
+#      the floor reason is threaded into it.
+name: retro-cell-report-skeleton
+mode: actions
+source: agents/coordinator/retro-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:retro-cell-marker-selfcheck
+  - file:post.sh

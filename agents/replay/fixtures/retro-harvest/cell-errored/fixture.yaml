@@ -26,8 +26,12 @@
 #      pod that died before the ride never created one, the output artifact is unresolvable and
 #      `optional: true` stages nothing — the harvest reads a path that does not exist. That is a
 #      strictly harsher world than `retro-harvest-one-cell-dead`'s markerless log, and the same
-#      WARN branch has to hold: `sed`'s read error goes to stderr (asserted, so it cannot become
-#      an unnoticed change of behaviour) and the extraction's `[ -s ]` test decides.
+#      WARN branch has to hold. homelab#590: the extraction now runs through agents/retro-report-
+#      floor.sh, whose own `[ ! -f "$IN" ]` check turns "path does not exist" into a clean `empty`
+#      reason on the helper's OWN stderr (captured, folded into the WARN line) instead of a raw
+#      `sed: can't read ...` escaping onto the composed clause's real stderr — a strict improvement
+#      this fixture pins: the WARN line now says WHY (`— empty`), and there is no longer a second,
+#      unexplained ERR line for the same event.
 #   4. RC 0, WARN names the cell, DEAD_NOTE carries the partial run into the PR body — the
 #      dead-cell sibling's contract, re-asserted in the error world rather than assumed to
 #      transfer, because the branch is reached by a different route (missing file, not empty
