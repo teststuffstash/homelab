@@ -4367,3 +4367,22 @@ first live ADR-110 maintenance session before the ADR existed.
   374k subagent tokens / 93 calls / 29 min vs ~25k seat. FU-167: step 0 merged (#557), step 1
   subagent in flight (family dirs + pins lint), step 2 batches follow overnight capacity
   permitting.
+
+- **2026-08-19 corpus sitting (the watches/codeowner-flow design + build).** PR#568 fixed in-PR
+  (FOURTH --pick-rail site, agent-session.sh:1478 — the "all three sites" claim was wrong) →
+  merged. Design ruled with the operator: three jail flows named (/meta-coordinate = role-resume
+  only; maintenance; corpus session), both types arm the SAME §Re-arm standing set; corpus
+  heartbeat 2700s (< cache TTL — stall belt == keep-warm, Part A″); subagent PR cycles owned to
+  a TERMINAL (pr-wait typed exits); seat review stays PRE-push/pre-bot (arming dilemma + warm
+  bounce + catch-point instrumentation). Built + landed: meta-state §Re-arm per-type (direct,
+  c01967f + sync line), #578 chainless §Session types + card cycle-ownership, #579 board § FIX
+  row (seat CR PRs — the #568 class's between-sessions backstop; suite 32/0, clause-replay
+  137/0), #580 jail-transcripts bucket (SEPARATE, no cluster-read — wallet-value sensitivity) +
+  sync script, #581 miss-ledger v2 (served-model/corpus-sha/transcript columns; wave backfill =
+  the deferral tax demonstrated). Post-merge catch on #580: Workspace manifest missing from the
+  coordinator kustomization resources: (the header's own warned class) — quickfix direct,
+  ledger row updated with the rule. E2E verified: 201 files / 272MB in
+  s3://jail-transcripts/projects/-workspace-homelab/, listed back with the bucket key. Standing
+  watches dogfooded all session (SEATPR carried all four PR cycles; zero ad-hoc monitors after
+  #568). Goal/wave parity PARKED (operator: "ignore the goal comparison for now"). Alerts noted,
+  not acted (out-of-type/backlog): HomeAssistantPowerSensorStale, RouterRunModelUnverifiable.
