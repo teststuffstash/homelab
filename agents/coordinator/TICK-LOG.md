@@ -4386,3 +4386,19 @@ first live ADR-110 maintenance session before the ADR existed.
   watches dogfooded all session (SEATPR carried all four PR cycles; zero ad-hoc monitors after
   #568). Goal/wave parity PARKED (operator: "ignore the goal comparison for now"). Alerts noted,
   not acted (out-of-type/backlog): HomeAssistantPowerSensorStale, RouterRunModelUnverifiable.
+
+- **2026-08-19 afternoon arc (same corpus sitting).** Overnight readout: loop drained 4 queued
+  issues unattended (#571/#573/#574/#576 — #573 = ADR-107 flip-acceptance 1), queue empty 02:49.
+  Heartbeat's FIRST firing caught a real stall: oracle#260 half-labeled (agent/queued w/o
+  agent-fix, 7d invisible — NO reader anywhere) → repaired + rung (loop produced fleet PR#265 in
+  ~40 min), board ⚠ half-labeled row shipped (#582). Wave→STINT rename (#585, operator catch:
+  three existing senses — ledger rule: coin-greps cover informal usage, not just the glossary).
+  session-ctx.sh shipped (#584, one bot round): NO OTEL/MCP — own-transcript reader; measured
+  THIS session: corpus read 19–37k/file-batch, ctx 601k@turn130, 59.4M cacheRead; meta-state
+  costs 23k (trim target). Board answered; #563 landed direct + closed; #577 + AR#75 queued
+  (full label pair). **#420 CLOSED at the first stint-ritual closeout** (built-vs-left comment,
+  §Rollout currency #586, #540 released standalone, post-reset re-reviews FIRED). **FU-058
+  stint AUTHORED: parent #587, legs #588–#591** (#292 rides leg 1 via Fixes — single-parent
+  kept its origin lineage); deadline = Mon 08-24 05:00 UTC retro cron (organic acceptance).
+  FU-167 batches 2–4 = slack-time subagent chunks (replay tree footprint-exempt — the
+  contention win already shipped 08-18; sequencing ruled: FU-058 first).
