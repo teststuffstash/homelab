@@ -1,0 +1,21 @@
+# FIXTURE — NOT LIVE CODE, never sourced or executed. Positive control for #197 instance 6.
+#
+# The round-1 defect of PR #559 (commit 2d3bc59, 2026-08-18) reproduced: backticks inside the
+# outer UNQUOTED `<<PREP` heredoc. The heredoc is EXPANDING, so the launcher command-substitutes
+# `` `at efc90c5a` `` and `` `at fd2efc80` `` at build time — those commands fail, and the
+# fragments silently vanish from the delivered prompt (the PROMPT text the pod receives never
+# mentions the PR#547 asides). The convention that avoids this is two-space padding (`  head  `).
+# The PROMPT here is deliberately apostrophe-free so this fixture isolates the BACKTICK signature.
+# EXPECT: HEREDOC-BACKTICK@18
+#
+PREP=$(cat <<PREP
+set -e
+gh repo clone ${REPO_SLUG} /work/repo
+PROMPT='Review pull request #${PR}.
+
+  IDEMPOTENT ASIDE — the dedup key is a MACHINE MARKER (ADR-103 precedent: match on the marker,
+  never on prose — two asides for the same precondition whose only difference is the prose tail
+  never match, at `efc90c5a` vs at `fd2efc80`), first line exactly:
+  STANDING ASIDE: <precondition> at <content-commit-sha8> — no verdict.'
+PREP
+)

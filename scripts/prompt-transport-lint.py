@@ -21,6 +21,17 @@ the gap, so the class needs a GUARD, not another warning. Two mechanical signatu
                        is base64 → file → `"$(cat FILE)"` (agents/coordinator-session.sh, #197).
   HEREDOC-DOLLAR-DIGIT `$` followed by a digit inside an EXPANDING (`<<EOF`, not `<<'EOF'`) heredoc
                        that builds a k8s manifest — the `$103.74` shape.
+  SQ-PROSE            a literal `'` inside a single-quoted shell string that is itself carried
+                       through an EXPANDING heredoc or `bash -lc` payload — the apostrophe
+                       terminates the string and everything after executes as shell (instance #5,
+                       commit 1698b42: "sandbox's" in the pod-side single-quoted PROMPT wedged the
+                       whole review plane). The transport that makes it live: the single-quoted
+                       string sits INSIDE an EXPANDING heredoc body that the launcher ships to a
+                       pod to run, so the pod's shell is the one that parses the broken quote.
+  HEREDOC-BACKTICK    a backtick inside an UNQUOTED (`<<EOF`, not `<<'EOF'`) heredoc that builds a
+                       prompt or pod manifest — command-substituted by the LAUNCHER at construction
+                       time and silently vanish from the delivered text (instance #6, PR#559 lines
+                       225/226/228: PR#547's `` `at efc90c5a` `` fragments executed at build time).
 
 Both are HEURISTICS on purpose (#197): a false positive costs a review prompt, a false negative is
 instance #5. The discriminator that keeps the current tree green: the OUTER
@@ -66,6 +77,15 @@ SUBST_RE = re.compile(r"\$\(|`")
 DOLLAR_DIGIT_RE = re.compile(r"(?<!\\)\$\{?\d")
 KIND_RE = re.compile(r"^\s*kind:\s*[A-Za-z]")
 STDIN_APPLY_RE = re.compile(r"\b(?:apply|create|replace|delete)\b[^|]*-f\s+-")
+# A heredoc captured into a variable: `PREP=$(cat <<PREP`, `FOO="$(cat <<'EOF'"` — the captured
+# value is shipped somewhere (a pod ARGS array, a file the pod reads), so its shell quoting is
+# parsed again by the destination shell.
+CAPTURED_HEREDOC_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:\$)?\(?\s*cat\s+<<")
+# A heredoc piped into kubectl/oc — the pod-manifest family. `"$KUBECTL"`, `${KUBECTL}`, or bare kubectl.
+PIPE_TO_KUBECTL_RE = re.compile(r"\|\s*\"?\\?\$?\{?[A-Za-z_]*KUBECTL|\|\s*kubectl\b")
+# A heredoc writing a prompt file (re-review.sh) — same "prose the pod reads" class.
+PROMPT_FILE_HEREDOC_RE = re.compile(r"cat\s+>\s+\"?\$?\{?[A-Za-z_]*PROMPT")
+SQ_ASSIGN_RE = re.compile(r"^\s*(?:export\s+|local\s+|declare\s+(?:-\w+\s+)?)?([A-Za-z_][A-Za-z0-9_]*)=\s*'")
 # A block that never closes its quote would swallow the rest of the file and turn one typo into a
 # whole-file false positive. Cap it: past this many lines the scanner gives up on that assignment.
 MAX_BLOCK_LINES = 80
@@ -189,6 +209,106 @@ def check_heredocs(heredocs):
     return out
 
 
+def _payload_heredoc(hd):
+    """True when an EXPANDING heredoc's body is carried to a re-executing context.
+
+    The three shapes that make backtick command-substitution LIVE:
+      * piped into kubectl/oc (`cat <<EOF | kubectl create -f -`) — the pod-manifest family;
+      * captured into a variable (`PREP=$(cat <<PREP`) that is shipped to a pod to run;
+      * written to a prompt file the pod reads (re-review.sh).
+    The `done <<FEED` loop-feeds (coordinator-scan.sh, footprint.sh, …) are data feeds, not
+    payloads — a backtick there is ordinary text and must not flag.
+    """
+    if hd["opener"].lstrip().startswith("done "):
+        return False
+    body = hd["body"]
+    is_manifest_body = (
+        any(KIND_RE.match(t) for _, t in body) and any("apiVersion:" in t for _, t in body)
+    )
+    return bool(
+        CAPTURED_HEREDOC_RE.search(hd["opener"])
+        or PIPE_TO_KUBECTL_RE.search(hd["opener"])
+        or PROMPT_FILE_HEREDOC_RE.search(hd["opener"])
+        or STDIN_APPLY_RE.search(hd["opener"])
+        or is_manifest_body
+    )
+
+
+def check_heredoc_backtick(heredocs):
+    """HEREDOC-BACKTICK: a backtick inside an UNQUOTED heredoc that builds a prompt or pod manifest.
+
+    An unquoted heredoc body is command-substituted at construction time. A backtick in it — even
+    inside a `# comment` line, which the shell does NOT recognise inside a heredoc body — runs a
+    command whose stdout replaces the fragment, so prose silently vanishes from the delivered text
+    (instance #6, PR#559 lines 225/226/228). The launcher's own convention is two-space padding
+    (`  head  `) precisely to avoid this.
+    """
+    out = []
+    for hd in heredocs:
+        if not hd["expanding"] or not _payload_heredoc(hd):
+            continue
+        for no, text in hd["body"]:
+            ticks = [m.start() for m in re.finditer(r"`", text)]
+            skip = set()
+            for i, pos in enumerate(ticks):
+                if pos in skip:
+                    continue
+                if pos > 0 and text[pos - 1] == "\\":
+                    continue  # escaped backtick survives expansion literally
+                end = text.find("`", pos + 1)
+                frag = text[pos:end + 1] if end != -1 else "`"
+                inner = text[pos + 1:end].strip() if end != -1 else "…"
+                # A backtick pair is ONE command substitution — emit one finding, not one per tick.
+                if end != -1 and end in ticks:
+                    skip.add(end)
+                out.append((no, "HEREDOC-BACKTICK", (
+                    "backtick inside the UNQUOTED heredoc opened at line %d (<<%s) — the launcher "
+                    "command-substitutes it when building the %s, so %s silently vanishes from the "
+                    "delivered prompt. Quote the delimiter <<'%s', escape the backtick, or use "
+                    "two-space padding (  %s  )." % (
+                        hd["opener_no"], hd["delim"], hd["delim"],
+                        frag, hd["delim"], inner,
+                    )
+                ), text.strip()))
+    return out
+
+
+def check_sq_prose(heredocs):
+    """SQ-PROSE: an apostrophe inside a single-quoted string carried through an expanding transport.
+
+    The instance (#5, commit 1698b42) was a `PROMPT='…'` assignment INSIDE the body of an EXPANDING
+    heredoc (`PREP=$(cat <<PREP`). The body is shipped to a pod and executed, so the apostrophe in
+    the prose ("sandbox's") terminated the single-quoted string and everything after parsed as
+    shell — every reviewer pod died on a syntax error. Detection: parse each captured EXPANDING
+    heredoc's body as shell, extract each `VAR='…'` block, and `bash -n` it. A broken apostrophe
+    makes the assignment unparseable; a clean single-quoted prompt parses with exactly two
+    apostrophes (opening + closing).
+    """
+    out = []
+    for hd in heredocs:
+        if not hd["expanding"] or not CAPTURED_HEREDOC_RE.search(hd["opener"]):
+            continue
+        body_lines = [t for _, t in hd["body"]]
+        _, inner_blocks, _ = parse(body_lines)
+        for b in inner_blocks:
+            first = b["lines"][0][1]
+            if not SQ_ASSIGN_RE.search(first):
+                continue
+            text = "".join(t for _, t in b["lines"])
+            r = subprocess.run(["bash", "-n"], input=text, capture_output=True, text=True)
+            if r.returncode != 0:
+                out.append((hd["opener_no"] + b["start"], "SQ-PROSE", (
+                    "apostrophe inside the single-quoted %s='…' string carried through the EXPANDING "
+                    "heredoc opened at line %d (`<<%s`) — the pod's shell parses this later, and the "
+                    "' terminates the string so the rest executes as shell (instance #5, 1698b42). "
+                    "bash -n on the extracted assignment fails: %s. Reword apostrophe-free." % (
+                        b["var"], hd["opener_no"], hd["delim"], r.stderr.strip().splitlines()[-1]
+                        if r.stderr.strip() else "syntax error",
+                    )
+                ), text.strip().splitlines()[0]))
+    return out
+
+
 def check_jq_quoting(blocks, plain):
     """JQ-QUOTING: `jq -R` output interpolated into a string a shell later re-expands."""
     def jq_hits(lines):
@@ -251,7 +371,12 @@ def lint(path):
     """Returns a sorted list of (line, code, message, source) findings for one file."""
     lines = Path(path).read_text().splitlines(keepends=True)
     heredocs, blocks, plain = parse(lines)
-    return sorted(check_heredocs(heredocs) + check_jq_quoting(blocks, plain))
+    return sorted(
+        check_heredocs(heredocs)
+        + check_heredoc_backtick(heredocs)
+        + check_sq_prose(heredocs)
+        + check_jq_quoting(blocks, plain)
+    )
 
 
 def report(path, findings):
@@ -320,7 +445,7 @@ def main(argv):
         hits += len(findings)
         report(str(f), findings)
     if hits:
-        print("prompt-transport-lint: FAIL — %d finding(s) across %d file(s). Both signatures are "
+        print("prompt-transport-lint: FAIL — %d finding(s) across %d file(s). The signatures are "
               "heuristics (#197): if this one is wrong, say so in the PR and refine the rule — do "
               "not silence it by rewriting the prompt around it." % (hits, len(files)), file=sys.stderr)
         return 1

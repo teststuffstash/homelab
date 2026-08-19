@@ -1,0 +1,30 @@
+# FIXTURE — NOT LIVE CODE. NEGATIVE control for the two new signatures' false-positive edges.
+#
+# A QUOTED heredoc (`<<'SNIP'`) must NOT flag backticks — nothing is command-substituted there, so
+# backticks are literal prose. A single-quoted PROMPT inside an EXPANDING heredoc that parses clean
+# (exactly two apostrophes: the delimiters) must NOT flag SQ-PROSE. A single-quoted assignment at
+# top level (machine-comment.sh's `mc_repo=''` idiom) and a case-pattern value followed by `;;`
+# (agent-session.sh's SUB_LABEL) must not flag either — they are ordinary shell, never transported.
+# EXPECT: clean
+#
+PROMPT='Review pull request #${PR}.
+
+  TOOL GAPS — name one only where the absence changed your verdict, and never the deliberate
+  devbox/network absence in this sandbox (that is the design above, not a gap).'
+
+TOOL_GAP_BODY='TOOL_GAP: gh-pr-checks — read-only call 403s on this token; verdict is evidence-based.'
+
+cat <<'SNIP' > /tmp/inner.sh
+set +e
+claude -p "$PROMPT" --model "$MODEL"
+# backticks here are LITERAL — the delimiter is quoted: `at efc90c5a`, `[bot]`, `-`
+exit $?
+SNIP
+
+case "$MODEL" in
+  opencode-go/*)
+    SUB_LABEL=', "homelab.teststuff.net/rail": opencode-go';;
+  *)
+    SUB_LABEL=', "homelab.teststuff.net/subscription-session": claude'
+    ;;
+esac
