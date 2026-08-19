@@ -134,11 +134,11 @@ for repo in $repos; do
   [ -n "$bline" ] && sec_solve="${sec_solve}${bline}"$'\n'
 
   # § TRIAGE — bot-authored without agent-fix (🌱), plus zero-label non-bot strays
-  # older than a day. `post-launch:` goal buckets and `wave:` parents (chainless-redesign §The
-  # jail wave, 2026-08-19) are containers, not work — skipped, or every label-inert wave parent
+  # older than a day. `post-launch:` goal buckets and `stint:` parents (chainless-redesign §The
+  # jail stint, 2026-08-19) are containers, not work — skipped, or every label-inert stint parent
   # would list as a stray from day two.
   tline="$(printf '%s' "$issues" | jq -r --arg repo "$repo" "$JQ"'[
-      .[] | select((.title | (startswith("post-launch:") or startswith("wave:"))) | not)
+      .[] | select((.title | (startswith("post-launch:") or startswith("stint:"))) | not)
       | select([lab[] | select(startswith("agent/"))] | length == 0)
       | select(
         (isbot and (haslab("agent-fix") | not))
