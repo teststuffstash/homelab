@@ -240,6 +240,23 @@ spec:
         # mis-routed. (A brand-new series appearing counts 0
         # in changes(), so the very first cron-woken dispatch after this ships is invisible here
         # — the accepted cost of an epoch-gauge design; the second one fires.)
+        # FU-176: the sentinel's health belt, keyed on its per-tick heartbeat (pushed on EVERY
+        # tick since the fix, zero-PR ticks included — before it, an empty push REPLACED the
+        # job/iac-sentinel group and a healthy quiet tick read as "sentinel blind"). The check
+        # is enforcement-critical since the G01 flip (it gates -iac merges), so its silence must
+        # page: the sentinel cron ticks every few minutes, 30m of no heartbeat is a dead lane.
+        # `absent()` covers the never-pushed / group-deleted case; `for: 15m` rides out a deploy.
+        # platform_machinery for the homelab#239 reason (pushgateway metric — no meaningful
+        # namespace, name not Agent*, so neither responder belt catches it unstamped).
+        - alert: IacSentinelSilent
+          expr: absent(iac_sentinel_last_run_timestamp_seconds) or (time() - max(iac_sentinel_last_run_timestamp_seconds) > 1800)
+          for: 15m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "iac-sentinel heartbeat silent >30m — the required -iac merge gate is not evaluating"
+            description: "SYMPTOM ONLY — no iac_sentinel_last_run_timestamp_seconds push for >30m (the sentinel CronWorkflow ticks every few minutes; scripts/iac-sentinel.sh pushes the heartbeat on every tick, zero-PR ticks included, FU-176). While silent, open -iac PRs wait on a required `iac-sentinel` commit status nobody posts — merges stall rather than bypass (fail-closed). Look at the `iac-sentinel` CronWorkflow runs in ns agent-coordinator (argo.teststuff.net or `kubectl -n agent-coordinator get workflows`), then the newest run's logs; a wedged/suspended cron, an image pull failure, or a pushgateway outage are the observed-plausible causes to check in that order."
         # platform_machinery for the homelab#239 reason.
         - alert: AgentDispatchCronWoken
           expr: sum by (project) (changes(agent_dispatch_cron_woken_timestamp[24h])) >= 2

@@ -8,6 +8,13 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-176** *(archived 2026-08-19)* — iac-sentinel zero-PR ticks wiped their own pushgateway
+  group (empty body = group REPLACE): fixed in `scripts/iac-sentinel.sh` `push_metrics` — a
+  per-tick `iac_sentinel_last_run_timestamp_seconds` heartbeat is always appended, so the body
+  is never empty; freshness keys on the heartbeat (iac-lane.md §L0b line), engine rows are
+  per-evaluated-PR only; `IacSentinelSilent` (pushgateway prometheusrule, warning +
+  platform_machinery) belts >30m of silence. Verified: local zero-PR push probe (body carries
+  exactly the heartbeat) + live heartbeat in pushgateway post-merge.
 - **FU-146** *(archived 2026-08-17)* — per-item dispatch hold: all three PR-side clauses shipped
   2026-08-07 and audited clean; the re-opened issue-side leg (the #153 five-dispatch storm — five
   item sessions in 11 min off a merge-storm doorbell cascade) shipped as PR#480

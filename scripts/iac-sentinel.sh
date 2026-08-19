@@ -36,6 +36,12 @@ metric() { METRICS="${METRICS}$1\n"; }
 
 push_metrics() {
   [ -n "$PUSHGATEWAY" ] || return 0
+  # FU-176: ALWAYS append a per-tick heartbeat, so the body is never empty — the pushgateway
+  # REPLACES the whole job/iac-sentinel group per push, and a zero-PR tick's empty body used to
+  # WIPE iac_sentinel_engine_seconds (2026-08-18: a clean board read as "sentinel blind" while
+  # the sentinel was healthy). Freshness keys on THIS metric; engine rows exist only for ticks
+  # that evaluated a PR. IacSentinelSilent (pushgateway prometheusrule) is the belt.
+  metric "iac_sentinel_last_run_timestamp_seconds $(date +%s)"
   printf '%b' "$METRICS" | curl -fsS --max-time 10 --data-binary @- \
     "${PUSHGATEWAY}/metrics/job/iac-sentinel" >/dev/null 2>&1 \
     || log "pushgateway push failed (metrics stay in logs)"
