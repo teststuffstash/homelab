@@ -93,6 +93,19 @@ Maps 1:1 onto the `error_class` shipped with FU-057 (live in `agent-session.sh` 
 Chain exhausted (all models struck for this task) → `agent/blocked` with the strike list in the
 comment — that IS worth a human.
 
+⚖ **The strike COMMENT stays the store for now — with a named debt for stack consumers
+(operator ruling, 2026-08-19).** The per-comment store is deliberate (the ADR-103 stores
+channel: start-of-comment anchoring, immutable ordering, greppable by the chain-walk and the
+fleet-fault rule — [observability-and-retro.md](observability-and-retro.md) §Part A⁗), and on
+homelab it stays as-is: the whole project is about agents, the noise is signal here. But for a
+CHAINLESS-STACK consumer it is machine residue on business-focused issue threads. The future
+shape — blocked today on the router's storage engine not being settled (state spans the sqlite
+router store, pushgateway, and GitHub comments) — is: migrate the strike READERS (the brief's
+chain-walk, the ≥2-in-24h fleet rule) to the router store's `strikes` table (already recorded
+there since M1a), then demote the GitHub comment to one appended line on the `agent-summary`
+index. Replay-first, per the A⁗ channel table's own "stores move later" clause; pick it up when
+the storage-engine question settles, not before.
+
 ### M1a. ⛔ THE TAXONOMY DRIFTED — strikes are recorded almost never (found 2026-08-07)
 
 **`router_strikes_total = 1` across the whole store**, against three `harness-death` rides on
