@@ -551,6 +551,7 @@ fi
 # ride to assert "I can't run k3d" without ever probing. It states the capability AND the verify
 # command, and is injected into the recipe's instructions at the {{PLATFORM_ENV_CARD}} marker
 # (deterministic awk-insert, no YAML dependency) so the worker cannot skip reading it.
+# >>>REPLAY:render_env_card>>>
 render_env_card() {
   local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}"
   # ═══ MAINTAINER NOTE — read before editing (this comment is NOT sent to the agent) ═══
@@ -591,6 +592,11 @@ render_env_card() {
     printf '%s\n' "- **Context repos:** read-only reference clones at \`/work/context/\` (${ctx_names}) — grep them freely (SERVICES.md lives in homelab; deploy pins in circles-iac). REFERENCE only: never commit/push/build there, and your task's own facts still come from the issue. A \`WARN: context clone failed\` at the top of the run log means that repo is NOT mounted — work without it, don't fetch it yourself."
   fi
   printf '%s\n' "- **Prior-art before creating anything named** (doc, script, tracker entry) IN THIS REPO: grep the repo's docs/trackers by keyword first — extend, don't duplicate."
+
+  # WHY: machine markers are launcher/scan-owned control flow — ADR-103 (#600, #607, #622).
+  # The worker model cannot author them (it imitates markers it sees, coupling to their meaning).
+  # Every ride on every harness gets this rule: it is not conditional.
+  printf '%s\n' "- **Machine markers are launcher/scan-owned.** NEVER write one in any comment or body: \`<!-- agent-summary -->\`, \`<!-- agent-event … -->\`, \`state-fp:\`, \`<!-- agent-budget-refusal -->\`, \`<!-- standing-aside … -->\`. Post progress as plain text or not at all; the ride's own bookkeeping lands via finalize."
 
   if [ -n "$DOCKER" ]; then
     # WHY: docker-client-in-devbox.json = FU-119; the kind-node-hangs-on-missing-mirror trap =
@@ -649,6 +655,7 @@ render_env_card() {
     printf '%s\n' "$GOAL_CARD" | sed 's/^/  > /'
   fi
 }
+# <<<REPLAY:render_env_card<<<
 
 # Build the launcher-owned RUN_CMD from --recipe now that the environment is known (FU-114): render
 # the card, splice it into the recipe at the marker, base64-carry the augmented recipe, and wrap the
