@@ -1,0 +1,23 @@
+# The FU-088 gate's Go arm, CAPACITY-limited leg (homelab#600 launcher half, 2026-08-19).
+#
+# CONDITION UNDER REPLAY: an opencode-go/* dispatch while the proxy's self-metered Go window is
+# latched (/opencode-limit → limited:true, reason "window-weekly") and the task is an issue-fix
+# ride (issue-42).
+#
+# THE CONTRACT: a CAPACITY reason (a utilization-<window> latch whose reset is hours/days out, or
+# homelab#600's observed-429/observed-402) must NOT defer-forever — the launcher REROUTES through
+# the M12 degrade path (docs/agents/model-routing.md §M12): dispatch
+# AGENT_SUBSCRIPTION_FALLBACK_MODEL (claude/haiku) on the subscription instead, with the SAME
+# bounds — class=fix only, subscriptionFallback/AGENT_SUBSCRIPTION_FALLBACK=0 opt-outs,
+# modelDeny, and the resulting ride carrying rail=subscription-fallback (SUB_LABEL + AGENT_RAIL).
+# The pod command is re-pointed at the fallback model (and the Go model's window env —
+# CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 — is stripped, so haiku isn't declared at 1M). The
+# ANTHROPIC latch is never consulted (the `bash` tripwire): a Go capacity latch is Go state,
+# not Anthropic state — the Go arm decides from the Go rail's own reply.
+name: go-rail-latch-reroute
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu088-gates
+  - file:post.sh

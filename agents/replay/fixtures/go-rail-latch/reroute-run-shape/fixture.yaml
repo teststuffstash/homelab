@@ -1,0 +1,18 @@
+# The FU-088 gate's Go arm, CAPACITY-limited + --run DISPATCH SHAPE leg (homelab#600).
+#
+# CONDITION UNDER REPLAY: an opencode-go/* dispatch while the Go window is capacity-latched
+# (reason "window-weekly"), task is an issue-fix ride, but the pod command is a `--run` string
+# with NO `--model` flag (the retro/--run shape, retro-session.sh:104), and `_claude_model` was
+# never assigned.
+#
+# THE CONTRACT (finding-2 ratchet, #439, transposed): the reroute inserts the subscription
+# fallback's model into the `claude -p ` command so the pod ACTUALLY serves the fallback —
+# never a false 'RAIL DEGRADE' log over a pod that would run the CLI default against the latched
+# Go rail. RUN_CMD is re-pointed at haiku, and rail=subscription-fallback is carried.
+name: go-rail-latch-reroute-run-shape
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu088-gates
+  - file:post.sh
