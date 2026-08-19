@@ -8,20 +8,35 @@
     "isDraft": false,
     "autoMergeRequest": null,
     "latestReviews": [
-      { "state": "APPROVED", "author": { "login": "homelab-reviewer[bot]" } }
-    ]
+      {
+        "state": "APPROVED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
+    "author": {
+      "is_bot": true,
+      "login": "homelab-agents[bot]"
+    }
   },
   {
     "number": 202,
     "title": "awaiting human",
     "labels": [
-      { "name": "major/awaiting-human" }
+      {
+        "name": "major/awaiting-human"
+      }
     ],
     "createdAt": "2026-08-01T00:00:00Z",
     "reviewDecision": "CHANGES_REQUESTED",
     "isDraft": false,
     "autoMergeRequest": null,
-    "latestReviews": []
+    "latestReviews": [],
+    "author": {
+      "is_bot": true,
+      "login": "homelab-agents[bot]"
+    }
   },
   {
     "number": 203,
@@ -31,7 +46,11 @@
     "reviewDecision": "CHANGES_REQUESTED",
     "isDraft": false,
     "autoMergeRequest": null,
-    "latestReviews": []
+    "latestReviews": [],
+    "author": {
+      "is_bot": true,
+      "login": "homelab-agents[bot]"
+    }
   },
   {
     "number": 204,
@@ -42,8 +61,17 @@
     "isDraft": false,
     "autoMergeRequest": null,
     "latestReviews": [
-      { "state": "APPROVED", "author": { "login": "homelab-reviewer[bot]" } }
-    ]
+      {
+        "state": "APPROVED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
+    "author": {
+      "is_bot": true,
+      "login": "homelab-agents[bot]"
+    }
   },
   {
     "number": 205,
@@ -54,19 +82,80 @@
     "isDraft": true,
     "autoMergeRequest": null,
     "latestReviews": [
-      { "state": "APPROVED", "author": { "login": "homelab-reviewer[bot]" } }
-    ]
+      {
+        "state": "APPROVED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
+    "author": {
+      "is_bot": true,
+      "login": "homelab-agents[bot]"
+    }
   },
   {
     "number": 206,
     "title": "error pr latch",
     "labels": [
-      { "name": "agent/error" }
+      {
+        "name": "agent/error"
+      }
     ],
     "createdAt": "2026-08-01T00:00:00Z",
     "reviewDecision": "CHANGES_REQUESTED",
     "isDraft": false,
     "autoMergeRequest": null,
-    "latestReviews": []
+    "latestReviews": [],
+    "author": {
+      "is_bot": true,
+      "login": "homelab-agents[bot]"
+    }
+  },
+  {
+    "number": 207,
+    "title": "seat pr awaiting fix",
+    "labels": [],
+    "createdAt": "2026-08-16T00:00:00Z",
+    "reviewDecision": "CHANGES_REQUESTED",
+    "isDraft": false,
+    "autoMergeRequest": null,
+    "latestReviews": [
+      {
+        "state": "CHANGES_REQUESTED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
+    "author": {
+      "is_bot": false,
+      "login": "RasmusSoot"
+    }
+  },
+  {
+    "number": 208,
+    "title": "seat pr error latched",
+    "labels": [
+      {
+        "name": "agent/error"
+      }
+    ],
+    "createdAt": "2026-08-16T00:00:00Z",
+    "reviewDecision": "CHANGES_REQUESTED",
+    "isDraft": false,
+    "autoMergeRequest": null,
+    "latestReviews": [
+      {
+        "state": "CHANGES_REQUESTED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
+    "author": {
+      "is_bot": false,
+      "login": "RasmusSoot"
+    }
   }
 ]

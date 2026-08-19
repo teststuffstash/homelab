@@ -4,10 +4,14 @@ board — stack platform (1 repos) · 2026-08-18T12:00:00Z
 circles#201 human gate pending (17d)
 circles#202 awaiting human (17d)
 
+§ FIX (seat PRs awaiting your fix round)
+circles#207 seat pr awaiting fix (2d)
+
 § SOLVE (parks & latches)
 ⛔ circles#101 error latch on gate (17d)
 ⛔ circles#103 error and blocked overlap (17d)
 ⛔ circles#206 error pr latch (17d)
+⛔ circles#208 seat pr error latched (2d)
 ⏸ circles#102 blocked on external (17d)
 
 § TRIAGE
@@ -23,4 +27,4 @@ circles: 3 suitable-unqueued (oldest 17d)
   circles#109 suitable backlog newer (16d)
   circles#113 bot queued fix (17d)
 
-totals — review: 2 · solve: 4 · triage: 2 · verdict-due: 1 · backlog: 3
+totals — review: 2 · fix: 1 · solve: 5 · triage: 2 · verdict-due: 1 · backlog: 3
