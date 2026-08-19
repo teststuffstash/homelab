@@ -1745,10 +1745,17 @@ EOF_GUARDED
     # report surface (orphans here + the board's §FIX) so scoping it out of the unit list makes it
     # visible rather than merely undispatched. The worker-authored case carries the #198 currency
     # check (same fingerprint pair as arbitrate/ci-red), so an unchanged conflict emits a report
-    # line instead of a ride.
+    # line instead of a ride. A THIRD leg (homelab#602): a PR whose `.author` is `null` (deleted/
+    # suspended GitHub account) matches NEITHER predicate and would otherwise vanish from both
+    # surfaces. Report-only — the account's lane is unknowable, so dispatching would risk the #595
+    # per-tick leak on a PR that might have been seat-authored; the catch-all line keeps it in a
+    # human's sight instead of silent.
     # >>>REPLAY:merge-conflict-gate>>>
     for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author != null) and (.author.login != $wa))|.number'); do
       orphans="${orphans}[$repo] ⚠ merge-conflict PR #${u} is seat-authored (operator lane) — the author's own push is the next mover; no machine fix-round mandate (homelab#595)\n"
+    done
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author == null))|.number'); do
+      orphans="${orphans}[$repo] ⚠ merge-conflict PR #${u} has a NULL author (deleted/suspended GitHub account) — the account's lane is unknowable, so no machine fix-round is dispatched; a human owns the next mover (homelab#602)\n"
     done
     for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author.login==$wa))|.number'); do
       mfp="$(pr_state_fp_pair "$slug" "$u")"; mfp_prev="${mfp#*|}"; mfp_cur="${mfp%%|*}"

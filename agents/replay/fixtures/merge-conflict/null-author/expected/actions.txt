@@ -1,0 +1,3 @@
+OUT ORPHAN [homelab] ⚠ merge-conflict PR #603 has a NULL author (deleted/suspended GitHub account) — the account's lane is unknowable, so no machine fix-round is dispatched; a human owns the next mover (homelab#602)
+OUT REACHED: end
+RC 0
