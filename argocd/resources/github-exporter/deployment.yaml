@@ -36,6 +36,13 @@ spec:
               value: "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/review"
             - name: COORDINATE_WEBHOOK_URL  # FU-115 red edge-trigger: /coordinate doorbell on CI-red armed agent PRs
               value: "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate"
+            # homelab#650 head-changed edge: /sentinel doorbell on a new head in a sentinel-covered
+            # repo (SENTINEL_REPOS in the script). Same EventSource, new endpoint — the receiving
+            # Sensor is the companion leg (issue #650 items 2-3); until it exists this POST 404s/
+            # connection-refuses, caught by the dispatcher's best-effort try/except (no different
+            # from any other cron-backstopped edge riding ahead of its Sensor).
+            - name: SENTINEL_WEBHOOK_URL
+              value: "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/sentinel"
             # Poll cadence (default 120). 90s halves worst-case ADR-093 review-edge latency vs 120
             # for a modest graphql cost: measured 2026-07-31 exporter-pat graphql peak ~1658/hr@120s
             # (~33% of the 5000/hr pool) → ~2200/hr@90s (~45%), well clear of the 2026-07-17 burn.
