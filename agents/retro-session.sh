@@ -71,7 +71,7 @@ if [ -n "$REVIEW" ]; then
   # the empty-skeleton shape (a landed report that is only the template's headings) would sail
   # straight past a bare `[ -f ]` check and spend a paid ride reviewing nine lines of nothing.
   REVIEW_FLOOR_OUT="$(mktemp)"; REVIEW_FLOOR_REASON="$(mktemp)"
-  if ! bash "$HERE/retro-report-floor.sh" "$REVIEW" "$REVIEW_FLOOR_OUT" 2>"$REVIEW_FLOOR_REASON"; then
+  if ! bash "$HERE/retro-report-floor.sh" "$REVIEW" "$REVIEW_FLOOR_OUT" report 2>"$REVIEW_FLOOR_REASON"; then
     echo "FATAL: --review $REVIEW does not meet the content floor ($(cat "$REVIEW_FLOOR_REASON")) — a cross-review of it would review nothing." >&2
     rm -f "$REVIEW_FLOOR_OUT" "$REVIEW_FLOOR_REASON"
     exit 1

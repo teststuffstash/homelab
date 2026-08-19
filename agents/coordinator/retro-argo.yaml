@@ -233,7 +233,7 @@ spec:
               # helper (agents/retro-report-floor.sh) shared with the harvest step below and with
               # retro-session.sh's --review gate — structurally one home, never three copies that
               # can drift apart.
-              if bash agents/retro-report-floor.sh "$RIDE_LOG" /tmp/cell-report.md 2>/tmp/cell-report-reason; then
+              if bash agents/retro-report-floor.sh "$RIDE_LOG" /tmp/cell-report.md log 2>/tmp/cell-report-reason; then
                 echo "cell self-check: ${CELL} produced a report ($(wc -c < /tmp/cell-report.md) bytes)"
               else
                 echo "CELL FAILED: no BEGIN/END-RETRO-REPORT block in this cell's OWN ride log (${CELL})." >&2
@@ -315,7 +315,7 @@ spec:
                   A) src="$LOG_A"; cell="$CELL_A"; model="$SLUG_A" ;;
                   B) src="$LOG_B"; cell="$CELL_B"; model="$SLUG_B" ;;
                 esac
-                if bash agents/retro-report-floor.sh "$src" /tmp/report.md 2>/tmp/report-reason; then
+                if bash agents/retro-report-floor.sh "$src" /tmp/report.md log 2>/tmp/report-reason; then
                   N=$((N+1))
                   cp /tmp/report.md "docs/agents/retros/${DATE}-${STACK}-${RUN}-${model}.md"
                 else

@@ -26,10 +26,10 @@
 # in retro-session.sh. Its sibling `retro-cell-report-present` carries a real report block; its
 # other sibling `retro-cell-report-skeleton` carries a report with markers but no floor-meeting
 # content — a different failure the SAME check now also catches (homelab#590, agents/retro-
-# report-floor.sh). This log has no markers at all, so the helper's fallback treats it as a bare
-# report and floor-checks the raw log — landing on `under-floor: 8 content lines < 20` rather than
-# `no-markers` (that reason is reserved for a broken/partial marker PAIR); the CELL FAILED prose
-# above still names the real story, the floor line is the added detail.
+# report-floor.sh). This log has no markers at all, and the caller declares `log` mode, so the
+# helper answers `no-markers` WITHOUT floor-checking the raw transcript (PR#620 r1: a marker-less
+# log is never "a report that happens to be long enough" — see the longlog sibling, which pins
+# exactly that hazard with a transcript that would clear the floor).
 name: retro-cell-report-missing
 mode: actions
 source: agents/coordinator/retro-argo.yaml

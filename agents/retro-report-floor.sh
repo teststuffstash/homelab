@@ -20,17 +20,23 @@
 #   it separates the two shapes on either side without being tuned to either one.
 #
 # USAGE:
-#   bash agents/retro-report-floor.sh <ride-log-or-report.md> <out-report.md>
+#   bash agents/retro-report-floor.sh <in> <out-report.md> <log|report>
 #
-# INPUT SHAPE (auto-detected, no flag — every caller passes a plain path):
-#   - BOTH markers present (BEGIN-RETRO-REPORT and END-RETRO-REPORT): treated as a RIDE LOG. The
-#     block between them is extracted with the harvest's OWN extraction command, verbatim —
-#     `sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' | sed '1d;$d'` — so a self-check and the
-#     harvest can never disagree about what a "report" is (agents/coordinator/retro-argo.yaml).
-#   - EXACTLY ONE of the two markers present: a report block that was started and never closed
-#     (a session cut off mid-write) — reason `no-markers`, no floor check attempted.
-#   - NEITHER marker present: not a ride-log wrapper at all — the `--review` case, where $REVIEW
-#     is already a committed, harvested report file. Used AS-IS: floor-checked directly.
+# The third arg is the CALLER'S declaration of what <in> is — it is not auto-detected, because
+# the two shapes are ambiguous exactly where it matters (PR#620 review r1): a cell that dies
+# without ever emitting a marker leaves a marker-less RAW session transcript, and transcript
+# noise (banners, tool calls, streamed reasoning) clears any content floor a real report would —
+# an auto-detect that falls back to "treat as report" would commit the raw log as the report,
+# the failure class this helper exists to close.
+#   log    — <in> is a RIDE LOG: BOTH markers are REQUIRED. The block between them is extracted
+#            with the harvest's OWN extraction command, verbatim —
+#            `sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' | sed '1d;$d'` — so the
+#            self-check and the harvest can never disagree about what a "report" is
+#            (agents/coordinator/retro-argo.yaml, both callers). Missing/partial markers →
+#            reason `no-markers`, whatever else the log contains.
+#   report — <in> is already a committed, harvested report file (retro-session.sh --review):
+#            used AS-IS, floor-checked directly. Markers never appear in a harvested report
+#            (extraction strips them), so no marker logic applies.
 #
 # EXIT 0: a report meeting the floor was written to <out>.
 # EXIT 1: missing/empty/under-floor — exactly one reason line on stderr:
@@ -39,9 +45,9 @@
 #   under-floor: N content lines < 20   — has content, but not enough of it
 set -euo pipefail
 
-IN="${1:-}"; OUT="${2:-}"
-if [ -z "$IN" ] || [ -z "$OUT" ]; then
-  echo "usage: retro-report-floor.sh <ride-log-or-report.md> <out-report.md>" >&2
+IN="${1:-}"; OUT="${2:-}"; MODE="${3:-}"
+if [ -z "$IN" ] || [ -z "$OUT" ] || { [ "$MODE" != "log" ] && [ "$MODE" != "report" ]; }; then
+  echo "usage: retro-report-floor.sh <in> <out-report.md> <log|report>" >&2
   exit 2
 fi
 
@@ -54,20 +60,22 @@ if [ ! -f "$IN" ]; then
   fail "empty"
 fi
 
-HAS_BEGIN=0; HAS_END=0
-grep -q 'BEGIN-RETRO-REPORT' "$IN" && HAS_BEGIN=1
-grep -q 'END-RETRO-REPORT' "$IN" && HAS_END=1
-
-if [ "$HAS_BEGIN" = 1 ] && [ "$HAS_END" = 1 ]; then
-  # Ride log with a complete marker pair — the harvest's own extraction, verbatim.
-  sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' "$IN" | sed '1d;$d' > "$TMP"
-  CONTENT_SRC="$TMP"
-elif [ "$HAS_BEGIN" = 1 ] || [ "$HAS_END" = 1 ]; then
-  # A report block that was started (or ended) but never completed — a real, distinct failure
-  # shape from "no report at all", and not something a floor count can characterize usefully.
-  fail "no-markers"
+if [ "$MODE" = "log" ]; then
+  HAS_BEGIN=0; HAS_END=0
+  grep -q 'BEGIN-RETRO-REPORT' "$IN" && HAS_BEGIN=1
+  grep -q 'END-RETRO-REPORT' "$IN" && HAS_END=1
+  if [ "$HAS_BEGIN" = 1 ] && [ "$HAS_END" = 1 ]; then
+    # Complete marker pair — the harvest's own extraction, verbatim.
+    sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' "$IN" | sed '1d;$d' > "$TMP"
+    CONTENT_SRC="$TMP"
+  else
+    # Zero or one marker: no complete report block exists in this log. A marker-less log is
+    # NEVER floor-checked as-is here — however long it is, it is transcript, not report
+    # (PR#620 review r1: the raw-log shape must fail no-markers, not sneak past the floor).
+    fail "no-markers"
+  fi
 else
-  # No marker at all: not a ride-log wrapper — the --review case. Use the file as-is.
+  # report mode: the file IS the report (the --review case). Used as-is.
   CONTENT_SRC="$IN"
 fi
 
