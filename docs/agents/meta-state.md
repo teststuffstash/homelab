@@ -15,9 +15,10 @@ meant to avoid.)
   > ~/.claude/meta-events/stint` and arm a FRESH meta-events monitor (running monitors predate
   src_stint — the gometer running-process rule). FU-167 batches 2–4 ride as slack-time subagent
   chunks (replay tree footprint-exempt; the contention win shipped 2026-08-18 — sequencing
-  ruled 2026-08-19: FU-058 first). #420 CLOSED at the first stint-ritual closeout; #540 is a
-  standalone board item (operator console-reset test); post-reset sonnet re-reviews fired
-  2026-08-19 (idempotent — re-fire harmless if the session died mid-run).
+  ruled 2026-08-19: FU-058 first). #420's FIRST closeout ran 2026-08-19 and the container is OPEN in its
+  post-originals phase (operator correction: #540 is a post-originals BUG sprout in the
+  stint's own deliverable — binds, holds the parent; final closeout when it resolves).
+  Post-reset sonnet re-reviews COMPLETE 2026-08-19.
 
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
   buildout → then stacks.** Board-clearing sessions are the current mode. Bucket B still waits.
