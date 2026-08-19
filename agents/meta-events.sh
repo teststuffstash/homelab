@@ -76,6 +76,9 @@ src_needsmeta() {
 # on first sight and CLEARs when it closes or ages out (the src_seatpr window shape). All
 # authors deliberately included: bot filings are the motivating class, and an operator filing is
 # a session pickup, not noise — edge collapse bounds the cost either way.
+# ACT RULE (operator, 2026-08-19): the seat TRIAGES platform-claim repos only; a stack-repo
+# event is the stack's own loop/jail's to act on — record it, skip it, unless the operator
+# points at it. The watch stays org-wide because operator-lane strays have no machine owner.
 src_newissue() {
   local tmp since
   tmp="$(mktemp)"
