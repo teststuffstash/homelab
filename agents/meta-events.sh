@@ -166,22 +166,22 @@ src_seatpr() {
   rm -f "$tmp"
 }
 
-# WAVE — the jail wave's burn-down (2026-08-19, chainless-redesign §The jail wave). Armed by
-# the seat writing "owner/repo#N" to $STATE/wave at wave start; absent/empty = the source emits
-# a clear-set (stale lines from a disarmed wave edge out). One sub-issue list per tick. The
-# ORIGINAL child set is snapshotted on first sight ($STATE/wave.originals.<n>), so "originals
+# STINT — the jail stint's burn-down (2026-08-19, chainless-redesign §The jail stint). Armed by
+# the seat writing "owner/repo#N" to $STATE/stint at stint start; absent/empty = the source emits
+# a clear-set (stale lines from a disarmed stint edge out). One sub-issue list per tick. The
+# ORIGINAL child set is snapshotted on first sight ($STATE/stint.originals.<n>), so "originals
 # done" — the FIRST-closeout trigger, the sweep the simple watches never ran — is an edge
 # diff_source produces naturally; sprouts (children linked after the snapshot) count separately.
 # The CLOSEOUT-DUE line stands as a set-line until the seat closes the parent or disarms.
-src_wave() {
+src_stint() {
   local ref tmp repo n ids orig totalo openo opens num st
-  ref="$(cat "$STATE/wave" 2>/dev/null || true)"
-  if [ -z "$ref" ]; then tmp="$(mktemp)"; : > "$tmp"; diff_source wave "$tmp"; rm -f "$tmp"; return; fi
+  ref="$(cat "$STATE/stint" 2>/dev/null || true)"
+  if [ -z "$ref" ]; then tmp="$(mktemp)"; : > "$tmp"; diff_source stint "$tmp"; rm -f "$tmp"; return; fi
   repo="${ref%#*}"; n="${ref##*#}"
   ids="$(gh api "repos/$repo/issues/$n/sub_issues?per_page=100" --paginate \
-        --jq '.[] | "\(.number):\(.state)"' 2>/dev/null)" || { hold_source wave "sub_issues read failed ($ref)"; return; }
-  [ -f "$STATE/wave.originals.$n" ] || printf '%s\n' "$ids" | cut -d: -f1 > "$STATE/wave.originals.$n"
-  orig="$(cat "$STATE/wave.originals.$n")"
+        --jq '.[] | "\(.number):\(.state)"' 2>/dev/null)" || { hold_source stint "sub_issues read failed ($ref)"; return; }
+  [ -f "$STATE/stint.originals.$n" ] || printf '%s\n' "$ids" | cut -d: -f1 > "$STATE/stint.originals.$n"
+  orig="$(cat "$STATE/stint.originals.$n")"
   totalo="$(printf '%s\n' "$orig" | grep -c . || true)"
   openo=0; opens=0
   while IFS=: read -r num st; do
@@ -196,12 +196,12 @@ $ids
 WAVEIDS
   tmp="$(mktemp)"
   {
-    printf 'WAVE|%s|originals open %s/%s · sprouts open %s\n' "$ref" "$openo" "$totalo" "$opens"
+    printf 'STINT|%s|originals open %s/%s · sprouts open %s\n' "$ref" "$openo" "$totalo" "$opens"
     if [ "$openo" = 0 ] && [ "$totalo" != 0 ]; then
-      printf 'WAVE|%s|CLOSEOUT-DUE — originals done: run the closeout sitting (docs-cleanup + FU sweep + built-vs-left analysis + sprout disposition; chainless-redesign §The jail wave)\n' "$ref"
+      printf 'STINT|%s|CLOSEOUT-DUE — originals done: run the closeout sitting (docs-cleanup + FU sweep + built-vs-left analysis + sprout disposition; chainless-redesign §The jail stint)\n' "$ref"
     fi
   } > "$tmp"
-  diff_source wave "$tmp"; rm -f "$tmp"
+  diff_source stint "$tmp"; rm -f "$tmp"
 }
 
 tick() {
@@ -211,7 +211,7 @@ tick() {
   src_goalcmt
   src_alert
   src_famine
-  src_wave
+  src_stint
 }
 
 if [ "${1:-}" = "--once" ]; then TICK=0; tick; exit 0; fi
