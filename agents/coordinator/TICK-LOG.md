@@ -4402,3 +4402,21 @@ first live ADR-110 maintenance session before the ADR existed.
   kept its origin lineage); deadline = Mon 08-24 05:00 UTC retro cron (organic acceptance).
   FU-167 batches 2–4 = slack-time subagent chunks (replay tree footprint-exempt — the
   contention win already shipped 08-18; sequencing ruled: FU-058 first).
+
+- **2026-08-19 late-morning arc (board-clearing close-out, same sitting).** #541 FIXED+VERIFIED
+  (kmsg-reader: privileged-sans-APE — the CAP_SYSLOG form passes dry-run but FAILS the device
+  cgroup live; DS 10/10, LogQL lines flowing; #563's carve-out now true in prod). #459's open
+  question PINNED via Loki (rings 2xx-delivered; coordinate Sensor deaf ~1h during infra churn —
+  the only never-restarted sensor; rateLimit hypothesis REFUTED by a 3-ring probe; report-only,
+  recurrence-outside-churn = the deaf-sensor-belt case). Work map + soft rules LANDED (#596:
+  stints-before-Goals, last-moment authoring; FU-178/179/180 rescued; FU-175 declared burned —
+  bot catch; #502 closed into the map as G-D). meta-state PRUNED 472→196 (done-history deleted,
+  Bucket worklog → the map; §Durable warnings eviction = S4/FU-117) — the prune shipped a
+  FU-540 typo behind a pipe-filtered lint exit → master lint-red ~15 min, quickfixed; lesson
+  re-banked. #564 shipped (#597 riding: subagent signatures + 2 live catches seat-fixed). #595
+  (merge-conflict clause gaps — filed by the machine off #586's own saga) queued, ride active.
+  #577 + AR#75 CLOSED by the loop same morning. #121 CLOSED: NOUS un-fence (#598) applied+
+  verified; first recurrence SELF-HEALED ~3 min, no-touch confirmed; the firing sensors were the
+  NOUS pair — the laptop4 attribution (stale title, not live labels) corrected on-thread.
+  Vendor gauge (#574, built overnight) caught a live Anthropic degradation on day one. Session
+  end board: solve=1 (#292 → stint S1 leg 1), triage=1 (or-op#34 soak), backlog aggregate 6.
