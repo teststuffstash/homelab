@@ -1601,8 +1601,8 @@ def collect_issue_lifecycle(lines):
                     continue
                 # Get label timeline for this issue to find first agent/queued application
                 try:
-                    events = gh(f"/repos/{ORG}/{repo}/issues/{number}/events?per_page=100")
-                    if not isinstance(events, list):
+                    events = list(gh_paged(f"/repos/{ORG}/{repo}/issues/{number}/events?", None))
+                    if not events:
                         continue
                     queued_at = None
                     for event in events:
