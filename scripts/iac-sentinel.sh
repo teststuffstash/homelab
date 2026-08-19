@@ -36,6 +36,14 @@ metric() { METRICS="${METRICS}$1\n"; }
 
 push_metrics() {
   [ -n "$PUSHGATEWAY" ] || return 0
+  # FU-176: an empty body must never reach the gateway — a push REPLACES the whole
+  # job/iac-sentinel group, and a zero-PR tick's empty body used to WIPE
+  # iac_sentinel_engine_seconds (2026-08-18: a clean board read as "sentinel blind" while the
+  # sentinel was healthy). The cron-tick path appends the heartbeat before calling here; a
+  # bench/--tree invocation must NOT (it would reset IacSentinelSilent's clock mid-outage —
+  # PR#670 review), and its evaluate() always emits engine/probe rows, so nothing here can be
+  # empty — the guard below is the belt for any future metric-less caller.
+  [ -n "$METRICS" ] || { log "push_metrics: nothing to push (empty body would wipe the group — FU-176)"; return 0; }
   printf '%b' "$METRICS" | curl -fsS --max-time 10 --data-binary @- \
     "${PUSHGATEWAY}/metrics/job/iac-sentinel" >/dev/null 2>&1 \
     || log "pushgateway push failed (metrics stay in logs)"
@@ -172,4 +180,10 @@ for repo in $SENTINEL_REPOS; do
 $prs
 EOF2
 done
+# FU-176: the per-tick heartbeat — CRON-TICK PATH ONLY (never --tree: a manual bench run with
+# PUSHGATEWAY set would reset IacSentinelSilent's staleness clock and mask the outage being
+# debugged). Appending it here also guarantees a zero-PR tick pushes a non-empty body, which is
+# what stops the group wipe. Freshness keys on this metric (iac-lane.md §L0b); engine rows exist
+# only for ticks that evaluated a PR.
+metric "iac_sentinel_last_run_timestamp_seconds $(date +%s)"
 push_metrics
