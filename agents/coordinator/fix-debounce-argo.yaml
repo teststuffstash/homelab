@@ -409,7 +409,7 @@ spec:
 
             # ── ≥2 pending: ONE set-pass session (subscription; latch-gated like every spawn) ──
             # homelab#439: --pick-rail mode — when ANY rail is clear the session proceeds.
-            rail="$(SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh --pick-rail 2>/dev/null)" || rail=""
+            rail="$(SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh --pick-rail)" || rail=""
             if [ -z "$rail" ]; then
               echo "set-pass DEFERRED — both rails latched (FU-088); pending set stays, backstop/next bell retries"
               exit 0

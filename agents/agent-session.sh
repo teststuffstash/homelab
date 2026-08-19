@@ -1473,9 +1473,11 @@ if [ "$HARNESS" = "claude" ]; then
       # subscription is latched but the Go rail is clear, a claude-harness worker/retro ride
       # FAILS OVER to the Go rail instead of idling (the reviewer #424 and the leg-1 non-worker
       # sites already do this). Both-latched stays a defer, report-only, exactly as before.
-      # The ladder's stderr is suppressed — this gate's own lines name the outcome (leg-1
-      # pattern). SUBSCRIPTION_TIER=dispatch: same consumer tier the non-worker sites use.
-      rail="$(SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh" --pick-rail 2>/dev/null)" || rail=""
+      # The ladder's stderr flows to the pod log (homelab#443/#568 — $() captures stdout only,
+      # so suppressing it discarded the latch's window/semaphore diagnostics during exactly the
+      # latched runs that need them). SUBSCRIPTION_TIER=dispatch: same consumer tier the
+      # non-worker sites use.
+      rail="$(SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh" --pick-rail)" || rail=""
       if [ -z "$rail" ]; then
         echo "→ ${PROJECT} claude-tier dispatch deferred — both rails latched (FU-088)"
         exit 0

@@ -571,3 +571,9 @@ Log each instance here, so the next author sees a register rather than a precede
   moves — the harness asserts a clause's `gh`/`kubectl` calls, and prompt text emits none.
 
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.
+- **homelab#443 re-review catch (2026-08-18)** — dropping `2>/dev/null` from the four
+  `--pick-rail` command substitutions (`review-reflex.sh`, `agent-session.sh`'s worker/retro
+  dispatch leg + the responder/fix-debounce argo YAMLs): a redirection-only change — `$(...)` captures stdout alone, so the rail value and
+  every action stream are byte-identical before/after; the change only lets the latch's
+  diagnostic stderr flow to pod logs again. The full suite (incl. the pick-rail fixtures,
+  which stub the latch) passed unchanged — no clause logic moved, no fixture applies.
