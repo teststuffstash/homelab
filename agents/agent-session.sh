@@ -1631,6 +1631,10 @@ if [ "$HARNESS" = "claude" ]; then
           # mirroring the RAIL_DEGRADED pattern — :418-420 runs before the label block and propagates
           # cleanly; this failover runs after it, so the overrides must be explicit.
           MODEL="$rail"
+          # PR#643 r1: GOOSE_MODEL was computed at :~1182 from the PRE-failover MODEL and feeds
+          # the pod manifest env the strike/stats readers compare — the same MODEL-vs-GOOSE_MODEL
+          # divergence #629 fixed on the opencode-go/* arm, sibling instance.
+          GOOSE_MODEL="$rail"
           SUB_LABEL=', "homelab.teststuff.net/rail": opencode-go'
           AGENT_RAIL="opencode-go"
           echo "→ Anthropic latched — serving ${PROJECT} on the Go rail ($rail)"
