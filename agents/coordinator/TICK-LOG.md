@@ -4487,3 +4487,32 @@ first live ADR-110 maintenance session before the ADR existed.
   #650); strike-comment store ruling recorded in model-routing §M1 (as-is on homelab, named
   chainless-consumer debt). Board at true close: #650 + #652 queued, nothing in flight.
 
+
+## 2026-08-19 night — corpus stint session (S2 + Go-rail park)
+
+- **Condition:** operator opened the night session: corpus load → board → S2 → S3 if time; the
+  #652 r1 strike (429 "Monthly usage limit reached. Resets in 24 days") named the cause — the
+  opencode-go rail is MONTH-exhausted (resets ~Sep-13), and `opencode-go/deepseek-v4-flash` was
+  primary on TWO claims. → **Command:** parked the dogfood: platform → `claude/haiku` primary
+  (PR#659, merged + cluster-claim verified), sleep → OR flash-0731 primary (sleep-iac#72,
+  CI-lane merged); mirror synced; re-flip rides FU-181. Strike-attribution defect (records the
+  resolved fallback, `error_class=unknown` on a quota 429 — survives #643) filed as #660,
+  queued; its fix PR#668 in review. Alert thread #235 carries the cause note.
+- **Board sweep (19:15Z):** #654 closed dup of #653; queued #653 (repo-wide `ci` red at
+  2026-08-20T10:00Z — the machine lane fixed + merged it as PR#667 within the hour) and
+  #655/#656/#657/#648/#660. #459 checked, NOT soak-proven (14 cron-woken dispatches on homelab
+  in 26h — exporter-restart blind windows are the suspect; #648/#669 in flight). Backlog left
+  parked on purpose: #518 (minRunners soak), #516 (G-A scope), #289 (oracle parked).
+- **S2 stint #661 authored** (children #662–#666, native-linked): table-mode batches 2–4 +
+  suite fold-in ran as four parallel clone subagents (sonnet, local clones, double-review).
+  Fold-in landed as PR#671 (5 standalone harnesses → `mode: suite`); batches verified
+  byte-exact seat-side, landing serially behind it. #666 (the #354 adversarial acceptance)
+  runs after the batches.
+- **S3 head start:** FU-176 shipped as PR#670 (per-tick sentinel heartbeat, never-empty push,
+  `IacSentinelSilent` belt, §L0b freshness line; FU archived in-commit).
+- **⚠ New failure shape, evidence recorded:** GitHub SECONDARY (burst) rate limit on the org
+  user intermittently 403'd reads/writes ~19:29–19:34Z while `rate_limit` showed ~4975 core
+  remaining — the issue-lifecycle collector's per-poll REST walk (#656, queued) + meta-events +
+  seat bursts stack in the same minutes. A truncated-tarball artifact of the same window made a
+  local sentinel probe false-flag gitleaks on #667/#668 (docs=0 trees); reproduced clean +
+  live statuses green — no leak, no live impact.
