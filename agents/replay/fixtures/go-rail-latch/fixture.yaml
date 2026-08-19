@@ -37,5 +37,6 @@ parts:
   - block:struck-model-init
   - block:tier-default-struck-model-sync
   - block:fu088-gates
+  - block:strike-quota-classifier
   - file:post.sh
 rows: rows.psv

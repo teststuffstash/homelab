@@ -1,0 +1,4 @@
+CALL bash ./subscription-latch.sh --pick-rail
+CALL kubectl -n test-namespace get pod test-pod-123 -o jsonpath={.status.reason}
+OUT PASS: error_class=quota from 429 quota/rate-limit classifier
+RC 0

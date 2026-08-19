@@ -16,3 +16,4 @@ reroute-unthreadable     |       |       |                                      
 strike-attribution       |       |       | POST_SHAPE=strike-attribution                 | strike-attribution      |
 strike-attribution-degrade |     |       | POST_SHAPE=strike-attribution-degrade         | strike-attribution-degrade |
 strike-attribution-init-tier-default |  |       | POST_SHAPE=strike-attribution-init-tier-default | strike-attribution-init-tier-default |
+strike-quota-classifier  |       |       | POST_SHAPE=strike-quota-classifier            | strike-quota-classifier |

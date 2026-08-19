@@ -2056,6 +2056,7 @@ if [ -n "$RUN_CMD" ]; then
       # signatures agent-finalize uses (that script is the authoritative copy of these patterns).
       # homelab#22: an activeDeadlineSeconds kill leaves no log signature at all — the pod's
       # status.reason is the only evidence, and it maps to the `timeout` strike class.
+      # >>>REPLAY:strike-quota-classifier>>>
       POD_REASON="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.reason}' 2>/dev/null || true)"
       if [ "$POD_REASON" = "DeadlineExceeded" ]; then
         ERR_CLASS="timeout"
@@ -2072,6 +2073,7 @@ if [ -n "$RUN_CMD" ]; then
       else
         ERR_CLASS="unknown"
       fi
+      # <<<REPLAY:strike-quota-classifier<<<
     fi
     STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
     echo "→ no PR opened — ${STRIKE_LINE}"
