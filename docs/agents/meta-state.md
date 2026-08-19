@@ -153,6 +153,11 @@ sitting).** Both jail session types — the mechanical MAINTENANCE session and t
 (design-agents corpus loaded: codeowner reads + FU build + subagent waves) — arm the SAME
 standing set below; what differs is cadence and the act rule:
 
+- **Ctx wind-down (operator, 2026-08-19): end ~50k tokens BEFORE the context cap — never ride
+  into compaction** (a compacted corpus session is no longer a corpus session; a fresh one
+  bootstraps from this file + TICK-LOG by design, mid-stint included). Measure with
+  `bash scripts/session-ctx.sh` at heartbeats once past ~½ window; at the threshold run the full
+  wind-down ritual regardless of in-flight work.
 - **Cadence**: the corpus session's heartbeat runs UNDER the ~1h Anthropic cache TTL —
   **2700s**, not 7200 — so the belt that catches a stall is also what keeps the big context
   cache-warm (a wake within TTL is a ~0.1× cache read; past it, a full re-read — the Part A″
