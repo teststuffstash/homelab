@@ -1,0 +1,111 @@
+# The iac-sentinel head-changed EDGE (homelab#650) — ALL EVENTS HAVE DOORBELLS applied to the
+# required `iac-sentinel` commit status: with `ci` at ~1m post-minRunners, the */2 cron tick was
+# the binding merge wait on EVERY push. The github-exporter piggyback (the one-poller rider rule)
+# POSTs /sentinel on a new head sha appearing on an open PR of a sentinel-covered repo (the tofu
+# `protected_repos` four); this Sensor submits the SAME evaluation the cron runs.
+#
+# THE EVENT IS A DOORBELL, NEVER A WORK ITEM (the /coordinate doctrine): the payload
+# {repo, pr, head} only says "something changed" — the evaluation is UNSCOPED and re-lists every
+# open head itself (~20s total; scoping was ruled an optimization, decided against for
+# simplicity in the issue body). At-least-once, missable: the CronWorkflow in reflexes-argo.yaml
+# stays as the level-triggered BACKSTOP (drops */2 → */15 once this edge is proven — the
+# edge+level pattern everywhere else).
+#
+# The WorkflowTemplate here is the ONE spec both the edge and the cron run (the `coordinate` /
+# `fix-debounce` extraction pattern): reflexes-argo.yaml's CronWorkflow shrinks to a
+# workflowTemplateRef in the follow-up operator-direct commit (that file is pin-only guarded).
+# The mutex serializes edge and cron submissions — Cron `Forbid` alone cannot see Sensor
+# submissions (the coordinate-argo.yaml lesson, verbatim).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: iac-sentinel
+  namespace: agent-coordinator
+spec:
+  entrypoint: main
+  serviceAccountName: agent-coordinator
+  synchronization:
+    mutexes:
+      - name: iac-sentinel
+  activeDeadlineSeconds: 900
+  ttlStrategy: { secondsAfterCompletion: 21600, secondsAfterFailure: 86400 }
+  arguments:
+    parameters:
+      # cron|edge — the wake source, stated per run (the FU-144 acceptance shape: "% of
+      # evaluations edge-served" must be a number, so the run marks itself).
+      - { name: wake, value: "cron" }
+  volumes:
+    - { name: work, emptyDir: {} }
+    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+  templates:
+    - name: main
+      inputs:
+        parameters:
+          - { name: wake, value: "{{workflow.parameters.wake}}" }
+      container:
+        image: ghcr.io/teststuffstash/homelab/arc-runner:2026.8.17-g03ee74a3a4d0
+        command: ["bash", "-lc"]
+        args:
+          - |
+            set -e
+            rm -rf /work/homelab
+            git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            cd /work/homelab
+            exec devbox run -- bash scripts/iac-sentinel.sh
+        env:
+          - { name: HOME, value: "/home/runner" }
+          - { name: ORG, value: "teststuffstash" }
+          - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc:9091" }
+          - { name: SENTINEL_WAKE, value: "{{inputs.parameters.wake}}" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          # The enforcement write identity — the REVIEWER App's token (reads stay on
+          # coordinator-git above). Optional: absent secret = shadow mode.
+          - name: SENTINEL_STATUS_TOKEN
+            valueFrom: { secretKeyRef: { name: reviewer-git, key: GH_TOKEN, optional: true } }
+        volumeMounts:
+          - { name: work, mountPath: /work }
+        resources:
+          requests: { cpu: "200m", memory: "512Mi" }
+          limits: { memory: "1Gi" }
+---
+# Sensor — on a /sentinel doorbell, submit one evaluation. rateLimit is the dumb outer belt
+# (a push storm collapses onto the mutex queue anyway); the exporter side dedupes per
+# (repo, pr, head), so steady-state is one ring per push.
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: sentinel
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: sensor-review # same submit-only Role as the other agent-loop Sensors
+    container:
+      resources:
+        requests: { cpu: "25m", memory: "64Mi" }
+        limits: { memory: "128Mi" }
+  dependencies:
+    - name: sentinel-dep
+      eventSourceName: agent-loop
+      eventName: sentinel
+  triggers:
+    - rateLimit: { unit: Minute, requestsPerUnit: 2 }
+      template:
+        name: submit-iac-sentinel
+        conditions: "sentinel-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: iac-sentinel-edge-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: iac-sentinel }
+                arguments:
+                  parameters:
+                    - { name: wake, value: "edge" }
