@@ -157,11 +157,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
 | `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
-| `fu088-ladder/anthropic` | actions | - | `agents/agent-session.sh` | - |
-| `fu088-ladder/both` | actions | - | `agents/agent-session.sh` | - |
-| `fu088-ladder/go` | actions | - | `agents/agent-session.sh` | - |
-| `fu088-ladder/run-shape` | actions | - | `agents/agent-session.sh` | - |
-| `fu088-ladder/unthreadable` | actions | - | `agents/agent-session.sh` | - |
+| `fu088-ladder` | table | - | `agents/agent-session.sh` | - |
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `go-rail-latch` | table | - | `agents/agent-session.sh` | - |

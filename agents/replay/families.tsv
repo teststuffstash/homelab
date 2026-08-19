@@ -1,5 +1,5 @@
 # fixture-dir -> family  (FU-167 cleanup move 5; agents/replay/README.md §The cleanup contract)
-# Tables (fix-debounce, go-rail-latch, goal-ancestor, scout-canary-filing-gate) stay at depth 1 and are NOT listed.
+# Tables (fix-debounce, fu088-ladder, go-rail-latch, goal-ancestor, scout-canary-filing-gate) stay at depth 1 and are NOT listed.
 _selftest-missing-sentinel	_selftest
 _selftest-unrecorded-read	_selftest
 _selftest-wrong-expectation	_selftest
@@ -22,11 +22,6 @@ doorbell-collapse	doorbell
 doorbell-fanout	doorbell
 env-card-machine-markers-capture	env-card-machine-markers
 footprint-conflict-predicate	footprint-conflict-predicate
-fu088-ladder-anthropic	fu088-ladder
-fu088-ladder-both	fu088-ladder
-fu088-ladder-go	fu088-ladder
-fu088-ladder-run-shape	fu088-ladder
-fu088-ladder-unthreadable	fu088-ladder
 goal-abandoned	goal
 goal-assembly-complete	goal
 goal-budget-refusal-first-touch	goal-budget-refusal
