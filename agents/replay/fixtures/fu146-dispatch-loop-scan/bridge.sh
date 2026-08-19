@@ -21,10 +21,13 @@ uharvest=""
 ORG="test"
 wipmap=""  # WIP map for repositories (empty for test)
 
-# Two test units in the queue for the initial run
-# The block will loop through them, with the first returning exit 3
+# Three test units: a c4c5 unit whose issue CLOSED since the list snapshot (the FU-121 skip —
+# PR#631 r2: it must mark the unit tried and DRAIN, never re-select it forever), then the
+# exit-3 racing pair. c4c5 outranks queued-dispatch in the clause priority, so it is selected
+# first; its skip must still leave the pass able to dispatch.
 punits=""
-units="queued-dispatch|homelab|issue-100
+units="c4c5-redispatch|homelab|issue-77
+queued-dispatch|homelab|issue-100
 queued-dispatch|circles|issue-50"
 
 # Mock coordinator-session.sh — return 3 on first call, 0 on second
@@ -45,6 +48,15 @@ bash() {
   fi
 }
 
+# Mock gh for the FU-121 fresh-state probe: issue-77 reads CLOSED (the raced close), anything
+# else is a fixture bug and fails loudly rather than serving an invented answer.
+gh() {
+  if [ "$1" = "issue" ] && [ "$2" = "view" ] && [ "$3" = "77" ]; then
+    printf 'CLOSED\n'; return 0
+  fi
+  echo "UNEXPECTED gh call in fixture: $*" >&2; return 1
+}
+
 # Mock scan_phase and dispatch_phase to avoid needing cluster/gateway access
 scan_phase() { :; }
 dispatch_phase() { :; }
@@ -58,4 +70,4 @@ EOF
 }
 
 # Make functions available to subshells
-export -f bash stacks_json scan_phase dispatch_phase
+export -f bash gh stacks_json scan_phase dispatch_phase

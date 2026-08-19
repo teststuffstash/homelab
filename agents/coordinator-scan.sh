@@ -2548,7 +2548,13 @@ EOF_GUARDED
     if [ "$uclause" = "c4c5-redispatch" ]; then
       fresh_state="$(gh issue view "${uitem#issue-}" --repo "${ORG}/${urepo}" --json state --jq .state 2>/dev/null || echo PROBE-FAILED)"
       if [ "$fresh_state" = "CLOSED" ]; then
-        echo "  FU-121: ${urepo} ${uitem} closed since the list snapshot — redispatch skipped."
+        # PR#631 r2: inside the FU-146 retry loop this `continue` targets the NEW `while`, no
+        # longer the outer stacks loop — unmarked, it would re-select this same closed unit
+        # forever (an unbounded tight loop of live probes). Mark it tried: the skip becomes a
+        # bounded drain to the next unit, which is strictly better than master's whole-stack
+        # abort — a raced close should not cost the pass its dispatch.
+        tried_units="${tried_units} ${unit}"
+        echo "  FU-121: ${urepo} ${uitem} closed since the list snapshot — redispatch skipped; trying next unit"
         continue
       fi
     fi
