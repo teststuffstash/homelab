@@ -463,6 +463,126 @@
       "panels": []
     },
     {
+      "id": 122,
+      "type": "stat",
+      "title": "Observed Go 429/402s (24h)",
+      "description": "GO_UPSTREAM 429/402 responses the proxy observed on the Go leg (by code) \u2014 the observed-capacity latch's counter (FU-170 leg d). In-memory; resets with the proxy pod \u2014 treat as a lower bound.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 0,
+        "y": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(router_go_observed_429_total[24h]))",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 121,
+      "type": "stat",
+      "title": "Observed capacity latch",
+      "description": "1 while the Go rail is latched on an upstream 429/402 from GO_UPSTREAM \u2014 the blind-ledger correction (FU-170 leg d). The self-metered windows read LOW at the real wall; this is the observed ground truth.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(router_go_capacity_latched)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OK",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "DEFERRING",
+                  "color": "red"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
       "id": 8,
       "type": "stat",
       "title": "5h utilization",
@@ -873,7 +993,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 10
+        "y": 14
       },
       "collapsed": false,
       "panels": []
@@ -891,7 +1011,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 11
+        "y": 15
       },
       "targets": [
         {
@@ -981,7 +1101,7 @@
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 24
       },
       "targets": [
         {
@@ -1040,7 +1160,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 30
       },
       "targets": [
         {
@@ -1091,7 +1211,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 37
       },
       "targets": [
         {

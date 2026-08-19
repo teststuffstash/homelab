@@ -1144,6 +1144,102 @@ def _or_capacity_down(now: float | None = None) -> str | None:
         return _or_cap["reason"] if _or_cap["until"] > (now or time.time()) else None
 
 
+# homelab#600 (FU-170 leg d): the Go rail's OWN capacity latch — the transpose of the
+# `_or_capacity_*` pattern onto the GO_UPSTREAM leg. The self-metered ledger is BLIND to the
+# real wall: the opencode console reads monthly 95% / weekly 90% while `/opencode-limit`'s
+# ledger read 62%/24% — the whole pre-relaunch jail burn is invisible to it (homelab#540), so
+# the gate kept ADMITTING Go dispatches straight through a window that hard-429s every request.
+# Since this proxy transits ALL cluster Go traffic (both ingress surfaces — the anthropic-compat
+# path and the OpenAI-compat/`_opencode_scrub` path — route to GO_UPSTREAM), an observed upstream
+# 429/402 is ground truth: latch it, compose it into `/opencode-limit`'s top-level `limited` with
+# a typed reason, and the gate starts deferring AT the real wall (zero launcher changes — every
+# consumer already probes /opencode-limit and acts on `limited`).
+# Self-healing both ways like the or-capacity latch: the hold expires on its own, and any Go 2xx
+# clears it early. In-memory by design; a proxy roll forgets, the next 429/402 re-latches.
+# ⚠ NOTE: jail-observed 429s do NOT transit this proxy (ADR-108 — the jail shim reports usage via
+# the ingest row) and are OUT OF SCOPE here; a later gometer-ingest row kind covers them.
+GO_CAPACITY_HOLD_S = int(os.environ.get("GO_CAPACITY_HOLD_S", "900"))
+# A 402 means the window is SPENT (not rate pressure) — a longer default hold is honest.
+GO_CAPACITY_402_HOLD_S = int(os.environ.get("GO_CAPACITY_402_HOLD_S", "1800"))
+_go_cap = {"until": 0.0, "reason": "", "code": 0, "since": 0.0, "count": 0}
+_go_cap_lock = threading.Lock()
+_go_cap_429: dict[int, int] = {}  # code -> observed count (router_go_observed_429_total{code})
+
+
+def _go_capacity_latch(code: int, retry_after: float | None = None) -> str:
+    """Latch the Go rail as capacity-exhausted from one observed GO_UPSTREAM 429/402. The hold
+    is Retry-After when present, else the fixed hold (402 uses the longer window-spent default).
+    Returns a note suffix."""
+    now = time.time()
+    hold = (retry_after if retry_after and retry_after > 0 else None) or \
+        (GO_CAPACITY_402_HOLD_S if code == 402 else GO_CAPACITY_HOLD_S)
+    reason = f"observed-{code}"
+    with _go_cap_lock:
+        first = _go_cap["until"] <= now
+        _go_cap["until"] = max(_go_cap["until"], now + hold)
+        _go_cap["reason"] = reason
+        _go_cap["code"] = code
+        if first:
+            _go_cap["since"] = now
+            _go_cap["count"] += 1
+    if first:
+        log(f"Go rail capacity DOWN ({reason}) for {hold:.0f}s — /opencode-limit now serves "
+            f"limited=true, the gate defers AT the real wall (observed {code} from GO_UPSTREAM, "
+            "homelab#600)")
+    return f"+go-{reason}"
+
+
+def _go_capacity_clear(why: str) -> str:
+    """A 2xx from GO_UPSTREAM means the Go rail is answering — drop an active hold early."""
+    now = time.time()
+    with _go_cap_lock:
+        if _go_cap["until"] <= now:
+            return ""
+        reason, _go_cap["until"], _go_cap["reason"], _go_cap["code"] = \
+            _go_cap["reason"], 0.0, "", 0
+    log(f"Go 2xx while capacity-latched ({reason}) — latch cleared early ({why})")
+    return "+go-capacity-cleared"
+
+
+def _go_capacity_update(status: int, resp_headers) -> str:
+    """Fold one GO_UPSTREAM status into the observed-capacity latch + counter. Returns a note
+    suffix. Retry-After may be absent or an HTTP-date — both fall back to the fixed hold.
+    Only the exhaustion statuses (429/402) increment the counter — the `_429_total` series is
+    the observed-capacity counter, not a traffic meter."""
+    if status in (429, 402):
+        with _go_cap_lock:
+            _go_cap_429[status] = _go_cap_429.get(status, 0) + 1
+    if status == 402:
+        return _go_capacity_latch(402)
+    if status == 429:
+        try:
+            retry_after = float(resp_headers.get("retry-after") or 0) or None
+        except (TypeError, ValueError):
+            retry_after = None
+        return _go_capacity_latch(429, retry_after)
+    if 200 <= status < 300:
+        return _go_capacity_clear("2xx on the go leg")
+    return ""
+
+
+def _go_capacity_snapshot(now: float) -> dict:
+    """The /opencode-limit + /metrics view. ⚠ `limited` is keyed on the hold's EXPIRY — never on
+    `reason != null` (the M12 stale-`reason` trap, rail-degrade-replay CAP5): `reason` is the raw
+    latch field, so it stays populated after expiry until the next 2xx clears it, and a consumer
+    that keys on `reason` would defer forever from the first observed 429. Consumers act on
+    `limited`."""
+    with _go_cap_lock:
+        until = _go_cap["until"]
+        return {
+            "limited": until > now,
+            "reason": _go_cap["reason"] or None,
+            "code": _go_cap["code"],
+            "until_epoch": round(until),
+            "remaining_s": max(0, round(until - now)),
+            "latched_total": _go_cap["count"],
+        }
+
+
 # homelab#180: where the balance comes from. The operator's metrics Service (PR #32 shipped it as
 # a DEDICATED Service — `openrouter-operator-metrics`, NOT the operator Deployment's own name),
 # reached over in-cluster service DNS per the #138 ruling. ClusterIP→ClusterIP: it does not transit
@@ -1388,11 +1484,15 @@ class Proxy(BaseHTTPRequestHandler):
             return
 
         status = resp.getcode()
-        # ADR-107 / homelab#445: an opencode rail (Go or Zen) must NOT pollute Anthropic
-        # subscription latch state. When /anthropic/* carries an opencode model, the rail flag
-        # is set and anthropic=True — the response must not update Anthropic accounting
-        # (an opencode 429 is not an Anthropic 429).
-        if anthropic and not go_leg and not zen_leg:
+        # homelab#600 (FU-170 leg d): the Go rail's own observed-capacity latch. This branch fires
+        # for BOTH ingress surfaces (the /api and /anthropic paths carry opencode-go/ models), and
+        # is deliberately independent of the anthropic + OpenRouter latches below — a Go 429 is
+        # not an Anthropic 429 and not an OpenRouter problem (the existing guards at
+        # `anthropic and not go_leg` / `or_model and not go_leg` already keep rail outcomes from
+        # polluting each other).
+        if go_leg:
+            note += _go_capacity_update(status, resp.headers)
+        elif anthropic and not go_leg and not zen_leg:
             note += _anthropic_latch_update(status, resp.headers)
         elif or_model and not go_leg and not zen_leg:  # OpenRouter accounting — opencode is a DIFFERENT provider
             # ADR-096: passive provider health for OpenRouter only. opencode-rail outcomes must
@@ -1585,6 +1685,13 @@ class Proxy(BaseHTTPRequestHandler):
             # `limited` verdict (status["limited"] or semaphore["limited"]) — launchers probe
             # /opencode-limit and act on `limited`, so every consumer inherits the bound with
             # ZERO launcher changes. The semaphore state rides in the payload under `semaphore`.
+            # FU-170 (piece d, homelab#600): the observed-capacity latch composes the SAME way —
+            # an upstream 429/402 from GO_UPSTREAM is ground truth the self-metered ledger cannot
+            # see, so it flips `limited` and types the reason (`observed-429`/`observed-402`).
+            # ⚠ `capacity.reason` is the RAW latch field (CAP5): it stays populated after the
+            # hold expires until a 2xx clears it, while `capacity.limited` (and the top-level
+            # `limited`) are keyed on the hold's EXPIRY — consumers act on `limited`, never on
+            # `reason != null`.
             def _go_snapshot(name, win_start, _resets_at):
                 return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
             # homelab#540: wire the CHAIN-anchor seam — the 5h window's open epoch comes from
@@ -1593,14 +1700,17 @@ class Proxy(BaseHTTPRequestHandler):
                 return router.go_usage_chain_open(span_s, lookback_s)
             status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
             go_semaphore = _go_semaphore_state()
+            go_capacity = _go_capacity_snapshot(time.time())
             payload = json.dumps({
-                "limited": status["limited"] or go_semaphore["limited"],
+                "limited": status["limited"] or go_semaphore["limited"] or go_capacity["limited"],
+                "reason": go_capacity["reason"],
                 "thresholds": status["thresholds"],
                 "pricing": status["pricing"],
                 "windows": status["windows"],
                 "by_stack": status["by_stack"],
                 "by_stack_window": status["by_stack_window"],
                 "semaphore": go_semaphore,
+                "capacity": go_capacity,
             }).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1680,6 +1790,22 @@ class Proxy(BaseHTTPRequestHandler):
                 "# HELP opencode_subscription_dispatch_limited Composite Go-rail limited verdict (any window past threshold).",
                 f"opencode_subscription_dispatch_limited {1 if go_status['limited'] else 0}",
             ]
+            # homelab#600 (FU-170 leg d): observed 429/402 → the counter + latch gauge. This is
+            # the counter half of the blind-ledger correction — the self-metered windows above
+            # can read LOW while the real wall is hard-429ing, so the observed-status series is
+            # the only one that reflects what the window actually served. Both code series are
+            # ALWAYS emitted (from 0) so "nothing observed yet" is a moving 0, not a missing
+            # series — the FU-131 honesty doctrine: a gap reads as a broken scrape, not a zero.
+            with _go_cap_lock:
+                go_cap_429 = dict(_go_cap_429)
+            lines += ["# TYPE router_go_observed_429_total counter",
+                      "# HELP router_go_observed_429_total GO_UPSTREAM exhaustion responses by HTTP status, observed on the Go leg (in-memory; resets on roll) — the observed-capacity latch's counter (FU-170 leg d).",
+                      *[f'router_go_observed_429_total{{code="{code}"}} {go_cap_429.get(code, 0)}'
+                        for code in (429, 402)]]
+            go_cap = _go_capacity_snapshot(now)
+            lines += ["# TYPE router_go_capacity_latched gauge",
+                      "# HELP router_go_capacity_latched 1 while the Go-rail observed-capacity latch holds (an upstream 429/402 from GO_UPSTREAM — the blind-ledger correction, FU-170 leg d).",
+                      f"router_go_capacity_latched {1 if go_cap['limited'] else 0}"]
             # FU-170 (piece a): the Go-rail concurrency semaphore — mirror of the anthropic one
             # below (absent running series = count unavailable, honest, not 0).
             go_semaphore = _go_semaphore_state()
@@ -2520,8 +2646,15 @@ def _self_test() -> int:
                 "body_raw": body,
             }
             resp = _go_response.get("body", b'data: {"ok":true}\n\ndata: [DONE]\n\n')
-            status = 429 if parsed.get("model") == "test-model-429" else 200
+            # homelab#600: the stub's status / Retry-After are configurable so the observed-capacity
+            # acceptance tests can drive a 429-with-Retry-After and a 402; the model-keyed 429
+            # stays for the cross-provider tests. Absent "status" → model-keyed fallback.
+            status = _go_response.get("status")
+            if status is None:
+                status = 429 if parsed.get("model") == "test-model-429" else 200
             self.send_response(status)
+            if _go_response.get("retry_after") is not None:
+                self.send_header("Retry-After", str(_go_response["retry_after"]))
             self.send_header("Content-Type", "text/event-stream" if _go_response.get("type") == "sse" else "application/json")
             self.send_header("Content-Length", str(len(resp)))
             self.end_headers()
@@ -2818,6 +2951,87 @@ def _self_test() -> int:
     check(final_until == initial_until,
           f"anthropic-latch: until unchanged ({initial_until} → {final_until})")
 
+    print("\n=== Go observed-capacity latch tests (homelab#600 / FU-170 leg d) ===")
+    # The five acceptance rows for the observed 429/402 latch. The stub's status/Retry-After are
+    # driven via _go_response; each row resets the latch so the previous row's hold can't bleed.
+    def _go_reset_latch():
+        with _go_cap_lock:
+            _go_cap["until"], _go_cap["reason"], _go_cap["code"] = 0.0, "", 0
+
+    # A1: a Go 429 with Retry-After latches for THAT duration.
+    _go_response["status"] = 429
+    _go_response["retry_after"] = 120
+    _go_reset_latch()
+    seen.clear()
+    st, data = call("opencode-go/cap-429")
+    check(st == 429, "go-capacity: 429 forwarded to client")
+    gcap = _go_capacity_snapshot(time.time())
+    check(gcap["limited"] is True, f"go-capacity: 429 latched (limited={gcap['limited']})")
+    check(gcap["reason"] == "observed-429", f"go-capacity: typed reason observed-429 (got {gcap['reason']})")
+    check(gcap["remaining_s"] == 120,
+          f"go-capacity: hold = Retry-After 120s (got {gcap['remaining_s']})")
+
+    # A2: a 402 latches (window spent — the longer default hold).
+    _go_response["status"] = 402
+    _go_response.pop("retry_after", None)
+    _go_reset_latch()
+    seen.clear()
+    st, data = call("opencode-go/cap-402")
+    check(st == 402, "go-capacity: 402 forwarded to client")
+    gcap = _go_capacity_snapshot(time.time())
+    check(gcap["limited"] is True, f"go-capacity: 402 latched (limited={gcap['limited']})")
+    check(gcap["reason"] == "observed-402", f"go-capacity: typed reason observed-402 (got {gcap['reason']})")
+    check(gcap["remaining_s"] == GO_CAPACITY_402_HOLD_S,
+          f"go-capacity: 402 hold = GO_CAPACITY_402_HOLD_S={GO_CAPACITY_402_HOLD_S}s (got {gcap['remaining_s']})")
+
+    # A3: a subsequent Go 2xx clears the latch early (self-healing contract).
+    _go_response["status"] = 200
+    seen.clear()
+    st, data = call("opencode-go/cap-2xx")
+    check(st == 200, "go-capacity: 2xx forwarded to client")
+    gcap = _go_capacity_snapshot(time.time())
+    check(gcap["limited"] is False, f"go-capacity: 2xx cleared latch early (limited={gcap['limited']})")
+    check(gcap["reason"] is None, f"go-capacity: reason cleared with latch (got {gcap['reason']})")
+
+    # A4: while latched, /opencode-limit serves limited:true with the typed reason.
+    _go_response["status"] = 429
+    _go_response["retry_after"] = 120
+    _go_reset_latch()
+    seen.clear()
+    st, data = call("opencode-go/cap-d")
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/opencode-limit")
+    r = c.getresponse()
+    lim = json.loads(r.read())
+    c.close()
+    check(lim["limited"] is True, f"go-capacity: /opencode-limit limited=true while latched (got {lim['limited']})")
+    check(lim["reason"] == "observed-429", f"go-capacity: /opencode-limit reason typed (got {lim['reason']})")
+    check(lim["capacity"]["limited"] is True, "go-capacity: capacity.limited true while latched")
+    check(lim["capacity"]["reason"] == "observed-429", "go-capacity: capacity.reason typed while latched")
+
+    # A5 (CAP5): an EXPIRED hold serves limited:false even though reason is still populated —
+    # consumers key on `limited`, never on `reason != null` (the M12 stale-reason trap).
+    with _go_cap_lock:
+        _go_cap["until"] = time.time() - 1
+        _go_cap["reason"] = "observed-429"
+        _go_cap["code"] = 429
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/opencode-limit")
+    r = c.getresponse()
+    lim = json.loads(r.read())
+    c.close()
+    check(lim["limited"] is False, f"go-capacity: expired hold → limited=false (CAP5; got {lim['limited']})")
+    check(lim["reason"] == "observed-429",
+          f"go-capacity: stale reason still populated (CAP5; got {lim['reason']})")
+    check(lim["capacity"]["limited"] is False, "go-capacity: capacity.limited false on expiry (CAP5)")
+    check(lim["capacity"]["remaining_s"] == 0, "go-capacity: capacity.remaining_s 0 on expiry (CAP5)")
+
+    # Restore the stub default + leave the latch in its expired (harmless) state. The semaphore
+    # tests below re-arm the ONLY state they care about (_semaphore_caches), so an expired
+    # go-capacity latch with a stale reason cannot bleed into them.
+    _go_response.pop("status", None)
+    _go_response.pop("retry_after", None)
+
     print("\n=== Only-free guardrail test (Go via /anthropic path) ===")
     # Test 9: only-free guardrail MUST deny Go-leg requests through /anthropic path.
     # FU-024: only-free sessions have no Go-window authority — same 403 as /chat/completions.
@@ -3104,6 +3318,22 @@ data: [DONE]
     for metric in ("opencode_subscription_usage_usd", "opencode_subscription_usage_threshold"):
         count = metrics.count(f"# TYPE {metric}")
         check(count == 1, f"/metrics: # TYPE {metric} appears exactly once (got {count})")
+    # Test 16b (homelab#600): the observed-capacity series are always emitted (from 0) and
+    # dedup once — a missing series reads as a broken scrape, not a zero (FU-131 doctrine).
+    for metric in ("router_go_observed_429_total", "router_go_capacity_latched"):
+        count = metrics.count(f"# TYPE {metric}")
+        check(count == 1, f"/metrics: # TYPE {metric} appears exactly once (got {count})")
+    import re as _re
+    # Both code series must be PRESENT — the always-on emission is the point (a missing series
+    # reads as a broken scrape, not a zero); the count itself is not asserted here because the
+    # earlier Go-429 tests have already observed several (the value is whatever it is).
+    check(bool(_re.search(r'router_go_observed_429_total\{code="429"\} \d+', metrics)),
+          "/metrics: router_go_observed_429_total{code=\"429\"} series present (always-on)")
+    check(bool(_re.search(r'router_go_observed_429_total\{code="402"\} \d+', metrics)),
+          "/metrics: router_go_observed_429_total{code=\"402\"} series present (always-on)")
+    check("router_go_capacity_latched 0" in metrics
+          or "router_go_capacity_latched 1" in metrics,
+          "/metrics: router_go_capacity_latched gauge present")
 
     # Test 17: Go-leg User-Agent — stub must see "homelab-openrouter-proxy"
     seen.clear()
