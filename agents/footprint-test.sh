@@ -59,6 +59,17 @@ expect 1 "replay entry vs broad agents glob"          "agents/replay/fixtures/x/
 expect 1 "replay-only vs the legacy sentinel"         "agents/replay/**"      "*"
 expect 1 "bare agents/replay (no glob) is exempt"     "agents/replay"         "agents/replay/run.sh"
 expect 0 "replay-ADJACENT name is not exempt"         "agents/replay-foo/**"  "agents/replay-foo/x.sh"
+# ── the compelled-counterpart widening (homelab#601, 2026-08-19): suite pins + FSM models ──────
+# Expected values from the contract (footprint.sh's three-class comment), not from running the
+# code: a top-level suite script and an fsm model/view are compelled counterparts (exempt); a
+# NESTED *-test.sh, a non-fsm doc, and the checker's own file are ordinary surfaces (not exempt).
+expect 1 "top-level suite pin is exempt (state-fp)"    "agents/state-fp-replay.sh" "agents/state-fp-replay.sh"
+expect 1 "top-level suite pin is exempt (-test.sh)"    "agents/board-test.sh"      "agents/board-test.sh"
+expect 1 "FSM model yaml is exempt"                    "docs/agents/merge-path-fsm.yaml" "docs/agents/merge-path-fsm.yaml"
+expect 1 "FSM generated view is exempt"                "docs/agents/iac-lane-fsm.md"     "docs/agents/iac-lane-fsm.md"
+expect 0 "NESTED -test.sh is NOT exempt (depth guard)" "agents/coordinator/responder-behaviour-test.sh" "agents/coordinator/responder-behaviour-test.sh"
+expect 0 "non-fsm agents doc is NOT exempt"            "docs/agents/workflow.md"   "docs/agents/workflow.md"
+expect 0 "footprint.sh itself is NOT exempt"           "agents/footprint.sh"       "agents/footprint.sh"
 expect 0 "mixed list: non-replay half still holds"    "agents/replay/**, agents/coordinator-scan.sh" "agents/coordinator-scan.sh"
 expect 1 "mixed list: replay half holds nothing"      "agents/replay/**, docs/**" "agents/replay/fixtures/y/**"
 
