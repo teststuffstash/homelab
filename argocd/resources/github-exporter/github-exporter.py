@@ -42,6 +42,10 @@ _repo_private = {}
 # Run→runner-class memo (completed runs never change; in-flight re-checked). The jobs endpoint is
 # the only place runner labels live — one request per NEW run in the window, then cached.
 _run_runner = {}
+# Run→job-timing-lines memo (completed runs' job metrics cached per scrape; every poll re-emits
+# the cached lines while the run is still in the window). Caches the computed exposition lines
+# (with run_id label for disambiguation) and re-emits them every scrape so series stay visible.
+_job_timings = {}
 # Completed runs whose jobs have been fetched (delta-only API call: one per new completed run).
 _jobs_fetched = set()
 ORG = os.environ.get("GITHUB_ORG", "teststuffstash")
@@ -342,13 +346,20 @@ def _runner_class(repo, run):
 def collect_job_timings(repo, run):
     """Emit job-level queue and duration metrics for a completed run (delta-only API call).
 
-    Returns lines to be added to the exposition. One API call per new completed run, ~dozens/day.
-    Job timings: queue_seconds (created_at to started_at) and duration_seconds (started_at to
-    completed_at). Emits per (repo, workflow, job_name) to support load analysis across runs."""
+    Returns lines to be added to the exposition. Caches computed lines and re-emits them on every
+    poll while the run is in the window, so job-level series stay visible across scrapes.
+    One API call per new completed run, ~dozens/day. Job timings: queue_seconds (created_at to
+    started_at) and duration_seconds (started_at to completed_at). Emits per (repo, workflow,
+    job_name, run_id) to support load analysis across runs (run_id disambiguates multiple runs
+    of the same workflow in the window)."""
     lines = []
     rid = run.get("id")
     done = (run.get("status") == "completed")
-    if not (rid and done and rid not in _jobs_fetched):
+    if not rid or not done:
+        return lines
+    if rid in _job_timings:
+        return _job_timings[rid]
+    if rid in _jobs_fetched:
         return lines
     try:
         jobs = gh(f"/repos/{ORG}/{repo}/actions/runs/{rid}/jobs?per_page=100").get("jobs") or []
@@ -364,14 +375,16 @@ def collect_job_timings(repo, run):
                 "repo": repo,
                 "workflow": run.get("name") or "",
                 "job": job_name,
+                "run_id": rid,
             }
             queue_seconds = epoch(started_at) - epoch(created_at)
             duration_seconds = epoch(completed_at) - epoch(started_at)
             lines.append(metric("github_ci_job_queue_seconds", labels, queue_seconds))
             lines.append(metric("github_ci_job_duration_seconds", labels, duration_seconds))
+        _job_timings[rid] = lines
+        _jobs_fetched.add(rid)
     except Exception:
-        pass  # failed to fetch jobs for this run; skip it, will retry if run re-appears in window
-    _jobs_fetched.add(rid)
+        pass  # failed to fetch jobs for this run; will retry if run re-appears in window
     return lines
 
 
@@ -1775,21 +1788,89 @@ def self_test():
          "completed_at": "2026-08-19T10:04:50Z"},
     ]
 
-    # Test job timing collection: queue and duration metrics.
-    lines = []
-    for job in _FIXTURE_JOBS:
-        labels = {
-            "owner": ORG, "repo": "homelab", "workflow": "Integration Tests", "job": job["name"]
-        }
-        queue_seconds = epoch(job["started_at"]) - epoch(job["created_at"])
-        duration_seconds = epoch(job["completed_at"]) - epoch(job["started_at"])
-        lines.append(metric("github_ci_job_queue_seconds", labels, queue_seconds))
-        lines.append(metric("github_ci_job_duration_seconds", labels, duration_seconds))
-    body_jobs = "\n".join(dedupe_exposition(lines))
-    assert 'github_ci_job_queue_seconds{job="checkout",owner="teststuffstash",repo="homelab",workflow="Integration Tests"} 5' in body_jobs
-    assert 'github_ci_job_duration_seconds{job="checkout",owner="teststuffstash",repo="homelab",workflow="Integration Tests"} 10' in body_jobs
-    assert 'github_ci_job_queue_seconds{job="setup-python",owner="teststuffstash",repo="homelab",workflow="Integration Tests"} 20' in body_jobs
-    assert 'github_ci_job_duration_seconds{job="run-tests",owner="teststuffstash",repo="homelab",workflow="Integration Tests"} 170' in body_jobs
+    # Test job timing collection: queue and duration metrics (PR #645, round 2: fix regressions).
+    # Regression 1: series must be emitted EVERY scrape while run is in window (caching fix).
+    # Regression 2: a failed /jobs fetch must be retried, not blacklisted (exception handling).
+    _job_timings.clear()
+    _jobs_fetched.clear()
+
+    saved_gh = globals()['gh']
+    call_count = [0]  # mutable count for closure
+
+    def _mock_gh_jobs_succeed(path, token=None):
+        """Mock gh() that succeeds on the jobs endpoint."""
+        call_count[0] += 1
+        if "/jobs" in path:
+            return {"jobs": _FIXTURE_JOBS}
+        return {}
+
+    def _mock_gh_jobs_fail_once(path, token=None):
+        """Mock gh() that fails once on jobs, then succeeds (retry test)."""
+        call_count[0] += 1
+        if "/jobs" in path:
+            if call_count[0] == 1:
+                raise Exception("simulated /jobs API failure")
+            return {"jobs": _FIXTURE_JOBS}
+        return {}
+
+    globals()['gh'] = _mock_gh_jobs_succeed
+    try:
+        # First scrape: populate cache.
+        lines1 = collect_job_timings("homelab", _FIXTURE_JOBS_RUN)
+        assert len(lines1) == 6, f"expected 6 lines (3 jobs × 2 metrics), got {len(lines1)}"
+        assert _FIXTURE_JOBS_RUN["id"] in _job_timings, "lines must be cached"
+        assert _FIXTURE_JOBS_RUN["id"] in _jobs_fetched, "run must be marked fetched on success"
+        assert call_count[0] == 1, "API should be called once"
+
+        # Verify run_id label is present for disambiguation.
+        body1 = "\n".join(lines1)
+        assert f'run_id="{_FIXTURE_JOBS_RUN["id"]}"' in body1, \
+            "job series must carry run_id label to disambiguate multiple runs"
+
+        # Second scrape: return cached lines WITHOUT calling API.
+        lines2 = collect_job_timings("homelab", _FIXTURE_JOBS_RUN)
+        assert lines1 == lines2, "cached lines must be identical on re-scrape"
+        assert call_count[0] == 1, "API should NOT be called again (cache hit)"
+
+        # Third scrape (same run, same cache).
+        lines3 = collect_job_timings("homelab", _FIXTURE_JOBS_RUN)
+        assert lines1 == lines3, "cache must return same lines every scrape"
+        assert call_count[0] == 1, "API should still not be called"
+
+        # Regression 2: failed fetch is retried.
+        _job_timings.clear()
+        _jobs_fetched.clear()
+        call_count[0] = 0
+        globals()['gh'] = _mock_gh_jobs_fail_once
+
+        run2 = dict(_FIXTURE_JOBS_RUN)
+        run2["id"] = 98765432102
+
+        # First call fails.
+        lines_fail = collect_job_timings("homelab", run2)
+        assert len(lines_fail) == 0, "failed fetch should return empty lines"
+        assert run2["id"] not in _jobs_fetched, \
+            "run must NOT be marked fetched after API failure (retry on next scrape)"
+        assert run2["id"] not in _job_timings, "cache must not store on failure"
+        assert call_count[0] == 1
+
+        # Second call succeeds (retry).
+        lines_retry = collect_job_timings("homelab", run2)
+        assert len(lines_retry) == 6, "retry should succeed and return 6 lines"
+        assert run2["id"] in _jobs_fetched, "run must be marked fetched on success"
+        assert run2["id"] in _job_timings, "lines must be cached on success"
+        assert call_count[0] == 2, "API should be called again for retry"
+
+        # Third call uses cache.
+        call_count[0] = 0
+        lines_cached = collect_job_timings("homelab", run2)
+        assert lines_retry == lines_cached, "cache must return same lines on hit"
+        assert call_count[0] == 0, "API should not be called when cached"
+
+    finally:
+        globals()['gh'] = saved_gh
+        _job_timings.clear()
+        _jobs_fetched.clear()
 
     # ── FU-150 OURS half (#284): the queued-age series and the alert that consumes it ────────────
     ident = {"owner": ORG, "repo": "homelab", "workflow": "CI", "branch": "master",
@@ -2012,7 +2093,7 @@ def self_test():
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
-          "scale, job-level queue/duration metrics)")
+          "scale, job-level queue/duration metrics + caching + retry on API failure)")
     return 0
 
 
