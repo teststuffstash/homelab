@@ -33,6 +33,9 @@ RETROS="$HERE/../docs/agents/retros"
 # itself, and it does that from BOTH environments the launchers run in (the jail, with
 # tofu/kubeconfig; the coordinator image, with the pod's ServiceAccount).
 . "$HERE/kube.sh"
+# The stack→(PROJECT, MAIN_REPO) map — shared with retro-argo.yaml's guard (homelab#588),
+# so it has one home instead of two copies.
+. "$HERE/retro-project.sh"
 
 STACK="${1:?usage: retro-session <stack> --cell <harness>:<model> (--ledger <json> | --review <report.md>) [--deep-dive-k N]}"
 shift
@@ -46,11 +49,7 @@ while [ $# -gt 0 ]; do case "$1" in
 esac; done
 [ -n "$CELL" ] || { echo "FATAL: --cell <harness>:<model> required (e.g. claude:opus, goose:deepseek/deepseek-v4-pro)" >&2; exit 2; }
 HARNESS="${CELL%%:*}"; MODEL="${CELL#*:}"
-case "$STACK" in
-  oracle) PROJECT=oracle-fleet; MAIN_REPO=teststuffstash/oracle-fleet;;
-  sleep)  PROJECT=sleep-tracking; MAIN_REPO=teststuffstash/sleep-tracking;;
-  *) echo "FATAL: unknown stack '$STACK' (add its project/main-repo mapping here)" >&2; exit 2;;
-esac
+retro_project "$STACK" || exit 2
 
 # Next run id from the harvested reports (rN numbering is per-stack).
 LAST=$(ls "$RETROS" 2>/dev/null | grep -oE "${STACK}-r[0-9]+" | grep -oE '[0-9]+$' | sort -n | tail -1 || true)

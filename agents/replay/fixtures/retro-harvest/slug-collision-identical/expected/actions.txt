@@ -1,0 +1,4 @@
+CALL cp /tmp/report.md docs/agents/retros/2026-08-11-oracle-r3-claude-opus-a.md
+CALL cp /tmp/report.md docs/agents/retros/2026-08-11-oracle-r3-claude-opus-b.md
+OUT DEAD_NOTE: empty — nothing appended to the PR body
+RC 0
