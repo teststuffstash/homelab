@@ -73,7 +73,7 @@ evaluate() {
   if ! gh api "repos/${ORG}/${repo}/tarball/${ref}" > "$tree.tgz" 2>/dev/null \
      || ! tar -xzf "$tree.tgz" -C "$tree" --strip-components=1 2>/dev/null; then
     log "[$repo#$pr@$ref] FETCH FAILED — skipping (rule #6: loud, not silently green)"
-    metric "iac_sentinel_probe_failed{repo=\"$repo\"} 1"
+    metric "iac_sentinel_probe_failed{repo=\"$repo\",pr=\"$pr\"} 1"
     return 1
   fi
   t_fetch=$(( $(now_ms) - t0 ))
@@ -149,7 +149,7 @@ evaluate() {
     metric "iac_sentinel_violations{repo=\"$repo\",pr=\"$pr\",rule=\"gitleaks\"} 1"
   elif [ "$grc" -ne 0 ]; then
     log "[$repo#$pr@$ref] gitleaks TOOL ERROR (rc=$grc) — probe failed, not a finding"
-    metric "iac_sentinel_probe_failed{repo=\"$repo\"} 1"
+    metric "iac_sentinel_probe_failed{repo=\"$repo\",pr=\"$pr\"} 1"
     GITLEAKS_TOOL_ERROR=1
   fi
   t_gitleaks=$(( $(now_ms) - t0 ))
@@ -157,7 +157,12 @@ evaluate() {
   total=$(( t_fetch + t_path + t_collect + t_kyverno + t_gitleaks ))
   log "[$repo#$pr@$ref] engines(ms): fetch=$t_fetch path=$t_path collect=$t_collect(docs=$n_docs) kyverno=$t_kyverno gitleaks=$t_gitleaks total=$total violations=$VIOLATIONS"
   for e in fetch:$t_fetch path:$t_path collect:$t_collect kyverno:$t_kyverno gitleaks:$t_gitleaks; do
-    metric "iac_sentinel_engine_seconds{engine=\"${e%%:*}\",repo=\"$repo\"} $(python3 -c "print(${e##*:}/1000)")"
+    # ⚠ label sets must be UNIQUE across every evaluate() of ONE tick: the pushgateway rejects a
+    # body carrying duplicate-labeled samples WHOLESALE (probed live 2026-08-19: HTTP 400,
+    # "collected before with the same name and label values") — without `pr` here, any tick with
+    # ≥2 open PRs in one repo lost its ENTIRE push, heartbeat included (push_failure_time_seconds
+    # vs push_time_seconds on the group was the tell; IacSentinelSilent's first firing was this).
+    metric "iac_sentinel_engine_seconds{engine=\"${e%%:*}\",repo=\"$repo\",pr=\"$pr\"} $(python3 -c "print(${e##*:}/1000)")"
   done
   return 0
 }
