@@ -394,7 +394,7 @@ iac-lane.md §governance checkpoint.
   sweep across EVERY active repo finds these — not just the stack in flight.
 - **⚠ Two readers, one mirror.** `coordinator-scan.sh` reads the LIVE CLUSTER claim; the DOORBELLS
   (`coordinator-session.sh`, `agent-session.sh`) read `agents/stacks.json`. Sync the file on every
-  claim change until the doorbells read the cluster too — that is the real repair, not done.
+  claim change until the doorbells read the cluster too — the repair is **FU-178** (2026-08-19).
 - **⚠ "Written is not applied" — the tell is always the CALLER, not the config.** A label
   description >100 chars that never reached GitHub; a required check on a branch pattern no workflow
   triggered on; a `units` entry no gate could reach; a router class whose only caller is the worker

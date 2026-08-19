@@ -273,6 +273,50 @@ review rubrics (`.agents/review.md`) + fixer-facing context files; the detector-
 intake doctrine written into the meta skill. Retro/ledger harvest as issue sources DELIVERED
 2026-08-11 — retro r3's batch = 7 queued issues across 3 repos (FU-058).
 
+### The platform work map — stints before Goals (2026-08-19)
+
+**The FU tracker is not the roadmap** — by this repo's own doctrine the remaining work lives in a
+UNION of homes: FUs (next actions), the FSM gap registers (dispositioned guards), the
+[chainless charter](docs/agents/chainless-redesign.md)'s build order + flip acceptance, the
+banked ⚖ directions, and the [A5 governance pile](docs/agents/iac-lane.md). This map GROUPS and
+POINTS — status and detail stay with each home (one home per fact). It supersedes the transient
+Bucket A/B enumeration in `docs/agents/meta-state.md`.
+
+**Two soft rules govern cadence (operator, 2026-08-19):**
+
+- **Issues at the last possible moment, queued as soon as possible after.** An issue is for work
+  that gets solved SOON; future work waits here, not on the board (the motivating case: the
+  Renovate Goal #502, authored fully-formed 08-18 and then sitting behind five stints — closed
+  back into this map, its body preserved as the launch-time draft). A stint parent is authored
+  when its session is next; a Goal is authored at launch.
+- **Stints before Goals.** The jail-lane containers clear the ground the Goals ride on.
+
+**The stint queue** (jail-lane containers — [chainless §The jail stint](docs/agents/chainless-redesign.md)):
+
+| # | stint | pointers |
+|---|---|---|
+| S1 | platform retro split — **parent #587 authored**, next session, deadline Mon 08-24 (organic acceptance = the cron fire) | FU-058 |
+| S2 | replay cleanup completion: table-mode batches 2–4, suite fold-in, the #354 adversarial acceptance | FU-167 |
+| S3 | belts & lint upkeep: sentinel pushgateway blind, transport-lint signatures (in flight), ratchet unreplayed backfill | FU-176, homelab#564, the FSM `unreplayed` rows |
+| S4 | context & vocabulary: the role×context×source dedup + the mission rename sweep | FU-117, FU-163 |
+| S5 | corpus diet: doc-heat + measured trimming (`scripts/session-ctx.sh --big` is the instrument) | FU-164 |
+
+**Goal candidates** (authored AT LAUNCH, in rough order — the Goal dogfood begins here once the
+stints clear; the goal lane's pause conditions read met as of 2026-08-19):
+
+| # | Goal | scope pointers |
+|---|---|---|
+| G-A | **every role routes** — the chainless completion | charter build items 3–6 + flip acceptance 2–4; #516 family decorrelation; FU-127; FU-095 (a)/(c); FU-179 strike policy; FU-180 relates (accounting half) |
+| G-B | **assurance** — SLO error-budget teeth (ex-FU-104), the lens tail (ASVS/e-ITS + the blocking knob, ex-FU-101), the responder remediation dial (ex-FU-103), prober briefs/edges | [roles.md](docs/agents/roles.md) §SLO machinery, §Lenses, §responder, FU-102 |
+| G-C | **self-service & catalog** — the FU-039 program + XRDs superseding SERVICES.md | FU-039, FU-049 (§Programs above) |
+| G-D | **Renovate live for the platform stack** — charter drafted and preserved in closed #502; re-mint at launch | homelab#502 (closed, body = the draft) |
+
+**Deliberately elsewhere, on purpose** (a plan built from FUs alone is blind to these): the ⚖
+banked directions (workload-profiles/estimator-into-router — model-routing §M8 feed 4;
+probe-vs-e2e — roles.md §prober; the tier thesis), the A5 governance pile (iac-lane.md), the
+gap registers' accepted rows, and the §Open revisit-conditions in
+[docs/agents/README.md](docs/agents/README.md).
+
 ## Caching tier (nix + images LIVE)
 
 The **nix** leg is LIVE — an in-cluster pull-through cache (`argocd/resources/nix-cache/`,
