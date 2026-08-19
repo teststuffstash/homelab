@@ -1,0 +1,17 @@
+# FU-146 dispatch loop exit-1 arm (homelab#625, PR#631 follow-up)
+#
+# Exit code 1 is a REAL ERROR from coordinator-session.sh. It must propagate as the scan's exit
+# code, not be absorbed like exit 3. This fixture pins that contract.
+#
+# CONDITION UNDER REPLAY: The dispatch loop is run with the mocked coordinator-session returning
+# 1 on the first call. Expected: dispatch_rc captures 1, the elif branch catches it, and the loop
+# exits (no retry, no "trying next unit").
+#
+# THE CONTRACT: On exit 1, the scan exits 1 (not 0, not 3).
+name: fu146-dispatch-loop-exit1
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:fu146-dispatch-loop
+  - file:cases.sh

@@ -6,7 +6,7 @@
 #   3. Call "bash coordinator-session.sh ..."
 #   4. Use scan_phase and dispatch_phase functions
 #
-# We set up test data and mock coordinator-session.sh to return different exit codes.
+# We set up test data and mock coordinator-session.sh to return exit 1 (real error).
 HERE="${HERE:-.}"
 
 # Required variables set up once at the start of the fixture run
@@ -21,27 +21,26 @@ uharvest=""
 ORG="test"
 wipmap=""  # WIP map for repositories (empty for test)
 
-# Three test units: a c4c5 unit whose issue CLOSED since the list snapshot (the FU-121 skip —
-# PR#631 r2: it must mark the unit tried and DRAIN, never re-select it forever), then the
-# exit-3 racing pair. c4c5 outranks queued-dispatch in the clause priority, so it is selected
-# first; its skip must still leave the pass able to dispatch.
+# Three test units. Like the exit-3 fixture, the first is c4c5 (which is skipped due to FU-121),
+# the second is where we return exit 1 (real error).
 punits=""
 units="c4c5-redispatch|homelab|issue-77
 queued-dispatch|homelab|issue-100
 queued-dispatch|circles|issue-50"
 
-# Mock coordinator-session.sh — return 3 on first call, 0 on second
-# (This is the exit-3 test arm; exit-1 test is in fu146-dispatch-loop-exit1)
+# Mock coordinator-session.sh — return 1 (real error) on first call
+# (This is the exit-1 arm: the error propagates, loop exits)
 _mock_call_count=0
 bash() {
   if [ "$1" = "${HERE}/coordinator-session.sh" ]; then
     _mock_call_count=$((_mock_call_count + 1))
     if [ $_mock_call_count -eq 1 ]; then
-      echo "  [MOCK] coordinator-session.sh called for issue-100, returning exit 3 (FU-146 racing)"
-      return 3
+      echo "  [MOCK] coordinator-session.sh called for issue-100, returning exit 1 (real error)"
+      return 1
     else
-      echo "  [MOCK] coordinator-session.sh called for issue-50, returning exit 0 (success)"
-      return 0
+      # If we get here, the loop should have already exited with 1, so this should not be called
+      echo "  [MOCK] ERROR: coordinator-session.sh called a second time (should have exited on first call)"
+      return 1
     fi
   else
     command bash "$@"
