@@ -161,6 +161,9 @@ is stale, so it cannot drift the way the prose register did.
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `go-rail-latch` | table | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/strike-attribution-degrade` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/strike-attribution-init-tier-default` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/strike-attribution` | actions | - | `agents/agent-session.sh` | - |
 | `goal-ancestor` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-gate` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal` | table | - | `agents/agent-session.sh` | - |

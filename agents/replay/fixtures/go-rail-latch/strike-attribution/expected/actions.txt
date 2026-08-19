@@ -1,0 +1,2 @@
+OUT PASS: STRUCK_MODEL initialized correctly for strike attribution
+RC 0

@@ -1,0 +1,2 @@
+OUT PASS: tier-default rewrite synced STRUCK_MODEL (they remain in sync at init)
+RC 0
