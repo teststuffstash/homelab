@@ -7,8 +7,11 @@
 # installation, same private-key Secret — NOT a second copy of that ExternalSecret, just a second
 # generator + a second minted Secret with a narrower (read-only) permission set.
 #
-# ⚠️ SCAFFOLD — prereqs: apply AFTER agents/coordinator/git-token.yaml (which creates the
-# `agents-github-app` Secret this generator's privateKey references) and AFTER rbac.yaml:
+# Synced by the agent-coordinator ArgoCD app (registered in kustomization.yaml — FU-152 renders
+# this directory via kustomize with prune, so an unlisted manifest is never created). The kubectl
+# lines below are the pre-ArgoCD / disaster-recovery path only; ordering there matters:
+# apply AFTER git-token.yaml (which creates the `agents-github-app` Secret this generator's
+# privateKey references) and AFTER rbac.yaml:
 #   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
 #   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/git-token.yaml
 #   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/retro-git.yaml
