@@ -1,0 +1,26 @@
+# homelab#617 — loop-fetch-guard: coordinator session aborts when git token fetch fails
+#
+# CONDITION UNDER REPLAY. The LOOP_FETCH guard at coordinator-session.sh:131 must propagate
+# curl's exit status to the || operator. If it doesn't (the old form with `export`), a failed
+# token fetch is silently masked and the session starts BLIND with a degraded card (homelab#617
+# sighting, 2026-08-19 11:49:27Z, proxy unreachable during deploy roll).
+#
+# THE CONTRACT (two paths):
+#   1. fetch success — curl returns 0 and a token. LOOP_FETCH assignment+export succeeds,
+#      GH_TOKEN is set and exported, session continues (no "GUARD_FIRED" output).
+#   2. fetch fail — curl exits nonzero (7 = connection refused, 404 = not found, etc).
+#      Assignment propagates the error to ||, the guard fires, "GUARD_FIRED" is printed,
+#      and exit 1 aborts the session (no blind dispatch).
+#
+# The asymmetry between scan and session (both have the guard; only session had the bug) is that
+# the scan side uses a bare assignment (`GH_TOKEN="$(curl …)" || exit`) while the session side
+# used `export GH_TOKEN="$(curl …)" || exit`. export masks the substitution status, so the ||
+# never fired. The fix splits them: `GH_TOKEN="…" || …; export GH_TOKEN` so status propagates.
+#
+name: loop-fetch-guard
+mode: actions
+source: agents/coordinator-session.sh
+parts:
+  - file:bridge.sh
+  - block:loop-fetch-guard
+  - file:post.sh
