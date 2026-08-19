@@ -7,13 +7,15 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-175**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-181**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
   **FU-141 burned** — filed 2026-08-05 for un-reaped ephemeral OpenRouterKey CRs, retracted the
   same day: already **openrouter-operator#10**, and a fixer-enabled repo's own issue is where that
   belongs (routing table) — the prior-art grep covered this tracker but not the repo's issues.
+  **FU-175 burned** — skipped in numbering, never issued: FU-176/FU-177 were filed without
+  touching the counter (found by the PR#596 review reconciling it, 2026-08-19).
 - **An archive entry may stamp the date after the id or at the end of the entry** — both
   `- **FU-NNN** *(archived YYYY-MM-DD)* — …` and `- **FU-NNN** — … *(archived YYYY-MM-DD)*` are
   read by the freshness check. Prefer the first; it sorts and scans better.
@@ -227,6 +229,16 @@ the block needs pruning, not more headings.
 
 ### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
 
+- [ ] **FU-178** — **Two readers, one mirror: the doorbells read `agents/stacks.json` while the
+      scan reads the live cluster claim** — a claim change (chain redirect, knob flip) reaches
+      the scan in minutes and the doorbell side only when someone remembers to sync the file
+      (found live 2026-08-02: a redispatch rode the file's stale chain two hours after the claim
+      moved). Rescued 2026-08-19 (the untracked-work sweep — its only home was a meta-state durable
+      warning). **Next:** doorbell-side callers (`coordinator-session.sh`, `agent-session.sh`,
+      `coordinate-ring.sh`) read the cluster with the file as the probe-failed belt — the same
+      merge `stacks_json()` already does; or extract that seam for the launchers. Relates
+      FU-049 (generating the mirror), ADR-085.
+
 - [ ] **FU-168** — **The dispatch design revisit chartered at #278's closeout — the design half
       is ADR-106's (the A3 sitting); this item now tracks the build + soak.** (a) concurrency
       shipped 2026-08-12 (the A2 famine PR — doorbell collapse + `--detach` mutex scoping +
@@ -428,6 +440,24 @@ the block needs pruning, not more headings.
       post-deploy gate" + §"Auto-revert does NOT generalize". Relates FU-041, FU-102, FU-090.
 
 ### Models, cost & routing
+
+- [ ] **FU-179** — **The strike-policy decision gates `ROUTER_STRIKE_ENFORCE` (recording ON
+      since 2026-08-07, enforcement deliberately OFF).** [`model-routing.md`](agents/model-routing.md)
+      §M1a: the flaky-cheap-model evidence (3 deaths vs 3 clean retries on `lg` work) does not
+      support blacklist-on-strike; the open policy fork is blacklist vs retry-serially vs
+      fan-out-N-keep-first-survivor. Rescued from prose 2026-08-19 (the untracked-work sweep — the
+      "do not flip without deciding" line had no owner). **Next:** read the accumulated strike
+      table (weeks of data now exist), decide the policy in a routing sitting, then flip or
+      retire the env. Natural G-A (every-role-routes) scope. Relates FU-095, ADR-096.
+
+- [ ] **FU-180** — **Subscription budgets + fair-scheduling window shares (chainless
+      cost-rethink directions 3–4).** Goal budgets on the platform stack stay CAP-PHANTOM until
+      subscription budgets exist (#278 closed at $76/$60 phantom vs ~$0 real); the design —
+      work-conserving per-stack window shares, budgets metering TOTAL cost across roles/rails —
+      is [`chainless-redesign.md`](agents/chainless-redesign.md) §The cost rethink. Rescued
+      2026-08-19: its build home was "a later wave of #420", which closed at the stint pilot.
+      **Next:** the accounting half rides FU-131/#278's rail-aware summation; the scheduler
+      half is a design sitting before any Goal whose `Budget:` must be real. Relates FU-088.
 
 - [ ] **FU-161** — **Scout v3: variant filter + benchmark cross-check + typed cell-keyed canary
       verdicts.** Design: [`model-routing.md`](agents/model-routing.md) §M7 legs 1–5. Legs 1–2

@@ -94,6 +94,17 @@ That target is already partly real: the alert lane self-queues from the responde
 The remaining work is on the merge side — tier 1 dropping back to unowned once the IAC-G04 sentinel
 covers homelab — **not** on adding more checks before the launch.
 
+## Author at the last moment, queue at once (soft rule — operator, 2026-08-19)
+
+An issue is for work that gets solved SOON: **create it at the last possible moment, and queue
+it as soon as possible after creating it.** Future work — stint candidates, unlaunched Goals,
+program tails — lives in the [ROADMAP work map](../../ROADMAP.md) (§The platform work map), not
+on the board; a stint parent is authored when its session is next, a Goal at launch. Soft rule,
+not a gate: the cost it prevents is board sediment (the motivating case: the Renovate Goal
+homelab#502, authored fully-formed and then sitting behind five stints — closed back into the
+map with its body preserved as the launch draft). Companion ordering rule, same ruling: **stints
+before Goals**.
+
 ## Label semantics — `agent-fix` is SUITABILITY (ADR-109, 2026-08-17)
 
 The label's one meaning, ratified after four readers had drifted to four
