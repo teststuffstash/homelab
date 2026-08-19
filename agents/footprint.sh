@@ -17,19 +17,38 @@ fp_norm_entry() {
   printf '%s' "$_e"
 }
 
-# fp_replay_exempt <entry-or-path> → 0 iff it lives under agents/replay/ (path-boundary aware:
-# agents/replay-foo is NOT exempt). ADR-097 addendum (2026-08-18, the FU-167/FU-168 joint call,
-# operator-ruled): the replay tree is EXEMPT from footprint semantics on BOTH sides — the ADR-103
-# ratchet COMPELS a replay touch on every clause PR, so requiring its declaration was ceremony
-# that manufactured the unsatisfiable-footprint class (homelab#270/PR#275) and a governance block
-# on a compelled edit (PR#547), against ZERO real replay conflicts measured over 41 PRs. Content
-# safety is the review rubric's worlds-are-extraordinary rule + the ratchet, never path
+# fp_replay_exempt <entry-or-path> → 0 iff it is a COMPELLED COUNTERPART of clause work —
+# a file some required lint forces the PR to touch alongside the change it declares. ADR-097
+# addendum (2026-08-18, the FU-167/FU-168 joint call, operator-ruled; WIDENED 2026-08-19,
+# homelab#601, seat ruling under the same rationale): requiring a compelled edit's declaration
+# is ceremony that manufactures the unsatisfiable-footprint class (homelab#270/PR#275) and
+# governance blocks on edits the gates themselves demand (PR#547; PR#599 touched
+# state-fp-replay.sh + merge-path-fsm.yaml outside its Touches because the fingerprint suite
+# and the FSM replay: declarations MUST move with a fixture — homelab#601's evidence). The
+# three compelled classes, each path-boundary aware:
+#   agents/replay/**           — the ADR-103 ratchet compels a replay touch on every clause PR
+#   agents/*-test.sh, *-replay.sh — the suite pins; a moved extracted block compels the suite edit
+#   docs/agents/*-fsm.yaml/.md — the model's replay:/guard declarations + the REGENERATED view
+#                                 (merge-path-lint currency reds a stale one)
+# Content safety is the review rubric's worlds-are-extraordinary rule + the ratchet, never path
 # declaration. ONE predicate, two call sites with deliberately different verbs: fp_conflict
-# STRIPS declared replay entries (no intersection holds), touches_check SKIPS changed replay
+# STRIPS declared exempt entries (no intersection holds), touches_check SKIPS changed exempt
 # paths (never an escape) — stripping in only one place would invert the escape direction.
 fp_replay_exempt() {
   case "$(fp_norm_entry "$1")" in
     agents/replay | agents/replay/*) return 0 ;;
+  esac
+  # Suite pins + FSM models match on the LITERAL path (declarations of these are literal file
+  # names; changed paths always are). ⚠ case globs cross `/`, so the depth guard comes FIRST:
+  # only TOP-LEVEL agents/*-test.sh|*-replay.sh are the compelled suite class —
+  # agents/coordinator/responder-behaviour-test.sh is an ordinary declared surface, not exempt.
+  case "$1" in
+    agents/*/*) : ;;
+    agents/*-test.sh | agents/*-replay.sh) return 0 ;;
+  esac
+  case "$1" in
+    docs/agents/*/*) : ;;
+    docs/agents/*-fsm.yaml | docs/agents/*-fsm.md) return 0 ;;
   esac
   return 1
 }
