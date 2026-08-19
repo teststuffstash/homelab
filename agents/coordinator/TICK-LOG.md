@@ -4516,3 +4516,34 @@ first live ADR-110 maintenance session before the ADR existed.
   seat bursts stack in the same minutes. A truncated-tarball artifact of the same window made a
   local sentinel probe false-flag gitleaks on #667/#668 (docs=0 trees); reproduced clean +
   live statuses green — no leak, no live impact.
+
+## 2026-08-19 night — stint #661 originals COMPLETE; sentinel push-loss found+fixed by its own new belt
+
+- **Stint #661 (S2, replay cleanup):** all five originals done in one session. Batches 2–4
+  landed (PR#673 go-rail-latch 11→1 · PR#677 fu088-ladder+goal-budget-refusal · PR#681
+  retro-harvest+summary-comment — every stream byte-exact, one disclosed staging-path deviation
+  on retro-harvest, seat-accepted), suite fold-in PR#671 (5 harnesses → mode: suite, replay
+  index = the ONE runner/index now). **The #354 adversarial acceptance PASSED first try**:
+  PR#684 (bland, green, armed removal of the reroute-deny row) drew CHANGES_REQUESTED at
+  21:26Z naming the exact lost coverage + the worlds-are-extraordinary rule — unaided. Closed
+  unmerged. FU-167 + ROADMAP S2 updated; parent #661 stays open on the #678 sprout tail
+  (queued, fixer lane).
+- **The sentinel chain — a belt catching a real loss 14 min after shipping:** FU-176's
+  heartbeat (PR#670, + r2 review catch: heartbeat rides the cron-tick path only, a --tree
+  bench run must not reset the alert clock) → `IacSentinelSilent` FIRED at 20:44Z → root
+  cause: `evaluate()` emitted per-PR duplicate-labeled engine rows, so ANY ≥2-PR tick's whole
+  push was HTTP-400-rejected (probed live; group showed push_failure≈now vs push_time stuck
+  20:18Z) — every multi-PR tick had silently lost all sentinel metrics since forever. Fix
+  PR#682 (per-PR `pr=` labels; replayed a real 3-PR body → 200). Heartbeat live 21:22Z, alert
+  cleared 21:24Z. Also PR#680: gitleaks tool-error (rc≠9, e.g. missing binary=127) was counted
+  a VIOLATION — now a probe failure → error status (this was the earlier "gitleaks artifact").
+  Responder's independent #683 linked to the fix.
+- **Gate reads:** #668 (strike-attribution, fixes #660) — read against the corpus, conflict
+  (post-batch-2) resolved seat-side, admin-merged 21:31Z. #667/#669/#672/#679 rode the
+  machine lane clean. Board wave fully drained: #653/#655/#656/#657/#648/#660 all closed
+  tonight by fixer PRs; #654 dup-closed. Queue at entry: 8 triage + 5 backlog → at this
+  writing: #678 riding, backlog unchanged (deliberate parks).
+- **⚠ meta-throughput.sh false STALL at 21:29Z** ("last ride evidence none >48h" while rides
+  demonstrably merged all evening) — probe falseness, capacity + coordinate lanes verified
+  healthy in the same sweep (5h util 0, coordinate workflows flowing). Needs a probe fix —
+  issue filed.

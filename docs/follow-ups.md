@@ -331,13 +331,16 @@ the block needs pruning, not more headings.
       against the platform's own decision-table doctrine). Plan + evidence:
       [`agents/replay/README.md`](../agents/replay/README.md) §The cleanup contract (7 moves:
       world registry, table mode, generated register, pins metadata, family dirs, hermeticity,
-      suite fold-in). **Next:** execute moves 1–3 BEFORE the FU-168 fix round — its deliverables
-      ride this lock; the scan-side footprint exemption for `agents/replay/**` is decided with
-      FU-168. **Post-refactor acceptance (operator, 2026-08-13, from #354):** one adversarial
-      run — a PR that removes an existing assertion for no stated reason; the ORDINARY review
-      reflex (armed with the review.md worlds-are-extraordinary rule) must catch it unaided.
-      One run suffices (operator: not 1000 — residual risk = git blame + an eventual larger
-      periodic review). Relates ADR-097, ADR-103, FU-165, FU-168, #354.
+      suite fold-in). **Stint #661 executed the bulk (2026-08-19 night):** table batches 2–4
+      (go-rail-latch 11→1, fu088-ladder+goal-budget-refusal 5+5→2, retro-harvest+summary-comment
+      5+4→2 — PRs #673/#677/#681, every stream byte-exact) + move 7 (5 standalone harnesses →
+      `mode: suite`, PR#671). **The #354 post-refactor adversarial acceptance PASSED first try**
+      (PR#684: unexplained assertion removal, green+armed → CHANGES_REQUESTED naming the exact
+      lost coverage + the worlds-are-extraordinary rule; record on #666). **Next (fix-density,
+      no deadline):** move 1's maintenance half (`record` wrapper + `--rerecord`), move 4's
+      pins↔FSM bidirectional lint, straggler small families as touched; sprout homelab#678
+      (fold the #668 fixtures into the go-rail-latch table). Relates ADR-097, ADR-103, FU-165,
+      FU-168, #354, homelab#661.
 
 - [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
       broken.** A
