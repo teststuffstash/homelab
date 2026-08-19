@@ -1675,6 +1675,40 @@ def self_test() -> int:
     assert not any(r[0] == "opencode-go" and r[1] == "platform"
                    and r[3] == "opencode-go/deepseek-v4-flash" for r in unver), \
         f"a platform Go ride served under its repo ns must be VERIFIABLE, not unverifiable: {unver}"
+    # homelab#577: the DEPLOYED-POD fallback, exercised directly. The #575 fixture above is
+    # MASKED in CI — the committed agents/stacks.json already maps `homelab`→platform, so
+    # _stack_repos() satisfies its map before the run_reports loop runs and a broken
+    # _repo_from_session regex (the ONLY signal the deployed pod has: it mounts router.py alone
+    # via ConfigMap, stacks.json absent by construction) would pass green. Patch os.path.exists
+    # to hide stacks.json, seed the launcher's real pod-name shapes, and assert the run_reports
+    # loop alone resolves repo → AgentStack.
+    record_report({"session": "agent-sleep-iac-issue-42-r1", "task": "issue-42",
+                   "stack": "sleep", "role": "worker",
+                   "model": "opencode-go/deepseek-v4-flash", "rail": "opencode-go", "outcome": "pr"})
+    record_report({"session": "agent-agent-runtime-083012", "task": "adhoc-20260819T083012",
+                   "stack": "platform", "role": "worker",
+                   "model": "opencode-go/deepseek-v4-flash", "rail": "opencode-go", "outcome": "pr"})
+    assert _repo_from_session("agent-homelab-issue-575-r1") == "homelab", "issue shape"
+    assert _repo_from_session("agent-sleep-iac-issue-42-r1") == "sleep-iac", \
+        "dashed-repo issue shape"
+    assert _repo_from_session("agent-agent-runtime-083012") == "agent-runtime", "timestamp shape"
+    _sp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..",
+                       "agents", "stacks.json")
+    _orig_exists = os.path.exists
+    os.path.exists = (lambda p, _orig=_orig_exists, _sp=os.path.abspath(_sp):
+                      False if os.path.abspath(p) == _sp else _orig(p))
+    try:
+        _deployed = _stack_repos()
+    finally:
+        os.path.exists = _orig_exists
+    # With stacks.json hidden, the map is EXACTLY the run_reports.session rows that parsed — a
+    # superset here (all of stacks.json's repos) would mean the file leaked back into the branch,
+    # a subset/wrong key a broken regex. Both are the regression this branch exists to catch.
+    assert set(_deployed) == {"homelab", "sleep-iac", "agent-runtime"}, \
+        f"stacks.json must be ABSENT — only run_reports.session rows may resolve: {_deployed}"
+    assert _deployed["homelab"] == "platform", f"issue shape (#575 fixture): {_deployed}"
+    assert _deployed["sleep-iac"] == "sleep", f"dashed-repo issue shape: {_deployed}"
+    assert _deployed["agent-runtime"] == "platform", f"timestamp shape: {_deployed}"
     body = "\n".join(metrics_lines())
     assert 'router_run_model_drift_total{rail="openrouter",stack="sleep",role="worker",' \
            'requested="deepseek/deepseek-v4-flash",served="moonshotai/kimi-k3",provider="Moonshot"} 1' \
@@ -2164,10 +2198,11 @@ def self_test() -> int:
     assert 'router_shadow_subscription_blocked_total{reason="subscription-limited:semaphore"} 1' \
         in body, "the FU-088 gate holding the ladder off must be countable"
     summary = status_summary()
-    # 8 run_reports (t-1 is INSERT OR REPLACE'd, + t-2 clean, + t-3 the real producer shape,
-    # + the 5 M11 ladder-cell fixtures) and 3 strikes (issue-9/sleep from the vocabulary fixture,
-    # issue-19/circles from the real one, issue-42/sleep from the ladder's degradation step).
-    assert summary["rows"]["run_reports"] == 13 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575
+    # 10 run_reports (t-1 is INSERT OR REPLACE'd, + t-2 clean, + t-3 the real producer shape,
+    # + the 5 M11 ladder-cell fixtures, + the 2 homelab#577 deployed-pod pod-name shapes) and 3
+    # strikes (issue-9/sleep from the vocabulary fixture, issue-19/circles from the real one,
+    # issue-42/sleep from the ladder's degradation step).
+    assert summary["rows"]["run_reports"] == 15 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
