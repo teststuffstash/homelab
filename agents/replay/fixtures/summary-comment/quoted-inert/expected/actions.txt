@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/circles/issues/630/comments --paginate
+CALL gh api --method PATCH repos/teststuffstash/circles/issues/comments/5231000042 -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-19T10:40:38Z` · **round 1 complete** — investigated the marker detection logic <!-- agent-event kind=stats ts=2026-08-19T10:40:38Z -->\n- `2026-08-19T11:05:00Z` · **round 2 complete** — deployment stable, all metrics green <!-- agent-event kind=stats ts=2026-08-19T11:05:00Z -->
+OUT RETURN 0
+OUT REACHED: end
+RC 0

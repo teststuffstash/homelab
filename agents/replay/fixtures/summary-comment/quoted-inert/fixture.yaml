@@ -1,0 +1,32 @@
+# homelab#630 — the marker detection must be anchored to the start of the body.
+#
+# CONDITION UNDER REPLAY. An issue has TWO comments:
+#   1. A REAL summary comment created by mc_event (id 5231000042), with `<!-- agent-summary -->`
+#      at the start of the body
+#   2. A QUOTED comment that mentions the marker inline (id 5231000100), but does NOT have it at
+#      the start — this is not a summary comment and should NOT be counted as a duplicate or target
+#      for append.
+#
+# BEFORE THE FIX: `contains` would match the marker anywhere, so the quoted comment would:
+#   - Count as a duplicate (false positive warning)
+#   - Potentially become the append target if it were older than the real summary comment
+#
+# AFTER THE FIX: `startswith` anchors to the body's first line:
+#   - Only the real summary comment is found
+#   - No duplicate warning
+#   - Append targets the real summary comment correctly
+#
+# THE TEST:
+#   1. Read timeline with one REAL summary comment (oldest) and one QUOTED comment (newer)
+#   2. Call mc_event to append an event
+#   3. Verify ONE PATCH (to the real summary comment), NO POST (create), NO duplicate warning
+#   4. Verify the patched body contains both the original content + the new event
+#   5. Verify stderr does NOT report a duplicate
+#
+name: summary-comment-quoted-inert
+mode: actions
+parts:
+  - file:bridge.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_NUMBER=630

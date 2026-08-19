@@ -1,0 +1,12 @@
+[
+  {
+    "id": 5231000042,
+    "created_at": "2026-08-19T10:40:38Z",
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-19T10:40:38Z` · **round 1 complete** — investigated the marker detection logic <!-- agent-event kind=stats ts=2026-08-19T10:40:38Z -->"
+  },
+  {
+    "id": 5231000100,
+    "created_at": "2026-08-19T10:50:00Z",
+    "body": "This comment discusses the fix: we need to anchor the search for `<!-- agent-summary -->` to the start of the body, not match it anywhere with `contains`. The issue mentions this marker, but it's inline, not at the start."
+  }
+]
