@@ -415,6 +415,10 @@ went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merg
   the poll tick is 15min — **parallel steps start paying only when serial engine time reaches
   the job-overhead scale (~10s+)**, i.e. after the v2 render pass (helm templating per chart is
   the expensive step) or ~10× policy growth; revisit against `iac_sentinel_engine_seconds` then.
+  **Sentinel freshness keys on `iac_sentinel_last_run_timestamp_seconds`** (per-tick heartbeat,
+  pushed on every tick incl. zero-PR ones — FU-176: the pushgateway replaces the whole group per
+  push, so engine rows legitimately vanish on quiet ticks and are NOT a health signal;
+  `IacSentinelSilent` alerts on >30m of heartbeat silence).
   This — not review — is what closes IAC-G01, because rollback is structurally blind to
   silent security holes (a public bucket never degrades a KPI).
 - **L1 — pre-merge rendered diff:** master-vs-branch manifest diff as a PR comment — grounds any

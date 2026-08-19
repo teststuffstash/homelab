@@ -157,34 +157,13 @@ is stale, so it cannot drift the way the prose register did.
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
 | `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
-| `fu088-ladder/anthropic` | actions | - | `agents/agent-session.sh` | - |
-| `fu088-ladder/both` | actions | - | `agents/agent-session.sh` | - |
-| `fu088-ladder/go` | actions | - | `agents/agent-session.sh` | - |
-| `fu088-ladder/run-shape` | actions | - | `agents/agent-session.sh` | - |
-| `fu088-ladder/unthreadable` | actions | - | `agents/agent-session.sh` | - |
+| `fu088-ladder` | table | - | `agents/agent-session.sh` | - |
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
-| `go-rail-latch/clear` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/defer` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/failover-model-sync` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/reroute-deny` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/reroute-envoptout` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/reroute-model-mismatch` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/reroute-nonfix` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/reroute-optout` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/reroute-run-shape` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/reroute-unthreadable` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/reroute` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/strike-attribution-degrade` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/strike-attribution-init-tier-default` | actions | - | `agents/agent-session.sh` | - |
-| `go-rail-latch/strike-attribution` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch` | table | - | `agents/agent-session.sh` | - |
 | `goal-ancestor` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-gate` | table | - | `agents/agent-session.sh` | - |
-| `goal-budget-refusal/first-touch` | actions | - | `agents/agent-session.sh` | - |
-| `goal-budget-refusal/interleaved` | actions | - | `agents/agent-session.sh` | - |
-| `goal-budget-refusal/legacy` | actions | - | `agents/agent-session.sh` | - |
-| `goal-budget-refusal/unchanged` | actions | - | `agents/agent-session.sh` | - |
-| `goal-budget-refusal/unreadable` | actions | - | `agents/agent-session.sh` | - |
+| `goal-budget-refusal` | table | - | `agents/agent-session.sh` | - |
 | `goal` | table | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 IL-T19 IL-T20 IL-T21 IL-T22 |
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
@@ -442,15 +421,18 @@ The block under replay is `agent-session.sh`'s budget pre-flight refusal, which 
 through that helper's three I/O seams, and those go to the PATH-shim `gh` — so find-or-create lands
 in the action stream for free and no seam needs shadowing. Two things worth copying:
 
-- **Hold the invocation constant and vary the WORLD.** All five bridges set the same six launcher
-  variables; what differs is what the goal's timeline already carries. That is where the bug was
-  (the dedup read only the LAST comment, so one interleaved `goal-review` re-admitted the refusal),
-  and a family that varied the call instead would have pinned five call sites and no world.
+- **Hold the invocation constant and vary the WORLD.** Every row's bridge sets the same six
+  launcher variables (`mode: table` since #661 made this literal — one shared bridge, five
+  `rows/<id>/` overlays); what differs is what the goal's timeline already carries. That is where
+  the bug was (the dedup read only the LAST comment, so one interleaved `goal-review` re-admitted
+  the refusal), and a family that varied the call instead would have pinned five call sites and no
+  world.
 - **A level-triggered clause needs its SILENT arms pinned, not just its loud one.** The interesting
   streams here are the four that add no comment: the edit when the numbers move, the adoption of a
   pre-marker refusal left by the old code, the no-op when nothing moved, and the fail-closed when
-  the timeline is unreadable (`STUB_GH=fail`, hence no `world/` in that directory). Pin only the
-  first-touch create and every re-spam regression is free to come back.
+  the timeline is unreadable (`STUB_GH=fail`, hence no `rows/unreadable/` overlay — there is
+  nothing to record for a call that never returns). Pin only the first-touch create and every
+  re-spam regression is free to come back.
 
 `fixtures/goal-ancestor-*` (homelab#367) are the eleventh family and the first whose subject is a
 LOOKUP rather than a computation: which of a ride's ancestors is the goal, walked by

@@ -36,6 +36,14 @@ metric() { METRICS="${METRICS}$1\n"; }
 
 push_metrics() {
   [ -n "$PUSHGATEWAY" ] || return 0
+  # FU-176: an empty body must never reach the gateway — a push REPLACES the whole
+  # job/iac-sentinel group, and a zero-PR tick's empty body used to WIPE
+  # iac_sentinel_engine_seconds (2026-08-18: a clean board read as "sentinel blind" while the
+  # sentinel was healthy). The cron-tick path appends the heartbeat before calling here; a
+  # bench/--tree invocation must NOT (it would reset IacSentinelSilent's clock mid-outage —
+  # PR#670 review), and its evaluate() always emits engine/probe rows, so nothing here can be
+  # empty — the guard below is the belt for any future metric-less caller.
+  [ -n "$METRICS" ] || { log "push_metrics: nothing to push (empty body would wipe the group — FU-176)"; return 0; }
   printf '%b' "$METRICS" | curl -fsS --max-time 10 --data-binary @- \
     "${PUSHGATEWAY}/metrics/job/iac-sentinel" >/dev/null 2>&1 \
     || log "pushgateway push failed (metrics stay in logs)"
@@ -57,6 +65,7 @@ post_status() {
 evaluate() {
   repo="$1"; ref="$2"; pr="$3"; author="$4"
   VIOLATIONS=0
+  GITLEAKS_TOOL_ERROR=0
   tree="$WORK/${repo}-${ref}"
   t0=$(now_ms)
   mkdir -p "$tree"
@@ -127,12 +136,21 @@ evaluate() {
   t0=$(now_ms)
   # --config from the sentinel's own clone: gitleaks would otherwise auto-read the SCANNED
   # tree's .gitleaks.toml, letting a hostile PR allowlist its own leak.
-  if ! gitleaks detect --no-git --source "$tree" --no-banner --exit-code 9 \
-         --config "$POLICY_DIR/gitleaks.toml" >/dev/null 2>&1; then
-    # exit 9 = leaks found (set explicitly so tool errors ≠ findings)
+  gitleaks detect --no-git --source "$tree" --no-banner --exit-code 9 \
+    --config "$POLICY_DIR/gitleaks.toml" >/dev/null 2>&1
+  grc=$?
+  # exit 9 = leaks found — set explicitly so tool errors ≠ findings, and CONSUMED as such
+  # (2026-08-19: the old `if ! gitleaks` counted ANY nonzero — a missing/broken binary (127) or
+  # a config error read as "secret material in the tree" and would post a failure status with a
+  # bogus reason; a tool error is a PROBE failure → error status, healed next tick).
+  if [ "$grc" -eq 9 ]; then
     VIOLATIONS=$((VIOLATIONS + 1))
     log "[$repo#$pr@$ref] VIOLATION gitleaks: secret material in the tree (details withheld from logs)"
     metric "iac_sentinel_violations{repo=\"$repo\",pr=\"$pr\",rule=\"gitleaks\"} 1"
+  elif [ "$grc" -ne 0 ]; then
+    log "[$repo#$pr@$ref] gitleaks TOOL ERROR (rc=$grc) — probe failed, not a finding"
+    metric "iac_sentinel_probe_failed{repo=\"$repo\"} 1"
+    GITLEAKS_TOOL_ERROR=1
   fi
   t_gitleaks=$(( $(now_ms) - t0 ))
 
@@ -158,7 +176,11 @@ for repo in $SENTINEL_REPOS; do
   while read -r num sha author; do
     [ -n "$num" ] || continue
     if evaluate "$repo" "$sha" "$num" "$author"; then
-      if [ "$VIOLATIONS" -eq 0 ]; then
+      if [ "${GITLEAKS_TOOL_ERROR:-0}" -ne 0 ]; then
+        # an engine that could not run means the verdict is INCOMPLETE — fail closed as a probe
+        # error (never success, and never a "violation" with a bogus reason); next tick retries.
+        post_status "$repo" "$sha" error "sentinel probe failed (gitleaks tool error) — retries next tick"
+      elif [ "$VIOLATIONS" -eq 0 ]; then
         post_status "$repo" "$sha" success "0 violations (kyverno + gitleaks + path-rule)"
       else
         post_status "$repo" "$sha" failure "$VIOLATIONS violation(s) — details in the iac-sentinel workflow logs"
@@ -172,4 +194,10 @@ for repo in $SENTINEL_REPOS; do
 $prs
 EOF2
 done
+# FU-176: the per-tick heartbeat — CRON-TICK PATH ONLY (never --tree: a manual bench run with
+# PUSHGATEWAY set would reset IacSentinelSilent's staleness clock and mask the outage being
+# debugged). Appending it here also guarantees a zero-PR tick pushes a non-empty body, which is
+# what stops the group wipe. Freshness keys on this metric (iac-lane.md §L0b); engine rows exist
+# only for ticks that evaluated a PR.
+metric "iac_sentinel_last_run_timestamp_seconds $(date +%s)"
 push_metrics

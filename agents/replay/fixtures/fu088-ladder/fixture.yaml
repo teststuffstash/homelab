@@ -1,0 +1,24 @@
+# fu088-ladder — THE FAMILY (homelab#439 leg 2), as one decision table (5 dirs → 1 family).
+#
+# THE CONTRACT: `agent-session.sh`'s fu088-gates block, `*)` arm — every claude-harness ride that
+# is NOT an opencode-go/* dispatch consults the ONE ladder (`subscription-latch.sh --pick-rail`)
+# instead of probing the Anthropic latch alone. Anthropic clear → proceed as dispatched, untouched,
+# no Go probe (a direct probe trips the curl tripwire — `anthropic`). Anthropic latched, Go clear →
+# FAIL OVER: thread the Go rail's model into RUN_CMD in place, on whichever of the two threadable
+# pod-command shapes this ride carries (`go`, `run-shape`) — and when the command is NEITHER shape,
+# defer rather than dispatch a pod that announces a rail it cannot actually serve (`unthreadable`,
+# finding 2). Both rails latched → defer, report-only, the same burn-saver either way (`both`).
+#
+# Shapes live as worlds (bridge.sh's own header has the detail): worlds/worker-shape (recipe/worker,
+# `--model haiku ` already in RUN_CMD) shared by anthropic/both/go; worlds/retro-run-shape (a `--run`
+# string with no --model flag) for run-shape; worlds/goose-run-shape (neither shape) for
+# unthreadable. `post.sh`'s RUN_CMD echo is a family part for every row — it never fires for
+# both/unthreadable (the block exits first), which is exactly the absence those two rows assert.
+name: fu088-ladder
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu088-gates
+  - file:post.sh
+rows: rows.psv

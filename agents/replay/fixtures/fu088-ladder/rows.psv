@@ -1,0 +1,7 @@
+# fu088-ladder — the decision table (family contract in fixture.yaml; homelab#439 leg 2).
+# id             | world              | patch (relpath @ patches/*.jq) | env                                        | expect         | params
+anthropic        | worker-shape       |                                 | STUB_RAIL=anthropic                        | anthropic      |
+both             | worker-shape       |                                 | STUB_RAIL= STUB_RAIL_RC=1                  | both           |
+go               | worker-shape       |                                 | STUB_RAIL=opencode-go/deepseek-v4-flash    | go             |
+run-shape        | retro-run-shape    |                                 | STUB_RAIL=opencode-go/deepseek-v4-flash    | run-shape      |
+unthreadable     | goose-run-shape    |                                 | STUB_RAIL=opencode-go/deepseek-v4-flash    | unthreadable   |
