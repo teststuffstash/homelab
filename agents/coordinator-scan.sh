@@ -2497,12 +2497,12 @@ EOF_GUARDED
     # >>>REPLAY:fu146-dispatch-loop>>>
     tried_units=""
     dispatch_succeeded=""
+    # FU-110: pinned queued-dispatch units go FIRST WITHIN their clause — prepending is safe
+    # because the clause loop below greps by clause name, so higher-priority clauses (in-flight
+    # recovery etc.) still win regardless of position.
+    units="${punits}${units}"
     while [ -z "$dispatch_succeeded" ]; do
       unit=""
-      # FU-110: pinned queued-dispatch units go FIRST WITHIN their clause — prepending is safe
-      # because the clause loop below greps by clause name, so higher-priority clauses (in-flight
-      # recovery etc.) still win regardless of position.
-      units="${punits}${units}"
       # Priority: in-flight recovery first, then merge-path exceptions, then CLOSE loops on merged
       # work (C6 — cheap bookkeeping that keeps state honest), and only then open NEW work.
       # goal-decompose sits just BEFORE queued-dispatch: it opens new work like a queued issue does,
@@ -2732,10 +2732,11 @@ EOF_GUARDED
       # won the (repo, item) key. The refusal is CORRECT; its rendering as a red workflow is
       # the problem — 34 red workflows in 16h bury 4 real failures. Retry the next unit (or
       # exit 0 if none); never propagate exit 3 as the scan's exit code.
+      dispatch_rc=0
       bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
         --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
-        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uharvest}"
-      dispatch_rc=$?
+        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uharvest}" \
+        || dispatch_rc=$?
       if [ $dispatch_rc -eq 3 ]; then
         echo "  FU-146: exit 3 — ${name}/${urepo}/${uitem} taken by racing dispatcher; trying next unit"
         tried_units="${tried_units} ${unit}"
@@ -2748,7 +2749,7 @@ EOF_GUARDED
       fi
       scan_phase deterministic
     done
-    # <<<REPLAY:fu146-dispatch-loop>>>
+    # <<<REPLAY:fu146-dispatch-loop<<<
   else
     echo "  run it (interactive, supervised):"
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"
