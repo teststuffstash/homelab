@@ -161,6 +161,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fu088-ladder/go` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder/run-shape` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder/unthreadable` | actions | - | `agents/agent-session.sh` | - |
+| `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `go-rail-latch/clear` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/defer` | actions | - | `agents/agent-session.sh` | - |
