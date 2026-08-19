@@ -1,7 +1,8 @@
 OUT → dispatching item unit for test-stack: homelab issue-100 (queued-dispatch, model sonnet, wip 1)…
 OUT   [MOCK] coordinator-session.sh called for issue-100, returning exit 3 (FU-146 racing)
 OUT   FU-146: exit 3 — test-stack/homelab/issue-100 taken by racing dispatcher; trying next unit
-OUT   actionable items but no dispatchable unit (context-only repos / gated) — report-only.
+OUT → dispatching item unit for test-stack: circles issue-50 (queued-dispatch, model sonnet, wip 1)…
+OUT   [MOCK] coordinator-session.sh called for issue-50, returning exit 0 (success)
 OUT TEST: exit 3 — racing dispatcher won, should retry next unit
 OUT TEST RESULT: dispatch_succeeded=1, tried_units=' queued-dispatch|homelab|issue-100'
 OUT REACHED: end

@@ -2510,11 +2510,14 @@ EOF_GUARDED
       # its children exist at all (leg (c), 2026-08-05). It stays BELOW every recovery and merge-path
       # clause — an in-flight failure is always more urgent than planning the next thing.
       for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout goal-checkpoint goal-decompose queued-dispatch; do
-        unit="$(printf '%b' "$units" | grep -m1 "^${clause}|" || true)"
-        # Skip units we've already tried this pass (FU-146 racing refusals)
-        if [ -n "$unit" ]; then
-          case " $tried_units " in *" $unit "*) unit="";; esac
-        fi
+        # First candidate of THIS clause not yet tried this pass (PR#631 r1: `grep -m1` against
+        # the unmodified $units re-found the same skipped line forever, so a clause with two
+        # units never drained past its first — the loop fell through to lower-priority clauses
+        # while same-clause work sat dispatchable). The subshell only READS tried_units.
+        unit="$(printf '%b' "$units" | grep "^${clause}|" | while IFS= read -r cand; do
+          case " $tried_units " in *" $cand "*) continue;; esac
+          printf '%s\n' "$cand"; break
+        done || true)"
         [ -n "$unit" ] && break
       done
       if [ -z "$unit" ]; then
