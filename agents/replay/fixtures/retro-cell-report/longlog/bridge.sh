@@ -3,7 +3,7 @@
 # $PWD is the fixture directory — run.sh cds into it — so the committed log stands in for the one
 # `tee` wrote in the pod.
 RIDE_LOG="$PWD/ride.log"
-CELL="goose:deepseek/deepseek-v4-pro"
+CELL="claude:opus"
 
 # The block now calls `bash agents/retro-report-floor.sh` at the relative path the real script
 # resolves it at (cwd = /work/homelab after the `cd` above it). Stage the REAL helper at that same

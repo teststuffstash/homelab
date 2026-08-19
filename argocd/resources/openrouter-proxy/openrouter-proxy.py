@@ -1182,6 +1182,8 @@ def _go_capacity_latch(code: int, retry_after: float | None = None) -> str:
         if first:
             _go_cap["since"] = now
             _go_cap["count"] += 1
+        # homelab#618: persist the latch so a proxy restart doesn't forget it
+        router.go_latch_save(_go_cap)
     if first:
         log(f"Go rail capacity DOWN ({reason}) for {hold:.0f}s — /opencode-limit now serves "
             f"limited=true, the gate defers AT the real wall (observed {code} from GO_UPSTREAM, "
@@ -1197,6 +1199,8 @@ def _go_capacity_clear(why: str) -> str:
             return ""
         reason, _go_cap["until"], _go_cap["reason"], _go_cap["code"] = \
             _go_cap["reason"], 0.0, "", 0
+        # homelab#618: clear the persisted latch so it doesn't re-appear on restart
+        router.go_latch_save(_go_cap)
     log(f"Go 2xx while capacity-latched ({reason}) — latch cleared early ({why})")
     return "+go-capacity-cleared"
 
@@ -2457,6 +2461,15 @@ def main() -> int:
                     _latch[k] = saved[k]
         if float(saved.get("until") or 0) > time.time():
             log(f"restored ACTIVE 429 latch from store (until={saved['until']:.0f})")
+    # homelab#618: restore Go capacity latch so a proxy roll doesn't forget an active 429/402 hold
+    go_saved = router.go_latch_load()
+    if go_saved:
+        with _go_cap_lock:
+            for k in ("until", "reason", "code"):
+                if go_saved.get(k) is not None:
+                    _go_cap[k] = go_saved[k]
+        if float(go_saved.get("until") or 0) > time.time():
+            log(f"restored ACTIVE Go capacity latch from store (until={go_saved['until']:.0f})")
     if ROUTER_ACCOUNT_REF and RANKINGS_POLL_S > 0:
         threading.Thread(target=_rankings_loop, daemon=True).start()
     if HEADROOM_POLL_S > 0:  # ADR-096 P2: per-key OpenRouter headroom (enrolled refs)

@@ -1,4 +1,4 @@
-ERR CELL FAILED: no BEGIN/END-RETRO-REPORT block in this cell's OWN ride log (goose:deepseek/deepseek-v4-pro).
+ERR CELL FAILED: no BEGIN/END-RETRO-REPORT block in this cell's OWN ride log (claude:opus).
 ERR   The ride exited 0, so the session died CLEAN — at the exit code a provider
 ERR   error before the first turn is indistinguishable from a finished run.
 ERR   floor check: no-markers
