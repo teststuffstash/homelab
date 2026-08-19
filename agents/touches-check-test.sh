@@ -51,10 +51,21 @@ test_escapes "no escapes — multiple entries exact match" \
 
 # ── CASE 4: Undeclared Touches (empty string) — all paths escape ──────────────────────────
 # No declared Touches means everything escapes.
+# ⚠ Expectation changed 2026-08-19 (homelab#601): the fsm.md path this case used as an expected
+# escape became a COMPELLED-counterpart exempt class, so the path swapped to a non-exempt doc —
+# the case's own concern (undeclared → everything else escapes) is unchanged.
 test_escapes "undeclared — all paths escape" \
   "" \
-  "$(printf 'agents/touches-check.sh\ndocs/agents/issue-lifecycle-fsm.md\nargocd/resources/example.yaml\n')" \
-  "$(printf 'agents/touches-check.sh|governance\ndocs/agents/issue-lifecycle-fsm.md\nargocd/resources/example.yaml\n')"
+  "$(printf 'agents/touches-check.sh\ndocs/agents/workflow.md\nargocd/resources/example.yaml\n')" \
+  "$(printf 'agents/touches-check.sh|governance\ndocs/agents/workflow.md\nargocd/resources/example.yaml\n')"
+
+# ── CASE 4b: compelled counterparts exempt in the undeclared branch too (homelab#601) ──────
+# Suite pins + FSM model/view paths never escape — same both-branches contract as the replay
+# tree (a compelled edit is compelled regardless of what the issue declared).
+test_escapes "compelled counterparts exempt when undeclared" \
+  "" \
+  "$(printf 'agents/state-fp-replay.sh\ndocs/agents/merge-path-fsm.yaml\ndocs/agents/merge-path-fsm.md\nagents/board-test.sh\n')" \
+  ""
 
 # ── CASE 5: Undeclared Touches (sentinel "*") — all paths escape ──────────────────────────
 # The wildcard sentinel * (used for issues without a Touches line) matches everything,

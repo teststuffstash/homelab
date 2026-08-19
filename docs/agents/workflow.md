@@ -290,7 +290,9 @@ predicate gains footprint intersection in place of `lane-free`:
   belt matches); hard per-repo max (default 3) and the ≤3-open-PR bound (updater churn is
   O(open PRs × merges) — oracle TRACKS rule 1) hold regardless of footprints; FU-088 capacity
   semaphore caps globally.
-- **`agents/replay/**` is EXEMPT from footprint semantics on both sides** (ADR-097 addendum,
+- **The COMPELLED-COUNTERPART classes are EXEMPT from footprint semantics on both sides** —
+  `agents/replay/**`, top-level `agents/*-test.sh`/`*-replay.sh` suite pins, and
+  `docs/agents/*-fsm.{yaml,md}` (ADR-097 addendum 2, 2026-08-19/homelab#601 widening the
   2026-08-18 — the FU-167/FU-168 joint call, operator-ruled): declared replay entries are
   stripped from the intersection (a replay-only footprint holds nothing and is held by nothing),
   and changed replay paths are never `Touches:` escapes, governance or otherwise. One predicate

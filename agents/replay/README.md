@@ -182,6 +182,8 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
+| `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
+| `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `opencode-phonehome-killswitch/opencode-phonehome-killswitch` | suite | - | `-` | - |
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/clear` | actions | - | `agents/subscription-latch.sh` | - |

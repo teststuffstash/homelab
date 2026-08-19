@@ -157,5 +157,41 @@
       "is_bot": false,
       "login": "RasmusSoot"
     }
+  },
+  {
+    "number": 209,
+    "title": "seat pr merge conflict",
+    "labels": [
+      {
+        "name": "merge-conflict"
+      }
+    ],
+    "createdAt": "2026-08-16T00:00:00Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "isDraft": false,
+    "autoMergeRequest": null,
+    "latestReviews": [],
+    "author": {
+      "is_bot": false,
+      "login": "RasmusSoot"
+    }
+  },
+  {
+    "number": 210,
+    "title": "bot pr merge conflict",
+    "labels": [
+      {
+        "name": "merge-conflict"
+      }
+    ],
+    "createdAt": "2026-08-16T00:00:00Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "isDraft": false,
+    "autoMergeRequest": null,
+    "latestReviews": [],
+    "author": {
+      "is_bot": true,
+      "login": "homelab-agents[bot]"
+    }
   }
 ]

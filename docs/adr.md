@@ -1214,6 +1214,14 @@ stays with the review rubric's worlds-are-extraordinary rule, the ratchet itself
 **Considered:** per-family disjoint declarations (FU-167 move 5 still lands, for dedup/ownership
 — but the ceremony would remain); an authoring-side lint enforcing the clause-file↔replay pairing
 (unnecessary once nothing needs declaring — deliberately NOT built).
+**Addendum 2 — the sibling compelled classes (2026-08-19, homelab#601, seat ruling under the
+same rationale):** the exemption widens to the two OTHER files the gates themselves compel a
+clause PR to touch — top-level `agents/*-test.sh`/`*-replay.sh` suite pins (a moved extracted
+block compels the suite edit) and `docs/agents/*-fsm.{yaml,md}` (the model's `replay:`
+declarations plus the regenerated view merge-path-lint reds when stale). Evidence: PR#599's
+ride was compelled outside its `Touches:` by exactly these two, one day after the first
+addendum. Depth-guarded — nested suite scripts (`agents/coordinator/*-test.sh`) and non-fsm
+docs stay ordinary declared surfaces. One predicate (`fp_replay_exempt`), both consumers.
 
 ### ADR-098 — Recipe validity is a platform gate, not a stack CI check
 

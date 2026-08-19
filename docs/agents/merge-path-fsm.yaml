@@ -213,10 +213,16 @@ transitions:
     owner: updater labels merge-conflict → coordinator item unit
     when: "merge_conflict_422"
     status: guarded
-    unreplayed: "one-line scan clause emit — fixture on its next touch"
+    replay:
+      - agents/replay/fixtures/merge-conflict/clause
+      - agents/replay/fixtures/merge-conflict/debounced
     guards:
       - desc: "scan emits the merge-conflict clause as a work unit"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merge-conflict\|' }
+      - desc: "WORKER_AUTHOR-scoped like changes-requested (homelab#595): a seat-authored conflict PR emits a report line, never a unit — the seat's own push is the next mover"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'homelab#595' }
+      - desc: "unchanged-state debounce on the worker-authored leg (the #198 fingerprint pair)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "merge-conflict DEBOUNCED" }
 
   - id: MP-T07
     name: fix round on the PR's own branch
