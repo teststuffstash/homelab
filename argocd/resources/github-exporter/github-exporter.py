@@ -1553,15 +1553,19 @@ def collect_issue_lifecycle(lines):
         "# HELP github_issue_done_at Epoch when the issue was closed (the wall time for queued→done).",
     ]
     for repo in repos:
-        # Search for issues closed in the window — closed:>={since}
-        path = f"/repos/{ORG}/{repo}/issues?state=closed&sort=updated&direction=desc&closed=%3E%3D{since}"
+        # Fetch closed issues and filter by window client-side (closed param not supported on this endpoint)
+        path = f"/repos/{ORG}/{repo}/issues?state=closed&sort=updated&direction=desc"
         try:
-            for issue in gh_paged(path, "items"):
+            window_cutoff = epoch(since)
+            for issue in gh_paged(path, None):
                 if not issue or issue.get("pull_request"):
                     continue  # skip PRs (they appear in issues list too)
                 number = issue.get("number")
                 closed_at = issue.get("closed_at")
                 if not (number and closed_at):
+                    continue
+                # Filter to window: only issues closed within WINDOW_HOURS
+                if epoch(closed_at) < window_cutoff:
                     continue
                 # Get label timeline for this issue to find first agent/queued application
                 try:
@@ -2148,15 +2152,15 @@ def self_test():
     # A fixture issue with a re-queue: first agent/queued application at T1, removed at T2,
     # re-applied at T3. Only T1 should be recorded (first-epoch rule). Closed at T4.
     _FIXTURE_ISSUE_LIFECYCLE_EVENTS = [
-        {"event": "labeled", "label": {"name": "agent/queued"}, "created_at": "2026-08-15T08:00:00Z"},
-        {"event": "unlabeled", "label": {"name": "agent/queued"}, "created_at": "2026-08-15T08:30:00Z"},
-        {"event": "labeled", "label": {"name": "agent/queued"}, "created_at": "2026-08-15T09:00:00Z"},
-        {"event": "closed", "created_at": "2026-08-15T10:00:00Z"},
+        {"event": "labeled", "label": {"name": "agent/queued"}, "created_at": "2026-08-19T08:00:00Z"},
+        {"event": "unlabeled", "label": {"name": "agent/queued"}, "created_at": "2026-08-19T08:30:00Z"},
+        {"event": "labeled", "label": {"name": "agent/queued"}, "created_at": "2026-08-19T09:00:00Z"},
+        {"event": "closed", "created_at": "2026-08-19T10:00:00Z"},
     ]
     _FIXTURE_CLOSED_ISSUE = {
         "number": 637,
         "state": "closed",
-        "closed_at": "2026-08-15T10:00:00Z",
+        "closed_at": "2026-08-19T10:00:00Z",
         "pull_request": None,
     }
 
@@ -2174,8 +2178,11 @@ def self_test():
     def _mock_gh_paged_issue_lifecycle(path, key):
         """Mock gh_paged() for issue lifecycle testing."""
         if "/issues?" in path and "state=closed" in path:
+            # The Issues List endpoint returns a bare array, so key must be None
+            assert key is None, f"Issues List endpoint must use key=None (not key={key!r}) to avoid batch[key] indexing on bare arrays"
             yield _FIXTURE_CLOSED_ISSUE
         elif "/repos?" in path:
+            assert key is None, f"Repos endpoint must use key=None (not key={key!r})"
             yield {"name": "homelab", "archived": False, "private": False}
 
     globals()['gh'] = _mock_gh_issue_lifecycle
@@ -2186,8 +2193,8 @@ def self_test():
         lifecycle_body = "\n".join(dedupe_exposition(lifecycle_lines))
 
         # Verify the first queued_at is recorded (first-epoch rule: T1, not T3)
-        first_queued_epoch = str(epoch("2026-08-15T08:00:00Z"))
-        done_epoch = str(epoch("2026-08-15T10:00:00Z"))
+        first_queued_epoch = str(epoch("2026-08-19T08:00:00Z"))
+        done_epoch = str(epoch("2026-08-19T10:00:00Z"))
         has_queued = f'github_issue_queued_at{{number="637",owner="teststuffstash",repo="homelab"}} {first_queued_epoch}'
         has_done = f'github_issue_done_at{{number="637",owner="teststuffstash",repo="homelab"}} {done_epoch}'
         assert has_queued in lifecycle_body, \
