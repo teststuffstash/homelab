@@ -1,0 +1,11 @@
+OUT >>> Case 1: Assignment propagates failure (NEW FIX)
+OUT GUARD_FIRED
+OUT EXIT: 1
+OUT 
+OUT >>> Case 2: Export masks failure (OLD BUG)
+OUT EXIT: 0
+OUT 
+OUT >>> Case 3: Success path (both forms should work)
+OUT TOKEN_EXPORTED
+OUT EXIT: 0
+RC 0
