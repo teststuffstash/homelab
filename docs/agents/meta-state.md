@@ -6,325 +6,49 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (2026-08-11 end-of-pipeline consolidation — history is TICK-LOG's)
+## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ NEXT SESSION: the FU-058 stint — parent homelab#587, legs #588–#591 (+#292 via leg 1's
   Fixes). Deadline: the retro cron self-fires Mon 2026-08-24 05:00 UTC = the organic
-  acceptance.** Build-session bootstrap (this worklog + §Re-arm — no corpus; the legs are
+  acceptance.** Build-session bootstrap (this file + §Re-arm — no corpus; the legs are
   mechanical-with-pattern, subagent chunks welcome). At start: `echo teststuffstash/homelab#587
   > ~/.claude/meta-events/stint` and arm a FRESH meta-events monitor (running monitors predate
   src_stint — the gometer running-process rule). FU-167 batches 2–4 ride as slack-time subagent
-  chunks (replay tree footprint-exempt; the contention win shipped 2026-08-18 — sequencing
-  ruled 2026-08-19: FU-058 first). #420's FIRST closeout ran 2026-08-19 and the container is OPEN in its
-  post-originals phase (operator correction: #540 is a post-originals BUG sprout in the
-  stint's own deliverable — binds, holds the parent; final closeout when it resolves).
-  Post-reset sonnet re-reviews COMPLETE 2026-08-19.
-
+  chunks (replay tree footprint-exempt). #420 is OPEN post-originals (#540 = the bound bug
+  sprout: anchors VERIFIED 2026-08-19, volume parity awaits the first clean post-relaunch 5h
+  window; ⚠ the Go monthly axis is effectively ungated meanwhile — console 93%, meter 62%,
+  failovers are the net).
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
-  buildout → then stacks.** Board-clearing sessions are the current mode. Bucket B still waits.
-- **2026-08-18 EVENING WIND-DOWN (the all-day session's pickup; full story = TICK-LOG):**
-  (1) **#553 wk-03 flapping — ROOT CAUSE FIXED, one verify left**: the U6LiteBasement DHCP
-  reservation collided with wk-03's static .63 (our own two configs); moved to .13, applied,
-  **AP confirmed renewed onto .13 at 16:39:17Z** — verify a flap-free interval
-  (`changes(kube_node_status_condition{node="wk-03",condition="Ready",status="true"}[2h])` = 0)
-  then CLOSE #553. FU-177 filed (make IP conflicts impossible: rung 1 = `ip-lint` over the four
-  address homes). (2) Board swept: alert set 4/4 dispositioned (#221+#121+#101 closed w/
-  evidence, #63 folded into FU-155) + #500 closed (nix-cache soak MET, 18–24s) + #518 leg-1
-  diagnosed & ndots:1 shipped (operator-direct on the pin-guarded file; VERIFY: first runner
-  pod with dnsConfig — a 13-min watch saw none, check ArgoCD synced arc-runners) + #540
-  reparented under #420 (agent-fix dropped, jail-lane per charter). (3) pve maintenance:
-  playbook + runbook recipe MERGED (#554), window executed, kernel 6.8.12-42 live, plug 5/5
-  thawed. (4) ✅ corpus sitting EXECUTED 2026-08-18 evening (see the sitting bullet below). (5) Loose: post-window Longhorn
-  degraded → 0 check; the responder triage budget was exhausted much of today (alert-issue
-  intake resumes on window reset).
-- **✅ G01 FLIP COMPLETE + ADR-110 CLAUDE.md paragraph LANDED (2026-08-18 build session; PR#548
-  + operator grant/apply).** Sentinel ENFORCES on all four repos (required `iac-sentinel`
-  status, reviewer-App identity, */5 tick); homelab baseline exceptions + owned gitleaks config;
-  tier-1 CODEOWNERS scaffold dropped; push guard live on oracle-iac ONLY (GitHub 422s push rules
-  on PUBLIC repos — fix-forward committed, §L0b records it). **Soak watches:** deploy-bump merge
-  latency (+≤ one */5 tick, revisit if it hurts ADR-084 feel) · the first real RED sentinel
-  status · FU-176 (sentinel wipes its own pushgateway group on zero-PR ticks — health of an
-  ENFORCING check is currently blind on quiet boards). Session also merged #544 (HA alert
-  exclusion, operator-sanctioned infra-only) and shipped PR#551 (Go-rail rides get
-  CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 for deepseek-v4-flash — harness assumed 200k, compacted
-  ~5x early; operator-reported off #523's ride) — #551 armed, completes on bot approval.
-  **✅ Corpus sitting EXECUTED 2026-08-18 ~17:00Z (/design-agents session, full corpus loaded —
-  the ADR-110 codeowner reads):** #545 (C4/C5 probe guard — exactly the ruled guard-only diff)
-  MERGED · #546 (WorkflowControllerMemoryNearLimit alert app) MERGED · #549 (review-flip belt,
-  MP-T14 — conforms to IL-T16/C6/rule-#6 discipline; note on the PR: the belt's HELD branch is
-  mostly fixture-reachable since scan L904 coerces a failed PR read to `[]`; fail direction is
-  no-flip = safe) MERGED through the full updater→CI→bot→codeowner pipeline. **#547 (TOOL_GAP
-  marker, #536):** the reviewer's TOUCHES-ESCAPES block was ruled premise-cured — the replay-
-  README register entry is COMPELLED by the required ADR-103 ratchet, the coordinator's Touches
-  widening was sanctioned, the stale verdict DISMISSED with audit message; #536 un-parked
-  (`agent/blocked` → `agent/review`); #547 rides the ordinary cycle to its codeowner park —
-  approve+merge it when the board shows it parked. **#555 filed+queued** (Anthropic vendor-status
-  gauge — status.claude.com scrape into the FU-150 vendor pattern; born of the 2026-08-18
-  degraded-performance event; report-only, never a dispatch input). Responder triage budget
-  exhausted ~12:49Z (alert-issue intake paused until window reset).
-- **⚑ ADR-110 ruled 2026-08-18** (the seat-time conversation): maintenance sessions ARE the
-  codeowner gate — corpus-loaded at start, seat merges the small, escalates the big; cluster
-  identities still merge nothing. Recorded in adr.md + chainless-redesign §maintenance session;
-  the agent-platform-direction memory's "per-PR human tap" reading is superseded.
-- **2026-08-18 wind-down pickup (supersedes the 08-17 bullet below; full story = TICK-LOG):**
-  (1) **wk-03 IN FLIGHT, tree DIRTY on purpose**: the #534 longhorn-flag set (machines.yaml +
-  variables.tf + generated tables) is UNCOMMITTED pending verify-then-commit — check
-  `scratchpad/recover-wk03.log` (a nohup recovery: trims done, pool **60.62%**, recreate was
-  running): manager 2/2 on wk-03 ⇒ commit the set + close #534; failed ⇒ the known failure mode
-  is a PARTIAL DISK IMPORT on VM replace (0.51%-allocated disk, boot-loop; second attempt also
-  died to the pool re-filling from Longhorn rebuild churn — now trimmed). ⚠ Pool reclaim works
-  ONLINE now (discard=on live everywhere; fstrim via privileged kube-system pod, no reboots).
-  (2) ⚠ `kubernetes_labels.longhorn_bulk_zone["wk-metal-04"]` escalated flap→**field-manager
-  CONFLICT** — kills FULL applies (targeted applies fine); chase before the next broad apply.
-  (3) PR watch: #543 (merges itself on green; closes #472) · #544 (#478 ride, mid-cycle) ·
-  queued rides still to surface: #369/#488/#501/#520-follow-ons?/#492/#536/#541/#519(done via
-  #537)/AR#72/73. #420 is probably CLOSABLE (part 1 + leg 2 (#528) merged; residue = the
-  post-reset sonnet re-reviews). (4) Soaks: nix-cache 16g NOW real (rolled + checksum belt
-  #537) — ✅ SOAK MET 2026-08-18 evening: post-warm devbox-install runs 18–24s (beats the ~45s
-  target; #500 closed twice, second reopen was the fix-apply churn itself); minRunners readout; #540 gometer (operator: other
-  container `git pull` + relaunch claude-go; the first-use-anchor test at any console reset
-  boundary); 08-25 argo purge; or-op#34. (5) ✅ the G01 flip chunk + ADR-110 paragraph SHIPPED
-  2026-08-18 (the ✅ bullet above owns the residuals).
-- **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners (operator-direct, pin-guarded
-  file) — target ~2-min ci wall (job itself is 2m38s; ~4min was runner spin-up queue). Measure
-  run-pickup deltas for a few days; revert to 0 if no win. Remaining setup cost tracked as an
-  issue (Set-up-job 1m5s: launch.actions.githubusercontent.com DNS retry + per-job action
-  downloads).
-
-- **2026-08-17 overnight pickup (the all-day session's tail — full story in TICK-LOG):**
-  (1) **PRs in flight, all machine-owned:** #475 (⏸ inventory re-word — a jail watch applies the
-  operator's standing codeowner approval when the bot re-approves; if the session died, approve
-  it by hand after the bot does) · #490 (board, TRIAGE-disjointness fix pushed, re-review →
-  auto-merge) · #496 (reviewer currency gate, seat PR, bot approval completes it).
-  (2) **#491 queued** (argo ttlStrategy/podGC — the #487 durable fix): its footprint hold
-  released when #487 merged; **its ride should be the FIRST organic Go-flash worker ride** —
-  morning check: the ride pod's `homelab.teststuff.net/rail=opencode-go` label (the dogfood's
-  outstanding confirmation, still unobserved after a queue-held day).
-  (3) **Morning sweep = `devbox run board`** (post-#490; until then `bash agents/board.sh` off
-  the branch) — REVIEW should be empty, BACKLOG = #493 (+#289 oracle).
-  (4) Go meter re-check against the console after ~a day of the restarted shim (drift should
-  stay ≈0; ⚠ any future shim-code metering fix requires a shim RESTART — the running process
-  is the meter). (5) FU-155's oomactions capture after hp-01's next pressure event (#485's
-  marker-limit thesis). (6) The churn fixes' first quiet proof: next busy-master day should
-  show near-zero unstrand updates of unmergeable PRs and near-zero standing-asides.
-
-- **minutark.ee LIVE + DNSSEC COMPLETE**; oracle-iac#351 OPEN — deliverable = the bootstrap AS
-  IaC, **UNBLOCKED 2026-08-12** (the host-side token session ran: two-zone ingress token minted +
-  stored) but oracle is PARKED (operator 2026-08-11) — pick up at unpark; acceptance =
-  drift-free re-plan through the two-zone token. FU-157 opportunistic. ⚠ `dig +short` wraps
-  long DS digests — `tr -d ' '` before grepping.
-- **HA #221 (meta lane) — DIAGNOSIS CORRECTED 2026-08-18 (jail session, evidence on the
-  thread): the 4 plugs were NEVER revived.** Both the 08-13 reloads and a fresh 08-18 reload
-  only recreated entities (timestamp bump, same value) — pve=124.6W / aquarium=29.7W /
-  konditsioneer=34.5W / laptop4=8.0W are FLAT from the retention edge (08-10) to now, while
-  laptop3/opnsense (same fence) fluctuate hourly. Post-reload debug trace: receive loop ALIVE,
-  polling ~31s, device returns byte-identical dps every poll; fresh jail tinytuya sessions get
-  the SAME frozen dps → **the freeze is DEVICE-side (measurement snapshot wedged since the
-  08-08/09 window), sibling of gaas's 914 state — reloads can't fix it and the tuya_local
-  2026.8.0 upgrade won't either** (still worth doing for the separate loop-death bug).
-  **Remedy for all 5 = physical power cycle — PROVEN 2026-08-18 on laptop4** (wall cycle;
-  the X250's battery carried the node so it never left Ready — cordon/drain was belt-only;
-  sensor thawed 8.0-frozen → 9.8 → 17.9 live within minutes). **PLUGS RENAMED 2026-08-18**
-  (same session): the NOUS A1s are now `thinkcentre` (ex-aquarium, powers the ThinkCentre,
-  remote power = switch.tuyalocal_thinkcentre) and `hp` (ex-konditsioneer, powers hp-01) —
-  HA registry + git sweep + wallet devices.json + dnsmasq all updated, dead *_corrected
-  sensors deleted. **✅ gaas RESOLVED same afternoon: the operator's breaker cycle cleared the
-  914** — the tuya_local entry loaded (climate.tuyalocal_gaas is a heating thermostat, live
-  measurements verified 24.5°C) — the local key was NEVER rotated; the rotated-key/re-extract
-  contingency is moot. **✅ thinkcentre + hp bricks RESOLVED 2026-08-18 evening — ROOT CAUSE
-  FOUND: the NOUS A1s WEDGE BEHIND THE FU-038 EGRESS FENCE on cold boot** (long brick pulls
-  alone did NOT fix them: the devices came back TCP-open but protocol-dead, tinytuya 902 —
-  looked like a rotated key, was not). Opening the tuya-egress door let each finish its cloud
-  registration and the local protocol came up IMMEDIATELY with the old key; door re-closed,
-  both serve through the fence (thinkcentre 19.8W live, hp 48.9W live). Full recipe + warning
-  now in opnsense/tuya-egress.py's header — expect a recurrence on any NOUS power loss.
-  The freeze onset (08-08/09) was the day after the fence went up: fence-correlated, all 5
-  devices. hp-01's AC-restore worked fine (the "flaky" note was stale). **✅ 5/5 RESOLVED
-  2026-08-18 evening — the pve maintenance window ran the same day** (operator + jail):
-  ansible/pve-upgrade.yml first run (228 pkgs, kernel 6.8.12-9 → -42), clean guest shutdown →
-  poweroff → wall-plug cycle → unattended self-recovery to 10/10 Ready in ~10 min; pve plug
-  thawed (153.6W boot draw vs frozen 124.6). Recipe now runbook §Proxmox host maintenance
-  window (PR#554). #221 can be CLOSED with this evidence — the machine/meta lane's call.
-  Residual watch: Longhorn degraded count → 0 post-window. The 9-static-sensor alert
-  exclusion shipped as #544 (was queued as homelab#478).
-- **ADR-107 / Go-rail chain (charter = [`chainless-redesign.md`](chainless-redesign.md) — its
-  §Rollout status is current): PART 1 COMPLETE 2026-08-14 02:25Z** — all chunks merged+live
-  (PRs #429/#433–#437/#440–#443; every chunk issue closed w/ evidence; #420 = the status
-  comment). PICKUP, in order: (1) **#439 leg 2** — agent-session.sh:1407 adopts the
-  `--pick-rail` ladder via the PR#407 `_claude_model` plumbing; retro inherits it with zero
-  retro changes — land BEFORE retro's first unattended fire 2026-08-17; PR body must flag the
-  worker-ride widening. (2) **Post-weekly-reset sonnet re-reviews**: `bash agents/re-review.sh
-  --project homelab` (3 snapshot sets banked: pr-437 ×2, pr-441 — the r6 approval snapshotted
-  itself). (3) **The wave's ledger PR** — rows in the session scratchpad
-  (`ledger-draft.md`); if this session is gone, reconstruct from TICK-LOG 08-13/14: new classes
-  = fabrication-in-transcription, deferred-verification coverage shadow, self-defeating-fix,
-  explain-away/false-completeness reports. ⚠ the running jail shim predates chunk G — jail
-  subagent burn is unmetered until the next `claude-go` launch (self-resolving; the cluster
-  meter + account console disagree by exactly that traffic meanwhile). Go 5h window economics:
-  review rounds ≈$1 each — a 6-round PR cycle is the biggest single draw. Build mode unchanged:
-  clone subagents, double review, misses →
-  [`../spikes/subagent-handover-misses.md`](../spikes/subagent-handover-misses.md).
-  Pending verifies: PR#407 (next platform ride's OTLP model), elastic shadow cells (#408).
-- **Zen free rail: SHIPPED on both surfaces (2026-08-14).** #446 = jail shim+launcher (merged
-  07:08Z, 1-round approved; shim-self-test CI-gated 9e97d5d) · #447 = proxy both ingress
-  surfaces (OPERATOR-merged 08:11Z direct to master — "subscription latch gates review" was
-  the operator's account of the dispatch gap; pod rolled <1 min, ConfigMap-shipped). Interim:
-  reviewer Go-failover model = **deepseek-v4-flash** (665cf64 — a $6.33 k3 review in the
-  balance regime; the proper model is decided next week). **#448 SHIPPED 2026-08-17**
-  (PR#465, the LiteLLM SDK leg — luna's Anthropic-compat surface is broken even for text). PICKUP: (1) live smoke the
-  proxy zen leg (`opencode/nemotron-3-ultra-free` through the in-cluster proxy — NOT verified
-  post-merge); (2) the #448 dispatch call; (3) FU-172 residues; (4) cleanup: the subagent
-  worktrees (`.claude/worktrees/agent-*`) + merged branches fix/opencode-zen-rail, fix/zen-rail.
-  Open: FU-170 (balance blindness), FU-171 (token refresh). Zen tool-compat: free tier is
-  text-only through Anthropic-compat; the translator is the unlock (evidence in the matrix row).
-- **⚑ GOAL LANE PAUSED (operator ruling, 2026-08-13):** the Goal type is too expensive to run —
-  the v1.1 pilot took expensive jail meta-coordination that still did not stop the 46 sprouts,
-  plus ~16h hands-on the operator will not repeat, and the weekly Anthropic pool is BLOWN (7d
-  ~0.87–0.89). No new Goal until the v1.2 machinery (ADR-106 checkpoints + FU-168 famine fixes)
-  is complete AND the budget recovers; Bucket B's launch gate inherits this as a further
-  precondition. Current mode instead: fast double-reviewed subagent chunks (bullet above).
-- **Soaks**: argo-workflows SECOND backlog sweep ~2026-08-25 (#521: purged 293 of 798 on 08-18;
-  the remaining ~500 completed pre-default workflows never self-delete — re-run the purge once
-  they cross 7d, then the #510 defaults own the curve alone) · minRunners:1 trial readout
-  (run-pickup deltas vs the ~4min scale-from-zero baseline) · iac-sentinel shadow (FU-106); router shadow (FU-095); retro first UNATTENDED fire
-  2026-08-17 (FU-058); FU-148 acceptance (first organic env-red self-retry); FU-149 datum
-  ~08-20; or-op#34 (first daily-429); renovate-approve fix (#114) = next Renovate wave shows
-  ONE approval per head; check-#3 shadow warnings stay zero.
-
-## NEXT SESSION — the worklog (updated 2026-08-12 wind-down: BUCKET A COMPLETE)
-
-⚑ **Fresh-session pickup (2026-08-12 ~19:10Z stand-down):** re-arm per §Re-arm (the meta-events
-monitor died with this session). Then the order is: (1) **circles#81** — the §Maturity
-disposition-mapping PR awaits the OPERATOR codeowner read (armed, bot will approve); (2)
-**homelab#365** — the one stack-sweep leftover (promote the #349 bridge bound to the class
-block); (3) **Bucket B launch gate** — the pre-Goal issue sweep (the inert 🌱 set: #280/#292/
-#295/#297/#303/#329/#354/#360-364/#369 — operator wants them decided BEFORE the next Goal) +
-launch criteria (A0 ✓ green; Pending gauge flat = watch post-A2; v1.2 legs replay-pinned ✓);
-then the Goal per Bucket B. Small residuals: 4b′ label flap · FU-051 E2E = organic watch ·
-circles deploy-bump generator fix before the next circles build (item 6) · A5 pile grows in
-iac-lane.md §governance checkpoint.
-
-0. **THE PLATFORM PLAN (chartered 2026-08-12) — two buckets.**
-   ⚑ **Session-type bootstrap rule (operator, 2026-08-12): a BUILD session reads THIS section +
-   §Re-arm and nothing heavy** — no design-agents corpus (145k; pay it only for a DESIGN sitting
-   like A3/v1.2), no full /meta-coordinate (pay it only to resume the coordination ROLE). The
-   charter carries the decisions; chunks name their files; CLAUDE.md/memory carry the process.
-   **Bucket A (pre-goal, PR-lane with the bot reviewer — the seat stops accumulating unreviewed
-   debt):** A0 ✅ VERIFIED 2026-08-12: the soak IS observable — reading rule: `iac_sentinel_violations`
-   no-series + FRESH `iac_sentinel_engine_seconds` (all 4 engines, per-repo, 786s at probe) =
-   genuinely ZERO violations; stale engine rows = blind. `probe_failed` absent. Gap noted:
-   `SENTINEL_REPOS` defaults to sleep-iac+oracle-iac only — circles-iac joins when unparked
-   · A1 FU-167 moves 1–3 (replay world registry, table-mode pilot, generated register) — FIRST,
-   everything else rides its lock · A2 ✅ DONE 2026-08-12 (#393): receiver-side collapse
-   (absorb-pending, zero lost edges) + FU-144 fan-out + `--detach` mutex scoping; the 017790c
-   wake metrics + `AgentDispatchCronWoken` are live — the "cron-woken ≈ 0" acceptance now SOAKS
-   under FU-168 — ⚖ rail move REJECTED (workers stay subscription; ruling in
-   model-routing.md §M12) · A3 ✅ DONE 2026-08-12 (the same-session sitting) → **ADR-106** (PR#389): single-mode
-   feature goals (master-lane variant RETIRED — not a Goal), origin lineage (bucket back to
-   ADR-102's strays-only role), findings store + checkpoints, fence → metadata + MECHANICAL
-   governance lint, mutex scoped to the deterministic phase, stack scope ·
-   A4 ✅ ALL FOUR LEGS DONE 2026-08-12: governance lint (direct) + merge doorbell (#396) +
-   the core (#398, 3 review rounds): findings store (goal-findings.sh, CI self-test) +
-   goal-checkpoint clause + harvest=store + burn-down demotion; FSM IL-T12/T15 rewritten · A5 RULED 2026-08-12 (mapping session): leg 1 SHIPPED (#401 — sentinel shadows homelab; the
-   tier-1 scaffold line drops when IAC-G04 enforces there or on the operator's trust call);
-   further ownership/gate changes now BATCH into the governance-checkpoint pile
-   (iac-lane.md §The platform lane — one /design-agents sitting per batch, never per-event
-   one-liners); full narrowing stays blocked on an assembly single-tax replacement · A6: #377 class ✅ (#402, 4 rounds — 27 :-null guards + goal-budget bash guard; ⚠ lesson:
-   a mechanical sweep regex corrupted 4 printf sites, bot caught the regression) · FU-166 ✅
-   WHOLE (#403 + archived: park/reflex split series, CodeownerParkWaiting, Prometheus-first
-   watch w/ collector-liveness key, the Goal-run cockpit — dashboard tf-APPLIED) · inert 🌱
-   triage → Bucket B (operator: decide with the pre-Goal issue sweep). FU-168's design half = DELIVERED by ADR-106; its build half rides A2/A4.
-   Jail latency fix (meta-events.sh, FU-166(b)) DONE first, direct to master.
-   **Subagent trial RUN 1 recorded 2026-08-12** (goal-ancestor table-mode, PR#392 merged):
-   defects by catch-point seat 0 / bot 0 / post-merge = watch with lag; 148.5k subagent tokens;
-   9m11s authoring, ~20m dispatch→merged. One data point, no adoption verdict — next comparable
-   chunk continues the A/B (harvest-goal or c4c5 conversions are the named candidates).
-   **Next-session shape (operator, 2026-08-12, calibrated): worktree-subagent TRIAL first, not
-   adoption.** Suitability test = "would it need the design-agents corpus?" — if yes, it is
-   design mislabeled as build → SEAT work (doorbell collapse is seat work by this test; today's
-   chunks all had mid-build design calls). Suitable subset = mechanical-with-established-pattern,
-   loud verification: the remaining table-mode family conversions (harvest-goal, goal-ancestor,
-   c4c5), per-fixture `requires:` diagnosis, doc/register sweeps. Protocol: ONE subagent, ONE
-   family (goal-ancestor, 4 fixtures), **pre-push seat review of the worktree diff** (bounce via
-   SendMessage; only the seat opens the PR), then bot review — two decorrelated reads, zero
-   codeowner touches. Measure: defect rate by catch-point (seat/bot/post-merge), tokens vs
-   seat-does-it, wall-clock. ⚠ The corpus-read test is a PRIOR, not a classifier (operator):
-   the dangerous class is context-poverty defects that pass BOTH reviews and surface later —
-   invisible to one run by construction. So this is an A/B over MULTIPLE comparable chunks
-   (seat-authored vs subagent-authored), post-merge defects tracked with a time lag, no
-   adoption verdict from run 1. Exploratory: better than speculation, decided by accumulation.
-   Width if adopted ≤2-3 (subscription burn is the limiter).
-   **Bucket B (the next Goal, launches on v1.2):** FU-095 pilots (task-class routing legs a/c +
-   strike-policy data) · FU-106 G01 flip chain (conditional on A0; the flip = the goal's
-   `Production-leg:`) · G06 advisory lens + SLO error-budget teeth (roles.md; ex-FU-104) ·
-   FU-090(b) janitor spec-drafts · cross-repo children by design (agent-runtime#36, or-op items).
-   Goal-body skeleton: Verdict-authority: human · Production-leg: sentinel ENFORCING on the -iac
-   repos + pilot evidence in the ledger · KPI: sprouts-per-ride < 1.2 (the debt-drain
-   prediction) · Budget: subscription-window capped (subscription budgets = later work).
-   **Launch criteria:** doorbell Pending gauge flat under load · v1.2 legs replay-pinned ·
-   7d utilization headroom (74% at charter) · A0 green · **the single-tax boundary designed**
-   (operator, 2026-08-12: codeowner-touch count is THE objective — assembly merge = one tax
-   per feature; the master-lane variant dissolved it and must not recur).
-
-1. **PR queue DRAINED 2026-08-11 (~11:30Z)**: #250/#251/#254/#255/#260 all merged (findings
-   harvested; residues: FSM dup keys + fixture registration + FU-106 third residue — all in the
-   same-day jail batch). The day's "FU-130 WAN class" reds were actually **wk-metal-02 losing
-   its IPv4 default route** — postmortem
-   [`docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md`](../incidents/2026-08-11-wk-metal-02-default-route-loss.md);
-   node rebooted + verified, ARC runner spread/requests shipped (arc-runners.yaml).
-2. **Board CLEAN per operator directive** (queue/fix/close all agents/infra issues; HA may
-   remain): closed #107/#131/#223(→#231)/#241; #235/#240/#244/#245 closed by merges; QUEUED
-   #242/#248 (+ already-queued #249/#252/#253/#256-259) — the loop drains them. Remaining open
-   by sanction: #221 (HA, meta chain above), #231 (single Cloudflare anchor — host session).
-3. **snore-recorder#15**: CI GREEN after the m02 fix (the "environmental red" was the route
-   loss). Remaining: address the review verdict (FU-051 deploy-pin enablement).
-4. **GOAL #278 CLOSED VALIDATED (2026-08-12 08:40:37Z — first VALIDATED terminal; 41s
-   label→close, zero descendant writes, report-first sweep as pinned).** Bucket #295 left OPEN
-   (sweep proposed "close with the goal" — operator's call); #289 park-deferred; 14 inert
-   sprouts = ordinary triage. The v1.2 design dossier is
-   [`docs/spikes/goal-lane-v1.1-fu165-pilot.md`](../spikes/goal-lane-v1.1-fu165-pilot.md) +
-   the version register (issue-authoring.md §Goal lane versions); FU-166/167/168 UNBLOCKED at
-   the verdict. Small fix-round candidates before the next platform Goal: doorbell fixed-name
-   collapse, stream/mutex scope, platform-worker rail/semaphore, goal-budget.sh dash fail-open
-   (one-shebang #377 class, named in the 06:24Z ruling), #379 triage (hold as FU-168 evidence).
-   Rail-aware budget summation rides post-FU-131 (cap-phantom $76/$60 at close, ~$0 real).
-4a. **Post-goal INERT 🌱 residue (deliberately unqueued; ordinary triage):** #280 (replay-README
-   FSM wording — verdict posted), #292 (retro byte-identical cells), #297 (ratchet → model-scout),
-   #303 (generate.py currency check), #329 (5 non-hermetic fixtures — sandbox-only, CI green),
-   #354 (agents/** tier rationale question — operator-shaped), #360/#362/#364 (doc staleness),
-   #363 (FU-039 absorbs CloudflareEdge5xx), #365 (promote the #349 bound to the class block),
-   #369 (FU-042 pre-flight mention-widening).
-4c. **Pending verifies/soaks from the goal (post-sweep 2026-08-12):** FU-161 = read the digest
-   of hand-fire `model-scout-2psl6` (fired at the sweep; settles the `arguments` envelope), then
-   legs 3–4 · FU-150 = quiet-month window opens ~2026-09-11 · FU-146/FU-147 soaks unchanged ·
-   #289 launches at oracle unpark · snore#15 = FU-051 verdict work. (FU-140/145/158/160/162/165
-   ARCHIVED by the sweep — crash-net proven 297/0, phase metrics live, pilot validated.)
-4b′. ⚠ NEW small drift: `kubernetes_labels.longhorn_bulk_zone["wk-metal-04"]` flaps in the
-   plan (applied, then reads changed again — something node-side rewrites it); chase when next
-   in tofu, not urgent.
-4b. ✅ DRIFT APPLIED 2026-08-12 (attended): wk-metal-04 ephemeral taint verified on the node;
-   ci-runner-01 REPLACED and verified up (guest agent: .55 on eth0, docker0 up, SSH over TCP —
-   ⚠ ICMP from the jail lies here, probe TCP).
-5. **docs-cleanup residue** (the comb ran + ~55 findings APPLIED 2026-08-11; what remains):
-   (a) ✅ merged 2026-08-12 (#395); (b) ✅ re-captured 2026-08-12 (operator cabling: wk-metal-01/02+hp-01 on the core 10-port,
-   wk-metal-03/04 on the office 5-port; ci-runner-01 on vmbr0); (c) FU-001 ref scrubs when its archive entry
-   expires (~08-13); (d) the openrouter-proxy.py FU-021 comment repoint — rides the NEXT
-   functional proxy change (a comment-only sync restarts the proxy and resets every for:
-   window); (e) the five EXPIRY-HELD archive ids (FU-014/021/022/025/041) need their own
-   scrub pass or a ruling that foundational shorthand keeps its archive residue.
-6. **Standing from 08-10** (⚠ PARKS LIFTED 2026-08-12: the circles/oracle parks were
-   goal-v1.1-window only (operator) — stack PRs run ARMED again. Residuals now live:
-   circles#77 ci-red triage · oracle-fleet#259 codeowner read (seat read posted 2026-08-12:
-   decline the .agents/ carve-out, de-dup the recipes' shared rules) · oracle-fleet#225 ERT
-   snapshot re-run · ⚠ circles deploy-bump generator writes the app CalVer into the -iac GIT
-   targetRevision (broke circles-infra; fix the workflow before the next circles build —
-   circles-iac#71/#68)):
-   oracle-fleet#255 rework (attended-download constraint stands). The HOST-SIDE 4-step
-   jail-read-all sequence: ✅ ALL DONE 2026-08-12 (argo verdict → PR#394; jail-read-all minted,
-   verified from the jail, legacy token DELETED; #231's blind leg settled + annotated —
-   **#231 is probably closeable now, operator's call**).
+  buildout → then stacks.** The forward plan lives in **ROADMAP §The platform work map**
+  (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
+- **⚑ Goal lane pause (operator, 2026-08-13):** no new Goal until v1.2 machinery + budget
+  recovery. As of 2026-08-19 the conditions read met (work map) — the unpause is the operator's
+  call at G-A launch; Goal budgets on the platform stack stay cap-phantom until FU-180.
+- **minutark.ee / oracle-iac#351** — OPEN, oracle parked (operator 2026-08-11); pick up at
+  unpark. Acceptance = drift-free re-plan through the two-zone token. ⚠ `dig +short` wraps long
+  DS digests — `tr -d ' '` before grepping.
+- **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
+  for a few days, revert to 0 if no win; the residual setup cost is homelab#518.
+- **Small live residue (compressed 2026-08-19):** wk-metal-04
+  `kubernetes_labels.longhorn_bulk_zone` field-manager CONFLICT kills FULL tofu applies
+  (targeted fine) — chase before the next broad apply · proxy zen leg live-smoke still unrun
+  (`opencode/nemotron-3-ultra-free` through the in-cluster proxy) · docs-cleanup residue legs:
+  FU-001 archive-expiry ref scrub (overdue), the openrouter-proxy FU-021 comment repoint (rides
+  the next functional proxy change), the five EXPIRY-HELD archive ids ruling · stack leftovers:
+  circles#77 ci-red triage, oracle-fleet#259 rework per the seat read, circles-iac deploy-bump
+  generator fix before the next circles build (circles-iac#71/#68).
+- **Soaks** (each owned by an FU/issue — this line is only the calendar): argo second backlog
+  sweep ~2026-08-25 (#521) · minRunners readout · iac-sentinel first real RED + FU-176 ·
+  router shadow/elastic cells (FU-095, PR#408) · FU-148 acceptance · FU-149 datum ~08-20 ·
+  or-op#34 first daily-429 · renovate-approve one-approval-per-head (#114) · FU-540-parity
+  (the clean 5h window, #540 thread).
 
 ## Durable warnings — re-read before touching these files
+
+> ⚠ This section is NON-transient content squatting in a transient file (a big share of its
+> read cost). Eviction to proper homes (CLAUDE.md, the jail-subagent-card, owning docs, FUs)
+> rides stint S4 (FU-117's context dedup) — until then it stays, unduplicated: pipe-filter-push
+> and the zsh trap already live in CLAUDE.md/the card; two-readers is FU-178 now.
 
 - **⚠ ABSENCE IS THE EASIEST THING TO FAKE — three self-inflicted probe errors in one night, all
   the same shape: query a NARROWER view than the question, then read the empty result as fact.**
