@@ -1,0 +1,1 @@
+printf '%s' 'Zm9v' | base64 -d > /tmp/retro-brief.md; claude -p --dangerously-skip-permissions --max-turns 200 'write the session retro'
