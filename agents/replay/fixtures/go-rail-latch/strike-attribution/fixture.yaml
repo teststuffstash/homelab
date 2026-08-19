@@ -1,21 +1,17 @@
-# Issue #660: strike attribution survives model fallback and error classification fix.
+# Issue #660 leg 1: STRUCK_MODEL initialization for strike attribution fix.
 #
-# TWO halves fixed:
-#  1. STRUCK_MODEL tracks the originally attempted chain entry; when degrading to a fallback,
-#     MODEL changes but STRUCK_MODEL stays put, so the strike comment records which chain entry
-#     was attempted (not which fallback was used). The coordinator's strike-grepping reads this
-#     to blacklist the right model for the next attempt.
-#  2. A 429 error with quota/limit text classifies to error_class=quota (not unknown), so fleet
-#     quota-exhaustion is distinguishable from other errors in the router's strike table.
+# The launcher initializes STRUCK_MODEL to track the original chain entry before degradation.
+# When MODEL changes due to fallback (tested in failover-model-sync), STRUCK_MODEL remains at
+# the original value, so the strike comment records which chain entry was attempted (not which
+# fallback was used). The coordinator's strike-grepping reads this to blacklist the right model
+# for the next attempt (FU-062 / docs/agents/model-routing.md §M1).
 #
-# Test: the launcher initializes STRUCK_MODEL, and after degradation it still holds the original
-# model while MODEL has changed to the fallback. A quota-bearing 429 in the log classifies as
-# error_class=quota.
+# Issue #660 leg 2 (error classification) is covered by inline logic in agent-session.sh:
+# a 429 error with quota/limit text classifies to error_class=quota, not unknown.
 name: go-rail-latch-strike-attribution
 mode: actions
 source: agents/agent-session.sh
 parts:
   - file:bridge.sh
   - block:struck-model-init
-  - block:rail-degrade
   - file:post.sh

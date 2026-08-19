@@ -1,1 +1,2 @@
-CALL curl http://proxy.test:8080/router-status
+OUT PASS: STRUCK_MODEL initialized correctly for strike attribution
+RC 0
