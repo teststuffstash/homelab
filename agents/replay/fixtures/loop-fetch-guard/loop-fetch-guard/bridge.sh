@@ -1,5 +1,23 @@
 # Bridge for loop-fetch-guard fixture.
 # Tests the core bash behavior: that assignment status propagates to ||, not export status.
+#
+# Setup: NS is used by the extracted LOOP_FETCH block; curl is shadowed to return test tokens.
+
+NS="test-ns"
+curl() {
+  case "${1:-}" in
+    *loop-git-token*)
+      # Mock curl returning a test token on success
+      printf 'test-token-12345'
+      return 0
+      ;;
+    *)
+      # Other curl calls should fail (shouldn't happen in this fixture)
+      return 7
+      ;;
+  esac
+}
+export -f curl
 
 echo ">>> Case 1: Assignment propagates failure (NEW FIX)"
 # This is the FIXED form: assignment (not export) followed by export
@@ -27,17 +45,3 @@ RC3=$?
 set -e
 echo "EXIT: $RC3"
 echo
-
-echo ">>> Case 4: Real concatenation in PREP (fixed form with trailing separator)"
-# homelab#617 round 2: the fix must preserve the separator between export and the next command.
-# LOOP_FETCH ends with "; export GH_TOKEN; " (trailing semicolon + space before the closing quote).
-# When used in PREP="set -e; ${LOOP_FETCH}touch /work/marker; ...", it must parse as separate commands.
-LOOP_FETCH='GH_TOKEN="$(echo faketoken)" || { echo FATAL; exit 1; }; export GH_TOKEN; '
-MARKER_DIR="$(mktemp -d)"
-PREP="set -e; ${LOOP_FETCH}touch ${MARKER_DIR}/marker; echo REACHED"
-set +e
-bash -c "$PREP" 2>&1
-RC4=$?
-set -e
-echo "EXIT: $RC4"
-[ $RC4 -eq 0 ] && echo "REAL_CONCAT_OK" || echo "REAL_CONCAT_FAILED"

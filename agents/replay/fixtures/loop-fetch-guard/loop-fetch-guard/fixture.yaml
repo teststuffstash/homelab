@@ -22,3 +22,5 @@ mode: actions
 source: agents/coordinator-session.sh
 parts:
   - file:bridge.sh
+  - block:loop-fetch-guard
+  - file:post.sh
