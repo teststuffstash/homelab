@@ -2,6 +2,7 @@
 # meta-events.sh — THE consolidated meta-seat event loop (FU-166 leg (b), 2026-08-12).
 #
 # One Monitor arms this; it polls cheap on a 120s tick, diffs each source against durable state,
+# Sources: needsmeta · newissue (org-wide, 24h window) · seatpr · goalcmt · alert · famine · stint.
 # and prints ONLY deltas — a quiet loop wakes nobody (a Monitor line is what wakes the seat, so
 # edge-detection IS the token economy). ~2-min worst-case latency on the classes the seat serves.
 #
@@ -65,6 +66,24 @@ src_needsmeta() {
     hold_source needsmeta "meta-needs-attention.sh failed"
   fi
   rm -f "$tmp" "$tmp.set" 2>/dev/null
+}
+
+
+# NEW ISSUES across the org, trailing 24h — the source the 2026-08-19 sitting was missing: three
+# bot-filed issues (#616/#617/#629) reached the seat only when the operator pasted their URLs.
+# One SEARCH call per tick (its own 30/min pool; index lag of ~a minute is fine for a watch —
+# dispatch never rides this source). The set is the trailing-24h window, so an issue emits ONCE
+# on first sight and CLEARs when it closes or ages out (the src_seatpr window shape). All
+# authors deliberately included: bot filings are the motivating class, and an operator filing is
+# a session pickup, not noise — edge collapse bounds the cost either way.
+src_newissue() {
+  local tmp since
+  tmp="$(mktemp)"
+  since="$(date -u -d '-24 hours' +%Y-%m-%dT%H:%M:%SZ)"
+  if ! gh api "search/issues?q=org:${ORG}+is:issue+state:open+created:>=${since}&per_page=50"       --jq '.items[] | "NEWISSUE|\(.repository_url | sub(".*/";""))#\(.number)|\(.user.login)|\(.title[0:70])"'       > "$tmp" 2>/dev/null; then
+    hold_source newissue "issue search failed"; rm -f "$tmp"; return
+  fi
+  diff_source newissue "$tmp"; rm -f "$tmp"
 }
 
 src_goalcmt() {
@@ -207,6 +226,7 @@ WAVEIDS
 tick() {
   TICK=$((TICK+1))
   [ $((TICK % 2)) -eq 1 ] && src_needsmeta
+  src_newissue
   src_seatpr
   src_goalcmt
   src_alert
