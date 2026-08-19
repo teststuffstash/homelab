@@ -8,4 +8,9 @@ OUT
 OUT >>> Case 3: Success path (both forms should work)
 OUT TOKEN_EXPORTED
 OUT EXIT: 0
+OUT 
+OUT >>> Case 4: Real concatenation in PREP (fixed form with trailing separator)
+OUT REACHED
+OUT EXIT: 0
+OUT REAL_CONCAT_OK
 RC 0

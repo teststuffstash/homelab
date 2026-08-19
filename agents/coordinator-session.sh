@@ -132,7 +132,7 @@ if [ -n "${LOOP_NS_ARG:-}" ]; then
   # homelab#617: split assignment from export so the curl status reaches the || guard. If `export`
   # masks the curl's exit (the old form), a blind coordinator starts. The assignment propagates
   # the failure, triggering the abort.
-  LOOP_FETCH="GH_TOKEN=\"\$(curl -fsS -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=coordinator\")\" || { echo 'FATAL: loop-git token fetch refused/failed — not running blind'; exit 1; }; export GH_TOKEN"
+  LOOP_FETCH="GH_TOKEN=\"\$(curl -fsS -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=coordinator\")\" || { echo 'FATAL: loop-git token fetch refused/failed — not running blind'; exit 1; }; export GH_TOKEN; "
   # <<<REPLAY:loop-fetch-guard<<<
 else
   LOOP_FETCH=""
