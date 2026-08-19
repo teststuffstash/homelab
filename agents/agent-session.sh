@@ -1465,8 +1465,88 @@ if [ "$HARNESS" = "claude" ]; then
     opencode-go/*)
       _go_reply="$(curl -fsS --max-time 5 "${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}/opencode-limit" 2>/dev/null)" || _go_reply=""
       if [ -n "$_go_reply" ] && [ "$(printf '%s' "$_go_reply" | jq -r '.limited // false' 2>/dev/null)" = "true" ]; then
-        echo "→ ${PROJECT} Go-rail dispatch deferred — opencode window limited ($(printf '%s' "$_go_reply" | jq -r '.reason // "?"' 2>/dev/null))"
-        exit 0
+        # homelab#600 (launcher half): the /opencode-limit `reason` separates the TRANSIENT
+        # semaphore leg from a CAPACITY one. The exact semaphore string is `semaphore` — the
+        # anthropic arm folds its semaphore in with reason="semaphore" (openrouter-proxy.py:1552,
+        # "the FU-088 concurrency semaphore is folded in server-side (reason \"semaphore\")") and
+        # FU-170 piece a composes the Go semaphore into the SAME top-level `limited` verdict
+        # (openrouter-proxy.py:1584-1597, _go_semaphore_state; no launcher change needed for the
+        # bound). The Go leg does NOT publish a `reason` today (openrouter-proxy.py:1596-1603 —
+        # the /opencode-limit payload has no `reason` key), so until homelab#600's proxy half
+        # lands, `.reason` is empty and every limited reply DEFERS exactly as before. The capacity
+        # reasons — window utilizations (the anthropic arm's `utilization-<window>` shape, here
+        # 5h/7d/30d) and homelab#600's observed-429/observed-402 — are what this arm REROUTES on.
+        _go_reason="$(printf '%s' "$_go_reply" | jq -r '.reason // ""' 2>/dev/null)"
+        case "$_go_reason" in
+          semaphore|"")
+            # transient: the semaphore releases in minutes, and an untyped limited (empty reason
+            # — the proxy as it stands) defers too. Fail-safe: never burn subscription capacity on
+            # a condition that will resolve on its own (the #158 inversion, one rail down).
+            echo "→ ${PROJECT} Go-rail dispatch deferred — opencode window limited (${_go_reason:-?})"
+            exit 0;;
+          *)
+            # CAPACITY: a window is latched (the monthly reset is ~25 days out) or homelab#600's
+            # observed-429/402 fired — deferring parks every Go-primary dispatch for the whole
+            # window. REROUTE through the M12 degrade path (docs/agents/model-routing.md §M12)
+            # instead, with the SAME bounds. ⚠ This is a FAITHFUL DUPLICATION of the rail-degrade
+            # block's bounds (:404-438) — the replay ratchet extracts the two sentinels
+            # independently, so a shared helper defined in one block is invisible to the other's
+            # fixtures (proven by RC-127); the dedup debt is named here, not silently paid.
+            _fb_ok="$(printf '%s' "$_srow" | jq -r 'if .subscriptionFallback == false then "" else "1" end' 2>/dev/null)" || _fb_ok="1"
+            _fb_why="subscriptionFallback:false on the stack row"
+            if [ "${AGENT_SUBSCRIPTION_FALLBACK:-1}" != "1" ]; then _fb_ok=""; _fb_why="AGENT_SUBSCRIPTION_FALLBACK=0"; fi
+            _fb_model="${AGENT_SUBSCRIPTION_FALLBACK_MODEL:-claude/haiku}"
+            if [ -n "$_fb_ok" ] \
+               && [ "$(printf '%s' "$_srow" | jq -r --arg m "$_fb_model" '[(.modelDeny // [])[] | select(. == $m)] | length' 2>/dev/null || echo 0)" != "0" ]; then
+              _fb_ok=""; _fb_why="${_fb_model} is in this stack's modelDeny — the claim wins over the fallback"
+            fi
+            case "${TASK:-}" in
+              issue-[0-9]*)
+                if [ -n "$_fb_ok" ]; then
+                  # Re-point the pod command at the fallback model FIRST — RUN_CMD was baked above
+                  # (harness-run-cmd) with the Go model; thread it in place like the #439 leg-2
+                  # failover (:1498-1521). The pre-thread token is captured first: _claude_model
+                  # takes the fallback below and can no longer serve as the match pattern. Thread
+                  # BEFORE announcing (the leg-2 finding-2 ratchet): never log a RAIL DEGRADE over
+                  # a pod that would serve the latched Go rail.
+                  _degrade_model="${_fb_model#claude/}"
+                  _old_model="${_claude_model:-${MODEL}}"
+                  _new_cmd="${RUN_CMD:-}"
+                  _new_cmd="${_new_cmd//--model ${_old_model} /--model ${_degrade_model} }"
+                  # The Go model's window env (harness-run-cmd baked
+                  # CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 for the 1M-window flash id) must NOT
+                  # ride a haiku fallback — the M12 degrade shape has no Go env, and a 200k model
+                  # declared at 1M auto-compacts wrong. Strip it; a no-op when it was never baked
+                  # (the --run/retro shape, or a non-flash Go id).
+                  _new_cmd="${_new_cmd//CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 /}"
+                  case "$_new_cmd" in
+                    *"--model ${_degrade_model} "*) ;;   # recipe/worker shape: the substitution took
+                    *"claude -p "*)                     # --run shape: no --model flag at all — insert one
+                      _new_cmd="${_new_cmd/claude -p /claude -p --model ${_degrade_model} }";;
+                    *)                                  # neither shape: never announce a rail the pod will not serve
+                      echo "→ ${PROJECT} Go-rail dispatch deferred — opencode window limited (${_go_reason}); the subscription fallback's model could not be threaded into the pod command"
+                      exit 0;;
+                  esac
+                  RUN_CMD="$_new_cmd"
+                  RAIL_DEGRADED="$_fb_model"
+                  echo "→ homelab#158 RAIL DEGRADE: Go-rail capacity limited [go-limited:${_go_reason}] — dispatching ${RAIL_DEGRADED} on the subscription instead of deferring (go-rail pick was: ${MODEL}). rail=subscription-fallback; the FU-088 gate still bounds this ride."
+                  # The pre-gate SUB_LABEL/AGENT_RAIL were computed from the PRE-reroute Go model
+                  # (:1147, :1305) — the degraded ride draws SUBSCRIPTION capacity (not the Go
+                  # window), so override them exactly as the M12 degrade leaves them
+                  # (:1149-1155 subscription-session:claude + rail:subscription-fallback, :1303).
+                  MODEL="$_degrade_model"
+                  SUB_LABEL=', "homelab.teststuff.net/subscription-session": claude, "homelab.teststuff.net/rail": subscription-fallback'
+                  AGENT_RAIL="subscription-fallback"
+                else
+                  # Says what THIS block decided, not what the ride will do — same shape as the
+                  # M12 strict-wait line (:435): an opted-out stack dispatches onto the latched
+                  # rail, and its own 429s are what it has chosen to wait on.
+                  echo "→ homelab#158: Go-rail capacity limited [go-limited:${_go_reason}] but the subscription fallback is OFF here (${_fb_why}) — strict wait: no degrade, and this ride is left to the gates below exactly as before the trigger existed."
+                fi;;
+              *)
+                echo "→ homelab#158: Go-rail capacity limited [go-limited:${_go_reason}] — no degrade for a non-fix ride (task=${TASK:-adhoc}); the existing gates decide this one.";;
+            esac;;
+        esac
       fi;;
     *)
       # homelab#439 leg 2: the ONE ladder replaces the Anthropic-only probe — when the

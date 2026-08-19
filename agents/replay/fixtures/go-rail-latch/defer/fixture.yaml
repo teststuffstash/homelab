@@ -1,12 +1,15 @@
 # The FU-088 gate's Go arm, LIMITED leg (ADR-107, platform Go-flash dogfood 2026-08-17).
 #
 # CONDITION UNDER REPLAY: an opencode-go/* dispatch while the proxy's self-metered Go window is
-# latched (/opencode-limit → limited:true).
+# latched (/opencode-limit → limited:true, reason "semaphore").
 #
-# THE CONTRACT: the spawn defers report-only (exit 0, the deferred line naming the reason) — and
-# the ANTHROPIC latch is never consulted: the bridge's `bash` tripwire reds this fixture if the
-# Go arm ever falls through to subscription-latch.sh, because a Go ride deferring on Anthropic
-# state is exactly the inversion homelab#158 was about (idle rail waiting on a busy one).
+# THE CONTRACT (homelab#600 launcher half): the SEMAPHORE reason DEFERS report-only (exit 0,
+# the deferred line naming the reason) — it releases in minutes, so a transient deferral is
+# correct and must NOT burn subscription capacity (the #158 inversion, one rail down). The
+# CAPACITY reasons reroute through the M12 degrade path instead — pinned by the `reroute`
+# sibling. In both legs the ANTHROPIC latch is never consulted: the bridge's `bash` tripwire
+# reds this fixture if the Go arm ever falls through to subscription-latch.sh, because a Go ride
+# deferring on Anthropic state is exactly the inversion homelab#158 was about.
 name: go-rail-latch-defer
 mode: actions
 source: agents/agent-session.sh

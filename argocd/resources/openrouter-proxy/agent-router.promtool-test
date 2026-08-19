@@ -466,11 +466,12 @@ tests:
               summary: "OpenRouter key agent-egress/router-account-key below 10% of its spend limit"
               description: "Standing key agent-egress/router-account-key has 8 USD left under its limit — OpenRouter-rail dispatch for that project will die on 402s when it empties."
 
-  # ══ The three that must NOT be bridged — "deliberately unchanged", executed ═══════════════════
-  # These two cases exist so the asymmetry is a running assertion rather than a comment. If a
-  # future sweep re-applies the #288 recipe here on the "single replica + `for:`" surface alone,
-  # these fail. (SubscriptionDispatchLimited, the third, is in the `claude-subscription` group and
-  # is covered by subscription.promtool-test — untouched by #332.)
+  # ══ The in-memory latches that must NOT be bridged — "deliberately unchanged", executed ═══════
+  # These cases exist so the asymmetry is a running assertion rather than a comment. If a future
+  # sweep re-applies the #288 recipe here on the "single replica + `for:`" surface alone, these
+  # fail. Three shipped (M1, M2, M3); a fourth (M4, the early clear) pins the healthy path that
+  # never reaches the window. (SubscriptionDispatchLimited, the subscription-group latch, is in the
+  # `claude-subscription` group and is covered by subscription.promtool-test — untouched by #332.)
 
   # ── M1 — OpenRouterCapacityDown: the roll DOES clear it, and that is correct ─────────────────
   # The latch is in-memory (`_or_cap`). A fresh pod has never seen a 429 and honestly reports 0, so
@@ -559,6 +560,79 @@ tests:
             exp_annotations:
               summary: "Router store is running ephemeral (:memory:)"
               description: "The openrouter-proxy router store failed to open its PVC and degraded to :memory: — strikes, provider events, generation costs and the persisted 429 latch are lost on every restart. Check the openrouter-proxy-data PVC / Longhorn volume in ns agent-egress."
+
+  # ── M3 — GoCapacityLatched (homelab#600, FU-170 leg d): the roll clears it, and that is correct ─
+  # The transpose of M1 onto the GO_UPSTREAM leg: the Go-rail latch is in-memory too (`_go_cap`,
+  # openrouter-proxy.py), so a fresh pod that has never observed a 429/402 honestly reports 0 and
+  # the alert resolving at the roll is the alert telling the truth. Bridging it would page for a
+  # latch that no longer exists anywhere. Same accepted cost as M1 — a ~30m re-arm blank if the
+  # outage is still going. The 5m-lookback model note in the file header applies (no staleness
+  # marker in promtool); the values are M1's (count-40 → last real sample 39m → silently readable
+  # to 44m), so "fired at 31m" and "cleared by the roll" are asserted on the honest side of the
+  # production silence.
+  - interval: 1m
+    name: M3 go capacity latch — a roll clears it and it does not come back on its own
+    input_series:
+      - series: 'router_go_capacity_latched{container="proxy",endpoint="http",instance="10.244.3.18:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-uuu-21",service="openrouter-proxy"}'
+        values: "1+0x40"
+      - series: 'router_go_capacity_latched{container="proxy",endpoint="http",instance="10.244.3.19:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-vvv-22",service="openrouter-proxy"}'
+        values: "_x43 0+0x80"
+    alert_rule_test:
+      # firing under the OLD pod's identity — `pod`/`instance` are on this alert, deliberately
+      - eval_time: 31m
+        alertname: GoCapacityLatched
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              container: proxy
+              endpoint: http
+              instance: 10.244.3.18:8080
+              job: openrouter-proxy
+              namespace: agent-egress
+              pod: openrouter-proxy-uuu-21
+              service: openrouter-proxy
+            exp_annotations:
+              summary: "Go rail capacity latch is held"
+              description: "GO_UPSTREAM returned a 429/402 and the Go-rail observed-capacity latch has held for 30m — Go worker dispatch is deferring at the real wall (/opencode-limit serves limited=true with the typed reason observed-429/observed-402). Probe: GET openrouter-proxy.agent-egress:8080/opencode-limit → .capacity (reason / code / remaining_s / latched_total) names which code latched. A 429 is rate pressure (Retry-After sizes the hold); a 402 means the window is SPENT (the longer default hold). The self-metered ledger reads LOW while this is latched — the observed wall is ground truth (FU-170 leg d)."
+      # the 5m-lookback model tail — old pod readable to 44m, new pod still 0: still no alert
+      - eval_time: 50m
+        alertname: GoCapacityLatched
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: GoCapacityLatched
+        exp_alerts: []
+
+  # ── M4 — GoCapacityLatched: a 2xx early-clear is sub-window, so a healthy rail never pages ────
+  # The latch self-heals forward (hold expiry) AND backward: a Go 2xx from GO_UPSTREAM drops an
+  # active hold immediately (_go_capacity_clear). This case pins the "sustained" half of the
+  # issue's subject line — the alert is for a latch that PERSISTS, and the way it pages "nothing"
+  # for a short one is that the short one never reaches the 30m window at all. Values: a 1-latched
+  # 14-minute burst (the 15m default hold is 900s, so a single 429 without Retry-After is sub-
+  # window by construction), cleared by a 2xx at 14m, then 0. `_x43 0+0x80` is a 0-latched series
+  # whose first sample lands at 43m (the M1 shape — a roll without the latch), so the test keeps
+  # asserting the new pod's honest 0 past the window instead of only the clear.
+  - interval: 1m
+    name: M4 go capacity latch — a 2xx early-clear is sub-window; only a sustained latch pages
+    input_series:
+      - series: 'router_go_capacity_latched{container="proxy",endpoint="http",instance="10.244.3.20:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-www-23",service="openrouter-proxy"}'
+        values: "1+0x14 0+0x80"
+      - series: 'router_go_capacity_latched{container="proxy",endpoint="http",instance="10.244.3.21:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-xxx-24",service="openrouter-proxy"}'
+        values: "_x43 0+0x80"
+    alert_rule_test:
+      # never fires: the burst is gone by 15m and the 30m `for:` never gets 30 consecutive minutes
+      - eval_time: 20m
+        alertname: GoCapacityLatched
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: GoCapacityLatched
+        exp_alerts: []
+      - eval_time: 50m
+        alertname: GoCapacityLatched
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: GoCapacityLatched
+        exp_alerts: []
 
   # ══ ADR-107 flip-acceptance 1 (homelab#515): the requested≠served drift belt ───────────────────
   # Both counters are COMPUTED from the PVC-backed store at scrape time (router.py

@@ -1,3 +1,3 @@
 CALL curl -fsS --max-time 5 http://proxy.test:8080/opencode-limit
-OUT → test-project Go-rail dispatch deferred — opencode window limited (window-weekly)
+OUT → test-project Go-rail dispatch deferred — opencode window limited (semaphore)
 RC 0

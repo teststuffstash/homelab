@@ -162,6 +162,13 @@ is stale, so it cannot drift the way the prose register did.
 | `fu088-ladder/unthreadable` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/clear` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/defer` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/reroute-deny` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/reroute-envoptout` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/reroute-nonfix` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/reroute-optout` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/reroute-run-shape` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/reroute-unthreadable` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/reroute` | actions | - | `agents/agent-session.sh` | - |
 | `goal-ancestor` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-gate` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal/first-touch` | actions | - | `agents/agent-session.sh` | - |
@@ -177,6 +184,7 @@ is stale, so it cannot drift the way the prose register did.
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
+| `merge-conflict/null-author` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `opencode-phonehome-killswitch/opencode-phonehome-killswitch` | suite | - | `-` | - |
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/clear` | actions | - | `agents/subscription-latch.sh` | - |

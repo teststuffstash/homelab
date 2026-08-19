@@ -12,7 +12,10 @@ AGENT_CREDIT_GATE="1"
 AGENT_EGRESS_PROXY="http://proxy.test:8080"
 curl() {
   printf 'CALL curl %s\n' "$*" >> "$REPLAY_ACTIONS"
-  printf '{"limited": true, "reason": "window-weekly"}'
+  # SEMAPHORE — the transient reason (openrouter-proxy.py:1552, "reason \"semaphore\"", the
+  # FU-088 concurrency semaphore folded server-side; FU-170 composes the Go semaphore into the
+  # same top-level limited). This is the branch that must keep DEFERRING.
+  printf '{"limited": true, "reason": "semaphore"}'
 }
 bash() {
   printf 'CALL bash %s\n' "$*" >> "$REPLAY_ACTIONS"
