@@ -1576,10 +1576,8 @@ def collect_issue_lifecycle(lines):
     the queued_at; the close time is the done_at. Re-queues keep the FIRST queued epoch (the
     platform throughput board joins this against agent_run_* for LLM-vs-platform split).
 
-    Uses server-side `since` filter on `updated_at` and early break when items fall out of the
-    window to reduce API quota usage (GitHub's Issues List endpoint filters by updated_at, and
-    closing an issue updates it; with sort=updated&direction=desc, the first out-of-window item
-    permits an early break instead of fetching all closed issues)."""
+    Uses server-side `since` filter on `updated_at` to reduce API quota usage (GitHub's Issues
+    List endpoint filters by updated_at, and closing an issue updates it)."""
     since = (datetime.now(timezone.utc) - timedelta(hours=WINDOW_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     all_repos = [r for r in gh_paged(f"/orgs/{ORG}/repos?type=all", None) if not r["archived"]]
     repos = [r["name"] for r in all_repos]
@@ -1601,10 +1599,9 @@ def collect_issue_lifecycle(lines):
                 closed_at = issue.get("closed_at")
                 if not (number and closed_at):
                     continue
-                # Early break: with sort=updated&direction=desc, first out-of-window item means
-                # all remaining items on this and subsequent pages are also out-of-window
+                # Filter to window: only issues closed within WINDOW_HOURS
                 if epoch(closed_at) < window_cutoff:
-                    break
+                    continue
                 # Get label timeline for this issue to find first agent/queued application
                 try:
                     events = list(gh_paged(f"/repos/{ORG}/{repo}/issues/{number}/events?", None))
@@ -2352,6 +2349,58 @@ def self_test():
         # Since parameter must be in the path (URL-encoded or not)
         assert any("since=" in call for call in issues_calls), \
             f"issues endpoint must include since parameter, got calls: {issues_calls}"
+
+        # Test 3: closed_at vs updated_at divergence — post-close comments update updated_at
+        # but not closed_at, so an out-of-window closed_at can sort ahead of an in-window one.
+        # The filter must check closed_at, not updated_at, and must not early-break on the first
+        # out-of-window closed_at (a later issue in the sort may have in-window closed_at).
+        _OUT_OF_WINDOW = _lc_ts(1500)  # 25 hours ago (outside 24h window)
+        _IN_WINDOW = _lc_ts(10)        # 10 minutes ago
+        _FIXTURE_CLOSED_ISSUE_OOW = {
+            "number": 638,
+            "state": "closed",
+            "closed_at": _OUT_OF_WINDOW,  # closed 5h ago
+            "updated_at": _IN_WINDOW,      # but commented on 10m ago (sorts first by updated_at DESC)
+            "pull_request": None,
+        }
+        _FIXTURE_CLOSED_ISSUE_IW = {
+            "number": 639,
+            "state": "closed",
+            "closed_at": _IN_WINDOW,      # closed 10m ago (in window)
+            "updated_at": _IN_WINDOW,
+            "pull_request": None,
+        }
+        _FIXTURE_EVENTS_IW = [
+            {"event": "labeled", "label": {"name": "agent/queued"}, "created_at": _LC_T1},
+        ]
+
+        def _mock_gh_paged_closed_at_divergence(path, key):
+            """Mock gh_paged() for closed_at vs updated_at divergence test."""
+            if "/issues?" in path and "state=closed" in path:
+                # Return issues sorted by updated_at DESC (newest first)
+                # Issue 638 has out-of-window closed_at but in-window updated_at (sorts first)
+                # Issue 639 has in-window closed_at (sorts second)
+                assert key is None
+                yield _FIXTURE_CLOSED_ISSUE_OOW
+                yield _FIXTURE_CLOSED_ISSUE_IW
+            elif "/events" in path:
+                assert key is None
+                yield from _FIXTURE_EVENTS_IW
+            elif "/repos?" in path:
+                assert key is None
+                yield {"name": "homelab", "archived": False, "private": False}
+
+        globals()['gh_paged'] = _mock_gh_paged_closed_at_divergence
+        lifecycle_lines_divergence = []
+        collect_issue_lifecycle(lifecycle_lines_divergence)
+        lifecycle_body_divergence = "\n".join(dedupe_exposition(lifecycle_lines_divergence))
+
+        # Issue 638 is out-of-window by closed_at, should NOT emit
+        assert 'number="638"' not in lifecycle_body_divergence, \
+            "issue 638 (closed_at out-of-window) must not emit, even if updated_at is in-window"
+        # Issue 639 is in-window by closed_at, MUST emit (the critical assertion)
+        assert 'number="639"' in lifecycle_body_divergence, \
+            f"issue 639 (closed_at in-window) must emit even when another issue sorts first; got:\n{lifecycle_body_divergence}"
     finally:
         globals()['gh'] = saved_gh_for_issue
         globals()['gh_paged'] = saved_gh_paged_for_issue
