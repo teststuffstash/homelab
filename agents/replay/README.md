@@ -155,6 +155,7 @@ is stale, so it cannot drift the way the prose register did.
 | `doorbell/fanout` | actions | - | `agents/coordinator-scan.sh` | - |
 | `env-card-machine-markers/env-card-machine-markers-capture` | actions | - | `agents/agent-session.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
+| `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
 | `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder/anthropic` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder/both` | actions | - | `agents/agent-session.sh` | - |
@@ -192,10 +193,12 @@ is stale, so it cannot drift the way the prose register did.
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/null-author` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
+| `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
 | `opencode-phonehome-killswitch/opencode-phonehome-killswitch` | suite | - | `-` | - |
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/clear` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/go` | actions | - | `agents/subscription-latch.sh` | - |
+| `rail-degrade/rail-degrade` | suite | - | `-` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
@@ -227,6 +230,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-go-failover/available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/explicit-model` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/limited` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-optout/reviewer-optout` | suite | - | `-` | - |
 | `reviewer-touches/escapes-computed` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-none` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/unavailable` | actions | - | `agents/reviewer-session.sh` | - |
@@ -256,6 +260,7 @@ is stale, so it cannot drift the way the prose register did.
 | `summary-comment/duplicate-detected` | actions | - | `-` | - |
 | `summary-comment/first-touch` | actions | - | `-` | - |
 | `summary-comment/quoted-inert` | actions | - | `-` | - |
+| `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
 | `unblocked-unlabeled/blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unblocked-unlabeled/surfaces` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unit-fast-path-author/unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |

@@ -1,0 +1,13 @@
+# FU-167 move 7 (stint #661) — the standalone ADR-097 double-dispatch belt registers so
+# "executed replay" has one runner and one index.
+#
+# mode: suite — synthetic cases over the EXACT predicate the scan sources (`fp_conflict` in
+# agents/footprint.sh), not an action stream: the miscount class has bitten twice (#55 races,
+# issue-96 null-strip) and with WIP>1 a predicate bug double-dispatches into a lane instead of
+# deferring, so every row here is a regression fence. The suite (agents/footprint-test.sh) sources
+# the REAL agents/footprint.sh and asserts fp_conflict's verdict directly — never a copy of the
+# glob logic. Registered, not rewritten: it keeps its own file and its own devbox task
+# (`devbox run footprint-test`, wired into CI at .github/workflows/ci.yaml).
+name: footprint-conflict-predicate
+mode: suite
+entrypoint: agents/footprint-test.sh
