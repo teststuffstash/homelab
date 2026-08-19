@@ -1,0 +1,4 @@
+CALL curl -fsS --max-time 5 http://proxy.test:8080/opencode-limit
+OUT → homelab#158 RAIL DEGRADE: Go-rail capacity limited [go-limited:window-weekly] — dispatching claude/haiku on the subscription instead of deferring (go-rail pick was: opencode-go/deepseek-v4-flash). rail=subscription-fallback; the FU-088 gate still bounds this ride.
+OUT PASS: STRUCK_MODEL divergence correct — attempted entry at strike time, fallback in use
+RC 0

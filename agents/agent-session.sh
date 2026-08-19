@@ -1183,9 +1183,16 @@ if [ "$HARNESS" = "claude" ]; then
       # counting this pod exactly like any other claude ride, because it draws the same capacity.
       [ -z "${RAIL_DEGRADED:-}" ] || SUB_LABEL="${SUB_LABEL}"', "homelab.teststuff.net/rail": subscription-fallback';;
   esac
+  # >>>REPLAY:tier-default-struck-model-sync>>>
   # Tier default: Haiku (fast, ~$0 marginal on subscription). An explicit --model wins.
-  if [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ]; then MODEL="haiku"; fi
+  if [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ]; then
+    # The pre-rewrite value is this script's OWN default (:48) — never a chain entry a dispatcher
+    # chose or a model that served a request — so the strike must name what actually runs. Contrast
+    # the two degrade sites below, which deliberately do NOT sync (#660 acceptance).
+    MODEL="haiku"; STRUCK_MODEL="$MODEL"
+  fi
   GOOSE_MODEL="$MODEL"
+  # <<<REPLAY:tier-default-struck-model-sync<<<
   # Cost attribution (2026-08-08 label audit): claude-harness WORKERS exported no telemetry, so
   # every haiku ride was missing from the stacks' subscription-equiv on the agent-cost dashboard.
   STACK_LABEL="${STACK_LABEL:-$(jq -r --arg r "$PROJECT" \
@@ -1563,6 +1570,11 @@ if [ "$HARNESS" = "claude" ]; then
                   # (:1147, :1305) — the degraded ride draws SUBSCRIPTION capacity (not the Go
                   # window), so override them exactly as the M12 degrade leaves them
                   # (:1149-1155 subscription-session:claude + rail:subscription-fallback, :1303).
+                  # STRUCK_MODEL is deliberately NOT synced here (#660 acceptance; PR#668 arbitration).
+                  # The pre-degrade entry is the one that was dispatched and found unavailable — that is
+                  # what the strike must name, so the coordinator's chain walk skips it and keeps the
+                  # fallback. Syncing to the fallback IS the #652 defect. The tier-default rewrite above
+                  # is the opposite shape (a placeholder default → the model that runs) and does sync.
                   MODEL="$_degrade_model"
                   GOOSE_MODEL="$_degrade_model"
                   SUB_LABEL=', "homelab.teststuff.net/subscription-session": claude, "homelab.teststuff.net/rail": subscription-fallback'
@@ -1636,6 +1648,11 @@ if [ "$HARNESS" = "claude" ]; then
           # the proven-threaded path only (the un-threadable defer above never reaches here),
           # mirroring the RAIL_DEGRADED pattern — :418-420 runs before the label block and propagates
           # cleanly; this failover runs after it, so the overrides must be explicit.
+          # STRUCK_MODEL is deliberately NOT synced here (#660 acceptance; PR#668 arbitration).
+          # The pre-degrade entry is the one that was dispatched and found unavailable — that is
+          # what the strike must name, so the coordinator's chain walk skips it and keeps the
+          # fallback. Syncing to the fallback IS the #652 defect. The tier-default rewrite above
+          # is the opposite shape (a placeholder default → the model that runs) and does sync.
           MODEL="$rail"
           # PR#643 r1: GOOSE_MODEL was computed at :~1182 from the PRE-failover MODEL and feeds
           # the pod manifest env the strike/stats readers compare — the same MODEL-vs-GOOSE_MODEL

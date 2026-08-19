@@ -175,6 +175,8 @@ is stale, so it cannot drift the way the prose register did.
 | `go-rail-latch/reroute-run-shape` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/reroute-unthreadable` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/reroute` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/strike-attribution-degrade` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch/strike-attribution-init-tier-default` | actions | - | `agents/agent-session.sh` | - |
 | `go-rail-latch/strike-attribution` | actions | - | `agents/agent-session.sh` | - |
 | `goal-ancestor` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-gate` | table | - | `agents/agent-session.sh` | - |
