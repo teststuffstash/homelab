@@ -74,3 +74,96 @@ spec:
           apiVersion: generators.external-secrets.io/v1alpha1
           kind: GithubAccessToken
           name: retro-git-gen
+---
+# ── The FU-080 (a) mirror: the token reaches the RIDE namespace as a Secret, never as text ──────
+# Review r2 on PR#619: the first cut exported the raw token in the retro-cell step and spliced it
+# as a literal env `value:` into the ride pod's manifest — the exact cross-namespace env-value
+# injection FU-080 (a) eliminated for the transcripts S3 key. Same remedy as there
+# (argocd/resources/agentstack/transcripts-store.yaml, the donor): a ClusterSecretStore whose
+# kubernetes-provider SA can read exactly ONE secret in agent-coordinator, and a per-ride-ns
+# ExternalSecret mirror the pod secretKeyRefs IN-NAMESPACE. No launcher or workflow step ever
+# reads the value; the pod spec carries a reference, not the token.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso-retro-git-reader
+  namespace: agent-coordinator
+---
+# Exactly one secret readable, by name.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: eso-retro-git-reader
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["retro-git"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eso-retro-git-reader
+  namespace: agent-coordinator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: eso-retro-git-reader
+subjects:
+  - kind: ServiceAccount
+    name: eso-retro-git-reader
+    namespace: agent-coordinator
+---
+# ESO's kubernetes provider validates itself with a SelfSubjectRulesReview — reuse the generic
+# ClusterRole the transcripts store ships (transcripts-store.yaml), bind this SA to it.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: eso-retro-git-reader-ssrr
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: eso-transcripts-reader-ssrr
+subjects:
+  - kind: ServiceAccount
+    name: eso-retro-git-reader
+    namespace: agent-coordinator
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: retro-git
+spec:
+  provider:
+    kubernetes:
+      remoteNamespace: agent-coordinator
+      server:
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          key: ca.crt
+          namespace: agent-coordinator
+      auth:
+        serviceAccount:
+          name: eso-retro-git-reader
+          namespace: agent-coordinator
+---
+# The per-ride-namespace mirror. Hand-written for the PLATFORM series ride ns
+# (openrouter-operator — agents/retro-project.sh is the map's one home); a second stack's retro
+# graduation adds its own mirror here, or the AgentStack Composition renders it per claim knob
+# (the transcripts-store precedent) when retro graduates per-stack.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: retro-git
+  namespace: openrouter-operator
+spec:
+  refreshInterval: 45m
+  secretStoreRef: { name: retro-git, kind: ClusterSecretStore }
+  target:
+    name: retro-git
+    creationPolicy: Owner
+  data:
+    - secretKey: GH_TOKEN
+      remoteRef: { key: retro-git, property: GH_TOKEN }

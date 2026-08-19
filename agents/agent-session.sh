@@ -1098,17 +1098,17 @@ fi
 
 # homelab#587 leg 2 (§B2 The split): a ~1h READ-ONLY fleet-wide token for the platform retro ride
 # ONLY — deliberately NOT GH_TOKEN (the ADR-087 leg B broker's per-repo token path stays
-# untouched; this rides alongside it, never replaces it). The narrowest seam: emitted into the
-# pod env ONLY when the LAUNCHER's own environment already carries it (retro-argo.yaml's
-# retro-cell step exports it from the retro-git Secret before calling retro-session.sh, which
-# execs this script — plain env inheritance, no CLI flag). Visible in the pod spec like every
-# other env entry here; accepted for the platform retro's RIDE namespace (a platform-stack fixer
-# ns — the retro-cell step in agent-coordinator is the only place that can source the value; an
-# ordinary fixer dispatch has no retro-git mount, so this fragment stays empty there).
+# untouched; this rides alongside it, never replaces it). The launcher is handed a Secret NAME
+# (RETRO_GH_SECRET, set by retro-argo.yaml's retro-cell step) and renders a secretKeyRef the pod
+# resolves against the IN-NAMESPACE mirror (retro-git.yaml's FU-080 (a) ClusterSecretStore +
+# per-ride-ns ExternalSecret) — the raw value never appears in any manifest or any launcher env
+# (PR#619 r2: literal cross-namespace env values are the pattern FU-080 (a) exists to forbid).
+# optional: true — a namespace without the mirror (every ordinary fixer dispatch) resolves to an
+# unset var, and the brief tells the model to name unreachable repos rather than guess.
 # >>>REPLAY:retro-gh-token-env>>>
 RETRO_GH_TOKEN_ENV=""
-if [ -n "${RETRO_GH_TOKEN:-}" ]; then
-  RETRO_GH_TOKEN_ENV=$'        - name: RETRO_GH_TOKEN\n          value: "'"$RETRO_GH_TOKEN"'"'
+if [ -n "${RETRO_GH_SECRET:-}" ]; then
+  RETRO_GH_TOKEN_ENV=$'        - name: RETRO_GH_TOKEN\n          valueFrom:\n            secretKeyRef: { name: "'"$RETRO_GH_SECRET"'", key: GH_TOKEN, optional: true }'
 fi
 # <<<REPLAY:retro-gh-token-env<<<
 

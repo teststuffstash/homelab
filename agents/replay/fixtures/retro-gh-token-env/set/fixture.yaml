@@ -2,8 +2,9 @@
 # manifest — the >>>REPLAY:retro-gh-token-env>>> block is the SAME `${AFFINITY}`/`${KATA_BLOCK}`
 # shape as WORK_BRANCH_ENV/ARM_ENV: a variable that is either empty or a well-indented env-entry
 # string, inserted verbatim into the manifest heredoc. This leg: the launcher's OWN environment
-# (retro-argo.yaml's retro-cell step exports RETRO_GH_TOKEN before exec'ing into this script via
-# retro-session.sh) carries the token — the fragment must render it as a real pod env entry.
+# (retro-argo.yaml's retro-cell step exports RETRO_GH_SECRET — a Secret NAME, never a value —
+# before exec'ing into this script via retro-session.sh) names the in-ns mirror; the fragment
+# must render a secretKeyRef env entry (PR#619 r2: the raw token never appears in manifest text).
 #
 # Reaches only the fragment-construction seam, not the `kubectl create -f -` STDIN further down
 # this same script — that heredoc has no >>>REPLAY:<<< sentinel of its own and no existing
@@ -17,7 +18,7 @@ name: retro-gh-token-env-set
 mode: actions
 source: agents/agent-session.sh
 env:
-  - RETRO_GH_TOKEN=ghs_faketoken123
+  - RETRO_GH_SECRET=retro-git
 parts:
   - block:retro-gh-token-env
   - file:post.sh

@@ -1,4 +1,5 @@
 OUT RETRO_GH_TOKEN_ENV (non-empty):
 OUT         - name: RETRO_GH_TOKEN
-OUT           value: "ghs_faketoken123"
+OUT           valueFrom:
+OUT             secretKeyRef: { name: "retro-git", key: GH_TOKEN, optional: true }
 RC 0

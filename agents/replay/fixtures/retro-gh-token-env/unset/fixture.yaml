@@ -1,7 +1,7 @@
-# homelab#587 leg 2, sibling of ../set: the launcher's environment does NOT carry RETRO_GH_TOKEN
-# (a fixer-namespace ride, or a retro-git secret not yet materialized — retro-argo.yaml's WARN
-# path). The fragment must stay empty, so the manifest never splices in an env entry naming an
-# unset variable.
+# homelab#587 leg 2, sibling of ../set: the launcher's environment does NOT carry
+# RETRO_GH_SECRET (every ordinary fixer dispatch — only retro-argo.yaml's retro-cell step sets
+# it). The fragment must stay empty, so the manifest never splices in a secretKeyRef naming a
+# Secret no ordinary ride namespace is meant to resolve.
 name: retro-gh-token-env-unset
 mode: actions
 source: agents/agent-session.sh
