@@ -15,10 +15,6 @@ OR_CREDITS=""
 OR_MIN="0.25"
 AGENT_CREDIT_GATE="1"
 AGENT_EGRESS_PROXY="http://proxy.test:8080"
-KUBECTL="kubectl"
-KUBE=""
-NS="test-namespace"
-POD="test-pod-xyz"
 . "$REPLAY_WORLD/vars.sh"
 
 curl() {

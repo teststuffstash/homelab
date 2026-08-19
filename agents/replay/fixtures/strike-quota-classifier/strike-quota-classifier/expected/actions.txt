@@ -1,0 +1,3 @@
+CALL kubectl -n test-namespace get pod test-pod-xyz -o jsonpath={.status.reason}
+OUT PASS: error_class=quota from 429 quota/rate-limit classifier
+RC 0

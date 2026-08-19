@@ -81,18 +81,4 @@ case "${POST_SHAPE:-off}" in
     fi
     echo "PASS: tier-default rewrite synced STRUCK_MODEL (they remain in sync at init)"
     ;;
-  strike-quota-classifier)
-    # Issue #660 leg 2: 429-quota classifier in raw-log fallback
-    if [ "$ERR_CLASS" != "quota" ]; then
-      echo "FAIL: ERR_CLASS=$ERR_CLASS (expected quota from 429 pattern)" >&2
-      exit 1
-    fi
-    # Verify that error_class=quota reaches the AGENT_STRIKE line (construct it as the block would)
-    TEST_STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
-    if ! echo "$TEST_STRIKE_LINE" | grep -q "error_class=quota"; then
-      echo "FAIL: STRIKE_LINE would be missing error_class=quota: $TEST_STRIKE_LINE" >&2
-      exit 1
-    fi
-    echo "PASS: error_class=quota from 429 quota/rate-limit classifier"
-    ;;
 esac
