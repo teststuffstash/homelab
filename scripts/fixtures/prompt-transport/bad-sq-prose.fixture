@@ -1,0 +1,20 @@
+# FIXTURE — NOT LIVE CODE, never sourced or executed. Positive control for #197 instance 5.
+#
+# The pre-fix pod-side single-quoted PROMPT of agents/reviewer-session.sh (commit 1698b42 parent,
+# 2026-08-18 ~17:37Z → fixed 18:27Z). The PROMPT='…' assignment sits INSIDE the body of the
+# EXPANDING `PREP=$(cat <<PREP` heredoc — the whole body is shipped to the review pod and executed,
+# so the apostrophe in "sandbox's" terminates the single-quoted string and everything after it
+# parses as shell. Every reviewer pod since #547 merged died on "bash: -c: line 144: syntax error
+# near unexpected token '('" and then reported Succeeded (the uploader trap masks the exit).
+# EXPECT: SQ-PROSE@14
+#
+PREP=$(cat <<PREP
+set -e
+gh repo clone ${REPO_SLUG} /work/repo
+PROMPT='Review pull request #${PR}.
+
+  TOOL GAPS (homelab#536) — name one only where the absence actually changed your verdict, and
+  never this sandbox's deliberate lack of devbox/network (that is the design above, not a gap).
+  The verdict question is NOT "is this perfect?" — it is "is master better off WITH this PR?"'
+PREP
+)
