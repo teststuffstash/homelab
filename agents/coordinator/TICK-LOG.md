@@ -4436,3 +4436,27 @@ first live ADR-110 maintenance session before the ADR existed.
   FU-058 stint rides there. #420 final closeout now waits: #540 parity + #600 subtree + #610.
   Session totals: ~20 PRs merged, 3 subagent chunks, 2 stall/latch incidents caught by the
   session's own new watches, 2 epic-lifecycle rules minted by pilot catches.
+
+- **2026-08-19 FU-058 stint session (corpus-loaded build; operator away, autonomous).** Corpus
+  read per /design-agents; watches armed (meta-events + 2700s heartbeat; stint file → #587).
+  **Go monthly exhaustion answered live (the operator's question):** console 100%/30d vs meter
+  63% (parity datum → #540); #607 r1 rode Go flash at 11:24Z, struck the wall ("Monthly usage
+  limit reached"), same-round haiku re-dispatch at 11:55Z delivered PR#615 — the #603/#610 belt's
+  ORGANIC FIRST FIRE, accepted. But the proxy latch held only 90s: the #605 deploy roll at
+  11:49:29Z wiped the in-memory hold (25-day latch lost; counters zeroed) → filed #618 (bound
+  under #420, the defect-in-deliverable rule), loop fixed it as PR#621 in ~40 min (latch now
+  rides latch_state per ADR-096's own intent). **The #587 stint ran to final closeout in one
+  session:** legs via 3 sonnet subagents in local clones (double-review mode) → PRs #623 (legs
+  1+4 + #292), #619 (leg 2, 3 rounds — r2 = the FU-080(a) raw-token catch, bot refused the
+  seat-accepted splice; remedied as ClusterSecretStore + per-ride-ns mirror + secretKeyRef),
+  #620 (leg 3, 1 round — auto-detect fallback → caller-declared log|report mode + longlog pin).
+  Sentinel milestone: the G01 fence took its FIRST live block on a platform PR (#619's new CRB
+  not in the homelab baseline; 75-min quiet BLOCKED until the heartbeat caught it) → baseline
+  grew `eso-retro-git-reader-ssrr` operator-direct. PR#612 fixed in-PR + merged; #615
+  codeowner-read + merged (its review follow-up harvested as #622). Footprint gate blocked 2 of
+  4 leg PRs on authored-issue under-declaration of new helper files — amend-at-review worked
+  both times (ledger observation). Seat process misses, both self-caught: a pipe-filtered replay
+  red slipped one push (fixed next commit); a failed-cd fallback checked out a PR branch in the
+  MAIN worktree (the #428 escape class hit by the seat itself — repaired, ledger row context).
+  Closeout: docs PR#624, FU-058 → pointer, built-vs-left on #587, miss-ledger rows ×4. Organic
+  acceptance = Mon 08-24 05:00Z platform retro fire.
