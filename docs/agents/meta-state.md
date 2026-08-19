@@ -17,9 +17,9 @@ meant to avoid.)
   Mon 00Z).** The 429→same-round-haiku belt is LIVE and organically proven (#607→PR#615); latch
   persistence landed (#618→#621) AFTER the first fire, so the NEXT Go dispatch burns one 429 to
   latch and the hold now survives proxy rolls — verify `router_go_capacity_latched` stays 1
-  across the next deploy. Meter-vs-console parity datum posted on #540 (draw under-count ~4×/7d
-  — the anchoring halves match now; the volume-parity check on a clean 5h window is still the
-  operator's).
+  across the next deploy. #420 + #540 CLOSED (operator, 2026-08-19) — the post-reset readout
+  (parity on a clean window, the 5h refusal shape, latch-survives-roll) is **FU-181**, actionable
+  after Sep-13.
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
   buildout → then stacks.** The forward plan lives in **ROADMAP §The platform work map**
   (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
@@ -42,7 +42,7 @@ meant to avoid.)
 - **Soaks** (each owned by an FU/issue — this line is only the calendar): platform-retro first unattended fire Mon 08-24 05:00Z (FU-058 acceptance) · argo second backlog
   sweep ~2026-08-25 (#521) · minRunners readout · iac-sentinel first real RED + FU-176 ·
   router shadow/elastic cells (FU-095, PR#408) · FU-148 acceptance · FU-149 datum ~08-20 ·
-  or-op#34 first daily-429 · renovate-approve one-approval-per-head (#114) · #540 volume-parity (the clean 5h window).
+  or-op#34 first daily-429 · renovate-approve one-approval-per-head (#114).
 
 ## Durable warnings — re-read before touching these files
 

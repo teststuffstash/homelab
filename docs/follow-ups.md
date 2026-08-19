@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-181**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-182**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -283,12 +283,21 @@ the block needs pruning, not more headings.
       explicit in the deployment; composed into `/opencode-limit` limited, gauges + board panel), (b) **jail-ingest
       freshness gauge** (age of last `stack=jail` go_usage row — the 2026-08-17 stale-shim
       under-metering, detection half), (c) **Go 429 counter + near-threshold alerts** (zero
-      opencode-window alert rules exist today), (d) **observed-429/402 LATCH correcting the
-      blind ledger** (operator-sanctioned 2026-08-19 at console 95%/meter 62% — queued as
-      homelab#600, M12's `_or_capacity_*` transposed; delivers (c)'s counter half), (e) **the
-      launcher REROUTE** — a latched Go-primary dispatches the `claude/haiku` fallback
-      same-round instead of defer-forever (semaphore still defers; seat chunk in flight
-      2026-08-19). Dashboard parity panels ride each piece.
+      opencode-window alert rules exist today), (d) **observed-429/402 LATCH** ✅ DONE
+      2026-08-19 (#600→#603, organically proven on #607's monthly-limit 429; persistence
+      #618→#621 — a proxy roll no longer drops a hold; delivers (c)'s counter half), (e) **the
+      launcher REROUTE** ✅ DONE 2026-08-19 (PR#610 — a latched Go-primary dispatches the
+      `claude/haiku` fallback same-round; semaphore still defers). Dashboard parity panels ride each piece.
+- [ ] **FU-181** — **Go-rail post-reset readout (after the 2026-09-13 monthly reset —
+      operator, 2026-08-19).** The rail is monthly-latched until then (observed-429 latch;
+      Retry-After ≈ the reset epoch), so homelab#540 (gometer parity: console 100%/99% vs meter
+      63%/25% — draw under-count; window ANCHORING now matches, evidence in #540's 2026-08-19
+      parity comment) and the #420 container closed as unactionable-until-reset. On the first
+      clean window after Sep-13: (1) re-run the meter-vs-console parity check on a clean 5h
+      window (#540's check); (2) capture the 5h-window refusal shape on its first organic fire
+      (429 vs 402 + its Retry-After — `router_go_observed_429_total{code}` and the latch log
+      line self-record it); (3) confirm the persisted latch (#618/#621) survives a proxy roll
+      while genuinely held. Relates FU-170 (residual gauges/alerts), homelab#540, homelab#420.
 - [ ] **FU-174** — **Reasoning effort is unmodeled fleet-wide (operator, 2026-08-17).** The DeepSWE
       numbers behind the flash slot ran `[max]`; the fleet runs provider defaults — the jail shim
       even DROPS `thinking` on translated legs, so no Go model ever sees an effort signal.
