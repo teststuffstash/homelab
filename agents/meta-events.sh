@@ -69,24 +69,33 @@ src_needsmeta() {
 }
 
 
-# NEW ISSUES across the org, trailing 24h — the source the 2026-08-19 sitting was missing: three
-# bot-filed issues (#616/#617/#629) reached the seat only when the operator pasted their URLs.
-# One SEARCH call per tick (its own 30/min pool; index lag of ~a minute is fine for a watch —
-# dispatch never rides this source). The set is the trailing-24h window, so an issue emits ONCE
-# on first sight and CLEARs when it closes or ages out (the src_seatpr window shape). All
-# authors deliberately included: bot filings are the motivating class, and an operator filing is
-# a session pickup, not noise — edge collapse bounds the cost either way.
+# NEW ISSUES, trailing 24h — the source the 2026-08-19 sitting was missing: three bot-filed
+# issues (#616/#617/#629) reached the seat only when the operator pasted their URLs.
+# PER-REPO REST LIST, deliberately NOT search (PR#632 r1): the search index under a fine-grained
+# PAT can silently drop private-repo results with a clean 200 (the FU-108 exporter class) — a
+# per-repo `gh issue list` either answers for that repo or FAILS for it, and a failed repo read
+# holds state loudly (rule #6) instead of looking healthy while blind. Cost: one REST call per
+# repo per tick (~13 × 30/hr against the PAT's 5000/hr pool). The repo set = the claim
+# universe (stacks.json mirror — the build-time consumer it exists for) + SEAT_REPOS, so an
+# unmirrored repo is the one gap; org-wide-by-search bought silence, not coverage.
+# The set is the trailing-24h window: an issue emits ONCE on first sight and CLEARs when it
+# closes or ages out (the src_seatpr window shape). All authors deliberately included: bot
+# filings are the motivating class, and an operator filing is a session pickup, not noise.
 # ACT RULE (operator, 2026-08-19): the seat TRIAGES platform-claim repos only; a stack-repo
 # event is the stack's own loop/jail's to act on — record it, skip it, unless the operator
-# points at it. The watch stays org-wide because operator-lane strays have no machine owner.
+# points at it. The watch stays fleet-wide because operator-lane strays have no machine owner.
 src_newissue() {
-  local tmp since
-  tmp="$(mktemp)"
+  local tmp since r ok=1 repos
+  tmp="$(mktemp)"; : > "$tmp"
   since="$(date -u -d '-24 hours' +%Y-%m-%dT%H:%M:%SZ)"
-  if ! gh api "search/issues?q=org:${ORG}+is:issue+state:open+created:>=${since}&per_page=50"       --jq '.items[] | "NEWISSUE|\(.repository_url | sub(".*/";""))#\(.number)|\(.user.login)|\(.title[0:70])"'       > "$tmp" 2>/dev/null; then
-    hold_source newissue "issue search failed"; rm -f "$tmp"; return
-  fi
-  diff_source newissue "$tmp"; rm -f "$tmp"
+  repos="$( { jq -r '.stacks[].repos[]' "$HERE/stacks.json" 2>/dev/null; printf '%s\n' $SEAT_REPOS; } | sort -u)"
+  [ -n "$repos" ] || { hold_source newissue "empty repo universe (stacks.json unreadable?)"; rm -f "$tmp"; return; }
+  for r in $repos; do
+    gh issue list -R "$ORG/$r" --state open --limit 25 --json number,author,title,createdAt       --jq ".[] | select(.createdAt >= \"$since\") | \"NEWISSUE|$r#\(.number)|\(.author.login)|\(.title[0:70])\""       >> "$tmp" 2>/dev/null || ok=0
+  done
+  if [ "$ok" = 1 ]; then diff_source newissue "$tmp"
+  else hold_source newissue "issue list failed for ≥1 repo"; fi
+  rm -f "$tmp"
 }
 
 src_goalcmt() {
