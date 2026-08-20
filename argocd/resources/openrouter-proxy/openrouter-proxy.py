@@ -3581,8 +3581,8 @@ data: [DONE]
     c.close()
     check(r.status == 400, f"ingest negative usd: 400 (got {r.status})")
 
-    # ── FU-710: _cr_guardrail tri-state has_cr / _headroom_tick fail-open tests ────────────────────
-    print("\n=== _cr_guardrail / _headroom_tick coverage tests (FU-710 / #701 acceptance) ===")
+    # ── #710: _cr_guardrail tri-state has_cr / _headroom_tick fail-open tests ────────────────────
+    print("\n=== _cr_guardrail / _headroom_tick coverage tests (#710 / #701 acceptance) ===")
     # The tri-state has_cr ∈ {True, False, None} from _cr_guardrail controls whether _headroom_tick
     # probes a session ref (CR found or list failed) vs skips it as residue (no CR). Acceptance:
     # CR found → probe, no CR + session → skip as residue, list failed → still probe (fail-open).
