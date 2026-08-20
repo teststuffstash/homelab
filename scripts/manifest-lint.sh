@@ -53,3 +53,27 @@ fi
 echo "manifest-lint: OK — ${valid} validated, ${skipped} SKIPPED (no local CRD schema: Applications,"
 echo "  AgentStacks, CiliumNetworkPolicies, PrometheusRules…). Skipped resources are NOT checked —"
 echo "  vendoring those CRD schemas is what would close the gap."
+
+# ── kustomization completeness (homelab#694, 2026-08-20) ─────────────────────────────────────
+# The agent-coordinator app is kustomize-rendered (FU-152): a manifest present in the directory
+# but absent from `resources:` produces the WORST drift shape — ArgoCD reads Synced+Healthy while
+# the resource silently does not exist (bitten twice: FU-152's origin; #692's Sensor absent until
+# #693). Every *.yaml in a kustomized dir must be listed (kustomization.yaml itself excepted).
+for kdir in agents/coordinator; do
+  kfile="$kdir/kustomization.yaml"
+  [ -f "$kfile" ] || continue
+  missing=""
+  for f in "$kdir"/*.yaml "$kdir"/*.yml; do
+    [ -e "$f" ] || continue
+    base="$(basename "$f")"
+    [ "$base" = "kustomization.yaml" ] && continue
+    grep -qE "^[[:space:]]*-[[:space:]]+${base}[[:space:]]*$" "$kfile" || missing="${missing}${base}"$'\n'
+  done
+  if [ -n "$missing" ]; then
+    echo "manifest-lint: FAIL — manifest(s) in ${kdir}/ absent from ${kfile} resources: (the" >&2
+    echo "  Synced-but-nonexistent drift, homelab#694/#693):" >&2
+    printf '%s' "$missing" | sed 's/^/    /' >&2
+    exit 1
+  fi
+  echo "manifest-lint: kustomization completeness OK (${kdir})"
+done
