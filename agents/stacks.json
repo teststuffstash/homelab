@@ -34,7 +34,7 @@
       ],
       "mainRepo": "homelab",
       "coordinatorModel": "opus",
-      "workerModel": "openrouter/deepseek/deepseek-v4-flash",
+      "workerModel": "deepseek/deepseek-v4-flash",
       "workerModelFallbacks": [
         "claude/haiku"
       ],

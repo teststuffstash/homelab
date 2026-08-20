@@ -82,7 +82,7 @@ spec:
   # primary ~2026-09-03, at fixup-wave end, or at OR depletion — whichever first (meta-state
   # soak line tracks it; the Go re-flip stays FU-181's, separate).
   modelDeny: [deepseek/deepseek-v4-flash-0731]
-  workerModel: openrouter/deepseek/deepseek-v4-flash
+  workerModel: deepseek/deepseek-v4-flash
   workerModelFallbacks: [claude/haiku]
   repos:
     # agent-runtime: FIXER ENABLED 2026-08-08 — the 2026-07-16 "No fixer: these build the
