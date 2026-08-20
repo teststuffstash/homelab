@@ -1,0 +1,3 @@
+CALL bash ./subscription-latch.sh --pick-rail
+OUT PASS: STRUCK_MODEL records the prefixed chain id for claude/* entries
+RC 0

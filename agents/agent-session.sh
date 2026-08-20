@@ -482,21 +482,13 @@ fi
 # The chain entry must match what the coordinator sees in the claim (before model-id.py resolution
 # strips prefixes like claude/* → haiku). Capture here BEFORE resolution.
 # If degrade at :420 already set it, use that; otherwise use current MODEL.
-set +u
 STRUCK_MODEL="${STRUCK_MODEL_ORIG:-$MODEL}"
-set -u
 # <<<REPLAY:struck-model-init<<<
 # >>>REPLAY:model-id-resolution>>>
 eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
 [ -z "$MODEL_HARNESS" ] || [ -n "${HARNESS_SET:-}" ] || HARNESS="$MODEL_HARNESS"
 MODEL="$MODEL_MODEL"
 # <<<REPLAY:model-id-resolution<<<
-# >>>REPLAY:struck-model-init>>>
-# Track the originally attempted model for strike attribution: STRUCK_MODEL records the chain
-# entry that was attempted (not the fallback if degraded, and not the stripped model from
-# resolution). This matches coordinator's chain walk which compares against claim entries.
-STRUCK_MODEL="$STRUCK_MODEL_ORIG"
-# <<<REPLAY:struck-model-init<<<
 
 # Without an explicit --task (interactive/ad-hoc runs) the transcript still lands somewhere findable.
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"

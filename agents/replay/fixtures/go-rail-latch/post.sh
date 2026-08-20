@@ -39,6 +39,17 @@ case "${POST_SHAPE:-off}" in
     fi
     echo "PASS: STRUCK_MODEL initialized correctly for strike attribution"
     ;;
+  strike-attribution-claude)
+    # Issue #674: STRUCK_MODEL for claude/* prefixed chain entry should record the full prefixed id.
+    # In the replay, model_id.py resolution is not executed, so MODEL stays at its vars.sh value.
+    # This test verifies that STRUCK_MODEL captures the prefixed chain id correctly.
+    EXPECTED_STRUCK_MODEL="claude/haiku"
+    if [ "$STRUCK_MODEL" != "$EXPECTED_STRUCK_MODEL" ]; then
+      echo "FAIL: STRUCK_MODEL=$STRUCK_MODEL (expected $EXPECTED_STRUCK_MODEL — the prefixed chain id)" >&2
+      exit 1
+    fi
+    echo "PASS: STRUCK_MODEL records the prefixed chain id for claude/* entries"
+    ;;
   strike-attribution-degrade)
     # Issue #660 leg 2: STRUCK_MODEL diverges from MODEL after degrade
     EXPECTED_STRUCK_MODEL="opencode-go/deepseek-v4-flash"
