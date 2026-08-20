@@ -77,7 +77,10 @@ if [ "$1" = "api" ]; then
     *"/issues?"*) r="${_p#repos/}"; r="${r%%/issues?*}"
                   f="$H/gh/verdict-list-$(printf '%s' "$r" | tr / _).json"
                   { [ -f "$f" ] && cat "$f" || printf '[]'; } | _emit; exit 0 ;;
-    */issues/*)   { cat "$H/gh/verdict-issue.json" 2>/dev/null || printf '{}'; } | _emit; exit 0 ;;
+    */issues/123)   { printf '{"id":"123123"}'; } | _emit; exit 0 ;;  # cause issue
+    */issues/999)   { cat "$H/gh/verdict-issue.json" 2>/dev/null || printf '{}'; } | _emit; exit 0 ;;  # filed issue
+    */issues/*)     { cat "$H/gh/verdict-issue.json" 2>/dev/null || printf '{}'; } | _emit; exit 0 ;;
+    */sub_issues)   exit 0 ;;  # POST succeeds silently
   esac
 fi
 exit 0
@@ -496,6 +499,39 @@ go "$(alert v2 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentv
 want     "verdict on a claimed APP repo found and labelled agent-fix" "oracle-fleet#228 labelled agent-fix"
 wantnot  "app-repo verdict → not written off as unfindable" "nothing to label"
 wantcall "app-repo verdict → /fix-verdict bell rung" "/fix-verdict"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "BIND-AT-FILING — Cause: line → native sub-issue edge (ADR-094, S6)"
+
+# When the issue body carries a line-anchored 'Cause: #<n>' marker and the cause issue exists,
+# the shell POSTs the native sub-issue edge, same pattern as .agents/fix.yaml. Same repo only.
+
+scenario cause-line-valid
+printf '[]' > "$H/gh/search.json"
+jq -n '[{number:999, body:"evidence\nalert-fp:c1\nCause: #123\nfix-verdict: fix", id:123999}]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
+jq -n '{body:"evidence\nalert-fp:c1\nCause: #123\nfix-verdict: fix", id:123999}' > "$H/gh/verdict-issue.json"
+# Additional fixtures for the cause issue and API calls
+jq -n '{id:123123}' > "$H/gh/cause-issue.json"
+go "$(alert c1 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want      "cause line present → issue filed with fix-verdict: fix" "labelled agent-fix"
+wantcall  "cause line valid → POST to /sub_issues endpoint" "/sub_issues"
+want      "cause line valid → logged as 'linked as sub-issue'" "linked as sub-issue"
+
+scenario cause-line-absent
+printf '[]' > "$H/gh/search.json"
+jq -n '[{number:999, body:"evidence\nalert-fp:c2\nfix-verdict: fix", id:123999}]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
+jq -n '{body:"evidence\nalert-fp:c2\nfix-verdict: fix", id:123999}' > "$H/gh/verdict-issue.json"
+go "$(alert c2 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want       "no cause line → issue filed normally" "labelled agent-fix"
+wantnocall "no cause line → no /sub_issues POST" "/sub_issues"
+
+scenario cause-line-malformed
+printf '[]' > "$H/gh/search.json"
+jq -n '[{number:999, body:"evidence\nalert-fp:c3\nCause: invalid\nfix-verdict: fix", id:123999}]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
+jq -n '{body:"evidence\nalert-fp:c3\nCause: invalid\nfix-verdict: fix", id:123999}' > "$H/gh/verdict-issue.json"
+go "$(alert c3 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want       "malformed cause line → issue filed normally" "labelled agent-fix"
+wantnocall "malformed cause line → no /sub_issues POST" "/sub_issues"
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
