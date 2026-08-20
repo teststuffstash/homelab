@@ -4579,3 +4579,19 @@ first live ADR-110 maintenance session before the ADR existed.
   exhausts ~Aug-25 pre-reset; private-repo updater runs are the metered burn — moving them to
   ARC contradicts the merge-path design note, operator fork). #686 (meta-throughput false
   STALL) filed with tonight's evidence, unqueued (seat tooling).
+
+## 2026-08-20 ~06:00 — session close (operator feedback: finish the board, quit — don't hold warm)
+
+- Morning sweep #674+: queued #674/#675/#676/#686/#701/#707 + or-op#47/#49 (#48 folded, #683/#694
+  closed with records, #698 closed on the operator's overage-off ruling). ⚠ Self-assessment
+  accepted as feedback (memory: session-winddown-over-warm-hold): the or-op nit tail should have
+  been ONE batch at the 2am ruling, the session should have wound down ~03:00 after the stint
+  closed, and the sprout-tail triage belonged to the stint closeout — not an unowned "morning".
+- The sentinel cron ask: backstop */15 → hourly (guarded-file direct) + the CRON-SERVICED
+  missed-ring detector (PR#702, labeled per-PR after a correct reviewer catch of the #682 class).
+- #686 root-caused by its fixer (PR#706, gate-read+merged): meta-throughput pipe-filtered
+  `gh api | tail -1`, masking 403-burst exits as "no ride evidence" — the repo's own
+  never-pipe-filter rule, one more instance. #707 filed+queued: responder `deferred-*` markers
+  dedupe like completed triages (the c5695d50 wedge since Aug-18).
+- Handover: PR#705/#704 mid-cycle (will park for the next session's gate reads), #701/#707
+  queued. Board otherwise clean. Monitors killed at close.

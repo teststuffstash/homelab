@@ -8,6 +8,17 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-08-20 ~06:00Z wind-down, night session closed on operator feedback — see the
+  session-winddown memory):** in flight, all machine-owned: PR#705 (fixes #674, STRUCK_MODEL
+  chain-id) + PR#704 (fixes #676, poll_forever fixture) mid-cycle — they will park bot-approved
+  at the codeowner gate for the NEXT corpus session's read; #701 + #707 queued behind them.
+  Watch items: the hourly iac-sentinel backstop's CRON-SERVICED detector (silence over weeks =
+  retire the cron; any firing names a dead edge); #459 re-read `changes(agent_dispatch_cron_
+  woken_timestamp[24h])` post-#669/#672/#679 before hunting emitters; hosted-minutes ruling on
+  #698 = tolerated updater stalls until Sep-1 (overage stays OFF). S2 DONE (stint #661 closed,
+  #354 acceptance PASSED); S3 DONE (FU-176 archived + sentinel push/tool-error/edge chain);
+  next stints: S4, S5 (ROADMAP work map).
+
 - **⚑ FU-058 stint DONE (2026-08-19, one session — #587 at final closeout; closes when docs
   PR#624 lands). WATCH: the Mon 2026-08-24 05:00 UTC retro cron = the platform series' first
   unattended fire, the build wave's organic acceptance** (full report per cell, content floor
