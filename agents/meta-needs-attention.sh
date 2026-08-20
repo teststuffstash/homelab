@@ -168,6 +168,7 @@ while true; do
                    | select(.createdAt < $cutoff)
                    | select(.title != "Dependency Dashboard")
                    | select(.body // "" | test("(^|\\n)alert-fp:") | not)
+                   | select(.title | startswith("stint:") | not)
                    | "NEEDS-META triage: \($r)#\(.number) unlabeled >24h — invisible to every clause"' 2>/dev/null)
     [ -n "$unl" ] && out="$out$unl"$'\n'
   done
