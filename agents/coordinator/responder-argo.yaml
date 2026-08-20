@@ -797,9 +797,14 @@ spec:
                     if [ -n "$CAUSE_ID" ]; then
                       NEW_ID="$(gh api "repos/$VREPO/issues/$VHIT" --jq '.id // empty' 2>/dev/null || true)"
                       if [ -n "$NEW_ID" ]; then
-                        gh api -X POST "repos/$VREPO/issues/$CAUSE_NUM/sub_issues" -F sub_issue_id="$NEW_ID" >/dev/null 2>&1 \
-                          && echo "→ bind-at-filing: $VREPO#$VHIT linked as sub-issue of $VREPO#$CAUSE_NUM" \
-                          || echo "→ bind-at-filing: $VREPO#$VHIT has Cause: #$CAUSE_NUM but link POST failed (non-fatal, body is fallback)"
+                        CUR_PARENT="$(gh api "repos/$VREPO/issues/$VHIT" --jq '.parent.id // empty' 2>/dev/null || true)"
+                        if [ -n "$CUR_PARENT" ]; then
+                          echo "→ bind-at-filing: $VREPO#$VHIT already linked as sub-issue (skip re-link)"
+                        else
+                          gh api -X POST "repos/$VREPO/issues/$CAUSE_NUM/sub_issues" -F sub_issue_id="$NEW_ID" >/dev/null 2>&1 \
+                            && echo "→ bind-at-filing: $VREPO#$VHIT linked as sub-issue of $VREPO#$CAUSE_NUM" \
+                            || echo "→ bind-at-filing: $VREPO#$VHIT has Cause: #$CAUSE_NUM but link POST failed (non-fatal, body is fallback)"
+                        fi
                       else
                         echo "→ bind-at-filing: could not get API ID for $VREPO#$VHIT (skip link attempt)"
                       fi
