@@ -32,6 +32,15 @@ the gap, so the class needs a GUARD, not another warning. Two mechanical signatu
                        prompt or pod manifest — command-substituted by the LAUNCHER at construction
                        time and silently vanish from the delivered text (instance #6, PR#559 lines
                        225/226/228: PR#547's `` `at efc90c5a` `` fragments executed at build time).
+  HEREDOC-FN-DOLLAR    a shell FUNCTION DEFINITION embedded inside an UNQUOTED heredoc payload,
+                       with an unescaped `$` in its body (instance #7, PR#727, 2026-08-20):
+                       agents/reviewer-session.sh defined `depth-rule-append() { … "$1" …
+                       "$PROMPT" … }` between `PREP=$(cat <<PREP` and its terminator — every
+                       unescaped `$` expanded at GENERATION time, in the outer script's scope, so
+                       the pod received a corrupted function (the call site's `|| true` swallowed
+                       it). Fixed shape: define the function at top level and inject it with
+                       `$(declare -f name)`, which is exempt (command-substitution output is not
+                       re-expanded).
 
 Both are HEURISTICS on purpose (#197): a false positive costs a review prompt, a false negative is
 instance #5. The discriminator that keeps the current tree green: the OUTER
@@ -86,6 +95,13 @@ PIPE_TO_KUBECTL_RE = re.compile(r"\|\s*\"?\\?\$?\{?[A-Za-z_]*KUBECTL|\|\s*kubect
 # A heredoc writing a prompt file (re-review.sh) — same "prose the pod reads" class.
 PROMPT_FILE_HEREDOC_RE = re.compile(r"cat\s+>\s+\"?\$?\{?[A-Za-z_]*PROMPT")
 SQ_ASSIGN_RE = re.compile(r"^\s*(?:export\s+|local\s+|declare\s+(?:-\w+\s+)?)?([A-Za-z_][A-Za-z0-9_]*)=\s*'")
+# A shell function definition line: `name() {` or `function name {`, optionally indented. Hyphens
+# are legal in bash function names (agents/reviewer-session.sh's depth-rule-append, PR#727).
+FN_DEF_RE = re.compile(r"^\s*(?:([A-Za-z_][A-Za-z0-9_-]*)\s*\(\)|function\s+([A-Za-z_][A-Za-z0-9_-]*))\s*\{")
+# Any unescaped `$` — deliberately broader than DOLLAR_DIGIT_RE. Used ONLY inside a heredoc-embedded
+# function body (check_heredoc_fn_dollar): `$1`, `$a`, `$PROMPT` are all generation-time landmines
+# there, not just `$<digit>`.
+DOLLAR_ANY_RE = re.compile(r"(?<!\\)\$")
 # A block that never closes its quote would swallow the rest of the file and turn one typo into a
 # whole-file false positive. Cap it: past this many lines the scanner gives up on that assignment.
 MAX_BLOCK_LINES = 80
@@ -273,6 +289,61 @@ def check_heredoc_backtick(heredocs):
     return out
 
 
+def check_heredoc_fn_dollar(heredocs):
+    """HEREDOC-FN-DOLLAR: a shell function DEFINITION embedded inside an UNQUOTED heredoc payload,
+    with an unescaped `$` somewhere in its body (instance #7, PR#727, 2026-08-20).
+
+    agents/reviewer-session.sh's first cut defined `depth-rule-append() { … "$1" … "$PROMPT" … }`
+    between `PREP=$(cat <<PREP` and its terminator — an unquoted (expanding) delimiter, so every
+    unescaped `$` in the function body expanded at GENERATION time, in the outer launcher's scope,
+    not at pod-run time. The pod received a corrupted function; the call site's `|| true` swallowed
+    the failure silently, and the extraction-based replay stayed green (it reads source, not
+    generated output). The fixed shape — define the function at TOP LEVEL, inject it into the
+    heredoc via `$(declare -f name)` — must NOT flag: a `$(declare -f …)` line never matches
+    FN_DEF_RE (it is a call, not a `name() {` definition), and a top-level definition sits in
+    `plain`, never in a heredoc body, so this check never sees it.
+
+    One finding per function (at its definition line), not per `$` — the class is "this function
+    got embedded here at all", and a per-occurrence report would just be noise on the same defect.
+    Brace matching is a simple per-line `{`/`}` count, same heuristic weight as the rest of this
+    file (#197): good enough for the shapes these launchers actually write.
+    """
+    out = []
+    for hd in heredocs:
+        if not hd["expanding"] or not _payload_heredoc(hd):
+            continue
+        body = hd["body"]
+        i, n = 0, len(body)
+        while i < n:
+            no, text = body[i]
+            m = FN_DEF_RE.match(text)
+            if not m:
+                i += 1
+                continue
+            fn_name = m.group(1) or m.group(2)
+            depth = text.count("{") - text.count("}")
+            has_dollar = bool(DOLLAR_ANY_RE.search(text[m.end():]))
+            j = i
+            while depth > 0 and j + 1 < n:
+                j += 1
+                _, jtext = body[j]
+                depth += jtext.count("{") - jtext.count("}")
+                if DOLLAR_ANY_RE.search(jtext):
+                    has_dollar = True
+            if has_dollar:
+                out.append((no, "HEREDOC-FN-DOLLAR", (
+                    "shell function `%s() { … }` defined inside the UNQUOTED heredoc opened at "
+                    "line %d (<<%s) has an unescaped $ in its body — the LAUNCHER expands it at "
+                    "GENERATION time, in the outer script's scope, not the pod, corrupting the "
+                    "emitted function (instance #7, PR#727, 2026-08-20). Define the function at "
+                    "top level and inject with $(declare -f %s), or escape every $ — "
+                    "generation-time expansion corrupts the emitted copy (the PR#727 class)."
+                    % (fn_name, hd["opener_no"], hd["delim"], fn_name)
+                ), text.strip()))
+            i = j + 1
+    return out
+
+
 def check_sq_prose(heredocs):
     """SQ-PROSE: an apostrophe inside a single-quoted string carried through an expanding transport.
 
@@ -374,6 +445,7 @@ def lint(path):
     return sorted(
         check_heredocs(heredocs)
         + check_heredoc_backtick(heredocs)
+        + check_heredoc_fn_dollar(heredocs)
         + check_sq_prose(heredocs)
         + check_jq_quoting(blocks, plain)
     )

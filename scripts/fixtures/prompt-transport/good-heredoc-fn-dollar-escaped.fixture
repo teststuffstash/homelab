@@ -1,0 +1,14 @@
+# FIXTURE — NOT LIVE CODE. NEGATIVE control for #197 instance 7 (#734): the same function-inside-
+# an-expanding-heredoc shape as bad-heredoc-fn-dollar.fixture, but with every $ escaped as \$. An
+# escaped $ never expands at generation time, so this must stay clean — escaping is one of the two
+# sanctioned remedies (the other is top-level def + $(declare -f), see the other good- fixture).
+# EXPECT: clean
+#
+PREP=$(cat <<PREP
+some \$escaped_ok stuff
+my-fn() {
+  local a="\$1"
+  echo "\$a \$PROMPT"
+}
+PREP
+)

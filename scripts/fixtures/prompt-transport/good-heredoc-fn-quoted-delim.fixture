@@ -1,0 +1,14 @@
+# FIXTURE — NOT LIVE CODE. NEGATIVE control for #197 instance 7 (#734): the same function-inside-
+# a-heredoc shape as bad-heredoc-fn-dollar.fixture, but the delimiter is QUOTED (`<<'PREP'`), so the
+# heredoc never expands — every $ inside is literal text handed to whatever reads the payload, not
+# a generation-time landmine. HEREDOC-FN-DOLLAR must never fire on a quoted-delimiter heredoc.
+# EXPECT: clean
+#
+PREP=$(cat <<'PREP'
+some $escaped_by_quoting stuff
+my-fn() {
+  local a="$1"
+  echo "$a $PROMPT"
+}
+PREP
+)

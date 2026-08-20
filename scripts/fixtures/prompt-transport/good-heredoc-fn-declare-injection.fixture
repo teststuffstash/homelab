@@ -1,0 +1,21 @@
+# FIXTURE — NOT LIVE CODE. NEGATIVE control for #197 instance 7 (#734): the FIXED shape of
+# agents/reviewer-session.sh's depth-rule-append (PR#727, 2026-08-20) — the function is defined at
+# TOP LEVEL, genuinely outside any heredoc, and injected into the payload heredoc via
+# `$(declare -f my-fn)`. This must stay clean two ways at once: the top-level definition (with its
+# own unescaped $1/$PROMPT — ordinary shell, never generation-time-expanded because it sits in
+# plain code, not a heredoc body) must not flag, and the injection line inside the heredoc must not
+# flag either — it is a command substitution CALL, not a `name() {` definition line, so FN_DEF_RE
+# never matches it. Command-substitution output is not re-expanded by the shell that built it.
+# EXPECT: clean
+#
+my-fn() {
+  local a="$1"
+  echo "$a $PROMPT"
+}
+
+PREP=$(cat <<PREP
+some setup here
+$(declare -f my-fn)
+my-fn "\$ARG"
+PREP
+)
