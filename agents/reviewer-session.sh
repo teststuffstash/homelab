@@ -170,12 +170,18 @@ gh pr checkout ${PR}
 # FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
 # the worker rounds + coordinator ticks for the same issue. Resolve via GitHub's closing-issue
 # reference ("Fixes #N"); fall back to pr-<N> when the PR closes no issue.
-_PR_META=\$(gh pr view ${PR} --json closingIssuesReferences,baseRefName,title 2>/dev/null || true)
+_PR_META=\$(gh pr view ${PR} --json closingIssuesReferences,baseRefName 2>/dev/null || true)
 ISSUE=\$(printf '%s' "\$_PR_META" | jq -r '.closingIssuesReferences[0].number // empty' 2>/dev/null || true)
 PR_BASE=\$(printf '%s' "\$_PR_META" | jq -r '.baseRefName // empty' 2>/dev/null || true)
-ISSUE_TITLE=\$(printf '%s' "\$_PR_META" | jq -r '.title // empty' 2>/dev/null || true)
+ISSUE_TITLE=""
+ISSUE_BODY=""
+if [ -n "\$ISSUE" ] && [ "\$ISSUE" != "null" ]; then
+  _ISSUE_JSON=\$(gh api "repos/\${REPO_SLUG}/issues/\${ISSUE}" 2>/dev/null || true)
+  ISSUE_TITLE=\$(printf '%s' "\$_ISSUE_JSON" | jq -r '.title // ""' 2>/dev/null || true)
+  ISSUE_BODY=\$(printf '%s' "\$_ISSUE_JSON" | jq -r '.body // ""' 2>/dev/null || true)
+fi
 if [ -n "\$ISSUE" ] && [ "\$ISSUE" != "null" ]; then TASK_KEY="issue-\$ISSUE"; else TASK_KEY="pr-${PR}"; ISSUE=""; fi
-export TASK_KEY ISSUE PR_BASE ISSUE_TITLE
+export TASK_KEY ISSUE PR_BASE ISSUE_TITLE ISSUE_BODY
 echo "→ transcript task key: \$TASK_KEY (fixes issue \${ISSUE:-none})"
 # ── SPROUT DEPTH (FU-090 rung 2, 2026-08-05) ───────────────────────────────────────────────────
 # How deep in the follow-up tree is the issue this PR closes? The harvest already flags depth ≥2
@@ -309,9 +315,6 @@ DEPTH RULE (this PR closes issue #$issue, which sits at follow-up depth $sprout_
 # is the one deciding whether to defer or block. Appended as a MECHANISM so no recipe has to
 # remember it, and only when it applies: a depth-0 review is untouched.
 if [ "\${SPROUT_DEPTH:-0}" -ge 2 ]; then
-  if [ -z "\$ISSUE_BODY" ]; then
-    ISSUE_BODY=\$(gh api "repos/\${REPO_SLUG}/issues/\${ISSUE}" --jq '.body // ""' 2>/dev/null || true)
-  fi
   depth-rule-append "\${SPROUT_DEPTH}" "\${PR_BASE}" "\${ISSUE_TITLE}" "\${ISSUE_BODY}" "\${ISSUE}" "\${REPO_SLUG}" || true
 fi
 PREP

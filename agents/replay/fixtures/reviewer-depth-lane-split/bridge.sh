@@ -10,9 +10,8 @@ PR_BASE="${PR_BASE:-master}"
 ISSUE_TITLE="${ISSUE_TITLE:-}"
 ISSUE_BODY="${ISSUE_BODY:-}"
 PROMPT="Initial prompt."
-ISSUE_IS_HOTFIX=""
 
-# Mock gh for issue body fetches
+# Mock gh for issue body fetches (unused by depth-rule-append directly, but present for safety)
 gh() {
   {
     printf 'CALL gh'
@@ -31,4 +30,4 @@ gh() {
   return 1
 }
 
-export PROMPT ISSUE_IS_HOTFIX
+export PROMPT
