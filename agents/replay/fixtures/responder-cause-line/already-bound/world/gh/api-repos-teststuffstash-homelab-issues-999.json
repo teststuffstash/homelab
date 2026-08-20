@@ -1,0 +1,15 @@
+{
+  "body": "PVCNearFull in monitoring/alertmanager\n\nalert-fp:c4\nCause: #123\nfix-verdict: fix\n",
+  "id": 123999,
+  "number": 999,
+  "state": "open",
+  "labels": [
+    { "name": "alert" },
+    { "name": "agent-fix" }
+  ],
+  "parent": {
+    "id": 123123,
+    "number": 123,
+    "state": "open"
+  }
+}
