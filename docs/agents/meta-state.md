@@ -63,7 +63,9 @@ meant to avoid.)
 - **Soaks** (each owned by an FU/issue — this line is only the calendar): platform-retro first unattended fire Mon 08-24 05:00Z (FU-058 acceptance) · argo second backlog
   sweep ~2026-08-25 (#521) · minRunners readout · iac-sentinel first real RED + FU-176 ·
   router shadow/elastic cells (FU-095, PR#408) · FU-148 acceptance · FU-149 datum ~08-20 ·
-  or-op#34 first daily-429 · renovate-approve one-approval-per-head (#114).
+  or-op#34 first daily-429 · renovate-approve one-approval-per-head (#114) · stint
+  quiet-window closes (rule 2026-08-20, chainless §The jail stint): #420 (waits on #710) +
+  #711 — close at a sweep ≥72h after each tree's last event.
 
 ## Durable warnings — re-read before touching these files
 

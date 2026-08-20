@@ -144,6 +144,14 @@ as **native sub-issues**. Three rules carry the whole design:
   restated here. Later closeouts repeat per sprout batch. Mixed execution is fine: a stint
   child that is fixer-shaped may be labeled `agent-fix`+`agent/queued` and ride the cluster loop;
   only the parent stays inert.
+- **Tree-empty ARMS the close; it never executes it (operator rule, 2026-08-20).** The parent
+  stays OPEN through a ≥72h quiet window (no new tree event) and closes at a LATER session's
+  sweep. Rationale: bind-at-filing is enforced by salience — filers bind to what the board
+  shows, and nearly all of the #420 tail repaired in the 2026-08-20 lineage sweep
+  (#660/#674/#646) was filed while the container sat closed. GitHub accepts sub-issues on
+  closed parents, so the mechanics never blocked — the visibility did. The Goal kind needs no
+  counterpart: its terminals are human verdicts and post-launch already holds it open (the
+  ADR-102 midpoint lesson, stint-sized).
 
 Subagent input is the fixer's three-layer architecture transposed
 ([`fixer-context.md`](fixer-context.md)): **L1** = the versioned
