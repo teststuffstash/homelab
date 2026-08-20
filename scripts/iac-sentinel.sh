@@ -181,6 +181,22 @@ for repo in $SENTINEL_REPOS; do
   [ -n "$prs" ] || { log "[$repo] no open PRs"; continue; }
   while read -r num sha author; do
     [ -n "$num" ] || continue
+    # homelab#650 backstop accounting: a CRON tick posting the FIRST iac-sentinel status on a
+    # head that is old enough for the edge to have fired = A MISSED RING, said loudly (the
+    # "cron-serviced dispatch is a defect with an id" rule, transposed). This is what earns the
+    # backstop its sparse cadence (hourly since 2026-08-20; operator: sensors do the heavy
+    # lifting) and would earn "no cron at all" if it stays silent. Heads younger than 10min are
+    # skipped — the exporter's 120s poll simply may not have fired yet.
+    if [ "$SENTINEL_WAKE" = "cron" ] && [ -n "$STATUS_TOKEN" ]; then
+      have="$(gh api "repos/${ORG}/${repo}/commits/${sha}/status"                 --jq '[.statuses[]|select(.context=="iac-sentinel")]|length' 2>/dev/null || echo probe-fail)"
+      if [ "$have" = "0" ]; then
+        age=$(( $(date +%s) - $(date -d "$(gh api "repos/${ORG}/${repo}/commits/${sha}"                 --jq '.commit.committer.date' 2>/dev/null || echo now)" +%s 2>/dev/null || date +%s) ))
+        if [ "$age" -gt 600 ]; then
+          log "[$repo#$num@$sha] ⚠ CRON-SERVICED — first status by the BACKSTOP on a ${age}s-old head: the edge missed this ring (homelab#650)"
+          metric "iac_sentinel_cron_serviced_timestamp_seconds $(date +%s)"
+        fi
+      fi
+    fi
     if evaluate "$repo" "$sha" "$num" "$author"; then
       if [ "${GITLEAKS_TOOL_ERROR:-0}" -ne 0 ]; then
         # an engine that could not run means the verdict is INCOMPLETE — fail closed as a probe
