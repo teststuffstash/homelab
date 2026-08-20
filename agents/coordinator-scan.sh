@@ -782,8 +782,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # unfiltered list so the goal lane can find goals that have LEFT agent/queued for the
     # non-dispatchable tracking state. Deriving beats a second call — the App's GraphQL pool is
     # what this loop actually runs out of (FU-084).
-    openall="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy,parent 2>/dev/null)" || openall='[]'
-    jq -e . >/dev/null 2>&1 <<<"${openall:-null}" || openall='[]'
+    openall_fetch_rc=0
+    openall="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy,parent,author 2>/dev/null)" || openall_fetch_rc=$?
+    jq -e . >/dev/null 2>&1 <<<"${openall:-null}" || { openall='[]'; openall_fetch_rc=1; }
+    if [ "$openall_fetch_rc" != 0 ]; then openall='[]'; fi
     queued="$(printf '%s' "$openall" \
       | jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"${queued:-null}" || queued='[]'
@@ -1109,11 +1111,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # Report-only class: an OPEN issue that (a) was authored by the loop identity OR carries a
     # line-anchored lineage cue at body head, AND (b) has NO native parent (issue.parent null).
     # Capped at 10 reports/scan. No label, no writes, never auto-link.
-    if jq -e . >/dev/null 2>&1 <<<"${openall:-null}" && jq -e . >/dev/null 2>&1 <<<"${inert:-null}"; then
-      unbound="$(printf '%s' "$openall" | jq -r --argjson inert "$inert" '
+    if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}" && jq -e . >/dev/null 2>&1 <<<"${inert:-null}"; then
+      unbound="$(printf '%s' "$openall" | jq -r '
         [.[] | .number as $n
          | (.body // "") as $b
-         | ($inert[] | select(.number == $n) | .author.is_bot // false) as $is_bot
+         | (.author.is_bot // false) as $is_bot
          | select(.parent == null)
          | (if $is_bot then "bot-authored"
             elif ($b | test("(?m)^Harvested from ")) then "Harvested from"
