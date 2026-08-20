@@ -115,6 +115,9 @@ standing SEATPR source — built 2026-08-12 from exactly this class — sat unar
   judgment ("which reaction"), a subagent executes it. And no triage-brain sits between the watch
   scripts and the seat — deterministic filter → judgment seat, the scan→coordinator shape; a
   recurring mechanical reaction graduates into the script/reflex itself (the ≥2-pattern rule).
+- **Issues either session type files bind at filing** (S6 / lineage contract rule 3): parent =
+  the epic or origin issue the work serves, or `standalone` stated in the body — lineage is
+  never implicit; the scan's unbound-sprout belt is the backstop.
 
 **The jail stint (operator direction, 2026-08-19 — the Goal SHAPE without the Goal machinery; renamed from "wave" same day, operator catch: three existing senses).**
 A bounded container for multi-session jail work: a parent issue titled `stint: <slug>`, label-inert

@@ -121,6 +121,13 @@ instructions: |
   costs one sub-minute exit rather than a re-ridden session. Do everything you CAN deliver first
   if part of the issue is inside your reach — then the marker names only the part that is not.
 
+  Sibling issues bind at filing (S6, lineage contract rule 3): if you file an issue mid-ride for
+  an owning concern outside your footprint (TRACKS rule 2), link it as a native sub-issue of the
+  issue THIS ride was dispatched for — `CID=$(gh api repos/<slug>/issues/<new-n> --jq .id)` then
+  `gh api -X POST repos/<slug>/issues/{{ issue }}/sub_issues -F sub_issue_id="$CID"`. If the
+  link call fails, say so in the new issue's body and continue — the body provenance is the
+  fallback lineage, never a reason to stop.
+
 prompt: |
   Work platform issue #{{ issue }} in the homelab repo per the instructions. Report: what you
   changed, which path tier it sits in, WHICH lints you ran and their results, whether anything was
