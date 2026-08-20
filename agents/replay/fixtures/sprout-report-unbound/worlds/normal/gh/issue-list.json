@@ -1,0 +1,14 @@
+[
+  { "number": 90, "title": "unbound sprout with cue",
+    "author": { "login": "homelab-agents-1234", "is_bot": true },
+    "labels": [], "body": "Harvested from #89\n\nSome description",
+    "parent": null, "isPinned": false, "createdAt": "2026-08-20T12:00:00Z" },
+  { "number": 91, "title": "bound sprout with cue",
+    "author": { "login": "homelab-agents-1234", "is_bot": true },
+    "labels": [], "body": "Split off from #90\n\nSome description",
+    "parent": { "number": 90 }, "isPinned": false, "createdAt": "2026-08-20T12:00:00Z" },
+  { "number": 92, "title": "standalone issue without cue",
+    "author": { "login": "RasmusSoot", "is_bot": false },
+    "labels": [], "body": "Some description",
+    "parent": null, "isPinned": false, "createdAt": "2026-08-20T12:00:00Z" }
+]

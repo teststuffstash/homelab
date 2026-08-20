@@ -91,6 +91,7 @@ session-belt-fast-path	session-belt
 session-belt-fast-path-probe-fail	session-belt
 session-belt-queued	session-belt
 sprout-report-skips-buckets	sprout-report-skips-buckets
+sprout-report-unbound	sprout-report-unbound
 state-fp	state-fp
 strike-quota-classifier	strike-quota-classifier
 touches-check-predicate	touches-check-predicate
