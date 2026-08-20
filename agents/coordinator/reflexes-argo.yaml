@@ -41,7 +41,11 @@ spec:
   # ungraduated stack. (Was: RESUMED 2026-07-28, meta-15 "enable the world".)
   suspend: true
   schedules:
-    - "*/15 * * * *"
+    # HOURLY since 2026-08-20 (operator: the sensors do the heavy lifting; the cron only
+    # rescues a dropped ring — worst wait for a lost ring = 1h on an unattended lane, and the
+    # CRON-SERVICED detector in scripts/iac-sentinel.sh names every ring the edge missed, which
+    # is the evidence that would retire this cron entirely).
+    - "17 * * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60
   workflowSpec:
