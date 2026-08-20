@@ -194,6 +194,7 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-subject/oracle-fleet` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-opted-infra-death` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-opted-negative-cost` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/witness-unopted-phase-slow` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-unopted` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `retro-cell-report/longlog` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/missing` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
@@ -211,6 +212,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-currency/behind-skips` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/probe-fail-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-depth-lane-split` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-exit-contract` | table | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-go-failover/available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/explicit-model` | actions | - | `agents/reviewer-session.sh` | - |
