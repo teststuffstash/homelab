@@ -1,0 +1,20 @@
+# homelab#712 — witness for AgentRunNegativeCost opt-in.
+#
+# CONDITION UNDER REPLAY. Alert AgentRunNegativeCost with project="openrouter-operator"
+# label, now opted in via case arm to use project as namespace fallback.
+#
+# EXPECTED BEHAVIOR (with the opt-in):
+#   1. Subject computation finds project="openrouter-operator" via the opt-in.
+#   2. Computed subject is ns:openrouter-operator (not alert:AgentRunNegativeCost).
+#   3. A second fire of the same alert from a different project would compute a different subject.
+#
+# WHY THIS MATTERS: Without the opt-in, both projects would compute alert:AgentRunNegativeCost
+# and subject-dedupe, silencing the second fire. The opt-in ensures each project's negative cost
+# gets its own issue thread.
+#
+name: responder-subject-witness-opted-negative-cost
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject
