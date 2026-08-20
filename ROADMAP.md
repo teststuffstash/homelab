@@ -300,6 +300,7 @@ Bucket A/B enumeration in `docs/agents/meta-state.md`.
 | S3 | belts & lint upkeep — sentinel pushgateway blind: DONE 2026-08-19 (FU-176 archived); transport-lint signatures: DONE (homelab#564 closed 2026-08-19); remaining: ratchet `unreplayed` backfill, by fix-density | the FSM `unreplayed` rows |
 | S4 | context & vocabulary: the role×context×source dedup + the mission rename sweep | FU-117, FU-163 |
 | S5 | corpus diet: doc-heat + measured trimming (`scripts/session-ctx.sh --big` is the instrument) | FU-164 |
+| S6 | epic post-deploy mechanic (the 2026-08-20 lineage sitting): the contract's post-deployment rule + reviewer depth logic (lane split, depth≥4 pushback, mint-to-origin — code-first) + bind-at-filing callers (arbitrate play, seat card) + the unbound-sprout report belt. Ships contract+code as one unit; dogfoods itself; #628 leg 3 is the measurement twin | FU-090 (its depth-gate Next), TICK-LOG 2026-08-20 |
 
 **Goal candidates** (authored AT LAUNCH, in rough order — the Goal dogfood begins here once the
 stints clear; the goal lane's pause conditions read met as of 2026-08-19):
