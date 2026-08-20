@@ -1,0 +1,19 @@
+# Reviewer depth guard: lane-split logic (homelab#718 S6 child 1)
+#
+# THE CONTRACT. The reviewer's depth guard now splits by PR base lane:
+#   - Goal-lane (base matches goal/**): suppress Follow-ups at depth ≥2 (code-first mode)
+#   - Organic-lane (base = default branch): allow Follow-ups at any depth, BUT at depth≥4
+#     routes non-hotfix findings to Container-findings instead
+#
+# Hotfix-class: issue body has line-anchored `alert-fp:` line OR title starts with 🚨
+#
+# This fixture validates the lane determination logic by observing PROMPT mutations
+# under the defined conditions.
+#
+name: reviewer-depth-lane-split
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:s6-child-1-depth-rule
+  - file:post.sh

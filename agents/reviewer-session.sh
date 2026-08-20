@@ -162,6 +162,60 @@ fi
 # the PR branch against the base; gh pr checkout fetches the PR head + sets the branch /code-review
 # and `--comment` resolve the PR from. Append the rubric only if the project ships one (an absent
 # --append-system-prompt-file path is a hard error — the coordinator hit exactly that).
+# FU-090 rung 2 + S6 child 1: depth-rule-append applies the lane-split depth guard.
+# Defined at TOP LEVEL (genuinely outside the PREP heredoc — the first cut sat INSIDE it after
+# a quote that was heredoc TEXT, so every unescaped $ expanded at generation time and the pod
+# got a corrupted function; seat gate-read catch, 2026-08-20). The definition stays unescaped
+# here so the replay extraction runs it verbatim; the pod script receives it via the
+# $(declare -f) injection inside the heredoc below — command-substitution results are not
+# re-expanded, so $1/$PROMPT survive to pod-time.
+# >>>REPLAY:s6-child-1-depth-rule>>>
+depth-rule-append() {
+  # Args: SPROUT_DEPTH PR_BASE ISSUE_TITLE ISSUE_BODY ISSUE REPO_SLUG
+  # Mutates: PROMPT
+  # Returns: 0 if rule was appended, 1 otherwise
+  local sprout_depth="$1" pr_base="$2" issue_title="$3" issue_body="$4" issue="$5" repo_slug="$6"
+
+  if [ "${sprout_depth:-0}" -lt 2 ]; then
+    return 1
+  fi
+
+  local is_goal_lane=false
+  case "$pr_base" in
+    goal/*) is_goal_lane=true;;
+  esac
+
+  if [ "$is_goal_lane" = true ]; then
+    # Goal-lane (code-first): suppress Follow-ups at depth ≥2
+    PROMPT="$PROMPT
+DEPTH RULE (this PR closes issue #$issue, which sits at follow-up depth $sprout_depth — a follow-up of a follow-up). You are near the end of a sprout chain, where each extra deferral costs another issue, another dispatch and another review for steadily smaller returns. So DO NOT emit a Follow-ups: section at all in this review. Each finding gets exactly one of two fates: if it genuinely must not ship, make it a BLOCKING finding and request changes so it is fixed in THIS PR; otherwise drop it, or leave it as a plain review comment that no one will file. Collapse the tail — that judgement is yours to make here and nobody else gets the chance."
+    return 0
+  fi
+
+  if [ "${sprout_depth:-0}" -lt 4 ]; then
+    return 1
+  fi
+
+  # Organic lane, depth ≥4: check hotfix status
+  local issue_is_hotfix=false
+  case "$issue_title" in
+    🚨*) issue_is_hotfix=true;;
+  esac
+  if printf '%s' "$issue_body" | grep -qE '^alert-fp:'; then
+    issue_is_hotfix=true
+  fi
+
+  if [ "$issue_is_hotfix" = false ]; then
+    # Non-hotfix: emit Container-findings instead of Follow-ups
+    PROMPT="$PROMPT
+DEPTH RULE (this PR closes issue #$issue, which sits at follow-up depth $sprout_depth — a follow-up of a follow-up). You are near the end of a sprout chain. Since this is not a hotfix-class issue (no alert-fp: line or 🚨 title marker), emit findings ONLY under a 'Container-findings:' heading instead of 'Follow-ups:', one concrete bullet each, written so it can become a backlog issue verbatim. Container-findings get merged into the ancestor issue as a comment post-deploy rather than minting new issues — that is how deep chains converge. Classify findings as before: BLOCKING if it makes master worse, otherwise drop it or leave a plain review comment. A Container-findings finding that is BLOCKING still requests changes so it gets fixed in THIS PR."
+    return 0
+  fi
+
+  return 1
+}
+# <<<REPLAY:s6-child-1-depth-rule<<<
+
 PREP=$(cat <<PREP
 set -e
 ${LOOP_FETCH}gh repo clone ${REPO_SLUG} /work/repo -- --quiet
@@ -170,9 +224,18 @@ gh pr checkout ${PR}
 # FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
 # the worker rounds + coordinator ticks for the same issue. Resolve via GitHub's closing-issue
 # reference ("Fixes #N"); fall back to pr-<N> when the PR closes no issue.
-ISSUE=\$(gh pr view ${PR} --json closingIssuesReferences -q '.closingIssuesReferences[0].number' 2>/dev/null || true)
+_PR_META=\$(gh pr view ${PR} --json closingIssuesReferences,baseRefName 2>/dev/null || true)
+ISSUE=\$(printf '%s' "\$_PR_META" | jq -r '.closingIssuesReferences[0].number // empty' 2>/dev/null || true)
+PR_BASE=\$(printf '%s' "\$_PR_META" | jq -r '.baseRefName // empty' 2>/dev/null || true)
+ISSUE_TITLE=""
+ISSUE_BODY=""
+if [ -n "\$ISSUE" ] && [ "\$ISSUE" != "null" ]; then
+  _ISSUE_JSON=\$(gh api "repos/\${REPO_SLUG}/issues/\${ISSUE}" 2>/dev/null || true)
+  ISSUE_TITLE=\$(printf '%s' "\$_ISSUE_JSON" | jq -r '.title // ""' 2>/dev/null || true)
+  ISSUE_BODY=\$(printf '%s' "\$_ISSUE_JSON" | jq -r '.body // ""' 2>/dev/null || true)
+fi
 if [ -n "\$ISSUE" ] && [ "\$ISSUE" != "null" ]; then TASK_KEY="issue-\$ISSUE"; else TASK_KEY="pr-${PR}"; ISSUE=""; fi
-export TASK_KEY ISSUE
+export TASK_KEY ISSUE PR_BASE ISSUE_TITLE ISSUE_BODY
 echo "→ transcript task key: \$TASK_KEY (fixes issue \${ISSUE:-none})"
 # ── SPROUT DEPTH (FU-090 rung 2, 2026-08-05) ───────────────────────────────────────────────────
 # How deep in the follow-up tree is the issue this PR closes? The harvest already flags depth ≥2
@@ -251,14 +314,17 @@ Otherwise (a normal code PR): run /code-review to find correctness bugs and post
   A greenfield / pre-prod repo (the rubric says which) biases HARD toward approve-with-follow-ups: with no consumers there is no "good enough" judgment to fail — forward progress merges NOW, and each residual finding becomes its own issue with its own round budget (which is cheaper and converges faster than piling rounds onto one PR). This is what a human author would negotiate: "better than master, merge it, backlog the nits." Do NOT re-litigate follow-ups already filed from earlier reviews of this same PR.
 
 STEP FINAL — submit exactly ONE native GitHub review as your verdict: run gh pr review ${PR} --approve --body with the Follow-ups: section (when non-empty) if the diff moves master forward, otherwise gh pr review ${PR} --request-changes --body with a one-paragraph summary of the BLOCKING findings only (for a dependency bump, summarise the required adaptations). Do NOT merge and do NOT push.'
+# the depth-rule-append definition is injected here at generation time (declare -f;
+# see the top-level definition + rationale above the PREP heredoc)
+$(declare -f depth-rule-append)
+
 # FU-090 rung 2: the depth-conditional half of the harvest bar. The bar above filters follow-ups by
 # QUALITY; this filters by POSITION. A finding on a sprout-of-a-sprout is not less true, it is less
 # worth another issue — the tail has to collapse somewhere, and the only actor who can collapse it
 # is the one deciding whether to defer or block. Appended as a MECHANISM so no recipe has to
 # remember it, and only when it applies: a depth-0 review is untouched.
 if [ "\${SPROUT_DEPTH:-0}" -ge 2 ]; then
-  PROMPT="\$PROMPT
-DEPTH RULE (this PR closes issue #\${ISSUE}, which sits at follow-up depth \${SPROUT_DEPTH} — a follow-up of a follow-up). You are near the end of a sprout chain, where each extra deferral costs another issue, another dispatch and another review for steadily smaller returns. So DO NOT emit a Follow-ups: section at all in this review. Each finding gets exactly one of two fates: if it genuinely must not ship, make it a BLOCKING finding and request changes so it is fixed in THIS PR; otherwise drop it, or leave it as a plain review comment that no one will file. Collapse the tail — that judgement is yours to make here and nobody else gets the chance."
+  depth-rule-append "\${SPROUT_DEPTH}" "\${PR_BASE}" "\${ISSUE_TITLE}" "\${ISSUE_BODY}" "\${ISSUE}" "\${REPO_SLUG}" || true
 fi
 PREP
 )

@@ -123,9 +123,24 @@ The epic rules:
    (GitHub single-parent); the absorbing child carries the `Fixes` link, and the burn-down
    counts the child, not the absorbed issue (the #292 rule).
 6. **Close = tree-empty**, at a final closeout/terminal — and the close IS the bound.
-7. **The depth guard is an epic rule already**: the reviewer walks the native parent chain of
-   any issue its PR closes and emits no `Follow-ups:` at depth ≥2 — implemented lineage-generic
-   in `reviewer-session.sh`, so it fires for stint children exactly as for Goal children.
+7. **The depth guard is an epic rule already — and LANE-SPLIT since S6 (homelab#718)**: the
+   reviewer walks the native parent chain of any issue its PR closes; on a `goal/**`-based PR
+   (coding-time) it emits no `Follow-ups:` at depth ≥2 (the original rule), while on the
+   organic lane (default-branch base — merge deploys) `Follow-ups:` flow at any depth, with
+   the depth-≥4 pushback of rule 8. Implemented lineage-generic in `reviewer-session.sh`
+   (`depth-rule-append`), so it fires for stint children exactly as for Goal children.
+8. **Post-deployment findings bind and append; minting waits for a judgment moment (S6,
+   operator rulings 2026-08-20).** An organic (post-deploy) finding in an epic's deliverables
+   ALWAYS enters the tree at its honest parent — the finding's ORIGIN issue, never the
+   container (mint-to-origin; the #278 bucket flattened 5 generations to 2). Cheap state
+   between moments: Goals append to the findings store, stints append a comment on the OPEN
+   parent (the quiet-window rule, [chainless-redesign.md](chainless-redesign.md) §The jail
+   stint). New board items are minted only at checkpoints/closeouts or per rule 7's graduated
+   organic lane (at depth ≥4 the reviewer emits `Container-findings:` instead — appended to
+   the open epic ancestor by the closeout play — unless the closed issue is hotfix-class:
+   an `alert-fp:` body line or a 🚨 title, which flows as ordinary `Follow-ups:` regardless).
+   Economic basis: every platform-repo mint eventually costs a corpus-session gate read
+   (ADR-110) — the binding resource.
 
 ⚠ **`task/goal`-keyed machinery is GOAL-kind machinery by definition** (operator caution,
 2026-08-19): the scan's goal clauses, budget walks and terminals key on that label, and a rule
