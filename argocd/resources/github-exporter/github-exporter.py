@@ -101,6 +101,15 @@ REVIEW_WEBHOOK_URL = os.environ.get("REVIEW_WEBHOOK_URL", "").strip()
 # armed agent PR goes CI-RED so the coordinate scan's ci-red clause fires near-instant instead of
 # only on the */10 poll (the symmetric twin of REVIEW_WEBHOOK_URL for the RED half of the FSM).
 COORDINATE_WEBHOOK_URL = os.environ.get("COORDINATE_WEBHOOK_URL", "").strip()
+# homelab#650 head-changed edge: the same agent-loop EventSource, a NEW endpoint. With `ci` at
+# ~1m post-minRunners, the iac-sentinel status's cron poll (*/5, interim */2) became the binding
+# merge wait on every push — POSTing the new head lets the sentinel Sensor evaluate it near-
+# instant instead of riding the tick out. Empty = disabled (dispatch stays with the cron).
+SENTINEL_WEBHOOK_URL = os.environ.get("SENTINEL_WEBHOOK_URL", "").strip()
+# The tofu `protected_repos` four that actually carry the required `iac-sentinel` status check
+# (repo_rulesets.tf, mirrored by scripts/iac-sentinel.sh's own SENTINEL_REPOS) — POSTing for a
+# repo outside this set would wake a Sensor evaluation whose merge wait doesn't depend on it.
+SENTINEL_REPOS = frozenset({"homelab", "sleep-iac", "oracle-iac", "circles-iac"})
 # The reviewer App's login (GraphQL bare; REST appends "[bot]" — stripped where compared). Feeds
 # the bot_approved_head arm of the review edge-trigger, mirroring review-reflex.sh's $bot.
 REVIEWER_BOT = os.environ.get("REVIEWER_BOT", "homelab-reviewer").strip()
@@ -139,6 +148,7 @@ _first_successful_poll = True  # homelab#648: skip job timings backfill on first
 _review_dispatched = set()  # (repo, number, head_sha) already POSTed this process lifetime
 _cired_dispatched = set()   # (repo, number, head_sha) already red-doorbelled this lifetime (FU-115)
 _conflict_dispatched = set()  # (repo, number, head_sha) already conflict-doorbelled this lifetime (FU-144)
+_sentinel_dispatched = set()  # (repo, number, head_sha) already sentinel-doorbelled this lifetime (homelab#650)
 _merged_rung = set()          # (repo, number) already merge-doorbelled this lifetime (ADR-106 (6))
 _queued_prev = {}             # repo -> {dispatchable-queued issue numbers last poll} (#459: the appearance-edge's only memory)
 _open_prs_prev = {}           # repo -> open PR numbers last poll; a vanished number is a merge candidate
@@ -616,6 +626,48 @@ def maybe_dispatch_conflict(repo, number, head_sha, *, review_decision, labels):
         print(f"conflict-edge: POST failed for {repo}#{number}: {e}", flush=True)
 
 
+def maybe_dispatch_sentinel(repo, number, head_sha):
+    """homelab#650 head-changed edge: POST /sentinel — a new endpoint on the same agent-loop
+    EventSource the other dispatchers piggyback on — so the iac-sentinel WorkflowTemplate
+    evaluates a NEW head near-instant instead of riding out the cron tick. With `ci` down to ~1m
+    post-minRunners, that tick (*/5, interim */2 operator-direct 2026-08-19) became the BINDING
+    merge wait on every push in a sentinel-covered repo — the exact "a status the cron services
+    is a defect with an id" case (workflow.md §Triggers, ALL EVENTS HAVE DOORBELLS).
+
+    Scoped to SENTINEL_REPOS — the tofu `protected_repos` four that actually carry the required
+    `iac-sentinel` status check — so a repo whose merge wait doesn't depend on the check never
+    wakes the Sensor. Repo-dumb WITHIN that set per the issue's own payload shape: no
+    {stack, loop_ns} lookup, because the sentinel Sensor scores one head directly rather than
+    routing into an agent loop namespace the way /coordinate and /review do.
+
+    Deduped per (repo, number, head_sha), the same shape as the conflict/red edges: the key
+    ALREADY encodes the head, so a genuinely new head is unconditionally a new key and rings —
+    including a brand-new PR's first observed head (nothing to diff against, and the issue's own
+    worked example: the sentinel status is what that PR's merge wait blocks on, so under-ringing
+    here strands the PR, not just adds noise). A false/duplicate wake costs one ~20s evaluation —
+    over-approximation is explicitly fine (the issue's own acceptance framing); best-effort, same
+    contract as every sibling dispatcher — a POST failure never disturbs the metrics poll, and the
+    cron backstop (dropping back to */15 once this edge is proven) owns the miss."""
+    if not SENTINEL_WEBHOOK_URL or repo not in SENTINEL_REPOS or not head_sha:
+        return
+    key = (repo, str(number), head_sha)
+    if key in _sentinel_dispatched:
+        return
+    payload = {"repo": repo, "pr": number, "head": head_sha}
+    body = json.dumps(payload).encode()
+    try:
+        req = urllib.request.Request(
+            SENTINEL_WEBHOOK_URL, data=body,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp.read()
+        _sentinel_dispatched.add(key)
+        print(f"sentinel-edge: POST /sentinel for {repo}#{number} @ {head_sha[:8]}", flush=True)
+    except Exception as e:
+        print(f"sentinel-edge: POST failed for {repo}#{number}: {e}", flush=True)
+
+
 def maybe_dispatch_merged(repo, vanished):
     """ADR-106 (6) merge doorbell: a MERGE previously woke nothing anywhere — reviewer rings at
     verdict, the ride at its own exit, but auto-merge completes minutes later and the
@@ -1043,6 +1095,12 @@ def collect_open_prs(lines):
                     review_decision=(pr["reviewDecision"] or "none").lower(),
                     labels=label_names,
                 )
+                # homelab#650 head-changed edge: POST /sentinel so a sentinel-covered repo's
+                # required `iac-sentinel` status evaluates THIS head near-instant instead of
+                # riding out the cron tick (the binding merge wait on every push since ci hit
+                # ~1m). SENTINEL_REPOS-gated inside the dispatcher; no new API call — headRefOid
+                # is already read above for the other three edges.
+                maybe_dispatch_sentinel(repo["name"], pr["number"], pr.get("headRefOid") or "")
                 # FU-166(a): the codeowner-park vs reflex-wait split, first-class series (was a
                 # 600s direct-gh poll in meta-needs-attention.sh clause 4 — against the one-poller
                 # doctrine and FU-084's API pool). ci green folds INTO the predicate here, so the
@@ -2407,6 +2465,45 @@ def self_test():
         globals()['gh'] = saved_gh_for_issue
         globals()['gh_paged'] = saved_gh_paged_for_issue
 
+    # ── homelab#650 sentinel head-changed edge ─────────────────────────────────────────────────────
+    # Same recorded-urlopen seam as the conflict/queued edges above: the predicate (SENTINEL_REPOS
+    # gate), the payload shape and the per-(repo, number, head_sha) dedup are all exercised without
+    # a socket.
+    global SENTINEL_WEBHOOK_URL
+    saved_urlopen, saved_url = urllib.request.urlopen, SENTINEL_WEBHOOK_URL
+    urllib.request.urlopen = _record
+    SENTINEL_WEBHOOK_URL = "http://agent-loop.invalid/sentinel"
+    try:
+        def sentinel(repo, number, head_sha):
+            del posted[:]
+            maybe_dispatch_sentinel(repo, number, head_sha)
+            return list(posted)
+
+        # A NEW head on a sentinel-covered repo rings once, payload {repo, pr, head} verbatim.
+        fired = sentinel("homelab", 650, "deadbeefcafe")
+        assert len(fired) == 1, fired
+        assert fired[0][0] == SENTINEL_WEBHOOK_URL
+        assert fired[0][1] == {"repo": "homelab", "pr": 650, "head": "deadbeefcafe"}, fired[0][1]
+        # A repo outside SENTINEL_REPOS never rings, however plausible the head.
+        assert sentinel("sleep-tracking", 42, "f00dbeef") == [], \
+            "non-sentinel repos must never ring the sentinel doorbell"
+        # The same head on a repeat poll must not re-ring (a quiet poll stays quiet)…
+        assert sentinel("sleep-iac", 7, "cafef00d"), "first call must fire"
+        assert sentinel("sleep-iac", 7, "cafef00d") == [], "repeat head must not re-ring"
+        # …while a genuinely NEW head on the same PR is a new wake.
+        assert sentinel("sleep-iac", 7, "f00df00d"), "a new head must re-ring"
+        # A brand-new PR's first observed head counts as new (nothing to diff against) and rings —
+        # under-ringing here strands the PR on the sentinel status its own merge wait blocks on.
+        assert sentinel("oracle-iac", 999, "abc12300"), "a PR's first observed head must ring"
+        assert sentinel("circles-iac", 1, "abc12399"), "every SENTINEL_REPOS member is covered"
+        # No head SHA ⇒ nothing to dedup on, so nothing is sent (the poll retries next cycle).
+        assert sentinel("homelab", 650, "") == []
+        # Empty webhook URL = the feature is off.
+        SENTINEL_WEBHOOK_URL = ""
+        assert sentinel("homelab", 650, "0ff00ff00f") == []
+    finally:
+        urllib.request.urlopen, SENTINEL_WEBHOOK_URL = saved_urlopen, saved_url
+
     # ── homelab#648: first-poll job-timings skip and flag clearing ────────────────────────────────
     # Test that the _first_successful_poll branch gates job-timing collection and that the flag
     # clears once collect_workflow_runs succeeds, not when all collectors do.
@@ -2513,7 +2610,7 @@ def self_test():
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
           "scale, job-level queue/duration metrics + caching + retry on API failure, issue "
           "lifecycle series with re-queue first-epoch rule, first-poll job-timings skip when "
-          "_first_successful_poll flag is set)")
+          "_first_successful_poll flag is set, sentinel head-changed edge-trigger)")
     return 0
 
 

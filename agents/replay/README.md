@@ -575,6 +575,14 @@ Log each instance here, so the next author sees a register rather than a precede
   moves — the harness asserts a clause's `gh`/`kubectl` calls, and prompt text emits none.
 
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.
+- **homelab#650 legs 1+2 (2026-08-19)** — the `/sentinel` endpoint block added to the agent-loop
+  EventSource in `review-argo.yaml`: a pure Argo Events DECLARATION (port/endpoint/method — no
+  clause shell, no branch, no action stream), consumed by the new `sentinel` Sensor
+  (sentinel-argo.yaml). The harness asserts a clause's `gh`/`kubectl` calls and this diff emits
+  none; the sibling endpoint additions (`/fix-verdict`, `/deploy-degraded`) predate the ratchet's
+  clause-file list and carried no fixture for the same reason. The evaluation the Sensor submits
+  is `scripts/iac-sentinel.sh` — script-side, not a clause file (the PR#548 register entry's
+  precedent, one line up in this list's history).
 - **homelab#443 re-review catch (2026-08-18)** — dropping `2>/dev/null` from the four
   `--pick-rail` command substitutions (`review-reflex.sh`, `agent-session.sh`'s worker/retro
   dispatch leg + the responder/fix-debounce argo YAMLs): a redirection-only change — `$(...)` captures stdout alone, so the rail value and

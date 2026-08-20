@@ -79,6 +79,13 @@ spec:
       port: "12000"
       endpoint: /fix-verdict
       method: POST
+    # homelab#650: the iac-sentinel head-changed edge — the github-exporter POSTs {repo, pr, head}
+    # when a new head sha appears on an open PR of a sentinel-covered repo. Consumed by the
+    # `sentinel` Sensor (sentinel-argo.yaml); the reflexes-argo.yaml cron is the backstop.
+    sentinel:
+      port: "12000"
+      endpoint: /sentinel
+      method: POST
 ---
 # Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
 apiVersion: argoproj.io/v1alpha1

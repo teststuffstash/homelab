@@ -25,6 +25,7 @@ WORKER_AUTHOR="${WORKER_AUTHOR:-app/homelab-agents-1234}"
 PUSHGATEWAY="${PUSHGATEWAY:-}"   # e.g. http://prometheus-pushgateway.monitoring.svc:9091 — empty = log-only
 POLICY_DIR="${POLICY_DIR:-${HERE}/../policy/iac}"
 STATUS_TOKEN="${SENTINEL_STATUS_TOKEN:-}"  # reviewer-App token; empty = shadow (no GitHub writes)
+SENTINEL_WAKE="${SENTINEL_WAKE:-cron}"     # cron|edge — who woke this run (homelab#650; stated per run)
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -205,4 +206,10 @@ done
 # what stops the group wipe. Freshness keys on this metric (iac-lane.md §L0b); engine rows exist
 # only for ticks that evaluated a PR.
 metric "iac_sentinel_last_run_timestamp_seconds $(date +%s)"
+# homelab#650: state the wake source, so "% of evaluations edge-served" is a number (the FU-144
+# acceptance shape). A DISTINCT metric name per source — never a label on the heartbeat: a POST
+# replaces per metric NAME within the group, so a labeled heartbeat would let an edge run erase
+# the cron's series (and vice versa). changes(edge)/changes(cron+edge) is the ratio.
+metric "iac_sentinel_wake_${SENTINEL_WAKE}_timestamp_seconds $(date +%s)"
+log "wake=${SENTINEL_WAKE} (homelab#650 edge accounting)"
 push_metrics
