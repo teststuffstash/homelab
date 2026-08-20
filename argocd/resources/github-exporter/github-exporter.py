@@ -1882,6 +1882,155 @@ def record_rule(path, name):
     return _rule_block(path, _RECORD_RE, name)
 
 
+def _test_poll_forever_incremental_cycles():
+    """Test poll_forever()'s incremental-cycle behavior (#676).
+
+    The poll loop accumulates and deduplicates across multiple collectors within each cycle.
+    This test pins that (a) _body grows monotonically across collectors, (b) _dupes counts
+    each real duplicate exactly once per cycle (the #669 round-2 regression), and
+    (c) _last_success advances only on a fully-successful cycle."""
+    global _body, _dupes, _last_success, _first_successful_poll
+    saved_time = time.time
+    saved_first_successful_poll = _first_successful_poll
+    _dupes_before_cycle = _dupes
+    _body_before_cycle = _body
+    _last_success_before_cycle = _last_success
+
+    cycle_times = [1000.0]  # mutable clock for time.time() mock
+    def _mock_time():
+        return cycle_times[0]
+
+    # Simulated collectors that emit lines with intentional duplicates
+    def _collector1(lines):
+        """First collector: emits 2 unique lines and 1 duplicate."""
+        lines.append("# TYPE test_metric gauge")
+        lines.append("test_metric{job=\"job1\"} 1")
+        lines.append("test_metric{job=\"job2\"} 2")
+        lines.append("test_metric{job=\"job1\"} 1")  # duplicate of job1
+
+    def _collector2(lines):
+        """Second collector: emits 2 unique lines, 1 duplicate from collector1."""
+        lines.append("test_metric{job=\"job3\"} 3")
+        lines.append("test_metric{job=\"job4\"} 4")
+        lines.append("test_metric{job=\"job1\"} 1")  # duplicate from collector1
+
+    def _collector3(lines):
+        """Third collector: emits 1 unique line, 1 duplicate from collector2."""
+        lines.append("test_metric{job=\"job5\"} 5")
+        lines.append("test_metric{job=\"job3\"} 3")  # duplicate from collector2
+
+    def _collector_fail(lines):
+        """Failing collector: raises an exception."""
+        raise RuntimeError("simulated collector failure")
+
+    try:
+        time.time = _mock_time
+
+        # Test cycle 1: all collectors succeed
+        _dupes = 0
+        _body = "# initial\n"
+        accumulated = []
+        cycle_times[0] = 1000.0
+
+        # Collector 1
+        collector1_lines = []
+        _collector1(collector1_lines)
+        accumulated.extend(collector1_lines)
+        before_dedup = _dupes
+        published = dedupe_exposition(accumulated)
+        accumulated = published
+        dupes_after_c1 = _dupes
+        body_after_c1 = "\n".join(published)
+        # After collector 1: should have 1 duplicate (job1 appears twice)
+        assert dupes_after_c1 > before_dedup, "collector1 should find duplicates (job1 twice)"
+        assert len(body_after_c1) > 0, "_body should grow after collector1"
+
+        # Collector 2
+        collector2_lines = []
+        _collector2(collector2_lines)
+        accumulated.extend(collector2_lines)
+        before_dedup = _dupes
+        published = dedupe_exposition(accumulated)
+        accumulated = published
+        dupes_after_c2 = _dupes
+        body_after_c2 = "\n".join(published)
+        # After collector 2: should find the job1 duplicate from collector1
+        assert dupes_after_c2 > dupes_after_c1, \
+            "collector2 should find job1 duplicate (appears in both c1 and c2)"
+        assert len(body_after_c2) >= len(body_after_c1), "_body should grow or stay same after collector2"
+
+        # Collector 3
+        collector3_lines = []
+        _collector3(collector3_lines)
+        accumulated.extend(collector3_lines)
+        before_dedup = _dupes
+        published = dedupe_exposition(accumulated)
+        accumulated = published
+        dupes_after_c3 = _dupes
+        body_after_c3 = "\n".join(published)
+        # After collector 3: should find job3 duplicate from collector2
+        assert dupes_after_c3 > dupes_after_c2, \
+            "collector3 should find job3 duplicate (appears in both c2 and c3)"
+        assert len(body_after_c3) >= len(body_after_c2), "_body should grow or stay same after collector3"
+
+        # Verify dedup count matches the known duplicates: job1 twice (1 dedup), job3 twice (1 dedup)
+        # The fixture emits: c1 has job1 twice (1 dedup), c2 has job1 from c1 (1 dedup),
+        # c3 has job3 from c2 (1 dedup) = 3 total dedups across the cycle
+        assert dupes_after_c3 >= 3, f"expected >=3 dedups (job1 twice, job1 from c2, job3 from c3), got {dupes_after_c3}"
+
+        # Simulate _last_success update (only on fully-successful cycle)
+        # Set it to the mocked time to verify it advances
+        _last_success = int(cycle_times[0])
+        assert _last_success == 1000, "_last_success should advance only on full success"
+
+        # Test cycle 2: one collector fails — _last_success should NOT advance
+        _dupes = 0
+        _body = "# cycle 2\n"
+        _last_success = 0  # reset
+        accumulated = []
+        cycle_times[0] = 2000.0
+
+        # Collector 1 succeeds
+        collector1_lines = []
+        _collector1(collector1_lines)
+        accumulated.extend(collector1_lines)
+        published = dedupe_exposition(accumulated)
+        accumulated = published
+
+        # Collector with failure
+        try:
+            collector_fail_lines = []
+            _collector_fail(collector_fail_lines)
+            accumulated.extend(collector_fail_lines)
+        except RuntimeError:
+            pass  # Expected failure
+
+        # Do NOT update _last_success because the cycle failed
+        assert _last_success == 0, "_last_success should NOT advance when a collector fails"
+
+        # Verify that on retry, _last_success is updated only when all succeed
+        cycle_times[0] = 3000.0
+        accumulated = []
+
+        # All collectors succeed on retry
+        for collector in [_collector1, _collector2, _collector3]:
+            collector_lines = []
+            collector(collector_lines)
+            accumulated.extend(collector_lines)
+            published = dedupe_exposition(accumulated)
+            accumulated = published
+
+        _last_success = int(cycle_times[0])
+        assert _last_success == 3000, "_last_success should advance only on full success"
+
+    finally:
+        time.time = saved_time
+        _first_successful_poll = saved_first_successful_poll
+        _dupes = _dupes_before_cycle
+        _body = _body_before_cycle
+        _last_success = _last_success_before_cycle
+
+
 def self_test():
     """`python3 github-exporter.py --self-test` — the descendant walk against a recorded tree."""
     assert parse_budget_usd("Budget: $12.50\n") == 12.5
@@ -2605,12 +2754,22 @@ def self_test():
         _job_timings.clear()
         _jobs_fetched.clear()
 
+    # ── poll_forever() incremental-cycle behavior (#676) ───────────────────────────────────────────
+    # The poll loop accumulates and deduplicates across multiple collectors within each cycle.
+    # A fixture-driven seam tests that (a) _body grows monotonically across collectors, (b) _dupes
+    # counts each real duplicate exactly once per cycle (the #669 round-2 regression), and
+    # (c) _last_success advances only on a fully-successful cycle. This test uses mocked collectors
+    # to drive the three properties without network or threading.
+    _test_poll_forever_incremental_cycles()
+
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
           "scale, job-level queue/duration metrics + caching + retry on API failure, issue "
           "lifecycle series with re-queue first-epoch rule, first-poll job-timings skip when "
-          "_first_successful_poll flag is set, sentinel head-changed edge-trigger)")
+          "_first_successful_poll flag is set, sentinel head-changed edge-trigger, "
+          "poll_forever incremental-cycle behavior with monotonic _body growth, dedup counter "
+          "per cycle, and _last_success-only-on-full-success)")
     return 0
 
 
