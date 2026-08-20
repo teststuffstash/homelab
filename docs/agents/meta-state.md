@@ -174,6 +174,12 @@ sitting).** Both jail session types — the mechanical MAINTENANCE session and t
 (design-agents corpus loaded: codeowner reads + FU build + subagent waves) — arm the SAME
 standing set below; what differs is cadence and the act rule:
 
+- **ONE STINT PER CORPUS SESSION (operator rule, 2026-08-20).** The corpus bootstrap
+  (~470k-equiv cache write) costs only ~6–10 turns' worth of high-ctx re-reads, while every turn
+  re-reads the WHOLE context at 0.1× — so at ctx ≥ ~500k a NEW stint always starts a FRESH
+  session (break-even turns ≈ 470k / ((ctx−400k)×0.1): 500k→~47, 600k→~23, 800k→~12; a real
+  stint is 150–300+ turns and stints EXPAND). Trailing work of a few dozen turns may stay warm.
+  Measured basis: the 2026-08-19 night session — 459 turns, 275.8M cache-read = ~92% of spend.
 - **Ctx wind-down (operator, 2026-08-19): end ~50k tokens BEFORE the context cap — never ride
   into compaction** (a compacted corpus session is no longer a corpus session; a fresh one
   bootstraps from this file + TICK-LOG by design, mid-stint included). Measure with
