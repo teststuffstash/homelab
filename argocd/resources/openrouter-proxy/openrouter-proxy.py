@@ -3581,6 +3581,73 @@ data: [DONE]
     c.close()
     check(r.status == 400, f"ingest negative usd: 400 (got {r.status})")
 
+    # ── #710: _cr_guardrail tri-state has_cr / _headroom_tick fail-open tests ────────────────────
+    print("\n=== _cr_guardrail / _headroom_tick coverage tests (#710 / #701 acceptance) ===")
+    # The tri-state has_cr ∈ {True, False, None} from _cr_guardrail controls whether _headroom_tick
+    # probes a session ref (CR found or list failed) vs skips it as residue (no CR). Acceptance:
+    # CR found → probe, no CR + session → skip as residue, list failed → still probe (fail-open).
+
+    # Seed _resolve_ref cache with different has_cr outcomes, then test _headroom_tick's behavior
+    now = time.time()
+
+    # Test A: CR found (has_cr=True) — session ref should be probed
+    _resolve_ref_result_cr_found = {
+        "key": "sk-test-cr-found",
+        "guardrail": "",
+        "has_cr": True,  # CR found
+        "kind": "openrouter",
+    }
+    ref_cr_found = "default/test-session-cr-found-uuid"
+    _refs[ref_cr_found] = (now + 3600, _resolve_ref_result_cr_found)
+
+    # Test B: No CR (has_cr=False) + session ref — session ref should be skipped as residue
+    _resolve_ref_result_no_cr = {
+        "key": "sk-test-no-cr",
+        "guardrail": "",
+        "has_cr": False,  # No CR found (pre-CR key or cleanup residue)
+        "kind": "openrouter",
+    }
+    ref_session_no_cr = "default/test-session-no-cr-uuid"
+    _refs[ref_session_no_cr] = (now + 3600, _resolve_ref_result_no_cr)
+
+    # Test C: Non-session ref with no CR — should NOT be skipped (residue skip is session-specific)
+    ref_no_session_no_cr = "default/test-openrouter-key-no-session"
+    _refs[ref_no_session_no_cr] = (now + 3600, _resolve_ref_result_no_cr)
+
+    # Test D: List failed (has_cr=None) — session ref should NOT be skipped (fail-open)
+    _resolve_ref_result_list_failed = {
+        "key": "sk-test-list-failed",
+        "guardrail": "",
+        "has_cr": None,  # CR list call failed (fail-open semantics)
+        "kind": "openrouter",
+    }
+    ref_session_list_failed = "default/test-session-list-failed-uuid"
+    _refs[ref_session_list_failed] = (now + 3600, _resolve_ref_result_list_failed)
+
+    # Drive _headroom_tick() end-to-end with monkeypatching to verify behavior
+    _mod = sys.modules[__name__]
+    _saved_log = _mod.log
+    _saved_key_refs = router.key_refs
+    _lines = []
+    _mod.log = lambda m: _lines.append(m)
+    router.key_refs = lambda: [ref_cr_found, ref_session_no_cr, ref_no_session_no_cr, ref_session_list_failed]
+    try:
+        _headroom_tick()
+    finally:
+        _mod.log = _saved_log
+        router.key_refs = _saved_key_refs
+    _out = "\n".join(_lines)
+
+    # Assert the four outcomes are correct
+    check("headroom: skipping " + ref_session_no_cr in _out,
+          "no CR + session: skipped as residue")
+    check("headroom: skipping " + ref_cr_found not in _out and "headroom: " + ref_cr_found + ": auth/key failed" in _out,
+          "CR found: probed")
+    check("headroom: skipping " + ref_session_list_failed not in _out and "headroom: " + ref_session_list_failed + ": auth/key failed" in _out,
+          "list failed → probed, fail-open")
+    check("headroom: skipping " + ref_no_session_no_cr not in _out and "headroom: " + ref_no_session_no_cr + ": auth/key failed" in _out,
+          "non-session no-CR: probed, residue skip is session-specific")
+
     print()
     if not fails:
         print("self-test: PASS")
