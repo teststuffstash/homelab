@@ -292,15 +292,17 @@ _refs: dict[str, tuple[float, dict | None]] = {}  # "ns/name" -> (expires_epoch,
 _refs_lock = threading.Lock()
 
 
-def _cr_guardrail(ns: str, secret_name: str) -> str | None:
+def _cr_guardrail(ns: str, secret_name: str) -> tuple[str | None, bool | None]:
     """FU-138: the AUTHORITATIVE guardrail is the OpenRouterKey CR, not the Secret.
 
     The Secret's GUARDRAIL is written by the operator only when it MINTS (create/rotate), so a
     guardrail change on an already-minted standing key never reaches it — enforcement went dead
     silently, and every claim change needed a hand patch (circles-iac#1, 2026-08-04). The CR is
     rendered from the AgentStack claim in git, so reading it here makes claim → composition → CR →
-    proxy the one path. Returns the CR's guardrail ("" = open), or None when no CR owns this Secret
-    (then the caller keeps the Secret's field — pre-CR keys still enforce)."""
+    proxy the one path. Returns (guardrail, has_cr):
+      - (str, True): CR found with guardrail value ("" = open)
+      - (None, False): no CR owns this Secret (pre-CR key, list succeeded)
+      - (None, None): list failed (fail-open: keep the Secret's guardrail, not a blocked state)"""
     try:
         token = open(f"{_SA_DIR}/token").read().strip()
         ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
@@ -313,19 +315,20 @@ def _cr_guardrail(ns: str, secret_name: str) -> str | None:
             items = (json.load(resp).get("items") or [])
     except Exception as e:  # noqa: BLE001 — unreadable CRs must not disarm the Secret's guardrail
         log(f"ref: openrouterkeys list failed in {ns}: {e} — falling back to the Secret's GUARDRAIL")
-        return None
+        return None, None
     for cr in items:
         spec = cr.get("spec") or {}
         # Mirror the CRD default: secretName, else <project>-openrouter (models.py target_secret_name).
         target = spec.get("secretName") or f"{spec.get('project', '')}-openrouter"
         if target == secret_name:
-            return spec.get("guardrail") or ""
-    return None
+            return spec.get("guardrail") or "", True
+    return None, False
 
 
 def _resolve_ref(ref: str) -> dict | None:
-    """`ns/name` -> {"key": OPENROUTER_API_KEY, "guardrail": ...}, or None
-    (missing/unlabeled/unreadable). guardrail feeds the FU-024 only-free enforcement."""
+    """`ns/name` -> {"key": OPENROUTER_API_KEY, "guardrail": ..., "has_cr": bool|None}, or None
+    (missing/unlabeled/unreadable). guardrail feeds the FU-024 only-free enforcement; has_cr
+    (True/False/None) distinguishes "CR exists" / "no CR, pre-CR key" / "CR list failed"."""
     now = time.time()
     with _refs_lock:
         hit = _refs.get(ref)
@@ -349,13 +352,14 @@ def _resolve_ref(ref: str) -> dict | None:
             b64 = data.get("OPENROUTER_API_KEY") or data.get("AUTH_TOKEN") or ""
             if b64:
                 secret_guardrail = base64.b64decode(data.get("GUARDRAIL", "")).decode()
-                cr_guardrail = _cr_guardrail(ns, name)  # FU-138: CR wins when one owns the Secret
+                cr_guardrail, has_cr = _cr_guardrail(ns, name)  # FU-138: CR wins when one owns the Secret
                 if cr_guardrail is not None and cr_guardrail != secret_guardrail:
                     log(f"ref: {ref} guardrail from CR: '{cr_guardrail or 'none'}' "
                         f"(Secret says '{secret_guardrail or 'none'}' — stale, FU-138)")
                 resolved = {
                     "key": base64.b64decode(b64).decode(),
                     "guardrail": secret_guardrail if cr_guardrail is None else cr_guardrail,
+                    "has_cr": has_cr,  # exposed for _headroom_tick to avoid a second CR list call
                     # ADR-096 P2: which rail this ref belongs to — OpenRouter keys enroll for
                     # the headroom poll; anthropic oauth refs must never hit /api/v1/auth/key.
                     "kind": "openrouter" if data.get("OPENROUTER_API_KEY") else "anthropic",
@@ -989,34 +993,6 @@ _headroom: dict[str, dict] = {}  # ref -> last auth/key snapshot (no key materia
 _headroom_lock = threading.Lock()
 
 
-def _session_ref_has_cr(ref: str) -> bool:
-    """Check if a session-key ref (format: <ns>/<project>-session-<id>-openrouter) has a live
-    OpenRouterKey CR. Returns True if the CR exists, False otherwise. On a failed CR list,
-    returns True (fail-open: keep probing rather than blacklist on API error)."""
-    if "-session-" not in ref:
-        return True  # not a session ref, allow probe
-    try:
-        ns, secret_name = ref.split("/", 1)
-        token = open(f"{_SA_DIR}/token").read().strip()
-        ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
-        req = urllib.request.Request(
-            "https://kubernetes.default.svc/apis/openrouter.teststuff.net/v1alpha1"
-            f"/namespaces/{ns}/openrouterkeys",
-            headers={"Authorization": "Bearer " + token},
-        )
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
-            items = (json.load(resp).get("items") or [])
-    except Exception as e:  # noqa: BLE001 — unreadable CRs must not disarm probing
-        log(f"headroom: _session_ref_has_cr({ref}): CR list failed: {e} — assuming CR exists (fail-open)")
-        return True
-    for cr in items:
-        spec = cr.get("spec") or {}
-        target = spec.get("secretName") or f"{spec.get('project', '')}-openrouter"
-        if target == secret_name:
-            return True
-    return False
-
-
 def _headroom_tick() -> int:
     refs = router.key_refs()
     if ROUTER_ACCOUNT_REF and ROUTER_ACCOUNT_REF not in refs:
@@ -1026,7 +1002,10 @@ def _headroom_tick() -> int:
         resolved = _resolve_ref(ref)
         if not resolved or resolved.get("kind") != "openrouter":
             continue  # anthropic oauth refs have no OpenRouter account state
-        if "-session-" in ref and not _session_ref_has_cr(ref):
+        # homelab#701: use has_cr from _resolve_ref (one CR list call per ref) instead of
+        # calling _session_ref_has_cr for a second list. has_cr=False means no CR found
+        # (residue); has_cr=None means list failed (fail-open, keep probing).
+        if "-session-" in ref and resolved.get("has_cr") is False:
             log(f"headroom: skipping {ref} — session Secret has no live OpenRouterKey CR (residue)")
             continue
         try:
