@@ -3,3 +3,6 @@
 normal|normal|||one-unbound|
 # Row 2: probe-fail — openall is unreadable (garbage) → PROBE-FAIL line, no unbound report
 probe-fail|normal||IN_OPENALL=garbage|probe-fail|
+# Row 3: cue-below — human-authored issue #93 has "Harvested from #89" on line 3 (not line 1)
+# → cue regex with \A does NOT match, so no unbound report for #93 (only #90 still matches)
+cue-below|normal|gh/issue-list.json @ add-cue-below.jq||one-unbound|
