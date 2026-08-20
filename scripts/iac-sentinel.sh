@@ -193,7 +193,10 @@ for repo in $SENTINEL_REPOS; do
         age=$(( $(date +%s) - $(date -d "$(gh api "repos/${ORG}/${repo}/commits/${sha}"                 --jq '.commit.committer.date' 2>/dev/null || echo now)" +%s 2>/dev/null || date +%s) ))
         if [ "$age" -gt 600 ]; then
           log "[$repo#$num@$sha] ⚠ CRON-SERVICED — first status by the BACKSTOP on a ${age}s-old head: the edge missed this ring (homelab#650)"
-          metric "iac_sentinel_cron_serviced_timestamp_seconds $(date +%s)"
+          # {repo,pr} like every sibling per-PR metric — an unlabeled line duplicates when TWO
+          # virgin heads hit one tick, and a duplicate label set 400s the WHOLE push (the exact
+          # #682 class this file just got fixed for; caught by the PR#702 review).
+          metric "iac_sentinel_cron_serviced_timestamp_seconds{repo=\"$repo\",pr=\"$num\"} $(date +%s)"
         fi
       fi
     fi
