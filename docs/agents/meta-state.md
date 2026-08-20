@@ -65,7 +65,17 @@ meant to avoid.)
   router shadow/elastic cells (FU-095, PR#408) · FU-148 acceptance · FU-149 datum ~08-20 ·
   or-op#34 first daily-429 · renovate-approve one-approval-per-head (#114) · stint
   quiet-window closes (rule 2026-08-20, chainless §The jail stint): #420 (waits on #710) +
-  #711 — close at a sweep ≥72h after each tree's last event.
+  #711 — close at a sweep ≥72h after each tree's last event · **platform workers on PAID OR
+  flash (PR#715, operator 2026-08-20 — fixup window): REVERT to claude/haiku primary
+  ~2026-09-03 / fixup-wave end / OR depletion, whichever first** (claim comment carries the
+  full record; Go re-flip stays FU-181).
+
+- **⚑ S6 STINT IN FLIGHT (authored 2026-08-20): #716, children #717–#723.** Queued to the
+  fixer lane: #718 (reviewer depth guard) #719 (responder Cause: bind) #720 (brief play doors)
+  #721 (unbound-sprout belt) #723 (retro BRIEF rule). Seat-owned: #717 (contract rule — ships
+  WITH #718's merge, never ahead) + #722 (✅ pastes landed 2026-08-20: fix.yaml sibling-bind,
+  subagent card, chainless session-discipline line). Gate reads on the children's PRs are this
+  stint's sessions' duty; closeout 1 at originals-done.
 
 ## Durable warnings — re-read before touching these files
 

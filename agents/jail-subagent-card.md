@@ -50,6 +50,9 @@
   — a change there changes what the required `ci` check does. Additive rows are ordinary work;
   editing or removing an EXISTING assertion is a red flag you must call out explicitly in your
   report (homelab#354).
+- **An issue you file binds at filing** (S6, lineage contract rule 3): link it as a native
+  sub-issue of the issue/epic your chunk serves (the dispatch prompt names it), or state
+  `standalone` in the body — never leave lineage implicit.
 
 ## Tests you write must be able to fail
 
