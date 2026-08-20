@@ -107,6 +107,11 @@ Anti-goals: no platform rewrites; no more than 6 findings; no finding without le
 
 ## Output contract (strict)
 
+When a retro finding becomes a process-change issue, its parent issue is the finding's ORIGIN
+issue (the ledger row's issue the finding was derived from) when singular; standalone-honest
+when the finding aggregates many rows; NEVER the retro report. The report links each filed
+issue either way.
+
 End your FINAL message with the complete report between these exact markers:
 
 BEGIN-RETRO-REPORT
