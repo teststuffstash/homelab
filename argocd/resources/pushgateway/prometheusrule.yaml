@@ -192,6 +192,17 @@ spec:
         # (and destroys RegistryMirrorDanglingLinks' datum, see that file). #336 names it as its
         # own finding in the PR body instead of absorbing it into a range selector, which is what
         # that issue's acceptance asks for.
+        #
+        # ── SUBJECT-COLLISION DECISION (homelab#724) ───────────────────────────────────────────
+        # This alert is a FLEET-LEVEL signal, not a per-project one. The PromQL groups by (phase),
+        # not by (project), and the `count by (phase) >= 3` guard would split meaningfully under
+        # per-project regrouping — a project with few rides would never meet the threshold, so the
+        # alert would be silent for a structural reason while LOOKING like coverage, which the
+        # header above already rejects as worse than the honest gap. The one live firing (#500) was
+        # fleet-wide by cause (nix-cache at its eviction ceiling, hitting every agent pod's
+        # devbox-install), not one project. The responder therefore uses the catch-all
+        # `alert:AgentRunPhaseSlow` subject, and two projects tripping this alert in one window
+        # subject-dedupe into one triage — that is accepted because the signal IS fleet-level.
         - alert: AgentRunPhaseSlow
           expr: |
             (
@@ -223,7 +234,7 @@ spec:
             platform_machinery: "true"
           annotations:
             summary: "Ride phase {{ $labels.phase }} p50 is {{ $value }}s — over 2× its own baseline"
-            description: "SYMPTOM ONLY, and deliberately so — this says a ride phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher's deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls. Those two are ALL the launcher emits (homelab#324) — everything after pod-Ready carries `source=\"in-pod\"` and is agent-finalize's: `clone`, `devbox-install` (the nix-cache mirror is the first suspect), `llm-loop` (the model, not the platform — a slow provider raises this and no infra change will lower it) and `finalize`. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric's own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red."
+            description: "SYMPTOM ONLY, and deliberately so — this says a ride phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher's deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls. Those two are ALL the launcher emits (homelab#324) — everything after pod-Ready carries `source=\"in-pod\"` and is agent-finalize's: `clone`, `devbox-install` (the nix-cache mirror is the first suspect), `llm-loop` (the model, not the platform — a slow provider raises this and no infra change will lower it) and `finalize`. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric's own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red. Subject-collision note (homelab#724): this is a fleet-level signal — the responder uses the catch-all `alert:AgentRunPhaseSlow` subject, and two projects tripping it in one window subject-dedupe into one triage (accepted: the one live firing was fleet-wide)."
         # 017790c doctrine (ADR-106 (5), the A2 famine chunk): ALL events have doorbells — the
         # cron is a FAILURE DETECTOR, so a dispatch the cron serviced is a dead doorbell edge
         # with an id, not background noise. The scan stamps epoch-valued wake gauges per dispatch

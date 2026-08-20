@@ -194,6 +194,7 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-subject/oracle-fleet` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-opted-infra-death` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-opted-negative-cost` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/witness-unopted-phase-slow` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-unopted` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `retro-cell-report/longlog` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/missing` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
