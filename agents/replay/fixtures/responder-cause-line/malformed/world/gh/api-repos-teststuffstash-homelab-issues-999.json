@@ -1,0 +1,10 @@
+{
+  "body": "PVCNearFull in monitoring/alertmanager\n\nalert-fp:c3\nCause: invalid\nfix-verdict: fix\n",
+  "id": 123999,
+  "number": 999,
+  "state": "open",
+  "labels": [
+    { "name": "alert" },
+    { "name": "agent-fix" }
+  ]
+}
