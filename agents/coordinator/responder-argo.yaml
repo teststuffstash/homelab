@@ -398,6 +398,7 @@ spec:
               # `.labels.namespace` stays the general path; the gate below mirrors the one
               # EGRESS_NOTE uses further down, so the two read as one idea. Any future rule whose
               # `source` really is a namespace opts in HERE, by name.
+              # >>>REPLAY:responder-subject>>>
               _ns="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
               case "$NAME" in
                 AgentWorkerEgressDropped)
@@ -418,6 +419,7 @@ spec:
               elif [ -n "$_ns" ];                     then SUBJ="ns:${_ns}"
               else                                         SUBJ="alert:${NAME}"; fi
               echo "→ $NAME ($FP): subject=$SUBJ"
+              # <<<REPLAY:responder-subject<<<
 
               # ── subject dedup (FU-133) — the GUARD the subject key never got ───────────────
               # The subject was computed 50 lines below this point and used only inside the LLM

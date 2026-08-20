@@ -1,0 +1,21 @@
+# homelab#707 — the WITNESS. An alert with project label but NOT opted in keeps the catch-all.
+#
+# CONDITION UNDER REPLAY. Alert RouterRotationStale carrying project="homelab" label but not
+# opted into the project fallback (only AgentDispatchCronWoken is).
+#
+# WHY A GREEN-PATH FIXTURE FOR A BUG. The subject fallback pattern can be misread as "if an alert
+# has no namespace, try project"; this fixture prevents that misreading from shipping. The guard
+# is that the fallback must be by NAME, not by label presence. If the implementation ever widens
+# to `.labels.project // catch-all` without the name case, this fixture reds: RouterRotationStale
+# would compute ns:homelab (wrong), marking any future fire as subjdup.
+#
+# THE CONTRACT:
+#   1. Subject computation reaches the catch-all (RouterRotationStale is not in the case list).
+#   2. The computed subject is alert:RouterRotationStale (not ns:homelab).
+#   3. RC 0 — subject computation always succeeds.
+name: responder-subject-witness-unopted
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

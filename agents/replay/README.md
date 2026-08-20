@@ -187,6 +187,9 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-reopen/report-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-selfref/unlabelled` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/homelab` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/oracle-fleet` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/witness-unopted` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `retro-cell-report/longlog` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/missing` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/present` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
