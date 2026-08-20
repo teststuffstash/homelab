@@ -1,0 +1,16 @@
+# homelab#707 — AgentDispatchCronWoken with project=homelab opts into project-aware subject
+#
+# CONDITION UNDER REPLAY. Alert AgentDispatchCronWoken carrying project="homelab" label.
+# Subject computation must select .labels.project when namespace is absent, yielding ns:homelab.
+#
+# THE CONTRACT:
+#   1. Subject computation prefers .labels.namespace, falls back to .labels.project for
+#      AgentDispatchCronWoken (by name, like AgentWorkerEgressDropped does with source).
+#   2. The computed subject is ns:homelab (not alert:AgentDispatchCronWoken).
+#   3. RC 0 — subject computation always succeeds.
+name: responder-subject-homelab
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

@@ -1,0 +1,18 @@
+# homelab#707 — AgentDispatchCronWoken with project=oracle-fleet opts into project-aware subject
+#
+# CONDITION UNDER REPLAY. Alert AgentDispatchCronWoken carrying project="oracle-fleet" label.
+# Subject computation must select .labels.project when namespace is absent, yielding ns:oracle-fleet.
+#
+# This prevents subject collision: two AgentDispatchCronWoken fps with different projects
+# compute different subjects and do not subject-dedupe onto each other.
+#
+# THE CONTRACT:
+#   1. Subject computation reaches the project fallback for AgentDispatchCronWoken (same code).
+#   2. The computed subject is ns:oracle-fleet (not alert:AgentDispatchCronWoken).
+#   3. RC 0 — subject computation always succeeds.
+name: responder-subject-oracle-fleet
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

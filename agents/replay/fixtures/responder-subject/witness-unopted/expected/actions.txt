@@ -1,0 +1,2 @@
+OUT → RouterRotationStale (d4e6f7g8h9i0j1k2): subject=alert:RouterRotationStale
+RC 0

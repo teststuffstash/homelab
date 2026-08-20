@@ -166,6 +166,31 @@ go "$(alert f4 '{"alertname":"AgentWorkerEgressDropped","source":"openrouter-ope
 want "source=openrouter-operator files platform-side" "stack=platform repo=teststuffstash/homelab"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
+section "LEG 2 — AgentDispatchCronWoken: project IS the namespace, preventing subject collision"
+# homelab#707: two different fingerprints from the same alert class (different projects) with no
+# namespace/pod/node/repo/workflow labels would both compute `alert:AgentDispatchCronWoken` and
+# subject-dedupe would mark the second as subjdup-* without triaging. Make AgentDispatchCronWoken
+# opt into a project-aware subject (like AgentWorkerEgressDropped does with source).
+
+scenario dispatch-cron-homelab
+go "$(alert dp1 '{"alertname":"AgentDispatchCronWoken","project":"homelab","severity":"warning"}')"
+want      "AgentDispatchCronWoken homelab → subject ns:homelab (was the catch-all alert:<name>)" "subject=ns:homelab"
+want      "AgentDispatchCronWoken homelab → routes platform" "stack=platform repo=teststuffstash/homelab"
+
+scenario dispatch-cron-oracle
+go "$(alert dp2 '{"alertname":"AgentDispatchCronWoken","project":"oracle-fleet","severity":"warning"}')"
+want      "AgentDispatchCronWoken oracle-fleet → subject ns:oracle-fleet" "subject=ns:oracle-fleet"
+want      "AgentDispatchCronWoken oracle-fleet → routes oracle" "stack=oracle repo=teststuffstash/oracle-iac"
+
+# Two different fps in one payload with different projects compute different subjects, so both
+# triage. This prevents the #707 collision where only one fp per subject fires per 24h.
+scenario dispatch-cron-multi-project
+go '{"alerts":[{"status":"firing","fingerprint":"dp3","labels":{"alertname":"AgentDispatchCronWoken","project":"homelab"}},{"status":"firing","fingerprint":"dp4","labels":{"alertname":"AgentDispatchCronWoken","project":"oracle-fleet"}}]}'
+want "dispatch-cron → first fp triages with subject ns:homelab" "subject=ns:homelab"
+want "dispatch-cron → second fp triages with subject ns:oracle-fleet" "subject=ns:oracle-fleet"
+want "dispatch-cron multi-project → both subjects are distinct (no collision dedup)" "subject=ns:oracle-fleet"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
 section "ROUND-2 REGRESSION — the source fallback is scoped to ONE alert"
 # Round 1 read `.labels.namespace // .labels.source` for EVERY alert, justified by the claim that
 # no other rule uses `source`. False: alert RouterRotationStale (in
