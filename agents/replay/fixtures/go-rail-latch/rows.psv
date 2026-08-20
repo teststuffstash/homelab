@@ -14,5 +14,6 @@ reroute-optout           |       |       | POST_SHAPE=pod                       
 reroute-run-shape        |       |       | POST_SHAPE=pod                               | reroute-run-shape       |
 reroute-unthreadable     |       |       |                                              | reroute-unthreadable    |
 strike-attribution       |       |       | POST_SHAPE=strike-attribution                 | strike-attribution      |
+strike-attribution-claude |       |       | POST_SHAPE=strike-attribution-claude          | strike-attribution-claude |
 strike-attribution-degrade |     |       | POST_SHAPE=strike-attribution-degrade         | strike-attribution-degrade |
 strike-attribution-init-tier-default |  |       | POST_SHAPE=strike-attribution-init-tier-default | strike-attribution-init-tier-default |

@@ -417,6 +417,8 @@ elif [ -n "$OR_CAPACITY_DOWN" ]; then
       if [ -n "$_fb_ok" ]; then
         RAIL_DEGRADED="$_fb_model"
         echo "→ homelab#158 RAIL DEGRADE: OpenRouter capacity down [${OR_CAPACITY_DOWN}] — dispatching ${RAIL_DEGRADED} on the subscription instead of deferring (openrouter pick was: ${MODEL}). rail=subscription-fallback; the FU-088 gate still bounds this ride."
+        # Preserve the original attempted model for strike attribution before the degrade
+        STRUCK_MODEL_ORIG="$MODEL"
         MODEL="$RAIL_DEGRADED"
         # The explicit --harness the dispatcher passed selects WITHIN the OpenRouter rail, and that
         # rail is down — so it cannot bind here. Clearing the flag lets the harness follow the model
@@ -473,17 +475,20 @@ fi
 # estimate_budget.py and in the proxy. This keeps the same self-executing behaviour: the dispatcher
 # passes --model straight from stacks.json and gets the right harness + a bare model id, and an
 # explicit --harness still wins.
+# >>>REPLAY:struck-model-init>>>
+# Track the originally attempted model for strike attribution (FU-062 / issue#660 / #674): when we
+# degrade to a fallback, MODEL is rewritten but STRUCK_MODEL remains at the original chain entry,
+# so the strike comment records which model was attempted and failed (not which fallback was used).
+# The chain entry must match what the coordinator sees in the claim (before model-id.py resolution
+# strips prefixes like claude/* → haiku). Capture here BEFORE resolution.
+# If degrade at :420 already set it, use that; otherwise use current MODEL.
+STRUCK_MODEL="${STRUCK_MODEL_ORIG:-$MODEL}"
+# <<<REPLAY:struck-model-init<<<
 # >>>REPLAY:model-id-resolution>>>
 eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
 [ -z "$MODEL_HARNESS" ] || [ -n "${HARNESS_SET:-}" ] || HARNESS="$MODEL_HARNESS"
 MODEL="$MODEL_MODEL"
 # <<<REPLAY:model-id-resolution<<<
-# >>>REPLAY:struck-model-init>>>
-# Track the originally attempted model for strike attribution (FU-062 / issue#660): when we degrade
-# to a fallback, MODEL is rewritten but STRUCK_MODEL remains at the original chain entry, so the
-# strike comment records which model was attempted and failed (not which fallback was used).
-STRUCK_MODEL="$MODEL"
-# <<<REPLAY:struck-model-init<<<
 
 # Without an explicit --task (interactive/ad-hoc runs) the transcript still lands somewhere findable.
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -1188,8 +1193,9 @@ if [ "$HARNESS" = "claude" ]; then
   if [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ]; then
     # The pre-rewrite value is this script's OWN default (:48) — never a chain entry a dispatcher
     # chose or a model that served a request — so the strike must name what actually runs. Contrast
-    # the two degrade sites below, which deliberately do NOT sync (#660 acceptance).
-    MODEL="haiku"; STRUCK_MODEL="$MODEL"
+    # the two degrade sites below, which deliberately do NOT sync (#660 acceptance). The chain id
+    # for haiku is claude/haiku, so strikes record the chain-entry shape for coordinator matching (#674).
+    MODEL="haiku"; STRUCK_MODEL="claude/haiku"
   fi
   GOOSE_MODEL="$MODEL"
   # <<<REPLAY:tier-default-struck-model-sync<<<
