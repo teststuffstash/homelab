@@ -208,6 +208,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-currency/behind-skips` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/probe-fail-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-depth-lane-split` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-exit-contract` | table | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-go-failover/available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/explicit-model` | actions | - | `agents/reviewer-session.sh` | - |
