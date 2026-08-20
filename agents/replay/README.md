@@ -183,6 +183,9 @@ is stale, so it cannot drift the way the prose register did.
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
+| `responder-cause-line/absent` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-cause-line/malformed` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-cause-line/valid` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-reopen/fix-verdict` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-reopen/report-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
@@ -238,6 +241,7 @@ is stale, so it cannot drift the way the prose register did.
 | `session-belt/fast-path` | actions | - | `agents/coordinator-scan.sh` | - |
 | `session-belt/queued` | actions | - | `agents/coordinator-scan.sh` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
+| `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
 | `strike-quota-classifier/strike-quota-classifier` | actions | - | `agents/agent-session.sh` | - |
 | `summary-comment` | table | - | `-` | - |

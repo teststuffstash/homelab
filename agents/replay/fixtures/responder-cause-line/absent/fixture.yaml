@@ -1,0 +1,15 @@
+# ADR-094 S6 — bind-at-filing: Cause: line → native sub-issue edge (absent case).
+#
+# CONDITION UNDER REPLAY. The filed issue body has NO 'Cause: #<n>' marker. The shell reads the
+# body, finds no matching line, and skips the sub-issue link entirely. No POST is made.
+#
+# THE CONTRACT:
+#   1. The issue body is read once via `gh api --jq '.body // ""'`.
+#   2. No Cause: line matches → no further gh calls.
+#   3. No output about bind-at-filing is emitted.
+name: responder-cause-line-absent
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-cause-line

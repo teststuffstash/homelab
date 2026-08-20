@@ -46,6 +46,9 @@ rail-degrade	rail-degrade
 reflex-tick-proceed	reflex-tick
 reflex-tick-skip	reflex-tick
 research-draw-roster	research-draw-roster
+responder-cause-line-absent	responder-cause-line
+responder-cause-line-malformed	responder-cause-line
+responder-cause-line-valid	responder-cause-line
 responder-reopen-fix-verdict	responder-reopen
 responder-reopen-report-only	responder-reopen
 responder-selfref-platform-machinery	responder-selfref
@@ -88,6 +91,7 @@ session-belt-fast-path	session-belt
 session-belt-fast-path-probe-fail	session-belt
 session-belt-queued	session-belt
 sprout-report-skips-buckets	sprout-report-skips-buckets
+sprout-report-unbound	sprout-report-unbound
 state-fp	state-fp
 strike-quota-classifier	strike-quota-classifier
 touches-check-predicate	touches-check-predicate

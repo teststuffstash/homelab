@@ -6,5 +6,6 @@ OUT ORPHAN   issue #95 — carries a taxonomy label, but no agent* label (by hom
 OUT ORPHAN [oracle-fleet] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):
 OUT ORPHAN   issue #92 — harvested minutes ago, blocker already closed (by homelab-agents-1234)
 OUT ORPHAN   issue #93 — an ordinary inert sprout — never had a blocker (by homelab-agents-1234)
+OUT ORPHAN [oracle-fleet] ⚠ PROBE-FAILED (openall / inert) — unbound-sprout belt skipped this tick (rule #6)
 OUT REACHED: end
 RC 0
