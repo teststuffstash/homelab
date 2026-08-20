@@ -4595,3 +4595,41 @@ first live ADR-110 maintenance session before the ADR existed.
   dedupe like completed triages (the c5695d50 wedge since Aug-18).
 - Handover: PR#705/#704 mid-cycle (will park for the next session's gate reads), #701/#707
   queued. Board otherwise clean. Monitors killed at close.
+
+## 2026-08-20 day — corpus session: lineage repair → the S6 stint end-to-end in one session
+
+- **Condition:** operator opened on S2/S3 status → /design-agents: the stint machinery did not
+  contain its sprouts (#420's tail unbound and invisible, no stints on the goals board).
+  → **Command:** full-corpus sitting ruled it — bind-at-filing had no caller at two of three
+  doors (arbitrate, seat/incident; harvest always bound). Seven lineage edges hand-repaired
+  (#660→#629, #674→#660, #616→#607, #646→#629, #653→#637, #694→#650, #696→#575; #575→#420 on
+  the operator's catch), S3 got its retroactive container (#711), and the quiet-window rule
+  landed (tree-empty ARMS a stint close, a later sweep ≥72h executes it — chainless §The jail
+  stint) with #420 + #711 reopened under it. S6 chartered into the work map, then widened to
+  EVERY authoring surface (operator).
+- **Rail move (operator):** platform workers → PAID OpenRouter flash for the fixup window
+  (PR#715 — plain flash, the 0731 deny stands unmet; €18 no-top-up balance is the cap; loud
+  M12 degrade behind it; revert trigger in meta-state). First CI red was my own chain-grammar
+  slip (three-part launcher form vs bare OR ids in claims) — the router-self-test coverage
+  gate caught it; cluster claim verified live post-merge.
+- **S6 stint #716:** authored 7 children ~08:20Z; originals 7/7 + closeout 1 by ~09:15Z; the
+  4-sprout tail (every one harvest-bound at honest depth 2–3) drained by ~11:00Z. TREE EMPTY
+  in one session against `Size: 2`. Gate reads all day (#705/#709 from the night parks, #714,
+  #725/#726/#728/#729, #733, #735/#736/#737, #739) — the bot rounds were load-bearing
+  throughout (PR#725's lane inversion, PR#737's dead-regex catch by EXECUTING jq, PR#736
+  closing all three #730 findings). **Seat catch of the day: PR#727's depth-guard function sat
+  INSIDE the unquoted PREP heredoc — generation-time $-expansion corrupted the pod's copy while
+  the extraction-based replay stayed green; both bot rounds missed it (one EXECUTED the
+  fixture).** Fixed via top-level def + $(declare -f) injection; the class now has a lint
+  signature (#734, HEREDOC-FN-DOLLAR — subagent-built in a local clone, seat double-reviewed,
+  landed operator-direct on scripts/**).
+- Belt work en route: needs-meta clause 3 excludes `stint:` parents (the #420 unlabeled>24h
+  false positive, fixed within the hour of arming the standing set); the subject-collision
+  family fully drained (#707→PR#709, #712→PR#714, #724→PR#733 documented-by-design with a
+  witness fixture).
+- **⚠ Own-practice catch:** `gh issue close` sequenced with `;` after a failed cherry-pick
+  (`-q` is not a cherry-pick flag) closed #734 carrying a FALSE "landed" claim — caught by the
+  missing PUSH-VERIFIED, landed for real, comment corrected in place. Rule: terminal
+  bookkeeping chains AFTER the fetch-compare, never `;`-sequenced beside it.
+- Wind-down ~11:05Z: board empty of agent work (queue 0, riding 0, no open PRs), monitors
+  killed by id, ctx ~650k, pickup in meta-state.

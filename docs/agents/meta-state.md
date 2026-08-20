@@ -70,13 +70,13 @@ meant to avoid.)
   ~2026-09-03 / fixup-wave end / OR depletion, whichever first** (claim comment carries the
   full record; Go re-flip stays FU-181).
 
-- **⚑ S6 STINT #716: originals 7/7 DONE + closeout 1 posted (2026-08-20 ~09:15Z, one
-  session).** Parent OPEN on the tail: #730/#731/#732 queued+riding the fixer lane (gate reads
-  due as they park), #734 SEAT-lane (transport-lint signature for the PR#727 heredoc
-  generation-time class — scripts/** deny row). Acceptance watch: the unbound-sprout belt
-  reports zero unbound loop-authored sprouts over the week; the retro filing rule's first
-  exercise = the Mon 08-24 retro fire (rides the FU-058 acceptance watch). Closeout 2 disposes
-  the tail; parent closes per the quiet-window rule.
+- **⚑ S6 STINT #716: TREE EMPTY (closeouts 1+2 posted, 2026-08-20 ~11:00Z — one session vs
+  Size: 2).** Quiet-window close due at a sweep ≥2026-08-23 (same calendar as #420 + #711 —
+  the soak line below). Standing acceptance: the unbound-sprout belt stays SILENT under the
+  week's real traffic; the responder `Cause:` line + organic depth≥4 `Container-findings:`
+  await first ORGANIC use (never synthetic); Mon 08-24 retro fire also exercises the S6
+  filing rule. Per-stack fix.yaml sibling-bind pastes trail at each recipe's next touch
+  (list in #722's closing comment). Next stints: S4, S5 (work map).
 
 ## Durable warnings — re-read before touching these files
 
