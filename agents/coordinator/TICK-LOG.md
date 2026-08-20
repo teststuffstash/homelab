@@ -4547,3 +4547,35 @@ first live ADR-110 maintenance session before the ADR existed.
   demonstrably merged all evening) — probe falseness, capacity + coordinate lanes verified
   healthy in the same sweep (5h util 0, coordinate workflows flowing). Needs a probe fix —
   issue filed.
+
+## 2026-08-20 small hours — #650 built+proven; the 401-storm arc; latch persistence verified
+
+- **#650 (sentinel head-changed edge) DONE end to end** (00:14–01:05Z): exporter
+  `maybe_dispatch_sentinel` + `/sentinel` endpoint + `sentinel` Sensor + the `iac-sentinel`
+  WorkflowTemplate extraction (PR#692), the kustomization miss caught+fixed (PR#693 — Synced+
+  Healthy while the resources didn't exist; completeness lint filed as #694), live proof on
+  throwaway PR#695 (ring → `iac-sentinel-edge-*` → status on the head), then the guarded-file
+  operator-direct commit: cron → `workflowTemplateRef` + */15 backstop (synced, verified). Wake
+  accounting: `iac_sentinel_wake_{cron,edge}_timestamp_seconds`.
+- **The #575 re-fire (RouterRunModelUnverifiable) — mis-triage corrected with jail evidence:**
+  the "account-wide OpenRouter 401 outage" was the proxy's headroom sweep probing **103 orphaned
+  session-key Secrets** (CRs correctly self-destructed; Secrets never GC'd; keys verified VALID
+  from the jail). Acted: orphans deleted; cause = or-op#43 → PR#44 (ownerReferences, gate-read,
+  merged, deployed #697/#699) + or-op#45→#46 (warn on partial owner metadata); belt = homelab
+  #696 → PR#700 (sweep skips CR-less session Secrets; machine lane end to end). 401 lines: 136
+  /140-per-sweep → 1 → expected 0 post-#700.
+- **Latch persistence VERIFIED (the meta-state watch item):** the proxy rolled at 02:59:38 with
+  PR#700; `router_go_capacity_latched` reads 1 on the new pod — PR#621 holds across rolls. The
+  `GoCapacityLatched` "clear" at 03:02 was the per-pod series break (the deploy-silences-alert
+  class), not a latch loss; gauge re-read before believing it.
+- **Gate reads this stretch:** homelab#688/#689/#691 (the #678 fold + the quota-classifier
+  fixture + its recomputed-STRIKE_LINE fix — all byte-verified/suite-run then admin-merged),
+  or-op#44/#46. or-op#47/#48/#49 (test-polish nit tail from #46's review) left INERT on purpose
+  — the recursion needed a stop; morning triage decides batch-vs-drop.
+- **⚠ Own-practice catch:** `gh issue edit "$(gh issue list --search …)"` queued #575 instead of
+  #696 (search order is arbitrary) — benign outcome (C6 closed it against the old merged PR; no
+  ride), #696 re-queued by NUMBER with read-back. Rule: edit by the number you already hold.
+- **Operator flags for the morning:** #698 hosted-runner minutes 80% (2410/3000, burn ~120/d →
+  exhausts ~Aug-25 pre-reset; private-repo updater runs are the metered burn — moving them to
+  ARC contradicts the merge-path design note, operator fork). #686 (meta-throughput false
+  STALL) filed with tonight's evidence, unqueued (seat tooling).
