@@ -65,7 +65,7 @@ case "${POST_SHAPE:-off}" in
   strike-attribution-init-tier-default)
     # Issue #660 leg 2: tier-default rewrite syncs STRUCK_MODEL
     EXPECTED_MODEL="haiku"
-    EXPECTED_STRUCK_MODEL="haiku"
+    EXPECTED_STRUCK_MODEL="claude/haiku"
     EXPECTED_GOOSE_MODEL="haiku"
     if [ "$MODEL" != "$EXPECTED_MODEL" ]; then
       echo "FAIL: MODEL=$MODEL (expected $EXPECTED_MODEL after tier-default rewrite)" >&2
