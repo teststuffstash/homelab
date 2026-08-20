@@ -183,6 +183,9 @@ is stale, so it cannot drift the way the prose register did.
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
+| `responder-cause-line/absent` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-cause-line/malformed` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-cause-line/valid` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-reopen/fix-verdict` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-reopen/report-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |

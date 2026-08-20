@@ -1,0 +1,6 @@
+CALL gh api repos/teststuffstash/homelab/issues/999 --jq .body // ""
+CALL gh api repos/teststuffstash/homelab/issues/123 --jq .id // empty
+CALL gh api repos/teststuffstash/homelab/issues/999 --jq .id // empty
+CALL gh api -X POST repos/teststuffstash/homelab/issues/123/sub_issues -F sub_issue_id=123999
+OUT → bind-at-filing: teststuffstash/homelab#999 linked as sub-issue of teststuffstash/homelab#123
+RC 0

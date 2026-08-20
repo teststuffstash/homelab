@@ -1,0 +1,17 @@
+# ADR-094 S6 — bind-at-filing: Cause: line → native sub-issue edge (malformed case).
+#
+# CONDITION UNDER REPLAY. The filed issue body carries 'Cause: invalid' — a line that does NOT
+# match the '^Cause: #[0-9]+' pattern (no issue number after the hash). The shell reads the
+# body, the grep returns empty, and no sub-issue link is attempted. Same behaviour as absent,
+# but explicitly tested to document that a malformed line is not silently treated as valid.
+#
+# THE CONTRACT:
+#   1. The issue body is read once via `gh api --jq '.body // ""'`.
+#   2. 'Cause: invalid' does not match '^Cause: #[0-9]+' → no further gh calls.
+#   3. No output about bind-at-filing is emitted.
+name: responder-cause-line-malformed
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-cause-line

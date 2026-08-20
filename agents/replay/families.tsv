@@ -46,6 +46,9 @@ rail-degrade	rail-degrade
 reflex-tick-proceed	reflex-tick
 reflex-tick-skip	reflex-tick
 research-draw-roster	research-draw-roster
+responder-cause-line-absent	responder-cause-line
+responder-cause-line-malformed	responder-cause-line
+responder-cause-line-valid	responder-cause-line
 responder-reopen-fix-verdict	responder-reopen
 responder-reopen-report-only	responder-reopen
 responder-selfref-platform-machinery	responder-selfref

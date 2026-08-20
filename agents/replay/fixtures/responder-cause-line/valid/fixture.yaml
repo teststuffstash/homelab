@@ -1,0 +1,18 @@
+# ADR-094 S6 — bind-at-filing: Cause: line → native sub-issue edge (valid case).
+#
+# CONDITION UNDER REPLAY. The filed issue body carries a line-anchored 'Cause: #123' marker.
+# The cause issue exists and returns an API ID. The shell reads the body, extracts the cause
+# number, verifies the cause issue exists, gets both API IDs, and POSTs the sub-issue edge.
+#
+# THE CONTRACT:
+#   1. The issue body is read once via `gh api --jq '.body // ""'`.
+#   2. The cause issue #123 is verified via `gh api --jq '.id // empty'`.
+#   3. The new issue #999 is read again for its API ID.
+#   4. The sub-issue POST is made to repos/.../issues/123/sub_issues.
+#   5. The success message is logged: "linked as sub-issue".
+name: responder-cause-line-valid
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-cause-line
