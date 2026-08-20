@@ -1,0 +1,24 @@
+# homelab#724 — witness for AgentRunPhaseSlow fleet-level decision.
+#
+# CONDITION UNDER REPLAY. Alert AgentRunPhaseSlow carrying project="openrouter-operator"
+# label but NOT opted into the project fallback (fleet-level decision: the PromQL groups
+# by (phase), not by (project), and the count-by-phase >= 3 guard would split meaningfully
+# under per-project regrouping).
+#
+# WHY A GREEN-PATH FIXTURE FOR A BUG. The subject fallback pattern can be misread as "if an
+# alert has no namespace, try project"; this fixture prevents that misreading from shipping.
+# The guard is that the fallback must be by NAME, not by label presence. If the implementation
+# ever widens to `.labels.project // catch-all` without the name case, this fixture reds:
+# AgentRunPhaseSlow would compute ns:openrouter-operator (wrong), marking any future fire as
+# subjdup — and the fleet-level signal would be split per-project, losing the >= 3 cohort guard.
+#
+# THE CONTRACT:
+#   1. Subject computation reaches the catch-all (AgentRunPhaseSlow is not in the case list).
+#   2. The computed subject is alert:AgentRunPhaseSlow (not ns:openrouter-operator).
+#   3. RC 0 — subject computation always succeeds.
+name: responder-subject-witness-unopted-phase-slow
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject
