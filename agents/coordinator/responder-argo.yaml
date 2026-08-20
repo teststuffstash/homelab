@@ -402,6 +402,8 @@ spec:
               case "$NAME" in
                 AgentWorkerEgressDropped)
                   [ -n "$_ns" ] || _ns="$(printf '%s' "$a" | jq -r '.labels.source // empty')";;
+                AgentDispatchCronWoken)
+                  [ -n "$_ns" ] || _ns="$(printf '%s' "$a" | jq -r '.labels.project // empty')";;
               esac
               _pvc="$(printf '%s' "$a" | jq -r '.labels.persistentvolumeclaim // empty')"
               _pod="$(printf '%s' "$a" | jq -r '.labels.pod // empty')"
