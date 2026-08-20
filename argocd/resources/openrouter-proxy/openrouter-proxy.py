@@ -989,6 +989,34 @@ _headroom: dict[str, dict] = {}  # ref -> last auth/key snapshot (no key materia
 _headroom_lock = threading.Lock()
 
 
+def _session_ref_has_cr(ref: str) -> bool:
+    """Check if a session-key ref (format: <ns>/<project>-session-<id>-openrouter) has a live
+    OpenRouterKey CR. Returns True if the CR exists, False otherwise. On a failed CR list,
+    returns True (fail-open: keep probing rather than blacklist on API error)."""
+    if "-session-" not in ref:
+        return True  # not a session ref, allow probe
+    try:
+        ns, secret_name = ref.split("/", 1)
+        token = open(f"{_SA_DIR}/token").read().strip()
+        ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
+        req = urllib.request.Request(
+            "https://kubernetes.default.svc/apis/openrouter.teststuff.net/v1alpha1"
+            f"/namespaces/{ns}/openrouterkeys",
+            headers={"Authorization": "Bearer " + token},
+        )
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            items = (json.load(resp).get("items") or [])
+    except Exception as e:  # noqa: BLE001 — unreadable CRs must not disarm probing
+        log(f"headroom: _session_ref_has_cr({ref}): CR list failed: {e} — assuming CR exists (fail-open)")
+        return True
+    for cr in items:
+        spec = cr.get("spec") or {}
+        target = spec.get("secretName") or f"{spec.get('project', '')}-openrouter"
+        if target == secret_name:
+            return True
+    return False
+
+
 def _headroom_tick() -> int:
     refs = router.key_refs()
     if ROUTER_ACCOUNT_REF and ROUTER_ACCOUNT_REF not in refs:
@@ -998,6 +1026,9 @@ def _headroom_tick() -> int:
         resolved = _resolve_ref(ref)
         if not resolved or resolved.get("kind") != "openrouter":
             continue  # anthropic oauth refs have no OpenRouter account state
+        if "-session-" in ref and not _session_ref_has_cr(ref):
+            log(f"headroom: skipping {ref} — session Secret has no live OpenRouterKey CR (residue)")
+            continue
         try:
             req = urllib.request.Request(
                 f"{UPSTREAM}/api/v1/auth/key",
