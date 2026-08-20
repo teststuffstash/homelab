@@ -1105,6 +1105,30 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     sprouts="$(printf '%s' "$inert" \
       | jq -r --argjson skip "$unbnums" '[.[]|select((.author.is_bot == true) and (((.labels|map(.name))|index("agent-fix"))|not) and ((.title|startswith("post-launch:"))|not) and (.number as $n | ($skip|index($n)) == null))|"  issue #\(.number) — \(.title) (by \(.author.login))"]|.[]' 2>/dev/null || true)"
     [ -n "$sprouts" ] && orphans="${orphans}[$repo] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):\n${sprouts}\n"
+    # ── UNBOUND SPROUT BELT (S6 child 4) ──────────────────────────────────────────────────────
+    # Report-only class: an OPEN issue that (a) was authored by the loop identity OR carries a
+    # line-anchored lineage cue at body head, AND (b) has NO native parent (issue.parent null).
+    # Capped at 10 reports/scan. No label, no writes, never auto-link.
+    if jq -e . >/dev/null 2>&1 <<<"${openall:-null}" && jq -e . >/dev/null 2>&1 <<<"${inert:-null}"; then
+      unbound="$(printf '%s' "$openall" | jq -r --argjson inert "$inert" '
+        [.[] | .number as $n
+         | (.body // "") as $b
+         | ($inert[] | select(.number == $n) | .author.is_bot // false) as $is_bot
+         | select(.parent == null)
+         | (if $is_bot then "bot-authored"
+            elif ($b | test("(?m)^Harvested from ")) then "Harvested from"
+            elif ($b | test("(?m)^Split off from ")) then "Split off from"
+            elif ($b | test("(?m)^Belt for ")) then "Belt for"
+            elif ($b | test("(?m)^Cause: #")) then "Cause: #"
+            else "" end) as $cue
+         | select($cue != "")
+         | "  🧬 UNBOUND SPROUT #\($n) (cue: \($cue)) — \(.title)"
+        ] | .[:10] | .[]
+      ' 2>/dev/null || true)"
+      [ -n "$unbound" ] && orphans="${orphans}[$repo] 🧬 UNBOUND SPROUTS — no native parent; bind to origin or state standalone:\n${unbound}\n"
+    else
+      orphans="${orphans}[$repo] ⚠ PROBE-FAILED (openall / inert) — unbound-sprout belt skipped this tick (rule #6)\n"
+    fi
     # <<<REPLAY:sprout-report<<<
     # ── RETIRED-FORMAT `Depends-on:` lint (homelab#226) ───────────────────────────────────────
     # FU-111 retired the body-line reader on 2026-08-07; the meta seat wrote one on 2026-08-08

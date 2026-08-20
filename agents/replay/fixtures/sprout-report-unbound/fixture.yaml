@@ -1,0 +1,23 @@
+# S6 child 4 — unbound-sprout report belt (report-only backstop for every door).
+#
+# CONDITION UNDER REPLAY. Three open issues in the normal world:
+#   #90 bot-authored, no parent, body starts with "Harvested from #89" → UNBOUND. MUST appear.
+#   #91 bot-authored, HAS parent (#90), body starts with "Split off from #90" → BOUND. Must NOT appear.
+#   #92 human-authored, no parent, no cue → STANDALONE. Must NOT appear.
+#
+# The probe-fail row tests an unreadable openall → PROBE-FAIL line, no report.
+#
+# pins:
+#   - S6-child-4
+name: sprout-report-unbound
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:sprout-report
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles
+world: normal
+rows: rows.psv

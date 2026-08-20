@@ -1,0 +1,4 @@
+CALL gh issue list --repo teststuffstash/circles --state open --json number,title,author,labels,createdAt,blockedBy
+OUT ORPHAN [circles] ⚠ PROBE-FAILED (openall / inert) — unbound-sprout belt skipped this tick (rule #6)
+OUT REACHED: end
+RC 0

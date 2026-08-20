@@ -237,6 +237,7 @@ is stale, so it cannot drift the way the prose register did.
 | `session-belt/fast-path` | actions | - | `agents/coordinator-scan.sh` | - |
 | `session-belt/queued` | actions | - | `agents/coordinator-scan.sh` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
+| `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
 | `strike-quota-classifier/strike-quota-classifier` | actions | - | `agents/agent-session.sh` | - |
 | `summary-comment` | table | - | `-` | - |
