@@ -1,0 +1,19 @@
+# ADR-094 S6 — bind-at-filing: Cause: line → native sub-issue edge (issue unreadable).
+#
+# CONDITION UNDER REPLAY. The filed issue body carries a line-anchored 'Cause: #123' marker.
+# The cause issue #123 exists and returns an API ID. But the filed issue #999 is unreadable
+# (the second gh api call for {id,parent} returns empty). The shell reads the body, extracts
+# the cause number, verifies the cause issue, then fails to read #999 and skips the link.
+#
+# THE CONTRACT:
+#   1. The issue body is read once via `gh api --jq '.body // ""'`.
+#   2. The cause issue #123 is verified via `gh api --jq '.id // empty'` — returns an ID.
+#   3. The new issue #999 is read for {id,parent} — returns empty.
+#   4. No sub-issue POST is made.
+#   5. The "could not read …#999" message is logged.
+name: responder-cause-line-issue-unreadable
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-cause-line
