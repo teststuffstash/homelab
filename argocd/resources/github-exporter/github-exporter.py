@@ -1689,6 +1689,22 @@ def collect_issue_lifecycle(lines):
             print(f"collect_issue_lifecycle: failed to fetch issues for {ORG}/{repo}: {exc}", flush=True)
 
 
+def _publish_with_self_metrics(published):
+    global _body
+    self_metrics = [
+        "# TYPE github_exporter_errors_total counter",
+        f"github_exporter_errors_total {_errors}",
+        "# TYPE github_exporter_last_success_timestamp gauge",
+        "# HELP github_exporter_last_success_timestamp Epoch of the last fully successful poll (stale ⇒ token expired/revoked or API down).",
+        f"github_exporter_last_success_timestamp {_last_success}",
+        "# TYPE github_exporter_duplicate_samples_total counter",
+        "# HELP github_exporter_duplicate_samples_total Duplicate sample lines collapsed out of the exposition (#153); >0 = a collector re-emitted a series and the dedup absorbed it — the poller is correct but a duplication path is back.",
+        f"github_exporter_duplicate_samples_total {_dupes}",
+    ]
+    with _lock:
+        _body = "\n".join(published + self_metrics) + "\n"
+
+
 def poll_forever():
     global _body, _errors, _last_success, _first_successful_poll
     while True:
@@ -1710,18 +1726,7 @@ def poll_forever():
                     print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) in {collector.__name__} "
                           f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
                 # Self-metrics: always appended, so they are always present even during a cold start
-                self_metrics = [
-                    "# TYPE github_exporter_errors_total counter",
-                    f"github_exporter_errors_total {_errors}",
-                    "# TYPE github_exporter_last_success_timestamp gauge",
-                    "# HELP github_exporter_last_success_timestamp Epoch of the last fully successful poll (stale ⇒ token expired/revoked or API down).",
-                    f"github_exporter_last_success_timestamp {_last_success}",
-                    "# TYPE github_exporter_duplicate_samples_total counter",
-                    "# HELP github_exporter_duplicate_samples_total Duplicate sample lines collapsed out of the exposition (#153); >0 = a collector re-emitted a series and the dedup absorbed it — the poller is correct but a duplication path is back.",
-                    f"github_exporter_duplicate_samples_total {_dupes}",
-                ]
-                with _lock:
-                    _body = "\n".join(published + self_metrics) + "\n"
+                _publish_with_self_metrics(published)
                 # Clear _first_successful_poll once workflow_runs itself succeeds (not when all collectors do)
                 if collector.__name__ == "collect_workflow_runs":
                     _first_successful_poll = False
@@ -1736,18 +1741,7 @@ def poll_forever():
                 if _dupes > before:
                     print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) after {collector.__name__} failure "
                           f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
-                self_metrics = [
-                    "# TYPE github_exporter_errors_total counter",
-                    f"github_exporter_errors_total {_errors}",
-                    "# TYPE github_exporter_last_success_timestamp gauge",
-                    "# HELP github_exporter_last_success_timestamp Epoch of the last fully successful poll (stale ⇒ token expired/revoked or API down).",
-                    f"github_exporter_last_success_timestamp {_last_success}",
-                    "# TYPE github_exporter_duplicate_samples_total counter",
-                    "# HELP github_exporter_duplicate_samples_total Duplicate sample lines collapsed out of the exposition (#153); >0 = a collector re-emitted a series and the dedup absorbed it — the poller is correct but a duplication path is back.",
-                    f"github_exporter_duplicate_samples_total {_dupes}",
-                ]
-                with _lock:
-                    _body = "\n".join(published + self_metrics) + "\n"
+                _publish_with_self_metrics(published)
         # Only update _last_success on a fully successful cycle (all collectors succeeded)
         if ok:
             _last_success = int(time.time())
