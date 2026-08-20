@@ -474,7 +474,7 @@ job, in order (re-read live state first, exit clean if someone already closed it
    `issue.parent`) and no `bucket=` was handed to you, you are harvesting at depth ≥2 — flag
    `⚠ deep sprout` in the closing comment so a human sees divergence early.
 
-   **`Container-findings:` bullets (depth ≥4, reviewer emits on goal-lane child 1):** bullets under
+   **`Container-findings:` bullets (depth ≥4, reviewer emits on organic-lane child 1):** bullets under
    a `Container-findings:` heading in the review are NOT minted as fresh issues. Instead, append each
    as one line in a comment on the OPEN epic-ancestor parent (walk `issue.parent` to the stint/Goal root).
    If there is no open ancestor, mint them as ordinary `Follow-ups:` issues and note that in your
