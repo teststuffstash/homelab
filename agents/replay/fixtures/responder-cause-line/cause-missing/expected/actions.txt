@@ -1,0 +1,4 @@
+CALL gh api repos/teststuffstash/homelab/issues/999 --jq .body // ""
+CALL gh api repos/teststuffstash/homelab/issues/123 --jq .id // empty
+OUT → bind-at-filing: Cause: #123 not found or unreadable in teststuffstash/homelab (skip link attempt)
+RC 0

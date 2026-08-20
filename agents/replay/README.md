@@ -185,6 +185,8 @@ is stale, so it cannot drift the way the prose register did.
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
 | `responder-cause-line/absent` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/already-bound` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-cause-line/cause-missing` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-cause-line/issue-unreadable` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/malformed` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/valid` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-reopen/fix-verdict` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |

@@ -811,8 +811,10 @@ spec:
                           echo "→ bind-at-filing: could not get API ID for $VREPO#$VHIT (skip link attempt)"
                         fi
                       else
-                        echo "→ bind-at-filing: Cause: #$CAUSE_NUM not found or unreadable in $VREPO (skip link attempt)"
+                        echo "→ bind-at-filing: could not read $VREPO#$VHIT (skip link attempt)"
                       fi
+                    else
+                      echo "→ bind-at-filing: Cause: #$CAUSE_NUM not found or unreadable in $VREPO (skip link attempt)"
                     fi
                   fi
                 fi

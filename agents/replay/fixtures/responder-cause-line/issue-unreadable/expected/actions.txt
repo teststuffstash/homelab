@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/homelab/issues/999 --jq .body // ""
+CALL gh api repos/teststuffstash/homelab/issues/123 --jq .id // empty
+CALL gh api repos/teststuffstash/homelab/issues/999 --jq {id: .id, parent: .parent.id}
+OUT → bind-at-filing: could not get API ID for teststuffstash/homelab#999 (skip link attempt)
+RC 0

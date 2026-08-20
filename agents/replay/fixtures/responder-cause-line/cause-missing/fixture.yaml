@@ -1,0 +1,18 @@
+# ADR-094 S6 — bind-at-filing: Cause: line → native sub-issue edge (cause missing).
+#
+# CONDITION UNDER REPLAY. The filed issue body carries a line-anchored 'Cause: #123' marker.
+# The cause issue #123 does NOT exist or returns no API ID. The shell reads the body, extracts
+# the cause number, verifies the cause issue exists, finds it missing, and skips the link.
+#
+# THE CONTRACT:
+#   1. The issue body is read once via `gh api --jq '.body // ""'`.
+#   2. The cause issue #123 is verified via `gh api --jq '.id // empty'` — returns empty.
+#   3. The new issue #999 is NEVER read (the probe returns before reaching it).
+#   4. No sub-issue POST is made.
+#   5. The "not found or unreadable" message is logged.
+name: responder-cause-line-cause-missing
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-cause-line
