@@ -1,0 +1,22 @@
+# homelab#712 — witness for AgentRunInfraDeathBurst opt-in.
+#
+# CONDITION UNDER REPLAY. Alert AgentRunInfraDeathBurst with project="sleep-tracking"
+# label, now opted in via case arm to use project as namespace fallback.
+#
+# EXPECTED BEHAVIOR (with the opt-in):
+#   1. Subject computation finds project="sleep-tracking" via the opt-in.
+#   2. Computed subject is ns:sleep-tracking (not alert:AgentRunInfraDeathBurst).
+#   3. A second fire of the same alert from a different project would compute a different subject.
+#
+# WHY THIS MATTERS: AgentRunInfraDeathBurst already groups by (project) in the PromQL,
+# so each project's infra burst gets its own alert instance. But without the subject opt-in,
+# all instances would dedupe to the same subject (alert:AgentRunInfraDeathBurst), silencing
+# the second and later projects' incidents. The opt-in ensures each project's infra issue
+# gets its own issue thread.
+#
+name: responder-subject-witness-opted-infra-death
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject
