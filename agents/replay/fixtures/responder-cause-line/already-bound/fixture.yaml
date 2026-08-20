@@ -1,0 +1,25 @@
+# ADR-094 S6 — bind-at-filing: Cause: line → native sub-issue edge (already-bound case).
+#
+# CONDITION UNDER REPLAY. The filed issue body carries a line-anchored 'Cause: #123' marker,
+# AND the filed issue already has a parent (i.e. it was already linked as a sub-issue on a
+# previous re-dispatch). The shell reads the body, extracts the cause number, verifies the
+# cause issue exists, gets both API IDs, THEN checks the child's existing parent before POSTing.
+# Finding one, it logs "already linked as sub-issue (skip re-link)" and does NOT POST.
+#
+# THIS IS THE FLAPPING ALERT-FP GUARD: on re-dispatch the shell re-reads the same issue body
+# and would otherwise POST /sub_issues each pass. GitHub treats the duplicate as a no-op, but
+# checking first avoids the noise hit.
+#
+# THE CONTRACT:
+#   1. The issue body is read via `gh api --jq '.body // ""'`.
+#   2. The cause issue #123 is verified via `gh api --jq '.id // empty'`.
+#   3. The new issue #999 is read for its API ID.
+#   4. The child's `.parent.id` is checked — it is non-empty.
+#   5. No POST to /sub_issues is made — described as "skip re-link".
+#   6. The skip message is logged.
+name: responder-cause-line-already-bound
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-cause-line
