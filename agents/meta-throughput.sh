@@ -45,8 +45,9 @@ newest_ts=""; newest_where=""
 for r in $repos; do
   # One REST page of newest comments per repo; ride signatures only. `direction=desc` gives the
   # newest first, so 100 covers far more than the lookback needs on any healthy day.
-  rows=$($GH api "repos/$ORG/$r/issues/comments?since=$since&per_page=100&sort=created&direction=desc" 2>/dev/null | tail -1) \
+  rows=$($GH api "repos/$ORG/$r/issues/comments?since=$since&per_page=100&sort=created&direction=desc" 2>/dev/null) \
     || { echo "PROBE-FAIL: comments read failed for $r"; exit 1; }
+  rows=$(printf '%s' "$rows" | tail -1)
   ts=$(printf '%s' "$rows" | jq -r --arg bot "$BOT" '
         [ .[] | select(.user.login == ($bot + "[bot]") or .user.login == $bot)
               | select(.body | test("<!-- agent-event |picking this up \\(round|\\| model \\||AGENT_STRIKE"))
@@ -58,10 +59,15 @@ for r in $repos; do
   fi
 done
 
-q=$($GH api "search/issues?q=org:$ORG+is:issue+is:open+label:agent/queued" 2>/dev/null | tail -1 | jq -r '.total_count' 2>/dev/null)
-p=$($GH api "search/issues?q=org:$ORG+is:issue+is:open+label:agent/in-progress" 2>/dev/null | tail -1 | jq -r '.total_count' 2>/dev/null)
-case "${q:-}" in ''|*[!0-9]*) echo "PROBE-FAIL: queued-count search failed"; exit 1;; esac
-case "${p:-}" in ''|*[!0-9]*) echo "PROBE-FAIL: in-progress-count search failed"; exit 1;; esac
+q_response=$($GH api "search/issues?q=org:$ORG+is:issue+is:open+label:agent/queued" 2>/dev/null) \
+    || { echo "PROBE-FAIL: queued-count search failed"; exit 1; }
+q=$(printf '%s' "$q_response" | tail -1 | jq -r '.total_count' 2>/dev/null)
+
+p_response=$($GH api "search/issues?q=org:$ORG+is:issue+is:open+label:agent/in-progress" 2>/dev/null) \
+    || { echo "PROBE-FAIL: in-progress-count search failed"; exit 1; }
+p=$(printf '%s' "$p_response" | tail -1 | jq -r '.total_count' 2>/dev/null)
+case "${q:-}" in ''|*[!0-9]*) echo "PROBE-FAIL: queued-count extraction failed"; exit 1;; esac
+case "${p:-}" in ''|*[!0-9]*) echo "PROBE-FAIL: in-progress-count extraction failed"; exit 1;; esac
 
 if [ -z "$newest_ts" ]; then
   age_min=$((LOOKBACK_H * 60)); agestr=">${LOOKBACK_H}h (none in lookback)"
