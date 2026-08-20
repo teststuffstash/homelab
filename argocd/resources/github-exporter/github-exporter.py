@@ -1705,46 +1705,57 @@ def _publish_with_self_metrics(published):
         _body = "\n".join(published + self_metrics) + "\n"
 
 
-def poll_forever():
+def _run_poll_cycle(collectors):
+    """Run one collection cycle: iterate collectors, accumulate/dedupe lines, publish incrementally.
+
+    Returns True iff all collectors succeeded; False if any failed. Updates module globals:
+    _body (published lines + self-metrics), _dupes (dedup counter), _last_success (only on success).
+    """
     global _body, _errors, _last_success, _first_successful_poll
+    accumulated = []  # all lines published so far this cycle
+    ok = True
+    for collector in collectors:
+        try:
+            collector_lines = []
+            collector(collector_lines)
+            # Accumulate this collector's lines and deduplicate the full body so far
+            accumulated.extend(collector_lines)
+            # Publish incrementally: accumulated lines + self-metrics, deduplicated each time
+            before = _dupes
+            published = dedupe_exposition(accumulated)  # dedupe the accumulated body
+            accumulated = published  # keep only deduped lines for the next collector
+            if _dupes > before:
+                print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) in {collector.__name__} "
+                      f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
+            # Self-metrics: always appended, so they are always present even during a cold start
+            _publish_with_self_metrics(published)
+            # Clear _first_successful_poll once workflow_runs itself succeeds (not when all collectors do)
+            if collector.__name__ == "collect_workflow_runs":
+                _first_successful_poll = False
+        except Exception as exc:  # keep the other collector alive; alert rides the metrics below
+            ok = False
+            _errors += 1
+            print(f"{collector.__name__} failed: {exc}", flush=True)
+            # Even on failure, publish what we have so far so the dashboard is never blank
+            before = _dupes
+            published = dedupe_exposition(accumulated)
+            accumulated = published  # keep only deduped lines for the next collector
+            if _dupes > before:
+                print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) after {collector.__name__} failure "
+                      f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
+            _publish_with_self_metrics(published)
+    # Only update _last_success on a fully successful cycle (all collectors succeeded)
+    if ok:
+        _last_success = int(time.time())
+    return ok
+
+
+def poll_forever():
+    collectors = (collect_open_prs, collect_workflow_runs, collect_agent_issues, collect_goals,
+                  collect_issue_lifecycle, collect_billing, collect_rate_limits,
+                  collect_app_permission_drift, collect_vendor_status, collect_anthropic_status)
     while True:
-        accumulated = []  # all lines published so far this cycle
-        ok = True
-        for collector in (collect_open_prs, collect_workflow_runs, collect_agent_issues, collect_goals,
-                          collect_issue_lifecycle, collect_billing, collect_rate_limits,
-                          collect_app_permission_drift, collect_vendor_status, collect_anthropic_status):
-            try:
-                collector_lines = []
-                collector(collector_lines)
-                # Accumulate this collector's lines and deduplicate the full body so far
-                accumulated.extend(collector_lines)
-                # Publish incrementally: accumulated lines + self-metrics, deduplicated each time
-                before = _dupes
-                published = dedupe_exposition(accumulated)  # dedupe the accumulated body
-                accumulated = published  # keep only deduped lines for the next collector
-                if _dupes > before:
-                    print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) in {collector.__name__} "
-                          f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
-                # Self-metrics: always appended, so they are always present even during a cold start
-                _publish_with_self_metrics(published)
-                # Clear _first_successful_poll once workflow_runs itself succeeds (not when all collectors do)
-                if collector.__name__ == "collect_workflow_runs":
-                    _first_successful_poll = False
-            except Exception as exc:  # keep the other collector alive; alert rides the metrics below
-                ok = False
-                _errors += 1
-                print(f"{collector.__name__} failed: {exc}", flush=True)
-                # Even on failure, publish what we have so far so the dashboard is never blank
-                before = _dupes
-                published = dedupe_exposition(accumulated)
-                accumulated = published  # keep only deduped lines for the next collector
-                if _dupes > before:
-                    print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) after {collector.__name__} failure "
-                          f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
-                _publish_with_self_metrics(published)
-        # Only update _last_success on a fully successful cycle (all collectors succeeded)
-        if ok:
-            _last_success = int(time.time())
+        _run_poll_cycle(collectors)
         time.sleep(INTERVAL)
 
 
@@ -1874,6 +1885,104 @@ def alert_rule(path, name):
 def record_rule(path, name):
     """One recording rule's block (see _rule_block)."""
     return _rule_block(path, _RECORD_RE, name)
+
+
+def _test_poll_forever_incremental_cycles():
+    """Test _run_poll_cycle()'s incremental-cycle behavior (#676).
+
+    Verifies that (a) _body grows monotonically across collectors, (b) _dupes counts
+    each real duplicate exactly once per cycle (the #669 round-2 regression), and
+    (c) _last_success advances only on a fully-successful cycle. The test calls the
+    real _run_poll_cycle() seam with fake collectors, asserting on MODULE GLOBALS."""
+    global _body, _dupes, _last_success, _first_successful_poll, _errors
+    saved_time = time.time
+    saved_first_successful_poll = _first_successful_poll
+    saved_body = _body
+    saved_dupes = _dupes
+    saved_last_success = _last_success
+    saved_errors = _errors
+
+    cycle_times = [1000.0]  # mutable clock for time.time() mock
+    def _mock_time():
+        return cycle_times[0]
+
+    # Simulated collectors that emit lines with intentional duplicates
+    def _collector1(lines):
+        """First collector: emits 2 unique lines and 1 duplicate."""
+        lines.append("# TYPE test_metric gauge")
+        lines.append("test_metric{job=\"job1\"} 1")
+        lines.append("test_metric{job=\"job2\"} 2")
+        lines.append("test_metric{job=\"job1\"} 1")  # duplicate of job1
+
+    def _collector2(lines):
+        """Second collector: emits 2 unique lines, 1 duplicate from collector1."""
+        lines.append("test_metric{job=\"job3\"} 3")
+        lines.append("test_metric{job=\"job4\"} 4")
+        lines.append("test_metric{job=\"job1\"} 1")  # duplicate from collector1
+
+    def _collector3(lines):
+        """Third collector: emits 1 unique line, 1 duplicate from collector2."""
+        lines.append("test_metric{job=\"job5\"} 5")
+        lines.append("test_metric{job=\"job3\"} 3")  # duplicate from collector2
+
+    def _collector_fail(lines):
+        """Failing collector: raises an exception."""
+        raise RuntimeError("simulated collector failure")
+
+    try:
+        time.time = _mock_time
+
+        # Test cycle 1: all collectors succeed
+        _dupes = 0
+        _body = "# initial\n"
+        _last_success = 0
+        _errors = 0
+        cycle_times[0] = 1000.0
+
+        # Call the real _run_poll_cycle() with fake collectors
+        ok = _run_poll_cycle((_collector1, _collector2, _collector3))
+
+        # Cycle 1: all succeed, so ok should be True and _last_success should advance
+        assert ok is True, "cycle 1 should succeed"
+        assert _last_success == 1000, "_last_success should advance on full success (was 0, now should be 1000)"
+        assert _dupes > 0, "collector1 should find duplicates (job1 appears twice)"
+        assert len(_body) > len("# initial\n"), "_body should grow after cycle 1"
+
+        # Test cycle 2: one collector fails — _last_success should NOT advance
+        _dupes = 0
+        _body = "# cycle 2\n"
+        _last_success = 0  # reset
+        _errors = 0
+        cycle_times[0] = 2000.0
+
+        # Run a cycle with a failure in the middle
+        ok = _run_poll_cycle((_collector1, _collector_fail, _collector3))
+
+        # Cycle 2: failure occurred, so ok should be False and _last_success should still be 0
+        assert ok is False, "cycle 2 should fail"
+        assert _last_success == 0, "_last_success should NOT advance when a collector fails"
+        assert _errors > 0, "_errors should increment on collector failure"
+
+        # Test cycle 3: all succeed again — _last_success should advance
+        _dupes = 0
+        _body = "# cycle 3\n"
+        _last_success = 0  # reset
+        _errors = 0
+        cycle_times[0] = 3000.0
+
+        ok = _run_poll_cycle((_collector1, _collector2, _collector3))
+
+        # Cycle 3: all succeed, so ok should be True and _last_success should advance
+        assert ok is True, "cycle 3 should succeed"
+        assert _last_success == 3000, "_last_success should advance on full success (was 0, now should be 3000)"
+
+    finally:
+        time.time = saved_time
+        _first_successful_poll = saved_first_successful_poll
+        _body = saved_body
+        _dupes = saved_dupes
+        _last_success = saved_last_success
+        _errors = saved_errors
 
 
 def self_test():
@@ -2599,12 +2708,22 @@ def self_test():
         _job_timings.clear()
         _jobs_fetched.clear()
 
+    # ── poll_forever() incremental-cycle behavior (#676) ───────────────────────────────────────────
+    # The poll loop accumulates and deduplicates across multiple collectors within each cycle.
+    # A fixture-driven seam tests that (a) _body grows monotonically across collectors, (b) _dupes
+    # counts each real duplicate exactly once per cycle (the #669 round-2 regression), and
+    # (c) _last_success advances only on a fully-successful cycle. This test uses mocked collectors
+    # to drive the three properties without network or threading.
+    _test_poll_forever_incremental_cycles()
+
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
           "scale, job-level queue/duration metrics + caching + retry on API failure, issue "
           "lifecycle series with re-queue first-epoch rule, first-poll job-timings skip when "
-          "_first_successful_poll flag is set, sentinel head-changed edge-trigger)")
+          "_first_successful_poll flag is set, sentinel head-changed edge-trigger, "
+          "poll_forever incremental-cycle behavior with monotonic _body growth, dedup counter "
+          "per cycle, and _last_success-only-on-full-success)")
     return 0
 
 
