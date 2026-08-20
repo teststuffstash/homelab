@@ -2,6 +2,8 @@
 slug="$IN_SLUG"
 repo="$IN_REPO"
 orphans=""
+openall_fetch_rc=0
+[ -n "${IN_OPENALL:-}" ] && openall_fetch_rc=1
 # openall is normally fetched outside the sentinel block; the fixture sets it here so the
 # unbound-sprout belt (inside the sentinel) can read it. IN_OPENALL lets a row override it
 # (e.g. for the probe-fail row).
