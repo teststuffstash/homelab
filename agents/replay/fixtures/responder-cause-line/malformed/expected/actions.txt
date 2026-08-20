@@ -1,0 +1,2 @@
+CALL gh api repos/teststuffstash/homelab/issues/999 --jq .body // ""
+RC 0

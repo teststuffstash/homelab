@@ -209,7 +209,8 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    it"*; the worst (oracle-fleet#225: four lanes in one issue, zero acceptance items met,
    reopened) is its inverse. When the issue you claim continues a merged finding, your plan
    comment names the SPECIFIC unshipped half; if the round needs more than that half, file a
-   sibling issue instead of widening.
+   sibling issue instead of widening — **the sibling's parent is this issue (the issue you are working on),
+   bound at filing** (lineage contract rule 3; use the native `sub_issues` POST edge, regardless of door).
 3. **Read + estimate — OpenRouter-primary chains only** (a `claude/` chain skips this step and the
    next; see the RAIL note above and step 5 §Claude tier). Pipe the issue text into the budget
    estimator:
@@ -473,6 +474,12 @@ job, in order (re-read live state first, exit clean if someone already closed it
    `issue.parent`) and no `bucket=` was handed to you, you are harvesting at depth ≥2 — flag
    `⚠ deep sprout` in the closing comment so a human sees divergence early.
 
+   **`Container-findings:` bullets (depth ≥4, reviewer emits on organic-lane child 1):** bullets under
+   a `Container-findings:` heading in the review are NOT minted as fresh issues. Instead, append each
+   as one line in a comment on the OPEN epic-ancestor parent (walk `issue.parent` to the stint/Goal root).
+   If there is no open ancestor, mint them as ordinary `Follow-ups:` issues and note that in your
+   closing comment (no ancestor to append to).
+
    **⚖ THE GOAL LANE IS DECIDED FOR YOU (ADR-102 → ADR-106 (3), 2026-08-12) — read your unit,
    do not judge.** The `--item` string carries `goal=<n>`, `bucket=<n>` and `harvest=store|inert`
    when the scan's deterministic `harvest-disposition` block resolved a goal ancestor. ORDERS,
@@ -708,7 +715,9 @@ Read the diff + the whole review thread, then rule — exactly one of:
 - **Rule the finding follow-up-class**: the blocking finding is real, but it does not have to
   land in THIS PR (the step-7 policy test — pre-prod repo, PR better than master, findings are
   edge semantics / spec ambiguity / new-code corners). File the fix as its own issue, comment
-  the ruling — and then **finish the terminal mechanically: dismiss the superseded verdict**
+  the ruling — **and LINK the filed issue as a native sub-issue of the issue whose PR was arbitrated**
+  (lineage contract rule 3; use the same `sub_issues` POST as the merged-closeout harvest, bind at
+  filing regardless of door). Then **finish the terminal mechanically: dismiss the superseded verdict**
   (next section). Do NOT stop at the comment: a ruling is not a verdict, the PR still carries
   CHANGES_REQUESTED, and nothing else in the loop can mint the approval you just ruled for.
 - **Close as not-mergeable**: master is better off without it. Close the PR with the reasoning,
