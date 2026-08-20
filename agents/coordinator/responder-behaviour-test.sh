@@ -533,5 +533,17 @@ go "$(alert c3 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentv
 want       "malformed cause line → issue filed normally" "labelled agent-fix"
 wantnocall "malformed cause line → no /sub_issues POST" "/sub_issues"
 
+scenario cause-line-already-bound
+printf '[]' > "$H/gh/search.json"
+jq -n '[{number:999, body:"evidence\nalert-fp:c4\nCause: #123\nfix-verdict: fix", id:123999}]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
+jq -n '{id:123123}' > "$H/gh/cause-issue.json"
+# The child issue already has a parent (simulating a previous bind). The stub reads verdict-issue.json
+# for the */issues/999 API call, so include parent there.
+jq -n '{body:"evidence\nalert-fp:c4\nCause: #123\nfix-verdict: fix", id:123999, parent:{id:123123}}' > "$H/gh/verdict-issue.json"
+go "$(alert c4 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want       "already bound → issue filed normally" "labelled agent-fix"
+wantnocall "already bound → no /sub_issues POST" "/sub_issues"
+want       "already bound → logged as 'skip re-link'" "skip re-link"
+
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
