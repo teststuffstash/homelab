@@ -3,3 +3,9 @@
 normal|normal|||one-unbound|
 # Row 2: probe-fail — openall is unreadable (garbage) → PROBE-FAIL line, no unbound report
 probe-fail|normal||IN_OPENALL=garbage|probe-fail|
+# Row 3: cue-below — human-authored issue #93 has "Harvested from #89" on line 3 (not line 1)
+# → cue regex with \A does NOT match, so no unbound report for #93 (only #90 still matches)
+cue-below|normal|gh/issue-list.json @ add-cue-below.jq||one-unbound|
+# Row 4: cue-at-head — human-authored issue #94 has "Harvested from #89" on line 1 (true head)
+# → cue regex with \A DOES match, so #94 appears as UNBOUND SPROUT (cue: Harvested from)
+cue-at-head|normal|gh/issue-list.json @ add-cue-at-head.jq||cue-at-head|

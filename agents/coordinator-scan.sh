@@ -1118,10 +1118,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
          | (.author.is_bot // false) as $is_bot
          | select(.parent == null)
          | (if $is_bot then "bot-authored"
-            elif ($b | test("(?m)^Harvested from ")) then "Harvested from"
-            elif ($b | test("(?m)^Split off from ")) then "Split off from"
-            elif ($b | test("(?m)^Belt for ")) then "Belt for"
-            elif ($b | test("(?m)^Cause: #")) then "Cause: #"
+            elif ($b | test("\\AHarvested from ")) then "Harvested from"
+            elif ($b | test("\\ASplit off from ")) then "Split off from"
+            elif ($b | test("\\ABelt for ")) then "Belt for"
+            elif ($b | test("\\ACause: #")) then "Cause: #"
             else "" end) as $cue
          | select($cue != "")
          | "  🧬 UNBOUND SPROUT #\($n) (cue: \($cue)) — \(.title)"
