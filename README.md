@@ -4,15 +4,18 @@ Infrastructure-as-code for a home network, built **boot-from-git**: every box is
 this repo (data is the only exception → S3, bucket-id in git). A Talos Linux Kubernetes cluster
 (hybrid Proxmox VMs + bare-metal), with OPNsense managed as code, provisioned via DIY netboot.
 
-- **`CONTEXT.md`** — why / the principles behind decisions.
-- **`ARCHITECTURE.md`** — how it's shaped (planes).
-- **`ROADMAP.md`** — what / when.
-- **`docs/runbook.md`** — operational recipes (start here to *do* things).
-- **`docs/provisioning.md`** — onboard a bare-metal node. **`docs/cloudflare.md`** — remote-access design.
-- **`docs/adr.md`** — architecture decision record (what was considered, what was chosen, and why).
-- **`docs/`** — service & ops docs index; the [office-plants service](docs/office-plants/README.md) is
+- **[`CONTEXT.md`](CONTEXT.md)** — why / the principles behind decisions.
+- **[`ARCHITECTURE.md`](ARCHITECTURE.md)** — how it's shaped (planes).
+- **[`ROADMAP.md`](ROADMAP.md)** — what / when.
+- **[`docs/agents/README.md`](docs/agents/README.md)** — the agent platform: the autonomous
+  issue→PR delivery loop. **Start here if you came for the agentic-AI work.**
+- **[`docs/runbook.md`](docs/runbook.md)** — operational recipes (start here to *do* things).
+- **[`docs/provisioning.md`](docs/provisioning.md)** — onboard a bare-metal node.
+  **[`docs/cloudflare.md`](docs/cloudflare.md)** — remote-access design.
+- **[`docs/adr.md`](docs/adr.md)** — architecture decision record (what was considered, what was chosen, and why).
+- **[`docs/`](docs/README.md)** — service & ops docs index; the [office-plants service](docs/office-plants/README.md) is
   the original reason this lab exists.
-- **`CLAUDE.md`** — orientation for the AI agent that does most of the work here.
+- **[`CLAUDE.md`](CLAUDE.md)** — orientation for the AI agent that does most of the work here.
 
 ## Topology
 
