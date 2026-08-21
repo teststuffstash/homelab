@@ -29,6 +29,15 @@ is [`../../.github/renovate-global.json`](../../.github/renovate-global.json).
 > E2E on oracle-fleet#37, merged). The `CronJob`/polling framing throughout the rest of this doc is the
 > original design; the mechanics below now read as: **edge-trigger primary, `*/15` backstop.**
 
+> **Update (2026-08-21, ADR-111 — the updater moves IN-CLUSTER; build = stint S7, homelab#741):**
+> the reusable workflow + per-repo callers (and their GitHub cron) retire in favor of the ADR-093
+> shape the review path already uses — an exporter edge (`maybe_dispatch_behind`) + a `*/15` Argo
+> CronWorkflow backstop running a platform-owned script, same `homelab-merge` App identity via ESO.
+> Why (measured): 91–96% of updater runs were the GitHub cron backstop, ~4,800 hosted min/mo at the
+> 1-min billing floor (#698), and the hosted-independence rationale below was per-leg only — CI and
+> review are cluster-resident anyway. Until S7's cutover child (homelab#745) lands, the machinery
+> described below is still what runs; this doc's "GitHub-hosted by design" rationale is superseded.
+
 > **The machine itself is MODELED, not just described:** [`merge-path-fsm.yaml`](merge-path-fsm.yaml)
 > is the machine-readable state/event/guard model — every guard anchored to code (grep-checked by
 > `devbox run merge-path-lint`, drift fails CI), every known-missing guard a dispositioned entry in

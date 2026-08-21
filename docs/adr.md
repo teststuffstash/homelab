@@ -1407,6 +1407,29 @@ verdict-writer AND merge-executor in-session; CLAUDE.md §How changes land gains
 maintenance-session paragraph in the G01-flip session (unparked same day); double-review
 (subagent → seat → bot) unchanged for seat-authored work.
 
+### ADR-111 — The merge-path updater moves in-cluster; "GitHub-hosted by design" is superseded
+
+**Status:** Accepted (operator, 2026-08-21 — the #698 hosted-minutes design session; build =
+stint S7, homelab#741). **Decision:** the `update-pr-branch` machinery (MP-T02/MP-T06) leaves
+GitHub-hosted Actions: a platform-owned script run by a `*/15` Argo CronWorkflow backstop in
+`agent-coordinator` + an exporter edge (`maybe_dispatch_behind` riding the ONE poller's walk),
+credentialed by an `updater-git` ESO ExternalSecret minted from the `homelab-merge` App. The
+per-repo callers + the reusable workflow are deleted; `MERGE_GH_APP_*` leaves the org Actions
+secrets — the CI-plane exposure the dedicated App existed to contain closes with it.
+**Why:** measured (2026-08-21 census): 91–96% of updater runs were the GitHub cron backstop —
+~4,800 min/mo across 4 private repos at the 1-min billing floor, over the whole 3,000 quota with
+zero PR traffic (#72, #698, two cycles); GitHub delivered `*/15` as ~25–35 min effective; and the
+hosted-independence property was per-LEG only — CI (ARC) and review are cluster-resident, so a
+cluster outage stalls the merge path regardless, and updater-current-but-unmergeable buys nothing.
+**Considered:** caller migration onto the reusable (no cost change — triggers are caller-owned);
+a free central sweeper in public homelab (rejected: a hand-maintained repo matrix in operator-only
+`.github/` — a new two-readers surface, stack logic in the wrong home); ARC caller migration
+(rejected 2026-08-20, stands — this is the reflex plane, not the ARC pool). **Consequences:** the
+adRise action retires and MP-T02 becomes an executed-replay clause; the exporter gains a seventh
+dispatcher (cron backstop + `GithubExporterDown/Stale` are the belts); the cron carries the
+CRON-SERVICED detector from day one; FU-183's pro-rated burn alert becomes a true anomaly
+detector. Supersedes the hosted-by-design line in `workflow.md` §Triggers + `merge-path.md`.
+
 ### ADR-108 — Observability stays out of routing-critical paths; meters push, critical paths never pull Prometheus
 
 **Status:** Accepted (2026-08-13, operator ruling on homelab#438).
