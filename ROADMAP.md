@@ -301,6 +301,7 @@ Bucket A/B enumeration in `docs/agents/meta-state.md`.
 | S4 | context & vocabulary: the role×context×source dedup + the mission rename sweep | FU-117, FU-163 |
 | S5 | corpus diet: doc-heat + measured trimming (`scripts/session-ctx.sh --big` is the instrument) | FU-164 |
 | S6 | epic post-deploy mechanic — **originals 7/7 DONE 2026-08-20 (stint #716, one session; closeout 1 on the parent)**: contract rule 8 + rule-7 lane split, reviewer depth guard (PR#727 — incl. the seat-caught heredoc generation-time corruption class, → #734), responder `Cause:` bind, brief play doors, unbound-sprout belt, seat pastes, retro filing rule. **TREE EMPTY same day** (4 sprouts drained, all harvest-bound at honest depth; + the HEREDOC-FN-DOLLAR lint signature); parent open in its quiet window (closes ≥08-23); per-repo fix.yaml pastes trail at fix-density | FU-090, homelab#716 |
+| S7 | merge-path updater in-cluster (ADR-111 — kills the ~4,800 min/mo hosted-cron burn, #698) + the FU-183 pro-rated burn alert — **parent #741 authored 2026-08-21 (children #742–#746); LAUNCH PARKED on Anthropic weekly headroom (95% at authoring)** | ADR-111, FU-183, homelab#741 |
 
 **Goal candidates** (authored AT LAUNCH, in rough order — the Goal dogfood begins here once the
 stints clear; the goal lane's pause conditions read met as of 2026-08-19):

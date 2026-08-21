@@ -549,8 +549,9 @@ the block needs pruning, not more headings.
       first day doesn't trip it (e.g. an absolute floor `usage > 300`, or a min-elapsed-days guard).
       Catches runaway burn on day 1 instead of at 80%. Interim: Alertmanager silence
       `5400ed94-23c7-4515-8b8b-c8d586598ae8` (endsAt 2026-09-01, imperative, self-expiring).
-      **Next:** rework the expr in `argocd/resources/github-exporter/prometheusrule.yaml` +
-      promtool-test rows (mind the §pre-331 poller-roll bridging comments). Relates #698, #72.
+      The DRIVER fix is decided separately — ADR-111 (updater in-cluster), stint S7 #741 —
+      making this alert a reintroduction detector. **Next:** child issue homelab#746 (the expr
+      + promtool rows; mind the §pre-331 poller-roll bridging). Relates #698, #72, ADR-111.
 
 - [ ] **FU-164** — **doc-heat: transcript-derived read heat over repo markdown — POINTER.**
       Question, heat doctrine (heat × class × age; blind spots; approximate lines), v0 (jail

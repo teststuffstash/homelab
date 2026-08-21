@@ -4633,3 +4633,31 @@ first live ADR-110 maintenance session before the ADR existed.
   bookkeeping chains AFTER the fetch-compare, never `;`-sequenced beside it.
 - Wind-down ~11:05Z: board empty of agent work (queue 0, riding 0, no open PRs), monitors
   killed by id, ctx ~650k, pickup in meta-state.
+
+## 2026-08-21 — jail session: #698 follow-through → ADR-111 + stint S7 (design-agents corpus loaded)
+
+- **Operator asks, in order:** silence GithubActionsMinutesHigh sans-git until Sep-1 → done as an
+  Alertmanager silence (`5400ed94-23c7-4515-8b8b-c8d586598ae8`, endsAt 2026-09-01T00:00Z, verified
+  `suppressed`; recorded on #698) — a silence excludes the responder because its edge IS the
+  notification webhook (fix-debounce's silenced=true read only affects queued-issue currency, not
+  dispatch). Alert-design critique filed as **FU-183** (pro-rated burn expr).
+- **"Was update-pr-branch supposed to move to 60-min cron + doorbell?"** — retrieval: NO record;
+  the half-memory was the SAME-session iac-sentinel move (fbd81dc hourly + #702 CRON-SERVICED
+  detector), transcript-grepped and confirmed.
+- **Design sitting (full corpus): the actual fix for the sweeper burn.** Census: 91–96% of updater
+  runs = the GitHub `*/15` cron backstop (182–192 of last 200/repo; GitHub delivered it as
+  ~25–35 min effective) ≈ ~4,800 hosted min/mo — the whole quota, zero traffic. Caller→reusable
+  migration is NOT a fix (triggers are caller-owned). First recommendation (public-homelab free
+  sweeper) was REJECTED by the operator on responsibility grounds (hand-list in operator-only
+  .github/ = a new two-readers surface) — their counter-argument decided it: the exporter already
+  sees every transition ≤120s, hosted-independence was per-leg while CI+review are
+  cluster-resident, and the GitHub cron was itself the flaky dependency. **Ruling → ADR-111:
+  updater moves in-cluster** (exporter `maybe_dispatch_behind` edge + `*/15` Argo CronWorkflow +
+  `updater-git` ESO secret from the homelab-merge App; callers + reusable retire;
+  `MERGE_GH_APP_*` leaves the CI-plane org secrets).
+- **Landed:** ADR-111 + merge-path.md/workflow.md currency notes (PR#747, doc-currency class per
+  ADR-110 — review expected to defer at 95% weekly); **stint S7 #741** authored with children
+  #742 (script+fixtures) → #743 (exporter edge) → #744 (manifests; blockedBy 742+743) → #745
+  (cutover; blockedBy 744 + soak) + #746 (FU-183 expr, independent), native sub-issue +
+  blockedBy edges verified. Direct: FU-183 pointer update, ROADMAP work-map S7 row, meta-state
+  park bullet (un-park = weekly-window headroom, ~2 days).
