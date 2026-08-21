@@ -8,6 +8,15 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ Stint S7 (#741, updater-in-cluster ADR-111 + the FU-183 burn alert) AUTHORED 2026-08-21 —
+  LAUNCH PARKED: Anthropic weekly at 95% at authoring.** Un-park trigger: the 7d window shows
+  headroom (`claude-subscription` dashboard / `agents/subscription-latch.sh` probe) or operator
+  go — expected within ~2 days. Then: children #742→#743→#744 in order (script+fixtures →
+  exporter edge → manifests), #745 cutover ONLY after the in-cluster leg is observed servicing
+  updates for a few days, #746 (alert expr) independent and fixer-shaped — may be queued to the
+  cluster loop. Docs already landed (ADR-111 via PR#747); the #698 Alertmanager silence
+  `5400ed94…` self-expires 2026-09-01 and needs nothing.
+
 - **⚑ PICKUP (2026-08-20 ~06:00Z wind-down, night session closed on operator feedback — see the
   session-winddown memory):** in flight, all machine-owned: PR#705 (fixes #674, STRUCK_MODEL
   chain-id) + PR#704 (fixes #676, poll_forever fixture) mid-cycle — they will park bot-approved
