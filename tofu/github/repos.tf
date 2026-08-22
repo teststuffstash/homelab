@@ -565,3 +565,51 @@ resource "github_repository" "circles_iac" {
     ignore_changes = [has_downloads]
   }
 }
+
+# rasmus-soot-cv — the public CV mirror (2026-08-22). NOT an agent repo: content is GENERATED —
+# the private teststuff repo (Forgejo) runs build_public.py and pushes the result here over the
+# write deploy key (deploy_keys.tf); this repo's own CI (ARC, runs-on: homelab-ephemeral — the CV
+# describes the platform, so the platform builds it) renders the PDF into a rolling `latest`
+# release asset. Never hand-edited, never PR-driven: excluded from the org PR ruleset
+# (org_ruleset.tf) and deliberately absent from protected_repos (variables.tf). Issues/projects
+# off — the source of truth (and its tracker) is the private master.
+resource "github_repository" "rasmus_soot_cv" {
+  name         = "rasmus-soot-cv"
+  description  = "CV of Rasmus Soot — generated from a private master, rendered to PDF by the homelab platform's own CI"
+  homepage_url = "https://github.com/teststuffstash/rasmus-soot-cv/releases/latest/download/Rasmus_Soot_CV.pdf"
+  topics       = ["cv"]
+  visibility   = "public"
+
+  has_issues      = false # mirror — issues belong to the private master
+  has_projects    = false
+  has_wiki        = false
+  has_discussions = false
+  is_template     = false
+
+  allow_merge_commit          = true
+  allow_squash_merge          = true
+  allow_rebase_merge          = true
+  allow_auto_merge            = false # no PR lane here — pushes arrive via the deploy key
+  allow_update_branch         = false
+  allow_forking               = true # PUBLIC repos are always forkable — GitHub ignores false, so match it (no perpetual diff)
+  delete_branch_on_merge      = true
+  web_commit_signoff_required = false
+
+  merge_commit_title          = "MERGE_MESSAGE"
+  merge_commit_message        = "PR_TITLE"
+  squash_merge_commit_title   = "COMMIT_OR_PR_TITLE"
+  squash_merge_commit_message = "COMMIT_MESSAGES"
+
+  archive_on_destroy = true
+
+  security_and_analysis {
+    secret_scanning { status = "disabled" }
+    secret_scanning_push_protection { status = "disabled" }
+  }
+
+  lifecycle {
+    # has_downloads is a deprecated no-op attribute: declaring it warns, omitting it perpetually
+    # diffs true->false. So we neither set nor reconcile it (see the header repos in this file).
+    ignore_changes = [has_downloads]
+  }
+}

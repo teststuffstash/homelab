@@ -58,6 +58,7 @@ att matchbox-grpc       ca.crt          "$CRED/homelab-matchbox/ca.crt"
 att matchbox-grpc       client.crt      "$CRED/homelab-matchbox/client.crt"
 att matchbox-grpc       client.key      "$CRED/homelab-matchbox/client.key"
 att github-runner-app   private-key.pem "$CRED/homelab-runner-app/private-key.pem"
+att github-cv-deploy    id_ed25519      "$CRED/homelab-cv-deploy/id_ed25519" # rasmus-soot-cv write deploy key (tofu/github/deploy_keys.tf; Forgejo publish secret)
 att github-reviewer-app private-key.pem "$CRED/homelab-github-reviewer/private-key.pem"
 val github-reviewer-app-id              "$CRED/homelab-github-reviewer/app-id"
 val github-reviewer-installation-id     "$CRED/homelab-github-reviewer/installation-id"
