@@ -15,7 +15,12 @@ resource "github_organization_ruleset" "default_branch" {
     }
     repository_name {
       include = ["~ALL"]
-      exclude = []
+      # rasmus-soot-cv is a push-only GENERATED mirror: the private teststuff repo's Forgejo action
+      # pushes to its master over a write deploy key (deploy_keys.tf), which the require-a-PR rule
+      # would reject (a deploy key is not an OrganizationAdmin, and rulesets aggregate — a repo-level
+      # carve-out cannot override this org rule). Real protection lives upstream in the private
+      # master; a trashed mirror is fully recoverable by one re-sync.
+      exclude = ["rasmus-soot-cv"]
     }
   }
 
