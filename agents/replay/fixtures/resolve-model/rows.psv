@@ -4,3 +4,5 @@
 proxy-reachable    |       |       |     | proxy-reachable     |
 proxy-unreachable  |       |       |     | proxy-unreachable   |
 override           |       |       |     | override            |
+coordinator-goal-decompose       |       |       |     | coordinator-goal-decompose       |
+coordinator-dispatch             |       |       |     | coordinator-dispatch             |

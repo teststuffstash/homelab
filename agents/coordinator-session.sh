@@ -68,6 +68,47 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# ── resolve model via /route (G-A 8, issue #781) ──────────────────────────────────────────
+# The tick/janitor/item session resolves its model through the router. Item sessions pass
+# their clause so the router's class policy distinguishes goal-decompose (reasoning tier,
+# class=goal-decompose) from ordinary dispatch (class=dispatch, via role_defaults).
+# The --model flag value (the stack claim's coordinatorModel or an operator override) becomes
+# the fallback if the proxy is unreachable. GOAL_MODEL env survives as the explicit escape
+# hatch for goal-decompose items (deleted in the sweep). Fail-OPEN (ADR-096).
+# See docs/agents/model-routing.md §M10.
+RESOLVE_CLASS=""
+if [ -n "$ITEM" ]; then
+  # Parse the clause from --item to set the routing class:
+  #   "repo=<r> item=<i> clause=goal-decompose ..." → class=goal-decompose
+  _item_clause=""
+  for _itf in $ITEM; do
+    case "$_itf" in
+      clause=*) _item_clause="${_itf#clause=}"; break;;
+    esac
+  done
+  case "$_item_clause" in
+    goal-decompose|goal-checkpoint) RESOLVE_CLASS="goal-decompose";;
+  esac
+fi
+# Call resolve-model.sh with role=coordinator. The class resolves via role_defaults to
+# 'dispatch' unless goal-decompose was detected above. The fallback is the current MODEL
+# (the scan's coordinatorModel, or opus/sonnet default). Do NOT pass --model to resolve-model
+# so the route is actually consulted: the scan's coordinatorModel becomes the fallback if
+# routing is unreachable (fail-OPEN). GOAL_MODEL is handled below, not via resolve-model's
+# --model/AGENT_MODEL (which would skip the route).
+_fb="${MODEL:-sonnet}"
+[ "$RESOLVE_CLASS" = "goal-decompose" ] && _fb="${GOAL_MODEL:-opus}"
+RESOLVED="$(bash "${HERE}/resolve-model.sh" --role coordinator --class "${RESOLVE_CLASS:-dispatch}" --fallback "$_fb" 2>/dev/null)" || RESOLVED=""
+if [ -n "$RESOLVED" ]; then
+  echo "→ coordinator model: role=coordinator class=${RESOLVE_CLASS:-dispatch} → ${RESOLVED}" >&2
+  MODEL="$RESOLVED"
+fi
+# GOAL_MODEL env escape hatch: if set and this is a goal-decompose item, it wins unconditionally.
+if [ -n "${GOAL_MODEL:-}" ] && [ "$RESOLVE_CLASS" = "goal-decompose" ]; then
+  echo "→ coordinator model: GOAL_MODEL=${GOAL_MODEL} wins (env escape hatch, goal-decompose)" >&2
+  MODEL="$GOAL_MODEL"
+fi
+
 # Per-stack scope: prepend the stack context to the prompt so the coordinator knows exactly
 # which repos are its world this session, and expose it as pod env for forward-compat. Policy will move
 # to a Crossplane AgentStack claim in the stack's -iac repo (docs/agents/platform-and-stacks.md); for
