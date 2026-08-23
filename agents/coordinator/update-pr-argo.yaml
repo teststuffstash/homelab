@@ -150,7 +150,7 @@ metadata:
   name: update-pr-branch-cron
   namespace: agent-coordinator
 spec:
-  schedule: "*/15 * * * *"
+  schedules: ["*/15 * * * *"]
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300
   successfulJobsHistoryLimit: 2
