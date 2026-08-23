@@ -1,0 +1,79 @@
+# Updater git token (ADR-111 / homelab#744) — the in-cluster updater's identity: the SAME
+# homelab-merge App the hosted workflow minted from (docs/github-apps.yaml, app 4207260), now
+# delivered by ESO into ns agent-coordinator (the reviewer-git.yaml shape / FU-089 central mint)
+# instead of an org Actions secret readable by the semi-trusted CI plane. The #745 cutover removes
+# MERGE_GH_APP_* from org secrets — the exposure the dedicated App existed to contain closes there.
+#
+# Grant is UNCHANGED from the App's declaration: contents+PR write (update-branch is a /pulls/
+# mutation — an App needs BOTH or it 403s), checks+statuses read, and deliberately NO Issues
+# ("a leaked merge key must not grant issue writes"). The merge-conflict LABEL write therefore
+# rides coordinator-git as UPDATER_LABEL_TOKEN in the WorkflowTemplate (update-pr-argo.yaml),
+# exactly as the action era rode the workflow's own GITHUB_TOKEN for that one step.
+#
+# The App key is ALREADY in Infisical (MERGE_GH_APP_PRIVATE_KEY — the exporter's FU-098 drift belt
+# reads the same key in ns monitoring), so this file needs no operator bootstrap step.
+---
+# 1) App private key: Infisical → a k8s Secret in this namespace the generator reads.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: updater-github-app
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: updater-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: MERGE_GH_APP_PRIVATE_KEY }
+---
+# 2) The generator: mint an installation token. NO `repositories:` narrowing, deliberately — the
+# token covers whatever the homelab-merge installation covers (callers verified on 11 repos incl.
+# circles/circles-iac, 2026-08-23), so a repo joining the installation is served without a manifest
+# edit, and a repo named here but NOT installed would 422 the whole mint (the reviewer-git.yaml
+# trap). The bound on what the token DOES is the App's own grant + the update-pr universe loop
+# (the stacks.json mirror), not this list.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: updater-git-gen
+  namespace: agent-coordinator
+spec:
+  appID: "4207260"           # homelab-merge (docs/github-apps.yaml)
+  installID: "144155950"     # the teststuffstash installation of homelab-merge
+  auth:
+    privateKey:
+      secretRef: { name: updater-github-app, key: privateKey }
+  permissions:
+    contents: write          #   the update-branch merge commit push
+    pull_requests: write     #   update-branch is a /pulls/ mutation — needs BOTH (docs/github-apps.yaml)
+    checks: read             #   pick-predicate reads (parity with the App declaration)
+    statuses: read
+---
+# 3) Drive the generator → the Secret the update-pr WorkflowTemplate reads as GH_TOKEN.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: updater-git
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 45m
+  target:
+    name: updater-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        GH_TOKEN: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: updater-git-gen
