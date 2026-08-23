@@ -2285,10 +2285,19 @@ def self_test() -> int:
     go_latch_save({"until": 0.0, "reason": "", "code": 0})  # simulate early clear
     cleared_loaded = go_latch_load()
     assert cleared_loaded is None, "cleared go latch must not persist"
+    # Seed a TRUE NULL-rail row (bypassing record_report, which always writes str(None or "") = "")
+    # alongside the record_report-written rows whose rail is '' — the migrated-store fixture
+    # above is in a throwaway :memory: connection and does NOT populate _conn, so without this
+    # row the assertion below would pass even with the buggy raw-GROUP-BY form.
+    _conn.execute(
+        "INSERT OR REPLACE INTO run_reports(ts,session,task,stack,role,round,model,"
+        "served_model,served_provider,cache_hit,cost_usd,error_class,outcome,rail) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (1.0, "null-rail-1", "issue-0", "none", "worker", 1, "m", "", "", 0.0, 0.0, "", "pr", None))
     body = "\n".join(metrics_lines())
-    # The migrated-store fixture above proves the NULL/'' split exists (old-1 has NULL rail,
-    # t-2 has '' rail). The by_rail query must coalesce both to 'unknown' and GROUP BY the
-    # coalesced value, producing exactly ONE line — not two with the same label set.
+    # The store now contains BOTH a genuine NULL-rail row (null-rail-1) and record_report-written
+    # rows whose rail is '' (e.g. t-2). The by_rail query must coalesce both to 'unknown' and
+    # GROUP BY the coalesced value, producing exactly ONE line — not two with the same label set.
     unknown_lines = [ln for ln in body.split("\n")
                      if 'router_run_reports_by_rail_total{rail="unknown"}' in ln]
     assert len(unknown_lines) == 1, \
@@ -2310,10 +2319,10 @@ def self_test() -> int:
         in body, "the FU-088 gate holding the ladder off must be countable"
     summary = status_summary()
     # 10 run_reports (t-1 is INSERT OR REPLACE'd, + t-2 clean, + t-3 the real producer shape,
-    # + the 5 M11 ladder-cell fixtures, + the 2 homelab#577 deployed-pod pod-name shapes) and 3
-    # strikes (issue-9/sleep from the vocabulary fixture, issue-19/circles from the real one,
-    # issue-42/sleep from the ladder's degradation step).
-    assert summary["rows"]["run_reports"] == 16 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1
+    # + the 5 M11 ladder-cell fixtures, + the 2 homelab#577 deployed-pod pod-name shapes,
+    # + null-rail-1) and 3 strikes (issue-9/sleep from the vocabulary fixture,
+    # issue-19/circles from the real one, issue-42/sleep from the ladder's degradation step).
+    assert summary["rows"]["run_reports"] == 17 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
