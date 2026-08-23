@@ -1318,10 +1318,15 @@ if [ "$HARNESS" = "opencode" ]; then
   # Headless mode: auto-approve tool calls (read/write/bash) — matching goose's GOOSE_MODE=auto.
   # Without this, an unattended opencode run prompts "user rejected permission" (homelab#792 gap 2).
   # The base is seeded when OC_CONFIG is empty (unpinned + no injection) so the guard never
-  # fails open on the headless path — every --recipe opencode ride gets autoApprove regardless.
+  # fails open on the headless path — every --recipe opencode ride gets mode.autoApprove.
+  # The correct shape for the pinned opencode binary (v1.18.13) is a sub-object under mode:
+  #   mode.autoApprove.permission and mode.autoApprove.options (each {} = approve all).
+  # The root-level autoApprove: true used in PR#800 was rejected at config validation
+  # (homelab#804). Verified against the pinned binary on 2026-08-23.
   if [ -n "$RUN_CMD" ]; then
     OC_CONFIG="$(jq -cn --argjson base "${OC_CONFIG:-null}" '
-      ($base // {"$schema": "https://opencode.ai/config.json"}) * {autoApprove: true}')"
+      ($base // {"$schema": "https://opencode.ai/config.json"})
+      * {mode: {autoApprove: {permission: {}, options: {}}}}')"
   fi
   if [ -n "$OC_CONFIG" ]; then
     # base64 keeps the JSON inert through the bash -c → jq -Rs → pod-yaml quoting layers.
@@ -2090,12 +2095,20 @@ if [ -n "$RUN_CMD" ]; then
       # agent-finalize already classified the run (authoritative — it saw the full log + exit code).
       # Its exit_status maps onto the strike taxonomy; anything else (failed/no-output/ci-failed
       # without a PR) is "unknown" — still a strike, just an unclassified one.
+      # homelab#804: when the exit_status is "failed" (harness exited non-zero with no matching
+      # failure signature), check the run log for a config validation error — the opencode binary
+      # rejects unknown config keys at startup and the pod dies in under 15s at zero cost. Map
+      # that class of death to harness-death so the coordinator strikes the model instead of
+      # treating the round as "unknown" (which re-dispatches on the same broken config).
       ERR_CLASS="$(printf '%s' "$STATS" | jq -r '
         (.exit_status // "") as $s
         | if $s == "no-artifact" then (.error_class // "no-pr")
           elif (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s
           else "unknown" end' \
         2>/dev/null || echo unknown)"
+      if [ "$ERR_CLASS" = "unknown" ] && grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG" 2>/dev/null; then
+        ERR_CLASS="harness-death"
+      fi
     else
       # No AGENT_RUN_STATS line at all = finalize never ran (the pod died hard / wait timed out) —
       # the PR-less death that used to be invisible. Classify the raw log jail-side with the same
@@ -2106,6 +2119,11 @@ if [ -n "$RUN_CMD" ]; then
       POD_REASON="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.reason}' 2>/dev/null || true)"
       if [ "$POD_REASON" = "DeadlineExceeded" ]; then
         ERR_CLASS="timeout"
+      # homelab#804: the opencode binary validates its config at startup and exits non-zero on
+      # unknown/unsupported keys. A pod that dies before the LLM loop in under 15s at zero cost
+      # with this signature is a harness-startup death — should never be classified "clean".
+      elif grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG"; then
+        ERR_CLASS="harness-death"
       elif grep -qiE -e '-32602|EOF while parsing|response may have been truncated|context_length_exceeded|panicked at' "$RUNLOG"; then
         ERR_CLASS="harness-death"
       elif grep -qiE '429.*quota|429.*limit|monthly.*limit.*reached|rate limit exceeded' "$RUNLOG"; then
