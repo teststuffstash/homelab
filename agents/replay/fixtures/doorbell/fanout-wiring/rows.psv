@@ -1,0 +1,2 @@
+normal  | | | DP_WAKE=edge-wake-1786464880 DISPATCH_PHASE_WAKE=edge-wake-1786464880 | normal |
+capacity| | | DP_WAKE=edge-wake-1786464880 DISPATCH_PHASE_WAKE=edge-wake-1786464880 SCAN_SOURCE=capacity SCAN_RAIL=go | capacity |

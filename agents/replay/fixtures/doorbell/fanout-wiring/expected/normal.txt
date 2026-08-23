@@ -1,0 +1,7 @@
+CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"stack":"circles","loop_ns":"circles-agents","unit":"-"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
+CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"stack":"sleep","loop_ns":"sleep-agents","unit":"-"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
+OUT   fan-out: doorbell rung for graduated stack circles ({"stack":"circles","loop_ns":"circles-agents","unit":"-"})
+OUT   fan-out: doorbell rung for graduated stack sleep ({"stack":"sleep","loop_ns":"sleep-agents","unit":"-"})
+ERR   [circles] graduated — owned by its per-stack loop; skipped in the global scan
+ERR   [sleep] graduated — owned by its per-stack loop; skipped in the global scan
+RC 0
