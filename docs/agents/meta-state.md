@@ -57,16 +57,18 @@ meant to avoid.)
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
   buildout → then stacks.** The forward plan lives in **ROADMAP §The platform work map**
   (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
-- **⚑ NEXT SESSION = the G-A LAUNCH (operator, 2026-08-23 — the Goal-lane UNPAUSE is given for
-  G-A).** A fresh corpus session: FIRST READ = the Mon 08-24 05:00Z platform-retro fire (FU-058
-  organic acceptance — a failed fire is handled before the launch), then author the Goal AT
-  launch (last-possible-moment rule; scope pointers = the work-map G-A row: charter build items
-  3–6 + flip acceptance 2–4, #516 family decorrelation, FU-127, FU-095(a)/(c), FU-179; FU-180
-  accepted = the Goal's `Budget:` stays cap-phantom on [the platform stack](agentstack.md)) and
-  decompose with the corpus loaded. **OR-budget ruling (operator, 2026-08-23): a limited
-  OpenRouter budget is loaded and losing ALL of it during G-A is acceptable** — platform
-  workers STAY on the PR#715 paid-OR-flash flip through G-A (do NOT revert early on M12
-  independence grounds; the ~09-03/fixup-end/depletion revert calendar stands). Fleet CLAUDE.md
+- **⚑ G-A LAUNCHED 2026-08-23 (~13:0xZ, this corpus session — operator "Start G-A" + the
+  recorded unpause; the launch preceded the Mon 08-24 05:00Z retro fire by operator order, so
+  the retro post-fire read is STILL the next session's first item).** Goal = **homelab#775**
+  (`Budget: 17` = the loaded OR credit; master-lane children, no goal branch — the #278 shape,
+  second datum). Children #776/#516/#777/agent-runtime#81/#778/#779/#780/#781/#782 queued
+  (blockedBy edges: #516,#780,#781,#782 ← #776; #780 also ← #516), #783 = the FU-179 strike
+  sitting (seat-lane, unqueued). Checkpoint-minted tail (NOT authored): claim reshape · P4
+  flip · legacy deletion sweep · per-role cost attribution. Platform doorbell rung at launch.
+  **OR-budget ruling stands: losing ALL of the ~$17 during G-A is acceptable; workers STAY on
+  PR#715 paid-OR flash (revert ~09-03/fixup-end/depletion).** Go rail monthly-latched → #778's
+  Go cells defer 🧊 until Sep-13. Watch items: child PRs park at the codeowner gate for corpus
+  sessions (gate reads = the session duty); #783 wants a routing sitting. Fleet CLAUDE.md
   slim-down is DISPATCHED to the main jail session (completion comment lands on claude-jail#1
   — no homelab tracker debt).
 - **minutark.ee / oracle-iac#351** — OPEN, oracle parked (operator 2026-08-11); pick up at

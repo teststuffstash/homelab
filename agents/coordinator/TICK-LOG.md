@@ -4748,3 +4748,22 @@ first live ADR-110 maintenance session before the ADR existed.
   on claude-jail#1). Monitors killed, transcripts synced. Session total: S6+S3+S4 containers
   advanced/closed, 6 PRs merged (761/768/771/772/774 + operator's 773), 2 FUs archived
   (FU-117, FU-163), stint #762 tree empty in one session.
+
+## 2026-08-23 — G-A launch (corpus session; operator "Start G-A", away 1h)
+
+- Operator launch order + the recorded Goal-lane unpause → **G-A launched before the Mon 08-24
+  retro fire** (that post-fire read stays the next session's first item). Full design-agents
+  corpus loaded per the skill; probes: OR credit $17.30 (`router_openrouter_account_credit_usd`),
+  capacity doorbell absent from the proxy (grep), `/route` callers = worker launcher/scan/scout/
+  fanout only (M10 confirmed), reviewer Go-failover literal at `reviewer-session.sh` (#516).
+- **Goal homelab#775 authored + decomposed in the seat** (the #278 shape: master-lane children,
+  no goal branch, never `agent/queued`, tracking state `agent/blocked`). `Budget: 17` = the
+  loaded OR credit; cap-phantom caveat recorded (FU-180 accepted). Children: #776 carrier ·
+  #516 absorbed (Touches path fixed) · #777 + agent-runtime#81 accounting · #778 scout canary
+  cells (Go 🧊 til Sep-13) · #779 capacity doorbell · #780/#781/#782 role wiring (blockedBy
+  #776; #780 also ← #516) · #783 FU-179 strike sitting (seat-lane, unqueued). Flip tail
+  (claim reshape, P4 flip, deletion sweep, per-role cost attribution) checkpoint-minted, not
+  authored. All queued children labelled, native sub-issue + blockedBy edges created,
+  platform doorbell rung (`coordinate-platform-manual-vvrtb`).
+- Bookkeeping: meta-state G-A row rewritten to launched state; ROADMAP G-A row → #775;
+  FU-179/FU-127/FU-161/FU-095 gained owning-child pointers.

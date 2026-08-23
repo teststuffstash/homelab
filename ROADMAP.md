@@ -308,7 +308,7 @@ stints clear; the goal lane's pause conditions read met as of 2026-08-19):
 
 | # | Goal | scope pointers |
 |---|---|---|
-| G-A | **every role routes** — the chainless completion | charter build items 3–6 + flip acceptance 2–4; #516 family decorrelation; FU-127; FU-095 (a)/(c); FU-179 strike policy; FU-180 relates (accounting half) |
+| G-A | **every role routes** — the chainless completion. **LAUNCHED 2026-08-23 → homelab#775** (status lives there) | charter build items 3–6 + flip acceptance 2–4; #516 family decorrelation; FU-127; FU-095 (a)/(c); FU-179 strike policy; FU-180 relates (accounting half) |
 | G-B | **assurance** — SLO error-budget teeth (ex-FU-104), the lens tail (ASVS/e-ITS + the blocking knob, ex-FU-101), the responder remediation dial (ex-FU-103), prober briefs/edges | [roles.md](docs/agents/roles.md) §SLO machinery, §Lenses, §responder, FU-102 |
 | G-C | **self-service & catalog** — the FU-039 program + XRDs superseding SERVICES.md | FU-039, FU-049 (§Programs above) |
 | G-D | **Renovate live for the platform stack** — charter drafted and preserved in closed #502; re-mint at launch | homelab#502 (closed, body = the draft) |

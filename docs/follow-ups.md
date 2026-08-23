@@ -465,7 +465,8 @@ the block needs pruning, not more headings.
       fan-out-N-keep-first-survivor. Rescued from prose 2026-08-19 (the untracked-work sweep — the
       "do not flip without deciding" line had no owner). **Next:** read the accumulated strike
       table (weeks of data now exist), decide the policy in a routing sitting, then flip or
-      retire the env. Natural G-A (every-role-routes) scope. Relates FU-095, ADR-096.
+      retire the env. **Owned by G-A child homelab#783 since the 2026-08-23 launch (Goal
+      #775).** Relates FU-095, ADR-096.
 
 - [ ] **FU-180** — **Subscription budgets + fair-scheduling window shares (chainless
       cost-rethink directions 3–4).** Goal budgets on the platform stack stay CAP-PHANTOM until
@@ -488,7 +489,8 @@ the block needs pruning, not more headings.
       canary rung (leg 3) runs BEFORE the digest, and a digest whose every row is unbenched AND
       uncanaried posts nowhere but the log — no issue, no 🌱 line. **Next:** legs 3–4 (typed
       cell-keyed canary verdicts + contradiction rule + pool curation) WITH the filing gate,
-      UNBLOCKED (FU-162 shipped). Related: #235's belt (machine lane owns it).
+      UNBLOCKED (FU-162 shipped) — owned by G-A child homelab#778 since the 2026-08-23
+      launch (Goal #775). Related: #235's belt (machine lane owns it).
 
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
@@ -499,6 +501,8 @@ the block needs pruning, not more headings.
       Mechanism + the open blacklist/retry/fan-out question: §M1a. **Next:** gather strike data with
       enforcement off, decide the policy, THEN judge the P4 flip.
       **Open:** legs (b)+(c) unstarted; wiring the coordinator lane to `/route` (§M10).
+      **G-A (Goal homelab#775, 2026-08-23) owns the §M10 wiring (children #780/#781/#782) and
+      leg (c) (rides child #778); leg (b) stays outside per charter decision 3.**
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 - [ ] **FU-127** — **One model-id parser LANDED; the structured claim field is the rest.**
       `agents/model_id.py` is the single implementation of `{rail, harness, model}` with the
@@ -508,7 +512,9 @@ the block needs pruning, not more headings.
       deployment unit, cannot import — so `devbox run model-id-test` executes that function out of
       the proxy file by AST and fails CI if the two ever disagree. **Next:** the structured
       `{rail,harness,model}` form in claims + `stacks.json` (string stays canonical; the parser is
-      the compatibility layer), which is also where a future rail (local vLLM) lands.
+      the compatibility layer), which is also where a future rail (local vLLM) lands. G-A
+      (Goal homelab#775, 2026-08-23): the routed-RESPONSE carrier is child #776; the
+      claim-field half rides the goal's checkpoint-minted claim reshape.
       Relates FU-095, ADR-096.
 - [ ] **FU-131** — **Cost-ledger undercount: harvest FIXED, the T+1 sweep is what remains.** The
       `/generation` backoff was (2s, 5s) and gave up at ~7s, losing 49% of a fan-out arm's spend
