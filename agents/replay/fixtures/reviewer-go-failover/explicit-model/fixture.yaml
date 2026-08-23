@@ -1,15 +1,15 @@
-# reviewer-go-failover-explicit-model (homelab#424) — explicit --model prevents failover.
+# reviewer-go-failover-explicit-model (homelab#424, G-A 7) — authoritative path: explicit --model wins.
 #
-# CONDITION UNDER REPLAY. The subscription-latch.sh probe returns exit 1 (Anthropic limited),
-# Go rail probe returns {limited: false}, BUT MODEL_SET_EXPLICIT=1 (operator passed --model).
+# CONDITION UNDER REPLAY. The /route call (above this block in the shipped script) resolved the
+# model decision: the router dispatched with a subscription model. But MODEL_SET_EXPLICIT=1
+# (operator passed --model=opus), so the ADR-096 override rule kept opus. _router_adopted=1,
+# so this block passes through silently.
 #
 # THE CONTRACT (executes the REAL gate block from reviewer-session.sh via sentinel):
-#   1. The gate calls `bash "$HERE/subscription-latch.sh"` — bridge sets HERE to fixture dir (stub).
-#   2. The gate calls `curl ... $PROXY/opencode-limit` — curl stub records and returns Go-available JSON.
-#   3. With MODEL_SET_EXPLICIT=1: defer with explicit-model message even though Go is available.
-#   4. The action stream asserts: curl probe happened AND explicit-model defer line emitted.
+#   1. _router_adopted is set, _router_defer is unset → neither arm fires, block passes through.
+#   2. The action stream is empty — no curl calls, no deferral exit.
 #
-# Parts: bridge.sh (seams: HERE, stubs, MODEL_SET_EXPLICIT=1) + block:reviewer-go-failover-gate (real code)
+# Parts: bridge.sh (seams: HERE, MODEL_SET_EXPLICIT, _router_adopted) + block:reviewer-go-failover-gate
 name: reviewer-go-failover-explicit-model
 mode: actions
 source: agents/reviewer-session.sh
