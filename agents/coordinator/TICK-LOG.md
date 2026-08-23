@@ -4814,3 +4814,8 @@ first live ADR-110 maintenance session before the ADR existed.
   observed Succeeded, cron sweeps the stacks.json universe. This strengthens the #745 un-park
   read — the hosted path structurally cannot service private repos until the reset.
 - Goal checkpoint ran machine-side: #795/#796 minted + queued (were harvest strays).
+- Operator: GitHub emails on the failing hosted runs → the four private-repo update-pr-branch.yml
+  callers DISABLED (`gh workflow disable`, verified disabled_manually ×4). Zero coverage cost:
+  quota-dead until Sep-1 anyway, in-cluster leg is sole server, files die at #745 (never
+  re-enable — delete). Everything else in those repos is self-hosted (ARC/proxmox-vm) — no other
+  hosted email source. Silence a3628730 stays as the self-expiring belt.
