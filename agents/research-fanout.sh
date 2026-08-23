@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# research-fanout.sh — the FU-126 multi-model spec-writer fan-out: dispatch the SAME goal issue
+# research-fanout.sh — the FU-126 multi-model spec-writer fan-out: dispatch the SAME mission issue
 # to N models, each as its own un-armed research ride, so the operator can compare and
 # cherry-pick the resulting research/* branches (the nemotron /workspace/idp jail run is the
 # reference output shape; oracle-fleet#166 / sleep PR port the grow-mode research recipes).
 #
-#   bash agents/research-fanout.sh <project> <goal-issue> --arms N [--class regular] [--dry-run]
+#   bash agents/research-fanout.sh <project> <mission-issue> --arms N [--class regular] [--dry-run]
 #   bash agents/research-fanout.sh oracle-fleet 210 --arms 7
 #
 # THE CALLER NAMES ZERO MODELS (ADR-104 / model-routing.md §M13, built FU-162). The roster is
@@ -38,9 +38,9 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-USAGE="usage: research-fanout.sh <project> <goal-issue> --arms N [--class regular] [--start-slot 1] [--dry-run]"
+USAGE="usage: research-fanout.sh <project> <mission-issue> --arms N [--class regular] [--start-slot 1] [--dry-run]"
 PROJECT="${1:?$USAGE}"
-ISSUE="${2:?goal issue number}"
+ISSUE="${2:?mission issue number}"
 shift 2
 
 ARMS=""; CLASS="regular"; START_SLOT=1; DRY=0
