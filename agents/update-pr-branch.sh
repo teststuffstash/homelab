@@ -35,13 +35,19 @@ PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
 
 # Defensive: `gh pr edit --add-label` FAILS on a missing label, so create it idempotently first
 # (the AgentStack claim provisions it via IssueLabels, but this survives a not-yet-claimed repo or
-# a deleted label — the reflex must never hard-fail and block the merge path). NB the label write
-# needs an identity with issues:write — whether the homelab-merge App is widened for it is
-# homelab#744's decide-at-build point; this script just uses $GH_TOKEN and reports failure loudly.
+# a deleted label — the reflex must never hard-fail and block the merge path).
+#
+# Label writes ride a SEPARATE identity (the #744 decide-at-build point, decided): gh's label
+# mutations need issues:write, and the homelab-merge App deliberately carries NO Issues permission
+# (docs/github-apps.yaml `absent:` — "a leaked merge key must not grant issue writes"; in the
+# action era the labeler step used the workflow's own GITHUB_TOKEN for exactly this reason).
+# In-cluster the WorkflowTemplate hands coordinator-git (issues:write across the agent repos) as
+# UPDATER_LABEL_TOKEN; absent (a jail hand-run), the main token is tried and a refusal stays
+# loud-but-non-fatal.
 label_conflict() {
-  gh label create merge-conflict --repo "$REPO" --color e11d21 \
+  GH_TOKEN="${UPDATER_LABEL_TOKEN:-${GH_TOKEN:-}}" gh label create merge-conflict --repo "$REPO" --color e11d21 \
     --description "PR branch conflicts with master — updater can't auto-resolve" --force >/dev/null 2>&1 || true
-  gh pr edit "$1" --repo "$REPO" --add-label merge-conflict \
+  GH_TOKEN="${UPDATER_LABEL_TOKEN:-${GH_TOKEN:-}}" gh pr edit "$1" --repo "$REPO" --add-label merge-conflict \
     || echo "updater[$REPO]: could not label #$1 merge-conflict (token lacks issues:write?) — the */15 pass retries"
 }
 
@@ -117,6 +123,6 @@ jq -c '.[]' <<<"$PRS" | while read -r pr; do
   if [ "$armed" = "true" ] && [ "$dirty" = "true" ]; then
     [ "$has" = "true" ] || label_conflict "$n"
   elif [ "$has" = "true" ]; then
-    gh pr edit "$n" --repo "$REPO" --remove-label merge-conflict || true
+    GH_TOKEN="${UPDATER_LABEL_TOKEN:-${GH_TOKEN:-}}" gh pr edit "$n" --repo "$REPO" --remove-label merge-conflict || true
   fi
 done
