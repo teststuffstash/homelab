@@ -1191,6 +1191,42 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       | "  issue #\(.number) — \(.title)"] | .[]' 2>/dev/null)" || depold=""
     [ -n "$depold" ] && orphans="${orphans}[$repo] ⚠ RETIRED FORMAT: a \`Depends-on:\` body line gates NOTHING (FU-111 retired the reader 2026-08-07 — native blocked-by edges are the only reader). Re-author it: gh api -X POST repos/${slug}/issues/<n>/dependencies/blocked_by -F issue_id=<the BLOCKER's numeric id>, then delete the line:\n${depold}\n"
     # <<<REPLAY:depends-on-retired<<<
+    # ── BODY-TOUCHES MISMATCH (homelab#808) — report-only ──────────────────────────────────────
+    # An issue body may mandate a deliverable path that its own `Touches:` footprint does not
+    # reach — "add a shared helper `agents/foo.sh`" with a `Touches:` that names no plausible
+    # target prefix. Nothing checks this today. Report-only, no label, no gate: an omitted
+    # Touches already means exclusive, and the mismatch may be a deliberate re-scope a human
+    # should read, not a machine block.
+    # No false positive when a `Touches:` prefix covers the path by directory or glob (e.g.,
+    # `agents/` covers `agents/foo.sh`).
+    # >>>REPLAY:body-footprint-mismatch>>>
+    if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}"; then
+      bfm_lines=""
+      # Extract Touches footprint and backtick-quoted paths for each issue, then check coverage.
+      while IFS='|' read -r bfmn bfmt bfmp; do
+        [ -n "$bfmn" ] || continue
+        uncovered=""; oldifs="$IFS"; IFS=','
+        for path in $bfmp; do
+          if ! fp_conflict_strict "$bfmt" "$path"; then
+            uncovered="${uncovered} \`${path}\`"
+          fi
+        done
+        IFS="$oldifs"
+        [ -n "$uncovered" ] && bfm_lines="${bfm_lines}  issue #${bfmn} — body paths${uncovered} not covered by declared \`Touches:\` (${bfmt})\n"
+      done <<< "$(printf '%s' "$openall" | jq -r '
+        [.[] | .number as $n
+         | (.body // "") as $b
+         | select($b != "")
+         | (([$b | scan("(?mi)^[ \t]*touches:[ \t]*(.+)$")] | first // []) | first // "") as $touches
+         | select($touches != "" and $touches != "*")
+         | ([$b | scan("`([a-zA-Z0-9._/*-][a-zA-Z0-9._/*-]+)`") | .[0]] | unique) as $paths
+         | select(($paths | length) > 0)
+         | "\($n)|\($touches)|\($paths | join(","))"
+        ] | .[]
+      ' 2>/dev/null || true)"
+      [ -n "$bfm_lines" ] && orphans="${orphans}[$repo] 🏷 BODY-TOUCHES mismatch: issue body references paths outside declared footprint (homelab#808 report-only — may be a deliberate re-scope):\n${bfm_lines}\n"
+    fi
+    # <<<REPLAY:body-footprint-mismatch<<<
     iss=""; qblocked=""; qcycles=""
     # ⚠ tab is IFS *whitespace*: POSIX read COLLAPSES consecutive tabs, so an empty middle
     # field shifts every later field left (live 2026-07-27: track-less sleep-iac#25's
