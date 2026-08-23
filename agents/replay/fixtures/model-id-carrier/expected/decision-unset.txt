@@ -1,0 +1,6 @@
+CALL python3 $ROOT/agents/model_id.py --shell claude/haiku
+OUT MODEL='haiku'
+OUT MODEL_RAIL='anthropic-subscription'
+OUT MODEL_HARNESS='claude'
+OUT HARNESS='claude'
+RC 0

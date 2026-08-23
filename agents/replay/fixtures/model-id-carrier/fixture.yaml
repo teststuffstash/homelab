@@ -1,0 +1,23 @@
+# model-id-carrier — the structured resolved {rail, harness, model} carrier (FU-127, G-A child 1).
+#
+# THE CONTRACT: the model-id-resolution block in agent-session.sh consumes
+# `.decision.resolved` from the router response when present, avoiding a re-parse
+# through model_id.py. When absent (mixed-deploy window: proxy and launcher deploy
+# independently), it falls back to the canonical model_id.py parser. Three rows:
+#
+#   carrier-present   — _decision holds .resolved={rail,harness,model} complete;
+#                        model_id.py is NOT called (the absent call is the probe).
+#   decision-unset    — _decision is entirely absent (set -u guard); falls back to
+#                        model_id.py --shell parse, no unbound-variable death.
+#   model-empty       — carrier present but resolved.model is empty; falls back to
+#                        model_id.py rather than assigning an empty MODEL.
+#
+# Not FSM-pinned (no docs/agents/*-fsm.yaml replay: list references model-id-carrier).
+name: model-id-carrier
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:model-id-resolution
+  - file:post.sh
+rows: rows.psv

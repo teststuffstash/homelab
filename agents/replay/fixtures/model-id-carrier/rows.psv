@@ -1,0 +1,6 @@
+# model-id-carrier — the decision table (family contract in fixture.yaml). Row state (MODEL,
+# _decision) lives in rows/<id>/vars.sh, not in this table.
+# id               | world | patch | env | expect               | params
+carrier-present    |       |       |     | carrier-present      |
+decision-unset     |       |       |     | decision-unset       |
+model-empty        |       |       |     | model-empty          |
