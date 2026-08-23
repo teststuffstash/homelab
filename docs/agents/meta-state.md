@@ -8,7 +8,7 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ Stint S7 (#741) LAUNCHED 2026-08-23 (operator go + latch clean).** Session 1 built all
+- **⚑ [Stint](chainless-redesign.md) S7 (#741) LAUNCHED 2026-08-23 (operator go + latch clean).** Session 1 built all
   three in-order children: #743 exporter edge MERGED (PR#757 — mergeStateStatus on the walk +
   maybe_dispatch_behind + UPDATE_PR_WEBHOOK_URL env); #742 script+replay-table (PR#755) and
   #744 manifests (PR#758, bring-up guard covers merge-order) mid-cycle at last write — finish
@@ -59,7 +59,7 @@ meant to avoid.)
   (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
 - **⚑ Goal lane pause (operator, 2026-08-13):** no new Goal until v1.2 machinery + budget
   recovery. As of 2026-08-19 the conditions read met (work map) — the unpause is the operator's
-  call at G-A launch; Goal budgets on the platform stack stay cap-phantom until FU-180.
+  call at G-A launch; Goal budgets on [the platform stack](agentstack.md) stay cap-phantom until FU-180.
 - **minutark.ee / oracle-iac#351** — OPEN, oracle parked (operator 2026-08-11); pick up at
   unpark. Acceptance = drift-free re-plan through the two-zone token. ⚠ `dig +short` wraps long
   DS digests — `tr -d ' '` before grepping.
@@ -83,18 +83,18 @@ meant to avoid.)
   ~2026-09-03 / fixup-wave end / OR depletion, whichever first** (claim comment carries the
   full record; Go re-flip stays FU-181).
 
-- **⚑ S6 STINT #716: TREE EMPTY; Container-findings acceptance ✅ PROVEN 2026-08-23** — first
-  ORGANIC depth-≥4 use flowed end-to-end (#740 closed by PR#759 → merge edge → C6 append on
-  #716 at 10:14:52Z, 3.5 min post-merge; chain #740→#738→#732→#719→#716 walked correctly).
-  Quiet-window close due at a sweep ≥2026-08-23 (same calendar as #420 + #711). **The S4
-  session's sweep DISPOSES the two appended bullets**: (a) reviewer footprint check reads only
-  the FIRST `Touches:` line (`reviewer-session.sh:362` `head -1`; scan side already
-  union-correct; `fix-debounce-argo.yaml:298` same shape, unassessed) — the PR#759 false-escape
-  instance; (b) stale "unreplayable until #740" comment in `agents/update-pr-branch.sh:64-65`
-  + the twin pointer in `fixtures/updater/fixture.yaml` (one-line cleanups). Remaining S6
-  acceptance: unbound-sprout belt silent under the week's traffic; responder `Cause:` line
-  awaits organic use; Mon 08-24 retro fire exercises the filing rule. **Next: S4 (operator,
-  2026-08-23 — this session's close); S5 deliberately LAST (ROADMAP work-map S5 row).**
+- **⚑ S4 STINT #762 LAUNCHED + largely executed 2026-08-23 (session 1).** Done: #765 eviction,
+  #766 rename (FU-163 archived), #767 check-3 flip, sprout #769 shipped, #770 closed as
+  duplicate-of-#332. In flight at last write: **PR#768** (#763 ground rules — was BEHIND,
+  updater-owned) + **PR#774** (#769) riding their review cycles; a fresh session finishes their
+  gate reads if parked. **OPERATOR DECISION PARKED: PR#773** (#764 — CLAUDE.md facts vs
+  `agents/jail-seat-card.md`, reworked to separate-files on the operator's mid-session
+  direction; un-armed, awaiting their read; claude-jail#1 carries the bootstrap-composition
+  spec). Stint closeout 1 fires when #768 lands + the operator rules on #773.
+  S6 #716 + S3 #711 CLOSED this session (quiet windows passed; #716's Container-findings
+  disposed via PR#761, deploy verified in-cluster). #420 stays open (#575 closed 08-23 09:50Z
+  reset its window — next check ≥08-26). Remaining S6 acceptance watches: unbound-sprout belt
+  quiet; responder `Cause:` organic use; Mon 08-24 retro fire. **S5 deliberately LAST.**
 
 ## Durable warnings — EVICTED (S4 #765, 2026-08-23)
 

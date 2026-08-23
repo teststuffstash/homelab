@@ -1,0 +1,12 @@
+# FU-117 / S4 #763 + the PR#768 review: the ground-rules degrade trio — missing / empty /
+# permission-denied must each degrade LOUDLY (WARN bullet in the card + stderr naming the path)
+# with the DYNAMIC card rendered in full. One shared observation point (the machine-markers
+# fixture's post.sh, composed after the per-leg pre.sh) — the cleanup contract's
+# share-by-reference rule instead of three byte-identical copies.
+name: env-card-ground-rules-empty
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:render_env_card
+  - file:pre.sh
+  - file:../../env-card-machine-markers/env-card-machine-markers-capture/post.sh

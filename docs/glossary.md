@@ -23,7 +23,7 @@ mission) would drown the check in false positives and stay judgment-lint territo
 | Term | Meaning | Owning doc |
 |---|---|---|
 | **Goal** (capital, issue type) | ADR-102's funded container: `task/goal` label + one machine-parsed `Budget:` line, decompose → assembly → post-launch → human verdict terminal | [`agents/issue-authoring.md`](agents/issue-authoring.md) §The goal container |
-| **mission** (research) | the research-lane dispatch unit — prepares the contract a Goal then implements. ⚠ Its dispatch label is still `goal` (historical); prose says *mission*, never "research goal" | [`agents/research-and-specs.md`](agents/research-and-specs.md) |
+| **mission** (research) | the research-lane dispatch unit — prepares the contract a Goal then implements. Carries NO label today (the legacy `goal` label is gone and never had a machine reader — FU-163, resolved 2026-08-23); **`mission`** is the reserved dispatch-label name for when FU-090(c) graduates | [`agents/research-and-specs.md`](agents/research-and-specs.md) |
 | *goal (prose)* | ⛔ retired in agents docs — say **Goal** (the type), **mission** (research), or "intent/target" in plain prose | — |
 | **lens** | the reviewer machinery × a brief sourced from an EXTERNALLY MAINTAINED standard, selected by a deterministic artifact-class predicate. Not a role; not a prose "viewpoint" | [`agents/roles.md`](agents/roles.md) §Lenses |
 | **canary** (unqualified) | the scout's **rail probe** — does a model complete a tool-call loop through OUR stack; a verdict about a (model, harness, class) CELL | [`agents/model-routing.md`](agents/model-routing.md) §M7 |
@@ -36,20 +36,25 @@ mission) would drown the check in false positives and stay judgment-lint territo
 | **homelab (repo)** | `teststuffstash/homelab` — this repository | `README.md` |
 | **⚓ the platform stack** | the AgentStack claim named `platform`: {homelab, agent-runtime, agent-coordinator, openrouter-operator}. ⛔ never "homelab" — sense-1 scoping of a sense-2 duty left 5 agent-runtime issues unswept a month (2026-08-08). Duties scope by the CLAIM's repo list | [`agents/agentstack.md`](agents/agentstack.md); mirror `agents/stacks.json` |
 | **the homelab** | the physical lab / the cluster+network as a whole | `CONTEXT.md`, `ARCHITECTURE.md` |
-| **findings store** | ADR-106's one typed machine comment per Goal — harvest APPENDS findings (origin, surface, class, substance), a count-keyed marker tracks disposition; checkpoints consume it, never 1:1 issue mints | [`agents/issue-authoring.md`](agents/issue-authoring.md) (v1.2 build) |
+| **⚓ findings store** | ADR-106's one typed machine comment per Goal — harvest APPENDS findings (origin, surface, class, substance), a count-keyed marker tracks disposition; checkpoints consume it, never 1:1 issue mints | [`agents/issue-authoring.md`](agents/issue-authoring.md) (v1.2 build) |
 | **retro** (cluster) | the platform's batched self-improvement role — ledger worst-K → transcript slices → report + process PRs, Mondays | [`agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2 |
 | **skill-retro** (jail) | the jail twin of the retro for `.claude/skills/`: dialogue-only transcript slices → GAPS ledger sightings (ADR-105) | `.claude/skills/skill-retro/SKILL.md` |
-| **Go rail** (opencode-go) | the OpenCode Go subscription as a billing rail — usage-value windows ($12/5h·$30/wk·$60/mo), OSS models, Anthropic/OpenAI-compat endpoints; model ids prefix `opencode-go/` | [`agents/chainless-redesign.md`](agents/chainless-redesign.md) (ADR-107 charter) |
-| **Zen rail** (opencode) | the OpenCode Zen FREE tier as the jail's third rail (issue #444) — model ids prefix `opencode/`, same wallet key as the Go rail, metered $0 by operator direction (assumption sentinel: a bare id that doesn't end `-free` and isn't `big-pickle` warns) | the jail shim routes it (`scripts/claude-model-shim.py`); the free-tier models register in [`spikes/opencode-model-matrix.md`](spikes/opencode-model-matrix.md) §OpenCode Zen free tier |
+| **⚓ Go rail** (opencode-go) | the OpenCode Go subscription as a billing rail — usage-value windows ($12/5h·$30/wk·$60/mo), OSS models, Anthropic/OpenAI-compat endpoints; model ids prefix `opencode-go/` | [`agents/chainless-redesign.md`](agents/chainless-redesign.md) (ADR-107 charter) |
+| **⚓ Zen rail** (opencode) | the OpenCode Zen FREE tier as the jail's third rail (issue #444) — model ids prefix `opencode/`, same wallet key as the Go rail, metered $0 by operator direction (assumption sentinel: a bare id that doesn't end `-free` and isn't `big-pickle` warns) | the jail shim routes it (`scripts/claude-model-shim.py`); the free-tier models register in [`spikes/opencode-model-matrix.md`](spikes/opencode-model-matrix.md) §OpenCode Zen free tier |
 | **board** (operator view) | `devbox run board [-- <stack>] [--full]` — the deterministic who-acts todo view (REVIEW / FIX / SOLVE / TRIAGE / VERDICT DUE / BACKLOG-aggregate); a retrieval tool, never a corpus sitting. Not the janitor (LLM board *judgment*) | [`agents/issue-authoring.md`](agents/issue-authoring.md) §Label semantics; impl `agents/board.sh` |
 | **epic** | an issue whose native sub-issue tree bounds work through its lifecycle — the shared LINEAGE/LIFECYCLE contract (bind-at-filing, defects-never-release, originals/sprouts, close-at-tree-empty); kinds: **Goal** (ADR-102/106) and **stint**. Explicitly NOT merge or budget mechanics — those are kind rules. ⚠ `task/goal`-keyed machinery is Goal-kind, never assumed epic-general | [`agents/issue-authoring.md`](agents/issue-authoring.md) §The lineage contract |
-| **stint** (jail) | an **epic kind**: the jail lane's bounded work container — a label-inert parent issue (`stint: <slug>`, `Size: N sessions`) whose native sub-issue tree binds all work AND all sprouts; multiple closeouts, first at originals-done (full sweep), parent closes when the tree empties. The Goal SHAPE with none of the Goal machinery — never `task/goal`, never budget-gated. ⚠ NOT "wave" — that word already carries three senses here (ArgoCD sync waves, Z-Wave, the informal subagent-batch usage), the exact stale-by-addition collision this file exists to prevent (operator catch, 2026-08-19) | [`agents/chainless-redesign.md`](agents/chainless-redesign.md) §The jail stint |
+| **⚓ stint** (jail) | an **epic kind**: the jail lane's bounded work container — a label-inert parent issue (`stint: <slug>`, `Size: N sessions`) whose native sub-issue tree binds all work AND all sprouts; multiple closeouts, first at originals-done (full sweep), parent closes when the tree empties. The Goal SHAPE with none of the Goal machinery — never `task/goal`, never budget-gated. ⚠ NOT "wave" — that word already carries three senses here (ArgoCD sync waves, Z-Wave, the informal subagent-batch usage), the exact stale-by-addition collision this file exists to prevent (operator catch, 2026-08-19) | [`agents/chainless-redesign.md`](agents/chainless-redesign.md) §The jail stint |
 | **⚓ system testing** | logic against real components in kind (Garage + app + Grafana + Playwright — the ADR-082 shape) | [`agents/model-routing.md`](agents/model-routing.md) §terminology ruling (2026-07-27) |
 | **e2e** | reserved for the ACTUAL target environment (synthetic production traffic) — not the kind gate | same ruling |
 
 ## Pending renames (recorded here, executed by the FU-163 sweep)
 
-- The researcher's dispatch label `goal` → a mission-shaped label (machinery touch: scan +
-  Sensors + recipes — do NOT rename the label ad hoc; it is read by predicates).
+- ~~The researcher's dispatch label `goal` → a mission-shaped label~~ **EXECUTED 2026-08-23
+  (S4 #766)**: verified that NO predicate reads a bare `goal` label (the scan keys on
+  `task/goal`; research dispatch is operator-manual) and the legacy hand-made labels were
+  already deleted by the authoritative IssueLabels sync — so the sweep was prose + this
+  glossary; `mission` is the reserved future label name (minted via the claim taxonomy at
+  FU-090(c) graduation, never ad hoc).
 - Prose "goal" rewording — scope re-measured SMALL 2026-08-11 (FU-163: the dense files are
-  correct TYPE vocabulary); ambiguous-prose rewords only, at docs-cleanup pace.
+  correct TYPE vocabulary); research-lane hot-spots reworded with #766; the residue rides
+  docs-cleanup pace.

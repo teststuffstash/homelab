@@ -133,3 +133,4 @@ spec:
           annotations:
             summary: "{{ $labels.entity }} has not updated in {{ $value | humanizeDuration }}"
             description: "Informational: this HA sensor has not changed in over a day. Some sensors legitimately sit still (daily totals, config-ish selects) — the point of this rule is that a whole GROUP going quiet at once is an integration dying, which is invisible otherwise because HA keeps entities `available` and serves the stale value."
+            info_suppressed_ack: "Deliberately dashboard/API-only: InfoInhibitor suppresses severity:info from every dispatch path (runbook §Meta-session probe & triage discipline). Per-entity staleness is too noisy to page; the pageable form of this class is the GROUP-level integration-death alert, and this rule feeds the Alertmanager/Grafana surface a human browses."

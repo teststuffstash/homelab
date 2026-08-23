@@ -583,15 +583,6 @@ the block needs pruning, not more headings.
 
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
 
-- [ ] **FU-163** — **Homelab glossary + vocabulary pruning: POINTER.** The glossary EXISTS
-      (2026-08-11): [`docs/glossary.md`](glossary.md) — ruled terms + collision inventory +
-      the "a NEW name clears the glossary first" rule (also in CLAUDE.md prior-art); `/design`
-      term-closure consumes it as the term→home index. **Next:** the informal-usage sweep —
-      MEASURED SMALL 2026-08-11 (dense "goal" files are correct TYPE vocabulary; hot-spots
-      carry ⚠ notes) — ambiguous-prose rewords only, riding docs-cleanup; the researcher
-      `goal` dispatch-label rename (machinery: scan/Sensors/recipes read it — never ad hoc);
-      check #3 **v1 SHADOW BUILT 2026-08-11** (⚓ terms, warn-only; run 1: 3 warnings, 0 FPs,
-      cleared) — flip to fail + widen anchors after a clean pipeline pass. Relates FU-117.
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
       IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
       [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).
@@ -625,16 +616,17 @@ the block needs pruning, not more headings.
       [`docs/agents/roles.md`](agents/roles.md) §Context delivery. Relates FU-117, FU-095, FU-020.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
-- [ ] **FU-117** — **Dedup the context-delivery spread into one role × context × source map.**
-      DELIBERATE let-it-pile-up item (operator style: grow organically, then analyse + refactor —
-      not BDUF). **Do NOT refactor yet** — keep noting sightings in
-      [`docs/agents/roles.md`](agents/roles.md) §"Context delivery", which holds the root finding
-      (goose never loads CLAUDE.md), the three context classes, the costs already paid, and the
-      boundary a worker must respect. Interim duplication into `render_env_card()` is accepted on
-      purpose 2026-07-28; this item tracks removing it. **Scope widened 2026-08-07 (operator): the
-      JAIL is a third context — `teststuffstash/claude-jail` needs an env-card mechanism of its own
-      so its `CLAUDE.md` is clean of instructions**, and homelab's stops mixing jail procedure with
-      repo-universal facts. Relates FU-114, ADR-094.
+- [ ] **FU-117** — **Context-delivery dedup: the role × context × source map — BUILT (S4
+      stint #762, 2026-08-23).** Map + status: [`docs/agents/roles.md`](agents/roles.md)
+      §Context delivery. Shipped: `agents/ground-rules.md` (one universal source, launcher-
+      injected, loud degrade — #763/PR#768); meta-state durable-warnings eviction (#765);
+      homelab CLAUDE.md split into facts + `agents/jail-seat-card.md` (#764/PR#773 — **parked
+      for the operator's read**). **Next:** the operator lands/reworks PR#773; claude-jail
+      implements the two-recipe composition (claude-jail#1 — mono: container card + seat card
+      → `/workspace/homelab/CLAUDE.local.md`; stack: container card + STACK_* env card, NO
+      seat card); then the fleet CLAUDE.md slim-down (12-repo inventory + tiering: the
+      claude-jail#1 thread, 2026-08-23). Archive when the homelab pieces land; the fleet tail
+      rides the inventory. Relates FU-114, ADR-094.
 
 - [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
       once I have more data and cleaned up the specs").** Write-up:

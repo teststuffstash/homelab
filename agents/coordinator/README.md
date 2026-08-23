@@ -476,7 +476,7 @@ job, in order (re-read live state first, exit clean if someone already closed it
 
    **`Container-findings:` bullets (depth ≥4, reviewer emits on organic-lane child 1):** bullets under
    a `Container-findings:` heading in the review are NOT minted as fresh issues. Instead, append each
-   as one line in a comment on the OPEN epic-ancestor parent (walk `issue.parent` to the stint/Goal root).
+   as one line in a comment on the OPEN epic-ancestor parent (walk `issue.parent` to the [stint](../../docs/agents/chainless-redesign.md)/Goal root).
    If there is no open ancestor, mint them as ordinary `Follow-ups:` issues and note that in your
    closing comment (no ancestor to append to).
 

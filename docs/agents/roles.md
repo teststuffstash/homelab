@@ -45,7 +45,7 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 | dispatch-on-event | reviewable transition (exporter edge) | reviewer | + lenses (FU-101) |
 | dispatch-on-schedule | cron (level-triggered) | scout; retro | prober (FU-102), audit-pass (FU-101 e-ITS) |
 | dispatch-on-alert | Alertmanager firing | responder v2 (triage-first, GitOps-verbs) | remediation whitelist; selfQueue |
-| dispatch-on-goal | human-queued `goal` issue | researcher (first mode proven E2E 2026-07-27 — sleep spec PR #38) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
+| dispatch-on-goal | a human-queued mission (research) / Goal issue | researcher (first mode proven E2E 2026-07-27 — sleep spec PR #38) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
 
 ## Live roles
 
@@ -94,7 +94,7 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 - **boundary**: budget-capped ephemeral key; must not hold the fixer WIP slot (FU-058 P3)
 - **machinery**: backstop = `retro-session` CronWorkflow (retro-argo.yaml) — self-fires Mondays
   05:00 UTC (unsuspended 2026-08-03; ⚠ the lane's FIRST end-to-end pass was 2026-08-11, hand-fired
-  after five latent bugs — FU-058; the PLATFORM series since 2026-08-19, the #587 stint: stack
+  after five latent bugs — FU-058; the PLATFORM series since 2026-08-19, the #587 [stint](chainless-redesign.md): stack
   param `platform`, ride ns from `agents/retro-project.sh`, fleet read token, report content
   floor); predicate = `minNewTasks` ledger level-trigger; no edge;
   keys/breakers inherit launcher defaults. Planned duty: harvests the local rules delta (§Lenses maintenance).
@@ -274,25 +274,25 @@ tier allowed, dual-model worth it) are FU-095's.
   Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPS both
   resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
   none of this shell).
-- **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (human-queued
-  `goal` issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
+- **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (a human-queued
+  MISSION issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
   spec PRs through the codeowner gate. **Boundary is the new piece: open-web egress** — a
   `research` egress profile (proxy-logged) or claude-harness server-side WebSearch; safe because
   the pod holds no cluster creds and a spec-branch-only git token. Consumers in order: sleep
   spec retrofit (FU-095 prerequisite), IdP greenfield (whose EITS output seeds the e-ITS lens).
   **First mode BUILT 2026-07-27:** sleep-tracking `.agents/research.yaml` (recipe: specs/-only
   boundary, un-armed PR = the human gate until a CODEOWNERS ruleset exists, FU-069 breaker),
-  `goal` label + goal issue sleep-tracking#36, claim `claudeTier: true` (sleep-iac#21), egress =
+  the then-`goal` label (retired, FU-163) + mission issue sleep-tracking#36, claim `claudeTier: true` (sleep-iac#21), egress =
   claude server-side WebSearch (no dial change — WebFetch stays blocked and the brief says so).
   Dispatch is operator-manual until FU-090(c) graduates; git token is the standing per-repo
   broker token (branch-scope narrowing = an open hardening dial). **Proven E2E 2026-07-27**
   (sleep spec PR #38: 17 ⚖ + 9 suspected bugs, dual-model reviewed, human-gated). The un-armed
   gate is now launcher-owned: `--no-arm` auto-derives from a `research*` recipe →
   `AGENT_ARM_PR=0` (agent-runtime), and the C9 re-arm belt skips `research/*` branches.
-  ⚠ Vocabulary (2026-08-10): the dispatch label is `goal` for historical reasons, but a research
-  MISSION is not an ADR-102 Goal — research PRECEDES the goal (it prepares the contract the Goal
-  then implements). Process home: [`research-and-specs.md`](research-and-specs.md); the rename is
-  FU-163's sweep.
+  Vocabulary (FU-163, rename executed 2026-08-23): a research MISSION is not an ADR-102 Goal —
+  research PRECEDES the Goal (it prepares the contract the Goal then implements). The historical
+  bare `goal` dispatch label no longer exists and never had a machine reader; `mission` is the
+  reserved future label. Process home: [`research-and-specs.md`](research-and-specs.md).
 - **infra-fixer** (FU-106) — **LIVE** — the -iac devops role. Works the **-iac wrapper layer** (charts stay
   target-agnostic); input = `values.schema.json` diff (the typed infra delta), fulfillment =
   enriched **bump PR** (chart pin + claim change in ONE -iac commit — atomic at the deploy
@@ -308,11 +308,26 @@ tier allowed, dual-model worth it) are FU-095's.
 ## Context delivery — role × context × source (FU-117)
 
 Operator 2026-07-28: *"context management is starting to spread — which role requires what
-context."* The operator's style here is explicit: **let it grow organically, then analyse and
-refactor — not BDUF.** So this section is a deliberate pile-up. Keep noting sightings; do **not**
-refactor until it has piled up enough to see the shape.
+context."* The section grew as a deliberate pile-up (grow organically, then analyse and refactor
+— not BDUF); **the refactor began with stint S4 (#762, 2026-08-23)** — the operator's own
+work-map scheduling is what lifted the let-it-pile-up gate. The map, as now built:
 
-**Root finding: two delivery channels carry different context.**
+| Context class | One source | Delivered by | Reaches |
+|---|---|---|---|
+| **1 — environment** (dynamic per-ride facts: docker, egress, proxies, round, write scope, base, goal card) | AgentStack claim knobs + launch state | `render_env_card()` (launcher, ADR-094) | every ride, both harnesses |
+| **2 — task + service facts** | the ISSUE (author-injected — the worker clones only `/work/repo`) | issue body | every ride |
+| **3 — universal ground rules** (devbox-only installs, prior-art, machine markers) | [`agents/ground-rules.md`](../../agents/ground-rules.md) — **built #763**: the env card's static sibling, injected verbatim by the launcher; a missing file degrades LOUDLY (replay `env-card-ground-rules/missing`) | `render_env_card()` prepends the file | every ride, both harnesses |
+| task rules (how to approach this class) | stack repo `.agents/<class>.yaml` | launcher `--recipe` (L2/L3, [fixer-context.md](fixer-context.md)) | the ride |
+| jail meta-session procedure | `/workspace/CLAUDE.md` + homelab `CLAUDE.md` (+ the claude-jail card — the #764 leg, open) | Claude-Code auto-load | the seat |
+
+The `render_env_card()` interim duplication (accepted 2026-07-28) is REMOVED — the card keeps
+only dynamic facts and `cat`s the ground-rules file. Remaining FU-117 legs: the jail third
+context (#764 — homelab CLAUDE.md stops mixing jail procedure with repo-universal facts; the
+claude-jail repo needs its own card mechanism) and the meta-state §Durable warnings eviction
+(#765).
+
+**Root finding (2026-07-28, kept as the section's evidence): two delivery channels carry
+different context.**
 
 | Channel | Reaches | Carries |
 |---|---|---|
@@ -338,10 +353,11 @@ repo-universal facts. Two costs already visible:
   PR-lane too; only the bookkeeping class stays direct). Structurally the ruleset rejects such a push, so
   the cost is confusion rather than damage — but the doc is the wrong place to be relying on
   branch protection to correct.
-- **The duplication now runs three ways, not two.** `render_env_card()` already restates CLAUDE.md
-  rules for goose; the jail restates a third set for the meta-session. The map this item is waiting
-  to draw therefore has THREE contexts (jail meta-session / claude-harness ride / goose ride), not
-  two, and the jail is the only one with no delivery mechanism to refactor *into*.
+- **The duplication now runs three ways, not two** *(superseded by #763 — the card no longer
+  restates anything; kept as the sighting that sized the map)*: `render_env_card()` restated
+  CLAUDE.md rules for goose; the jail restated a third set for the meta-session. The map
+  therefore has THREE contexts (jail meta-session / claude-harness ride / goose ride), and the
+  jail was the only one with no delivery mechanism to refactor *into*.
 
 ⚑ Interim guard only (2026-08-07): a banner at that section scoping it to the jail. It reaches
 Claude-Code readers and NOT goose rides — belt, not fix, and precisely the spread this item exists
@@ -362,9 +378,9 @@ So the map has at least **three context classes**:
    author/coordinator.
 3. **Universal ground rules** — CLAUDE.md today, and unreachable by goose.
 
-**Interim (done 2026-07-28, meta-15):** the key CLAUDE.md rules were duplicated into
-`render_env_card()` and the missing nix-cache proxy added. The duplication is accepted on purpose;
-FU-117 tracks the dedup.
+**Interim (2026-07-28, meta-15 — RETIRED by #763):** the key CLAUDE.md rules were duplicated
+into `render_env_card()`; the dedup into `agents/ground-rules.md` removed the duplication
+(map above).
 
 **Sighting 2026-08-03 (circles FU-126 A/B):** recipe text carried egress FOLKLORE ("WebFetch will
 mostly be blocked") while the truth is per-HARNESS capability — claude rides have server-side
@@ -398,11 +414,10 @@ cannot reach a ClusterIP (FU-072), so the card must print the address *this* pod
 Acceptance: from a ride-shaped pod in ns `circles`, a question no model can answer from training
 data came back with 10 citations.
 
-**The refactor, when it has piled up enough:** a **role × context × source** map that separates
-*dynamic per-ride facts* (env card: docker/egress/proxy values, round, write-scope) from *universal
-ground rules* (authored once, delivered to goose via a launcher-injected static block — the env
-card's sibling — or a recipe "read CLAUDE.md first" opener) from *task rules* (the recipe). One
-source per concern, delivered to the roles that need it.
+**The refactor (executed as designed, S4 #763):** the role × context × source map at the top of
+this section — dynamic per-ride facts (env card) / universal ground rules (authored once in
+`agents/ground-rules.md`, launcher-injected as the env card's static sibling) / task rules (the
+recipe). One source per concern, delivered to the roles that need it.
 
 ## SLO machinery (not a role — stack policy)
 

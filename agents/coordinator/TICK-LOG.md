@@ -4703,3 +4703,34 @@ first live ADR-110 maintenance session before the ADR existed.
   FU-180/FU-131 tranche 1, FU-179 decision at decompose); Go-rail set stays on the Sep-13
   calendar; **S5 corpus diet LAST** (ROADMAP S5 row — trim-once-after, self-referential
   corpus, goal-era doc-heat data).
+
+## 2026-08-23 — corpus session: S4 stint launch (session 1) + the pickup sweep
+
+- Corpus loaded (/design-agents `start S4 stint`); standing set armed (meta-events + 2700s
+  heartbeat), PR watches per-terminal.
+- **Pickup sweep:** #711 (S3 container) closed — quiet window passed; #420 stays open (#575
+  closed same morning, window reset); **#716 (S6) disposed + CLOSED** — both Container-findings
+  bullets ruled do-now and shipped as PR#761 (Touches: UNION read in the reviewer AND
+  fix-debounce's queue-time deny — the latter was fail-open on multi-line bodies; two red-cased
+  replay fixtures; stale #740 pointers cleaned). Deploy leg verified in-cluster (WorkflowTemplate
+  carries the union read).
+- **Stint S4 #762 authored** (children #763–#767) and largely executed same session:
+  - #763 ground rules → `agents/ground-rules.md`, launcher-injected, loud degrade; roles.md
+    gains the role×context×source map (PR#768, in cycle at write time).
+  - #764 CLAUDE.md split — REWORKED mid-session on operator direction (separate FILES, not a
+    divider): facts stay in CLAUDE.md, seat procedure → `agents/jail-seat-card.md`, jail
+    bootstrap cats container card + seat card (claude-jail#1). PR#773 **parked for the
+    operator's read** (steers every session — escalate-the-big).
+  - #765 meta-state §Durable warnings EVICTED (runbook §Meta-session probe & triage discipline
+    + jail-subagent-card + owned-doc pointers; two stale claims caught: the restart-gap
+    "candidate fix" had shipped as the #332 class → sprout #770 closed as duplicate, runbook
+    corrected; the agent-runtime status note dropped as stable news).
+  - #766 goal→mission rename EXECUTED (PR#771 merged) — verified no machine reader ever
+    existed; `mission` reserved for FU-090(c) graduation. FU-163 archived.
+  - #767 check #3 flipped warn→fail (PR#772 merged) — the shadow loop was a pipe-subshell, the
+    flip was a restructure, red-cased; anchors widened on measurement (findings store, Go rail,
+    Zen rail, stint; 9 files linked).
+  - Sprout #769 severity:info lint (PR#774, in cycle) — red-cased live on HomeAssistantSensorStale,
+    annotated as deliberately dashboard-only.
+- Tracker: FU-117 → BUILT + pointer (remaining: operator lands #773, claude-jail#1); FU-163
+  archived.
