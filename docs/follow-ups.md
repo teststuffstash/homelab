@@ -487,10 +487,13 @@ the block needs pruning, not more headings.
       scout graduations are pointless — zero information."** An all-`unbenched`, canary-less
       digest asks for a graduation call on no evidence. Honest-but-empty must not FILE: the
       canary rung (leg 3) runs BEFORE the digest, and a digest whose every row is unbenched AND
-      uncanaried posts nowhere but the log — no issue, no 🌱 line. **Next:** legs 3–4 (typed
-      cell-keyed canary verdicts + contradiction rule + pool curation) WITH the filing gate,
-      UNBLOCKED (FU-162 shipped) — owned by G-A child homelab#778 since the 2026-08-23
-      launch (Goal #775). Related: #235's belt (machine lane owns it).
+      uncanaried posts nowhere but the log — no issue, no 🌱 line. **Legs 3–4 + the filing gate SHIPPED by the machine lane** (#469 → PR#499, merged
+      2026-08-18; #506 ruled common-cause whole-set) — found at the 2026-08-23 G-A launch
+      reconciliation, the tracker line was stale. ⚠ Written-not-proven: no organic scout fire
+      since the merge, and every 08-10..08-17 canary died `nonzero-exit-1` at $0 (runner
+      fault, verdicts void — the models carry no evidence either way). **Next:** the residue
+      — first-fire proof, Go cells (post Sep-13), rung-2/FU-095(c), pool depth, void the
+      tainted rotation rows — owned by G-A child homelab#778 (re-scoped, Goal #775). Related: #235's belt (machine lane owns it).
 
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
