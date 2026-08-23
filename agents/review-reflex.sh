@@ -70,6 +70,7 @@ fi
 # never freeze every merge lane (rule #6 in reverse — availability of the gate < the gate);
 # a query failure logs loud and parks nothing.
 # The ONE read lives in agents/slo-teeth.sh (homelab#831) — ALL dispatch sites call the same helper.
+log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 # >>>REPLAY:slo-teeth-filter>>>
 _teeth_err="$(mktemp)"
 REPOS="$(bash "$HERE/slo-teeth.sh" --filter $REPOS 2>"$_teeth_err" | tr '\n' ' ')" || true
@@ -94,8 +95,6 @@ DEFAULT_BRANCH="${DEFAULT_BRANCH:-master}"
 ROUNDS_MAX="${REVIEW_ROUNDS_MAX:-8}"                   # circuit breaker: max bot verdicts per ISSUE, ever
                                                        # (summed across every PR that references it — homelab#156)
 KUBECTL="$(command -v kubectl || echo kubectl)"
-
-log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
 # >>>REPLAY:reflex-tick-gate>>>
 # 0a. FU-088(a) reactive latch: the first 429 anywhere on the subscription latches the egress

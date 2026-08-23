@@ -250,6 +250,17 @@ _go tick "agent-runtime sleep-tracking snore-recorder"
 dispatched "T4: fail-open keeps all repos"
 want     "T4: proceeding"                                         "KEPT agent-runtime sleep-tracking snore-recorder"
 
+# ── 5 ── SOURCE ORDERING — log() defined BEFORE the slo-teeth-filter block (homelab#831 r3) ──
+section "5 — source ordering: log() defined before the filter block's first call site"
+_log_line="$(grep -n '^log()' "$REFLEX" | head -1 | cut -d: -f1)"
+_block_line="$(grep -n '>>>REPLAY:slo-teeth-filter>>>' "$REFLEX" | head -1 | cut -d: -f1)"
+if [ -n "$_log_line" ] && [ -n "$_block_line" ] && [ "$_log_line" -lt "$_block_line" ]; then
+  ok "O1: log() at line $_log_line, filter sentinel at line $_block_line — ordering enforced"
+else
+  bad "O1: log() definition (line ${_log_line:-?}) not before filter block sentinel (line ${_block_line:-?})" \
+      "if log() is moved below >>>REPLAY:slo-teeth-filter>>> then every stderr line from slo-teeth.sh causes 'log: command not found' under set -euo pipefail"
+fi
+
 # ── result ──────────────────────────────────────────────────────────────────────────────────────
 section "result"
 printf '  %s passed, %s failed\n' "$PASS" "$FAIL"
