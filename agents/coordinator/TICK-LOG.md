@@ -4678,3 +4678,28 @@ first live ADR-110 maintenance session before the ADR existed.
   coordinator-git as UPDATER_LABEL_TOKEN (merge App stays issues-less per its documented
   absent:), updater-git generator omits repositories: (installation-tracking, no 422 trap),
   422→label branch unreplayable until #740 (noted at the branch).
+
+## 2026-08-23 — operator session, second half: triage sweep + S7 soak readout + gate reads
+- CV pipeline VERIFIED live end-to-end (teststuff→Forgejo action→deploy-key publish→render→
+  rolling release; asset replaced in place). Refactor decided: repo owns infra, action narrows
+  to yaml-only publish — handed to the teststuff session as a 3-step list. tofu unchanged.
+- Included-pool read for #745: 2938/3000 — pool exhausts today; harmless, the in-cluster
+  updater carries private repos from exhaustion (involuntary live-fire soak). #745 stays on
+  its few-day read.
+- Triage: #752 measured in-pod (live model_drift_rows() + all-time store) → REFUTED, closed.
+  #575 already fixed (PR#576/#592 + refire cause #748→#749) → closed with the 3-cause lineage.
+  #459 root-caused (janitor stamps the cron-woken gauge unconditionally) → fixed PR#760
+  (replay leg: janitor beats a cached cron verdict), merged, issue closed. #740 re-priced on
+  its second consumer (updater 422 branch), queued → the loop shipped PR#759 same session.
+- Gate read on #759 (per-call STUB_GH_<slug> injection, both paths): verified stub placement
+  (record-then-override, before the read/write split), both gates re-run under devbox
+  (suite holds, responder 113/0), approved as codeowner, merged.
+- **S6 Container-findings first ORGANIC use PROVEN**: C6 appended both review bullets on #716
+  at 10:14:52Z (3.5 min post-merge, edge-served), chain walked correctly, findings sharpened
+  in the append (reviewer-session.sh:362 head -1 vs scan's union). Disposal = the S4 session's
+  #716 sweep.
+- Plan rulings recorded: S4 next session (vocabulary BEFORE goals — the `goal` label rename
+  must not run under goal traffic); budget/router FUs fold into G-A (accounting-first,
+  FU-180/FU-131 tranche 1, FU-179 decision at decompose); Go-rail set stays on the Sep-13
+  calendar; **S5 corpus diet LAST** (ROADMAP S5 row — trim-once-after, self-referential
+  corpus, goal-era doc-heat data).

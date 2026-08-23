@@ -83,13 +83,18 @@ meant to avoid.)
   ~2026-09-03 / fixup-wave end / OR depletion, whichever first** (claim comment carries the
   full record; Go re-flip stays FU-181).
 
-- **⚑ S6 STINT #716: TREE EMPTY (closeouts 1+2 posted, 2026-08-20 ~11:00Z — one session vs
-  Size: 2).** Quiet-window close due at a sweep ≥2026-08-23 (same calendar as #420 + #711 —
-  the soak line below). Standing acceptance: the unbound-sprout belt stays SILENT under the
-  week's real traffic; the responder `Cause:` line + organic depth≥4 `Container-findings:`
-  await first ORGANIC use (never synthetic); Mon 08-24 retro fire also exercises the S6
-  filing rule. Per-stack fix.yaml sibling-bind pastes trail at each recipe's next touch
-  (list in #722's closing comment). Next stints: S4, S5 (work map).
+- **⚑ S6 STINT #716: TREE EMPTY; Container-findings acceptance ✅ PROVEN 2026-08-23** — first
+  ORGANIC depth-≥4 use flowed end-to-end (#740 closed by PR#759 → merge edge → C6 append on
+  #716 at 10:14:52Z, 3.5 min post-merge; chain #740→#738→#732→#719→#716 walked correctly).
+  Quiet-window close due at a sweep ≥2026-08-23 (same calendar as #420 + #711). **The S4
+  session's sweep DISPOSES the two appended bullets**: (a) reviewer footprint check reads only
+  the FIRST `Touches:` line (`reviewer-session.sh:362` `head -1`; scan side already
+  union-correct; `fix-debounce-argo.yaml:298` same shape, unassessed) — the PR#759 false-escape
+  instance; (b) stale "unreplayable until #740" comment in `agents/update-pr-branch.sh:64-65`
+  + the twin pointer in `fixtures/updater/fixture.yaml` (one-line cleanups). Remaining S6
+  acceptance: unbound-sprout belt silent under the week's traffic; responder `Cause:` line
+  awaits organic use; Mon 08-24 retro fire exercises the filing rule. **Next: S4 (operator,
+  2026-08-23 — this session's close); S5 deliberately LAST (ROADMAP work-map S5 row).**
 
 ## Durable warnings — re-read before touching these files
 
