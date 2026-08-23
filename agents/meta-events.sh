@@ -136,7 +136,7 @@ src_alert() {
   # keyed on (alertname, namespace) — NEVER the fingerprint: instance churn re-keys fingerprints
   # (the #355 restart-gap identity lesson) and would flap this set forever. Watchdog (the
   # always-firing liveness canary) and InfoInhibitor (stock machinery) are excluded.
-  if curl -sf -m 10 "$AM/api/v2/alerts?active=true" \
+  if curl -sf -m 10 "$AM/api/v2/alerts?active=true&silenced=false" \
       | jq -r '.[] | select(.labels.alertname != "Watchdog" and .labels.alertname != "InfoInhibitor")
                | "ALERT|\(.labels.alertname)/\(.labels.namespace // "-")|firing"' | sort -u > "$tmp" 2>/dev/null; then
     diff_source alert "$tmp"
