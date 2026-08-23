@@ -1,0 +1,2 @@
+[2026-08-23T12:00:00Z] Configuration is invalid: unknown key "enable_new_pipeline" in config file
+[2026-08-23T12:00:01Z] Error: configuration parse failure
