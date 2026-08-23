@@ -76,6 +76,51 @@ spec:
         - record: goal_budget_remaining_usd
           expr: max by (owner, project, stack, goal) (goal_budget_usd) - goal_spent_usd
 
+    # ── Per-rail accounting views (homelab#777 — flip acceptance 2) ──────────────────────────────
+    # The pushgateway metrics (agent_run_cost_usd, agent_run_total) carry no `rail` label — the
+    # launcher's finalize leg pushes them before the router's record_report folds the explicit
+    # rail. So rail is DERIVED from the model prefix, matching the router's own ladder_tier /
+    # route() logic and agents/ledger.py _model_rail():
+    #   claude/*  → subscription (Anthropic direct + claude-code)
+    #   opencode-go/* → subscription (Go rail, also subscription-billed)
+    #   *         → openrouter (everything else, including :free models)
+    #
+    # Honesty rule (#348 precedent, binding): a rail with no data is ABSENT from derived series,
+    # never zeroed — a subscription-rail goal must not render as 0% burn when its truth is
+    # "not metered in USD". agent_run_cost_usd is typically absent for subscription-rail rides
+    # (the subscription is already paid for), so agent_run_cost_usd_by_rail{rail="subscription"}
+    # will often be absent — that is the honest reading. Counts (agent_run_count_by_rail) are
+    # the honest unit for subscription + Go; window-draw truth is the proxy's own gometer/anthropic
+    # series and is NOT restated here.
+    - name: agent-rail-accounting
+      rules:
+        # Per-rail cost: add rail label via a two-pass label_replace — first default to openrouter,
+        # then override to subscription for claude/ and opencode-go/ prefixes.
+        - record: agent_run_cost_usd_by_rail
+          expr: >-
+            sum by (rail, project, stack) (
+              label_replace(
+                label_replace(
+                  agent_run_cost_usd,
+                  "rail", "openrouter", "__name__", ".*"
+                ),
+                "rail", "subscription", "model", "(claude/.*|opencode-go/.*)"
+              )
+            )
+        # Per-rail ride count: same rail derivation, counting agent_run_total series (one per
+        # run group). Subscription + Go rides are counted; their cost is typically absent.
+        - record: agent_run_count_by_rail
+          expr: >-
+            sum by (rail, project, stack) (
+              label_replace(
+                label_replace(
+                  agent_run_total,
+                  "rail", "openrouter", "__name__", ".*"
+                ),
+                "rail", "subscription", "model", "(claude/.*|opencode-go/.*)"
+              )
+            )
+
     - name: github
       rules:
         # ── THE #288 RESTART-GAP CLASS, ported to five alerts in this group (homelab#331) ───────
