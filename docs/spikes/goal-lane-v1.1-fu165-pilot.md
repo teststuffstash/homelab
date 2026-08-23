@@ -4,7 +4,7 @@
 bucket-semantics question, FU-090's §M10 phase-not-clause block). Version register:
 [`../agents/issue-authoring.md`](../agents/issue-authoring.md) §Goal lane versions.
 
-The pilot ran the ADR-102 lifecycle end-to-end on the platform stack: 12 direct children,
+The pilot ran the ADR-102 lifecycle end-to-end on [the platform stack](../agents/agentstack.md): 12 direct children,
 46 post-launch-bucket sprouts, 41 merged PRs, 16:00Z 2026-08-11 → 06:30Z 2026-08-12, all
 rides `claude/haiku` on the subscription rail. Method + rendered views: `agents/goal_graph.py`
 (deterministic sub-issue + provenance snapshot, containment vs derivation DAGs); the working

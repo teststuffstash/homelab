@@ -94,7 +94,7 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 - **boundary**: budget-capped ephemeral key; must not hold the fixer WIP slot (FU-058 P3)
 - **machinery**: backstop = `retro-session` CronWorkflow (retro-argo.yaml) — self-fires Mondays
   05:00 UTC (unsuspended 2026-08-03; ⚠ the lane's FIRST end-to-end pass was 2026-08-11, hand-fired
-  after five latent bugs — FU-058; the PLATFORM series since 2026-08-19, the #587 stint: stack
+  after five latent bugs — FU-058; the PLATFORM series since 2026-08-19, the #587 [stint](chainless-redesign.md): stack
   param `platform`, ride ns from `agents/retro-project.sh`, fleet read token, report content
   floor); predicate = `minNewTasks` ledger level-trigger; no edge;
   keys/breakers inherit launcher defaults. Planned duty: harvests the local rules delta (§Lenses maintenance).
