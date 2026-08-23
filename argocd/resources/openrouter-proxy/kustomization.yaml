@@ -29,6 +29,9 @@ configMapGenerator:
       - router.py
       - model-classes.json
       - gometer.py
+      # FU-127: the canonical model-id parser — same file as agents/model_id.py, deployed
+      # alongside the proxy so router.py can import it directly (no third copy).
+      - model_id.py
   - name: grafana-dashboard-subscription
     files:
       - subscription.json=dashboard-subscription.json

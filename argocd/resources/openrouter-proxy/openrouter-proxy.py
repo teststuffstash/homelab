@@ -2259,24 +2259,33 @@ class Proxy(BaseHTTPRequestHandler):
             # place a deferred slot is visible to whoever is watching the fan-out land.
             draw_note = (f" draw={decision['pool']}#{decision.get('slot')}"
                          f"@{decision.get('pool_version') or '?'}") if decision.get("pool") else ""
+            # FU-127: the structured carrier rides in the log line so every consumer (launcher,
+            # shadow evidence, operator) reads the same resolved {rail, harness, model}.
+            _res = decision.get("resolved") or {}
             log(f"POST /route stack={req_body.get('stack')} task={req_body.get('task')} "
                 f"role={req_body.get('role')} → {decision['decision']} "
                 f"{decision.get('model') or decision.get('reason')} "
                 f"[{decision.get('basis') or ''}{'+half-open' if decision.get('half_open') else ''}]"
-                f"{draw_note}")
+                f"{draw_note}"
+                f"{' resolved=' + _res['rail'] + '/' + _res['harness'] + '/' + _res['model'] if _res else ''}")
             # THE M11 SHADOW LINE (homelab#159) — what the cross-rail ladder WOULD have picked,
             # beside what was actually served. Nothing acts on it: this line, the shadow_decisions
             # table and the router_shadow_* series ARE the deliverable, and the P4 flip happens
             # only after a soak review reads them (docs/agents/model-routing.md §M11).
             sh = decision.get("shadow") or {}
             if sh:
+                # FU-127: the shadow line carries its own resolved object (computed from the
+                # shadow pick's model, not the served pick's), so shadow evidence reads
+                # rail-explicit from the shadow's own structured carrier.
+                _sres = sh.get("resolved") or {}
                 log(f"  shadow cell={decision.get('class')}/{sh['urgency']}"
                     f"({sh['urgency_source']}) start={sh['start_tier']}"
                     f"{'(reprobe)' if sh.get('reprobe') else ''} learned={sh['learned_start_tier']}"
                     f" → rail={sh.get('rail') or '-'} {sh.get('model') or sh['decision']}"
                     f" tier={sh.get('ladder_tier') or '-'}"
                     f" subscription={'free' if sh['subscription']['eligible'] else (sh['subscription']['blocked'] or 'n/a')}"
-                    f" served={decision.get('model') or decision.get('reason')}")
+                    f" served={decision.get('model') or decision.get('reason')}"
+                    f"{' resolved=' + _sres['rail'] + '/' + _sres['harness'] + '/' + _sres['model'] if _sres else ''}")
             self._reply_json(200, decision)
             return
         if self.path == "/rotation":

@@ -177,6 +177,7 @@ is stale, so it cannot drift the way the prose register did.
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/null-author` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
+| `model-id-carrier` | table | - | `agents/agent-session.sh` | - |
 | `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
 | `opencode-phonehome-killswitch/opencode-phonehome-killswitch` | suite | - | `-` | - |
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |
