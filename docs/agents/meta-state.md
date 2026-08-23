@@ -49,9 +49,10 @@ meant to avoid.)
   AgentRunInfraDeathBurst today = demand bursts, both self-resolved/accounted.
 - **⚑ Go rail EXHAUSTED for the month (console 100%/30d, resets Sep-13 ~11:30Z; weekly 99% →
   Mon 00Z).** The 429→same-round-haiku belt is LIVE and organically proven (#607→PR#615); latch
-  persistence landed (#618→#621) AFTER the first fire, so the NEXT Go dispatch burns one 429 to
-  latch and the hold now survives proxy rolls — verify `router_go_capacity_latched` stays 1
-  across the next deploy. #420 + #540 CLOSED (operator, 2026-08-19) — the post-reset readout
+  persistence landed (#618→#621) AFTER the first fire — **VERIFIED 2026-08-23 ~13:47Z: the
+  PR#784 proxy roll came and `router_go_capacity_latched` stayed 1 on the fresh pod, no new
+  429 burned** (the GoCapacityLatched ALERT's `for:` clock resets on a roll — cosmetic
+  firing→pending flap, the deploy-silences-`for:` class; gauge is the truth). #420 + #540 CLOSED (operator, 2026-08-19) — the post-reset readout
   (parity on a clean window, the 5h refusal shape, latch-survives-roll) is **FU-181**, actionable
   after Sep-13.
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
