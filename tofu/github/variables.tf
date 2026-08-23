@@ -56,6 +56,9 @@ variable "protected_repos" {
     restrict_workflow_pushes = optional(bool, false)
   }))
   default = {
+    # rasmus-soot-cv is deliberately ABSENT: it is a push-only mirror (Forgejo deploy-key sync from
+    # the private teststuff master; org PR-ruleset exclusion in org_ruleset.tf). Its render workflow
+    # runs on push, so a required PR check would never report and would wedge any PR ever opened.
     # The four sentinel repos (SENTINEL_REPOS in scripts/iac-sentinel.sh) carry the required
     # `iac-sentinel` context — the IAC-G01 enforcement flip (2026-08-18, iac-lane.md §L0b). The
     # status is posted by the sentinel CronWorkflow (*/5) under the homelab-REVIEWER App, so a

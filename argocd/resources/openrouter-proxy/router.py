@@ -560,7 +560,7 @@ def model_drift_rows(window_s: int = 7 * 86400) -> tuple[list, list]:
     unver: list = []
     reports = _read(
         "SELECT model, rail, stack, role, COUNT(*) FROM run_reports "
-        "WHERE ts > ? AND rail != '' GROUP BY model, rail, stack, role", (since,))
+        "WHERE ts > ? AND rail != '' AND outcome != 'failed' GROUP BY model, rail, stack, role", (since,))
     for model, rail, stack, role, n in reports:
         rf = model_family(model)
         if rail == "opencode-go":
@@ -1666,6 +1666,18 @@ def self_test() -> int:
         f"a same-family requested/served pair must not be drift: {drift}"
     assert any(r[0] == "openrouter" and r[3] == "tencent/hy3" for r in unver), \
         f"a run with no generation evidence must be unverifiable: {unver}"
+    # homelab#748: a FAILED run_report (outcome='failed', e.g. a model-scout canary crash) must
+    # NOT appear in the unverifiable set — a harness death with a recorded error_class is already
+    # explained and must not masquerade as a coverage gap. The non-failed unver-1 row above proves
+    # the belt still fires for genuine blind spots.
+    record_report({"session": "failed-unver-1", "task": "issue-748", "stack": "circles",
+                   "role": "worker", "model": "anthropic/claude-sonnet-5", "rail": "openrouter",
+                   "outcome": "failed", "error_class": "nonzero-exit-1"})
+    drift, unver = model_drift_rows()
+    assert not any(r[0] == "openrouter" and r[3] == "anthropic/claude-sonnet-5" for r in unver), \
+        f"a failed run_report must NOT be unverifiable: {unver}"
+    assert any(r[0] == "openrouter" and r[3] == "tencent/hy3" for r in unver), \
+        f"the non-failed unverifiable row must still be present after the failed-row fix: {unver}"
     # The Go rail: a requested opencode-go/deepseek-v4-flash ride whose stack served only
     # kimi-k3 (a slot-map redirect) is drift; a Go ride with NO ledger rows for its stack is
     # unverifiable. go_usage rows are written with the BARE model id (prefix stripped at the
@@ -2243,7 +2255,7 @@ def self_test() -> int:
     # + the 5 M11 ladder-cell fixtures, + the 2 homelab#577 deployed-pod pod-name shapes) and 3
     # strikes (issue-9/sleep from the vocabulary fixture, issue-19/circles from the real one,
     # issue-42/sleep from the ladder's degradation step).
-    assert summary["rows"]["run_reports"] == 15 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577
+    assert summary["rows"]["run_reports"] == 16 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
