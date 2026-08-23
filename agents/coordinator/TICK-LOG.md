@@ -4767,3 +4767,31 @@ first live ADR-110 maintenance session before the ADR existed.
   platform doorbell rung (`coordinate-platform-manual-vvrtb`).
 - Bookkeeping: meta-state G-A row rewritten to launched state; ROADMAP G-A row → #775;
   FU-179/FU-127/FU-161/FU-095 gained owning-child pointers.
+
+## 2026-08-23 — G-A day-1 afternoon (operator-live: FU-179 data, #455 forensics, ADR-107 addendum, the fan-out pilot)
+
+- **#783 memo posted** (strike table read live from the router store: 6 strikes/16d, 5 = goose-truncation;
+  proposal = retire ROUTER_STRIKE_ENFORCE; ruling = operator's). **#455 answered**: every 08-10..08-17
+  canary died `nonzero-exit-1` at $0 (runner fault, verdicts VOID); PR#499 rebuilt the runner 08-18,
+  unproven organically; FU-161 line was stale → #778 re-scoped (design-agents-G1 class, recorded).
+- **ADR-107 ADDENDUM (operator ruling)**: "one harness" split into full-support (sense A) vs
+  dispatch-pick (sense B); claude+opencode both target full support; scout probes 3 harnesses per
+  candidate + retry ladder. Recorded: adr.md addendum + charter reword (PR#793); children #791
+  (proxy OR-translation) + #792 (opencode first-party) authored+queued; #778 scope widened.
+- **Fan-out pilot (operator-directed) RAN + CLOSED**: 4 arms on #778 (flash + ox-alpha +
+  nemotron-lightning:free + laguna:free), ~$0.05 real spend. Deliveries: flash PR#790 (closed at
+  the ruling, findings preserved); nemotron = fabricated delivery, transcript-SALVAGED to PR#794
+  (subagent; zero git writes in its session — never attempted push); ox-alpha = the (model,harness)
+  cell story — goose 400-storm/circuit, bare-opencode misresolved to a default model (= THE
+  dead-canary root cause, A/B-proven with the prefixed form), prefixed-opencode drove tools but hit
+  the headless permission gate; laguna = 429 spiral. Pilot findings 1–7 on the #778 thread (incl.
+  the FU-042 pending-pod wedge → coordinator breaker fired correctly, cleared with provenance).
+- **Multi-reviewer round**: sonnet (grounded; caught the scout2-/scout- secret bug) +
+  nemotron-ultra:free (caught the rung-discriminator loss; one claim refuted by grounding) +
+  glm-5.2:free (429-walled ×5 = the ladder case). Board on #778. Ruling executed: #794 survivor
+  (void fixture row added, armed, green), #790 deleted, experiment closed — redo with real
+  machinery, citation-forced briefs for cheap reviewers.
+- Gate reads landed: PR#784 (#776), PR#786 (#777), PR#788 (#782 — the dual-rail latch regression
+  catch). PR#793 round-2 title fix pushed. Go-latch roll persistence VERIFIED on #784's own roll.
+  Misc: miss-ledger entry (local-clone origin push), claude-jail#2 (mono env block + wallet-reach +
+  forgejo SSH), FU-095(b) back in scope (rides PR#793).
