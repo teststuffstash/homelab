@@ -52,4 +52,16 @@ reset_scan "edge|1786464880"; SCAN_RING_NS=""; LATCH=held; SPAWN=true
 capacity_fanout_stacks go
 LATCH=clear
 
+echo "REACHED: capacity doorbell integrated — main loop skips graduated stacks when SCAN_SOURCE=capacity"
+reset_scan "edge|1786464880"; SCAN_RING_NS=""; SCAN_SOURCE=capacity; SCAN_RAIL=go; SPAWN=true
+capacity_fanout_stacks go
+fanout_graduated_stack circles
+fanout_graduated_stack sleep
+SCAN_SOURCE=""; SCAN_RAIL=""
+
+echo "REACHED: graduated fanout fires normally when SCAN_SOURCE is not capacity"
+reset_scan "edge|1786464880"; SCAN_RING_NS=""; SCAN_SOURCE=""; SPAWN=true
+fanout_graduated_stack circles
+fanout_graduated_stack sleep
+
 echo "REACHED: end"
