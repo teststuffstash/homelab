@@ -49,9 +49,15 @@ while [ $# -gt 0 ]; do case "$1" in
 esac; done
 [ -n "$CELL" ] || { echo "FATAL: --cell <harness>:<model> required (e.g. claude:opus, goose:deepseek/deepseek-v4-pro)" >&2; exit 2; }
 HARNESS="${CELL%%:*}"; MODEL="${CELL#*:}"
-# G-A 9, issue #782: resolve the cell model via /route before spawning.
-# The cell string is passed as a constraint so the router sees the A/B design axis.
-# Fail-OPEN to the literal cell model when the proxy is unreachable.
+# ── ADR-096 override rule: retro cell model = constraint + fail-OPEN fallback ──
+# The retro --cell flag is MANDATORY — every retro invocation supplies one.
+# Unlike the coordinator/reviewer optional --model flag, there is no "operator
+# explicitly overrode" signal here. The cell model is always a ROUTING CONSTRAINT:
+#   - --cell <harness>:<model> constrains the router to the named cell's A/B axis
+#   - --fallback <model> provides the fail-OPEN literal when /route is unreachable
+# An operator who wants to hard-pin (skipping the route) sets AGENT_MODEL, which
+# resolve-model.sh checks ahead of the /route call. This is the universal override.
+# See also docs/agents/model-routing.md.
 MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "$CELL" --fallback "$MODEL")"
 retro_project "$STACK" || exit 2
 

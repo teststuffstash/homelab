@@ -60,7 +60,7 @@ while [ $# -gt 0 ]; do
     --main-repo)       MAIN_REPO="$2"; shift 2;;          # the stack's MAIN repo — cwd + its CLAUDE.md/specs (default homelab)
     --ref)             BASE_REF="$2"; shift 2;;
     --repo)            REPO_URL="$2"; shift 2;;
-    --model)           MODEL="$2"; shift 2;;       # sonnet|opus|haiku|fable|<full-id>. Default opus (needs Max); --model sonnet to save.
+    --model)           MODEL="$2"; MODEL_SET_EXPLICIT=1; shift 2;;       # sonnet|opus|haiku|fable|<full-id>. Default opus (needs Max); --model sonnet to save.
     --permission-mode) PERM_MODE="$2"; shift 2;;   # default|acceptEdits|plan|auto|dontAsk|bypassPermissions
     --no-attach)       NO_ATTACH=1; shift;;
     --detach)          DETACH=1; shift;;      # ADR-106 (5): headless only — exit at pod-Ready; the POD uploads, pushes its session row, and rings the completion doorbell itself (the caller's mutex must not span the ride)
@@ -90,15 +90,27 @@ if [ -n "$ITEM" ]; then
     goal-decompose|goal-checkpoint) RESOLVE_CLASS="goal-decompose";;
   esac
 fi
-# Call resolve-model.sh with role=coordinator. The class resolves via role_defaults to
-# 'dispatch' unless goal-decompose was detected above. The fallback is the current MODEL
-# (the scan's coordinatorModel, or opus/sonnet default). Do NOT pass --model to resolve-model
-# so the route is actually consulted: the scan's coordinatorModel becomes the fallback if
-# routing is unreachable (fail-OPEN). GOAL_MODEL is handled below, not via resolve-model's
-# --model/AGENT_MODEL (which would skip the route).
-_fb="${MODEL:-sonnet}"
-[ "$RESOLVE_CLASS" = "goal-decompose" ] && _fb="${GOAL_MODEL:-opus}"
-RESOLVED="$(bash "${HERE}/resolve-model.sh" --role coordinator --class "${RESOLVE_CLASS:-dispatch}" --fallback "$_fb" 2>/dev/null)" || RESOLVED=""
+# ── ADR-096 override rule: explicit operator --model vs scan-supplied default ──
+# The same $MODEL variable holds TWO things with opposite routing intent:
+#   (a) The scan-supplied coordinatorModel (or the opus default) — SHOULD be a fallback,
+#       the route is consulted first. This is the ordinary dispatch path.
+#   (b) An operator-passed --model on the command line — IS an explicit override, the
+#       route must be skipped.
+# We distinguish them by MODEL_SET_EXPLICIT (set when --model was passed to THIS script).
+# For (a) → --fallback (route consulted, fail-OPEN to the scan default if routing unreachable).
+# For (b) → --model (route SKIPPED, the override wins unconditionally per ADR-096).
+# GOAL_MODEL is handled below, not via resolve-model's --model/AGENT_MODEL.
+if [ -n "${MODEL_SET_EXPLICIT:-}" ]; then
+  # Explicit operator --model: override wins over the route (ADR-096 override rule).
+  # resolve-model.sh checks --model / AGENT_MODEL first and exits before calling /route.
+  RESOLVED="$(bash "${HERE}/resolve-model.sh" --role coordinator --class "${RESOLVE_CLASS:-dispatch}" --model "$MODEL" --fallback "$MODEL" 2>/dev/null)" || RESOLVED=""
+else
+  # Scan-supplied default (coordinatorModel) or script default: use as fallback,
+  # the route is actually consulted. Fail-OPEN when the proxy is unreachable.
+  _fb="${MODEL:-sonnet}"
+  [ "$RESOLVE_CLASS" = "goal-decompose" ] && _fb="${GOAL_MODEL:-opus}"
+  RESOLVED="$(bash "${HERE}/resolve-model.sh" --role coordinator --class "${RESOLVE_CLASS:-dispatch}" --fallback "$_fb" 2>/dev/null)" || RESOLVED=""
+fi
 if [ -n "$RESOLVED" ]; then
   echo "→ coordinator model: role=coordinator class=${RESOLVE_CLASS:-dispatch} → ${RESOLVED}" >&2
   MODEL="$RESOLVED"
