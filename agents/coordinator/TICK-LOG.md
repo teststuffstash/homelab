@@ -4819,3 +4819,22 @@ first live ADR-110 maintenance session before the ADR existed.
   quota-dead until Sep-1 anyway, in-cluster leg is sole server, files die at #745 (never
   re-enable — delete). Everything else in those repos is self-hosted (ARC/proxmox-vm) — no other
   hosted email source. Silence a3628730 stays as the self-expiring belt.
+
+## 2026-08-23 evening (G-A day 2 close + G-B launch — corpus session, /design-agents continue)
+
+- G-A: 10 more children/sprouts closed through gate reads + the machine lane (#779 doorbell,
+  #792 opencode first-party incl. the #804 DOA fix cycle, #516 decorrelation, #780/#781 role
+  wiring, #810 --model split, #814/#815/#796/#808 pins+lints). Every role routes; §M10
+  superseded-banner landed. #783 RULED (strike env retired, ADR-112 shape); G-E banked
+  (cheap-tier reliability economics — free-only fan-out trial, review-side multi-model the
+  target). Famine: gb_ledger 5s timeout vs 486KB pushgateway dump froze the G-A tree
+  (#807→PR#812 fixed; FU-182 = writer-side growth); #791 unblocked + re-rode.
+- G-B #818 LAUNCHED cluster-autonomous (details/meta-state). Launch-night defects: ADR-097
+  exclusive-hold on queued Goals (workaround + #822), PR#801's unparsed routed id (PR#824),
+  unit fast-path reviewer-only + priority starvation (findings on #822).
+- Ops: private-minutes exhaustion → 4 updater callers disabled + silence a3628730 (emails
+  stopped); loki bucket 8→16Gi unwedge (retention decision parked #811); GoCapacityLatched
+  for:-flap ×6 across proxy rolls, gauge held 1 throughout; CodeownerParkWaiting + phase-slow
+  alerts self-resolved; #500 verdict concurred + min-samples alert refinement noted.
+- Skills: design-agents-G1 promoted (live-state claims verified, never corpus-quoted — the
+  subscription-cap-3-vs-5 catch); meta-events silenced-filter quickfix landed + re-armed.

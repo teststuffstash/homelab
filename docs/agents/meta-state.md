@@ -62,6 +62,23 @@ meant to avoid.)
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
   buildout → then stacks.** The forward plan lives in **ROADMAP §The platform work map**
   (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
+- **⚑ G-B LAUNCHED OVERNIGHT-AUTONOMOUS 2026-08-23 ~20:48Z — the v1.2 cluster-decompose proof.
+  MORNING READ (after the retro post-fire read): homelab#818.** Goal #818 (assurance; Budget 25,
+  `Base: goal/818-assurance` — branch cut+protected, ci triggers on goal/** since the same-day
+  trigger fix), decomposing IN-CLUSTER on **fable** via the routed `goal-decompose` class
+  (chain_head PR#813; smoke FABLE-OK; decompose pod Running clean at wind-down). What the
+  morning verifies: children authored+queued with inherited Base + corpus grounding named ·
+  rides into the protected goal branch · FU-143 C6 closing goal-merges · findings store +
+  checkpoints · assembly PR parked codeowner-gated. **Launch-night defect trail (all fixed or
+  filed):** queued Goals were ADR-097-held as exclusive (#818 carries the replay-exempt no-op
+  `Touches:` as the ruled workaround; structural fix = #822, queued, + 3 findings on its
+  thread: unit-fast-path is reviewer-shaped only · priority starvation by the self-regenerating
+  changes-requested stream · the PR#801 adoption passed the FULL routed id to `claude --model`
+  — decompose DOA, fixed PR#824, its replay pin rides #822's wave). ⚠ needs-meta source
+  flapped twice (empty-read → clear+re-emit burst ~19:09/20:21) — a hold-on-failed-read gap in
+  `agents/meta-events.sh`'s NEEDSMETA arm, next session's 5-min fix. #818's body-vs-Touches
+  lint flag (#821's new belt) is the workaround's expected noise. Loki incident closed
+  (quota 16Gi, recovered+verified); retention decision parked on #811 for TOMORROW.
 - **⚑ G-A DAY-1 CLOSE (launched + 5 children DONE in one session, 2026-08-23; retro post-fire
   read Mon 08-24 05:00Z stays the next session's FIRST item).** Goal = **homelab#775**
   (`Budget: 17` = the loaded OR credit; #278 shape: master-lane children, jail-decomposed,
