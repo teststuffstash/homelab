@@ -474,6 +474,34 @@ def model_family(model: str) -> str:
     return _MODEL_FAMILY_SUFFIX_RE.sub("", raw)
 
 
+# ── #516: vendor-family (rail-agnostic) for decorrelation ──
+# Rail prefixes that are pure TRANSPORT (the vendor follows in `vendor/model`) vs. the ones that
+# ARE the vendor. Stripping the latter deletes the segment this function then reads — #797 r4.
+_RAIL_ONLY_PREFIXES = ("opencode-go/", "openrouter/", "opencode/")
+_VENDOR_PREFIXES = (("claude/", "anthropic"), ("anthropic/", "anthropic"), ("openai/", "openai"))
+
+
+def vendor_family(model: str) -> str:
+    """The VENDOR of a model id, rail-agnostic — the level #516 decorrelation compares at.
+    One home, beside model_family(): model_family() answers WHICH model (drift, claude-haiku !=
+    claude-opus); this answers WHOSE model (decorrelation, claude/haiku == claude/opus ==
+    anthropic/claude-sonnet-5 == anthropic). Both share _MODEL_FAMILY_SUFFIX_RE; neither copies
+    the other's prefix list."""
+    raw = (model or "").strip().split(":")[0]      # drop a :free / :tag suffix
+    raw = re.sub(r"\[[^\]]*\]", "", raw)           # drop [1m] / [2m] context brackets
+    for _p in _RAIL_ONLY_PREFIXES:                 # transport only — the vendor is what follows
+        if raw.startswith(_p):
+            raw = raw[len(_p):]
+            break
+    for _p, _v in _VENDOR_PREFIXES:                # these prefixes ARE the vendor
+        if raw.startswith(_p):
+            return _v
+    raw = _MODEL_FAMILY_SUFFIX_RE.sub("", raw)
+    if raw in ("haiku", "sonnet", "opus") or raw.startswith("claude-"):
+        return "anthropic"                         # bare alias / bare claude-* id
+    return raw.split("/")[0] if "/" in raw else raw.split("-")[0]
+
+
 def _repo_from_session(session: str) -> str | None:
     """Recover the repo name from a launcher pod-name session.
 
@@ -1216,22 +1244,14 @@ def route(payload: dict, ctx: dict) -> dict:
         source = "rotation"
     deny = {str(m) for m in (payload.get("deny") or [])}
     # ── #516: family decorrelation as a /route primitive ──
-    # The author's model id → VENDOR family (rail-agnostic). Same definition as the pool
-    # self-test's `fam` (m.split("/")[0]), applied after rail prefix stripping so that
-    # opencode-go/deepseek-v4-flash and deepseek/deepseek-v4-flash share the vendor "deepseek"
-    # and a route with decorrelate_from from either rail excludes both. An emptied candidate
-    # set defers typed rather than degrading to same-family. The suffix-stamp regex is shared
-    # with model_family() — never a second copy.
+    # The author's model id → VENDOR family (rail-agnostic), derived via vendor_family() which
+    # handles rail-only prefixes, vendor-bearing prefixes, and bare claude aliases in one home.
+    # A route with decorrelate_from from either rail excludes all models of that vendor across
+    # every rail. An emptied candidate set defers typed rather than degrading to same-family.
     decorrelate_from = str(payload.get("decorrelate_from") or "").strip()
     decorrelate_family = None
     if decorrelate_from:
-        _df = decorrelate_from
-        for _pfx in ("opencode-go/", "openrouter/", "opencode/", "claude/", "anthropic/", "openai/"):
-            if _df.startswith(_pfx):
-                _df = _df[len(_pfx):]
-                break
-        _df = _MODEL_FAMILY_SUFFIX_RE.sub("", _df)
-        decorrelate_family = _df.split("/")[0] if "/" in _df else _df.split("-")[0]
+        decorrelate_family = vendor_family(decorrelate_from)
     # Recorded always, ACTED ON only when STRIKE_ENFORCE (see the constant's note): today this is
     # an empty set, which is exactly the behaviour the loop has had all along — now on purpose.
     struck = set(strikes_for(str(payload.get("task") or ""), str(payload.get("stack") or ""))) \
@@ -1253,14 +1273,7 @@ def route(payload: dict, ctx: dict) -> dict:
         elif rail not in rails:
             skipped.append({"model": m, "reason": f"rail-{rail}-not-in-class-{cls}"})
         elif decorrelate_family:
-            _mdf = m
-            for _pfx in ("opencode-go/", "openrouter/", "opencode/", "claude/", "anthropic/", "openai/"):
-                if _mdf.startswith(_pfx):
-                    _mdf = _mdf[len(_pfx):]
-                    break
-            _mdf = _MODEL_FAMILY_SUFFIX_RE.sub("", _mdf)
-            _mv = _mdf.split("/")[0] if "/" in _mdf else _mdf.split("-")[0]
-            if _mv == decorrelate_family:
+            if vendor_family(m) == decorrelate_family:
                 skipped.append({"model": m, "reason": f"decorrelate:{decorrelate_family}"})
             else:
                 eligible.append((m, rail))
@@ -2359,6 +2372,36 @@ def self_test() -> int:
     assert _dc7.get("retry_after_s") is not None, \
         "mixed decorrelate+cooldown must carry retry_after_s"
     _write("DELETE FROM model_cooldowns WHERE model=?", ("moonshotai/kimi-k3",))
+    # ── vendor_family() direct assertions ──
+    assert vendor_family("opencode-go/deepseek-v4-flash") == "deepseek", \
+        f"rail-prefixed deepseek → deepseek: {vendor_family('opencode-go/deepseek-v4-flash')}"
+    assert vendor_family("deepseek/deepseek-v4-flash-0731") == "deepseek", \
+        f"bare deepseek-stamped → deepseek: {vendor_family('deepseek/deepseek-v4-flash-0731')}"
+    assert vendor_family("claude/haiku") == "anthropic", \
+        f"claude/haiku → anthropic: {vendor_family('claude/haiku')}"
+    assert vendor_family("claude/sonnet") == "anthropic", \
+        f"claude/sonnet → anthropic: {vendor_family('claude/sonnet')}"
+    assert vendor_family("claude/opus") == "anthropic", \
+        f"claude/opus → anthropic: {vendor_family('claude/opus')}"
+    assert vendor_family("anthropic/claude-sonnet-5") == "anthropic", \
+        f"anthropic/claude-sonnet-5 → anthropic: {vendor_family('anthropic/claude-sonnet-5')}"
+    assert vendor_family("openai/gpt-5") == "openai", \
+        f"openai/gpt-5 → openai: {vendor_family('openai/gpt-5')}"
+    assert vendor_family("moonshotai/kimi-k3") == "moonshotai", \
+        f"moonshotai/kimi-k3 → moonshotai: {vendor_family('moonshotai/kimi-k3')}"
+    # Same-vendor Claude decorrelation: decorrelate_from=claude/opus must exclude claude/haiku
+    _dc8base = dict(base, chain=["claude/haiku", "tencent/hy3"])
+    _dc8 = route(dict(_dc8base, decorrelate_from="claude/opus"), CTX)
+    assert _dc8["decision"] == "dispatch" and _dc8["model"] == "tencent/hy3", \
+        f"claude/opus decorrelate_from must skip claude/haiku: {_dc8}"
+    assert any(s["reason"] == "decorrelate:anthropic" for s in _dc8["skipped"]), \
+        f"claude/haiku must be skipped with decorrelate:anthropic: {_dc8['skipped']}"
+    # Cross-rail anthropic equivalence: anthropic/claude-sonnet-5 must also exclude claude/haiku
+    _dc9 = route(dict(_dc8base, decorrelate_from="anthropic/claude-sonnet-5"), CTX)
+    assert _dc9["decision"] == "dispatch" and _dc9["model"] == "tencent/hy3", \
+        f"anthropic/claude-sonnet-5 decorrelate_from must skip claude/haiku: {_dc9}"
+    assert any(s["reason"] == "decorrelate:anthropic" for s in _dc9["skipped"]), \
+        f"claude/haiku must be skipped with decorrelate:anthropic: {_dc9['skipped']}"
     # homelab#180: the operator-gauge parse behind the latch's `credit` leg. The proxy half is one
     # HTTP GET; every way this leg can go quietly dead is decided HERE, so it is pinned HERE.
     _OP_TS = 1786237718.460958
