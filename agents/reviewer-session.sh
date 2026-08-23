@@ -68,7 +68,7 @@ STACK_LABEL="${STACK_LABEL:-none}"
 
 # Pro/Max subscription ⇒ sonnet (a strong reviewer, free at margin). Override for a high-stakes PR
 # (e.g. --model opus) or a metered run. Rubric path is relative to the project repo root.
-REPO_SLUG=""; MODEL="sonnet"; RUBRIC=".agents/review.md"; PERM_MODE="bypassPermissions"; ROUND="1"; GO_SERVED=0
+REPO_SLUG=""; MODEL="sonnet"; RUBRIC=".agents/review.md"; PERM_MODE="bypassPermissions"; ROUND="1"; GO_SERVED=0; MODEL_RAIL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)            REPO_SLUG="$2"; shift 2;;   # owner/name or full URL; default teststuffstash/<project>
@@ -214,7 +214,7 @@ if [ "$AGENT_ROUTER" != "off" ]; then
           fi
         fi
         GO_SERVED=0
-        [ "$MODEL_RAIL" = "go" ] && GO_SERVED=1
+        [ "$MODEL_RAIL" = "opencode-go" ] && GO_SERVED=1
       elif [ "$_verdict" = "defer" ]; then
         _router_defer=1
       fi
