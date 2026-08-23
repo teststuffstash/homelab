@@ -2096,7 +2096,9 @@ if [ -n "$RUN_CMD" ]; then
   # agent-runtime#16 the same day).
   case "$TASK" in issue-*|pr-*) STRIKE_APPLIES=1;; *) STRIKE_APPLIES="";; esac
   if [ -n "$STRIKE_APPLIES" ] && [ -z "$PR_URL" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
+    # >>>REPLAY:strike-classifier>>>
     if [ -n "$STATS" ]; then
+      # >>>REPLAY:strike-stats-classifier>>>
       # agent-finalize already classified the run (authoritative — it saw the full log + exit code).
       # Its exit_status maps onto the strike taxonomy; anything else (failed/no-output/ci-failed
       # without a PR) is "unknown" — still a strike, just an unclassified one.
@@ -2114,6 +2116,7 @@ if [ -n "$RUN_CMD" ]; then
       if [ "$ERR_CLASS" = "unknown" ] && grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG" 2>/dev/null; then
         ERR_CLASS="harness-death"
       fi
+      # <<<REPLAY:strike-stats-classifier<<<
     else
       # No AGENT_RUN_STATS line at all = finalize never ran (the pod died hard / wait timed out) —
       # the PR-less death that used to be invisible. Classify the raw log jail-side with the same
@@ -2144,6 +2147,7 @@ if [ -n "$RUN_CMD" ]; then
       fi
       # <<<REPLAY:strike-quota-classifier<<<
     fi
+    # <<<REPLAY:strike-classifier<<<
     # >>>REPLAY:strike-line-format>>>
     STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
     # <<<REPLAY:strike-line-format<<<

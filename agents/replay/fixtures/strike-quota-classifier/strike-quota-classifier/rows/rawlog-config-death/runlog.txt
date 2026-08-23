@@ -1,0 +1,2 @@
+[2026-08-23T12:00:00Z] Unrecognized key "loop_max_retries" in config file
+Error: failed to start harness
