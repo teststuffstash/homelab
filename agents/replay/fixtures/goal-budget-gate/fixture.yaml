@@ -35,6 +35,10 @@
 #                       pre-509 numbers.
 #   open-over-budget    the plain control, no phase label: an OPEN over-budget goal refuses
 #                       identically — the refusal is about the SUM, not about the goal's phase.
+#   open-over-budget-degraded  the same tree as open-over-budget, but the spend ledger is absent
+#                       (no-ledger world). All children are charged their full cap, the refusal
+#                       body says the sum is a cap-sum estimate rather than actual spend, and the
+#                       GB_LEDGER_DEGRADED flag is asserted through the changed comment text.
 #   open-within         the `within` arm said and passing — the pass-through a budget-respecting
 #                       ride sees, and the log line that makes the gate legible to a human.
 #
