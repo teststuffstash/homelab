@@ -474,6 +474,34 @@ def model_family(model: str) -> str:
     return _MODEL_FAMILY_SUFFIX_RE.sub("", raw)
 
 
+# ── #516: vendor-family (rail-agnostic) for decorrelation ──
+# Rail prefixes that are pure TRANSPORT (the vendor follows in `vendor/model`) vs. the ones that
+# ARE the vendor. Stripping the latter deletes the segment this function then reads — #797 r4.
+_RAIL_ONLY_PREFIXES = ("opencode-go/", "openrouter/", "opencode/")
+_VENDOR_PREFIXES = (("claude/", "anthropic"), ("anthropic/", "anthropic"), ("openai/", "openai"))
+
+
+def vendor_family(model: str) -> str:
+    """The VENDOR of a model id, rail-agnostic — the level #516 decorrelation compares at.
+    One home, beside model_family(): model_family() answers WHICH model (drift, claude-haiku !=
+    claude-opus); this answers WHOSE model (decorrelation, claude/haiku == claude/opus ==
+    anthropic/claude-sonnet-5 == anthropic). Both share _MODEL_FAMILY_SUFFIX_RE; neither copies
+    the other's prefix list."""
+    raw = (model or "").strip().split(":")[0]      # drop a :free / :tag suffix
+    raw = re.sub(r"\[[^\]]*\]", "", raw)           # drop [1m] / [2m] context brackets
+    for _p in _RAIL_ONLY_PREFIXES:                 # transport only — the vendor is what follows
+        if raw.startswith(_p):
+            raw = raw[len(_p):]
+            break
+    for _p, _v in _VENDOR_PREFIXES:                # these prefixes ARE the vendor
+        if raw.startswith(_p):
+            return _v
+    raw = _MODEL_FAMILY_SUFFIX_RE.sub("", raw)
+    if raw in ("haiku", "sonnet", "opus") or raw.startswith("claude-"):
+        return "anthropic"                         # bare alias / bare claude-* id
+    return raw.split("/")[0] if "/" in raw else raw.split("-")[0]
+
+
 def _repo_from_session(session: str) -> str | None:
     """Recover the repo name from a launcher pod-name session.
 
@@ -1215,6 +1243,15 @@ def route(payload: dict, ctx: dict) -> dict:
         chain = _rotation_candidates(cinfo)
         source = "rotation"
     deny = {str(m) for m in (payload.get("deny") or [])}
+    # ── #516: family decorrelation as a /route primitive ──
+    # The author's model id → VENDOR family (rail-agnostic), derived via vendor_family() which
+    # handles rail-only prefixes, vendor-bearing prefixes, and bare claude aliases in one home.
+    # A route with decorrelate_from from either rail excludes all models of that vendor across
+    # every rail. An emptied candidate set defers typed rather than degrading to same-family.
+    decorrelate_from = str(payload.get("decorrelate_from") or "").strip()
+    decorrelate_family = None
+    if decorrelate_from:
+        decorrelate_family = vendor_family(decorrelate_from)
     # Recorded always, ACTED ON only when STRIKE_ENFORCE (see the constant's note): today this is
     # an empty set, which is exactly the behaviour the loop has had all along — now on purpose.
     struck = set(strikes_for(str(payload.get("task") or ""), str(payload.get("stack") or ""))) \
@@ -1235,6 +1272,11 @@ def route(payload: dict, ctx: dict) -> dict:
             skipped.append({"model": m, "reason": f"capability-floor:{floor_fail}"})
         elif rail not in rails:
             skipped.append({"model": m, "reason": f"rail-{rail}-not-in-class-{cls}"})
+        elif decorrelate_family:
+            if vendor_family(m) == decorrelate_family:
+                skipped.append({"model": m, "reason": f"decorrelate:{decorrelate_family}"})
+            else:
+                eligible.append((m, rail))
         else:
             eligible.append((m, rail))
     capacity_block: dict | None = None
@@ -1292,7 +1334,11 @@ def route(payload: dict, ctx: dict) -> dict:
         decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
                     "half_open": half_open, "skipped": skipped, "jitter": jitter_on, **result}
     else:
-        if capacity_block:
+        if decorrelate_family and not eligible and skipped and \
+                all(s["reason"] == f"decorrelate:{decorrelate_family}" for s in skipped):
+            reason = f"decorrelate:{decorrelate_family}"
+            retry = None
+        elif capacity_block:
             reason, retry = capacity_block["reason"], capacity_block.get("retry_after_s") or 900
         elif any(s["reason"].startswith("cooldown:") for s in skipped):
             reason = "cooldown"
@@ -2238,6 +2284,124 @@ def self_test() -> int:
     assert dj_off["model"] == dj_off["jitter_pool"][0], "ties break stably, in caller order"
     assert dj_on["shadow"]["reprobe"] and not dj_off["shadow"]["reprobe"], \
         "the shadow ladder must not jitter either when the caller asked for none"
+    # ── #516: family decorrelation as a /route primitive, plus the shadow/served divergence ──
+    # Same-family exclusion: decorrelate_from blocks models sharing the author's family across rails.
+    _dcbase = dict(base, chain=["deepseek/deepseek-v4-flash", "tencent/hy3", "claude/haiku"])
+    _dc = route(dict(_dcbase, decorrelate_from="opencode-go/deepseek-v4-flash"), CTX)
+    assert _dc["decision"] == "dispatch" and _dc["model"] == "tencent/hy3", \
+        f"decorrelate_from must skip the deepseek family: {_dc}"
+    assert any(s["reason"] == "decorrelate:deepseek" for s in _dc["skipped"]), \
+        f"deepseek model must be skipped with decorrelate reason: {_dc['skipped']}"
+    # Cross-family: a different family from the author passes through unaffected (tencent is
+    # moonshotai/kimi-k3, not tencent/hy3 — decorrelate_from=tencent/hy3 blocks the hy3 family).
+    _dc2 = route(dict(_dcbase, decorrelate_from="moonshotai/kimi-k3"), CTX)
+    assert _dc2["decision"] == "dispatch" and _dc2["model"] == "deepseek/deepseek-v4-flash", \
+        f"unrelated decorrelate_from must not block deepseek: {_dc2}"
+    # Entire chain from the same family → typed defer (decorrelate:<family>), not chain-exhausted.
+    _dc3 = route(dict(base, chain=["deepseek/deepseek-v4-flash"],
+                      decorrelate_from="opencode-go/deepseek-v4-flash"), CTX)
+    assert _dc3["decision"] == "defer" and _dc3["reason"] == "decorrelate:deepseek", \
+        f"all-same-family must defer with decorrelate reason: {_dc3}"
+    assert _dc3.get("retry_after_s") is None, "decorrelate defer must not carry retry_after"
+    # The shadow ladder also sees the decorrelation — the same-family model is absent from its
+    # candidates so it cannot pick it either.
+    assert _dc["shadow"]["decision"] == "dispatch", \
+        "shadow must dispatch when the served path dispatches"
+    assert all("deepseek" not in c["model"] for c in _dc["shadow"]["candidates"]), \
+        "the decorrelated family must be absent from shadow candidates"
+    # Shadow/served divergence: a chain where the shadow ladder would pick the subscription rung
+    # (a proven cell that floors at free would pick the subscription stand-in) while the served
+    # path dispatches the free model — assert the divergence IS recorded and the served decision
+    # is unaffected. The review class (subscription-first rails) with proven free cell means the
+    # shadow ladder at tight urgency floors to subscription.
+    _shadow_div = route(dict(base, session="t-shadow-div-1", **{"class": "review"}),
+                        {**CTX, "pick": lambda b: b[-1]})
+    # The review class has subscription-first rails. At tight urgency with the cell unproven,
+    # the shadow ladder floors to subscription, while the served path dispatches the free model.
+    assert _shadow_div["decision"] == "dispatch", \
+        f"served decision must dispatch regardless of shadow: {_shadow_div}"
+    # Verify divergence by checking the shadow decision was recorded in the store
+    _sd_rows = _read("SELECT served_model, shadow_model, agrees FROM shadow_decisions "
+                     "WHERE session='t-shadow-div-1'")
+    assert len(_sd_rows) == 1, f"exactly one shadow decision row for t-shadow-div-1: {_sd_rows}"
+    assert _sd_rows[0][0] == _shadow_div["model"], \
+        "served model in shadow record must match the served decision"
+    # If the served and shadow models differ, agrees=0; since review class has different rail
+    # ordering, the shadow picks the subscription model while served picks the free model.
+    if _sd_rows[0][0] != _sd_rows[0][1]:
+        assert _sd_rows[0][2] == 0, \
+            f"divergent shadow/served must record agrees=0: {_sd_rows}"
+    # Sibling decorrelation guard: a denied model + decorrelate_from must still defer
+    # chain-exhausted (preventing the guard from being relabelled decorrelate:<family>).
+    _dc4 = route(dict(base, chain=["deepseek/deepseek-v4-flash"],
+                      deny=["deepseek/deepseek-v4-flash"],
+                      decorrelate_from="tencent/hy3"), CTX)
+    assert _dc4["decision"] == "defer" and _dc4["reason"] == "chain-exhausted", \
+        f"denied + decorrelate_from must defer chain-exhausted: {_dc4}"
+    # Cooldown + decorrelate_from: a model on cooldown with decorrelate_from set to an unrelated
+    # family must retain its retry_after_s (not lose it to the decorrelate: branch).
+    cooldown_note("inclusionai/ling-3.0-flash:free", 429)
+    _now = time.time()
+    _write("UPDATE model_cooldowns SET until=? WHERE model=?",
+           (_now + 99999, "inclusionai/ling-3.0-flash:free"))
+    _dc5 = route(dict(base, chain=["inclusionai/ling-3.0-flash:free"],
+                      decorrelate_from="tencent/hy3"), CTX)
+    assert _dc5["decision"] == "defer" and _dc5["reason"] == "cooldown", \
+        f"cooldown + decorrelate_from must defer cooldown: {_dc5}"
+    assert _dc5.get("retry_after_s") is not None, \
+        "cooldown + decorrelate_from must carry retry_after_s"
+    _write("UPDATE model_cooldowns SET until=? WHERE model=?",
+           (_now - 1, "inclusionai/ling-3.0-flash:free"))
+    cooldown_note("inclusionai/ling-3.0-flash:free", 200)
+    # Mixed decorrelate + deny: two models, one decorrelated (vendor deepseek), one denied.
+    # With the all() guard, this must defer chain-exhausted (not relabel decorrelate:deepseek).
+    _dc6 = route(dict(base, chain=["deepseek/deepseek-v4-flash", "moonshotai/kimi-k3"],
+                      deny=["moonshotai/kimi-k3"],
+                      decorrelate_from="opencode-go/deepseek-v4-flash"), CTX)
+    assert _dc6["decision"] == "defer" and _dc6["reason"] == "chain-exhausted", \
+        f"mixed decorrelate+deny must defer chain-exhausted: {_dc6}"
+    # Mixed decorrelate + cooldown: two models, one decorrelated (vendor deepseek), one on
+    # cooldown (moonshotai/kimi-k3). Must defer cooldown (not decorrelate) and carry retry_after_s.
+    _now2 = time.time()
+    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?)",
+           ("moonshotai/kimi-k3", _now2 + 99999, 1, "429-burst", _now2))
+    _dc7 = route(dict(base, chain=["deepseek/deepseek-v4-flash", "moonshotai/kimi-k3"],
+                      decorrelate_from="opencode-go/deepseek-v4-flash"), CTX)
+    assert _dc7["decision"] == "defer" and _dc7["reason"] == "cooldown", \
+        f"mixed decorrelate+cooldown must defer cooldown: {_dc7}"
+    assert _dc7.get("retry_after_s") is not None, \
+        "mixed decorrelate+cooldown must carry retry_after_s"
+    _write("DELETE FROM model_cooldowns WHERE model=?", ("moonshotai/kimi-k3",))
+    # ── vendor_family() direct assertions ──
+    assert vendor_family("opencode-go/deepseek-v4-flash") == "deepseek", \
+        f"rail-prefixed deepseek → deepseek: {vendor_family('opencode-go/deepseek-v4-flash')}"
+    assert vendor_family("deepseek/deepseek-v4-flash-0731") == "deepseek", \
+        f"bare deepseek-stamped → deepseek: {vendor_family('deepseek/deepseek-v4-flash-0731')}"
+    assert vendor_family("claude/haiku") == "anthropic", \
+        f"claude/haiku → anthropic: {vendor_family('claude/haiku')}"
+    assert vendor_family("claude/sonnet") == "anthropic", \
+        f"claude/sonnet → anthropic: {vendor_family('claude/sonnet')}"
+    assert vendor_family("claude/opus") == "anthropic", \
+        f"claude/opus → anthropic: {vendor_family('claude/opus')}"
+    assert vendor_family("anthropic/claude-sonnet-5") == "anthropic", \
+        f"anthropic/claude-sonnet-5 → anthropic: {vendor_family('anthropic/claude-sonnet-5')}"
+    assert vendor_family("openai/gpt-5") == "openai", \
+        f"openai/gpt-5 → openai: {vendor_family('openai/gpt-5')}"
+    assert vendor_family("moonshotai/kimi-k3") == "moonshotai", \
+        f"moonshotai/kimi-k3 → moonshotai: {vendor_family('moonshotai/kimi-k3')}"
+    # Same-vendor Claude decorrelation: decorrelate_from=claude/opus must exclude claude/haiku
+    _dc8base = dict(base, chain=["claude/haiku", "tencent/hy3"])
+    _dc8 = route(dict(_dc8base, decorrelate_from="claude/opus"), CTX)
+    assert _dc8["decision"] == "dispatch" and _dc8["model"] == "tencent/hy3", \
+        f"claude/opus decorrelate_from must skip claude/haiku: {_dc8}"
+    assert any(s["reason"] == "decorrelate:anthropic" for s in _dc8["skipped"]), \
+        f"claude/haiku must be skipped with decorrelate:anthropic: {_dc8['skipped']}"
+    # Cross-rail anthropic equivalence: anthropic/claude-sonnet-5 must also exclude claude/haiku
+    _dc9 = route(dict(_dc8base, decorrelate_from="anthropic/claude-sonnet-5"), CTX)
+    assert _dc9["decision"] == "dispatch" and _dc9["model"] == "tencent/hy3", \
+        f"anthropic/claude-sonnet-5 decorrelate_from must skip claude/haiku: {_dc9}"
+    assert any(s["reason"] == "decorrelate:anthropic" for s in _dc9["skipped"]), \
+        f"claude/haiku must be skipped with decorrelate:anthropic: {_dc9['skipped']}"
     # homelab#180: the operator-gauge parse behind the latch's `credit` leg. The proxy half is one
     # HTTP GET; every way this leg can go quietly dead is decided HERE, so it is pinned HERE.
     _OP_TS = 1786237718.460958
