@@ -705,12 +705,6 @@ def normalize_model(model: str) -> str:
     return stripped if "/" in stripped else model
 
 
-def normalize_model(model: str) -> str:
-    """Bare vendor/model id; keep openrouter/<cloaked> (same rule as estimate_budget.py)."""
-    stripped = model.removeprefix("openrouter/")
-    return stripped if "/" in stripped else model
-
-
 # ── OR leg: Anthropic-surface → OpenRouter translation (homelab#791) ─────────
 # When a claude-harness pod sends an /anthropic/v1/messages request with an
 # `openrouter/` model id, the proxy must translate the Anthropic-format request
@@ -778,7 +772,30 @@ def _or_request_translate(body: bytes) -> tuple[dict, str]:
             if tool_calls:
                 out_msg["tool_calls"] = tool_calls
             out_msg["content"] = kept_blocks if kept_blocks else None
-        messages.append(out_msg)
+            messages.append(out_msg)
+        # Handle tool_result blocks in user messages → OpenAI tool role messages
+        elif role == "user" and isinstance(content, list):
+            # Extract tool_result blocks and convert them to separate tool-role messages
+            text_blocks = []
+            tool_results = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    tool_results.append(block)
+                else:
+                    text_blocks.append(block)
+            # Keep text blocks in the user message
+            if text_blocks:
+                out_msg["content"] = text_blocks if text_blocks else None
+                messages.append(out_msg)
+            # Each tool_result becomes a separate tool-role message
+            for tr in tool_results:
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tr.get("tool_use_id", ""),
+                    "content": tr.get("content", ""),
+                })
+        else:
+            messages.append(out_msg)
 
     out["messages"] = messages
 
@@ -1864,6 +1881,8 @@ class Proxy(BaseHTTPRequestHandler):
             # only adjusts the URL and tags the note so response translation fires below.
             url = UPSTREAM + "/api/v1/chat/completions"
             note += "+or-translate"
+            # or_leg uses ref-credential resolution, which may return a subscription oauth token.
+            # We'll handle the allowlist + oauth check below after resolving the ref.
         elif anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
             url = ANTHROPIC_UPSTREAM + self.path[len("/anthropic"):]
             note += "+anthropic"
@@ -1881,35 +1900,48 @@ class Proxy(BaseHTTPRequestHandler):
         headers = {k: v for k, v in self.headers.items() if k.lower() not in _DROP_REQ}
         # ADR-107 / homelab#445: opencode-leg auth (Go + Zen) — REPLACE all inbound auth with the
         # rail's key. The subscription oauth must NEVER reach opencode.ai.
-        if go_leg or zen_leg:
-            # SECURITY: allowlist-only headers for the third-party opencode.ai upstream — never
-            # forward inbound auth headers (case variants like AUTHORIZATION/X-API-KEY could
-            # smuggle the subscription credential past a case-sensitive strip). This is a
-            # cross-provider egress, not an operator-trusted hop; only send what the rail needs.
+        # homelab#791: or_leg (OpenRouter) also uses allowlist + ref-auth injection, but with
+        # explicit oauth-token guard (subscription oauth must never reach third-party).
+        if go_leg or zen_leg or or_leg:
+            # SECURITY: allowlist-only headers for third-party upstreams — never forward inbound
+            # auth headers (case variants like AUTHORIZATION/X-API-KEY could smuggle the subscription
+            # credential past a case-sensitive strip). This is cross-provider egress, not
+            # operator-trusted hop; only send what the rail needs.
             allowed = {}
             for k, v in self.headers.items():
                 lk = k.lower()
                 # Allow: content-type (body shape), anthropic-version (client compat), accept
                 if lk in ("content-type", "anthropic-version", "accept"):
                     allowed[k] = v
-            # Third-party Cloudflare blocks default Python-urllib UAs (live-probed 2026-08-13);
-            # send the proxy's uniform UA, never the client's.
             allowed["User-Agent"] = "homelab-openrouter-proxy"
-            # Inject our auth — both styles because opencode.ai's docs don't commit to one (and
-            # /v1/messages demands x-api-key: Bearer-only → 401, per the zen matrix).
-            rail_key = (ZEN_KEY if zen_leg else GO_KEY)
-            rail_key = (rail_key.split() or [""])[-1]  # last-token sanitization
-            allowed["x-api-key"] = rail_key
-            allowed["Authorization"] = f"Bearer {rail_key}"
+            if go_leg or zen_leg:
+                # Go/Zen: inject the rail's own key (not a ref — keys are environment secrets)
+                rail_key = (ZEN_KEY if zen_leg else GO_KEY)
+                rail_key = (rail_key.split() or [""])[-1]  # last-token sanitization
+                allowed["x-api-key"] = rail_key
+                allowed["Authorization"] = f"Bearer {rail_key}"
+                note += "+zen-auth-swap" if zen_leg else "+go-auth-swap"
+            elif or_leg:
+                # or_leg: resolve ref-auth and guard against subscription oauth egress
+                note += _inject_ref_auth(allowed)  # This mutates allowed["Authorization"]
+                # Check if the resolved auth is a subscription oauth token — refuse it loudly
+                auth_k = next((k for k in allowed if k.lower() == "authorization"), None)
+                if auth_k and allowed[auth_k].startswith("Bearer sk-ant-oat"):
+                    log(f"{self.command} {self.path} → 502 [or-leg] model={or_model or '-'} - "
+                        f"subscription oauth egress blocked")
+                    self._reply_json(502, {
+                        "error": "or-leg credential guard: subscription oauth token cannot reach "
+                                 "third-party OpenRouter (ADR-087 / homelab#791)"
+                    })
+                    return
             headers = allowed
-            # Also strip anthropic-beta headers (they're Anthropic-specific, not opencode's).
+            # Strip anthropic-beta headers (Anthropic-specific, not needed for Go/Zen/OpenRouter)
             headers = {k: v for k, v in headers.items() if k.lower() != "anthropic-beta"}
-            note += "+zen-auth-swap" if zen_leg else "+go-auth-swap"
         else:
             note += _inject_ref_auth(headers)  # ADR-087: opaque-ref -> real key, every method/path
-        # ADR-107 / homelab#445: oauth-beta reinjection is Anthropic-specific — never run for an
-        # opencode rail. The allowlist already strips anthropic-beta, but this guard is explicit.
-        if anthropic and not go_leg and not zen_leg:
+        # ADR-107 / homelab#445: oauth-beta reinjection is Anthropic-specific — never run for
+        # opencode rails or the or_leg. The allowlist already strips anthropic-beta, but explicit.
+        if anthropic and not go_leg and not zen_leg and not or_leg:
             # Subscription oauth tokens need the oauth beta; the ANTHROPIC_AUTH_TOKEN gateway
             # path in claude-code doesn't send it (only the CLAUDE_CODE_OAUTH_TOKEN path does).
             auth_k = next((k for k in headers if k.lower() == "authorization"), None)
@@ -4220,6 +4252,55 @@ data: [DONE]
               f"or-translate tool_call: stop_reason is 'tool_use' (got {resp.get('stop_reason')})")
     except (ValueError, TypeError):
         check(False, "or-translate tool_call: response is valid JSON")
+
+    # Test 2b: tool_result follow-up (multi-turn tool round-trip)
+    # The response to Test 2 should have had a tool_use block with an id; now we send a follow-up
+    # user message containing a tool_result block (Anthropic format: inline in content).
+    _or_response = {
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": "The directory was empty."},
+            "finish_reason": "stop",
+        }],
+        "id": "test-gen-99999",
+        "model": "openai/gpt-5",
+        "usage": {"prompt_tokens": 15, "completion_tokens": 3},
+    }
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/anthropic/claude-3-sonnet",
+                  "max_tokens": 4096,
+                  "messages": [
+                      {"role": "user", "content": "Run a command"},
+                      {"role": "assistant", "content": [
+                          {"type": "tool_use", "id": "call_abc123", "name": "bash",
+                           "input": {"command": "ls -la"}}
+                      ]},
+                      {"role": "user", "content": [
+                          {"type": "tool_result", "tool_use_id": "call_abc123",
+                           "content": "total 0"}
+                      ]},
+                  ],
+                  "tools": [{"name": "bash", "description": "Shell tool",
+                             "input_schema": {"type": "object", "properties": {}}}],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer OAUTH-SECRET"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    check(r.status == 200, "or-translate tool_result: 200")
+    o = seen.get("or_translate") or {}
+    # Verify the tool_result was translated: check that the forwarded messages include a tool-role message
+    try:
+        sent_msg = o.get("messages") or []
+        has_tool_role = any(m.get("role") == "tool" and m.get("tool_call_id") for m in sent_msg)
+        check(has_tool_role,
+              f"or-translate tool_result: forwarded request has role='tool' message with tool_call_id")
+    except (ValueError, TypeError):
+        check(False, "or-translate tool_result: forwarded body is valid JSON")
 
     # Test 3: /chat/completions path with openrouter/ model — should NOT translate (only /anthropic/ path)
     seen.clear()
