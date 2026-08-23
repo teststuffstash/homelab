@@ -12,10 +12,12 @@
 > tracker's single writer) is structurally not theirs, and catting it in would recreate the
 > wrong-context failure this split exists to fix. A stack jail's homelab context is the
 > shallow-cloned `CLAUDE.md` — pure repo facts — which is the right amount.
-> Until the jail mechanism lands, `CLAUDE.md` points here and a seat session reads it at
-> start. A worker riding this repo from the fixer lane never auto-loads this file either,
-> which makes the jail/worker split structural instead of banner-enforced. Paths below are
-> written relative to the REPO ROOT (the seat's cwd), not this file.
+> The mechanism is LIVE (claude-jail, 2026-08-23): the entrypoint composes at container start,
+> so the card snapshot refreshes on container restart, not per session — after editing this
+> file, running mono containers serve the previous composition until restarted. A worker
+> riding this repo from the fixer lane never auto-loads this file, which makes the jail/worker
+> split structural instead of banner-enforced. Paths below are written relative to the REPO
+> ROOT (the seat's cwd), not this file.
 
 ## Design questions run full-context
 

@@ -201,10 +201,11 @@ Two rules make the table hold:
 **Everything above is repo-universal fact.** The SEAT's session procedure — design-skill
 routing, the FU tracker discipline, apply safety, and how changes land (PR lane vs the
 bookkeeping class) — lives in **[`agents/jail-seat-card.md`](agents/jail-seat-card.md)**,
-composed by the MONO jail's bootstrap into `CLAUDE.local.md` in THIS checkout (gitignored,
-auto-loaded — homelab-scoped, so it never reaches a session seated in another stack;
-teststuffstash/claude-jail#1). Until that lands, read the card at session start — it is short
-and load-bearing. Stack jails and fixer-lane agents get no seat card by design: a stack jail's
+composed by the MONO jail's entrypoint into `CLAUDE.local.md` in THIS checkout at container
+start (gitignored, auto-loaded — homelab-scoped, so it never reaches a session seated in
+another stack; mechanism live since 2026-08-23, teststuffstash/claude-jail#1). A seat session
+missing that file is in a stale container (started pre-merge) or outside the jail — the card
+is one read away. Stack jails and fixer-lane agents get no seat card by design: a stack jail's
 homelab context is this file's facts via its shallow clone, and a worker's contract is its
 recipe + the launcher's environment card (`agents/ground-rules.md`) — open a PR and let the
 reviewer gate it, exactly as in a stack repo.
