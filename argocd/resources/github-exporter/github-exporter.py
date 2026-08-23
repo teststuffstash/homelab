@@ -106,6 +106,12 @@ COORDINATE_WEBHOOK_URL = os.environ.get("COORDINATE_WEBHOOK_URL", "").strip()
 # merge wait on every push — POSTing the new head lets the sentinel Sensor evaluate it near-
 # instant instead of riding the tick out. Empty = disabled (dispatch stays with the cron).
 SENTINEL_WEBHOOK_URL = os.environ.get("SENTINEL_WEBHOOK_URL", "").strip()
+# ADR-111 updater edge (homelab#743): /update-pr doorbell when an armed, green PR goes BEHIND —
+# the in-cluster updater (agents/update-pr-branch.sh via its Sensor, #742/#744) replaces the
+# GitHub-hosted cron that burned ~4,800 hosted min/mo (#698). Empty = disabled; until the #744
+# Sensor lands a POST connection-refuses, carried by the dispatcher's best-effort try/except —
+# the same ride-ahead-of-its-Sensor contract the sentinel edge shipped under.
+UPDATE_PR_WEBHOOK_URL = os.environ.get("UPDATE_PR_WEBHOOK_URL", "").strip()
 # The tofu `protected_repos` four that actually carry the required `iac-sentinel` status check
 # (repo_rulesets.tf, mirrored by scripts/iac-sentinel.sh's own SENTINEL_REPOS) — POSTing for a
 # repo outside this set would wake a Sensor evaluation whose merge wait doesn't depend on it.
@@ -149,6 +155,7 @@ _review_dispatched = set()  # (repo, number, head_sha) already POSTed this proce
 _cired_dispatched = set()   # (repo, number, head_sha) already red-doorbelled this lifetime (FU-115)
 _conflict_dispatched = set()  # (repo, number, head_sha) already conflict-doorbelled this lifetime (FU-144)
 _sentinel_dispatched = set()  # (repo, number, head_sha) already sentinel-doorbelled this lifetime (homelab#650)
+_behind_dispatched = set()    # (repo, number, head_sha) already updater-doorbelled this lifetime (ADR-111 #743)
 _merged_rung = set()          # (repo, number) already merge-doorbelled this lifetime (ADR-106 (6))
 _queued_prev = {}             # repo -> {dispatchable-queued issue numbers last poll} (#459: the appearance-edge's only memory)
 _open_prs_prev = {}           # repo -> open PR numbers last poll; a vanished number is a merge candidate
@@ -668,6 +675,50 @@ def maybe_dispatch_sentinel(repo, number, head_sha):
         print(f"sentinel-edge: POST failed for {repo}#{number}: {e}", flush=True)
 
 
+def maybe_dispatch_behind(repo, number, head_sha, *, merge_state, ci_state, armed):
+    """ADR-111 updater edge (homelab#743): POST /update-pr when an ARMED, green PR sits BEHIND
+    master, so the in-cluster updater (agents/update-pr-branch.sh, #742) brings it current
+    near-instantly — the edge whose GitHub-hosted predecessor effectively WAS its own cron
+    (91–96% of runs, ~4,800 hosted min/mo, #698).
+
+    Predicate: armed ∧ BEHIND ∧ green-or-checkless. Deliberately NARROWER than the updater's own
+    main pick (which has NO green gate — the 2026-07-10 wedge lesson): the edge serves the common
+    case, and a red-behind PR (a base-side CI fix landing) is the */15 cron backstop's within one
+    tick. Checkless ("none") rings — over-approximation is explicitly fine, the updater re-derives
+    the FULL predicate (incl. the CR∧BEHIND unstrand gate) with the App token before acting, so a
+    false wake costs one pr-list read, never a bad update. NB the exporter PAT's null-commit-dates
+    limitation (the reason the review edge stays off on private repos) does NOT bite here — this
+    predicate reads no commit objects; the commit-reading unstrand gate runs in the updater
+    itself under the App token.
+
+    Payload is repo-dumb ({repo}, + number/head for the log): this doorbell wakes the CENTRAL
+    updater in agent-coordinator, not a stack loop, so no {stack, loop_ns} lookup. Deduped per
+    (repo, number, head_sha) — an update CHANGES the head (merge commit), so a PR that falls
+    behind again re-rings on its new head, while a serviced-or-failed ring never repeats on the
+    same head (the cron retries). Best-effort, sibling contract: a POST failure never disturbs
+    the metrics poll."""
+    if not UPDATE_PR_WEBHOOK_URL or not head_sha:
+        return
+    if not (armed and merge_state == "BEHIND" and ci_state in ("success", "none")):
+        return
+    key = (repo, str(number), head_sha)
+    if key in _behind_dispatched:
+        return
+    payload = {"repo": repo, "number": str(number), "head_sha": head_sha}
+    body = json.dumps(payload).encode()
+    try:
+        req = urllib.request.Request(
+            UPDATE_PR_WEBHOOK_URL, data=body,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp.read()
+        _behind_dispatched.add(key)
+        print(f"behind-edge: POST /update-pr for {repo}#{number} @ {head_sha[:8]}", flush=True)
+    except Exception as e:
+        print(f"behind-edge: POST failed for {repo}#{number}: {e}", flush=True)
+
+
 def maybe_dispatch_merged(repo, vanished):
     """ADR-106 (6) merge doorbell: a MERGE previously woke nothing anywhere — reviewer rings at
     verdict, the ride at its own exit, but auto-merge completes minutes later and the
@@ -878,7 +929,7 @@ query($org:String!, $cursor:String, $goals:Int!, $issues:Int!) {
 __GOAL_FIELDS__
         pullRequests(states:OPEN, first:40) {
           nodes {
-            number isDraft updatedAt reviewDecision baseRefName headRefName
+            number isDraft updatedAt reviewDecision baseRefName headRefName mergeStateStatus
             labels(first:15){ nodes { name } }
             reviews(last:30){ nodes { author { login } state submittedAt } }
             headRefOid
@@ -1101,6 +1152,16 @@ def collect_open_prs(lines):
                 # ~1m). SENTINEL_REPOS-gated inside the dispatcher; no new API call — headRefOid
                 # is already read above for the other three edges.
                 maybe_dispatch_sentinel(repo["name"], pr["number"], pr.get("headRefOid") or "")
+                # ADR-111 updater edge (#743): POST /update-pr when this armed PR sits
+                # green-but-BEHIND — the in-cluster updater's wake; its GitHub-hosted
+                # predecessor's cron burn is #698. mergeStateStatus rides the same walk,
+                # zero extra API calls (the #209 goal-fields precedent).
+                maybe_dispatch_behind(
+                    repo["name"], pr["number"], pr.get("headRefOid") or "",
+                    merge_state=(pr.get("mergeStateStatus") or "").upper(),
+                    ci_state=ci_state,
+                    armed=pr.get("autoMergeRequest") is not None,
+                )
                 # FU-166(a): the codeowner-park vs reflex-wait split, first-class series (was a
                 # 600s direct-gh poll in meta-needs-attention.sh clause 4 — against the one-poller
                 # doctrine and FU-084's API pool). ci green folds INTO the predicate here, so the
@@ -2051,6 +2112,60 @@ def self_test():
     assert not is_transient_graphql_error(
         RuntimeError("Field 'parent' doesn't exist on type 'Issue'"))
 
+    # ── the updater edge (ADR-111 / homelab#743): armed ∧ green ∧ BEHIND rings /update-pr ────────
+    global UPDATE_PR_WEBHOOK_URL
+    saved_update_url = UPDATE_PR_WEBHOOK_URL
+    saved_urlopen_behind = urllib.request.urlopen
+    _behind_posts = []
+
+    class _BehindResp:
+        def read(self):
+            return b"{}"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    def _capture_behind(req, timeout=30):
+        _behind_posts.append(json.loads(req.data.decode()))
+        return _BehindResp()
+
+    try:
+        UPDATE_PR_WEBHOOK_URL = "http://updater.test/update-pr"
+        urllib.request.urlopen = _capture_behind
+        _behind_dispatched.clear()
+        fire = dict(merge_state="BEHIND", ci_state="success", armed=True)
+        maybe_dispatch_behind("oracle-fleet", 101, "a" * 40, **fire)
+        assert _behind_posts == [{"repo": "oracle-fleet", "number": "101", "head_sha": "a" * 40}], \
+            _behind_posts
+        maybe_dispatch_behind("oracle-fleet", 101, "a" * 40, **fire)
+        assert len(_behind_posts) == 1, "same behind head must dedup — one ring per head"
+        maybe_dispatch_behind("oracle-fleet", 101, "b" * 40, **fire)
+        assert len(_behind_posts) == 2, "a NEW head that is still behind rings again"
+        # No-fire rows: armed∧green∧CURRENT (the issue's explicit one), unarmed, red, and no URL.
+        maybe_dispatch_behind("oracle-fleet", 102, "c" * 40,
+                              merge_state="CLEAN", ci_state="success", armed=True)
+        maybe_dispatch_behind("oracle-fleet", 103, "d" * 40,
+                              merge_state="BEHIND", ci_state="success", armed=False)
+        maybe_dispatch_behind("oracle-fleet", 104, "e" * 40,
+                              merge_state="BEHIND", ci_state="failure", armed=True)
+        assert len(_behind_posts) == 2, "CURRENT / unarmed / red must not ring"
+        maybe_dispatch_behind("oracle-fleet", 105, "f" * 40,
+                              merge_state="BEHIND", ci_state="none", armed=True)
+        assert len(_behind_posts) == 3, "a checkless BEHIND armed PR rings (over-approx is fine)"
+        UPDATE_PR_WEBHOOK_URL = ""
+        maybe_dispatch_behind("oracle-fleet", 106, "0" * 40, **fire)
+        assert len(_behind_posts) == 3, "empty URL disables the edge entirely"
+        # The walk carries the field the predicate reads — on BOTH query variants (the goal-field
+        # fallback must not strip it; it is not a goal field).
+        assert "mergeStateStatus" in _PR_QUERY_GOALS and "mergeStateStatus" in _PR_QUERY_BASE
+    finally:
+        UPDATE_PR_WEBHOOK_URL = saved_update_url
+        urllib.request.urlopen = saved_urlopen_behind
+        _behind_dispatched.clear()
+
     # ── transient HTTP error retry (homelab#652): exponential backoff for 5xx errors ──────────────
     # Test that transient 5xx errors are retried within a poll, but persistent errors fail fast.
     assert _is_transient_http_error(urllib.error.HTTPError(None, 502, "Bad Gateway", {}, None))
@@ -2722,6 +2837,7 @@ def self_test():
           "scale, job-level queue/duration metrics + caching + retry on API failure, issue "
           "lifecycle series with re-queue first-epoch rule, first-poll job-timings skip when "
           "_first_successful_poll flag is set, sentinel head-changed edge-trigger, "
+          "updater behind edge-trigger (ADR-111 #743), "
           "poll_forever incremental-cycle behavior with monotonic _body growth, dedup counter "
           "per cycle, and _last_success-only-on-full-success)")
     return 0
