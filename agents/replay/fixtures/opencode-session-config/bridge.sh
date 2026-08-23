@@ -11,8 +11,10 @@
 # THE CONTRACT:
 #   1. `OC_SETUP` is non-empty — the base64 config write is always produced for a --recipe
 #      opencode ride regardless of pin/injection state.
-#   2. The decoded config JSON carries `autoApprove: true`.
+#   2. The decoded config JSON carries `mode.autoApprove` (with empty permission+options).
 #   3. The config JSON carries the `$schema` key.
+#   homelab#804: the root-level autoApprove:true (PR#800) was rejected by the pinned opencode
+#   binary (v1.18.13). The correct shape is mode.autoApprove.{perception:{},options:{}}.
 OC_SETUP=""; OC_ENV=""
 HARNESS="opencode"
 RUN_CMD="printf '%s' 'UkVDSVBF' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m openrouter/deepseek/deepseek-v4-flash 'task message'"
