@@ -5,4 +5,5 @@ terminal-reverted | gate-homelab-278 | gh/issue-view-278.json @ patches/add-term
 terminal-abandoned| gate-homelab-278 | gh/issue-view-278.json @ patches/add-terminal-abandoned.jq | GOAL_PARENT=278 | terminal
 post-launch-open  | gate-homelab-278 | gh/issue-view-278.json @ patches/add-post-launch.jq       | GOAL_PARENT=278 | refusal
 open-over-budget  | gate-homelab-278 | gh/issue-view-278.json @ patches/set-budget-1.jq          | GOAL_PARENT=278 | refusal
+open-over-budget-degraded | gate-homelab-278-no-ledger | gh/issue-view-278.json @ patches/set-budget-1.jq | GOAL_PARENT=278 | degraded-refusal
 open-within       | gate-homelab-278 |                                                           | GOAL_PARENT=278 | within
