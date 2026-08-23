@@ -153,6 +153,9 @@ is stale, so it cannot drift the way the prose register did.
 | `dispatch-phase/session` | actions | - | `agents/coordinator-session.sh` | - |
 | `doorbell/collapse` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout` | actions | - | `agents/coordinator-scan.sh` | - |
+| `env-card-ground-rules/empty` | actions | - | `agents/agent-session.sh` | - |
+| `env-card-ground-rules/missing` | actions | - | `agents/agent-session.sh` | - |
+| `env-card-ground-rules/unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-machine-markers/env-card-machine-markers-capture` | actions | - | `agents/agent-session.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
