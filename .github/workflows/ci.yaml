@@ -11,7 +11,11 @@ name: CI
 
 on:
   pull_request:
-    branches: [master]
+    # goal/** joined 2026-08-23 (operator-direct, overnight v1.2-proof Goal prep): the ruleset
+    # requires `ci` on goal/** PRs, and a required check whose workflow never triggers leaves an
+    # approved child PR permanently BLOCKED — the ruleset and the trigger move together
+    # (docs/agents/issue-authoring.md §Base, the circles coupling trap).
+    branches: [master, "goal/**"]
   workflow_dispatch: {}
 
 # One live run per PR (org standard — docs/ci.md §Concurrency): superseded PR heads cancel,
