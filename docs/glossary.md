@@ -23,7 +23,7 @@ mission) would drown the check in false positives and stay judgment-lint territo
 | Term | Meaning | Owning doc |
 |---|---|---|
 | **Goal** (capital, issue type) | ADR-102's funded container: `task/goal` label + one machine-parsed `Budget:` line, decompose → assembly → post-launch → human verdict terminal | [`agents/issue-authoring.md`](agents/issue-authoring.md) §The goal container |
-| **mission** (research) | the research-lane dispatch unit — prepares the contract a Goal then implements. ⚠ Its dispatch label is still `goal` (historical); prose says *mission*, never "research goal" | [`agents/research-and-specs.md`](agents/research-and-specs.md) |
+| **mission** (research) | the research-lane dispatch unit — prepares the contract a Goal then implements. Carries NO label today (the legacy `goal` label is gone and never had a machine reader — FU-163, resolved 2026-08-23); **`mission`** is the reserved dispatch-label name for when FU-090(c) graduates | [`agents/research-and-specs.md`](agents/research-and-specs.md) |
 | *goal (prose)* | ⛔ retired in agents docs — say **Goal** (the type), **mission** (research), or "intent/target" in plain prose | — |
 | **lens** | the reviewer machinery × a brief sourced from an EXTERNALLY MAINTAINED standard, selected by a deterministic artifact-class predicate. Not a role; not a prose "viewpoint" | [`agents/roles.md`](agents/roles.md) §Lenses |
 | **canary** (unqualified) | the scout's **rail probe** — does a model complete a tool-call loop through OUR stack; a verdict about a (model, harness, class) CELL | [`agents/model-routing.md`](agents/model-routing.md) §M7 |
@@ -49,7 +49,12 @@ mission) would drown the check in false positives and stay judgment-lint territo
 
 ## Pending renames (recorded here, executed by the FU-163 sweep)
 
-- The researcher's dispatch label `goal` → a mission-shaped label (machinery touch: scan +
-  Sensors + recipes — do NOT rename the label ad hoc; it is read by predicates).
+- ~~The researcher's dispatch label `goal` → a mission-shaped label~~ **EXECUTED 2026-08-23
+  (S4 #766)**: verified that NO predicate reads a bare `goal` label (the scan keys on
+  `task/goal`; research dispatch is operator-manual) and the legacy hand-made labels were
+  already deleted by the authoritative IssueLabels sync — so the sweep was prose + this
+  glossary; `mission` is the reserved future label name (minted via the claim taxonomy at
+  FU-090(c) graduation, never ad hoc).
 - Prose "goal" rewording — scope re-measured SMALL 2026-08-11 (FU-163: the dense files are
-  correct TYPE vocabulary); ambiguous-prose rewords only, at docs-cleanup pace.
+  correct TYPE vocabulary); research-lane hot-spots reworded with #766; the residue rides
+  docs-cleanup pace.
