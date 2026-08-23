@@ -1,11 +1,12 @@
-# The chainless redesign — one harness, N subscription rails, every role routed (ADR-107 charter)
+# The chainless redesign — a harness matrix, N subscription rails, every role routed (ADR-107 charter)
 
 **Status: CHARTER (operator direction, 2026-08-13 — the subscription-autopsy session). Design
 accepted in principle; build NOT started.** This doc owns the redesign's decisions, the claim-knob
 ledger, the OpenCode Go rail evidence, and the build plan — so the direction survives any one
 session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (§M8–M13) and the
 claim by [`agentstack.md`](agentstack.md); this doc records what CHANGES in each and why. The
-decision record is **ADR-107**; the day's probe evidence is TICK-LOG 2026-08-13.
+decision record is **ADR-107** (decision 3 superseded by **ADR-112**, the harness matrix); the
+day's probe evidence is TICK-LOG 2026-08-13.
 
 Trigger: the Anthropic 7d window at 87–89% while the router could steer nothing that mattered —
 67% of the pool is the jail seat, ~28% platform roles that never call `/route` (§M10), and the one
@@ -22,15 +23,19 @@ an env var only goose read (PR#407).
    (closing §M10's unrouted-lane gap — the lanes holding ~28% of the subscription pool). Doctrine
    (safety net, decorrelation, audit bands) moves to git-owned class policy
    (`model-classes.json` floors/rails + the claim's constraints), never hardcoded models.
-3. **One harness — explicitly TEMPORARY (operator, 2026-08-17).** The claude CLI serves every
-   rail; goose/opencode demote to FU-095(b) experiment cells. Not permanent doctrine: the
-   operator wants to concentrate on one harness while more pressing problems get solved — a
-   fully dynamic dispatch harness is more coordination than the current platform can carry.
-   Revisit when it can. Rail + model are a routed decision materialized as base-URL/credential/model
-   translation at the egress proxy — the pod is spawned identically regardless. Dispatch never
-   pre-computes a harness. (Accepted trade, stated: the client becomes a monoculture — a
-   claude-CLI bug is fleet-correlated; the RAILS stay independent, which is what the M12
-   independence ruling actually protects. Version-pinned image + strikes carry it.)
+3. **Harness support is a MATRIX, not a monoculture — ADR-112 (2026-08-23), superseding
+   ADR-107 decision (3)'s 2026-08-17 "one harness, temporary" text.** The old wording fused two
+   senses: *sense A — full-support harness* (runs every role/reflex, serves every rail: both
+   subscriptions, OpenRouter, free tiers) and *sense B — the dispatch-time pick* for a given
+   ride. The ruling: **claude AND opencode both reach sense-A full support** — claude first
+   (the beefiest subscription; its in-cluster OpenRouter leg is the missing rail), opencode
+   promoted from experiment-cell to first-party (recipe support, headless permission config,
+   full-id `-m`). Rail + model (+ harness) stay routed decisions materialized at the egress
+   proxy; dispatch never pre-computes. **The scout probes every candidate across all three
+   harnesses** — a verdict is the (model × harness) cell VECTOR, never one harness's failure
+   (the ox-alpha 2026-08-23 evidence: three harness paths, three different outcomes, one
+   model) — and failed cells retry on a backoff ladder (~1h/2h) before sticking. Goose remains
+   a probed cell axis, not a build target.
 4. **OpenCode Go is the second subscription rail** ($10/mo; usage-value windows $12/5h · $30/wk ·
    $60/mo; 18 OSS models incl. the retro-proven audit tier; Anthropic- and OpenAI-compatible
    endpoints). The M11 ladder generalizes: the zero-marginal-cost band holds a SET of
