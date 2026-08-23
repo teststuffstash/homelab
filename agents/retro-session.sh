@@ -52,7 +52,9 @@ HARNESS="${CELL%%:*}"; MODEL="${CELL#*:}"
 # G-A 9, issue #782: resolve the cell model via /route before spawning.
 # The cell string is passed as a constraint so the router sees the A/B design axis.
 # Fail-OPEN to the literal cell model when the proxy is unreachable.
-MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "$CELL" --fallback "$MODEL")"
+# ADR-096 override rule (issue #810): the explicit --cell model is an operator override
+# and is passed as --model so the route is skipped when the override is deliberate.
+MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "$CELL" --model "$MODEL" --fallback "$MODEL")"
 retro_project "$STACK" || exit 2
 
 # Next run id from the harvested reports (rN numbering is per-stack).
