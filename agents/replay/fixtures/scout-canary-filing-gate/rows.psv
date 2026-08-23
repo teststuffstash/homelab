@@ -5,3 +5,4 @@ filed-digest-canary-column    | filed         |       |     | filed         |
 contradiction-rule-typed      | contradiction |       |     | contradiction |
 filing-gate-skip-common-cause | skip          |       |     | skip          |
 unparsable-stats-typed-unknown | unparsable    |       |     | unparsable    |
+void-platform-artifact-no-retry | void          |       |     | void          |
