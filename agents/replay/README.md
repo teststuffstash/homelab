@@ -171,6 +171,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |

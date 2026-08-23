@@ -509,6 +509,7 @@ else
   eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
 fi
 [ -z "$MODEL_HARNESS" ] || [ -n "${HARNESS_SET:-}" ] || HARNESS="$MODEL_HARNESS"
+OPENCODE_MODEL="$MODEL"  # Full provider-prefixed id for opencode CLI (-m must receive openrouter/<vendor>/<model>)
 MODEL="$MODEL_MODEL"
 # <<<REPLAY:model-id-resolution<<<
 
@@ -537,7 +538,7 @@ if [ -n "${RECIPE:-}" ]; then
   # first exposed on goose). The RUN_CMD is BUILT below, after the environment knobs (--docker,
   # egress) are known — so the platform environment card (FU-114 L1) can be composed from them and
   # injected into the recipe. Here we only VALIDATE and derive launcher-owned flags.
-  case "$HARNESS" in claude|goose) ;; *) echo "FATAL: --recipe supports the claude/goose harnesses (got '${HARNESS}'); opencode uses --run" >&2; exit 2;; esac
+  case "$HARNESS" in claude|goose|opencode) ;; *) echo "FATAL: --recipe supports the claude/goose/opencode harnesses (got '${HARNESS}')" >&2; exit 2;; esac
   [ -f "$RECIPE" ] || { echo "FATAL: --recipe ${RECIPE} not found (pass the dispatcher-side clone's path)" >&2; exit 2; }
   [ -z "$RUN_CMD" ] || { echo "--recipe and --run are mutually exclusive" >&2; exit 2; }
   # Task key → issue number. `issue-<N>` is the fixer shape; `research-<N>-<slug>` is the
@@ -1012,6 +1013,7 @@ if [ -n "${RECIPE:-}" ]; then
   case "$HARNESS" in
     claude) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}claude -p --model ${_claude_model} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
     goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}";;
+    opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
   esac
   # <<<REPLAY:harness-run-cmd<<<
 fi
@@ -1311,6 +1313,11 @@ if [ "$HARNESS" = "opencode" ]; then
       ($base // {"$schema": "https://opencode.ai/config.json"})
       * {provider: {openrouter: {options: {baseURL: $u, apiKey: "{env:OPENROUTER_API_KEY}"}}}}')"
     echo "→ opencode via egress proxy: baseURL ${PROXY_URL}/api/v1 (ADR-087; AGENT_CRED_INJECT=0 opts out)"
+  fi
+  # Headless mode: auto-approve tool calls (read/write/bash) — matching goose's GOOSE_MODE=auto.
+  # Without this, an unattended opencode run prompts "user rejected permission" (homelab#792 gap 2).
+  if [ -n "$RUN_CMD" ] && [ -n "$OC_CONFIG" ]; then
+    OC_CONFIG="$(printf '%s' "$OC_CONFIG" | jq -c '. + {"autoApprove": true}')"
   fi
   if [ -n "$OC_CONFIG" ]; then
     # base64 keeps the JSON inert through the bash -c → jq -Rs → pod-yaml quoting layers.
@@ -1774,6 +1781,8 @@ ${DIND_CONTAINER}
           value: "1"
         - name: DEVBOX_DISABLE_TELEMETRY
           value: "1"
+        # homelab#792: the pinned build does not expose a separate models-fetch knob; the CNP Policy
+        # DENY to models.opencode.ai is the backstop (add a dedicated env var here if one appears).
         # opencode CLI's own phone-home (homelab#456, 2026-08-17): the auto-update check
         # (registry.npmjs.org, its npm-distributed updater) + model-registry fetch
         # (models.opencode.ai) were the openrouter-operator POLICY_DENIED pair — the image bundles
