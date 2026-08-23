@@ -1,0 +1,8 @@
+CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels
+CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/101/update-branch
+CALL gh label create merge-conflict --repo teststuffstash/testrepo --color e11d21 --description PR branch conflicts with master — updater can't auto-resolve --force
+CALL gh pr edit 101 --repo teststuffstash/testrepo --add-label merge-conflict
+OUT updater[teststuffstash/testrepo]: updating #101 (oldest armed+BEHIND, FIFO)
+OUT updater[teststuffstash/testrepo]: update of #101 failed (422/conflict?) — labeling merge-conflict; next pass retries
+ERR gh: Not Found (HTTP 404)
+RC 0

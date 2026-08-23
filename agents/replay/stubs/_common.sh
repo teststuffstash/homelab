@@ -15,6 +15,12 @@
 #           nothing), so it is loud and fatal — never an empty body with exit 0.
 #   WRITE → record and return success. Mutations are the OUTPUT under test; serving them would be
 #           replaying the world's reply to an action instead of asserting the action.
+#
+# Per-call failure injection (homelab#740): STUB_GH_<slugged-world-key>=fail|empty|body404|garbage
+# overrides the run-global $STUB_GH for ONE named call, evaluated for BOTH reads and writes.
+# The slug is the same bare-words slug _rp_serve uses (e.g. `STUB_GH_api_repos_foo_issues_1` for
+# `gh api repos/foo/issues/1`). Run-global $STUB_GH keeps today's semantics — a per-call var
+# only affects its one call, everything else falls through to the global.
 set -u
 
 _rp_die() {   # _rp_die <message...> — exit 9, the "the fixture is wrong" code the runner reports
@@ -57,6 +63,18 @@ _rp_words() {
 
 _rp_slug() {   # "pr view 234" → "pr-view-234"
   printf '%s' "$1" | tr 'A-Z' 'a-z' | sed 's#[^a-z0-9]\{1,\}#-#g; s#^-##; s#-$##'
+}
+
+# Per-call failure injection (homelab#740): check STUB_GH_<slug> before falling through to the
+# run-global $STUB_GH. Supports the same values as $STUB_GH plus `empty` (empty stdout, exit 0).
+# Returns 0 with the mode in stdout if a per-call override is set, 1 if none.
+# NOTE: slug hyphens are converted to underscores because env var names cannot contain hyphens.
+_rp_per_call_override() {   # _rp_per_call_override <slug>
+  _rp_var="STUB_GH_$(printf '%s' "$1" | tr '-' '_')"
+  eval '_rp_val="${'"$_rp_var"':-}"'
+  [ -n "$_rp_val" ] || return 1
+  printf '%s' "$_rp_val"
+  return 0
 }
 
 # Serve the most specific recording that exists, shortening the key one word at a time:
