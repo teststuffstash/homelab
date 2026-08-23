@@ -95,10 +95,10 @@ def fake_s5(args, key_id, key_secret):
 def fake_sh(args, env=None):
     if args[0] == "gh" and args[1] == "api":
         # gh api ... --jq '[.[] | .body]' returns an array of the comment BODIES. proj#7 has a
-        # strike-only round 4, plus a duplicate round 2 (which already has a manifest ->
+        # strike-only round 5, plus a duplicate round 2 (which already has a manifest ->
         # merge_rounds must keep the manifest entry). One non-strike comment must be ignored.
         return json.dumps([
-            "AGENT_STRIKE: model=model-c error_class=auth-storm round=4 session=pod4\n\n<details>struck",
+            "AGENT_STRIKE: model=model-c error_class=auth-storm round=5 session=pod5\n\n<details>struck",
             "AGENT_STRIKE: model=model-b error_class=unknown round=2 session=pod2",
             "a plain human comment — no strike line",
         ])

@@ -243,7 +243,7 @@ def summarize(project, issue, rid, rsec):
         rounds.append({
             "round": worker_round(w),
             "model": model,
-            "rail": _model_rail(model, rail=str(m.get("rail") or "")),
+            "rail": _model_rail(model, rail=str(w.get("rail") or "")),
             "exit_status": w.get("exit_status") or stats.get("exit_status", ""),
             "error_class": w.get("error_class") or stats.get("error_class") or "",
             "ci": stats.get("ci_passed"),
