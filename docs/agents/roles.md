@@ -143,8 +143,11 @@ in-pod (deterministic — changed paths + `gh pr diff` grep), fetches matching
 `agents/lenses/<lens>.md` from the public homelab repo raw (platform-owned, no image rebuild),
 and appends them to the system prompt after the project rubric. The advisory contract lives
 INSIDE each lens file (`LENS(<name>):` findings are Follow-ups, never the verdict); fetch
-failure skips the lens loudly. The per-stack advisory→blocking knob is not yet rendered (needs
-the AgentStack claim + a launcher read — do it when the first lens earns teeth).
+failure skips the lens loudly. The per-stack advisory→blocking knob is rendered on the
+AgentStack claim as `spec.lenses.<name>: advisory|blocking` (FU-101), sourced through
+the same fail-closed claim read as the reviewer optout — zero extra cluster calls.
+A lens marked blocking appends a `POSTURE: blocking` line to its fetched text so the
+reviewer knows its findings MAY determine the verdict. Absent = every lens stays advisory.
 
 Per-stack claim knob graduates a lens advisory → blocking. Audit-lane model rules (reasoning
 tier allowed, dual-model worth it) are FU-095's.

@@ -281,6 +281,14 @@ DEPTH RULE (this PR closes issue #$issue, which sits at follow-up depth $sprout_
 }
 # <<<REPLAY:s6-child-1-depth-rule<<<
 
+# FU-101 lens posture: read the per-stack lenses→posture map from the SAME single claim read
+# that feeds the optout gate (reviewer-optout.sh). This costs zero extra cluster calls and
+# cannot straddle a claim edit the way two reads can. Fail-closed: unreadable → empty map
+# (every lens stays advisory, consistent with the optout gate's posture).
+# >>>REPLAY:lens-posture-gate>>>
+LENS_MAP="$(bash "$HERE/reviewer-optout.sh" --lens-map "$PROJECT" 2>/dev/null || echo "{}")"
+# <<<REPLAY:lens-posture-gate<<<
+
 PREP=$(cat <<PREP
 set -e
 ${LOOP_FETCH}gh repo clone ${REPO_SLUG} /work/repo -- --quiet
@@ -334,13 +342,27 @@ if printf '%s\n' "\$CHANGED" | grep -qE '^charts?/templates/|^(argocd|k8s|manife
 fi
 SYSFILE=/tmp/review-system.md
 if [ -f "${RUBRIC}" ]; then cp "${RUBRIC}" "\$SYSFILE"; else : > "\$SYSFILE"; fi
+# Lens posture map from the single claim read (FU-101): absent lenses → advisory
+LENS_MAP='$LENS_MAP'
+# >>>REPLAY:lens-posture-handling>>>
 for l in \$LENSES; do
+  _posture=\$(printf '%s' "\$LENS_MAP" | jq -r --arg l "\$l" '.[\$l] // "advisory"' 2>/dev/null || echo "advisory")
   if { printf '\n\n---\n\n'; curl -fsS --max-time 10 "\$LENS_BASE/\$l.md"; } >> "\$SYSFILE"; then
-    echo "→ lens attached: \$l (advisory — FU-101)"
+    if [ "\$_posture" = "blocking" ]; then
+      printf '\n**POSTURE: blocking** — findings from this lens MAY determine the verdict.\n' >> "\$SYSFILE"
+      echo "→ lens attached: \$l (BLOCKING — \$LENS_MAP maps it)"
+    else
+      echo "→ lens attached: \$l (advisory — FU-101)"
+    fi
   else
-    echo "WARN: lens \$l fetch failed — review proceeds without it (advisory-only, never blocks)"
+    if [ "\$_posture" = "blocking" ]; then
+      echo "WARN: lens \$l fetch FAILED — lens is BLOCKING for this stack, but review proceeds without it (a blocking lens that cannot be fetched must NOT silently become advisory)"
+    else
+      echo "WARN: lens \$l fetch failed — review proceeds without it (advisory-only, never blocks)"
+    fi
   fi
 done
+# <<<REPLAY:lens-posture-handling<<<
 RUBRIC_FLAG=""
 [ -s "\$SYSFILE" ] && RUBRIC_FLAG="--append-system-prompt-file \$SYSFILE"
 echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: \${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"

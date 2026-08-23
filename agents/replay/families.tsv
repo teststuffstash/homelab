@@ -37,6 +37,7 @@ harvest-goal-open-exhausted	harvest
 harvest-goal-open-funded	harvest
 harvest-master-inert	harvest
 ledger-emitter-rounds	ledger-emitter-rounds
+lens-posture	lens-posture
 model-id-parse-drift	model-id-parse-drift
 opencode-phonehome-killswitch	opencode-phonehome-killswitch
 pick-rail-both	pick-rail

@@ -177,6 +177,23 @@ spec:
                       type: string
                       default: haiku
                       description: Claude model alias for the probe session (subscription rail).
+                lenses:
+                  type: object
+                  description: >-
+                    Per-stack knob graduating a named lens from advisory to blocking (FU-101).
+                    Each key is a lens name (e.g. k8s-prod, helm); the value is the posture.
+                    Absent = every lens stays advisory. NO default on this object on purpose:
+                    an omitted defaulted object is stamped into the stored claim by the API
+                    server and permanently OutOfSyncs every claim that does not carry it
+                    (the 2026-07-16 claudeTier lesson — same rule as prober).
+                  additionalProperties:
+                    type: string
+                    enum: [advisory, blocking]
+                    default: advisory
+                    description: >-
+                      advisory — lens findings are Follow-ups, never the verdict.
+                      blocking — lens findings MAY determine the verdict (the lens text
+                      carries the posture line so the reviewer knows it matters).
                 loop:
                   type: object
                   default: {}
