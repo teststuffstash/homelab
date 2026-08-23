@@ -1356,6 +1356,22 @@ preconditions + knob ledger + build order in
 [`agents/chainless-redesign.md`](agents/chainless-redesign.md); the jail shim
 (`scripts/claude-model-shim.py`) is the rail-split prototype the proxy inherits.
 
+**Addendum (2026-08-23, operator ruling — the G-A fan-out pilot sitting): decision 3's "one
+harness" fused two senses and is REWORDED.** *Sense A — full-support harness*: runs in every
+role/reflex and serves every rail (both subscriptions, OpenRouter, free tiers). *Sense B — the
+dispatch-time pick*: which harness a given ride runs. The ruling: **claude AND opencode both
+reach sense-A full support** (claude first — the beefiest subscription lives there, and it still
+lacks in-cluster OpenRouter service; opencode is PROMOTED from experiment-cell to first-party),
+and the monoculture reading is retired — **harness is a CELL AXIS, not a constant**. The scout
+canaries every candidate across ALL THREE harnesses and a model's verdict is the cell VECTOR,
+never one harness's failure (evidence: `stealth/ox-alpha`, 2026-08-23 — goose 400-storm,
+bare-id opencode mis-resolved to a default model, prefixed opencode drove tools fine; the
+2026-08-10..17 all-`failed` canary rows are the same single-cell blindness). Failed cells
+retry on a backoff ladder (~1h/2h) before a verdict sticks — free-tier transients are not
+verdicts. FU-095(b)'s cells become the standing evidence surface rather than a demoted
+experiment. Build: G-A children (the proxy anthropic→OpenRouter translation leg; opencode
+first-party plumbing) + homelab#778 (scout 3-harness cells + retry ladder).
+
 ### ADR-109 — `agent-fix` means SUITABILITY; operator intent is never machinery state
 
 **Status:** Accepted (2026-08-17, operator ruling in the design-agents sitting that followed PR#475).
