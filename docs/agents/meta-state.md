@@ -83,18 +83,18 @@ meant to avoid.)
   ~2026-09-03 / fixup-wave end / OR depletion, whichever first** (claim comment carries the
   full record; Go re-flip stays FU-181).
 
-- **⚑ S6 STINT #716: TREE EMPTY; Container-findings acceptance ✅ PROVEN 2026-08-23** — first
-  ORGANIC depth-≥4 use flowed end-to-end (#740 closed by PR#759 → merge edge → C6 append on
-  #716 at 10:14:52Z, 3.5 min post-merge; chain #740→#738→#732→#719→#716 walked correctly).
-  Quiet-window close due at a sweep ≥2026-08-23 (same calendar as #420 + #711). **The S4
-  session's sweep DISPOSES the two appended bullets**: (a) reviewer footprint check reads only
-  the FIRST `Touches:` line (`reviewer-session.sh:362` `head -1`; scan side already
-  union-correct; `fix-debounce-argo.yaml:298` same shape, unassessed) — the PR#759 false-escape
-  instance; (b) stale "unreplayable until #740" comment in `agents/update-pr-branch.sh:64-65`
-  + the twin pointer in `fixtures/updater/fixture.yaml` (one-line cleanups). Remaining S6
-  acceptance: unbound-sprout belt silent under the week's traffic; responder `Cause:` line
-  awaits organic use; Mon 08-24 retro fire exercises the filing rule. **Next: S4 (operator,
-  2026-08-23 — this session's close); S5 deliberately LAST (ROADMAP work-map S5 row).**
+- **⚑ S4 STINT #762 LAUNCHED + largely executed 2026-08-23 (session 1).** Done: #765 eviction,
+  #766 rename (FU-163 archived), #767 check-3 flip, sprout #769 shipped, #770 closed as
+  duplicate-of-#332. In flight at last write: **PR#768** (#763 ground rules — was BEHIND,
+  updater-owned) + **PR#774** (#769) riding their review cycles; a fresh session finishes their
+  gate reads if parked. **OPERATOR DECISION PARKED: PR#773** (#764 — CLAUDE.md facts vs
+  `agents/jail-seat-card.md`, reworked to separate-files on the operator's mid-session
+  direction; un-armed, awaiting their read; claude-jail#1 carries the bootstrap-composition
+  spec). Stint closeout 1 fires when #768 lands + the operator rules on #773.
+  S6 #716 + S3 #711 CLOSED this session (quiet windows passed; #716's Container-findings
+  disposed via PR#761, deploy verified in-cluster). #420 stays open (#575 closed 08-23 09:50Z
+  reset its window — next check ≥08-26). Remaining S6 acceptance watches: unbound-sprout belt
+  quiet; responder `Cause:` organic use; Mon 08-24 retro fire. **S5 deliberately LAST.**
 
 ## Durable warnings — EVICTED (S4 #765, 2026-08-23)
 
