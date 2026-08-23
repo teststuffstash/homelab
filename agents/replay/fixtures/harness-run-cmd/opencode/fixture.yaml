@@ -1,0 +1,20 @@
+# homelab#792 — opencode joins the --recipe path (G-A 12, ADR-107 addendum).
+#
+# CONDITION UNDER REPLAY. A recipe dispatch on the opencode harness: the card-spliced recipe is
+# already base64'd, the context-repos prelude is built, the issue number is known. What is left is
+# the `case "$HARNESS"` that freezes the pod command — the string that reaches `args:` as one
+# argv element a few dozen lines later.
+#
+# THE CONTRACT:
+#   1. `OPENCODE_MODEL` is the full provider-prefixed id (openrouter/<vendor>/<model>).
+#   2. The recipe is base64-decoded to /tmp/fix-recipe.yaml; the opencode run command references
+#      the recipe file as the task prompt.
+#   3. The rest of the pod command is unmoved: prelude, then the base64 decode, then `opencode run
+#      -m ${OPENCODE_MODEL} ...`.
+name: harness-run-cmd-opencode
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-run-cmd
+  - file:post.sh
