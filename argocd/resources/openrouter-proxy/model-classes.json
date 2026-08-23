@@ -13,6 +13,7 @@
   },
   "review": {
    "chain_source": "stack",
+   "decorrelate": "family",
    "reasoning": true,
    "min_tier_rule": "gte-author",
    "rails": [
