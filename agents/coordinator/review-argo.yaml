@@ -86,6 +86,13 @@ spec:
       port: "12000"
       endpoint: /sentinel
       method: POST
+    # ADR-111 (homelab#744): the updater doorbell — the github-exporter POSTs {repo} when an
+    # armed green PR goes BEHIND (maybe_dispatch_behind, #743). Consumed by the `update-pr`
+    # Sensor (update-pr-argo.yaml); the */15 CronWorkflow in the same file is the backstop.
+    update-pr:
+      port: "12000"
+      endpoint: /update-pr
+      method: POST
 ---
 # Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
 apiVersion: argoproj.io/v1alpha1

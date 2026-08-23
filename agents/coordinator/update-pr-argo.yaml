@@ -1,0 +1,163 @@
+# The merge-path updater, in-cluster (ADR-111 / homelab#744) — the activation machinery around
+# agents/update-pr-branch.sh (#742), replacing the GitHub-hosted reusable workflow whose */15 cron
+# was 91–96% of its runs and ~4,800 hosted min/mo across the private repos (#698). The review-path
+# shape (ADR-093), verbatim: exporter edge (maybe_dispatch_behind, #743) → /update-pr doorbell →
+# Sensor → this WorkflowTemplate for ONE repo; a */15 CronWorkflow sweeps the whole universe as
+# the level-triggered backstop. The hosted callers + reusable retire at the #745 cutover, ONLY
+# after this leg is observed servicing updates for a few days.
+#
+# THE EVENT IS A DOORBELL, NEVER A WORK ITEM: the payload {repo} only scopes the pass — the script
+# re-derives armed/green/BEHIND itself with the App token (over-approximation is fine, a false
+# wake costs one pr-list read). At-least-once, missable; the cron re-derives everything.
+#
+# Serialization: one mutex across edge + cron submissions (Cron `Forbid` cannot see Sensor
+# submissions — the coordinate-argo.yaml lesson). Races beyond it cost a wasted API call, never a
+# bad merge: update-branch is idempotent at GitHub and the merge gate is GitHub's (merge-path.md).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: update-pr-branch
+  namespace: agent-coordinator
+spec:
+  entrypoint: main
+  serviceAccountName: agent-coordinator
+  synchronization:
+    mutexes:
+      - name: update-pr-branch
+  activeDeadlineSeconds: 600
+  ttlStrategy: { secondsAfterCompletion: 21600, secondsAfterFailure: 86400 }
+  arguments:
+    parameters:
+      # cron|edge — the wake source, stated per run (the FU-144 accounting shape: "% of updates
+      # edge-served" must be a number; a CRON-SERVICED update names a dead edge — #702).
+      - { name: wake, value: "cron" }
+      # one repo short name (edge) or "" = the whole stacks.json universe (cron).
+      - { name: repo, value: "" }
+  volumes:
+    - { name: work, emptyDir: {} }
+  templates:
+    - name: main
+      inputs:
+        parameters:
+          - { name: wake, value: "{{workflow.parameters.wake}}" }
+          - { name: repo, value: "{{workflow.parameters.repo}}" }
+      metadata:
+        labels: { app: update-pr-workflow }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        command: ["bash", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            WAKE="{{inputs.parameters.wake}}"; ONE="{{inputs.parameters.repo}}"
+            rm -rf /work/homelab
+            git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            cd /work/homelab
+            # Bring-up guard: these manifests and the script (#742) merge as separate PRs — a run
+            # landing in the gap no-ops loudly instead of redding every */15 tick. Harmless
+            # permanently: master always carries the script after the stint.
+            [ -f agents/update-pr-branch.sh ] || { echo "updater script not on master yet (#742 mid-cycle) — no-op"; exit 0; }
+            # Universe = the stacks.json MIRROR, the way review-reflex.sh derives its scan set —
+            # never a hand list (the claims are the source; the mirror is their committed twin,
+            # always present in a fresh clone; agentstack.md §Consumption).
+            if [ -n "$ONE" ]; then REPOS="$ONE"; else
+              REPOS="$(jq -r '.stacks[].repos[]' agents/stacks.json | sort -u)"
+            fi
+            rc=0
+            for r in $REPOS; do
+              out="$(bash agents/update-pr-branch.sh "teststuffstash/${r}" 2>&1)" || rc=1
+              printf '%s\n' "$out"
+              # The CRON-SERVICED detector (#702, from day one): an UPDATE the cron performed is
+              # an update the behind edge missed — a dead-edge finding with a name, not coverage
+              # working as intended. Silence over weeks = the edge carries the load.
+              if [ "$WAKE" = "cron" ]; then
+                printf '%s\n' "$out" \
+                  | grep -E '^(updater\[.*\]: updating|unstrand: updating)' \
+                  | sed "s|^|CRON-SERVICED (${r} — the behind edge missed this; dead-edge detector #702): |" || true
+              fi
+            done
+            exit $rc
+        env:
+          - { name: HOME, value: "/home/node" }
+          - { name: ORG, value: "teststuffstash" }
+          # The homelab-merge App token (updater-git.yaml). NOT optional: no token = no updater —
+          # the pod parks in CreateContainerConfigError until ESO materialises the Secret, which
+          # is louder and safer than a pass that 401s per repo.
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: updater-git, key: GH_TOKEN } }
+          # The merge-conflict LABEL identity: coordinator-git (issues:write) — the merge App
+          # deliberately has no Issues permission (updater-git.yaml header). Optional: absent,
+          # the script tries the main token and reports the refusal without failing the pass.
+          - name: UPDATER_LABEL_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+        volumeMounts:
+          - { name: work, mountPath: /work }
+        resources:
+          requests: { cpu: "50m", memory: "128Mi" }
+          limits: { memory: "256Mi" }
+---
+# Sensor — on an /update-pr doorbell (the exporter's maybe_dispatch_behind, #743), run one
+# repo-scoped pass. rateLimit is the dumb outer belt; the exporter dedupes per
+# (repo, number, head) so steady-state is one ring per newly-behind head.
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: update-pr
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: sensor-review # same submit-only Role as the other agent-loop Sensors
+    container:
+      resources:
+        requests: { cpu: "25m", memory: "64Mi" }
+        limits: { memory: "128Mi" }
+  dependencies:
+    - name: update-pr-dep
+      eventSourceName: agent-loop
+      eventName: update-pr
+  triggers:
+    - rateLimit: { unit: Minute, requestsPerUnit: 6 }
+      template:
+        name: submit-update-pr
+        conditions: "update-pr-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: update-pr-edge-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: update-pr-branch }
+                arguments:
+                  parameters:
+                    - { name: wake, value: "edge" }
+                    - { name: repo, value: "OVERRIDE" }
+          parameters:
+            - src: { dependencyName: update-pr-dep, dataKey: body.repo }
+              dest: spec.arguments.parameters.1.value
+---
+# The */15 level-triggered backstop over the whole universe — the leg that REPLACES the hosted
+# cron burning ~4,800 min/mo (in-cluster, minutes cost nothing; GitHub delivered */15 as
+# ~25–35 min effective anyway). Forbid + the template mutex serialize it against edge runs.
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: update-pr-branch-cron
+  namespace: agent-coordinator
+spec:
+  schedules: ["*/15 * * * *"]
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  workflowSpec:
+    workflowTemplateRef: { name: update-pr-branch }
+    arguments:
+      parameters:
+        - { name: wake, value: "cron" }
+        - { name: repo, value: "" }

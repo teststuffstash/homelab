@@ -10,6 +10,10 @@
 #   3. conflict labeler: armed ∧ DIRTY gains merge-conflict (idempotent create first); the label
 #      is removed once the PR is no longer armed-and-DIRTY.
 # The script under test is INVOKED BY PATH (bridge.sh), never transcribed — arg handling included.
+# Ratchet disposition (#744, 2026-08-23): the /update-pr EventSource endpoint (review-argo.yaml)
+# and the Sensor/WorkflowTemplate/cron around this script (update-pr-argo.yaml) are ACTIVATION
+# MACHINERY — routing surface with no clause logic of their own; THIS family is their behavior
+# pin, and the CRON-SERVICED detector line is asserted operationally (log-read), not replayed.
 # Base world `board` is CLEAN (#90 armed∧CLEAN + #91 unarmed∧BEHIND = the armed-only witness);
 # each row patches its condition in. ⚠ The 422-on-update branch is unreplayable until homelab#740
 # (STUB_GH is run-global; a single write cannot be failed) — noted at the branch in the script.

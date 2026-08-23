@@ -7,6 +7,7 @@
 #
 # The Argo entries are the reason this file exists at all — kustomize's built-ins only walk the
 # standard PodSpec locations, and Argo hangs container specs off `spec.templates[]`.
+# (Count re-verified 2026-08-23 with the update-pr WorkflowTemplate: 16 references, 0 untagged.)
 images:
   # ── standard PodSpec shapes (restoring the built-ins) ──
   - path: spec/containers/image
