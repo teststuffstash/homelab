@@ -13,6 +13,22 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# severity:info check (homelab#769 / S4 #762) — kube-prometheus-stack's stock InfoInhibitor
+# inhibit rule holds every `severity: info` alert `suppressed` in Alertmanager: it fires in
+# Prometheus and is dispatched to NOTHING (not the responder, not the HA webhook — proven live
+# 2026-08-06; runbook §Meta-session probe & triage discipline). A rule that WANTS to be
+# dashboard/API-only acknowledges it with an `info_suppressed_ack` annotation saying why;
+# anything else is a decoration shipped as an alert and REDS here. Args: <rules-json> <label>.
+check_info_severity() {
+  local inf
+  inf=$(jq -r '[.groups[].rules[]? | select(.alert) | select(.labels.severity == "info")
+                | select((.annotations.info_suppressed_ack // "") == "") | .alert] | join(", ")' "$1" 2>/dev/null || true)
+  [ -z "$inf" ] && return 0
+  echo "  FAIL $2: severity: info is SILENTLY SUPPRESSED (InfoInhibitor) — these dispatch to NOTHING: $inf" >&2
+  echo "        use severity: warning, or annotate info_suppressed_ack: \"<why dashboard-only is intended>\"" >&2
+  return 1
+}
+
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 files=$(grep -rl "^kind: PrometheusRule" argocd/ tofu/ 2>/dev/null | sort || true)
 [ -n "$files" ] || { echo "prometheus-rules-lint: FAIL — found no PrometheusRule manifests at all" >&2; exit 2; }
@@ -30,6 +46,7 @@ for f in $files; do
     echo "  FAIL $f:"; printf '%s\n' "$out" | sed 's/^/    /'
     rc=1
   fi
+  check_info_severity "$tmp/r.json" "$f" || rc=1
   checked=$((checked+1)); rules=$((rules+n))
 done
 [ "$checked" -gt 0 ] && echo "prometheus-rules-lint: $checked file(s), $rules rule(s) checked$( [ $rc -eq 0 ] && echo ' — all parse' )"
@@ -73,6 +90,7 @@ for f in $vfiles; do
       echo "  FAIL $f (entry '$e'):"; printf '%s\n' "$pout" | sed 's/^/    /'
       rc=1; file_rc=1
     fi
+    check_info_severity "$out" "$f (entry '$e')" || { rc=1; file_rc=1; }
   done <<EOF
 $entries
 EOF
