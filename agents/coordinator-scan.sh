@@ -1320,11 +1320,19 @@ EOF_GUARDED
         fi
       fi
       # <<<REPLAY:guarded-hold<<<
+      # ADR-097 goal exemption (homelab#822): a goal's decompose/checkpoint unit writes
+      # no code (it authorises child issues via `gh` and toggles labels, never a PR diff),
+      # so the ADR-097 footprint hold — which prevents write-surface conflicts between
+      # concurrently dispatched units — is a category error. A goal is exempt in BOTH
+      # directions: it is not held by in-progress issues' footprints and does not hold
+      # sibling dispatches.
+      if fp_goal_exempt "$qclass"; then
+        : # skip the ADR-097 footprint hold for goal-class units
       # ADR-097 footprint hold (supersedes the track-label lane hold): a queued unit is held iff
       # its declared footprint intersects ANY in-progress issue's footprint. Undeclared (`*`)
       # conflicts with everything, so a repo with any in-progress work keeps WIP=1 for legacy
       # issues; disjoint declared footprints dispatch in parallel (launcher limit rides wipmap).
-      if fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
+      elif fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
         orphans="${orphans}[$repo] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
         continue
       fi
