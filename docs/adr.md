@@ -1338,7 +1338,8 @@ goal-half of FU-090 superseded; design detail: docs/agents/issue-authoring.md §
 ### ADR-107 — Chainless everywhere: one harness, N subscription rails, every role routed
 
 **Status:** Charter accepted (operator, 2026-08-13 — the subscription-autopsy session; build not
-started). **Decision:** (1) static model chains are DELETED, `routerMode: authoritative` becomes
+started). **Decision (3) Superseded-by ADR-112** (2026-08-23 — the one-harness monoculture is
+reversed; decisions 1–2, 4–5 stand). **Decision:** (1) static model chains are DELETED, `routerMode: authoritative` becomes
 the only mode; (2) every role (coordinator/reviewer/responder/retro/prober) wires to `/route` —
 doctrine moves to git-owned class policy, never hardcoded models; (3) ONE harness (the claude
 CLI) serves every rail — rail/model materialize as proxy-side base-URL/credential/model
@@ -1429,6 +1430,28 @@ adRise action retires and MP-T02 becomes an executed-replay clause; the exporter
 dispatcher (cron backstop + `GithubExporterDown/Stale` are the belts); the cron carries the
 CRON-SERVICED detector from day one; FU-183's pro-rated burn alert becomes a true anomaly
 detector. Supersedes the hosted-by-design line in `workflow.md` §Triggers + `merge-path.md`.
+
+### ADR-112 — Harness support is a matrix: claude AND opencode full-support; harness is a cell axis
+
+**Status:** Accepted (operator ruling, 2026-08-23 — the G-A fan-out pilot sitting). Supersedes
+ADR-107 decision (3). **Decision:** the "one harness" wording fused two senses and is replaced.
+*Sense A — full-support harness*: runs in every role/reflex and serves every rail (both
+subscriptions, OpenRouter, free tiers). *Sense B — the dispatch-time pick* for a given ride.
+**claude AND opencode both reach sense-A full support** (claude first — the beefiest
+subscription lives there and it still lacks the in-cluster OpenRouter leg; opencode is PROMOTED
+from experiment-cell to first-party: recipe support, headless permissions, full-id `-m`). The
+monoculture reading is retired — **harness is a CELL AXIS, not a constant**: the scout canaries
+every candidate across ALL THREE harnesses and a model's verdict is the cell VECTOR, never one
+harness's failure; failed cells retry on a backoff ladder (~1h/2h) before a verdict sticks —
+free-tier transients are not verdicts. **Considered:** filing this as an ADR-107 addendum —
+rejected by this file's own rule 2 (a decision reversal is a new ADR, never an addendum).
+**Why:** `stealth/ox-alpha` (2026-08-23) — goose 400-storm, bare-id opencode mis-resolved to a
+default model, prefixed opencode drove tools fine: three harness paths, three outcomes, one
+model; the 2026-08-10..17 all-`failed` canary rows are the same single-cell blindness.
+**Consequences:** FU-095(b)'s cells become the standing evidence surface rather than a demoted
+experiment; build = G-A children (the proxy anthropic→OpenRouter translation leg; opencode
+first-party plumbing) + homelab#778 (scout 3-harness cells + retry ladder); design home
+[`agents/chainless-redesign.md`](agents/chainless-redesign.md) decision 3.
 
 ### ADR-108 — Observability stays out of routing-critical paths; meters push, critical paths never pull Prometheus
 
