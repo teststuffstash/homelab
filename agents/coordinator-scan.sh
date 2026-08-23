@@ -2642,19 +2642,11 @@ EOF_GUARDED
     # "Sonnet is sufficient here; opus is available for a genuinely high-stakes PR via --model, but
     # it is not the default." A review is a review. Escalate a SPECIFIC hard goal with GOAL_MODEL,
     # do not raise the floor for the whole clause.
-    # ⚠ Launcher-side map ON PURPOSE (ADR-094: dispatch params are launcher-owned, never
-    # LLM-assembled). The router's vocabulary already describes this better — it grades
-    # `claude/opus: premium` in `model_tiers` and separates `reasoning: true` classes from
-    # `dispatch` — but /route's ONLY caller is agent-session.sh (the worker launcher);
-    # coordinator-session.sh consults the proxy solely for /loop-git-token, so there is nothing to
-    # route through yet. When the coordinator lane is wired to /route (post-P4, FU-095), this map
-    # becomes a subscription-rail reasoning class and dies here. See docs/agents/model-routing.md §M10.
-    case "$uclause" in
-      # AUTHORING vs CHECKING (operator ruling 2026-08-05): decompose CREATES work; the ADR-106
-      # checkpoint is the SECOND authoring moment (fold-by-footprint / mint children / drop), so
-      # it rides the same reasoning tier. The demoted burn-down tick costs no model at all.
-      goal-decompose|goal-checkpoint) cmodel="${GOAL_MODEL:-opus}";;
-    esac
+    # G-A 8 (#781): this case map is DEAD — replaced by the goal-decompose class policy in
+    # model-classes.json. coordinator-session.sh now calls resolve-model.sh with --role coordinator
+    # and the clause-derived class (goal-decompose for goal-decompose/goal-checkpoint, dispatch
+    # for everything else via role_defaults). GOAL_MODEL survives as the env escape hatch in
+    # coordinator-session.sh. The comment above is left as a historical marker (ADR-094).
     # ADR-097: the launcher-owned AGENT_WIP_LIMIT for this repo (live workers + 1, ceiling-capped;
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
     uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | head -1)"
