@@ -4741,3 +4741,10 @@ first live ADR-110 maintenance session before the ADR existed.
   current (both jail rows live). Tree empty ~11:52Z — close ARMED, executes ≥08-26. One session
   against `Size: 2`. Fleet CLAUDE.md slim-down inventoried + tiered on claude-jail#1
   (12 repos, 3 tiers), unblocked, awaiting the operator's word.
+- SESSION CLOSE (~12:15Z, operator wind-down order): next session = the G-A launch (Goal-lane
+  unpause GIVEN for G-A; OR ruling recorded — limited budget loaded, losing all of it during
+  G-A accepted, PR#715 flip stays through the Goal). First read Mon 08-24 retro fire. Fleet
+  CLAUDE.md rollout dispatched to the main jail session (prompt handed over; completion lands
+  on claude-jail#1). Monitors killed, transcripts synced. Session total: S6+S3+S4 containers
+  advanced/closed, 6 PRs merged (761/768/771/772/774 + operator's 773), 2 FUs archived
+  (FU-117, FU-163), stint #762 tree empty in one session.

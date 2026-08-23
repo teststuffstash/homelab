@@ -57,9 +57,18 @@ meant to avoid.)
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
   buildout → then stacks.** The forward plan lives in **ROADMAP §The platform work map**
   (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
-- **⚑ Goal lane pause (operator, 2026-08-13):** no new Goal until v1.2 machinery + budget
-  recovery. As of 2026-08-19 the conditions read met (work map) — the unpause is the operator's
-  call at G-A launch; Goal budgets on [the platform stack](agentstack.md) stay cap-phantom until FU-180.
+- **⚑ NEXT SESSION = the G-A LAUNCH (operator, 2026-08-23 — the Goal-lane UNPAUSE is given for
+  G-A).** A fresh corpus session: FIRST READ = the Mon 08-24 05:00Z platform-retro fire (FU-058
+  organic acceptance — a failed fire is handled before the launch), then author the Goal AT
+  launch (last-possible-moment rule; scope pointers = the work-map G-A row: charter build items
+  3–6 + flip acceptance 2–4, #516 family decorrelation, FU-127, FU-095(a)/(c), FU-179; FU-180
+  accepted = the Goal's `Budget:` stays cap-phantom on [the platform stack](agentstack.md)) and
+  decompose with the corpus loaded. **OR-budget ruling (operator, 2026-08-23): a limited
+  OpenRouter budget is loaded and losing ALL of it during G-A is acceptable** — platform
+  workers STAY on the PR#715 paid-OR-flash flip through G-A (do NOT revert early on M12
+  independence grounds; the ~09-03/fixup-end/depletion revert calendar stands). Fleet CLAUDE.md
+  slim-down is DISPATCHED to the main jail session (completion comment lands on claude-jail#1
+  — no homelab tracker debt).
 - **minutark.ee / oracle-iac#351** — OPEN, oracle parked (operator 2026-08-11); pick up at
   unpark. Acceptance = drift-free re-plan through the two-zone token. ⚠ `dig +short` wraps long
   DS digests — `tr -d ' '` before grepping.
