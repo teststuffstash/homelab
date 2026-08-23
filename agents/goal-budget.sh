@@ -51,7 +51,15 @@ GB_HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # degrades to the conservative cap-sum (see the charge loop).
 gb_ledger() {   # gb_ledger <project>
   _gb_pgw="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
-  curl -m 5 -fsS "${_gb_pgw}/metrics" 2>/dev/null | sort -u \
+  _gb_raw="$(curl -m 30 -fsS "${_gb_pgw}/metrics" 2>&1)" || {
+    _gb_rc=$?
+    case $_gb_rc in
+      28) echo "→ gb_ledger: TIMED OUT after 30s (payload likely large) — falling back to cap-sum" >&2;;
+      *)  echo "→ gb_ledger: UNREACHABLE (curl exit $_gb_rc) — falling back to cap-sum" >&2;;
+    esac
+    return 1
+  }
+  printf '%s\n' "$_gb_raw" | sort -u \
     | awk -v proj="$1" '/^agent_run_cost_usd\{/ && index($0, "project=\"" proj "\"") {
         if (match($0, /issue="[0-9]+"/)) { iss=substr($0, RSTART+7, RLENGTH-8);
           sum[iss] += $NF } }
@@ -232,7 +240,8 @@ print(json.dumps(out))
   # not "may this specific ride mint a key". Same sum, one fewer reservation — advisory, as the
   # ⚖ line on #207 requires. The launcher pre-flight remains the enforcing arithmetic.
   _gb_led="$(gb_ledger "$_gb_proj")" || _gb_led=""
-  [ -z "$_gb_led" ] && echo "→ Goal budget: spend ledger unreachable — falling back to CAP-sum (conservative)" >&2
+  GB_LEDGER_DEGRADED="false"
+  [ -z "$_gb_led" ] && GB_LEDGER_DEGRADED="true" && echo "→ Goal budget: spend ledger unreachable — falling back to CAP-sum (conservative)" >&2
   GB_SUM=0; GB_ROWS=""
   for _gb_row in $(printf '%s' "$_gb_kids" | jq -r '.[] | "\(.n):\(.chars):\(.label):\(.live):\(.ridden)"' 2>/dev/null); do
     _gb_n="${_gb_row%%:*}"; _gb_rest="${_gb_row#*:}"; _gb_c="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"
