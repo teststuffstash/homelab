@@ -1,0 +1,28 @@
+# doorbell-fanout-wiring (issue#796) — pins the PRODUCTION call site of the capacity fan-out,
+# not just the helpers. The REPLAY:doorbell-fanout-callsite block encloses the graduated-stack
+# check + fanout_graduated_stack call that the main loop makes at line 792 of coordinator-scan.sh.
+#
+# CONDITION UNDER REPLAY. The main dispatch loop iterates over stacks_json and for each graduated
+# stack calls fanout_graduated_stack "$name". In normal mode this rings the stack's doorbell; in
+# capacity mode (SCAN_SOURCE=capacity) fanout_graduated_stack returns 0 and no ring is sent.
+# The capacity case block at the end of the doorbell-fanout region rings via capacity_fanout_stacks
+# instead, producing the capacity-ring curl calls visible in the capacity row.
+#
+# The bar: reverting line 792 from fanout_graduated_stack to fanout_stack must turn the replay
+# RED, because the extracted block would then call fanout_stack which lacks the capacity guard
+# and double-rings in capacity mode.
+name: doorbell-fanout-wiring
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:doorbell-fanout
+  - file:latch-override.sh
+  - file:loop-open.sh
+  - block:doorbell-fanout-callsite
+  - file:loop-close.sh
+rows: rows.psv
+env:
+  - SPAWN=1
+  - SCAN_REPO=all
+  - SCAN_RING_NS=
