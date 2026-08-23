@@ -429,12 +429,12 @@ incident detail are TICK-LOG's.
   claiming a condition ended. And **a deploy can silence an alert for its whole `for:`
   window**: restarting the emitting pod ends the old per-pod series and the `for:` timer
   restarts from zero (SubscriptionWeeklyPoolLow sat at 0.92 while "cleared", 2026-08-07).
-  Hardening the class (`max_over_time` over restart gaps) is a [stint](agents/chainless-redesign.md)-#762 sprout.
+  The class is SHIPPED (homelab#332): the restart-gap test — bridged vs deliberately-not-bridged per alert — lives at the head of `argocd/resources/openrouter-proxy/prometheusrule.yaml`, promtool-pinned.
 - **`severity: info` alerts are SILENTLY SUPPRESSED in this cluster** — kube-prometheus-stack's
   stock `InfoInhibitor` inhibit rule holds them `suppressed` in Alertmanager; they dispatch to
   nothing (not the responder, not the Home Assistant webhook). Use `warning`. Tell:
   `curl -s 'http://192.168.40.14:9093/api/v2/alerts?inhibited=true'` — Prometheus saying
-  `firing` is NOT evidence anyone was told. A lint signature for this is a stint-#762 sprout.
+  `firing` is NOT evidence anyone was told. Mechanized: `prometheus-rules-lint` reds on unacknowledged `severity: info` (homelab#769).
 - **A steady-state COUNTER cannot separate "at capacity" from "cannot work"** (`running: 4,
   pending: 0` reads identically either way). Capacity claims need a THROUGHPUT signal: a
   saturated pool has jobs RUNNING, a broken one has workers WAITING. (Also in the responder
