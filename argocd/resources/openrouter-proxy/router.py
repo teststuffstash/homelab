@@ -1321,8 +1321,8 @@ def route(payload: dict, ctx: dict) -> dict:
         decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
                     "half_open": half_open, "skipped": skipped, "jitter": jitter_on, **result}
     else:
-        if decorrelate_family and not eligible and \
-                any(s["reason"] == f"decorrelate:{decorrelate_family}" for s in skipped):
+        if decorrelate_family and not eligible and skipped and \
+                all(s["reason"] == f"decorrelate:{decorrelate_family}" for s in skipped):
             reason = f"decorrelate:{decorrelate_family}"
             retry = None
         elif capacity_block:
@@ -2340,6 +2340,25 @@ def self_test() -> int:
     _write("UPDATE model_cooldowns SET until=? WHERE model=?",
            (_now - 1, "inclusionai/ling-3.0-flash:free"))
     cooldown_note("inclusionai/ling-3.0-flash:free", 200)
+    # Mixed decorrelate + deny: two models, one decorrelated (vendor deepseek), one denied.
+    # With the all() guard, this must defer chain-exhausted (not relabel decorrelate:deepseek).
+    _dc6 = route(dict(base, chain=["deepseek/deepseek-v4-flash", "moonshotai/kimi-k3"],
+                      deny=["moonshotai/kimi-k3"],
+                      decorrelate_from="opencode-go/deepseek-v4-flash"), CTX)
+    assert _dc6["decision"] == "defer" and _dc6["reason"] == "chain-exhausted", \
+        f"mixed decorrelate+deny must defer chain-exhausted: {_dc6}"
+    # Mixed decorrelate + cooldown: two models, one decorrelated (vendor deepseek), one on
+    # cooldown (moonshotai/kimi-k3). Must defer cooldown (not decorrelate) and carry retry_after_s.
+    _now2 = time.time()
+    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?)",
+           ("moonshotai/kimi-k3", _now2 + 99999, 1, "429-burst", _now2))
+    _dc7 = route(dict(base, chain=["deepseek/deepseek-v4-flash", "moonshotai/kimi-k3"],
+                      decorrelate_from="opencode-go/deepseek-v4-flash"), CTX)
+    assert _dc7["decision"] == "defer" and _dc7["reason"] == "cooldown", \
+        f"mixed decorrelate+cooldown must defer cooldown: {_dc7}"
+    assert _dc7.get("retry_after_s") is not None, \
+        "mixed decorrelate+cooldown must carry retry_after_s"
+    _write("DELETE FROM model_cooldowns WHERE model=?", ("moonshotai/kimi-k3",))
     # homelab#180: the operator-gauge parse behind the latch's `credit` leg. The proxy half is one
     # HTTP GET; every way this leg can go quietly dead is decided HERE, so it is pinned HERE.
     _OP_TS = 1786237718.460958
