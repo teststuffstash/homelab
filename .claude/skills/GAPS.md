@@ -26,12 +26,18 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
 
 ## design-agents
 
-- [ ] design-agents-G1 — a STATUS read from `meta-state.md`/tracker was repeated in the answer
+- [x] design-agents-G1 — a STATUS read from `meta-state.md`/tracker was repeated in the answer
       ("agent-runtime#62 still queued") although the session's own live board probe contradicted
       it in-context (#62 closed 30 min after meta-state's consolidation stamp). Fix: the output
       contract gains "status claims lifted from transient docs are live-verified (or marked
       as-of-doc-date) before being reported" — the never-repeat-a-remembered-status rule applied
       to the corpus itself. Sighted 2026-08-11 (operator catch).
+      **RESIGHT 2026-08-23 (operator catch)** — the class extends to CONFIG constants, not just
+      statuses: the seat quoted workflow.md's "SUBSCRIPTION_MAX_RUNNING default 3" while the
+      deployed value had been 5 for two weeks (the operator's own dashboard said /5 in the same
+      conversation). A number in corpus prose describing live config is a status claim; the
+      deployment/ConfigMap is the authority. **promoted→** the skill's output contract gains
+      the live-state-claims-verified rule (statuses AND config constants), same commit.
 - [ ] design-G2 — "multiple passes gave different answers to the same question" wasn't
       recognized as a design-shaped trigger; the first pass ran as grep-triage and missed
       tracker-held facts (FU-157's user-token nature; the live legacy token outside the

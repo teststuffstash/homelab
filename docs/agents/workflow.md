@@ -109,7 +109,9 @@ at 85%:
    than spilling to paid.
 
 Two more gates ride the same probe script: the **concurrency semaphore** (≥
-`SUBSCRIPTION_MAX_RUNNING`, default 3, Running pods labelled
+`SUBSCRIPTION_MAX_RUNNING` — the script default is 3 but the AUTHORITY is the proxy
+Deployment's explicit env, **5 since 2026-08-08** (the Max 5x→20x upgrade; the Argo
+`subscription-capacity` ConfigMap mirrors it and says so) — Running pods labelled
 `homelab.teststuff.net/subscription-session=claude` → defer — the proactive half that prevents
 the burst which *causes* a 429) and, for OpenRouter workers, the **account-credit floor** in
 `agent-session.sh` (FU-088b, `OPENROUTER_MIN_CREDIT`, default $0.25). That floor reads the balance
