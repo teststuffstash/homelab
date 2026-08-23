@@ -111,3 +111,11 @@ everything derivable once the transcript link exists. The rules that keep it che
 - Dispatch-prompt mechanics proven so far: warm devbox = `cp -a /workspace/homelab/.devbox .`
   (40s → 3.6s, measured); the PR cycle = `devbox run pr-wait -- <n>` (typed exits; fix-in-context
   on 2, escalate on 3/4/5); worktree per subagent; width ≤2–3 (subscription burn).
+
+- **2026-08-23 (salvage subagent, sonnet):** a `git clone --local` clone's `origin` remote
+  resolves to the SHARED checkout's path, so the natural `git push -u origin <branch>` writes a
+  stray branch ref into `/workspace/homelab/.git` instead of GitHub. The agent caught and cleaned
+  it itself (added a `github` remote, deleted the stray ref, verified clean master). Brief rule
+  candidate: the dispatch prompt names the push target explicitly — `git remote add github
+  <real URL> && git push -u github <branch>` — whenever the workspace is a local clone. Also:
+  plain `--local` hardlink clones fail cross-device from /tmp → `--no-hardlinks`.
