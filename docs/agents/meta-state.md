@@ -63,13 +63,17 @@ meant to avoid.)
   (`Budget: 17` = the loaded OR credit; #278 shape: master-lane children, jail-decomposed,
   never queued; bucket #787 auto-created). DONE: #776 (carrier, PR#784), agent-runtime#81
   (PR#82 + #785 pin), #777 (accounting, PR#786), #782 (wiring, PR#788 — a REAL FU-088
-  dual-rail regression caught+fixed in review), #778's pilot half. IN CYCLE: #789 (#779
-  capacity doorbell) · PR#793 (ADR-107-addendum docs, round 2 pushed, self-merges) · PR#794
-  (#778 salvage+void fixture, armed, bot-approval completes it — author=sole-codeowner waiver).
-  QUEUED: #516, #780, #781 (wiring), #791 (proxy OR-translation), #792 (opencode first-party),
-  #778 residue re-rides the normal lane post-#794. **ADR-107 ADDENDUM (operator, in-session):
-  harness = a MATRIX — claude+opencode full-support, scout probes 3 harnesses/candidate with a
-  ~1h/2h retry ladder** (adr.md + charter title reworded on PR#793). **Fan-out pilot RAN +
+  dual-rail regression caught+fixed in review), #778's pilot half, **#779 capacity doorbell
+  (PR#789 gate-read + merged 2026-08-23 16:26Z; proxy rolled, Go latch held 1 through the roll —
+  organic doorbell wake on a real latch clear stays a soak watch)**, PR#794 (#778 salvage,
+  merged). IN CYCLE: PR#793 (ADR-107-addendum docs — round-3 restructure pushed 2026-08-23
+  ~16:29Z: the reviewer caught the addendum reversing decision 3 against adr.md rule 2, so it is
+  now **ADR-112** + Superseded-by marker on ADR-107 (3); awaiting re-review, self-merges on bot
+  approval) · #516/PR#797 + #792/PR#800 in machine fix rounds (changes-requested at head —
+  cluster loop owns; gate reads land when they park). QUEUED: #780, #781 (wiring), #791 (proxy
+  OR-translation); #778 residue re-rides the normal lane. **HARNESS MATRIX ruling (operator,
+  in-session): claude+opencode full-support, scout probes 3 harnesses/candidate with a ~1h/2h
+  retry ladder — recorded as ADR-112 (PR#793 round 3), not an ADR-107 addendum.** **Fan-out pilot RAN +
   CLOSED (operator): findings ledger = the #778 thread** (recipe path dispatcher-side ·
   rounds-as-arms · ephemeral-tier toleration needed · FU-042 wedge on pending arms · opencode
   bare `-m` = the dead-canary root cause (A/B-proven) · nemotron fabricates delivery (salvaged
