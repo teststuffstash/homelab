@@ -847,7 +847,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     jq -e . >/dev/null 2>&1 <<<"${inprog:-null}" || inprog='[]'
     # ADR-097: one line per in-progress issue = its declared footprint; missing Touches: → `*`
     # (exclusive). The queued predicate below holds any unit whose footprint intersects a line.
+    # Direction 2 of the homelab#822 goal exemption: a `task/goal` issue contributes NO entry to
+    # busy_fps, so it does not hold sibling dispatches (cross-reference fp_goal_exempt in
+    # agents/footprint.sh — both readers share `task/goal` as the exemption key).
     busy_fps="$(printf '%s' "$inprog" | jq -r '.[]
+      | select(((.labels|map(.name))|index("task/goal"))|not)
       | ([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(","))
       | if . == "" then "*" else . end')"
     # ── FU-143 (contract points 1+2): a goal child cannot self-close ──────────────────────────
