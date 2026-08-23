@@ -32,6 +32,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       contract gains "status claims lifted from transient docs are live-verified (or marked
       as-of-doc-date) before being reported" — the never-repeat-a-remembered-status rule applied
       to the corpus itself. Sighted 2026-08-11 (operator catch).
+      **RESIGHT 2026-08-23 (operator catch)** — the class extends to CONFIG constants, not just
+      statuses: the seat quoted workflow.md's "SUBSCRIPTION_MAX_RUNNING default 3" while the
+      deployed value had been 5 for two weeks (the operator's own dashboard said /5 in the same
+      conversation). A number in corpus prose describing live config is a status claim; the
+      deployment/ConfigMap is the authority. ≥2 dates → promotion due.
 - [ ] design-G2 — "multiple passes gave different answers to the same question" wasn't
       recognized as a design-shaped trigger; the first pass ran as grep-triage and missed
       tracker-held facts (FU-157's user-token nature; the live legacy token outside the
