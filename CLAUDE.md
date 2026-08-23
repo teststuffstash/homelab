@@ -196,6 +196,18 @@ Two rules make the table hold:
   agent platform). `devbox run docs-graph-lint` holds the mechanical half (links resolve, no
   orphan docs).
 
+---
+
+# Part 2 — jail-session procedure (the seat; NOT for agents riding this repo)
+
+> Everything ABOVE this line is repo-universal fact (what exists, where things live, how they
+> are named); everything BELOW is **operator/jail-session procedure** — lanes, gates, tracker
+> discipline, apply safety. If you are a WORKER riding this repo from the fixer lane, your
+> contract is your recipe + the launcher's environment card (which carries the universal
+> ground rules — `agents/ground-rules.md`), not this part: branch + PR, the ruleset gates the
+> rest. This split is FU-117's third-context leg (S4 #764) — jail procedure and repo facts
+> stopped sharing one undifferentiated file.
+
 ## Design questions run full-context
 
 **Assessing, critiquing, or designing a subsystem is not triage** — the ground truth for design
