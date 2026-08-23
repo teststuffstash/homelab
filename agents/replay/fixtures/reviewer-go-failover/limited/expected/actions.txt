@@ -1,4 +1,2 @@
-CALL curl http://openrouter-proxy.agent-egress.svc.cluster.local:8080/opencode-limit
-OUT → review of test-project#42 deferred — subscription rate-limited (FU-088 latch)
-ERR subscription limited (FU-088, 429): utilization high — deferring subscription dispatch
+OUT → review of test-project#42 deferred — subscription-limited:latched
 RC 0
