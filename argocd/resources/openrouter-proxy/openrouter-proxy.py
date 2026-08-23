@@ -1373,28 +1373,37 @@ def _credit_tick() -> float | None:
 def _check_anthropic_expiry() -> None:
     """Check if Anthropic latch just expired (limited→ok) and ring doorbell if so."""
     now = time.time()
+    ring = False
     with _latch_lock:
         if _latch["until"] > 0 and _latch["until"] <= now and not _latch["rung_edge"]:
             _latch["rung_edge"] = True
-            _ring_capacity_doorbell("anthropic")
+            ring = True
+    if ring:
+        _ring_capacity_doorbell("anthropic")
 
 
 def _check_go_expiry() -> None:
     """Check if Go latch just expired (limited→ok) and ring doorbell if so."""
     now = time.time()
+    ring = False
     with _go_cap_lock:
         if _go_cap["until"] > 0 and _go_cap["until"] <= now and not _go_cap["rung_edge"]:
             _go_cap["rung_edge"] = True
-            _ring_capacity_doorbell("go")
+            ring = True
+    if ring:
+        _ring_capacity_doorbell("go")
 
 
 def _check_or_capacity_expiry() -> None:
     """Check if OR capacity latch just expired (limited→ok) and ring doorbell if so."""
     now = time.time()
+    ring = False
     with _or_cap_lock:
         if _or_cap["until"] > 0 and _or_cap["until"] <= now and not _or_cap["rung_edge"]:
             _or_cap["rung_edge"] = True
-            _ring_capacity_doorbell("openrouter")
+            ring = True
+    if ring:
+        _ring_capacity_doorbell("openrouter")
 
 
 def _anthropic_latch_update(status: int, resp_headers) -> str:
@@ -1427,6 +1436,7 @@ def _anthropic_latch_update(status: int, resp_headers) -> str:
     if 200 <= status < 300:
         global _latch_saved_at
         ring = False
+        ret_val = ""
         with _latch_lock:
             if _latch["until"] > now:
                 _latch["until"] = 0.0
@@ -1436,13 +1446,16 @@ def _anthropic_latch_update(status: int, resp_headers) -> str:
                 _latch_saved_at = now
                 router.latch_save(_latch)
                 log("anthropic 2xx while latched — latch cleared early")
-                if ring:
-                    _ring_capacity_doorbell("anthropic")
-                return "+latch-cleared"
-            # Keep the persisted windows fresh without one sqlite write per streamed request.
-            if now - _latch_saved_at > 30:
-                _latch_saved_at = now
-                router.latch_save(_latch)
+                ret_val = "+latch-cleared"
+            else:
+                # Keep the persisted windows fresh without one sqlite write per streamed request.
+                if now - _latch_saved_at > 30:
+                    _latch_saved_at = now
+                    router.latch_save(_latch)
+        if ring:
+            _ring_capacity_doorbell("anthropic")
+        if ret_val:
+            return ret_val
     return ""
 
 
