@@ -32,5 +32,36 @@ fanout_eligible && fanout_ring sleep "changes-requested|snore-recorder|pr-7"
 echo "REACHED: ring refused — loud, cron named as owner"
 reset_scan "edge|1786464880"
 CURL_RC=7 fanout_stack circles
+CURL_RC=""
+
+echo "REACHED: capacity fan-out — edge wake rings every graduated stack"
+reset_scan "edge|1786464880"; SCAN_RING_NS=""; SPAWN=true
+capacity_fanout_stacks go
+
+echo "REACHED: capacity fan-out — cron wake never fans out"
+reset_scan "cron|"; SCAN_RING_NS=""; SPAWN=true
+capacity_fanout_stacks go
+
+echo "REACHED: capacity fan-out — per-stack instance never fans out"
+reset_scan "edge|1786464880"; SCAN_RING_NS=""; SCAN_STACK=circles; SPAWN=true
+capacity_fanout_stacks go
+SCAN_STACK=""
+
+echo "REACHED: capacity fan-out — latched (held, said once)"
+reset_scan "edge|1786464880"; SCAN_RING_NS=""; LATCH=held; SPAWN=true
+capacity_fanout_stacks go
+LATCH=clear
+
+echo "REACHED: capacity doorbell integrated — main loop skips graduated stacks when SCAN_SOURCE=capacity"
+reset_scan "edge|1786464880"; SCAN_RING_NS=""; SCAN_SOURCE=capacity; SCAN_RAIL=go; SPAWN=true
+capacity_fanout_stacks go
+fanout_graduated_stack circles
+fanout_graduated_stack sleep
+SCAN_SOURCE=""; SCAN_RAIL=""
+
+echo "REACHED: graduated fanout fires normally when SCAN_SOURCE is not capacity"
+reset_scan "edge|1786464880"; SCAN_RING_NS=""; SCAN_SOURCE=""; SPAWN=true
+fanout_graduated_stack circles
+fanout_graduated_stack sleep
 
 echo "REACHED: end"
