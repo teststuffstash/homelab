@@ -7,5 +7,5 @@ OUT - **Egress: ENFORCED** (profile: baseline). Only allowlisted hosts are reach
 OUT - **Web research: WebSearch available** (server-side — runs OUTSIDE this pod, unaffected by the egress posture). WebFetch fetches FROM this pod and rides the egress posture above; if it fails, use WebSearch and mark snippet-level provenance.
 OUT - **Round 1** of 3 (a CHANGES_REQUESTED review or CI-red-on-your-change costs a round; infra failures don't). Land one tight, correct change.
 OUT - **Write scope:** you can only push a `fix/`-prefixed branch and open a PR — master is unreachable (branch protection + token scope). A real boundary, not something to route around.
-ERR WARN: ground-rules file missing/empty/unreadable: /nonexistent/ground-rules.md — env card degraded (FU-117)
+ERR WARN: ground-rules file missing/empty/unreadable: $TMP/gr-empty.md — env card degraded (FU-117)
 RC 0

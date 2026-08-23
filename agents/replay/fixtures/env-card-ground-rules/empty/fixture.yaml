@@ -3,7 +3,7 @@
 # with the DYNAMIC card rendered in full. One shared observation point (the machine-markers
 # fixture's post.sh, composed after the per-leg pre.sh) — the cleanup contract's
 # share-by-reference rule instead of three byte-identical copies.
-name: env-card-ground-rules-missing
+name: env-card-ground-rules-empty
 mode: actions
 source: agents/agent-session.sh
 parts:

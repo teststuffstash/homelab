@@ -353,10 +353,11 @@ repo-universal facts. Two costs already visible:
   PR-lane too; only the bookkeeping class stays direct). Structurally the ruleset rejects such a push, so
   the cost is confusion rather than damage — but the doc is the wrong place to be relying on
   branch protection to correct.
-- **The duplication now runs three ways, not two.** `render_env_card()` already restates CLAUDE.md
-  rules for goose; the jail restates a third set for the meta-session. The map this item is waiting
-  to draw therefore has THREE contexts (jail meta-session / claude-harness ride / goose ride), not
-  two, and the jail is the only one with no delivery mechanism to refactor *into*.
+- **The duplication now runs three ways, not two** *(superseded by #763 — the card no longer
+  restates anything; kept as the sighting that sized the map)*: `render_env_card()` restated
+  CLAUDE.md rules for goose; the jail restated a third set for the meta-session. The map
+  therefore has THREE contexts (jail meta-session / claude-harness ride / goose ride), and the
+  jail was the only one with no delivery mechanism to refactor *into*.
 
 ⚑ Interim guard only (2026-08-07): a banner at that section scoping it to the jail. It reaches
 Claude-Code readers and NOT goose rides — belt, not fix, and precisely the spread this item exists
