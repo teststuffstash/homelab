@@ -92,6 +92,7 @@ session-belt-c4c5	session-belt
 session-belt-fast-path	session-belt
 session-belt-fast-path-probe-fail	session-belt
 session-belt-queued	session-belt
+slo-teeth	slo-teeth
 sprout-report-skips-buckets	sprout-report-skips-buckets
 sprout-report-unbound	sprout-report-unbound
 state-fp	state-fp

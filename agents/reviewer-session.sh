@@ -102,6 +102,24 @@ if ! bash "$HERE/reviewer-optout.sh" "$PROJECT"; then
 fi
 # <<<REPLAY:optout-gate<<<
 
+# ── THE SLO TEETH GATE (homelab#831, FU-104) ──────────────────────────────────────────────────
+# Honor the stack's error budget burn state HERE, at the one point ALL dispatch sites pass
+# through: the reflex tick AND the primary edge path (github-exporter → Sensor → review
+# WorkflowTemplate). The teeth shipped inside the reflex tick alone, so on a burnt stack the
+# edge path still dispatched a review, approved it, and auto-merge still fired — exactly the
+# homelab#204 shape one lane over. slo-teeth.sh is the single read and the single (FAIL-OPEN)
+# posture; it prints its own reason to stderr.
+# FIRST, deliberately: before the head-sha probe, before the latch, before the pod. A burnt
+# stack must cost neither a GitHub call nor a subscription session.
+# FAIL-OPEN: a dead Prometheus must never freeze every merge lane (rule #6 in reverse —
+# availability of the gate < the gate). An unreachable metric is NOT evidence of a burnt budget.
+# >>>REPLAY:slo-teeth-gate>>>
+if ! bash "$HERE/slo-teeth.sh" "$PROJECT"; then
+  echo "→ review of ${PROJECT}#${PR} NOT dispatched — stack error budget burnt (auto-merge lane demoted to human, FU-104)"
+  exit 0
+fi
+# <<<REPLAY:slo-teeth-gate<<<
+
 # FU-080 perStack (mirror of coordinator-session.sh): --loop-ns runs the reviewer pod in the stack's
 # loop home as agentstack-loop, fetching the review-bot token (loop-reviewer-git-<stack>) per-run
 # from the broker. The reviewer-git secretKeyRef/volume below stay optional:true — inert in that ns;
