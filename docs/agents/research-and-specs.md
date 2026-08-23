@@ -15,10 +15,13 @@ Research is the **pre-goal phase**: a research MISSION prepares the contract (th
 tree, landed by harvest); a **Goal** (ADR-102) then exists to *implement* those specs. Two issue
 kinds with different lifecycles, budgets, and outputs — a woven branch vs merged code.
 
-⚠ **Vocabulary hazard (FU-163):** the dispatch label is `goal` for historical reasons and circles'
-research mission (#1) predates the ADR-102 Goal type — "goal for research" and "a Goal issue" are
-different things and hard to grep apart. Until the rename lands, this doc says **mission** for the
-research kind.
+**Vocabulary (FU-163 — rename executed, S4 #766, 2026-08-23):** the research kind is a
+**mission**, never "a goal". The historical bare `goal` dispatch label no longer exists anywhere
+— the authoritative IssueLabels sync deleted the hand-made legacy labels, and NO machine
+predicate ever read it (the scan keys on `task/goal`, the Goal type; research dispatch is
+operator-manual by issue number). A mission issue therefore carries **no label today**; when
+FU-090(c) graduates research dispatch, the label minted via the claim taxonomy is **`mission`**
+(name reserved in [`../glossary.md`](../glossary.md)).
 
 ## The process
 
@@ -83,7 +86,7 @@ Callers name **zero models** — `class` + `slot` + `jitter:false` against the s
 bands are disjoint *by curation convention*, which structurally prevents run-1's two selection
 slips (below) without router enforcement.
 
-In practice, for step 1: `bash agents/research-fanout.sh <project> <goal-issue> --arms 7`
+In practice, for step 1: `bash agents/research-fanout.sh <project> <mission-issue> --arms 7`
 (`--dry-run` draws the roster and stops). A slot whose model is unavailable comes back a typed
 defer and stays EMPTY — over-provision covers it; nothing is substituted. Record the arm table it
 prints, `pool-version` included: that triple is what re-draws the mission. ⚠ The hand-seeded
@@ -132,7 +135,8 @@ weekly refresh (§M7 leg 5) deepens it.
   primitives; a mission-level `Budget:` line (Goal-shaped) is expected but NOT designed. Run-1
   data: kimi $4.33, others <$2, opus on subscription.
 - **Dispatch automation**: missions are operator-manual (FU-090(c) is the graduation shape).
-- **The `goal` label / mission naming** — FU-163.
+- ~~The `goal` label / mission naming — FU-163~~ — **resolved 2026-08-23 (S4 #766)**: the
+  vocabulary note above; `mission` is the reserved future dispatch label.
 - **Harvest cadence** for a longer mission (one harvest at the end vs per-phase).
 - **Two-weave mode**: designed here, never yet run — first mission that hits a genuinely split
   judge verdict should try it.
