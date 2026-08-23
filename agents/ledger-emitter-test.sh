@@ -98,12 +98,12 @@ ledger.sh = fake_sh
 summ = ledger.summarize("proj", 7, "rid", "rsec")
 check(summ is not None, "summarize found manifests for proj#7")
 want_rounds = [
-    {"round": 1, "model": "model-a", "exit_status": "clean", "error_class": "", "ci": True},
-    {"round": 2, "model": "model-b", "exit_status": "no-artifact", "error_class": "unknown", "ci": None},
-    {"round": 3, "model": "model-a", "exit_status": "clean", "error_class": "", "ci": True},
+    {"round": 1, "model": "model-a", "rail": "openrouter", "exit_status": "clean", "error_class": "", "ci": True},
+    {"round": 2, "model": "model-b", "rail": "openrouter", "exit_status": "no-artifact", "error_class": "unknown", "ci": None},
+    {"round": 3, "model": "model-a", "rail": "openrouter", "exit_status": "clean", "error_class": "", "ci": True},
 ]
 check(summ["rounds"] == want_rounds,
-      "summarize rounds are round-ordered with model/exit_status/error_class/ci per manifest")
+      "summarize rounds are round-ordered with model/rail/exit_status/error_class/ci per manifest")
 check(summ["total_cost_usd"] == 0.35, "total_cost_usd = 0.10+0.05+0.20 = 0.35")
 check(summ["reviewer_rounds"] == 1, "reviewer_rounds = 1")
 check(summ["wall_time_s"] == 7200, "wall_time_s spans min(r1)..max(r3) = 2h = 7200s")
@@ -116,7 +116,7 @@ strikes = [
 ]
 merged = ledger.merge_rounds(summ["rounds"], strikes)
 want_merged = want_rounds + [
-    {"round": 4, "model": "model-c", "exit_status": "", "error_class": "auth-storm", "ci": False},
+    {"round": 4, "model": "model-c", "rail": "openrouter", "exit_status": "", "error_class": "auth-storm", "ci": False},
 ]
 check(merged == want_merged,
       "merge_rounds: strike-only round 4 appended, round 2 keeps its manifest entry")

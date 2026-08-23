@@ -1,0 +1,129 @@
+# Behaviour fixture for the `agent-rail-accounting` recording group (homelab#777 — flip acceptance
+# 2): per-rail cost and count views derived from the pushgateway metrics.
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/agent-rail-accounting.promtool-test
+#
+# The recording rules derive rail from the model prefix:
+#   claude/*, opencode-go/* → subscription
+#   everything else         → openrouter
+#
+# Honesty rule (#348 precedent, binding): a rail with no data is ABSENT from derived series,
+# never zeroed. agent_run_cost_usd is typically absent for subscription-rail rides (the
+# subscription is already paid for), so agent_run_cost_usd_by_rail{rail="subscription"} will
+# often be absent — that is the honest reading.
+rule_files:
+  - agent-rail-accounting.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── Case 1 — OpenRouter rail only: cost and count both present ───────────────────────────────
+  # A deepseek model on the OpenRouter rail: cost is real USD, count is 1.
+  - interval: 1m
+    name: OpenRouter rail — cost and count present
+    input_series:
+      - series: 'agent_run_cost_usd{project="homelab",issue="777",stack="platform",job="agent-run",role="fix",round="1",model="deepseek/deepseek-v4-flash"}'
+        values: "0.50+0x30"
+      - series: 'agent_run_total{project="homelab",issue="777",stack="platform",job="agent-run",role="fix",round="1",model="deepseek/deepseek-v4-flash"}'
+        values: "1+0x30"
+    promql_expr_test:
+      - expr: agent_run_cost_usd_by_rail
+        eval_time: 5m
+        exp_samples:
+          - labels: 'agent_run_cost_usd_by_rail{rail="openrouter", project="homelab", stack="platform"}'
+            value: 0.50
+      - expr: agent_run_count_by_rail
+        eval_time: 5m
+        exp_samples:
+          - labels: 'agent_run_count_by_rail{rail="openrouter", project="homelab", stack="platform"}'
+            value: 1
+      # subscription rail is absent — no subscription-model rides in this case
+      - expr: agent_run_cost_usd_by_rail{rail="subscription"}
+        eval_time: 5m
+        exp_samples: []
+      - expr: agent_run_count_by_rail{rail="subscription"}
+        eval_time: 5m
+        exp_samples: []
+
+  # ── Case 2 — Subscription rail only (claude/ model): cost absent, count present ──────────────
+  # A claude/haiku model on the subscription rail: the subscription is already paid for, so
+  # agent_run_cost_usd is typically absent (no cost series pushed). Count is the honest unit.
+  - interval: 1m
+    name: Subscription rail (claude/) — cost absent, count present
+    input_series:
+      # No agent_run_cost_usd series — the subscription rail does not push cost
+      - series: 'agent_run_total{project="homelab",issue="278",stack="platform",job="agent-run",role="review",round="1",model="claude/haiku"}'
+        values: "1+0x30"
+    promql_expr_test:
+      # Cost is ABSENT for subscription rail (honesty rule — no cost data pushed)
+      - expr: agent_run_cost_usd_by_rail
+        eval_time: 5m
+        exp_samples: []
+      - expr: agent_run_count_by_rail
+        eval_time: 5m
+        exp_samples:
+          - labels: 'agent_run_count_by_rail{rail="subscription", project="homelab", stack="platform"}'
+            value: 1
+      # openrouter rail is absent — no OpenRouter-model rides in this case
+      - expr: agent_run_cost_usd_by_rail{rail="openrouter"}
+        eval_time: 5m
+        exp_samples: []
+      - expr: agent_run_count_by_rail{rail="openrouter"}
+        eval_time: 5m
+        exp_samples: []
+
+  # ── Case 3 — Go rail (opencode-go/ model): cost absent, count present ───────────────────────
+  # An opencode-go model on the subscription (Go) rail: same as claude/ — cost is absent,
+  # count is the honest unit.
+  - interval: 1m
+    name: Go rail (opencode-go/) — cost absent, count present
+    input_series:
+      - series: 'agent_run_total{project="circles",issue="42",stack="circles",job="agent-run",role="worker",round="1",model="opencode-go/sonnet"}'
+        values: "1+0x30"
+    promql_expr_test:
+      # Cost is ABSENT for Go/subscription rail (honesty rule — no cost data pushed)
+      - expr: agent_run_cost_usd_by_rail
+        eval_time: 5m
+        exp_samples: []
+      - expr: agent_run_count_by_rail
+        eval_time: 5m
+        exp_samples:
+          - labels: 'agent_run_count_by_rail{rail="subscription", project="circles", stack="circles"}'
+            value: 1
+
+  # ── Case 4 — Mixed rails: both OpenRouter and subscription rides on the same project ─────────
+  - interval: 1m
+    name: Mixed rails — both OpenRouter and subscription
+    input_series:
+      - series: 'agent_run_cost_usd{project="homelab",issue="777",stack="platform",job="agent-run",role="fix",round="1",model="deepseek/deepseek-v4-flash"}'
+        values: "0.50+0x30"
+      - series: 'agent_run_total{project="homelab",issue="777",stack="platform",job="agent-run",role="fix",round="1",model="deepseek/deepseek-v4-flash"}'
+        values: "1+0x30"
+      - series: 'agent_run_total{project="homelab",issue="278",stack="platform",job="agent-run",role="review",round="1",model="claude/haiku"}'
+        values: "1+0x30"
+    promql_expr_test:
+      - expr: agent_run_cost_usd_by_rail
+        eval_time: 5m
+        exp_samples:
+          - labels: 'agent_run_cost_usd_by_rail{rail="openrouter", project="homelab", stack="platform"}'
+            value: 0.50
+      - expr: agent_run_count_by_rail
+        eval_time: 5m
+        exp_samples:
+          - labels: 'agent_run_count_by_rail{rail="openrouter", project="homelab", stack="platform"}'
+            value: 1
+          - labels: 'agent_run_count_by_rail{rail="subscription", project="homelab", stack="platform"}'
+            value: 1
+
+  # ── Case 5 — Honesty rule: absent data is absent, never zeroed ───────────────────────────────
+  # No input series at all — both rails should be absent, not 0.
+  - interval: 1m
+    name: No data — both rails absent (honesty rule)
+    input_series: []
+    promql_expr_test:
+      - expr: agent_run_cost_usd_by_rail
+        eval_time: 5m
+        exp_samples: []
+      - expr: agent_run_count_by_rail
+        eval_time: 5m
+        exp_samples: []
