@@ -31,6 +31,11 @@ import sys
 import threading
 import time
 
+# FU-127: the canonical model-id parser, deployed alongside the proxy in the same ConfigMap.
+# One definition — the same one `devbox run model-id-test` pins against agents/model_id.py by
+# AST; never a third copy.
+import model_id
+
 # Strike taxonomy (model-routing.md §M1): these error classes are INFRA failures — they blacklist
 # the (task, model) pair without consuming a round. Kept in step with agent-session.sh's
 # classifier and agent-finalize (the authoritative signature copy).
@@ -1303,9 +1308,20 @@ def route(payload: dict, ctx: dict) -> dict:
         # The draw's provenance rides BOTH verdicts: a deferred slot has to be recordable in the
         # arm table too ("slot 4 deferred, cooldown" is evidence; a blank is not).
         decision.update({k: v for k, v in drawn.items() if k in ("pool", "pool_version", "slot")})
+    # FU-127: the structured carrier — consumers read `.decision.resolved` instead of re-parsing
+    # the model string. Present on dispatch, absent on defer (no model to resolve). The rail in
+    # resolved uses the canonical vocabulary (anthropic-subscription, openrouter, opencode-go)
+    # while decision.rail uses the route's internal vocabulary (subscription, openrouter).
+    if result:
+        decision["resolved"] = model_id.parse(result["model"])
     # ── M11 SHADOW (homelab#159) — computed after the served decision, consumed by nobody ──
     shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck, cool, ctx,
                             sub_gate, or_gate, jitter, pick_fn)
+    # FU-127: the shadow pick carries its own resolved object so the M11 shadow log line
+    # describes the SHADOW pick, not the served pick (which may differ — that's the entire
+    # point of the shadow line). Present on dispatch, absent on defer.
+    if shadow.get("model"):
+        shadow["resolved"] = model_id.parse(shadow["model"])
     record_shadow_decision(payload, cls, decision, shadow)
     decision["shadow"] = shadow
     _write("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -2014,6 +2030,30 @@ def self_test() -> int:
     d = route(dict(base), CTX)
     assert d["decision"] == "dispatch" and d["model"] == "inclusionai/ling-3.0-flash:free", d
     assert d["rail"] == "openrouter" and d["class"] == "coding", d
+    # FU-127: the structured carrier — shape AND string↔structured parity for each rail prefix.
+    # openrouter rail, bare vendor/model (the common case)
+    assert d.get("resolved") == {"rail": "openrouter", "harness": "", "model": "inclusionai/ling-3.0-flash:free"}, \
+        f"resolved shape (openrouter bare): {d.get('resolved')}"
+    # subscription rail: claude/ prefix → anthropic-subscription, harness claude
+    _sub = route(dict(base, chain=["claude/haiku"]), CTX)
+    assert _sub["decision"] == "dispatch" and _sub["rail"] == "subscription", _sub
+    assert _sub.get("resolved") == {"rail": "anthropic-subscription", "harness": "claude", "model": "haiku"}, \
+        f"resolved shape (subscription): {_sub.get('resolved')}"
+    # opencode-go rail: prefix kept, harness claude
+    _go = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), CTX)
+    assert _go["decision"] == "dispatch" and _go["rail"] == "openrouter", _go
+    assert _go.get("resolved") == {"rail": "opencode-go", "harness": "claude", "model": "opencode-go/deepseek-v4-flash"}, \
+        f"resolved shape (opencode-go): {_go.get('resolved')}"
+    # cloaked openrouter/<codename>: prefix KEPT, model is the full id
+    _cloak = route(dict(base, chain=["openrouter/owl-alpha"]), CTX)
+    assert _cloak["decision"] == "dispatch" and _cloak["rail"] == "openrouter", _cloak
+    assert _cloak.get("resolved") == {"rail": "openrouter", "harness": "", "model": "openrouter/owl-alpha"}, \
+        f"resolved shape (cloaked): {_cloak.get('resolved')}"
+    # defer decision has NO resolved field
+    _def = route(dict(base, chain=["deepseek/deepseek-v4-flash"],
+                      deny=["deepseek/deepseek-v4-flash"]), CTX)
+    assert _def["decision"] == "defer" and _def.get("resolved") is None, \
+        f"defer must not carry resolved: {_def.get('resolved')}"
     # free model starts 429ing: burst past min_events/bad_share trips a cooldown
     for _ in range(8):
         record_provider_event("inclusionai/ling-3.0-flash:free", "novita", 429)

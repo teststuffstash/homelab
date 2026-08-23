@@ -1,0 +1,5 @@
+OUT MODEL='haiku'
+OUT MODEL_RAIL='anthropic-subscription'
+OUT MODEL_HARNESS='claude'
+OUT HARNESS='claude'
+RC 0

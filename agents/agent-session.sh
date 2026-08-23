@@ -228,7 +228,7 @@ if [ "$AGENT_ROUTER" != "off" ]; then
       if [ -n "${MODEL_SET:-}" ]; then
         echo "→ router: explicit --model ${MODEL} wins over the routed decision (ADR-096 override rule)"
       elif [ "$_verdict" = "dispatch" ] && [ -n "$_rmodel" ]; then
-        MODEL="$_rmodel"
+        MODEL="$_rmodel"; _router_adopted=1
       elif [ "$_verdict" = "defer" ]; then
         # homelab#158: the exit moved BELOW the rail-degrade block — an `or-capacity-down:*` defer is a
         # provider outage, and this launcher has one more rail to try before it gives the round up.
@@ -485,7 +485,29 @@ fi
 STRUCK_MODEL="${STRUCK_MODEL_ORIG:-$MODEL}"
 # <<<REPLAY:struck-model-init<<<
 # >>>REPLAY:model-id-resolution>>>
-eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
+# FU-127: consume the structured carrier when the router provides it — no re-parse needed.
+# Falls back to the model_id.py parser when absent (mixed-deploy window: proxy and launcher
+# deploy independently). Only consumed when the router's decision was actually adopted into
+# MODEL (_router_adopted set at the MODEL="$_rmodel" line, which only fires under
+# AGENT_ROUTER=authoritative + verdict=dispatch + _rmodel non-empty). Shadow/off/explicit
+# --model paths take the fallback parse.
+if [ -n "${_router_adopted:-}" ]; then
+  _resolved="$(printf '%s' "${_decision:-}" | jq -r '.resolved // empty' 2>/dev/null)"
+  if [ -n "$_resolved" ] && [ "$_resolved" != "null" ]; then
+    MODEL_RAIL="$(printf '%s' "$_resolved" | jq -r '.rail // ""')"
+    MODEL_HARNESS="$(printf '%s' "$_resolved" | jq -r '.harness // ""')"
+    MODEL_MODEL="$(printf '%s' "$_resolved" | jq -r '.model // ""')"
+    # Guard: if resolved.model is empty, fall back to the model_id.py parse
+    # rather than assigning an empty MODEL (mixed-deploy window).
+    if [ -z "$MODEL_MODEL" ]; then
+      eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
+    fi
+  else
+    eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
+  fi
+else
+  eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
+fi
 [ -z "$MODEL_HARNESS" ] || [ -n "${HARNESS_SET:-}" ] || HARNESS="$MODEL_HARNESS"
 MODEL="$MODEL_MODEL"
 # <<<REPLAY:model-id-resolution<<<
