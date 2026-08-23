@@ -1,0 +1,11 @@
+# decorrelate-resolution-malformed-json — the proxy returns malformed JSON (not parseable).
+# jq fails on parse error, _last_model is empty, "not available" logged. No crash under set -e.
+name: decorrelate-resolution-malformed-json
+mode: actions
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:decorrelate-resolution
+  - file:post.sh
+scrub:
+  - s/[0-2][0-9]:[0-5][0-9]:[0-5][0-9]/HH:MM:SS/g

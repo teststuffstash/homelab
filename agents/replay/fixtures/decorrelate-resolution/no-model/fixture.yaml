@@ -1,0 +1,11 @@
+# decorrelate-resolution-no-model — the proxy returns valid JSON but without served_model
+# or model fields. jq returns "" via the // "" fallback, "not available" logged.
+name: decorrelate-resolution-no-model
+mode: actions
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:decorrelate-resolution
+  - file:post.sh
+scrub:
+  - s/[0-2][0-9]:[0-5][0-9]:[0-5][0-9]/HH:MM:SS/g
