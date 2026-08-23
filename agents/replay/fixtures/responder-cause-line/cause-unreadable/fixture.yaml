@@ -1,0 +1,21 @@
+# ADR-094 S6 — bind-at-filing: Cause: line → native sub-issue edge (cause unreadable via per-call keying).
+#
+# CONDITION UNDER REPLAY. The filed issue body carries a line-anchored 'Cause: #123' marker.
+# The cause issue #123 exists in the world file, but the per-call override
+# STUB_GH_api_repos_teststuffstash_homelab_issues_123=empty makes that specific read return
+# empty stdout, simulating a network/API failure for just that one call. The shell reads the
+# body, extracts the cause number, then fails to read #123 and skips the link.
+#
+# THE CONTRACT:
+#   1. The issue body is read once via `gh api --jq '.body // ""'`.
+#   2. The cause issue #123 read returns empty (per-call override) — CAUSE_ID is empty.
+#   3. No sub-issue POST is made.
+#   4. The "Cause: #123 not found or unreadable" message is logged.
+name: responder-cause-line-cause-unreadable
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-cause-line
+env:
+  - STUB_GH_api_repos_teststuffstash_homelab_issues_123=empty

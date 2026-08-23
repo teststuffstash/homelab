@@ -15,6 +15,21 @@ _rp_record "$@"
 WORDS="$(_rp_words "$@")"
 [ -n "$WORDS" ] || _rp_die "bare \`gh\` with no subcommand — nothing to key a world file on."
 
+# Per-call failure injection (homelab#740): STUB_GH_<slugged-world-key> overrides the run-global
+# $STUB_GH for ONE named call, evaluated for BOTH reads and writes. The slug is the same bare-words
+# slug _rp_serve uses. Supports the same values as $STUB_GH plus `empty` (empty stdout, exit 0).
+SLUG="$(_rp_slug "$WORDS")"
+PC_OVERRIDE="$(_rp_per_call_override "$SLUG")" || PC_OVERRIDE=''
+if [ -n "$PC_OVERRIDE" ]; then
+  case "$PC_OVERRIDE" in
+    fail)    printf 'gh: Not Found (HTTP 404)\n' >&2; exit 1 ;;
+    empty)   exit 0 ;;
+    body404) printf 'gh: Not Found (HTTP 404)\n';     exit 0 ;;
+    garbage) printf 'upstream connect error or disconnect/reset before headers\n'; exit 0 ;;
+    *)       _rp_die "unknown per-call override value: $PC_OVERRIDE (want fail|empty|body404|garbage)" ;;
+  esac
+fi
+
 # `gh api` is read-or-write depending on --method/-X; everything else keys off the verb.
 IS_API_WRITE=0; PREV=''
 [ "${WORDS%% *}" = api ] && for a in "$@"; do
@@ -39,10 +54,12 @@ if [ "${IS_API_WRITE:-0}" = 1 ] || _rp_is_mutation "$MUTATING_VERBS" "$WORDS"; t
   exit 0
 fi
 
-# $STUB_GH lets a fixture replay the failure modes a guarded probe must survive without recording a
-# separate world: `fail` = non-zero (403/404/network), `body404` = gh's error text on STDOUT with
-# exit 0 (the shape that turns an error string into a fingerprint if the caller skips `jq -e`),
-# `garbage` = a 200 that is not JSON at all.
+# $STUB_GH (run-global) lets a fixture replay the failure modes a guarded probe must survive without
+# recording a separate world: `fail` = non-zero (403/404/network), `body404` = gh's error text on
+# STDOUT with exit 0 (the shape that turns an error string into a fingerprint if the caller skips
+# `jq -e`), `garbage` = a 200 that is not JSON at all.
+# Per-call STUB_GH_<slug> (homelab#740) is checked FIRST, above the read/write split — see the
+# SLUG/PC_OVERRIDE block. Run-global $STUB_GH only applies when no per-call override is set.
 case "${STUB_GH:-ok}" in
   fail)    printf 'gh: Not Found (HTTP 404)\n' >&2; exit 1 ;;
   body404) printf 'gh: Not Found (HTTP 404)\n';     exit 0 ;;
