@@ -70,6 +70,8 @@ fi
 # never freeze every merge lane (rule #6 in reverse — availability of the gate < the gate);
 # a query failure logs loud and parks nothing.
 PROM_URL="${PROM_URL:-http://192.168.40.13:9090}"
+# The egress proxy — same value subscription-latch.sh/agent-session.sh use for POST /route, GET /report/latest, etc.
+PROXY_URL="${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}"
 burnt_stacks="$(curl -fsS --max-time 10 "$PROM_URL/api/v1/query" \
   --data-urlencode 'query=max by (stack) (stack:error_budget_burnt:bool) == 1' 2>/dev/null \
   | jq -r '.data.result[].metric.stack' 2>/dev/null | tr '\n' ' ')" || burnt_stacks=""
@@ -317,6 +319,25 @@ EOF_C9
   [ -n "$pick" ] || { log "[$repo] nothing to review"; continue; }
   read -r pick v_total v_head v_head_approved pick_head pick_issue <<<"$pick"
 
+  # ── Decorrelation: resolve the newest round's SERVED model for this task ────────────────
+  # The dispatch resolves the M5 evidence row (the served model, never the requested id) from
+  # the run-report store and passes it as --decorrelate-from so the router excludes that family
+  # across rails (#516's primitive). The proxy stores run_reports via POST /report from every
+  # worker session; query the latest here.
+  decorrelate_arg=""
+  if [ "$pick_issue" != "-" ] && [ -n "${PROXY_URL:-}" ]; then
+    _last_report="$(curl -fsS --max-time 3 \
+      "${PROXY_URL}/report/latest?task=issue-${pick_issue}" 2>/dev/null)" || _last_report=""
+    if [ -n "$_last_report" ]; then
+      _last_model="$(printf '%s' "$_last_report" | jq -r '.served_model // .model // ""' 2>/dev/null)"
+      if [ -n "$_last_model" ]; then
+        decorrelate_arg="--decorrelate-from $_last_model"
+        log "[$repo] decorrelate_from: $_last_model (issue #${pick_issue})"
+      fi
+    fi
+  fi
+  [ -n "$decorrelate_arg" ] || log "[$repo] decorrelate_from: not available (run-report query skipped or unreachable)"
+
   # Breaker: a legit pick has ZERO bot approvals at head (the predicate filters those), <2 bot
   # verdicts at head, and fewer than ROUNDS_MAX verdicts ever ON ITS ISSUE — see the issue-keyed
   # ceiling below; the at-head checks stay strictly per-PR (beyond that it's a worker↔reviewer
@@ -424,9 +445,9 @@ for pair in "${dispatch[@]}"; do
     goal/*) extra="--model ${REVIEW_GOAL_MODEL:-sonnet} --rubric .agents/review-goal.md"
             log "→ assembly PR (head ${phead}): model ${REVIEW_GOAL_MODEL:-sonnet}, rubric review-goal.md";;
   esac
-  log "→ dispatch reviewer: ${repo} #${pr}${LOOP_NS_ARG:+ (loop-ns ${LOOP_NS_ARG})}"
+  log "→ dispatch reviewer: ${repo} #${pr}${LOOP_NS_ARG:+ (loop-ns ${LOOP_NS_ARG})}${decorrelate_arg:+ (decorrelate-from ${decorrelate_arg#--decorrelate-from })}"
   # shellcheck disable=SC2086
-  bash "$HERE/reviewer-session.sh" "$repo" "$pr" $extra ${LOOP_NS_ARG:+--loop-ns "$LOOP_NS_ARG"} &
+  bash "$HERE/reviewer-session.sh" "$repo" "$pr" $extra $decorrelate_arg ${LOOP_NS_ARG:+--loop-ns "$LOOP_NS_ARG"} &
   running=$((running + 1))
   if [ "$running" -ge "$K" ]; then wait -n || true; running=$((running - 1)); fi
 done
