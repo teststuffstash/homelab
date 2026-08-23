@@ -207,7 +207,7 @@ sequenceDiagram
   participant C as CI / system test
   participant R as reviewer
   U->>MC: paste the report
-  MC->>MC: read prod — sleep.sqlite night=2026-06-24 → 25 min;<br/>raw sessions in S3 → both present; parser.py → hypothesis
+  MC->>MC: read prod — sleep.sqlite night=2026-06-24 → 25 min#59;<br/>raw sessions in S3 → both present#59; parser.py → hypothesis
   MC->>I: open Issue + synthetic DATA TABLE (no real PII) + the platform facts
   Note over U,I: operator labels `agent-fix` + `agent/queued` — breaker #1
   S->>CO: emits (queued-dispatch, sleep-tracking, #N)
