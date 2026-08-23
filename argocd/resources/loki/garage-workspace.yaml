@@ -15,7 +15,7 @@ spec:
     module: |
       resource "garage_bucket" "loki" {
         global_alias = "loki"
-        max_size     = 8589934592 # 8Gi — ADR-089 cap; ~11× the 30-day-retention steady state (698MiB measured 2026-08-03, FU-093 tier reconciliation)
+        max_size     = 17179869184 # 16Gi — doubled 2026-08-23 (homelab#811: bucket hit the 8Gi cap and self-locked — flush AND the compactor's retention pass both fail at 100%, so the cap must leave the compactor working room; agent-era ingest is ~11× the 2026-08-03 baseline). ADR-089 cap; retention-vs-lookback incoherence (720h vs 168h) tracked on #811.
       }
       resource "garage_key" "loki" { name = "loki" }
       resource "garage_bucket_permission" "loki_rw" {
