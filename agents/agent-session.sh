@@ -1287,6 +1287,7 @@ fi
 # provider's headline prompt $/M) blocks the expensive-lottery fallback (the $5.79 qwen incident).
 # goose deliberately gets NOTHING here — it cannot carry provider prefs; that's the ADR-081 proxy.
 OC_SETUP=""; OC_ENV=""
+# >>>REPLAY:opencode-session-config>>>
 if [ "$HARNESS" = "opencode" ]; then
   PIN_JSON="$(python3 "$HERE/estimate_budget.py" --model "$MODEL" --lookup 2>/dev/null || true)"
   # order carries the ROUTING slug — OpenRouter matches tags ("deepinfra"), display names no-op.
@@ -1316,8 +1317,11 @@ if [ "$HARNESS" = "opencode" ]; then
   fi
   # Headless mode: auto-approve tool calls (read/write/bash) — matching goose's GOOSE_MODE=auto.
   # Without this, an unattended opencode run prompts "user rejected permission" (homelab#792 gap 2).
-  if [ -n "$RUN_CMD" ] && [ -n "$OC_CONFIG" ]; then
-    OC_CONFIG="$(printf '%s' "$OC_CONFIG" | jq -c '. + {"autoApprove": true}')"
+  # The base is seeded when OC_CONFIG is empty (unpinned + no injection) so the guard never
+  # fails open on the headless path — every --recipe opencode ride gets autoApprove regardless.
+  if [ -n "$RUN_CMD" ]; then
+    OC_CONFIG="$(jq -cn --argjson base "${OC_CONFIG:-null}" '
+      ($base // {"$schema": "https://opencode.ai/config.json"}) * {autoApprove: true}')"
   fi
   if [ -n "$OC_CONFIG" ]; then
     # base64 keeps the JSON inert through the bash -c → jq -Rs → pod-yaml quoting layers.
@@ -1325,6 +1329,7 @@ if [ "$HARNESS" = "opencode" ]; then
     OC_ENV=$'        - name: OPENCODE_CONFIG\n          value: "/tmp/opencode-session.json"'
   fi
 fi
+# <<<REPLAY:opencode-session-config<<<
 
 if [ -n "$RUN_CMD" ]; then
   # Run the harness, tee its output to a file, then emit the AGENT_RUN_STATS line (agent-finalize
