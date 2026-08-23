@@ -1,0 +1,42 @@
+# The `agent-rail-accounting` recording rules — per-rail cost and count views (homelab#777 flip
+# acceptance 2) — lifted VERBATIM out of prometheusrule.yaml (comments stripped, the manifest is
+# their one home). This is the rules file that agent-rail-accounting.promtool-test loads. Not a
+# manifest and not applied to anything: `promtool test rules` needs upstream-format rules
+# (top-level `groups:`), and a PrometheusRule keeps them under `.spec`, so the CR cannot be loaded
+# directly. Named .promtool-rules rather than .yaml on purpose — manifest-lint kubeconforms EVERY
+# *.yaml under argocd/resources and a non-manifest there would fail it.
+#
+# ⚠ NOT DRIFT-PINNED (like the existing hand copies in this directory and unlike github-exporter's
+# queued-age.promtool-rules, which `devbox run exporter-self-test` checks): the general harness
+# that would extract `.spec.groups` at run time and delete the hand copies altogether lives in
+# `scripts/**` + `.github/**`, CI-invoked paths outside the fixer lane's tier. Until it exists,
+# RE-COPY AFTER EVERY EXPR EDIT — a stale copy tests the OLD expr and passes vacuously:
+#
+#   python3 -c "import json, yaml; ...
+#
+# (no one-liner yet; the drift pin is a future concern).
+groups:
+  - name: agent-rail-accounting
+    rules:
+      - record: agent_run_cost_usd_by_rail
+        expr: >-
+          sum by (rail, project, stack) (
+            label_replace(
+              label_replace(
+                agent_run_cost_usd,
+                "rail", "openrouter", "__name__", ".*"
+              ),
+              "rail", "subscription", "model", "(claude/.*|opencode-go/.*)"
+            )
+          )
+      - record: agent_run_count_by_rail
+        expr: >-
+          sum by (rail, project, stack) (
+            label_replace(
+              label_replace(
+                agent_run_total,
+                "rail", "openrouter", "__name__", ".*"
+              ),
+              "rail", "subscription", "model", "(claude/.*|opencode-go/.*)"
+            )
+          )

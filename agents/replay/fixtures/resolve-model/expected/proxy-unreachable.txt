@@ -1,0 +1,5 @@
+CALL curl -fsS --max-time 5 -H Content-Type: application/json -d {"role":"responder"} http://stub-router.agent-egress.svc:9999/route
+OUT RESOLVED_MODEL='claude/sonnet'
+OUT RESOLVED_VERDICT='proxy-unreachable'
+ERR ⚠️  resolve-model(responder): http://stub-router.agent-egress.svc:9999 UNREACHABLE — falling back to literal 'claude/sonnet' (fail-OPEN; an unroutable responder is worse than an unrouted one)
+RC 0

@@ -1,0 +1,4 @@
+OUT RESOLVED_MODEL='opencode-go/claude-sonnet-4-20250514'
+OUT RESOLVED_VERDICT='override'
+ERR → resolve-model(responder): explicit override AGENT_MODEL=opencode-go/claude-sonnet-4-20250514 — routed path skipped
+RC 0

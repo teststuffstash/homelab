@@ -49,6 +49,10 @@ while [ $# -gt 0 ]; do case "$1" in
 esac; done
 [ -n "$CELL" ] || { echo "FATAL: --cell <harness>:<model> required (e.g. claude:opus, goose:deepseek/deepseek-v4-pro)" >&2; exit 2; }
 HARNESS="${CELL%%:*}"; MODEL="${CELL#*:}"
+# G-A 9, issue #782: resolve the cell model via /route before spawning.
+# The cell string is passed as a constraint so the router sees the A/B design axis.
+# Fail-OPEN to the literal cell model when the proxy is unreachable.
+MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "$CELL" --fallback "$MODEL")"
 retro_project "$STACK" || exit 2
 
 # Next run id from the harvested reports (rN numbering is per-stack).
