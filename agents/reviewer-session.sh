@@ -621,14 +621,48 @@ SNIP
 ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s\n%s' "$UPLOADER" "$PREP" "$TOUCHESPART" "$RUNPART" | jq -Rs .)]"
 
 # >>>REPLAY:reviewer-go-failover-gate>>>
-# FU-088(a): defer while the subscription is 429-latched. The /route call above has already
-# resolved the model decision — the router picks from the Go rail or defers when the subscription
-# is latched (the ladder's Go rung is the failover now, not a hardcoded literal here).
-# An explicit --model still wins per the ADR-096 override rule enforced above in the route block.
-# This block handles only the deferral exit path (the router said "defer" or was unreachable).
+# FU-088(a): defer while the subscription is 429-latched (covers the Sensor path too, which
+# dispatches this script directly without the reflex tick's guard). Level-triggered upstream —
+# the backstop tick re-picks this PR once the latch clears, so a skip loses nothing.
+# FAIL-OVER LADDER (homelab#424, ADR-096 shadow): when the subscription is latched, probe the Go rail
+# (/opencode-limit). If Go is available (limited=false), serve the review from the Go rail
+# instead of deferring. An explicit --model always wins — the failover only kicks in when
+# the operator didn't pin a model.
+# The /route consult above may have already resolved the model (authoritative mode). In that case
+# only the deferral arm applies. In shadow/off/unreachable mode the routed verdict did NOT replace
+# the model, so the legacy ladder remains the dispatch's only capacity gate — identical to the
+# pattern agent-session.sh uses downstream of a shadow consult.
 if [ -n "${_router_defer:-}" ]; then
   echo "→ review of ${PROJECT}#${PR} deferred — ${_rwhy:-router deferral}"
   exit 0
+elif [ -z "${_router_adopted:-}" ]; then
+  # shadow/off, or the router was unreachable/declined: the routed verdict did NOT replace the
+  # model, so this dispatch's ONLY capacity gate is the legacy ladder — exactly as agent-session.sh
+  # keeps its static chain + FU-088 gates intact downstream of the consult in shadow mode.
+  if ! bash "$HERE/subscription-latch.sh"; then
+    # Subscription is latched — probe the Go rail before deferring.
+    # Reuse the same proxy base URL that subscription-latch.sh uses (AGENT_EGRESS_PROXY env).
+    PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+    go_reply="$(curl -fsS --max-time 5 "$PROXY/opencode-limit" 2>/dev/null)" || go_reply=""
+    go_limited="true"
+    if [ -n "$go_reply" ]; then
+      go_limited="$(printf '%s' "$go_reply" | jq -r '.limited // false' 2>/dev/null)" || go_limited="true"
+    fi
+    if [ "$go_limited" = "false" ]; then
+      # Go rail is available — use it for this review (only when no explicit --model was passed).
+      if [ -z "${MODEL_SET_EXPLICIT:-}" ]; then
+        MODEL="opencode-go/qwen3.5-plus"
+        GO_SERVED=1
+        echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/qwen3.5-plus)"
+      else
+        echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (explicit --model=${MODEL} pinned, cannot failover to Go)"
+        exit 0
+      fi
+    else
+      echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (FU-088 latch)"
+      exit 0
+    fi
+  fi
 fi
 # <<<REPLAY:reviewer-go-failover-gate<<<
 

@@ -1,0 +1,19 @@
+# reviewer-go-failover-shadow-both-limited (G-A 7) — shadow mode, both rails limited, defer.
+#
+# CONDITION UNDER REPLAY. SHADOW mode: _router_defer and _router_adopted are both unset, so the
+# legacy ladder runs. subscription-latch.sh stub exits 1 (subscription limited), /opencode-limit
+# probe returns {limited: true}. Both rails are limited — the gate defers with FU-088 message.
+#
+# THE CONTRACT (executes the REAL gate block from reviewer-session.sh via sentinel):
+#   1. subscription-latch.sh exits 1 → enters the failover ladder.
+#   2. curl stub records the /opencode-limit call and returns Go-limited JSON.
+#   3. Go limited → defer with FU-088 message (exit 0).
+#   4. The action stream asserts: curl probe happened AND deferral line emitted.
+#
+# Parts: bridge.sh (seams: HERE, curl stub) + block:reviewer-go-failover-gate (real code)
+name: reviewer-go-failover-shadow-both-limited
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-go-failover-gate

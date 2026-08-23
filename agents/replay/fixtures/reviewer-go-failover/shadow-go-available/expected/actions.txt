@@ -1,0 +1,3 @@
+CALL curl http://openrouter-proxy.agent-egress.svc.cluster.local:8080/opencode-limit
+OUT → Anthropic latched — serving review of test-project#42 from the Go rail (opencode-go/qwen3.5-plus)
+RC 0
