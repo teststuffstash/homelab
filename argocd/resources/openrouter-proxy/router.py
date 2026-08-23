@@ -1317,6 +1317,11 @@ def route(payload: dict, ctx: dict) -> dict:
     # ── M11 SHADOW (homelab#159) — computed after the served decision, consumed by nobody ──
     shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck, cool, ctx,
                             sub_gate, or_gate, jitter, pick_fn)
+    # FU-127: the shadow pick carries its own resolved object so the M11 shadow log line
+    # describes the SHADOW pick, not the served pick (which may differ — that's the entire
+    # point of the shadow line). Present on dispatch, absent on defer.
+    if shadow.get("model"):
+        shadow["resolved"] = model_id.parse(shadow["model"])
     record_shadow_decision(payload, cls, decision, shadow)
     decision["shadow"] = shadow
     _write("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?)",

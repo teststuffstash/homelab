@@ -2274,9 +2274,10 @@ class Proxy(BaseHTTPRequestHandler):
             # only after a soak review reads them (docs/agents/model-routing.md §M11).
             sh = decision.get("shadow") or {}
             if sh:
-                # FU-127: the shadow line carries the resolved object too, so shadow evidence reads
-                # rail-explicit from the same structured carrier.
-                _sres = decision.get("resolved") or {}
+                # FU-127: the shadow line carries its own resolved object (computed from the
+                # shadow pick's model, not the served pick's), so shadow evidence reads
+                # rail-explicit from the shadow's own structured carrier.
+                _sres = sh.get("resolved") or {}
                 log(f"  shadow cell={decision.get('class')}/{sh['urgency']}"
                     f"({sh['urgency_source']}) start={sh['start_tier']}"
                     f"{'(reprobe)' if sh.get('reprobe') else ''} learned={sh['learned_start_tier']}"
