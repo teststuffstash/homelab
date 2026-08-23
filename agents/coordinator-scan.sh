@@ -1227,6 +1227,65 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       [ -n "$bfm_lines" ] && orphans="${orphans}[$repo] 🏷 BODY-TOUCHES mismatch: issue body references paths outside declared footprint (homelab#808 report-only — may be a deliberate re-scope):\n${bfm_lines}\n"
     fi
     # <<<REPLAY:body-footprint-mismatch<<<
+    # ── CLAUSE-REPLAY PAIRING (homelab#825) — report-only ────────────────────────────────────
+    # The ADR-103 ratchet requires any PR changing a clause file must touch agents/replay/**.
+    # An issue whose declared `Touches:` reaches any ratchet clause file but does not reach
+    # agents/replay/** is structurally under-scoped: the resulting PR would red on the required
+    # `ci` check. Report-only, no label, no gate: same rule as body-footprint-mismatch.
+    # Clause list is canonical in .github/workflows/ci.yaml:118 (the ratchet definition; check
+    # there for drift). Current list extracted from that regex:
+    # >>>REPLAY:clause-replay-pairing>>>
+    if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}"; then
+      crm_lines=""
+      # Ratchet clause files — CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
+      clause_files="agents/model-scout.sh
+agents/coordinator-scan.sh
+agents/review-reflex.sh
+agents/reviewer-session.sh
+agents/reviewer-optout.sh
+agents/machine-comment.sh
+agents/goal-budget.sh
+agents/agent-session.sh
+agents/retro-session.sh
+agents/argv-guard.sh
+agents/coordinator/reflexes-argo.yaml
+agents/coordinator/review-argo.yaml
+agents/coordinator/coordinate-argo.yaml
+agents/coordinator/responder-argo.yaml
+agents/coordinator/retro-argo.yaml
+agents/coordinator/fix-debounce-argo.yaml
+agents/coordinator/deploy-revert-argo.yaml"
+
+      while IFS='|' read -r crmn crmt; do
+        [ -n "$crmn" ] || continue
+        # Check if any clause file is covered by the touches footprint
+        touched_clause=""
+        while IFS= read -r cf; do
+          [ -n "$cf" ] || continue
+          if fp_conflict_strict "$crmt" "$cf"; then
+            touched_clause="$cf"
+            break
+          fi
+        done <<< "$clause_files"
+
+        # If a clause file is touched, check if agents/replay/** is also touched
+        if [ -n "$touched_clause" ]; then
+          if ! fp_conflict_strict "$crmt" "agents/replay/**"; then
+            crm_lines="${crm_lines}  issue #${crmn} — touches clause \`${touched_clause}\` but \`Touches:\` (\`${crmt}\`) does not reach \`agents/replay/**\`\n"
+          fi
+        fi
+      done <<< "$(printf '%s' "$openall" | jq -r '
+        [.[] | .number as $n
+         | (.body // "") as $b
+         | select($b != "")
+         | (([$b | scan("(?mi)^[ \t]*touches:[ \t]*(.+)$")] | first // []) | first // "") as $touches
+         | select($touches != "" and $touches != "*")
+         | "\($n)|\($touches)"
+        ] | .[]
+      ' 2>/dev/null || true)"
+      [ -n "$crm_lines" ] && orphans="${orphans}[$repo] ⚠️ CLAUSE-REPLAY pairing: issue touches a ratchet clause file but does not declare \`agents/replay/**\` (homelab#825 report-only — the PR would red on the ADR-103 ratchet):\n${crm_lines}\n"
+    fi
+    # <<<REPLAY:clause-replay-pairing<<<
     iss=""; qblocked=""; qcycles=""
     # ⚠ tab is IFS *whitespace*: POSIX read COLLAPSES consecutive tabs, so an empty middle
     # field shifts every later field left (live 2026-07-27: track-less sleep-iac#25's
