@@ -1,0 +1,5 @@
+# resolve-model — decision table (family contract in fixture.yaml). Row state (ROLE,
+# FALLBACK, STUB_CURL, _decision source) lives in rows/<id>/vars.sh, not in this table.
+# id               | world | patch | env | expect              | params
+proxy-reachable    |       |       |     | proxy-reachable     |
+proxy-unreachable  |       |       |     | proxy-unreachable   |
