@@ -433,7 +433,7 @@ spec:
             {\"queue\": [{\"repo\": \"owner/name\", \"number\": 1, \"why\": \"...\"}], \"link\": [{\"repo\": \"owner/name\", \"number\": 2, \"cause_repo\": \"owner/name\", \"cause_number\": 1, \"why\": \"...\"}], \"unsure\": [{\"repo\": \"owner/name\", \"number\": 3, \"why\": \"...\"}]}
             \`\`\`
             HARD RULES: do NOT label, comment, edit, file, close or reopen anything — the shell applies your JSON deterministically (ADR-094). No kubectl mutations. Every issue in the set appears in exactly one of queue/link/unsure." \
-              --model "$(bash /work/homelab/agents/resolve-model.sh --role dispatch-unit --fallback sonnet)" --permission-mode bypassPermissions --max-turns 25 </dev/null \
+              --model "$(case "$rail" in opencode-go/*) echo "$rail";; *) bash /work/homelab/agents/resolve-model.sh --role dispatch-unit --fallback sonnet;; esac)" --permission-mode bypassPermissions --max-turns 25 </dev/null \
               > /tmp/setpass.out 2>&1 || { echo "WARN: set-pass session failed — set stays pending"; tail -5 /tmp/setpass.out; exit 0; }
 
             awk '/^```json[[:space:]]*$/{f=1;buf="";next} /^```[[:space:]]*$/{if(f){last=buf};f=0;next} f{buf=buf $0 "\n"} END{printf "%s", last}' /tmp/setpass.out > /tmp/decision.json
