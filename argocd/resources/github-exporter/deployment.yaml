@@ -43,6 +43,12 @@ spec:
             # from any other cron-backstopped edge riding ahead of its Sensor).
             - name: SENTINEL_WEBHOOK_URL
               value: "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/sentinel"
+            # ADR-111 updater edge (homelab#743): /update-pr doorbell when an armed green PR goes
+            # BEHIND — wakes the in-cluster updater that replaces the GitHub-hosted cron
+            # (~4,800 hosted min/mo, #698). Until the #744 Sensor lands this POST
+            # connection-refuses; best-effort, same ride-ahead-of-its-Sensor contract as /sentinel.
+            - name: UPDATE_PR_WEBHOOK_URL
+              value: "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/update-pr"
             # Poll cadence (default 120). 90s halves worst-case ADR-093 review-edge latency vs 120
             # for a modest graphql cost: measured 2026-07-31 exporter-pat graphql peak ~1658/hr@120s
             # (~33% of the 5000/hr pool) → ~2200/hr@90s (~45%), well clear of the 2026-07-17 burn.
