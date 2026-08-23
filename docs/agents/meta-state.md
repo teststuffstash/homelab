@@ -8,14 +8,18 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ Stint S7 (#741, updater-in-cluster ADR-111 + the FU-183 burn alert) AUTHORED 2026-08-21 —
-  LAUNCH PARKED: Anthropic weekly at 95% at authoring.** Un-park trigger: the 7d window shows
-  headroom (`claude-subscription` dashboard / `agents/subscription-latch.sh` probe) or operator
-  go — expected within ~2 days. Then: children #742→#743→#744 in order (script+fixtures →
-  exporter edge → manifests), #745 cutover ONLY after the in-cluster leg is observed servicing
-  updates for a few days, #746 (alert expr) independent and fixer-shaped — may be queued to the
-  cluster loop. Docs already landed (ADR-111 via PR#747); the #698 Alertmanager silence
-  `5400ed94…` self-expires 2026-09-01 and needs nothing.
+- **⚑ Stint S7 (#741) LAUNCHED 2026-08-23 (operator go + latch clean).** Session 1 built all
+  three in-order children: #743 exporter edge MERGED (PR#757 — mergeStateStatus on the walk +
+  maybe_dispatch_behind + UPDATE_PR_WEBHOOK_URL env); #742 script+replay-table (PR#755) and
+  #744 manifests (PR#758, bring-up guard covers merge-order) mid-cycle at last write — finish
+  their gate reads if parked. #746 QUEUED to the cluster loop (labels + doorbell rung). **#745
+  cutover stays PARKED: un-park after a few days of the in-cluster leg observed servicing BOTH
+  paths** — read `update-pr-edge-*` workflow logs for edge-serviced updates and the cron's
+  CRON-SERVICED lines (silence there = the edge carries the load), and `gh run list` on the
+  callers showing the hosted runs idle; then #745 deletes callers/reusable/org-secrets + FSM
+  anchor repoint. The #698 Alertmanager silence `5400ed94…` self-expires 2026-09-01 and needs
+  nothing. Label-identity decision recorded in-code: merge App stays issues-less,
+  UPDATER_LABEL_TOKEN=coordinator-git.
 
 - **⚑ PICKUP (2026-08-20 ~06:00Z wind-down, night session closed on operator feedback — see the
   session-winddown memory):** in flight, all machine-owned: PR#705 (fixes #674, STRUCK_MODEL
