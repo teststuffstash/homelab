@@ -2,7 +2,7 @@
 
 > The SEAT's procedure card (FU-117 third context, S4 #764) — the sibling of
 > [`jail-subagent-card.md`](jail-subagent-card.md) (subagents) and
-> [`ground-rules.md`](ground-rules.md) (pod workers). Composed into the seat's session context
+> `ground-rules.md` (pod workers — lands with PR#768). Composed into the seat's session context
 > by the jail bootstrap: claude-jail cats its own container card + THIS file
 > (teststuffstash/claude-jail#1); until that mechanism lands, `CLAUDE.md` points here and a
 > seat session reads it at start. `CLAUDE.md` itself carries only repo-universal facts now —
