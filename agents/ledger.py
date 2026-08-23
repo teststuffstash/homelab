@@ -90,16 +90,46 @@ def parse_ts(name):
 # the strike" is not the strike (the infeasible-marker doctrine, coordinator-scan).
 STRIKE_RE = re.compile(r"^AGENT_STRIKE: model=(\S+) error_class=(\S+) round=(\d+)")
 
+# ── Rail vocabulary (homelab#795 — G-A, one taxonomy across ledger + proxy + rules) ────────────
+# The launcher (agent-runtime's agent-session.sh, AGENT_RAIL) emits FOUR values:
+#   openrouter          — default, everything routed through OpenRouter
+#   subscription        — Claude direct + claude-code (Anthropic subscription)
+#   opencode-go         — Go rail (opencode-go/ models, also subscription-billed)
+#   subscription-fallback — degraded to subscription when OpenRouter/Go capacity is down
+#
+# The accounting views (_model_rail below and the agent_run_{cost_usd,count}_by_rail recording
+# rules in argocd/resources/github-exporter/agent-rail-accounting.promtool-rules) fold the
+# subscription-billed rails into a single "subscription" bucket. This is an EXPLICIT fold:
+#   subscription   ← claude/*, opencode-go/*, subscription-fallback
+#   openrouter     ← everything else
+#
+# The router's router_run_reports_by_rail_total metric surfaces the raw four values from the
+# run_reports table; the difference between raw and folded is the stated fold above, not a drift.
+# See homelab#795 for the full taxonomy specification.
 
-def _model_rail(model: str) -> str:
-    """Derive the rail from the model id (homelab#777 — same derived-field discipline as r4
-    F4/F5 rounds array; historical rows lack it, readers tolerate absence). The router's
-    record_report folds the launcher's explicit `rail` field into run_reports, but the
-    manifest (written by agent-finalize) does not carry it yet — so the ledger derives it
-    from the model prefix, matching the router's own ladder_tier / route() logic:
-      claude/*  → subscription (Anthropic direct + claude-code)
-      opencode-go/* → subscription (Go rail, also subscription-billed)
-      *         → openrouter (everything else, including :free models)"""
+
+def _model_rail(model: str, rail: str = "") -> str:
+    """Return the accounting rail bucket for a model.
+
+    When a recorded rail is available (non-empty, not the empty-string written by old
+    record_report versions), it takes precedence over prefix derivation. Absence stays absence
+    — a row with neither recorded rail nor a recognizable model prefix yields "openrouter",
+    which is the default accounting bucket, not a guess (the #348 honesty rule).
+
+    Falls back to prefix derivation for historical rows without a recorded rail:
+      claude/*        → subscription (Anthropic direct + claude-code)
+      opencode-go/*   → subscription (Go rail, also subscription-billed)
+      *               → openrouter (everything else, including :free models)
+
+    See _RAIL_VOCABULARY above for the canonical four values and the fold contract.
+    """
+    if rail and rail not in ("", "unknown"):
+        # Recorded rail from the run-stats/report path wins. The four canonical rails fold
+        # to two accounting buckets; return the folded value so the ledger's rail field has
+        # a consistent vocabulary.
+        if rail == "openrouter":
+            return "openrouter"
+        return "subscription"  # subscription, opencode-go, subscription-fallback → subscription
     if model.startswith("claude/") or model.startswith("opencode-go/"):
         return "subscription"
     return "openrouter"
@@ -205,10 +235,15 @@ def summarize(project, issue, rid, rsec):
     for w in workers:
         stats = w.get("stats") or {}
         model = w.get("model") or ""
+        # homelab#795: pass the recorded rail from the manifest (if present — agent-finalize
+        # started folding AGENT_RAIL into manifest after agent-runtime#81). Older manifests
+        # lack it, falling back to prefix derivation. The manifest rail takes the canonical
+        # four values (openrouter, subscription, opencode-go, subscription-fallback) and
+        # _model_rail folds them to the two accounting buckets.
         rounds.append({
             "round": worker_round(w),
             "model": model,
-            "rail": _model_rail(model),
+            "rail": _model_rail(model, rail=str(m.get("rail") or "")),
             "exit_status": w.get("exit_status") or stats.get("exit_status", ""),
             "error_class": w.get("error_class") or stats.get("error_class") or "",
             "ci": stats.get("ci_passed"),
