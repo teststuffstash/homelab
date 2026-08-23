@@ -601,6 +601,38 @@ fanout_stack() {   # $1 = a graduated stack the global scan is skipping — ring
   esac
   fanout_ring "$1" "-"
 }
+capacity_fanout_ring() {   # $1 = stack, $2 = rail — re-ring a graduated stack with capacity source
+  local body
+  body="{\"source\":\"capacity\",\"rail\":\"$2\",\"stack\":\"$1\",\"loop_ns\":\"$1-agents\"}"
+  if curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$body" \
+       "${AGENT_LOOP_WEBHOOK}/coordinate" >/dev/null 2>&1; then
+    echo "  capacity-fan-out: doorbell re-rung for graduated stack $1 rail $2 (${body})"
+  else
+    echo "  capacity-fan-out: RING FAILED for $1 — no fallback for capacity rings (a defect if recurring)" >&2
+  fi
+  return 0
+}
+capacity_fanout_stacks() {   # $1 = rail — re-ring every graduated stack for a capacity transition
+  local stack_name
+  fanout_eligible || return 0
+  for stack_name in $(stacks_json | jq -r '.stacks[]|select(.graduated // false)|.name'); do
+    capacity_fanout_ring "$stack_name" "$1"
+  done
+}
+fanout_graduated_stack() {   # $1 = stack — ring if not in capacity fan-out mode (issue#779 fix)
+  [ "${SCAN_SOURCE:-}" != "capacity" ] || return 0
+  fanout_stack "$1"
+}
+
+# issue#779: capacity doorbell fan-out — re-ring every graduated stack for a capacity transition
+case "${SCAN_SOURCE:-}" in capacity)
+  if [ -n "${SCAN_RAIL:-}" ]; then
+    echo "capacity doorbell: ringing every graduated stack for $SCAN_RAIL cleared"
+    capacity_fanout_stacks "$SCAN_RAIL"
+    # Capacity rings are informational re-rings; a ring alone doesn't stop the main scan
+    # (each per-stack coordinator probes its own subscription latch)
+  fi
+;; esac
 # <<<REPLAY:doorbell-fanout<<<
 
 # FU-085/FU-086(1) compound: an edge that already KNOWS its unit (a reviewer verdict is
@@ -757,7 +789,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     echo "  [$name] graduated — owned by its per-stack loop; skipped in the global scan" >&2
     # FU-144: skipped is no longer dropped — an edge-woken repo-dumb ring resolves here and
     # re-rings the stack's own loop (gates + rationale at the fan-out block above).
-    fanout_stack "$name"
+    fanout_graduated_stack "$name"
     continue
   fi
   repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
