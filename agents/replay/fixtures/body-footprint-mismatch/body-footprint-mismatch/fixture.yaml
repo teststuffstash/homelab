@@ -20,8 +20,7 @@
 #
 # No `gh` call appears in the action stream on purpose — the lint rides `openall`, the fetch
 # the repo pass already made.
-pins:
-  - IL-T04
+# pins: (none — report-only check, not a lifecycle transition)
 name: body-footprint-mismatch
 mode: actions
 source: agents/coordinator-scan.sh
