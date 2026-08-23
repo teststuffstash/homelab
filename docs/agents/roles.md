@@ -318,13 +318,14 @@ work-map scheduling is what lifted the let-it-pile-up gate. The map, as now buil
 | **2 — task + service facts** | the ISSUE (author-injected — the worker clones only `/work/repo`) | issue body | every ride |
 | **3 — universal ground rules** (devbox-only installs, prior-art, machine markers) | [`agents/ground-rules.md`](../../agents/ground-rules.md) — **built #763**: the env card's static sibling, injected verbatim by the launcher; a missing file degrades LOUDLY (replay `env-card-ground-rules/missing`) | `render_env_card()` prepends the file | every ride, both harnesses |
 | task rules (how to approach this class) | stack repo `.agents/<class>.yaml` | launcher `--recipe` (L2/L3, [fixer-context.md](fixer-context.md)) | the ride |
-| jail meta-session procedure | `/workspace/CLAUDE.md` + homelab `CLAUDE.md` (+ the claude-jail card — the #764 leg, open) | Claude-Code auto-load | the seat |
+| jail seat procedure | [`agents/jail-seat-card.md`](../../agents/jail-seat-card.md) — **built #764/PR#773**: composed by the mono jail's entrypoint (container card + seat card → `/workspace/homelab/CLAUDE.local.md`, container-start snapshot; claude-jail#1) | Claude-Code auto-load of the composed `CLAUDE.local.md` | the homelab seat ONLY — stack jails get the facts-only `CLAUDE.md` via their clone, deliberately no seat card |
+| jail container ground rules | claude-jail `tools/jail-card.md` (that repo's own; stack jails add a `STACK_*`-rendered env card) | the jail entrypoint/init composition | every jail session, both jail classes |
 
 The `render_env_card()` interim duplication (accepted 2026-07-28) is REMOVED — the card keeps
-only dynamic facts and `cat`s the ground-rules file. Remaining FU-117 legs: the jail third
-context (#764 — homelab CLAUDE.md stops mixing jail procedure with repo-universal facts; the
-claude-jail repo needs its own card mechanism) and the meta-state §Durable warnings eviction
-(#765).
+only dynamic facts and `cat`s the ground-rules file. Every FU-117 leg is BUILT (2026-08-23:
+#763 ground rules, #764 the jail third context — both jail compositions live, #765 the
+meta-state eviction); the residual is the fleet CLAUDE.md slim-down, inventoried + tiered on
+the claude-jail#1 thread.
 
 **Root finding (2026-07-28, kept as the section's evidence): two delivery channels carry
 different context.**

@@ -8,6 +8,17 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-117** *(archived 2026-08-23)* — context-delivery dedup: COMPLETE via stint S4 #762,
+  all three legs same day. The role×context×source map lives at
+  `docs/agents/roles.md` §Context delivery. #763: `agents/ground-rules.md` = the ONE universal
+  source, launcher-injected with a loud degrade (the `-r && -s` guard + the missing/empty/
+  unreadable replay trio). #764: homelab CLAUDE.md is facts-only; seat procedure =
+  `agents/jail-seat-card.md`, composed by the mono jail's entrypoint into
+  `/workspace/homelab/CLAUDE.local.md` (claude-jail#1 — two recipes; stack jails get a
+  `STACK_*`-rendered env card and deliberately NO seat card). #765: meta-state durable
+  warnings evicted to runbook/card/owned docs. Residual (NOT tracker-held): the fleet
+  CLAUDE.md slim-down, inventoried + tiered on the claude-jail#1 thread, executable on the
+  operator's word.
 - **FU-163** *(archived 2026-08-23)* — glossary + vocabulary pruning: COMPLETE via stint S4
   #762. The glossary is live (`docs/glossary.md`, ⚓-anchored term list); the researcher
   `goal`→mission rename executed (#766/PR#771 — verified: no machine predicate ever read the

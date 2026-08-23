@@ -83,18 +83,19 @@ meant to avoid.)
   ~2026-09-03 / fixup-wave end / OR depletion, whichever first** (claim comment carries the
   full record; Go re-flip stays FU-181).
 
-- **⚑ S4 STINT #762 LAUNCHED + largely executed 2026-08-23 (session 1).** Done: #765 eviction,
-  #766 rename (FU-163 archived), #767 check-3 flip, sprout #769 shipped, #770 closed as
-  duplicate-of-#332. In flight at last write: **PR#768** (#763 ground rules — was BEHIND,
-  updater-owned) + **PR#774** (#769) riding their review cycles; a fresh session finishes their
-  gate reads if parked. **OPERATOR DECISION PARKED: PR#773** (#764 — CLAUDE.md facts vs
-  `agents/jail-seat-card.md`, reworked to separate-files on the operator's mid-session
-  direction; un-armed, awaiting their read; claude-jail#1 carries the bootstrap-composition
-  spec). Stint closeout 1 fires when #768 lands + the operator rules on #773.
-  S6 #716 + S3 #711 CLOSED this session (quiet windows passed; #716's Container-findings
-  disposed via PR#761, deploy verified in-cluster). #420 stays open (#575 closed 08-23 09:50Z
-  reset its window — next check ≥08-26). Remaining S6 acceptance watches: unbound-sprout belt
-  quiet; responder `Cause:` organic use; Mon 08-24 retro fire. **S5 deliberately LAST.**
+- **⚑ S4 STINT #762: TREE EMPTY 2026-08-23 ~11:52Z, closeout 1 RUN — close ARMED, executes at
+  a sweep ≥2026-08-26** (same calendar as #420's recheck). All 5 originals + 2 sprouts closed
+  in ONE session (vs `Size: 2 sessions`); FU-117 + FU-163 archived. The jail composition is
+  LIVE both classes (claude-jail#1; operator ran `docker compose build` — sessions in
+  containers started PRE-merge still predate the composed seat card until restarted, this one
+  included). Fleet CLAUDE.md slim-down: inventoried + tiered on claude-jail#1, executable on
+  the operator's word (tier 1+2 pointer drops now unblocked; oracle-fleet's tier-3 moves ride
+  the stack env card, already live).
+  S6 #716 + S3 #711 CLOSED this session (quiet windows; #716's Container-findings disposed via
+  PR#761, deploy verified in-cluster). #420 open (#575 closed 08-23 09:50Z reset its window —
+  ≥08-26). Remaining S6 acceptance watches: unbound-sprout belt quiet; responder `Cause:`
+  organic use; Mon 08-24 05:00Z retro fire (next session's first read). **S5 deliberately
+  LAST; next stint queue: S7's #745 cutover un-park read (edge-serviced evidence).**
 
 ## Durable warnings — EVICTED (S4 #765, 2026-08-23)
 

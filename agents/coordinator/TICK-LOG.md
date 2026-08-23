@@ -4734,3 +4734,10 @@ first live ADR-110 maintenance session before the ADR existed.
     annotated as deliberately dashboard-only.
 - Tracker: FU-117 → BUILT + pointer (remaining: operator lands #773, claude-jail#1); FU-163
   archived.
+- S4 CLOSEOUT 1 (same session, ~11:55Z): #773 merged by the operator (fallback instruction
+  dropped once the jail composition went live + `docker compose build` ran); #764 + #765 closed
+  (the direct-commit `Fixes #765` keyword had not auto-closed — hand-closed with the ref);
+  FU-117 archived (all three legs BUILT in one day); roles.md context-delivery map brought
+  current (both jail rows live). Tree empty ~11:52Z — close ARMED, executes ≥08-26. One session
+  against `Size: 2`. Fleet CLAUDE.md slim-down inventoried + tiered on claude-jail#1
+  (12 repos, 3 tiers), unblocked, awaiting the operator's word.
