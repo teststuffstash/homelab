@@ -54,8 +54,11 @@
    "tier": "dispatch"
   },
   "goal-decompose": {
-   "_comment": "M10 goal-lane reasoning class — goal-decompose/goal-checkpoint items need opus-tier on the subscription rail (operator ruling 2026-08-05). Replaces the launcher-side case map; consumed by coordinator-session.sh calling resolve-model.sh with --class goal-decompose. The claim's coordinatorModel passes through as the --model override.",
+   "_comment": "M10 goal-lane reasoning class — goal-decompose/goal-checkpoint items ride the subscription rail's reasoning tier. Replaces the launcher-side case map (PR#801); consumed by coordinator-session.sh calling resolve-model.sh with --class goal-decompose. chain_head added 2026-08-23 (operator ruling, G-B launch): WITHOUT it the class had no candidates and every live call deferred chain-exhausted — the launcher fallback (GOAL_MODEL:-opus) silently carried the lane while the fixture's stub router masked it. claude/fable is deliberate: the design-agents corpus has only ever been written/read by fable, and the decompose is the load-bearing corpus read (in-cluster fable smoke passed 2026-08-23, FABLE-OK through the proxy /anthropic leg). Revisit to opus only on an ATTENDED opus-vs-fable decomposition comparison, measured by authoring-attributable rounds (the miss-ledger metric).",
    "chain_source": "stack",
+   "chain_head": [
+    "claude/fable"
+   ],
    "reasoning": true,
    "rails": [
     "subscription"
@@ -191,6 +194,7 @@
   "claude/haiku": "cheap",
   "claude/sonnet": "large",
   "claude/opus": "premium",
+  "claude/fable": "premium",
   "deepseek/deepseek-v4-flash": "cheap",
   "deepseek/deepseek-v4-pro": "large",
   "tencent/hy3": "cheap",
