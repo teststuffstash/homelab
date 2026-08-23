@@ -455,6 +455,12 @@ dispatch_phase() {   # $1 = the stack's MAIN repo — publish the scan-side rows
   # The 017790c invariant rows (rationale at dp_wake): the wake source of THIS dispatch, as an
   # epoch so `changes()` counts dispatches. An unreadable Workflow (a jail run) stamps neither —
   # absence of both is "not measured", never "edge".
+  # ⚠ The JANITOR tick stamps NEITHER (homelab#459, 2026-08-23): it is report-only BY DESIGN — no
+  # doorbell exists for "run the periodic janitor", so its cron label is not a missed edge. Before
+  # this gate every janitor pass contributed one guaranteed "dead doorbell edge" sample (the cron
+  # gauge's own HELP), leaving AgentDispatchCronWoken one tolerated race away from firing on any
+  # janitor day. The phase-timing rows above still ship — those ARE meaningful for the janitor.
+  if [ "${SCAN_JANITOR:-}" != "1" ]; then
   case "${DISPATCH_PHASE_WAKE%%|*}" in
     edge) wake="# TYPE agent_dispatch_edge_woken_timestamp gauge
 # HELP agent_dispatch_edge_woken_timestamp Epoch of this stack's last EDGE-woken dispatch (017790c: changes() over this counts them).
@@ -465,6 +471,7 @@ agent_dispatch_edge_woken_timestamp ${now}
 agent_dispatch_cron_woken_timestamp ${now}
 " ;;
   esac
+  fi
   printf '%s\n%s\n%s%s' \
     "# TYPE agent_dispatch_phase_seconds gauge" \
     "# HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160)." \
