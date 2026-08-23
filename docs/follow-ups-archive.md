@@ -8,6 +8,14 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-163** *(archived 2026-08-23)* — glossary + vocabulary pruning: COMPLETE via stint S4
+  #762. The glossary is live (`docs/glossary.md`, ⚓-anchored term list); the researcher
+  `goal`→mission rename executed (#766/PR#771 — verified: no machine predicate ever read the
+  bare label, the legacy labels were already deleted by the authoritative IssueLabels sync;
+  `mission` reserved for FU-090(c) graduation); docs-graph-lint check #3 flipped warn→fail
+  with anchors widened on measurement (#767/PR#772 — the shadow loop was a pipe-subshell, the
+  flip required restructuring). Residual ambiguous-prose "goal" rewords ride docs-cleanup as
+  standing practice, not a tracker item.
 - **FU-183** *(archived 2026-08-23)* — GithubActionsMinutesHigh flat threshold → pro-rated
   burn expr: SHIPPED by the cluster loop (homelab#746 → PR#756, stint S7 #741) — fires when
   month-to-date usage exceeds the elapsed quota share with a start-of-month floor; promtool rows
