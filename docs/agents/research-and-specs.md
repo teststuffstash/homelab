@@ -86,7 +86,7 @@ Callers name **zero models** — `class` + `slot` + `jitter:false` against the s
 bands are disjoint *by curation convention*, which structurally prevents run-1's two selection
 slips (below) without router enforcement.
 
-In practice, for step 1: `bash agents/research-fanout.sh <project> <goal-issue> --arms 7`
+In practice, for step 1: `bash agents/research-fanout.sh <project> <mission-issue> --arms 7`
 (`--dry-run` draws the roster and stops). A slot whose model is unavailable comes back a typed
 defer and stays EMPTY — over-provision covers it; nothing is substituted. Record the arm table it
 prints, `pool-version` included: that triple is what re-draws the mission. ⚠ The hand-seeded
