@@ -33,8 +33,10 @@ Two places where agents run, with one boundary between them:
   stacks are graduated: oracle (2026-07-18), sleep + platform (2026-07-26), circles (2026-08-03).
 
 The boundary between them is the interesting part: **the jail has the context and the authority;
-the cluster has the blast-radius containment.** Work moves from jail to cluster as an *issue* (the
-loop's only input) and comes back as a *PR* (its only output).
+the cluster has the blast-radius containment.** On the **fixer lane**, work crosses that boundary
+as an *issue* and comes back as a *PR* — but that is one lane's edge, not the loop's whole surface:
+the other roles enter on their own edges (alerts → responder, schedules → retro/scout, typed
+schema deltas → infra-fixer; the roles table below is the inventory).
 
 Inside the cluster, the intelligence sits at a small number of judgment points and everything
 between them is deterministic plumbing you mostly already run — a scan, CI, ArgoCD, Renovate,
