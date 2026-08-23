@@ -601,6 +601,27 @@ fanout_stack() {   # $1 = a graduated stack the global scan is skipping — ring
   esac
   fanout_ring "$1" "-"
 }
+capacity_fanout_ring() {   # $1 = stack, $2 = rail — re-ring a graduated stack with capacity source
+  local body
+  body="{\"source\":\"capacity\",\"rail\":\"$2\",\"stack\":\"$1\",\"loop_ns\":\"$1-agents\"}"
+  if curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$body" \
+       "${AGENT_LOOP_WEBHOOK}/coordinate" >/dev/null 2>&1; then
+    echo "  capacity-fan-out: doorbell re-rung for graduated stack $1 rail $2 (${body})"
+  else
+    echo "  capacity-fan-out: RING FAILED for $1 — no fallback for capacity rings (a defect if recurring)" >&2
+  fi
+  return 0
+}
+capacity_fanout_stacks() {   # $1 = rail — re-ring every graduated stack for a capacity transition
+  local stack_name
+  [ -n "$SPAWN" ] || return 0
+  [ -z "${SCAN_STACK:-}" ] || return 0   # per-stack instances never fan out
+  [ -n "$DISPATCH_PHASE_WAKE" ] || DISPATCH_PHASE_WAKE="$(dp_wake)"
+  case "$DISPATCH_PHASE_WAKE" in edge*) ;; *) return 0;; esac  # capacity rings from edges only
+  for stack_name in $(stacks_json | jq -r '.stacks[]|select(.graduated // false)|.name'); do
+    capacity_fanout_ring "$stack_name" "$1"
+  done
+}
 # <<<REPLAY:doorbell-fanout<<<
 
 # FU-085/FU-086(1) compound: an edge that already KNOWS its unit (a reviewer verdict is
@@ -739,6 +760,16 @@ case "${SCAN_UNIT:-}" in ""|"-") ;; *)
   if [ -n "$SPAWN" ]; then
     if fast_unit_dispatch "$SCAN_UNIT"; then exit 0; fi
     echo "unit fast-path fell through — running the full scan"
+  fi
+;; esac
+
+# issue#779: capacity doorbell fan-out — re-ring every graduated stack for a capacity transition
+case "${SCAN_SOURCE:-}" in capacity)
+  if [ -n "${SCAN_RAIL:-}" ]; then
+    echo "capacity doorbell: ringing every graduated stack for $SCAN_RAIL cleared"
+    capacity_fanout_stacks "$SCAN_RAIL"
+    # Capacity rings are informational re-rings; a ring alone doesn't stop the main scan
+    # (each per-stack coordinator probes its own subscription latch)
   fi
 ;; esac
 

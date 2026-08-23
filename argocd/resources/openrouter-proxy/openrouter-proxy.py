@@ -115,7 +115,7 @@ ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW = {w: _window_threshold(w) for w in ("5h", "7
 # WINDOW-DRAW pricing moved to gometer — the shared home (ADR-108), see GO_WINDOWS /
 # GO_UTIL_THRESHOLDS / window_draw() there. The proxy serves /opencode-limit from gometer.
 _latch = {"until": 0.0, "last_429": 0.0, "headers": {}, "headers_at": 0.0,
-          "windows": {}, "count_429": 0}
+          "windows": {}, "count_429": 0, "rung_edge": False}
 _latch_lock = threading.Lock()
 _latch_saved_at = 0.0  # happy-path persistence throttle (latch TRANSITIONS always persist)
 
@@ -150,6 +150,7 @@ def _dispatch_verdict(now: float, tier: str | None = None) -> tuple[bool, str | 
     """The composite launcher answer: (limited, reason, windows). 429 latch wins; otherwise a
     window past the utilization threshold that hasn't reset yet defers dispatch. A window whose
     reset epoch has passed is dead data, never a verdict — stale headers can't wedge dispatch."""
+    _check_anthropic_expiry()  # ring doorbell on epoch expiry (limited→ok transition)
     with _latch_lock:
         until = _latch["until"]
         windows = {k: dict(v) for k, v in _latch["windows"].items()}
@@ -1099,9 +1100,24 @@ _or_cap = {"until": 0.0, "reason": "", "since": 0.0, "count": 0,
            # `credit_at` is when WE last read a usable balance; `credit_src_at` is when the
            # OPERATOR last talked to OpenRouter. They differ, and only the second one says how old
            # the number actually is (homelab#180).
-           "credit": None, "credit_at": 0.0, "credit_src_at": None}
+           "credit": None, "credit_at": 0.0, "credit_src_at": None, "rung_edge": False}
 _or_cap_lock = threading.Lock()
 _or_429: dict[str, float] = {}  # model -> last 429 epoch (the cross-model rpd detector)
+
+
+def _ring_capacity_doorbell(rail: str) -> None:
+  """Ring the /coordinate doorbell on a limited→ok capacity transition (FU-146 / issue#779)."""
+  try:
+    body = json.dumps({"source": "capacity", "rail": rail}).encode()
+    req = urllib.request.Request(
+        f"{os.environ.get('AGENT_LOOP_WEBHOOK', 'http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000')}/coordinate",
+        data=body, method="POST",
+        headers={"Content-Type": "application/json", "User-Agent": "openrouter-proxy"})
+    with urllib.request.urlopen(req, timeout=5) as resp:
+      resp.read()
+    log(f"capacity doorbell: rang /coordinate for {rail} limited→ok transition")
+  except Exception as e:  # noqa: BLE001 — doorbell is best-effort, never a crash source
+    log(f"capacity doorbell: {rail} ring failed: {e}")
 
 
 def _or_capacity_latch(reason: str, hold: float = 0.0) -> str:
@@ -1115,6 +1131,7 @@ def _or_capacity_latch(reason: str, hold: float = 0.0) -> str:
         if first:
             _or_cap["since"] = now
             _or_cap["count"] += 1
+            _or_cap["rung_edge"] = False  # re-arm edge detection for new latch cycle
     if first:
         log(f"openrouter ACCOUNT capacity DOWN ({reason}) for {hold:.0f}s — /route now defers "
             f"the openrouter rail as or-capacity-down:{reason}; class=fix launchers may degrade "
@@ -1129,8 +1146,13 @@ def _or_capacity_clear(why: str) -> str:
         if _or_cap["until"] <= now:
             return ""
         reason, _or_cap["until"], _or_cap["reason"] = _or_cap["reason"], 0.0, ""
+        ring = not _or_cap["rung_edge"]  # ring if not already rung for this latched cycle
+        if ring:
+            _or_cap["rung_edge"] = True
     _or_429.clear()
     log(f"openrouter 2xx while capacity-latched ({reason}) — latch cleared early ({why})")
+    if ring:
+        _ring_capacity_doorbell("openrouter")
     return "+or-capacity-cleared"
 
 
@@ -1150,6 +1172,7 @@ def _or_capacity_429(model: str) -> str:
 
 def _or_capacity_down(now: float | None = None) -> str | None:
     """The launcher-visible verdict: the latch reason while it holds, else None."""
+    _check_or_capacity_expiry()  # ring doorbell on epoch expiry (limited→ok transition)
     with _or_cap_lock:
         return _or_cap["reason"] if _or_cap["until"] > (now or time.time()) else None
 
@@ -1171,7 +1194,7 @@ def _or_capacity_down(now: float | None = None) -> str | None:
 GO_CAPACITY_HOLD_S = int(os.environ.get("GO_CAPACITY_HOLD_S", "900"))
 # A 402 means the window is SPENT (not rate pressure) — a longer default hold is honest.
 GO_CAPACITY_402_HOLD_S = int(os.environ.get("GO_CAPACITY_402_HOLD_S", "1800"))
-_go_cap = {"until": 0.0, "reason": "", "code": 0, "since": 0.0, "count": 0}
+_go_cap = {"until": 0.0, "reason": "", "code": 0, "since": 0.0, "count": 0, "rung_edge": False}
 _go_cap_lock = threading.Lock()
 _go_cap_429: dict[int, int] = {}  # code -> observed count (router_go_observed_429_total{code})
 
@@ -1192,6 +1215,7 @@ def _go_capacity_latch(code: int, retry_after: float | None = None) -> str:
         if first:
             _go_cap["since"] = now
             _go_cap["count"] += 1
+            _go_cap["rung_edge"] = False  # re-arm edge detection for new latch cycle
         # homelab#618: persist the latch so a proxy restart doesn't forget it
         router.go_latch_save(_go_cap)
     if first:
@@ -1209,9 +1233,14 @@ def _go_capacity_clear(why: str) -> str:
             return ""
         reason, _go_cap["until"], _go_cap["reason"], _go_cap["code"] = \
             _go_cap["reason"], 0.0, "", 0
+        ring = not _go_cap["rung_edge"]  # ring if not already rung for this latched cycle
+        if ring:
+            _go_cap["rung_edge"] = True
         # homelab#618: clear the persisted latch so it doesn't re-appear on restart
         router.go_latch_save(_go_cap)
     log(f"Go 2xx while capacity-latched ({reason}) — latch cleared early ({why})")
+    if ring:
+        _ring_capacity_doorbell("go")
     return "+go-capacity-cleared"
 
 
@@ -1242,6 +1271,7 @@ def _go_capacity_snapshot(now: float) -> dict:
     latch field, so it stays populated after expiry until the next 2xx clears it, and a consumer
     that keys on `reason` would defer forever from the first observed 429. Consumers act on
     `limited`."""
+    _check_go_expiry()  # ring doorbell on epoch expiry (limited→ok transition)
     with _go_cap_lock:
         until = _go_cap["until"]
         return {
@@ -1340,6 +1370,33 @@ def _credit_tick() -> float | None:
     return balance
 
 
+def _check_anthropic_expiry() -> None:
+    """Check if Anthropic latch just expired (limited→ok) and ring doorbell if so."""
+    now = time.time()
+    with _latch_lock:
+        if _latch["until"] > 0 and _latch["until"] <= now and not _latch["rung_edge"]:
+            _latch["rung_edge"] = True
+            _ring_capacity_doorbell("anthropic")
+
+
+def _check_go_expiry() -> None:
+    """Check if Go latch just expired (limited→ok) and ring doorbell if so."""
+    now = time.time()
+    with _go_cap_lock:
+        if _go_cap["until"] > 0 and _go_cap["until"] <= now and not _go_cap["rung_edge"]:
+            _go_cap["rung_edge"] = True
+            _ring_capacity_doorbell("go")
+
+
+def _check_or_capacity_expiry() -> None:
+    """Check if OR capacity latch just expired (limited→ok) and ring doorbell if so."""
+    now = time.time()
+    with _or_cap_lock:
+        if _or_cap["until"] > 0 and _or_cap["until"] <= now and not _or_cap["rung_edge"]:
+            _or_cap["rung_edge"] = True
+            _ring_capacity_doorbell("openrouter")
+
+
 def _anthropic_latch_update(status: int, resp_headers) -> str:
     """FU-088(a): fold one /anthropic upstream status into the 429 latch. Returns a note suffix."""
     now = time.time()
@@ -1358,20 +1415,29 @@ def _anthropic_latch_update(status: int, resp_headers) -> str:
         except (TypeError, ValueError):
             hold = ANTHROPIC_429_HOLD_S
         with _latch_lock:
+            was_latched = _latch["until"] > now
             _latch["until"] = now + hold
             _latch["last_429"] = now
             _latch["count_429"] += 1
+            if not was_latched:
+                _latch["rung_edge"] = False  # re-arm edge detection for new latch cycle
             router.latch_save(_latch)  # ADR-096: an active hold survives a proxy roll
         log(f"anthropic 429 — subscription LATCHED for {hold:.0f}s (launchers defer via /anthropic-limit)")
         return "+429-latched"
     if 200 <= status < 300:
         global _latch_saved_at
+        ring = False
         with _latch_lock:
             if _latch["until"] > now:
                 _latch["until"] = 0.0
+                ring = not _latch["rung_edge"]  # ring if not already rung for this latched cycle
+                if ring:
+                    _latch["rung_edge"] = True
                 _latch_saved_at = now
                 router.latch_save(_latch)
                 log("anthropic 2xx while latched — latch cleared early")
+                if ring:
+                    _ring_capacity_doorbell("anthropic")
                 return "+latch-cleared"
             # Keep the persisted windows fresh without one sqlite write per streamed request.
             if now - _latch_saved_at > 30:

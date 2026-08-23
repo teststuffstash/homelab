@@ -84,6 +84,10 @@ spec:
                     # perstack trigger fired beside this one), so the global scan must NOT
                     # fan it out again — that includes the scan's own fan-out re-rings.
                     - { name: ring_ns, value: "-" }
+                    # issue#779 capacity doorbell: the ring source (empty/"" = not a capacity ring)
+                    - { name: source, value: "" }
+                    # issue#779 capacity doorbell: the rail that cleared (go/openrouter/anthropic)
+                    - { name: rail, value: "" }
           parameters:
             # dataKey missing from the POST body → the static `value` above stays (unscoped scan).
             - src: { dependencyName: coordinate-dep, dataKey: body.repo, value: "all" }
@@ -92,6 +96,10 @@ spec:
               dest: spec.arguments.parameters.1.value
             - src: { dependencyName: coordinate-dep, dataKey: body.loop_ns, value: "-" }
               dest: spec.arguments.parameters.2.value
+            - src: { dependencyName: coordinate-dep, dataKey: body.source, value: "" }
+              dest: spec.arguments.parameters.3.value
+            - src: { dependencyName: coordinate-dep, dataKey: body.rail, value: "" }
+              dest: spec.arguments.parameters.4.value
     # FU-080: submit an inline coordinate Workflow INTO <loop_ns> as agentstack-loop (SCAN_STACK
     # scoped, broker-fetch role=coordinator). Inlined rather than referencing a per-stack
     # WorkflowTemplate so the composition cron stays byte-identical per stack; the coordinator-scan
@@ -132,6 +140,8 @@ spec:
                     - { name: stack, value: PLACEHOLDER }
                     - { name: loop_ns, value: PLACEHOLDER }
                     - { name: unit, value: "-" } # FU-085 compound ("-" = full scan)
+                    - { name: source, value: "" } # issue#779: capacity doorbell source
+                    - { name: rail, value: "" } # issue#779: capacity doorbell rail
                 entrypoint: main
                 volumes:
                   - { name: work, emptyDir: {} }
@@ -171,6 +181,10 @@ spec:
               dest: spec.arguments.parameters.1.value
             - src: { dependencyName: coordinate-perstack, dataKey: body.unit, value: "-" }
               dest: spec.arguments.parameters.2.value
+            - src: { dependencyName: coordinate-perstack, dataKey: body.source, value: "" }
+              dest: spec.arguments.parameters.3.value
+            - src: { dependencyName: coordinate-perstack, dataKey: body.rail, value: "" }
+              dest: spec.arguments.parameters.4.value
 ---
 # The coordinate Workflow — the coordinator-reflex CronWorkflow's inline container, extracted so
 # the cron backstop and the Sensor edge both workflowTemplateRef ONE definition (the review-argo
@@ -218,6 +232,8 @@ spec:
       - { name: repo, value: "all" }
       - { name: unit, value: "-" } # FU-085 compound: "-" = full scan; else the scoped fast-path
       - { name: ring_ns, value: "-" } # FU-144: the POST's loop_ns ("-" = repo-dumb ring → the scan may fan out; the cron backstop inherits the default and never fans out anyway — its wake source is cron)
+      - { name: source, value: "" } # issue#779: capacity doorbell source (empty = not a capacity ring)
+      - { name: rail, value: "" } # issue#779: capacity doorbell rail
   entrypoint: main
   volumes:
     - { name: work, emptyDir: {} }
@@ -240,6 +256,9 @@ spec:
             # already routed per-stack (coordinator-scan.sh §doorbell-fanout reads both).
             export SCAN_REPO='{{workflow.parameters.repo}}'
             export SCAN_RING_NS='{{workflow.parameters.ring_ns}}'
+            # issue#779 capacity doorbell: the ring source and rail for capacity fan-out
+            export SCAN_SOURCE='{{workflow.parameters.source}}'
+            export SCAN_RAIL='{{workflow.parameters.rail}}'
             exec bash /work/homelab/agents/coordinator-scan.sh --spawn
         env:
           - { name: HOME, value: "/home/node" }
