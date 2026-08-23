@@ -54,7 +54,7 @@ bash agents/agent-session.sh sleep-tracking --harness goose --model openrouter/d
 ```
 
 Flags: `--run "<cmd>"` · `--ref <base>` · `--repo <url>` · `--harness goose|opencode|claude` ·
-`--model <provider/model>` · `--recipe <path>` (goose + claude — the launcher-owned path, FU-114; opencode uses `--run`) ·
+`--model <provider/model>` · `--recipe <path>` (goose + claude + opencode — the launcher-owned path, FU-114; opencode joined via ADR-112/#792) ·
 `--task issue-N|pr-N` + `--round N` (idempotency key + transcript prefix) · `--work-branch <br>`
 (resume a PR branch) · `--docker` (kata+dind; auto-derived from the claim's `fixer.docker`) ·
 `--openrouter-secret <name>` · `--no-arm` (human-gated PR, FU-105 researcher; auto-derived from a
