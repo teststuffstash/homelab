@@ -488,11 +488,16 @@ STRUCK_MODEL="${STRUCK_MODEL_ORIG:-$MODEL}"
 # FU-127: consume the structured carrier when the router provides it — no re-parse needed.
 # Falls back to the model_id.py parser when absent (mixed-deploy window: proxy and launcher
 # deploy independently).
-_resolved="$(printf '%s' "$_decision" | jq -r '.resolved // empty' 2>/dev/null)"
+_resolved="$(printf '%s' "${_decision:-}" | jq -r '.resolved // empty' 2>/dev/null)"
 if [ -n "$_resolved" ] && [ "$_resolved" != "null" ]; then
   MODEL_RAIL="$(printf '%s' "$_resolved" | jq -r '.rail // ""')"
   MODEL_HARNESS="$(printf '%s' "$_resolved" | jq -r '.harness // ""')"
   MODEL_MODEL="$(printf '%s' "$_resolved" | jq -r '.model // ""')"
+  # Guard: if resolved.model is empty, fall back to the model_id.py parse
+  # rather than assigning an empty MODEL (mixed-deploy window).
+  if [ -z "$MODEL_MODEL" ]; then
+    eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
+  fi
 else
   eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
 fi
