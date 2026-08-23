@@ -3618,9 +3618,102 @@ def _self_test() -> int:
     _check_go_expiry()
     check(doorbell_rings.get(("go", None), 0) == 1, f"doorbell: re-latch + clear re-arms the edge (got {doorbell_rings})")
 
-    # Clean up latch state for subsequent tests
+    print("\n=== Anthropic latch doorbell transition tests (issue#809) ===")
+    # Mirror D1-D4 for the Anthropic 429/utilization latch path.
+    # E1: limited→ok rings once (epoch expiry path)
+    doorbell_rings.clear()
+    with _latch_lock:
+        _latch["until"] = 1.0  # just expired
+        _latch["last_429"] = 0.0
+        _latch["rung_edge"] = False
+    _check_anthropic_expiry()
+    check(doorbell_rings.get(("anthropic", None), 0) == 1,
+          f"doorbell anthropic: limited→ok transition rang (got {doorbell_rings})")
+
+    # E2: ok→ok (already cleared) never rings
+    doorbell_rings.clear()
+    with _latch_lock:
+        _latch["until"] = 0.0
+        _latch["rung_edge"] = False
+    _check_anthropic_expiry()
+    check(doorbell_rings.get(("anthropic", None), 0) == 0,
+          f"doorbell anthropic: ok→ok transition never rings (got {doorbell_rings})")
+
+    # E3: limited→limited (re-latched before clear) never rings
+    doorbell_rings.clear()
+    with _latch_lock:
+        _latch["until"] = time.time() + 60
+        _latch["last_429"] = 0.0
+        _latch["rung_edge"] = False
+    _check_anthropic_expiry()
+    check(doorbell_rings.get(("anthropic", None), 0) == 0,
+          f"doorbell anthropic: limited→limited never rings (got {doorbell_rings})")
+
+    # E4: re-latch then clear rings again (rung_edge reset by re-latch)
+    doorbell_rings.clear()
+    with _latch_lock:
+        _latch["until"] = time.time() + 60  # re-latch
+        _latch["last_429"] = time.time()
+        _latch["rung_edge"] = False  # edge marker resets on new latch
+    with _latch_lock:
+        _latch["until"] = 1.0  # then expire
+        _latch["rung_edge"] = False
+    _check_anthropic_expiry()
+    check(doorbell_rings.get(("anthropic", None), 0) == 1,
+          f"doorbell anthropic: re-latch + clear re-arms the edge (got {doorbell_rings})")
+
+    print("\n=== OR capacity doorbell transition tests (issue#809) ===")
+    # Mirror D1-D4 for the OpenRouter capacity-down hold path.
+    # F1: limited→ok rings once (epoch expiry path)
+    doorbell_rings.clear()
+    with _or_cap_lock:
+        _or_cap["until"] = 1.0  # just expired
+        _or_cap["reason"] = "observed-429"
+        _or_cap["rung_edge"] = False
+    _check_or_capacity_expiry()
+    check(doorbell_rings.get(("openrouter", None), 0) == 1,
+          f"doorbell or-capacity: limited→ok transition rang (got {doorbell_rings})")
+
+    # F2: ok→ok (already cleared) never rings
+    doorbell_rings.clear()
+    with _or_cap_lock:
+        _or_cap["until"] = 0.0
+        _or_cap["reason"] = ""
+        _or_cap["rung_edge"] = False
+    _check_or_capacity_expiry()
+    check(doorbell_rings.get(("openrouter", None), 0) == 0,
+          f"doorbell or-capacity: ok→ok transition never rings (got {doorbell_rings})")
+
+    # F3: limited→limited (re-latched before clear) never rings
+    doorbell_rings.clear()
+    with _or_cap_lock:
+        _or_cap["until"] = time.time() + 60
+        _or_cap["reason"] = "observed-429"
+        _or_cap["rung_edge"] = False
+    _check_or_capacity_expiry()
+    check(doorbell_rings.get(("openrouter", None), 0) == 0,
+          f"doorbell or-capacity: limited→limited never rings (got {doorbell_rings})")
+
+    # F4: re-latch then clear rings again (rung_edge reset by re-latch)
+    doorbell_rings.clear()
+    with _or_cap_lock:
+        _or_cap["until"] = time.time() + 60  # re-latch
+        _or_cap["reason"] = "observed-429"
+        _or_cap["rung_edge"] = False  # edge marker resets on new latch
+    with _or_cap_lock:
+        _or_cap["until"] = 1.0  # then expire
+        _or_cap["rung_edge"] = False
+    _check_or_capacity_expiry()
+    check(doorbell_rings.get(("openrouter", None), 0) == 1,
+          f"doorbell or-capacity: re-latch + clear re-arms the edge (got {doorbell_rings})")
+
+    # Clean up latch states for subsequent tests
     with _go_cap_lock:
         _go_cap["until"], _go_cap["reason"], _go_cap["code"] = 0.0, "", 0
+    with _latch_lock:
+        _latch["until"] = 0.0
+    with _or_cap_lock:
+        _or_cap["until"], _or_cap["reason"] = 0.0, ""
 
     print("\n=== Only-free guardrail test (Go via /anthropic path) ===")
     # Test 9: only-free guardrail MUST deny Go-leg requests through /anthropic path.
