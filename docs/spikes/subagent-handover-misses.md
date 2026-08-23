@@ -119,3 +119,16 @@ everything derivable once the transcript link exists. The rules that keep it che
   candidate: the dispatch prompt names the push target explicitly — `git remote add github
   <real URL> && git push -u github <branch>` — whenever the workspace is a local clone. Also:
   plain `--local` hardlink clones fail cross-device from /tmp → `--no-hardlinks`.
+
+- **2026-08-23 (G-A decomposition retro — seat-authored CLUSTER children, same ledger per the
+  chainless decision-6 contract):** three round-costing authoring misses, attributed via the new
+  goal_graph round badges. (a) #776: the body said "consumes `.decision.resolved` when PRESENT"
+  — the worker implemented those words and broke the shadow boundary; rule: a deliverable on a
+  MODE boundary states the negative case explicitly ("must NOT consume under shadow"), not only
+  the positive. (b) #782: the body mandated "one shared helper" while `Touches:` declared only
+  the three lane files — body-nouns vs footprint cross-check at authoring; a body that demands a
+  new file names it in the footprint. (c) #782: the responder/debounce `--pick-rail` dual-rail
+  mechanics went unnamed and the worker replaced the case statement blind — enumerate the
+  load-bearing mechanics already in the touched surface (the issue is the only context channel);
+  the acceptance line "no capacity-behaviour change" is what armed the reviewer catch — keep
+  writing acceptance as invariants, they are the net when the spec is thin.
