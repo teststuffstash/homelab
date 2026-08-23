@@ -1435,7 +1435,9 @@ def metrics_lines() -> list[str]:
         "# TYPE router_run_reports_by_rail_total counter",
         "# HELP router_run_reports_by_rail_total Run reports broken down by rail (homelab#777 — flip acceptance 2).",
     ]
-    by_rail = _read("SELECT COALESCE(NULLIF(rail,''),'unknown'), COUNT(*) FROM run_reports GROUP BY rail")
+    by_rail = _read("SELECT rail, COUNT(*) FROM "
+                    "(SELECT COALESCE(NULLIF(rail,''),'unknown') AS rail FROM run_reports) "
+                    "GROUP BY rail")
     if by_rail:
         lines += [f'router_run_reports_by_rail_total{{rail="{r}"}} {n}' for r, n in by_rail]
     else:
@@ -2244,6 +2246,13 @@ def self_test() -> int:
     cleared_loaded = go_latch_load()
     assert cleared_loaded is None, "cleared go latch must not persist"
     body = "\n".join(metrics_lines())
+    # The migrated-store fixture above proves the NULL/'' split exists (old-1 has NULL rail,
+    # t-2 has '' rail). The by_rail query must coalesce both to 'unknown' and GROUP BY the
+    # coalesced value, producing exactly ONE line — not two with the same label set.
+    unknown_lines = [ln for ln in body.split("\n")
+                     if 'router_run_reports_by_rail_total{rail="unknown"}' in ln]
+    assert len(unknown_lines) == 1, \
+        f"expected exactly 1 by_rail unknown line, got {len(unknown_lines)}: {unknown_lines}"
     assert "router_db_persistent 0" in body, "self-test store is ephemeral by construction"
     assert 'router_strikes_total{error_class="harness-death"} 1' in body
     assert 'router_circuit_open_total{class="auth"} 1' in body
