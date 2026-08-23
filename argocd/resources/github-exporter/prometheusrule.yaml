@@ -76,7 +76,23 @@ spec:
         - record: goal_budget_remaining_usd
           expr: max by (owner, project, stack, goal) (goal_budget_usd) - goal_spent_usd
 
-    # ── Per-rail accounting views (homelab#777 — flip acceptance 2) ──────────────────────────────
+    # ── Per-rail accounting views (homelab#777 — flip acceptance 2, taxonomy #795) ──────────────
+    # ── RAIL TAXONOMY (homelab#795, G-A) ────────────────────────────────────────────────────────
+    # The launcher emits FOUR canonical AGENT_RAIL values (agent-runtime's agent-session.sh):
+    #   openrouter            — default, everything routed through OpenRouter
+    #   subscription          — Claude direct + claude-code (Anthropic subscription)
+    #   opencode-go           — Go rail (opencode-go/ models, also subscription-billed)
+    #   subscription-fallback — degraded to subscription when OpenRouter/Go capacity is down
+    #
+    # These recording rules and agents/ledger.py:_model_rail() FOLD the subscription-billed
+    # rails into a single "subscription" bucket. The folding is EXPLICIT:
+    #   subscription ← claude/*, opencode-go/*, subscription-fallback
+    #   openrouter   ← everything else
+    #
+    # The router's router_run_reports_by_rail_total metric surfaces the RAW four values from the
+    # run_reports table; the difference between raw (router) and folded (here + ledger) is the
+    # stated fold above, not a drift. See agents/ledger.py §_RAIL_VOCABULARY for the full contract.
+    #
     # The pushgateway metrics (agent_run_cost_usd, agent_run_total) carry no `rail` label — the
     # launcher's finalize leg pushes them before the router's record_report folds the explicit
     # rail. So rail is DERIVED from the model prefix, matching the router's own ladder_tier /
