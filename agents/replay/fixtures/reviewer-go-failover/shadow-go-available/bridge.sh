@@ -1,11 +1,12 @@
 # ── bridge — seams only, no gate logic. Sets HERE to fixture dir for subscription-latch.sh stub,
 # provides curl function that records calls and serves world JSON for /opencode-limit.
+# SHADOW mode: _router_defer and _router_adopted are UNSET, so the legacy ladder runs.
 HERE="$REPLAY_FIXTURE"
 PROJECT="${PROJECT:-test-project}"
 PR="${PR:-42}"
-MODEL="opus"  # Explicit model pinned by operator
-MODEL_SET_EXPLICIT=1  # This prevents the failover even when Go is available
+MODEL="sonnet"
 GO_SERVED=0
+# MODEL_SET_EXPLICIT is NOT set — the gate's failover condition is true when Go is available
 
 # The latch seam is the stub FILE $HERE/subscription-latch.sh — the real gate runs
 # `bash "$HERE/subscription-latch.sh"`, which a shell function could not intercept.

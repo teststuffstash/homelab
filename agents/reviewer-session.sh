@@ -68,7 +68,7 @@ STACK_LABEL="${STACK_LABEL:-none}"
 
 # Pro/Max subscription ⇒ sonnet (a strong reviewer, free at margin). Override for a high-stakes PR
 # (e.g. --model opus) or a metered run. Rubric path is relative to the project repo root.
-REPO_SLUG=""; MODEL="sonnet"; RUBRIC=".agents/review.md"; PERM_MODE="bypassPermissions"; ROUND="1"; GO_SERVED=0
+REPO_SLUG=""; MODEL="sonnet"; RUBRIC=".agents/review.md"; PERM_MODE="bypassPermissions"; ROUND="1"; GO_SERVED=0; MODEL_RAIL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)            REPO_SLUG="$2"; shift 2;;   # owner/name or full URL; default teststuffstash/<project>
@@ -77,6 +77,7 @@ while [ $# -gt 0 ]; do
     --permission-mode) PERM_MODE="$2"; shift 2;;
     --round)           ROUND="$2"; shift 2;;       # review iteration on this PR (transcript prefix reviewer-r<N>)
     --loop-ns)         LOOP_NS_ARG="$2"; shift 2;;  # FU-080 perStack: run the reviewer pod in <stack>-agents as agentstack-loop; the review-bot token is fetched per-run from the proxy's TokenReview-gated /loop-git-token?role=reviewer (no Secret in that ns)
+    --decorrelate-from) DECORRELATE_FROM="$2"; shift 2;;  # model family to decorrelate from (M5 evidence row — the served model, never the requested id)
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -156,6 +157,70 @@ else
   POD="reviewer-${PROJECT}-${PR}-$(date -u +%H%M%S)"
 fi
 # <<<REPLAY:reviewer-currency-gate<<<
+
+# ── ADR-096: consult the router at the model-decision seam (POST /route) ──
+# role: reviewer → class review; the class policy orders the subscription rail first, so behaviour
+# is unchanged while capacity is ok — the routed pick replaces the literal, not the doctrine.
+# AGENT_ROUTER=shadow (default): consult + log the divergence, dispatch unchanged.
+# =authoritative: the decision REPLACES the model — but an explicit --model always wins.
+# =off: today's behavior exactly.
+# decorrelate_from is the M5 evidence row (the newest round's SERVED model, never the requested
+# id) — the router excludes that FAMILY across rails (#516's primitive).
+# Fail-open: unreachable proxy → static behavior, one loud line.
+_srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {}' "$HERE/stacks.json" 2>/dev/null)" || _srow="{}"
+[ -n "$_srow" ] || _srow='{}'
+_stack_rmode="$(printf '%s' "$_srow" | jq -r '.routerMode // ""')"
+if [ -z "${AGENT_ROUTER:-}" ] && [ -n "$_stack_rmode" ]; then AGENT_ROUTER="$_stack_rmode"; fi
+AGENT_ROUTER="${AGENT_ROUTER:-shadow}"
+if [ "$AGENT_ROUTER" != "off" ]; then
+  ROUTER_URL="${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}"
+  # No chain sent for reviewer — the class policy (class review) orders the rails server-side.
+  # No key_ref — the reviewer uses the subscription rail exclusively (ref:coordinator-claude).
+  # >>>REPLAY:route-request>>>
+  _route_labels="[]"
+  _route_urgency=""
+  _task="${TASK_KEY:-review-${PROJECT}-${PR}}"
+  _req="$(jq -nc --arg stack "$(printf '%s' "$_srow" | jq -r '.name // ""')" \
+      --arg task "$_task" --arg session "reviewer-${PROJECT}-${PR}-r${ROUND}" \
+      --arg urgency "$_route_urgency" \
+      --argjson labels "$_route_labels" \
+      --arg decorrelate_from "${DECORRELATE_FROM:-}" \
+      '{stack: $stack, task: $task, role: "reviewer", session: $session,
+        decorrelate_from: (if $decorrelate_from == "" then null else $decorrelate_from end),
+        labels: $labels, urgency: (if $urgency == "" then null else $urgency end)}')"
+  # <<<REPLAY:route-request<<<
+  _decision="$(curl -fsS --max-time 5 -H "Content-Type: application/json" \
+      -d "$_req" "$ROUTER_URL/route" 2>/dev/null)" || _decision=""
+  if [ -z "$_decision" ]; then
+    echo "→ router: $ROUTER_URL unreachable — static model chain (fail-open, AGENT_ROUTER=$AGENT_ROUTER)"
+  else
+    _verdict="$(printf '%s' "$_decision" | jq -r '.decision // "?"')"
+    _rmodel="$(printf '%s' "$_decision" | jq -r '.model // ""')"
+    _rwhy="$(printf '%s' "$_decision" | jq -r '[.reason, .basis, (if .half_open then "half-open" else empty end)] | map(select(. != null and . != "")) | join(",")')"
+    echo "→ router(${AGENT_ROUTER}): ${_verdict} ${_rmodel:-—} [${_rwhy}] (static would be: ${MODEL})"
+    if [ "$AGENT_ROUTER" = "authoritative" ]; then
+      if [ -n "${MODEL_SET_EXPLICIT:-}" ]; then
+        echo "→ router: explicit --model ${MODEL} wins over the routed decision (ADR-096 override rule)"
+      elif [ "$_verdict" = "dispatch" ] && [ -n "$_rmodel" ]; then
+        MODEL="$_rmodel"; _router_adopted=1
+        # Consume the structured carrier when available
+        _resolved="$(printf '%s' "${_decision:-}" | jq -r '.resolved // empty' 2>/dev/null)"
+        if [ -n "$_resolved" ] && [ "$_resolved" != "null" ]; then
+          MODEL_RAIL="$(printf '%s' "$_resolved" | jq -r '.rail // ""')"
+          MODEL_HARNESS="$(printf '%s' "$_resolved" | jq -r '.harness // ""')"
+          MODEL_MODEL="$(printf '%s' "$_resolved" | jq -r '.model // ""')"
+          if [ -n "$MODEL_MODEL" ]; then
+            eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
+          fi
+        fi
+        GO_SERVED=0
+        [ "$MODEL_RAIL" = "opencode-go" ] && GO_SERVED=1
+      elif [ "$_verdict" = "defer" ]; then
+        _router_defer=1
+      fi
+    fi
+  fi
+fi
 
 # In-pod prep, run under `bash -lc` so the image's gh-wrapper (reads the LIVE ~1h token from
 # GH_TOKEN_FILE) is on PATH. gh repo clone → a full clone (master present) so /code-review can diff
@@ -559,32 +624,44 @@ ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s\n%s' "$UPLOADER" "$PREP" "$TOUCHESP
 # FU-088(a): defer while the subscription is 429-latched (covers the Sensor path too, which
 # dispatches this script directly without the reflex tick's guard). Level-triggered upstream —
 # the backstop tick re-picks this PR once the latch clears, so a skip loses nothing.
-# FAIL-OVER LADDER (homelab#424): when the subscription is latched, probe the Go rail
+# FAIL-OVER LADDER (homelab#424, ADR-096 shadow): when the subscription is latched, probe the Go rail
 # (/opencode-limit). If Go is available (limited=false), serve the review from the Go rail
 # instead of deferring. An explicit --model always wins — the failover only kicks in when
 # the operator didn't pin a model.
-if ! bash "$HERE/subscription-latch.sh"; then
-  # Subscription is latched — probe the Go rail before deferring.
-  # Reuse the same proxy base URL that subscription-latch.sh uses (AGENT_EGRESS_PROXY env).
-  PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
-  go_reply="$(curl -fsS --max-time 5 "$PROXY/opencode-limit" 2>/dev/null)" || go_reply=""
-  go_limited="true"
-  if [ -n "$go_reply" ]; then
-    go_limited="$(printf '%s' "$go_reply" | jq -r '.limited // false' 2>/dev/null)" || go_limited="true"
-  fi
-  if [ "$go_limited" = "false" ]; then
-    # Go rail is available — use it for this review (only when no explicit --model was passed).
-    if [ -z "${MODEL_SET_EXPLICIT:-}" ]; then
-      MODEL="opencode-go/qwen3.5-plus"
-      GO_SERVED=1
-      echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/qwen3.5-plus)"
+# The /route consult above may have already resolved the model (authoritative mode). In that case
+# only the deferral arm applies. In shadow/off/unreachable mode the routed verdict did NOT replace
+# the model, so the legacy ladder remains the dispatch's only capacity gate — identical to the
+# pattern agent-session.sh uses downstream of a shadow consult.
+if [ -n "${_router_defer:-}" ]; then
+  echo "→ review of ${PROJECT}#${PR} deferred — ${_rwhy:-router deferral}"
+  exit 0
+elif [ -z "${_router_adopted:-}" ]; then
+  # shadow/off, or the router was unreachable/declined: the routed verdict did NOT replace the
+  # model, so this dispatch's ONLY capacity gate is the legacy ladder — exactly as agent-session.sh
+  # keeps its static chain + FU-088 gates intact downstream of the consult in shadow mode.
+  if ! bash "$HERE/subscription-latch.sh"; then
+    # Subscription is latched — probe the Go rail before deferring.
+    # Reuse the same proxy base URL that subscription-latch.sh uses (AGENT_EGRESS_PROXY env).
+    PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+    go_reply="$(curl -fsS --max-time 5 "$PROXY/opencode-limit" 2>/dev/null)" || go_reply=""
+    go_limited="true"
+    if [ -n "$go_reply" ]; then
+      go_limited="$(printf '%s' "$go_reply" | jq -r '.limited // false' 2>/dev/null)" || go_limited="true"
+    fi
+    if [ "$go_limited" = "false" ]; then
+      # Go rail is available — use it for this review (only when no explicit --model was passed).
+      if [ -z "${MODEL_SET_EXPLICIT:-}" ]; then
+        MODEL="opencode-go/qwen3.5-plus"
+        GO_SERVED=1
+        echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/qwen3.5-plus)"
+      else
+        echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (explicit --model=${MODEL} pinned, cannot failover to Go)"
+        exit 0
+      fi
     else
-      echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (explicit --model=${MODEL} pinned, cannot failover to Go)"
+      echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (FU-088 latch)"
       exit 0
     fi
-  else
-    echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (FU-088 latch)"
-    exit 0
   fi
 fi
 # <<<REPLAY:reviewer-go-failover-gate<<<
