@@ -137,7 +137,7 @@ queueing semantics, the latch provides ground truth. ConfigMap semaphores are na
 so per-stack workflows carry the latch only (decided with FU-080: per-stack capacity =
 subscription-latch, no cross-ns semaphore — the Composition's rendered crons rely on the probe).
 Never suspend a schedule for capacity — `suspend: true` is state that rots.
-**The Go rail runs the same pattern (ADR-107/FU-170, 2026-08-17).** Go-rail rides
+**The [Go rail](chainless-redesign.md) runs the same pattern (ADR-107/FU-170, 2026-08-17).** Go-rail rides
 (`rail=opencode-go` pods) gate on `GET /opencode-limit`: self-metered usage-value windows
 ($12/5h · $30/wk · $60/mo, epoch-anchored grids — gometer, PR#481; drawn at LIST price on raw
 tokens, badge-halved) plus the FU-088-pattern **concurrency semaphore** — the proxy counts

@@ -14,9 +14,12 @@
 # and absent on CI runners.
 #
 # Check #3 — a doc leaning on a ⚓-anchored glossary term without linking the term's home —
-# is LIVE in SHADOW (warn-only) since 2026-08-11: the glossary's ⚓ rows are the term list
-# (one home — never duplicate terms here), linking the home OR the glossary satisfies it.
-# Flip to fail after the docs-cleanup pipeline clears the initial warning set (FU-163).
+# FAILS since 2026-08-23 (FU-163 / S4 #767; shadow since 2026-08-11 — run 1: 3 warnings,
+# 0 FPs, cleared): the glossary's ⚓ rows are the term list (one home — never duplicate terms
+# here), linking the home OR the glossary satisfies it. Check-3-only exclusions beyond
+# is_historical: TICK-LOG (append-only journal) and adr.md (decision record) use terms
+# historically and must never be forced to grow links; meta-state is transient but LIVING
+# (its rows are re-read every session) and stays checked.
 
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -65,10 +68,14 @@ for f in docs/agents/*.md; do
 done
 
 # --- 3) glossary ⚓ terms: a living doc using an anchored term links its home or the glossary
-# WARN-ONLY (shadow rollout, the sentinel/router pattern) — see the header note.
+# FAILING since 2026-08-23 (see the header note). ⚠ The findings must reach $status, so no
+# pipe-subshell: the loop reads a captured row list (the flip would have been a no-op behind
+# `grep | while` — the classic subshell-loses-status trap).
 GLOSS=docs/glossary.md
 if [ -f "$GLOSS" ]; then
-  grep '^| \*\*⚓' "$GLOSS" | while IFS= read -r row; do
+  rows=$(grep '^| \*\*⚓' "$GLOSS")
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
     term=$(printf '%s' "$row" | awk -F'|' '{print $2}' | sed 's/\*\*//g; s/⚓//g; s/^ *//; s/ *(.*//; s/ *$//')
     homerel=$(printf '%s' "$row" | awk -F'|' '{print $4}' | grep -oE '\]\([^)#]*\.md' | head -1 | sed 's/^](//')
     [ -n "$term" ] || continue
@@ -79,13 +86,17 @@ if [ -f "$GLOSS" ]; then
       [ "$f" = "$GLOSS" ] && continue
       [ "$f" = "$home" ] && continue
       if is_historical "$f"; then continue; fi
+      case "$f" in agents/coordinator/TICK-LOG.md|docs/adr.md) continue ;; esac
       grep -qiF "$term" "$f" || continue
       grep -qF "$hbase" "$f" && continue
       grep -qF "glossary.md" "$f" && continue
-      echo "WARN term-unlinked (check #3 shadow): $f uses \"$term\" without linking $home or the glossary"
+      echo "TERM-UNLINKED (check #3): $f uses \"$term\" without linking $home or the glossary"
+      status=1
     done
-  done
+  done <<EOF_ROWS
+$rows
+EOF_ROWS
 fi
 
-[ "$status" -eq 0 ] && echo "docs-graph: links resolve, agents doc table complete"
+[ "$status" -eq 0 ] && echo "docs-graph: links resolve, agents doc table complete, ⚓ terms linked"
 exit "$status"

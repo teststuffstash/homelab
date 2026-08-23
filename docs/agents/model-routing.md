@@ -337,7 +337,7 @@ context size, cache-read share — and prices candidates as **expected cost per 
 (1−cache)`) with hand-tuned static bands launcher-side; router-resident and measured, it
 recomputes automatically when the price table moves — no per-role model preferences hardcoded
 anywhere, no stale "who knows what" tuning. Consequences that fall out rather than being
-policy: rail affinity (a cache-heavy profile prices brutally on the Go rail's list-on-raw draw
+policy: rail affinity (a cache-heavy profile prices brutally on the [Go rail](chainless-redesign.md)'s list-on-raw draw
 and cheaply on Anthropic's discounted cache — so "low-cache roles prefer Go" is an OUTPUT);
 whole-cycle reservations (retiring the flat $2 cap-tier class behind goal #278's $104 phantom
 — ADR-107 cost-rethink direction 4's mechanism). Refinements pinned at sketch time: split by
@@ -599,7 +599,7 @@ money) was considered and REJECTED for now: the subscription's 5h/7d windows are
 live OUTSIDE anything a platform ride can edit, and platform workers are exactly the rides that
 can introduce bugs into the OpenRouter cap mechanics themselves (the operator, the proxy, the key
 CRs). Independence-from-the-code-under-change is the property that decides it. Consequences: goal
-budgets on the platform stack stay cap-phantom until SUBSCRIPTION budgets are built (the "get
+budgets on [the platform stack](agentstack.md) stay cap-phantom until SUBSCRIPTION budgets are built (the "get
 subscription budgets working" direction — rides the post-FU-131 rail-aware-summation charter on
 #278), and the FU-168 famine fixes carry the throughput load alone.
 

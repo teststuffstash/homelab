@@ -29,7 +29,7 @@ is [`../../.github/renovate-global.json`](../../.github/renovate-global.json).
 > E2E on oracle-fleet#37, merged). The `CronJob`/polling framing throughout the rest of this doc is the
 > original design; the mechanics below now read as: **edge-trigger primary, `*/15` backstop.**
 
-> **Update (2026-08-21, ADR-111 — the updater moves IN-CLUSTER; build = stint S7, homelab#741):**
+> **Update (2026-08-21, ADR-111 — the updater moves IN-CLUSTER; build = [stint](chainless-redesign.md) S7, homelab#741):**
 > the reusable workflow + per-repo callers (and their GitHub cron) retire in favor of the ADR-093
 > shape the review path already uses — an exporter edge (`maybe_dispatch_behind`) + a `*/15` Argo
 > CronWorkflow backstop running a platform-owned script, same `homelab-merge` App identity via ESO.

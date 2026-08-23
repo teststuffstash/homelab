@@ -429,7 +429,7 @@ incident detail are TICK-LOG's.
   claiming a condition ended. And **a deploy can silence an alert for its whole `for:`
   window**: restarting the emitting pod ends the old per-pod series and the `for:` timer
   restarts from zero (SubscriptionWeeklyPoolLow sat at 0.92 while "cleared", 2026-08-07).
-  Hardening the class (`max_over_time` over restart gaps) is a stint-#762 sprout.
+  Hardening the class (`max_over_time` over restart gaps) is a [stint](agents/chainless-redesign.md)-#762 sprout.
 - **`severity: info` alerts are SILENTLY SUPPRESSED in this cluster** — kube-prometheus-stack's
   stock `InfoInhibitor` inhibit rule holds them `suppressed` in Alertmanager; they dispatch to
   nothing (not the responder, not the Home Assistant webhook). Use `warning`. Tell:
