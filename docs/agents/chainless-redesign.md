@@ -343,8 +343,9 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
    `model-classes.json` grows rails/class policy.
 5. Role wiring (coordinator/reviewer/responder/retro launchers call `/route`).
 6. Legacy deletion in one sweep: chains, `claudeTier`, `guardrail`, the M12 branch, the M10
-   case-maps, `REVIEW_GOAL_MODEL`, `GOOSE_MODEL` threading — each deletion site is already
-   named in its own doc.
+   case-maps, `REVIEW_GOAL_MODEL`, `GOOSE_MODEL` threading, and the retired
+   `ROUTER_STRIKE_ENFORCE` read + filter branch (ruled 2026-08-23, §M1a) — each deletion site
+   is already named in its own doc.
 
 ## Related
 

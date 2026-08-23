@@ -151,7 +151,23 @@ a pricier chain entry for a failure a ~$0.04 retry fixes.
 **fan out N parallel workers and keep the first survivor** may beat both retry-serially and falling
 through the chain — N × $0.04 against one attempt on a costlier model, with wall-clock the real
 win. That is a policy question the strike DATA now exists to answer; it is why we record before we
-act. Do not flip `ROUTER_STRIKE_ENFORCE` without deciding blacklist / retry / fan-out first.
+act.
+
+**RULED 2026-08-23 (operator, G-A child homelab#783): `ROUTER_STRIKE_ENFORCE` is RETIRED as a
+blacklist knob.** The 16-day store read (the #783 memo): six strikes total, five of them one
+harness class (`goose-32602-truncation`), enforcement would have changed ~1 decision for cents;
+the 3-deaths-vs-3-clean-retries evidence stands. Strikes stay **recorded** (this feed is the
+FU-057 pivot's and feed 3's input — recording preceded policy once and must again), and
+`model_cooldowns` carries the residual provider 4xx/5xx class. The env's **deletion site is the
+`STRIKE_ENFORCE` read + filter branch in `router.py`**, and it rides the G-A legacy-deletion
+sweep (chainless-redesign.md build order 6) — dead code until then, nothing sets the env.
+Re-open condition: a post-P4-flip strike mix showing a per-model class the cooldowns miss —
+re-opens as a NEW design carrying the provider dimension from day one (the #783 thread's
+provider-attribution legs: strike records gain the served provider; serving-shaped strikes
+exclude the (model, provider) pair and re-run the PRICED pick — never a blind same-model
+retry; a model-level verdict needs ≥2-provider evidence). Fan-out graduates OUT of strike
+policy to a dispatch-time evidence lane on `:free` models (ROADMAP work map, the G-E
+candidate; the #778 thread is the pilot's findings ledger).
 
 ⚠ **The self-test could never have caught this** — its fixture put `harness-death` in
 `error_class`, the taxonomy's own vocabulary, a shape the launcher never sends (same trap as
