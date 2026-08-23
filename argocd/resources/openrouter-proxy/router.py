@@ -1321,7 +1321,8 @@ def route(payload: dict, ctx: dict) -> dict:
         decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
                     "half_open": half_open, "skipped": skipped, "jitter": jitter_on, **result}
     else:
-        if decorrelate_family and not eligible:
+        if decorrelate_family and not eligible and \
+                any(s["reason"] == f"decorrelate:{decorrelate_family}" for s in skipped):
             reason = f"decorrelate:{decorrelate_family}"
             retry = None
         elif capacity_block:
@@ -2317,8 +2318,29 @@ def self_test() -> int:
     if _sd_rows[0][0] != _sd_rows[0][1]:
         assert _sd_rows[0][2] == 0, \
             f"divergent shadow/served must record agrees=0: {_sd_rows}"
+    # Sibling decorrelation guard: a denied model + decorrelate_from must still defer
+    # chain-exhausted (preventing the guard from being relabelled decorrelate:<family>).
+    _dc4 = route(dict(base, chain=["deepseek/deepseek-v4-flash"],
+                      deny=["deepseek/deepseek-v4-flash"],
+                      decorrelate_from="tencent/hy3"), CTX)
+    assert _dc4["decision"] == "defer" and _dc4["reason"] == "chain-exhausted", \
+        f"denied + decorrelate_from must defer chain-exhausted: {_dc4}"
+    # Cooldown + decorrelate_from: a model on cooldown with decorrelate_from set to an unrelated
+    # family must retain its retry_after_s (not lose it to the decorrelate: branch).
+    cooldown_note("inclusionai/ling-3.0-flash:free", 429)
+    _now = time.time()
+    _write("UPDATE model_cooldowns SET until=? WHERE model=?",
+           (_now + 99999, "inclusionai/ling-3.0-flash:free"))
+    _dc5 = route(dict(base, chain=["inclusionai/ling-3.0-flash:free"],
+                      decorrelate_from="tencent/hy3"), CTX)
+    assert _dc5["decision"] == "defer" and _dc5["reason"] == "cooldown", \
+        f"cooldown + decorrelate_from must defer cooldown: {_dc5}"
+    assert _dc5.get("retry_after_s") is not None, \
+        "cooldown + decorrelate_from must carry retry_after_s"
+    _write("UPDATE model_cooldowns SET until=? WHERE model=?",
+           (_now - 1, "inclusionai/ling-3.0-flash:free"))
+    cooldown_note("inclusionai/ling-3.0-flash:free", 200)
     # homelab#180: the operator-gauge parse behind the latch's `credit` leg. The proxy half is one
-    # HTTP GET; every way this leg can go quietly dead is decided HERE, so it is pinned HERE.
     # HTTP GET; every way this leg can go quietly dead is decided HERE, so it is pinned HERE.
     _OP_TS = 1786237718.460958
     fresh = (f"# HELP {ACCOUNT_CREDIT_GAUGE} account credit\n"
