@@ -1,0 +1,7 @@
+# strike-quota-classifier — the decision table (family contract in fixture.yaml).
+# id                          | world | patch | env | expect                  | params
+stats-config-death            |       |       |     | stats-config-death      |
+stats-unknown-clean           |       |       |     | stats-unknown-clean     |
+rawlog-config-death           |       |       |     | rawlog-config-death     |
+rawlog-deadline-first         |       |       |     | rawlog-deadline-first   |
+rawlog-quota                  |       |       |     | rawlog-quota            |
