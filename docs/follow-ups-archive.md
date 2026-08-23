@@ -8,6 +8,11 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-183** *(archived 2026-08-23)* — GithubActionsMinutesHigh flat threshold → pro-rated
+  burn expr: SHIPPED by the cluster loop (homelab#746 → PR#756, stint S7 #741) — fires when
+  month-to-date usage exceeds the elapsed quota share with a start-of-month floor; promtool rows
+  in loop-health.promtool-test. Residual (silence `5400ed94…` self-expires 2026-09-01; a normal
+  month evaluates green post-cutover) is #741's acceptance, not a tracker item.
 - **FU-176** *(archived 2026-08-19)* — iac-sentinel zero-PR ticks wiped their own pushgateway
   group (empty body = group REPLACE): fixed in `scripts/iac-sentinel.sh` `push_metrics` — a
   per-tick `iac_sentinel_last_run_timestamp_seconds` heartbeat is always appended, so the body

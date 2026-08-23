@@ -540,19 +540,6 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
-- [ ] **FU-183** — **GithubActionsMinutesHigh: replace the flat 80% threshold with a pro-rated
-      burn alert.** A plain `> 2400` is true-but-unactionable once the cause is accepted (homelab#698:
-      sweeper minutes ruled tolerated until the Sep-1 reset) — the responder kept reopening on every
-      3h refire, and 80% on the last day of a month is not even a problem. Redesign (operator,
-      2026-08-21): fire when month-to-date usage exceeds the elapsed share of quota —
-      `usage > (day_of_month/31) * 3000` — with a wider tolerance early in the month so one busy
-      first day doesn't trip it (e.g. an absolute floor `usage > 300`, or a min-elapsed-days guard).
-      Catches runaway burn on day 1 instead of at 80%. Interim: Alertmanager silence
-      `5400ed94-23c7-4515-8b8b-c8d586598ae8` (endsAt 2026-09-01, imperative, self-expiring).
-      The DRIVER fix is decided separately — ADR-111 (updater in-cluster), stint S7 #741 —
-      making this alert a reintroduction detector. **Next:** child issue homelab#746 (the expr
-      + promtool rows; mind the §pre-331 poller-roll bridging). Relates #698, #72, ADR-111.
-
 - [ ] **FU-164** — **doc-heat: transcript-derived read heat over repo markdown — POINTER.**
       Question, heat doctrine (heat × class × age; blind spots; approximate lines), v0 (jail
       parser + static report, `devbox run doc-heat`) and the serving plan:
