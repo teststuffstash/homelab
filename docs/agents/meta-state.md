@@ -8,7 +8,7 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ Stint S7 (#741) LAUNCHED 2026-08-23 (operator go + latch clean).** Session 1 built all
+- **⚑ [Stint](chainless-redesign.md) S7 (#741) LAUNCHED 2026-08-23 (operator go + latch clean).** Session 1 built all
   three in-order children: #743 exporter edge MERGED (PR#757 — mergeStateStatus on the walk +
   maybe_dispatch_behind + UPDATE_PR_WEBHOOK_URL env); #742 script+replay-table (PR#755) and
   #744 manifests (PR#758, bring-up guard covers merge-order) mid-cycle at last write — finish
@@ -59,7 +59,7 @@ meant to avoid.)
   (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
 - **⚑ Goal lane pause (operator, 2026-08-13):** no new Goal until v1.2 machinery + budget
   recovery. As of 2026-08-19 the conditions read met (work map) — the unpause is the operator's
-  call at G-A launch; Goal budgets on the platform stack stay cap-phantom until FU-180.
+  call at G-A launch; Goal budgets on [the platform stack](agentstack.md) stay cap-phantom until FU-180.
 - **minutark.ee / oracle-iac#351** — OPEN, oracle parked (operator 2026-08-11); pick up at
   unpark. Acceptance = drift-free re-plan through the two-zone token. ⚠ `dig +short` wraps long
   DS digests — `tr -d ' '` before grepping.

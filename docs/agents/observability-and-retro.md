@@ -491,13 +491,13 @@ is needed for this.
 **⚖ THE SPLIT (operator ruling, 2026-08-17, from the r4 evidence): the retro divides into the
 PLATFORM retro and per-stack retros — built in that order.**
 
-1. **The platform retro FIRST — BUILT 2026-08-19 (the #587 stint, legs on #588/#589/#590/#591).**
+1. **The platform retro FIRST — BUILT 2026-08-19 (the #587 [stint](chainless-redesign.md), legs on #588/#589/#590/#591).**
    r4 ("oracle r4", PR#454) proved the shape: the pain-rank reads the WHOLE `_ledger.jsonl` with
    no stack filter, the worst-K landed on circles/homelab/openrouter-operator/sleep rows while
    oracle sat quiet, and every finding targets a PLATFORM artifact. That is correct, not a bug —
    **structural problems require looking into the stack repos; no way around it** (operator).
    As built: the workflow's `stack` param defaults `platform` (series `platform-rN`, ride ns =
-   the platform stack's fixer ns via `agents/retro-project.sh` — the ONE stack→ns map, shared
+   [the platform stack](agentstack.md)'s fixer ns via `agents/retro-project.sh` — the ONE stack→ns map, shared
    with the guard, whose busy-probe now checks only the ride namespace: WIP-slot locality);
    ACCESS tracks the questions — a fleet-wide READ-ONLY `retro-git` token (App-minted, delivered
    by the FU-080 (a) mirror pattern, never as manifest text — PR#619) reaches the ride as
