@@ -8,6 +8,14 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-179** *(archived 2026-08-23)* — strike policy RULED (operator, G-A child homelab#783):
+  `ROUTER_STRIKE_ENFORCE` retired as a blacklist knob — 16-day store read = six strikes, five one
+  goose-harness class; enforcement would have changed ~1 decision for cents. Strikes stay
+  RECORDED; cooldowns carry the residual class. Code deletion rides the G-A legacy sweep
+  (deletion site named in `model-routing.md` §M1a). Re-open = post-flip per-model class the
+  cooldowns miss → new design with the provider dimension (the #783 thread's legs; future home =
+  the ROADMAP G-E candidate). Fan-out → the free-model evidence lane, same candidate.
+
 - **FU-117** *(archived 2026-08-23)* — context-delivery dedup: COMPLETE via stint S4 #762,
   all three legs same day. The role×context×source map lives at
   `docs/agents/roles.md` §Context delivery. #763: `agents/ground-rules.md` = the ONE universal

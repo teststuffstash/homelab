@@ -458,16 +458,6 @@ the block needs pruning, not more headings.
 
 ### Models, cost & routing
 
-- [ ] **FU-179** — **The strike-policy decision gates `ROUTER_STRIKE_ENFORCE` (recording ON
-      since 2026-08-07, enforcement deliberately OFF).** [`model-routing.md`](agents/model-routing.md)
-      §M1a: the flaky-cheap-model evidence (3 deaths vs 3 clean retries on `lg` work) does not
-      support blacklist-on-strike; the open policy fork is blacklist vs retry-serially vs
-      fan-out-N-keep-first-survivor. Rescued from prose 2026-08-19 (the untracked-work sweep — the
-      "do not flip without deciding" line had no owner). **Next:** read the accumulated strike
-      table (weeks of data now exist), decide the policy in a routing sitting, then flip or
-      retire the env. **Owned by G-A child homelab#783 since the 2026-08-23 launch (Goal
-      #775).** Relates FU-095, ADR-096.
-
 - [ ] **FU-180** — **Subscription budgets + fair-scheduling window shares (chainless
       cost-rethink directions 3–4).** Goal budgets on the platform stack stay CAP-PHANTOM until
       subscription budgets exist (#278 closed at $76/$60 phantom vs ~$0 real); the design —
