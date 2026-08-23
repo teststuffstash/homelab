@@ -74,7 +74,103 @@ else:
                   "the two implementations have DRIFTED (FU-127)")
             fails += 1
 
-print(f"model-id: {len(CASES)} cases × parser + proxy drift pin — "
+# ── --shell interface and HARNESS_SET interaction pin (homelab#827) ───
+# #791's deliverable 3 said "the launcher's harness derivation stops forcing goose for OR
+# models." That is mis-stated: for OpenRouter, harness is a CHOICE, not a property of the
+# id — goose, opencode, and claude all serve OpenRouter today. model_id.py correctly returns
+# harness="" for every OR model, leaving the choice to the caller's --harness flag.
+#
+# This pin verifies:
+#   1. The --shell output for an OR model sets MODEL_HARNESS=''
+#   2. Sourcing that output in a shell with HARNESS_SET (from --harness) correctly KEEPS
+#      the explicit harness — the caller's choice survives the empty derivation.
+#   3. Sourcing that output without HARNESS_SET also leaves the caller's default harness,
+#      because the empty MODEL_HARNESS is skipped by [ -z "$MODEL_HARNESS" ].
+for mid, label in [("openrouter/anthropic/claude-sonnet-4-20250514", "vendor/model"),
+                    ("openrouter/deepseek/deepseek-v4-flash", "vendor/model"),
+                    ("xiaomi/mimo-v2.5", "bare vendor/model")]:
+    import subprocess
+    result = subprocess.run(
+        [sys.executable, parser_path, "--shell", mid],
+        capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"FAIL --shell {mid!r} exited {result.returncode}: {result.stderr}")
+        fails += 1
+        continue
+    # Parse the shell output manually — Python exec can't run shell assignments.
+    # Output is space-separated KEY=VALUE with shlex-quoted values.
+    parsed = {}
+    for token in result.stdout.strip().split():
+        if "=" in token:
+            k, v = token.split("=", 1)
+            # shlex.quote produces '' for empty strings
+            parsed[k] = v.strip("'") if v.startswith("'") else v
+    if parsed.get("MODEL_HARNESS") != "":
+        print(f"FAIL --shell {mid!r}: MODEL_HARNESS={parsed.get('MODEL_HARNESS')!r}, want ''")
+        fails += 1
+    if parsed.get("MODEL_RAIL") != "openrouter":
+        print(f"FAIL --shell {mid!r}: MODEL_RAIL={parsed.get('MODEL_RAIL')!r}, want 'openrouter'")
+        fails += 1
+    # HARNESS_SET interaction: explicit --harness claude must survive the empty derivation.
+    # We use subprocess with bash to test the exact agent-session.sh:511 guard line.
+    MODEL_HARNESS = parsed.get("MODEL_HARNESS", "")
+    # Test 1: HARNESS_SET=1 (caller passed --harness) — harness stays unchanged
+    p1 = subprocess.run(
+        ["bash", "-c",
+         'MH="$1"; H="$2"; HS="$3"; '
+         '[ -z "$MH" ] || [ -n "${HS:-}" ] || H="$MH"; echo "$H"',
+         "_", MODEL_HARNESS, "opencode", "1"],
+        capture_output=True, text=True)
+    if p1.stdout.strip() != "opencode":
+        print(f"FAIL HARNESS_SET interaction {mid!r}: harness={p1.stdout.strip()!r}, want 'opencode'")
+        fails += 1
+    # Test 2: no HARNESS_SET, MODEL_HARNESS empty — harness stays unchanged
+    p2 = subprocess.run(
+        ["bash", "-c",
+         'MH="$1"; H="$2"; '
+         '[ -z "$MH" ] || [ -n "${HARNESS_SET:-}" ] || H="$MH"; echo "$H"',
+         "_", MODEL_HARNESS, "opencode"],
+        capture_output=True, text=True)
+    if p2.stdout.strip() != "opencode":
+        print(f"FAIL no-HARNESS_SET interaction {mid!r}: harness={p2.stdout.strip()!r}, want 'opencode'")
+        fails += 1
+    # Subscription model for comparison: claude/haiku must produce MODEL_HARNESS=claude
+    # which triggers the override path on agent-session.sh:511 ([ -z "$MODEL_HARNESS" ] is FALSE).
+    sub_result = subprocess.run(
+        [sys.executable, parser_path, "--shell", "claude/haiku"],
+        capture_output=True, text=True)
+    sub_parsed = {}
+    for token in sub_result.stdout.strip().split():
+        if "=" in token:
+            k, v = token.split("=", 1)
+            sub_parsed[k] = v.strip("'") if v.startswith("'") else v
+    if sub_parsed.get("MODEL_HARNESS") != "claude":
+        print(f"FAIL --shell claude/haiku: MODEL_HARNESS={sub_parsed.get('MODEL_HARNESS')!r}, want 'claude'")
+        fails += 1
+    else:
+        sub_MH = sub_parsed["MODEL_HARNESS"]
+        # Verify the override path: subscription MODEL_HARNESS=claude overrides default opencode
+        p3 = subprocess.run(
+            ["bash", "-c",
+             'MH="$1"; H="$2"; '
+             '[ -z "$MH" ] || [ -n "${HARNESS_SET:-}" ] || H="$MH"; echo "$H"',
+             "_", sub_MH, "opencode"],
+            capture_output=True, text=True)
+        if p3.stdout.strip() != "claude":
+            print(f"FAIL subscription harness derivation: HARNESS={p3.stdout.strip()!r}, want 'claude'")
+            fails += 1
+        # With explicit HARNESS_SET, the derivation is skipped
+        p4 = subprocess.run(
+            ["bash", "-c",
+             'MH="$1"; H="$2"; HARNESS_SET="$3"; '
+             '[ -z "$MH" ] || [ -n "${HARNESS_SET:-}" ] || H="$MH"; echo "$H"',
+             "_", sub_MH, "opencode", "1"],
+            capture_output=True, text=True)
+        if p4.stdout.strip() != "opencode":
+            print(f"FAIL subscription HARNESS_SET interaction: explicit harness overridden to {p4.stdout.strip()!r}")
+            fails += 1
+
+print(f"model-id: {len(CASES)} cases × parser + proxy drift pin + {3} OR shell/HARNESS_SET pins — "
       f"{'FAILED' if fails else 'all agree'}")
 sys.exit(1 if fails else 0)
 PY
