@@ -1,0 +1,11 @@
+# reviewer-route-carrier-resolved-absent — the /route response has NO .resolved carrier
+# (legacy response, mixed-deploy window). The carrier parse block is skipped cleanly.
+# MODEL_RAIL stays empty, GO_SERVED=0, no unbound-variable death (the round-3 defect,
+# fixed: MODEL_RAIL's GO_SERVED guard uses ${MODEL_RAIL:-}).
+name: reviewer-route-carrier-resolved-absent
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:route-request
+  - file:post.sh

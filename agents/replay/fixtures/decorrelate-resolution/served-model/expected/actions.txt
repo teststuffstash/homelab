@@ -1,0 +1,4 @@
+CALL curl -fsS --max-time 3 http://proxy.test:8080/report/latest?task=issue-123
+HH:MM:SS [test-project] decorrelate_from: gpt-4o (issue #123)
+OUT decorrelate_arg='--decorrelate-from gpt-4o'
+RC 0
