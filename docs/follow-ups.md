@@ -505,7 +505,7 @@ the block needs pruning, not more headings.
       enforcement off, decide the policy, THEN judge the P4 flip.
       **Open:** legs (b)+(c) unstarted; wiring the coordinator lane to `/route` (§M10).
       **G-A (Goal homelab#775, 2026-08-23) owns the §M10 wiring (children #780/#781/#782) and
-      leg (c) (rides child #778); leg (b) stays outside per charter decision 3.**
+      leg (c) (rides child #778); leg (b) is IN-scope since the ADR-107 addendum (2026-08-23) reworded decision 3 — the scout's 3-harness cells (#778 scope + #791/#792) ARE the (b) evidence surface.**
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 - [ ] **FU-127** — **One model-id parser LANDED; the structured claim field is the rest.**
       `agents/model_id.py` is the single implementation of `{rail, harness, model}` with the
