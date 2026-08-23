@@ -375,8 +375,8 @@ transitions:
         anchor: { file: agents/goal-budget.sh, pattern: "goal_resolve_ancestor" }
       - desc: "the worker's slice is BOUNDED — Goal+Acceptance card only, never the spec tree"
         anchor: { file: agents/agent-session.sh, pattern: "GOAL CONTEXT" }
-      - desc: "the reasoning-tier model map (launcher-owned, ADR-094)"
-        anchor: { file: agents/coordinator-scan.sh, pattern: 'goal-decompose.goal-checkpoint\) cmodel' }
+      - desc: "the reasoning tier is CLASS POLICY, not a launcher case map (G-A 8, #781) — the session derives class=goal-decompose from the clause and /route resolves it; ADR-094 holds (the launcher consumes the routed verdict, the LLM never picks)"
+        anchor: { file: agents/coordinator-session.sh, pattern: 'goal-decompose.goal-checkpoint\) RESOLVE_CLASS' }
 
   - id: IL-T12
     name: goal burn-down (deterministic) + goal-checkpoint on triggers (ADR-106 (3), was per-closure goal-review)

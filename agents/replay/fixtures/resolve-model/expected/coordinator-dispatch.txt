@@ -1,0 +1,5 @@
+CALL curl -fsS --max-time 5 -H Content-Type: application/json -d {"role":"coordinator","class":"dispatch"} http://stub-router.agent-egress.svc:9999/route
+OUT RESOLVED_MODEL='claude/sonnet'
+OUT RESOLVED_VERDICT='dispatch'
+ERR → resolve-model(coordinator): router=dispatch model=claude/sonnet []
+RC 0
