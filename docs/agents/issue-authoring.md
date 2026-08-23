@@ -800,3 +800,31 @@ Add the row in the same commit as the superseding decision.
 | **v1** | 2026-08-05..08 — circles#17→#29, oracle-fleet goal-174 | FU-090 leg (c) + `Base: goal/**` branches; close = "goal met" ruling | machine-ruled "met" 100 min before operator refutation (#17); 19-sprout tree growing 3 generations 34h post-close (goal-174); `Base:` rot + self-queue outliving the goal (the 2026-08-09 census) | ADR-102 |
 | **v1.1** | 2026-08-11..12 — homelab#278 (the FU-165 pilot) | ADR-102: budget-funded container, post-launch bucket, midpoint merge, human verdict terminals | bucket flattens the derivation DAG (2 vs 5 generations); worker-findings inflow ungated (52 edges, all worker/ride-authored); per-event cadence (21 rulings, 46 singleton mints); `Touches:` fence ~7× against small folds; dispatcher-bound throughput (queue 3,550 min vs pod 605, 361 min starvation); no consumer for goal-thread operator directives — all in [`../spikes/goal-lane-v1.1-fu165-pilot.md`](../spikes/goal-lane-v1.1-fu165-pilot.md) | ADR-106 |
 | **v1.2** | design ACCEPTED 2026-08-12 (ADR-106); build = Bucket A4/A2 + the next platform Goal | FU-168 (ADR-094 concurrency + ADR-097 fence, numbers decide) · #295 bucket semantics · typed findings disposition · §M10 checkpoints · FU-166(b) · **stack-scoped goals** (operator, 2026-08-12: the tree spans the claim's repos incl. `-iac` — a Goal belongs to a STACK; v1.1 proved cross-repo lineage/budget/ride on ONE agent-runtime child, but sibling repos have no merge doorbell and `-iac` descendants were never exercised, so "done means deployed" stops at the app-repo merge everywhere homelab isn't its own -iac) | — | — |
+
+### ⚖ BANKED (2026-08-23, operator direction from the G-A day-1 retro — NOT adopted; a v1.3 candidate row): theme-branch decomposition for deploy-to-test stacks
+
+On a stack where **merge is deploy** (homelab = its own `-iac`), a Goal cannot batch as one
+`goal/**` assembly (it defers the live soak its acceptance is made of) — but flat
+per-child-to-master pays the codeowner tax per child and degenerates the Goal into a stint
+(the G-A day-1 retro: 5 gate reads in one session; the platform merge gate IS the seat). The
+banked middle: **the batching unit is the largest change you are willing to deploy-and-soak as
+one roll — a THEME**, expressed as a 3-level tree:
+
+- A **level-2 theme issue** (direct child of the Goal, unqueued container) owns a
+  `goal/<goal-n>-<theme>` branch; **level-3** sub-issues carry `Base:` onto it and flow
+  bot-gated (the `goal/**` ruleset twin has no codeowner flag — the tax concentrates).
+- **The theme assembly is an ordinary PR** — `goal/<n>-<theme> → master`, body
+  `Fixes #<level-2>`. Deliberately NO `Assembly-for:` and no goal mention: the merge closes the
+  level-2 like any master-lane PR, the burn-down moves on the child close, and IL-T18's
+  one-shot transition is never touched. Near-zero new machinery.
+- **Themes build only on MASTER** (merged themes); ordering = native blockedBy between level-2s.
+  A theme earns a branch at **≥2 children sharing a surface**; singletons go straight to master.
+- G-A evidence for the cut: the wiring trio (#780/#781/#782) re-touches one surface through
+  three rolls; the #795 taxonomy divergence shipped live where a theme would have caught it
+  pre-deploy.
+
+Build items AT ADOPTION (not before): re-key the rule-7 depth guard (level-3 reviews currently
+lose their `Follow-ups:` channel — it was calibrated for sprout tails, not deliberate trees);
+document the per-branch master-refresh hop. **G-A itself continues per-child-to-master
+(operator, 2026-08-23: no process change mid-goal); first user = the next platform Goal launch,
+authored from the work map.**
