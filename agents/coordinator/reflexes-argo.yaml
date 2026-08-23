@@ -142,6 +142,10 @@ spec:
             - { name: ORG, value: "teststuffstash" }
             - { name: DIGEST_REPO, value: "homelab" }
             - { name: PRICE_CEILING, value: "0.50" }
+            # FU-095(c) rung 2 (homelab#778): xs task canary cap per tick. One cell
+            # end-to-end is the acceptance, not fleet coverage.
+            - { name: RUNG2_ENABLED, value: "1" }
+            - { name: MAX_RUNG2, value: "1" }
             # FU-161 leg 2 (homelab#299/PR#306): the MCP get-model benchmark pull. OPERATOR
             # direct-to-master by design — this file is pin-only-lint-guarded, so no PR can land
             # non-pin lines; the Secret is ESO-minted by scout-account-key.yaml. optional: the

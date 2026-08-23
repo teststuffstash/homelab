@@ -206,6 +206,28 @@ scout_canary_ride() { # <id> <is_free> [retry] → the AGENT_RUN_STATS json on s
   printf '%s\n' "$out" | grep -E "AGENT_RUN_STATS|PREFLIGHT|403|guardrail" >&2 || true
   printf '%s' "$out" | sed -n 's/.*AGENT_RUN_STATS \(.*\)/\1/p' | tail -1
 }
+
+# LEG 3, RUNG 2 (FU-095(c)) — the xs task canary. Same infrastructure as rung 1 (mint, ride,
+# cleanup, typed verdict) but runs a REAL extra-small task — not a trivial echo — to exercise the
+# model's ability to read content, follow instructions, and produce structured output on a
+# budget-capped key. Runs ONLY on candidates that achieved a `clean` rung 1 verdict (a model that
+# cannot complete the trivial tool-call loop will not benefit from a harder task). The verdict is
+# cell-keyed like rung 1 with `rung:xs` and lands in the router's rotation store alongside the
+# rung 1 entry. MAX_RUNG2 caps the number per tick (default 1 — the issue says one cell
+# end-to-end is the acceptance, not fleet coverage).
+scout_canary_ride_rung2() { # <id> <is_free> [retry] → the AGENT_RUN_STATS json on stdout (may be empty)
+  local id="$1" is_free="$2" out
+  local sess="scout2-$(printf '%s' "$id" | tr '/:.' '---')"
+  local secret="${CANARY_PROJECT}-session-${sess}-openrouter"
+  # The xs task: read README.md and produce a JSON array of {level, title} objects for all
+  # markdown headings. This exercises file reading, structured data extraction, and formatted
+  # JSON output — a real but tiny task typical of the agent-budget/xs label.
+  out="$(bash "$HERE/agent-session.sh" "$CANARY_PROJECT" --harness opencode --model "openrouter/$id" \
+      --task "$sess" --openrouter-secret "$secret" \
+      --run 'opencode run -m "$MODEL" "Read README.md then reply with ONLY a JSON array of {level: <int>, title: <str>} objects for every markdown heading in the file. No other text."' 2>&1)" || true
+  printf '%s\n' "$out" | grep -E "AGENT_RUN_STATS|PREFLIGHT|403|guardrail" >&2 || true
+  printf '%s' "$out" | sed -n 's/.*AGENT_RUN_STATS \(.*\)/\1/p' | tail -1
+}
 # <<<REPLAY:scout-seams<<<
 
 # >>>REPLAY:scout-diff>>>
@@ -363,6 +385,9 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     printf '%s\n' "$v"
   }
 
+  RUNG2_ENABLED="${RUNG2_ENABLED:-0}" # gate — 0 preserves fixture backward compatibility; reflexes-argo.yaml sets 1 for production
+MAX_RUNG2="${MAX_RUNG2:-1}"   # per tick — the issue says one cell end-to-end is the acceptance
+
   # Canary one candidate (FU-062/FU-024 + FU-161 legs 3–4). Mints an ephemeral key (seam), rides
   # the trivial closed task (seam), classifies the TYPED verdict, and applies the contradiction
   # rule. Echoes the verdict word to stdout; all logs go to stderr so stdout stays parseable.
@@ -396,6 +421,25 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     printf '%s' "$verdict"
   }
 
+  # RUNG 2 (FU-095(c)) — xs task canary on ONE candidate that passed rung 1. Mints its own
+  # ephemeral key (seam), rides the realistic xs task (seam), classifies the TYPED verdict.
+  # Runs only on models that completed rung 1 clean — a model that cannot complete the trivial
+  # tool-call loop will not benefit from a harder task.
+  canary_one_rung2() { # <id> <is_free> <benched> → one typed verdict word
+    local id="$1" is_free="$2" benched="$3" gname verdict stats mrc
+    if [ "$is_free" = "true" ]; then gname="only-free"; else gname="\$0.05 cap"; fi
+    scout_canary_mint "$id" "$is_free" || mrc=$?
+    case "${mrc:-0}" in
+      0) : ;;
+      1) echo "mint-failed"; return 0 ;;
+      2) echo "key-never-minted"; return 0 ;;
+    esac
+    log "canary rung2: dispatching $id (${gname})"
+    verdict="$(scout_classify "$(scout_canary_ride_rung2 "$id" "$is_free")")"
+    scout_canary_mint "$id" "$is_free" cleanup || true
+    printf '%s' "$verdict"
+  }
+
   CANARY_BLOCK=""
   if [ "$CANARY" = "1" ]; then
     log "canary: riding up to ${MAX_CANARIES} candidate(s) in ns ${CANARY_PROJECT}"
@@ -403,8 +447,14 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     jq -r --argjson n "$MAX_CANARIES" '.[0:$n][] | "\(.model) \(.free) \(.bench.benched)"' "$WORK/ranked.json" \
       | while read -r cid cfree cbenched; do
           verdict="$(canary_one "$cid" "$cfree" "$cbenched")"
-          jq -cn --arg m "$cid" --arg v "$verdict" --argjson f "$cfree" \
-            '{model:$m, canary_verdict:$v, free:$f}' >> "$WORK/canary.jsonl"
+          # RUNG 2 (FU-095(c)): only on clean-rung-1 models when explicitly enabled, up to MAX_RUNG2
+          rung2_v=""
+          if [ "${RUNG2_ENABLED:-0}" = "1" ] && [ "$verdict" = "clean" ] && [ "${rung2_done:-0}" -lt "$MAX_RUNG2" ]; then
+            rung2_v="$(canary_one_rung2 "$cid" "$cfree" "$cbenched")"
+            rung2_done=$((rung2_done + 1))
+          fi
+          jq -cn --arg m "$cid" --arg v "$verdict" --argjson f "$cfree" --arg r2 "${rung2_v:-}" \
+            '{model:$m, canary_verdict:$v, free:$f, rung2_verdict:$r2}' >> "$WORK/canary.jsonl"
         done
     # Common-cause (leg 4): the WHOLE tick's verdicts (≥2 of them) identical and non-clean ⇒ the
     # scout's own plumbing is the common factor, not the models — ONE scout-infra datum, zero
@@ -419,6 +469,13 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     if [ -n "$COMMON_CAUSE" ]; then
       log "canary: common cause — all canaried verdicts identical (${COMMON_CAUSE}) — ONE scout-infra datum, zero per-model verdicts (leg 4)"
       rotation_post "canary" "$(jq -cn --arg v "$COMMON_CAUSE" '{model:"_scout-infra", canary_verdict:$v}')" || true
+      # Rung 2 data is still valid even when rung 1 common-cause fires — the xs task
+      # independently exercises the model on its own minted key.
+      while IFS= read -r entry; do
+        [ -n "$entry" ] || continue
+        r2="$(printf '%s' "$entry" | jq -r '.rung2_verdict // ""')"
+        [ -n "$r2" ] && rotation_post "canary" "$(printf '%s' "$entry" | jq '{model, rung2_verdict}')" || true
+      done < "$WORK/canary.jsonl"
       : > "$WORK/canary.jsonl"
       CANARY_BLOCK=$'\n\n**Canary rides** (FU-062/FU-024/FU-161 — trivial closed rail ride, ephemeral capped key):\n\n*Common cause: every canaried verdict was identical (`'"${COMMON_CAUSE}"$'`) — ONE `_scout-infra` datum posted to the rotation store, zero per-model verdicts (leg 4). The rail, not the models, is the likely cause.*'
     else
@@ -435,12 +492,14 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     # pre-merge ranked.json.
     jq -n --slurpfile r "$WORK/ranked.json" --slurpfile c "$WORK/canary.jsonl" '
       ($c | INDEX(.model)) as $cv
-      | [ $r[0][] | . + {canary: ($cv[.model].canary_verdict // "")} ]' \
+      | [ $r[0][] | . + {canary: ($cv[.model].canary_verdict // ""),
+                         rung2: ($cv[.model].rung2_verdict // "")} ]' \
       > "$WORK/ranked.canary.json" && mv "$WORK/ranked.canary.json" "$WORK/ranked.json"
     if [ -s "$WORK/canary.jsonl" ]; then
       ROWS="$(jq -s -r '.[] | "| `" + .model + "` | " + .canary_verdict
-        + (if .free then " (only-free)" else " ($0.05 cap)" end) + " |"' "$WORK/canary.jsonl")"
-      CANARY_BLOCK=$'\n\n**Canary rides** (FU-062/FU-024/FU-161 — trivial closed rail ride, ephemeral capped key; `only-free` = proxy 403s any paid model pre-spend):\n\n| model | canary verdict |\n|---|---|\n'"$ROWS"$'\n\n*A TYPED verdict carries the launcher'"'"'s `error_class`, never a bare `failed`: `clean` = the model completed a real tool-calling ride on a budget-capped key; `auth-storm`/`timeout`/`harness-death`/`budget-403`/… = the rail or the key failed, typed; `suspect-infra`/`inconclusive` = a benchmark-capable model that fails the rail (contradiction rule, leg 4). A canary verdict is evidence for graduation, not automatic graduation. Full outcome + transcript in the ledger (model label).*'
+        + (if .free then " (only-free)" else " ($0.05 cap)" end)
+        + " | " + (if (.rung2_verdict // "") != "" then .rung2_verdict else "—" end) + " |"' "$WORK/canary.jsonl")"
+      CANARY_BLOCK=$'\n\n**Canary rides** (FU-062/FU-024/FU-161 — trivial closed rung-1 rail ride, ephemeral capped key; `only-free` = proxy 403s any paid model pre-spend):\n\n| model | rung-1 verdict | rung-2 xs task |\n|---|---|---|\n'"$ROWS"$'\n\n*A TYPED verdict carries the launcher'"'"'s `error_class`, never a bare `failed`: `clean` = the model completed a real tool-calling ride on a budget-capped key; `auth-storm`/`timeout`/`harness-death`/`budget-403`/… = the rail or the key failed, typed; `suspect-infra`/`inconclusive` = a benchmark-capable model that fails the rail (contradiction rule, leg 4). Rung 2 (xs task, FU-095(c)) runs only on models that achieved `clean` rung 1 — the xs task exercises structured output and file reading on the same budget-capped key. A canary verdict is evidence for graduation, not automatic graduation. Full outcome + transcript in the ledger (model label).*'
     fi
   fi
   # <<<REPLAY:scout-canary<<<
@@ -464,8 +523,8 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
       "Weekly model scout (REPORT-ONLY, FU-062 / docs/agents/model-routing.md §M7): models whose BASE"
       + " id is NEW on OpenRouter since the last tick, advertise `tools`, and are `:free` or ≤ $" + $ceiling
       + "/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in.\n\n"
-      + "| # | model | AA int/code/agentic | effective $/M in | price note | pinned provider | uptime | providers | canary |\n"
-      + "|---|---|---|---|---|---|---|---|---|\n"
+      + "| # | model | AA int/code/agentic | effective $/M in | price note | pinned provider | uptime | providers | canary | rung 2 |\n"
+      + "|---|---|---|---|---|---|---|---|---|---|\n"
       + (to_entries | map(((.key + 1) | tostring) as $n | .value
           | "| " + $n + " | `" + .model + "` | "
           + (if .bench.benched
@@ -477,13 +536,15 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
           + (.enr.pinned_provider.provider // "—") + "` | "
           + (if .enr.pinned_provider.uptime then ((.enr.pinned_provider.uptime * 10 | round) / 10 | tostring) + "%" else "—" end)
           + " | " + ((.enr.provider_count // "—") | tostring) + " | "
-          + (if (.canary // "") == "" then "—" else .canary end) + " |")
+          + (if (.canary // "") == "" then "—" else .canary end) + " | "
+          + (if (.rung2 // "") == "" then "—" else .rung2 end) + " |")
          | join("\n"))
       + "\n\n*effective $/M = cache-aware per-provider min at 80% cache hit (§M3); pinned provider ="
       + " the tools-capable session pin `--lookup` would choose (§M4). AA indices = MCP `get-model`"
       + " (§M7 leg 2); `unbenched` = not in the Artificial-Analysis feed, which is the normal state of"
       + " a genuine newcomer — the canary rung, not the benchmark, is what speaks for those. `canary` ="
-      + " the rung-1 rail-probe verdict (§M7 leg 3), typed (`error_class` vocabulary); `—` = not"
+      + " the rung-1 rail-probe verdict (§M7 leg 3), typed (`error_class` vocabulary); `rung 2` ="
+      + " the xs task verdict (FU-095(c), runs only on clean rung-1 models); `—` = not"
       + " canaried this tick.*\n\n"
       + "**Graduation is a human call**: add worthy entries to `agents/stacks.json`"
       + " `workerModelFallbacks` — evidence, not vibes. The same commit MUST add the model_tiers"
