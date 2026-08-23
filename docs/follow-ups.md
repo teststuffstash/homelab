@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-182**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-184** (FU-183 was minted out of order while this line still said 182; 183 is archived). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -288,6 +288,15 @@ the block needs pruning, not more headings.
       #618→#621 — a proxy roll no longer drops a hold; delivers (c)'s counter half), (e) **the
       launcher REROUTE** ✅ DONE 2026-08-19 (PR#610 — a latched Go-primary dispatches the
       `claude/haiku` fallback same-round; semaphore still defers). Dashboard parity panels ride each piece.
+- [ ] **FU-182** — **The pushgateway grows without bound and its reads slow linearly (no TTL on
+      pushed groups).** 486 KB / 3298 lines at 2026-08-23 (`agent_run_phase_seconds` alone 1089
+      lines — per-(issue, round) groups accumulate forever); serve time 3.7–5.3 s, which is what
+      froze goal #775's budget gate (homelab#807 fixes the READER — this item is the WRITER side).
+      Not the oversize-cache class (nothing rebuilds; terminal ride groups are dead rows).
+      **Next:** group hygiene — a cleanup pass (cron or push-time) deleting groups for terminal
+      rides older than the ledger's retention need, sized so reads stay flat. Relates FU-131,
+      homelab#807, observability §B1.
+
 - [ ] **FU-181** — **Go-rail post-reset readout (after the 2026-09-13 monthly reset —
       operator, 2026-08-19).** The rail is monthly-latched until then (observed-429 latch;
       Retry-After ≈ the reset epoch), so homelab#540 (gometer parity: console 100%/99% vs meter
