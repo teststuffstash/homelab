@@ -1,0 +1,4 @@
+CALL curl -fsS --max-time 3 http://proxy.test:8080/report/latest?task=issue-123
+HH:MM:SS [test-project] decorrelate_from: not available (run-report query skipped or unreachable)
+OUT decorrelate_arg=''
+RC 0

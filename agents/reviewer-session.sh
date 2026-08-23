@@ -188,7 +188,6 @@ if [ "$AGENT_ROUTER" != "off" ]; then
       '{stack: $stack, task: $task, role: "reviewer", session: $session,
         decorrelate_from: (if $decorrelate_from == "" then null else $decorrelate_from end),
         labels: $labels, urgency: (if $urgency == "" then null else $urgency end)}')"
-  # <<<REPLAY:route-request<<<
   _decision="$(curl -fsS --max-time 5 -H "Content-Type: application/json" \
       -d "$_req" "$ROUTER_URL/route" 2>/dev/null)" || _decision=""
   if [ -z "$_decision" ]; then
@@ -214,12 +213,13 @@ if [ "$AGENT_ROUTER" != "off" ]; then
           fi
         fi
         GO_SERVED=0
-        [ "$MODEL_RAIL" = "opencode-go" ] && GO_SERVED=1
+        [ "${MODEL_RAIL:-}" = "opencode-go" ] && GO_SERVED=1
       elif [ "$_verdict" = "defer" ]; then
         _router_defer=1
       fi
     fi
   fi
+  # <<<REPLAY:route-request<<<
 fi
 
 # In-pod prep, run under `bash -lc` so the image's gh-wrapper (reads the LIVE ~1h token from

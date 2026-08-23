@@ -1,0 +1,4 @@
+OUT RESOLVED_MODEL='opus'
+OUT RESOLVED_VERDICT='override'
+ERR → resolve-model(coordinator): explicit override AGENT_MODEL=opus — routed path skipped
+RC 0

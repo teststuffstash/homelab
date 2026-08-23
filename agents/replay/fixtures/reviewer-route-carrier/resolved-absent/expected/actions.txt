@@ -1,0 +1,7 @@
+CALL curl -fsS --max-time 5 -H Content-Type: application/json -d {"stack":"test","task":"review-test-project-42","role":"reviewer","session":"reviewer-test-project-42-r1","decorrelate_from":null,"labels":[],"urgency":null} http://proxy.test:8080/route
+OUT → router(authoritative): dispatch sonnet [class,capacity] (static would be: sonnet)
+OUT MODEL='sonnet'
+OUT MODEL_RAIL=''
+OUT MODEL_HARNESS=''
+OUT GO_SERVED=0
+RC 0
