@@ -101,7 +101,14 @@ _fb="${MODEL:-sonnet}"
 RESOLVED="$(bash "${HERE}/resolve-model.sh" --role coordinator --class "${RESOLVE_CLASS:-dispatch}" --fallback "$_fb" 2>/dev/null)" || RESOLVED=""
 if [ -n "$RESOLVED" ]; then
   echo "→ coordinator model: role=coordinator class=${RESOLVE_CLASS:-dispatch} → ${RESOLVED}" >&2
-  MODEL="$RESOLVED"
+  # The routed answer is a FULL rail-prefixed id (claude/fable) — the claude CLI takes the BARE
+  # alias. Parse through the ONE parser (FU-127, the worker launcher's exact move at its
+  # model-id-resolution block); a subscription-rail answer yields MODEL_MODEL=<alias>. Found
+  # live 2026-08-23 on goal #818's decompose: PR#801 shipped this adoption un-parsed and the
+  # class DEFERRED until PR#813 gave it a chain_head, so the first genuinely-routed session was
+  # the first to pass claude/fable verbatim to --model and die at model selection.
+  eval "$(python3 "${HERE}/model_id.py" --shell "$RESOLVED")"
+  MODEL="${MODEL_MODEL:-$RESOLVED}"
 fi
 # GOAL_MODEL env escape hatch: if set and this is a goal-decompose item, it wins unconditionally.
 if [ -n "${GOAL_MODEL:-}" ] && [ "$RESOLVE_CLASS" = "goal-decompose" ]; then
