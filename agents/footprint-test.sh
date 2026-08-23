@@ -86,9 +86,6 @@ expect_strict 0 "strict: replay vs replay STILL conflicts"   "agents/replay/**" 
 expect_strict 0 "strict: sentinel vs replay conflicts"       "*"                "agents/replay/x"
 expect_strict 1 "strict: disjoint stays disjoint"            "agents/replay/**" "docs/adr.md"
 
-expect_strict 0 "strict: sentinel vs replay conflicts"       "*"                "agents/replay/x"
-expect_strict 1 "strict: disjoint stays disjoint"            "agents/replay/**" "docs/adr.md"
-
 # ── the goal exemption (homelab#822) ──────────────────────────────────────────────────────────
 # fp_goal_exempt returns 0 for "goal" class and 1 for every other class.
 expect_goal_exempt() { # expect_goal_exempt <0|1> <desc> <class>

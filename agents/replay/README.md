@@ -165,6 +165,7 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-machine-markers/env-card-machine-markers-capture` | actions | - | `agents/agent-session.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
+| `footprint-hold-goal-exempt` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder` | table | - | `agents/agent-session.sh` | - |
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |

@@ -1320,6 +1320,7 @@ EOF_GUARDED
         fi
       fi
       # <<<REPLAY:guarded-hold<<<
+      # >>>REPLAY:footprint-hold>>>
       # ADR-097 goal exemption (homelab#822): a goal's decompose/checkpoint unit writes
       # no code (it authorises child issues via `gh` and toggles labels, never a PR diff),
       # so the ADR-097 footprint hold — which prevents write-surface conflicts between
@@ -1336,6 +1337,7 @@ EOF_GUARDED
         orphans="${orphans}[$repo] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
         continue
       fi
+      # <<<REPLAY:footprint-hold<<<
       if [ -n "$wip_busy" ]; then
         orphans="${orphans}[$repo] ⏳ project WIP at ceiling (${REPO_MAX_WIP} live workers in ${repo} — ADR-097 hard max):\n  issue #${qnum} — ${qtitle}\n"
         continue

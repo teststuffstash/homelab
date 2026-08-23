@@ -1,0 +1,24 @@
+# homelab#822 — the ADR-097 goal-class footprint exemption.
+#
+# WHAT IT PINS. A goal-decompose/goal-checkpoint unit writes no code (it authors child issues
+# via `gh` and toggles labels, never a PR diff), so the ADR-097 footprint hold — which
+# prevents write-surface conflicts between concurrently dispatched units — is a category
+# error. A goal is exempt in BOTH directions: it is not held by in-progress issues' footprints
+# and does not hold sibling dispatches.
+#
+# THE FOUR CASES, and what each one exists to stop a later edit from breaking:
+#   #822a `goal` + `*`           → DISPATCHED (exclusive-footprint goal is exempt)
+#   #822b `fix`  + `*`           → HELD (exclusive-footprint fix is still held)
+#   #822c `goal` + disjoint      → DISPATCHED (disjoint goal is exempt)
+#   #822d `goal` + overlapping   → DISPATCHED (overlapping goal is still exempt — exemption
+#          is by class, not by declaration)
+#
+# NO LABEL WRITE IS ASSERTED FOR FREE: the action stream carries no `gh` call at all.
+name: footprint-hold-goal-exempt
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - file:cases.sh
+  - block:footprint-hold
+  - file:post.sh
