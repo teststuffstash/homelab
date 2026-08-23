@@ -4,7 +4,8 @@
 # evidence issue per alert on homelab — rejected: machine-rate issue creation pollutes the tracker
 # (one bug from 4000 issues overnight), and a stack workload's alert belongs to the STACK's ops
 # surface (its -iac repo), reaching homelab only when the stack needs something from the platform.
-# Now a firing alert fingerprint gets ONE inline LLM triage session (sonnet, subscription-gated),
+# Now a firing alert fingerprint gets ONE inline LLM triage session (role: responder, resolved via
+# /route; literals die at the deletion sweep — G-A 9, issue #782),
 # whose cheapest-sufficient outcome is: report-only → GitOps quick fix on the stack's -iac
 # (revert/pin PR through the CI-only auto-merge lane) → ONE issue in the stack's -iac/app repo →
 # a homelab issue ONLY for platform namespaces or needs-platform. Same autonomy the jail
@@ -122,7 +123,8 @@ spec:
             - src: { dependencyName: alert-dep, dataKey: body }
               dest: spec.arguments.parameters.0.value
 ---
-# The respond WorkflowTemplate — per NEW fingerprint: one inline sonnet triage session.
+# The respond WorkflowTemplate — per NEW fingerprint: one inline triage session (model via /route
+# role:responder; fallback sonnet when the proxy is unreachable — G-A 9, issue #782).
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -664,7 +666,7 @@ spec:
             (d) whenever the repo you filed on is NOT the computed default '$ROUTE_REPO' — stack-ward or platform-ward, the rule is symmetric (see STEP 1) — the body must carry the one-line reason: the fix surface that took you there.
 
             HARD RULES: before filing, search the agent repos ORG-WIDE (same reason as the subject search above — the route can move between fires) for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only. Name your tool gaps as evidence, not lobbying (homelab#536): when a NAMED diagnostic or tool is unavailable in-pod — RBAC-denied verb, a binary this image lacks, an egress-blocked fetch — and its absence changed what you could verify, add ONE line to your issue body (or your stdout report, when report-only) whose FIRST characters are exactly 'TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>'. Once per session per tool; never a request for the grant itself — the janitor aggregates these into the operator's inventory, and a gap already ruled stays listed with its ruling." \
-                --model "$(case "$rail" in opencode-go/*) echo "$rail";; *) echo sonnet;; esac)" --permission-mode bypassPermissions --max-turns 40 </dev/null \
+                --model "$(bash /work/homelab/agents/resolve-model.sh --role responder --fallback sonnet)" --permission-mode bypassPermissions --max-turns 40 </dev/null \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
 
               # ── #228 (b): A REOPEN RESTORES A RECORD, NEVER A QUEUE ─────────────────────────
