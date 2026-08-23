@@ -860,8 +860,13 @@ if [ -n "${RECIPE:-}" ]; then
         # comment carries "edited …" and its own history).
         _gbr_slug="${ORG:-teststuffstash}/${PROJECT}"
         _gbr_mark='<!-- agent-budget-refusal -->'
-        _gbr_body="$(printf '%s\nAGENT_BUDGET_REFUSED: Σ(spend + reservations) $%s > Budget $%s\n\nThe launcher refused to dispatch a child of this goal — deterministic pre-flight, not a model judgement (FU-090 leg (c)).\n\nPer-child caps:\n\n%b\nThis is a human decision either way: **re-scope the children** so their caps fit, or **raise the `Budget:` line** on this issue. Until one of those happens the refusal repeats every scan and no child of this goal dispatches.\n\nThe sum is ACTUAL spend for settled children (the per-row notes name each charge) plus cap reservations for live keys and this dispatch; a ridden child with no ledger entry is charged its cap, conservatively.\n\n_Level-triggered: this is ONE comment, re-edited as the numbers move (ADR-103 rule 2) — not one comment per refusal._' \
-          "$_gbr_mark" "$GB_SUM" "$GB_BUDGET" "$GB_ROWS")"
+        if [ "${GB_LEDGER_DEGRADED:-false}" = "true" ]; then
+          _gbr_summary="The sum is a cap-sum estimate because the spend ledger was unreachable — every child was charged its full cap rather than its actual spend. This is the conservative fallback; once the ledger is reachable again the refusal will re-evaluate against real spend."
+        else
+          _gbr_summary="The sum is ACTUAL spend for settled children (the per-row notes name each charge) plus cap reservations for live keys and this dispatch; a ridden child with no ledger entry is charged its cap, conservatively."
+        fi
+        _gbr_body="$(printf '%s\nAGENT_BUDGET_REFUSED: Σ(spend + reservations) $%s > Budget $%s\n\nThe launcher refused to dispatch a child of this goal — deterministic pre-flight, not a model judgement (FU-090 leg (c)).\n\nPer-child caps:\n\n%b\nThis is a human decision either way: **re-scope the children** so their caps fit, or **raise the `Budget:` line** on this issue. Until one of those happens the refusal repeats every scan and no child of this goal dispatches.\n\n%s\n\n_Level-triggered: this is ONE comment, re-edited as the numbers move (ADR-103 rule 2) — not one comment per refusal._' \
+          "$_gbr_mark" "$GB_SUM" "$GB_BUDGET" "$GB_ROWS" "$_gbr_summary")"
         _gbr_listed="$(mc_gh_comments "$_gbr_slug" "$GOAL_PARENT")" || _gbr_listed=''
         if ! printf '%s' "${_gbr_listed:-null}" | jq -e 'type == "array"' >/dev/null 2>&1; then   # :-null — jq 1.6 exits 0 on EMPTY input, inverting the guard (homelab#377)
           # FAIL CLOSED, exactly as mc_event does: an unreadable timeline plus a create is one new
