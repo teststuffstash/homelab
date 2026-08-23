@@ -3,12 +3,19 @@
 > The SEAT's procedure card (FU-117 third context, S4 #764) — the sibling of
 > [`jail-subagent-card.md`](jail-subagent-card.md) (subagents) and
 > `ground-rules.md` (pod workers — lands with PR#768). Composed into the seat's session context
-> by the jail bootstrap: claude-jail cats its own container card + THIS file
-> (teststuffstash/claude-jail#1); until that mechanism lands, `CLAUDE.md` points here and a
-> seat session reads it at start. `CLAUDE.md` itself carries only repo-universal facts now —
-> a worker riding this repo from the fixer lane never auto-loads this file, which makes the
-> jail/worker split structural instead of banner-enforced. Paths below are written relative
-> to the REPO ROOT (the seat's cwd), not this file.
+> by the MONO jail's bootstrap: claude-jail cats its shared container card + THIS file into
+> **`/workspace/homelab/CLAUDE.local.md`** (gitignored here; auto-loaded by Claude Code) — the
+> homelab-scoped target, so the seat card loads ONLY for sessions actually seated in this repo,
+> never for a mono-jail session working another stack (claude-jail#1, design 2026-08-23).
+> **STACK jails deliberately get NO seat card**: their homelab token is branch+PR-only by
+> identity — this card's authority (direct-to-master bookkeeping, the ADR-110 gate read, the
+> tracker's single writer) is structurally not theirs, and catting it in would recreate the
+> wrong-context failure this split exists to fix. A stack jail's homelab context is the
+> shallow-cloned `CLAUDE.md` — pure repo facts — which is the right amount.
+> Until the jail mechanism lands, `CLAUDE.md` points here and a seat session reads it at
+> start. A worker riding this repo from the fixer lane never auto-loads this file either,
+> which makes the jail/worker split structural instead of banner-enforced. Paths below are
+> written relative to the REPO ROOT (the seat's cwd), not this file.
 
 ## Design questions run full-context
 

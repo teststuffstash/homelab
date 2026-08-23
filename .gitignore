@@ -29,3 +29,4 @@ __pycache__/
 /backups/
 .opencode-go.env
 scripts/mermaid-lint/node_modules/
+CLAUDE.local.md
