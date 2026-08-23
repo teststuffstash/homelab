@@ -34,6 +34,9 @@
     "jq": {
       "version": "latest"
     },
+    "nodejs_22": {
+      "version": "latest"
+    },
     "python3": {
       "version": "latest"
     },
@@ -264,6 +267,9 @@
       ],
       "docs-graph-lint": [
         "sh scripts/docs-graph-lint.sh"
+      ],
+      "mermaid-lint": [
+        "sh scripts/mermaid-lint.sh"
       ],
       "flash-irrigation": [
         "export PLATFORMIO_CORE_DIR=$PWD/esphome/.platformio",

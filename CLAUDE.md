@@ -26,7 +26,7 @@ devbox run k9s          # cluster TUI on tofu/kubeconfig
 
 Toolchain: opentofu, kubectl, talosctl, kubernetes-helm, cilium-cli, k9s, ansible, sops, age, jq,
 yq, python3, openssl, awscli2, gh, argocd, argo (workflows), infisical, keepassxc, gitleaks,
-kyverno, **dig/host (bind), nmap, curl, nc/ncat, cloudflared, kubeconform, hubble, promtool (prometheus), wireguard-tools**. `nix` commands need
+kyverno, **dig/host (bind), nmap, curl, nc/ncat, cloudflared, kubeconform, hubble, promtool (prometheus), wireguard-tools, node/npm (nodejs_22)**. `nix` commands need
 `export NIX_CONFIG="experimental-features = nix-command flakes"`. `devbox run` executes from the
 repo root and runs scripts under **dash** — keep them simple, use absolute paths / `tofu -chdir=`,
 avoid `bash -c '<multiline>'` (it mangles).

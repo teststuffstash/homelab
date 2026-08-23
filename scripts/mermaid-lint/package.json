@@ -1,0 +1,10 @@
+{
+  "name": "mermaid-lint",
+  "private": true,
+  "description": "Pinned deps for scripts/mermaid-lint.sh — parse-validate ```mermaid blocks with mermaid's own parser (no browser).",
+  "type": "module",
+  "dependencies": {
+    "jsdom": "30.0.1",
+    "mermaid": "11.17.0"
+  }
+}
