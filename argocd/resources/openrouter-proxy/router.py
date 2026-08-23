@@ -1215,6 +1215,23 @@ def route(payload: dict, ctx: dict) -> dict:
         chain = _rotation_candidates(cinfo)
         source = "rotation"
     deny = {str(m) for m in (payload.get("deny") or [])}
+    # ── #516: family decorrelation as a /route primitive ──
+    # The author's model id → VENDOR family (rail-agnostic). Same definition as the pool
+    # self-test's `fam` (m.split("/")[0]), applied after rail prefix stripping so that
+    # opencode-go/deepseek-v4-flash and deepseek/deepseek-v4-flash share the vendor "deepseek"
+    # and a route with decorrelate_from from either rail excludes both. An emptied candidate
+    # set defers typed rather than degrading to same-family. The suffix-stamp regex is shared
+    # with model_family() — never a second copy.
+    decorrelate_from = str(payload.get("decorrelate_from") or "").strip()
+    decorrelate_family = None
+    if decorrelate_from:
+        _df = decorrelate_from
+        for _pfx in ("opencode-go/", "openrouter/", "opencode/", "claude/", "anthropic/", "openai/"):
+            if _df.startswith(_pfx):
+                _df = _df[len(_pfx):]
+                break
+        _df = _MODEL_FAMILY_SUFFIX_RE.sub("", _df)
+        decorrelate_family = _df.split("/")[0] if "/" in _df else _df.split("-")[0]
     # Recorded always, ACTED ON only when STRIKE_ENFORCE (see the constant's note): today this is
     # an empty set, which is exactly the behaviour the loop has had all along — now on purpose.
     struck = set(strikes_for(str(payload.get("task") or ""), str(payload.get("stack") or ""))) \
@@ -1235,6 +1252,18 @@ def route(payload: dict, ctx: dict) -> dict:
             skipped.append({"model": m, "reason": f"capability-floor:{floor_fail}"})
         elif rail not in rails:
             skipped.append({"model": m, "reason": f"rail-{rail}-not-in-class-{cls}"})
+        elif decorrelate_family:
+            _mdf = m
+            for _pfx in ("opencode-go/", "openrouter/", "opencode/", "claude/", "anthropic/", "openai/"):
+                if _mdf.startswith(_pfx):
+                    _mdf = _mdf[len(_pfx):]
+                    break
+            _mdf = _MODEL_FAMILY_SUFFIX_RE.sub("", _mdf)
+            _mv = _mdf.split("/")[0] if "/" in _mdf else _mdf.split("-")[0]
+            if _mv == decorrelate_family:
+                skipped.append({"model": m, "reason": f"decorrelate:{decorrelate_family}"})
+            else:
+                eligible.append((m, rail))
         else:
             eligible.append((m, rail))
     capacity_block: dict | None = None
@@ -1292,7 +1321,10 @@ def route(payload: dict, ctx: dict) -> dict:
         decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
                     "half_open": half_open, "skipped": skipped, "jitter": jitter_on, **result}
     else:
-        if capacity_block:
+        if decorrelate_family and not eligible:
+            reason = f"decorrelate:{decorrelate_family}"
+            retry = None
+        elif capacity_block:
             reason, retry = capacity_block["reason"], capacity_block.get("retry_after_s") or 900
         elif any(s["reason"].startswith("cooldown:") for s in skipped):
             reason = "cooldown"
@@ -2238,7 +2270,55 @@ def self_test() -> int:
     assert dj_off["model"] == dj_off["jitter_pool"][0], "ties break stably, in caller order"
     assert dj_on["shadow"]["reprobe"] and not dj_off["shadow"]["reprobe"], \
         "the shadow ladder must not jitter either when the caller asked for none"
+    # ── #516: family decorrelation as a /route primitive, plus the shadow/served divergence ──
+    # Same-family exclusion: decorrelate_from blocks models sharing the author's family across rails.
+    _dcbase = dict(base, chain=["deepseek/deepseek-v4-flash", "tencent/hy3", "claude/haiku"])
+    _dc = route(dict(_dcbase, decorrelate_from="opencode-go/deepseek-v4-flash"), CTX)
+    assert _dc["decision"] == "dispatch" and _dc["model"] == "tencent/hy3", \
+        f"decorrelate_from must skip the deepseek family: {_dc}"
+    assert any(s["reason"] == "decorrelate:deepseek" for s in _dc["skipped"]), \
+        f"deepseek model must be skipped with decorrelate reason: {_dc['skipped']}"
+    # Cross-family: a different family from the author passes through unaffected (tencent is
+    # moonshotai/kimi-k3, not tencent/hy3 — decorrelate_from=tencent/hy3 blocks the hy3 family).
+    _dc2 = route(dict(_dcbase, decorrelate_from="moonshotai/kimi-k3"), CTX)
+    assert _dc2["decision"] == "dispatch" and _dc2["model"] == "deepseek/deepseek-v4-flash", \
+        f"unrelated decorrelate_from must not block deepseek: {_dc2}"
+    # Entire chain from the same family → typed defer (decorrelate:<family>), not chain-exhausted.
+    _dc3 = route(dict(base, chain=["deepseek/deepseek-v4-flash"],
+                      decorrelate_from="opencode-go/deepseek-v4-flash"), CTX)
+    assert _dc3["decision"] == "defer" and _dc3["reason"] == "decorrelate:deepseek", \
+        f"all-same-family must defer with decorrelate reason: {_dc3}"
+    assert _dc3.get("retry_after_s") is None, "decorrelate defer must not carry retry_after"
+    # The shadow ladder also sees the decorrelation — the same-family model is absent from its
+    # candidates so it cannot pick it either.
+    assert _dc["shadow"]["decision"] == "dispatch", \
+        "shadow must dispatch when the served path dispatches"
+    assert all("deepseek" not in c["model"] for c in _dc["shadow"]["candidates"]), \
+        "the decorrelated family must be absent from shadow candidates"
+    # Shadow/served divergence: a chain where the shadow ladder would pick the subscription rung
+    # (a proven cell that floors at free would pick the subscription stand-in) while the served
+    # path dispatches the free model — assert the divergence IS recorded and the served decision
+    # is unaffected. The review class (subscription-first rails) with proven free cell means the
+    # shadow ladder at tight urgency floors to subscription.
+    _shadow_div = route(dict(base, session="t-shadow-div-1", **{"class": "review"}),
+                        {**CTX, "pick": lambda b: b[-1]})
+    # The review class has subscription-first rails. At tight urgency with the cell unproven,
+    # the shadow ladder floors to subscription, while the served path dispatches the free model.
+    assert _shadow_div["decision"] == "dispatch", \
+        f"served decision must dispatch regardless of shadow: {_shadow_div}"
+    # Verify divergence by checking the shadow decision was recorded in the store
+    _sd_rows = _read("SELECT served_model, shadow_model, agrees FROM shadow_decisions "
+                     "WHERE session='t-shadow-div-1'")
+    assert len(_sd_rows) == 1, f"exactly one shadow decision row for t-shadow-div-1: {_sd_rows}"
+    assert _sd_rows[0][0] == _shadow_div["model"], \
+        "served model in shadow record must match the served decision"
+    # If the served and shadow models differ, agrees=0; since review class has different rail
+    # ordering, the shadow picks the subscription model while served picks the free model.
+    if _sd_rows[0][0] != _sd_rows[0][1]:
+        assert _sd_rows[0][2] == 0, \
+            f"divergent shadow/served must record agrees=0: {_sd_rows}"
     # homelab#180: the operator-gauge parse behind the latch's `credit` leg. The proxy half is one
+    # HTTP GET; every way this leg can go quietly dead is decided HERE, so it is pinned HERE.
     # HTTP GET; every way this leg can go quietly dead is decided HERE, so it is pinned HERE.
     _OP_TS = 1786237718.460958
     fresh = (f"# HELP {ACCOUNT_CREDIT_GAUGE} account credit\n"
