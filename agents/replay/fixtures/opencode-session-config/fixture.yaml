@@ -1,0 +1,20 @@
+# homelab#792 — opencode session config on the unpinned + no-injection path (gap 2).
+#
+# CONDITION UNDER REPLAY. A recipe dispatch on the opencode harness where the provider pin
+# lookup returns nothing (registry unreachable / no eligible provider) AND cred injection is
+# not active. Before the fix (PR#800 round 1), the autoApprove guard required OC_CONFIG to
+# already be non-empty — so on this path OC_SETUP was never written, the headless run lacked
+# autoApprove, and the "user rejected permission" failure reproduced.
+#
+# THE CONTRACT:
+#   1. `OC_SETUP` is non-empty — the base64 config write is always produced for a --recipe
+#      opencode ride regardless of pin/injection state.
+#   2. The decoded config JSON carries `autoApprove: true`.
+#   3. The config JSON carries the `$schema` key.
+name: opencode-session-config
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:opencode-session-config
+  - file:post.sh
