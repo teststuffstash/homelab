@@ -1432,6 +1432,15 @@ def metrics_lines() -> list[str]:
         f"router_db_persistent {1 if _persistent else 0}",
         "# TYPE router_run_reports_total counter",
         f"router_run_reports_total {(_read('SELECT COUNT(*) FROM run_reports') or [(0,)])[0][0]}",
+        "# TYPE router_run_reports_by_rail_total counter",
+        "# HELP router_run_reports_by_rail_total Run reports broken down by rail (homelab#777 — flip acceptance 2).",
+    ]
+    by_rail = _read("SELECT COALESCE(NULLIF(rail,''),'unknown'), COUNT(*) FROM run_reports GROUP BY rail")
+    if by_rail:
+        lines += [f'router_run_reports_by_rail_total{{rail="{r}"}} {n}' for r, n in by_rail]
+    else:
+        lines.append("router_run_reports_by_rail_total 0")
+    lines += [
         "# TYPE router_strikes_total counter",
     ]
     strikes = _read("SELECT error_class, COUNT(*) FROM strikes GROUP BY error_class")

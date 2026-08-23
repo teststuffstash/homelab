@@ -186,12 +186,27 @@ def summarize(project, issue, rid, rsec):
         return r if isinstance(r, int) else 0
 
     workers.sort(key=worker_round)
+    def _model_rail(model: str) -> str:
+        """Derive the rail from the model id (homelab#777 — same derived-field discipline as r4
+        F4/F5 rounds array; historical rows lack it, readers tolerate absence). The router's
+        record_report folds the launcher's explicit `rail` field into run_reports, but the
+        manifest (written by agent-finalize) does not carry it yet — so the ledger derives it
+        from the model prefix, matching the router's own ladder_tier / route() logic:
+          claude/*  → subscription (Anthropic direct + claude-code)
+          opencode-go/* → subscription (Go rail, also subscription-billed)
+          *         → openrouter (everything else, including :free models)"""
+        if model.startswith("claude/") or model.startswith("opencode-go/"):
+            return "subscription"
+        return "openrouter"
+
     rounds = []
     for w in workers:
         stats = w.get("stats") or {}
+        model = w.get("model") or ""
         rounds.append({
             "round": worker_round(w),
-            "model": w.get("model") or "",
+            "model": model,
+            "rail": _model_rail(model),
             "exit_status": w.get("exit_status") or stats.get("exit_status", ""),
             "error_class": w.get("error_class") or stats.get("error_class") or "",
             "ci": stats.get("ci_passed"),
