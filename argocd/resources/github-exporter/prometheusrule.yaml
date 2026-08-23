@@ -395,7 +395,9 @@ spec:
             description: 'Month-to-date net spend is ${{ $value | printf "%.2f" }} (expected $0 — everything inside included usage). Break it down by SKU: sum by (product, sku, repo) (github_billing_net_amount).'
 
         # Included-quota burn — the Team plan includes 3000 hosted min/month (UI 2026-07:
-        # "179 min used / 3,000 min included"); alert at 80%. unit=Min.* matches the API's
+        # "179 min used / 3,000 min included"); alert when month-to-date usage exceeds the
+        # ELAPSED SHARE of that quota (day_of_month/days_in_month × 3000), floored at 300 min
+        # so one busy first day cannot trip it. unit=Min.* matches the API's
         # "Minutes" and excludes the GigabyteHours storage SKUs under the same product.
         - alert: GithubActionsMinutesHigh
           expr: >-
@@ -405,8 +407,8 @@ spec:
             severity: warning
             platform_machinery: "true"
           annotations:
-            summary: "GitHub Actions hosted minutes at 80% of included quota"
-            description: '{{ $value | printf "%.0f" }} hosted-runner minutes this month (3000 included, resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*"}).'
+            summary: "GitHub Actions hosted minutes burning above the elapsed share of quota"
+            description: '{{ $value | printf "%.0f" }} hosted-runner minutes this month, past the elapsed share of the 3000-minute monthly quota (threshold = day_of_month/days_in_month × 3000, floored at 300; resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*"}).'
 
         # Held Actions/Packages storage, derived: GB-hr is cumulative month-to-date, so its
         # 24h increase ÷ 24 = average GB currently held. Quota is 2 GB (the UI's "used" is the
