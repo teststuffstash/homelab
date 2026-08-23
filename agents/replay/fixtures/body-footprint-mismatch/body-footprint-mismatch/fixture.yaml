@@ -1,0 +1,33 @@
+# homelab#808 — body-referenced paths that the declared `Touches:` footprint does not cover,
+# flagged report-only.
+#
+# WHY THIS IS A CHECK AND NOT A DOC LINE. An issue body can say "add a shared helper
+# `agents/foo.sh`" with a `Touches:` that names no plausible target path — and nothing
+# reports the mismatch today. On #782 this cost a round plus an arbitration.
+#
+# THE SIX ISSUES:
+#   #301 Touches: agents/coordinator-scan.sh
+#        body mentions `agents/coordinator-scan.sh` — COVERED (no report)
+#   #302 Touches: agents/                        (prefix scope)
+#        body mentions `agents/foo.sh`, `agents/bar/baz.sh` — COVERED by prefix (no report)
+#   #303 Touches: argocd/resources/
+#        body mentions `agents/foo.sh` — NOT COVERED → REPORTED
+#   #304 No Touches line (exclusive `*` sentinel)
+#        body mentions `agents/foo.sh` — NOT CHECKED (omitted Touches = exclusive, ADR-097)
+#   #305 Touches: *                              (everything scope)
+#        body mentions `agents/foo.sh` — NOT CHECKED (`*` covers everything)
+#   #306 "body": null                            — NOT CHECKED (empty body)
+#
+# No `gh` call appears in the action stream on purpose — the lint rides `openall`, the fetch
+# the repo pass already made.
+# pins: (none — report-only check, not a lifecycle transition)
+name: body-footprint-mismatch
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:body-footprint-mismatch
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
