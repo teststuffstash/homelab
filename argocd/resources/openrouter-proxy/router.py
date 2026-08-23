@@ -1495,7 +1495,12 @@ def metrics_lines() -> list[str]:
         "# TYPE router_run_reports_total counter",
         f"router_run_reports_total {(_read('SELECT COUNT(*) FROM run_reports') or [(0,)])[0][0]}",
         "# TYPE router_run_reports_by_rail_total counter",
-        "# HELP router_run_reports_by_rail_total Run reports broken down by rail (homelab#777 — flip acceptance 2).",
+        "# HELP router_run_reports_by_rail_total Run reports broken down by rail (homelab#777 flip acceptance 2, taxonomy #795 — raw values, NOT folded).",
+        "# The launcher emits FOUR canonical AGENT_RAIL values (openrouter, subscription,",
+        "# opencode-go, subscription-fallback); this metric surfaces them RAW from the",
+        "# run_reports table. The folded accounting view (2 buckets: subscription, openrouter)",
+        "# is in agents/ledger.py:_model_rail() and the agent_run_{cost_usd,count}_by_rail",
+        "# recording rules. See agents/ledger.py §_RAIL_VOCABULARY.",
     ]
     by_rail = _read("SELECT rail, COUNT(*) FROM "
                     "(SELECT COALESCE(NULLIF(rail,''),'unknown') AS rail FROM run_reports) "

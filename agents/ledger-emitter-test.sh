@@ -38,6 +38,13 @@ def check(cond, label):
 
 # ── the constructed manifest world (the input, not the logic under test) ────────────────────
 # worker manifests: rounds 1/2/3 (r2 carries stats.error_class), plus one reviewer manifest.
+# homelab#795: manifests now carry a "rail" field when available (agent-finalize folds
+# AGENT_RAIL from agent-runtime#81). r1 has no rail (older manifest — tests prefix derivation
+# fallback); r2 has rail="opencode-go" (tests recorded-rail branch with fold to subscription);
+# r3 has no rail (tests prefix derivation for claude/ model → subscription);
+# r4 has rail="openrouter" with model="claude/haiku" (tests recorded wins over prefix — the
+# prefix would derive "subscription" but the recorded rail says "openrouter" → folded to
+# "openrouter").
 MANIFESTS = {
     "worker-r1-20260817T000000Z/manifest.json": {
         "role": "worker", "round": 1, "model": "model-a", "exit_status": "clean",
@@ -46,12 +53,18 @@ MANIFESTS = {
     },
     "worker-r2-20260817T010000Z/manifest.json": {
         "role": "worker", "round": 2, "model": "model-b", "exit_status": "no-artifact",
+        "rail": "opencode-go",
         "stats": {"ci_passed": None, "cost_usd": 0.05, "queue_wait_s": 2, "duration_s": 60,
                   "error_class": "unknown"},
     },
     "worker-r3-20260817T020000Z/manifest.json": {
-        "role": "worker", "round": 3, "model": "model-a", "exit_status": "clean",
+        "role": "worker", "round": 3, "model": "claude/haiku", "exit_status": "clean",
         "stats": {"ci_passed": True, "cost_usd": 0.20, "queue_wait_s": 1, "duration_s": 40},
+    },
+    "worker-r4-20260817T030000Z/manifest.json": {
+        "role": "worker", "round": 4, "model": "claude/haiku", "exit_status": "clean",
+        "rail": "openrouter",
+        "stats": {"ci_passed": True, "cost_usd": 0.30, "queue_wait_s": 1, "duration_s": 45},
     },
     "reviewer-r1-20260817T003000Z/manifest.json": {
         "role": "reviewer", "round": 1, "model": "reviewer-model",
@@ -82,10 +95,10 @@ def fake_s5(args, key_id, key_secret):
 def fake_sh(args, env=None):
     if args[0] == "gh" and args[1] == "api":
         # gh api ... --jq '[.[] | .body]' returns an array of the comment BODIES. proj#7 has a
-        # strike-only round 4, plus a duplicate round 2 (which already has a manifest ->
+        # strike-only round 5, plus a duplicate round 2 (which already has a manifest ->
         # merge_rounds must keep the manifest entry). One non-strike comment must be ignored.
         return json.dumps([
-            "AGENT_STRIKE: model=model-c error_class=auth-storm round=4 session=pod4\n\n<details>struck",
+            "AGENT_STRIKE: model=model-c error_class=auth-storm round=5 session=pod5\n\n<details>struck",
             "AGENT_STRIKE: model=model-b error_class=unknown round=2 session=pod2",
             "a plain human comment — no strike line",
         ])
@@ -94,42 +107,50 @@ def fake_sh(args, env=None):
 ledger.s5 = fake_s5
 ledger.sh = fake_sh
 
-# ── 1. summarize(): manifest rounds, round-ordered, one per worker (F4) ─────────────────────
+# ── 1. summarize(): manifest rounds, round-ordered, one per worker (F4 + homelab#795) ────
+# Changes for #795:
+#   r2: rail="opencode-go" recorded → _model_rail folds to "subscription"
+#   r3: model changed to "claude/haiku" → prefix derivation → "subscription"
+#   r4 (new): model="claude/haiku" with rail="openrouter" → recorded wins, yields "openrouter"
 summ = ledger.summarize("proj", 7, "rid", "rsec")
 check(summ is not None, "summarize found manifests for proj#7")
 want_rounds = [
     {"round": 1, "model": "model-a", "rail": "openrouter", "exit_status": "clean", "error_class": "", "ci": True},
-    {"round": 2, "model": "model-b", "rail": "openrouter", "exit_status": "no-artifact", "error_class": "unknown", "ci": None},
-    {"round": 3, "model": "model-a", "rail": "openrouter", "exit_status": "clean", "error_class": "", "ci": True},
+    # r2: recorded rail="opencode-go" folds to "subscription" — tests recorded-wins branch
+    {"round": 2, "model": "model-b", "rail": "subscription", "exit_status": "no-artifact", "error_class": "unknown", "ci": None},
+    # r3: model="claude/haiku" with no rail → prefix derivation → "subscription"
+    {"round": 3, "model": "claude/haiku", "rail": "subscription", "exit_status": "clean", "error_class": "", "ci": True},
+    # r4: model="claude/haiku" with rail="openrouter" → recorded wins → "openrouter" (folded)
+    {"round": 4, "model": "claude/haiku", "rail": "openrouter", "exit_status": "clean", "error_class": "", "ci": True},
 ]
 check(summ["rounds"] == want_rounds,
-      "summarize rounds are round-ordered with model/rail/exit_status/error_class/ci per manifest")
-check(summ["total_cost_usd"] == 0.35, "total_cost_usd = 0.10+0.05+0.20 = 0.35")
+      "summarize rounds: r1 prefix-derived openrouter, r2 recorded rail folded to subscription, r3 prefix-derived subscription, r4 recorded rail wins over prefix")
+check(summ["total_cost_usd"] == 0.65, "total_cost_usd = 0.10+0.05+0.20+0.30 = 0.65")
 check(summ["reviewer_rounds"] == 1, "reviewer_rounds = 1")
-check(summ["wall_time_s"] == 7200, "wall_time_s spans min(r1)..max(r3) = 2h = 7200s")
+check(summ["wall_time_s"] == 10800, "wall_time_s spans min(r1)..max(r4) = 3h = 10800s")
 check(summ["pr_url"] == "https://github.com/org/proj/pull/1", "pr_url from the worker manifest")
 
-# ── 2. merge_rounds(): strike-only rounds folded in, manifest wins on collision (F4) ────────
+# ── 2. merge_rounds(): strike-only rounds folded in, manifest wins on collision (F4 + #795) ─
 strikes = [
-    {"round": 4, "model": "model-c", "error_class": "auth-storm"},  # strike-only round
+    {"round": 5, "model": "model-c", "error_class": "auth-storm"},  # strike-only round (was r4, now r5 since manifest r4 exists)
     {"round": 2, "model": "model-b", "error_class": "unknown"},    # duplicate -> manifest wins
 ]
 merged = ledger.merge_rounds(summ["rounds"], strikes)
 want_merged = want_rounds + [
-    {"round": 4, "model": "model-c", "rail": "openrouter", "exit_status": "", "error_class": "auth-storm", "ci": False},
+    {"round": 5, "model": "model-c", "rail": "openrouter", "exit_status": "", "error_class": "auth-storm", "ci": False},
 ]
 check(merged == want_merged,
-      "merge_rounds: strike-only round 4 appended, round 2 keeps its manifest entry")
+      "merge_rounds: strike-only round 5 appended, round 2 keeps its manifest entry (recorded rail wins)")
 
-# ── 3. flat fields DERIVED from the merged rounds, order-preserving (F4) ────────────────────
+# ── 3. flat fields DERIVED from the merged rounds, order-preserving (F4 + #795) ────────────
 models = [r["model"] for r in merged]
 worker_exit_statuses = [r["exit_status"] for r in merged]
 ci_sequence = [r["ci"] for r in merged]
-check(models == ["model-a", "model-b", "model-a", "model-c"],
-      "models derived order-preserving, dedup REMOVED (model-a appears twice)")
-check(worker_exit_statuses == ["clean", "no-artifact", "clean", ""],
+check(models == ["model-a", "model-b", "claude/haiku", "claude/haiku", "model-c"],
+      "models derived order-preserving (claude/haiku appears twice — once from prefix subscription, once from recorded openrouter)")
+check(worker_exit_statuses == ["clean", "no-artifact", "clean", "clean", ""],
       "worker_exit_statuses aligned with rounds (strike round exit_status is empty)")
-check(ci_sequence == [True, None, True, False],
+check(ci_sequence == [True, None, True, True, False],
       "ci_sequence aligned with rounds (strike round ci is False)")
 retry_storms = sum(1 for r in merged if (r["exit_status"] or r["error_class"]) in ("auth-storm", "budget-403"))
 check(retry_storms == 1, "retry_storms counts the auth-storm strike-only round")
@@ -155,13 +176,15 @@ check(row["key"] == "proj#7" and row["terminal_label"] == "agent/blocked" and ro
       "row identity fields (key/terminal_label/issue_state) intact")
 check(row.get("snapshot") is True, "row marked snapshot: true (issue open at emit time)")
 check(row["rounds"] == want_merged, "row rounds[] = merged per-round list")
-check(row["models"] == ["model-a", "model-b", "model-a", "model-c"], "row models order-preserving")
-check(row["worker_exit_statuses"] == ["clean", "no-artifact", "clean", ""], "row worker_exit_statuses aligned")
-check(row["ci_sequence"] == [True, None, True, False], "row ci_sequence aligned")
+check(row["models"] == ["model-a", "model-b", "claude/haiku", "claude/haiku", "model-c"],
+      "row models order-preserving (both claude/haiku entries — r3 prefix-derived subscription, r4 recorded openrouter)")
+check(row["worker_exit_statuses"] == ["clean", "no-artifact", "clean", "clean", ""],
+      "row worker_exit_statuses aligned (r4 clean exit adds a new clean entry)")
+check(row["ci_sequence"] == [True, None, True, True, False], "row ci_sequence aligned")
 check(row["retry_storms"] == 1, "row retry_storms counts the strike-only auth-storm")
-check(row["total_cost_usd"] == 0.35, "row total_cost_usd still the manifest-only sum")
+check(row["total_cost_usd"] == 0.65, "row total_cost_usd = 0.10+0.05+0.20+0.30 = 0.65")
 check(row["budget_tier"] == "sm" and row["budget_cap_usd"] == 0.5, "row budget tier/cap present")
-check(row["calibration_error"] == round(0.35 / 0.5, 3), "row calibration_error = 0.35/0.5")
+check(row["calibration_error"] == round(0.65 / 0.5, 3), "row calibration_error = 0.65/0.5")
 
 print("\n%d checks passed" % len(PASSED))
 PYEOF
