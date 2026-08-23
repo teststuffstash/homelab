@@ -1,0 +1,3 @@
+[
+  {"model": "inclusionai/ling-3.0-flash", "free": false, "headline": 0.15, "bench": {"benched": true, "intelligence": 55, "coding": 50.6, "agentic": 48}, "enr": {"price_per_mtok": 0.15, "price_note": "—", "pinned_provider": {"provider": "inclusion-ai", "uptime": 99.3}, "provider_count": 2}, "score": 48}
+]
