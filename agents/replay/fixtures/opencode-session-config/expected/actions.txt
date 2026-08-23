@@ -1,4 +1,4 @@
 OUT → opencode session pin unavailable (registry lookup failed / no eligible provider) — running unpinned
 OUT OC_SETUP: SET
-OUT CONFIG_JSON: {"$schema":"https://opencode.ai/config.json","autoApprove":true}
+OUT CONFIG_JSON: {"$schema":"https://opencode.ai/config.json","mode":{"autoApprove":{"permission":{},"options":{}}}}
 RC 0
