@@ -1,0 +1,18 @@
+[
+  {
+    "number": 90,
+    "createdAt": "2026-08-20T10:00:00Z",
+    "mergeStateStatus": "CLEAN",
+    "autoMergeRequest": { "enabledAt": "2026-08-20T10:01:00Z" },
+    "reviewDecision": "",
+    "labels": []
+  },
+  {
+    "number": 91,
+    "createdAt": "2026-08-20T11:00:00Z",
+    "mergeStateStatus": "BEHIND",
+    "autoMergeRequest": null,
+    "reviewDecision": "",
+    "labels": []
+  }
+]

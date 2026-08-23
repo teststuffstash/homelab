@@ -1,0 +1,3 @@
+CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels
+OUT updater[teststuffstash/testrepo]: no armed+BEHIND PR to update
+RC 0
