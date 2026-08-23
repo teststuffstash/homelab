@@ -1,0 +1,39 @@
+#!/bin/sh
+# Fixture-backed `curl`, installed on $PATH ahead of the real one by agents/replay/run.sh.
+#
+# resolve-model.sh does one curl POST to the router proxy.  This stub:
+#   - RECORDS the full invocation to the action stream
+#   - Serves a pre-recorded response from world/curl/ when one exists
+#   - FAILS (exit 7, the "failed to connect" code) when no recording exists and
+#     $STUB_CURL is unset, or serves the $STUB_CURL behaviour
+#
+# No network, no proxy: every call either hits a committed file or a configured failure mode.
+set -u
+_RP_TOOL=curl
+. "${REPLAY_STUB_DIR:?agents/replay/run.sh must export REPLAY_STUB_DIR}/_common.sh"
+
+_rp_record "$@"
+
+# Simplify the bare words: drop --max-time, -sS, -H, -d, the URL since it's always the proxy.
+# We key on the HTTP method + path part: "POST /route"
+WORDS="$(_rp_words "$@")"
+
+# Resolve-model makes exactly one curl call: POST <proxy>/route
+# The response is keyed as "POST /route"
+SLUG="route-post"
+PC_OVERRIDE="$(_rp_per_call_override "$SLUG")" || PC_OVERRIDE=''
+if [ -n "$PC_OVERRIDE" ]; then
+  case "$PC_OVERRIDE" in
+    fail)  printf 'curl: (7) Failed to connect\n' >&2; exit 7 ;;
+    empty) exit 0 ;;
+    *)     _rp_die "unknown per-call override value: $PC_OVERRIDE" ;;
+  esac
+fi
+
+# Run-global $STUB_CURL: fail = connection refused (exit 7, curl's own connection code)
+case "${STUB_CURL:-ok}" in
+  fail) printf 'curl: (7) Failed to connect\n' >&2; exit 7 ;;
+esac
+
+# Serve the recorded response if it exists, otherwise fail
+_rp_serve "route-post" || exit 7

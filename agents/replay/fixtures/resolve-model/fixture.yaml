@@ -1,0 +1,19 @@
+# resolve-model — shared resolve step for subscription lanes (G-A 9, issue #782).
+#
+# THE CONTRACT: the resolve-model block in resolve-model.sh does one POST /route call,
+# fail-OPEN to the literal fallback when the proxy is unreachable.  Two rows:
+#
+#   proxy-reachable    — curl succeeds, router returns verdict=dispatch with a model;
+#                        RESOLVED_MODEL matches the routed model.
+#   proxy-unreachable  — curl fails (connection refused); RESOLVED_MODEL matches
+#                        the literal FALLBACK, loud line on stderr.
+#
+# Not FSM-pinned (no docs/agents/*-fsm.yaml replay: list references resolve-model).
+name: resolve-model
+mode: table
+source: agents/resolve-model.sh
+parts:
+  - file:bridge.sh
+  - block:resolve-model
+  - file:post.sh
+rows: rows.psv
