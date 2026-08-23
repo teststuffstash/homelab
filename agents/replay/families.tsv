@@ -10,6 +10,7 @@ argv-payload-over-ceiling	argv-payload
 argv-payload-retro-handoff	argv-payload
 argv-payload-warn-band	argv-payload
 board-classification	board-classification
+body-footprint-mismatch	body-footprint-mismatch
 c4c5-bodies-probe-fail	c4c5-bodies-probe-fail
 c4c5-infeasible-parks	c4c5-infeasible
 c4c5-infeasible-probe-fail	c4c5-infeasible
