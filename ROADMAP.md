@@ -304,7 +304,10 @@ Bucket A/B enumeration in `docs/agents/meta-state.md`.
 | S7 | merge-path updater in-cluster (ADR-111 — kills the ~4,800 min/mo hosted-cron burn, #698) + the FU-183 pro-rated burn alert — **parent #741 authored 2026-08-21 (children #742–#746); LAUNCH PARKED on Anthropic weekly headroom (95% at authoring)** | ADR-111, FU-183, homelab#741 |
 
 **Goal candidates** (authored AT LAUNCH, in rough order — the Goal dogfood begins here once the
-stints clear; the goal lane's pause conditions read met as of 2026-08-19):
+stints clear; the goal lane's pause conditions read met as of 2026-08-19). ⚖ The NEXT platform
+Goal's decomposition reads the banked theme-branch direction first
+([issue-authoring.md](docs/agents/issue-authoring.md) §⚖ BANKED 2026-08-23 — level-2 theme
+branches for deploy-to-test stacks; G-A deliberately finished the old way):
 
 | # | Goal | scope pointers |
 |---|---|---|
