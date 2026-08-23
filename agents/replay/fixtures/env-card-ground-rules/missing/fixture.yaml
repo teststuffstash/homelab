@@ -1,0 +1,10 @@
+# FU-117 / S4 #763 — the ground-rules file is the env card's ONE universal-rules source, and a
+# missing/unreadable file must degrade LOUDLY, never silently (the FU-125 class): the card gains
+# a visible WARN bullet, stderr names the path, and the DYNAMIC card still renders in full — a
+# launcher-side packaging gap must not cost the ride its environment facts.
+name: env-card-ground-rules-missing
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:render_env_card
+  - file:post.sh

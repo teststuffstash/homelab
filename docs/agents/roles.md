@@ -308,11 +308,26 @@ tier allowed, dual-model worth it) are FU-095's.
 ## Context delivery — role × context × source (FU-117)
 
 Operator 2026-07-28: *"context management is starting to spread — which role requires what
-context."* The operator's style here is explicit: **let it grow organically, then analyse and
-refactor — not BDUF.** So this section is a deliberate pile-up. Keep noting sightings; do **not**
-refactor until it has piled up enough to see the shape.
+context."* The section grew as a deliberate pile-up (grow organically, then analyse and refactor
+— not BDUF); **the refactor began with stint S4 (#762, 2026-08-23)** — the operator's own
+work-map scheduling is what lifted the let-it-pile-up gate. The map, as now built:
 
-**Root finding: two delivery channels carry different context.**
+| Context class | One source | Delivered by | Reaches |
+|---|---|---|---|
+| **1 — environment** (dynamic per-ride facts: docker, egress, proxies, round, write scope, base, goal card) | AgentStack claim knobs + launch state | `render_env_card()` (launcher, ADR-094) | every ride, both harnesses |
+| **2 — task + service facts** | the ISSUE (author-injected — the worker clones only `/work/repo`) | issue body | every ride |
+| **3 — universal ground rules** (devbox-only installs, prior-art, machine markers) | [`agents/ground-rules.md`](../../agents/ground-rules.md) — **built #763**: the env card's static sibling, injected verbatim by the launcher; a missing file degrades LOUDLY (replay `env-card-ground-rules/missing`) | `render_env_card()` prepends the file | every ride, both harnesses |
+| task rules (how to approach this class) | stack repo `.agents/<class>.yaml` | launcher `--recipe` (L2/L3, [fixer-context.md](fixer-context.md)) | the ride |
+| jail meta-session procedure | `/workspace/CLAUDE.md` + homelab `CLAUDE.md` (+ the claude-jail card — the #764 leg, open) | Claude-Code auto-load | the seat |
+
+The `render_env_card()` interim duplication (accepted 2026-07-28) is REMOVED — the card keeps
+only dynamic facts and `cat`s the ground-rules file. Remaining FU-117 legs: the jail third
+context (#764 — homelab CLAUDE.md stops mixing jail procedure with repo-universal facts; the
+claude-jail repo needs its own card mechanism) and the meta-state §Durable warnings eviction
+(#765).
+
+**Root finding (2026-07-28, kept as the section's evidence): two delivery channels carry
+different context.**
 
 | Channel | Reaches | Carries |
 |---|---|---|
@@ -362,9 +377,9 @@ So the map has at least **three context classes**:
    author/coordinator.
 3. **Universal ground rules** — CLAUDE.md today, and unreachable by goose.
 
-**Interim (done 2026-07-28, meta-15):** the key CLAUDE.md rules were duplicated into
-`render_env_card()` and the missing nix-cache proxy added. The duplication is accepted on purpose;
-FU-117 tracks the dedup.
+**Interim (2026-07-28, meta-15 — RETIRED by #763):** the key CLAUDE.md rules were duplicated
+into `render_env_card()`; the dedup into `agents/ground-rules.md` removed the duplication
+(map above).
 
 **Sighting 2026-08-03 (circles FU-126 A/B):** recipe text carried egress FOLKLORE ("WebFetch will
 mostly be blocked") while the truth is per-HARNESS capability — claude rides have server-side
@@ -398,11 +413,10 @@ cannot reach a ClusterIP (FU-072), so the card must print the address *this* pod
 Acceptance: from a ride-shaped pod in ns `circles`, a question no model can answer from training
 data came back with 10 citations.
 
-**The refactor, when it has piled up enough:** a **role × context × source** map that separates
-*dynamic per-ride facts* (env card: docker/egress/proxy values, round, write-scope) from *universal
-ground rules* (authored once, delivered to goose via a launcher-injected static block — the env
-card's sibling — or a recipe "read CLAUDE.md first" opener) from *task rules* (the recipe). One
-source per concern, delivered to the roles that need it.
+**The refactor (executed as designed, S4 #763):** the role × context × source map at the top of
+this section — dynamic per-ride facts (env card) / universal ground rules (authored once in
+`agents/ground-rules.md`, launcher-injected as the env card's static sibling) / task rules (the
+recipe). One source per concern, delivered to the roles that need it.
 
 ## SLO machinery (not a role — stack policy)
 
