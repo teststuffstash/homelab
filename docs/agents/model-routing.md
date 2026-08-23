@@ -435,6 +435,19 @@ label) — never request-time inference in the proxy.
 
 ### M10. The coordinator lane is UNROUTED — and the goal clauses are its reasoning tier
 
+> **⚠ SUPERSEDED IN THE LARGE (2026-08-23, G-A #775 — the role-wiring children landed):** every
+> role now routes — coordinator + dispatch units via PR#801 (the goal-model case map became the
+> `goal-decompose` class in `model-classes.json`; §IL-T11's anchor moved with it), the reviewer
+> via PR#803 (decorrelation consumed as the #516 `/route` primitive, failover literal deleted in
+> authoritative mode), responder/retro/fix-debounce via PR#788 (#782). "The only caller is
+> `agent-session.sh`" and "implemented as a launcher-side case in `coordinator-scan.sh`" below
+> are HISTORY. What still stands from this section: the AUTHORING-vs-CHECKING axis (decompose =
+> reasoning tier, reviews stay sonnet-class), the `GOAL_MODEL` escape hatch (now in
+> `coordinator-session.sh`), the audit/research-classes-are-the-wrong-shape warning (heeded —
+> `goal-decompose` is its own subscription-rail class), and the `dispatch`-tier caveat at the
+> section's end. Residue: explicit `--model` override semantics on the coordinator side is
+> homelab#810; the legacy case-map prose gets deleted with the G-A sweep.
+
 Everything above governs the **OpenRouter rail**. The coordinator does not ride it: it runs
 `claude -p` against the Claude subscription (`coordinator-claude`, `CLAUDE_CODE_OAUTH_TOKEN`) with
 `--model sonnet|opus|haiku|fable`, and its model comes from `cmodel` —
