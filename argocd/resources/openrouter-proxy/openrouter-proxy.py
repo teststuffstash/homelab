@@ -1045,6 +1045,133 @@ def _or_stream_translate(sse_text: str, model: str) -> str:
     return "\n".join(out_lines)
 
 
+class _ORStreamingTranslator:
+    """Stateful streaming translator for OpenAI SSE → Anthropic SSE events.
+
+    Processes one OpenAI SSE ``data:`` line at a time and emits the corresponding
+    Anthropic SSE event lines, preserving content-block and tool-call state across
+    successive calls so the proxy can write translated output incrementally instead
+    of buffering the entire upstream response first.
+    """
+
+    def __init__(self, model: str):
+        self.model = model
+        self.block_index = 0
+        self.sent_start = False
+        self.current_tool = None  # {id, name, arguments_buffer} when accumulating a tool call
+        self._done = False
+
+    def feed(self, event_json: dict) -> str:
+        """Process one OpenAI SSE event dict and return Anthropic SSE lines.
+
+        Returns an empty string when the event carries nothing to emit (e.g. a
+        heartbeat or an already-consumed usage-only event after message_delta).
+        """
+        if self._done:
+            return ""
+
+        out = ""
+        choices = event_json.get("choices") or []
+        if not choices:
+            return ""
+        delta = choices[0].get("delta") or {}
+        finish = choices[0].get("finish_reason")
+        event_id = event_json.get("id", "")
+
+        # Role assignment (first event in a stream)
+        role = delta.get("role")
+        if role == "assistant" and not self.sent_start:
+            self.sent_start = True
+            out += (
+                f'event: message_start\n'
+                f'data: {json.dumps({"type": "message_start", "message": {"id": event_id, "type": "message", "role": "assistant", "content": [], "model": self.model}})}\n\n'
+            )
+
+        # Content delta
+        content = delta.get("content")
+        if content is not None:
+            if not self.sent_start:
+                self.sent_start = True
+                out += (
+                    f'event: message_start\n'
+                    f'data: {json.dumps({"type": "message_start", "message": {"id": event_id, "type": "message", "role": "assistant", "content": [], "model": self.model}})}\n\n'
+                )
+            # Start a text content block on first content delta
+            if self.block_index == 0 and not self.current_tool:
+                out += (
+                    f'event: content_block_start\n'
+                    f'data: {json.dumps({"type": "content_block_start", "index": self.block_index, "content_block": {"type": "text", "text": ""}})}\n\n'
+                )
+            out += (
+                f'event: content_block_delta\n'
+                f'data: {json.dumps({"type": "content_block_delta", "index": self.block_index, "delta": {"type": "text_delta", "text": content}})}\n\n'
+            )
+
+        # Tool calls delta
+        tool_calls = delta.get("tool_calls")
+        if tool_calls:
+            for tc in tool_calls:
+                fn = tc.get("function") or {}
+                fn_name = fn.get("name", "")
+                fn_args = fn.get("arguments", "")
+
+                if tc.get("id"):
+                    # New tool call starting
+                    if self.current_tool:
+                        out += (
+                            f'event: content_block_stop\n'
+                            f'data: {json.dumps({"type": "content_block_stop", "index": self.block_index})}\n\n'
+                        )
+                        self.block_index += 1
+                    self.current_tool = {
+                        "id": tc["id"],
+                        "name": fn_name,
+                        "arguments": fn_args or "",
+                    }
+                    out += (
+                        f'event: content_block_start\n'
+                        f'data: {json.dumps({"type": "content_block_start", "index": self.block_index, "content_block": {"type": "tool_use", "id": self.current_tool["id"], "name": self.current_tool["name"], "input": {}}})}\n\n'
+                    )
+                    if fn_args:
+                        out += (
+                            f'event: content_block_delta\n'
+                            f'data: {json.dumps({"type": "content_block_delta", "index": self.block_index, "delta": {"type": "input_json_delta", "partial_json": fn_args}})}\n\n'
+                        )
+                elif self.current_tool and fn_args:
+                    # Accumulate arguments for existing tool call
+                    self.current_tool["arguments"] += fn_args
+                    out += (
+                        f'event: content_block_delta\n'
+                        f'data: {json.dumps({"type": "content_block_delta", "index": self.block_index, "delta": {"type": "input_json_delta", "partial_json": fn_args}})}\n\n'
+                    )
+
+        # Finish reason — close content blocks and emit message_delta
+        if finish:
+            if self.current_tool:
+                out += (
+                    f'event: content_block_stop\n'
+                    f'data: {json.dumps({"type": "content_block_stop", "index": self.block_index})}\n\n'
+                )
+                self.block_index += 1
+                self.current_tool = None
+            elif self.block_index == 0 and self.sent_start:
+                out += (
+                    f'event: content_block_stop\n'
+                    f'data: {json.dumps({"type": "content_block_stop", "index": self.block_index})}\n\n'
+                )
+                self.block_index += 1
+
+            usage = event_json.get("usage") or {}
+            stop_reason = _FINISH_REASON_MAP.get(finish, "end_turn")
+            out += (
+                f'event: message_delta\n'
+                f'data: {json.dumps({"type": "message_delta", "delta": {"stop_reason": stop_reason, "stop_sequence": None}, "usage": {"output_tokens": usage.get("completion_tokens", 0)}})}\n\n'
+            )
+            self._done = True
+
+        return out
+
+
 def _opencode_scrub(payload: dict, note_tag: str) -> list[str]:
     """ADR-107 / homelab#445 compat scrub shared by the Go and Zen rails. opencode.ai's
     Anthropic-compat layer mishandles STRING-shorthand message content (probed 2026-08-13:
@@ -2032,27 +2159,72 @@ class Proxy(BaseHTTPRequestHandler):
         read1 = getattr(resp, "read1", resp.read)  # HTTPError bodies may lack read1 (finite anyway)
         try:
             if or_leg and 200 <= status < 300:
-                # homelab#791: translate the OpenAI-format response to Anthropic format.
-                # Accumulate the full response body (both streaming and non-streaming paths),
-                # translate, then write — the or_leg only carries tool-using non-stream sessions
-                # for now; streaming SSE translation is stateful and needs a future pass.
+                # homelab#791 + ADR-103: translate the OpenAI-format response to Anthropic format.
+                # Streaming (SSE) responses are translated INCREMENTALLY — each complete SSE
+                # event is translated and written as it arrives, so the downstream client never
+                # waits for the entire upstream response to complete before seeing the first
+                # token. Non-streaming (JSON) responses are buffered and translated in one pass.
                 buf = b""
+                sse_buf = b""
+                translator = None
+                is_sse = False
                 while chunk := read1(8192):
-                    buf += chunk
-                    sent += len(chunk)
-                    if deadline and time.time() > deadline:
-                        with _inflight_lock:
-                            _deadline_exceeded[or_model or "other"] = \
-                                _deadline_exceeded.get(or_model or "other", 0) + 1
-                        log(f"REQUEST DEADLINE EXCEEDED: {self.command} {self.path} "
-                            f"model={or_model or '-'} — severing after {time.time() - started:.0f}s "
-                            f"(deadline {deadline_s:.0f}s, or-leg; homelab#22)")
-                        note += "+deadline-severed"
-                        buf = buf[:131072]  # cap at 128KB to keep translation bounded
-                        break
-                translated = _or_response_translate(buf, or_model or "")
-                self.wfile.write(translated)
-                self.wfile.flush()
+                    if not is_sse and not buf:
+                        # Peek at the first chunk to detect SSE (data: prefix)
+                        text = chunk.decode("utf-8", errors="replace")
+                        is_sse = text.startswith("data: ") or "\ndata: " in text
+                    if is_sse:
+                        # Streaming path: accumulate line buffer, extract complete SSE
+                        # events (delimited by \n\n), translate each event incrementally
+                        # and write immediately.
+                        sse_buf += chunk
+                        sent += len(chunk)
+                        while b"\n\n" in sse_buf:
+                            event_bytes, _, sse_buf = sse_buf.partition(b"\n\n")
+                            event_text = event_bytes.decode("utf-8", errors="replace")
+                            for line in event_text.split("\n"):
+                                if not line.startswith("data: "):
+                                    continue
+                                payload = line[len("data: "):].strip()
+                                if payload == "[DONE]":
+                                    continue
+                                try:
+                                    event = json.loads(payload)
+                                except (ValueError, TypeError):
+                                    continue
+                                if translator is None:
+                                    translator = _ORStreamingTranslator(or_model or "")
+                                translated = translator.feed(event)
+                                if translated:
+                                    self.wfile.write(translated.encode("utf-8"))
+                                    self.wfile.flush()
+                        if deadline and time.time() > deadline:
+                            with _inflight_lock:
+                                _deadline_exceeded[or_model or "other"] = \
+                                    _deadline_exceeded.get(or_model or "other", 0) + 1
+                            log(f"REQUEST DEADLINE EXCEEDED: {self.command} {self.path} "
+                                f"model={or_model or '-'} — severing after {time.time() - started:.0f}s "
+                                f"(deadline {deadline_s:.0f}s, or-leg SSE; homelab#22)")
+                            note += "+deadline-severed"
+                            break
+                    else:
+                        # Non-streaming (JSON) path: buffer and translate in one pass.
+                        buf += chunk
+                        sent += len(chunk)
+                        if deadline and time.time() > deadline:
+                            with _inflight_lock:
+                                _deadline_exceeded[or_model or "other"] = \
+                                    _deadline_exceeded.get(or_model or "other", 0) + 1
+                            log(f"REQUEST DEADLINE EXCEEDED: {self.command} {self.path} "
+                                f"model={or_model or '-'} — severing after {time.time() - started:.0f}s "
+                                f"(deadline {deadline_s:.0f}s, or-leg; homelab#22)")
+                            note += "+deadline-severed"
+                            buf = buf[:131072]
+                            break
+                if not is_sse:
+                    translated = _or_response_translate(buf, or_model or "")
+                    self.wfile.write(translated)
+                    self.wfile.flush()
             else:
                 while chunk := read1(8192):
                     self.wfile.write(chunk)
@@ -4307,7 +4479,66 @@ data: [DONE]
     except (ValueError, TypeError):
         check(False, "or-translate tool_result: forwarded body is valid JSON")
 
-    # Test 2c: credential header guard — ref-auth resolution and oauth-guard verification
+    # Test 2d: tool_result.content as a LIST — forwarded verbatim per _or_request_translate
+    # Anthropic allows tool_result.content to be a list of content blocks (e.g. an image block
+    # paired with a text caption). _or_request_translate passes it through to the OpenAI tool
+    # message without stringification. This test pins the actual behaviour — a self-test row
+    # so the reviewer can see whether OR's compat layer accepts it as-is, rather than guessing.
+    _or_response = {
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": "I see the image result."},
+            "finish_reason": "stop",
+        }],
+        "id": "test-gen-list-content",
+        "model": "openai/gpt-5",
+        "usage": {"prompt_tokens": 20, "completion_tokens": 5},
+    }
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/anthropic/claude-3-sonnet",
+                  "max_tokens": 4096,
+                  "messages": [
+                      {"role": "user", "content": "Read this file"},
+                      {"role": "assistant", "content": [
+                          {"type": "tool_use", "id": "call_read123", "name": "read",
+                           "input": {"path": "/tmp/test.txt"}}
+                      ]},
+                      {"role": "user", "content": [
+                          {"type": "tool_result", "tool_use_id": "call_read123",
+                           "content": [{"type": "text", "text": "file contents here"},
+                                       {"type": "image", "source": {"type": "base64",
+                                        "media_type": "image/png",
+                                        "data": "iVBORw0KGgo="}}]}
+                      ]},
+                  ],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer OAUTH-SECRET"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    check(r.status == 200, "or-translate tool_result list content: 200")
+    o = seen.get("or_translate") or {}
+    try:
+        sent_msg = o.get("messages") or []
+        # Find the tool-role message that carries the forwarded content
+        tool_msg = next((m for m in sent_msg if m.get("role") == "tool"), None)
+        check(tool_msg is not None, "or-translate tool_result list: forwarded has tool-role message")
+        tool_content = tool_msg.get("content") if tool_msg else None
+        # The content MUST be forwarded AS THE LIST the Anthropic request sent — not
+        # stringified to a single string. This is the point of the test: pin the pass-through.
+        check(isinstance(tool_content, list),
+              f"or-translate tool_result list: content is a list (got {type(tool_content).__name__})")
+        check(len(tool_content) == 2,
+              f"or-translate tool_result list: two blocks in forwarded content (got {len(tool_content) if isinstance(tool_content, list) else 'not a list'})")
+        first_block = tool_content[0] if isinstance(tool_content, list) else {}
+        check(isinstance(first_block, dict) and first_block.get("type") == "text",
+              f"or-translate tool_result list: first block type is 'text' (got {first_block.get('type') if isinstance(first_block, dict) else 'n/a'})")
+    except (ValueError, TypeError, StopIteration):
+        check(False, "or-translate tool_result list: parseable forwarded body")
     # Mock a ref resolution: agent-ns/openrouter-key resolves to the test key
     _refs["agent-ns/openrouter-key"] = (time.time() + 3600, {
         "key": "test-or-key-resolved",
@@ -4338,7 +4569,45 @@ data: [DONE]
     # Clean up the mocked ref
     _refs.pop("agent-ns/openrouter-key", None)
 
-    # Test 3: /chat/completions path with openrouter/ model — should NOT translate (only /anthropic/ path)
+    _refs.pop("agent-ns/openrouter-key", None)
+
+    # Test 2e: sk-ant-oat oauth-egress refusal — 502 when resolved auth starts with sk-ant-oat
+    # The refusal branch at ~L1933-1938 must return 502 with zero bytes reaching the OR stub.
+    # This test fails (pins) if the guard is removed: a resolved oauth token MUST NOT egress
+    # to third-party OpenRouter (ADR-087 / homelab#791).
+    _refs["agent-ns/oat-key"] = (time.time() + 3600, {
+        "key": "sk-ant-oat-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "guardrail": "",
+        "kind": "openrouter",
+        "has_cr": False,
+    })
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/openai/gpt-5",
+                  "max_tokens": 4096,
+                  "messages": [{"role": "user", "content": "Test oauth egress guard"}],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:agent-ns/oat-key"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    check(r.status == 502,
+          f"or-translate oauth guard: 502 on sk-ant-oat key (got {r.status})")
+    try:
+        err = json.loads(data)
+        check("credential guard" in (err.get("error") or "").lower() or "oauth" in (err.get("error") or "").lower(),
+              f"or-translate oauth guard: error body mentions credential guard or oauth (got {err.get('error')})")
+    except (ValueError, TypeError):
+        check(False, "or-translate oauth guard: error body is valid JSON")
+    # The OR stub must NOT have received the request — zero bytes forwarded
+    o = seen.get("or_translate") or {}
+    check(o.get("path") is None,
+          f"or-translate oauth guard: OR stub NOT called (path={o.get('path')})")
+    # Clean up the mocked ref
+    _refs.pop("agent-ns/oat-key", None)
     seen.clear()
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("POST", "/api/v1/chat/completions",
