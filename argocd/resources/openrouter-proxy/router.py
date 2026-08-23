@@ -1448,6 +1448,17 @@ def metrics_lines() -> list[str]:
         f"router_db_persistent {1 if _persistent else 0}",
         "# TYPE router_run_reports_total counter",
         f"router_run_reports_total {(_read('SELECT COUNT(*) FROM run_reports') or [(0,)])[0][0]}",
+        "# TYPE router_run_reports_by_rail_total counter",
+        "# HELP router_run_reports_by_rail_total Run reports broken down by rail (homelab#777 — flip acceptance 2).",
+    ]
+    by_rail = _read("SELECT rail, COUNT(*) FROM "
+                    "(SELECT COALESCE(NULLIF(rail,''),'unknown') AS rail FROM run_reports) "
+                    "GROUP BY rail")
+    if by_rail:
+        lines += [f'router_run_reports_by_rail_total{{rail="{r}"}} {n}' for r, n in by_rail]
+    else:
+        lines.append("router_run_reports_by_rail_total 0")
+    lines += [
         "# TYPE router_strikes_total counter",
     ]
     strikes = _read("SELECT error_class, COUNT(*) FROM strikes GROUP BY error_class")
@@ -2274,7 +2285,23 @@ def self_test() -> int:
     go_latch_save({"until": 0.0, "reason": "", "code": 0})  # simulate early clear
     cleared_loaded = go_latch_load()
     assert cleared_loaded is None, "cleared go latch must not persist"
+    # Seed a TRUE NULL-rail row (bypassing record_report, which always writes str(None or "") = "")
+    # alongside the record_report-written rows whose rail is '' — the migrated-store fixture
+    # above is in a throwaway :memory: connection and does NOT populate _conn, so without this
+    # row the assertion below would pass even with the buggy raw-GROUP-BY form.
+    _conn.execute(
+        "INSERT OR REPLACE INTO run_reports(ts,session,task,stack,role,round,model,"
+        "served_model,served_provider,cache_hit,cost_usd,error_class,outcome,rail) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (1.0, "null-rail-1", "issue-0", "none", "worker", 1, "m", "", "", 0.0, 0.0, "", "pr", None))
     body = "\n".join(metrics_lines())
+    # The store now contains BOTH a genuine NULL-rail row (null-rail-1) and record_report-written
+    # rows whose rail is '' (e.g. t-2). The by_rail query must coalesce both to 'unknown' and
+    # GROUP BY the coalesced value, producing exactly ONE line — not two with the same label set.
+    unknown_lines = [ln for ln in body.split("\n")
+                     if 'router_run_reports_by_rail_total{rail="unknown"}' in ln]
+    assert len(unknown_lines) == 1, \
+        f"expected exactly 1 by_rail unknown line, got {len(unknown_lines)}: {unknown_lines}"
     assert "router_db_persistent 0" in body, "self-test store is ephemeral by construction"
     assert 'router_strikes_total{error_class="harness-death"} 1' in body
     assert 'router_circuit_open_total{class="auth"} 1' in body
@@ -2292,10 +2319,10 @@ def self_test() -> int:
         in body, "the FU-088 gate holding the ladder off must be countable"
     summary = status_summary()
     # 10 run_reports (t-1 is INSERT OR REPLACE'd, + t-2 clean, + t-3 the real producer shape,
-    # + the 5 M11 ladder-cell fixtures, + the 2 homelab#577 deployed-pod pod-name shapes) and 3
-    # strikes (issue-9/sleep from the vocabulary fixture, issue-19/circles from the real one,
-    # issue-42/sleep from the ladder's degradation step).
-    assert summary["rows"]["run_reports"] == 16 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1
+    # + the 5 M11 ladder-cell fixtures, + the 2 homelab#577 deployed-pod pod-name shapes,
+    # + null-rail-1) and 3 strikes (issue-9/sleep from the vocabulary fixture,
+    # issue-19/circles from the real one, issue-42/sleep from the ladder's degradation step).
+    assert summary["rows"]["run_reports"] == 17 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
