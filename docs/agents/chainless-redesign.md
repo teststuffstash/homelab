@@ -1,4 +1,4 @@
-# The chainless redesign — one harness, N subscription rails, every role routed (ADR-107 charter)
+# The chainless redesign — a harness matrix, N subscription rails, every role routed (ADR-107 charter)
 
 **Status: CHARTER (operator direction, 2026-08-13 — the subscription-autopsy session). Design
 accepted in principle; build NOT started.** This doc owns the redesign's decisions, the claim-knob
