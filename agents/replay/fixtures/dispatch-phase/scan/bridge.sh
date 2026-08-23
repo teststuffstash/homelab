@@ -80,4 +80,14 @@ echo "REACHED: second cron dispatch — cached, fresh stamp"
 DP_NOW=1786465130; dispatch_phase circles
 printf 'RETURN %s\n' "$?"
 
+# ── the JANITOR tick (homelab#459): report-only by design — no doorbell exists for "run the
+# periodic janitor", so a janitor dispatch ships its timing rows but stamps NO wake source at
+# all. Without this gate every janitor pass minted one guaranteed cron-woken sample and the
+# AgentDispatchCronWoken tooth sat one tolerated race away from firing on any janitor day. The
+# wake cache is still the cron pod's — the gate must beat a cached cron verdict, not rely on an
+# unreadable probe.
+echo "REACHED: janitor tick — timing rows ship, NO wake stamp (homelab#459)"
+DP_NOW=1786465150; SCAN_JANITOR=1 dispatch_phase circles
+printf 'RETURN %s\n' "$?"
+
 echo "REACHED: end"
