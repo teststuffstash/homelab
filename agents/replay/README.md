@@ -148,6 +148,10 @@ is stale, so it cannot drift the way the prose register did.
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
+| `decorrelate-resolution/empty-report` | actions | - | `agents/review-reflex.sh` | - |
+| `decorrelate-resolution/malformed-json` | actions | - | `agents/review-reflex.sh` | - |
+| `decorrelate-resolution/no-model` | actions | - | `agents/review-reflex.sh` | - |
+| `decorrelate-resolution/served-model` | actions | - | `agents/review-reflex.sh` | - |
 | `depends-on-retired-format/depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
 | `dispatch-phase/scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `dispatch-phase/session` | actions | - | `agents/coordinator-session.sh` | - |
@@ -232,6 +236,9 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-go-failover/shadow-both-limited` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/shadow-go-available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-optout/reviewer-optout` | suite | - | `-` | - |
+| `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-route-carrier/resolved-absent` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-route-carrier/resolved-adopted` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-computed` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-none` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/multiline-union` | actions | - | `agents/reviewer-session.sh` | - |

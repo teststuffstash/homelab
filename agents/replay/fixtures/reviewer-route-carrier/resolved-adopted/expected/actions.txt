@@ -1,0 +1,8 @@
+CALL curl -fsS --max-time 5 -H Content-Type: application/json -d {"stack":"test","task":"review-test-project-42","role":"reviewer","session":"reviewer-test-project-42-r1","decorrelate_from":null,"labels":[],"urgency":null} http://proxy.test:8080/route
+CALL python3 $ROOT/agents/model_id.py --shell opencode-go/gpt-4o
+OUT → router(authoritative): dispatch opencode-go/gpt-4o [class,capacity] (static would be: sonnet)
+OUT MODEL='opencode-go/gpt-4o'
+OUT MODEL_RAIL='opencode-go'
+OUT MODEL_HARNESS='claude'
+OUT GO_SERVED=1
+RC 0

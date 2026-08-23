@@ -1,0 +1,10 @@
+# reviewer-route-carrier-rail-not-go — the /route response carries .resolved but the rail
+# is "anthropic-subscription" (not "opencode-go"). GO_SERVED=0. model_id.py re-derives
+# the canonical values from MODEL (which was set to "claude/sonnet" by the router decision).
+name: reviewer-route-carrier-rail-not-go
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:route-request
+  - file:post.sh
