@@ -154,6 +154,25 @@ def parse_provenance(body, repo, self_num, root_num=None):
     return None
 
 
+ROUND_RE = re.compile(r"""round[=\s:"']+(\d+)""", re.IGNORECASE)
+
+
+def round_evidence(repo, number):
+    """Max round + dispatch count from the issue's durable machine markers (ADR-103/#210):
+    the agent-summary comment's `<!-- agent-event kind=dispatch -->` claim lines carry
+    "(round N)", AGENT_STRIKE comments carry round=N, old-shape stats comments carry the word
+    too. Deterministic (content-derived ints, no timestamps). None when no ride evidence —
+    absent is absent, never 0 (the #348 honesty rule)."""
+    rounds, dispatches = [], 0
+    for c in gh_json_lines(f"repos/{repo}/issues/{number}/comments"):
+        body = c.get("body") or ""
+        dispatches += body.count("<!-- agent-event kind=dispatch")
+        if ("<!-- agent-event" in body or body.startswith("AGENT_STRIKE:")
+                or "AGENT_RUN_STATS" in body or "picking this up" in body):
+            rounds += [int(m) for m in ROUND_RE.findall(body)]
+    return (max(rounds) if rounds else None), dispatches
+
+
 def fetch(repo, number, with_deps=True):
     nodes, edges = {}, []
     root_id = node_id(repo, number)
@@ -171,10 +190,13 @@ def fetch(repo, number, with_deps=True):
             for o in prov["origins"]:
                 edges.append({"from": o, "to": nid, "type": "harvest",
                               "via_pr": prov["via_pr"], "kind": prov["kind"]})
+        rmax, rdisp = round_evidence(r, n)
         nodes[nid] = {
             "id": nid,
             "repo": r,
             "number": n,
+            "rounds": rmax,
+            "dispatches": rdisp,
             "title": issue.get("title", ""),
             "state": issue["state"],
             "state_reason": issue.get("state_reason"),
@@ -243,6 +265,18 @@ def esc(text, limit=48):
     return text.replace('"', "#quot;")  # mermaid's own entity escape — truncate FIRST
 
 
+def round_badge(n):
+    """' ·rN' when ride evidence exists (rN = max round; ·rN×D adds the dispatch count when it
+    exceeds the round — strike/c4c5 re-dispatches made visible). Empty when no evidence, so a
+    sprout-less clean node and a never-ridden node stay distinguishable by the badge's absence
+    vs r1."""
+    r = n.get("rounds")
+    if r is None:
+        return ""
+    d = n.get("dispatches") or 0
+    return f" \u00b7r{r}\u00d7{d}" if d > r else f" \u00b7r{r}"
+
+
 def render_mermaid(g):
     by_id = {n["id"]: n for n in g["nodes"]}
     sub_children = {}
@@ -256,7 +290,7 @@ def render_mermaid(g):
     def node_line(n, indent="    "):
         # shape is the secondary encoding beside color: open work = stadium, settled = rect,
         # the goal itself = subroutine box — state must never be color-alone
-        label = f'"#{n["number"]} {esc(n["title"])}"'
+        label = f'"#{n["number"]} {esc(n["title"])}{round_badge(n)}"'
         if n["status"] == "goal":
             shape = f"[[{label}]]"
         elif n["status"] in ("closed", "closed-skip", "bucket"):
@@ -314,9 +348,9 @@ def render_derivation(g):
     for n in g["nodes"]:
         if n["id"] in buckets:
             continue
-        label = f'"#{n["number"]} {esc(n["title"], 40)}"'
+        label = f'"#{n["number"]} {esc(n["title"], 40)}{round_badge(n)}"'
         if n["repo"] != g["root"].split("#")[0]:
-            label = f'"{n["repo"].split("/")[-1]}#{n["number"]} {esc(n["title"], 34)}"'
+            label = f'"{n["repo"].split("/")[-1]}#{n["number"]} {esc(n["title"], 34)}{round_badge(n)}"'
         shape = f"[[{label}]]" if n["status"] == "goal" else (
             f"[{label}]" if n["status"].startswith("closed") else f"([{label}])")
         out.append(f'    {mermaid_id(n["id"])}{shape}:::{n["status"].replace("-", "_")}')
