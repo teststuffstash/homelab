@@ -784,12 +784,17 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # per-stack coordinate loop (cron + doorbell edge) owns it, so scanning here too would double-run
   # (the #134 label-race class). The per-stack instance (SCAN_STACK == name) reaches this line only
   # for its own stack and proceeds. Graduation is retirable in one flag flip (claim loop.graduated).
+  # >>>REPLAY:doorbell-fanout-callsite>>>
   if [ -z "${SCAN_STACK:-}" ] \
      && [ "$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.graduated // false')" = "true" ]; then
     echo "  [$name] graduated — owned by its per-stack loop; skipped in the global scan" >&2
     # FU-144: skipped is no longer dropped — an edge-woken repo-dumb ring resolves here and
     # re-rings the stack's own loop (gates + rationale at the fan-out block above).
     fanout_graduated_stack "$name"
+  fi
+  # <<<REPLAY:doorbell-fanout-callsite<<<
+  if [ -z "${SCAN_STACK:-}" ] \
+     && [ "$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.graduated // false')" = "true" ]; then
     continue
   fi
   repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
