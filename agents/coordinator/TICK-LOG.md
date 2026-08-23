@@ -4795,3 +4795,22 @@ first live ADR-110 maintenance session before the ADR existed.
   catch). PR#793 round-2 title fix pushed. Go-latch roll persistence VERIFIED on #784's own roll.
   Misc: miss-ledger entry (local-clone origin push), claude-jail#2 (mono env block + wallet-reach +
   forgejo SSH), FU-095(b) back in scope (rides PR#793).
+
+## 2026-08-23 (G-A day 2 — corpus session, /design-agents continue)
+
+- G-A gate read: PR#789 (#779 capacity doorbell) approved + merged 16:26Z; proxy rolled with the
+  doorbell code, Go latch held 1 through the roll (persistence proven again), ArgoCD Synced/Healthy.
+  Organic doorbell wake on a real latch clear = soak watch (Go monthly-latched til Sep-13).
+- PR#793 round 3: the reviewer caught the harness-matrix addendum REVERSING ADR-107 decision (3)
+  against adr.md rule 2 — restructured as ADR-112 + Superseded-by marker; charter + FU-095 refs
+  synced. Awaiting re-review (self-merges on bot approval, sole-codeowner waiver).
+- CONDITION: private-repo hosted minutes ran OUT ~15:10Z (3000/3000 exactly — oracle-fleet 837 +
+  oracle-iac 849 + sleep-tracking 587 + snore-recorder 727; overage OFF per #698). Every hosted
+  update-pr-branch schedule run on the 4 private repos fails at job start (zero-step failures),
+  ~4/h, each drawing a report-only responder triage (subject-dedup held; no issues filed).
+  → COMMAND: Alertmanager silence a3628730 (alertname=GithubWorkflowRunFailed +
+  workflow=update-pr-branch, ends Sep-1) — sibling of 5400ed94, same #698 ruling. The in-cluster
+  updater (ADR-111 S7) is the SOLE server for private repos from 15:10Z: edge + */15 cron both
+  observed Succeeded, cron sweeps the stacks.json universe. This strengthens the #745 un-park
+  read — the hosted path structurally cannot service private repos until the reset.
+- Goal checkpoint ran machine-side: #795/#796 minted + queued (were harvest strays).
