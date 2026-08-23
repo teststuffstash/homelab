@@ -224,6 +224,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-optout/reviewer-optout` | suite | - | `-` | - |
 | `reviewer-touches/escapes-computed` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-none` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-touches/multiline-union` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/unavailable` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/undeclared` | actions | - | `agents/reviewer-session.sh` | - |
 | `route-request/labels` | actions | - | `agents/agent-session.sh` | - |
