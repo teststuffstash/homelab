@@ -30,6 +30,8 @@
   idiom breaks). Wrap multi-word probes in `bash -c '…'` or call binaries directly.
 - The jail `python3` has **no `yaml` module** — use `devbox run -- yq`.
 - Compose issue/PR bodies with `--body-file`, never inline `"$(…)"` interpolation.
+- `gh --jq` takes NO `--arg`/`--argjson` (those are jq flags); `gh pr view` has no `merged`
+  field — test `state == "MERGED"`.
 
 ## Write boundaries (the recipe-tier rules, jail edition)
 

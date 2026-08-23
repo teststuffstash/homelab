@@ -411,3 +411,52 @@ the durable what-each-is:
 Probe hygiene rules (script files, dry-run under the real interpreter, PROBE-FAIL over silent
 empty, kill leftovers by process before re-arming) stay in `meta-state.md` §Re-arm — they are
 per-session practice, re-read at bootstrap.
+
+### Meta-session probe & triage discipline (durable)
+
+Evicted from `meta-state.md` §Durable warnings 2026-08-23 (S4 #765 — non-transient content was
+squatting in the transient file). Each rule was paid for at least once; dates and the full
+incident detail are TICK-LOG's.
+
+- **Absence is the easiest thing to fake.** When a probe returns empty/absent and that absence
+  would change a conclusion, re-query the WHOLE object before believing it: `-o json` and read
+  the structure — never `jsonpath` for a field whose path you are inferring, never `| head` a
+  listing you are about to call complete. An empty result is a claim about your query, not
+  about the world (three self-inflicted instances in one night, 2026-08-08: a `head -5` hiding
+  a credential file; `spec.fixer` read at the wrong nesting; a native sidecar invisible to
+  `.spec.containers`).
+- **A firing-set transition is an event, not a measurement** — re-read the metric before
+  claiming a condition ended. And **a deploy can silence an alert for its whole `for:`
+  window**: restarting the emitting pod ends the old per-pod series and the `for:` timer
+  restarts from zero (SubscriptionWeeklyPoolLow sat at 0.92 while "cleared", 2026-08-07).
+  Hardening the class (`max_over_time` over restart gaps) is a stint-#762 sprout.
+- **`severity: info` alerts are SILENTLY SUPPRESSED in this cluster** — kube-prometheus-stack's
+  stock `InfoInhibitor` inhibit rule holds them `suppressed` in Alertmanager; they dispatch to
+  nothing (not the responder, not the Home Assistant webhook). Use `warning`. Tell:
+  `curl -s 'http://192.168.40.14:9093/api/v2/alerts?inhibited=true'` — Prometheus saying
+  `firing` is NOT evidence anyone was told. A lint signature for this is a stint-#762 sprout.
+- **A steady-state COUNTER cannot separate "at capacity" from "cannot work"** (`running: 4,
+  pending: 0` reads identically either way). Capacity claims need a THROUGHPUT signal: a
+  saturated pool has jobs RUNNING, a broken one has workers WAITING. (Also in the responder
+  prompt since `ecb74bb`.)
+- **A green surface is not a green outcome.** A workflow "failure" that already shipped its
+  artifact; a ride pod `Succeeded` with its harness dead and nothing committed. The status
+  field often answers a different question than the one asked — for a ride the durable signal
+  is the `AGENT_STRIKE:` comment on the issue (ride pods are GC'd in minutes, so a log probe's
+  silence proves nothing).
+- **Check the bypass ACTORS before calling anything a human gate.** A `required-approval`
+  ruleset whose only bypass is `OrganizationAdmin: always` is NOT a human gate — the jail
+  credentials ARE that admin (`gh pr merge --admin`). Applies to every platform-lane repo where
+  `reviewer.enabled=false` means no bot will ever approve. ⚠ Do NOT "fix" that by flipping
+  `reviewer.enabled=true` on the `platform` claim — it would also point the bot at homelab and
+  agent-coordinator, both tier-3.
+- **"Written is not applied" — the tell is always the CALLER, not the config.** A router class
+  only the worker launcher calls, a required check no workflow triggers on, a label description
+  that never reached GitHub. A deadline is what turns a plausible reading into a checked one.
+- **A reviewer that verifies code against ONE spec page is not verifying it against the
+  CONTRACT** — two agents reasoned correctly inside one page and reached a remedy a sibling
+  page forbids (circles#32, ruled 2026-08-06).
+- **An operator-lane PR has NO machine owner** — `changes-requested`/`merge-conflict` units are
+  `WORKER_AUTHOR`-scoped by design. The covering surfaces are `devbox run board` (review queue
+  + codeowner parks) and `meta-needs-attention.sh` clause 4; a stalled human PR is found by a
+  board sweep, never by the loop.
