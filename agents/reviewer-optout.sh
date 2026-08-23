@@ -103,7 +103,6 @@ if [ "$1" = "--lens-map" ]; then
   _map_repo="$2"
   if ! probe_claims; then
     say "claims read PROBE-FAILED (kubectl get $CRD) — lens posture is UNKNOWN; returning empty map (advisory for all lenses)."
-    echo "{}"
     exit 1
   fi
   printf '%s' "$CLAIMS" | jq -r --arg repo "$_map_repo" '

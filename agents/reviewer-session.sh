@@ -368,7 +368,7 @@ for l in \$LENSES; do
   if { printf '\n\n---\n\n'; curl -fsS --max-time 10 "\$LENS_BASE/\$l.md"; } >> "\$SYSFILE"; then
     if [ "\$_posture" = "blocking" ]; then
       printf '\n**POSTURE: blocking** — findings from this lens MAY determine the verdict.\n' >> "\$SYSFILE"
-      echo "→ lens attached: \$l (BLOCKING — \$LENS_MAP maps it)"
+      echo "→ lens attached: \$l (BLOCKING — \$_posture)"
     else
       echo "→ lens attached: \$l (advisory — FU-101)"
     fi

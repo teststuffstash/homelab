@@ -45,6 +45,12 @@ extract() {
     END { if (!saw_open || !saw_close) exit 3 }
   ' "$2" | sed 's/\\\$/$/g'
 }
+extract lens-posture-gate "$SESSION" > "$TMP/gate.sh" || {
+  echo "lens-posture-replay: sentinel >>>REPLAY:lens-posture-gate>>> missing from $SESSION" >&2
+  exit 3
+}
+[ -s "$TMP/gate.sh" ] || { echo "lens-posture-replay: gate block extracted EMPTY" >&2; exit 3; }
+
 extract lens-posture-handling "$SESSION" > "$TMP/handling.sh" || {
   echo "lens-posture-replay: sentinel >>>REPLAY:lens-posture-handling>>> missing from $SESSION" >&2
   exit 3
@@ -198,8 +204,15 @@ chmod +x "$BIN/kubectl"
 
 _go agent-runtime
 wantrc  "F1: fail-closed — exit 1"                              1
-eq      "F1: empty map on failure"                               "$(printf '%s' "$OUT" | tr -d '\n')" "{}"
+eq      "F1: empty stdout from raw optout (caller adds || echo {})" "$(printf '%s' "$OUT" | tr -d '\n')" ""
 wanterr "F1: PROBE-FAILED message"                               "PROBE-FAILED"
+
+# Gate test: the `|| echo "{}"` in the extracted sentinel provides the fallback
+section "2a — fail-closed gate: || echo {} fallback"
+LENS_MAP=""
+PROJECT="agent-runtime" HERE="$HERE" PATH="$BIN:$PATH" \
+  eval "$(cat "$TMP/gate.sh")" 2>/dev/null || true
+eq "G1: gate fallback to empty map on probe failure"             "${LENS_MAP:-}" "{}"
 
 # ── 3 ── Handling block: posture appended to sysfile ────────────────────────────────────────────
 section "3 — lens-posture-handling block (extracted from reviewer-session.sh PREP)"
