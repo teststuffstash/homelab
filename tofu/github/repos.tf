@@ -298,7 +298,7 @@ import {
 
 resource "github_repository" "homelab" {
   name         = "homelab"
-  description  = "Infrastructure-as-code home network — Talos Kubernetes (Proxmox + bare-metal), OPNsense, Cilium BGP, Longhorn, Home Assistant. Boot-from-git, no click-ops."
+  description  = "Agentic software delivery on its own Talos Kubernetes platform — research shapes goals, agents ride issues to CI-verified PRs, and production closes each goal validated or reverted. Boot-from-git, no click-ops."
   homepage_url = ""
   topics = [
     "ansible",
