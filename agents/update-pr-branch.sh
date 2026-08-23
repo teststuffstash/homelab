@@ -61,8 +61,8 @@ if [ -n "$pick" ]; then
   echo "updater[$REPO]: updating #$pick (oldest armed+BEHIND, FIFO)"
   if ! gh api -X PUT "repos/$REPO/pulls/$pick/update-branch" >/dev/null; then
     # 422 = conflict (or already-current race). Label it so triage sees it — the DIRTY labeler
-    # below re-derives this on later passes too. ⚠ unreplayed: the replay stubs cannot fail a
-    # single write (homelab#740, STUB_GH is run-global) — fixture this branch when #740 lands.
+    # below re-derives this on later passes too. Replayed: fixtures/updater `update-fail` row
+    # (per-call failure injection, STUB_GH_<slug> — homelab#740 / PR#759).
     echo "updater[$REPO]: update of #$pick failed (422/conflict?) — labeling merge-conflict; next pass retries"
     label_conflict "$pick"
   fi
