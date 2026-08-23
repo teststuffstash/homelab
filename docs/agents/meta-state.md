@@ -17,8 +17,12 @@ meant to avoid.)
   paths** — read `update-pr-edge-*` workflow logs for edge-serviced updates and the cron's
   CRON-SERVICED lines (silence there = the edge carries the load), and `gh run list` on the
   callers showing the hosted runs idle; then #745 deletes callers/reusable/org-secrets + FSM
-  anchor repoint. The #698 Alertmanager silence `5400ed94…` self-expires 2026-09-01 and needs
-  nothing. Label-identity decision recorded in-code: merge App stays issues-less,
+  anchor repoint. ⚠ EVIDENCE READ CHANGED 2026-08-23 ~15:10Z: the private-repo hosted minutes
+  ran OUT (3000/3000, overage OFF per #698) — every hosted caller run on the 4 private repos
+  fails at job start until Sep-1, so the in-cluster leg is their SOLE server now; the un-park
+  read becomes "no BEHIND stalls on private repos over a few days" (hosted-idle is no longer
+  evidence, it is forced). Silence `a3628730` (GithubWorkflowRunFailed × update-pr-branch, ends
+  Sep-1) mutes the failure noise — sibling of `5400ed94…` (both self-expire 2026-09-01). Label-identity decision recorded in-code: merge App stays issues-less,
   UPDATER_LABEL_TOKEN=coordinator-git.
 
 - **⚑ PICKUP (2026-08-20 ~06:00Z wind-down, night session closed on operator feedback — see the
