@@ -1,19 +1,25 @@
-# Issue #687 leg 2: Replay coverage for the 429-quota error_class classifier
+# Issue #815 / #804 (homelab): Replay coverage for the startup-config-death strike
+# signature in BOTH classifier branches — STATS path and raw-log fallback.
 #
 # THE CONTRACT:
-#   A runlog containing a 429 quota/rate-limit message flows through the classifier
-#   (agents/agent-session.sh the raw-log fallback branch) and asserts that error_class=quota
-#   reaches the AGENT_STRIKE line.
+#   The opencode binary rejects unknown config keys at startup (Configuration is invalid /
+#   Unrecognized key), causing the pod to die in under 15s at zero cost. Both classifier
+#   branches must map this signature to error_class=harness-death so the coordinator strikes
+#   the model instead of treating the round as "unknown" (which re-dispatches on the same
+#   broken config).
 #
-# CONDITION UNDER REPLAY. The classifier sits in the path where finalize never ran (no AGENT_RUN_STATS
-# line, pod died hard / wait timed out). The pod's status.reason is read via kubectl, and patterns
-# are grepped from the RUNLOG. A runlog with quota patterns triggers the quota error_class arm.
+# CONDITION UNDER REPLAY. The strike classifier sits in two branches of agent-session.sh:
+#   - STATS path (AGENT_RUN_STATS line exists): if exit_status classifies as "unknown", the
+#     run log is checked for the config-death signature. Must not over-trigger on clean logs.
+#   - Raw-log fallback (no AGENT_RUN_STATS): the pod's reason and run log are classified
+#     from scratch with the same signatures. DeadlineExceeded takes precedence over the
+#     config-death check (ordering witness).
 #
 name: strike-quota-classifier
-mode: actions
+mode: table
 source: agents/agent-session.sh
 parts:
   - file:bridge.sh
-  - block:strike-quota-classifier
+  - block:strike-classifier
   - block:strike-line-format
-  - file:cases.sh
+  - file:post.sh
