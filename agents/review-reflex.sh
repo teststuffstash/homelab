@@ -80,6 +80,9 @@ if [ -z "${REPOS// /}" ]; then
   exit 0
 fi
 # <<<REPLAY:slo-teeth-filter<<<
+# The egress proxy — same value subscription-latch.sh/agent-session.sh use for POST /route,
+# GET /report/latest (the #803 decorrelate-from lookup at L319), /report, etc.
+PROXY_URL="${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}"
 K="${REVIEW_CONCURRENCY:-2}"
 NS="${REVIEWER_NS:-${LOOP_NS_ARG:-agent-coordinator}}"
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot identity
