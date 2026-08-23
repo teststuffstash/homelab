@@ -232,6 +232,13 @@ jobs:
       - name: Docs graph lint (devbox run docs-graph-lint)
         run: devbox run docs-graph-lint
 
+      # Mermaid parse-lint: every tracked ```mermaid block through mermaid's own parser (jsdom,
+      # no browser) — a diagram GitHub refuses to render fails HERE, not on a reader
+      # (docs/README.md §Conventions; the docs/agents/README.md worked-example was unrenderable
+      # for weeks). ~3s npm ci + ~1.5s parse; deps pinned in scripts/mermaid-lint/package-lock.json.
+      - name: Mermaid parse lint (devbox run mermaid-lint)
+        run: devbox run mermaid-lint
+
       # Mirror pre-warm (#80): when THIS PR changes the runner-image pin, pull the new image's
       # blobs through the LAN ghcr mirror once while CI gates the merge — the ≤maxRunners node
       # herd after the ArgoCD flip then hits a warm cache (pure reads), instead of N concurrent
