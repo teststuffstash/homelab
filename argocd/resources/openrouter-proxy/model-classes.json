@@ -53,6 +53,15 @@
    ],
    "tier": "dispatch"
   },
+  "goal-decompose": {
+   "_comment": "M10 goal-lane reasoning class — goal-decompose/goal-checkpoint items need opus-tier on the subscription rail (operator ruling 2026-08-05). Replaces the launcher-side case map; consumed by coordinator-session.sh calling resolve-model.sh with --class goal-decompose. The claim's coordinatorModel passes through as the --model override.",
+   "chain_source": "stack",
+   "reasoning": true,
+   "rails": [
+    "subscription"
+   ],
+   "tier": "heavy"
+  },
   "regular": {
    "_comment": "ADR-104 research BANDS — four classes whose only job is to select a curated pool below (`class` + `slot` + `jitter:false` = the draw verb). They carry no chain: a draw never falls through to the rotation path, because a substituted arm is a corrupted experiment (§M13).",
    "pool": "regular",
