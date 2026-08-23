@@ -1923,6 +1923,10 @@ class Proxy(BaseHTTPRequestHandler):
                 note += "+zen-auth-swap" if zen_leg else "+go-auth-swap"
             elif or_leg:
                 # or_leg: resolve ref-auth and guard against subscription oauth egress
+                # Copy the inbound Authorization header into allowed BEFORE resolving the ref
+                auth_v = next((v for k, v in self.headers.items() if k.lower() == "authorization"), None)
+                if auth_v:
+                    allowed["Authorization"] = auth_v
                 note += _inject_ref_auth(allowed)  # This mutates allowed["Authorization"]
                 # Check if the resolved auth is a subscription oauth token — refuse it loudly
                 auth_k = next((k for k in allowed if k.lower() == "authorization"), None)
@@ -4156,6 +4160,7 @@ data: [DONE]
             parsed = json.loads(body) if body else {}
             seen["or_translate"] = {
                 "path": self.path,
+                "auth": self.headers.get("Authorization"),
                 "model": parsed.get("model") if body else None,
                 "body_raw": body,
                 "messages": parsed.get("messages") if body else None,
@@ -4301,6 +4306,37 @@ data: [DONE]
               f"or-translate tool_result: forwarded request has role='tool' message with tool_call_id")
     except (ValueError, TypeError):
         check(False, "or-translate tool_result: forwarded body is valid JSON")
+
+    # Test 2c: credential header guard — ref-auth resolution and oauth-guard verification
+    # Mock a ref resolution: agent-ns/openrouter-key resolves to the test key
+    _refs["agent-ns/openrouter-key"] = (time.time() + 3600, {
+        "key": "test-or-key-resolved",
+        "guardrail": "",
+        "kind": "openrouter",
+        "has_cr": False,
+    })
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/openai/gpt-5",
+                  "max_tokens": 4096,
+                  "messages": [{"role": "user", "content": "Test ref-auth"}],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:agent-ns/openrouter-key"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    check(r.status == 200, "or-translate ref-auth: 200")
+    o = seen.get("or_translate") or {}
+    # Assert the OpenRouter stub received an Authorization header
+    check(o.get("auth") is not None, f"or-translate ref-auth: Authorization header forwarded (got {o.get('auth')})")
+    # Assert it's not the raw inbound ref value, and not the raw oauth — must be the resolved key
+    check(o.get("auth") == "Bearer test-or-key-resolved",
+          f"or-translate ref-auth: Authorization is resolved key, not raw ref (got {o.get('auth')})")
+    # Clean up the mocked ref
+    _refs.pop("agent-ns/openrouter-key", None)
 
     # Test 3: /chat/completions path with openrouter/ model — should NOT translate (only /anthropic/ path)
     seen.clear()
