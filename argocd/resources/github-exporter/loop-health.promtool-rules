@@ -75,7 +75,7 @@ groups:
           summary: GitHub is billing real money this month
           description: 'Month-to-date net spend is ${{ $value | printf "%.2f" }} (expected $0 — everything inside included usage). Break it down by SKU: sum by (product, sku, repo) (github_billing_net_amount).'
       - alert: GithubActionsMinutesHigh
-        expr: sum(max without (instance, pod) (max_over_time(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*", visibility="private"}[10m]))) > 2400
+        expr: sum(max without (instance, pod) (max_over_time(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*", visibility="private"}[10m]))) > scalar(max(clamp_min(day_of_month() / days_in_month() * 3000, 300)))
         for: 1h
         labels:
           severity: warning

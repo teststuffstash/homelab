@@ -1336,3 +1336,42 @@ tests:
               severity: warning
             exp_annotations:
               summary: "GitHub Actions hosted minutes at 80% of included quota"
+
+  # ── GithubActionsMinutesHigh — pro-rated burn: day-1 floor, mid-month runaway, late-month on-pace ──
+  # FU-183/#746: the flat 2400 threshold is replaced with a pro-rated burn expression that fires
+  # when month-to-date usage exceeds the elapsed share of quota: usage > (day_of_month / days_in_month)
+  # * 3000, with a 300-minute floor so one busy first day does not trip it. The three cases below
+  # exercise the floor, the mid-month runaway, and the late-month on-pace green.
+  - interval: 1m
+    name: "busy day-1 usage under the 300-minute floor does not fire"
+    input_series:
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "200+0x120"
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: GithubActionsMinutesHigh
+        exp_alerts: []
+  - interval: 1m
+    name: "mid-month runaway usage fires (1500 by day 8 exceeds pro-rated 774)"
+    input_series:
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "1500+0x20000"
+    alert_rule_test:
+      - eval_time: 169h
+        alertname: GithubActionsMinutesHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+            exp_annotations:
+              summary: "GitHub Actions hosted minutes at 80% of included quota"
+              description: "1500 hosted-runner minutes this month (3000 included, resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\"})."
+  - interval: 1m
+    name: "late-month on-pace usage does not fire (2600 by day 28 is under pro-rated 2709)"
+    input_series:
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "2600+0x40000"
+    alert_rule_test:
+      - eval_time: 649h
+        alertname: GithubActionsMinutesHigh
+        exp_alerts: []
