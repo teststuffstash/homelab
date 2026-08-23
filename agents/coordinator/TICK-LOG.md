@@ -4661,3 +4661,20 @@ first live ADR-110 maintenance session before the ADR existed.
   (cutover; blockedBy 744 + soak) + #746 (FU-183 expr, independent), native sub-issue +
   blockedBy edges verified. Direct: FU-183 pointer update, ROADMAP work-map S7 row, meta-state
   park bullet (un-park = weekly-window headroom, ~2 days).
+
+## 2026-08-23 — operator session: CV description + mermaid lint + stint S7 launch (session 1)
+- Operator asked for a better homelab repo description (CV prep) + the unrenderable
+  docs/agents/README.md diagram + "mermaid lint in CI". Full design-agents corpus loaded.
+- Direct: repos.tf description (operator pick #3 — agentic-delivery scope), the §What-this-is
+  issue-in/PR-out sentence scoped to the fixer lane (the misread's source), mermaid diagram
+  `#59;` fix (verified against mermaid 11's parser — all 24 repo blocks).
+- PR#753 MERGED: mermaid-lint (parse-only, jsdom, deps lockfile-pinned, nodejs_22 into devbox)
+  + ci.yaml step landed operator-direct after merge. Measured ~3s npm ci + ~1.5s parse — runs
+  unconditionally; changed-paths gate is the fallback if CI disagrees.
+- **Stint S7 LAUNCHED** (operator go; subscription latch clean): #742 updater script +
+  7-row replay table (PR#755), #743 exporter behind-edge (PR#757 MERGED), #744 Sensor/cron/ESO
+  manifests (PR#758). #746 queued to the cluster loop. #745 parked on the servicing soak
+  (meta-state carries the un-park read). Decisions made in-flight: label writes ride
+  coordinator-git as UPDATER_LABEL_TOKEN (merge App stays issues-less per its documented
+  absent:), updater-git generator omits repositories: (installation-tracking, no 422 trap),
+  422→label branch unreplayable until #740 (noted at the branch).
