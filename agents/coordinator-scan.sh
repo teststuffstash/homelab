@@ -614,10 +614,7 @@ capacity_fanout_ring() {   # $1 = stack, $2 = rail — re-ring a graduated stack
 }
 capacity_fanout_stacks() {   # $1 = rail — re-ring every graduated stack for a capacity transition
   local stack_name
-  [ -n "$SPAWN" ] || return 0
-  [ -z "${SCAN_STACK:-}" ] || return 0   # per-stack instances never fan out
-  [ -n "$DISPATCH_PHASE_WAKE" ] || DISPATCH_PHASE_WAKE="$(dp_wake)"
-  case "$DISPATCH_PHASE_WAKE" in edge*) ;; *) return 0;; esac  # capacity rings from edges only
+  fanout_eligible || return 0
   for stack_name in $(stacks_json | jq -r '.stacks[]|select(.graduated // false)|.name'); do
     capacity_fanout_ring "$stack_name" "$1"
   done

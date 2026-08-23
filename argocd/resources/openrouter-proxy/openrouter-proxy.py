@@ -2738,6 +2738,7 @@ def _self_test() -> int:
     ZEN_UPSTREAM = "http://127.0.0.1:18194/zen"
     ZEN_KEY = "zen-test-key"
     PORT = 18190
+    os.environ["AGENT_LOOP_WEBHOOK"] = "http://127.0.0.1:18195"
 
     def stub(name, port):
         h = type(f"Stub_{name}", (Stub,), {"name": name})
@@ -2815,6 +2816,33 @@ def _self_test() -> int:
 
     zen_stub_server = ThreadingHTTPServer(("127.0.0.1", 18194), ZenStub)
     threading.Thread(target=zen_stub_server.serve_forever, daemon=True).start()
+
+    # Agent loop webhook stub (records capacity doorbell calls for testing)
+    doorbell_rings = {}
+    class WebhookStub(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *_):
+            pass
+
+        def do_POST(self):
+            if self.path == "/coordinate":
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length) if length else b""
+                parsed = json.loads(body) if body else {}
+                source = parsed.get("source")
+                if source == "capacity":
+                    key = (parsed.get("rail"), parsed.get("stack"))
+                    doorbell_rings[key] = doorbell_rings.get(key, 0) + 1
+                self.send_response(204)
+                self.end_headers()
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    webhook_stub_server = ThreadingHTTPServer(("127.0.0.1", 18195), WebhookStub)
+    threading.Thread(target=webhook_stub_server.serve_forever, daemon=True).start()
+
     threading.Thread(target=main, daemon=True).start()
     time.sleep(0.5)  # let server start
 
@@ -3155,6 +3183,57 @@ def _self_test() -> int:
     _go_response.pop("status", None)
     _go_response.pop("retry_after", None)
     _go_reset_latch()
+
+    print("\n=== Capacity doorbell transition tests (issue#779) ===")
+    # Verify the doorbell rings once per limited→ok transition, held once per scan while latched.
+    # The edge detection relies on rung_edge: limited→ok rings once; ok→ok and limited→limited ring zero.
+
+    # D1: limited→ok rings once (epoch expiry path)
+    doorbell_rings.clear()
+    with _go_cap_lock:
+        _go_cap["until"] = 1.0  # just expired
+        _go_cap["reason"] = "observed-429"
+        _go_cap["code"] = 429
+        _go_cap["rung_edge"] = False
+    _check_go_expiry()
+    check(doorbell_rings.get(("go", None), 0) == 1, f"doorbell: limited→ok transition rang (got {doorbell_rings})")
+
+    # D2: ok→ok (already cleared) never rings
+    doorbell_rings.clear()
+    with _go_cap_lock:
+        _go_cap["until"] = 0.0
+        _go_cap["reason"] = ""
+        _go_cap["code"] = 0
+        _go_cap["rung_edge"] = False
+    _check_go_expiry()
+    check(doorbell_rings.get(("go", None), 0) == 0, f"doorbell: ok→ok transition never rings (got {doorbell_rings})")
+
+    # D3: limited→limited (re-latched before clear) never rings
+    doorbell_rings.clear()
+    with _go_cap_lock:
+        _go_cap["until"] = time.time() + 60
+        _go_cap["reason"] = "observed-429"
+        _go_cap["code"] = 429
+        _go_cap["rung_edge"] = False
+    _check_go_expiry()
+    check(doorbell_rings.get(("go", None), 0) == 0, f"doorbell: limited→limited never rings (got {doorbell_rings})")
+
+    # D4: re-latch then clear rings again (rung_edge reset by re-latch)
+    doorbell_rings.clear()
+    with _go_cap_lock:
+        _go_cap["until"] = time.time() + 60  # re-latch
+        _go_cap["reason"] = "observed-429"
+        _go_cap["code"] = 429
+        _go_cap["rung_edge"] = False  # edge marker resets on new latch
+    with _go_cap_lock:
+        _go_cap["until"] = 1.0  # then expire
+        _go_cap["rung_edge"] = False
+    _check_go_expiry()
+    check(doorbell_rings.get(("go", None), 0) == 1, f"doorbell: re-latch + clear re-arms the edge (got {doorbell_rings})")
+
+    # Clean up latch state for subsequent tests
+    with _go_cap_lock:
+        _go_cap["until"], _go_cap["reason"], _go_cap["code"] = 0.0, "", 0
 
     print("\n=== Only-free guardrail test (Go via /anthropic path) ===")
     # Test 9: only-free guardrail MUST deny Go-leg requests through /anthropic path.

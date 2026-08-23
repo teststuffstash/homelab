@@ -32,5 +32,24 @@ fanout_eligible && fanout_ring sleep "changes-requested|snore-recorder|pr-7"
 echo "REACHED: ring refused — loud, cron named as owner"
 reset_scan "edge|1786464880"
 CURL_RC=7 fanout_stack circles
+CURL_RC=""
+
+echo "REACHED: capacity fan-out — edge wake rings every graduated stack"
+reset_scan "edge|1786464880"; SCAN_RING_NS=""; SPAWN=true
+capacity_fanout_stacks go
+
+echo "REACHED: capacity fan-out — cron wake never fans out"
+reset_scan "cron|"; SCAN_RING_NS=""; SPAWN=true
+capacity_fanout_stacks go
+
+echo "REACHED: capacity fan-out — per-stack instance never fans out"
+reset_scan "edge|1786464880"; SCAN_RING_NS=""; SCAN_STACK=circles; SPAWN=true
+capacity_fanout_stacks go
+SCAN_STACK=""
+
+echo "REACHED: capacity fan-out — latched (held, said once)"
+reset_scan "edge|1786464880"; SCAN_RING_NS=""; LATCH=held; SPAWN=true
+capacity_fanout_stacks go
+LATCH=clear
 
 echo "REACHED: end"

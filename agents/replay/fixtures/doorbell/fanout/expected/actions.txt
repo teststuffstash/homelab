@@ -3,6 +3,8 @@ CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"stack":"sleep",
 CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"stack":"sleep","loop_ns":"sleep-agents","unit":"-"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
 CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"stack":"sleep","loop_ns":"sleep-agents","unit":"changes-requested|snore-recorder|pr-7"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
 CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"stack":"circles","loop_ns":"circles-agents","unit":"-"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
+CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"source":"capacity","rail":"go","stack":"circles","loop_ns":"circles-agents"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
+CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"source":"capacity","rail":"go","stack":"sleep","loop_ns":"sleep-agents"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
 OUT REACHED: edge-woken, repo scope all — every graduated stack rings
 OUT   fan-out: doorbell rung for graduated stack circles ({"stack":"circles","loop_ns":"circles-agents","unit":"-"})
 OUT   fan-out: doorbell rung for graduated stack sleep ({"stack":"sleep","loop_ns":"sleep-agents","unit":"-"})
@@ -15,6 +17,13 @@ OUT   fan-out: SKIPPED — subscription latched; a woken scan would only re-defe
 OUT REACHED: unit delegation — the fast-path forwards the unit in the ring
 OUT   fan-out: doorbell rung for graduated stack sleep ({"stack":"sleep","loop_ns":"sleep-agents","unit":"changes-requested|snore-recorder|pr-7"})
 OUT REACHED: ring refused — loud, cron named as owner
+OUT REACHED: capacity fan-out — edge wake rings every graduated stack
+OUT   capacity-fan-out: doorbell re-rung for graduated stack circles rail go ({"source":"capacity","rail":"go","stack":"circles","loop_ns":"circles-agents"})
+OUT   capacity-fan-out: doorbell re-rung for graduated stack sleep rail go ({"source":"capacity","rail":"go","stack":"sleep","loop_ns":"sleep-agents"})
+OUT REACHED: capacity fan-out — cron wake never fans out
+OUT REACHED: capacity fan-out — per-stack instance never fans out
+OUT REACHED: capacity fan-out — latched (held, said once)
+OUT   fan-out: SKIPPED — subscription latched; a woken scan would only re-defer (cron backstop owns it)
 OUT REACHED: end
 ERR   fan-out: RING FAILED for circles — its */30 cron backstop owns the edge (a defect if recurring, 017790c)
 RC 0
