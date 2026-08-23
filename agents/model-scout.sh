@@ -355,10 +355,16 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
       (.exit_status // "") as $s
       | (.error_class // "") as $ec
       | if $s == "no-artifact" or $s == "clean" then "clean"
-        elif $s == "failed" then (if $ec != "" then $ec else "unknown" end)
-        elif $s == "" then (if $ec != "" then $ec else "unknown" end)
-        elif (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s
-        else $s end' 2>/dev/null)" || v=""
+      elif $s == "failed" then
+        # NEW: platform-artifacts (v2 runner death, zero spend, no model blame)
+        # when error_class is "nonzero-exit-1" with no other context, classify as void
+        # rather than leaking a bare generic exit code as model evidence.
+        if $ec == "nonzero-exit-1" then "void"
+        elif $ec != "" then $ec
+        else "unknown" end
+      elif $s == "" then (if $ec != "" then $ec else "unknown" end)
+      elif (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s
+      else $s end' 2>/dev/null)" || v=""
     [ -n "$v" ] || v="unknown"
     printf '%s\n' "$v"
   }
@@ -380,7 +386,9 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     verdict="$(scout_classify "$(scout_canary_ride "$id" "$is_free")")"
     # Contradiction rule (leg 4): canary-fail ∧ benchmark-capable ⇒ suspect-infra, retry once,
     # else `inconclusive` — never `failed`. An UNBENCHED model's typed failure stands as-is.
-    if [ "$verdict" != "clean" ] && [ "$benched" = "true" ]; then
+    # "void" verdicts are platform artifacts (v2 runner death, zero spend) — they do NOT trigger
+    # the contradiction rule, since they are not model failures.
+    if [ "$verdict" != "clean" ] && [ "$verdict" != "void" ] && [ "$benched" = "true" ]; then
       log "canary: $id — contradiction (suspect-infra: bench-capable, rail not clean: ${verdict}) — retrying once"
       retry_v="$(scout_classify "$(scout_canary_ride "$id" "$is_free" retry)")"
       if [ "$retry_v" = "clean" ]; then
