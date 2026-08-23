@@ -359,7 +359,10 @@ else
   fi
   if [ "$_tc_ok" = "1" ]; then
     ISSUE_BODY=$(gh api "repos/$REPO_SLUG/issues/$ISSUE" --jq '.body // ""' 2>/dev/null || true)
-    DECLARED_TOUCHES=$(printf '%s' "$ISSUE_BODY" | grep -iE '^[ \t]*touches:[ \t]*' | sed -E 's/^[ \t]*touches:[ \t]*//i' | tr -d '\r' | head -1)
+    # UNION of every Touches: line (S6 sprout, #716: a later line supersedes/widens the original
+    # footprint — head -1 ran the check against the stale first line and self-reported false
+    # escapes on PR#759; the scan's jq `scan(...) | join(",")` has always been the union).
+    DECLARED_TOUCHES=$(printf '%s' "$ISSUE_BODY" | grep -iE '^[ \t]*touches:[ \t]*' | sed -E 's/^[ \t]*touches:[ \t]*//i' | tr -d '\r' | paste -sd, -)
     ESCAPES_RAW=$(touches_check "$DECLARED_TOUCHES" "${CHANGED:-}" 2>/dev/null) || { _tc_ok=0; ESCAPES_RAW=""; }
   fi
   if [ "$_tc_ok" = "1" ]; then

@@ -1,0 +1,22 @@
+# S6 sprout (#716, from PR#759's false escapes) — multi-line Touches: is read as a UNION.
+#
+# CONDITION UNDER REPLAY. PR closes issue #123 whose body carries TWO `Touches:` lines — the
+# original footprint plus a later superseding/widening line (the multi-consumer issue shape,
+# homelab#740's second-consumer line being the live instance). The PR diff touches paths covered
+# only by the UNION of the two lines.
+#
+# THE CONTRACT:
+#   1. DECLARED_TOUCHES aggregates EVERY `Touches:` line (comma-joined), mirroring the scan's
+#      `scan("(?mi)^...touches:...") | join(",")` — the two readers must not diverge (ADR-097)
+#   2. No escapes are reported: a path covered by ANY declared line is covered
+#
+# RED-CASES the head -1 parse (pre-fix): only the first line was read, so `docs/test.md`
+# self-reported as an escape and the reviewer flagged a false block (PR#759's shape).
+#
+# Parts: bridge.sh (seams: ISSUE, CHANGED, gh) + block:reviewer-touches-check
+name: reviewer-touches-multiline-union
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-touches-check
