@@ -622,8 +622,11 @@ the block needs pruning, not more headings.
       injected, loud degrade — #763/PR#768); meta-state durable-warnings eviction (#765);
       homelab CLAUDE.md split into facts + `agents/jail-seat-card.md` (#764/PR#773 — **parked
       for the operator's read**). **Next:** the operator lands/reworks PR#773; claude-jail
-      implements the bootstrap composition (claude-jail#1 — cat container card + seat card,
-      e.g. into `CLAUDE.local.md`); archive when both land. Relates FU-114, ADR-094.
+      implements the two-recipe composition (claude-jail#1 — mono: container card + seat card
+      → `/workspace/homelab/CLAUDE.local.md`; stack: container card + STACK_* env card, NO
+      seat card); then the fleet CLAUDE.md slim-down (12-repo inventory + tiering: the
+      claude-jail#1 thread, 2026-08-23). Archive when the homelab pieces land; the fleet tail
+      rides the inventory. Relates FU-114, ADR-094.
 
 - [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
       once I have more data and cleaned up the specs").** Write-up:
