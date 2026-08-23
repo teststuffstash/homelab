@@ -45,7 +45,7 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 | dispatch-on-event | reviewable transition (exporter edge) | reviewer | + lenses (FU-101) |
 | dispatch-on-schedule | cron (level-triggered) | scout; retro | prober (FU-102), audit-pass (FU-101 e-ITS) |
 | dispatch-on-alert | Alertmanager firing | responder v2 (triage-first, GitOps-verbs) | remediation whitelist; selfQueue |
-| dispatch-on-goal | human-queued `goal` issue | researcher (first mode proven E2E 2026-07-27 — sleep spec PR #38) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
+| dispatch-on-goal | a human-queued mission (research) / Goal issue | researcher (first mode proven E2E 2026-07-27 — sleep spec PR #38) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
 
 ## Live roles
 
@@ -274,25 +274,25 @@ tier allowed, dual-model worth it) are FU-095's.
   Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPS both
   resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
   none of this shell).
-- **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (human-queued
-  `goal` issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
+- **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (a human-queued
+  MISSION issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
   spec PRs through the codeowner gate. **Boundary is the new piece: open-web egress** — a
   `research` egress profile (proxy-logged) or claude-harness server-side WebSearch; safe because
   the pod holds no cluster creds and a spec-branch-only git token. Consumers in order: sleep
   spec retrofit (FU-095 prerequisite), IdP greenfield (whose EITS output seeds the e-ITS lens).
   **First mode BUILT 2026-07-27:** sleep-tracking `.agents/research.yaml` (recipe: specs/-only
   boundary, un-armed PR = the human gate until a CODEOWNERS ruleset exists, FU-069 breaker),
-  `goal` label + goal issue sleep-tracking#36, claim `claudeTier: true` (sleep-iac#21), egress =
+  the then-`goal` label (retired, FU-163) + mission issue sleep-tracking#36, claim `claudeTier: true` (sleep-iac#21), egress =
   claude server-side WebSearch (no dial change — WebFetch stays blocked and the brief says so).
   Dispatch is operator-manual until FU-090(c) graduates; git token is the standing per-repo
   broker token (branch-scope narrowing = an open hardening dial). **Proven E2E 2026-07-27**
   (sleep spec PR #38: 17 ⚖ + 9 suspected bugs, dual-model reviewed, human-gated). The un-armed
   gate is now launcher-owned: `--no-arm` auto-derives from a `research*` recipe →
   `AGENT_ARM_PR=0` (agent-runtime), and the C9 re-arm belt skips `research/*` branches.
-  ⚠ Vocabulary (2026-08-10): the dispatch label is `goal` for historical reasons, but a research
-  MISSION is not an ADR-102 Goal — research PRECEDES the goal (it prepares the contract the Goal
-  then implements). Process home: [`research-and-specs.md`](research-and-specs.md); the rename is
-  FU-163's sweep.
+  Vocabulary (FU-163, rename executed 2026-08-23): a research MISSION is not an ADR-102 Goal —
+  research PRECEDES the Goal (it prepares the contract the Goal then implements). The historical
+  bare `goal` dispatch label no longer exists and never had a machine reader; `mission` is the
+  reserved future label. Process home: [`research-and-specs.md`](research-and-specs.md).
 - **infra-fixer** (FU-106) — **LIVE** — the -iac devops role. Works the **-iac wrapper layer** (charts stay
   target-agnostic); input = `values.schema.json` diff (the typed infra delta), fulfillment =
   enriched **bump PR** (chart pin + claim change in ONE -iac commit — atomic at the deploy
