@@ -58,20 +58,28 @@ meant to avoid.)
 - **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
   buildout → then stacks.** The forward plan lives in **ROADMAP §The platform work map**
   (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
-- **⚑ G-A LAUNCHED 2026-08-23 (~13:0xZ, this corpus session — operator "Start G-A" + the
-  recorded unpause; the launch preceded the Mon 08-24 05:00Z retro fire by operator order, so
-  the retro post-fire read is STILL the next session's first item).** Goal = **homelab#775**
-  (`Budget: 17` = the loaded OR credit; master-lane children, no goal branch — the #278 shape,
-  second datum). Children #776/#516/#777/agent-runtime#81/#778/#779/#780/#781/#782 queued
-  (blockedBy edges: #516,#780,#781,#782 ← #776; #780 also ← #516), #783 = the FU-179 strike
-  sitting (seat-lane, unqueued). Checkpoint-minted tail (NOT authored): claim reshape · P4
-  flip · legacy deletion sweep · per-role cost attribution. Platform doorbell rung at launch.
-  **OR-budget ruling stands: losing ALL of the ~$17 during G-A is acceptable; workers STAY on
-  PR#715 paid-OR flash (revert ~09-03/fixup-end/depletion).** Go rail monthly-latched → #778's
-  Go cells defer 🧊 until Sep-13. Watch items: child PRs park at the codeowner gate for corpus
-  sessions (gate reads = the session duty); #783 wants a routing sitting. Fleet CLAUDE.md
-  slim-down is DISPATCHED to the main jail session (completion comment lands on claude-jail#1
-  — no homelab tracker debt).
+- **⚑ G-A DAY-1 CLOSE (launched + 5 children DONE in one session, 2026-08-23; retro post-fire
+  read Mon 08-24 05:00Z stays the next session's FIRST item).** Goal = **homelab#775**
+  (`Budget: 17` = the loaded OR credit; #278 shape: master-lane children, jail-decomposed,
+  never queued; bucket #787 auto-created). DONE: #776 (carrier, PR#784), agent-runtime#81
+  (PR#82 + #785 pin), #777 (accounting, PR#786), #782 (wiring, PR#788 — a REAL FU-088
+  dual-rail regression caught+fixed in review), #778's pilot half. IN CYCLE: #789 (#779
+  capacity doorbell) · PR#793 (ADR-107-addendum docs, round 2 pushed, self-merges) · PR#794
+  (#778 salvage+void fixture, armed, bot-approval completes it — author=sole-codeowner waiver).
+  QUEUED: #516, #780, #781 (wiring), #791 (proxy OR-translation), #792 (opencode first-party),
+  #778 residue re-rides the normal lane post-#794. **ADR-107 ADDENDUM (operator, in-session):
+  harness = a MATRIX — claude+opencode full-support, scout probes 3 harnesses/candidate with a
+  ~1h/2h retry ladder** (adr.md + charter title reworded on PR#793). **Fan-out pilot RAN +
+  CLOSED (operator): findings ledger = the #778 thread** (recipe path dispatcher-side ·
+  rounds-as-arms · ephemeral-tier toleration needed · FU-042 wedge on pending arms · opencode
+  bare `-m` = the dead-canary root cause (A/B-proven) · nemotron fabricates delivery (salvaged
+  PR#794) · citation-forced briefs for cheap reviewers · time-delta = fan-out viable).
+  OPERATOR-PENDING: the #783 strike ruling (memo posted: proposal = retire the env) · the A5
+  second-reviewer-App question (evidence route = shadow re-reviews, `--rail` flag on
+  re-review.sh unbuilt). Harvest strays #795/#796 await the goal checkpoint. laguna r4 pod was
+  left running to natural terminal (~$0, 4h key). **OR-budget ruling stands (paid-flash
+  through G-A, revert ~09-03/fixup-end/depletion); Go latched til Sep-13 (roll-persistence
+  VERIFIED).** claude-jail#2 filed: mono per-session env block + wallet-reach + forgejo SSH.
 - **minutark.ee / oracle-iac#351** — OPEN, oracle parked (operator 2026-08-11); pick up at
   unpark. Acceptance = drift-free re-plan through the two-zone token. ⚠ `dig +short` wraps long
   DS digests — `tr -d ' '` before grepping.
