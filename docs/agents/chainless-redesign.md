@@ -5,7 +5,8 @@ accepted in principle; build NOT started.** This doc owns the redesign's decisio
 ledger, the OpenCode Go rail evidence, and the build plan — so the direction survives any one
 session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (§M8–M13) and the
 claim by [`agentstack.md`](agentstack.md); this doc records what CHANGES in each and why. The
-decision record is **ADR-107**; the day's probe evidence is TICK-LOG 2026-08-13.
+decision record is **ADR-107** (decision 3 superseded by **ADR-112**, the harness matrix); the
+day's probe evidence is TICK-LOG 2026-08-13.
 
 Trigger: the Anthropic 7d window at 87–89% while the router could steer nothing that mattered —
 67% of the pool is the jail seat, ~28% platform roles that never call `/route` (§M10), and the one
@@ -22,8 +23,8 @@ an env var only goose read (PR#407).
    (closing §M10's unrouted-lane gap — the lanes holding ~28% of the subscription pool). Doctrine
    (safety net, decorrelation, audit bands) moves to git-owned class policy
    (`model-classes.json` floors/rails + the claim's constraints), never hardcoded models.
-3. **Harness support is a MATRIX, not a monoculture — REWORDED 2026-08-23 (ADR-107 addendum;
-   supersedes the 2026-08-17 "one harness, temporary" text).** The old wording fused two
+3. **Harness support is a MATRIX, not a monoculture — ADR-112 (2026-08-23), superseding
+   ADR-107 decision (3)'s 2026-08-17 "one harness, temporary" text.** The old wording fused two
    senses: *sense A — full-support harness* (runs every role/reflex, serves every rail: both
    subscriptions, OpenRouter, free tiers) and *sense B — the dispatch-time pick* for a given
    ride. The ruling: **claude AND opencode both reach sense-A full support** — claude first
