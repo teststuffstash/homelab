@@ -289,10 +289,12 @@ the block needs pruning, not more headings.
       launcher REROUTE** ✅ DONE 2026-08-19 (PR#610 — a latched Go-primary dispatches the
       `claude/haiku` fallback same-round; semaphore still defers). Dashboard parity panels ride each piece.
 - [ ] **FU-182** — **The pushgateway grows without bound and its reads slow linearly (no TTL on
-      pushed groups).** 486 KB / 3298 lines at 2026-08-23 (`agent_run_phase_seconds` alone 1089
-      lines — per-(issue, round) groups accumulate forever); serve time 3.7–5.3 s, which is what
-      froze goal #775's budget gate (homelab#807 fixes the READER — this item is the WRITER side).
-      Not the oversize-cache class (nothing rebuilds; terminal ride groups are dead rows).
+      pushed groups).** 486 KB / 3298 lines at 2026-08-23; serve 3.7–5.3 s — froze goal #775's
+      budget gate (homelab#807 fixed the READER; this is the WRITER side). **2026-08-24: the
+      growth also LOGGED — the in-pod emitter pushed `agent_run_phase_seconds` without the
+      launcher's HELP line, and the gateway logs ~256KB per conflicting group pair per 30s scrape:
+      48.7 GiB/day, 98% of Loki ingest, what filled the loki bucket (homelab#811). Emitter fixed
+      byte-identical (agent-runtime#84); 148 dead in-pod groups DELETEd one-off.**
       **Next:** group hygiene — a cleanup pass (cron or push-time) deleting groups for terminal
       rides older than the ledger's retention need, sized so reads stay flat. Relates FU-131,
       homelab#807, observability §B1.
