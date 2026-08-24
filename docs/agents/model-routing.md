@@ -90,10 +90,10 @@ Maps 1:1 onto the `error_class` shipped with FU-057 (live in `agent-session.sh` 
 | `harness-death` (goose `-32602`), `auth-storm` (401/403), `timeout`, provider 404/5xx | **strike** per (task, model) | same round, next chain model, re-dispatch NOW |
 | `budget-403` | neither | estimator/cap problem → escalate (the existing ⚠ path) |
 
-> **Note — raw-log fallback path (agent-runtime#871 / PR #879) split `budget-403` into subclasses.**
+> **Note — raw-log fallback path (homelab#871 / PR #879) split `budget-403` into subclasses.**
 > This table describes the **in-pod finalize vocabulary** (`agent-session.sh` finalize, the
 > `error_class` that lands in the ledger). A separate code path — the `agent-session.sh`
-> raw-log fallback, which parses the proxy's HTTP response body when the structured report
+> raw-log fallback, which greps the harness run log when the structured report
 > was never written — emits the finer-grained `budget-403-key` / `budget-403-account` plus a
 > residual `budget-403` (the subclass that the in-pod finalize would have emitted). The
 > reaction differs by subclass:
