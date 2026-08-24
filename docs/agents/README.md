@@ -101,6 +101,9 @@ These come straight from [`../../CONTEXT.md`](../../CONTEXT.md) ("boot from git"
   narrow allow-list of runbook ops that can't be expressed in git.
 - **Durable, auditable state is the source of truth; conversation, vectors, and snapshots are
   cache.** Durable state here = git + S3. A dead sandbox is re-dispatched, never resurrected.
+- **Bash is glue, logic is Python (ADR-113).** Orchestration/exec glue stays shell —
+  shellcheck-gated (FU-185) — while any component holding decision logic is Python from birth;
+  logic that grew inside glue extracts at touch time, and the replay harness pins both sides.
 - **No blobs; test data must not be hidden.** Fixtures are human-readable data tables (YAML/CSV/
   markdown), not opaque `.sqlite`/base64 — the database is *built from* the table at runtime.
 
