@@ -1296,6 +1296,10 @@ OC_SETUP=""; OC_ENV=""
 if [ "$HARNESS" = "opencode" ]; then
   PIN_JSON="$(python3 "$HERE/estimate_budget.py" --model "$MODEL" --lookup 2>/dev/null || true)"
   # order carries the ROUTING slug — OpenRouter matches tags ("deepinfra"), display names no-op.
+  # homelab#876: opencode silently falls back to its default model if the -m provider is not recognized.
+  # No config knob exists on the pinned binary (v1.18.13) to disable this fallback (no strict mode or
+  # provider allowlist). The fix is launcher-side: compose the full provider-prefixed ID in the CLI
+  # argument so opencode recognizes it and never reaches the fallback path.
   OC_CONFIG="$(printf '%s' "$PIN_JSON" | jq -c --arg m "$GOOSE_MODEL" '
     select(.pinned_provider != null) |
     {"$schema": "https://opencode.ai/config.json",
