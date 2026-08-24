@@ -1,0 +1,16 @@
+# homelab#849 — REPO_PR_CAP counts armed PRs per base, not repo-wide.
+#
+# WHAT IT PINS. The TRACKS rule 1 PR budget hold counts armed open PRs per the queued issue's
+# target base (its `Base:` body line, default = repo default branch) instead of repo-wide.
+# Three cases:
+#   1. master-base armed PRs ≥ cap does NOT hold a `Base: goal/**` queued issue
+#   2. ≥ cap same-base (master) armed PRs still holds a master-based (no Base:) issue
+#   3. absent `Base:` counts against the default branch (master)
+name: pr-cap-per-base
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - file:cases.sh
+  - block:pr-cap-per-base
+  - file:post.sh

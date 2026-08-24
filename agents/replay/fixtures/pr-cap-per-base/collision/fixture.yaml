@@ -1,0 +1,14 @@
+# homelab#849 collision case — per-base armed PR lookup with base-name collision.
+# A `per_base_armed` carrying `big-master|7` alongside `master|1` must NOT
+# charge `master` the `big-master` row's count. The old grep -F substring match
+# did exactly that; the awk exact-field match does not.
+#
+# Expected: master-based issue with 1 armed PR < cap 3 → DISPATCHED.
+name: pr-cap-per-base-collision
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - file:cases.sh
+  - block:pr-cap-per-base
+  - file:post.sh
