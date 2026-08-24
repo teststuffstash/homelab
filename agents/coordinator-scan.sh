@@ -1431,7 +1431,7 @@ EOF_GUARDED
       # the SAME base branch as the queued issue (homelab#849). Count per-base: master-based PRs
       # do not hold a goal/**-based issue and vice versa. In-flight recovery clauses (c4c5,
       # merge-conflict, …) are exempt: they REDUCE the count.
-      qbase_armed="$(printf '%s' "$per_base_armed" | grep -F -m1 "${qbase}|" | cut -d'|' -f2 || echo 0)"
+      qbase_armed="$(printf '%s' "$per_base_armed" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
       if [ "${qbase_armed:-0}" -ge "$REPO_PR_CAP" ]; then
         orphans="${orphans}[$repo] ⏳ PR budget (${qbase_armed} armed PRs against ${qbase} ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
         continue
