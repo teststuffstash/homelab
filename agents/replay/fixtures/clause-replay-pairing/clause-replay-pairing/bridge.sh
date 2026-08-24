@@ -13,6 +13,33 @@
 . "${REPLAY_ROOT}/agents/footprint.sh"
 slug="$IN_SLUG"
 repo="$IN_REPO"
+# homelab#853: clause_files is hoisted (before the per-repo loop) plus a parity assertion
+# that reads ci.yaml's ratchet regex. The fixture tests the per-issue pairing check only,
+# so set PARITY_ISSUES empty (no drift) and provide the canonical list.
+clause_files="agents/model-scout.sh
+agents/coordinator-scan.sh
+agents/review-reflex.sh
+agents/reviewer-session.sh
+agents/reviewer-optout.sh
+agents/machine-comment.sh
+agents/goal-budget.sh
+agents/agent-session.sh
+agents/retro-session.sh
+agents/argv-guard.sh
+agents/coordinator/reflexes-argo.yaml
+agents/coordinator/review-argo.yaml
+agents/coordinator/reviewer-git.yaml
+agents/coordinator/coordinate-argo.yaml
+agents/coordinator/responder-argo.yaml
+agents/coordinator/retro-argo.yaml
+agents/coordinator/fix-debounce-argo.yaml
+agents/coordinator/deploy-revert-argo.yaml"
+if [ "${PARITY_DRIFT:-0}" = "1" ]; then
+  PARITY_ISSUES="  PARITY FAIL: \`agents/coordinator/reviewer-git.yaml\` matches ratchet regex but is missing from \`clause_files\`\n"
+else
+  PARITY_ISSUES=""
+fi
+mainrepo=homelab
 openall_fetch_rc=0
 orphans=""
 openall='[
