@@ -1,0 +1,2 @@
+[2026-08-24T05:04:00Z] Error: insufficient credit to complete the request
+[2026-08-24T05:04:01Z] Please top up your account and try again

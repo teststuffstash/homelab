@@ -1,3 +1,10 @@
+# Issue #871 (homelab): budget-403 split — the raw-log classifier distinguishes
+# account-credit from key-limit 403s, and carries the matched log line into the
+# strike comment. Three branches:
+#   - budget-403-key:   key limit exceeded
+#   - budget-403-account: insufficient (credit|fund), 402 payment, payment required, out of credit
+#   - budget-403:       residual (insufficient quota, quota exceeded, budget exceeded)
+#
 # Issue #815 / #804 (homelab): Replay coverage for the startup-config-death strike
 # signature in BOTH classifier branches — STATS path and raw-log fallback.
 #

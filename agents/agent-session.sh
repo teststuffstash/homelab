@@ -2136,7 +2136,11 @@ if [ -n "$RUN_CMD" ]; then
         ERR_CLASS="harness-death"
       elif grep -qiE '429.*quota|429.*limit|monthly.*limit.*reached|rate limit exceeded' "$RUNLOG"; then
         ERR_CLASS="quota"
-      elif grep -qiE 'insufficient (credit|quota|fund)|402 payment|payment required|quota exceeded|budget exceeded|key limit exceeded|out of credit' "$RUNLOG"; then
+      elif BUDGET_MATCH="$(grep -iE 'key limit exceeded' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
+        ERR_CLASS="budget-403-key"
+      elif BUDGET_MATCH="$(grep -iE 'insufficient (credit|fund)|402 payment|payment required|out of credit' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
+        ERR_CLASS="budget-403-account"
+      elif BUDGET_MATCH="$(grep -iE 'insufficient quota|quota exceeded|budget exceeded' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
         ERR_CLASS="budget-403"
       elif [ "$(grep -ciE 'authentication failed|401 unauthorized|403 forbidden|invalid api key|no auth credentials' "$RUNLOG")" -ge 3 ]; then
         ERR_CLASS="auth-storm"
@@ -2150,6 +2154,9 @@ if [ -n "$RUN_CMD" ]; then
     # <<<REPLAY:strike-classifier<<<
     # >>>REPLAY:strike-line-format>>>
     STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+    if [ -n "${BUDGET_MATCH:-}" ]; then
+      STRIKE_LINE="${STRIKE_LINE} match=${BUDGET_MATCH}"
+    fi
     # <<<REPLAY:strike-line-format<<<
     echo "→ no PR opened — ${STRIKE_LINE}"
     ISSUE_N=""
