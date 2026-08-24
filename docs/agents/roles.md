@@ -156,14 +156,16 @@ tier allowed, dual-model worth it) are FU-095's.
 
 - **prober** (FU-102) — the **contract probe** role (glossary ruling: *canary* unqualified is
   the scout's rail probe; the early "agentic canary" name is retired). Product-contract probes (oracle UC-1 probe-e2e is
-  the proven brief); prod-read + report-only. **Scheduled leg BUILT 2026-08-07, disabled
-  everywhere**: claim knob `spec.prober {enabled, schedule, model}` renders `probe-<stack>`
+  the proven brief); prod-read + report-only. **Scheduled leg BUILT 2026-08-07; FIRST FLIP 2026-08-24
+  (platform stack, homelab#835)**: claim knob `spec.prober {enabled, schedule, model}` renders `probe-<stack>`
   (CronWorkflow, loop ns) running `<mainRepo>/.agents/probe.md` on the SUBSCRIPTION
   (claude/haiku — operator direction 2026-08-07, platform roles ride the subscription;
   latch-gated). Report-only BY CONSTRUCTION: the pod holds no git/gh credential. Still
   missing: the post-deploy sync-succeeded edge, 🌱 issue filing, (endpoint, digest) keying —
-  and every brief. Detection belts stack: FU-099 blackbox (seconds, dumb) → prober (minutes,
-  contract-deep) → responder; until a claim flips `enabled`, the stack remains
+  and every stack brief but the platform's (`homelab/.agents/probe.md`, #835 — belt-gap
+  framing: report what is broken AND unalerted; content shape still awaits the ≥2-projects
+  rule). Detection belts stack: FU-099 blackbox (seconds, dumb) → prober (minutes,
+  contract-deep) → responder; until a claim flips `enabled` (platform: 2026-08-24), a stack remains
   blackbox → *nothing* → responder and the alert lane carries the prober's load.
 
   **⚖ SUGGESTED IDEAS — operator thinking in progress (2026-08-08), NOT decisions. Do not build
