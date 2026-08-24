@@ -1313,6 +1313,8 @@ agents/coordinator/deploy-revert-argo.yaml"
       # legacy issues keep WIP=1 semantics without backfill).
       [ "$qtouches" = "-" ] && qtouches="*"
       [ "$qdeps" = "-" ] && qdeps=""
+      [ "$qparent" = "-" ] && qparent=""
+      [ "$qbase" = "-" ] && qbase=""
       # TRACKS rule 1 per-base (homelab#849): absent `Base:` body line → default branch.
       [ -z "$qbase" ] && qbase="$default_branch"
       blocked=""; stale=""
@@ -1502,7 +1504,7 @@ EOF_GUARDED
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       fi
     done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
-            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), ((.parent.number // "") | tostring), (([(.body // "") | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "")) ] | @tsv')
+            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), (((.parent.number // "") | tostring) | if . == "" then "-" else . end), (([.body // "" | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "" | if . == "" then "-" else . end)) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     # ── the goal lane (FU-090 leg (c) 2026-08-05; per-closure session DEMOTED by ADR-106 (3) 2026-08-12) ───────────────────────────────────────────────
     # The forest/trees rule's third leg: a goal must be RE-EVALUATED, not merely survive its
