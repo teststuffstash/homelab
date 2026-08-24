@@ -112,17 +112,17 @@ meant to avoid.)
   left running to natural terminal (~$0, 4h key). **OR-budget ruling stands (paid-flash
   through G-A, revert ~09-03/fixup-end/depletion); Go latched til Sep-13 (roll-persistence
   VERIFIED).** claude-jail#2 filed: mono per-session env block + wallet-reach + forgejo SSH.
-- **⚑ GARAGE TIER-2 FORENSICS (operator-ordered pickup, 2026-08-24 — new session does it):**
-  reassemble the Aug-4→24 transcript delta (10,617 keys proven present, Tier-1 census) from the
-  preserved evidence. Inputs, all frozen: `backups/garage-meta-forensics/` on the jail host
-  (snap-1531Z.img = the 15:31Z meta layer, + head-001.img.gz), the Longhorn snapshots
-  (`pre-restore-2026-08-24-meta-wipe` on the data volume), scan scripts' shape in TICK-LOG.
-  Work: decode leaf values (garage v2.3.0 object/version records) → block hashes → read blocks
-  from the data-volume snapshot → re-upload delta keys (also: jail-transcripts + the post-Aug-4
-  `cloudflare/terraform.tfstate`, serial > restored copy). ⚠ `garage repair blocks` FORBIDDEN
-  until this closes (then run it once, deliberately). Full context: homelab#884 thread +
-  `docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md`. Separate next act: the ADR-114
-  rf=3 build-out (FU-137, deadline ~08-31) — independent of forensics, can run first.
+- **⚑ GARAGE TIER-2 FORENSICS: DONE 2026-08-24 evening (homelab#884) — two OPERATOR decisions left.**
+  The delta is back: 10,846 objects / 2.14 GB re-uploaded and independently verified (10,843 exact,
+  3 divergences all handled), jail-transcripts fully recovered from zero, `cloudflare/terraform.tfstate`
+  restored to serial 2 + `minutark_www` imported → `tofu -chdir=tofu/cloudflare plan` = **No changes**.
+  Detail: TICK-LOG 2026-08-24 evening + the incident doc §Tier-2 recovery. Open for the operator:
+  **(1) widen the carve?** — loki/allure/oracle-`parsed/`/sleep metadata is equally intact in the
+  frozen layer and the pipeline is proven (~1 M objects / ~50 GB rerun); scope was narrowed when the
+  cost was unknown. **(2) the `garage repair blocks` hold** stays ON until (1) is answered — running
+  it forecloses (1) permanently. Evidence stays frozen in `backups/garage-meta-forensics/` +
+  the `pre-restore-2026-08-24-meta-wipe` Longhorn snapshot; tooling in `scripts/garage-forensics/`.
+  Independent next act: the ADR-114 rf=3 build-out (FU-137, deadline ~08-31).
   unpark. Acceptance = drift-free re-plan through the two-zone token. ⚠ `dig +short` wraps long
   DS digests — `tr -d ' '` before grepping.
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
