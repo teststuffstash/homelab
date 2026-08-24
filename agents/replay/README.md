@@ -151,7 +151,7 @@ is stale, so it cannot drift the way the prose register did.
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
-| `clause-replay-pairing/clause-replay-pairing` | actions | - | `agents/coordinator-scan.sh` | - |
+| `clause-replay-pairing/clause-replay-pairing` | table | - | `agents/coordinator-scan.sh` | - |
 | `decorrelate-resolution/empty-report` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/malformed-json` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/no-model` | actions | - | `agents/review-reflex.sh` | - |
@@ -195,6 +195,9 @@ is stale, so it cannot drift the way the prose register did.
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/clear` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/go` | actions | - | `agents/subscription-latch.sh` | - |
+| `pr-cap-per-base` | actions | - | `agents/coordinator-scan.sh` | - |
+| `pr-cap-per-base/collision` | actions | - | `agents/coordinator-scan.sh` | - |
+| `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |
 | `rail-degrade/rail-degrade` | suite | - | `-` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |

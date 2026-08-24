@@ -784,6 +784,64 @@ case "${SCAN_UNIT:-}" in ""|"-") ;; *)
 ;; esac
 
 any_work=""
+
+# ── Ratchet clause files (homelab#825, #853) ─────────────────────────────
+# CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
+# Parity assertion below verifies this list matches the regex at runtime.
+clause_files="agents/model-scout.sh
+agents/coordinator-scan.sh
+agents/review-reflex.sh
+agents/reviewer-session.sh
+agents/reviewer-optout.sh
+agents/machine-comment.sh
+agents/goal-budget.sh
+agents/agent-session.sh
+agents/retro-session.sh
+agents/argv-guard.sh
+agents/coordinator/reflexes-argo.yaml
+agents/coordinator/review-argo.yaml
+agents/coordinator/reviewer-git.yaml
+agents/coordinator/coordinate-argo.yaml
+agents/coordinator/responder-argo.yaml
+agents/coordinator/retro-argo.yaml
+agents/coordinator/fix-debounce-argo.yaml
+agents/coordinator/deploy-revert-argo.yaml"
+
+# ── PARITY ASSERTION: clause_files vs ci.yaml ratchet regex (homelab#853) ──
+# The canonical ratchet regex lives in .github/workflows/ci.yaml:118 (ONE HOME).
+# Reads the regex at runtime so no copy can silently drift. Degrade honestly:
+# if ci.yaml is unreadable, report that verification could not be done.
+# Computed once (not per-repo) since the fact is platform-wide.
+PARITY_ISSUES=""
+_pci_yaml=""
+if [ -n "${REPLAY_ROOT:-}" ] && [ -f "$REPLAY_ROOT/.github/workflows/ci.yaml" ]; then
+  _pci_yaml="$REPLAY_ROOT/.github/workflows/ci.yaml"
+elif [ -n "${HERE:-}" ] && [ -f "${HERE}/../.github/workflows/ci.yaml" ]; then
+  _pci_yaml="$(cd "${HERE}/.." && pwd)/.github/workflows/ci.yaml"
+fi
+if [ -n "$_pci_yaml" ]; then
+  _pregex=$(grep -E "grep -E.*agents/" "$_pci_yaml" | sed "s/.*grep -E '//;s/'.*//" | head -1)
+  if [ -n "$_pregex" ]; then
+    _proot="$(dirname "$(dirname "$(dirname "$_pci_yaml")")")"
+    while IFS= read -r _pfile; do
+      [ -n "$_pfile" ] || continue
+      _pfound=0
+      while IFS= read -r _pcf; do
+        [ -n "$_pcf" ] || continue
+        if [ "$_pcf" = "$_pfile" ]; then
+          _pfound=1
+          break
+        fi
+      done <<< "$clause_files"
+      [ "$_pfound" = 0 ] && PARITY_ISSUES="${PARITY_ISSUES}  PARITY FAIL: \`${_pfile}\` matches ratchet regex but is missing from \`clause_files\`\n"
+    done <<< "$(cd "$_proot" && find . -type f -not -path './.git/*' -print | sed 's|^\./||' | grep -E "$_pregex" | sort || true)"
+  else
+    PARITY_ISSUES="  PARITY FAIL: could not extract ratchet regex from .github/workflows/ci.yaml\n"
+  fi
+else
+  PARITY_ISSUES="  PARITY FAIL: .github/workflows/ci.yaml not found — cannot verify clause_files parity\n"
+fi
+
 for name in $(stacks_json | jq -r '.stacks[].name'); do
   # FU-080 perStack: a stack-scoped instance (the coordinate-<stack> CronWorkflow in
   # <stack>-agents sets SCAN_STACK) scans ONLY its own stack; the global reflex keeps sweeping
@@ -962,7 +1020,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # `body` is fetched for the FU-146 per-item hold: it carries the `Implements #<n>` line that
     # agent-runtime#34 now guarantees, which is the only reliable PR-to-issue key (branch names
     # are not — circles#31 rode `fix/p0-bake-resolution`, #32 rode `fix/32-p0-page-sunburst`).
-    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body 2>/dev/null)" || prsjson='[]'
+    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName 2>/dev/null)" || prsjson='[]'
     jq -e . >/dev/null 2>&1 <<<"${prsjson:-null}" || prsjson='[]'
     # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
     # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
@@ -970,7 +1028,16 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # un-armed PRs charged the budget for work the updater never does: circles' twelve human-gated
     # research/comparison PRs held issue #17 out of dispatch indefinitely, silently, on 2026-08-05.
     # A parked PR awaiting a human is not churn — it is the human gate doing its job.
-    open_prs="$(jq '[.[] | select(.autoMergeRequest != null)] | length' <<<"$prsjson")"
+    # homelab#849: per-base count. Armed PRs against one base do not churn against another base's
+    # issues — master merges never re-base a goal/** child, and goal/** merges never re-base a
+    # master PR. Map baseRefName → count of armed PRs, as newline-separated "base|count" lines.
+    per_base_armed="$(jq -r '[.[] | select(.autoMergeRequest != null)]
+      | group_by(.baseRefName)
+      | map("\(.[0].baseRefName)|\(length)")
+      | .[]' <<<"$prsjson")"
+    # Default branch: a queued issue without a `Base:` body line counts against this.
+    default_branch="$(gh repo view "$slug" --json defaultBranch --jq .defaultBranch 2>/dev/null || echo "master")"
+    [ -n "$default_branch" ] || default_branch=master
     # ADR-097 project-WIP predicate (was binary WIP=1; found live meta-8: two dispatchers raced
     # #52 inside one scan window; 2026-07-21 #55: two CRON ticks raced through the phase=Running
     # filter while a kata pod sat Pending — so the probe counts everything non-terminal): the
@@ -1250,24 +1317,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # >>>REPLAY:clause-replay-pairing>>>
     if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}"; then
       crm_lines=""
-      # Ratchet clause files — CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
-      clause_files="agents/model-scout.sh
-agents/coordinator-scan.sh
-agents/review-reflex.sh
-agents/reviewer-session.sh
-agents/reviewer-optout.sh
-agents/machine-comment.sh
-agents/goal-budget.sh
-agents/agent-session.sh
-agents/retro-session.sh
-agents/argv-guard.sh
-agents/coordinator/reflexes-argo.yaml
-agents/coordinator/review-argo.yaml
-agents/coordinator/coordinate-argo.yaml
-agents/coordinator/responder-argo.yaml
-agents/coordinator/retro-argo.yaml
-agents/coordinator/fix-debounce-argo.yaml
-agents/coordinator/deploy-revert-argo.yaml"
+      # `clause_files` is defined above (hoisted before the per-repo loop) — the
+      # parity assertion against ci.yaml's ratchet regex runs once there, not per-repo. See
+      # the >>>REPLAY:clause-replay-pairing>>> block before the for-name loop.
+      # Emit the parity finding once (on the main repo) rather than repeating for every stack/repo.
+      [ "$repo" = "homelab" ] && [ -n "$PARITY_ISSUES" ] && orphans="${orphans}[$repo] 🔗 CLAUSE-LIST PARITY: clause_files list does not match the ratchet regex in ci.yaml (homelab#853):\n${PARITY_ISSUES}\n"
 
       while IFS='|' read -r crmn crmt; do
         [ -n "$crmn" ] || continue
@@ -1305,7 +1359,7 @@ agents/coordinator/deploy-revert-argo.yaml"
     # Depends-on landed in qtracks, qdeps read empty → the FU-087 gate silently never ran and
     # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the two
     # optional fields; normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
-    while IFS="$(printf '\t')" read -r qnum qtitle qtouches qdeps qpin qclass qparent; do
+    while IFS="$(printf '\t')" read -r qnum qtitle qtouches qdeps qpin qclass qparent qbase; do
       # FU-114 L3: the task class rides the unit (label task/* → .agents/<class>.yaml, default fix)
       [ -n "$qclass" ] || qclass="fix"
       [ -n "$qnum" ] || continue
@@ -1313,6 +1367,10 @@ agents/coordinator/deploy-revert-argo.yaml"
       # legacy issues keep WIP=1 semantics without backfill).
       [ "$qtouches" = "-" ] && qtouches="*"
       [ "$qdeps" = "-" ] && qdeps=""
+      [ "$qparent" = "-" ] && qparent=""
+      [ "$qbase" = "-" ] && qbase=""
+      # TRACKS rule 1 per-base (homelab#849): absent `Base:` body line → default branch.
+      [ -z "$qbase" ] && qbase="$default_branch"
       blocked=""; stale=""
       for dep in $(printf '%s' "$qdeps" | tr ',' ' '); do
         dnum="${dep##*#}"; dslug="$slug"
@@ -1425,13 +1483,17 @@ EOF_GUARDED
         continue
       fi
       # <<<REPLAY:session-belt-queued<<<
-      # TRACKS rule 1: NEW work is held while the repo carries ≥ REPO_PR_CAP open PRs — the
-      # updater reflex rebases every open PR on every merge (churn is O(open PRs × merges)).
-      # In-flight recovery clauses (c4c5, merge-conflict, …) are exempt: they REDUCE the count.
-      if [ "${open_prs:-0}" -ge "$REPO_PR_CAP" ]; then
-        orphans="${orphans}[$repo] ⏳ PR budget (${open_prs} open ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
+      # >>>REPLAY:pr-cap-per-base>>>
+      # TRACKS rule 1: NEW work is held while the repo carries ≥ REPO_PR_CAP armed PRs against
+      # the SAME base branch as the queued issue (homelab#849). Count per-base: master-based PRs
+      # do not hold a goal/**-based issue and vice versa. In-flight recovery clauses (c4c5,
+      # merge-conflict, …) are exempt: they REDUCE the count.
+      qbase_armed="$(printf '%s' "$per_base_armed" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
+      if [ "${qbase_armed:-0}" -ge "$REPO_PR_CAP" ]; then
+        orphans="${orphans}[$repo] ⏳ PR budget (${qbase_armed} armed PRs against ${qbase} ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
         continue
       fi
+      # <<<REPLAY:pr-cap-per-base<<<
       if [ -n "$stale" ]; then
         iss="${iss}  issue #${qnum} — ${qtitle} [⚠ dep${stale} closed as not-planned — premise may be dead]\n"
       else
@@ -1496,7 +1558,7 @@ EOF_GUARDED
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       fi
     done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
-            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), ((.parent.number // "") | tostring) ] | @tsv')
+            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), (((.parent.number // "") | tostring) | if . == "" then "-" else . end), (([.body // "" | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "" | if . == "" then "-" else . end)) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     # ── the goal lane (FU-090 leg (c) 2026-08-05; per-closure session DEMOTED by ADR-106 (3) 2026-08-12) ───────────────────────────────────────────────
     # The forest/trees rule's third leg: a goal must be RE-EVALUATED, not merely survive its

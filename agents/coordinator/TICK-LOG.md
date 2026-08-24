@@ -4919,3 +4919,4 @@ first live ADR-110 maintenance session before the ADR existed.
   own miss corrected on-thread (the 13:05 session had already shed the label before my write).
 - Machine cycle also landed: #863 (per-base PR cap, fixes #849) + #858 (clause parity) mid-rounds
   on correct bot findings; #849→#863 caught a real jq-array/@tsv truncation in review.
+- **Close of day**: #862 MERGED 13:16Z, #854 closed; hand-fired scout tick `model-scout-manual-85z7z` **Succeeded 13:39Z (20 min)** — first completed tick since PR#499, the 6-day outage over end-to-end. #858 (#853) + #863 (#849, per-base cap LIVE) merged behind it. ADR-113 merged (PR#865).
