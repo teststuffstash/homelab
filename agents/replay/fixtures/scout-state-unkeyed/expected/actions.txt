@@ -1,0 +1,7 @@
+CALL curl GET https://openrouter.ai/api/v1/models
+CALL s5cmd cp s3://agent-transcripts/_model-scout/known-models.json (snapshot read) — FAIL
+CALL s5cmd cp ids.json s3://agent-transcripts/_model-scout/known-models.json (7 ids) — FAIL
+OUT catalog: 7 models
+OUT no previous snapshot at s3://agent-transcripts/_model-scout/known-models.json — bootstrap tick (baseline saved, no digest)
+OUT scout: bootstrap snapshot write failed (non-fatal)
+RC 0
