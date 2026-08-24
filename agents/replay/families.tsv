@@ -4,6 +4,7 @@ _selftest-missing-sentinel	_selftest
 _selftest-unrecorded-read	_selftest
 _selftest-wrong-expectation	_selftest
 adopted-not-queued-surfaces	adopted-not-queued-surfaces
+asvs	asvs
 arbitrate-first-tick	arbitrate
 arbitrate-probe-unreadable	arbitrate
 argv-payload-over-ceiling	argv-payload
@@ -37,7 +38,6 @@ harvest-goal-open-exhausted	harvest
 harvest-goal-open-funded	harvest
 harvest-master-inert	harvest
 ledger-emitter-rounds	ledger-emitter-rounds
-asvs	asvs
 lens-posture	lens-posture
 model-id-parse-drift	model-id-parse-drift
 opencode-phonehome-killswitch	opencode-phonehome-killswitch
