@@ -458,15 +458,22 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
   # 4. The digest issue — a report for a human, so the graduation decision has the numbers in it.
   #    Rendered from the RANKED list, in rank order: the table is also the order canary slots were
   #    spent in, and the suppressed set rides as one line under it (leg 1).
-  #    FU-161 FILING GATE: a digest whose every row is unbenched AND uncanaried carries ZERO
-  #    graduation evidence (no benchmark index, no typed canary verdict) — such a tick posts to the
-  #    scout log only, and `gh issue create` is SKIPPED with a log line saying why (the digests
-  #    that filed nothing but a table of `unbenched`s — #380, #455 — are what this gate exists to
-  #    stop). The snapshot still advances either way (point 5).
+  #    FU-161 FILING GATE (homelab#877): a digest whose every row is unbenched AND uncanaried-with-evidence
+  #    carries ZERO graduation evidence (no benchmark index, no typed canary verdict carrying model signal).
+  #    Evidence verdicts: `clean` (model succeeded) or error_class values (model-specific errors).
+  #    Non-evidence verdicts: `void`, `no-stats`, `unknown`, `mint-failed`, `key-never-minted`,
+  #    `harness-death`, `auth-storm`, `budget-403`, `timeout`, `suspect-infra`, `inconclusive`
+  #    (all platform/rail faults, not model outcomes). Such a tick posts to the scout log LOUDLY,
+  #    and `gh issue create` is SKIPPED (the digests that filed nothing but zero-evidence — #874 is
+  #    the live counterexample — are what this gate exists to stop). The snapshot still advances
+  #    either way (point 5). Strategy (homelab#877): skip loudly, log withheld model ids so
+  #    newcomers are recoverable from the tick's own output.
   BENCHED_N="$(jq '[.[] | select(.bench.benched)] | length' "$WORK/ranked.json")"
-  CANARIED_N="$(jq '[.[] | select((.canary // "") != "")] | length' "$WORK/ranked.json")"
-  if [ "$BENCHED_N" -eq 0 ] && [ "$CANARIED_N" -eq 0 ]; then
-    log "scout: digest SKIPPED — every row unbenched AND uncanaried (no graduation evidence: $(jq -r '[.[].model] | join(", ")' "$WORK/ranked.json")); gh issue create NOT run (FU-161 filing gate)"
+  EVIDENCE_CANARIED_N="$(jq '[.[] | select((.canary // "") != "" and (.canary != "void" and .canary != "no-stats" and .canary != "unknown" and .canary != "mint-failed" and .canary != "key-never-minted" and .canary != "harness-death" and .canary != "auth-storm" and .canary != "budget-403" and .canary != "timeout" and .canary != "suspect-infra" and .canary != "inconclusive"))] | length' "$WORK/ranked.json")"
+  if [ "$BENCHED_N" -eq 0 ] && [ "$EVIDENCE_CANARIED_N" -eq 0 ]; then
+    WITHHELD="$(jq -r '[.[] | select((.canary // "") == "" or (.canary == "void" or .canary == "no-stats" or .canary == "unknown" or .canary == "mint-failed" or .canary == "key-never-minted" or .canary == "harness-death" or .canary == "auth-storm" or .canary == "budget-403" or .canary == "timeout" or .canary == "suspect-infra" or .canary == "inconclusive")) | .model + " (canary: " + (.canary // "none") + ")"] | join(", ")' "$WORK/ranked.json")"
+    log "scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): ${WITHHELD} — gh issue create NOT run"
+    log "scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/agents/model-routing.md §M7 leg 4)"
   else
     TITLE="🔭 model scout: $(jq length "$WORK/ranked.json") new candidate model(s) ($(date -u +%F))"
     BODY="$(jq -r --arg ceiling "$CEILING" '
