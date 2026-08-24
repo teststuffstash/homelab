@@ -52,6 +52,7 @@ responder-cause-line-absent	responder-cause-line
 responder-cause-line-already-bound	responder-cause-line
 responder-cause-line-malformed	responder-cause-line
 responder-cause-line-valid	responder-cause-line
+responder-graduation	responder-graduation
 responder-reopen-fix-verdict	responder-reopen
 responder-reopen-report-only	responder-reopen
 responder-selfref-platform-machinery	responder-selfref
