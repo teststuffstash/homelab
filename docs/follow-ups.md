@@ -560,7 +560,11 @@ the block needs pruning, not more headings.
       operator requirement), which also delivers context-repos.md's measurement sweep.
       Relates FU-117, FU-163, FU-058, FU-140.
 
-- [ ] **FU-058** — **Retro P3: POINTER.** Design, run history, the 2026-08-17 SPLIT ruling
+- [ ] **FU-058** — **Retro P3: POINTER.** ⚠ First unattended PLATFORM fire (2026-08-24 05:00Z)
+      FAILED — cell-a to the Anthropic 529 storm (transient), cell-b budget-403, and BOTH cells
+      rode the routed model (hy3) instead of their configured cells (#861, the #782/#810 class).
+      Re-fire by hand after #861 merges — that fire is the deferred acceptance read.
+      Design, run history, the 2026-08-17 SPLIT ruling
       (platform retro first, stack retros second) and the 2026-08-19 platform-series build
       (the #587 stint: rename + ride-ns guard + fleet read token + KPI drop + content floor +
       RetroReportOverdue restart-gap hardening — PRs #619/#620/#623):
