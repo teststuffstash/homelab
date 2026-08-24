@@ -4838,3 +4838,28 @@ first live ADR-110 maintenance session before the ADR existed.
   alerts self-resolved; #500 verdict concurred + min-samples alert refinement noted.
 - Skills: design-agents-G1 promoted (live-state claims verified, never corpus-quoted — the
   subscription-cap-3-vs-5 catch); meta-events silenced-filter quickfix landed + re-armed.
+
+## 2026-08-24 morning (mechanical jail session, no corpus — #221 pump-alert algorithm + #811 log accumulation)
+
+- #221: operator ruled pump-counter staleness ≠ health (pump 3 four days "stale", soil wet, node
+  live). PR#846: pump `*_water_seconds` counters excluded from `HomeAssistantSensorStale`; new
+  `IrrigationNodeSilent` = min() over the node's five 60s-cadence sensors stale >1h for 30m —
+  group-level liveness, ~1.5h detection vs 26h, threshold 2.5x the worst 7d soilm staleness.
+  Merged + verified live (rule loaded, pump 3+4 fires cleared). Issue keeps its tuya_local/gaas legs.
+- #811 root cause found: 48.7GiB/day — 98% of ALL Loki ingest — was prometheus-pushgateway logging
+  a ~256KB "inconsistent help strings" family dump per conflicting group pair per 30s scrape:
+  agent-finalize pushed `agent_run_phase_seconds` WITHOUT the launcher's HELP line. The ramp
+  (0.9→48.7GiB/day from 08-19) tracked group re-accumulation after the gateway pod's 08-18
+  restart, and THIS filled the loki bucket — the ~11x "growth" was the defect, not organic.
+  Fixes: agent-runtime#84 (byte-identical HELP + contract test) merged, image rebuilding; all 206
+  dead source=in-pod groups DELETEd (history stays in the TSDB); flood verified 0 lines/3m.
+  FU-182 extended (writer-side group hygiene stays its Next). Retention A/B decision stays the
+  operator's — the input changed, noted on the issue.
+- Operator: "should this have been caught earlier?" → the log-volume belt, PR#847 (merged +
+  verified live): Loki ServiceMonitor (Loki was never scraped), ruler completed (AM v2 wired) with
+  per-pod `LokiPodLogVolumeHigh` (>25KB/s ≈ 2GiB/day/pod), Prometheus `LokiIngestVolumeHigh`
+  (>120KB/s ≈ 10GiB/day) + `LokiIngestVolumeRamp` (8x own 7d avg, clamp_min 25KB/s floor — the
+  quiet-system guard). Fixture pins the flood shape + the floor. Post-merge: loki-0 rolled,
+  recording rule live (~1.4KB/s healthy baseline), ruler evaluating.
+- Reflex note: both platform PRs sat unreviewed ~25min (typical 2-11min) — review-platform rung
+  once each per the fire-once discipline; AR#84's red CI was a devbox-fetch 504 flake (rerun green).
