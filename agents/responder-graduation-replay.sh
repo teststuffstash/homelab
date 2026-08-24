@@ -32,7 +32,7 @@ command -v jq >/dev/null 2>&1 || { echo "responder-graduation-replay: needs jq (
 # ── helpers ─────────────────────────────────────────────────────────────────────────────────────
 PASS=0; FAIL=0; FAILED=()
 ok()       { PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
-bad()      { FAIL=$((FAIL+1)); FAILED+=("$1"); printf '  \033[31m✗\033[0m %s\n       %s\n' "$1" "$2"; }
+bad()      { FAIL=$((FAIL+1)); FAILED+=("$1"); local d="${2:-}"; printf '  \033[31m✗\033[0m %s\n' "$1"; [ -n "$d" ] && printf '       %s\n' "$d"; }
 section()  { printf '\n\033[1m%s\033[0m\n' "$1"; }
 eq()       { [ "$2" = "$3" ] && ok "$1" || bad "$1" "got '$2', wanted '$3'"; }
 want()     { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "output lacks: $2"; }
@@ -323,10 +323,10 @@ else
 fi
 
 # Check the enabled property
-if grep -q "enabled.*boolean" "$XRD" 2>/dev/null; then
-  ok "G4: enabled property exists in XRD"
+if grep -q "enabled:" "$XRD" 2>/dev/null && grep -A1 "enabled:" "$XRD" | grep -q "type: boolean" 2>/dev/null; then
+  ok "G4: enabled property (type boolean) exists in XRD"
 else
-  bad "G4: enabled property NOT found in XRD"
+  bad "G4: enabled property NOT found in XRD" "Expected enabled: with type: boolean"
 fi
 
 # ── result ──────────────────────────────────────────────────────────────────────────────────────
