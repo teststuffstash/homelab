@@ -1,0 +1,4 @@
+[
+  {"number":234,"labels":[{"name":"agent/arbitrate"}],"reviewDecision":"APPROVED","autoMergeRequest":{"enabledAt":"2026-08-24T12:00:00Z","enabledBy":{"login":"app/homelab-agents-1234"}},"mergeStateStatus":"BEHIND"},
+  {"number":235,"labels":[{"name":"agent/arbitrate"},{"name":"agent/error"}]}
+]
