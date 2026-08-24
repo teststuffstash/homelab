@@ -4987,3 +4987,44 @@ first live ADR-110 maintenance session before the ADR existed.
   Pre-Aug-4 keys (2,369) ≈ restored backup (2,392) validates the read. Layers copied to
   backups/garage-meta-forensics/ (jail host). Tier-2 = decode values → block hashes → reassemble →
   re-upload; repair-blocks hold stands. Loki/grafana/sleep-ingester stale-key tail all green.
+
+## 2026-08-24 evening — Tier-2 garage forensics: the Aug-4→24 delta carved out of the orphan blocks and re-uploaded
+
+- **Tier-2 RAN AND CLOSED in one session (homelab#884).** Chain: raw layer image → LMDB leaf pages →
+  garage v2 table records → block hashes → block files on the live data volume → S3 re-upload.
+  Table markers make raw pages attributable without a b-tree: `G2s3ob` = object, `G09s3v` = version
+  (key = the 32-byte version uuid — garage Uuids are FixedBytes32, not 16), block_ref = 64-byte key,
+  merkle = `{"Leaf"|"Intermediate"}`. Object meta carries the headers under
+  `encryption.Plaintext.inner.headers`; all objects were Plaintext (no SSE), so blocks are plain zstd.
+- **Bucket attribution without the alias table**: group object rows by their 32-byte bucket-id prefix
+  and read the key shapes — `d2d517cb…` = jail-transcripts, `a8880474…` = homelab-tofu-state,
+  `8760ac06…` = agent-transcripts (also visible: loki `fake/`, allure `runs/`, oracle `parsed/`).
+- **Result: 10,846 delta objects, 2.14 GB, 100% reconstructable** — 4,846 inline (recoverable from
+  metadata alone), 6,000 block-backed, every one joined to its version row (0 orphans). Run:
+  **9,611 PUT / 1,235 already-present / 0 failures**; md5-vs-stored-etag checked per object before
+  the PUT. Live end state: agent-transcripts 13,209 objects / 2.4 GB, **jail-transcripts 224 objects
+  / 321.7 MB (a bucket with NO backup at all — fully recovered)**.
+- **Independent verify from the jail** (different path than the writer: LAN `s3.teststuff.net`, not
+  the in-cluster Service): HEAD all 10,846 → **10,843 size+etag exact**, 3 explained divergences.
+- **The 3 divergences were the real finding — mutable singletons the restore had silently REGRESSED**
+  (they existed post-restore, so the never-overwrite rule skipped them): `_ledger.jsonl` had lost
+  299 of 387 rows and `_model-scout/known-models.json` 90 of 416 ids to the Aug-4 backup. Both
+  MERGED (union, live wins per key) and re-uploaded: ledger 392 rows, scout 427 ids. Left alone, the
+  scout's next tick would have re-announced ~90 models as new and canaried them.
+- **`cloudflare/terraform.tfstate` recovered and the root is drift-free**: carved serial **2**
+  (2026-08-09 12:15Z) vs the restored **serial 1** — same lineage, swapped in (serial-1 copy kept at
+  `backups/garage-meta-forensics/cf-tfstate-serial1-preswap-20260824.tfstate`). First plan refreshed
+  every minutark/tunnel/mTLS resource clean with **1 to add**: `cloudflare_dns_record.minutark_www`,
+  which exists in Cloudflare (`www.minutark.ee` resolves) but whose state write fell in the lost
+  window — `tofu import`ed, **re-plan = No changes** (state re-encrypted, serial 3). infisical/
+  provisioning tfstates: carved == live, no action.
+- Mechanics worth keeping: RWO is a NODE-level lock, so a second pod pinned to garage-0's node
+  mounts the same PVC read-only (no host paths, no privilege); `python:3.14-slim` has stdlib
+  `compression.zstd`, so no pip in the pod; the garage image has no shell — `/garage` only.
+- Cleanup: helper pod deleted (a nodeName-pinned second mounter would pin the data volume to that
+  node), all three temp keys (`forensics-*`) deleted; artifacts in `backups/garage-meta-forensics/`.
+- ⚠ **`garage repair blocks` HOLD NOT LIFTED — now an operator decision, and it is bigger than it
+  looks**: the same machinery would recover the OUT-OF-SCOPE buckets too (loki 163k keys, allure
+  348k, oracle `parsed/` 252k, sleep), whose metadata is equally intact in the frozen layer. Running
+  repair forecloses that permanently. Scope was narrowed to transcripts when Tier-2 cost was
+  unknown; it is now a known ~1 M-object/50 GB rerun of a proven pipeline. Named on #884.
