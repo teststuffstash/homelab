@@ -1,0 +1,9 @@
+# ASVS code-class predicate replay (issue#833).
+# Pins the `gh pr diff` grep that selects the ASVS lens for auth/input/session code.
+# Tests: matching imports (jwt, oauth, session, passport), auth function definitions,
+# session management calls, route registrations, and deliberately quiet misses.
+#
+# mode: suite — self-asserting replay script, no cluster/network/credentials.
+name: asvs
+mode: suite
+entrypoint: agents/asvs-replay.sh
