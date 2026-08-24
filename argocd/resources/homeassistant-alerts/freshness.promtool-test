@@ -296,9 +296,13 @@ tests:
       # excluded (homelab#478): nord pool currency is literally always "EUR"
       - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.nord_pool_ee_currency",friendly_name="Nord Pool EE Currency",instance="192.168.40.10:8123",job="home-assistant"}'
         values: "-86460+0x120"
+      # excluded (homelab#221): a pump water-seconds counter freezes for DAYS whenever the soil
+      # is wet enough that no watering runs — its staleness is weather, not integration health.
+      # Node death is IrrigationNodeSilent's job now (cases 7 and 8 below).
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_pump_3_water_seconds",friendly_name="Office Plants Irrigation Pump 3 Water Seconds",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-86460+0x120"
       # NOT excluded: the wedged plug — frozen for 2.45 days in production (fixture header), the
-      # exact class the rule must keep catching. The irrigation pump counter is the same kind of
-      # deliberately-not-excluded case (see the manifest comment — do not re-add it).
+      # exact class the rule must keep catching.
       - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.plug_pve_power",friendly_name="Plug pve power",instance="192.168.40.10:8123",job="home-assistant"}'
         values: "-86460+0x120"
     alert_rule_test:
@@ -310,3 +314,58 @@ tests:
       - eval_time: 120m
         alertname: HomeAssistantSensorStale
         exp_alerts: *pve_stale_alert
+
+  # ── 7. IrrigationNodeSilent, firing half (homelab#221): the whole node quiet pages in ~1.5h ───
+  # All five fast sensors froze 1h1m before t=0 — the node-death signature the pump counters used
+  # to be the 26h-latency tripwire for. The staleness threshold is already crossed at t=0, so
+  # `for: 30m` fires at t=30m: total detection latency is threshold+for ≈ 1.5h after last update.
+  # The exp_labels block is also the assertion that min() dropped entity/friendly_name — the
+  # subject is the node, not any one sensor.
+  - interval: 1m
+    name: the whole irrigation node quiet fires IrrigationNodeSilent with entity dropped
+    input_series:
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_soilm_sens_1",friendly_name="Office Plants Irrigation SoilM Sens 1",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-3660+0x120"
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_soilm_sens_2",friendly_name="Office Plants Irrigation SoilM Sens 2",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-3660+0x120"
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_soilm_sens_3",friendly_name="Office Plants Irrigation SoilM Sens 3",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-3660+0x120"
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_soilm_sens_4",friendly_name="Office Plants Irrigation SoilM Sens 4",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-3660+0x120"
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_wifi_signal_sensor",friendly_name="Office Plants Irrigation WiFi Signal Sensor",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-3660+0x120"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: IrrigationNodeSilent
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: IrrigationNodeSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+
+  # ── 8. IrrigationNodeSilent, quiet half: ONE live sensor proves the node alive ────────────────
+  # Four fast sensors frozen (a real partial shape: saturated ADCs, a quiet wifi diagnostic) while
+  # one soil sensor still publishes every minute. min() reads the FRESHEST sensor, so a single
+  # live series holds the alert down at any horizon — the per-sensor false-positive mode that made
+  # the pump counters bad liveness signals structurally cannot fire this rule.
+  - interval: 1m
+    name: one live fast sensor holds IrrigationNodeSilent down
+    input_series:
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_soilm_sens_1",friendly_name="Office Plants Irrigation SoilM Sens 1",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-3660+0x120"
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_soilm_sens_2",friendly_name="Office Plants Irrigation SoilM Sens 2",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-3660+0x120"
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_soilm_sens_3",friendly_name="Office Plants Irrigation SoilM Sens 3",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-3660+0x120"
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_soilm_sens_4",friendly_name="Office Plants Irrigation SoilM Sens 4",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "0+60x120"
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.office_plants_irrigation_wifi_signal_sensor",friendly_name="Office Plants Irrigation WiFi Signal Sensor",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-3660+0x120"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: IrrigationNodeSilent
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: IrrigationNodeSilent
+        exp_alerts: []
