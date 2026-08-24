@@ -2,6 +2,12 @@
 # defaults (managementSecret.create=false); homelab supplies its Infisical ClusterSecretStore here so the
 # chart renders the ExternalSecret that delivers the OpenRouter MANAGEMENT key. Referenced as
 # $values/argocd/platform/values/openrouter-operator.yaml by argocd/platform/openrouter-operator.yaml.
+# 512Mi: the chart's 256Mi default OOM-crashlooped 2026-08-24 with the fleet at ~75 OpenRouterKey
+# CRs (kopf resume + reconcile working set); requests kept at chart defaults.
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { cpu: 500m, memory: 512Mi }
+
 managementSecret:
   create: true
   name: openrouter-management
