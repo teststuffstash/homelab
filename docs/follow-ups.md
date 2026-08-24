@@ -560,7 +560,11 @@ the block needs pruning, not more headings.
       operator requirement), which also delivers context-repos.md's measurement sweep.
       Relates FU-117, FU-163, FU-058, FU-140.
 
-- [ ] **FU-058** — **Retro P3: POINTER.** Design, run history, the 2026-08-17 SPLIT ruling
+- [ ] **FU-058** — **Retro P3: POINTER.** ⚠ First unattended PLATFORM fire (2026-08-24 05:00Z)
+      FAILED — cell-a to the Anthropic 529 storm (transient), cell-b budget-403, and BOTH cells
+      rode the routed model (hy3) instead of their configured cells (#861, the #782/#810 class).
+      Re-fire by hand after #861 merges — that fire is the deferred acceptance read.
+      Design, run history, the 2026-08-17 SPLIT ruling
       (platform retro first, stack retros second) and the 2026-08-19 platform-series build
       (the #587 stint: rename + ride-ns guard + fleet read token + KPI drop + content floor +
       RetroReportOverdue restart-gap hardening — PRs #619/#620/#623):
@@ -685,7 +689,12 @@ the block needs pruning, not more headings.
       them. ⚠ Still IN the preferred-victim set: `cilium-agent` runs BestEffort
       (`resources: {}`; homelab#63's evidence — closed into this item 2026-08-18, ≥4 restarts
       on wk-metal-03 alone). Whether to give it requests is part of this item's tune-vs-accept
-      ruling — the spike's Talos-pin experiment comes first. Relates FU-139/FU-112, ADR-044.
+      ruling — the spike's Talos-pin experiment comes first. **2026-08-24: recurs on the
+      SERVICE tier** (#857 — thinkcentre, a 5-kill branch-A burst in ~2s at 10:52Z; the §6
+      `oomactions` capture is RUN pre-upgrade, evidence on #857: all scores nonzero =
+      ranked-Burstable path, not the §1.4 zero-score bug). Scope question REOPENED: Option A's
+      v1.13.8 pin now reads as ALL metal nodes (thinkcentre/hp-01 upgrade safely; nocloud VMs
+      stay excluded), still the operator's ruling. Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
