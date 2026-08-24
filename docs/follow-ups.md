@@ -118,7 +118,12 @@ six OVERSIZE items pointer-ized into
       sleep re-syncs from phone/pi, loki loss accepted). **Operator ruling 2026-08-24: oracle
       serves production ~next week and this failure class must be structurally impossible by
       then** — the rf/db-engine/backup-cadence decision is now deadline-bound, ADR-shaped.
-      **Next:** that durability ADR (rf≥2 vs sqlite-engine single-node, backup cadence, offsite).
+      **ADR-114 decided 2026-08-24** (rf=3 across physical zones, engines-replicate/storage-
+      stores-singles, backup = logical-deletion CronJob; design + grounding links in
+      [`docs/garage.md`](garage.md) §Target architecture; zone labels landed with the ADR, PR#886).
+      **Next:** the build-out, oracle-prod-deadline-bound (~2026-08-31): garage rf=3 migration
+      (local XFS on wk-metal-01/04 + wk-02 interim), CNPG replica-1 + required zone
+      anti-affinity, backup CronJob. Offsite stays parked behind oracle/idp prod.
       Posture + numbers: [`docs/garage.md`](garage.md) §Durability. Relates FU-013, FU-012, ADR-031.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
