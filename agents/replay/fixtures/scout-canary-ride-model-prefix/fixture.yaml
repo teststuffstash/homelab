@@ -1,0 +1,40 @@
+# homelab#876 — the canary ride's model parameter must be composed launcher-side with the full
+# provider-prefixed ID so opencode recognizes it and does not silently fall back to its default model.
+#
+# CONDITION UNDER REPLAY. `scout_canary_ride()` (defined in the `scout-seams` block) composes a
+# `--run` command to pass to agent-session.sh. Before the fix, the command used `-m "$MODEL"`,
+# where `$MODEL` is the pod-env variable carrying the STRIPPED model ID (e.g., "deepseek-v4-flash").
+# opencode does not recognize a bare model name without the provider prefix, so it silently falls
+# back to its default model (opencode.ai's Zen) instead of using OpenRouter. This corrupts the
+# canary's verdict and introduces an infra death shaped identically to a genuine model failure.
+#
+# THE FIX — compose the run command with the full provider-prefixed ID at the launcher level:
+#   --run "opencode run -m \"openrouter/$id\" \"..."
+#
+# The `$id` variable in `scout_canary_ride` is the FULL prefixed ID (e.g., "openrouter/deepseek/deepseek-v4-flash").
+# Use double quotes around the --run value so the launcher-side `$id` expands correctly in the
+# composed command.
+#
+# THIS FIXTURE PINS that the fix works: `scout_canary_ride` is called with a test model ID,
+# and the recorded bash call shows the full provider-prefixed model in the -m argument.
+#
+# THE CONTRACT:
+#   1. `scout_canary_ride` is called with `id=deepseek/deepseek-v4-flash`, `is_free=false`.
+#   2. The `bash` call records the command-line invocation of agent-session.sh.
+#   3. The recorded `--run` argument contains `opencode run -m "openrouter/deepseek/deepseek-v4-flash"`.
+#   4. The full provider-prefixed ID is present in the -m argument (not just the stripped model name).
+#
+# If the fix is reverted (bare `-m "$MODEL"` is restored), this fixture REDS because the recorded
+# `--run` argument will lack the "openrouter/" prefix, and the assertion that checks for
+# `openrouter/deepseek/deepseek-v4-flash` will fail.
+#
+# agents/agent-session.sh carries only a comment-line addition (deliverable 2 documentation) — no
+# functional change, so no fixture applies to that file. This single fixture clears the ADR-103
+# ratchet for both clause-file changes (the README comment explains why none applies to agent-session.sh).
+#
+name: scout-canary-ride-model-prefix
+mode: actions
+source: agents/model-scout.sh
+parts:
+  - block:scout-seams
+  - file:bridge.sh
