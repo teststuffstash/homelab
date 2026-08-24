@@ -953,7 +953,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # `body` is fetched for the FU-146 per-item hold: it carries the `Implements #<n>` line that
     # agent-runtime#34 now guarantees, which is the only reliable PR-to-issue key (branch names
     # are not — circles#31 rode `fix/p0-bake-resolution`, #32 rode `fix/32-p0-page-sunburst`).
-    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body 2>/dev/null)" || prsjson='[]'
+    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName 2>/dev/null)" || prsjson='[]'
     jq -e . >/dev/null 2>&1 <<<"${prsjson:-null}" || prsjson='[]'
     # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
     # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
@@ -961,7 +961,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # un-armed PRs charged the budget for work the updater never does: circles' twelve human-gated
     # research/comparison PRs held issue #17 out of dispatch indefinitely, silently, on 2026-08-05.
     # A parked PR awaiting a human is not churn — it is the human gate doing its job.
-    open_prs="$(jq '[.[] | select(.autoMergeRequest != null)] | length' <<<"$prsjson")"
+    # homelab#849: per-base count. Armed PRs against one base do not churn against another base's
+    # issues — master merges never re-base a goal/** child, and goal/** merges never re-base a
+    # master PR. Map baseRefName → count of armed PRs, as newline-separated "base|count" lines.
+    per_base_armed="$(jq -r '[.[] | select(.autoMergeRequest != null)]
+      | group_by(.baseRefName)
+      | map("\(.[0].baseRefName)|\(length)")
+      | .[]' <<<"$prsjson")"
+    # Default branch: a queued issue without a `Base:` body line counts against this.
+    default_branch="$(gh repo view "$slug" --json defaultBranch --jq .defaultBranch 2>/dev/null || echo "master")"
     # ADR-097 project-WIP predicate (was binary WIP=1; found live meta-8: two dispatchers raced
     # #52 inside one scan window; 2026-07-21 #55: two CRON ticks raced through the phase=Running
     # filter while a kata pod sat Pending — so the probe counts everything non-terminal): the
@@ -1296,7 +1304,7 @@ agents/coordinator/deploy-revert-argo.yaml"
     # Depends-on landed in qtracks, qdeps read empty → the FU-087 gate silently never ran and
     # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the two
     # optional fields; normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
-    while IFS="$(printf '\t')" read -r qnum qtitle qtouches qdeps qpin qclass qparent; do
+    while IFS="$(printf '\t')" read -r qnum qtitle qtouches qdeps qpin qclass qparent qbase; do
       # FU-114 L3: the task class rides the unit (label task/* → .agents/<class>.yaml, default fix)
       [ -n "$qclass" ] || qclass="fix"
       [ -n "$qnum" ] || continue
@@ -1304,6 +1312,8 @@ agents/coordinator/deploy-revert-argo.yaml"
       # legacy issues keep WIP=1 semantics without backfill).
       [ "$qtouches" = "-" ] && qtouches="*"
       [ "$qdeps" = "-" ] && qdeps=""
+      # TRACKS rule 1 per-base (homelab#849): absent `Base:` body line → default branch.
+      [ -z "$qbase" ] && qbase="$default_branch"
       blocked=""; stale=""
       for dep in $(printf '%s' "$qdeps" | tr ',' ' '); do
         dnum="${dep##*#}"; dslug="$slug"
@@ -1416,13 +1426,17 @@ EOF_GUARDED
         continue
       fi
       # <<<REPLAY:session-belt-queued<<<
-      # TRACKS rule 1: NEW work is held while the repo carries ≥ REPO_PR_CAP open PRs — the
-      # updater reflex rebases every open PR on every merge (churn is O(open PRs × merges)).
-      # In-flight recovery clauses (c4c5, merge-conflict, …) are exempt: they REDUCE the count.
-      if [ "${open_prs:-0}" -ge "$REPO_PR_CAP" ]; then
-        orphans="${orphans}[$repo] ⏳ PR budget (${open_prs} open ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
+      # >>>REPLAY:pr-cap-per-base>>>
+      # TRACKS rule 1: NEW work is held while the repo carries ≥ REPO_PR_CAP armed PRs against
+      # the SAME base branch as the queued issue (homelab#849). Count per-base: master-based PRs
+      # do not hold a goal/**-based issue and vice versa. In-flight recovery clauses (c4c5,
+      # merge-conflict, …) are exempt: they REDUCE the count.
+      qbase_armed="$(printf '%s' "$per_base_armed" | grep -F -m1 "${qbase}|" | cut -d'|' -f2 || echo 0)"
+      if [ "${qbase_armed:-0}" -ge "$REPO_PR_CAP" ]; then
+        orphans="${orphans}[$repo] ⏳ PR budget (${qbase_armed} armed PRs against ${qbase} ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
         continue
       fi
+      # <<<REPLAY:pr-cap-per-base<<<
       if [ -n "$stale" ]; then
         iss="${iss}  issue #${qnum} — ${qtitle} [⚠ dep${stale} closed as not-planned — premise may be dead]\n"
       else
@@ -1487,7 +1501,7 @@ EOF_GUARDED
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       fi
     done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
-            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), ((.parent.number // "") | tostring) ] | @tsv')
+            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), ((.parent.number // "") | tostring), (([(.body // "") | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | first // "")) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     # ── the goal lane (FU-090 leg (c) 2026-08-05; per-closure session DEMOTED by ADR-106 (3) 2026-08-12) ───────────────────────────────────────────────
     # The forest/trees rule's third leg: a goal must be RE-EVALUATED, not merely survive its
