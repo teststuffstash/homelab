@@ -2225,6 +2225,28 @@ class Proxy(BaseHTTPRequestHandler):
                     translated = _or_response_translate(buf, or_model or "")
                     self.wfile.write(translated)
                     self.wfile.flush()
+                elif sse_buf:
+                    # EOF flush (homelab#852): an upstream whose final SSE event is not
+                    # terminated by \n\n leaves residue in sse_buf. Process it as a
+                    # final event so the client receives the closing content_block_stop
+                    # / message_delta instead of a truncated stream.
+                    event_text = sse_buf.decode("utf-8", errors="replace")
+                    for line in event_text.split("\n"):
+                        if not line.startswith("data: "):
+                            continue
+                        payload = line[len("data: "):].strip()
+                        if payload == "[DONE]":
+                            continue
+                        try:
+                            event = json.loads(payload)
+                        except (ValueError, TypeError):
+                            continue
+                        if translator is None:
+                            translator = _ORStreamingTranslator(or_model or "")
+                        translated = translator.feed(event)
+                        if translated:
+                            self.wfile.write(translated.encode("utf-8"))
+                            self.wfile.flush()
             else:
                 while chunk := read1(8192):
                     self.wfile.write(chunk)
@@ -4321,6 +4343,9 @@ data: [DONE]
         "model": "openai/gpt-5",
         "usage": {"prompt_tokens": 10, "completion_tokens": 5},
     }
+    # homelab#852: SSE stub mode flag and data for the SSE self-test row
+    _or_stub_sse = False
+    _or_stub_sse_data = b""
 
     class ORStub(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -4337,6 +4362,15 @@ data: [DONE]
                 "body_raw": body,
                 "messages": parsed.get("messages") if body else None,
             }
+            # homelab#852: SSE stub mode — return text/event-stream when flag is set
+            if _or_stub_sse:
+                out = _or_stub_sse_data
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Content-Length", str(len(out)))
+                self.end_headers()
+                self.wfile.write(out)
+                return
             out = json.dumps(_or_response).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -4623,6 +4657,85 @@ data: [DONE]
           "or-translate: /chat/completions with openrouter/ model passes through (not translated)")
     # This should have hit the regular /chat/completions handler, which forwards to OpenRouter.
     # The openrouter/ model stays as-is (normalize_model keeps /vendor/ parts intact).
+
+    # homelab#852: SSE self-test row — exercise the or_leg SSE streaming path through
+    # the real _forward_upstream. The OR stub returns text/event-stream so is_sse is
+    # True, and the last event arrives WITHOUT trailing \n\n to pin the EOF flush.
+    print("\n=== OR translation leg SSE streaming tests (homelab#852) ===")
+    _or_stub_sse = True
+    _sse_events = [
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""},
+                      "finish_reason": None}]},
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {"content": "Hello from SSE"},
+                      "finish_reason": None}]},
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {"tool_calls": [
+             {"index": 0, "id": "call_sse_001", "type": "function",
+              "function": {"name": "bash", "arguments": ""}}]},
+                      "finish_reason": None}]},
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {"tool_calls": [
+             {"index": 0, "function": {"arguments": '{"comman'}}]},
+                      "finish_reason": None}]},
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {"tool_calls": [
+             {"index": 0, "function": {"arguments": 'd": "ls -la"}'}}]},
+                      "finish_reason": None}]},
+        # Last event WITHOUT trailing \n\n — tests the EOF flush
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}],
+         "usage": {"prompt_tokens": 12, "completion_tokens": 8}},
+    ]
+    _sse_text = ""
+    for e in _sse_events[:-1]:
+        _sse_text += f"data: {json.dumps(e)}\n\n"
+    _sse_text += f"data: {json.dumps(_sse_events[-1])}"  # no trailing \n\n
+    _or_stub_sse_data = _sse_text.encode("utf-8")
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/openai/gpt-5",
+                  "max_tokens": 4096,
+                  "messages": [{"role": "user", "content": "SSE streaming test"}],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer OAUTH-SECRET"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    _or_stub_sse = False
+    _or_stub_sse_data = b""
+    check(r.status == 200, "or-translate sse: 200 from SSE streaming path")
+    body_text = data.decode("utf-8", errors="replace")
+    # Verify the response is valid Anthropic SSE with all expected events
+    check("event: message_start" in body_text,
+          "or-translate sse: contains message_start event")
+    check("event: content_block_start" in body_text,
+          "or-translate sse: contains content_block_start event")
+    # Verify text content delta (JSON has spaces after colons)
+    check("\"text\": \"Hello from SSE\"" in body_text,
+          "or-translate sse: text content delta present")
+    # Verify tool call translation (JSON has spaces after colons)
+    check("\"id\": \"call_sse_001\"" in body_text,
+          "or-translate sse: tool call id present in response")
+    check("\"name\": \"bash\"" in body_text,
+          "or-translate sse: tool name present in response")
+    # Verify tool call arguments spanned across chunks (JSON-escaped in the output)
+    check("\\\"ls -la\\\"" in body_text,
+          "or-translate sse: tool call arguments present (split across chunks)")
+    # Verify content_block_stop events (at least one: the tool_use block close;
+    # the text block is never explicitly closed — pre-existing translator behavior)
+    stop_count = body_text.count("event: content_block_stop")
+    check(stop_count >= 1,
+          f"or-translate sse: at least 1 content_block_stop event (got {stop_count})")
+    # Verify message_delta with tool_use stop_reason (JSON has spaces after colons)
+    check("event: message_delta" in body_text,
+          "or-translate sse: contains message_delta event")
+    check("\"stop_reason\": \"tool_use\"" in body_text,
+          "or-translate sse: stop_reason is tool_use")
 
     # Restore UPSTREAM
     UPSTREAM = _old_upstream
