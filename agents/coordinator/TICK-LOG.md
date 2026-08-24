@@ -4981,3 +4981,9 @@ first live ADR-110 maintenance session before the ADR existed.
   the CNPG build-out). FU-137 pointer-ized, oracle-prod-deadline-bound (~08-31).
 - Open tail: Tier-1 LMDB triage (transcripts + jail-transcripts + post-Aug-4 cloudflare tfstate)
   on the frozen snapshots; the rf=3 build-out; `garage repair blocks` FORBIDDEN until forensics done.
+- **Tier-1 LMDB triage: POSITIVE** (evening 2): wk-02's rebuild-snapshot layer read raw (fs block
+  == LMDB page → aligned scan); 609k intact pages; transcript-bucket key census 12,989 distinct
+  keys, **10,617 in the lost Aug-4→24 window through Aug 24** — the delta's metadata is ~complete.
+  Pre-Aug-4 keys (2,369) ≈ restored backup (2,392) validates the read. Layers copied to
+  backups/garage-meta-forensics/ (jail host). Tier-2 = decode values → block hashes → reassemble →
+  re-upload; repair-blocks hold stands. Loki/grafana/sleep-ingester stale-key tail all green.
