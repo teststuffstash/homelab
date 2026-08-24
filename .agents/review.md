@@ -13,6 +13,12 @@ judged PER PATH (`docs/agents/iac-lane.md` §The platform lane) rather than per 
   `agents/**`, `.agents/**`, `scripts/**`, `policy/**`, `.github/**`, `tofu/github/**`, `tofu/cloudflare/**`.
   Those are the launcher, the scan, the reflex and the rulesets over them. A worker editing its own
   governor is ungated whatever the ruleset says. Block regardless of how good the change looks.
+  ⚠ The ADR-097 compelled-counterpart classes are NEVER escapes and NEVER governance-blocking —
+  `agents/replay/**`, top-level `agents/*-test.sh`/`agents/*-replay.sh` (not `agents/*/*`), and
+  `docs/agents/*-fsm.{yaml,md}` (`agents/footprint.sh` `fp_replay_exempt` is the one predicate;
+  do not re-derive an escape from the raw `Touches:` line, and do not trust a PR-body
+  `Touches-escapes:` entry for these classes over the predicate — PR#893 manufactured a blocked
+  round exactly that way).
 - **A hand-edited chart or image pin** outside the deploy pipeline (ADR-084), unless the PR says
   why. `targetRevision:` and `agents/images.env` move via bump PRs.
 - **A manifest that does not validate**, or a PR claiming green without saying WHICH lints ran —
