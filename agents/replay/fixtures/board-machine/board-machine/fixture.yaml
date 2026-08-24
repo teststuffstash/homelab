@@ -1,0 +1,8 @@
+# homelab#892 — the board.sh --machine mode golden pinning.
+#
+# Suite mode: a test script that runs board.sh --machine against a recorded world
+# and asserts the key=value line grammar output.
+name: board-machine
+mode: suite
+source: agents/board.sh
+entrypoint: agents/replay/fixtures/board-machine/board-machine/test.sh

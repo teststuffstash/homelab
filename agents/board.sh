@@ -26,10 +26,14 @@ ROOT="$(dirname "$HERE")"
 ORG="${ORG:-teststuffstash}"
 STACKS_FILE="${STACKS_FILE:-$HERE/stacks.json}"
 
-stack="platform"; full=0
+stack="platform"; full=0; machine=0; scope=""
 for arg in "$@"; do
   case "$arg" in
     --full) full=1 ;;
+    --machine) machine=1 ;;
+    --scope) scope="${2:-}"; shift ;;
+    --scope=*) scope="${arg#*=}" ;;
+    --scope) scope="${2:-}"; shift ;;
     -*) echo "board: unknown flag: $arg" >&2; exit 2 ;;
     *) stack="$arg" ;;
   esac
@@ -185,6 +189,94 @@ done
 # ── render ────────────────────────────────────────────────────────────────────
 mrepos="$(printf '%s' "$repos" | wc -w | tr -d ' ')"
 if [ -n "${BOARD_NOW:-}" ]; then hdr="$(date -u -d "@$BOARD_NOW" +%Y-%m-%dT%H:%M:%SZ)"; else hdr="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; fi
+
+# ── MACHINE MODE (homelab#892) ─────────────────────────────────────────────────────────────────
+# Consumes derived classes from Prometheus (the `agent_item_class` series pushed by
+# coordinator-scan.sh per tick) and enriches with gh/kubectl reads. Never re-derives the
+# classes board-side — the one-computer rule.
+if [ "$machine" = 1 ]; then
+  # Prometheus endpoint: in-cluster or jail (env-picked, responder-runbook pattern)
+  PROMETHEUS_URL="${PROMETHEUS_URL:-http://kube-prometheus-stack-prometheus.monitoring.svc:9090}"
+  DERIVED_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  # Query Prometheus for the current agent_item_class series
+  prom_query() {
+    curl -sS --max-time 10 "${PROMETHEUS_URL}/api/v1/query" \
+      --data-urlencode "query=$1" 2>/dev/null | jq -r '.data.result[]? // []' 2>/dev/null || true
+  }
+
+  # Build the scope filter
+  scope_filter=""
+  scope_label=""
+  if [ -n "$scope" ]; then
+    case "$scope" in
+      goal:*) scope_label="goal=${scope#goal:}" ;;
+      stack:*) scope_label="stack=${scope#stack:}" ;;
+      repo:*) scope_label="repo=${scope#repo:}" ;;
+    esac
+    # Scope via goal_descendant_info if available (homelab#892)
+    if [ -n "$scope_label" ] && [[ "$scope" == goal:* ]]; then
+      # Resolve goal descendants from the exporter's series
+      gid="${scope#goal:}"
+      gmembers="$(prom_query "goal_descendant_info{goal=\"${gid}\"}" | jq -r '.metric.item // ""' 2>/dev/null || true)"
+      [ -n "$gmembers" ] && scope_filter="item=~\"$(printf '%s' "$gmembers" | tr '\n' '|' | sed 's/|$//')\""
+    fi
+  fi
+
+  # Fetch all classified items from Prometheus
+  query="agent_item_class${scope_filter:+{$scope_filter}}"
+  [ -z "$scope_filter" ] && query="agent_item_class"
+  raw="$(prom_query "$query" 2>/dev/null || true)"
+
+  if [ -z "$raw" ] || [ "$raw" = "[]" ]; then
+    # No data from Prometheus — emit empty machine board
+    echo "board v1 scope=stack:${stack} ts=${DERIVED_TS} sources=derived:tick@none"
+    echo "# no agent_item_class series found — the scan has not pushed a tick yet, or Prometheus is unreachable"
+    exit 0
+  fi
+
+  # Parse the series into rows
+  rows="$(printf '%s' "$raw" | jq -r '
+    .[] | {repo: .metric.repo, item: .metric.item, class: .metric.class, who: .metric.who}
+    | [.who, .class, .repo, .item] | @tsv
+  ' 2>/dev/null || true)"
+
+  # Build machine output rows
+  # Stable sort: who, class, repo, item
+  printf 'board v1 scope=stack:%s ts=%s sources=labels:live pods:live derived:tick@%s\n' \
+    "$stack" "$hdr" "$DERIVED_TS"
+
+  # Build per-item rows from the parsed data
+  had_rows=0
+  while IFS=$'\t' read -r who class repo item; do
+    [ -n "$item" ] || continue
+    # Trim the agent_item_class value (always 1)
+    id="${repo}/${item}"
+    # Map to board display format
+    case "$class" in
+      riding)                  echo "who=machine  class=riding id=${id} age=<1m" ;;
+      phantom)                 echo "who=operator class=phantom id=${id} note=\"agent/in-progress with no live pod — reconcile pending\"" ;;
+      held-merged-unlinked)    echo "who=operator class=held-merged-unlinked id=${id} pod=none link=weak since=<1h next=\"repair strong link or hand-close\"" ;;
+      parked-blocked)          echo "who=operator class=parked-blocked id=${id} note=\"human-gated — agent/blocked\"" ;;
+      parked-infeasible)       echo "who=operator class=parked-infeasible id=${id} note=\"AGENT_INFEASIBLE — re-scope needed\"" ;;
+      arbitrate-standing)      echo "who=operator class=arbitrate-standing id=${id} note=\"escalated to human — agent/arbitrate\"" ;;
+      queued-held)             echo "who=machine  class=queued-held id=${id} note=\"held by in-progress footprint\"" ;;
+      queued-held-by-ghost)    echo "who=operator class=queued-held-by-ghost id=${id} note=\"held by phantom/infeasible blocker\"" ;;
+      queued-ready)            echo "who=machine  class=queued-ready id=${id} note=\"dispatchable — next tick\"" ;;
+      deferred-capacity)       echo "who=machine  class=deferred-capacity id=${id} note=\"held by WIP ceiling\"" ;;
+      guarded-path)            echo "who=operator class=guarded-path id=${id} note=\"pin-only guarded path — operator push needed\"" ;;
+      orphan-unarmed)          echo "who=operator class=orphan-unarmed id=${id} note=\"open PR not on merge path — arm or park\"" ;;
+      container)               echo "who=none     class=container id=${id} note=\"post-launch bucket, container\"" ;;
+      backlog-aggregate)       echo "who=operator class=backlog-aggregate id=${id} note=\"suitable-unqueued backlog\"" ;;
+      *)                       echo "who=${who} class=${class} id=${id}" ;;
+    esac
+    had_rows=1
+  done <<< "$rows"
+
+  [ "$had_rows" = 0 ] && echo "# no classified items from current tick"
+  exit 0
+fi
+
 echo "board — stack $stack ($mrepos repos) · $hdr"
 
 [ -n "$sec_review" ] && { printf '\n§ REVIEW (codeowner queue)\n'; printf '%s' "$sec_review"; }

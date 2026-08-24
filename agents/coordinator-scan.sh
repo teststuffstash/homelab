@@ -149,6 +149,35 @@ scan_phase() {   # $1 = dispatch | deterministic — record a phase transition f
   return 0
 }
 # <<<REPLAY:scan-phase<<<
+# ── ITEM CLASS EXPORT (homelab#892) — per-tick derived class → pushgateway ─────────────────────
+# The scan classifies every open issue/PR it sees into one of the derived classes below. At the
+# end of each stack's pass, the class map is pushed to the pushgateway (job `agent_board`, grouped
+# per namespace) so `board.sh --machine` can consume it from Prometheus instead of re-deriving it.
+# Group-replace per tick (FU-176 semantics): a closed item drops off at the next tick, and a quiet
+# tick that empties the group is not a health signal.
+#
+# Classes (low-cardinality enum, v1):
+#   riding, phantom, held-merged-unlinked, parked-blocked, parked-infeasible,
+#   arbitrate-standing, queued-held, queued-held-by-ghost, queued-ready,
+#   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate
+# who ∈ operator | machine | none
+# >>>REPLAY:item-class>>>
+item_class_push() {   # push one item class to the pushgateway
+  local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}" now
+  [ -n "$SCAN_PHASE_PGW" ] && [ -n "$SCAN_PHASE_POD" ] || return 0
+  now="$(sp_now)"
+  printf '%s\n' \
+    "# TYPE agent_item_class gauge" \
+    "# HELP agent_item_class 1 = the scan classified this item in this class this tick." \
+    "agent_item_class{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\"} 1" \
+    "# TYPE agent_item_class_since_timestamp_seconds gauge" \
+    "# HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class." \
+    "agent_item_class_since_timestamp_seconds{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\"} ${now}" \
+    | curl -fsS --max-time 5 --data-binary @- \
+        "${SCAN_PHASE_PGW}/metrics/job/agent_board/namespace/${SCAN_PHASE_NS}" >/dev/null 2>&1 \
+    || true   # pushgateway unreachable — observability fault, never a dispatch blocker
+}
+# <<<REPLAY:item-class<<<
 # NO-OP ROUND PREDICATE — shared by the ci-red clause (FU-115b) and changes-requested (FU-147).
 # Input: `gh pr view N --json comments,commits`. Prints "1" when the LAST completed round pushed
 # nothing. Defined once because two copies WILL drift, and this one was already wrong twice:
