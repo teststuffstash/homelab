@@ -112,6 +112,11 @@ six OVERSIZE items pointer-ized into
       `ert-snapshots` excluded as re-ingestable. **Next:** the operator's AWS/Civo bucket — parked
       behind oracle-fleet/idp reaching prod, so the interim carries the risk until then; a cron
       would need FU-012-style creds and a runner. ⚠ now load-bearing for tofu state as well.
+      **The risk fired 2026-08-24**: the meta LMDB was wiped in the pve thin-pool incident
+      ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884) — the
+      2026-08-04 interim copy is now the restore source. **Next:** operator decides the #884
+      restore (Aug-4 objects into the recreated buckets, ~20-day loss on loki/transcripts/sleep);
+      then make `garage-backup` a cadence, not a one-shot — its 20-day staleness is the loss window.
       Posture + numbers: [`docs/garage.md`](garage.md) §Durability. Relates FU-013, FU-012, ADR-031.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
@@ -668,6 +673,10 @@ the block needs pruning, not more headings.
       ResourceQuota existed cluster-wide; now armed on all four stacks.
       **Next:** Garage admin-API metrics (`:3903`) + ServiceMonitor + >80% alert — the last
       unmetered tier. Blocks the FU-106 "mechanical" predicate.
+      **2026-08-24: the third sum went unmetered into its third 100%** and took wk-01 + Garage's
+      metadata with it ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)) —
+      the pve thin-pool Data% metric + alert is now the FIRST priority here, and freed blocks
+      need a periodic guest fstrim (discard=on alone returns nothing; Talos never trims).
       Relates ADR-089, FU-116 (archived).
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**

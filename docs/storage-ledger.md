@@ -114,7 +114,13 @@ treated as the reliable half of the bulk tier precisely because it is a VM that 
 to spare. The two laptops/desktops it was trusted over are independent physical disks in
 independent boxes. That reasoning is what moved Garage's replicas to them (ADR-089 addendum).
 
-**RESOLVED 2026-08-07.** Pool extended by 15G from VG free, `thin_pool_autoextend_threshold` set
+**RESOLVED 2026-08-07 — and it did not hold.** The pool refilled to 100% by 2026-08-18 and
+again 2026-08-24 (the autoextend belt fired at 80% on 08-17 and failed exactly as the caveat
+below predicted — 257 VG extents left), froze wk-01 twice, and wiped Garage's metadata:
+[incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md). `discard=on` returns
+nothing on its own — Talos guests never fstrim, so freed blocks only came back with the 08-07
+and 08-24 manual trims. Metering + periodic trim are the FU-093 first priority now.
+Pool extended by 15G from VG free, `thin_pool_autoextend_threshold` set
 to 80 (LVM warned it was disabled; it is a belt that can only consume free VG extents, not
 capacity), then `discard=on` + `ssd=1` on wk-02's scsi0 and a trim:
 

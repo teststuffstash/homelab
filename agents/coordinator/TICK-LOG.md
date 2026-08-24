@@ -4920,3 +4920,23 @@ first live ADR-110 maintenance session before the ADR existed.
 - Machine cycle also landed: #863 (per-base PR cap, fixes #849) + #858 (clause parity) mid-rounds
   on correct bot findings; #849→#863 caught a real jq-array/@tsv truncation in review.
 - **Close of day**: #862 MERGED 13:16Z, #854 closed; hand-fired scout tick `model-scout-manual-85z7z` **Succeeded 13:39Z (20 min)** — first completed tick since PR#499, the 6-day outage over end-to-end. #858 (#853) + #863 (#849, per-base cap LIVE) merged behind it. ADR-113 merged (PR#865).
+
+## 2026-08-24 — operator-started incident session: pve thin pool 100% (3rd), wk-01 ×2, Garage meta wipe
+
+- Symptom in: "Grafana and alertmanager both don't show any data" → prometheus-0 wedged on
+  NotReady wk-01 (kubelet dead 14:18Z). VM `running` in pve but guest gone; qm reset no-op
+  (`prelaunch`, 109% CPU) → stop/start → Ready 15:18Z; second freeze 15:41Z was `io-error`
+  (pool full again) → freed space, `qm resume`.
+- Root cause `lvs pve/data` **100.00%** (dmeventd: autoextend FAILED since 08-17 22:19Z, 257
+  extents free — the storage-ledger 08-07 "resolved" caveat firing). fstrim wk-02/wk-03/wk-01/
+  cp-01 via `kubectl debug -n kube-system --profile=sysadmin` → pool **56%**.
+- 10 wk-01 pods force-deleted post-verified-power-cycle (reborn kubelet never confirms old
+  deletions); monitoring verified live end-to-end (60 targets, Grafana 200, AM API up).
+- **Garage meta LMDB came back empty-tabled** (clean open, no corruption; `metadata_fsync`
+  defaults FALSE) — Crossplane recreated all 14 buckets empty; 55GB blocks intact, Longhorn
+  snapshot `pre-restore-2026-08-24-meta-wipe` taken; local object backup = **2026-08-04** only.
+  Fixes: `metadata_fsync=true` + 6h LMDB auto-snapshot (57fbb0e5, verified live);
+  openrouter-operator OOM belt 256→512Mi (d1cdf37c). Incident doc
+  `2026-08-24-pve-thin-pool-garage-meta-wipe.md`; FU-093/FU-137 extended.
+- Responder issues #883/#885 closed on verified recovery; **#884 left open** — carries the
+  operator restore decision (Aug-4 objects vs 20-day loss on loki/transcripts/sleep).
