@@ -90,6 +90,24 @@ Maps 1:1 onto the `error_class` shipped with FU-057 (live in `agent-session.sh` 
 | `harness-death` (goose `-32602`), `auth-storm` (401/403), `timeout`, provider 404/5xx | **strike** per (task, model) | same round, next chain model, re-dispatch NOW |
 | `budget-403` | neither | estimator/cap problem → escalate (the existing ⚠ path) |
 
+> **Note — raw-log fallback path (agent-runtime#871 / PR #879) split `budget-403` into subclasses.**
+> This table describes the **in-pod finalize vocabulary** (`agent-session.sh` finalize, the
+> `error_class` that lands in the ledger). A separate code path — the `agent-session.sh`
+> raw-log fallback, which parses the proxy's HTTP response body when the structured report
+> was never written — emits the finer-grained `budget-403-key` / `budget-403-account` plus a
+> residual `budget-403` (the subclass that the in-pod finalize would have emitted). The
+> reaction differs by subclass:
+>
+> - **`budget-403-account`**: the OpenRouter account credit is exhausted — an operator top-up,
+>   not an estimator/cap problem. No estimator change fixes it.
+> - **`budget-403-key`**: a single key hit its rate/limit cap. On a fresh key well under its
+>   account-level cap this is a mint defect (the key was issued with too-low limits).
+> - **`budget-403`** (residual): the in-pod meaning — estimator/cap problem → escalate the ⚠ path.
+>
+> The finalize twin is tracked as **agent-runtime#85** (filed by the same G-A checkpoint that
+> produced this note). When that lands the table gains real rows for the subclasses and this
+> note is replaced — it is a temporary bridge, not a permanent fixture.
+
 Chain exhausted (all models struck for this task) → `agent/blocked` with the strike list in the
 comment — that IS worth a human.
 
@@ -313,6 +331,32 @@ surface (§M8 classes, §M9 chainless stacks, §M13 research pools). Legs, in bu
    the scout-infra hypothesis — the stack demonstrably worked — so partial identical-failure
    groups stay per-model and ride the contradiction rule's retry; the ci-red/strike fleet rules'
    any-N≥2 reading does not import here, they have no clean-sibling refuter).
+
+   **Evidence-bearing vs non-evidence partition (FU-161 filing gate, #877).** The shipped
+   skip-log gate (`model-scout.sh:476`) cites this section; the partition itself is not a
+   sanity rule but the **gate condition** that decides whether a canary verdict counts as
+   evidence for graduation:
+
+   - **Evidence-bearing**: `clean` — a model completed a real tool-calling ride on a
+     budget-capped key *without* the `only-free` guardrail, or an `error_class` that is a
+     genuine *model* outcome (e.g. a model-side refusal typed as `changes-requested`);
+   - **Non-evidence (rail/platform fault, tells you nothing about the model)**: `void`,
+     `no-stats`, `unknown`, `mint-failed`, `key-never-minted`, `harness-death`, `auth-storm`,
+     `budget-403`, `timeout`, `suspect-infra`, `inconclusive`.
+
+   A row carrying a non-evidence verdict is withheld from graduation consideration. The
+   partition is enforced in three sites in `agents/model-scout.sh`, all in the digest
+   assembly section:
+
+   1. The conceptual comment at `model-scout.sh:461-470` (the source of truth for the
+      non-evidence list);
+   2. `EVIDENCE_CANARIED_N` at `model-scout.sh:472` — a jq `select` that counts models whose
+      canary verdict is *not* in the non-evidence set;
+   3. `WITHHELD` at `model-scout.sh:474` — the inverse jq `select` that names the models
+      excluded from the digest.
+
+   There is no single home for the partition; these three sites are its ground truth. When
+   a verdict is added to or removed from the non-evidence list, all three must change.
 5. **Pool curation — the §M13 duty.** The scout maintains the named class pools: ranked,
    family-deduped, disjoint bands by convention, deeper than any plausible slot ask, refreshed
    weekly from capability × market (`task_market`) × effective price × rail-compat. Diversity
