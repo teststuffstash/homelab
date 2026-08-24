@@ -4723,13 +4723,29 @@ data: [DONE]
     # homelab#869: read incrementally to assert translated output reaches the client
     # before the final chunk is sent (the stub writes in ≥2 chunks with a flush
     # between them). If _forward_upstream re-buffered the upstream body, the first
-    # read would block until the stub closes the connection.
-    first_chunk = r.read(4096)
+    # read would block until the stub closes the connection (~50ms+ later).
+    # Use r.fp.read1 (BufferedReader.read1) which reads at most one raw read from
+    # the underlying socket and returns immediately — unlike r.read(4096) which
+    # loops until it has accumulated 4096 bytes or hits EOF. With incremental
+    # delivery, the first chunk arrives well before the 50ms inter-chunk sleep;
+    # with buffering, the read blocks until the proxy finishes reading the stub
+    # (after the 50ms sleep) and writes all data to the client.
+    _t0 = time.monotonic()
+    first_chunk = r.fp.read1(4096)
+    _t1 = time.monotonic()
+    _elapsed = _t1 - _t0
     body_text = first_chunk.decode("utf-8", errors="replace")
-    # Verify translated output is already visible after the first chunk
+    # Verify translated output is visible after the first chunk AND that it
+    # arrived well before the 50ms inter-chunk sleep — <30ms threshold gives
+    # ample headroom for scheduling jitter on a contended pod.
     check("event: message_start" in body_text,
           "or-translate sse: translated output visible before final chunk (incrementality)")
-    # Read the rest of the response
+    check(_elapsed < 0.03,
+          f"or-translate sse: incremental delivery timing (read took {_elapsed*1000:.0f}ms, "
+          f"expected <30ms — if the proxy buffered the whole upstream body, the read would "
+          f"block until the proxy finished reading the stub after the ~50ms sleep)")
+    # Read the rest of the response (r.read() reads from the same BufferedReader,
+    # continuing from where read1 left off)
     rest = r.read()
     body_text += rest.decode("utf-8", errors="replace")
     c.close()
