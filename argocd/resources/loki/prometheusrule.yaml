@@ -1,0 +1,48 @@
+# Log-volume ingest belt, aggregate half (homelab#811). WHY THIS EXISTS: on 2026-08-19..24 a
+# single pod (prometheus-pushgateway, 256KB "inconsistent help strings" lines) ramped Loki ingest
+# 0.9 → 48.7 GiB/day — 98% of everything ingested — and filled the loki Garage bucket to its hard
+# cap before anything alerted, because NOTHING watched log volume: Loki itself was not even
+# scraped. The belt has three straps across two systems:
+#   • per-pod ABSOLUTE (LokiPodLogVolumeHigh) — Loki ruler, ruler-rules.yaml: per-pod volume
+#     never leaves Loki, so that half cannot live here.
+#   • aggregate ABSOLUTE (LokiIngestVolumeHigh, below) — a flat ceiling no healthy day touches.
+#   • aggregate RAMP (LokiIngestVolumeRamp, below) — deviation vs the system's own 7d baseline,
+#     with a clamp_min FLOOR so a quiet system's first real logging can never fire it (a ramp
+#     alert without a floor pages on 100 B/s → 5 KB/s, which is nothing).
+# SIZING, all measured 2026-08-24: pre-flood baseline ~12-18 KB/s total (~1-1.5 GiB/day raw);
+# the #811 flood 590 KB/s (48.7 GiB/day) — 30-50x baseline. Absolute 120 KB/s ≈ 10 GiB/day sits
+# ~8x above baseline and 5x under the flood; ramp 8x-of-baseline catches a recurrence in ~2.5h
+# even if baseline drifts up; floor 25 KB/s ≈ 2 GiB/day. The distributor counter resets on a Loki
+# roll — rate() bridges resets, and the recording rule is what gives the ramp a 7d baseline that
+# survives them. Behaviour pinned in loki-ingest.promtool-test (both alerts + the floor).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loki-ingest
+  namespace: loki
+  labels: { app: loki }
+spec:
+  groups:
+    - name: loki-ingest
+      rules:
+        - record: loki:distributor_ingest_bytes:rate30m
+          expr: |
+            sum(rate(loki_distributor_bytes_received_total[30m]))
+        - alert: LokiIngestVolumeHigh
+          expr: |
+            loki:distributor_ingest_bytes:rate30m > 120000
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki is ingesting {{ $value | humanize }}B/s (>10GiB/day) — something is flooding the log store"
+            description: "Aggregate log ingest is ~8x the measured healthy baseline (~12-18KB/s). The #811 class: one pathological emitter filled the loki Garage bucket to its hard cap in 6 days, wedging flush AND the compactor. Attribute the pod with LokiPodLogVolumeHigh (Loki ruler) or the volume API, then fix the EMITTER — the bucket cap is the belt, not the fix."
+        - alert: LokiIngestVolumeRamp
+          expr: |
+            loki:distributor_ingest_bytes:rate30m > clamp_min(8 * avg_over_time(loki:distributor_ingest_bytes:rate30m[7d]), 25000)
+          for: 2h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki ingest {{ $value | humanize }}B/s is >8x its own 7d average — a new log flood is ramping"
+            description: "Log volume deviates hard from this system's own trailing week. Fires only above a 25KB/s (~2GiB/day) floor, so a quiet system growing its first real workload stays silent — this alert is for the 30-100x pathological ramps (#811: 0.9→48.7GiB/day over 5 days while under every static radar until the bucket hit its cap). Attribute per-pod via LokiPodLogVolumeHigh or the volume API."

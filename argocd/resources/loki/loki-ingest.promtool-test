@@ -1,0 +1,68 @@
+# Behaviour fixture for the aggregate log-volume belt (homelab#811).
+#
+#   devbox run -- promtool test rules argocd/resources/loki/loki-ingest.promtool-test
+#
+# WHAT IS BEING PINNED:
+#   1. THE FLOOD SHAPE FIRES BOTH STRAPS. A week of healthy baseline (15KB/s — inside the
+#      measured 12-18KB/s band) followed by the #811 flood at 600KB/s (the measured 590KB/s,
+#      rounded): the absolute strap fires ~1.5h in, the ramp strap ~2.5h in. Six DAYS faster
+#      than the bucket-cap belt that caught the real one.
+#   2. THE FLOOR HOLDS (the baseline guard). A near-silent system (100B/s) that starts real
+#      logging at 20KB/s is a 200x ramp — and stays QUIET, because 20KB/s is under the 25KB/s
+#      floor. A ramp alert without this floor pages on every quiet system's first workload.
+#   3. THE RAMP IS RELATIVE. The same 20KB/s that case 2 tolerates would, on a system already
+#      averaging 15KB/s, also stay quiet (8x15=120KB/s threshold) — asserted implicitly by case
+#      1's baseline week never firing either alert.
+#
+# The input is the raw distributor counter (per-5m increments = B/s x 300); the recording rule
+# under test is what turns it into the rate the alerts read.
+rule_files:
+  - loki-ingest.promtool-rules
+
+evaluation_interval: 5m
+
+tests:
+  # ── 1. A healthy week, then the #811 flood: both straps fire, in their measured order ─────────
+  - interval: 5m
+    name: the 40x flood fires absolute at +1h30m and ramp at +2h30m; the baseline week is silent
+    input_series:
+      # 7d at 15000 B/s (4.5e6/step), then 600000 B/s (1.8e8/step) for 4h
+      - series: 'loki_distributor_bytes_received_total{tenant="fake",job="loki",namespace="loki"}'
+        values: "0+4500000x2016 9077400000+180000000x48"
+    alert_rule_test:
+      # deep inside the baseline week: nothing
+      - eval_time: 6d
+        alertname: LokiIngestVolumeHigh
+        exp_alerts: []
+      - eval_time: 6d
+        alertname: LokiIngestVolumeRamp
+        exp_alerts: []
+      # flood starts at 7d. rate30m crosses within ~30m; absolute (for: 1h) fires by +1h35m
+      - eval_time: 7d1h35m
+        alertname: LokiIngestVolumeHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+      # ramp (for: 2h) fires by +2h35m — 8x the 7d avg is ~120KB/s, flood is 600KB/s
+      - eval_time: 7d2h35m
+        alertname: LokiIngestVolumeRamp
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+  # ── 2. THE FLOOR: a quiet system's first real workload is a 200x ramp and stays silent ────────
+  - interval: 5m
+    name: a 200x ramp under the 25KB/s floor never fires the ramp strap
+    input_series:
+      # 2d at 100 B/s (30000/step), then 20000 B/s (6e6/step) for 6h
+      - series: 'loki_distributor_bytes_received_total{tenant="fake",job="loki",namespace="loki"}'
+        values: "0+30000x576 17280000+6000000x72"
+    alert_rule_test:
+      - eval_time: 2d3h
+        alertname: LokiIngestVolumeRamp
+        exp_alerts: []
+      - eval_time: 2d6h
+        alertname: LokiIngestVolumeRamp
+        exp_alerts: []
+      - eval_time: 2d6h
+        alertname: LokiIngestVolumeHigh
+        exp_alerts: []
