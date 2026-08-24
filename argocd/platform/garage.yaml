@@ -49,6 +49,13 @@ spec:
           consistencyMode: consistent
           existingRpcSecret: garage-rpc
           replicationFactor: "1"
+          # Both lines are the 2026-08-24 incident response (pve thin pool hit 100%, wk-01 froze,
+          # the meta LMDB came back with empty tables — docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md):
+          # Garage's metadata_fsync DEFAULTS TO FALSE, so a hard VM stop can lose committed metadata;
+          # the auto-snapshot is the second belt — a periodic LMDB copy inside the meta volume.
+          metadataAutoSnapshotInterval: 6h
+          additionalTopLevelConfig: |-
+            metadata_fsync = true
           s3:
             api:
               region: garage
