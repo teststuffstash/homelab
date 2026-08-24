@@ -114,6 +114,37 @@ static stores did not — that asymmetry is the lesson). specs.oracle 200, sleep
 job green, loki flushing clean, restore key deleted. Buckets born after Aug 4 had no backup:
 `jail-transcripts` (forensic target), `circles-specs` (regenerated).
 
+## Tier-2 recovery — the Aug-4→24 delta carved back out (same day, evening)
+
+The Aug-4 restore left a 20-day hole. It turned out to be recoverable in full: Garage purges orphan
+blocks only on a **manual** `garage repair blocks`, so the content was still on disk, and LMDB's
+copy-on-write meant the emptied tables' old pages were still readable in the frozen meta-volume
+layer. Tier-1 (afternoon) proved the pages were there; Tier-2 (evening) decoded them. Method and
+tooling: [`scripts/garage-forensics/`](../../scripts/garage-forensics/README.md).
+
+- **10,846 objects / 2.14 GB re-uploaded, 0 failures** — 4,846 recoverable from metadata alone
+  (Garage inlines small objects), 6,000 reassembled from blocks, every one joined to its version
+  row. Each object's md5 was checked against the pre-wipe ETag before the PUT.
+- **`jail-transcripts` (224 objects, 322 MB) came back from nothing** — the bucket post-dated the
+  Aug-4 backup, so this was its only copy.
+- **Verified over a second path** (LAN endpoint, not the in-cluster Service): 10,843 of 10,846 exact
+  on size + ETag.
+- **`cloudflare/terraform.tfstate` recovered**: carved serial 2 (Aug-9 12:15Z) replaced the restored
+  serial 1, same lineage. The first plan then wanted one resource — `minutark_www`, which exists in
+  Cloudflare but whose state write also fell in the hole — `tofu import`ed it; **re-plan reports no
+  changes**. The pre-swap serial-1 copy is kept alongside the evidence.
+- **The restore's silent tail, found by the verify pass:** the never-overwrite rule correctly skips
+  keys that exist, which means *mutable singletons* restored from the Aug-4 backup stay regressed —
+  `_ledger.jsonl` had lost 299 of 387 rows and `_model-scout/known-models.json` 90 of 416 ids.
+  Both merged (union, live wins per key) and re-uploaded. Left alone, the scout's next tick would
+  have re-announced ~90 models as new and canaried them.
+
+**Still frozen, deliberately:** `backups/garage-meta-forensics/` (the meta layer images) and the
+`pre-restore-2026-08-24-meta-wipe` Longhorn snapshot. The `garage repair blocks` hold stays ON: the
+metadata for the out-of-scope buckets (loki, allure, oracle `parsed/`, sleep) is equally intact in
+that layer, and repair would foreclose recovering them. Widening the carve is an operator call on
+homelab#884 — the scope was narrowed when Tier-2's cost was unknown, and it is now a proven pipeline.
+
 ## Residual
 
 - **FU-093** — pve thin-pool metering (the third sum) + periodic guest fstrim.
