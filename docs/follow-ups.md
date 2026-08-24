@@ -685,7 +685,12 @@ the block needs pruning, not more headings.
       them. ⚠ Still IN the preferred-victim set: `cilium-agent` runs BestEffort
       (`resources: {}`; homelab#63's evidence — closed into this item 2026-08-18, ≥4 restarts
       on wk-metal-03 alone). Whether to give it requests is part of this item's tune-vs-accept
-      ruling — the spike's Talos-pin experiment comes first. Relates FU-139/FU-112, ADR-044.
+      ruling — the spike's Talos-pin experiment comes first. **2026-08-24: recurs on the
+      SERVICE tier** (#857 — thinkcentre, a 5-kill branch-A burst in ~2s at 10:52Z; the §6
+      `oomactions` capture is RUN pre-upgrade, evidence on #857: all scores nonzero =
+      ranked-Burstable path, not the §1.4 zero-score bug). Scope question REOPENED: Option A's
+      v1.13.8 pin now reads as ALL metal nodes (thinkcentre/hp-01 upgrade safely; nocloud VMs
+      stay excluded), still the operator's ruling. Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
