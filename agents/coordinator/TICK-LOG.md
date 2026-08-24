@@ -4971,3 +4971,13 @@ first live ADR-110 maintenance session before the ADR existed.
   GAPS design-agents-G2 filed (label-reported-as-activity, operator catch). G-A live census:
   4 open of 35 descendants (2 operator: #778 Go-latch split, #876 infeasible-parked; 1 riding
   #889/PR#890; 1 container #787).
+- **Restore closed out (evening)**: all 11 buckets = backup counts (351,683 objects; allure 10-PUT
+  re-sync); specs.oracle 200; the stale-key tail found+fixed — Crossplane re-minted key ids, loki-0
+  had silently 403'd every flush ~28h (pod predated re-mint; restart), sleep-ingester's
+  Infisical-held static key copies re-imported via `garage key import` (verify job green). ESO
+  k8s-store chains self-healed, static stores didn't. Restore key deleted.
+- **ADR-114 merged (PR#886)** + zone labels applied live to all 10 nodes (machines.yaml `zone`);
+  meta snapshots → data volume; forgejo-pg-1 kicked off wk-02 (host-spread; zone-spread lands with
+  the CNPG build-out). FU-137 pointer-ized, oracle-prod-deadline-bound (~08-31).
+- Open tail: Tier-1 LMDB triage (transcripts + jail-transcripts + post-Aug-4 cloudflare tfstate)
+  on the frozen snapshots; the rf=3 build-out; `garage repair blocks` FORBIDDEN until forensics done.
