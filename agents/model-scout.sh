@@ -100,8 +100,8 @@ scout_catalog() { curl -fsS "$API/models"; }   # the live /models catalog, raw
 scout_state_read()  { # <dest-file> — non-zero = no snapshot yet (bootstrap tick)
   s5 "${AGENT_TS_READER_ID:-}" "${AGENT_TS_READER_SECRET:-}" cp "$STATE" "$1" >/dev/null 2>&1
 }
-scout_state_write() { # <src-file>
-  s5 "${AGENT_TS_WRITER_ID:-}" "${AGENT_TS_WRITER_SECRET:-}" cp "$1" "$STATE" >/dev/null
+scout_state_write() { # <src-file> — non-zero = save failed (caller handles)
+  s5 "${AGENT_TS_WRITER_ID:-}" "${AGENT_TS_WRITER_SECRET:-}" cp "$1" "$STATE" >/dev/null 2>&1
 }
 
 scout_enrich() { # <candidates.json> → the enriched array on stdout
@@ -227,7 +227,7 @@ log "catalog: ${CURRENT_N} models"
 #    would orphan the live snapshot and make every model new on the very tick that ships this.
 if ! scout_state_read "$WORK/known.json"; then
   log "no previous snapshot at ${STATE} — bootstrap tick (baseline saved, no digest)"
-  scout_state_write "$WORK/ids.json"
+  scout_state_write "$WORK/ids.json" || log "scout: bootstrap snapshot write failed (non-fatal)"
   exit 0
 fi
 
@@ -513,5 +513,5 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
 fi
 
 # 5. Advance the snapshot (also when zero candidates — non-candidate newcomers are old news now).
-scout_state_write "$WORK/ids.json"
+scout_state_write "$WORK/ids.json" || log "scout: snapshot write failed (non-fatal, next tick will retry)"
 log "snapshot advanced (${CURRENT_N} known models); scout tick done"

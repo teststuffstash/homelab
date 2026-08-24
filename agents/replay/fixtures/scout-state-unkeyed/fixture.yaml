@@ -1,0 +1,26 @@
+# FU-161 leg 1 — the unkeyed S3 state path that was killing the tick.
+#
+# CONDITION UNDER REPLAY. The `model-scout` CronWorkflow's env carries AGENT_TS_READER_ID and
+# AGENT_TS_WRITER_ID from `optional: true` secrets. When those secrets don't exist (or the keys
+# are missing), the env vars are empty. `scout_state_read` handles this gracefully (returns non-zero,
+# treated as "no snapshot yet" = bootstrap tick). But `scout_state_write` was NOT guarded by `|| true`
+# before PR#854 — its `s5cmd` failure propagated through `set -e` and killed the tick with exit code 1,
+# which is the 20s death that has blocked every tick since PR#499.
+#
+# THE CONTRACT:
+#   1. `scout_state_read` returns non-zero (empty credentials → s5cmd fails). This is the EXPECTED
+#      first-tick / unkeyed path — the scout treats it as a bootstrap tick.
+#   2. `scout_state_write` ALSO returns non-zero (same empty credentials). This is the guard that
+#      was missing: the `|| log "scout: bootstrap snapshot write failed (non-fatal)"` catches the
+#      failure, logs the event, and the script continues.
+#   3. RC 0. The tick does NOT die with exit code 1. A bootstrap tick that cannot save its snapshot
+#      is still a completed tick (the next run will try again).
+#   4. The log line "scout: bootstrap snapshot write failed (non-fatal)" is the evidence that the
+#      guard fired — removing it would make this fixture red.
+name: scout-state-unkeyed
+mode: actions
+source: agents/model-scout.sh
+parts:
+  - block:scout-seams
+  - file:bridge.sh
+  - block:scout-diff

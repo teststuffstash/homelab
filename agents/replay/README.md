@@ -259,6 +259,7 @@ is stale, so it cannot drift the way the prose register did.
 | `scout-bench/ranked-columns` | actions | - | `agents/model-scout.sh` | - |
 | `scout-bench/unkeyed-unbenched` | actions | - | `agents/model-scout.sh` | - |
 | `scout-canary-filing-gate` | table | - | `agents/model-scout.sh` | - |
+| `scout-state-unkeyed` | actions | - | `agents/model-scout.sh` | - |
 | `scout-variant/batch-rollout` | actions | - | `agents/model-scout.sh` | - |
 | `scout-variant/known-base` | actions | - | `agents/model-scout.sh` | - |
 | `session-atomic-gate/session-atomic-gate` | actions | - | `agents/coordinator-session.sh` | - |
