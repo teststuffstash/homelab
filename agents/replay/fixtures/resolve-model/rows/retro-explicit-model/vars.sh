@@ -4,7 +4,7 @@
 # The CURL_RESPONSE shows what the router WOULD have dispatched, but the override
 # exits before /route — no curl, no proxy contact.
 ROLE="retro"
-FALLBACK="sonnet"
+FALLBACK="opus"
 CLASS="audit"
 CELL="claude:opus"
 OVERRIDE="opus"
