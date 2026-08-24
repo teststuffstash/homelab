@@ -12,27 +12,39 @@
 # simply the world.
 #
 # THE CONTRACT (the issue's minimum, one row each):
-#   1. A digest whose every row is unbenched AND uncanaried posts to the scout log ONLY —
-#      `gh issue create` is SKIPPED with a log line saying why (the zero-information digests #380
-#      and #455 are the reason this gate exists). The `skip` row also pins the leg-4 COMMON-CAUSE
-#      rule: two canaries failing IDENTICALLY in one tick = ONE `_scout-infra` datum in the
-#      rotation store, zero per-model verdicts — the suppressed tick is exactly the all-unbenched
-#      all-uncanaried shape the gate skips.
+#   1. A digest whose every row is unbenched AND lacking an evidence-bearing canary verdict posts
+#      to the scout log ONLY — `gh issue create` is SKIPPED with a log line saying why (the
+#      zero-information digests #380 and #455 are the reason this gate exists). Evidence-bearing
+#      verdicts are `clean` or a model-specific `error_class`; platform/rail faults like `void`,
+#      `no-stats`, and `unknown` provide no model signal. The `skip` row also pins the leg-4
+#      COMMON-CAUSE rule: two canaries failing IDENTICALLY in one tick = ONE `_scout-infra`
+#      datum in the rotation store, zero per-model verdicts — the suppressed tick is exactly the
+#      all-unbenched all-lacking-evidence shape the gate skips.
 #   2. A canary verdict is TYPED — the launcher's `error_class`, never a bare `failed`. The
 #      `contradiction` row pins the CONTRADICTION rule: canary-fail ∧ benchmark-capable ⇒
 #      `suspect-infra`, retry once, else `inconclusive` — ling-3.0-flash is the real 2026-08-10
 #      datum that posted a bogus `failed` while benching above gpt-5.1. The row records the retry
 #      also failing, so the final verdict is `inconclusive`, and the typed class (`auth-storm`)
 #      never leaks through as the answer.
-#   3. Any row with a benchmark index OR a typed canary verdict ⇒ file as today, rows carrying the
-#      canary column. The `filed` row pins that: one benched + one unbenched-but-clean canary,
-#      the digest posts, the canary column shows both typed verdicts.
+#   3. Any row with a benchmark index OR an evidence-bearing canary verdict ⇒ file as today, rows
+#      carrying the canary column. The `filed` row pins that: one benched + one unbenched-but-clean
+#      canary, the digest posts, the canary column shows both typed verdicts. Evidence-bearing
+#      means `clean` or a model-specific `error_class`, not platform/rail faults.
 #   4. An UNPARSABLE stats blob is a TYPED verdict, never blank (additive, PR#499 round 2). A
 #      jq parse failure on a non-JSON AGENT_RUN_STATS tail ⇒ `unknown` — the rail DID speak, the
-#      line did not parse; a fact distinct from `no-stats`. The `unparsable` row pins the
-#      silent-degrade the old code caused: an unbenched candidate's EMPTY verdict read as
-#      uncanaried and the gate SKIPPED the digest; with the fix the row is canaried (`unknown`)
-#      and the digest FILES.
+#      line did not parse; a fact distinct from `no-stats`. Though `unknown` is typed, it carries
+#      no model signal (it is a runner fault, not a model outcome), so it does not meet the
+#      evidence-bearing criterion. The `unparsable` row pins this: an unbenched candidate with
+#      `unknown` verdict is canaried but lacks evidence, so the gate SKIPS the digest.
+#   5. A digest with ≥1 evidence-bearing verdict (whether benched rows with canary, or unbenched
+#      rows with `clean`/model-error verdicts) posts normally to file. The `mixed-benched-and-evidence`
+#      row pins that: a benched row + an unbenched row with an evidence-bearing canary coexist,
+#      the digest posts, the canary column shows the evidence-bearing verdict.
+#   6. A digest whose every row has non-evidence verdicts (`void`, `no-stats`, `unknown` with no
+#      alternative benched rows) skips filing but logs the model ids so they remain discoverable
+#      from the tick. The `all-non-evidence-void-no-stats` row pins this: three unbenched rows
+#      with only `void`/`no-stats` verdicts, the digest is SKIPPED, and the withheld model ids
+#      appear in the tick log.
 #
 # Worlds are the family's per-row recorded state: ranked.json (post-rank rows, the shape leg 2
 # writes) + the AGENT_RUN_STATS lines the rides would have emitted. `filed` and `contradiction`
