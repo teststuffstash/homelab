@@ -5,3 +5,5 @@ stats-unknown-clean           |       |       |     | stats-unknown-clean     |
 rawlog-config-death           |       |       |     | rawlog-config-death     |
 rawlog-deadline-first         |       |       |     | rawlog-deadline-first   |
 rawlog-quota                  |       |       |     | rawlog-quota            |
+rawlog-budget-403-key         |       |       |     | rawlog-budget-403-key   |
+rawlog-budget-403-account     |       |       |     | rawlog-budget-403-account |
