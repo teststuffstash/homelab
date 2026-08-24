@@ -8,3 +8,5 @@ coordinator-goal-decompose       |       |       |     | coordinator-goal-decomp
 coordinator-dispatch             |       |       |     | coordinator-dispatch             |
 coordinator-explicit-override    |       |       |     | coordinator-explicit-override    |
 retro-explicit-model             |       |       |     | retro-explicit-model             |
+retro-cli-flag-shape             |       |       |     | retro-cli-flag-shape             |
+coordinator-cli-fallback-only    |       |       |     | coordinator-cli-fallback-only    |
