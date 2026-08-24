@@ -4940,3 +4940,25 @@ first live ADR-110 maintenance session before the ADR existed.
   `2026-08-24-pve-thin-pool-garage-meta-wipe.md`; FU-093/FU-137 extended.
 - Responder issues #883/#885 closed on verified recovery; **#884 left open** — carries the
   operator restore decision (Aug-4 objects vs 20-day loss on loki/transcripts/sleep).
+
+## 2026-08-24 — corpus session: gate reads over the 4 parked fixer PRs (garage restore running in a sibling session)
+
+- Session scope per operator: PR reviews only, no subagents (opencode-go slots latched), the
+  sibling session owns the Garage restore (~1h). Full design-agents corpus loaded → ADR-110
+  codeowner reads executed.
+- All four bot PRs read against the corpus and ruled SMALL → merged: #873 (arbitrate churn on a
+  landing PR, fixes #868 — SELECT excludes APPROVED+armed, FU-147 gated on fresh evidence),
+  #879 (budget-403 → -key/-account/residual split + match= line, fixes #871), #880 (scout
+  filing gate reads evidence not attempts, fixes #877), #878 (resolve-model CLI-flag replay
+  rows, fixes #870). #873 auto-merged on the codeowner approval; #879/#880/#878 admin-merged
+  (BEHIND only via disjoint sibling merges — file sets verified disjoint, re-cycling 3 bot
+  reviews would have bought nothing).
+- Gate-read findings, all on record: answered #873's reviewer TOOL_GAP from the tofu source
+  (`dismiss_stale_reviews_on_push=true`, repo_rulesets.tf:138 — residual churn real but
+  state-fp-bounded to ≤1 ride per BEHIND-after-approval cycle); filed the FU-147 un-anchored
+  `test("ARBITRATE")` marker nit as a Follow-ups bullet on my #873 approval (harvest mints it);
+  caught + directly fixed the consumer gap the #879 review sweep missed — ledger.py
+  `retry_storms` exact-membership would drop the new subclasses (quickfix `2bda99b8`,
+  prefix-match, ledger-emitter-test green 26 checks, subclass-count probed).
+- #880↔#879 interaction checked and unreachable (scout classifies STATS-borne error_class; the
+  split is raw-log-fallback-only). C6 merged-closeouts for #868/#870/#871/#877 left to the loop.
