@@ -140,8 +140,8 @@ is stale, so it cannot drift the way the prose register did.
 | `_selftest/wrong-expectation` | actions | - | `-` | - |
 | `adopted-not-queued-surfaces/adopted-not-queued-surfaces` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/first-tick` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
-| `arbitrate/fu147-refire-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
-| `arbitrate/landing-sequence` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/fu147-refire-blocked` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `arbitrate/landing-sequence` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/probe-unreadable` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `argv-payload/over-ceiling` | actions | - | `agents/agent-session.sh` | - |
 | `argv-payload/retro-handoff` | actions | - | `agents/retro-session.sh` | - |
