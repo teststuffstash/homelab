@@ -113,10 +113,12 @@ six OVERSIZE items pointer-ized into
       behind oracle-fleet/idp reaching prod, so the interim carries the risk until then; a cron
       would need FU-012-style creds and a runner. ⚠ now load-bearing for tofu state as well.
       **The risk fired 2026-08-24**: the meta LMDB was wiped in the pve thin-pool incident
-      ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884) — the
-      2026-08-04 interim copy is now the restore source. **Next:** operator decides the #884
-      restore (Aug-4 objects into the recreated buckets, ~20-day loss on loki/transcripts/sleep);
-      then make `garage-backup` a cadence, not a one-shot — its 20-day staleness is the loss window.
+      ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884); the
+      Aug-4 copy was restored same day (operator go; forensics narrowed to transcripts only —
+      sleep re-syncs from phone/pi, loki loss accepted). **Operator ruling 2026-08-24: oracle
+      serves production ~next week and this failure class must be structurally impossible by
+      then** — the rf/db-engine/backup-cadence decision is now deadline-bound, ADR-shaped.
+      **Next:** that durability ADR (rf≥2 vs sqlite-engine single-node, backup cadence, offsite).
       Posture + numbers: [`docs/garage.md`](garage.md) §Durability. Relates FU-013, FU-012, ADR-031.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
