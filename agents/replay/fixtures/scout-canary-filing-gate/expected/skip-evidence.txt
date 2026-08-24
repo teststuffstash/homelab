@@ -1,0 +1,25 @@
+CALL scout_canary_mint model=stealth/ox-alpha free=false
+CALL scout_canary_ride model=stealth/ox-alpha
+CALL scout_canary_mint model=stealth/ox-alpha cleanup
+CALL scout_canary_mint model=meta/muse-spark-1.2-contributor free=false
+CALL scout_canary_ride model=meta/muse-spark-1.2-contributor
+CALL scout_canary_mint model=meta/muse-spark-1.2-contributor cleanup
+CALL scout_canary_mint model=deepseek/deepseek-v4-flash-vision-exp free=false
+CALL scout_canary_ride model=deepseek/deepseek-v4-flash-vision-exp
+CALL scout_canary_mint model=deepseek/deepseek-v4-flash-vision-exp cleanup
+CALL rotation_post source=canary entry={"model":"stealth/ox-alpha","canary_verdict":"void","free":false}
+CALL rotation_post source=canary entry={"model":"meta/muse-spark-1.2-contributor","canary_verdict":"no-stats","free":false}
+CALL rotation_post source=canary entry={"model":"deepseek/deepseek-v4-flash-vision-exp","canary_verdict":"void","free":false}
+OUT ROW 1 stealth/ox-alpha benched=false canary=void
+OUT ROW 2 meta/muse-spark-1.2-contributor benched=false canary=no-stats
+OUT ROW 3 deepseek/deepseek-v4-flash-vision-exp benched=false canary=void
+OUT CANARY stealth/ox-alpha void free=false
+OUT CANARY meta/muse-spark-1.2-contributor no-stats free=false
+OUT CANARY deepseek/deepseek-v4-flash-vision-exp void free=false
+ERR canary: riding up to 3 candidate(s) in ns teststuffstash
+ERR canary: dispatching stealth/ox-alpha ($0.05 cap)
+ERR canary: dispatching meta/muse-spark-1.2-contributor ($0.05 cap)
+ERR canary: dispatching deepseek/deepseek-v4-flash-vision-exp ($0.05 cap)
+ERR scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): stealth/ox-alpha (canary: void), meta/muse-spark-1.2-contributor (canary: no-stats), deepseek/deepseek-v4-flash-vision-exp (canary: void) — gh issue create NOT run
+ERR scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/agents/model-routing.md §M7 leg 4)
+RC 0

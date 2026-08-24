@@ -1,0 +1,5 @@
+[
+  {"model": "stealth/ox-alpha", "free": false, "headline": 0.15, "bench": {"benched": false}, "enr": null, "score": -1},
+  {"model": "meta/muse-spark-1.2-contributor", "free": false, "headline": 0.12, "bench": {"benched": false}, "enr": null, "score": -1},
+  {"model": "deepseek/deepseek-v4-flash-vision-exp", "free": false, "headline": 0.25, "bench": {"benched": false}, "enr": null, "score": -1}
+]

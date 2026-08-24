@@ -11,5 +11,6 @@ ERR canary: riding up to 3 candidate(s) in ns teststuffstash
 ERR canary: dispatching newco/spark:free (only-free)
 ERR canary: dispatching qwen/qwen3.8-27b ($0.05 cap)
 ERR canary: common cause — all canaried verdicts identical (auth-storm) — ONE scout-infra datum, zero per-model verdicts (leg 4)
-ERR scout: digest SKIPPED — every row unbenched AND uncanaried (no graduation evidence: newco/spark:free, qwen/qwen3.8-27b); gh issue create NOT run (FU-161 filing gate)
+ERR scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): newco/spark:free (canary: ), qwen/qwen3.8-27b (canary: ) — gh issue create NOT run
+ERR scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/agents/model-routing.md §M7 leg 4)
 RC 0
