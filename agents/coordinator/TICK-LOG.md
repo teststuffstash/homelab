@@ -4863,3 +4863,28 @@ first live ADR-110 maintenance session before the ADR existed.
   recording rule live (~1.4KB/s healthy baseline), ruler evaluating.
 - Reflex note: both platform PRs sat unreviewed ~25min (typical 2-11min) — review-platform rung
   once each per the fire-once discipline; AR#84's red CI was a devbox-fetch 504 flake (rerun green).
+
+## 2026-08-24 — corpus session: G-B stall read, ADR-110 gate reads ×3, #849 filed, #835 prober delivered
+
+- Operator asked: did last night's goal stall, is it the codeowner-parked #775/#818 PRs? Read:
+  G-B #818 ran CLEAN (decompose on fable, 5 children, #831/#832 merged into goal branch by
+  22:18Z); #833/#834 then held by `⏳ PR budget (3 open ≥ cap 3)` — the three codeowner-parked
+  master PRs (#836/#837/#841, bot-approved, REVIEW_REQUIRED) ate the whole REPO_PR_CAP. Designed
+  backpressure, not a defect — but base-blind: churn products have no cross terms between bases
+  (operator's sharpening). → COMMAND: filed **#849** (count armed PRs per the queued issue's
+  target base; REPO_MAX_WIP stays base-blind), bound under #822 beside #828/#829.
+- ADR-110 gate reads ×3 (full-diff, corpus loaded): #836 (goal footprint exemption, the ruled
+  #822 fix) · #837 (#827 harness-guard test pin) · #841 (#825 clause-replay pairing lint;
+  non-blocking note: clause list duplicates ci.yaml:118 — one-home read on next touch). All
+  approved; cascade merged all three by 10:17Z; freed budget dispatched #833 organically.
+- **#835 ruling: `.agents/**` carve-out DECLINED** (operator; N=1-forever + judgment work mis-fit
+  to the fix lane). Seat delivered both halves as **PR#850** into `goal/818-assurance` (armed):
+  `.agents/probe.md` — the platform probe brief, belt-gap framing (report what is broken AND
+  unalerted; 6 checks, OK/FINDING/PROBE-FAIL contract) — + claim `prober: {enabled, 41 */6,
+  haiku}` + roles.md first-flip currency. First prober enablement anywhere. Post-merge verify:
+  `probe-platform` CronWorkflow renders in platform-agents; first tick's report is the read.
+- Overnight residue on the board: retro first unattended fire FAILED (all cells + harvest exit 1,
+  ~05:00Z; janitor died same window to Anthropic 529 — correlation unverified, transcript read
+  owed = the standing FU-058 post-fire item) · review-platform-1787515200 Failed exit 4 (one-off,
+  subsequent runs green) · #778 still agent/review with no PR (checkpoint recommends re-queue —
+  dispatch decision, not taken here).
