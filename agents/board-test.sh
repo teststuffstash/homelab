@@ -164,3 +164,40 @@ present "probe-fail: PR-list probe failure is WARNed" \
 
 printf '\n  %s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
+
+# ══ 4. --machine mode — derived classes from Prometheus (homelab#892) ════════════════════════
+# Seam: PROMETHEUS_URL=${PROMETHEUS_URL:-http://kube-prometheus-stack-prometheus.monitoring.svc:9090}
+# (overridable to http://stub for testing with a curl stub). The curl stub returns synthetic
+# agent_item_class series data in Prometheus JSON format.
+
+# Create a curl stub for Prometheus
+cat > "$TMP/bin/curl" <<'CURLSTUB'
+#!/usr/bin/env bash
+# Stub curl for Prometheus queries
+if [[ "$*" == *"/api/v1/query"* ]]; then
+  cat <<'JSON'
+{"status":"success","data":{"resultType":"vector","result":[
+  {"metric":{"repo":"homelab","item":"833","class":"held-merged-unlinked","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"834","class":"queued-held-by-ghost","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"889","class":"riding","who":"machine"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"840","class":"container","who":"none"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"aggregate","class":"backlog-aggregate","who":"operator"},"value":[1787054400,"1"]}
+]}}
+JSON
+fi
+exit 0
+CURLSTUB
+chmod +x "$TMP/bin/curl"
+
+board "$TMP/machine.actions" "$TMP/machine.err" "PROMETHEUS_URL=http://stub" --machine platform
+if [ "$BOARD_RC" = 0 ]; then ok "machine: board.sh --machine exits 0"; else bad "machine: board.sh --machine exited $BOARD_RC"; fi
+present "machine: header has board v1 prefix" "board v1" "$BOARD_OUT"
+present "machine: header has scope=stack:platform" "scope=stack:platform" "$BOARD_OUT"
+present "machine: header has sources=labels:live pods:live derived:tick@" "sources=labels:live pods:live derived:tick@" "$BOARD_OUT"
+present "machine: held-merged-unlinked row (who=operator)" "who=operator class=held-merged-unlinked id=homelab#833" "$BOARD_OUT"
+present "machine: queued-held-by-ghost row (who=operator)" "who=operator class=queued-held-by-ghost id=homelab#834" "$BOARD_OUT"
+present "machine: backlog-aggregate row (who=operator)" "who=operator class=backlog-aggregate id=homelab/aggregate" "$BOARD_OUT"
+present "machine: riding row (who=machine)" "who=machine  class=riding id=homelab#889" "$BOARD_OUT"
+present "machine: container row (who=none)" "who=none     class=container id=homelab#840" "$BOARD_OUT"
+absent "machine: no § REVIEW section" "§ " "$BOARD_OUT"
+absent "machine: no totals line" "totals —" "$BOARD_OUT"

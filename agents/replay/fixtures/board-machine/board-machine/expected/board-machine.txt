@@ -1,0 +1,6 @@
+board v1 scope=stack:platform ts=2026-08-18T12:00:00Z sources=labels:live pods:live derived:tick@2026-08-18T12:00:00Z
+who=operator class=held-merged-unlinked id=homelab#833 pod=none link=weak since=<1h next="repair strong link or hand-close"
+who=operator class=queued-held-by-ghost id=homelab#834 note="held by phantom/infeasible blocker"
+who=operator class=backlog-aggregate id=homelab/aggregate note="n/a"
+who=machine  class=riding id=homelab#889 age=<1m
+who=none     class=container id=homelab#840 note="n/a"

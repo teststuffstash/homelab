@@ -19,5 +19,6 @@ parts:
   - file:bridge.sh
 env:
   - AGENT_PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - SCAN_PHASE_PGW=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
   - SCAN_PHASE_POD=coordinate-homelab-1
   - SCAN_PHASE_NS=homelab-agents

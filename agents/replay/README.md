@@ -147,6 +147,7 @@ is stale, so it cannot drift the way the prose register did.
 | `argv-payload/retro-handoff` | actions | - | `agents/retro-session.sh` | - |
 | `argv-payload/warn-band` | actions | - | `agents/agent-session.sh` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
+| `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-footprint-mismatch/body-footprint-mismatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
@@ -183,6 +184,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
+| `item-class/item-class` | actions | - | `agents/coordinator-scan.sh` | - |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |

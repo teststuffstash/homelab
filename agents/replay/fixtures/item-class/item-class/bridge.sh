@@ -11,40 +11,42 @@ curl() {
   return "${CURL_RC:-0}"
 }
 
-echo "=== push: held-merged-unlinked (who=operator) ==="
-item_class_push "homelab" "833" "held-merged-unlinked" "operator"
-printf 'RETURN %s\n' "$?"
+{
+  echo "=== push: held-merged-unlinked (who=operator) ==="
+  item_class_push "homelab" "833" "held-merged-unlinked" "operator"
+  printf 'RETURN %s\n' "$?"
 
-echo "=== push: queued-held-by-ghost (who=operator) ==="
-item_class_push "homelab" "834" "queued-held-by-ghost" "operator"
-printf 'RETURN %s\n' "$?"
+  echo "=== push: queued-held-by-ghost (who=operator) ==="
+  item_class_push "homelab" "834" "queued-held-by-ghost" "operator"
+  printf 'RETURN %s\n' "$?"
 
-echo "=== push: riding (who=machine) ==="
-item_class_push "homelab" "889" "riding" "machine"
-printf 'RETURN %s\n' "$?"
+  echo "=== push: riding (who=machine) ==="
+  item_class_push "homelab" "889" "riding" "machine"
+  printf 'RETURN %s\n' "$?"
 
-echo "=== push: container (who=none) ==="
-item_class_push "homelab" "840" "container" "none"
-printf 'RETURN %s\n' "$?"
+  echo "=== push: container (who=none) ==="
+  item_class_push "homelab" "840" "container" "none"
+  printf 'RETURN %s\n' "$?"
 
-echo "=== push: backlog-aggregate (who=operator) ==="
-item_class_push "homelab" "aggregate" "backlog-aggregate" "operator"
-printf 'RETURN %s\n' "$?"
+  echo "=== push: backlog-aggregate (who=operator) ==="
+  item_class_push "homelab" "aggregate" "backlog-aggregate" "operator"
+  printf 'RETURN %s\n' "$?"
 
-# A run with no gateway (the jail/manual path, AGENT_PUSHGATEWAY_URL=""): no push at all.
-echo "=== push: gateway disabled ==="
-SCAN_PHASE_PGW="" item_class_push "homelab" "999" "riding" "machine"
-printf 'RETURN %s\n' "$?"
+  # A run with no gateway (the jail/manual path, AGENT_PUSHGATEWAY_URL=""): no push at all.
+  echo "=== push: gateway disabled ==="
+  SCAN_PHASE_PGW="" item_class_push "homelab" "999" "riding" "machine"
+  printf 'RETURN %s\n' "$?"
 
-# A run with no pod identity: no push at all.
-echo "=== push: no pod identity ==="
-SCAN_PHASE_POD="" item_class_push "homelab" "999" "riding" "machine"
-printf 'RETURN %s\n' "$?"
+  # A run with no pod identity: no push at all.
+  echo "=== push: no pod identity ==="
+  SCAN_PHASE_POD="" item_class_push "homelab" "999" "riding" "machine"
+  printf 'RETURN %s\n' "$?"
 
-# The gateway is up but refuses (curl exit 7): one warning (silenced by || true), and the
-# classification is unaffected.
-echo "=== push: gateway refuses ==="
-CURL_RC=7 item_class_push "homelab" "999" "riding" "machine"
-printf 'RETURN %s\n' "$?"
+  # The gateway is up but refuses (curl exit 7): one warning (silenced by || true), and the
+  # classification is unaffected.
+  echo "=== push: gateway refuses ==="
+  CURL_RC=7 item_class_push "homelab" "999" "riding" "machine"
+  printf 'RETURN %s\n' "$?"
 
-echo "=== end ==="
+  echo "=== end ==="
+} >> "$REPLAY_ACTIONS"
