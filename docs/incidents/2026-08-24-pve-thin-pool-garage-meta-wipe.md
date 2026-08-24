@@ -100,6 +100,20 @@ post-dates the wipe (empty reads began 15:31:04).
 - Crossplane recreating buckets is camouflage: "the bucket exists" post-incident proves
   reconciliation, not survival. Check `Created:` dates.
 
+## Restore (same day, operator go ~16:50Z)
+
+Aug-4 backup re-uploaded in full — all 11 buckets count-verified (351,683 objects; allure-reports
+needed one idempotent re-sync for 10 failed PUTs). Content-addressing re-adopted matching orphan
+blocks in place. `homelab-browse` + `tofu-state` keys re-imported with wallet id/secret.
+**The stale-key tail:** Crossplane re-minted every app key with NEW ids; consumers whose secret
+is a *static copy* (Infisical-held: sleep-ingester) or whose pod predated the re-mint (loki-0,
+grafana's sleep sidecar) kept 403ing — loki silently failed every flush for ~28h ("No such key:
+GK…" in its log was the tell). Fixed by restarting the stale pods and re-importing the old sleep
+keys via `garage key import` (ESO chains reading in-cluster Kubernetes stores self-healed;
+static stores did not — that asymmetry is the lesson). specs.oracle 200, sleep-ingester verify
+job green, loki flushing clean, restore key deleted. Buckets born after Aug 4 had no backup:
+`jail-transcripts` (forensic target), `circles-specs` (regenerated).
+
 ## Residual
 
 - **FU-093** — pve thin-pool metering (the third sum) + periodic guest fstrim.
