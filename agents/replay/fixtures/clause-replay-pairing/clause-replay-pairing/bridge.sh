@@ -34,7 +34,11 @@ agents/coordinator/responder-argo.yaml
 agents/coordinator/retro-argo.yaml
 agents/coordinator/fix-debounce-argo.yaml
 agents/coordinator/deploy-revert-argo.yaml"
-PARITY_ISSUES="${PARITY_ISSUES:-}"
+if [ "${PARITY_DRIFT:-0}" = "1" ]; then
+  PARITY_ISSUES="  PARITY FAIL: \`agents/coordinator/reviewer-git.yaml\` matches ratchet regex but is missing from \`clause_files\`\n"
+else
+  PARITY_ISSUES=""
+fi
 mainrepo=homelab
 openall_fetch_rc=0
 orphans=""

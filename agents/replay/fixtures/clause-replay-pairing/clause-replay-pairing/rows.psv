@@ -3,6 +3,9 @@
 # Row 2: oracle-fleet repo, PARITY_ISSUES non-empty — the CLAUSE-LIST PARITY line must NOT be
 #        emitted (the guard is `[ "$repo" = "homelab" ]`, not `$mainrepo`), while the pairing
 #        check still reports its two issues.
+# Row 3: homelab repo, PARITY_DRIFT=1 — the CLAUSE-LIST PARITY line IS emitted, plus the
+#        two pairing lines.
 # id                    | world | patch | env                                                              | expect                | params
-homelab-no-drift       |       |       | IN_REPO=homelab IN_SLUG=teststuffstash/homelab PARITY_ISSUES=      | homelab-no-drift      |
-non-homelab-with-drift |       |       | IN_REPO=oracle-fleet IN_SLUG=teststuffstash/oracle-fleet PARITY_ISSUES="  PARITY FAIL: \`agents/coordinator/reviewer-git.yaml\` matches ratchet regex but is missing from \`clause_files\`\n" | non-homelab-with-drift |
+homelab-no-drift       |       |       | IN_REPO=homelab IN_SLUG=teststuffstash/homelab PARITY_DRIFT=0      | homelab-no-drift      |
+non-homelab-with-drift |       |       | IN_REPO=oracle-fleet IN_SLUG=teststuffstash/oracle-fleet PARITY_DRIFT=1 | non-homelab-with-drift |
+homelab-with-drift     |       |       | IN_REPO=homelab IN_SLUG=teststuffstash/homelab PARITY_DRIFT=1      | homelab-with-drift    |
