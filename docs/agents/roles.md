@@ -213,8 +213,15 @@ tier allowed, dual-model worth it) are FU-095's.
   (`fix-debounce-argo.yaml`) judges the whole pending SET before any `agent/queued` lands —
   mechanism in [`iac-lane.md`](iac-lane.md) §"one root cause, N alert issues". This replaced
   the per-issue `selfQueue` knob (cb4ae5a, which dispatched same-cause issues in parallel).
-  Graduation dial still NOT built: imperative remediation whitelist (needs a scoped Role per
-  stack ns).
+  **Graduation dial BUILT 2026-08-24 (goal#818):** a claim-gated `responder:` block on the
+  AgentStack XRD renders a scoped Role + RoleBinding per stack namespace (the loop ns + every
+  fixer-enabled repo ns), granting exactly the declared verb/resource pairs to the responder
+  identity (agentstack-loop SA). Default OFF — absent block = nothing rendered, the responder
+  keeps its report-only breakers ("no kubectl mutations", one-issue-max, inert labels).
+  Enabling the dial does not by itself make the responder mutate anything; a consumer must be
+  wired to read the grant and act on it (goal #818 §assembly — this PR ships NO consumer;
+  report-only remains the default posture). The escalation-check mirror lives in
+  `argocd/resources/agentstack/rbac.yaml` under `crossplane-agentstack-composed`.
   **Three lane gaps, all evidenced by the 27-issue corpus (2026-08-04 audit, FU-133):** the lane
   files one issue per *fingerprint* and correlates nothing (~19 of 27 issues were 5 root causes;
   one PVC produced 8 across 8 days); it has no state after "issue filed" (`send_resolved = false`

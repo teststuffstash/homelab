@@ -80,6 +80,36 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get, list, watch, create, update, patch, delete]
+  # Responder graduation dial (goal#818 / FU-103): the Composition composes per-namespace
+  # Role + RoleBinding granting the claim-declared verb/resource pairs to the responder
+  # identity (agentstack-loop SA). To COMPOSE a Role that grants verb V on resource R,
+  # Crossplane's own SA must already HOLD V on R (k8s privilege-escalation prevention).
+  # The common remediation verbs below are pre-granted so the compose passes for any
+  # reasonable whitelist. Crossplane never USES these verbs — they exist so it can hand
+  # them to the responder Role. If a claim declares a verb/resource pair NOT listed here,
+  # the compose fails with "attempting to grant RBAC permissions not currently held" and
+  # the claim engineer must add the missing pair to this block.
+  - apiGroups: [""]
+    resources: [pods, pods/log, pods/status]
+    verbs: [get, list, watch, patch, delete]
+  - apiGroups: [""]
+    resources: [configmaps, endpoints, events, persistentvolumeclaims, persistentvolumeclaims/status, services]
+    verbs: [get, list, watch, patch, delete]
+  - apiGroups: [""]
+    resources: [secrets, serviceaccounts]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, deployments/scale, deployments/status, statefulsets, statefulsets/status, daemonsets]
+    verbs: [get, list, watch, patch, delete]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch, delete]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch, patch, delete]
+  - apiGroups: [cilium.io]
+    resources: [ciliumnetworkpolicies, ciliumnetworkpolicies/status]
+    verbs: [get, list, watch, patch, delete]
   # ADR-089 quota-as-contract: the Composition has been able to compose a per-repo ResourceQuota
   # since the tier work landed, but the block is gated on `{{- if $r.storage }}` and NO claim had
   # ever set `storage` — so this grant was never needed and its absence never showed. Arming the
