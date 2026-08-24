@@ -105,21 +105,15 @@ six OVERSIZE items pointer-ized into
       integration gate pins 4.0.6 — prod can drift from what CI tested. **Next:** pin the version
       (`frser-sqlite-datasource 4.0.6` in the plugins list) and let Renovate own the bump like any
       chart. Surfaced by sleep-tracking#121 (dashboard render goal). Relates FU-136.
-- [ ] **FU-137** — **Garage has no offsite backup** — `replication_factor = 1` on one node, all
-      redundancy borrowed from Longhorn's 2 replicas, and nothing copies the objects off the
-      cluster. (FU-013 backs things *into* Garage; this is the other direction.) **Interim taken
-      2026-08-04:** `devbox run garage-backup` → `backups/garage/` on the jail host, count-verified,
-      `ert-snapshots` excluded as re-ingestable. **Next:** the operator's AWS/Civo bucket — parked
-      behind oracle-fleet/idp reaching prod, so the interim carries the risk until then; a cron
-      would need FU-012-style creds and a runner. ⚠ now load-bearing for tofu state as well.
-      **The risk fired 2026-08-24**: the meta LMDB was wiped in the pve thin-pool incident
-      ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884); the
-      Aug-4 copy was restored same day (operator go; forensics narrowed to transcripts only —
-      sleep re-syncs from phone/pi, loki loss accepted). **Operator ruling 2026-08-24: oracle
-      serves production ~next week and this failure class must be structurally impossible by
-      then** — the rf/db-engine/backup-cadence decision is now deadline-bound, ADR-shaped.
-      **Next:** that durability ADR (rf≥2 vs sqlite-engine single-node, backup cadence, offsite).
-      Posture + numbers: [`docs/garage.md`](garage.md) §Durability. Relates FU-013, FU-012, ADR-031.
+- [ ] **FU-137** — **Garage durability: POINTER.** The risk fired 2026-08-24 — meta LMDB wiped
+      in the pve thin-pool incident, Aug-4 backup restored same day
+      ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884).
+      **ADR-114** (2026-08-24) answers it: rf=3 across physical zones, engines-replicate/
+      storage-stores-singles, backup = logical-deletion CronJob — design, grounding links,
+      history: [`docs/garage.md`](garage.md) §Durability + §Target architecture.
+      **Next (oracle-prod-deadline-bound, ~2026-08-31):** the build-out — garage rf=3 migration
+      (local XFS, wk-metal-01/04 + wk-02 interim), CNPG replica-1 + required zone anti-affinity,
+      backup CronJob. Offsite stays parked behind oracle/idp prod. Relates FU-013, FU-012, ADR-031.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
