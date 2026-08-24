@@ -53,7 +53,7 @@ Prometheus is reachable in-cluster at
 4. **The silence class — heartbeats and freshness.** Metrics that must move, checked for
    staleness against their own cadence:
    - `time() - iac_sentinel_last_run_timestamp_seconds > 1800` (sentinel ticks every ≤15m);
-   - `agent_scan_phase_start_timestamp_seconds` older than ~2h across loop namespaces while
+   - `agent_scan_phase_start_timestamp` older than ~2h across loop namespaces while
      coordinate crons run every 30m;
    - `time() - push_time_seconds > 86400` on pushgateway groups that historically push daily.
    Any stale heartbeat not already alerting = FINDING (this is the class the belts miss most).
