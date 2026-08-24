@@ -62,11 +62,15 @@ data:
       volume_enabled: true
       max_query_lookback: 168h
 
-    ruler:
-      storage:
-        type: local
-        local:
-          directory: /loki/rules
+    ruler:                            # homelab#811: the per-pod log-volume belt runs IN the ruler
+      storage:                        # (LogQL — per-pod volume never leaves Loki); rules come from
+        type: local                   # the loki-ruler-rules ConfigMap mounted under
+        local:                        # /etc/loki/rules/<tenant>; "fake" is the single-tenant dir
+          directory: /etc/loki/rules  # name when auth_enabled=false.
+      rule_path: /loki/ruler-scratch  # scratch on the PVC (ruler needs a writable copy)
+      alertmanager_url: http://alertmanager-operated.monitoring.svc.cluster.local:9093
+      enable_alertmanager_v2: true    # AM >=0.27 removed the v1 API; without this every
+                                      # notification 404s silently
 
     analytics:
       reporting_enabled: false
