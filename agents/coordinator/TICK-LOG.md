@@ -4962,3 +4962,12 @@ first live ADR-110 maintenance session before the ADR existed.
   prefix-match, ledger-emitter-test green 26 checks, subclass-count probed).
 - #880↔#879 interaction checked and unreachable (scout classifies STATS-borne error_class; the
   split is raw-log-fallback-only). C6 merged-closeouts for #868/#870/#871/#877 left to the loop.
+
+- **Attention-layer landing (same session, operator "land it"):** #892 authored+queued (leg 5:
+  scan derived-class export + board --machine + AgentAttentionStanding belt), bound to #628;
+  #628 body gained legs 5–7 + the leg-4 attention-table note; doorbell rung. Earlier in the
+  sitting: #833 unwedged (PR#856 body repaired → machine C6 closed it; #834 dispatched ~40min
+  later, proving the hold-chain cost), agent-runtime#87 filed+queued (finalize weak-link check),
+  GAPS design-agents-G2 filed (label-reported-as-activity, operator catch). G-A live census:
+  4 open of 35 descendants (2 operator: #778 Go-latch split, #876 infeasible-parked; 1 riding
+  #889/PR#890; 1 container #787).
