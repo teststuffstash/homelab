@@ -970,6 +970,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       | .[]' <<<"$prsjson")"
     # Default branch: a queued issue without a `Base:` body line counts against this.
     default_branch="$(gh repo view "$slug" --json defaultBranch --jq .defaultBranch 2>/dev/null || echo "master")"
+    [ -n "$default_branch" ] || default_branch=master
     # ADR-097 project-WIP predicate (was binary WIP=1; found live meta-8: two dispatchers raced
     # #52 inside one scan window; 2026-07-21 #55: two CRON ticks raced through the phase=Running
     # filter while a kata pod sat Pending — so the probe counts everything non-terminal): the

@@ -194,6 +194,7 @@ is stale, so it cannot drift the way the prose register did.
 | `pick-rail/clear` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/go` | actions | - | `agents/subscription-latch.sh` | - |
 | `pr-cap-per-base` | actions | - | `agents/coordinator-scan.sh` | - |
+| `pr-cap-per-base/collision` | actions | - | `agents/coordinator-scan.sh` | - |
 | `rail-degrade/rail-degrade` | suite | - | `-` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
