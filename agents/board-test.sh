@@ -172,15 +172,28 @@ printf '\n  %s passed, %s failed\n' "$PASS" "$FAIL"
 # Create a curl stub for Prometheus
 cat > "$TMP/bin/curl" <<'CURLSTUB'
 #!/usr/bin/env bash
-# Stub curl for Prometheus queries
-if [[ "$*" == *"/api/v1/query"* ]]; then
+# Stub curl for Prometheus queries — matches the longer metric name FIRST (since it's a substring)
+if [[ "$*" == *"agent_item_class_since_timestamp_seconds"* ]]; then
+  # Timestamp series: item -> start epoch in value[1]
   cat <<'JSON'
 {"status":"success","data":{"resultType":"vector","result":[
-  {"metric":{"repo":"homelab","item":"833","class":"held-merged-unlinked","who":"operator","since_seconds":"27000"},"value":[1787054400,"1"]},
-  {"metric":{"repo":"homelab","item":"834","class":"queued-held-by-ghost","who":"operator","since_seconds":"27000"},"value":[1787054400,"1"]},
-  {"metric":{"repo":"homelab","item":"889","class":"riding","who":"machine","since_seconds":"360"},"value":[1787054400,"1"]},
-  {"metric":{"repo":"homelab","item":"840","class":"container","who":"none","since_seconds":"0"},"value":[1787054400,"1"]},
-  {"metric":{"repo":"homelab","item":"aggregate","class":"backlog-aggregate","who":"operator","since_seconds":"1123200"},"value":[1787054400,"1"]}
+  {"metric":{"repo":"homelab","item":"833"},"value":[1787054400,"1787027400"]},
+  {"metric":{"repo":"homelab","item":"834"},"value":[1787054400,"1787027400"]},
+  {"metric":{"repo":"homelab","item":"889"},"value":[1787054400,"1787054040"]},
+  {"metric":{"repo":"homelab","item":"840"},"value":[1787054400,"1787054400"]},
+  {"metric":{"repo":"homelab","item":"aggregate"},"value":[1787054400,"1785931200"]}
+]}}
+JSON
+elif [[ "$*" == *"/api/v1/query"* ]]; then
+  # Class series (includes one item absent from timestamp series to test unknown case)
+  cat <<'JSON'
+{"status":"success","data":{"resultType":"vector","result":[
+  {"metric":{"repo":"homelab","item":"833","class":"held-merged-unlinked","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"834","class":"queued-held-by-ghost","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"889","class":"riding","who":"machine"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"840","class":"container","who":"none"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"841","class":"parked-blocked","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"aggregate","class":"backlog-aggregate","who":"operator"},"value":[1787054400,"1"]}
 ]}}
 JSON
 fi
@@ -188,21 +201,26 @@ exit 0
 CURLSTUB
 chmod +x "$TMP/bin/curl"
 
-board "$TMP/machine.actions" "$TMP/machine.err" "PROMETHEUS_URL=http://stub" --machine platform
+board "$TMP/machine.actions" "$TMP/machine.err" "PROMETHEUS_URL=http://stub BOARD_NOW=$NOW" --machine platform
 if [ "$BOARD_RC" = 0 ]; then ok "machine: board.sh --machine exits 0"; else bad "machine: board.sh --machine exited $BOARD_RC"; fi
 present "machine: header has board v1 prefix" "board v1" "$BOARD_OUT"
 present "machine: header has scope=stack:platform" "scope=stack:platform" "$BOARD_OUT"
 present "machine: header has sources=labels:live pods:live derived:tick@" "sources=labels:live pods:live derived:tick@" "$BOARD_OUT"
 present "machine: held-merged-unlinked row (who=operator)" "who=operator class=held-merged-unlinked id=homelab#833" "$BOARD_OUT"
 present "machine: queued-held-by-ghost row (who=operator)" "who=operator class=queued-held-by-ghost id=homelab#834" "$BOARD_OUT"
+present "machine: computed elapsed times (7h30m for items 833 and 834)" "since=7h30m" "$BOARD_OUT"
 present "machine: backlog-aggregate row (who=operator)" "who=operator class=backlog-aggregate id=homelab/aggregate" "$BOARD_OUT"
-present "machine: riding row (who=machine)" "who=machine  class=riding id=homelab#889" "$BOARD_OUT"
+present "machine: riding row (who=machine) with computed age" "who=machine  class=riding id=homelab#889 age=6m" "$BOARD_OUT"
 present "machine: container row (who=none)" "who=none     class=container id=homelab#840" "$BOARD_OUT"
+present "machine: item absent from timestamp series renders unknown" "since=unknown" "$BOARD_OUT"
 absent "machine: no § REVIEW section" "§ " "$BOARD_OUT"
 absent "machine: no totals line" "totals —" "$BOARD_OUT"
 
-# Test --scope parameter parsing (directive 2)
-board "$TMP/scope.actions" "$TMP/scope.err" "PROMETHEUS_URL=http://stub" --machine --scope=goal:775 platform 2>/dev/null || true
-if [ "$BOARD_RC" = 0 ]; then ok "machine: --scope=goal:775 parsing works"; else bad "machine: --scope=goal:775 parsing failed"; fi
+# Test --scope parameter parsing — space-separated form (directive 2)
+board "$TMP/scope-eq.actions" "$TMP/scope-eq.err" "PROMETHEUS_URL=http://stub BOARD_NOW=$NOW" --machine --scope=goal:775 platform 2>/dev/null || true
+if [ "$BOARD_RC" = 0 ]; then ok "machine: --scope=goal:775 (equals form) parsing works"; else bad "machine: --scope=goal:775 parsing failed"; fi
+
+board "$TMP/scope-sp.actions" "$TMP/scope-sp.err" "PROMETHEUS_URL=http://stub BOARD_NOW=$NOW" --machine --scope goal:775 platform 2>/dev/null || true
+if [ "$BOARD_RC" = 0 ]; then ok "machine: --scope goal:775 (space form) parsing works"; else bad "machine: --scope goal:775 parsing failed"; fi
 
 [ "$FAIL" -eq 0 ] || exit 1

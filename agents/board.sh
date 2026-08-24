@@ -247,14 +247,19 @@ if [ "$machine" = 1 ]; then
       item: .metric.item,
       class: .metric.class,
       who: .metric.who,
-      since_seconds: ($ts_series[.metric.item // ""] // 0 | ($now | tonumber) - .)
+      since_seconds: (($ts_series[.metric.item // ""]) as $t | if $t == null then null else (($now | tonumber) - $t) end)
     } |
     def format_elapsed:
-      . as $secs |
-      if $secs < 60 then "<1m"
-      elif $secs < 3600 then "\(($secs / 60 | floor))m"
-      elif $secs < 86400 then "\(($secs / 3600 | floor))h"
-      else "\(($secs / 86400 | floor))d" end;
+      if . == null then "unknown" else
+        (. | floor) as $secs |
+        if $secs < 60 then "<1m"
+        elif $secs < 3600 then "\(($secs / 60 | floor))m"
+        elif $secs < 86400 then
+          (($secs / 3600) | floor) as $h
+          | ((($secs - ($h * 3600)) / 60) | floor) as $m
+          | (if $m == 0 then "\($h)h" else "\($h)h\($m)m" end)
+        else "\(($secs / 86400 | floor))d" end
+      end;
     [.who, .class, .repo, .item, (.since_seconds | format_elapsed)] | @tsv
   ' 2>/dev/null || true)"
 
