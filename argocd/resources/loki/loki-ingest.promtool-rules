@@ -1,0 +1,24 @@
+# The loki-ingest group lifted VERBATIM out of prometheusrule.yaml (annotations stripped — the
+# manifest is their one home), for loki-ingest.promtool-test. Same standing caveat as the other
+# *.promtool-rules copies: NOT drift-pinned — a stale copy tests the old expr and passes
+# vacuously. Re-copy after editing the manifest:
+#
+#   yq -o=json '{"groups": [{"name": "loki-ingest", "rules": [.spec.groups[].rules[] | del(.annotations)]}]}' argocd/resources/loki/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: loki-ingest
+    rules:
+      - record: loki:distributor_ingest_bytes:rate30m
+        expr: |
+          sum(rate(loki_distributor_bytes_received_total[30m]))
+      - alert: LokiIngestVolumeHigh
+        expr: |
+          loki:distributor_ingest_bytes:rate30m > 120000
+        for: 1h
+        labels:
+          severity: warning
+      - alert: LokiIngestVolumeRamp
+        expr: |
+          loki:distributor_ingest_bytes:rate30m > clamp_min(8 * avg_over_time(loki:distributor_ingest_bytes:rate30m[7d]), 25000)
+        for: 2h
+        labels:
+          severity: warning
