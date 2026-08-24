@@ -4888,3 +4888,34 @@ first live ADR-110 maintenance session before the ADR existed.
   owed = the standing FU-058 post-fire item) · review-platform-1787515200 Failed exit 4 (one-off,
   subsequent runs green) · #778 still agent/review with no PR (checkpoint recommends re-queue —
   dispatch decision, not taken here).
+
+## 2026-08-24 afternoon — corpus session continued: #857 Talos capture, router-consumer audit, ADR-113, the #854/#861/#849 machine cycle
+
+- **#857 (PodSigkilled thinkcentre)**: seat ran FU-155's §6 pre-upgrade capture (9 OOMActions;
+  today = a 5-kill branch-A burst 10:52:27–29Z, all scores nonzero = ranked-Burstable, NOT the
+  §1.4 zero-score bug; kmsg corroborates incl. the dead-cgroup re-kill). Writer creds probe-clean.
+  FU-155 scope REOPENED: Option A's v1.13.8 pin now reads ALL metal nodes (aeeef7f). #110's same-
+  minute fire = DIFFERENT class (container OOM, mirror 1.4G > 512Mi) — PR#859 gate-read+armed
+  (was FU-079-orphan un-armed), merged.
+- **Retro first unattended fire FAILED** (05:00Z): cell-a 529 storm (transient), cell-b budget-403
+  — and BOTH cells rode routed hy3 instead of their configured models: /route has NO `cell` reader
+  and the #782 wiring passed the cell as --fallback. Filed #861 (→ PR#864 merged same day: cell =
+  explicit override; §M10 sentence synced direct, 46c73d5d). Re-fire after-fix = FU-058's read.
+- **Router-consumer audit (operator-pointed, stack repos incl.)**: every literal mapped to a
+  tracker home (G-A tail / FU-127 / store entry 32 for retro-cells-as-slot-draws + jail slot map);
+  smell retired: `.agents/review.yaml` sediment (zero consumers, openai/gpt-latest literal) —
+  new-stack scaffold line dropped (d78f67a), deletion issues sleep-tracking#132 + circles#83.
+- **ADR-113** (bash=glue/Python=logic, shellcheck gates, no wholesale rewrite — PR#865 merged) +
+  **FU-185** (the gate build; SC2318 names #854's exact bug; ~8 standing warnings). Operator's
+  framing recorded: at ~3k LOC a human can no longer hold bash; the lint holds the LLMs.
+- **#854 scout outage cycle**: PR#862's S3-cred diagnosis REFUTED at the gate (Loki: line-167
+  `sess: unbound` = the `local`-expansion trap, 49aa3c6c/PR#499; live write probe clean) →
+  CHANGES_REQUESTED with the literal fix → machine arbitration independently re-verified, struck
+  a harness death (r2 opencode 19s), filed #866, dispatched r3 --harness goose → r3 delivered
+  split+fixtures+honest record → approved; landing. Lesson posted on #864's thread: at a
+  codeowner park a seat finding is a blocking review or the seat's own edit, NEVER a comment.
+- **#868 filed+queued**: arbitrate churn on a LANDING PR (state-fp mutates every tick post-
+  approval → 3 sessions/5min on #862; FU-147 re-labeled over a newer arbitration ruling). Seat's
+  own miss corrected on-thread (the 13:05 session had already shed the label before my write).
+- Machine cycle also landed: #863 (per-base PR cap, fixes #849) + #858 (clause parity) mid-rounds
+  on correct bot findings; #849→#863 caught a real jq-array/@tsv truncation in review.
