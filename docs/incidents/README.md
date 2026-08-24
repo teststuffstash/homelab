@@ -57,3 +57,6 @@ the same exemption the TICK-LOG and ADRs carry.
 | 2026-07-27 | [Responder deferred an alert into silence](2026-07-27-responder-silent-defer.md) | FU-113 |
 | 2026-07-29 | [`agent-finalize` bookkeeping fragility (PATH loss + unauthed `gh`)](2026-07-29-agent-finalize-bookkeeping.md) | FU-120, FU-123 |
 | 2026-07-31 | [Last PR in a batch hung BEHIND on an unreliable GitHub cron](2026-07-31-last-pr-behind-hang.md) | FU-124 |
+| 2026-08-07 | [CI stayed down 5h after GitHub recovered: a listener chasing a deleted runner set](2026-08-07-arc-listener-wedge.md) | — |
+| 2026-08-11 | [wk-metal-02 lost its IPv4 default route; fleet-wide "WAN class" reds + runner starvation](2026-08-11-wk-metal-02-default-route-loss.md) | FU-150 |
+| 2026-08-24 | [pve thin pool 100% (third fill) — wk-01 froze twice, Garage metadata wiped](2026-08-24-pve-thin-pool-garage-meta-wipe.md) | FU-093, FU-137 |
