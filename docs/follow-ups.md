@@ -220,6 +220,16 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
       — both need only org self-hosted-runners R/W. `docs/github-setup.md` §2.
 
+- [ ] **FU-185** — **Shellcheck gate on the agent glue.** The 2026-08-24 shell audit: ~13
+      recorded shell-language defects (unbound vars, bashisms, masked exits, fail-open `||`),
+      disproportionately the SILENT class — and ShellCheck's SC2318 names the exact
+      `local`-expansion bug that killed every model-scout tick for 6 days (#854; PR#862's
+      first diagnosis was refuted by the live log). ADR-113 rules the split: bash stays glue,
+      decision logic is Python, no wholesale rewrite. **Next:** add `shellcheck` to devbox.json
+      + a required `ci` step (`shellcheck -S warning agents/*.sh scripts/*.sh` — .github edit,
+      operator lane) and burn down the ~8 standing warnings (3 scout / 4 scan / 1 launcher) in
+      the same PR. Relates ADR-113, ADR-103, #854.
+
 ## Agents
 
 Sub-grouped 2026-08-07 — the block had reached 34 of the tracker's 57 open items and read as one
