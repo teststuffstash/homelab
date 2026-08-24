@@ -24,6 +24,8 @@
 #
 # No `gh` call appears in the action stream on purpose — the lint rides `openall`, the fetch
 # the repo pass already made.
+# homelab#853: the parity assertion reads ci.yaml at runtime and verifies the clause_files list
+# matches the ratchet regex. It is exercised by every fixture run (no listed fixtures = no drift).
 # pins: (none — report-only check, not a lifecycle transition)
 name: clause-replay-pairing
 mode: actions
