@@ -49,16 +49,21 @@ while [ $# -gt 0 ]; do case "$1" in
 esac; done
 [ -n "$CELL" ] || { echo "FATAL: --cell <harness>:<model> required (e.g. claude:opus, goose:deepseek/deepseek-v4-pro)" >&2; exit 2; }
 HARNESS="${CELL%%:*}"; MODEL="${CELL#*:}"
-# ── ADR-096 override rule: retro cell model = constraint + fail-OPEN fallback ──
+# ── ADR-096 override rule: retro cell model = explicit override ──
 # The retro --cell flag is MANDATORY — every retro invocation supplies one.
-# Unlike the coordinator/reviewer optional --model flag, there is no "operator
-# explicitly overrode" signal here. The cell model is always a ROUTING CONSTRAINT:
-#   - --cell <harness>:<model> constrains the router to the named cell's A/B axis
-#   - --fallback <model> provides the fail-OPEN literal when /route is unreachable
-# An operator who wants to hard-pin (skipping the route) sets AGENT_MODEL, which
-# resolve-model.sh checks ahead of the /route call. This is the universal override.
+# The cell model is passed as BOTH --fallback and --model (explicit override):
+#   --fallback is the resolve-model.sh validation requirement (line 47) and
+#              the fail-OPEN literal when /route is unreachable
+#   --model    makes resolve-model.sh short-circuit before the /route call,
+#              so the cell rides EXACTLY its configured model
+# This ensures the A/B experiment axis is preserved: two cells with different
+# models ride EXACTLY their configured models, and the router cannot collapse
+# them onto one pool pick (G-A #775, fixed for retro in #861).
+# The old --fallback-only semantics (issue #782 wiring) let the router's
+# dispatch verdict override the cell model, silently destroying the experiment
+# axis.  The coordinator-session.sh caller uses the same pattern (line 106).
 # See also docs/agents/model-routing.md.
-MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "$CELL" --fallback "$MODEL")"
+MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "$CELL" --fallback "$MODEL" --model "$MODEL")"
 retro_project "$STACK" || exit 2
 
 # Next run id from the harvested reports (rN numbering is per-stack).
