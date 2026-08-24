@@ -34,7 +34,7 @@ agents/coordinator/responder-argo.yaml
 agents/coordinator/retro-argo.yaml
 agents/coordinator/fix-debounce-argo.yaml
 agents/coordinator/deploy-revert-argo.yaml"
-PARITY_ISSUES=""
+PARITY_ISSUES="${PARITY_ISSUES:-}"
 mainrepo=homelab
 openall_fetch_rc=0
 orphans=""

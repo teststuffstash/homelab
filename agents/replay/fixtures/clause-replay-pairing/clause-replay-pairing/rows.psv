@@ -1,0 +1,8 @@
+# clause-replay-pairing — the decision table (family contract in fixture.yaml; per-row intent below).
+# Row 1: homelab repo, no drift — the pairing check reports the two under-scoped issues.
+# Row 2: oracle-fleet repo, PARITY_ISSUES non-empty — the CLAUSE-LIST PARITY line must NOT be
+#        emitted (the guard is `[ "$repo" = "homelab" ]`, not `$mainrepo`), while the pairing
+#        check still reports its two issues.
+# id                    | world | patch | env                                                              | expect                | params
+homelab-no-drift       |       |       | IN_REPO=homelab IN_SLUG=teststuffstash/homelab PARITY_ISSUES=      | homelab-no-drift      |
+non-homelab-with-drift |       |       | IN_REPO=oracle-fleet IN_SLUG=teststuffstash/oracle-fleet PARITY_ISSUES="  PARITY FAIL: \`agents/coordinator/reviewer-git.yaml\` matches ratchet regex but is missing from \`clause_files\`\n" | non-homelab-with-drift |

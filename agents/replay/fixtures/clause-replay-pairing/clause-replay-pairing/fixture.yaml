@@ -28,13 +28,17 @@
 # at runtime; the fixture tests the per-issue pairing check only and provides the canonical
 # list + PARITY_ISSUES (empty = no drift) via bridge.sh.
 # pins: (none — report-only check, not a lifecycle transition)
+#
+# TWO ROWS:
+#   homelab-no-drift          — homelab repo, PARITY_ISSUES empty (no drift asserted)
+#   non-homelab-with-drift    — oracle-fleet repo, PARITY_ISSUES non-empty,
+#                               asserting NO CLAUSE-LIST PARITY line is emitted
+#                               (the guard `[ "$repo" = "homelab" ]` prevents it)
 name: clause-replay-pairing
-mode: actions
+mode: table
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
   - block:clause-replay-pairing
   - file:post.sh
-env:
-  - IN_SLUG=teststuffstash/homelab
-  - IN_REPO=homelab
+rows: rows.psv

@@ -1303,7 +1303,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       # parity assertion against ci.yaml's ratchet regex runs once there, not per-repo. See
       # the >>>REPLAY:clause-replay-pairing>>> block before the for-name loop.
       # Emit the parity finding once (on the main repo) rather than repeating for every stack/repo.
-      [ "$repo" = "$mainrepo" ] && [ -n "$PARITY_ISSUES" ] && orphans="${orphans}[$repo] 🔗 CLAUSE-LIST PARITY: clause_files list does not match the ratchet regex in ci.yaml (homelab#853):\n${PARITY_ISSUES}\n"
+      [ "$repo" = "homelab" ] && [ -n "$PARITY_ISSUES" ] && orphans="${orphans}[$repo] 🔗 CLAUSE-LIST PARITY: clause_files list does not match the ratchet regex in ci.yaml (homelab#853):\n${PARITY_ISSUES}\n"
 
       while IFS='|' read -r crmn crmt; do
         [ -n "$crmn" ] || continue
