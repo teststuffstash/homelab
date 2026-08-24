@@ -1242,6 +1242,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}"; then
       crm_lines=""
       # Ratchet clause files — CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
+      # Parity assertion below verifies this list matches the regex at runtime (homelab#853).
       clause_files="agents/model-scout.sh
 agents/coordinator-scan.sh
 agents/review-reflex.sh
@@ -1254,11 +1255,47 @@ agents/retro-session.sh
 agents/argv-guard.sh
 agents/coordinator/reflexes-argo.yaml
 agents/coordinator/review-argo.yaml
+agents/coordinator/reviewer-git.yaml
 agents/coordinator/coordinate-argo.yaml
 agents/coordinator/responder-argo.yaml
 agents/coordinator/retro-argo.yaml
 agents/coordinator/fix-debounce-argo.yaml
 agents/coordinator/deploy-revert-argo.yaml"
+
+      # ── PARITY ASSERTION: clause_files vs ci.yaml ratchet regex (homelab#853) ──
+      # The canonical ratchet regex lives in .github/workflows/ci.yaml:118 (ONE HOME).
+      # Reads the regex at runtime so no copy can silently drift. Degrade honestly:
+      # if ci.yaml is unreadable, report that verification could not be done.
+      _pci_yaml=""
+      if [ -n "${REPLAY_ROOT:-}" ] && [ -f "$REPLAY_ROOT/.github/workflows/ci.yaml" ]; then
+        _pci_yaml="$REPLAY_ROOT/.github/workflows/ci.yaml"
+      elif [ -n "${HERE:-}" ] && [ -f "${HERE}/../.github/workflows/ci.yaml" ]; then
+        _pci_yaml="$(cd "${HERE}/.." && pwd)/.github/workflows/ci.yaml"
+      fi
+      PARITY_ISSUES=""
+      if [ -n "$_pci_yaml" ]; then
+        _pregex=$(grep -E "grep -E.*agents/" "$_pci_yaml" | sed "s/.*grep -E '//;s/'.*//" | head -1)
+        if [ -n "$_pregex" ]; then
+          _proot="$(dirname "$(dirname "$(dirname "$_pci_yaml")")")"
+          while IFS= read -r _pfile; do
+            [ -n "$_pfile" ] || continue
+            _pfound=0
+            while IFS= read -r _pcf; do
+              [ -n "$_pcf" ] || continue
+              if [ "$_pcf" = "$_pfile" ]; then
+                _pfound=1
+                break
+              fi
+            done <<< "$clause_files"
+            [ "$_pfound" = 0 ] && PARITY_ISSUES="${PARITY_ISSUES}  PARITY FAIL: \`${_pfile}\` matches ratchet regex but is missing from \`clause_files\`\n"
+          done <<< "$(cd "$_proot" && find . -type f -not -path './.git/*' -print | sed 's|^\./||' | grep -E "$_pregex" | sort || true)"
+        else
+          PARITY_ISSUES="  PARITY FAIL: could not extract ratchet regex from .github/workflows/ci.yaml\n"
+        fi
+      else
+        PARITY_ISSUES="  PARITY FAIL: .github/workflows/ci.yaml not found — cannot verify clause_files parity\n"
+      fi
+      [ -n "$PARITY_ISSUES" ] && orphans="${orphans}[$repo] 🔗 CLAUSE-LIST PARITY: clause_files list does not match the ratchet regex in ci.yaml (homelab#853):\n${PARITY_ISSUES}\n"
 
       while IFS='|' read -r crmn crmt; do
         [ -n "$crmn" ] || continue
