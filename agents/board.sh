@@ -217,7 +217,7 @@ if [ "$machine" = 1 ]; then
     if [ -n "$scope_label" ] && [[ "$scope" == goal:* ]]; then
       # Resolve goal descendants from the exporter's series
       gid="${scope#goal:}"
-      gmembers="$(prom_query "goal_descendant_info{goal=\"${gid}\"}" | jq -r '.metric.item // ""' 2>/dev/null || true)"
+      gmembers="$(prom_query "goal_descendant_info{goal=\"${gid}\"}" | jq -r '.[] | .metric.item // ""' 2>/dev/null || true)"
       [ -n "$gmembers" ] && scope_filter="item=~\"$(printf '%s' "$gmembers" | tr '\n' '|' | sed 's/|$//')\""
     fi
   fi
