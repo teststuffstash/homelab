@@ -1595,3 +1595,29 @@ attribution easy; the corpus view is where classes emerge; single-sighting codif
 G05 failure mode (contracts emerge from patterns).
 **Consequences:** GAPS.md is public (dialogue-level facts only); TICK-LOG keeps narrative; skill
 doctrine changes stay operator-gated except plain factual wrongness.
+
+### ADR-114 — Garage rf=3 across physical zones; engines replicate, Longhorn stores singles
+
+**Status:** Accepted (2026-08-24, operator design session over the garagehq real-world/layout
+docs; deadline-bound — oracle serves production ~2026-08-31).
+**Decision:** replicated data engines stop stacking on replicated storage. Garage moves to
+`replication_factor = 3`, one instance per physical zone (`wk-metal-01`, `wk-metal-04`,
+`proxmox`/wk-02 as the interim third — a disk added to hp-01 replaces it later via
+`layout assign` + rebalance), each on **node-local XFS** (not Longhorn; ext4 inode limits bite
+at loki/ert object counts), zones = `topology.kubernetes.io/zone` from `machines.yaml` (new
+`zone` field: physical box = zone, every pve-pool VM = `proxmox`). LMDB stays (upstream:
+recommended for rf ≥ 2; corruption recoverable from peers) with `metadata_fsync = true` + 6h
+native snapshots kept. CNPG gets the same treatment: replica-1 storage + **required**
+zone anti-affinity (soft anti-affinity healed forgejo-pg into two instances on one VM,
+then both instances in one failure domain, 2026-08-24). Backup shrinks to the
+logical-deletion class (Garage has no S3 versioning): an in-cluster CronJob syncs objects to a
+std-tier Longhorn PVC, alerting via pushgateway; offsite stays parked (FU-137).
+**Considered:** rf=3 on Longhorn (6 copies, zones opaque to Garage); SQLite engine (the
+single-node mitigation — moot at rf=3); keep rf=1 + belts only (availability gap remains — the
+2026-08-24 incident cost 70 min of platform S3 on one VM freeze).
+**Why:** the real failure domain is the pve thin pool, not a node — placement must encode it;
+Garage's whole recovery doc assumes rf ≥ 2; capacity fits by reclaiming Garage's own 150Gi×2
+Longhorn footprint from the same metal disks.
+**Consequences:** layout ops get a version-disciplined script (apply-once-per-version, single
+RPC host); `docs/garage.md` §Target architecture carries the mechanism; FU-137 tracks
+delivery; SERVICES.md unchanged (endpoints stay).

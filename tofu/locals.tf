@@ -20,6 +20,11 @@ locals {
   # Reading a file at plan time is pure data — no provider, no state, no ordering dependency.
   machines = yamldecode(file("${path.module}/../machines/machines.yaml")).machines
 
+  # Failure-domain zones (ADR-114): machines.yaml `zone` → topology.kubernetes.io/zone.
+  # Physical box = zone; every VM on the pve thin pool = "proxmox" (one pool took several VMs
+  # at once, 2026-08-24 incident). Applied by tofu/longhorn.tf.
+  machine_zones = { for m in local.machines : m.name => m.zone if can(m.zone) }
+
   # Bare-metal Talos workers (metal.tf). Booleans are compared to `true` (not just try()-defaulted)
   # so an explicit `kata: null` in YAML degrades to false instead of erroring in a conditional.
   metal_nodes = {
