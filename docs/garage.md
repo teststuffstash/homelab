@@ -120,6 +120,14 @@ default FALSE runs LMDB `MDB_NOSYNC` — documented corruption-prone on unclean 
 window): stop Garage, `mv db.lmdb db.lmdb.bak && cp -r /mnt/data/meta_snapshots/<latest> db.lmdb`,
 restart, `garage repair -a --yes tables`.
 
+**When there is no snapshot and no backup covering the window**, the objects are still recoverable:
+blocks are content-addressed and only a *manual* `garage repair blocks` reaps orphans, and LMDB's
+copy-on-write leaves the emptied tables' pages readable in a frozen volume layer. That carve
+recovered the whole Aug-4→24 delta on incident day —
+[`scripts/garage-forensics/`](../scripts/garage-forensics/README.md) is the method and the tooling.
+Its first instruction is the one with a deadline: **freeze the evidence and do not run
+`garage repair blocks`** until the carve is done.
+
 ## Target architecture — rf=3 across physical zones (ADR-114, build-out in progress)
 
 **Grounding** — the upstream pages this design was read against (2026-08-24; before any
