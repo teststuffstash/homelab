@@ -35,6 +35,7 @@ Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter 
 
 import base64
 import hashlib
+import io
 import json
 import os
 import re
