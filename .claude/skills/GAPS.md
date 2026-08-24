@@ -38,6 +38,13 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       conversation). A number in corpus prose describing live config is a status claim; the
       deployment/ConfigMap is the authority. **promoted→** the skill's output contract gains
       the live-state-claims-verified rule (statuses AND config constants), same commit.
+- [ ] design-agents-G2 — a lifecycle LABEL was reported as activity ("#833 is riding —
+      in-progress") from a live `gh` read alone: the label is a CLAIM, and the state is the
+      JOIN (label × live pod × PR state) — the issue's PR had merged 8h earlier with no pod
+      running (the FU-143 held class). The promoted live-state rule covered doc-sourced claims;
+      this extends it: a lifecycle label is never reported as activity without the pod/PR join
+      (the seat-side twin of IL-T16's phantom-label lesson). Sighted 2026-08-24 (operator
+      catch). Tooling half → the #628 observability-plane discussion.
 - [ ] design-G2 — "multiple passes gave different answers to the same question" wasn't
       recognized as a design-shaped trigger; the first pass ran as grep-triage and missed
       tracker-held facts (FU-157's user-token nature; the live legacy token outside the
