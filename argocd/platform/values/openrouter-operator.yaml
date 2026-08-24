@@ -10,3 +10,11 @@ managementSecret:
     refreshInterval: 1h
     storeRef: { name: infisical, kind: ClusterSecretStore }
     remoteRef: { key: OPENROUTER_MANAGEMENT_KEY }
+
+# The chart default (128Mi req / 256Mi limit) OOMKills on kopf's startup resume: it reconciles every
+# live OpenRouterKey CR concurrently on boot, and the fleet has grown past what 256Mi covers (76 CRs
+# live 2026-08-24). Doubled the limit to give startup headroom; request left alone since steady-state
+# usage isn't the problem. See PodSigkilled alert-fp:f8f7ccfa26f2355e.
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { cpu: 500m, memory: 512Mi }
