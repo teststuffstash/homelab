@@ -35,6 +35,7 @@ Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter 
 
 import base64
 import hashlib
+import io
 import json
 import os
 import re
@@ -1933,6 +1934,35 @@ def _anthropic_latch_update(status: int, resp_headers) -> str:
     return ""
 
 
+def _process_sse_event(event_bytes: bytes,
+                       translator: _ORStreamingTranslator | None,
+                       or_model: str,
+                       wfile: io.BufferedWriter) -> _ORStreamingTranslator | None:
+    """Process one complete SSE event (bytes delimited by \\n\\n) and write translated output.
+
+    Shared by the read1 loop and the EOF-flush branch so the per-event
+    parse/translate/write logic has exactly one home (homelab#869).
+    """
+    event_text = event_bytes.decode("utf-8", errors="replace")
+    for line in event_text.split("\n"):
+        if not line.startswith("data: "):
+            continue
+        payload = line[len("data: "):].strip()
+        if payload == "[DONE]":
+            continue
+        try:
+            event = json.loads(payload)
+        except (ValueError, TypeError):
+            continue
+        if translator is None:
+            translator = _ORStreamingTranslator(or_model or "")
+        translated = translator.feed(event)
+        if translated:
+            wfile.write(translated.encode("utf-8"))
+            wfile.flush()
+    return translator
+
+
 class Proxy(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "openrouter-proxy"
@@ -2181,23 +2211,8 @@ class Proxy(BaseHTTPRequestHandler):
                         sent += len(chunk)
                         while b"\n\n" in sse_buf:
                             event_bytes, _, sse_buf = sse_buf.partition(b"\n\n")
-                            event_text = event_bytes.decode("utf-8", errors="replace")
-                            for line in event_text.split("\n"):
-                                if not line.startswith("data: "):
-                                    continue
-                                payload = line[len("data: "):].strip()
-                                if payload == "[DONE]":
-                                    continue
-                                try:
-                                    event = json.loads(payload)
-                                except (ValueError, TypeError):
-                                    continue
-                                if translator is None:
-                                    translator = _ORStreamingTranslator(or_model or "")
-                                translated = translator.feed(event)
-                                if translated:
-                                    self.wfile.write(translated.encode("utf-8"))
-                                    self.wfile.flush()
+                            translator = _process_sse_event(
+                                event_bytes, translator, or_model or "", self.wfile)
                         if deadline and time.time() > deadline:
                             with _inflight_lock:
                                 _deadline_exceeded[or_model or "other"] = \
@@ -2230,23 +2245,8 @@ class Proxy(BaseHTTPRequestHandler):
                     # terminated by \n\n leaves residue in sse_buf. Process it as a
                     # final event so the client receives the closing content_block_stop
                     # / message_delta instead of a truncated stream.
-                    event_text = sse_buf.decode("utf-8", errors="replace")
-                    for line in event_text.split("\n"):
-                        if not line.startswith("data: "):
-                            continue
-                        payload = line[len("data: "):].strip()
-                        if payload == "[DONE]":
-                            continue
-                        try:
-                            event = json.loads(payload)
-                        except (ValueError, TypeError):
-                            continue
-                        if translator is None:
-                            translator = _ORStreamingTranslator(or_model or "")
-                        translated = translator.feed(event)
-                        if translated:
-                            self.wfile.write(translated.encode("utf-8"))
-                            self.wfile.flush()
+                    translator = _process_sse_event(
+                        sse_buf, translator, or_model or "", self.wfile)
             else:
                 while chunk := read1(8192):
                     self.wfile.write(chunk)
@@ -4362,14 +4362,30 @@ data: [DONE]
                 "body_raw": body,
                 "messages": parsed.get("messages") if body else None,
             }
-            # homelab#852: SSE stub mode — return text/event-stream when flag is set
+            # homelab#852: SSE stub mode — return text/event-stream when flag is set.
+            # homelab#869: write in ≥2 chunks with a flush between them (no Content-Length,
+            # close-delimited) so the client observes translated bytes before the final
+            # chunk is sent — pinning incrementality, not just the EOF flush.
             if _or_stub_sse:
                 out = _or_stub_sse_data
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
-                self.send_header("Content-Length", str(len(out)))
+                self.send_header("Connection", "close")
                 self.end_headers()
-                self.wfile.write(out)
+                # Split at the first \n\n boundary so at least one complete SSE event
+                # is delivered in the first write, then the rest in a second write.
+                split_at = out.find(b"\n\n")
+                if split_at >= 0 and split_at + 2 < len(out):
+                    first = out[:split_at + 2]
+                    rest = out[split_at + 2:]
+                    self.wfile.write(first)
+                    self.wfile.flush()
+                    time.sleep(0.05)  # give the client a chance to read the first chunk
+                    self.wfile.write(rest)
+                    self.wfile.flush()
+                else:
+                    self.wfile.write(out)
+                    self.wfile.flush()
                 return
             out = json.dumps(_or_response).encode()
             self.send_response(200)
@@ -4704,12 +4720,38 @@ data: [DONE]
               headers={"Content-Type": "application/json",
                        "Authorization": "Bearer OAUTH-SECRET"})
     r = c.getresponse()
-    data = r.read()
+    # homelab#869: read incrementally to assert translated output reaches the client
+    # before the final chunk is sent (the stub writes in ≥2 chunks with a flush
+    # between them). If _forward_upstream re-buffered the upstream body, the first
+    # read would block until the stub closes the connection (~50ms+ later).
+    # Use r.fp.read1 (BufferedReader.read1) which reads at most one raw read from
+    # the underlying socket and returns immediately — unlike r.read(4096) which
+    # loops until it has accumulated 4096 bytes or hits EOF. With incremental
+    # delivery, the first chunk arrives well before the 50ms inter-chunk sleep;
+    # with buffering, the read blocks until the proxy finishes reading the stub
+    # (after the 50ms sleep) and writes all data to the client.
+    _t0 = time.monotonic()
+    first_chunk = r.fp.read1(4096)
+    _t1 = time.monotonic()
+    _elapsed = _t1 - _t0
+    body_text = first_chunk.decode("utf-8", errors="replace")
+    # Verify translated output is visible after the first chunk AND that it
+    # arrived well before the 50ms inter-chunk sleep — <30ms threshold gives
+    # ample headroom for scheduling jitter on a contended pod.
+    check("event: message_start" in body_text,
+          "or-translate sse: translated output visible before final chunk (incrementality)")
+    check(_elapsed < 0.03,
+          f"or-translate sse: incremental delivery timing (read took {_elapsed*1000:.0f}ms, "
+          f"expected <30ms — if the proxy buffered the whole upstream body, the read would "
+          f"block until the proxy finished reading the stub after the ~50ms sleep)")
+    # Read the rest of the response (r.read() reads from the same BufferedReader,
+    # continuing from where read1 left off)
+    rest = r.read()
+    body_text += rest.decode("utf-8", errors="replace")
     c.close()
     _or_stub_sse = False
     _or_stub_sse_data = b""
     check(r.status == 200, "or-translate sse: 200 from SSE streaming path")
-    body_text = data.decode("utf-8", errors="replace")
     # Verify the response is valid Anthropic SSE with all expected events
     check("event: message_start" in body_text,
           "or-translate sse: contains message_start event")
