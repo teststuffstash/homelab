@@ -194,7 +194,7 @@ if [ -n "$FROM" ]; then
     SURFACES_OPT=".github/workflows/devbox-cache.yml .github/workflows/ghcr-cleanup.yaml
       .github/workflows/renovate-approve.yaml .github/workflows/update-pr-branch.yml
       .pre-commit-config.yaml .dockerignore
-      .agents/fix.yaml .agents/review.yaml .agents/review.md .agents/research.yaml .agents/build.yaml
+      .agents/fix.yaml .agents/review.md .agents/research.yaml .agents/build.yaml
       scripts/ci.sh scripts/test-chart.sh scripts/validate-chart.sh scripts/package-chart.sh
       scripts/build-image.sh scripts/deploy-pin.sh"
     for f in $SURFACES_REQ; do dcopy req "$f"; done
