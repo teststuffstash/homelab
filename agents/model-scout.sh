@@ -164,7 +164,8 @@ rotation_post() { # <source> <entry-json> — one rotation-store entry (POST /ro
 
 scout_canary_mint() { # <id> <is_free> [cleanup] → 0 minted / cleaned; 1 = mint-failed; 2 = never-minted
   local id="$1" is_free="$2" mode="${3:-}"
-  local sess="scout-$(printf '%s' "$id" | tr '/:.' '---')" key="${CANARY_PROJECT}-${sess}"
+  local sess="scout-$(printf '%s' "$id" | tr '/:.' '---')"
+  local key="${CANARY_PROJECT}-${sess}"
   if [ "$mode" = "cleanup" ]; then
     kubectl -n "$CANARY_PROJECT" delete openrouterkey "$key" --ignore-not-found >&2 2>/dev/null || true
     return 0

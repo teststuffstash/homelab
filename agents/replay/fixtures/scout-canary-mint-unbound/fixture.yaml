@@ -1,0 +1,35 @@
+# FU-161 leg 0 — the REAL failure mode: bash `local` expansion order kills the tick under `set -u`.
+#
+# CONDITION UNDER REPLAY. The `model-scout` CronWorkflow's `set -u` (line 62) means every
+# expansion of an unset variable is a fatal error. `scout_canary_mint()` (defined in the
+# `scout-seams` block) declared `sess` AND used it in the same `local` statement:
+#
+#   local sess="scout-$(printf '%s' "$id" | tr '/:.' '---')" key="${CANARY_PROJECT}-${sess}"
+#
+# Bash expands ALL of a `local` builtin's arguments BEFORE it performs any assignment, so `${sess}`
+# in the `key=` word expands while `sess` is still unset → `sess: unbound variable`, exit 1.
+# This is the 20s death that has blocked every model-scout tick since PR#499 (the line was
+# introduced by `49aa3c6c`).
+#
+# THE FIX — split the declaration into two statements:
+#   local sess="scout-$(printf '%s' "$id" | tr '/:.' '---')"
+#   local key="${CANARY_PROJECT}-${sess}"
+#
+# THIS FIXTURE PINS that the fix works: `scout_canary_mint` is called with a test model ID,
+# reaches the cleanup path (which also uses both `sess` and `key`), and returns RC 0 instead of
+# dying under `set -u`.
+#
+# THE CONTRACT:
+#   1. `scout_canary_mint` is called with `id=test/model`, `is_free=true`, `mode=cleanup`.
+#   2. Both `sess` and `key` expand correctly — no unbound variable error.
+#   3. The `kubectl delete` action is recorded (the kubectl stub handles mutations).
+#   4. RC 0. The function does NOT die with exit code 1.
+#
+# If the fix is reverted (single `local` declaration restored), this fixture REDS with
+# `sess: unbound variable` — the exact failure mode it pins.
+name: scout-canary-mint-unbound
+mode: actions
+source: agents/model-scout.sh
+parts:
+  - block:scout-seams
+  - file:bridge.sh
