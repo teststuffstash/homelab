@@ -18,6 +18,11 @@
 #
 # ⚠ The StatefulSet's volumeClaimTemplates are IMMUTABLE and hold 63 GB. Nothing here may change
 # `persistence` — a resize is the PV-rebind dance in docs/garage-bulk-migration.md, never an edit.
+#
+# Before any SUBSTANTIAL change here (replication, storage, engine, snapshots): read
+# docs/garage.md §Target architecture — it carries ADR-114 and the upstream garagehq reading
+# list that grounded the current posture (the fsync/snapshot lines below are incident response,
+# 2026-08-24 meta wipe).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

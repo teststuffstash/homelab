@@ -110,6 +110,58 @@ Two consequences worth holding:
 - Garage durability is now load-bearing for **tofu state** too (FU-012 put three roots there). Those
   additionally have timestamped copies in `~/.claude/homelab-tofu-state-backups/`.
 
+**The sharp edge fired 2026-08-24** — the meta LMDB came back empty-tabled after a pve
+thin-pool freeze ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)); the
+Aug-04 object copy was the restore source. Hardening now live: `metadata_fsync = true` (the
+default FALSE runs LMDB `MDB_NOSYNC` — documented corruption-prone on unclean shutdown),
+`metadata_auto_snapshot_interval = 6h`, snapshots on the data volume
+(`metadata_snapshots_dir` — they need up to 4× the DB size). **Recovery recipe** (garagehq
+"Recovering from failures" Scenario 3, rf=1 flavor — the snapshot interval is a hard loss
+window): stop Garage, `mv db.lmdb db.lmdb.bak && cp -r /mnt/data/meta_snapshots/<latest> db.lmdb`,
+restart, `garage repair -a --yes tables`.
+
+## Target architecture — rf=3 across physical zones (ADR-114, build-out in progress)
+
+**Grounding** — the upstream pages this design was read against (2026-08-24; before any
+substantial change here, read them all — they are what changed the outcome):
+
+- [configuration reference](https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/) —
+  `metadata_fsync=false` default = LMDB `MDB_NOSYNC` (the wipe mechanism); rf=1 "test
+  deployments" only; snapshot sizing (4× DB); SQLite as the single-node alternative.
+- [recovering from failures](https://garagehq.deuxfleurs.fr/documentation/operations/recovering/) —
+  every recovery path assumes a pre-armed belt or rf ≥ 2; Scenario-3 snapshot restore is our
+  runbook recipe; rf=1 makes the snapshot interval a hard loss window.
+- [durability & repairs](https://garagehq.deuxfleurs.fr/documentation/operations/durability-repairs/) —
+  scrub is verify-only; `repair blocks` is the only orphan reaper (manual); native snapshots
+  are the clean kind vs fs-level.
+- [real-world deployment](https://garagehq.deuxfleurs.fr/documentation/cookbook/real-world/) —
+  zones as failure domains, capacity balancing (usable = smallest zone), XFS-not-EXT4 for
+  data, meta on SSD, "LMDB + snapshots or switch to Sqlite".
+- [cluster layout](https://garagehq.deuxfleurs.fr/documentation/operations/layout/) — layout =
+  versioned staged changes (plan/apply-shaped); apply once per version, one RPC host; the
+  algorithm minimizes movement, capacity values steer distribution.
+
+The single-node posture above is being retired: **`replication_factor = 3`, one Garage instance
+per physical failure domain, node-local XFS storage — Longhorn drops out of the Garage data
+path entirely** (engines replicate; storage stores singles — the same ruling moves CNPG to
+replica-1 storage + *required* zone anti-affinity). Zones come from `machines.yaml`'s `zone`
+field → `topology.kubernetes.io/zone`: physical box = zone, every pve-pool VM = `proxmox`.
+
+- **Layout:** `wk-metal-01` (500G MX500), `wk-metal-04` (500G SATA), and interim third zone
+  `proxmox` (wk-02) — losing the whole pve zone keeps quorum (2/3, reads+writes continue).
+  Planned upgrade: a disk in hp-01 replaces wk-02 (`garage layout assign` + rebalance, no
+  downtime). Capacity ~100G/zone balanced (usable = smallest zone); fits by reclaiming Garage's
+  own 150Gi×2 Longhorn footprint from the same disks.
+- **Layout ops discipline** (garagehq layout doc): stage assigns, review `layout show`, ONE
+  `layout apply --version N` against ONE RPC host; never reuse a version number.
+- **Engine:** LMDB stays — upstream recommends it for rf ≥ 2; metadata corruption on one node
+  becomes `delete + garage repair tables` (resync from peers), not an incident. fsync +
+  snapshots stay as belts.
+- **Backup contracts to the logical-deletion class** (Garage has no S3 object versioning — a
+  write key can delete irreversibly and replication propagates it): in-cluster CronJob syncing
+  objects to a std-tier Longhorn PVC (not the Garage zones), pushgateway-alerted. No manual
+  step, no external creds. Offsite stays parked (FU-137).
+
 ## Static-website serving (3902, live 2026-07-14)
 
 `s3.web.rootDomain = ".teststuff.net"` (garage.tf): any **website-enabled** bucket is served
