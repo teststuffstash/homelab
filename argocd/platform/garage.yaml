@@ -56,6 +56,9 @@ spec:
           metadataAutoSnapshotInterval: 6h
           additionalTopLevelConfig: |-
             metadata_fsync = true
+            # snapshots need up to 4x the DB size — the 10Gi meta volume can't hold that
+            # (2.4GB db as of the incident); the docs' own advice is the data volume.
+            metadata_snapshots_dir = "/mnt/data/meta_snapshots"
           s3:
             api:
               region: garage
