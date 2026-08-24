@@ -319,7 +319,13 @@ the block needs pruning, not more headings.
       window (#540's check); (2) capture the 5h-window refusal shape on its first organic fire
       (429 vs 402 + its Retry-After — `router_go_observed_429_total{code}` and the latch log
       line self-record it); (3) confirm the persisted latch (#618/#621) survives a proxy roll
-      while genuinely held. Relates FU-170 (residual gauges/alerts), homelab#540, homelab#420.
+      while genuinely held; (4) **Go-rail rail-probe cells for the served set** (deepseek-v4-flash
+      + the tool-verified trio) — moved from homelab#778 at the G-A split (operator, 2026-08-24);
+      prerequisite = homelab#876's full-prefix `-m` canary fix. ⚠ The workspace pay-from-balance
+      toggle went ON 2026-08-24: upstream now BILLS instead of 429ing, so the gometer latch is the
+      ONLY brake on Go spend — keep it latched through the window; leg 2's "first organic refusal
+      shape" may now be a 402/billing shape rather than a 429, read it accordingly.
+      Relates FU-170 (residual gauges/alerts), homelab#540, homelab#420, homelab#778.
 - [ ] **FU-174** — **Reasoning effort is unmodeled fleet-wide (operator, 2026-08-17).** The DeepSWE
       numbers behind the flash slot ran `[max]`; the fleet runs provider defaults — the jail shim
       even DROPS `thinking` on translated legs, so no Go model ever sees an effort signal.
