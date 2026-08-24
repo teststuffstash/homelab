@@ -188,10 +188,19 @@ STATS_TS_DEF='def stats_ts: [ .comments[]? | (.body // "") as $b
     then [ $b | scan("<!-- agent-event kind=stats ts=([^ ]+) -->")[0] ]
     elif ($b | test("Agent run stats")) then [ .createdAt ]
     else [] end | .[] ];'
+# FU-147 (homelab#868): the re-label must not fire over a NEWER arbitration ruling. The 12:18
+# re-fire on PR#862 re-read "stats without commits" minutes after the 12:15 arbitration had
+# already ruled that same round a strike — the predicate had no notion of an arbitration event
+# newer than the evidence it was built on. So the no-op predicate now also requires that the
+# newest no-op stats marker POST-DATES the newest arbitration event (an "ARBITRATE" comment).
+# An arbitration event newer than the stats marker means the ruling already covered this round;
+# re-labelling would re-dispatch the same escalation the ruling just resolved.
 NOOP_ROUND_JQ="${STATS_TS_DEF}"'
   ([.commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
   | ([ stats_ts[] | select($head == "" or . > $head) ] | length) as $after
-  | if $after >= 2 then "1" else "" end'
+  | ([ .comments[]? | select((.body // "") | test("ARBITRATE")) | .createdAt ] | max // "") as $arb_ts
+  | ([ stats_ts[] | select($head == "" or . > $head) ] | max // "") as $newest_noop_ts
+  | if $after >= 2 and ($arb_ts == "" or $newest_noop_ts > $arb_ts) then "1" else "" end'
 # <<<REPLAY:round-evidence<<<
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
 
@@ -2386,7 +2395,7 @@ EOF_GUARDED
     # last arbitrate dispatch (homelab#198, fingerprint helper at the top of this file); unchanged
     # state is a REPORT line, which is what an escalation waiting on a human should look like.
     # >>>REPLAY:arbitrate-gate>>>
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")))|.number'); do
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")) and ((.autoMergeRequest==null) or (.reviewDecision!="APPROVED")))|.number'); do
       afp="$(pr_state_fp_pair "$slug" "$u")"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
         orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
