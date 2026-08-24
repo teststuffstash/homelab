@@ -309,8 +309,11 @@ def main():
         summ["models"] = [r["model"] for r in rounds]
         summ["worker_exit_statuses"] = [r["exit_status"] for r in rounds]
         summ["ci_sequence"] = [r["ci"] for r in rounds]
-        summ["retry_storms"] = sum(1 for r in rounds
-                                   if (r["exit_status"] or r["error_class"]) in ("auth-storm", "budget-403"))
+        # budget-403 is prefix-matched: the raw-log classifier split it into -key/-account
+        # subclasses (homelab#871) and the strike comment is this reader's source.
+        summ["retry_storms"] = sum(
+            1 for v in ((r["exit_status"] or r["error_class"]) for r in rounds)
+            if v == "auth-storm" or v.startswith("budget-403"))
         rec = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "key": key, "project": project, "issue": issue, "stack": repos.get(project, ""),

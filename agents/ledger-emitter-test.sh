@@ -152,7 +152,7 @@ check(worker_exit_statuses == ["clean", "no-artifact", "clean", "clean", ""],
       "worker_exit_statuses aligned with rounds (strike round exit_status is empty)")
 check(ci_sequence == [True, None, True, True, False],
       "ci_sequence aligned with rounds (strike round ci is False)")
-retry_storms = sum(1 for r in merged if (r["exit_status"] or r["error_class"]) in ("auth-storm", "budget-403"))
+retry_storms = sum(1 for v in ((r["exit_status"] or r["error_class"]) for r in merged) if v == "auth-storm" or v.startswith("budget-403"))
 check(retry_storms == 1, "retry_storms counts the auth-storm strike-only round")
 
 # ── 4. is_snapshot() matrix (F5) ────────────────────────────────────────────────────────────
