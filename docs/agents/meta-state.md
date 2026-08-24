@@ -8,6 +8,13 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ #628 attention-layer program (operator ratified 2026-08-24, seat sitting):** leg 5 =
+  homelab#892 QUEUED (fixer lane — the scan derived-class series + `board --machine` + the one
+  standing belt; gate reads land it). Leg 6 = SEAT-LANE after leg 5 (board webservice page +
+  goal_graph trees with links; carries the bucket/hostname provisioning). Leg 7 after 6
+  (meta-events BOARD source, needs-meta arms retire). Design record: #628 body + #892;
+  companion defect agent-runtime#87 (finalize weak-link check — the #833 8h hold's cause) QUEUED.
+
 - **⚑ [Stint](chainless-redesign.md) S7 (#741) LAUNCHED 2026-08-23 (operator go + latch clean).** Session 1 built all
   three in-order children: #743 exporter edge MERGED (PR#757 — mergeStateStatus on the walk +
   maybe_dispatch_behind + UPDATE_PR_WEBHOOK_URL env); #742 script+replay-table (PR#755) and
