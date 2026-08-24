@@ -1,0 +1,37 @@
+# homelab#825 — clause-replay pairing check.
+#
+# WHY THIS IS A CHECK AND NOT A DOC LINE. The ADR-103 ratchet requires any PR changing a
+# clause file must touch agents/replay/**. An issue whose declared `Touches:` reaches any
+# ratchet clause file but does not reach agents/replay/** is structurally under-scoped: the
+# resulting PR would red on the required `ci` check. On #808 this went undetected until PR#821,
+# because the check there catches backtick-quoted body paths, and "its executed replay" is prose,
+# not a literal path. This check detects the deterministic pairing: Touches intersects the
+# ratchet clause set ∧ does not cover agents/replay/**.
+#
+# THE SIX ISSUES:
+#   #701 Touches: agents/coordinator-scan.sh
+#        touches a clause file, declares no agents/replay/** — REPORTED
+#   #702 Touches: agents/coordinator-scan.sh, agents/replay/**
+#        touches a clause file, declares agents/replay/** — NOT REPORTED
+#   #703 Touches: agents/coordinator/
+#        touches a clause file (by prefix), declares no agents/replay/** — REPORTED
+#   #704 Touches: argocd/resources/
+#        does not touch any clause file — NOT CHECKED
+#   #705 No Touches line (exclusive `*` sentinel)
+#        not checked per ADR-097 — NOT CHECKED
+#   #706 "body": null
+#        empty body — NOT CHECKED
+#
+# No `gh` call appears in the action stream on purpose — the lint rides `openall`, the fetch
+# the repo pass already made.
+# pins: (none — report-only check, not a lifecycle transition)
+name: clause-replay-pairing
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:clause-replay-pairing
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
