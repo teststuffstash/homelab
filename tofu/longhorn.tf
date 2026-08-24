@@ -63,6 +63,23 @@ resource "kubernetes_labels" "longhorn_storage" {
   }
 }
 
+# Every other cluster member gets its zone label from machines.yaml (ADR-114): the two Longhorn
+# resources above already own the label for their nodes (same values — machines.yaml is the
+# source both agree with), this covers the rest so zone-spread rules can't treat unlabeled
+# nodes as one implicit zone (cp-01/wk-01/wk-03 are all the SAME pve failure domain).
+resource "kubernetes_labels" "node_zone" {
+  for_each = {
+    for n, z in local.machine_zones : n => z
+    if !contains(keys(local.longhorn_zones), n) && !contains(keys(local.longhorn_bulk_zones), n) && n != "ci-runner-01"
+  }
+  api_version = "v1"
+  kind        = "Node"
+  metadata { name = each.key }
+  labels = {
+    "topology.kubernetes.io/zone" = each.value
+  }
+}
+
 # Bulk nodes get ONLY the zone label (anti-affinity), never create-default-disk.
 resource "kubernetes_labels" "longhorn_bulk_zone" {
   for_each    = local.longhorn_bulk_zones

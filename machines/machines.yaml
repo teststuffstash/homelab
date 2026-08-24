@@ -56,6 +56,11 @@
 #                     (kubernetes_node_taint in tofu/metal.tf), so stateful workloads never land
 #                     there; explicitly-tolerating workloads still can. Applied AFTER the node
 #                     joins (docs/provisioning.md step 7).
+#   zone              failure-domain for topology.kubernetes.io/zone (ADR-114): physical box =
+#                     zone; every VM on the pve thin pool = "proxmox" (the 2026-08-24 incident
+#                     took several VMs with ONE pool). Consumed by tofu/longhorn.tf via
+#                     local.machine_zones; the label lands only on k8s nodes (ci-runner-01
+#                     carries the field as failure-domain documentation).
 #
 # NOT here (yet), on purpose — each has one home and moving it needs a file outside this change:
 #   • VM specs (vm_id/cores/memory/disk) — `var.nodes` in tofu/variables.tf, `ci-runner.tf` for
@@ -106,6 +111,7 @@ machines:
 
   - name: cp-01
     kind: vm
+    zone: proxmox
     label: "`cp-01` (VM)"
     role: k8s control plane
     hardware: Talos VM on pve
@@ -115,6 +121,7 @@ machines:
 
   - name: wk-01
     kind: vm
+    zone: proxmox
     label: "`wk-01` (VM)"
     role: k8s worker
     hardware: Talos VM on pve
@@ -123,6 +130,7 @@ machines:
 
   - name: wk-02
     kind: vm
+    zone: proxmox
     label: "`wk-02` (VM)"
     role: k8s worker + Longhorn (bulk tier)
     hardware: Talos VM on pve
@@ -131,6 +139,7 @@ machines:
 
   - name: wk-03
     kind: vm
+    zone: proxmox
     label: "`wk-03` (VM)"
     role: k8s worker, ephemeral/CI-runner tier (tainted; removable — no Longhorn disks, no kata)
     hardware: Talos VM on pve
@@ -144,6 +153,7 @@ machines:
 
   - name: thinkcentre
     kind: metal
+    zone: thinkcentre
     label: "`thinkcentre` (metal, PXE)"
     role: k8s worker + Longhorn (+ 2×Optane fast tier)
     hardware: Lenovo ThinkCentre Edge
@@ -177,6 +187,7 @@ machines:
 
   - name: hp-01
     kind: metal
+    zone: hp-01
     label: "`hp-01` (metal, PXE)"
     role: k8s worker + Longhorn (WoL-capable)
     hardware: HP desktop
@@ -199,6 +210,7 @@ machines:
 
   - name: wk-metal-01
     kind: metal
+    zone: wk-metal-01
     label: "`wk-metal-01` (ThinkPad X240, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier
     hardware: Lenovo ThinkPad X240
@@ -224,6 +236,7 @@ machines:
 
   - name: wk-metal-02
     kind: metal
+    zone: wk-metal-02
     label: "`wk-metal-02` (ThinkPad X250, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node, 8GB)
     hardware: Lenovo ThinkPad X250
@@ -247,6 +260,7 @@ machines:
 
   - name: wk-metal-03
     kind: metal
+    zone: wk-metal-03
     label: "`wk-metal-03` (laptop i5-6200U, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node)
     hardware: laptop, i5-6200U (Skylake, VT-x/KVM + AVX2)
@@ -271,6 +285,7 @@ machines:
 
   - name: wk-metal-04
     kind: metal
+    zone: wk-metal-04
     label: "`wk-metal-04` (desktop i5-3570K 16GB, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier
     hardware: desktop, i5-3570K (Ivy Bridge, VT-x/EPT, no AVX2)
@@ -302,6 +317,7 @@ machines:
 
   - name: ci-runner-01
     kind: vm
+    zone: proxmox
     label: "`ci-runner-01` (VM)"
     role: GitHub Actions runner VM — Docker/binfmt builds (ADR-082)
     hardware: Debian 12 VM on pve
