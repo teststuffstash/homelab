@@ -1453,6 +1453,27 @@ experiment; build = G-A children (the proxy anthropic→OpenRouter translation l
 first-party plumbing) + homelab#778 (scout 3-harness cells + retry ladder); design home
 [`agents/chainless-redesign.md`](agents/chainless-redesign.md) decision 3.
 
+### ADR-113 — Bash is glue, logic is Python: shellcheck gates the glue; no wholesale rewrite
+
+**Status:** Accepted (operator ruling, 2026-08-24 — the shell audit after PR#862's refuted
+diagnosis). **Decision:** the two-language pattern already in the tree becomes the rule —
+orchestration/exec glue (dispatch, reflexes, launchers) stays bash; a component holding
+decision logic (parsers, rankers, budget/policy math) is authored in Python from birth; logic
+that grew inside glue extracts to Python at touch time, fix-density paced, never big-bang
+(ADR-103's migration rule). ShellCheck (`-S warning`) becomes a required `ci` step over the
+glue (FU-185). **Considered:** wholesale Go/Python rewrite of the orchestrators — rejected:
+the 233 replay fixtures compose bash blocks by sentinel (the ratchet is bash-native and is the
+platform's strongest safety investment), the glue's whole job is exec-ing `gh`/`kubectl`/
+`claude` so a subprocess rewrite keeps the exec-boundary hazards while paying full rewrite
+risk, and the measured defect record is ~80% domain-class (language-agnostic). Status quo —
+rejected: the shell-language class (~13 recorded ids) is disproportionately the SILENT kind
+(exit-0 deaths, fail-open, masked exits), and SC2318 names the exact `local`-expansion bug
+that killed every model-scout tick for six days (#854/#862). **Why:** measured, not tasted —
+at ~2,800-line scripts a human can no longer hold bash while LLMs can, and the lint is what
+holds them. **Consequences:** FU-185 wires the gate + burns the ~8 standing warnings; the
+inline shell in `responder-argo.yaml`/`fix-debounce-argo.yaml` is the first extraction
+candidate at its next touch; "which language" is a review-rubric question for new components.
+
 ### ADR-108 — Observability stays out of routing-critical paths; meters push, critical paths never pull Prometheus
 
 **Status:** Accepted (2026-08-13, operator ruling on homelab#438).
