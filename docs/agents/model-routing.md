@@ -446,7 +446,7 @@ label) — never request-time inference in the proxy.
 > `coordinator-session.sh`), the audit/research-classes-are-the-wrong-shape warning (heeded —
 > `goal-decompose` is its own subscription-rail class), and the `dispatch`-tier caveat at the section's end.
 
-**ADR-096 override rule (settled, #810):** explicit CLI `--model` on coordinator/reviewer = override (route skipped, `resolve-model --model`). Scan-supplied default (`coordinatorModel`) + retro `--cell` model = constraint + fail-OPEN fallback (`resolve-model --fallback`, route consulted). `AGENT_MODEL` env = universal override (checked ahead of the route in all roles). Stated once here; the launcher comments cite this section by name.
+**ADR-096 override rule (settled, #810):** explicit CLI `--model` on coordinator/reviewer = override (route skipped, `resolve-model --model`). Scan-supplied default (`coordinatorModel`) = constraint + fail-OPEN fallback (`resolve-model --fallback`, route consulted). Retro `--cell` model = **explicit override** since #861/PR#864 (cells are experiment ARMS — ADR-104, experiments do not jitter, so the router may never collapse the A/B axis; `resolve-model --model` with `--fallback` kept for validation + the unreachable-proxy literal). `AGENT_MODEL` env = universal override (checked ahead of the route in all roles). Stated once here; the launcher comments cite this section by name.
 
 Everything above governs the **OpenRouter rail**. The coordinator does not ride it: it runs
 `claude -p` against the Claude subscription (`coordinator-claude`, `CLAUDE_CODE_OAUTH_TOKEN`) with
