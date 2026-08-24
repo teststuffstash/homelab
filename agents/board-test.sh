@@ -163,7 +163,6 @@ present "probe-fail: PR-list probe failure is WARNed" \
   "$(cat "$TMP/probe.err")"
 
 printf '\n  %s passed, %s failed\n' "$PASS" "$FAIL"
-[ "$FAIL" -eq 0 ] || exit 1
 
 # ══ 4. --machine mode — derived classes from Prometheus (homelab#892) ════════════════════════
 # Seam: PROMETHEUS_URL=${PROMETHEUS_URL:-http://kube-prometheus-stack-prometheus.monitoring.svc:9090}
@@ -177,11 +176,11 @@ cat > "$TMP/bin/curl" <<'CURLSTUB'
 if [[ "$*" == *"/api/v1/query"* ]]; then
   cat <<'JSON'
 {"status":"success","data":{"resultType":"vector","result":[
-  {"metric":{"repo":"homelab","item":"833","class":"held-merged-unlinked","who":"operator"},"value":[1787054400,"1"]},
-  {"metric":{"repo":"homelab","item":"834","class":"queued-held-by-ghost","who":"operator"},"value":[1787054400,"1"]},
-  {"metric":{"repo":"homelab","item":"889","class":"riding","who":"machine"},"value":[1787054400,"1"]},
-  {"metric":{"repo":"homelab","item":"840","class":"container","who":"none"},"value":[1787054400,"1"]},
-  {"metric":{"repo":"homelab","item":"aggregate","class":"backlog-aggregate","who":"operator"},"value":[1787054400,"1"]}
+  {"metric":{"repo":"homelab","item":"833","class":"held-merged-unlinked","who":"operator","since_seconds":"27000"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"834","class":"queued-held-by-ghost","who":"operator","since_seconds":"27000"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"889","class":"riding","who":"machine","since_seconds":"360"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"840","class":"container","who":"none","since_seconds":"0"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"aggregate","class":"backlog-aggregate","who":"operator","since_seconds":"1123200"},"value":[1787054400,"1"]}
 ]}}
 JSON
 fi
@@ -201,3 +200,9 @@ present "machine: riding row (who=machine)" "who=machine  class=riding id=homela
 present "machine: container row (who=none)" "who=none     class=container id=homelab#840" "$BOARD_OUT"
 absent "machine: no § REVIEW section" "§ " "$BOARD_OUT"
 absent "machine: no totals line" "totals —" "$BOARD_OUT"
+
+# Test --scope parameter parsing (directive 2)
+board "$TMP/scope.actions" "$TMP/scope.err" "PROMETHEUS_URL=http://stub" --machine --scope=goal:775 platform 2>/dev/null || true
+if [ "$BOARD_RC" = 0 ]; then ok "machine: --scope=goal:775 parsing works"; else bad "machine: --scope=goal:775 parsing failed"; fi
+
+[ "$FAIL" -eq 0 ] || exit 1

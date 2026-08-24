@@ -647,11 +647,11 @@ Prometheus (never re-derives them board-side — the one-computer rule):
 
 ```
 board v1 scope=stack:platform ts=<iso> sources=labels:live pods:live derived:tick@<iso>
-who=operator class=held-merged-unlinked id=homelab#833 pod=none pr=#856 merged=11:00Z link=weak since=7h30m next="repair strong link or hand-close"
-who=operator class=queued-held-by-ghost id=homelab#834 hold=footprint:#833(docs/agents/roles.md) since=7h30m
-who=machine  class=riding id=homelab#889 round=2 pod=agent-homelab-issue-889-r2 age=6m pr=#890
-who=none     class=container id=homelab#840 note="post-launch bucket, empty"
-who=operator class=backlog-aggregate repo=homelab n=10 oldest=13d
+who=operator class=held-merged-unlinked id=homelab#833 pod=none link=weak since=7h30m next="repair strong link or hand-close"
+who=operator class=queued-held-by-ghost id=homelab#834 since=7h30m note="held by phantom/infeasible blocker"
+who=machine  class=riding id=homelab#889 age=6m
+who=none     class=container id=homelab#840 note="post-launch bucket, container"
+who=operator class=backlog-aggregate id=homelab/aggregate note="suitable-unqueued backlog"
 ```
 
 **Rules:**
