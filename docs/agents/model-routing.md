@@ -337,9 +337,14 @@ surface (§M8 classes, §M9 chainless stacks, §M13 research pools). Legs, in bu
    sanity rule but the **gate condition** that decides whether a canary verdict counts as
    evidence for graduation:
 
-   - **Evidence-bearing**: `clean` — a model completed a real tool-calling ride on a
-     budget-capped key *without* the `only-free` guardrail, or an `error_class` that is a
-     genuine *model* outcome (e.g. a model-side refusal typed as `changes-requested`);
+   - **Evidence-bearing**: `clean` — the model completed a real tool-calling ride — or any
+     `error_class` NOT in the non-evidence list below (a genuine *model* outcome). The three
+     enforcement sites test the verdict STRING only, so a free-model (`only-free`) canary that
+     returns `clean` counts as evidence exactly like a budget-capped one: `.canary` is merged
+     into `ranked.json` independent of `.free` (`model-scout.sh:447-448`). On the canary path
+     `clean` is in practice the only reachable evidence-bearing verdict — the §M1 model-outcome
+     classes (`changes-requested`, `ci-failed`) are PR-ride verdicts and a canary is an adhoc,
+     no-PR probe (`model-scout.sh:347-348`);
    - **Non-evidence (rail/platform fault, tells you nothing about the model)**: `void`,
      `no-stats`, `unknown`, `mint-failed`, `key-never-minted`, `harness-death`, `auth-storm`,
      `budget-403`, `timeout`, `suspect-infra`, `inconclusive`.
