@@ -358,6 +358,24 @@ if printf '%s\n' "\$CHANGED" | grep -qE '^charts?/templates/|^(argocd|k8s|manife
    || gh pr diff ${PR} 2>/dev/null | grep -qE '^\+.*kind: *(Deployment|StatefulSet|DaemonSet|CronJob)\b'; then
   LENSES="\$LENSES k8s-prod"
 fi
+# >>>REPLAY:asvs-predicate>>>
+# ASVS lens: code-class predicate for auth/input/session code (issue#833).
+# Prefers quiet miss — see agents/lenses/asvs.md for false-positive analysis.
+# Signals: auth imports, auth function definitions, session management, input parsing,
+# new public endpoint route registrations across Go/Python/TypeScript.
+if gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(import|from|using|require)\s+.*(auth|jwt|oauth|saml|oidc|csrf|cors|bcrypt|argon2|passport)' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(func.*(Login|Logout|Auth|Authenticate|Authorize|Register|Signup|Token|Session|Refresh|Middleware|Guard)[^a-z]|def.*(login|logout|auth|authenticate|authorize|register|signup|session|token|refresh|middleware|guard)[^a-z])' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(session\.(Save|Get|Set|Delete|Destroy|Regenerate|Start|Create)[^a-z]|csrf\.(Protect|Token|Middleware)|cors\.(New|Allow|Handle)|ParseForm|ParseMultipartForm|\.Bind\(|\.Validate\(|\.Sanitize\(|\.Escape\()' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(http\.(Handle|HandleFunc|ServeMux)|HandleFunc\(|mux\.(NewRouter|Handle|Methods|Headers)|gin\.(Default|New|Group|RouterGroup)|echo\.(New|Group|Route)|chi\.(NewRouter|Route|Group|Mux))' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(router\.(get|post|put|delete|patch|GET|POST|PUT|DELETE|PATCH)\(|@(Get|Post|Put|Delete|Patch)\(|app\.(get|post|put|delete|patch|route|router)|@app\.route\(|@router\.(get|post|put|delete|patch)\(|\.add_url_rule\()'; then
+  LENSES="\$LENSES asvs"
+fi
+# <<<REPLAY:asvs-predicate<<<
 SYSFILE=/tmp/review-system.md
 if [ -f "${RUBRIC}" ]; then cp "${RUBRIC}" "\$SYSFILE"; else : > "\$SYSFILE"; fi
 # Lens posture map from the single claim read (FU-101): absent lenses → advisory

@@ -135,7 +135,7 @@ incident-evidenced in merge-path-fsm.yaml style — the retro role maintains it.
 |---|---|---|---|---|
 | k8s-prod | k8s production checklist class | `chart*/templates/` or manifest dirs touched, or diff adds a workload `kind:` | advisory | **LIVE 2026-07-27** (`agents/lenses/k8s-prod.md`) |
 | helm | helm-best-practices | `chart*/` touched | advisory | **LIVE 2026-07-27** (`agents/lenses/helm.md`) |
-| ASVS | OWASP ASVS (pinned major) | auth/input/session code; new public endpoint | advisory | pending (predicate needs a code-class detector, not paths) |
+| ASVS | OWASP ASVS v5.0 (May 2025, [asvs.dev](https://asvs.dev/)) | `gh pr diff` grep for auth/input/session/signature code and new route registrations (Go/Python/TS) | advisory | **LIVE 2026-08-24** (`agents/lenses/asvs.md`) — code-class predicate via diff grep, not paths; prefers quiet miss over false alarm |
 | e-ITS | RIA e-ITS baseline | stack-level, scheduled audit-pass | audit report | pending (seeded by FU-105's IdP research output) |
 
 Mechanism (built with FU-101's first two lenses): `reviewer-session.sh` computes the diff class

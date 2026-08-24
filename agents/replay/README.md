@@ -144,6 +144,7 @@ is stale, so it cannot drift the way the prose register did.
 | `argv-payload/over-ceiling` | actions | - | `agents/agent-session.sh` | - |
 | `argv-payload/retro-handoff` | actions | - | `agents/retro-session.sh` | - |
 | `argv-payload/warn-band` | actions | - | `agents/agent-session.sh` | - |
+| `asvs` | suite | - | `-` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
