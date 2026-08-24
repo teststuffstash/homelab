@@ -4,12 +4,12 @@ _selftest-missing-sentinel	_selftest
 _selftest-unrecorded-read	_selftest
 _selftest-wrong-expectation	_selftest
 adopted-not-queued-surfaces	adopted-not-queued-surfaces
-asvs	asvs
 arbitrate-first-tick	arbitrate
 arbitrate-probe-unreadable	arbitrate
 argv-payload-over-ceiling	argv-payload
 argv-payload-retro-handoff	argv-payload
 argv-payload-warn-band	argv-payload
+asvs	asvs
 board-classification	board-classification
 c4c5-bodies-probe-fail	c4c5-bodies-probe-fail
 c4c5-infeasible-parks	c4c5-infeasible
