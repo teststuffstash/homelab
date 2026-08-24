@@ -402,6 +402,11 @@ guarded edit out of the issue and hand that part to the operator (a push to mast
 §Carve-outs), or split it into its own issue that says so. #299 is what it costs otherwise — a full
 round to discover it, and the deliverable still needed a human.
 
+⚠ **Goal-class issues (`task/goal`) are exempt from the ADR-097 footprint intersection
+entirely** — a goal writes no code (it authors child issues via `gh` and toggles labels,
+never a PR diff), so the footprint hold is a category error in both directions.
+`agents/footprint.sh` `fp_goal_exempt` (homelab#822).
+
 ## Base: the declared base branch (2026-08-05)
 
 An issue whose work must be built on an **unmerged branch** carries a `Base:` body line, same

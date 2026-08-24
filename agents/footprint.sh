@@ -53,6 +53,20 @@ fp_replay_exempt() {
   return 1
 }
 
+# fp_goal_exempt <class> → 0 iff the item is a goal-class unit (goal-decompose,
+# goal-checkpoint). Goal units write NO code — they author child issues via `gh`
+# and toggle labels, never a PR diff — so the ADR-097 footprint hold (which
+# prevents write-surface conflicts between concurrently dispatched units) is a
+# category error for them. A goal is exempt in BOTH directions: it is not held
+# by in-progress issues' footprints and does not hold sibling dispatches.
+# Homelab#822.
+fp_goal_exempt() {
+  case "${1:-}" in goal)
+    return 0
+  ;; esac
+  return 1
+}
+
 # fp_pair_conflict <entryA> <entryB> → 0 iff the two entries overlap (path-boundary aware:
 # chassis ∩ chassis/api.py = yes; chassis ∩ chassis-x = no)
 fp_pair_conflict() {

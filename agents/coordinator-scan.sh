@@ -847,7 +847,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     jq -e . >/dev/null 2>&1 <<<"${inprog:-null}" || inprog='[]'
     # ADR-097: one line per in-progress issue = its declared footprint; missing Touches: → `*`
     # (exclusive). The queued predicate below holds any unit whose footprint intersects a line.
+    # Direction 2 of the homelab#822 goal exemption: a `task/goal` issue contributes NO entry to
+    # busy_fps, so it does not hold sibling dispatches (cross-reference fp_goal_exempt in
+    # agents/footprint.sh — both readers share `task/goal` as the exemption key).
     busy_fps="$(printf '%s' "$inprog" | jq -r '.[]
+      | select(((.labels|map(.name))|index("task/goal"))|not)
       | ([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(","))
       | if . == "" then "*" else . end')"
     # ── FU-143 (contract points 1+2): a goal child cannot self-close ──────────────────────────
@@ -1379,14 +1383,24 @@ EOF_GUARDED
         fi
       fi
       # <<<REPLAY:guarded-hold<<<
+      # >>>REPLAY:footprint-hold>>>
+      # ADR-097 goal exemption (homelab#822): a goal's decompose/checkpoint unit writes
+      # no code (it authorises child issues via `gh` and toggles labels, never a PR diff),
+      # so the ADR-097 footprint hold — which prevents write-surface conflicts between
+      # concurrently dispatched units — is a category error. A goal is exempt in BOTH
+      # directions: it is not held by in-progress issues' footprints and does not hold
+      # sibling dispatches.
+      if fp_goal_exempt "$qclass"; then
+        : # skip the ADR-097 footprint hold for goal-class units
       # ADR-097 footprint hold (supersedes the track-label lane hold): a queued unit is held iff
       # its declared footprint intersects ANY in-progress issue's footprint. Undeclared (`*`)
       # conflicts with everything, so a repo with any in-progress work keeps WIP=1 for legacy
       # issues; disjoint declared footprints dispatch in parallel (launcher limit rides wipmap).
-      if fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
+      elif fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
         orphans="${orphans}[$repo] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
         continue
       fi
+      # <<<REPLAY:footprint-hold<<<
       if [ -n "$wip_busy" ]; then
         orphans="${orphans}[$repo] ⏳ project WIP at ceiling (${REPO_MAX_WIP} live workers in ${repo} — ADR-097 hard max):\n  issue #${qnum} — ${qtitle}\n"
         continue

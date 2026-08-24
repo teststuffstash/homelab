@@ -86,6 +86,26 @@ expect_strict 0 "strict: replay vs replay STILL conflicts"   "agents/replay/**" 
 expect_strict 0 "strict: sentinel vs replay conflicts"       "*"                "agents/replay/x"
 expect_strict 1 "strict: disjoint stays disjoint"            "agents/replay/**" "docs/adr.md"
 
+# ── the goal exemption (homelab#822) ──────────────────────────────────────────────────────────
+# fp_goal_exempt returns 0 for "goal" class and 1 for every other class.
+expect_goal_exempt() { # expect_goal_exempt <0|1> <desc> <class>
+  fp_goal_exempt "$3"; got=$?
+  if [ "$got" -ne "$1" ]; then
+    echo "FAIL: $2 (class='$3' want=$1 got=$got)"; fails=$((fails + 1))
+  fi
+}
+expect_goal_exempt 0 "goal class is exempt"                   "goal"
+expect_goal_exempt 1 "fix class is not exempt"                "fix"
+expect_goal_exempt 1 "doc class is not exempt"                "doc"
+expect_goal_exempt 1 "empty class is not exempt"              ""
+expect_goal_exempt 1 "arbitrary string is not exempt"         "anything-else"
+# The ADR-097 footprint hold for goal-class items is skipped entirely (homelab#822), so
+# fp_conflict/fp_conflict_multi don't need to strip goal entries — the scan's queued-dispatch
+# loop checks fp_goal_exempt BEFORE calling fp_conflict_multi. Verify the invariant: a
+# goal-issued `*` (no Touches line) still conflicts under fp_conflict (it is a different
+# predicate for a different reader).
+expect 0 "goal's star STILL conflicts under fp_conflict"       "*"                     "*"
+
 if [ "$fails" -gt 0 ]; then
   echo "footprint-test: ${fails} FAILED"
   exit 1
