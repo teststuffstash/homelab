@@ -1,0 +1,28 @@
+# The FU-147 re-fire blocked by a newer arbitration event (homelab#868). The 12:18-shaped re-fire
+# on PR#862 re-read "stats without commits" minutes after the 12:15 arbitration had already ruled
+# that same round a strike — the predicate had no notion of an arbitration event newer than the
+# evidence it was built on.
+#
+# This fixture records a world where:
+#   - Two stats comments ("Agent run stats") exist after the last commit (no-op evidence)
+#   - An "ARBITRATE" comment (the FU-147 labeler's arbitration event) is newer than the newest
+#     stats comment
+#   - The NOOP_ROUND_JQ should return "" (empty) — the arbitration event is newer than the
+#     no-op evidence, so the FU-147 must NOT re-label.
+#
+# The arbitration ruling comment at 12:15:35Z does not contain "ARBITRATE" and is not detected;
+# the "ARBITRATE" comment from the first FU-147 labeling at 12:08:45Z is the arbitration event
+# the predicate sees. Since it post-dates the newest stats marker (12:08:43Z), the no-op predicate
+# returns false and the re-label is blocked.
+pins:
+  - MP-T11
+name: arbitrate-fu147-refire-blocked
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:round-evidence
+  - file:bridge.sh
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
