@@ -5082,3 +5082,39 @@ first live ADR-110 maintenance session before the ADR existed.
 - Cleanup done: forensics pod deleted, temp key `forensics-wide` deleted, local cred copies
   shredded. Evidence stays frozen in `backups/garage-meta-forensics/` + the
   `pre-restore-2026-08-24-meta-wipe` snapshot. PRs #900–#909 (nine) merged.
+
+## 2026-08-25 (evening) — FU-184: the metadata env rebuilt, snapshot belt unblocked
+
+- **Condition:** operator called the deferred `convert-db` act ("70GB free on this drive now for
+  backups"). Baseline captured first: 896,849 objects / 14 buckets / 4.28M table rows,
+  `data.mdb` 19,437,924,352 B, meta volume 62% used.
+- **The recorded order failed twice, both facts now in `docs/garage.md` §Durability.** `garage
+  convert-db -a lmdb -b lmdb` → *"input and output database engine must differ"* (v2.3.0 rejects
+  same-engine). Routed via sqlite instead → *"LMDB: error while decoding: invalid utf-8 sequence"*
+  — `list_trees()` enumerates the main db, and 8 freelist records had been stranded there by the
+  08-24 torn write, keyed by raw txnid.
+- **Root cause, from LMDB's source rather than inference** (`mdb.c:9565`): a snapshot is
+  `MDB_CP_COMPACT`, which predicts the compacted root as `next_pgno - 1 - freecount` and returns
+  `MDB_INCOMPATIBLE` when the walk disagrees — `/* page leak or corrupt DB */`. 4,745,586 pages,
+  ~550k live. The 8 junk keys sort after all 67 tree names, which is why every attempt wrote
+  ~2.28 GB before dying. Deleting them alone did NOT fix it (A/B'd offline) — the leak is the gate.
+- **Rehearsed offline on a byte-exact frozen copy before touching the volume**: compacting copy
+  fails as-is, succeeds on the rebuilt env in 14s. Only then was the live window opened.
+- **Live run:** ArgoCD `platform`+`garage` auto-sync suspended (the child app's syncPolicy is
+  itself GitOps-managed — patching only `garage` gets reverted in seconds), sts→0, Longhorn
+  snapshots `garage-meta-pre-convertdb-20260825` + `-pre-rebuild-`, two sha256-verified host
+  copies, rebuild, swap, sts→1, auto-sync restored. **18.10 GiB → 1.57 GiB**, 67 trees /
+  4,279,175 entries exact; every bucket count unchanged (only `loki` +157 / `agent-transcripts`
+  +3, both live writers). Meta volume 62% → **6%**. 161 stale snapshot dirs + the old env pruned.
+- **In-pod rebuild ABANDONED mid-run** and redone host-side: ~550k scattered 4 KiB reads over a
+  network-attached Longhorn volume ran at ~0.3 MB/s (≈90 min projected) vs ~100 MB/s for a
+  sequential `cat`. Downtime ~20 min instead of ~90.
+- **The sting:** with a healthy env the snapshot copy takes ~15 s instead of ~11 min, and the
+  page-cache burst blew Garage's 512Mi limit — `garage meta snapshot` OOM-killed the container
+  (it restarted clean, no data effect). Limit → 2Gi in PR#911. **Do not exec-trigger a snapshot
+  into garage-0.**
+- Shipped as PR#911 (script `scripts/garage-forensics/lmdb-rebuild.py` + docs + the limit).
+  ⚠ A parallel jail session merged #910 — same page-leak diagnosis, docs only — at 15:12Z while
+  this ran; the two accounts were merged into one §Durability block on rebase rather than one
+  clobbering the other.
+- **Open:** the acceptance soak — one *auto* snapshot completing, carved to the live object count.
