@@ -152,6 +152,21 @@ meant to avoid.)
   ⚠ A parallel jail session merged #910 (same diagnosis, docs only) at 15:12Z mid-run; the two
   accounts were merged on rebase rather than one clobbering the other — watch for that pattern.
 
+- **⚑ STORAGE, 2026-08-25 evening — hp-01 has a second disk, the pool trim has a schedule.**
+  hp-01: +119.2G in `std` (`hg5d`, WWID-pinned; PR#920). The `optane_disks` field is now
+  `longhorn_disks` ({device,name,tags}) — thinkcentre's names must stay optane0/optane1 forever,
+  they are its live Longhorn disk keys. pve thin pool 78.72% → **62.99%** via the new daily
+  per-VM fstrim CronJob (PR#925 riding, `argocd/resources/node-fstrim/`). **Residue:**
+  (a) `install_disk: /dev/sda` on hp-01 is still a NAME with two identical 128G SATA SSDs in the
+  box — repin to WWID, FU-076's neighbourhood; (b) ci-runner-01 shares the pool, is not a k8s
+  node, and its own `fstrim.timer` is assumed-not-verified; (c) a Longhorn `filesystem-trim`
+  RecurringJob is the unbuilt second layer (node fstrim cannot reclaim inside replica sparse
+  files); (d) the pool ITSELF is still unmetered — no pve exporter, so the new alerts prove the
+  belt runs, not that it suffices. All four on FU-093/the ledger.
+  **Operator direction: ADR-114's remaining capacity = cheap boxes with their own storage**, not
+  more disks in pve (its SATA ports are a firmware setting — possible, but it costs a
+  whole-cluster BIOS outage).
+
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
   for a few days, revert to 0 if no win; the residual setup cost is homelab#518.
 - **Small live residue (compressed 2026-08-19):** wk-metal-04
