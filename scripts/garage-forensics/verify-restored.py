@@ -48,7 +48,16 @@ def head(bucket, key):
 
 
 def check(rec):
-    st, h = head(rec["b"], rec["k"])
+    # One flaky socket must not abandon a 500k-object verification: an unhandled TimeoutError
+    # here propagates out of the future and kills the whole run, which is how the first Tier-3
+    # verify died. Retry once, then record it as a finding like any other.
+    for attempt in (1, 2):
+        try:
+            st, h = head(rec["b"], rec["k"])
+            break
+        except Exception as e:                  # noqa: BLE001 - transport faults are data here
+            if attempt == 2:
+                return {"k": rec["k"], "b": rec["b"], "r": "exception", "err": repr(e)[:120]}
     if st != 200:
         return {"k": rec["k"], "b": rec["b"], "r": f"head-{st}"}
     size = int(h.get("Content-Length") or -1)
