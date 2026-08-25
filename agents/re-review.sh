@@ -421,6 +421,7 @@ EOF
   claude_reply=$(claude -p "$PROMPT_CONTENT" --model "$MODEL" --output-format json 2>/dev/null) || {
     echo "  ERROR: claude invocation failed"
     # In replay, the bridge provides a valid prompt and claude stub; this is a test failure.
+    continue
   }
   # <<<REPLAY:re-review-shadow<<<
 
