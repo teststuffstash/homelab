@@ -1,3 +1,4 @@
+CALL kubectl get pods -A -l homelab.teststuff.net/subscription-session=claude --field-selector status.phase=Running --no-headers
 CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"source":"capacity","rail":"go","stack":"circles","loop_ns":"circles-agents"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
 CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"source":"capacity","rail":"go","stack":"sleep","loop_ns":"sleep-agents"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
 OUT capacity doorbell: ringing every graduated stack for go cleared
