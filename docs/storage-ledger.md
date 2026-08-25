@@ -219,10 +219,12 @@ threshold**.
 - **Garage metering** — still the open item, but **smaller than it reads: the exporter is already
   running.** Measured 2026-08-25 by scraping `http://<garage-pod-ip>:3903/metrics` with the admin
   token: **48 metric families**, served regardless of the chart's `monitoring.metrics.enabled:
-  false` (that flag gates the ServiceMonitor, not the exporter). What is missing is only the
-  plumbing — 3903 appears in **no** Service (`garage`, `garage-headless` and `garage-s3` all expose
-  3900/3902 only), so nothing can scrape it. Two of the families are worth naming because they are
-  what this section has been asking for:
+  false`. That flag gates the headless **`garage-metrics` Service** — the `port: 3903` block in
+  `argocd/charts/garage/templates/service.yaml` — not the exporter; the ServiceMonitor has its own
+  gate, `monitoring.metrics.serviceMonitor.enabled`. So the gap is two values: with the first
+  false, 3903 appears in **no** Service (`garage`, `garage-headless` and the `garage-s3`
+  LoadBalancer all expose 3900/3902 only) and nothing can scrape a port that is already answering.
+  Two of the families are worth naming because they are what this section has been asking for:
   - **`garage_local_disk_avail` / `garage_local_disk_total`** — the usage half, per volume, which
     is the ">80% alert" above.
   - **`table_size{table_name=…}`** — per-table row counts. That is a direct detector for the
