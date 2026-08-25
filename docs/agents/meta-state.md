@@ -137,28 +137,20 @@ meant to avoid.)
   byte-exact from the intact OCI image). Never run `garage bucket cleanup-incomplete-uploads`
   against a bucket still being recovered.
 
-- **⚑ FU-184 DONE (mechanism) 2026-08-25 — the metadata env is REBUILT; one soak left.** The
-  auto-snapshot had never worked because `MDB_CP_COMPACT` refuses a page-leaked env by arithmetic
-  (`root != next_pgno-1-freecount` → `MDB_INCOMPATIBLE`, mdb.c "page leak or corrupt DB"); the
-  08-24 torn write left 4,745,586 pages holding ~550k live ones, plus 8 freelist records stranded
-  in the MAIN db (they sort last, hence the ~2.28 GB written before each failure — and they also
-  break `convert-db`, which UTF-8-decodes main-db keys). **The recorded `convert-db -a lmdb -b
-  lmdb` order was wrong twice over**: v2.3.0 rejects same-engine outright, and the utf-8 fault hits
-  first. Fix shipped as `scripts/garage-forensics/lmdb-rebuild.py` (rebuild by insertion, then the
-  compacting copy as its own acceptance test): **18.10 GiB → 1.57 GiB**, 67 trees / 4,279,175
-  entries exact, every bucket count unchanged, meta volume 62% → 6%. Full account: `docs/garage.md`
-  §Durability. **PR#911** (script + docs + the 512Mi→2Gi limit) is riding — bot-reviewed,
-  auto-merge armed; land it with a gate read.
-  **REMAINING (the only open half of FU-184):** watch for one *auto* snapshot to COMPLETE now the
-  limit is 2Gi — the manual `garage meta snapshot` trigger OOM-killed the container at 512Mi
-  (the copy went from ~11 min to ~15 s once the env was healthy, and the page-cache burst blew the
-  cgroup). Then carve it with `lmdb-carve.py` and compare to `garage stats`. Next natural fire is
-  ~6h after the 16:16Z start; do NOT re-trigger by exec into garage-0.
-  Rollback still held: Longhorn snapshots `garage-meta-pre-convertdb-20260825` +
-  `garage-meta-pre-rebuild-20260825`, and two sha256-verified host copies under
-  `backups/garage-meta-20260825-{preconvert,prerebuild}/` (19 GB each — delete once the soak
-  passes). ⚠ **A parallel jail session merged #910 (same diagnosis, docs only) at 15:12Z while this
-  ran** — the two accounts are merged into one §Durability block; watch for that pattern.
+- **⚑ FU-184 CLOSED 2026-08-25 (archived) — Garage's metadata env rebuilt, snapshot belt proven.**
+  `MDB_CP_COMPACT` refuses a page-leaked env by arithmetic; the 08-24 torn write left 4.7M pages
+  for ~550k live ones, plus 8 freelist records stranded in the MAIN db (which is also what broke
+  `convert-db` — and it rejects lmdb→lmdb anyway, so the recorded order was wrong twice over).
+  Rebuilt by insertion (`scripts/garage-forensics/lmdb-rebuild.py`, PR#911): **18.10 GiB → 1.57
+  GiB**, 67 trees / 4,279,175 entries exact, buckets unchanged, meta volume 62% → 6%. Limit
+  512Mi→2Gi (a healthy env snapshots in ~15 s, and the first fast one OOM-killed garage-0).
+  **Acceptance PASSED same day** — a snapshot completed, 4,280,149 entries, no OOM, restarts=0.
+  Account: `docs/garage.md` §Durability. Residue for a later session: delete
+  `backups/garage-meta-20260825-prerebuild/` (20 GB) after ~2026-09-01; **PR#912 riding**
+  (storage-ledger: Garage's exporter is already live on :3903 with 48 families incl. `table_size`
+  and `garage_local_disk_avail` — only the Service port + ServiceMonitor are missing, FU-093).
+  ⚠ A parallel jail session merged #910 (same diagnosis, docs only) at 15:12Z mid-run; the two
+  accounts were merged on rebase rather than one clobbering the other — watch for that pattern.
 
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
   for a few days, revert to 0 if no win; the residual setup cost is homelab#518.

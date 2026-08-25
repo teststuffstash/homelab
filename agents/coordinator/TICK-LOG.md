@@ -5118,3 +5118,18 @@ first live ADR-110 maintenance session before the ADR existed.
   this ran; the two accounts were merged into one §Durability block on rebase rather than one
   clobbering the other.
 - **Open:** the acceptance soak — one *auto* snapshot completing, carved to the live object count.
+- **Acceptance PASSED the same evening** (no 6h soak needed): PR#911 merged 16:41Z, ArgoCD synced
+  the 2Gi limit, and `garage meta snapshot` then COMPLETED — 1,683,718,144 B, 67 trees,
+  4,280,149 entries, zero non-UTF-8 main-db keys, counts tracking live, `restarts=0`. FU-184
+  archived. Pre-rebuild copies kept in `backups/garage-meta-20260825-prerebuild/` until ~09-01.
+- **Side catch:** the `homelab-browse` key was re-minted by the 08-24 wipe **without its grants**
+  (`garage-s3` returned AccessDenied on every bucket). Re-granted read on the four sleep buckets;
+  verified by downloading `sleep-db/sleep.sqlite` over the LAN endpoint — 53,248 B, matching the
+  baseline. Other keys' grants are worth a sweep; nothing else was probed.
+- **Operator question answered by measurement, not inference** (→ PR#912, FU-093): Garage v2.3.0
+  already serves **48 metric families** on `:3903` — `monitoring.metrics.enabled: false` gates only
+  the ServiceMonitor. Nothing scrapes it because 3903 is in no Service. `table_size{table_name}` is
+  a direct detector for the 08-24 empty-table wipe and `garage_local_disk_avail` is the ledger's
+  ">80% alert". ⚠ It would NOT have helped on the day: Prometheus was pinned to wk-01 and dark
+  14:18→15:45 while the wipe was 15:31 — every scraped signal shared fate with the failure.
+  Upstream's Grafana dashboard is request/error/queue panels and predates `table_size`.
