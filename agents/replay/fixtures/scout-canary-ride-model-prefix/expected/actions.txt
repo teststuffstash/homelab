@@ -1,0 +1,2 @@
+CALL bash /replay/agents/agent-session.sh teststuffstash --harness opencode --model openrouter/deepseek/deepseek-v4-flash --task scout-deepseek-deepseek-v4-flash --openrouter-secret teststuffstash-session-scout-deepseek-deepseek-v4-flash-openrouter --run opencode run -m "openrouter/deepseek/deepseek-v4-flash" "Reply with ONLY the first markdown heading text of README.md (no other words)."
+RC 0
