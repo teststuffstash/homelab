@@ -29,13 +29,13 @@ locals {
   # so an explicit `kata: null` in YAML degrades to false instead of erroring in a conditional.
   metal_nodes = {
     for m in local.machines : m.name => {
-      ip           = m.ip                               # DHCP-reserved IP (maintenance-mode + ongoing node address)
-      install_disk = m.install_disk                     # target disk for the install (NOT a longhorn_disks entry)
+      ip           = m.ip           # DHCP-reserved IP (maintenance-mode + ongoing node address)
+      install_disk = m.install_disk # target disk for the install (NOT a longhorn_disks entry)
       # Extra Longhorn disks: [{device, name, tags}] — mountpoint AND node.longhorn.io disk key
       # are both <name>, so a rename orphans replicas. Tier comes from `tags` (ADR-089).
       longhorn_disks = tolist(try(m.longhorn_disks, []))
-      pin_hostname = try(m.pin_hostname, true) != false # HostnameConfig patch; default true
-      kata         = try(m.kata, false) == true         # metal_kata install image + homelab.io/kata label
+      pin_hostname   = try(m.pin_hostname, true) != false # HostnameConfig patch; default true
+      kata           = try(m.kata, false) == true         # metal_kata install image + homelab.io/kata label
     } if try(m.talos_metal_node, false) == true
   }
 
