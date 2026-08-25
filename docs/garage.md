@@ -190,6 +190,26 @@ rather than competing with it. Two notes for the next time:
   ([`argocd/platform/garage.yaml`](../argocd/platform/garage.yaml)); a snapshot that suddenly gets
   *fast* is what makes an old limit too small.
 
+**What a metadata restore does NOT bring back: grants.** Bucket↔key permissions live in the same
+metadata as everything else, and the recovery path only replays what something *declares*. App
+buckets and keys are declared in Crossplane `Workspace` CRs (ADR-076,
+[`patterns/app-owned-resources.md`](patterns/app-owned-resources.md)), which recreate bucket + key
++ grant together — those self-heal. The **hand-made operational keys do not**: `garage key import`
+restores an id/secret so cached credentials keep working, and restores no permissions with it.
+That is how `homelab-browse` (the `scripts/garage-s3.sh` browse key) spent 24h after the
+2026-08-24 wipe authenticating perfectly and refusing every bucket. Tell the two failures apart —
+`Operation is not allowed for this key` is a missing GRANT, `No such key` is a stale key ID in a
+consumer that has not been restarted. After any metadata restore, sweep both:
+
+```sh
+G="devbox run -- kubectl --kubeconfig tofu/kubeconfig -n garage exec garage-0 -c garage -- /garage"
+$G key list                       # then `$G key info <id>` per key. VERIFIED 2026-08-25 against a
+                                  # throwaway key: an ungranted key still PRINTS the
+                                  # "BUCKETS FOR THIS KEY" header and its column row — what is
+                                  # missing is any row under it. Match on rows, not the header.
+$G bucket allow --read <bucket> --key homelab-browse
+```
+
 **When there is no snapshot and no backup covering the window**, the objects are still recoverable:
 blocks are content-addressed and only a *manual* `garage repair blocks` reaps orphans, and LMDB's
 copy-on-write leaves the emptied tables' pages readable in a frozen volume layer. That carve
