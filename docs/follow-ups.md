@@ -527,8 +527,10 @@ the block needs pruning, not more headings.
       cleanly on every row; the rest = the ruled steady state, net honored, both served-set Go
       cells ride-level clean). The flip child = **the ladder promotion into the served path** +
       env/claim flips (acceptance: zero chain-exhausted defers on subscription-only classes).
-      What remains is the operator's SEQUENCING call: flip at/after the ~2026-09-03 PR#715
-      paid-flash revert, or ship the claim `rails:` posture knob first.
+      SEQUENCING RULED **A** (operator, 2026-08-25): flip at/after the ~2026-09-03 PR#715
+      paid-flash revert — penalty-free now that `classes.dispatch` carries `chain_head`
+      (the 08-23 goal-decompose precedent, second instance); the `rails:` posture knob builds
+      post-flip on authoritative soak. The checkpoint mints the flip child at the revert.
       Relates ADR-077, ADR-081, ADR-096, ADR-112, FU-044, FU-046, FU-057, FU-062, FU-105.
 - [ ] **FU-127** — **One model-id parser LANDED; the structured claim field is the rest.**
       `agents/model_id.py` is the single implementation of `{rail, harness, model}` with the
