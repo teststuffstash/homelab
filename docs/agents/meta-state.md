@@ -117,17 +117,33 @@ meant to avoid.)
   detail in TICK-LOG 2026-08-24 evening + incident §Tier-2. Tier-3 carved the WHOLE store from the
   same frozen layer: **956,600 objects, 0 orphan versions**, and the **bucket_alias table survived**
   (14 names → old ids, `wide/aliases.json`) so nothing had to be identified by key shape. Live-key
-  filtered → **544,548 objects / 17.1 GB** re-uploading in pod `garage-forensics` (detached, survives
-  this session): `/tmp/report2.jsonl`, log `/tmp/restore2.log`, ~37 obj/s (**Garage's own
-  `metadata_fsync=true` is the ceiling** — the incident's fix), ETA ~4 h. Then the **3 giant ERT
-  objects (6+6+42 GB, multipart, 2 071 parts)** via the new part-replay path →
-  `/tmp/giants.report.jsonl`, log `/tmp/giants.log`. **`/tmp/chain.sh` is armed in the pod and
-  starts the giants when the bulk exits** — the two are SEQUENTIAL by measurement: Garage's commit
-  path is serialized, so run together they trade throughput (bulk 37→13 obj/s), not add it.
+  filtered → **544,548 objects / 17.1 GB**. First 182,000 landed, then **the restore filled the
+  meta volume and took Garage down** (503 on every write, ~08:24–09:27Z — see the incident doc
+  §Tier-3). Resumed 09:29Z **sorted by (bucket, key)** and running in pod `garage-forensics`
+  (detached, survives this session): `/tmp/work2.jsonl` → `/tmp/report3.jsonl`, log
+  `/tmp/restore3.log`, ~23 obj/s, **362,823 remaining, ETA ~14:00Z**. Then the **3 giant ERT
+  objects (6+6+42 GB, multipart, 2 071 parts)** via the part-replay path →
+  `/tmp/giants.report.jsonl`. **`/tmp/chain.sh` (verified running) starts the giants when the bulk
+  exits** — SEQUENTIAL by measurement: Garage's commit path is serialized, so run together they
+  trade throughput (bulk 37→13 obj/s), not add it.
+  ⚠ **Insert ORDER is the whole story on space**: page order cost 3.52 GiB of LMDB for 182k objects
+  (~20.3 KB/obj, ~8× the pre-wipe store); sorted cost **no measurable growth** over 19,750. Now the
+  default (PR#905). A `Monitor` guard kills the run if meta free < 3Gi.
   **PICKUP if this session is gone:** wait for both reports (`/tmp/chain.log` marks each stage),
   then `verify-restored.py` from the jail over `https://s3.teststuff.net` with the temp key
-  `forensics-wide`, then **delete the key (`/garage key delete forensics-wide`) and the pod**.
-  Manifest: `backups/garage-meta-forensics/wide/`. Tooling: PR#900 (merged) + PR#901.
+  `forensics-wide`, then **delete the key (`/garage key delete forensics-wide`) and the pod**;
+  earlier reports `/tmp/report2.jsonl` + `/tmp/report3.jsonl` both count toward the tally.
+  Manifest: `backups/garage-meta-forensics/wide/`. Tooling PRs: #900/#901/#902/#904 merged, #905 in
+  flight.
+  **Live changes made during the outage (all verified, cluster state otherwise restored):**
+  `meta-garage-0` **10Gi→30Gi**, `numberOfReplicas` **2→1 on wk-02**, `dataLocality`
+  best-effort→**disabled** (unsatisfiable — garage-0 runs on wk-01, which has no Longhorn disk, and
+  it was blocking every rebuild). The `std` tier could not host a grown 2-replica volume at all:
+  hp-01 sits at 22.5 GB free vs Longhorn's 31.4 GB floor, so it rejected ANY expansion. The rf=1
+  debt is on **FU-137**; the broken auto-snapshot control is **FU-184**. ⚠ the replica shuffling
+  pushed the **pve pool 69→84%**; `fstrim` via `kubectl debug node/wk-02 … -- fstrim -v /host/var`
+  returned it to 69.17% — the batch form silently did only part of the job, run it per node and
+  READ the byte count.
   **STILL OPERATOR-OWNED: the `garage repair blocks` hold** — but it now reclaims ≈nothing, because
   re-adopting the ERT giants re-refs ~47 GB of the 54 GB on the data volume. **DO NOT delete those
   3 keys to reclaim it (operator ruling, 2026-08-25):** the 2026-07-12 corpus is the stale base the
