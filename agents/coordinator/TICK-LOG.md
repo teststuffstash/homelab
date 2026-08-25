@@ -5201,3 +5201,38 @@ first live ADR-110 maintenance session before the ADR existed.
   stays the documented #792 CNP-backstop) · iac-sentinel per-head edge runs convoy on the mutex
   under PR bursts (a cron-shaped batch sweep would collapse them) · the needs-meta
   "no reviewer will come" arm is over-eager (4 false fires during ordinary edge latency).
+
+## 2026-08-25 evening — /board-sweep (window since ~08-23; corpus loaded; first stage of the sweep pipeline)
+
+- **Machine truth:** crosscheck clean (every firing triage-eligible alert has a ledger entry);
+  nodes 10/10 Ready; Longhorn 23 healthy / 5 detached / 0 degraded; hp-01 uncordoned post-PR#920.
+  Firing set was {RetroReportOverdue, KubeJobFailed sleep-ingester, GithubActionsMinutesHigh(#698,
+  tolerated til Sep-1), AgentRunPhaseSlow(#500), AgentDispatchCronWoken(#459)}.
+- **HANDLED (verified by substance):** #916→PR#924 (gate-read SMALL, approved, auto-merged);
+  PR#926 landed (garage grants doc); **the platform retro's first successful scheduled report
+  landed** (r1 opus, PR#918 18:01Z) — FU-058's organic acceptance, one fire late; #897 fixed by
+  the operator quickfix 190e60e6 (hand-closed, keyword didn't fire); G-B #818 all 5 originals
+  closed (post-launch, bucket #840); G-A #775 down to 2 open descendants (#778 operator, #787
+  container); machine fix rounds live on #921/#915.
+- **Drained the resolved-alert/open-issue class** (send_resolved=false gap): closed #903 (meta
+  volume 6% post-FU-184), #885 (hp-01-maintenance churn, self-healed), #860 (dup-cause of #857),
+  #538 (wk-03 7d recovered; today's note = hp-01 window), sleep-iac#75 (3 green runs; deleted the
+  lingering failed Job 29793102 → alert clears), #237 (report landed), #874 (digest read: all
+  unbenched + non-evidence canaries — nothing graduates), #235 (premise died with §M7 v3 legs 1–2).
+- **STUCK-MACHINE found + contained: the renamed platform-retro success push had NEVER landed**
+  (r4 predates the rename, 08-24 died pre-harvest, r1's push failed into a TTL'd WARN) →
+  RetroReportOverdue fired false ~2h against a landed report. True fact pushed by hand
+  (job/platform-retro/series/platform, ts = PR#918 merge), expr verified fresh; belt defect
+  filed+queued **#932**.
+- **Retro r1 process-change batch filed** (prior-art negative stated): #927 (F1 fleet-ruling-files,
+  queued) · #928 (F5 phantom agent/review predicate, queued) · #929 (F6 estimator pick_tier →
+  ledger, queued) · #930 (F2 DELIM-FIELD lint — seat lane, scripts/ deny path) · #931 (F3+F4 —
+  operator lane, .agents/** pair). Backlog triage: #866+#830 queued; #888/#851/#914 labeled
+  agent-fix (inventory); agent-runtime#93 queued; #875 quickfixed direct (70bddd33).
+- **Residual signal for the operator:** #459 is firing legitimately (changes(cron_woken[24h]) = 2
+  and 5) — cron-serviced dispatches persist post-#669/#672/#679, a dead edge remains unhunted ·
+  thinkcentre OOM bursts recurring (#857 stays the one thread; FU-155 v1.13.8 pin is the fix,
+  operator-owned) · #456 reopened 08-24 (opencode phone-home from openrouter-operator persists
+  despite the killswitch — models.opencode.ai leg) · iac-sentinel edge queue bursts to ~8 Pending
+  behind the mutex on merge-heavy evenings (drains; watch, not a defect). #745 un-park read and S4
+  #762 close both execute at a sweep ≥08-26.
