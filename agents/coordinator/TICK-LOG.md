@@ -5167,3 +5167,37 @@ first live ADR-110 maintenance session before the ADR existed.
   red on `doorbell-fanout-wiring/capacity`, and checking out old commits in the live tree was the
   wrong tool. The prior-art grep I should have run FIRST found **#897** — already filed, known
   non-hermetic (reads the LIVE FU-088 latch). Master carried its fix (190e60e6) within the hour.
+
+## 2026-08-25 (late evening) — corpus session: codeowner queue, G-A closure evidence, the credits probes
+
+- Codeowner queue cleared: #894 merged (attention-layer scaffolding; gate read found two emitter
+  defects — per-item pushgateway POST clobbers siblings, since-timestamp re-stamped per tick —
+  filed as #913, blocked-by #892, whose PR#915 was riding by session end) + #896 merged
+  (opencode full-prefix `-m`). C6 harvested #914 organically.
+- Retro re-fired post-#864 (the cell-fix): platform r1 DELIVERED (PR#918 merged — F1..F6 worth
+  the operator read; the process-change batch files at the pipeline session). cell-b died its
+  report-marker self-check again — FU-058 residue.
+- The "red master" scare = homelab#897, NOT an ADR-103 violation: the fanout-wiring capacity row
+  runs the block's source-time `case` before the latch override composes, reaching the REAL
+  subscription-latch.sh as a child process — verdict tracked the live proxy. Fixed hermetic
+  (190e60e, closes #897): the row pins an unreachable proxy so the fail-open belt path runs
+  identically everywhere. 253/253.
+- meta-events ALERT arm false mass-clear (five live alerts "cleared" at 17:31Z): the guard tested
+  the PIPELINE's exit, not curl's — fixed f703ec3. Residual: the NEEDSMETA empty-read half.
+- G-A (#775): banked docs pass executed (33f8c92) · FU-181 re-scoped + Go posture RULED
+  (janitorial+failover; big-pickle = deepseek's $0 shadow → #923 queued) · zen big-pickle FULL
+  tool-loop PASS through the proxy · go-flash per-surface split (Anthropic ride-proven, BOTH
+  served-set cells incl. qwen3.5-plus; OpenAI surface leaks DSML) — matrix rows e0ada2e ·
+  divergence read COMPLETE then CORRECTED on operator challenge (the 123 deferrals =
+  chain-exhausted on subscription-only classes, a served-walk candidate-injection gap, NOT #158;
+  fallbacks carried them at ≈$0) → `classes.dispatch` chain_head landed (b535ea0, the 08-23
+  goal-decompose precedent's second instance) · **flip sequencing RULED A** (at/after the
+  ~Sep-03 PR#715 revert; flip child = ladder promotion + flips; 07547f4).
+- #917/PR#921 breaker cleared on operator ruling (transient 5xx, haiku fallback proven serving).
+- hp-01 second-disk window (operator/opus session): #920 fmt-fixed and merged; the transient
+  Pending-rides/PDB/disk-IO alert cluster was the cordon+rebuild, all cleared.
+- Findings for the pipeline sweep: opencode 1.18.18 still probes registry.npmjs.org with
+  OPENCODE_DISABLE_AUTOUPDATE=1 set (knob regression suspect, #456 class; models.opencode.ai
+  stays the documented #792 CNP-backstop) · iac-sentinel per-head edge runs convoy on the mutex
+  under PR bursts (a cron-shaped batch sweep would collapse them) · the needs-meta
+  "no reviewer will come" arm is over-eager (4 false fires during ordinary edge latency).
