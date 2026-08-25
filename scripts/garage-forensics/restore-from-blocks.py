@@ -150,14 +150,23 @@ def put_multipart(rec, out):
     digests, sent, total = [None] * len(plan), [0], [0]
     fail, done = {}, 0
 
+    def note_fail(**fields):
+        """First failure wins, recorded WHOLE. Field-by-field writes from several threads can
+        interleave into a hybrid that names one failure's reason and another's details — and a
+        corrupted diagnostic is precisely what this tool must not produce."""
+        with lock:
+            if not fail:
+                fail.update(fields)
+
     def send(n, hashes):
         """One part: read its blocks, hash it, upload it. Independent of every other part."""
+        if fail:
+            return          # the object is already doomed to abort; don't burn more PUTs
         part = []
         for h in hashes:
             bb = block_bytes(h)
             if bb is None:
-                fail.setdefault("r", "block-missing")
-                fail["block"] = h
+                note_fail(r="block-missing", block=h)
                 return
             part.append(bb)
         part = b"".join(part)
@@ -166,9 +175,8 @@ def put_multipart(rec, out):
             st, _, body = s3("PUT", b, k, part, {},
                              {"partNumber": str(n), "uploadId": upload_id})
             if st != 200:
-                fail.setdefault("r", "mpu-part-%d" % st)
-                fail["part"] = n
-                fail["err"] = body[:200].decode("utf-8", "replace")
+                note_fail(r="mpu-part-%d" % st, part=n,
+                          err=body[:200].decode("utf-8", "replace"))
                 return
         with lock:
             sent[0] += 1
@@ -180,6 +188,10 @@ def put_multipart(rec, out):
     try:
         # Parts upload CONCURRENTLY: measured single-stream at ~2 MB/s against this cluster,
         # which is round-trip latency per part, not a throughput limit worth respecting.
+        # NOTE the concurrency here MULTIPLIES with the outer worker pool — THREADS objects x
+        # MPU_THREADS parts. Harmless while large objects are restored in their own run (THREADS=1),
+        # which is how the 2026-08-24 recovery drove it; size both down if a manifest ever mixes
+        # many large objects into a wide run.
         with cf.ThreadPoolExecutor(max_workers=MPU_THREADS) as ex:
             futs = [ex.submit(send, n, hashes) for n, hashes in plan]
             for f in futs:
