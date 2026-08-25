@@ -14,7 +14,7 @@ it only stats each object's block files. Worth a pass before a large run — a c
 far more bytes than survive, and the blocks of anything deleted before the wipe are gone
 (that delete dropped their refcount, so Garage's GC took them on its own timer).
 """
-import base64, collections, hashlib, hmac, json, os, re, sys, threading, queue, urllib.request, urllib.error, urllib.parse, datetime
+import base64, collections, concurrent.futures as cf, hashlib, hmac, json, os, re, sys, threading, queue, urllib.request, urllib.error, urllib.parse, datetime
 
 ENDPOINT = os.environ.get("S3_ENDPOINT", "http://garage-s3.garage.svc.cluster.local:3900")
 REGION = os.environ.get("S3_REGION", "garage")
@@ -27,10 +27,12 @@ PRESCAN = os.environ.get("PRESCAN") == "1"     # stat blocks only; talks to no e
 LIMIT = int(os.environ.get("LIMIT", "0"))
 MAX_BODY = int(os.environ.get("MAX_BODY", str(512 << 20)))     # in-memory reassembly ceiling
 PROGRESS = os.environ.get("PROGRESS") == "1"   # per-part lines for the few very large objects
+MPU_THREADS = int(os.environ.get("MPU_THREADS", "6"))          # concurrent parts per large object
 AK = os.environ.get("AWS_ACCESS_KEY_ID", "")
 SK = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 if not PRESCAN and not (AK and SK):
     sys.exit("AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY required (unless PRESCAN=1)")
+lock = threading.Lock()        # guards the report file and the multipart progress counters
 
 try:
     from compression.zstd import decompress as zdec          # python 3.14+
@@ -120,7 +122,8 @@ def prescan(rec):
 
 
 def put_multipart(rec, out):
-    """Re-upload a multipart object part-by-part, so only one part is ever in memory.
+    """Re-upload a multipart object a part at a time, so an object larger than RAM is never
+    held whole — MPU_THREADS parts are in flight at once, not the whole object.
 
     The carve keeps each block's part_number, which is what makes this exact: replaying the
     original part boundaries reproduces the stored `<md5-of-part-md5s>-<n>` ETag, and a
@@ -143,31 +146,64 @@ def put_multipart(rec, out):
             out["r"] = "mpu-no-upload-id"
             return out
         upload_id = m.group(1).decode()
-    digests, done, total = [], 0, 0
-    try:
-        for n, hashes in enumerate(groups.values(), start=1):
-            part = []
-            for h in hashes:
-                bb = block_bytes(h)
-                if bb is None:
-                    out["r"] = "block-missing"
-                    out["block"] = h
-                    return out
-                part.append(bb)
-            part = b"".join(part)
-            digests.append(hashlib.md5(part).digest())
-            total += len(part)
-            if not DRY:
-                st, _, body = s3("PUT", b, k, part, {},
-                                 {"partNumber": str(n), "uploadId": upload_id})
-                if st != 200:
-                    out["r"] = "mpu-part-%d" % st
-                    out["part"] = n
-                    out["err"] = body[:200].decode("utf-8", "replace")
-                    return out
-            done = n
+    plan = list(enumerate(groups.values(), start=1))
+    digests, sent, total = [None] * len(plan), [0], [0]
+    fail, done = {}, 0
+
+    def note_fail(**fields):
+        """First failure wins, recorded WHOLE. Field-by-field writes from several threads can
+        interleave into a hybrid that names one failure's reason and another's details — and a
+        corrupted diagnostic is precisely what this tool must not produce."""
+        with lock:
+            if not fail:
+                fail.update(fields)
+
+    def send(n, hashes):
+        """One part: read its blocks, hash it, upload it. Independent of every other part."""
+        if fail:
+            return          # the object is already doomed to abort; don't burn more PUTs
+        part = []
+        for h in hashes:
+            bb = block_bytes(h)
+            if bb is None:
+                note_fail(r="block-missing", block=h)
+                return
+            part.append(bb)
+        part = b"".join(part)
+        digests[n - 1] = hashlib.md5(part).digest()
+        if not DRY:
+            st, _, body = s3("PUT", b, k, part, {},
+                             {"partNumber": str(n), "uploadId": upload_id})
+            if st != 200:
+                note_fail(r="mpu-part-%d" % st, part=n,
+                          err=body[:200].decode("utf-8", "replace"))
+                return
+        with lock:
+            sent[0] += 1
+            total[0] += len(part)
             if PROGRESS:
-                print(f"    {k[-40:]} part {n}/{len(groups)} ({total / 1e9:.1f} GB)", flush=True)
+                print(f"    {k[-40:]} part {sent[0]}/{len(plan)} ({total[0] / 1e9:.1f} GB)",
+                      flush=True)
+
+    try:
+        # Parts upload CONCURRENTLY: measured single-stream at ~2 MB/s against this cluster,
+        # which is round-trip latency per part, not a throughput limit worth respecting.
+        # NOTE the concurrency here MULTIPLIES with the outer worker pool — THREADS objects x
+        # MPU_THREADS parts. Harmless while large objects are restored in their own run (THREADS=1),
+        # which is how the 2026-08-24 recovery drove it; size both down if a manifest ever mixes
+        # many large objects into a wide run.
+        with cf.ThreadPoolExecutor(max_workers=MPU_THREADS) as ex:
+            futs = [ex.submit(send, n, hashes) for n, hashes in plan]
+            for f in futs:
+                f.result()
+        done = sent[0]
+        if fail:
+            out.update(fail)
+            return out
+        if any(d is None for d in digests):
+            out["r"] = "mpu-part-missing"
+            return out
+        total = total[0]
         etag = hashlib.md5(b"".join(digests)).hexdigest() + "-" + str(len(digests))
         out["computed_etag"] = etag
         out["got"] = total
@@ -260,7 +296,6 @@ if LIMIT:
 # STREAM the manifest — a whole-store carve is a ~0.5 GB work file whose parsed form does
 # not fit the pod's memory limit, and the queue is bounded for the same reason.
 q = queue.Queue(maxsize=4096)
-lock = threading.Lock()
 fh = open(REPORT, "w")
 done = [0]
 
