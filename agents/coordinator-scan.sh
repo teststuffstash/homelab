@@ -202,7 +202,7 @@ item_class_flush() {   # batch-push all accumulated rows, carrying first-transit
     if [ -n "$metrics_before" ]; then
       ts_line="$(printf '%s' "$metrics_before" | grep -F "agent_item_class_since_timestamp_seconds" \
         | grep "repo=\"${repo}\"" | grep "item=\"${item}\"" | grep "class=\"${class}\"" \
-        | grep "who=\"${who}\"" | sed 's/.*} //' | head -1)"
+        | grep "who=\"${who}\"" | sed 's/.*} //' | head -1 || true)"
     else
       ts_line=""
     fi
