@@ -1,0 +1,3 @@
+CALL kubectl -n test-namespace get pod test-pod-xyz -o jsonpath={.status.reason}
+OUT → no PR opened — AGENT_STRIKE: model=claude/opus-5 error_class=harness-death round=1 session=test-pod-xyz
+RC 0

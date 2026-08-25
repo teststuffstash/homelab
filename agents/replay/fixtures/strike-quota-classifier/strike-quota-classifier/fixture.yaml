@@ -8,19 +8,25 @@
 # Issue #815 / #804 (homelab): Replay coverage for the startup-config-death strike
 # signature in BOTH classifier branches — STATS path and raw-log fallback.
 #
+# Issue #866 (homelab): Replay coverage for the provider-5xx (harness-side UnknownError)
+# strike signature in BOTH classifier branches. A zero-cost, sub-30s pod death with
+# "UnknownError" in the log must classify as harness-death to avoid mis-classifying the
+# ride as "clean" (which would escalate an existing PR to arbitrate, costing coordinator time).
+#
 # THE CONTRACT:
-#   The opencode binary rejects unknown config keys at startup (Configuration is invalid /
-#   Unrecognized key), causing the pod to die in under 15s at zero cost. Both classifier
-#   branches must map this signature to error_class=harness-death so the coordinator strikes
-#   the model instead of treating the round as "unknown" (which re-dispatches on the same
-#   broken config).
+#   1. Config-death: The opencode binary rejects unknown config keys at startup (Configuration is
+#      invalid / Unrecognized key), causing the pod to die in under 15s at zero cost. Both classifier
+#      branches must map this signature to error_class=harness-death.
+#   2. Provider-5xx: The model API returns UnknownError (harness-side), causing the pod to die at
+#      zero cost in sub-30s with no new artifact. Both classifier branches must map this signature
+#      to error_class=harness-death. Strike should emit regardless of PR_URL (homelab#866).
 #
 # CONDITION UNDER REPLAY. The strike classifier sits in two branches of agent-session.sh:
 #   - STATS path (AGENT_RUN_STATS line exists): if exit_status classifies as "unknown", the
-#     run log is checked for the config-death signature. Must not over-trigger on clean logs.
+#     run log is checked for config-death and provider-5xx signatures. Must not over-trigger on clean logs.
 #   - Raw-log fallback (no AGENT_RUN_STATS): the pod's reason and run log are classified
 #     from scratch with the same signatures. DeadlineExceeded takes precedence over the
-#     config-death check (ordering witness).
+#     config-death/provider-5xx checks (ordering witness).
 #
 name: strike-quota-classifier
 mode: table
