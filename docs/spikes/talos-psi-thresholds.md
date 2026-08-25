@@ -264,8 +264,29 @@ devbox run -- talosctl -n 192.168.2.184 version
 Check 2 in particular converts this whole document from "mechanism that fits the evidence" to
 "mechanism confirmed", and it is worth running **before** the upgrade so there is a before/after.
 
+## 7. Evidence updates (moved from the FU-155 tracker item, 2026-08-25 — status stays with the
+## pointer, evidence lives here)
+
+- **2026-08-08 — the ~10-day cadence premise is broken**: wk-metal-03 flapped ≥4 cycles in
+  ~2.5h, visible only by hand-auditing comments across 3 issues.
+- **2026-08-17 — victim surface shrunk**: the two biggest UNLIMITED pods got limits (#485
+  Prometheus 8Gi marker-limit, #487 workflow-controller 1Gi) — the OOMController's
+  preferred-victim set no longer contains them. ⚠ Still IN the set: `cilium-agent` runs
+  BestEffort (`resources: {}`; homelab#63's evidence, closed into FU-155 2026-08-18 — ≥4
+  restarts on wk-metal-03 alone). Whether to give it requests is part of the tune-vs-accept
+  ruling; the §5 pin experiment comes first.
+- **2026-08-24 — recurs on the SERVICE tier** (homelab#857: thinkcentre, a 5-kill branch-A
+  burst in ~2s at 10:52Z). The §6 `oomactions` capture RAN pre-upgrade (evidence on #857):
+  all scores nonzero = the ranked-Burstable path, NOT the §1.4 zero-score bug. Scope
+  consequence: Option A's v1.13.8 pin now reads ALL metal nodes (thinkcentre/hp-01 upgrade
+  safely; nocloud VMs stay excluded) — still the operator's ruling to make.
+- **2026-08-25 — recurred again** on thinkcentre (~17:40Z, cilium-agent + longhorn-manager)
+  during the hp-01 disk-swap maintenance + Longhorn rebuild window; self-recovered.
+  hp-01's cilium-envoy also took an OOMController kill (18:03Z, requests-only Burstable —
+  §2's known victim class; §5's "give cilium-envoy limits" option remains open).
+
 ## Related
 
 FU-155 (tracker), FU-139 / FU-112 / FU-082 (archived — the reservation hardening this builds on),
 FU-033 (a *1.14* precondition; option A stays inside 1.13), ADR-044 (the ephemeral tier),
-`docs/incidents/2026-07-27-kata-ride-oom-cascade.md`, homelab#63/#65/#100/#101.
+`docs/incidents/2026-07-27-kata-ride-oom-cascade.md`, homelab#63/#65/#100/#101, homelab#857.
