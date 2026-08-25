@@ -238,7 +238,10 @@ six OVERSIZE items pointer-ized into
       decision logic is Python, no wholesale rewrite. **Next:** add `shellcheck` to devbox.json
       + a required `ci` step (`shellcheck -S warning agents/*.sh scripts/*.sh` — .github edit,
       operator lane) and burn down the ~8 standing warnings (3 scout / 4 scan / 1 launcher) in
-      the same PR. Relates ADR-113, ADR-103, #854.
+      the same PR. Known live instance of the class: `meta-needs-attention.sh` can exit 0 with
+      an empty read on an inner gh failure — meta-events' NEEDSMETA arm then mass-clears +
+      re-emits (flapped twice 2026-08-23; the ALERT arm's twin was quickfixed f703ec39).
+      Relates ADR-113, ADR-103, #854.
 
 ## Agents
 
@@ -525,38 +528,27 @@ the block needs pruning, not more headings.
       — first-fire proof, Go cells (post Sep-13), rung-2/FU-095(c), pool depth, void the
       tainted rotation rows — owned by G-A child homelab#778 (re-scoped, Goal #775). Related: #235's belt (machine lane owns it).
 
-- [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
-      pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
-      2026-08-03; §M10 SUPERSEDED 2026-08-23 — every role routes, G-A children #780/#781/#782);
-      decision record ADR-096 (P1–P3+P5 live). Strike policy RULED 2026-08-23 (#783; FU-179
-      archived): `ROUTER_STRIKE_ENFORCE` retired — strikes stay recorded, cooldowns carry the
-      residual class, the env's deletion rides the G-A legacy sweep (§M1a).
-      **Open:** legs (b)+(c) ride G-A child #778 (leg (b) IN-scope since ADR-112 — the scout's
-      3-harness cells ARE the (b) evidence surface; Go served-set cells runnable on the credits
-      window — the Sep-13 gate dissolved with FU-181's 2026-08-25 re-scope).
-      **Next:** the flip evidence is COMPLETE (2026-08-25, #775 comments 5415070206 +
-      5415278592 — CORRECTED: the 123 deferred rows are `chain-exhausted` on subscription-only
-      classes, a served-walk candidate-injection gap, NOT #158 capacity; shadow resolves haiku
-      cleanly on every row; the rest = the ruled steady state, net honored, both served-set Go
-      cells ride-level clean). The flip child = **the ladder promotion into the served path** +
-      env/claim flips (acceptance: zero chain-exhausted defers on subscription-only classes).
-      SEQUENCING RULED **A** (operator, 2026-08-25): flip at/after the ~2026-09-03 PR#715
-      paid-flash revert — penalty-free now that `classes.dispatch` carries `chain_head`
-      (the 08-23 goal-decompose precedent, second instance); the `rails:` posture knob builds
-      post-flip on authoritative soak. The checkpoint mints the flip child at the revert.
-      Relates ADR-077, ADR-081, ADR-096, ADR-112, FU-044, FU-046, FU-057, FU-062, FU-105.
+- [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design,
+      pilots, the strike/§M10 rulings: [`docs/agents/model-routing.md`](agents/model-routing.md)
+      + ADR-096/ADR-112. Legs (b)+(c) ride G-A child #778 (the scout's 3-harness cells ARE the
+      (b) surface; Go cells runnable now — FU-181's 08-25 re-scope dissolved the Sep-13 gate).
+      **Next:** flip evidence COMPLETE (2026-08-25, #775 comments 5415070206 + 5415278592 —
+      CORRECTED: the 123 deferred rows are `chain-exhausted` on subscription-only classes, a
+      served-walk candidate-injection gap, NOT #158 capacity; shadow resolves haiku cleanly on
+      every row). The flip child = **the ladder promotion into the served path** + env/claim
+      flips (acceptance: zero chain-exhausted defers on subscription-only classes). SEQUENCING
+      RULED **A** (operator, 2026-08-25): flip at/after the ~2026-09-03 PR#715 paid-flash
+      revert; the checkpoint mints the flip child at the revert; the `rails:` posture knob
+      builds post-flip. Relates ADR-077, ADR-096, ADR-112, FU-046, FU-057, FU-062, FU-105.
 - [ ] **FU-127** — **One model-id parser LANDED; the structured claim field is the rest.**
-      `agents/model_id.py` is the single implementation of `{rail, harness, model}` with the
-      overloaded-prefix rules in one commented place (incl. the cloaked `openrouter/<codename>`
-      case, where the prefix is part of the id). Migrated: agent-session.sh (both sites),
-      research-fanout.sh, `estimate_budget.normalize_model`. The proxy keeps its own copy — another
-      deployment unit, cannot import — so `devbox run model-id-test` executes that function out of
-      the proxy file by AST and fails CI if the two ever disagree. **Next:** the structured
-      `{rail,harness,model}` form in claims + `stacks.json` (string stays canonical; the parser is
-      the compatibility layer), which is also where a future rail (local vLLM) lands. G-A
-      (Goal homelab#775, 2026-08-23): the routed-RESPONSE carrier is child #776; the
-      claim-field half rides the goal's checkpoint-minted claim reshape.
-      Relates FU-095, ADR-096.
+      `agents/model_id.py` is the single `{rail, harness, model}` implementation (overloaded
+      prefixes incl. the cloaked `openrouter/<codename>` case); migrated callers =
+      agent-session.sh, research-fanout.sh, `estimate_budget.normalize_model`; the proxy's
+      unavoidable copy is drift-pinned by `devbox run model-id-test` (AST-extracted).
+      **Next:** the structured `{rail,harness,model}` form in claims + `stacks.json` (string
+      stays canonical; also where a future local-vLLM rail lands). The routed-RESPONSE carrier
+      shipped as G-A child #776; the claim-field half rides the goal's checkpoint-minted claim
+      reshape. Relates FU-095, ADR-096.
 - [ ] **FU-131** — **Cost-ledger undercount: harvest FIXED, the T+1 sweep is what remains.** The
       `/generation` backoff was (2s, 5s) and gave up at ~7s, losing 49% of a fan-out arm's spend
       ($2.196 of $4.328 stored, the stored 29 matching OpenRouter's export to the cent). Now
@@ -587,17 +579,15 @@ the block needs pruning, not more headings.
       operator requirement), which also delivers context-repos.md's measurement sweep.
       Relates FU-117, FU-163, FU-058, FU-140.
 
-- [ ] **FU-058** — **Retro P3: POINTER.** The 08-24 first unattended fire FAILED (529 storm +
-      the #861 cell-override defect, fixed PR#864); **the post-fix re-fire DELIVERED 2026-08-25**:
-      platform r1 report landed (PR#918, opus cell — substantive: 6 findings, 5 High/Med-High
-      changes), the batch is FILED as homelab#927–#931 (3 queued, #930 seat-lane, #931 operator),
-      and the run exposed a new belt defect — the success-metric push failed silently and
-      RetroReportOverdue fired false for ~2h (#932, queued; fact hand-recorded). Design + history:
+- [ ] **FU-058** — **Retro P3: POINTER.** The 08-24 fire FAILED (529 storm + #861, fixed
+      PR#864); **the re-fire DELIVERED 2026-08-25** — platform r1 landed (PR#918), its batch
+      filed as #927–#931 (3 queued, #930 seat, #931 operator), plus the silent success-push
+      belt defect #932 (queued; fact hand-recorded). Design + history:
       [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2.
-      **Next:** the Mon 2026-08-31 05:00 UTC cron = the clean unattended acceptance (full report
-      per cell — r1 was one cell — no false RetroReportOverdue, #932 landed); then the ledger
-      emitter gaps (brief-v2(b) + r4's three blind spots), MCP transcript slices, stack retros
-      (non-overlap). Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
+      **Next:** the Mon 2026-08-31 05:00 UTC cron = the clean unattended acceptance (full
+      report per cell — r1 was one — no false RetroReportOverdue, #932 landed); then the
+      ledger emitter gaps, MCP transcript slices, stack retros (non-overlap).
+      Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
       the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
@@ -609,30 +599,21 @@ the block needs pruning, not more headings.
       DaemonSet into Loki — ALL maintained components. Explicitly REJECTED: the `hubble-otel`
       OTLP adapter (blog-circulated pattern) — the project is archived/unmaintained; Cilium has
       no supported native OTel emitter. Relates FU-020.
-- [ ] **FU-102** — **Prober role (the agentic canary): POINTER.** Brief + machinery checklist:
-      [`docs/agents/roles.md`](agents/roles.md) §"Role machinery checklists" → prober. Origin:
-      meta-11 — a manual agentic probe was the ONLY detector of a 13h Ready-but-dead outage.
-      **Scheduled leg BUILT 2026-08-07, disabled everywhere:** claim knob `spec.prober` (no
-      object default — the stamping lesson) renders `probe-<stack>` in the loop ns, subscription
-      claude/haiku, report-only by construction (no git/gh creds); brief = `<mainRepo>/
-      .agents/probe.md`, LOCATION-only contract. **First enablement = PLATFORM** (G-B child
-      #835 → PR#850 into `goal/818-assurance`: `.agents/probe.md` platform brief + claim
-      `prober: {enabled, 41 */6, haiku}`) — NOT live yet: it lands with G-B's assembly merge,
-      which is wedged on the #933 checkpoint-bucket defect. **Next:** after the G-B assembly,
-      read `probe-platform`'s first tick; oracle's probe.md stays #289 (parked with the stack);
-      then the sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
+- [ ] **FU-102** — **Prober role (the contract probe): POINTER.** Brief + machinery checklist +
+      build state: [`docs/agents/roles.md`](agents/roles.md) §"Role machinery checklists" →
+      prober (scheduled leg built 2026-08-07, report-only by construction). **First enablement
+      = PLATFORM** (G-B child #835 → PR#850 into `goal/818-assurance`: platform probe brief +
+      claim `prober` block) — NOT live yet: it lands with G-B's assembly merge, wedged on the
+      #933 checkpoint-bucket defect. **Next:** after the G-B assembly, read `probe-platform`'s
+      first tick; oracle's probe.md stays #289 (parked with the stack); then the
+      sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
 
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
 
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
-      IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
+      IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel
+      (G01 ENFORCEMENT FLIP live since 2026-08-18 — §L0b has the full state):
       [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).
-      Closed: G02/G03/G07 (2026-08-02), G05 rung-0 + G04 sentinel v1 shadow (2026-08-03), G08
-      (2026-08-05), **G01 ENFORCEMENT FLIP 2026-08-18** (PR#548 + operator grant/apply: sentinel
-      posts the required `iac-sentinel` status under the reviewer App on all four repos incl.
-      homelab — the homelab baseline `policy/iac/exceptions/homelab.yaml` + owned gitleaks
-      config made the platform repo clean; push guard live on oracle-iac only, GitHub 422s push
-      rules on public repos — §L0b has the full state; tier-1 CODEOWNERS scaffold dropped).
       **Next:** the G06 advisory lens; watch the flip soak (deploy-bump latency +≤ one */5
       tick; first real RED status). Relates FU-087/FU-093, FU-176, ADR-084, ADR-076.
 - [ ] **FU-177** — **Make conflicting IP assignment impossible (operator ask, 2026-08-18).**
@@ -675,19 +656,13 @@ the block needs pruning, not more headings.
       budget/credential/review-gate assumptions, so it must be designed in an ADR before any code. Relates
       the `AgentStack` claim (would carry the tier as policy — platform-and-stacks.md) and the merge-path reflexes.
 
-- [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** The rule, the double-book
-      history, the lint (2026-08-02), the 2026-08-03 reconciliation (121%→89%) and the 2026-08-07
-      retier (third bulk zone, wk-02 → std, the half-applied fence, the never-armed quota, and the
-      LVM thin pool underneath wk-02 that no sum could see): [`docs/storage-ledger.md`](storage-ledger.md).
-      **Longhorn metering DONE** 2026-08-04 (`02cf8bb`) — both sums, `argocd/resources/longhorn-alerts/`.
-      **ADR-089's quota DONE** 2026-08-07 — it had never been set on a single claim, so no
-      ResourceQuota existed cluster-wide; now armed on all four stacks.
-      **Garage metrics leg queued 2026-08-25 as homelab#934** (PR#912's measurement: 48 families
-      already live on `:3903`, only the Service port + ServiceMonitor + belts missing — machine
-      lane owns the build). **fstrim SCHEDULED 2026-08-25** (PR#925, `argocd/resources/node-fstrim/`
-      daily per-VM CronJob; first run 78.72%→62.99%, ~384 GiB). **Next:** the pve thin-pool Data%
-      metric + alert (the pool itself is STILL unmetered — the new alerts prove the belt runs, not
-      that it suffices); then a Longhorn `filesystem-trim` RecurringJob (node fstrim cannot reclaim
+- [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** The rule, history (Longhorn
+      metering 2026-08-04, the ADR-089 quota arming 2026-08-07, the 08-24 third-100% incident)
+      and status detail: [`docs/storage-ledger.md`](storage-ledger.md). Garage metrics leg
+      queued 2026-08-25 as homelab#934 (machine-owned); pve fstrim SCHEDULED (PR#925 daily
+      CronJob, first run 78.72%→62.99%). **Next:** the pve thin-pool Data% metric + alert (the
+      pool ITSELF is still unmetered — the new belts prove the trim runs, not that it
+      suffices); then a Longhorn `filesystem-trim` RecurringJob (node fstrim cannot reclaim
       inside replica sparse files); ci-runner-01's own fstrim.timer is assumed-not-verified.
       Relates ADR-089, ADR-114, homelab#934.
 
@@ -708,24 +683,15 @@ the block needs pruning, not more headings.
       flap storm** (`carrier_changes` 2→3778, no reboot, flat plug power) — the thinkcentre
       bad-cable class, NOT battery/power. **Next (operator, physical):** reseat/replace
       wk-metal-02's cable / switch port; evidence + counters on homelab#117.
-- [ ] **FU-155** — **PSI-stall shared-fate kills RECUR on hardened nodes: POINTER.** Burst
-      mechanism, evidence (incl. the broken ~10-day cadence premise — wk-metal-03 flapped ≥4
-      cycles in ~2.5h on 2026-08-08, only visible by hand-auditing comments across 3 issues)
-      and the ⚖ recommendation (pin the ephemeral tier to Talos v1.13.8 first, alone,
-      re-measure): [`docs/spikes/talos-psi-thresholds.md`](spikes/talos-psi-thresholds.md)
-      (#157/PR#160). **Next:** operator rules tune-vs-accept; run the spike's §6
-      `talosctl get oomactions` capture BEFORE any upgrade. Victim-surface shrunk 2026-08-17:
-      the two biggest UNLIMITED pods got limits (#485 Prometheus 8Gi marker-limit, #487
-      workflow-controller 1Gi) — the OOMController's preferred-victim set no longer contains
-      them. ⚠ Still IN the preferred-victim set: `cilium-agent` runs BestEffort
-      (`resources: {}`; homelab#63's evidence — closed into this item 2026-08-18, ≥4 restarts
-      on wk-metal-03 alone). Whether to give it requests is part of this item's tune-vs-accept
-      ruling — the spike's Talos-pin experiment comes first. **2026-08-24: recurs on the
-      SERVICE tier** (#857 — thinkcentre, a 5-kill branch-A burst in ~2s at 10:52Z; the §6
-      `oomactions` capture is RUN pre-upgrade, evidence on #857: all scores nonzero =
-      ranked-Burstable path, not the §1.4 zero-score bug). Scope question REOPENED: Option A's
-      v1.13.8 pin now reads as ALL metal nodes (thinkcentre/hp-01 upgrade safely; nocloud VMs
-      stay excluded), still the operator's ruling. Relates FU-139/FU-112, ADR-044.
+- [ ] **FU-155** — **PSI-stall shared-fate kills RECUR on hardened nodes: POINTER.** Mechanism,
+      evidence (the broken cadence premise, the 2026-08-17 victim-surface shrink, the 08-24
+      service-tier recurrence + pre-upgrade `oomactions` capture, cilium-agent's BestEffort
+      exposure) and the ⚖ recommendation: [`docs/spikes/talos-psi-thresholds.md`](spikes/talos-psi-thresholds.md)
+      §7 Evidence updates (#157/PR#160; symptom thread homelab#857 — recurred again 08-25
+      during the hp-01 maintenance window). Scope REOPENED 2026-08-24: Option A's v1.13.8 pin
+      now reads ALL metal nodes (nocloud VMs stay excluded). **Next:** operator rules
+      tune-vs-accept (the pin experiment first; cilium-agent requests are part of the same
+      ruling). Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
