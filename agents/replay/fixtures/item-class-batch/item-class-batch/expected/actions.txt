@@ -1,0 +1,1 @@
+# Minimal expected output - the batch push is an observability side-effect, not a primary output

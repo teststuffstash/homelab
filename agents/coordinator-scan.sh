@@ -162,20 +162,69 @@ scan_phase() {   # $1 = dispatch | deterministic — record a phase transition f
 #   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate
 # who ∈ operator | machine | none
 # >>>REPLAY:item-class>>>
-item_class_push() {   # push one item class to the pushgateway
-  local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}" now
+# Per-stack accumulator: newline-joined lines "repo|item|class|who|first_timestamp"
+# Gets reset at the start of each stack's processing and flushed at the end via item_class_flush.
+ITEM_CLASS_ROWS=""
+
+item_class_push() {   # accumulate one item class row for batch push
+  local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}"
+  # Append to accumulator; caller will flush at end of stack's pass
+  ITEM_CLASS_ROWS="${ITEM_CLASS_ROWS}${repo}|${item}|${class}|${who}|...\n"
+}
+
+item_class_flush() {   # batch-push all accumulated rows, carrying first-transition timestamps
   [ -n "$SCAN_PHASE_PGW" ] && [ -n "$SCAN_PHASE_POD" ] || return 0
+  [ -z "$ITEM_CLASS_ROWS" ] && return 0
+
+  local now rows_body metrics_before metric_line repo item class who since_ts ts_line
   now="$(sp_now)"
-  printf '%s\n' \
-    "# TYPE agent_item_class gauge" \
-    "# HELP agent_item_class 1 = the scan classified this item in this class this tick." \
-    "agent_item_class{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\"} 1" \
-    "# TYPE agent_item_class_since_timestamp_seconds gauge" \
-    "# HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class." \
-    "agent_item_class_since_timestamp_seconds{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\"} ${now}" \
+
+  # Query pushgateway to get existing metrics for timestamp carry-over (GET the group's current state)
+  # The pushgateway persists every pushed group until it is replaced, so we can read back the last tick's
+  # timestamp values and preserve them for unchanged (item, class) pairs.
+  metrics_before="$(curl -fsS --max-time 5 \
+    "${SCAN_PHASE_PGW}/metrics?job=agent_board&namespace=${SCAN_PHASE_NS}" 2>/dev/null || echo "")"
+
+  # Build the new exposition batch, preserving timestamps for unchanged items
+  rows_body="# TYPE agent_item_class gauge
+# HELP agent_item_class 1 = the scan classified this item in this class this tick.
+# TYPE agent_item_class_since_timestamp_seconds gauge
+# HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
+"
+
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    IFS='|' read -r repo item class who since_ts <<<"$line"
+    [ -n "$repo" ] && [ -n "$item" ] && [ -n "$class" ] && [ -n "$who" ] || continue
+
+    # Look up the timestamp from the previous tick (if the item+class pair existed and is unchanged)
+    # Extract from metrics_before: agent_item_class_since_timestamp_seconds{...repo="X",item="Y",class="Z",...} VALUE
+    if [ -n "$metrics_before" ]; then
+      ts_line="$(printf '%s' "$metrics_before" | grep -F "agent_item_class_since_timestamp_seconds" \
+        | grep "repo=\"${repo}\"" | grep "item=\"${item}\"" | grep "class=\"${class}\"" \
+        | grep "who=\"${who}\"" | sed 's/.*} //' | head -1)"
+    else
+      ts_line=""
+    fi
+
+    # Use existing timestamp if found; otherwise use now (first transition)
+    case "$ts_line" in
+      *[0-9]*) since_ts="$ts_line" ;;
+      *) since_ts="$now" ;;
+    esac
+
+    rows_body="${rows_body}agent_item_class{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\"} 1
+agent_item_class_since_timestamp_seconds{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\"} ${since_ts}
+"
+  done <<<"$(printf '%b' "$ITEM_CLASS_ROWS")"
+
+  # Do ONE batched POST for this (tick, namespace) pair
+  printf '%s' "$rows_body" \
     | curl -fsS --max-time 5 --data-binary @- \
         "${SCAN_PHASE_PGW}/metrics/job/agent_board/namespace/${SCAN_PHASE_NS}" >/dev/null 2>&1 \
     || true   # pushgateway unreachable — observability fault, never a dispatch blocker
+
+  ITEM_CLASS_ROWS=""
 }
 # <<<REPLAY:item-class<<<
 # NO-OP ROUND PREDICATE — shared by the ci-red clause (FU-115b) and changes-requested (FU-147).
@@ -897,7 +946,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; wipmap=""
+  items=""; orphans=""; units=""; punits=""; wipmap=""; ITEM_CLASS_ROWS=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   for repo in $repos; do
@@ -1575,17 +1624,26 @@ EOF_GUARDED
         else
           units="${units}goal-decompose|${repo}|issue-${qnum}\n"
         fi
+        item_class_push "$repo" "issue-${qnum}" "container" "machine"
         continue
       fi
       # FU-090 leg (c) forest/trees: a child's unit carries its GOAL, so the item session re-reads
       # the parent before acting instead of judging the child in isolation. Free — `parent` rides
       # the issue-list call above, no extra request against the App's GraphQL pool. Empty for the
       # ordinary case (no parent), which parses back to the 4-field shape unchanged.
+      # Classify the queued issue based on blocker status
+      # If qblockers ("-") means no blockers, use queued-ready; otherwise queued-held
+      if [ "$qblockers" = "-" ]; then
+        qclass_item="queued-ready"
+      else
+        qclass_item="queued-held"
+      fi
       if [ "$qpin" = "P" ]; then
         punits="${punits}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       else
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       fi
+      item_class_push "$repo" "issue-${qnum}" "$qclass_item" "machine"
     done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
             | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), (((.parent.number // "") | tostring) | if . == "" then "-" else . end), (([.body // "" | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "" | if . == "" then "-" else . end)) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
@@ -1903,6 +1961,7 @@ EOF_GUARDED
         if [ -n "$gck" ]; then
           echo "  [$repo] goal #${g}: CHECKPOINT due (${gck}; store ${gtot} total / ${gdisp} dispositioned)"
           units="${units}goal-checkpoint|${repo}|issue-${g}\n"
+          item_class_push "$repo" "issue-${g}" "container" "machine"
         fi
       done
     fi
@@ -2013,6 +2072,7 @@ EOF_GUARDED
         continue
       fi
       units="${units}changes-requested|${repo}|pr-${u}\n"
+      item_class_push "$repo" "pr-${u}" "riding" "machine"
     done
     # merge-conflict (MP-T06, homelab#595): the updater labels a PR `merge-conflict` when its
     # update-branch API call 422s on a DIRTY head. WORKER_AUTHOR-scoped, mirroring the
@@ -2043,10 +2103,12 @@ EOF_GUARDED
         continue
       fi
       units="${units}merge-conflict|${repo}|pr-${u}\n"
+      item_class_push "$repo" "pr-${u}" "parked-infeasible" "machine"
     done
     # <<<REPLAY:merge-conflict-gate<<<
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (.reviewDecision!="CHANGES_REQUESTED") and (($L|index("merge-conflict"))|not))|.number'); do
       units="${units}unarmed-major|${repo}|pr-${u}\n"
+      item_class_push "$repo" "pr-${u}" "orphan-unarmed" "machine"
     done
     # BACKSTOP (FU-079, generalizes the old dep-only clause): an un-armed open PR that no lane owns
     # is invisible to the ENTIRE merge path — the updater, review reflex, and auto-merge all key on
@@ -2402,6 +2464,7 @@ EOF_GUARDED
                   "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                    | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
                 units="${units}c4c5-redispatch|${repo}|issue-${u%%|*}|${u#*|}\n"
+                item_class_push "$repo" "issue-${u%%|*}" "phantom" "machine"
               done
             fi
             # <<<REPLAY:c4c5-derivations<<<
@@ -2431,6 +2494,7 @@ EOF_GUARDED
         continue
       fi
       units="${units}arbitrate|${repo}|pr-${u}\n"
+      item_class_push "$repo" "pr-${u}" "arbitrate-standing" "operator"
     done
     # <<<REPLAY:arbitrate-gate<<<
 
@@ -2611,6 +2675,7 @@ EOF_GUARDED
             # units-only clauses were invisible to the `[ -z "$items" ]` gate (the meta-14 stall) —
             # every dispatchable unit MUST also add an items line.
             items="${items}[$repo] PR #${u} — ${rclause} (CI red, armed; attempt $((red_rounds+1))/${RED_MAX} on ${red_rounds_key} @ ${head8})\n"
+            item_class_push "$repo" "pr-${u}" "parked-infeasible" "machine"
             red_n=$((red_n+1))
           fi
         else
@@ -2655,6 +2720,7 @@ EOF_GUARDED
       if [ "$c6_n" -lt 3 ]; then
         units="${units}merged-closeout|${repo}|issue-${gn}\n"
         items="${items}[$repo] issue #${gn} — merged-closeout (FU-143: goal child merged into ${gbase}, keyword inert)\n"
+        item_class_push "$repo" "issue-${gn}" "held-merged-unlinked" "machine"
         c6_n=$((c6_n+1))
       else
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${gn} (goal child) waits for the next pass\n"
@@ -2666,6 +2732,7 @@ EOF_GUARDED
         # trip the actionability gate + surface in the report (see the ci-red note above) —
         # otherwise a merged issue's agent/done flip + Follow-ups harvest silently never dispatches.
         items="${items}[$repo] issue #${u} — merged-closeout (closed, still non-terminal agent/*)\n"
+        item_class_push "$repo" "issue-${u}" "held-merged-unlinked" "machine"
         c6_n=$((c6_n+1))
       else
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${u} waits for the next pass\n"
@@ -3034,6 +3101,8 @@ EOF_GUARDED
     echo "  run it (interactive, supervised):"
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"
   fi
+  # Flush accumulated item classifications for this stack's pass
+  item_class_flush
 done
 
 [ -n "$any_work" ] || echo "no stack has actionable work — nothing to spawn (no LLM woken)."

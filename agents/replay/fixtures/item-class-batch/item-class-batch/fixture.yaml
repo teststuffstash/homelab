@@ -1,0 +1,14 @@
+# item-class-batch — batch push per tick, carry-over timestamps (FU-176, homelab#913)
+#
+# mode: actions — replay seams via the scan's actual flow
+#
+# Verifies batch-per-tick push + first-transition timestamp carry-over:
+# 1. Accumulates rows during pass, ONE curl POST per tick per namespace  
+# 2. Preserves first-transition timestamps for unchanged (item, class) pairs
+# 3. Re-stamps to now when class changes
+# 4. FU-176 group-replace semantics per tick (closed items drop off)
+#
+name: item-class-batch
+mode: actions
+source: agents/coordinator-scan.sh
+parts: [actions]
