@@ -1435,8 +1435,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # ⚠ tab is IFS *whitespace*: POSIX read COLLAPSES consecutive tabs, so an empty middle
     # field shifts every later field left (live 2026-07-27: track-less sleep-iac#25's
     # Depends-on landed in qtracks, qdeps read empty → the FU-087 gate silently never ran and
-    # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the two
-    # optional fields; normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
+    # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the four
+    # optional fields (Touches, deps, parent, base — the last two joined via FU-114 L3 and
+    # homelab#849); normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
     while IFS="$(printf '\t')" read -r qnum qtitle qtouches qdeps qpin qclass qparent qbase; do
       # FU-114 L3: the task class rides the unit (label task/* → .agents/<class>.yaml, default fix)
       [ -n "$qclass" ] || qclass="fix"
