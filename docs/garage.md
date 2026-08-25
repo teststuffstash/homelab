@@ -112,7 +112,10 @@ sharp edge is the **meta volume** — LMDB on `longhorn`, tiny next to the data,
 the ~60 GB of blocks unreadable. **30Gi with `numberOfReplicas: 1` (wk-02) since 2026-08-25**: it
 was 10Gi/2 replicas until the Tier-3 restore filled it, and the `std` tier had no disk that could
 take a second grown replica (hp-01 sits below Longhorn's 25% floor), so redundancy was traded for
-the headroom to finish. Both halves come back with the ADR-114 build-out — **FU-137**.
+the headroom to finish. Both halves come back with the ADR-114 build-out — **FU-137**, whose
+options widened on 2026-08-25: the env rebuild below took the DB from 18.1 GiB to 1.6 GiB, so the
+volume now sits at 6% and a second replica no longer needs a disk that can hold 30Gi of mostly
+leaked pages.
 
 Two consequences worth holding:
 
@@ -133,34 +136,59 @@ default FALSE runs LMDB `MDB_NOSYNC` — documented corruption-prone on unclean 
 window): stop Garage, `mv db.lmdb db.lmdb.bak && cp -r /mnt/data/meta_snapshots/<latest> db.lmdb`,
 restart, `garage repair -a --yes tables`.
 
-> ⚠ **DO NOT run that recipe as written — the snapshots it depends on do not exist (FU-184).**
-> Measured 2026-08-25: the snapshot worker fails every attempt with `MDB_INCOMPATIBLE` and leaves
-> an **empty** directory behind (131 of them since the incident, not one usable snapshot). And
-> `<latest>` is the trap even once they work: a snapshot in progress has the same name shape as a
-> finished one, and copying one mid-write yielded 203,744 objects with **zero** version rows
-> against ~465k live. Whatever you restore, **carve it first**
+> ⚠ **`<latest>` is a trap: a snapshot in progress has the same name shape as a finished one.**
+> Copying one mid-write yielded 203,744 objects with **zero** version rows against ~465k live.
+> Whatever you restore, **carve it first**
 > ([`scripts/garage-forensics/`](../scripts/garage-forensics/README.md) parses an LMDB file
 > offline) and compare its object count to `garage stats` before putting it in place.
 
-**Why it fails, and why no config will fix it (diagnosed 2026-08-25).** Garage snapshots with
-`copy_to_path(CompactionOption::Enabled)`, i.e. `mdb_env_copy2(…, MDB_CP_COMPACT)`, and LMDB
-documents that flag as *"currently fails if the environment has suffered a page leak."* The
-2026-08-24 wipe emptied every table while leaving their pages allocated and off the freelist —
-that **is** a page leak, and it is the very property that made the forensic carve possible. Normal
-reads and writes tolerate leaked pages (543k objects were written through this DB on 08-25); only
-the compacting walk renumbers every page, so it is the one operation that trips. Measured: every
-attempt fails ~10 min in with 12 GiB free (so not the 08-24 full disk), only the snapshot worker
-errors, and `data.mdb` is **18.1 GiB holding ~2 GiB of live data** — the leak, sized. Ruled out:
-binary/DB version mismatch, architecture mismatch, and a corrupt pairing — all three fail at
-`mdb_env_open`, and Garage serves normally. (Stock `lmdb-utils` cannot even open the file:
-`MDB_VERSION_MISMATCH`, because heed links LMDB master3 — so Debian's `mdb_copy` is no way out
-either.)
+**Why it failed, and what it took to fix (FU-184, resolved 2026-08-25).** From its install on
+2026-08-24 the snapshot worker failed *every* attempt with `MDB_INCOMPATIBLE` — 161 empty
+directories, not one usable snapshot, while the recipe above quietly assumed otherwise. Garage
+snapshots with `copy_to_path(CompactionOption::Enabled)`, i.e. `mdb_env_copy2(…, MDB_CP_COMPACT)`,
+which LMDB documents as *"currently fails if the environment has suffered a page leak"* and
+enforces by arithmetic:
 
-**The fix is to rebuild the environment**, which is also the only way to reclaim the ~16 GiB:
-`garage convert-db -a lmdb -b lmdb` (present in v2.3.0) into a new path, stop Garage, swap
-`db.lmdb`, restart, verify `garage stats` counts, then drop the old file. A fresh environment is
-small enough to re-place with two replicas, so it feeds the ADR-114 build-out rather than
-competing with it. Tracked as **FU-184**; until then this store has **no working snapshot belt**.
+```c
+rc = mdb_env_cwalk(&my, &root, 0);
+if (rc == MDB_SUCCESS && root != new_root)
+    rc = MDB_INCOMPATIBLE;   /* page leak or corrupt DB */
+```
+
+It predicts the compacted root as `next_pgno - 1 - freecount` and so **refuses any env whose pages
+are neither reachable nor on the freelist**. The 2026-08-24 wipe left exactly that — it emptied
+every table while leaving their pages allocated and off the freelist, which is also the very
+property that made the forensic carve possible. `data.mdb` was 4,745,586 pages holding ~550k live
+ones: 18.1 GiB of file for ~1.6 GiB of data, growing forever, since leaked pages are never reused.
+Normal reads and writes tolerate all of it (543k objects were written through this DB on 08-25);
+only the compacting walk renumbers every page, so it is the one operation that trips. Ruled out
+along the way, so nobody re-walks them: binary/DB version mismatch, architecture mismatch and a
+corrupt pairing all fail at `mdb_env_open` instead, and stock `lmdb-utils` cannot even open the
+file (`MDB_VERSION_MISMATCH` — heed links LMDB master3), so Debian's `mdb_copy` is no way out.
+
+The same damage had also put **8 freelist records into the *main* database**, keyed by raw txnid.
+They sort after all 67 tree names, which is why each attempt walked the whole store, wrote
+~2.28 GB, and only then died — and why `garage convert-db` dies earlier still, decoding main-DB
+keys as UTF-8 before it does anything else.
+
+**The fix is a rebuild by insertion.** No copy tool can do it (the copy is what the leak
+disqualifies) and `convert-db` refuses `lmdb`→`lmdb` outright — *"input and output database engine
+must differ"* — so [`scripts/garage-forensics/lmdb-rebuild.py`](../scripts/garage-forensics/README.md)
+re-inserts every tree in key order, skipping the junk keys, and then takes the compacting copy,
+which now succeeds and is itself the proof the belt works. Run 2026-08-25: **18.10 GiB → 1.57
+GiB**, 67 trees / 4,279,175 entries verified exact, every bucket's object count unchanged. A fresh
+environment is also small enough to re-place with two replicas, so it feeds the ADR-114 build-out
+rather than competing with it. Two notes for the next time:
+
+- **Do it on a host copy, not in a pod against the volume.** The rebuild reads ~550k *scattered*
+  4 KiB pages; over a network-attached Longhorn volume that ran at ~0.3 MB/s (≈90 min projected),
+  while a sequential `cat` of the same file moves at ~100 MB/s. Copy out, rebuild locally, push
+  the small result back — ~20 min of downtime, most of it the two transfers.
+- **A working snapshot needs headroom the container did not have.** Once the env was healthy the
+  copy finished in ~15 s instead of ~11 min, and that burst of page cache blew Garage's 512Mi
+  limit — the first successful-shaped attempt OOM-killed the container. The limit is 2Gi now
+  ([`argocd/platform/garage.yaml`](../argocd/platform/garage.yaml)); a snapshot that suddenly gets
+  *fast* is what makes an old limit too small.
 
 **When there is no snapshot and no backup covering the window**, the objects are still recoverable:
 blocks are content-addressed and only a *manual* `garage repair blocks` reaps orphans, and LMDB's
