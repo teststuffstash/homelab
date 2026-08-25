@@ -130,6 +130,15 @@ default FALSE runs LMDB `MDB_NOSYNC` — documented corruption-prone on unclean 
 window): stop Garage, `mv db.lmdb db.lmdb.bak && cp -r /mnt/data/meta_snapshots/<latest> db.lmdb`,
 restart, `garage repair -a --yes tables`.
 
+> ⚠ **DO NOT run that recipe as written — the snapshots it depends on do not exist (FU-184).**
+> Measured 2026-08-25: the snapshot worker fails every attempt with `MDB_INCOMPATIBLE` and leaves
+> an **empty** directory behind (131 of them since the incident, not one usable snapshot). And
+> `<latest>` is the trap even once they work: a snapshot in progress has the same name shape as a
+> finished one, and copying one mid-write yielded 203,744 objects with **zero** version rows
+> against ~465k live. Whatever you restore, **carve it first**
+> ([`scripts/garage-forensics/`](../scripts/garage-forensics/README.md) parses an LMDB file
+> offline) and compare its object count to `garage stats` before putting it in place.
+
 **When there is no snapshot and no backup covering the window**, the objects are still recoverable:
 blocks are content-addressed and only a *manual* `garage repair blocks` reaps orphans, and LMDB's
 copy-on-write leaves the emptied tables' pages readable in a frozen volume layer. That carve
