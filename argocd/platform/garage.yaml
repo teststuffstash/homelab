@@ -90,7 +90,14 @@ spec:
             storageClass: longhorn
         resources:
           limits:
-            memory: 512Mi
+            # 512Mi until 2026-08-25, when it became the thing that broke the snapshot belt
+            # (FU-184). A metadata snapshot is an LMDB compacting copy; while the env was
+            # page-leaked it crawled for ~11 min and never finished, so its page cache never
+            # piled up. On the rebuilt 1.6 GiB env the same copy completes in ~15 s, and that
+            # burst of dirty pages exceeded 512Mi — the first successful-shaped attempt
+            # OOM-killed the container instead. Sized for the copy, not the steady state:
+            # headroom must exceed the DB size, so this rises with it. docs/garage.md §Durability.
+            memory: 2Gi
           requests:
             cpu: 100m
             memory: 128Mi
