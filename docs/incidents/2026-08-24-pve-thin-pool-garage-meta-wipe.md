@@ -111,7 +111,18 @@ grafana's sleep sidecar) kept 403ing — loki silently failed every flush for ~2
 GK…" in its log was the tell). Fixed by restarting the stale pods and re-importing the old sleep
 keys via `garage key import` (ESO chains reading in-cluster Kubernetes stores self-healed;
 static stores did not — that asymmetry is the lesson). specs.oracle 200, sleep-ingester verify
-job green, loki flushing clean, restore key deleted. Buckets born after Aug 4 had no backup:
+job green, loki flushing clean, restore key deleted.
+**And a second half of that same asymmetry, found 2026-08-25 — a re-imported key comes back
+WITHOUT its grants.** `garage key import` restores the id/secret so cached credentials keep
+working; the bucket↔key permissions live in the wiped metadata and are not part of the import.
+The 21 app keys were fine because Crossplane declares bucket+key+grant together and replayed all
+three. Of the two hand-made keys re-imported above, `tofu-state` was re-granted and
+`homelab-browse` was not — so for 24h it authenticated correctly and returned `AccessDenied` on
+every bucket (`Operation is not allowed for this key`, which is the *grant* failure; the stale-key
+tail above says `No such key`, which is the *identity* failure — the two read very differently and
+are worth telling apart). Re-granted 2026-08-25 and verified by fetching an object over the LAN
+endpoint. A full sweep the same day found all 23 keys correctly granted, all 31 in-cluster Secret
+references pointing at live keys, and no other pod predating the wipe holding S3 credentials. Buckets born after Aug 4 had no backup:
 `jail-transcripts` (forensic target), `circles-specs` (regenerated).
 
 ## Tier-2 recovery — the Aug-4→24 delta carved back out (same day, evening)
