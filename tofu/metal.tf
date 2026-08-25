@@ -12,7 +12,7 @@ locals {
   talos_install_image = data.talos_image_factory_urls.metal.urls.installer
 }
 
-# The node set + its per-node flags (install_disk / optane_disks / pin_hostname / kata) live in
+# The node set + its per-node flags (install_disk / longhorn_disks / pin_hostname / kata) live in
 # **machines/machines.yaml** — the one inventory, also read by machines/generate.py for the doc
 # tables. `local.metal_nodes` (tofu/locals.tf) reduces it to the entries flagged
 # `talos_metal_node: true`; the field semantics are documented there and in the YAML header.
@@ -99,13 +99,18 @@ data "talos_machine_configuration" "metal" {
       hostname   = each.key
       auto       = { "$patch" = "delete" }
     })] : [],
-    # Format + mount any extra disks (Optane) under /var/lib/longhorn so longhorn-manager
-    # can see them. Talos partitions (GPT, full disk) + makes a filesystem + mounts.
-    length(each.value.optane_disks) > 0 ? [yamlencode({
+    # Format + mount any extra disks under /var/lib/longhorn so longhorn-manager can see them
+    # (it host-mounts only that path). Talos partitions (GPT, full disk) + makes a filesystem +
+    # mounts. The mountpoint is the entry's `name`, which is ALSO its node.longhorn.io disk key —
+    # never rename one that holds replicas, Longhorn would call the old key missing.
+    # ⚠ Talos refuses a device that already carries a partition table; `talosctl wipe disk <dev>`
+    # first. Prefer /dev/disk/by-id/wwn-* devices — this directive PARTITIONS, so a re-enumerated
+    # /dev/sdX on a two-same-size-disk box formats the wrong one (hp-01, 2026-08-25).
+    length(each.value.longhorn_disks) > 0 ? [yamlencode({
       machine = {
-        disks = [for i, dev in each.value.optane_disks : {
-          device     = dev
-          partitions = [{ mountpoint = "/var/lib/longhorn/optane${i}" }]
+        disks = [for d in each.value.longhorn_disks : {
+          device     = d.device
+          partitions = [{ mountpoint = "/var/lib/longhorn/${d.name}" }]
         }]
       }
     })] : []

@@ -29,7 +29,7 @@ Tail PXE attempts: `ssh -i ~/.claude/homelab-pve-ssh/id_ed25519 root@192.168.2.3
 
 Bare-metal nodes are declared in **[`machines/machines.yaml`](../machines/machines.yaml)** — the one
 inventory — as an entry flagged `talos_metal_node: true` with an `install_disk` (plus the optional
-`optane_disks` / `pin_hostname` / `kata` / `avx2` / `ephemeral` flags; field semantics in that file's
+`longhorn_disks` / `pin_hostname` / `kata` / `avx2` / `ephemeral` flags; field semantics in that file's
 header). `tofu/locals.tf` reduces those entries to `local.metal_nodes`, which `tofu/metal.tf`
 consumes — there is deliberately no `var.metal_nodes` map any more, so a node fact is edited in
 exactly one place. After **any** edit to the YAML, regenerate the doc tables:
