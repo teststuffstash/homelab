@@ -142,6 +142,26 @@ restart, `garage repair -a --yes tables`.
 > ([`scripts/garage-forensics/`](../scripts/garage-forensics/README.md) parses an LMDB file
 > offline) and compare its object count to `garage stats` before putting it in place.
 
+**Why it fails, and why no config will fix it (diagnosed 2026-08-25).** Garage snapshots with
+`copy_to_path(CompactionOption::Enabled)`, i.e. `mdb_env_copy2(…, MDB_CP_COMPACT)`, and LMDB
+documents that flag as *"currently fails if the environment has suffered a page leak."* The
+2026-08-24 wipe emptied every table while leaving their pages allocated and off the freelist —
+that **is** a page leak, and it is the very property that made the forensic carve possible. Normal
+reads and writes tolerate leaked pages (543k objects were written through this DB on 08-25); only
+the compacting walk renumbers every page, so it is the one operation that trips. Measured: every
+attempt fails ~10 min in with 12 GiB free (so not the 08-24 full disk), only the snapshot worker
+errors, and `data.mdb` is **18.1 GiB holding ~2 GiB of live data** — the leak, sized. Ruled out:
+binary/DB version mismatch, architecture mismatch, and a corrupt pairing — all three fail at
+`mdb_env_open`, and Garage serves normally. (Stock `lmdb-utils` cannot even open the file:
+`MDB_VERSION_MISMATCH`, because heed links LMDB master3 — so Debian's `mdb_copy` is no way out
+either.)
+
+**The fix is to rebuild the environment**, which is also the only way to reclaim the ~16 GiB:
+`garage convert-db -a lmdb -b lmdb` (present in v2.3.0) into a new path, stop Garage, swap
+`db.lmdb`, restart, verify `garage stats` counts, then drop the old file. A fresh environment is
+small enough to re-place with two replicas, so it feeds the ADR-114 build-out rather than
+competing with it. Tracked as **FU-184**; until then this store has **no working snapshot belt**.
+
 **When there is no snapshot and no backup covering the window**, the objects are still recoverable:
 blocks are content-addressed and only a *manual* `garage repair blocks` reaps orphans, and LMDB's
 copy-on-write leaves the emptied tables' pages readable in a frozen volume layer. That carve
