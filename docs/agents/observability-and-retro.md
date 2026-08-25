@@ -603,6 +603,92 @@ run 1 taught is subsumed: $0.25 is the smallest tier there is. Before #270 the k
 step with a warning behind it, and the ride fell back to the stack FIXER's standing budget key —
 which is what run 3's dead cell-b spent 8 seconds of a provider retry against (homelab#248).
 
+## Part C — the attention layer v1: derived-class export, board --machine, standing belt (#892)
+
+**Leg 5 of container #628.** The scan classifies every issue/PR it sees; that classification was
+consumed only as ephemeral report lines in workflow logs. This leg makes it consumable state.
+
+### C1. Item class series (emitter)
+
+`coordinator-scan.sh` now includes `item_class_push()` — a function that pushes
+`agent_item_class{repo,item,class,who} = 1` and
+`agent_item_class_since_timestamp_seconds{...}` to the pushgateway (job `agent_board`),
+grouped per namespace exactly like `agent_scan_phase_*` (homelab#283). Group-replace per
+tick: closed items drop off at the next tick, and a quiet tick emptying the group is not a
+health signal.
+
+**Class taxonomy (v1, low-cardinality enum):**
+
+| class | who | meaning |
+|---|---|---|
+| `riding` | machine | A worker pod is actively riding this issue |
+| `phantom` | operator | `agent/in-progress` with no live pod — reconciliation pending |
+| `held-merged-unlinked` | operator | Merged PR mentions the issue but does not close it — weak link |
+| `parked-blocked` | operator | `agent/blocked` — human-gated |
+| `parked-infeasible` | operator | `AGENT_INFEASIBLE` — re-scope needed |
+| `arbitrate-standing` | operator | Escalated to human — `agent/arbitrate` |
+| `queued-held` | machine | Held by in-progress footprint |
+| `queued-held-by-ghost` | operator | Held by a phantom/infeasible blocker — the blocker's liveness is the question |
+| `queued-ready` | machine | Dispatchable — next tick |
+| `deferred-capacity` | machine | Held by WIP ceiling |
+| `guarded-path` | operator | Pin-only guarded path — operator push needed |
+| `orphan-unarmed` | operator | Open PR not on merge path — arm or park |
+| `container` | none | Post-launch bucket, container issue |
+| `backlog-aggregate` | operator | Suitable-unqueued backlog (ADR-109: count + oldest, never per-issue) |
+
+**Hold-chain propagation rule:** a `queued-held` item whose blocking item is itself
+`who=operator` (ghost / merged-held / parked) becomes `queued-held-by-ghost`,
+`who=operator`. A hold is only as legitimate as its blocker's liveness.
+
+### C2. board.sh --machine mode
+
+`board.sh --machine` renders the key=value line grammar from the derived classes in
+Prometheus (never re-derives them board-side — the one-computer rule):
+
+```
+board v1 scope=stack:platform ts=<iso> sources=labels:live pods:live derived:tick@<iso>
+who=operator class=held-merged-unlinked id=homelab#833 pod=none link=weak since=7h30m next="repair strong link or hand-close"
+who=operator class=queued-held-by-ghost id=homelab#834 since=7h30m note="held by phantom/infeasible blocker"
+who=machine  class=riding id=homelab#889 age=6m
+who=none     class=container id=homelab#840 note="post-launch bucket, container"
+who=operator class=backlog-aggregate id=homelab/aggregate note="suitable-unqueued backlog"
+```
+
+**Rules:**
+- One line per item; anchored key=value tokens (the `AGENT_STRIKE:` culture)
+- Rows carry the join verdict + next action so no follow-up query is needed
+- Stable sort: who, class, repo, item
+- Freshness header is line 1
+- `--scope goal:<n>` resolves tree membership from the exporter's `goal_descendant_info`
+  series — never a fresh recursive API walk
+
+**Prometheus endpoint:** in-cluster `http://kube-prometheus-stack-prometheus.monitoring.svc:9090`;
+from the jail `https://prometheus.teststuff.net` — the script must work in both (env-picked,
+the responder-runbook pattern).
+
+### C3. The belt: AgentAttentionStanding
+
+PrometheusRule `AgentAttentionStanding` — `who="operator"` rows standing > **4h**. Slow by
+design: an active seat drains the board long before it fires; this exists only for the no-seat
+case. The annotation links to the BIG PICTURE (the Grafana attention table, or
+`board.teststuff.net` once leg 6 lands) — **never an individual issue**. Description is a
+symptom, not a guessed cause. The `for: 1h` window is reset by deployments (pushgateway
+redeploy silences the timer), accepted because the design is slow enough that a reset window
+is tolerable.
+
+### C4. Replay-pinned fixtures
+
+Two fixtures commit the behaviour:
+
+- **`item-class`** (actions mode): pins the `item_class_push()` function — the curl call,
+  the metric names and labels, the group-replace URL, and the three degenerate paths (no
+  gateway, no pod identity, gateway refuses). The fixture's bridge exercises the #833
+  counterfactual (`held-merged-unlinked who=operator`), the #834 scenario
+  (`queued-held-by-ghost`), a riding row, a container row, and a backlog-aggregate row.
+- **`board-machine`** (suite mode): pins the `--machine` output grammar against a synthetic
+  Prometheus response carrying the same five classes. Asserts the stable sort, the header
+  line, and the absence of human board sections.
+
 ## Rollout
 
 - **P0 (blocker)**: bucket + manifests + the three capture hooks. Fire coordinators after this —

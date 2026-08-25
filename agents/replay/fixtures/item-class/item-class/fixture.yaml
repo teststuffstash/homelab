@@ -1,0 +1,24 @@
+# homelab#892 — the EMITTER half of the attention layer v1.
+#
+# CONDITION UNDER REPLAY. The item_class_push function sends `agent_item_class` and
+# `agent_item_class_since_timestamp_seconds` series to the pushgateway (job `agent_board`,
+# grouped per namespace). The push is per (repo, item, class, who) tuple, and the whole
+# namespace group is replaced per tick.
+#
+# THE CONTRACT:
+#   1. ONE push per tuple, to the NAMESPACE-keyed group (`…/job/agent_board/namespace/…`)
+#      with the labels as metric labels.
+#   2. `agent_item_class` is a gauge set to 1.
+#   3. `agent_item_class_since_timestamp_seconds` is a gauge set to the current epoch.
+#   4. Every degenerate path (no gateway, no pod identity) returns 0 silently.
+name: item-class
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:item-class
+  - file:bridge.sh
+env:
+  - AGENT_PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - SCAN_PHASE_PGW=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - SCAN_PHASE_POD=coordinate-homelab-1
+  - SCAN_PHASE_NS=homelab-agents

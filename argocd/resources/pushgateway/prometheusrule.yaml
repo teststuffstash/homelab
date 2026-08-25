@@ -336,6 +336,33 @@ spec:
             summary: "Argo Events infra pod {{ $labels.pod }} is burning CPU (idle baseline is ~5m)"
             description: "{{ $labels.pod }} in agent-coordinator has held >0.5 cores for 15m; these pods idle near zero, so this is a spin, not load. THE LOG MAY BE COMPLETELY EMPTY — the 2026-08-05 12:48 recurrence logged nothing at all while burning 1692m, so an empty log is NOT evidence the pod is fine. If it does log, look for `AckSync() on message: nats: timeout` with one event id retriggering (a redelivery loop, whose CPU outlives it). Fix: delete the pod, the Deployment recreates it; then check for spurious workflows it submitted (`kubectl -n agent-coordinator get wf --sort-by=.metadata.creationTimestamp`). It RECURS — homelab#103, a restart is palliative."
 
+        # AgentAttentionStanding (homelab#892 — leg 5 belt): `who="operator"` rows standing > 4h.
+        # The board's machine mode classifies items into `who=operator` rows (parked, held-by-ghost,
+        # phantom, merged-unlinked) that the operator's seat attends to. An active seat drains the
+        # board long before 4h passes; this alert exists only for the no-seat case. The annotation
+        # links to the BIG PICTURE (the Grafana attention table, or `board.teststuff.net` once leg 6
+        # lands) — never an individual issue. Description is a symptom, not a guessed cause.
+        # ⚠ Deploy silences `for:` — if the pushgateway is redeployed during a standing alert, the
+        # `for:` window restarts. That is accepted: a gateway redeploy is rare, and the alert is
+        # slow by design (4h standing) so a reset window is at most a few hours of missed page.
+        - alert: AgentAttentionStanding
+          expr: |
+            (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="parked-blocked",who="operator"}[5m]))) > 4 * 3600
+            or
+            (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="parked-infeasible",who="operator"}[5m]))) > 4 * 3600
+            or
+            (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="held-merged-unlinked",who="operator"}[5m]))) > 4 * 3600
+            or
+            (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="queued-held-by-ghost",who="operator"}[5m]))) > 4 * 3600
+            or
+            (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="phantom",who="operator"}[5m]))) > 4 * 3600
+          for: 1h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "Operator-attention items (who=operator) have been standing >4h on {{ $labels.repo }}"
+            description: "SYMPTOM ONLY — the board's who=operator class contains items that need the operator's attention (parked, merged-unlinked, queued-held-by-ghost, phantom). An active seat drains the board long before 4h; this alert exists for the no-seat case. Check the BIG PICTURE at the Grafana attention table (board.teststuff.net once leg 6 lands). Deploy silences the `for:` window — a pushgateway redeploy during an active standing resets the timer, accepted because the design is slow enough that a reset window is tolerable."
         # The SECOND half of homelab#103, and the worse half: a wedged coordinate workflow holds
         # the `coordinator-scan` mutex, and every later tick queues behind it Pending. The loop
         # stops dispatching and NOTHING says so — `get wf` shows activity, and the Pending reason
