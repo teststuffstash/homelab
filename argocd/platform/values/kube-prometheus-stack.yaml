@@ -301,7 +301,9 @@ grafana:
   persistence:
     enabled: false
   plugins:
-    - frser-sqlite-datasource
+    # Pinned (FU-173): unpinned fetches the LATEST release per pod start — prod could drift
+    # from the 4.0.6 sleep integration gate with no commit anywhere. Renovate owns the bump.
+    - frser-sqlite-datasource 4.0.6
   resources:
     requests:
       cpu: 100m
