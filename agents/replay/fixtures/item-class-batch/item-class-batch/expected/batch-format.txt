@@ -1,8 +1,0 @@
-# TYPE agent_item_class gauge
-# HELP agent_item_class 1 = the scan classified this item in this class this tick.
-# TYPE agent_item_class_since_timestamp_seconds gauge
-# HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-agent_item_class{repo="homelab",item="issue-123",class="phantom",who="machine"} 1
-agent_item_class_since_timestamp_seconds{repo="homelab",item="issue-123",class="phantom",who="machine"} FIRST_TRANSITION_TS
-agent_item_class{repo="homelab",item="pr-45",class="riding",who="machine"} 1
-agent_item_class_since_timestamp_seconds{repo="homelab",item="pr-45",class="riding",who="machine"} CURRENT_TS

@@ -1,6 +1,0 @@
-#!/bin/bash
-# Mock curl for pushgateway — capture the batch data
-BATCH_DIR="${REPLAY_ROOT}/.batch_push_data"
-mkdir -p "$BATCH_DIR"
-PUSH_NUM=$(($(ls "$BATCH_DIR" | wc -l) + 1))
-cat > "$BATCH_DIR/push_${PUSH_NUM}.txt"
