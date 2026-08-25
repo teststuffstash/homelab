@@ -6,6 +6,8 @@
 sp_now() { printf '1786465900'; }
 
 ITEM_CLASS_ROWS=""  # Initialize the accumulator (set by the extracted block definition)
+CURL_GET_BODY=""   # Initialize the GET response (may be seeded by scenarios)
+CURL_RC=0          # Initialize the curl return code
 
 curl() {
   printf 'CALL curl %s\n' "$*" >> "$REPLAY_ACTIONS"
