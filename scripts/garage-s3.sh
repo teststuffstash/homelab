@@ -7,6 +7,11 @@
 #
 # Creds: the read-only `homelab-browse` key in ~/.claude/homelab-garage/ (read on the sleep buckets;
 # grant more with `kubectl -n garage exec garage-0 -- /garage bucket allow --read <b> --key homelab-browse`).
+# ⚠ This key is HAND-MADE — no Crossplane Workspace declares it, so a metadata restore does not
+# bring its grants back (`garage key import` restores the id/secret and nothing else). After any
+# Garage metadata loss this script fails with `AccessDenied: Operation is not allowed for this key`
+# until the grants are re-issued by hand; it took 24h to notice after the 2026-08-24 wipe.
+# See docs/garage.md §Durability.
 # Endpoint defaults to https://s3.teststuff.net (LAN VIP). When that isn't routable (e.g. from the
 # jail), port-forward and override: GARAGE_S3_ENDPOINT=http://127.0.0.1:3900.
 set -euo pipefail
