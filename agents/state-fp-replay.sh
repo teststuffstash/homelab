@@ -161,6 +161,9 @@ PRE
 # `gh pr list` payload the scan already holds; `repo` is the short name that rides in a unit line,
 # `slug` the ORG/name the probe takes.
 slug="$IN_SLUG"; repo="$IN_REPO"; prsjson="$(cat "$IN_PRSJSON")"; orphans=""; units=""
+# ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
+# so a harness running one extracted block has no flush to assert on; the function is inert here.
+item_class_push() { :; }
 BRIDGE
   cat "$TMP/block.arbitrate-gate.sh"
   cat <<'POST'

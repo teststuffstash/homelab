@@ -1,14 +1,22 @@
-# item-class-batch — batch push per tick, carry-over timestamps (FU-176, homelab#913)
+# homelab#913 — item_class_push batching and first-transition timestamp carry-over.
 #
-# mode: actions — replay seams via the scan's actual flow
+# CONDITION UNDER REPLAY. The item_class_push function accumulates rows during a scan pass,
+# and item_class_flush performs ONE batched push per (tick, namespace) to the pushgateway.
+# Timestamps are carried over from the previous tick for unchanged (item, class) pairs.
 #
-# Verifies batch-per-tick push + first-transition timestamp carry-over:
-# 1. Accumulates rows during pass, ONE curl POST per tick per namespace  
-# 2. Preserves first-transition timestamps for unchanged (item, class) pairs
-# 3. Re-stamps to now when class changes
-# 4. FU-176 group-replace semantics per tick (closed items drop off)
-#
+# THE CONTRACT:
+#   1. Multiple item_class_push calls accumulate rows without pushing.
+#   2. ONE item_class_flush call sends all rows in a single curl request.
+#   3. Timestamps are preserved for unchanged items; new items get the current epoch.
+#   4. All series in the group are replaced atomically (pushgateway group replace semantics).
 name: item-class-batch
 mode: actions
 source: agents/coordinator-scan.sh
-parts: [actions]
+parts:
+  - block:item-class
+  - file:bridge.sh
+env:
+  - AGENT_PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - SCAN_PHASE_PGW=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - SCAN_PHASE_POD=coordinate-homelab-1
+  - SCAN_PHASE_NS=homelab-agents
