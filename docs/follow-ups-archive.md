@@ -8,6 +8,12 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-173** *(archived 2026-08-25)* — **Grafana frser plugin pinned 4.0.6.** PR#935 + the
+  same-evening syntax quickfix (8bd4dc67): Grafana's background installer parses `id@version`
+  — the docs' legacy `id version` space form SPLIT, installed "4.0.6" as its own pluginId and
+  crashlooped the new RS (old pod kept serving; the gotcha is now a ⚠ comment at the pin site).
+  Verified end-to-end: 4.0.6 in-pod, app Synced/Healthy, `grafana.teststuff.net/api/health` 200.
+  Renovate owns the bump from here.
 - **FU-149** *(archived 2026-08-25)* — **Responder daily budget = 12: the soak answered LEAVE IT.**
   The 14d read (daily `max(responder_triage_sessions_today)`): ordinary days 0–6, the cap bound
   only on genuine storm days (08-18 the board-clearing/ARC day = 12, 08-24 the pve/Garage
