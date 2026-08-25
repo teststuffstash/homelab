@@ -2115,7 +2115,7 @@ if [ -n "$RUN_CMD" ]; then
       ERR_CLASS="$(printf '%s' "$STATS" | jq -r '
         (.exit_status // "") as $s
         | if $s == "no-artifact" then (.error_class // "no-pr")
-          elif $s == "budget-403" then (.error_class // "budget-403")
+          elif $s == "budget-403" then ({"budget-exhausted-key":"budget-403-key","budget-exhausted-account":"budget-403-account","http-403-other":"http-403-other"}[.error_class // ""] // "budget-403")
           elif (["harness-death","auth-storm","timeout"] | index($s)) then $s
           else "unknown" end' \
         2>/dev/null || echo unknown)"
