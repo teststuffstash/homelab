@@ -108,8 +108,11 @@ is Longhorn's (2 replicas per volume). Replica PLACEMENT is owned by
 invalidated by the 2026-08-07 `diskSelector` stamping — read the ledger, not a dated copy).
 
 **What does not protect it:** nothing backs Garage *out*. FU-013 backs other things *into* it. The
-sharp edge is the **meta volume** — 10Gi of LMDB on `longhorn`, tiny next to the data, and losing it
-makes the ~60 GB of blocks unreadable.
+sharp edge is the **meta volume** — LMDB on `longhorn`, tiny next to the data, and losing it makes
+the ~60 GB of blocks unreadable. **30Gi with `numberOfReplicas: 1` (wk-02) since 2026-08-25**: it
+was 10Gi/2 replicas until the Tier-3 restore filled it, and the `std` tier had no disk that could
+take a second grown replica (hp-01 sits below Longhorn's 25% floor), so redundancy was traded for
+the headroom to finish. Both halves come back with the ADR-114 build-out — **FU-137**.
 
 Two consequences worth holding:
 
@@ -129,6 +132,15 @@ default FALSE runs LMDB `MDB_NOSYNC` — documented corruption-prone on unclean 
 "Recovering from failures" Scenario 3, rf=1 flavor — the snapshot interval is a hard loss
 window): stop Garage, `mv db.lmdb db.lmdb.bak && cp -r /mnt/data/meta_snapshots/<latest> db.lmdb`,
 restart, `garage repair -a --yes tables`.
+
+> ⚠ **DO NOT run that recipe as written — the snapshots it depends on do not exist (FU-184).**
+> Measured 2026-08-25: the snapshot worker fails every attempt with `MDB_INCOMPATIBLE` and leaves
+> an **empty** directory behind (131 of them since the incident, not one usable snapshot). And
+> `<latest>` is the trap even once they work: a snapshot in progress has the same name shape as a
+> finished one, and copying one mid-write yielded 203,744 objects with **zero** version rows
+> against ~465k live. Whatever you restore, **carve it first**
+> ([`scripts/garage-forensics/`](../scripts/garage-forensics/README.md) parses an LMDB file
+> offline) and compare its object count to `garage stats` before putting it in place.
 
 **When there is no snapshot and no backup covering the window**, the objects are still recoverable:
 blocks are content-addressed and only a *manual* `garage repair blocks` reaps orphans, and LMDB's
