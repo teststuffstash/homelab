@@ -8,9 +8,27 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ NEXT SESSION = the board-sweep → fu-sweep → docs-cleanup PIPELINE (operator plan,
+  2026-08-25): ONE corpus session running all three (board-sweep skill Hard rule 1 + §Pipeline
+  amortization), then S5 corpus-diet ×2 sessions** (split scope: the sweep-independent trim
+  first, ~25–30k off — the per-file table is in the 2026-08-25 conversation/TICK-LOG entry;
+  the post-flip residue rides the legacy sweep). The S5 parent is authored by the pipeline
+  session at its close (author-at-last-moment). Pipeline inputs waiting: the retro r1
+  process-change batch (PR#918's six, two operator-direct: `.agents/review.md` F3 bullet +
+  the F1 brief clause), the small-findings list in the TICK-LOG entry, #887/#888/#851/#874/#875
+  strays, the #907-era triage tail.
+- **⚑ G-A (#775) endgame RULED (2026-08-25, all recorded — the graph need not be read):**
+  flip sequencing = **A** (at/after the ~2026-09-03 PR#715 paid-flash revert; the checkpoint
+  mints the flip child then = the M11 ladder promotion into the served path + env/claim flips;
+  acceptance = zero `chain-exhausted` on subscription-only classes + belts quiet). FU-095/
+  FU-181 carry status; chainless-redesign carries the Go posture ruling + the sweep trap.
+  **VERIFY (first session after ArgoCD syncs b535ea0):** `decisions` gains dispatch-class
+  rows served `claude/sonnet`, zero new `chain-exhausted` — the chain_head fix live-proven.
+  #778's residue = the organic canary proof only (Go cells DONE both, zen/pickle probed).
 - **⚑ #628 attention-layer program (operator ratified 2026-08-24, seat sitting):** leg 5 =
-  homelab#892 QUEUED (fixer lane — the scan derived-class series + `board --machine` + the one
-  standing belt; gate reads land it). Leg 6 = SEAT-LANE after leg 5 (board webservice page +
+  homelab#892 CLOSED via PR#894 2026-08-25 — the WIRING half rides #913 (queued; PR#915 in its
+  review cycle — batch-per-tick push + first-transition timestamps, the #894 gate-read
+  findings). Leg 6 = SEAT-LANE after #913 (board webservice page +
   goal_graph trees with links; carries the bucket/hostname provisioning). Leg 7 after 6
   (meta-events BOARD source, needs-meta arms retire). Design record: #628 body + #892;
   companion defect agent-runtime#87 (finalize weak-link check — the #833 8h hold's cause) QUEUED.
