@@ -162,8 +162,8 @@ scan_phase() {   # $1 = dispatch | deterministic — record a phase transition f
 #   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate
 # who ∈ operator | machine | none
 # >>>REPLAY:item-class>>>
-# Per-stack accumulator: newline-joined lines "repo|item|class|who|first_timestamp"
-# Gets reset at the start of each stack's processing and flushed at the end via item_class_flush.
+# Per-pass accumulator: newline-joined lines "repo|item|class|who|first_timestamp"
+# Gets flushed once after the stacks loop via item_class_flush.
 ITEM_CLASS_ROWS=""
 
 item_class_push() {   # accumulate one item class row for batch push
