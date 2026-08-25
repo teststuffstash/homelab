@@ -108,8 +108,11 @@ is Longhorn's (2 replicas per volume). Replica PLACEMENT is owned by
 invalidated by the 2026-08-07 `diskSelector` stamping — read the ledger, not a dated copy).
 
 **What does not protect it:** nothing backs Garage *out*. FU-013 backs other things *into* it. The
-sharp edge is the **meta volume** — 10Gi of LMDB on `longhorn`, tiny next to the data, and losing it
-makes the ~60 GB of blocks unreadable.
+sharp edge is the **meta volume** — LMDB on `longhorn`, tiny next to the data, and losing it makes
+the ~60 GB of blocks unreadable. **30Gi with `numberOfReplicas: 1` (wk-02) since 2026-08-25**: it
+was 10Gi/2 replicas until the Tier-3 restore filled it, and the `std` tier had no disk that could
+take a second grown replica (hp-01 sits below Longhorn's 25% floor), so redundancy was traded for
+the headroom to finish. Both halves come back with the ADR-114 build-out — **FU-137**.
 
 Two consequences worth holding:
 
