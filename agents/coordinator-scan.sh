@@ -1632,9 +1632,8 @@ EOF_GUARDED
       # the parent before acting instead of judging the child in isolation. Free — `parent` rides
       # the issue-list call above, no extra request against the App's GraphQL pool. Empty for the
       # ordinary case (no parent), which parses back to the 4-field shape unchanged.
-      # Classify the queued issue based on blocker status
-      # If qblockers ("-") means no blockers, use queued-ready; otherwise queued-held
-      if [ "$qblockers" = "-" ]; then
+      # Classify the queued issue based on blocker status (qdeps is normalized to empty if "-")
+      if [ -z "$qdeps" ]; then
         qclass_item="queued-ready"
       else
         qclass_item="queued-held"
