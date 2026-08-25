@@ -5028,3 +5028,57 @@ first live ADR-110 maintenance session before the ADR existed.
   348k, oracle `parsed/` 252k, sleep), whose metadata is equally intact in the frozen layer. Running
   repair forecloses that permanently. Scope was narrowed to transcripts when Tier-2 cost was
   unknown; it is now a known ~1 M-object/50 GB rerun of a proven pipeline. Named on #884.
+
+## 2026-08-25 — Tier-3: the whole store carved back, an hour of Garage downtime, and blocks I destroyed
+
+- **RECOVERY COMPLETE AND VERIFIED (homelab#884, operator widened the scope).** One carve pass over
+  the same frozen layer took the **whole store: 956,600 objects, 0 orphan versions**. The
+  **bucket_alias table survived** (14 names → old ids), so buckets were identified exactly instead
+  of guessed from key shapes — which corrected a live assumption: the `parsed/` prefix is in
+  **ert-snapshots**, not an oracle bucket. `ert-snapshots` and `circles-specs` were at **0 objects
+  live** (never in the Aug-4 backup) — from-nothing recoveries like jail-transcripts.
+- **End state: 543,257 of 543,450 verified exact** on size+ETag over the LAN endpoint (a different
+  path than the writer). `ert-snapshots` is **252,366 objects / 60.4 GB — exactly the independent
+  2026-08-04 measurement in docs/garage.md**. Garage went 383,893 → **896,628 objects**, 6.5 →
+  **71.8 GiB**, refcounted blocks 86,251 → **295,148** against 294,778 block files on disk: the
+  orphan mass is fully re-adopted, so `garage repair blocks` now reclaims ≈nothing.
+- **Not restored, all accounted:** 884 blocks genuinely gone (deleted pre-wipe, rc already dropped,
+  normal GC took them) · 214 `oracle-specs` objects blocked by its 1.0 GiB bucket quota (operator:
+  not important; CI-regenerable) · 189 loki objects restored then **immediately expired by loki's
+  own 30-day retention** — dated 2026-07-25→08-03, i.e. 22–31 days old (correct behaviour, verified
+  by dating the keys, not assumed) · 4 transient 502s, all `ok` on re-check.
+- **⚠ THE RESTORE TOOK GARAGE DOWN FOR AN HOUR** (08:24–09:27Z, 503 on every write). It filled the
+  10Gi meta volume. Cause was **insert ORDER**: the carve emits page order, random against Garage's
+  key space, which fed the B-tree random inserts at ~20.3 KB/object (~8× the pre-wipe store).
+  Sorted by (bucket,key) it ran ~13 KB/object. Sorting is now build-work.py's default (PR#905/#906).
+  ⚠ the first ~30k sorted objects showed ZERO growth — that is the wipe's free pages being consumed,
+  NOT steady state; I published that window as the result and had to correct it (#906).
+- **☠ ABORTING A MULTIPART UPLOAD DESTROYS THE ORPHAN BLOCKS IT READ.** A part upload references a
+  block that had *no rc entry* (invisible to GC); aborting drops it to rc=0 = garbage, and the
+  resync worker deletes the file ~10 min later. Two killed runs + two `garage bucket
+  cleanup-incomplete-uploads` calls cost **3,952 of corpus.sqlite's 5,766 blocks** — silently, ten
+  minutes after the fact, four hours after a prescan said every block was present. The `finally:
+  abort` was mine, added in PR#901 and praised in review as hygiene. Fixed PR#907: failed uploads
+  are left dangling on purpose, and blocks are stat'd BEFORE an upload is created.
+- **corpus.sqlite REBUILT byte-exact from the intact corpus-image.oci.tar** — stream the oci-archive
+  from its blocks → the uncompressed layer tar → member `corpus/corpus.sqlite`, re-chunked into the
+  original 721 part boundaries. Computed ETag `0d5ebde5…-721` == the carved original; confirmed by
+  HEAD over the LAN path. Nothing staged on disk.
+- **Multipart part-replay proven at scale:** `corpus-image.oci.tar` (6.05 GB, 721 parts) and
+  `xml.2026.zip` (**42 GB, 629 parts**) both reproduced their exact carved ETags from orphan blocks.
+- **Live storage changes:** `meta-garage-0` **10Gi→30Gi**, `numberOfReplicas` **2→1 (wk-02)**,
+  `dataLocality` best-effort→**disabled** (unsatisfiable: garage-0 runs on wk-01, which has no
+  Longhorn disk — it was blocking every rebuild). The `std` tier cannot host a grown 2-replica meta
+  volume: hp-01 is BELOW Longhorn's 25% floor so it rejects any expansion at any size. rf=1 debt →
+  FU-137, and it makes the ADR-114 ~08-31 deadline load-bearing.
+- **⚠ Longhorn replica churn is charged to the pve thin pool** — the shuffling pushed it 69→84% with
+  1 GiB of VG left (the 08-24 corner). `fstrim` per node returned it to 69.17%; a batch loop over
+  four nodes silently did only part of the job. Run it one node at a time and READ the byte count.
+- **FU-184 filed: the metadata auto-snapshot has never worked.** `metadata_auto_snapshot_interval =
+  6h` (the 08-24 durability fix) dies every attempt with `MDB_INCOMPATIBLE`, leaving an empty dir —
+  131 of them. docs/garage.md's DR recipe said to copy `meta_snapshots/<latest>`; today that
+  restores an empty directory, and an in-progress snapshot is name-identical to a finished one (I
+  carved one mid-write: 203,744 objects, 0 version rows vs ~465k live). Recipe now carries the ⚠.
+- Cleanup done: forensics pod deleted, temp key `forensics-wide` deleted, local cred copies
+  shredded. Evidence stays frozen in `backups/garage-meta-forensics/` + the
+  `pre-restore-2026-08-24-meta-wipe` snapshot. PRs #900–#909 (nine) merged.
