@@ -112,53 +112,30 @@ meant to avoid.)
   left running to natural terminal (~$0, 4h key). **OR-budget ruling stands (paid-flash
   through G-A, revert ~09-03/fixup-end/depletion); Go latched til Sep-13 (roll-persistence
   VERIFIED).** claude-jail#2 filed: mono per-session env block + wallet-reach + forgejo SSH.
-- **⚑ GARAGE TIER-3 (widened carve) RUNNING since 2026-08-25 ~06:24Z (homelab#884, operator: widen
-  to loki/allure/oracle-`parsed/`/sleep).** Tier-2 (the transcripts delta) is DONE and verified —
-  detail in TICK-LOG 2026-08-24 evening + incident §Tier-2. Tier-3 carved the WHOLE store from the
-  same frozen layer: **956,600 objects, 0 orphan versions**, and the **bucket_alias table survived**
-  (14 names → old ids, `wide/aliases.json`) so nothing had to be identified by key shape. Live-key
-  filtered → **544,548 objects / 17.1 GB**. First 182,000 landed, then **the restore filled the
-  meta volume and took Garage down** (503 on every write, ~08:24–09:27Z — see the incident doc
-  §Tier-3). Resumed 09:29Z **sorted by (bucket, key)** and running in pod `garage-forensics`
-  (detached, survives this session): `/tmp/work2.jsonl` → `/tmp/report3.jsonl`, log
-  `/tmp/restore3.log`, ~23 obj/s, **362,823 remaining, ETA ~14:00Z**. Then the **3 giant ERT
-  objects (6+6+42 GB, multipart, 2 071 parts)** via the part-replay path →
-  `/tmp/giants.report.jsonl`. **`/tmp/chain.sh` (verified running) starts the giants when the bulk
-  exits** — SEQUENTIAL by measurement: Garage's commit path is serialized, so run together they
-  trade throughput (bulk 37→13 obj/s), not add it.
-  ⚠ **Insert ORDER is the whole story on space**: page order cost 3.52 GiB of LMDB for 182k objects
-  (~20.3 KB/obj, ~8× the pre-wipe store); sorted cost **no measurable growth** over 19,750. Now the
-  default (PR#905). A `Monitor` guard kills the run if meta free < 3Gi.
-  **PICKUP if this session is gone:** wait for both reports (`/tmp/chain.log` marks each stage),
-  then `verify-restored.py` from the jail over `https://s3.teststuff.net` with the temp key
-  `forensics-wide`, then **delete the key (`/garage key delete forensics-wide`) and the pod**;
-  earlier reports `/tmp/report2.jsonl` + `/tmp/report3.jsonl` both count toward the tally.
-  Manifest: `backups/garage-meta-forensics/wide/`. Tooling PRs: #900/#901/#902/#904 merged, #905 in
-  flight.
-  **Live changes made during the outage (all verified, cluster state otherwise restored):**
-  `meta-garage-0` **10Gi→30Gi**, `numberOfReplicas` **2→1 on wk-02**, `dataLocality`
-  best-effort→**disabled** (unsatisfiable — garage-0 runs on wk-01, which has no Longhorn disk, and
-  it was blocking every rebuild). The `std` tier could not host a grown 2-replica volume at all:
-  hp-01 sits at 22.5 GB free vs Longhorn's 31.4 GB floor, so it rejected ANY expansion. The rf=1
-  debt is on **FU-137**; the broken auto-snapshot control is **FU-184**. ⚠ the replica shuffling
-  pushed the **pve pool 69→84%**; `fstrim` via `kubectl debug node/wk-02 … -- fstrim -v /host/var`
-  returned it to 69.17% — the batch form silently did only part of the job, run it per node and
-  READ the byte count.
-  **STILL OPERATOR-OWNED: the `garage repair blocks` hold** — but it now reclaims ≈nothing, because
-  re-adopting the ERT giants re-refs ~47 GB of the 54 GB on the data volume. **DO NOT delete those
-  3 keys to reclaim it (operator ruling, 2026-08-25):** the 2026-07-12 corpus is the stale base the
-  first delta job must run against, and a re-ingest fetches TODAY's register — it moves the window
-  instead of restoring it. Rationale + the ghcr-image-is-not-a-substitute finding now live in
-  `docs/garage.md` §Durability (PR#902); ert-snapshots is no longer tiered cheap-to-lose, which
-  makes FU-137's ~08-31 deadline load-bearing. Verified against the carve: every delta-base input
-  (`latest.json`, the `build/`+`publish/` manifests, 252,354 `parsed/`) is in ert-snapshots and the
-  deployed workflow pins `S3_ARTIFACT_BUCKET=ert-snapshots`, so base resolution never leaves the
-  bucket; nothing in the job reads S3 `LastModified`, so the restore's new mtimes cost no realism.
-  Evidence stays frozen (`backups/garage-meta-forensics/` + the
-  `pre-restore-2026-08-24-meta-wipe` Longhorn snapshot). ⚠ watch `lvs pve/data` during the run
-  (68.2% at start).
-  unpark. Acceptance = drift-free re-plan through the two-zone token. ⚠ `dig +short` wraps long
-  DS digests — `tr -d ' '` before grepping.
+- **⚑ GARAGE TIER-3 (widened carve): DONE + VERIFIED 2026-08-25 (homelab#884).** The whole store
+  carved (956,600 objects, 0 orphan versions; bucket_alias table recovered) and restored:
+  **543,257 of 543,450 verified exact** on size+ETag over the LAN path. `ert-snapshots` is back at
+  **252,366 objects / 60.4 GB — exactly docs/garage.md's independent 2026-08-04 figure**, all three
+  giants included (42 GB `xml.2026.zip` reproduced its exact multipart ETag). Not restored, all
+  accounted: 884 blocks gone pre-wipe · 214 `oracle-specs` at its 1.0 GiB quota (operator: not
+  important) · 189 loki objects expired by loki's own 30-day retention right after restore · 4
+  transient 502s re-checked ok. Detail: TICK-LOG 2026-08-25 + incident §Tier-3. Pod + temp key
+  deleted; evidence still frozen in `backups/garage-meta-forensics/`.
+  **OPERATOR-OWNED, now cheap:** the `garage repair blocks` hold can come off — refcounted blocks
+  (295,148) now cover the block files on disk (294,778), so it reclaims ≈nothing. **DO NOT delete
+  the 3 ERT giants to reclaim space** — the 2026-07-12 corpus is the stale base the first delta job
+  needs (operator, 2026-08-25; rationale in docs/garage.md §Durability).
+  ⚠ **Live storage debt from the recovery:** `meta-garage-0` is **30Gi with numberOfReplicas 1
+  (wk-02)** and `dataLocality: disabled` — the `std` tier cannot host a grown 2-replica meta volume
+  (hp-01 is below Longhorn's 25% floor and rejects any expansion). Redundancy returns with the
+  ADR-114 build-out, which makes FU-137's ~08-31 deadline load-bearing. **FU-184**: the metadata
+  auto-snapshot has never worked (131 empty dirs, `MDB_INCOMPATIBLE`) and the DR recipe trusted it.
+  ⚠ Two traps the tooling now guards, both of which cost something: restore ORDER sizes the metadata
+  DB (page order filled the volume and took Garage down for an hour), and **aborting a multipart
+  upload destroys the orphan blocks it read** (cost 3,952 blocks of corpus.sqlite, since rebuilt
+  byte-exact from the intact OCI image). Never run `garage bucket cleanup-incomplete-uploads`
+  against a bucket still being recovered.
+
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
   for a few days, revert to 0 if no win; the residual setup cost is homelab#518.
 - **Small live residue (compressed 2026-08-19):** wk-metal-04
