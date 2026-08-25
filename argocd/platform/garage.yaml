@@ -17,7 +17,11 @@
 # five phantom differences.)
 #
 # ⚠ The StatefulSet's volumeClaimTemplates are IMMUTABLE and hold 63 GB. Nothing here may change
-# `persistence` — a resize is the PV-rebind dance in docs/garage-bulk-migration.md, never an edit.
+# `persistence`, and the sizes below are NOT the live sizes — they must keep matching the existing
+# templates or the app stops syncing under selfHeal. A real resize is `kubectl patch pvc` (the
+# longhorn StorageClass sets allowVolumeExpansion — that is how meta went 10Gi -> 30Gi on
+# 2026-08-25), or the PV-rebind dance in docs/garage-bulk-migration.md to move tier/storageClass.
+# Either way the value here stays put; docs/garage.md §Durability carries the live numbers.
 #
 # Before any SUBSTANTIAL change here (replication, storage, engine, snapshots): read
 # docs/garage.md §Target architecture — it carries ADR-114 and the upstream garagehq reading
@@ -78,6 +82,10 @@ spec:
             storageClass: longhorn-bulk
           enabled: true
           meta:
+            # ⚠ DO NOT "correct" this to the live size. It must keep matching the StatefulSet's
+            # immutable volumeClaimTemplate (also 1Gi) or the app never syncs again under selfHeal.
+            # The real PVC is 30Gi with numberOfReplicas 1 on wk-02 (2026-08-25) — see FU-137;
+            # this number has been decorative since the volume was first resized out of band.
             size: 1Gi
             storageClass: longhorn
         resources:

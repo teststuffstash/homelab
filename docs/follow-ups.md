@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-184** (FU-183 was minted out of order while this line still said 182; 183 is archived). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-186** (FU-183 and FU-185 were each minted out of order while this line lagged; 183 is archived, 184 minted 2026-08-25). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -114,6 +114,20 @@ six OVERSIZE items pointer-ized into
       **Next (oracle-prod-deadline-bound, ~2026-08-31):** the build-out — garage rf=3 migration
       (local XFS, wk-metal-01/04 + wk-02 interim), CNPG replica-1 + required zone anti-affinity,
       backup CronJob. Offsite stays parked behind oracle/idp prod. Relates FU-013, FU-012, ADR-031.
+      ⚠ **The meta volume runs `numberOfReplicas: 1` (wk-02) since 2026-08-25** — the only way to
+      expand it past the full `std` tier during the Tier-3 restore; redundancy comes back with this
+      build-out, which is what makes the deadline load-bearing. Snapshot control: **FU-184**.
+- [ ] **FU-184** — **Garage's metadata auto-snapshot has never worked, and the DR recipe trusts
+      it.** `metadata_auto_snapshot_interval = 6h` was installed 2026-08-24 as the wipe's durability
+      fix; the worker dies every attempt with `MDB_INCOMPATIBLE: Operation and DB incompatible, or
+      DB flags changed`, leaving an empty directory — **131 of them, 08-24 20:31 → 08-25, zero
+      usable snapshots**. Worse, an in-progress `db.lmdb` is indistinguishable by name from a
+      finished one (carving one mid-write yielded 203,744 objects and **0 version rows** against
+      ~465k live), so [`garage.md`](garage.md) §Durability's "copy `meta_snapshots/<latest>`"
+      restores an empty dir or a torn file — a DR path worse than none. Recipe now carries the ⚠;
+      this item owns the control. **Next:** find why the copy is rejected (env opened with flags
+      that forbid `mdb_env_copy`? snapshots dir on another filesystem?), then either make snapshots
+      real or drop the assurance from the recipe and ADR-114; prune the empty dirs. Relates FU-137.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
