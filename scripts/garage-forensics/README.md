@@ -43,6 +43,39 @@ their page numbers are reused.
 `carve-one.py` pulls a single object out to a local file without writing to S3 — the right tool when
 what you need is one lost `terraform.tfstate` rather than a bucket.
 
+## The other repair: `lmdb-rebuild.py` (a live env, not a wipe)
+
+The chain above recovers objects from an env that lost its tables. `lmdb-rebuild.py <src data.mdb>
+<out data.mdb>` fixes the *opposite* damage: an env that still serves fine but is structurally
+unfit — pages leaked, so the file grows without bound and **every** LMDB compacting copy is
+rejected, which is exactly what `metadata_auto_snapshot_interval` performs. Symptom in the Garage
+log, once per attempt, forever:
+
+```
+ERROR garage_util::background::worker: Error in worker Metadata snapshot worker (TID 59):
+      DB error: LMDB: MDB_INCOMPATIBLE: Operation and DB incompatible, or DB flags changed
+```
+
+LMDB decides this by arithmetic, not by reading your data: it predicts the compacted root as
+`next_pgno - 1 - freecount` and returns `MDB_INCOMPATIBLE` when the walk lands elsewhere
+(`mdb.c`: `/* page leak or corrupt DB */`). So no *copy* can fix it — the copy is what the leak
+disqualifies — and `garage convert-db` cannot either: it rejects `lmdb`→`lmdb` ("input and output
+database engine must differ"), and the same damage can leave raw freelist records in the main
+database, which kills its `list_trees()` on a UTF-8 decode before it starts. This script re-inserts
+every named tree in key order (append mode packs the leaves), skipping non-UTF-8 main-DB keys, then
+takes the compacting copy of the result — which now succeeds, right-sizes the file, and is itself
+the acceptance test for the snapshot belt. It exits non-zero unless every tree's entry count
+matches the source.
+
+Needs `pip install lmdb`; Garage must be stopped, and the meta volume is the ONLY copy — take a
+Longhorn snapshot and a verified off-cluster copy of `data.mdb` first. **Run it on a host copy**:
+the rebuild reads hundreds of thousands of scattered 4 KiB pages, which over a network-attached
+Longhorn volume is ~0.3 MB/s against ~100 MB/s for a sequential `cat` of the same file — copy out,
+rebuild, push the (much smaller) result back. Live run 2026-08-25, homelab#884 / FU-184:
+18.10 GiB → 1.57 GiB, 67 trees / 4,279,175 entries, exact match. Afterwards check that the
+container's memory limit still exceeds the DB size — a snapshot that starts *completing* writes
+its whole copy in seconds, and the first one OOM-killed Garage at 512Mi.
+
 ## What the records look like (Garage v2.3.0)
 
 Table rows are `<version marker><msgpack named map>`, and the marker is what makes a stale page
