@@ -129,36 +129,36 @@ meant to avoid.)
   (wk-02)** and `dataLocality: disabled` — the `std` tier cannot host a grown 2-replica meta volume
   (hp-01 is below Longhorn's 25% floor and rejects any expansion). Redundancy returns with the
   ADR-114 build-out, which makes FU-137's ~08-31 deadline load-bearing. **FU-184**: the metadata
-  auto-snapshot has never worked (131 empty dirs, `MDB_INCOMPATIBLE`) and the DR recipe trusted it.
+  auto-snapshot had never worked (161 empty dirs, `MDB_INCOMPATIBLE`) and the DR recipe trusted it
+  — env rebuilt the same evening, see the FU-184 bullet below.
   ⚠ Two traps the tooling now guards, both of which cost something: restore ORDER sizes the metadata
   DB (page order filled the volume and took Garage down for an hour), and **aborting a multipart
   upload destroys the orphan blocks it read** (cost 3,952 blocks of corpus.sqlite, since rebuilt
   byte-exact from the intact OCI image). Never run `garage bucket cleanup-incomplete-uploads`
   against a bucket still being recovered.
 
-- **⚑ NEXT ACT — FU-184 `convert-db` (planned window, NOT urgent).** The metadata auto-snapshot
-  cannot work on this DB: `MDB_CP_COMPACT` fails on a page-leaked env and the 08-24 wipe left
-  exactly that (full diagnosis + evidence: `docs/garage.md` §Durability). Rebuilding the env fixes
-  the snapshot belt AND reclaims ~16 GiB (`data.mdb` is 18.1 GiB for ~2 GiB of live data), and a
-  fresh small env is re-placeable with 2 replicas — so it feeds FU-137/ADR-114.
-  **Deliberately deferred to a fresh session (2026-08-25, ctx 654k):** it rewrites the ONLY copy of
-  the metadata recovered on 08-25. The Aug-4 backup and the frozen carve both PREDATE that
-  recovery, so a botched swap loses the whole day's work. Not urgent — the DB has been flat since
-  14:12Z with 12 GiB free.
-  **Order (do not skip 1 or 2):**
-  1. **Longhorn snapshot of `meta-garage-0` first** — block-level, works even though LMDB's own
-     snapshot does not. This is the only rollback that covers the current state.
-  2. **Suspend ArgoCD selfHeal on the `garage` Application** (`syncPolicy.automated`, prune+selfHeal
-     are ON) or it will fight the STS scale-down. Restore it afterwards.
-  3. Scale `sts/garage` to 0; run `garage convert-db -a lmdb -i /mnt/meta/db.lmdb -b lmdb -o
-     /mnt/meta/db.lmdb.new` from a pod using the garage image with a command override (that image
-     has NO shell — `/garage` only), meta PVC mounted rw on garage-0's node (RWO = node-level lock).
-  4. `mv db.lmdb db.lmdb.old && mv db.lmdb.new db.lmdb`; scale back to 1; **verify `garage stats`
-     object count matches ~896,628 and the buckets' counts** before deleting `db.lmdb.old`.
-  5. Acceptance: one auto-snapshot COMPLETES, and carving it with `scripts/garage-forensics/
-     lmdb-carve.py` reports the live object count (a torn/partial snapshot carves short — that is
-     how a mid-write one was caught on 08-25).
-  6. Then consider the alert: this control failed 131 times in a row and surfaced nothing.
+- **⚑ FU-184 DONE (mechanism) 2026-08-25 — the metadata env is REBUILT; one soak left.** The
+  auto-snapshot had never worked because `MDB_CP_COMPACT` refuses a page-leaked env by arithmetic
+  (`root != next_pgno-1-freecount` → `MDB_INCOMPATIBLE`, mdb.c "page leak or corrupt DB"); the
+  08-24 torn write left 4,745,586 pages holding ~550k live ones, plus 8 freelist records stranded
+  in the MAIN db (they sort last, hence the ~2.28 GB written before each failure — and they also
+  break `convert-db`, which UTF-8-decodes main-db keys). **The recorded `convert-db -a lmdb -b
+  lmdb` order was wrong twice over**: v2.3.0 rejects same-engine outright, and the utf-8 fault hits
+  first. Fix shipped as `scripts/garage-forensics/lmdb-rebuild.py` (rebuild by insertion, then the
+  compacting copy as its own acceptance test): **18.10 GiB → 1.57 GiB**, 67 trees / 4,279,175
+  entries exact, every bucket count unchanged, meta volume 62% → 6%. Full account: `docs/garage.md`
+  §Durability. **PR#911** (script + docs + the 512Mi→2Gi limit) is riding — bot-reviewed,
+  auto-merge armed; land it with a gate read.
+  **REMAINING (the only open half of FU-184):** watch for one *auto* snapshot to COMPLETE now the
+  limit is 2Gi — the manual `garage meta snapshot` trigger OOM-killed the container at 512Mi
+  (the copy went from ~11 min to ~15 s once the env was healthy, and the page-cache burst blew the
+  cgroup). Then carve it with `lmdb-carve.py` and compare to `garage stats`. Next natural fire is
+  ~6h after the 16:16Z start; do NOT re-trigger by exec into garage-0.
+  Rollback still held: Longhorn snapshots `garage-meta-pre-convertdb-20260825` +
+  `garage-meta-pre-rebuild-20260825`, and two sha256-verified host copies under
+  `backups/garage-meta-20260825-{preconvert,prerebuild}/` (19 GB each — delete once the soak
+  passes). ⚠ **A parallel jail session merged #910 (same diagnosis, docs only) at 15:12Z while this
+  ran** — the two accounts are merged into one §Durability block; watch for that pattern.
 
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
   for a few days, revert to 0 if no win; the residual setup cost is homelab#518.
