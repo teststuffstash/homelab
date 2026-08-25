@@ -119,12 +119,15 @@ meant to avoid.)
   (14 names → old ids, `wide/aliases.json`) so nothing had to be identified by key shape. Live-key
   filtered → **544,548 objects / 17.1 GB** re-uploading in pod `garage-forensics` (detached, survives
   this session): `/tmp/report2.jsonl`, log `/tmp/restore2.log`, ~37 obj/s (**Garage's own
-  `metadata_fsync=true` is the ceiling** — the incident's fix), ETA ~4 h. Separately the **3 giant
-  ERT objects (6+6+42 GB, multipart, 2 071 parts)** restore via the new part-replay path →
-  `/tmp/giants.report.jsonl`, log `/tmp/giants.log`.
-  **PICKUP if this session is gone:** wait for both reports, then `verify-restored.py` from the jail
-  over `https://s3.teststuff.net` with the temp key `forensics-wide`, then **delete the key
-  (`/garage key delete forensics-wide`) and the pod**. Manifest: `backups/garage-meta-forensics/wide/`.
+  `metadata_fsync=true` is the ceiling** — the incident's fix), ETA ~4 h. Then the **3 giant ERT
+  objects (6+6+42 GB, multipart, 2 071 parts)** via the new part-replay path →
+  `/tmp/giants.report.jsonl`, log `/tmp/giants.log`. **`/tmp/chain.sh` is armed in the pod and
+  starts the giants when the bulk exits** — the two are SEQUENTIAL by measurement: Garage's commit
+  path is serialized, so run together they trade throughput (bulk 37→13 obj/s), not add it.
+  **PICKUP if this session is gone:** wait for both reports (`/tmp/chain.log` marks each stage),
+  then `verify-restored.py` from the jail over `https://s3.teststuff.net` with the temp key
+  `forensics-wide`, then **delete the key (`/garage key delete forensics-wide`) and the pod**.
+  Manifest: `backups/garage-meta-forensics/wide/`. Tooling: PR#900 (merged) + PR#901.
   **STILL OPERATOR-OWNED: the `garage repair blocks` hold.** ⚠ it is no longer a
   recover-vs-forget call — re-adopting the ERT giants re-refs ~47 GB of the 54 GB on the data
   volume, so after Tier-3 repair reclaims ≈nothing (deleting those 3 keys is the reversible way
