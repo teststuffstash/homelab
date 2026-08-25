@@ -185,6 +185,8 @@ selection-shaped moves behind `/route`.
 
 ### The cost rethink & subscription fair scheduling (operator direction, 2026-08-13)
 
+**Tracked by:** FU-180 (subscription budgets + window shares — the build pointer).
+
 `guardrail: only-free` is a legacy of the single-rail era — built to stop a stack silently
 moving from free to paid OpenRouter models, when "cost" meant one thing. The landscape it
 guarded no longer exists: two subscriptions (Anthropic, Go) whose marginal cost is ~0 but whose
