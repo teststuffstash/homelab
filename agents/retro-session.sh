@@ -62,7 +62,8 @@ HARNESS="${CELL%%:*}"; MODEL="${CELL#*:}"
 # The old --fallback-only semantics (issue #782 wiring) let the router's
 # dispatch verdict override the cell model, silently destroying the experiment
 # axis.  The coordinator-session.sh caller uses the same pattern (line 106).
-# See also docs/agents/model-routing.md.
+# Override-rule home: docs/agents/model-routing.md §M10 (the one stated home of the
+# ADR-096 override rule; cell = explicit override since #861/PR#864).
 MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "$CELL" --fallback "$MODEL" --model "$MODEL")"
 retro_project "$STACK" || exit 2
 

@@ -516,17 +516,15 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
-      2026-08-03; §M10 the unrouted coordinator lane); decision record ADR-096 (P1–P3+P5 live).
-      ⛔ **The P4 soak has been measuring a router with an EMPTY strike table** — strikes were never
-      recorded (found + fixed 2026-08-07, `32b0fb3`), and enforcement stays OFF by operator ruling
-      because the evidence contradicts "N strikes and you're out" (3 deaths vs 3 clean on lg).
-      Mechanism + the open blacklist/retry/fan-out question: §M1a. **Next:** gather strike data with
-      enforcement off, decide the policy, THEN judge the P4 flip.
-      **Open:** legs (b)+(c) unstarted; wiring the coordinator lane to `/route` (§M10).
-      **G-A (Goal homelab#775, 2026-08-23) owns the §M10 wiring (children #780/#781/#782) and
-      leg (c) (rides child #778); leg (b) is IN-scope since ADR-112 (2026-08-23) superseded ADR-107
-      decision 3 with the harness matrix — the scout's 3-harness cells (#778 scope + #791/#792) ARE the (b) evidence surface.**
-      Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
+      2026-08-03; §M10 SUPERSEDED 2026-08-23 — every role routes, G-A children #780/#781/#782);
+      decision record ADR-096 (P1–P3+P5 live). Strike policy RULED 2026-08-23 (#783; FU-179
+      archived): `ROUTER_STRIKE_ENFORCE` retired — strikes stay recorded, cooldowns carry the
+      residual class, the env's deletion rides the G-A legacy sweep (§M1a).
+      **Open:** legs (b)+(c) ride G-A child #778 (leg (b) IN-scope since ADR-112 — the scout's
+      3-harness cells ARE the (b) evidence surface; Go cells 🧊 until 2026-09-13, FU-181).
+      **Next:** judge the P4 flip on the soak read (shadow divergences + drift belts + #778's
+      cells) — the flip child is checkpoint-minted on Goal #775.
+      Relates ADR-077, ADR-081, ADR-096, ADR-112, FU-044, FU-046, FU-057, FU-062, FU-105.
 - [ ] **FU-127** — **One model-id parser LANDED; the structured claim field is the rest.**
       `agents/model_id.py` is the single implementation of `{rail, harness, model}` with the
       overloaded-prefix rules in one commented place (incl. the cloaked `openrouter/<codename>`
