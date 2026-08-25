@@ -250,6 +250,14 @@ migrate through).
 
 ## The OpenCode Go rail — probed facts (2026-08-13, wallet key `opencode-go-api-key`)
 
+> **POSTURE RULED (operator, 2026-08-25 — pinned on homelab#778):** Go serves
+> **janitorial/low-cache roles + failover backup, permanently** — window-draw at list-on-raw
+> prices cache-heavy work out (§M8 feed-4's rail affinity, measured: Go review rounds ≈$1 vs
+> OR-flash worker rides $0.03–0.05); deepseek+OpenRouter stays the economical worker ride. The
+> best find of the rail saga is the ZEN sibling's **big-pickle as deepseek's $0 shadow** (A5
+> shadow re-reviews homelab#923, the G-E fan-out arm; matrix row has the caveats). FU-181 holds
+> the post-reset hygiene legs; the P4 flip is DE-GATED from Sep-13 by the same ruling.
+
 - Endpoints: `https://opencode.ai/zen/go/v1/messages` (Anthropic-compat) ·
   `…/v1/chat/completions` (OpenAI-compat) · `…/v1/models` (25 live ids). **Bearer auth works**;
   `/v1/messages` additionally demands `x-api-key` (send both). Cloudflare 1010-blocks the
@@ -345,7 +353,13 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
 6. Legacy deletion in one sweep: chains, `claudeTier`, `guardrail`, the M12 branch, the M10
    case-maps, `REVIEW_GOAL_MODEL`, `GOOSE_MODEL` threading, and the retired
    `ROUTER_STRIKE_ENFORCE` read + filter branch (ruled 2026-08-23, §M1a) — each deletion site
-   is already named in its own doc.
+   is already named in its own doc. **Sweep additions + the ONE trap (goal #775 findings-store
+   entry 5, surfaced here so the sweep session needs no graph read):** three post-wiring
+   `--fallback` literals ARE sweep targets (`--fallback sonnet` on the responder + dispatch-unit
+   launchers, `--fallback "$MODEL"` on retro), but the `case "$rail" in opencode-go/*)`
+   short-circuit blocks in the two Argo lanes are **FU-088 dual-rail latch logic that must
+   SURVIVE the sweep** — they look exactly like an M10 case-map and are not one (PR#788
+   restored them after a review round dropped them once already).
 
 ## Related
 
