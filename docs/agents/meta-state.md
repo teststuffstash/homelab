@@ -112,17 +112,25 @@ meant to avoid.)
   left running to natural terminal (~$0, 4h key). **OR-budget ruling stands (paid-flash
   through G-A, revert ~09-03/fixup-end/depletion); Go latched til Sep-13 (roll-persistence
   VERIFIED).** claude-jail#2 filed: mono per-session env block + wallet-reach + forgejo SSH.
-- **⚑ GARAGE TIER-2 FORENSICS: DONE 2026-08-24 evening (homelab#884) — two OPERATOR decisions left.**
-  The delta is back: 10,846 objects / 2.14 GB re-uploaded and independently verified (10,843 exact,
-  3 divergences all handled), jail-transcripts fully recovered from zero, `cloudflare/terraform.tfstate`
-  restored to serial 2 + `minutark_www` imported → `tofu -chdir=tofu/cloudflare plan` = **No changes**.
-  Detail: TICK-LOG 2026-08-24 evening + the incident doc §Tier-2 recovery. Open for the operator:
-  **(1) widen the carve?** — loki/allure/oracle-`parsed/`/sleep metadata is equally intact in the
-  frozen layer and the pipeline is proven (~1 M objects / ~50 GB rerun); scope was narrowed when the
-  cost was unknown. **(2) the `garage repair blocks` hold** stays ON until (1) is answered — running
-  it forecloses (1) permanently. Evidence stays frozen in `backups/garage-meta-forensics/` +
-  the `pre-restore-2026-08-24-meta-wipe` Longhorn snapshot; tooling in `scripts/garage-forensics/`.
-  Independent next act: the ADR-114 rf=3 build-out (FU-137, deadline ~08-31).
+- **⚑ GARAGE TIER-3 (widened carve) RUNNING since 2026-08-25 ~06:24Z (homelab#884, operator: widen
+  to loki/allure/oracle-`parsed/`/sleep).** Tier-2 (the transcripts delta) is DONE and verified —
+  detail in TICK-LOG 2026-08-24 evening + incident §Tier-2. Tier-3 carved the WHOLE store from the
+  same frozen layer: **956,600 objects, 0 orphan versions**, and the **bucket_alias table survived**
+  (14 names → old ids, `wide/aliases.json`) so nothing had to be identified by key shape. Live-key
+  filtered → **544,548 objects / 17.1 GB** re-uploading in pod `garage-forensics` (detached, survives
+  this session): `/tmp/report2.jsonl`, log `/tmp/restore2.log`, ~37 obj/s (**Garage's own
+  `metadata_fsync=true` is the ceiling** — the incident's fix), ETA ~4 h. Separately the **3 giant
+  ERT objects (6+6+42 GB, multipart, 2 071 parts)** restore via the new part-replay path →
+  `/tmp/giants.report.jsonl`, log `/tmp/giants.log`.
+  **PICKUP if this session is gone:** wait for both reports, then `verify-restored.py` from the jail
+  over `https://s3.teststuff.net` with the temp key `forensics-wide`, then **delete the key
+  (`/garage key delete forensics-wide`) and the pod**. Manifest: `backups/garage-meta-forensics/wide/`.
+  **STILL OPERATOR-OWNED: the `garage repair blocks` hold.** ⚠ it is no longer a
+  recover-vs-forget call — re-adopting the ERT giants re-refs ~47 GB of the 54 GB on the data
+  volume, so after Tier-3 repair reclaims ≈nothing (deleting those 3 keys is the reversible way
+  back). Evidence stays frozen (`backups/garage-meta-forensics/` + the
+  `pre-restore-2026-08-24-meta-wipe` Longhorn snapshot). Independent next act: the ADR-114 rf=3
+  build-out (FU-137, deadline ~08-31). ⚠ watch `lvs pve/data` during the run (68.2% at start).
   unpark. Acceptance = drift-free re-plan through the two-zone token. ⚠ `dig +short` wraps long
   DS digests — `tr -d ' '` before grepping.
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
