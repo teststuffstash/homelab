@@ -5265,3 +5265,21 @@ first live ADR-110 maintenance session before the ADR existed.
 - **PR#925 conflict resolved** (its FU-093 edit vs the sweep's newer trim — took master's,
   merge-not-clobber; BEHIND+armed, machine-owned again). NEEDSMETA empty-read flap disposed
   into FU-185 (the masked-inner-exit class; ALERT arm's twin was f703ec39).
+
+## 2026-08-25 ~20:40Z — grafana SQLITE_BUSY (operator report): the sentinel-edge queue starving hp-01's root disk
+
+- **Condition:** operator pasted grafana `authn.service` lock errors. Read: 322 SQLITE_BUSY/30m
+  (~1/sec), pod on hp-01 (freshly uncordoned = emptiest → the scheduler put the WHOLE evening
+  burst there), `sda` 68% IO util, Longhorn rebuilds ZERO — the writers were 13 Pending + 1
+  Running duplicate `iac-sentinel-edge` workflows (the sweep session's own merges/label edits
+  rang the edge per event; each run re-scans ALL open PR heads behind the mutex) + an agent
+  ride + a coordinator session, beside grafana's fsync-sensitive sqlite on emptyDir.
+- **Command:** deleted the 13 Pending duplicates (loss-free by construction — every run scans
+  every head, */5 cron backstop re-derives; the Running one finished). `sda` 68%→6.7%,
+  grafana clean (0 SQLITE_BUSY over 2m, LAN health 200) within ~3 min of the drain.
+- **Filed:** #938 queued (port the doorbell-collapse pattern to the sentinel edge — fixed-name
+  submit or absorb-pending; the board-sweep entry's "watch, not a defect" read is REVERSED,
+  tonight it degraded a platform service) · #867 extended (the spread half — second instance,
+  new pathology: a freshly-uncordoned node attracts the whole burst). Residual: one old
+  `iac-sentinel-edge-l4p6k` Failed exit-1 run (54m prior, siblings green since — cron
+  self-healed; unexplained, noted only).
