@@ -60,11 +60,34 @@ def check(rec):
     return {"k": rec["k"], "b": rec["b"], "r": "ok"}
 
 
-work = [json.loads(l) for l in open(WORK)]
+WORKERS = int(os.environ.get("THREADS", "16"))
 res = collections.Counter()
-with open(REPORT, "w") as fh, cf.ThreadPoolExecutor(max_workers=16) as ex:
-    for out in ex.map(check, work):
+
+
+def records():
+    """Streamed — a whole-store manifest carries inline payloads and does not fit in RAM."""
+    with open(WORK) as src:
+        for line in src:
+            r = json.loads(line)
+            yield {"b": r["b"], "k": r["k"], "size": r["size"], "etag": r.get("etag")}
+
+
+with open(REPORT, "w") as fh, cf.ThreadPoolExecutor(max_workers=WORKERS) as ex:
+    def collect(fut):
+        out = fut.result()
         res[out["r"]] += 1
         if out["r"] != "ok":
             fh.write(json.dumps(out) + "\n")
+        if sum(res.values()) % 5000 == 0:
+            print(sum(res.values()), dict(res), flush=True)
+
+    pending = set()
+    for rec in records():
+        pending.add(ex.submit(check, rec))
+        if len(pending) >= WORKERS * 16:
+            ready, pending = cf.wait(pending, return_when=cf.FIRST_COMPLETED)
+            for fut in ready:
+                collect(fut)
+    for fut in cf.as_completed(pending):
+        collect(fut)
 print(json.dumps(dict(res), indent=2))
