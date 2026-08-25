@@ -132,14 +132,22 @@ src_goalcmt() {
 }
 
 src_alert() {
-  local tmp; tmp="$(mktemp)"
+  local tmp body; tmp="$(mktemp)"
   # keyed on (alertname, namespace) — NEVER the fingerprint: instance churn re-keys fingerprints
   # (the #355 restart-gap identity lesson) and would flap this set forever. Watchdog (the
   # always-firing liveness canary) and InfoInhibitor (stock machinery) are excluded.
-  if curl -sf -m 10 "$AM/api/v2/alerts?active=true&silenced=false" \
-      | jq -r '.[] | select(.labels.alertname != "Watchdog" and .labels.alertname != "InfoInhibitor")
-               | "ALERT|\(.labels.alertname)/\(.labels.namespace // "-")|firing"' | sort -u > "$tmp" 2>/dev/null; then
-    diff_source alert "$tmp"
+  # ⚠ Guard the CURL's exit, never the pipeline's: `if curl | jq | sort > tmp` tests SORT's
+  # exit, so an unreachable Alertmanager fed jq empty stdin and served an EMPTY set as truth —
+  # a 10s blip mass-cleared five live alerts (Go latch included) at 2026-08-25 17:31Z. The
+  # pipe-filter-a-gate class (CLAUDE.md §lanes), on a read instead of a push.
+  if body="$(curl -sf -m 10 "$AM/api/v2/alerts?active=true&silenced=false")"; then
+    if printf '%s' "$body" \
+        | jq -r '.[] | select(.labels.alertname != "Watchdog" and .labels.alertname != "InfoInhibitor")
+                 | "ALERT|\(.labels.alertname)/\(.labels.namespace // "-")|firing"' | sort -u > "$tmp" 2>/dev/null; then
+      diff_source alert "$tmp"
+    else
+      hold_source alert "alert payload unparseable"
+    fi
   else
     hold_source alert "alertmanager unreachable"
   fi
