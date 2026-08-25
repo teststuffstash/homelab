@@ -12,3 +12,5 @@ rawlog-quota                  |       |       |     | rawlog-quota            |
 rawlog-budget-403-key         |       |       |     | rawlog-budget-403-key   |
 rawlog-budget-403-account     |       |       |     | rawlog-budget-403-account |
 rawlog-provider-5xx           |       |       |     | rawlog-provider-5xx     |
+stats-unknown-with-pr         |       |       |     | stats-unknown-with-pr   |
+stats-harness-death-with-pr   |       |       |     | stats-harness-death-with-pr |

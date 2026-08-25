@@ -19,7 +19,12 @@
 #      branches must map this signature to error_class=harness-death.
 #   2. Provider-5xx: The model API returns UnknownError (harness-side), causing the pod to die at
 #      zero cost in sub-30s with no new artifact. Both classifier branches must map this signature
-#      to error_class=harness-death. Strike should emit regardless of PR_URL (homelab#866).
+#      to error_class=harness-death.
+#   3. PR-present narrowing (homelab#866): A PR-less ride strikes on any classified error, `unknown`
+#      included (FU-062 semantics — that's the chain-walk signal). A ride WITH an open PR strikes
+#      only on harness-death, auth-storm, timeout, quota, or budget-* classes; anything else
+#      (e.g., `unknown`) must not strike and must reset ERR_CLASS to empty so the report records
+#      no error.
 #
 # CONDITION UNDER REPLAY. The strike classifier sits in two branches of agent-session.sh:
 #   - STATS path (AGENT_RUN_STATS line exists): if exit_status classifies as "unknown", the

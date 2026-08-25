@@ -2168,7 +2168,8 @@ if [ -n "$RUN_CMD" ]; then
       fi
       # <<<REPLAY:strike-quota-classifier<<<
     fi
-    # >>>REPLAY:strike-classifier>>>
+    # <<<REPLAY:strike-classifier<<<
+    # >>>REPLAY:strike-line-format>>>
     # homelab#866: the EMIT decision. A PR-less ride keeps FU-062 semantics unchanged — ANY
     # classified error strikes, `unknown` included (that is the chain-walk signal). A ride WITH
     # an open PR strikes only on a harness-death-class signature, because a clean round with a
@@ -2178,15 +2179,22 @@ if [ -n "$RUN_CMD" ]; then
       harness-death|auth-storm|timeout|quota|budget-*) EMIT_STRIKE=1;;
     esac
     [ -n "${PR_URL:-}" ] || EMIT_STRIKE=1
-    # <<<REPLAY:strike-classifier<<<
+    # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
+    # no specific signature must not be recorded as having an error. Inside the block on purpose:
+    # this reset is behaviour replay has to pin, not control flow it may drop (PR #942 review).
+    [ -n "$EMIT_STRIKE" ] || ERR_CLASS=""
+    # STRIKE_LINE is empty exactly when EMIT_STRIKE is unset, so the gate itself is extracted and
+    # the composed replay script branches on it the way the shipped script does.
+    STRIKE_LINE=""
     if [ -n "$EMIT_STRIKE" ]; then
-      # >>>REPLAY:strike-line-format>>>
       STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
       if [ -n "${BUDGET_MATCH:-}" ]; then
         STRIKE_LINE="${STRIKE_LINE} match=${BUDGET_MATCH}"
       fi
-      # <<<REPLAY:strike-line-format<<<
-      if [ -z "$PR_URL" ]; then
+    fi
+    # <<<REPLAY:strike-line-format<<<
+    if [ -n "$STRIKE_LINE" ]; then
+      if [ -z "${PR_URL:-}" ]; then
         echo "→ no PR opened — ${STRIKE_LINE}"
       else
         echo "→ harness death with PR — ${STRIKE_LINE}"
@@ -2205,10 +2213,6 @@ if [ -n "$RUN_CMD" ]; then
       else
         echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
       fi
-    else
-      # A non-striking run must report an empty error_class, not "unknown". A PR-present ride that
-      # classifies as "unknown" (no specific signature) must not be recorded as having an error.
-      ERR_CLASS=""
     fi
   fi
 
