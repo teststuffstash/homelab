@@ -72,10 +72,12 @@ done
 # The tick/janitor/item session resolves its model through the router. Item sessions pass
 # their clause so the router's class policy distinguishes goal-decompose (reasoning tier,
 # class=goal-decompose) from ordinary dispatch (class=dispatch, via role_defaults).
-# The --model flag value (the stack claim's coordinatorModel or an operator override) becomes
-# the fallback if the proxy is unreachable. GOAL_MODEL env survives as the explicit escape
-# hatch for goal-decompose items (deleted in the sweep). Fail-OPEN (ADR-096).
-# See docs/agents/model-routing.md §M10.
+# The --model flag value carries TWO cases with opposite routing intent (the ADR-096 override
+# rule — the block below distinguishes them): a scan-supplied coordinatorModel is a FALLBACK
+# (route consulted, fail-OPEN if the proxy is unreachable); an explicit operator --model is an
+# OVERRIDE (route skipped). GOAL_MODEL env survives as the explicit escape hatch for
+# goal-decompose items (deleted in the sweep).
+# Override-rule home: docs/agents/model-routing.md §M10.
 RESOLVE_CLASS=""
 if [ -n "$ITEM" ]; then
   # Parse the clause from --item to set the routing class:
