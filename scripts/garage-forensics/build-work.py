@@ -65,9 +65,15 @@ kept_bytes = collections.Counter()
 # collapses, and the metadata DB grows far beyond the data it holds. Measured on 2026-08-25 during
 # the homelab#884 restore: 182,000 objects in page order cost 3.52 GiB of LMDB growth (~20.3
 # KB/object, ~8x the pre-wipe store's bytes-per-object) and filled the meta volume, taking Garage
-# down with "No space left on device". The same restore re-run sorted showed NO measurable growth
-# over its first 19,750 objects — the inserts land in already-freed pages instead of splitting new
-# ones. Records are spooled to disk and only an index is sorted, so this costs no more memory.
+# down with "No space left on device". Re-run sorted, the same restore cost ~7.8 KB/object over its
+# first 77,750 — a ~2.6x saving, not a cure.
+#   ⚠ Do not size a restore off the first tens of thousands. Sorted began at LITERALLY zero growth
+#   for ~30k objects and then climbed (0 -> 6 -> 8 -> 25 KB/object across successive intervals,
+#   all inside ONE bucket): the early figure is the wipe's free pages being consumed, not steady
+#   state. An earlier revision of this comment quoted that window as the result, which would have
+#   led the next person to under-provision the volume. Budget on the cumulative average, keep the
+#   free-space guard, and remember the ordering buys headroom rather than removing the need for it.
+# Records are spooled to disk and only an index is sorted, so this costs no more memory.
 SPOOL = OUT + ".spool"
 index = []
 
