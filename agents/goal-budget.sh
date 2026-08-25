@@ -147,7 +147,6 @@ goal_resolve_ancestor() {   # <slug> <issue> [max-hops]
 
 goal_budget_read() {   # <slug> <goal-issue> <model> [dispatch-issue]
   _gb_slug="$1"; _gb_goal="$2"; _gb_model="$3"; _gb_dispatch="${4:-}"
-  _gb_proj="${_gb_slug#*/}"
   GB_BUDGET=""; GB_SUM=0; GB_ROWS=""; GB_VERDICT="no-budget"
 
   # ONE view answers two questions now: the `Budget:` line (the grammar is `gb_budget_line` above —
@@ -188,9 +187,10 @@ goal_budget_read() {   # <slug> <goal-issue> <model> [dispatch-issue]
   # GB_ROWS and their spend sums into GB_SUM. Each child is identified by its qualified
   # <owner>/<repo>#<number> identity, so a foreign parent number can never alias a local one.
   # Cycle-safe by construction (a seen-set over qualified IDs), bounded at depth 6 (same bound
-  # as the ancestor walk). If the root's sub-issues API is unreadable, the walk returns [] and
-  # the caller's "no descendants resolved" warning fires — fail-closed (under-count is the
-  # conservative direction: it admits fewer rides, not more).
+  # as the ancestor walk). If any sub_issues API call fails (root or non-root), the walk
+  # flags it as degraded and the caller falls back to cap-sum — under-counting descendant
+  # spend *lowers* GB_SUM, which admits *more* rides, not fewer, so a degraded walk must not
+  # remain silent.
   _gb_kids="$(python3 -c '
 import json, sys, subprocess
 
@@ -220,6 +220,7 @@ max_depth = int(sys.argv[3]) if len(sys.argv) > 3 else 6
 seen = set()
 frontier = [(root_repo, root_num, 0)]
 nodes = {}
+degraded = []
 
 while frontier:
     repo, num, depth = frontier.pop(0)
@@ -229,6 +230,7 @@ while frontier:
     seen.add(nid)
     children = gh_sub_issues(repo, num)
     if children is None:
+        degraded.append(nid)
         continue
     for child in children:
         cr = repo_of(child)
@@ -253,10 +255,18 @@ for nid, issue in sorted(nodes.items(), key=lambda x: (x[0].split("#")[0], int(x
                           for l in names(issue)))
     })
 
-print(json.dumps(out))
-' "$_gb_slug" "$_gb_goal" 6 2>/dev/null || echo '[]')"
+result = {
+    "degraded": len(degraded) > 0,
+    "children": out
+}
+print(json.dumps(result))
+' "$_gb_slug" "$_gb_goal" 6 2>/dev/null || echo '{\"degraded\":false,\"children\":[]}')"
+  # Check for degraded walk (any sub_issues fetch failed — root or non-root).
+  _gb_walk_degraded="$(printf '%s' "$_gb_kids" | jq -r '.degraded // false' 2>/dev/null || echo false)"
+  GB_WALK_DEGRADED="$_gb_walk_degraded"
+
   # A parent that HAS descendants must not silently resolve to none — that is the gate failing open.
-  if [ "$(printf '%s' "$_gb_kids" | jq -r 'length' 2>/dev/null || echo 0)" = "0" ]; then
+  if [ "$(printf '%s' "$_gb_kids" | jq -r '.children | length' 2>/dev/null || echo 0)" = "0" ]; then
     echo "→ Goal budget: no descendants resolved for #${_gb_goal} — nothing to sum (if that is wrong, the query is broken, not the goal)" >&2
   fi
 
@@ -283,8 +293,30 @@ print(json.dumps(out))
   _gb_led="$(gb_ledger)" || _gb_led=""
   GB_LEDGER_DEGRADED="false"
   [ -z "$_gb_led" ] && GB_LEDGER_DEGRADED="true" && echo "→ Goal budget: spend ledger unreachable — falling back to CAP-sum (conservative)" >&2
+
+  # If the descendant walk is degraded (any sub_issues fetch failed), fall back to conservative cap-sum.
+  # Under-counting descendant spend *lowers* GB_SUM, which admits *more* rides; degraded must not be silent.
+  if [ "$_gb_walk_degraded" = "true" ]; then
+    echo "→ Goal budget: descendant walk degraded (fetch failure in tree) — falling back to CAP-sum (conservative)" >&2
+    GB_SUM=0; GB_ROWS=""
+    for _gb_row in $(printf '%s' "$_gb_kids" | jq -r '.children[] | "\(.n):\(.repo):\(.chars):\(.label):\(.live):\(.ridden)"' 2>/dev/null); do
+      _gb_n="${_gb_row%%:*}"; _gb_rest="${_gb_row#*:}"
+      _gb_repo="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"
+      _gb_c="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"
+      _gb_l="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"
+      _gb_live="${_gb_rest%%:*}"; _gb_ridden="${_gb_rest#*:}"
+      _gb_c_cap="$(gb_cap "${_gb_c:-0}" "$_gb_model" "$_gb_l")"
+      _gb_charge="$_gb_c_cap"; _gb_why="cap (walk degraded)"
+      GB_SUM="$(gb_add "$GB_SUM" "${_gb_charge:-0}")"
+      GB_ROWS="${GB_ROWS}    ${_gb_repo}#${_gb_n} → \$${_gb_charge} (${_gb_why})\n"
+    done
+    GB_VERDICT="exhausted"
+    [ "$(python3 -c "import sys;print(1 if float(sys.argv[1])>float(sys.argv[2]) else 0)" "$GB_SUM" "$GB_BUDGET")" = "1" ] || GB_VERDICT="within"
+    return 0
+  fi
+
   GB_SUM=0; GB_ROWS=""
-  for _gb_row in $(printf '%s' "$_gb_kids" | jq -r '.[] | "\(.n):\(.repo):\(.chars):\(.label):\(.live):\(.ridden)"' 2>/dev/null); do
+  for _gb_row in $(printf '%s' "$_gb_kids" | jq -r '.children[] | "\(.n):\(.repo):\(.chars):\(.label):\(.live):\(.ridden)"' 2>/dev/null); do
     _gb_n="${_gb_row%%:*}"; _gb_rest="${_gb_row#*:}"
     _gb_repo="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"
     _gb_c="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"

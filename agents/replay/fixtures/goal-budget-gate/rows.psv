@@ -9,3 +9,4 @@ open-over-budget-degraded | gate-homelab-278-no-ledger | gh/issue-view-278.json 
 open-within       | gate-homelab-278 |                                                           | GOAL_PARENT=278 | within
 cross-repo-within | gate-homelab-278-cross |                                                      | GOAL_PARENT=278 | cross-repo-within
 colliding-number-exhausted | gate-homelab-278-cross | gh/issue-view-278.json @ patches/set-budget-1.jq | GOAL_PARENT=278 | colliding-number-exhausted
+degraded-walk-midtree-fail | gate-homelab-278-cross |                                                  | GOAL_PARENT=278 STUB_GH_api_repos_teststuffstash_homelab_issues_1001_sub_issues=fail | degraded-walk-midtree-fail
