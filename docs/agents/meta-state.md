@@ -128,12 +128,19 @@ meant to avoid.)
   then `verify-restored.py` from the jail over `https://s3.teststuff.net` with the temp key
   `forensics-wide`, then **delete the key (`/garage key delete forensics-wide`) and the pod**.
   Manifest: `backups/garage-meta-forensics/wide/`. Tooling: PR#900 (merged) + PR#901.
-  **STILL OPERATOR-OWNED: the `garage repair blocks` hold.** ⚠ it is no longer a
-  recover-vs-forget call — re-adopting the ERT giants re-refs ~47 GB of the 54 GB on the data
-  volume, so after Tier-3 repair reclaims ≈nothing (deleting those 3 keys is the reversible way
-  back). Evidence stays frozen (`backups/garage-meta-forensics/` + the
-  `pre-restore-2026-08-24-meta-wipe` Longhorn snapshot). Independent next act: the ADR-114 rf=3
-  build-out (FU-137, deadline ~08-31). ⚠ watch `lvs pve/data` during the run (68.2% at start).
+  **STILL OPERATOR-OWNED: the `garage repair blocks` hold** — but it now reclaims ≈nothing, because
+  re-adopting the ERT giants re-refs ~47 GB of the 54 GB on the data volume. **DO NOT delete those
+  3 keys to reclaim it (operator ruling, 2026-08-25):** the 2026-07-12 corpus is the stale base the
+  first delta job must run against, and a re-ingest fetches TODAY's register — it moves the window
+  instead of restoring it. Rationale + the ghcr-image-is-not-a-substitute finding now live in
+  `docs/garage.md` §Durability (PR#902); ert-snapshots is no longer tiered cheap-to-lose, which
+  makes FU-137's ~08-31 deadline load-bearing. Verified against the carve: every delta-base input
+  (`latest.json`, the `build/`+`publish/` manifests, 252,354 `parsed/`) is in ert-snapshots and the
+  deployed workflow pins `S3_ARTIFACT_BUCKET=ert-snapshots`, so base resolution never leaves the
+  bucket; nothing in the job reads S3 `LastModified`, so the restore's new mtimes cost no realism.
+  Evidence stays frozen (`backups/garage-meta-forensics/` + the
+  `pre-restore-2026-08-24-meta-wipe` Longhorn snapshot). ⚠ watch `lvs pve/data` during the run
+  (68.2% at start).
   unpark. Acceptance = drift-free re-plan through the two-zone token. ⚠ `dig +short` wraps long
   DS digests — `tr -d ' '` before grepping.
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
