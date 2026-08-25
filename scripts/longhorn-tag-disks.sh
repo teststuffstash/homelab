@@ -12,6 +12,11 @@
 #          partition with). wk-02 left this tier on 2026-08-07 — see the note below.
 #   fast — the ThinkCentre Optane pair (longhorn-register-optane.sh, untouched here).
 #
+# hp-01 carries a SECOND std disk since 2026-08-25 (`hg5d`, a 128G Toshiba HG5d) — this node was
+# the ledger's "the one place where the honest answer is buy a disk" (104% of allocatable, under
+# Longhorn's 25% floor). Talos mounts it at /var/lib/longhorn/hg5d from machines.yaml's
+# `longhorn_disks`; this script is what makes Longhorn aware of it.
+#
 # Safe to run any time; tags on disks with live replicas are metadata-only. Run BEFORE the
 # tofu apply that enables defaultDiskSelector (untagged disks + selector = unschedulable PVCs).
 set -euo pipefail
@@ -37,6 +42,23 @@ tag() { # node disk tags-json
 }
 
 for n in thinkcentre hp-01; do tag "$n" "$(default_disk "$n")" '["std"]'; done
+
+# hp-01's second std disk. Skipped when already registered — re-patching mid disk-sync trips the
+# longhorn validator (same guard as wk-metal-01/mx500 below). storageReserved is 0 on purpose:
+# unlike the default disks this one holds nothing but Longhorn data (no container image store),
+# and the 25% minimal-available floor still applies globally.
+if kubectl -n longhorn-system get nodes.longhorn.io hp-01 -o jsonpath='{.spec.disks.hg5d.path}' 2>/dev/null | grep -q .; then
+  echo "  hp-01/hg5d already registered — skip"
+else
+  kubectl -n longhorn-system patch nodes.longhorn.io hp-01 --type=merge -p '{
+    "spec": {
+      "disks": {
+        "hg5d": {"path":"/var/lib/longhorn/hg5d","allowScheduling":true,"evictionRequested":false,"storageReserved":0,"tags":["std"],"diskType":"filesystem"}
+      }
+    }
+  }' >/dev/null
+  echo "  hp-01/hg5d registered (std)"
+fi
 # thinkcentre's reservation was auto-sized at 30% (35.3G) against a node whose container image
 # store is 4.1G — it was fencing off a third of the disk from a tier that had 10.5G of scheduling
 # room left, which is why nine std replicas sat PENDING with 67G physically free (2026-08-07).

@@ -33,12 +33,19 @@
 # Talos / cluster flags (consumed by tofu):
 #   talos_metal_node  true ⇒ tofu/metal.tf manages this node's machine config (PXE-installed
 #                     bare-metal worker). Requires `install_disk`.
-#   install_disk      target disk for the Talos install (NOT the optane cache)
-#   optane_disks      extra block devices formatted+mounted as Longhorn "fast" disks. Mounted
-#                     UNDER /var/lib/longhorn/ on purpose: longhorn-manager only host-mounts that
-#                     path (Bidirectional propagation), so a disk anywhere else is invisible to
-#                     it. Each becomes /var/lib/longhorn/optane<N>; registered with tag "fast"
-#                     (scripts/longhorn-register-optane.sh + the longhorn-fast StorageClass).
+#   install_disk      target disk for the Talos install (NOT any longhorn_disks entry)
+#   longhorn_disks    extra block devices formatted+mounted as ADDITIONAL Longhorn disks, one
+#                     entry per device: {device, name, tags}. Mounted UNDER /var/lib/longhorn/ on
+#                     purpose: longhorn-manager only host-mounts that path (Bidirectional
+#                     propagation), so a disk anywhere else is invisible to it. Each becomes
+#                     /var/lib/longhorn/<name>, and <name> is ALSO the disk key in the
+#                     node.longhorn.io CR — so renaming one makes Longhorn see a new empty disk
+#                     and declare the old one missing. Never rename an entry that holds replicas.
+#                     `tags` selects the ADR-089 tier (docs/storage-ledger.md); registration is
+#                     scripts/longhorn-tag-disks.sh (std/bulk) or -register-optane.sh (fast).
+#                     ⚠ Prefer a /dev/disk/by-id/wwn-* device here over /dev/sdX: this directive
+#                     PARTITIONS the device, and on a box with two same-size disks a /dev/sdX that
+#                     re-enumerates would format the wrong one (hp-01, 2026-08-25).
 #   pin_hostname      pin the hostname via a HostnameConfig patch (default true). Set false for a
 #                     node that has NOT yet been reinstalled with the pinned config — otherwise a
 #                     plain `tofu apply` would push the hostname change to the *running* node and
@@ -175,7 +182,10 @@ machines:
     # No AVX2 (Pentium G840) — verified via /proc/cpuinfo.
     talos_metal_node: true
     install_disk: /dev/sdb
-    optane_disks: [/dev/nvme0n1, /dev/nvme1n1]
+    longhorn_disks:
+      # names MUST stay optane0/optane1 — they are the live Longhorn disk keys.
+      - { device: /dev/nvme0n1, name: optane0, tags: [fast] }
+      - { device: /dev/nvme1n1, name: optane1, tags: [fast] }
     pin_hostname: true
     notes: >-
       Desktop — highest absolute throughput of the tested boxes, but thirsty.
@@ -206,6 +216,11 @@ machines:
     # No AVX2 — verified via /proc/cpuinfo.
     talos_metal_node: true
     install_disk: /dev/sda
+    longhorn_disks:
+      # 2nd 128GB SATA SSD added 2026-08-25 to relieve the std tier — hp-01 is the node
+      # docs/storage-ledger.md calls the one place where the honest answer is buy a disk.
+      # by-id, NOT /dev/sdb: both disks are 128GB SATA and this directive partitions.
+      - { device: /dev/disk/by-id/wwn-0x500080db1007e129, name: hg5d, tags: [std] }
     notes: On the hp plug (ex-konditsioneer NOUS A1, renamed 2026-08-18) — power measurable as sensor.plug_hp_power; switch.tuyalocal_hp can cycle it, but AC-restore is flaky so WoL is the recovery path.
 
   - name: wk-metal-01
