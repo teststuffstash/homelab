@@ -6,218 +6,71 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
+## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ NEXT SESSION = the board-sweep → fu-sweep → docs-cleanup PIPELINE (operator plan,
-  2026-08-25): ONE corpus session running all three (board-sweep skill Hard rule 1 + §Pipeline
-  amortization), then S5 corpus-diet ×2 sessions** (split scope: the sweep-independent trim
-  first, ~25–30k off — the per-file table is in the 2026-08-25 conversation/TICK-LOG entry;
-  the post-flip residue rides the legacy sweep). The S5 parent is authored by the pipeline
-  session at its close (author-at-last-moment). Pipeline inputs waiting: the retro r1
-  process-change batch (PR#918's six, two operator-direct: `.agents/review.md` F3 bullet +
-  the F1 brief clause), the small-findings list in the TICK-LOG entry, #887/#888/#851/#874/#875
-  strays, the #907-era triage tail.
-- **⚑ G-A (#775) endgame RULED (2026-08-25, all recorded — the graph need not be read):**
-  flip sequencing = **A** (at/after the ~2026-09-03 PR#715 paid-flash revert; the checkpoint
-  mints the flip child then = the M11 ladder promotion into the served path + env/claim flips;
-  acceptance = zero `chain-exhausted` on subscription-only classes + belts quiet). FU-095/
-  FU-181 carry status; chainless-redesign carries the Go posture ruling + the sweep trap.
-  **VERIFY (first session after ArgoCD syncs b535ea0):** `decisions` gains dispatch-class
-  rows served `claude/sonnet`, zero new `chain-exhausted` — the chain_head fix live-proven.
-  #778's residue = the organic canary proof only (Go cells DONE both, zen/pickle probed).
-- **⚑ #628 attention-layer program (operator ratified 2026-08-24, seat sitting):** leg 5 =
-  homelab#892 CLOSED via PR#894 2026-08-25 — the WIRING half rides #913 (queued; PR#915 in its
-  review cycle — batch-per-tick push + first-transition timestamps, the #894 gate-read
-  findings). Leg 6 = SEAT-LANE after #913 (board webservice page +
-  goal_graph trees with links; carries the bucket/hostname provisioning). Leg 7 after 6
-  (meta-events BOARD source, needs-meta arms retire). Design record: #628 body + #892;
-  companion defect agent-runtime#87 (finalize weak-link check — the #833 8h hold's cause) QUEUED.
+- **⚑ NEXT SESSION = the S5 [stint](chainless-redesign.md) (operator, 2026-08-25): corpus diet — doc-heat + measured
+  trimming (FU-164 is the instrument), post-closure by design.** The 2026-08-25 docs-cleanup
+  deliberately left for it: the **29 remaining STALE-ARCHIVE ids** (the lint list) — most of
+  their living refs are PROVENANCE names in code comments/docs (FU-088 ×51, FU-069 ×26,
+  FU-057 ×20 …), the same class as the exempt TICK-LOG/ADR refs, so the scrub needs the
+  **name-anchor ruling** (operator: exempt provenance refs / keep permanent one-line stubs /
+  scrub-and-rename) before any mass edit; plus the deep whole-repo comb.
 
-- **⚑ [Stint](chainless-redesign.md) S7 (#741) LAUNCHED 2026-08-23 (operator go + latch clean).** Session 1 built all
-  three in-order children: #743 exporter edge MERGED (PR#757 — mergeStateStatus on the walk +
-  maybe_dispatch_behind + UPDATE_PR_WEBHOOK_URL env); #742 script+replay-table (PR#755) and
-  #744 manifests (PR#758, bring-up guard covers merge-order) mid-cycle at last write — finish
-  their gate reads if parked. #746 QUEUED to the cluster loop (labels + doorbell rung). **#745
-  cutover stays PARKED: un-park after a few days of the in-cluster leg observed servicing BOTH
-  paths** — read `update-pr-edge-*` workflow logs for edge-serviced updates and the cron's
-  CRON-SERVICED lines (silence there = the edge carries the load), and `gh run list` on the
-  callers showing the hosted runs idle; then #745 deletes callers/reusable/org-secrets + FSM
-  anchor repoint. ⚠ EVIDENCE READ CHANGED 2026-08-23 ~15:10Z: the private-repo hosted minutes
-  ran OUT (3000/3000, overage OFF per #698) — every hosted caller run on the 4 private repos
-  fails at job start until Sep-1, so the in-cluster leg is their SOLE server now; the un-park
-  read becomes "no BEHIND stalls on private repos over a few days" (hosted-idle is no longer
-  evidence, it is forced). Silence `a3628730` (GithubWorkflowRunFailed × update-pr-branch, ends
-  Sep-1) mutes the failure noise — sibling of `5400ed94…` (both self-expire 2026-09-01). Label-identity decision recorded in-code: merge App stays issues-less,
-  UPDATER_LABEL_TOKEN=coordinator-git.
+- **⚑ G-B #818 WEDGED on homelab#933 (found + filed by the 2026-08-25 sweep, queued):** all 5
+  originals closed, 1 store finding, but the goal-checkpoint's child-set-complete trigger
+  counts the OPEN post-launch bucket (#840) as an open child — assembly can never fire for a
+  goal that harvested pre-assembly. The fixed clause emits the checkpoint on its first scan;
+  then the morning-read items stand (assembly PR → codeowner tax → `probe-platform` first
+  tick — the platform prober enablement rides the assembly, FU-102).
 
-- **⚑ PICKUP (2026-08-20 ~06:00Z wind-down, night session closed on operator feedback — see the
-  session-winddown memory):** in flight, all machine-owned: PR#705 (fixes #674, STRUCK_MODEL
-  chain-id) + PR#704 (fixes #676, poll_forever fixture) mid-cycle — they will park bot-approved
-  at the codeowner gate for the NEXT corpus session's read; #701 + #707 queued behind them.
-  Watch items: the hourly iac-sentinel backstop's CRON-SERVICED detector (silence over weeks =
-  retire the cron; any firing names a dead edge); #459 re-read `changes(agent_dispatch_cron_
-  woken_timestamp[24h])` post-#669/#672/#679 before hunting emitters; hosted-minutes ruling on
-  #698 = tolerated updater stalls until Sep-1 (overage stays OFF). S2 DONE (stint #661 closed,
-  #354 acceptance PASSED); S3 DONE (FU-176 archived + sentinel push/tool-error/edge chain);
-  next stints: S4, S5 (ROADMAP work map).
+- **⚑ G-A #775 post-launch, 2 open descendants:** #778 (operator — Go posture RULED 2026-08-25:
+  janitorial/failover permanently, P4 de-gated from Sep-13, big-pickle shadow arm = #923
+  queued; FU-181 holds the post-reset hygiene legs) + #787 (container). **The FU-095 flip
+  child is minted at the ~2026-09-03 paid-flash revert** (sequencing ruled A, 2026-08-25 —
+  acceptance: zero chain-exhausted defers on subscription-only classes).
 
-- **⚑ FU-058 stint DONE (2026-08-19, one session — #587 at final closeout; closes when docs
-  PR#624 lands). WATCH: the Mon 2026-08-24 05:00 UTC retro cron = the platform series' first
-  unattended fire, the build wave's organic acceptance** (full report per cell, content floor
-  holding, distinct files for identical cells, no false RetroReportOverdue). Post-fire read =
-  next session's first item; a failed fire is a defect on FU-058's Next.
-- **⚑ Board close-out afternoon (2026-08-19, operator-driven): the ring-heavy day's residue.**
-  Landed: #631 (exit-3 absorption + FU-121 drain — the famine class fix; watch the Failed pile
-  STOP growing and TTL out by ~Aug-22), #626 (blind-ride abort), #634+#633 (marker anchoring +
-  env-card rule), #632 (meta-events NEWISSUE source — per-repo REST walk, act rule: platform
-  repos only), #628 re-scoped as the throughput CONTAINER (legs #636 queued/#637 filed; leg 3 =
-  generalize agent-goals machinery, operator pointer in body). At session end: #641(#635)+#642(#639)
-  merged via gate reads; #643 (fixes #629 — strike model field) in its review cycle, #640
-  riding, #636 queued behind it — all machine-owned; the next session's gate reads finish them. Lineage: #629→#622→#607→
-  #600→#420 now fully native (#607's missing edge was the break). GithubRateLimitLow +
-  AgentRunInfraDeathBurst today = demand bursts, both self-resolved/accounted.
-- **⚑ Go rail EXHAUSTED for the month (console 100%/30d, resets Sep-13 ~11:30Z; weekly 99% →
-  Mon 00Z).** The 429→same-round-haiku belt is LIVE and organically proven (#607→PR#615); latch
-  persistence landed (#618→#621) AFTER the first fire — **VERIFIED 2026-08-23 ~13:47Z: the
-  PR#784 proxy roll came and `router_go_capacity_latched` stayed 1 on the fresh pod, no new
-  429 burned** (the GoCapacityLatched ALERT's `for:` clock resets on a roll — cosmetic
-  firing→pending flap, the deploy-silences-`for:` class; gauge is the truth). #420 + #540 CLOSED (operator, 2026-08-19) — the post-reset readout
-  (parity on a clean window, the 5h refusal shape, latch-survives-roll) is **FU-181**, actionable
-  after Sep-13.
-- **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
-  buildout → then stacks.** The forward plan lives in **ROADMAP §The platform work map**
-  (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
-- **⚑ G-B LAUNCHED OVERNIGHT-AUTONOMOUS 2026-08-23 ~20:48Z — the v1.2 cluster-decompose proof.
-  MORNING READ (after the retro post-fire read): homelab#818.** Goal #818 (assurance; Budget 25,
-  `Base: goal/818-assurance` — branch cut+protected, ci triggers on goal/** since the same-day
-  trigger fix), decomposing IN-CLUSTER on **fable** via the routed `goal-decompose` class
-  (chain_head PR#813; smoke FABLE-OK; decompose pod Running clean at wind-down). What the
-  morning verifies: children authored+queued with inherited Base + corpus grounding named ·
-  rides into the protected goal branch · FU-143 C6 closing goal-merges · findings store +
-  checkpoints · assembly PR parked codeowner-gated. **Launch-night defect trail (all fixed or
-  filed):** queued Goals were ADR-097-held as exclusive (#818 carries the replay-exempt no-op
-  `Touches:` as the ruled workaround; structural fix = #822, queued, + 3 findings on its
-  thread: unit-fast-path is reviewer-shaped only · priority starvation by the self-regenerating
-  changes-requested stream · the PR#801 adoption passed the FULL routed id to `claude --model`
-  — decompose DOA, fixed PR#824, its replay pin rides #822's wave). ⚠ needs-meta source
-  flapped twice (empty-read → clear+re-emit burst ~19:09/20:21) — a hold-on-failed-read gap in
-  `agents/meta-events.sh`'s NEEDSMETA arm, next session's 5-min fix. #818's body-vs-Touches
-  lint flag (#821's new belt) is the workaround's expected noise. Loki incident closed
-  (quota 16Gi, recovered+verified); retention decision parked on #811 for TOMORROW.
-- **⚑ G-A DAY-1 CLOSE (launched + 5 children DONE in one session, 2026-08-23; retro post-fire
-  read Mon 08-24 05:00Z stays the next session's FIRST item).** Goal = **homelab#775**
-  (`Budget: 17` = the loaded OR credit; #278 shape: master-lane children, jail-decomposed,
-  never queued; bucket #787 auto-created). DONE: #776 (carrier, PR#784), agent-runtime#81
-  (PR#82 + #785 pin), #777 (accounting, PR#786), #782 (wiring, PR#788 — a REAL FU-088
-  dual-rail regression caught+fixed in review), #778's pilot half, **#779 capacity doorbell
-  (PR#789 gate-read + merged 2026-08-23 16:26Z; proxy rolled, Go latch held 1 through the roll —
-  organic doorbell wake on a real latch clear stays a soak watch)**, PR#794 (#778 salvage,
-  merged). IN CYCLE: PR#793 (ADR-107-addendum docs — round-3 restructure pushed 2026-08-23
-  ~16:29Z: the reviewer caught the addendum reversing decision 3 against adr.md rule 2, so it is
-  now **ADR-112** + Superseded-by marker on ADR-107 (3); awaiting re-review, self-merges on bot
-  approval) · #516/PR#797 + #792/PR#800 in machine fix rounds (changes-requested at head —
-  cluster loop owns; gate reads land when they park). QUEUED: #780, #781 (wiring), #791 (proxy
-  OR-translation); #778 residue re-rides the normal lane. **HARNESS MATRIX ruling (operator,
-  in-session): claude+opencode full-support, scout probes 3 harnesses/candidate with a ~1h/2h
-  retry ladder — recorded as ADR-112 (PR#793 round 3), not an ADR-107 addendum.** **Fan-out pilot RAN +
-  CLOSED (operator): findings ledger = the #778 thread** (recipe path dispatcher-side ·
-  rounds-as-arms · ephemeral-tier toleration needed · FU-042 wedge on pending arms · opencode
-  bare `-m` = the dead-canary root cause (A/B-proven) · nemotron fabricates delivery (salvaged
-  PR#794) · citation-forced briefs for cheap reviewers · time-delta = fan-out viable).
-  OPERATOR-PENDING: the #783 strike ruling (memo posted: proposal = retire the env) · the A5
-  second-reviewer-App question (evidence route = shadow re-reviews, `--rail` flag on
-  re-review.sh unbuilt). Harvest strays #795/#796 await the goal checkpoint. laguna r4 pod was
-  left running to natural terminal (~$0, 4h key). **OR-budget ruling stands (paid-flash
-  through G-A, revert ~09-03/fixup-end/depletion); Go latched til Sep-13 (roll-persistence
-  VERIFIED).** claude-jail#2 filed: mono per-session env block + wallet-reach + forgejo SSH.
-- **⚑ GARAGE TIER-3 (widened carve): DONE + VERIFIED 2026-08-25 (homelab#884).** The whole store
-  carved (956,600 objects, 0 orphan versions; bucket_alias table recovered) and restored:
-  **543,257 of 543,450 verified exact** on size+ETag over the LAN path. `ert-snapshots` is back at
-  **252,366 objects / 60.4 GB — exactly docs/garage.md's independent 2026-08-04 figure**, all three
-  giants included (42 GB `xml.2026.zip` reproduced its exact multipart ETag). Not restored, all
-  accounted: 884 blocks gone pre-wipe · 214 `oracle-specs` at its 1.0 GiB quota (operator: not
-  important) · 189 loki objects expired by loki's own 30-day retention right after restore · 4
-  transient 502s re-checked ok. Detail: TICK-LOG 2026-08-25 + incident §Tier-3. Pod + temp key
-  deleted; evidence still frozen in `backups/garage-meta-forensics/`.
-  **OPERATOR-OWNED, now cheap:** the `garage repair blocks` hold can come off — refcounted blocks
-  (295,148) now cover the block files on disk (294,778), so it reclaims ≈nothing. **DO NOT delete
-  the 3 ERT giants to reclaim space** — the 2026-07-12 corpus is the stale base the first delta job
-  needs (operator, 2026-08-25; rationale in docs/garage.md §Durability).
-  ⚠ **Live storage debt from the recovery:** `meta-garage-0` is **30Gi with numberOfReplicas 1
-  (wk-02)** and `dataLocality: disabled` — the `std` tier cannot host a grown 2-replica meta volume
-  (hp-01 is below Longhorn's 25% floor and rejects any expansion). Redundancy returns with the
-  ADR-114 build-out, which makes FU-137's ~08-31 deadline load-bearing. **FU-184**: the metadata
-  auto-snapshot had never worked (161 empty dirs, `MDB_INCOMPATIBLE`) and the DR recipe trusted it
-  — env rebuilt the same evening, see the FU-184 bullet below.
-  ⚠ Two traps the tooling now guards, both of which cost something: restore ORDER sizes the metadata
-  DB (page order filled the volume and took Garage down for an hour), and **aborting a multipart
-  upload destroys the orphan blocks it read** (cost 3,952 blocks of corpus.sqlite, since rebuilt
-  byte-exact from the intact OCI image). Never run `garage bucket cleanup-incomplete-uploads`
-  against a bucket still being recovered.
+- **⚑ S7 (#741): #745 cutover un-park read executes at a sweep ≥2026-08-26** — hosted callers
+  on the 4 private repos fail until Sep-1 (minutes exhausted, overage OFF), so the read is
+  "no BEHIND stalls on private repos over a few days" (currently vacuously clean — zero open
+  PRs there). Silences `a3628730` + `5400ed94…` self-expire 2026-09-01. **S4 #762 close also
+  armed, executes ≥08-26** (same calendar as #420's recheck).
 
-- **⚑ FU-184 CLOSED 2026-08-25 (archived) — Garage's metadata env rebuilt, snapshot belt proven.**
-  `MDB_CP_COMPACT` refuses a page-leaked env by arithmetic; the 08-24 torn write left 4.7M pages
-  for ~550k live ones, plus 8 freelist records stranded in the MAIN db (which is also what broke
-  `convert-db` — and it rejects lmdb→lmdb anyway, so the recorded order was wrong twice over).
-  Rebuilt by insertion (`scripts/garage-forensics/lmdb-rebuild.py`, PR#911): **18.10 GiB → 1.57
-  GiB**, 67 trees / 4,279,175 entries exact, buckets unchanged, meta volume 62% → 6%. Limit
-  512Mi→2Gi (a healthy env snapshots in ~15 s, and the first fast one OOM-killed garage-0).
-  **Acceptance PASSED same day** — a snapshot completed, 4,280,149 entries, no OOM, restarts=0.
-  Account: `docs/garage.md` §Durability. Residue for a later session: delete
-  `backups/garage-meta-20260825-prerebuild/` (20 GB) after ~2026-09-01; **PR#912 riding**
-  (storage-ledger: Garage's exporter is already live on :3903 with 48 families incl. `table_size`
-  and `garage_local_disk_avail` — only the Service port + ServiceMonitor are missing, FU-093).
-  ⚠ A parallel jail session merged #910 (same diagnosis, docs only) at 15:12Z mid-run; the two
-  accounts were merged on rebase rather than one clobbering the other — watch for that pattern.
+- **⚑ Retro (FU-058): r1 DELIVERED 2026-08-25** (PR#918; the batch = #927–#929 queued, #930
+  SEAT lane: the DELIM-FIELD transport-lint signature — `scripts/` deny path; #931 OPERATOR
+  lane: the `.agents/` pair). #932 queued (the silent success-push belt). **Next unattended
+  Mon 08-31 05:00Z fire = the clean acceptance.**
 
-- **⚑ STORAGE, 2026-08-25 evening — hp-01 has a second disk, the pool trim has a schedule.**
-  hp-01: +119.2G in `std` (`hg5d`, WWID-pinned; PR#920). The `optane_disks` field is now
-  `longhorn_disks` ({device,name,tags}) — thinkcentre's names must stay optane0/optane1 forever,
-  they are its live Longhorn disk keys. pve thin pool 78.72% → **62.99%** via the new daily
-  per-VM fstrim CronJob (PR#925 riding, `argocd/resources/node-fstrim/`). **Residue:**
-  (a) `install_disk: /dev/sda` on hp-01 is still a NAME with two identical 128G SATA SSDs in the
-  box — repin to WWID, FU-076's neighbourhood; (b) ci-runner-01 shares the pool, is not a k8s
-  node, and its own `fstrim.timer` is assumed-not-verified; (c) a Longhorn `filesystem-trim`
-  RecurringJob is the unbuilt second layer (node fstrim cannot reclaim inside replica sparse
-  files); (d) the pool ITSELF is still unmetered — no pve exporter, so the new alerts prove the
-  belt runs, not that it suffices. All four on FU-093/the ledger.
-  **Operator direction: ADR-114's remaining capacity = cheap boxes with their own storage**, not
-  more disks in pve (its SATA ports are a firmware setting — possible, but it costs a
-  whole-cluster BIOS outage).
+- **⚑ GARAGE, operator-owned residue (recovery COMPLETE + env rebuilt, #884/FU-184 archived):**
+  the `garage repair blocks` hold can come off (reclaims ≈nothing now) · **do NOT delete the 3
+  ERT giants** (the 2026-07-12 corpus is the first delta job's stale base — rationale in
+  docs/garage.md §Durability) · delete `backups/garage-meta-20260825-prerebuild/` (20 GB) +
+  `backups/garage-meta-forensics/` evidence after ~2026-09-01 · **meta volume rides rf=1 on
+  wk-02** — redundancy returns with the ADR-114 build-out, FU-137's ~08-31 deadline is
+  load-bearing.
 
-- **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
-  for a few days, revert to 0 if no win; the residual setup cost is homelab#518.
-- **Small live residue (compressed 2026-08-19):** wk-metal-04
-  `kubernetes_labels.longhorn_bulk_zone` field-manager CONFLICT kills FULL tofu applies
-  (targeted fine) — chase before the next broad apply · proxy zen leg live-smoke still unrun
-  (`opencode/nemotron-3-ultra-free` through the in-cluster proxy) · docs-cleanup residue legs:
-  FU-001 archive-expiry ref scrub (overdue), the openrouter-proxy FU-021 comment repoint (rides
-  the next functional proxy change), the five EXPIRY-HELD archive ids ruling · stack leftovers:
-  circles#77 ci-red triage, oracle-fleet#259 rework per the seat read, circles-iac deploy-bump
-  generator fix before the next circles build (circles-iac#71/#68).
-- **Soaks** (each owned by an FU/issue — this line is only the calendar): platform-retro first unattended fire Mon 08-24 05:00Z (FU-058 acceptance) · argo second backlog
-  sweep ~2026-08-25 (#521) · minRunners readout · iac-sentinel first real RED + FU-176 ·
-  router shadow/elastic cells (FU-095, PR#408) · FU-148 acceptance · FU-149 datum ~08-20 ·
-  or-op#34 first daily-429 · renovate-approve one-approval-per-head (#114) · stint
-  quiet-window closes (rule 2026-08-20, chainless §The jail stint): #420 (waits on #710) +
-  #711 — close at a sweep ≥72h after each tree's last event · **platform workers on PAID OR
-  flash (PR#715, operator 2026-08-20 — fixup window): REVERT to claude/haiku primary
-  ~2026-09-03 / fixup-wave end / OR depletion, whichever first** (claim comment carries the
-  full record; Go re-flip stays FU-181).
+- **⚑ FU-168 soak read FAILED 2026-08-25:** cron-woken dispatches persist
+  (`changes(agent_dispatch_cron_woken_timestamp[24h])` = 2 and 5) — #459 fires legitimately,
+  a dead doorbell edge remains. The emitter hunt (the scan states wake source per dispatch)
+  is the next concrete action, tracked on #459 + FU-168.
 
-- **⚑ S4 STINT #762: TREE EMPTY 2026-08-23 ~11:52Z, closeout 1 RUN — close ARMED, executes at
-  a sweep ≥2026-08-26** (same calendar as #420's recheck). All 5 originals + 2 sprouts closed
-  in ONE session (vs `Size: 2 sessions`); FU-117 + FU-163 archived. The jail composition is
-  LIVE both classes (claude-jail#1; operator ran `docker compose build` — sessions in
-  containers started PRE-merge still predate the composed seat card until restarted, this one
-  included). Fleet CLAUDE.md slim-down: inventoried + tiered on claude-jail#1, executable on
-  the operator's word (tier 1+2 pointer drops now unblocked; oracle-fleet's tier-3 moves ride
-  the stack env card, already live).
-  S6 #716 + S3 #711 CLOSED this session (quiet windows; #716's Container-findings disposed via
-  PR#761, deploy verified in-cluster). #420 open (#575 closed 08-23 09:50Z reset its window —
-  ≥08-26). Remaining S6 acceptance watches: unbound-sprout belt quiet; responder `Cause:`
-  organic use; Mon 08-24 05:00Z retro fire (next session's first read). **S5 deliberately
-  LAST; next stint queue: S7's #745 cutover un-park read (edge-serviced evidence).**
+- **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — readout pending; revert to
+  0 if no win; residual setup cost = homelab#518 (its promtool child #936 queued 2026-08-25:
+  loop-health fixture = 107.6s of the 130s lint step).
+- **Small live residue:** wk-metal-04 `kubernetes_labels.longhorn_bulk_zone` field-manager
+  CONFLICT kills FULL tofu applies (targeted fine) — chase before the next broad apply ·
+  proxy zen leg live-smoke still unrun (`opencode/nemotron-3-ultra-free` through the
+  in-cluster proxy) · the openrouter-proxy FU-021 comment repoint rides the next functional
+  proxy change · hp-01 `install_disk: /dev/sda` is still a NAME with two identical disks
+  (repin to WWID, FU-076's neighbourhood) · stack leftovers: circles#77 ci-red triage,
+  oracle-fleet#259 rework per the seat read, circles-iac deploy-bump generator fix before
+  the next circles build (circles-iac#71/#68).
+- **Soaks** (each owned by an FU/issue — this line is only the calendar): retro Mon 08-31
+  unattended fire (FU-058 clean acceptance) · argo second backlog sweep (#521, ~due) ·
+  minRunners readout · FU-148 first organic environmental-red retry · or-op#34 first
+  daily-429 · renovate-approve one-approval-per-head (#114) · #420 + #762 closes ≥08-26 ·
+  CiDispatchStalled quiet-month window opens ~09-11 (FU-150) · **paid-flash REVERT
+  ~2026-09-03 / fixup-end / OR depletion, whichever first** (PR#715; the claim comment
+  carries the record; the FU-095 flip child mints at the revert; Go re-flip = FU-181).
 
 ## Durable warnings — EVICTED (S4 #765, 2026-08-23)
 

@@ -8,6 +8,11 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-149** *(archived 2026-08-25)* — **Responder daily budget = 12: the soak answered LEAVE IT.**
+  The 14d read (daily `max(responder_triage_sessions_today)`): ordinary days 0–6, the cap bound
+  only on genuine storm days (08-18 the board-clearing/ARC day = 12, 08-24 the pve/Garage
+  incident = 11) — which is what a storm cap is for. `RESPONDER_DAILY_MAX` stays 12; a non-storm
+  exhaustion re-opens this as a new datum, not this id.
 - **FU-184** — **Garage's metadata auto-snapshot never worked; env rebuilt.** `MDB_CP_COMPACT`
   refuses a page-leaked env by arithmetic (mdb.c "page leak or corrupt DB"), and the 08-24 torn
   write left 4,745,586 pages for ~550k live ones — plus 8 freelist records stranded in the main db,
@@ -604,25 +609,6 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   (`synchronization.semaphores`) on the review-reflex/coordinator CronWorkflows + the `review`
   WorkflowTemplate; over-cap submissions queue "waiting for lock" instead of deferring (Argo sees
   only Argo-run workflows — the latch stays ground truth; per-stack scoping = FU-080's problem).
-- **FU-026** *(archived 2026-07-17)* — **Coordinator graduated off the hand-driven CronJob+bash
-  substrate → Argo Workflows + Events (ADR-093, Accepted 2026-07-17; the ADR marks this
-  discharged by Phase 1).** Live: all four reflexes are Argo CronWorkflows
-  (`agents/coordinator/reflexes-argo.yaml` — the k8s CronJob manifests are deleted, the */15
-  review CronWorkflow *is* the rollback backstop), the review edge-trigger Sensor is active
-  (exporter POSTs reviewable PRs incl. re-review rounds → `review-argo.yaml`), stacks opt in via
-  the AgentStack `argo.enabled` render, and the coordinator reflex was **unsuspended 2026-07-17**
-  (meta-7) gated per-stack by the FU-080 `coordinator.enabled` knob. Remainder lives elsewhere:
-  per-stack loop move (creds ref-rail + `<stack>-agents` ns CronWorkflows) = **FU-080**; oracle
-  ingestion DAGs = ADR-093 Phase 2 (oracle-fleet's ING-RT-STEP-CONTRACTS, unbuilt by design).
-
-- **FU-083** *(archived 2026-07-17)* — **agent-finalize no longer misclassifies raw-command adhoc
-  rides as failed.** Adhoc tasks (not `issue-*`/`pr-*`) with `harness_exit==0` now classify as
-  clean instead of `failed/no-output` — the adhoc branch sits after every failure signature, so
-  fix rides are unaffected; review finding added `ci_passed is not False` to the clean gate.
-  Shipped agent-runtime#16 (merged 2026-07-16), deployed via deploy-pin
-  `agent-base:2026.7.16-g55879b292003` (homelab#30). Not yet re-validated by a live adhoc ride —
-  next `--run`-style verification ride doubles as the check.
-
 - **FU-069** *(archived 2026-07-17)* — **Anomaly protocol propagated to every role.** The
   `agent/error` breaker label + `AGENT_ERROR:` comment convention (live for reviews since
   2026-07-12) now also covers: (a) the coordinator scan (excludes `agent/error`, reports
@@ -772,16 +758,6 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   (separate, untouched). `terraform.tfvars` stays the source tofu reads (per `scripts/tf.sh`); a
   recovery copy of the value is in the wallet as `pve-api-token-tofu`.
 
-- **FU-002** *(archived 2026-07-15)* — **Jail GitHub PAT out of remote URLs → git credential
-  helper.** Mono jail: `tools/jail-entrypoint.sh` writes an ephemeral `~/.git-credentials` from
-  `GH_TOKEN` + injects `credential.helper store` via `GIT_CONFIG_*` env (`~/.gitconfig` is a busy
-  bind-mount → EBUSY); guarded on `GH_TOKEN` so oracle's stack jail is a no-op. All clones scrubbed
-  to plain URLs (`new-project.md` Kind 2 fixed); leaked `github_pat_11AALWBOQ0…` rotated 2026-07-15.
-  Live-verified after a real jail restart: plain-URL pushes to homelab + claude-jail via the store.
-  Gotchas: the parent `/workspace` clone itself was missed by the first scrub; and a push that
-  fails 401 (e.g. a leftover stale embedded token) makes git *erase* the matching store entry —
-  auth then stays broken until the next jail restart rewrites the file.
-
 - **FU-078** *(archived 2026-07-15)* — **opnsense-acme role signs + polls after create.** The role
   no longer stops at the cert SPEC: it now re-lists certs, signs any spec'd cert with
   `statusCode != "200"` (`POST acmeclient/certificates/sign/<uuid>` — catches fresh creates AND
@@ -792,15 +768,6 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   Shipped alongside ADR-092 (its wildcard cert issues through this same path). Jinja filters
   validated against sample data; live-verification rides the ADR-092 rollout (the `*.oracle`
   wildcard is the first cert through the new sign+poll path).
-
-- **FU-008** *(archived 2026-07-14)* — **Forgejo repo/org bootstrap: decided → keep imperative.**
-  Forgejo is deliberately *not* in homelab's GitHub IaC — the standing mechanism is `new-project.md`
-  Kind 3 (org via API, repo via `tea`, push over SSH with the dedicated `~/.claude/homelab-forgejo/`
-  key; this is how `sleep-lab` was made). FU-008's "one-shot token, since deleted" premise is stale:
-  the creds are now durable in KeePass — `forgejo-api-token`, `forgejo-rasmus-password`,
-  `forgejo-gpg-keyid` (`scripts/keepass-init.sh`) + the `forgejo-keys` SSH/GPG attachments
-  (`scripts/wallet-files.sh`). No gitea/forgejo TF provider (would duplicate the recipe + contradict
-  the design). Exercised: moved `rasmus/{therapy,car-fleet,presentations}` onto Forgejo this way.
 
 - **FU-042** *(archived 2026-07-14)* — **Deterministic dispatch pre-flight** (af8e2e1, 2026-07-09):
   `agent-session.sh` refuses dispatch on open-linked-PR (unless `--work-branch` resumes that PR's
@@ -819,13 +786,6 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   09cd3e0), then superseded by ADR-087 broker tokens default-on. Acceptance rounds ran on
   oracle-fleet#7/#8 (not #1 as originally planned — #1's walls were the evidence, not the venue).
 
-- **FU-065** *(archived 2026-07-14)* — **In-sandbox test clusters: SUPERSEDED by `fixer.docker`**
-  (2026-07-14). The item's endgame — "test-cluster tier as a per-stack AgentStack policy field" —
-  shipped as the docker knob: kind/k3d inside a kata microVM ride, proven on all 3 laptops
-  (docs/spikes/kata-ci-gate.md). The kata runtime made the originally-ruled-out
-  kind-in-a-pod path the winner; rung 1 (envtest+chainsaw, unprivileged in-pod) stays available
-  repo-side for API-only operators without any platform work; rung 2 (vcluster) dropped.
-
 - **FU-074** *(archived 2026-07-14)* — **k3d/kind-in-kata acceptance: SOLVED, repeatable.**
   Root cause of all post-reinstall hangs: kata guests lack `/dev/kmsg` and kubelet (cadvisor)
   hard-requires it — k3s died *after* its apiserver was up, so k3d saw only a silent log-stream
@@ -836,16 +796,6 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   kind journal wins for postmortems) in `docs/spikes/kata-ci-gate.md`. Reinstall-mystery re-check
   split out as FU-076.
 
-- **FU-075** *(archived 2026-07-14)* — **WireGuard endpoint freshness: ddclient on OPNsense**
-  (chosen over the Telia static-IP fee). New `opnsense-ddclient` role: os-ddclient plugin
-  (ensure-installed in the play), native backend, Cloudflare service, `checkip: if`/wan (public
-  IP, no external lookup), credential = the SAME zone DNS token ACME holds (no new secret).
-  Acceptance: record broken to `192.0.2.1` via CF API -> cache cleared -> ddclient PATCHed it back
-  to the WAN IP. **Gotchas:** plugin API namespace is `dyndns`, NOT `ddclient`; plugin installs
-  are refused until the base is current ("Installation out of date" -> updated 26.1.8->26.1.11_6,
-  no reboot needed despite the status_msg claiming so); ddclient only writes when the WAN IP
-  differs from its *cached* `current_ip` -- to force a write, clear `current_ip` via
-  `accounts/setItem` then `service/reconfigure` (recipe in runbook).
 - **FU-071** *(archived 2026-07-13)* — **All 8 legacy HAProxy VIPs migrated `192.168.2.x` →
   `192.168.3.0/24`** (ADR-088; last octet mirrors the backend `40.x`). Zero client blip via
   temporary dual-binds over the 3600s Unbound-TTL window, then trimmed; stale aliases/overrides
