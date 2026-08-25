@@ -114,18 +114,7 @@ six OVERSIZE items pointer-ized into
       **Next (oracle-prod-deadline-bound, ~2026-08-31):** the build-out — garage rf=3 migration
       (local XFS, wk-metal-01/04 + wk-02 interim), CNPG replica-1 + required zone anti-affinity,
       backup CronJob. Offsite stays parked behind oracle/idp prod. Relates FU-013, FU-012, ADR-031.
-      ⚠ meta volume is **1 replica (wk-02) since 2026-08-25**; the "no `std` disk fits a grown 2nd"
-      blocker LIFTED that evening — the FU-184 rebuild left it 1.6 GiB used of 30Gi (6%).
-- [ ] **FU-184** — **Garage's metadata auto-snapshot has never worked: POINTER.** The
-      `metadata_auto_snapshot_interval = 6h` belt installed as the 2026-08-24 wipe's durability fix
-      produced **zero** usable snapshots — 161 empty dirs, `MDB_INCOMPATIBLE` every attempt — and
-      [`garage.md`](garage.md) §Durability's DR recipe depended on them. Cause, the two `convert-db`
-      dead ends, and the rebuild: that doc's §Durability block. **Env REBUILT 2026-08-25**
-      (`scripts/garage-forensics/lmdb-rebuild.py`, PR#911): 18.10 GiB → 1.57 GiB, 67 trees /
-      4,279,175 entries exact, buckets unchanged; meta volume 62% → 6%, which widens FU-137's
-      replica options. **Next:** the acceptance soak — one *auto* snapshot completing on the new
-      2Gi limit (the manual trigger OOM-killed the container at 512Mi), carved with `lmdb-carve.py`
-      to the live object count. Relates FU-137, ADR-114.
+      ⚠ meta volume is **1 replica (wk-02)**; the "no `std` disk fits a 2nd" blocker LIFTED 08-25 — the rebuild left it at 6%.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
