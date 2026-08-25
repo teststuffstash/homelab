@@ -5133,3 +5133,37 @@ first live ADR-110 maintenance session before the ADR existed.
   ">80% alert". ⚠ It would NOT have helped on the day: Prometheus was pinned to wk-01 and dark
   14:18→15:45 while the wipe was 15:31 — every scraped signal shared fate with the failure.
   Upstream's Grafana dashboard is request/error/queue panels and predates `table_size`.
+
+## 2026-08-25 (evening, cont.) — hp-01 gets a second disk; the thin-pool trim gets a schedule
+
+- **Link survey (operator ask — "did I knock something out again?"):** all six metal NICs at
+  1000/Full including wk-metal-02. The four pve VMs report `speed=-` because virtio NICs have no
+  PHY — normal, not a fault. Worth remembering as a false-positive shape for this check.
+- **hp-01 second Longhorn disk (PR#920).** Drained + `talosctl shutdown` (cordon alone moves
+  nothing, and hp-01 was carrying ArgoCD, both Argo controllers, Alertmanager, Crossplane, ESO and
+  **2 of 3 eventbus JetStream replicas** — a hard power-off would have taken quorum with it).
+  ⚠ Longhorn's `node-drain-policy: block-if-contains-last-replica` blocks the drain via the
+  instance-manager PDB; relaxing it to `allow-if-replica-is-stopped` did NOT help (12 replicas of
+  ATTACHED volumes were running, and the PDB protects those regardless of policy). The working
+  move for short maintenance is to drain workloads and leave the instance-manager alone
+  (`--pod-selector='longhorn.io/component!=instance-manager'`) — evicting it would rebuild 14
+  replicas for a 15-minute disk swap. Policy restored.
+- The disk arrived carrying a **bootable Windows install** (MBR + 350M "System Reserved" NTFS +
+  118.9G NTFS). Operator confirmed the wipe; `talosctl wipe disk sdb` first, because Talos refuses
+  to partition a device that already has a partition table. Pinned by WWID, not /dev/sdb — two
+  identical 128G SATA SSDs in one box and `longhorn_disks` PARTITIONS what it points at.
+  `install_disk: /dev/sda` on the same node is still name-based and should follow.
+- `optane_disks` → `longhorn_disks` ({device,name,tags}) because the old field hardcoded the `fast`
+  tag, and FU-159 makes `fast` Optane scratch that is NEVER load-bearing. `tofu plan` proved the
+  generalisation inert for thinkcentre (1 to change, hp-01 only) — its names had to stay
+  optane0/optane1, which are its live node.longhorn.io disk keys.
+- **fstrim automation (PR#925, FU-093).** Daily CronJob per pool VM. Verifying before committing
+  caught two defects: the byte parser matched only util-linux's format and pushed 0 from a run
+  that reclaimed 76 GiB (busybox prints differently), and the namespace set only PodSecurity
+  `enforce`, leaving audit/warn at the cluster default. `prometheus-rules-lint` caught a third —
+  a `severity: info` alert, which InfoInhibitor silently suppresses; dropped rather than promoted.
+  **First run: pool 78.72% → 62.99%, ~384 GiB returned.**
+- ⚠ **A bisect was started and correctly interrupted by the operator**: master's clause-replay was
+  red on `doorbell-fanout-wiring/capacity`, and checking out old commits in the live tree was the
+  wrong tool. The prior-art grep I should have run FIRST found **#897** — already filed, known
+  non-hermetic (reads the LIVE FU-088 latch). Master carried its fix (190e60e6) within the hour.
