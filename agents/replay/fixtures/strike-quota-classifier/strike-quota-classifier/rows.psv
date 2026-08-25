@@ -2,6 +2,9 @@
 # id                          | world | patch | env | expect                  | params
 stats-config-death            |       |       |     | stats-config-death      |
 stats-unknown-clean           |       |       |     | stats-unknown-clean     |
+stats-budget-403-account      |       |       |     | stats-budget-403-account |
+stats-budget-403-key          |       |       |     | stats-budget-403-key    |
+stats-budget-403-other        |       |       |     | stats-budget-403-other  |
 rawlog-config-death           |       |       |     | rawlog-config-death     |
 rawlog-deadline-first         |       |       |     | rawlog-deadline-first   |
 rawlog-quota                  |       |       |     | rawlog-quota            |
