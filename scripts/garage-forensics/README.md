@@ -19,16 +19,24 @@ their page numbers are reused.
 1. **Freeze the evidence first.** Longhorn snapshot of the data volume, and copy the meta volume's
    replica layers off the node. Do NOT run `garage repair blocks` (or `block-refs` / `block-rc`)
    until the carve is finished — the auto-scrub is verify-only and safe.
-2. **`lmdb-carve.py <layer.img> <outdir> <bucket-id-hex>…`** — scans the raw layer image and writes
-   `objects.jsonl` + `versions.jsonl`. ext4's block size equals LMDB's page size, so every DB page
+2. **`lmdb-carve.py <layer.img> <outdir> [<bucket-id-hex>…]`** — scans the raw layer image and
+   writes `aliases.json` + `objects.jsonl` + `versions.jsonl`; with no bucket ids it carves every
+   bucket the alias table names. ext4's block size equals LMDB's page size, so every DB page
    is one aligned 4 K block and the scan needs no b-tree walk and no filesystem: it classifies pages
    by their LMDB header and reads the leaf nodes directly. Values larger than a page live on
    overflow pages, which is why the scan also indexes `pgno → image offset` (each page header
-   carries its own page number).
-3. **`restore-from-blocks.py work.jsonl report.jsonl`** — runs INSIDE the cluster
+   carries its own page number). Records are spooled to disk and only the winning line per key is
+   kept, so a whole-store carve stays inside a few hundred MB of RAM.
+3. **`build-work.py <carve-dir> work.jsonl [--only|--exclude a,b] [--live <dir>] [--since ms]`** —
+   joins objects to their version rows, resolves bucket ids to names, drops everything that was not
+   a `Complete` version, and (with `--live`) skips keys that are already back, so the run is the
+   delta rather than a million no-op HEADs.
+4. **`restore-from-blocks.py work.jsonl report.jsonl`** — runs INSIDE the cluster
    (`forensics-pod.yaml`), reassembles each object from its blocks and PUTs it back. Stdlib only:
-   SigV4 is 40 lines and beats depending on pip inside a pod.
-4. **`verify-restored.py work.jsonl failures.jsonl`** — HEADs every key over a *different* path
+   SigV4 is 40 lines and beats depending on pip inside a pod. `PRESCAN=1` stats the blocks without
+   reading or writing anything — run it first on a big carve, it answers "how much of what the
+   metadata names is still on disk" in under a minute.
+5. **`verify-restored.py work.jsonl failures.jsonl`** — HEADs every key over a *different* path
    (the LAN endpoint, not the in-cluster Service) and compares size + ETag against the carved
    metadata, so a shared-fate bug in the writer cannot hide a bad object.
 
@@ -44,6 +52,7 @@ attributable when there is no b-tree to walk:
 |---|---|---|
 | `G2s3ob` | object | `<32B bucket id><object key>` |
 | `G09s3v` | version | `<32B version uuid>` |
+| *(none)* | bucket_alias | `<32 zero bytes><global alias>`; value `{name, state:{ts, v: <32B bucket id>}}` |
 | *(none)* | block_ref | `<32B block hash><32B version uuid>` |
 | *(none)* | merkle tree | short; value is `{"Leaf"\|"Intermediate": …}` |
 
@@ -53,8 +62,17 @@ needs no blocks at all) or `FirstBlock` (+ the version row's ordered block list)
 live at `meta.encryption.Plaintext.inner.headers`; `Plaintext` also means the blocks are plain zstd,
 which `SSE`-encrypted buckets would not be.
 
-Bucket ids are the OLD ones, and the alias table may not have survived — group object rows by their
-32-byte prefix and identify buckets from the key shapes instead.
+Bucket ids in the carve are the OLD ones — Crossplane re-minted every bucket with a new id after
+the wipe, so nothing in the live store matches them. Recovering the *names* is what `aliases.json`
+is for: the bucket_alias rows carve out of the same pages, keyed by `<32 zero bytes><name>`, which
+is why a first attempt looking for the bare name as the key finds nothing. That table survived
+intact in the 2026-08-24 wipe (all 14 buckets); the fallback if it ever does not is to group object
+rows by their 32-byte prefix and identify buckets from the key shapes.
+
+A multipart object's version row carries a `part_number` per block. That is worth more than
+ordering: replaying the original part boundaries through a multipart upload reproduces the stored
+`<md5-of-part-md5s>-<n>` ETag exactly, so a >RAM object can be restored *and* proven byte-identical
+without ever holding it whole (`restore-from-blocks.py` does this for anything over `MAX_BODY`).
 
 ## Operational notes
 
