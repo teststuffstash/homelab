@@ -8,6 +8,18 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-184** — **Garage's metadata auto-snapshot never worked; env rebuilt.** `MDB_CP_COMPACT`
+  refuses a page-leaked env by arithmetic (mdb.c "page leak or corrupt DB"), and the 08-24 torn
+  write left 4,745,586 pages for ~550k live ones — plus 8 freelist records stranded in the main db,
+  which is what broke `garage convert-db` too (it also rejects lmdb→lmdb outright, so the tracker's
+  original recipe was wrong twice over). Rebuilt by insertion with
+  `scripts/garage-forensics/lmdb-rebuild.py` (PR#911): **18.10 GiB → 1.57 GiB**, 67 trees /
+  4,279,175 entries exact, every bucket count unchanged, meta volume 62% → 6%. Container limit
+  512Mi → 2Gi — a healthy env makes the copy ~15 s instead of ~11 min and the first fast one
+  OOM-killed Garage. **Acceptance PASSED same day**: a snapshot completed (1.68 GB, 67 trees,
+  4,280,149 entries, zero junk keys, tracking live), no OOM, `restarts=0`. Mechanism:
+  [`garage.md`](garage.md) §Durability. Pre-rebuild copies held in
+  `backups/garage-meta-20260825-prerebuild/` — delete after ~2026-09-01. (archived 2026-08-25)
 - **FU-179** *(archived 2026-08-23)* — strike policy RULED (operator, G-A child homelab#783):
   `ROUTER_STRIKE_ENFORCE` retired as a blacklist knob — 16-day store read = six strikes, five one
   goose-harness class; enforcement would have changed ~1 decision for cents. Strikes stay
