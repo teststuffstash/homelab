@@ -1897,7 +1897,8 @@ ${DIND_CONTAINER}
         - name: AGENT_PUSHGATEWAY_URL
           value: "${PGW_URL}"
         # goose reads provider+model from env; opencode auto-detects OPENROUTER_API_KEY and takes
-        # the model via \`-m \${MODEL}\` at run time (e.g. \`opencode run -m \$MODEL "…"\`).
+        # the model as the full vendor/model id (e.g. \`openrouter/vendor/model\`). Using the
+        # stripped MODEL id (e.g. \`-m \$MODEL\`) silently falls back to opencode's default.
         - name: GOOSE_PROVIDER
           value: "openrouter"
         - name: GOOSE_MODEL
@@ -2114,7 +2115,8 @@ if [ -n "$RUN_CMD" ]; then
       ERR_CLASS="$(printf '%s' "$STATS" | jq -r '
         (.exit_status // "") as $s
         | if $s == "no-artifact" then (.error_class // "no-pr")
-          elif (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s
+          elif $s == "budget-403" then (.error_class // "budget-403")
+          elif (["harness-death","auth-storm","timeout"] | index($s)) then $s
           else "unknown" end' \
         2>/dev/null || echo unknown)"
       if [ "$ERR_CLASS" = "unknown" ] && grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG" 2>/dev/null; then
