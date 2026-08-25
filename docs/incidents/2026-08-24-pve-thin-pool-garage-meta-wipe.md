@@ -145,6 +145,49 @@ metadata for the out-of-scope buckets (loki, allure, oracle `parsed/`, sleep) is
 that layer, and repair would foreclose recovering them. Widening the carve is an operator call on
 homelab#884 — the scope was narrowed when Tier-2's cost was unknown, and it is now a proven pipeline.
 
+## Tier-3 — the widened carve (2026-08-25), and the two failures it caused
+
+Operator widened the scope to the remaining buckets. One pass over the same frozen layer carved the
+**whole store: 956,600 objects, zero orphan versions**, and recovered the **bucket_alias table**
+(all 14 names → old ids), so buckets were identified exactly rather than guessed from key shapes —
+which corrected an assumption: the `parsed/` prefix is in **ert-snapshots**, not an oracle bucket.
+`ert-snapshots` and `circles-specs` were at **0 objects live** (never in the Aug-4 backup), so like
+`jail-transcripts` they were from-nothing recoveries. Live-key filtering left 544,548 objects.
+
+Outcome: **361,484 restored, 0 failures**; 884 blocks genuinely gone (loki chunks deleted before
+the wipe — their rc had already dropped, so normal GC took them); 214 blocked by `oracle-specs`
+hitting its **1.0 GiB bucket quota** (app-owned, and that bucket regenerates from CI).
+
+**The restore took Garage down for an hour.** It filled the 10Gi meta volume (`LMDB: No space left
+on device`, 503 on every write, ~08:24–09:27Z). Recovery: `meta-garage-0` expanded 10Gi→30Gi. That
+needed `numberOfReplicas` 2→1 (wk-02) and `dataLocality` best-effort→disabled, because the `std`
+tier had no disk that could take a grown second replica — hp-01 sits **below** Longhorn's 25%
+minimal-available floor, so it rejected *any* expansion at *any* size. The rf=1 debt is FU-137's.
+
+Three lessons, each of which cost something:
+
+- **Restore ORDER sizes the metadata DB.** The carve emits page order, which is random against
+  Garage's key space; that fed the B-tree random inserts at ~20.3 KB/object — ~8× the pre-wipe
+  store — and filled the volume. Sorted by (bucket, key) it ran ~13 KB/object cumulative. Sorting
+  is now `build-work.py`'s default. ⚠ the first ~30k sorted objects showed **zero** growth, which
+  is the wipe's free pages being consumed, not steady state — do not size a volume off that window
+  (an earlier revision of the code comment did exactly that).
+- **☠ Aborting a multipart upload DESTROYS the orphan blocks it read.** A part upload references a
+  content-addressed block that had *no rc entry* (invisible to GC); aborting drops it to **rc=0**,
+  which is garbage, and the resync worker deletes the file ~10 min later. Two killed runs plus two
+  `garage bucket cleanup-incomplete-uploads` calls cost **3,952 of `corpus.sqlite`'s 5,766 blocks**,
+  silently and ~10 minutes after the fact — the prescan had reported every block present four hours
+  earlier. Failed uploads are now left dangling on purpose and blocks are stat'd before an upload is
+  created. Never run `cleanup-incomplete-uploads` against a bucket still being recovered.
+- **Longhorn replica churn is charged to the pve thin pool.** Moving/rebuilding the meta replicas
+  pushed it 69%→84% with only 1 GiB of VG left to autoextend into — the 08-24 corner again. `fstrim`
+  per node returned it to 69.17%; a batch loop over four nodes silently did only part of the job, so
+  run it one node at a time and read the byte count.
+
+Damage that survives: `corpus.sqlite` (6.05 GB) is unrecoverable from blocks. It is derived data —
+oracle-fleet's delta job reads `parsed/` plus the step manifests, never the corpus file, and the
+file also exists as a member inside the intact `corpus-image.oci.tar`.
+
 ## Residual
 
 - **FU-093** — pve thin-pool metering (the third sum) + periodic guest fstrim.
