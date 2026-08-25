@@ -2,6 +2,8 @@ CALL gh issue view 278 --repo teststuffstash/homelab --json body,labels
 CALL gh api repos/teststuffstash/homelab/issues/278/sub_issues
 CALL gh api repos/teststuffstash/homelab/issues/1001/sub_issues
 CALL gh api repos/teststuffstash/homelab/issues/1002/sub_issues
-OUT → Goal budget: Σ(spend + reservations) $3.0 ≤ Budget $5 on #278 — within funding
+CALL gh api repos/teststuffstash/agent-runtime/issues/81/sub_issues
+CALL gh api repos/teststuffstash/agent-runtime/issues/85/sub_issues
+OUT → Goal budget: Σ(spend + reservations) $4.5 ≤ Budget $5 on #278 — within funding
 OUT REACHED: the dispatch continued past the pre-flight
 RC 0

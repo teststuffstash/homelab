@@ -7,3 +7,5 @@ post-launch-open  | gate-homelab-278 | gh/issue-view-278.json @ patches/add-post
 open-over-budget  | gate-homelab-278 | gh/issue-view-278.json @ patches/set-budget-1.jq          | GOAL_PARENT=278 | refusal
 open-over-budget-degraded | gate-homelab-278-no-ledger | gh/issue-view-278.json @ patches/set-budget-1.jq | GOAL_PARENT=278 | degraded-refusal
 open-within       | gate-homelab-278 |                                                           | GOAL_PARENT=278 | within
+cross-repo-within | gate-homelab-278-cross |                                                      | GOAL_PARENT=278 | cross-repo-within
+colliding-number-exhausted | gate-homelab-278-cross | gh/issue-view-278.json @ patches/set-budget-1.jq | GOAL_PARENT=278 | colliding-number-exhausted

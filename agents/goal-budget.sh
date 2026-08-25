@@ -47,9 +47,10 @@ fi
 GB_HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 # The spend ledger: what the subtree ACTUALLY spent. The pushgateway the finalize leg pushes to is
-# the record; one GET, parsed to `<issue> <usd>` lines. Empty output = unreachable, and the caller
-# degrades to the conservative cap-sum (see the charge loop).
-gb_ledger() {   # gb_ledger <project>
+# the record; one GET, parsed to `<project> <issue> <usd>` lines (all projects, not filtered —
+# #917: cross-repo children need their own project's spend). Empty output = unreachable, and the
+# caller degrades to the conservative cap-sum (see the charge loop).
+gb_ledger() {   # gb_ledger
   _gb_pgw="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
   _gb_raw="$(curl -m 30 -fsS "${_gb_pgw}/metrics" 2>&1)" || {
     _gb_rc=$?
@@ -60,10 +61,11 @@ gb_ledger() {   # gb_ledger <project>
     return 1
   }
   printf '%s\n' "$_gb_raw" | sort -u \
-    | awk -v proj="$1" '/^agent_run_cost_usd\{/ && index($0, "project=\"" proj "\"") {
-        if (match($0, /issue="[0-9]+"/)) { iss=substr($0, RSTART+7, RLENGTH-8);
-          sum[iss] += $NF } }
-      END { for (i in sum) printf "%s %.4f\n", i, sum[i] }'
+    | awk '/^agent_run_cost_usd\{/ {
+        if (match($0, /project="([^"]+)"/)) { proj=substr($0, RSTART+9, RLENGTH-10) }
+        if (match($0, /issue="([0-9]+)"/)) { iss=substr($0, RSTART+7, RLENGTH-8);
+          sum[proj, iss] += $NF } }
+      END { for (k in sum) { split(k, a, SUBSEP); printf "%s %s %.4f\n", a[1], a[2], sum[k] } }'
 }
 
 # What a minted key for this child would ALLOW (cap_usd) — the reservation unit.
@@ -181,41 +183,78 @@ goal_budget_read() {   # <slug> <goal-issue> <model> [dispatch-issue]
   # sprout of a child sits at depth 2 and a direct-children sum misses it entirely. Measured
   # live on openrouter-operator#10 the moment this was written: direct children [14,15],
   # actual descendants [14,15,17,18,21] — a gate counting 2 of 5 is not a cap.
-  # The walk is a fixpoint over ONE fetch, cycle-safe by construction (a seen-set), and it
-  # is what makes "an unrealistic goal keeps sprouting" a BOUNDED failure instead of a
-  # silent one: every sprout in the tree spends the goal's money. Post-launch sprouts (ADR-102)
-  # hang off the post-launch bucket, which is itself a sub-issue of the goal — so they are
-  # descendants and this walk already counts them, which is what makes the bucket affordable.
-  # NB `gh --jq` takes only an expression — it has NO --argjson (that is a jq flag); the
-  # first cut used it, errored, and behind `|| echo []` made this gate pass everything.
-  _gb_kids="$(gh issue list --repo "$_gb_slug" --state all --limit 300 \
-    --json number,body,labels,parent 2>/dev/null \
-    | python3 -c '
-import json,sys
-try: items = json.load(sys.stdin)
-except Exception: print("[]"); sys.exit(0)
-root = int(sys.argv[1])
-par = {i["number"]: ((i.get("parent") or {}).get("number")) for i in items}
-seen, frontier = set(), [root]
+  # The walk is a BFS over the sub-issues API (gh api repos/<r>/issues/<n>/sub_issues), which
+  # returns repo-qualified children — the fix for #917: cross-repo descendants now appear in
+  # GB_ROWS and their spend sums into GB_SUM. Each child is identified by its qualified
+  # <owner>/<repo>#<number> identity, so a foreign parent number can never alias a local one.
+  # Cycle-safe by construction (a seen-set over qualified IDs), bounded at depth 6 (same bound
+  # as the ancestor walk). If the root's sub-issues API is unreadable, the walk returns [] and
+  # the caller's "no descendants resolved" warning fires — fail-closed (under-count is the
+  # conservative direction: it admits fewer rides, not more).
+  _gb_kids="$(python3 -c '
+import json, sys, subprocess
+
+def gh_sub_issues(repo, number):
+    """Call gh api repos/<repo>/issues/<n>/sub_issues, return list or None on failure."""
+    try:
+        res = subprocess.run(
+            ["gh", "api", "repos/{}/issues/{}/sub_issues".format(repo, number)],
+            capture_output=True, text=True, timeout=30
+        )
+        if res.returncode != 0:
+            return None
+        return json.loads(res.stdout) if res.stdout.strip() else []
+    except Exception:
+        return None
+
+def repo_of(issue):
+    return issue["repository_url"].split("/repos/", 1)[1]
+
+def names(issue):
+    return [l["name"] for l in (issue.get("labels") or [])]
+
+root_repo = sys.argv[1]
+root_num = int(sys.argv[2])
+max_depth = int(sys.argv[3]) if len(sys.argv) > 3 else 6
+
+seen = set()
+frontier = [(root_repo, root_num, 0)]
+nodes = {}
+
 while frontier:
-    cur = frontier.pop()
-    for n, pn in par.items():
-        if pn == cur and n not in seen:
-            seen.add(n); frontier.append(n)
-by = {i["number"]: i for i in items}
-def names(i): return [l["name"] for l in (i.get("labels") or [])]
-out = [{"n": n,
-        "chars": len(by[n].get("body") or ""),
-        "label": next((l for l in names(by[n]) if l.startswith("agent-budget/")), ""),
-        # actual-spend accounting (operator ruling 2026-08-08): a LIVE child holds a minted key
-        # that can still spend up to its cap; a RIDDEN child exposes only its harvested actual.
-        "live": ("agent/in-progress" in names(by[n])),
-        "ridden": (by[n].get("state") == "CLOSED"
+    repo, num, depth = frontier.pop(0)
+    nid = "{}#{}".format(repo, num)
+    if nid in seen:
+        continue
+    seen.add(nid)
+    children = gh_sub_issues(repo, num)
+    if children is None:
+        continue
+    for child in children:
+        cr = repo_of(child)
+        cn = child["number"]
+        cnid = "{}#{}".format(cr, cn)
+        if cnid not in seen:
+            nodes[cnid] = child
+            if depth < max_depth:
+                frontier.append((cr, cn, depth + 1))
+
+out = []
+for nid, issue in sorted(nodes.items(), key=lambda x: (x[0].split("#")[0], int(x[0].split("#")[1]))):
+    n = int(nid.split("#")[1])
+    out.append({
+        "n": n,
+        "repo": nid.split("#")[0],
+        "chars": len(issue.get("body") or ""),
+        "label": next((l for l in names(issue) if l.startswith("agent-budget/")), ""),
+        "live": ("agent/in-progress" in names(issue)),
+        "ridden": (issue.get("state") == "CLOSED"
                    or any(l in ("agent/in-progress","agent/review","agent/done","agent/error","agent/blocked")
-                          for l in names(by[n])))}
-       for n in sorted(seen) if n in by]
+                          for l in names(issue)))
+    })
+
 print(json.dumps(out))
-' "$_gb_goal" 2>/dev/null || echo '[]')"
+' "$_gb_slug" "$_gb_goal" 6 2>/dev/null || echo '[]')"
   # A parent that HAS descendants must not silently resolve to none — that is the gate failing open.
   if [ "$(printf '%s' "$_gb_kids" | jq -r 'length' 2>/dev/null || echo 0)" = "0" ]; then
     echo "→ Goal budget: no descendants resolved for #${_gb_goal} — nothing to sum (if that is wrong, the query is broken, not the goal)" >&2
@@ -239,18 +278,24 @@ print(json.dumps(out))
   # ⚠ The HARVEST caller passes no dispatch issue: it is asking "does this goal still have room",
   # not "may this specific ride mint a key". Same sum, one fewer reservation — advisory, as the
   # ⚖ line on #207 requires. The launcher pre-flight remains the enforcing arithmetic.
-  _gb_led="$(gb_ledger "$_gb_proj")" || _gb_led=""
+  # #917: ledger now returns <project> <issue> <usd> lines (all projects), and each child carries
+  # its repo. Spend is looked up by project+issue, so cross-repo children find their own spend.
+  _gb_led="$(gb_ledger)" || _gb_led=""
   GB_LEDGER_DEGRADED="false"
   [ -z "$_gb_led" ] && GB_LEDGER_DEGRADED="true" && echo "→ Goal budget: spend ledger unreachable — falling back to CAP-sum (conservative)" >&2
   GB_SUM=0; GB_ROWS=""
-  for _gb_row in $(printf '%s' "$_gb_kids" | jq -r '.[] | "\(.n):\(.chars):\(.label):\(.live):\(.ridden)"' 2>/dev/null); do
-    _gb_n="${_gb_row%%:*}"; _gb_rest="${_gb_row#*:}"; _gb_c="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"
-    _gb_l="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"; _gb_live="${_gb_rest%%:*}"; _gb_ridden="${_gb_rest#*:}"
+  for _gb_row in $(printf '%s' "$_gb_kids" | jq -r '.[] | "\(.n):\(.repo):\(.chars):\(.label):\(.live):\(.ridden)"' 2>/dev/null); do
+    _gb_n="${_gb_row%%:*}"; _gb_rest="${_gb_row#*:}"
+    _gb_repo="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"
+    _gb_c="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"
+    _gb_l="${_gb_rest%%:*}"; _gb_rest="${_gb_rest#*:}"
+    _gb_live="${_gb_rest%%:*}"; _gb_ridden="${_gb_rest#*:}"
     _gb_c_cap="$(gb_cap "${_gb_c:-0}" "$_gb_model" "$_gb_l")"
-    _gb_spent="$(printf '%s\n' "$_gb_led" | awk -v n="$_gb_n" '$1==n{print $2; exit}')"
+    _gb_proj="${_gb_repo#*/}"
+    _gb_spent="$(printf '%s\n' "$_gb_led" | awk -v p="$_gb_proj" -v n="$_gb_n" '$1==p && $2==n{print $3; exit}')"
     if [ -z "$_gb_led" ]; then
       _gb_charge="$_gb_c_cap"; _gb_why="cap (no ledger)"
-    elif [ "$_gb_n" = "$_gb_dispatch" ] || [ "$_gb_live" = "true" ]; then
+    elif [ "$_gb_live" = "true" ] || { [ -n "$_gb_dispatch" ] && [ "$_gb_n" = "$_gb_dispatch" ] && [ "$_gb_repo" = "$_gb_slug" ]; }; then
       _gb_charge="$(gb_add "${_gb_spent:-0}" "$_gb_c_cap")"
       _gb_why="\$${_gb_spent:-0} spent + \$${_gb_c_cap} live/dispatch reservation"
     elif [ -n "$_gb_spent" ]; then
@@ -261,7 +306,7 @@ print(json.dumps(out))
       _gb_charge="0"; _gb_why="never ridden — gated at its own dispatch"
     fi
     GB_SUM="$(gb_add "$GB_SUM" "${_gb_charge:-0}")"
-    GB_ROWS="${GB_ROWS}    #${_gb_n} → \$${_gb_charge} (${_gb_why})\n"
+    GB_ROWS="${GB_ROWS}    ${_gb_repo}#${_gb_n} → \$${_gb_charge} (${_gb_why})\n"
   done
 
   if [ "$(python3 -c "import sys;print(1 if float(sys.argv[1])>float(sys.argv[2]) else 0)" "$GB_SUM" "$GB_BUDGET")" = "1" ]; then
