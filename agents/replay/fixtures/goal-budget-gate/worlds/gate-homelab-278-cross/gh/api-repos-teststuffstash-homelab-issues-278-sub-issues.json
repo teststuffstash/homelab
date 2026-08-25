@@ -1,0 +1,34 @@
+[
+  {
+    "number": 1001,
+    "state": "CLOSED",
+    "title": "the bake",
+    "body": "the bake",
+    "labels": [{"name": "agent/done"}],
+    "repository_url": "https://api.github.com/repos/teststuffstash/homelab"
+  },
+  {
+    "number": 1002,
+    "state": "OPEN",
+    "title": "the page",
+    "body": "the page",
+    "labels": [{"name": "agent/queued"}],
+    "repository_url": "https://api.github.com/repos/teststuffstash/homelab"
+  },
+  {
+    "number": 81,
+    "state": "CLOSED",
+    "title": "cross-repo child of homelab#775",
+    "body": "ridden cross-repo child",
+    "labels": [{"name": "agent/done"}],
+    "repository_url": "https://api.github.com/repos/teststuffstash/agent-runtime"
+  },
+  {
+    "number": 85,
+    "state": "OPEN",
+    "title": "cross-repo child with colliding number",
+    "body": "colliding number child",
+    "labels": [{"name": "agent/queued"}],
+    "repository_url": "https://api.github.com/repos/teststuffstash/agent-runtime"
+  }
+]

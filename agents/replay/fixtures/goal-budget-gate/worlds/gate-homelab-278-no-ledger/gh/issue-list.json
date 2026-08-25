@@ -1,5 +1,0 @@
-[
-  { "number": 278, "body": "Budget: 5", "labels": [ { "name": "task/goal" } ], "parent": null },
-  { "number": 1001, "body": "the bake", "labels": [ { "name": "agent/done" } ], "parent": { "number": 278 } },
-  { "number": 1002, "body": "the page", "labels": [ { "name": "agent/queued" } ], "parent": { "number": 278 } }
-]
