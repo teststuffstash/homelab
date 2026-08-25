@@ -8,6 +8,11 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-149** *(archived 2026-08-25)* — **Responder daily budget = 12: the soak answered LEAVE IT.**
+  The 14d read (daily `max(responder_triage_sessions_today)`): ordinary days 0–6, the cap bound
+  only on genuine storm days (08-18 the board-clearing/ARC day = 12, 08-24 the pve/Garage
+  incident = 11) — which is what a storm cap is for. `RESPONDER_DAILY_MAX` stays 12; a non-storm
+  exhaustion re-opens this as a new datum, not this id.
 - **FU-184** — **Garage's metadata auto-snapshot never worked; env rebuilt.** `MDB_CP_COMPACT`
   refuses a page-leaked env by arithmetic (mdb.c "page leak or corrupt DB"), and the 08-24 torn
   write left 4,745,586 pages for ~550k live ones — plus 8 freelist records stranded in the main db,

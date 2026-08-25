@@ -70,7 +70,15 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-08-11 (fu-sweep over the Observability & evidence subsection, after the
+_Last updated: 2026-08-25 (fu-sweep after the evening board-sweep, machine-lane reconciled by
+substance: **FU-149 archived** — the 14d read says ordinary days 0–6, the cap bound only on real
+storm days; **FU-168's (a) soak read FAILED** — cron-woken dispatches persist (2 and 5 in 24h),
+the emitter hunt is live on #459; **FU-147 fired live 2026-08-24 and mis-fired** — the landing-PR
+class fixed via #868→PR#873, one clean organic fire still owed; FU-058 re-fire DELIVERED r1
+(PR#918) + the batch filed #927–#932; FU-093's Garage-metrics leg queued as #934, fstrim
+scheduled PR#925; FU-102's first enablement = platform, wedged on #933 (checkpoint counts the
+post-launch bucket as an open child — G-B cannot assemble); FU-173 pin PR#935 armed. Previous
+2026-08-11 (fu-sweep over the Observability & evidence subsection, after the
 first board-sweep: **FU-058 corrected** — the 08-10 "guard-refused" reading was false, five
 latent retro-lane bugs fixed + first report DELIVERED (PR#246); **FU-133 pointer-ized** —
 remaining legs (a)/(c) queued as homelab#252/#253 (#253 blocked-by #244); FU-159 + FU-158 to
@@ -102,9 +110,9 @@ six OVERSIZE items pointer-ized into
       the LATEST release on every pod start, so a plugin release can change prod behavior with no
       commit anywhere. Ruled out as the cause of the 2026-08 sleep-overview breakage (no frser
       release since 4.0.6, 2026-05-11) but it's a live silent-regression vector, and sleep's
-      integration gate pins 4.0.6 — prod can drift from what CI tested. **Next:** pin the version
-      (`frser-sqlite-datasource 4.0.6` in the plugins list) and let Renovate own the bump like any
-      chart. Surfaced by sleep-tracking#121 (dashboard render goal). Relates FU-136.
+      integration gate pins 4.0.6. **Pin PR#935 armed 2026-08-25** (fu-sweep).
+      **Next:** after PR#935 merges + the grafana pod rolls, verify the plugin version in-pod,
+      then archive. Surfaced by sleep-tracking#121. Relates FU-136.
 - [ ] **FU-137** — **Garage durability: POINTER.** The risk fired 2026-08-24 — meta LMDB wiped
       in the pve thin-pool incident, Aug-4 backup restored same day
       ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884).
@@ -258,9 +266,12 @@ the block needs pruning, not more headings.
       instrument — cron-woken dispatches ≈ 0 once soaked); (b) the `Touches:` fence demotion +
       mechanical governance lint = Bucket A4 (ADR-106 (4)). Evidence:
       [`docs/spikes/goal-lane-v1.1-fu165-pilot.md`](spikes/goal-lane-v1.1-fu165-pilot.md)
-      findings 4–5. **Next:** watch the wake metrics after the A2 merge+sync (the alert is the
-      regression tooth); close when A4's fence half ships and the famine numbers hold.
-      Relates ADR-106, ADR-094, ADR-097, FU-167, FU-090.
+      findings 4–5. **⚠ The (a) soak read FAILED 2026-08-25** (fu-sweep):
+      `changes(agent_dispatch_cron_woken_timestamp[24h])` = 2 and 5 — cron-serviced dispatches
+      persist post-#669/#672/#679 and `AgentDispatchCronWoken` (#459) is firing legitimately.
+      A dead edge remains; the emitter hunt (which transition the cron serviced — the scan states
+      wake source per dispatch) is the concrete next action, on #459. **Next:** the hunt, then
+      A4's fence half; close when cron-woken ≈ 0 holds. Relates ADR-106, ADR-094, ADR-097, FU-167.
 
 - [ ] **FU-169** — **Differential coverage as a REVIEW INPUT (operator design, 2026-08-13).**
       The reviewer can't see whether a PR improves or reduces test coverage; the blanket
@@ -376,9 +387,11 @@ the block needs pruning, not more headings.
       Reusing FU-115b's predicate exposed two bugs in it: it read `.commits[]?.commit.committedDate`
       where `gh` puts it TOP-LEVEL, so `$head` was always "" and it returned "no-op" for **every**
       PR; and comparison was wrong anyway — a good round posts stats AFTER its push. **Counting**
-      is the fix (`>= 2` stats after the newest non-merge commit). Never fired: 0 `agent/arbitrate`
-      fleet-wide. One shared `NOOP_ROUND_JQ` now. **Next:** verify on a real no-op round — both
-      clauses were IDLE at deploy, so it is tested against real history, not live traffic.
+      is the fix (`>= 2` stats after the newest non-merge commit). One shared `NOOP_ROUND_JQ`.
+      **Fired live 2026-08-24** (the #862 arbitrate cycle) — and MIS-fired: it re-labeled over
+      a newer arbitration ruling on a LANDING PR (state-fp mutates every tick post-approval,
+      3 sessions/5min) — fixed via #868 → PR#873 (SELECT excludes APPROVED+armed, "gated on
+      fresh evidence"). **Next:** one CLEAN organic fire on a genuine no-op round post-#873.
 - [ ] **FU-090** — **Sprout index / issue authoring: POINTER.** All legs, the breaker-#1 gate,
       the shipped sub-issue lineage (2026-08-02), the `Touches:` contract (ADR-097) and the
       retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
@@ -552,15 +565,6 @@ the block needs pruning, not more headings.
       hand-diffed export. **Next:** the T+1 sweep over `GET /activity?api_key_hash=` for whatever
       still misses (per-session keys make attribution exact; needs a management key), and the
       round-2 no-`/report` hole. Relates ADR-096, FU-095.
-- [ ] **FU-149** — **The responder's daily budget is binding, but 12 now means a different thing.**
-      ADR-099 changed the ceiling's UNIT: FU-113(c) counted distinct *incidents* (and leaked); the
-      latch counts *spawned sessions* and is exact, so a day with 12 genuinely distinct alerts now
-      stops triage where the old cap let it run. **First datum 2026-08-06: 30 sessions, 26 of them
-      ONE incident** (the Actions outage) — that sizes the old hole, not the new steady state, and
-      it exhausted the budget the day it shipped. **Deferred because the value is an evidence
-      question** (as ADR-097's parallelism was). **Next:** after ~2 weeks of ORDINARY days, read
-      `responder_triage_sessions_today` on the "Responder triage budget" dashboard — p95 well under
-      12, leave it; `ResponderTriageBudgetExhausted` on non-storm days, raise `RESPONDER_DAILY_MAX`.
 - [ ] **FU-126** — **Multi-model spec-writer fan-out: same mission → N researcher rides on N
       models → N un-armed `research/*` PRs → operator compares and cherry-picks.** Platform legs
       BUILT 2026-08-02: `agents/research-fanout.sh` (per-model task keys, ephemeral budget keys,
@@ -583,21 +587,17 @@ the block needs pruning, not more headings.
       operator requirement), which also delivers context-repos.md's measurement sweep.
       Relates FU-117, FU-163, FU-058, FU-140.
 
-- [ ] **FU-058** — **Retro P3: POINTER.** ⚠ First unattended PLATFORM fire (2026-08-24 05:00Z)
-      FAILED — cell-a to the Anthropic 529 storm (transient), cell-b budget-403, and BOTH cells
-      rode the routed model (hy3) instead of their configured cells (#861, the #782/#810 class).
-      Re-fire by hand after #861 merges — that fire is the deferred acceptance read.
-      Design, run history, the 2026-08-17 SPLIT ruling
-      (platform retro first, stack retros second) and the 2026-08-19 platform-series build
-      (the #587 stint: rename + ride-ns guard + fleet read token + KPI drop + content floor +
-      RetroReportOverdue restart-gap hardening — PRs #619/#620/#623):
+- [ ] **FU-058** — **Retro P3: POINTER.** The 08-24 first unattended fire FAILED (529 storm +
+      the #861 cell-override defect, fixed PR#864); **the post-fix re-fire DELIVERED 2026-08-25**:
+      platform r1 report landed (PR#918, opus cell — substantive: 6 findings, 5 High/Med-High
+      changes), the batch is FILED as homelab#927–#931 (3 queued, #930 seat-lane, #931 operator),
+      and the run exposed a new belt defect — the success-metric push failed silently and
+      RetroReportOverdue fired false for ~2h (#932, queued; fact hand-recorded). Design + history:
       [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2.
-      **Next:** the Mon 2026-08-24 05:00 UTC cron is the platform series' first unattended
-      fire = the build wave's organic acceptance (full report per cell, distinct files for
-      byte-identical cells, cross-review refuses nothing silently, no false
-      RetroReportOverdue); then the ledger emitter gaps (brief-v2(b) + r4's three blind
-      spots), MCP transcript slices, and stack retros authored against the platform
-      coverage (non-overlap). Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
+      **Next:** the Mon 2026-08-31 05:00 UTC cron = the clean unattended acceptance (full report
+      per cell — r1 was one cell — no false RetroReportOverdue, #932 landed); then the ledger
+      emitter gaps (brief-v2(b) + r4's three blind spots), MCP transcript slices, stack retros
+      (non-overlap). Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
       the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
@@ -615,9 +615,12 @@ the block needs pruning, not more headings.
       **Scheduled leg BUILT 2026-08-07, disabled everywhere:** claim knob `spec.prober` (no
       object default — the stamping lesson) renders `probe-<stack>` in the loop ns, subscription
       claude/haiku, report-only by construction (no git/gh creds); brief = `<mainRepo>/
-      .agents/probe.md`, LOCATION-only contract (content waits for a 2nd stack's probe).
-      **Next:** write oracle's probe.md from the proven UC-1 brief + flip `prober.enabled` on
-      the oracle claim; then the sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
+      .agents/probe.md`, LOCATION-only contract. **First enablement = PLATFORM** (G-B child
+      #835 → PR#850 into `goal/818-assurance`: `.agents/probe.md` platform brief + claim
+      `prober: {enabled, 41 */6, haiku}`) — NOT live yet: it lands with G-B's assembly merge,
+      which is wedged on the #933 checkpoint-bucket defect. **Next:** after the G-B assembly,
+      read `probe-platform`'s first tick; oracle's probe.md stays #289 (parked with the stack);
+      then the sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
 
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
 
@@ -679,13 +682,14 @@ the block needs pruning, not more headings.
       **Longhorn metering DONE** 2026-08-04 (`02cf8bb`) — both sums, `argocd/resources/longhorn-alerts/`.
       **ADR-089's quota DONE** 2026-08-07 — it had never been set on a single claim, so no
       ResourceQuota existed cluster-wide; now armed on all four stacks.
-      **Next:** Garage admin-API metrics (`:3903`) + ServiceMonitor + >80% alert — the last
-      unmetered tier. Blocks the FU-106 "mechanical" predicate.
-      **2026-08-24: the third sum went unmetered into its third 100%** and took wk-01 + Garage's
-      metadata with it ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)) —
-      the pve thin-pool Data% metric + alert is now the FIRST priority here, and freed blocks
-      need a periodic guest fstrim (discard=on alone returns nothing; Talos never trims).
-      Relates ADR-089, FU-116 (archived).
+      **Garage metrics leg queued 2026-08-25 as homelab#934** (PR#912's measurement: 48 families
+      already live on `:3903`, only the Service port + ServiceMonitor + belts missing — machine
+      lane owns the build). **fstrim SCHEDULED 2026-08-25** (PR#925, `argocd/resources/node-fstrim/`
+      daily per-VM CronJob; first run 78.72%→62.99%, ~384 GiB). **Next:** the pve thin-pool Data%
+      metric + alert (the pool itself is STILL unmetered — the new alerts prove the belt runs, not
+      that it suffices); then a Longhorn `filesystem-trim` RecurringJob (node fstrim cannot reclaim
+      inside replica sparse files); ci-runner-01's own fstrim.timer is assumed-not-verified.
+      Relates ADR-089, ADR-114, homelab#934.
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
