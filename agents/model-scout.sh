@@ -201,9 +201,10 @@ scout_canary_ride() { # <id> <is_free> [retry] → the AGENT_RUN_STATS json on s
   # Headless ride; --harness opencode carries the model via -m. agent-finalize writes the ledger
   # row (model label = $id) + transcript. We read its error_class from the stats line. The `retry`
   # marker is a label the contradiction rule stamps; production rides are identical either way.
+  # The full provider-prefixed id must be composed launcher-side to reach opencode's -m correctly.
   out="$(bash "$HERE/agent-session.sh" "$CANARY_PROJECT" --harness opencode --model "openrouter/$id" \
       --task "$sess" --openrouter-secret "$secret" \
-      --run 'opencode run -m "$MODEL" "Reply with ONLY the first markdown heading text of README.md (no other words)."' 2>&1)" || true
+      --run "opencode run -m \"openrouter/$id\" \"Reply with ONLY the first markdown heading text of README.md (no other words).\"" 2>&1)" || true
   printf '%s\n' "$out" | grep -E "AGENT_RUN_STATS|PREFLIGHT|403|guardrail" >&2 || true
   printf '%s' "$out" | sed -n 's/.*AGENT_RUN_STATS \(.*\)/\1/p' | tail -1
 }
