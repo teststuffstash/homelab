@@ -130,6 +130,16 @@ def put_multipart(rec, out):
     mismatch aborts the upload instead of completing a wrong object.
     """
     b, k = rec["b"], rec["k"]
+    # Check the WHOLE object before creating an upload. A part upload references its blocks, and
+    # any subsequent failure leaves those references in a state someone will be tempted to clean
+    # up — see the finally below for why that is fatal. Failing before the first PUT touches
+    # nothing at all.
+    missing = [h for h in rec["blocks"] if block_path(h)[0] is None]
+    if missing:
+        out["r"] = "block-missing"
+        out["n_missing"] = len(missing)
+        out["block"] = missing[0]
+        return out
     groups = collections.OrderedDict()
     for h, p in zip(rec["blocks"], rec["bparts"]):
         groups.setdefault(p, []).append(h)
@@ -231,9 +241,26 @@ def put_multipart(rec, out):
         return out
     finally:
         if upload_id:
-            # never leave a half-finished upload holding block refs
-            s3("DELETE", b, k, b"", {}, {"uploadId": upload_id})
-            out["aborted_after_parts"] = done
+            # ☠ DO NOT ABORT. Aborting a half-finished upload here DESTROYS THE SOURCE DATA, and
+            # it cost 3,952 of corpus.sqlite's 5,766 blocks on 2026-08-25 before anyone noticed.
+            #
+            # The blocks this tool reassembles are ORPHANS: on disk with no refcount entry at all,
+            # which is exactly why Garage's GC leaves them alone and why the carve works. Uploading
+            # a part ADDS a reference to that same content-addressed block (rc 0 -> 1). Aborting
+            # the upload REMOVES it (rc 1 -> 0) — and a block at rc 0 is no longer an invisible
+            # orphan, it is garbage, so the resync worker deletes the file within ~10 minutes.
+            # Tidying up the upload is what converts "recoverable forever" into "gone".
+            #
+            # Leaving the upload dangling keeps rc >= 1 and keeps the blocks alive. It costs an
+            # incomplete MPU, which is cheap and reversible; the abort is neither. For the same
+            # reason, never run `garage bucket cleanup-incomplete-uploads` against a bucket you are
+            # still recovering. Set MPU_ABORT=1 only when the source is NOT orphan blocks.
+            if os.environ.get("MPU_ABORT") == "1":
+                s3("DELETE", b, k, b"", {}, {"uploadId": upload_id})
+                out["aborted_after_parts"] = done
+            else:
+                out["mpu_left_dangling"] = done
+                out["upload_id"] = upload_id
 
 
 def handle(rec):
