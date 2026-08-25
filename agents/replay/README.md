@@ -636,6 +636,13 @@ Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the
   every action stream are byte-identical before/after; the change only lets the latch's
   diagnostic stderr flow to pod logs again. The full suite (incl. the pick-rail fixtures,
   which stub the latch) passed unchanged — no clause logic moved, no fixture applies.
+- **homelab#564 (2026-08-19)** — the two live HEREDOC-BACKTICK instances the new lint signature
+  surfaced (`coordinator-session.sh:439`, `reviewer-session.sh:575`): comment-only rewording
+  inside expanding heredoc bodies — backticks in an unquoted heredoc command-substitute even in
+  `# comment` lines, silently deleting the fragment from the delivered manifest. No action
+  stream changes (the manifests' comment TEXT is not asserted by any fixture); the full suite
+  passed unchanged. The lint's new fixtures (`scripts/fixtures/prompt-transport/`) are the
+  executable pin for the class.
 - **homelab#919 (2026-08-25)** — added `homelab.io/ephemeral` toleration to the non-docker pod
   spec in `agents/agent-session.sh`. The toleration is a YAML fragment inside an unquoted heredoc
   (`cat <<EOF | kubectl create -f -`) that is NOT inside any `>>>REPLAY:` sentinel — the pod
