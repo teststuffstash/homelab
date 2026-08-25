@@ -2168,14 +2168,18 @@ if [ -n "$RUN_CMD" ]; then
       fi
       # <<<REPLAY:strike-quota-classifier<<<
     fi
-    # Emit strike only if it's a harness death (not for "unknown" errors with no signature, which
-    # might indicate a legitimate run that didn't open a PR for other reasons).
-    IS_HARNESS_DEATH=""
+    # >>>REPLAY:strike-classifier>>>
+    # homelab#866: the EMIT decision. A PR-less ride keeps FU-062 semantics unchanged — ANY
+    # classified error strikes, `unknown` included (that is the chain-walk signal). A ride WITH
+    # an open PR strikes only on a harness-death-class signature, because a clean round with a
+    # PR classifies as `unknown` and must never strike.
+    EMIT_STRIKE=""
     case "$ERR_CLASS" in
-      harness-death|auth-storm|timeout|quota|budget-*) IS_HARNESS_DEATH=1;;
+      harness-death|auth-storm|timeout|quota|budget-*) EMIT_STRIKE=1;;
     esac
+    [ -n "${PR_URL:-}" ] || EMIT_STRIKE=1
     # <<<REPLAY:strike-classifier<<<
-    if [ -n "$IS_HARNESS_DEATH" ]; then
+    if [ -n "$EMIT_STRIKE" ]; then
       # >>>REPLAY:strike-line-format>>>
       STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
       if [ -n "${BUDGET_MATCH:-}" ]; then
@@ -2201,6 +2205,10 @@ if [ -n "$RUN_CMD" ]; then
       else
         echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
       fi
+    else
+      # A non-striking run must report an empty error_class, not "unknown". A PR-present ride that
+      # classifies as "unknown" (no specific signature) must not be recorded as having an error.
+      ERR_CLASS=""
     fi
   fi
 
