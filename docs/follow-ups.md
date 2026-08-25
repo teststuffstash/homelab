@@ -311,22 +311,20 @@ the block needs pruning, not more headings.
       rides older than the ledger's retention need, sized so reads stay flat. Relates FU-131,
       homelab#807, observability §B1.
 
-- [ ] **FU-181** — **Go-rail post-reset readout (after the 2026-09-13 monthly reset —
-      operator, 2026-08-19).** The rail is monthly-latched until then (observed-429 latch;
-      Retry-After ≈ the reset epoch), so homelab#540 (gometer parity: console 100%/99% vs meter
-      63%/25% — draw under-count; window ANCHORING now matches, evidence in #540's 2026-08-19
-      parity comment) and the #420 container closed as unactionable-until-reset. On the first
-      clean window after Sep-13: (1) re-run the meter-vs-console parity check on a clean 5h
-      window (#540's check); (2) capture the 5h-window refusal shape on its first organic fire
-      (429 vs 402 + its Retry-After — `router_go_observed_429_total{code}` and the latch log
-      line self-record it); (3) confirm the persisted latch (#618/#621) survives a proxy roll
-      while genuinely held; (4) **Go-rail rail-probe cells for the served set** (deepseek-v4-flash
-      + the tool-verified trio) — moved from homelab#778 at the G-A split (operator, 2026-08-24);
-      prerequisite = homelab#876's full-prefix `-m` canary fix. ⚠ The workspace pay-from-balance
-      toggle went ON 2026-08-24: upstream now BILLS instead of 429ing, so the gometer latch is the
-      ONLY brake on Go spend — keep it latched through the window; leg 2's "first organic refusal
-      shape" may now be a 402/billing shape rather than a 429, read it accordingly.
-      Relates FU-170 (residual gauges/alerts), homelab#540, homelab#420, homelab#778.
+- [ ] **FU-181** — **Go-rail post-reset readout = METER-CALIBRATION HYGIENE, not a flip gate
+      (re-scoped by operator ruling 2026-08-25, recorded on homelab#778).** The Go posture is
+      **janitorial/low-cache roles + failover backup only** — window-draw at list-on-raw prices
+      cache-heavy work out (§M8 feed-4's rail affinity, now ruled); deepseek+OpenRouter stays the
+      economical worker ride. Leg 4's served-set cells therefore shrink to the failover reviewer
+      model + a dispatch-class cell, runnable NOW on the temporary credits window (#876's
+      prerequisite landed via PR#896; 2026-08-25 probe evidence on #778 — Anthropic-surface flash
+      tool_use PASS, OpenAI-surface DSML leak matrix row) — **the P4 flip is DE-GATED from
+      Sep-13.** On the first clean window after Sep-13, the hygiene legs stand: (1) #540's
+      meter-vs-console parity on a clean 5h window; (2) the refusal shape on first organic fire
+      (likely 402/billing while the pay-from-balance toggle is ON — the gometer latch is the ONLY
+      brake on Go spend meanwhile); (3) persisted latch (#618/#621) survives a roll while held.
+      Big-pickle-as-deepseek-shadow (A5 shadow re-reviews, the G-E $0 arm) is #778's thread.
+      Relates FU-170 (residual gauges/alerts), homelab#540, homelab#778.
 - [ ] **FU-174** — **Reasoning effort is unmodeled fleet-wide (operator, 2026-08-17).** The DeepSWE
       numbers behind the flash slot ran `[max]`; the fleet runs provider defaults — the jail shim
       even DROPS `thinking` on translated legs, so no Go model ever sees an effort signal.
@@ -521,7 +519,8 @@ the block needs pruning, not more headings.
       archived): `ROUTER_STRIKE_ENFORCE` retired — strikes stay recorded, cooldowns carry the
       residual class, the env's deletion rides the G-A legacy sweep (§M1a).
       **Open:** legs (b)+(c) ride G-A child #778 (leg (b) IN-scope since ADR-112 — the scout's
-      3-harness cells ARE the (b) evidence surface; Go cells 🧊 until 2026-09-13, FU-181).
+      3-harness cells ARE the (b) evidence surface; Go served-set cells runnable on the credits
+      window — the Sep-13 gate dissolved with FU-181's 2026-08-25 re-scope).
       **Next:** judge the P4 flip on the soak read (shadow divergences + drift belts + #778's
       cells) — the flip child is checkpoint-minted on Goal #775.
       Relates ADR-077, ADR-081, ADR-096, ADR-112, FU-044, FU-046, FU-057, FU-062, FU-105.
