@@ -2176,7 +2176,7 @@ if [ -n "$RUN_CMD" ]; then
     # PR classifies as `unknown` and must never strike.
     EMIT_STRIKE=""
     case "$ERR_CLASS" in
-      harness-death|auth-storm|timeout|quota|budget-*) EMIT_STRIKE=1;;
+      harness-death|auth-storm|timeout|quota|budget-*|http-403-other) EMIT_STRIKE=1;;
     esac
     [ -n "${PR_URL:-}" ] || EMIT_STRIKE=1
     # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
