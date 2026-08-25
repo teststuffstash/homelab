@@ -230,18 +230,14 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
       — both need only org self-hosted-runners R/W. `docs/github-setup.md` §2.
 
-- [ ] **FU-185** — **Shellcheck gate on the agent glue.** The 2026-08-24 shell audit: ~13
-      recorded shell-language defects (unbound vars, bashisms, masked exits, fail-open `||`),
-      disproportionately the SILENT class — and ShellCheck's SC2318 names the exact
-      `local`-expansion bug that killed every model-scout tick for 6 days (#854; PR#862's
-      first diagnosis was refuted by the live log). ADR-113 rules the split: bash stays glue,
-      decision logic is Python, no wholesale rewrite. **Next:** add `shellcheck` to devbox.json
-      + a required `ci` step (`shellcheck -S warning agents/*.sh scripts/*.sh` — .github edit,
-      operator lane) and burn down the ~8 standing warnings (3 scout / 4 scan / 1 launcher) in
-      the same PR. Known live instance of the class: `meta-needs-attention.sh` can exit 0 with
-      an empty read on an inner gh failure — meta-events' NEEDSMETA arm then mass-clears +
-      re-emits (flapped twice 2026-08-23; the ALERT arm's twin was quickfixed f703ec39).
-      Relates ADR-113, ADR-103, #854.
+- [ ] **FU-185** — **Shellcheck gate on the agent glue.** The 2026-08-24 audit: ~13 shell
+      defects, disproportionately SILENT — SC2318 names the exact `local`-expansion bug that
+      killed every scout tick for 6 days (#854). ADR-113 rules the split (bash = glue, logic =
+      Python, no wholesale rewrite). Known live instance: `meta-needs-attention.sh` can exit 0
+      on an empty read after an inner gh failure — the NEEDSMETA arm mass-clears + re-emits
+      (flapped 2026-08-23 ×2; the ALERT arm's twin quickfixed f703ec39). **Next:** shellcheck
+      in devbox.json + a required `ci` step (`.github` edit, operator lane) and the ~8
+      standing warnings burnt down in the same PR. Relates ADR-113, ADR-103, #854.
 
 ## Agents
 
@@ -262,19 +258,14 @@ the block needs pruning, not more headings.
       merge `stacks_json()` already does; or extract that seam for the launchers. Relates
       FU-049 (generating the mirror), ADR-085.
 
-- [ ] **FU-168** — **The dispatch design revisit chartered at #278's closeout — the design half
-      is ADR-106's (the A3 sitting); this item now tracks the build + soak.** (a) concurrency
-      shipped 2026-08-12 (the A2 famine PR — doorbell collapse + `--detach` mutex scoping +
-      FU-144 fan-out; the 017790c wake metrics + `AgentDispatchCronWoken` are the acceptance
-      instrument — cron-woken dispatches ≈ 0 once soaked); (b) the `Touches:` fence demotion +
-      mechanical governance lint = Bucket A4 (ADR-106 (4)). Evidence:
-      [`docs/spikes/goal-lane-v1.1-fu165-pilot.md`](spikes/goal-lane-v1.1-fu165-pilot.md)
-      findings 4–5. **⚠ The (a) soak read FAILED 2026-08-25** (fu-sweep):
-      `changes(agent_dispatch_cron_woken_timestamp[24h])` = 2 and 5 — cron-serviced dispatches
-      persist post-#669/#672/#679 and `AgentDispatchCronWoken` (#459) is firing legitimately.
-      A dead edge remains; the emitter hunt (which transition the cron serviced — the scan states
-      wake source per dispatch) is the concrete next action, on #459. **Next:** the hunt, then
-      A4's fence half; close when cron-woken ≈ 0 holds. Relates ADR-106, ADR-094, ADR-097, FU-167.
+- [ ] **FU-168** — **Dispatch revisit (#278 closeout): build + soak.** (a) concurrency shipped
+      2026-08-12 (the A2 famine PR; `AgentDispatchCronWoken` is the acceptance instrument —
+      cron-woken ≈ 0 once soaked); (b) `Touches:` fence demotion + governance lint = Bucket A4.
+      Evidence: [`docs/spikes/goal-lane-v1.1-fu165-pilot.md`](spikes/goal-lane-v1.1-fu165-pilot.md)
+      findings 4–5. **⚠ The (a) soak read FAILED 2026-08-25**: `changes(cron_woken[24h])` = 2
+      and 5 — #459 fires legitimately, a dead doorbell edge remains. **Next:** the emitter hunt
+      (the scan states wake source per dispatch), on #459; then A4's fence half; close when
+      cron-woken ≈ 0 holds. Relates ADR-106, ADR-094, ADR-097, FU-167.
 
 - [ ] **FU-169** — **Differential coverage as a REVIEW INPUT (operator design, 2026-08-13).**
       The reviewer can't see whether a PR improves or reduces test coverage; the blanket
@@ -384,13 +375,10 @@ the block needs pruning, not more headings.
       FU-168, #354, homelab#661.
 
 - [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
-      broken.** A
-      `changes-requested` round that pushes nothing was invisible (circles PR#39 r3: died on a
-      `-32602` truncation, classified `clean`, banked nothing — cause is agent-runtime#36).
-      Reusing FU-115b's predicate exposed two bugs in it: it read `.commits[]?.commit.committedDate`
-      where `gh` puts it TOP-LEVEL, so `$head` was always "" and it returned "no-op" for **every**
-      PR; and comparison was wrong anyway — a good round posts stats AFTER its push. **Counting**
-      is the fix (`>= 2` stats after the newest non-merge commit). One shared `NOOP_ROUND_JQ`.
+      broken.** A `changes-requested` round that pushes nothing was invisible (circles PR#39
+      r3); reusing FU-115b's predicate exposed two bugs in IT (committedDate read at the wrong
+      level → "no-op" for every PR; and a good round posts stats AFTER its push). **Counting**
+      is the fix (`>= 2` stats after the newest non-merge commit), one shared `NOOP_ROUND_JQ`.
       **Fired live 2026-08-24** (the #862 arbitrate cycle) — and MIS-fired: it re-labeled over
       a newer arbitration ruling on a LANDING PR (state-fp mutates every tick post-approval,
       3 sessions/5min) — fixed via #868 → PR#873 (SELECT excludes APPROVED+armed, "gated on
