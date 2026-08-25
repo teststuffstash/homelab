@@ -521,8 +521,12 @@ the block needs pruning, not more headings.
       **Open:** legs (b)+(c) ride G-A child #778 (leg (b) IN-scope since ADR-112 — the scout's
       3-harness cells ARE the (b) evidence surface; Go served-set cells runnable on the credits
       window — the Sep-13 gate dissolved with FU-181's 2026-08-25 re-scope).
-      **Next:** judge the P4 flip on the soak read (shadow divergences + drift belts + #778's
-      cells) — the flip child is checkpoint-minted on Goal #775.
+      **Next:** the flip evidence is COMPLETE (2026-08-25, #775 comment 5415070206: 27% of
+      divergences = the #158 recovered-deferral signature, 73% = the ruled steady state, zero
+      pathological picks, net honored; both served-set Go cells ride-level clean) — what remains
+      is the operator's SEQUENCING call: flip at/after the ~2026-09-03 PR#715 paid-flash revert,
+      or ship the claim `rails:` posture knob first; the checkpoint mints the flip child on that
+      ruling.
       Relates ADR-077, ADR-081, ADR-096, ADR-112, FU-044, FU-046, FU-057, FU-062, FU-105.
 - [ ] **FU-127** — **One model-id parser LANDED; the structured claim field is the rest.**
       `agents/model_id.py` is the single implementation of `{rail, harness, model}` with the
