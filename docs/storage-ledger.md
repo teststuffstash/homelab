@@ -216,8 +216,28 @@ threshold**.
   decision, not a rubber stamp. **135Gi/150 (90%) since 2026-08-04** — `tofu-state` took 1Gi
   ([`tofu-state.md`](tofu-state.md)); it was sized against the actual 1.4MB main-root state
   precisely because the tier has no room for a round-number guess.
-- **Garage metering** — enable the admin-API metrics (`:3903`) + a ServiceMonitor; per-bucket
-  usage-vs-cap panels; a **>80% alert**. Still the open item.
+- **Garage metering** — still the open item, but **smaller than it reads: the exporter is already
+  running.** Measured 2026-08-25 by scraping `http://<garage-pod-ip>:3903/metrics` with the admin
+  token: **48 metric families**, served regardless of the chart's `monitoring.metrics.enabled:
+  false` (that flag gates the ServiceMonitor, not the exporter). What is missing is only the
+  plumbing — 3903 appears in **no** Service (`garage`, `garage-headless` and `garage-s3` all expose
+  3900/3902 only), so nothing can scrape it. Two of the families are worth naming because they are
+  what this section has been asking for:
+  - **`garage_local_disk_avail` / `garage_local_disk_total`** — the usage half, per volume, which
+    is the ">80% alert" above.
+  - **`table_size{table_name=…}`** — per-table row counts. That is a direct detector for the
+    2026-08-24 class of loss ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)):
+    an empty-tabled DB is `table_size` collapsing to 0, which no amount of request-rate or
+    queue-length watching says. ⚠ It would **not** have helped on the day — Prometheus was pinned
+    to wk-01 by its own Longhorn PVC and was dark 14:18→15:45 while the wipe happened at 15:31, so
+    every Prometheus-scraped signal shared fate with the failure. Alerting on it is worth doing for
+    the *next* one; the shared-fate half is a separate question this ledger does not own.
+
+  Upstream's [dashboard](https://garagehq.deuxfleurs.fr/documentation/cookbook/monitoring/)
+  (`script/telemetry/grafana-garage-dashboard-prometheus.json`) is **not** that alert: its ten
+  panels are S3/web/RPC request and error rates, block I/O bytes, the resync queue and two table
+  *queue-length* gauges. It predates `table_size` and never plots it — useful as a starting board,
+  not as the metering this section is waiting for.
 - **Longhorn metering — BUILT 2026-08-04** (`02cf8bb`,
   `argocd/resources/longhorn-alerts/prometheusrule.yaml`). Both sums, as specified:
   `LonghornDiskFillingUp`/`LonghornDiskAlmostFull` on physical bytes (85%/93%) and
