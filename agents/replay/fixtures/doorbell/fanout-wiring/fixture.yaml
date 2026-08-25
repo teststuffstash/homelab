@@ -11,6 +11,16 @@
 # The bar: reverting line 792 from fanout_graduated_stack to fanout_stack must turn the replay
 # RED, because the extracted block would then call fanout_stack which lacks the capacity guard
 # and double-rings in capacity mode.
+#
+# HERMETICITY (homelab#897): the block's trailing `case` EXECUTES AT SOURCE TIME — before
+# latch-override.sh is composed — so the capacity row reaches the REAL subscription-latch.sh as a
+# CHILD process (function stubs don't cross the bash child boundary; only PATH shims do). Its
+# verdict was therefore a function of the live proxy: reachable → no belt call (the recorded
+# stream); unreachable (any jail checkout) → the kubectl semaphore-belt CALL appears and the row
+# reds. The row now pins AGENT_EGRESS_PROXY to a deterministically-unreachable address so the
+# latch's FAIL-OPEN belt path runs identically everywhere, and the expected stream carries the
+# belt's kubectl CALL. This also pins the fail-open contract itself: latch unreachable ⇒ belt
+# count ⇒ clear ⇒ rings proceed.
 name: doorbell-fanout-wiring
 mode: table
 source: agents/coordinator-scan.sh
