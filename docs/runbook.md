@@ -170,7 +170,7 @@ only LAN DHCP.
 soft-anti-affinity across wk-02/thinkcentre/hp-01). All stateful services use Longhorn PVCs (not
 node-pinned). A `longhorn-fast` SC (replica=1, node-local; SCRATCH for disk-write-heavy pods —
 eligibility ruling in `docs/storage-ledger.md`, FU-159) lives on the ThinkCentre's 2×Optane,
-formatted+mounted via the ThinkCentre entry's `optane_disks` field in `machines/machines.yaml`
+formatted+mounted via the ThinkCentre entry's `longhorn_disks` field in `machines/machines.yaml`
 (`tofu/metal.tf` only consumes it) and registered with `scripts/longhorn-register-optane.sh`.
 
 - ⚠️ **Never `talosctl upgrade` a Proxmox *nocloud* VM** — the reboot loses the cloud-init static
