@@ -77,7 +77,7 @@ the emitter hunt is live on #459; **FU-147 fired live 2026-08-24 and mis-fired**
 class fixed via #868→PR#873, one clean organic fire still owed; FU-058 re-fire DELIVERED r1
 (PR#918) + the batch filed #927–#932; FU-093's Garage-metrics leg queued as #934, fstrim
 scheduled PR#925; FU-102's first enablement = platform, wedged on #933 (checkpoint counts the
-post-launch bucket as an open child — G-B cannot assemble); FU-173 pin PR#935 armed. Previous
+post-launch bucket as an open child — G-B cannot assemble); FU-173 pinned + archived. Previous
 2026-08-11 (fu-sweep over the Observability & evidence subsection, after the
 first board-sweep: **FU-058 corrected** — the 08-10 "guard-refused" reading was false, five
 latent retro-lane bugs fixed + first report DELIVERED (PR#246); **FU-133 pointer-ized** —
@@ -105,14 +105,6 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
-- [ ] **FU-173** — **Grafana panel plugins install unpinned** — `grafana.plugins:
-      [frser-sqlite-datasource]` in `argocd/platform/values/kube-prometheus-stack.yaml` fetches
-      the LATEST release on every pod start, so a plugin release can change prod behavior with no
-      commit anywhere. Ruled out as the cause of the 2026-08 sleep-overview breakage (no frser
-      release since 4.0.6, 2026-05-11) but it's a live silent-regression vector, and sleep's
-      integration gate pins 4.0.6. **Pin PR#935 armed 2026-08-25** (fu-sweep).
-      **Next:** after PR#935 merges + the grafana pod rolls, verify the plugin version in-pod,
-      then archive. Surfaced by sleep-tracking#121. Relates FU-136.
 - [ ] **FU-137** — **Garage durability: POINTER.** The risk fired 2026-08-24 — meta LMDB wiped
       in the pve thin-pool incident, Aug-4 backup restored same day
       ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884).

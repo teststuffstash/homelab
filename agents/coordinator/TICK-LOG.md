@@ -5236,3 +5236,32 @@ first live ADR-110 maintenance session before the ADR existed.
   despite the killswitch — models.opencode.ai leg) · iac-sentinel edge queue bursts to ~8 Pending
   behind the mutex on merge-heavy evenings (drains; watch, not a defect). #745 un-park read and S4
   #762 close both execute at a sweep ≥08-26.
+
+## 2026-08-25 late evening — fu-sweep + docs-cleanup (pipeline stages 2–3) + the mid-sweep operator asks
+
+- **fu-sweep (68 open in): FU-149 archived** (14d read: ordinary days 0–6, the 12-cap bound only
+  on real storm days — value stands) · **FU-173 pinned + archived** (PR#935; ⚠ the space form
+  `id version` SPLIT in Grafana's background installer — "4.0.6" became its own pluginId and
+  crashlooped the new RS ~20 min while the old pod kept serving; fixed 8bd4dc67 as `id@version`,
+  verified 4.0.6 in-pod + Synced/Healthy + LAN 200) · **FU-168's (a) soak read FAILED** —
+  cron-woken ≠ 0, the emitter hunt is live on #459 · **FU-147 fired live 08-24 and mis-fired**
+  (landing-PR churn, fixed #868→#873; one clean organic fire owed) · machine-lane reconcile
+  found **G-B #818 WEDGED: filed #933 queued** (checkpoint trigger (b) counts the open
+  post-launch bucket as an open child — assembly unreachable for any goal that harvested
+  pre-assembly) · **#934 queued** (Garage :3903 metrics build — PR#912 was docs-only).
+- **Operator mid-sweep asks, both delivered:** the 130s `prometheus-rules-lint` CI step —
+  measured to one fixture (`loop-health.promtool-test` = 107.6s: x40000-sample series at 1m ≈
+  28 days materialized against rules whose longest lookback is 10m) → **#936 filed+queued under
+  #518** · **PR#921 corpus gate read → APPROVED** (cross-repo budget walk: matches the v1.2
+  stack-scoped-goal ruling, fail direction conservative and strictly better than the old
+  silent-[] fail-open; non-blocking note: one REST call per tree node per evaluation).
+- **docs-cleanup (S5-bounded per operator — "anything not scrubbed here is for that stint"):**
+  meta-state pruned 279→150 lines to current truth; 6 zero-ref stale-archive entries expired
+  (FU-002/008/026/065/075/083); OVERSIZE trims FU-058/093/095/102/106/127/147/155/168/185
+  (FU-155's evidence → talos-psi spike §7); FU-180 backlink added to chainless-redesign;
+  docs-graph-lint green. **Handed to S5:** the 29 remaining STALE-ARCHIVE ids (most living refs
+  are provenance NAMES — needs the name-anchor ruling), the standing OVERSIZE set
+  (FU-039/125/161/167/169/170+DONE-MARKER/181/095), the deep whole-repo comb + doc-heat (FU-164).
+- **PR#925 conflict resolved** (its FU-093 edit vs the sweep's newer trim — took master's,
+  merge-not-clobber; BEHIND+armed, machine-owned again). NEEDSMETA empty-read flap disposed
+  into FU-185 (the masked-inner-exit class; ALERT arm's twin was f703ec39).
