@@ -113,6 +113,7 @@ else
   [ "$RESOLVE_CLASS" = "goal-decompose" ] && _fb="${GOAL_MODEL:-opus}"
   RESOLVED="$(bash "${HERE}/resolve-model.sh" --role coordinator --class "${RESOLVE_CLASS:-dispatch}" --fallback "$_fb" 2>/dev/null)" || RESOLVED=""
 fi
+# >>>REPLAY:coordinator-adopt-model>>>
 if [ -n "$RESOLVED" ]; then
   echo "→ coordinator model: role=coordinator class=${RESOLVE_CLASS:-dispatch} → ${RESOLVED}" >&2
   # The routed answer is a FULL rail-prefixed id (claude/fable) — the claude CLI takes the BARE
@@ -124,11 +125,14 @@ if [ -n "$RESOLVED" ]; then
   eval "$(python3 "${HERE}/model_id.py" --shell "$RESOLVED")"
   MODEL="${MODEL_MODEL:-$RESOLVED}"
 fi
+# <<<REPLAY:coordinator-adopt-model<<<
+# >>>REPLAY:coordinator-goal-model>>>
 # GOAL_MODEL env escape hatch: if set and this is a goal-decompose item, it wins unconditionally.
 if [ -n "${GOAL_MODEL:-}" ] && [ "$RESOLVE_CLASS" = "goal-decompose" ]; then
   echo "→ coordinator model: GOAL_MODEL=${GOAL_MODEL} wins (env escape hatch, goal-decompose)" >&2
   MODEL="$GOAL_MODEL"
 fi
+# <<<REPLAY:coordinator-goal-model<<<
 
 # Per-stack scope: prepend the stack context to the prompt so the coordinator knows exactly
 # which repos are its world this session, and expose it as pod env for forward-compat. Policy will move

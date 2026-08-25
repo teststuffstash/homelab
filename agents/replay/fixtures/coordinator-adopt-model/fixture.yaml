@@ -1,0 +1,30 @@
+# coordinator-adopt-model — the coordinator adoption's model parse (PR#824, issue #830).
+#
+# THE CONTRACT: the adoption block in coordinator-session.sh parses a routed model answer
+# through model_id.py (FU-127) so that a rail-prefixed id like `claude/fable` yields the
+# bare alias `fable` for `claude --model`, while a bare answer like `sonnet` passes through
+# unchanged. The GOAL_MODEL escape hatch (goal-decompose items) wins unconditionally AFTER
+# the parse, so it is pinned as untouched by the adoption block.
+#
+# Five rows:
+#   routed-fable            — RESOLVED=claude/fable → MODEL=fable (parse strips the rail prefix)
+#   bare-sonnet             — RESOLVED=sonnet → MODEL=sonnet (bare answer unchanged)
+#   goal-decompose-override — RESOLVED=claude/fable + GOAL_MODEL=opus + goal-decompose
+#                           → MODEL=opus (GOAL_MODEL wins after parse)
+#   goal-decompose-bare     — RESOLVED=sonnet + GOAL_MODEL=opus + goal-decompose
+#                           → MODEL=opus (GOAL_MODEL wins, parse doesn't interfere)
+#   no-resolved             — RESOLVED="" → MODEL unchanged (adoption block skipped)
+#
+# coordinator-session.sh is NOT in the ADR-103 ratchet's clause list (.github/workflows/ci.yaml,
+# a NEVER-TOUCH path). The fixture is sufficient without it because agents/replay/** IS
+# CI-executed from the branch (devbox run clause-replay), so a changed adoption block reds
+# the fixture directly — the clause list is an additional cross-check, not the only ratchet.
+name: coordinator-adopt-model
+mode: table
+source: agents/coordinator-session.sh
+parts:
+  - file:bridge.sh
+  - block:coordinator-adopt-model
+  - block:coordinator-goal-model
+  - file:post.sh
+rows: rows.psv
