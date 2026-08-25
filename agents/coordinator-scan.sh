@@ -3102,8 +3102,12 @@ EOF_GUARDED
     echo "  run it (interactive, supervised):"
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"
   fi
-  # Flush accumulated item classifications for this stack's pass
-  item_class_flush
 done
+
+# FU-176, one scope level up (PR #915 review): SCAN_PHASE_NS is process-fixed at the top of this
+# file, so a per-stack flush would POST every stack to the SAME job=agent_board,namespace=<ns>
+# group and pushgateway's replace-by-metric-name semantics would leave only the last stack's rows.
+# Accumulate across the whole pass and flush ONCE, here, after the stacks loop.
+item_class_flush
 
 [ -n "$any_work" ] || echo "no stack has actionable work — nothing to spawn (no LLM woken)."
