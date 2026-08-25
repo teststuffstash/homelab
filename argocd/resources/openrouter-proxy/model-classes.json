@@ -48,6 +48,10 @@
    "tier": "heavy"
   },
   "dispatch": {
+   "_comment": "chain_head added 2026-08-25 (operator ruling — the goal-decompose 08-23 precedent, second instance of the same class): the coordinator-lane /route calls (coordinator, dispatch-unit, responder) arrive stack-less, so chain_source resolves nothing and the rotation universe is all-OpenRouter — with rails subscription-only the served walk exhausted on EVERY call (123 chain-exhausted defers over 7d, homelab#775 comment 5415278592) while the launchers' fail-open fallbacks silently carried the lane on sonnet. claude/sonnet matches the carried behavior (coordination judgment default). Both chain_head stand-ins retire when the P4 flip promotes the M11 ladder's subscription candidate into the served walk.",
+   "chain_head": [
+    "claude/sonnet"
+   ],
    "rails": [
     "subscription"
    ],
