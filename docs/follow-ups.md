@@ -114,20 +114,17 @@ six OVERSIZE items pointer-ized into
       **Next (oracle-prod-deadline-bound, ~2026-08-31):** the build-out — garage rf=3 migration
       (local XFS, wk-metal-01/04 + wk-02 interim), CNPG replica-1 + required zone anti-affinity,
       backup CronJob. Offsite stays parked behind oracle/idp prod. Relates FU-013, FU-012, ADR-031.
-      ⚠ **The meta volume runs `numberOfReplicas: 1` (wk-02) since 2026-08-25** — the only way to
-      expand it past the full `std` tier during the Tier-3 restore; redundancy comes back with this
-      build-out, which is what makes the deadline load-bearing. Snapshot control: **FU-184**.
-- [ ] **FU-184** — **Garage's metadata auto-snapshot has never worked, and the DR recipe trusts
-      it.** `metadata_auto_snapshot_interval = 6h` was installed 2026-08-24 as the wipe's durability
-      fix; the worker dies every attempt with `MDB_INCOMPATIBLE: Operation and DB incompatible, or
-      DB flags changed`, leaving an empty directory — **131 of them, 08-24 20:31 → 08-25, zero
-      usable snapshots**. Worse, an in-progress `db.lmdb` is indistinguishable by name from a
-      finished one (carving one mid-write yielded 203,744 objects and **0 version rows** against
-      ~465k live), so [`garage.md`](garage.md) §Durability's "copy `meta_snapshots/<latest>`"
-      restores an empty dir or a torn file — a DR path worse than none. Recipe now carries the ⚠;
-      this item owns the control. **Next:** find why the copy is rejected (env opened with flags
-      that forbid `mdb_env_copy`? snapshots dir on another filesystem?), then either make snapshots
-      real or drop the assurance from the recipe and ADR-114; prune the empty dirs. Relates FU-137.
+      ⚠ meta volume is **1 replica (wk-02) since 2026-08-25** — no `std` disk fits a grown 2nd; snapshots **FU-184**.
+- [ ] **FU-184** — **Garage's metadata auto-snapshot has never worked: POINTER.** The
+      `metadata_auto_snapshot_interval = 6h` belt installed as the 2026-08-24 wipe's durability fix
+      has produced **zero** usable snapshots — 131 empty dirs, `MDB_INCOMPATIBLE` every attempt —
+      and [`garage.md`](garage.md) §Durability's DR recipe depended on them. **Diagnosed
+      2026-08-25** (cause, evidence, what was ruled out: that doc's ⚠ block): `MDB_CP_COMPACT`
+      fails on a page-leaked environment, and the wipe left exactly that, so it will never succeed
+      on this DB. **Next:** rebuild the env in a planned window — `garage convert-db -a lmdb -b
+      lmdb`, stop, swap, restart, verify counts. Reclaims ~16 GiB and restores snapshots in one
+      move, and a fresh small env is re-placeable with 2 replicas (feeds FU-137). Acceptance: a
+      snapshot completes and carves to the live object count. Relates FU-137, ADR-114.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
