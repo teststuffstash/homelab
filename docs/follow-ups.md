@@ -676,7 +676,7 @@ the block needs pruning, not more headings.
       **2026-08-24: the third sum went unmetered into its third 100%** and took wk-01 + Garage's
       metadata with it ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)) —
       the pve thin-pool Data% metric + alert is now the FIRST priority here, and freed blocks
-      need a periodic guest fstrim (discard=on alone returns nothing; Talos never trims).
+      periodic guest fstrim BUILT 2026-08-25 (`argocd/resources/node-fstrim/`, daily per pool VM + belt alerts; first run 78.72%->62.99%). Pool metering itself still open — no pve exporter.
       Relates ADR-089, FU-116 (archived).
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
