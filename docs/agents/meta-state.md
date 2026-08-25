@@ -136,6 +136,30 @@ meant to avoid.)
   byte-exact from the intact OCI image). Never run `garage bucket cleanup-incomplete-uploads`
   against a bucket still being recovered.
 
+- **⚑ NEXT ACT — FU-184 `convert-db` (planned window, NOT urgent).** The metadata auto-snapshot
+  cannot work on this DB: `MDB_CP_COMPACT` fails on a page-leaked env and the 08-24 wipe left
+  exactly that (full diagnosis + evidence: `docs/garage.md` §Durability). Rebuilding the env fixes
+  the snapshot belt AND reclaims ~16 GiB (`data.mdb` is 18.1 GiB for ~2 GiB of live data), and a
+  fresh small env is re-placeable with 2 replicas — so it feeds FU-137/ADR-114.
+  **Deliberately deferred to a fresh session (2026-08-25, ctx 654k):** it rewrites the ONLY copy of
+  the metadata recovered on 08-25. The Aug-4 backup and the frozen carve both PREDATE that
+  recovery, so a botched swap loses the whole day's work. Not urgent — the DB has been flat since
+  14:12Z with 12 GiB free.
+  **Order (do not skip 1 or 2):**
+  1. **Longhorn snapshot of `meta-garage-0` first** — block-level, works even though LMDB's own
+     snapshot does not. This is the only rollback that covers the current state.
+  2. **Suspend ArgoCD selfHeal on the `garage` Application** (`syncPolicy.automated`, prune+selfHeal
+     are ON) or it will fight the STS scale-down. Restore it afterwards.
+  3. Scale `sts/garage` to 0; run `garage convert-db -a lmdb -i /mnt/meta/db.lmdb -b lmdb -o
+     /mnt/meta/db.lmdb.new` from a pod using the garage image with a command override (that image
+     has NO shell — `/garage` only), meta PVC mounted rw on garage-0's node (RWO = node-level lock).
+  4. `mv db.lmdb db.lmdb.old && mv db.lmdb.new db.lmdb`; scale back to 1; **verify `garage stats`
+     object count matches ~896,628 and the buckets' counts** before deleting `db.lmdb.old`.
+  5. Acceptance: one auto-snapshot COMPLETES, and carving it with `scripts/garage-forensics/
+     lmdb-carve.py` reports the live object count (a torn/partial snapshot carves short — that is
+     how a mid-write one was caught on 08-25).
+  6. Then consider the alert: this control failed 131 times in a row and surfaced nothing.
+
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
   for a few days, revert to 0 if no win; the residual setup cost is homelab#518.
 - **Small live residue (compressed 2026-08-19):** wk-metal-04
