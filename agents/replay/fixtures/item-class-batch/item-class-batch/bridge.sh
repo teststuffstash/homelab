@@ -29,5 +29,19 @@ curl() {
   item_class_flush
   printf 'FLUSH_DONE %s\n' "$?"
 
+  echo "=== scenario 2: timestamp carry-over for unchanged items ==="
+  CURL_GET_BODY="# HELP agent_item_class_since_timestamp_seconds Unix epoch when classified
+# TYPE agent_item_class_since_timestamp_seconds gauge
+agent_item_class_since_timestamp_seconds{repo=\"homelab\",item=\"833\",class=\"held-merged-unlinked\",who=\"operator\"} 1786000000
+agent_item_class_since_timestamp_seconds{repo=\"homelab\",item=\"834\",class=\"queued-held-by-ghost\",who=\"operator\"} 1786100000"
+
+  item_class_push "homelab" "833" "held-merged-unlinked" "operator"
+  item_class_push "homelab" "835" "riding" "machine"
+  printf 'ACCUMULATED %s\n' "$(printf '%b' "$ITEM_CLASS_ROWS" | wc -l)"
+
+  echo "=== flush with timestamp preservation ==="
+  item_class_flush
+  printf 'FLUSH_DONE %s\n' "$?"
+
   echo "=== end ==="
 } >> "$REPLAY_ACTIONS"
