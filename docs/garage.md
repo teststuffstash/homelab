@@ -85,12 +85,22 @@ Cloudflare). HAProxy must allow large request bodies / streaming for S3 uploads 
 Measured 2026-08-04, because "can I afford to lose this?" deserves numbers rather than a shrug.
 
 **~63.7 GB across 12 buckets**, and the shape matters more than the total: `ert-snapshots` is 60.4
-GB / 252k objects of it and is **recoverable** — the oracle-fleet ingestion re-downloads its source
-zip, so losing it costs a long re-ingest, not data. Everything else together is ~3.3 GB, and the
-part that is genuinely irreplaceable is small: `agent-transcripts` (491 MB, the loop's own
-observability record) and the `sleep-*` buckets (27.5 MB of real personal data). `allure-reports`
-and `oracle-specs` regenerate from CI and from `specs/` in the stack repos; `loki` self-expires at
-7 days.
+GB / 252k objects of it. Everything else together is ~3.3 GB, and the part that is genuinely
+irreplaceable is small: `agent-transcripts` (491 MB, the loop's own observability record) and the
+`sleep-*` buckets (27.5 MB of real personal data). `allure-reports` and `oracle-specs` regenerate
+from CI and from `specs/` in the stack repos; `loki` self-expires at 7 days.
+
+**⚠ `ert-snapshots` is NOT the cheap-to-lose bucket this section called it until 2026-08-25.** The
+old reading — "the oracle-fleet ingestion re-downloads its source zip, so losing it costs a long
+re-ingest, not data" — is true about the *bytes* and wrong about the *asset*. Re-ingesting fetches
+**today's** register, so it produces a current corpus and destroys the only thing a stale one is
+good for: the delta job (oracle-fleet `specs/ingestion/riigiteataja-delta.md`) updates a base
+corpus in place, and testing it needs a base that has genuinely aged. The 2026-07-12 ingest is that
+base, and it is not re-creatable at any price — re-download moves the window, it does not restore
+it (operator, 2026-08-25). Nor is the published ghcr `ert-corpus` image a substitute: `resolve_base`
+needs `latest.json`, the `build/` + `publish/` step manifests and the whole `parsed/` set, none of
+which ride in the image. Treat this bucket as **irreplaceable while an un-run delta window is open**,
+and as production data outright once the oracle stack serves traffic.
 
 **What protects it:** Garage runs `replication_factor = 1` on a single node, so *all* redundancy
 is Longhorn's (2 replicas per volume). Replica PLACEMENT is owned by
