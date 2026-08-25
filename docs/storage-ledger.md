@@ -12,13 +12,13 @@ jointly blow the tier — which is exactly what happened.
 > **A tier's committed capacity is the sum of every cap charged against it, across every repo, and
 > exactly one ledger owns that sum.** A claim that doesn't appear in the ledger doesn't exist.
 
-## Current shape (2026-08-07)
+## Current shape (2026-08-25)
 
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
-| `std` | hp-01, thinkcentre, **wk-02** | 496.6G | 410.6G | 237.3G (58%) | 193.7G (39%) |
-| `bulk` | wk-metal-01, **wk-metal-04** | 975.1G | 706.7G | 633.5G (90%) | 384.9G (39%) |
-| `fast` | thinkcentre Optane ×2 | 28.7G | 28.7G | 5.4G | 1.3G |
+| `std` | hp-01 **×2 disks**, thinkcentre, **wk-02** | 581.7G | 501.6G | 305.0G (61%) | 243.3G (42%) |
+| `bulk` | wk-metal-01, **wk-metal-04** | 908.1G | 658.1G | 580.0G (88%) | 619.9G (68%) |
+| `fast` | thinkcentre Optane ×2 | 26.7G | 26.7G | 5.0G | 1.4G |
 
 **`fast` eligibility (operator ruling 2026-08-11, FU-159):** SCRATCH for disk-write-heavy pods
 (CI builds and the like) — single-node replica-1 Optane of modest speed; NEVER load-bearing
@@ -29,11 +29,28 @@ oversized on purpose (see homelab#116 below), which spends nominal headroom to b
 actually matters, and physical sits at 39%. **`std`'s comfort is new**: it had two zones and
 hp-01 at 105% until wk-02 moved into it the same day.
 
-**hp-01 remains the tight node and no knob fixes it.** 104% of allocatable, 70% physical, and
-43.3G of that is the container image store on the smallest disk in the tier. Its reservation
-already under-covers its own images, so lowering it would only move the lie. This is the one place
-in the lab where the honest answer is *buy a disk* — and see the hypervisor section for why that
-disk cannot be a SATA SSD in pve.
+**hp-01 was the tight node and no knob fixed it** — 104% of allocatable, 70% physical, 43.3G of
+that the container image store on the smallest disk in the tier, and a reservation that did not
+even cover its own images, so lowering it would only have moved the lie. This section said the
+honest answer was *buy a disk*; **that happened on 2026-08-25**. A second 128G SATA SSD (a Toshiba
+HG5d, `hg5d`, tagged `std`) is mounted at `/var/lib/longhorn/hg5d` and adds **119.2G raw / 116.8G
+free** to the tier — declared in `machines/machines.yaml`'s `longhorn_disks`, provisioned by Talos
+at boot, registered by `scripts/longhorn-tag-disks.sh`. hp-01's original disk stays at 117G with
+its image store; the new one carries Longhorn data only, hence `storageReserved: 0`.
+
+Two things that made it more than a bolt-on. The disk arrived with a **bootable Windows install**
+(MBR, a flagged 350M "System Reserved" NTFS + 118.9G NTFS), so it needed `talosctl wipe disk` first
+— Talos refuses to partition a device that already carries a partition table. And it is now the
+*second* 128G SATA SSD in that box, which makes `/dev/sdX` an unsafe way to name either of them:
+the entry is pinned to `/dev/disk/by-id/wwn-0x500080db1007e129` precisely because `longhorn_disks`
+*partitions* what it points at. `install_disk: /dev/sda` on the same node is the remaining
+name-based selector and should follow (FU-076's neighbourhood).
+
+**The hypervisor is still not where a spare SATA SSD goes**, but the reason is cost, not
+impossibility (operator, 2026-08-25): pve's board exposes the ports and they are disabled in
+firmware, so enabling them is a BIOS session with the whole cluster down. The direction for
+ADR-114's remaining capacity is therefore **cheap boxes with their own storage**, not more disks
+in pve — see the hypervisor section for what that firmware state actually looks like.
 
 ## The double-booking that started this (2026-07-22, closing oracle-iac#40)
 
@@ -132,8 +149,12 @@ capacity), then `discard=on` + `ssd=1` on wk-02's scsi0 and a trim:
 253 GB returned. Recipe — including the two ways that do NOT work — in
 [`runbook.md`](runbook.md) §"Reclaiming thin-pool space from a Talos VM".
 
-⚠ **pve cannot take a SATA SSD.** Checked 2026-08-07: of 90 PCI devices the NVMe is the *only*
-mass-storage controller — no AHCI enumerated, `ahci` not loaded, `/sys/class/ata_port/` empty. The
+⚠ **pve will not take a SATA SSD without a full-cluster outage.** Checked 2026-08-07: of 90 PCI
+devices the NVMe is the *only* mass-storage controller — no AHCI enumerated, `ahci` not loaded,
+`/sys/class/ata_port/` empty. The ports are physically present and this is a firmware setting, so
+it is *possible* — it just costs a BIOS session with every VM on the box down, which is why the
+answer to "where does the next disk go" is a new cheap box, not this one (operator, 2026-08-25).
+The
 board (`INTEL X99-P4`) exposes SATA ports physically but they are disabled in firmware. The x16
 slot is permanently occupied: the box **refuses to POST without the GPU** (a GeForce 9600 GT with
 `driver=none`, so it idles at full clocks heating the M.2 beneath it — NVMe sensor 1 reads ~69°C).
