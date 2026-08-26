@@ -1,0 +1,16 @@
+[
+  {
+    "number": 80,
+    "title": "scan: the janitor tick drops its exit code",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "task/fix"}],
+    "body": "The janitor cron drops the tick's exit code, so failures look like success.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:00:00Z"
+  },
+  {
+    "number": 81,
+    "title": "docs: the footprint-release lifecycle",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "task/fix"}],
+    "body": "Document when an issue footprint frees.\n\nTouches: docs/agents/\n",
+    "updatedAt": "2026-08-25T06:05:00Z"
+  }
+]

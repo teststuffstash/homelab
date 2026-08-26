@@ -1,0 +1,28 @@
+# homelab#928 — the agent/review phantom belt: an `agent-fix ∧ agent/review` issue with NO open PR
+# and NO merged PR mentioning it, persisted past C4C5_PERSIST_S, is a terminal sink invisible to
+# every scan class. This belt reconciles it back to `agent/queued`, verbatim shape of the IL-T16
+# belt (homelab#155) but for `agent/review` instead of `agent/in-progress`.
+#
+# CONDITION UNDER REPLAY. Two review-only issues in one world:
+#   #80 — `agent/review`, no open PR, no merged PR, persisted past C4C5_PERSIST_S → RECONCILES.
+#   #81 — `agent/review`, no open PR, but mentioned by a MERGED PR → HELD (may be finished work).
+#
+# THE CONTRACT:
+#   1. #80 is WRITTEN in the IL-T16 order — `--add-label agent/queued` FIRST, `--remove-label
+#      agent/review` SECOND, then a `gh issue view` RE-READ that proves the end state before
+#      a single word is commented.
+#   2. The audit comment names the phantom-reconciliation semantic.
+#   3. #81 emits NO write — a merged PR mentioning it holds.
+#   4. The belt runs INSIDE the C4/C5 clause, after the IL-T16 belt and before c4c5-derivations.
+pins:
+  - IL-T16
+name: review-phantom-belt
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:review-phantom-belt
+  - file:post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
+  - 's/ [0-9]\{1,\}m / Nm /g'

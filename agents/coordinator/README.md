@@ -39,8 +39,8 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 |---|---|---|
 | `agent-fix` | opt-in: this issue is fair game for the agent | human |
 | `agent/queued` | ready to dispatch | human or coordinator — **or the scan itself**, restoring it when it reconciles a phantom `agent/in-progress` (homelab#155, IL-T16) |
-| `agent/in-progress` | a worker pod is running this round | coordinator; the deterministic scan REMOVES it when the state is a phantom — no live pod, no open PR, no merged PR mentioning it, persisted past `C4C5_PERSIST_S` — because the stale label also holds every sibling through the ADR-097 footprint intersection (IL-T16) |
-| `agent/review` | PR open, awaiting review (human or agent) | coordinator |
+| `agent/in-progress` | a worker pod is running this round | coordinator; the deterministic scan REMOVES it when the state is a phantom — no live pod, no open PR, no merged PR mentioning it, persisted past `C4C5_PERSIST_S` — because the stale label also holds every sibling through the ADR-097 footprint intersection (IL-T16, homelab#155) |
+| `agent/review` | PR open, awaiting review (human or agent) | coordinator; the deterministic scan REMOVES it when the state is a phantom — no open PR, no merged PR mentioning it, persisted past `C4C5_PERSIST_S` — because the stale label is a terminal sink invisible to every scan class (homelab#928) |
 | `agent/blocked` | needs a human (budget escalate / max rounds / ambiguous) — **or the scan itself**, parking an issue whose worker ruled the deliverable not implementable as written (one `AGENT_INFEASIBLE: <path/resource>` comment → IL-T26, §The infeasible terminal). Excluded from the C4/C5 predicate by the selector, not by assumption: a human gate is never re-dispatched | coordinator — **or the deterministic scan** |
 | `agent/done` | merged | coordinator |
 | `agent-budget/{xs,sm,md,lg}` | optional cap-tier override for the estimator | human |
