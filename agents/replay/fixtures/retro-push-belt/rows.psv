@@ -1,0 +1,5 @@
+# retro-push-belt — the decision table (family contract in fixture.yaml; per-row intent below).
+# id            | world | patch | env                              | expect      | params
+push-ok         |       |       | CURL_RC_1=0                      | push-ok     |
+push-retry-ok   |       |       | CURL_RC_1=1 CURL_RC_2=0          | push-retry-ok |
+push-fails      |       |       | CURL_RC_1=1 CURL_RC_2=1          | push-fails  |
