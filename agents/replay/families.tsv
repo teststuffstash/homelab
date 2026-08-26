@@ -34,6 +34,7 @@ goal-validated	goal
 harness-run-cmd-claude	harness-run-cmd
 harness-run-cmd-go	harness-run-cmd
 harness-run-cmd-goose	harness-run-cmd
+harness-run-cmd-re-review-shadow	harness-run-cmd
 harvest-deep-sprout	harvest
 harvest-goal-closed	harvest
 harvest-goal-open-exhausted	harvest

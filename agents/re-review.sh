@@ -13,17 +13,23 @@
 #   snapshot-manifest.json — {project,task,pr,round,model,headsha8,timestamp,files}
 #
 # Usage:
-#   bash agents/re-review.sh --project homelab --pr 437 [--since YYYYMMDD] [--dry-run] [--model sonnet]
+#   bash agents/re-review.sh --project homelab --pr 437 [--since YYYYMMDD] [--dry-run] [--model sonnet] [--shadow]
 #
 # Flags:
 #   --project <p>     Filter to this project (required with --pr)
 #   --pr <n>          Filter to this PR number
 #   --since YYYYMMDD  Only snapshots after this date (UTC)
 #   --dry-run         Do discovery + fetch + assembly, print the claude command + prompt skeleton instead of invoking
-#   --model <m>       Model to use for re-review (default: sonnet)
+#   --model <m>       Model to use for re-review (default: sonnet). Full model id parsed via model_id.py for rail derivation.
+#   --shadow          Advisory-only mode: NEVER posts to the PR. Writes report to stdout with shadow-re-review marker.
 #
 # Idempotency: Posts comparison as PR comment with <!-- re-review:<headsha8>-<ts> --> tag; skips snapshots whose tag already exists.
 # PAT trap: Never uses statusCheckRollup in any API call (403s on App installation tokens).
+#
+# Shadow mode (--shadow): The re-review NEVER posts a verdict, review, or comment to the PR.
+# Report is written to stdout with a shadow-re-review marker, model + rail attributed.
+# The live reviewer identity split is exactly what the A5 evidence will decide; the shadow
+# must not contaminate it.
 
 set -euo pipefail
 
@@ -47,6 +53,7 @@ PROJECT=""
 PR=""
 SINCE=""
 DRY_RUN=0
+SHADOW=0
 MODEL="sonnet"
 
 # Parse args
@@ -56,6 +63,7 @@ while [ $# -gt 0 ]; do
     --pr)      PR="$2"; shift 2;;
     --since)   SINCE="$2"; shift 2;;
     --dry-run) DRY_RUN=1; shift;;
+    --shadow)  SHADOW=1; shift;;
     --model)   MODEL="$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -66,6 +74,13 @@ if [ -n "$PR" ] && [ -z "$PROJECT" ]; then
   echo "re-review: --pr requires --project (the bucket is keyed <project>/<task>/...)" >&2
   exit 2
 fi
+
+# Derive rail from model id via model_id.py (ADR-096 §M10 explicit-override semantics).
+# The --model flag IS the override — the route call is skipped entirely.
+eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
+# MODEL_RAIL, MODEL_HARNESS, MODEL_MODEL are now set.
+# For shadow mode, attribute the rail in the report header.
+echo "→ re-review: model=$MODEL rail=$MODEL_RAIL harness=$MODEL_HARNESS resolved=$MODEL_MODEL"
 
 # Temp dir with cleanup trap
 TMPDIR_BASE="${TMPDIR:-/tmp}"
@@ -394,10 +409,21 @@ EOF
   echo "→ invoking claude for re-review..."
   # claude -p takes the prompt VALUE (no @file convention — "@path" would BE the prompt)
   PROMPT_CONTENT="$(cat "$PROMPT_FILE")"
+
+  # >>>REPLAY:re-review-shadow>>>
+  # Re-review command assembly: model id passed through verbatim, no verdict-posting call in shadow mode.
+  # Inputs: MODEL, SHADOW, PROMPT_CONTENT, MODEL_RAIL (set by bridge.sh or the script flow)
+  # Outputs: claude_reply captured, shadow report to stdout in shadow mode.
+  #
+  # The model id is passed through verbatim — no transformation, no alias resolution.
+  # In shadow mode, no verdict-posting call (gh pr comment) is made.
+  # Reasoning-model accommodation: no tight output cap is inherited (max_tokens headroom).
   claude_reply=$(claude -p "$PROMPT_CONTENT" --model "$MODEL" --output-format json 2>/dev/null) || {
     echo "  ERROR: claude invocation failed"
+    # In replay, the bridge provides a valid prompt and claude stub; this is a test failure.
     continue
   }
+  # <<<REPLAY:re-review-shadow<<<
 
   # Parse claude response: the --output-format json ENVELOPE carries the model text in .result
   # (the reviewer-session.sh:497 shape) — the {verdict, findings} JSON we asked for is INSIDE
@@ -435,8 +461,8 @@ $idem_tag
 
 ## Re-review Comparison
 
-| Recorded | Sonnet Re-review |
-|----------|------------------|
+| Recorded | Re-review |
+|----------|----------|
 | $recorded_model / $recorded_verdict | $MODEL / $sonnet_verdict |
 
 <details><summary>Recorded review body (as submitted)</summary>
@@ -445,7 +471,7 @@ $recorded_body
 
 </details>
 
-### Sonnet Findings
+### Findings
 
 $sonnet_findings
 EOF
@@ -464,15 +490,38 @@ EOF
 **$compare_result**
 EOF
 
-  # Post comment — BOT REVIEW R4 #8: transient failure warns and continues (don't abort batch)
-  echo "→ posting comparison comment..."
-  if ! gh pr comment "$snap_pr" --repo "teststuffstash/${snap_project}" --body-file "$COMMENT_FILE" 2>/dev/null; then
-    echo "  POST-FAILED: gh pr comment returned non-zero — snapshot processed but comment not posted" >&2
+  if [ "$SHADOW" -eq 1 ]; then
+    # Shadow mode: advisory-only — NEVER post to the PR. Write report to stdout with
+    # shadow-re-review marker, model + rail attributed. The live reviewer identity split
+    # is exactly what the A5 evidence will decide; the shadow must not contaminate it.
+    echo ""
+    echo "=== shadow-re-review ==="
+    echo "snapshot: ${snapshot_path}"
+    echo "project: ${snap_project}"
+    echo "pr: ${snap_pr}"
+    echo "headsha: ${headsha8}"
+    echo "model: ${MODEL}"
+    echo "rail: ${MODEL_RAIL}"
+    echo "recorded_model: ${recorded_model}"
+    echo "recorded_verdict: ${recorded_verdict}"
+    echo "re-review_verdict: ${sonnet_verdict}"
+    echo "compare_result: ${compare_result}"
+    echo ""
+    echo "--- findings ---"
+    echo "${sonnet_findings}"
+    echo "--- end findings ---"
+    echo "=== end shadow-re-review ==="
+  else
+    # Post comment — BOT REVIEW R4 #8: transient failure warns and continues (don't abort batch)
+    echo "→ posting comparison comment..."
+    if ! gh pr comment "$snap_pr" --repo "teststuffstash/${snap_project}" --body-file "$COMMENT_FILE" 2>/dev/null; then
+      echo "  POST-FAILED: gh pr comment returned non-zero — snapshot processed but comment not posted" >&2
+    fi
   fi
 
   # Print summary line
   echo ""
-  echo "${snap_project}#${snap_pr} ${headsha8} recorded=${recorded_model}/${recorded_verdict} sonnet=${sonnet_verdict} ${compare_result}"
+  echo "${snap_project}#${snap_pr} ${headsha8} recorded=${recorded_model}/${recorded_verdict} re-review=${sonnet_verdict} ${compare_result}"
 done
 
 echo ""
