@@ -1779,6 +1779,15 @@ spec:
   # projected token (Composition renders the SA per fixer ns; no RBAC grants attached).
   serviceAccountName: agentstack-worker
   terminationGracePeriodSeconds: 5
+  # FU-136 / homelab#919: non-docker rides (goose, claude, opencode) need the ephemeral-tier
+  # toleration to schedule onto the compute/burst nodes (wk-metal-01..04, wk-03) that carry
+  # homelab.io/ephemeral=true:NoSchedule. Docker rides get this via kata RuntimeClass already.
+  # The AVX2 nodeAffinity (opencode only) is orthogonal — goose/claude run fine on non-AVX2 nodes.
+  tolerations:
+    - key: homelab.io/ephemeral
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
 ${AFFINITY}
 ${KATA_BLOCK}
   securityContext:
