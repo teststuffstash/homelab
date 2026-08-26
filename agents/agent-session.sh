@@ -2100,22 +2100,24 @@ if [ -n "$RUN_CMD" ]; then
     fi
   fi
 
-  # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates WITHOUT an
-  # open PR is an infra strike candidate — classify it and post ONE structured comment to the ISSUE
-  # (not a PR: there is none). That comment IS the strike store: state lives in GitHub, and the
-  # coordinator greps `AGENT_STRIKE:` in issue comments to blacklist the model for this task and
-  # pick the next chain entry. Keep the first line's format STABLE — it's the machine interface.
-  # Strike semantics apply only to TASKED rides (issue-*/pr-*) — an adhoc ride (validation,
-  # experiment) expects no PR; striking it is noise (the finalize-side twin landed in
-  # agent-runtime#16 the same day).
+  # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates with a
+  # harness death is an infra strike candidate — classify it and post ONE structured comment to the ISSUE.
+  # That comment IS the strike store: state lives in GitHub, and the coordinator greps `AGENT_STRIKE:`
+  # in issue comments to blacklist the model for this task and pick the next chain entry. Keep the first
+  # line's format STABLE — it's the machine interface. Strike semantics apply only to TASKED rides
+  # (issue-*/pr-*) — an adhoc ride (validation, experiment) expects no constraints; striking it is noise
+  # (the finalize-side twin landed in agent-runtime#16 the same day). homelab#866: a harness death is
+  # defined by its signature (config-invalid, provider-5xx, etc), not by PR-absence. A fix round on an
+  # existing PR can die in its harness and must emit a strike to avoid mis-classifying it as a clean
+  # round (which would escalate the PR to arbitrate, costing a coordinator ride to re-derive "never ran").
   case "$TASK" in issue-*|pr-*) STRIKE_APPLIES=1;; *) STRIKE_APPLIES="";; esac
-  if [ -n "$STRIKE_APPLIES" ] && [ -z "$PR_URL" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
+  if [ -n "$STRIKE_APPLIES" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
     # >>>REPLAY:strike-classifier>>>
     if [ -n "$STATS" ]; then
       # >>>REPLAY:strike-stats-classifier>>>
       # agent-finalize already classified the run (authoritative — it saw the full log + exit code).
-      # Its exit_status maps onto the strike taxonomy; anything else (failed/no-output/ci-failed
-      # without a PR) is "unknown" — still a strike, just an unclassified one.
+      # Its exit_status maps onto the strike taxonomy; anything else (failed/no-output/ci-failed) is
+      # "unknown" — still a strike if not covered by a more specific signature, just an unclassified one.
       # homelab#804: when the exit_status is "failed" (harness exited non-zero with no matching
       # failure signature), check the run log for a config validation error — the opencode binary
       # rejects unknown config keys at startup and the pod dies in under 15s at zero cost. Map
@@ -2131,13 +2133,18 @@ if [ -n "$RUN_CMD" ]; then
       if [ "$ERR_CLASS" = "unknown" ] && grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG" 2>/dev/null; then
         ERR_CLASS="harness-death"
       fi
+      # homelab#866: provider-5xx error signature (harness-side UnknownError from the model API).
+      # Zero cost, sub-30s duration, no new artifact — a startup death like config-invalid.
+      if [ "$ERR_CLASS" = "unknown" ] && grep -qE '"name":\s*"UnknownError"|Unexpected server error' "$RUNLOG" 2>/dev/null; then
+        ERR_CLASS="harness-death"
+      fi
       # <<<REPLAY:strike-stats-classifier<<<
     else
       # No AGENT_RUN_STATS line at all = finalize never ran (the pod died hard / wait timed out) —
-      # the PR-less death that used to be invisible. Classify the raw log jail-side with the same
-      # signatures agent-finalize uses (that script is the authoritative copy of these patterns).
-      # homelab#22: an activeDeadlineSeconds kill leaves no log signature at all — the pod's
-      # status.reason is the only evidence, and it maps to the `timeout` strike class.
+      # Classify the raw log jail-side with the same signatures agent-finalize uses (that script is
+      # the authoritative copy of these patterns). homelab#22: an activeDeadlineSeconds kill leaves
+      # no log signature at all — the pod's status.reason is the only evidence, and it maps to the
+      # `timeout` strike class.
       # >>>REPLAY:strike-quota-classifier>>>
       POD_REASON="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.reason}' 2>/dev/null || true)"
       if [ "$POD_REASON" = "DeadlineExceeded" ]; then
@@ -2148,6 +2155,10 @@ if [ -n "$RUN_CMD" ]; then
       elif grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG"; then
         ERR_CLASS="harness-death"
       elif grep -qiE -e '-32602|EOF while parsing|response may have been truncated|context_length_exceeded|panicked at' "$RUNLOG"; then
+        ERR_CLASS="harness-death"
+      # homelab#866: provider-5xx error signature (harness-side UnknownError from the model API).
+      # Zero cost, sub-30s duration, no new artifact — a startup death like config-invalid.
+      elif grep -qE '"name":\s*"UnknownError"|Unexpected server error' "$RUNLOG"; then
         ERR_CLASS="harness-death"
       elif grep -qiE '429.*quota|429.*limit|monthly.*limit.*reached|rate limit exceeded' "$RUNLOG"; then
         ERR_CLASS="quota"
@@ -2168,25 +2179,49 @@ if [ -n "$RUN_CMD" ]; then
     fi
     # <<<REPLAY:strike-classifier<<<
     # >>>REPLAY:strike-line-format>>>
-    STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
-    if [ -n "${BUDGET_MATCH:-}" ]; then
-      STRIKE_LINE="${STRIKE_LINE} match=${BUDGET_MATCH}"
+    # homelab#866: the EMIT decision. A PR-less ride keeps FU-062 semantics unchanged — ANY
+    # classified error strikes, `unknown` included (that is the chain-walk signal). A ride WITH
+    # an open PR strikes only on a harness-death-class signature, because a clean round with a
+    # PR classifies as `unknown` and must never strike.
+    EMIT_STRIKE=""
+    case "$ERR_CLASS" in
+      harness-death|auth-storm|timeout|quota|budget-*|http-403-other) EMIT_STRIKE=1;;
+    esac
+    [ -n "${PR_URL:-}" ] || EMIT_STRIKE=1
+    # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
+    # no specific signature must not be recorded as having an error. Inside the block on purpose:
+    # this reset is behaviour replay has to pin, not control flow it may drop (PR #942 review).
+    [ -n "$EMIT_STRIKE" ] || ERR_CLASS=""
+    # STRIKE_LINE is empty exactly when EMIT_STRIKE is unset, so the gate itself is extracted and
+    # the composed replay script branches on it the way the shipped script does.
+    STRIKE_LINE=""
+    if [ -n "$EMIT_STRIKE" ]; then
+      STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+      if [ -n "${BUDGET_MATCH:-}" ]; then
+        STRIKE_LINE="${STRIKE_LINE} match=${BUDGET_MATCH}"
+      fi
     fi
     # <<<REPLAY:strike-line-format<<<
-    echo "→ no PR opened — ${STRIKE_LINE}"
-    ISSUE_N=""
-    case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
-    SLUG=""
-    case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
-    if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
-      # ~~~ fences (not ```) so backticks inside log lines can't break out of the block.
-      STRIKE_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
-        "$STRIKE_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
-      echo "→ posting strike comment to ${SLUG}#${ISSUE_N}"
-      gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$STRIKE_BODY" 2>&1 | tail -1 \
-        || echo "  (strike comment failed — non-fatal; the strike still shows in these logs)"
-    else
-      echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
+    if [ -n "$STRIKE_LINE" ]; then
+      if [ -z "${PR_URL:-}" ]; then
+        echo "→ no PR opened — ${STRIKE_LINE}"
+      else
+        echo "→ harness death with PR — ${STRIKE_LINE}"
+      fi
+      ISSUE_N=""
+      case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
+      SLUG=""
+      case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
+      if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+        # ~~~ fences (not ```) so backticks inside log lines can't break out of the block.
+        STRIKE_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
+          "$STRIKE_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
+        echo "→ posting strike comment to ${SLUG}#${ISSUE_N}"
+        gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$STRIKE_BODY" 2>&1 | tail -1 \
+          || echo "  (strike comment failed — non-fatal; the strike still shows in these logs)"
+      else
+        echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
+      fi
     fi
   fi
 

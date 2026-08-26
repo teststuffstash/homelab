@@ -1,0 +1,8 @@
+[2026-08-24T12:03:00Z] → ready: branch=fix/issue-854-scout-state-write-guard
+Error: {
+  "name": "UnknownError",
+  "data": {
+    "message": "Unexpected server error. Check server logs for details.",
+    "ref": "err_9a07793b"
+  }
+}
