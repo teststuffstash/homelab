@@ -40,6 +40,12 @@ meant to avoid.)
   lane: the `.agents/` pair). #932 queued (the silent success-push belt). **Next unattended
   Mon 08-31 05:00Z fire = the clean acceptance.**
 
+- **⚑ GARAGE copied-credential rotation (HOST-side, one command now):** the mapping is CODE —
+  `scripts/github-secrets-sync.sh` (operator direction 2026-08-26; `--check` verified all 3
+  sources current in-jail). On the host: **`devbox run github-secrets-sync`**, then acceptance
+  `gh run rerun 32941605062 --repo teststuffstash/oracle-fleet --failed` green. Class + design:
+  docs/garage.md §metadata-restore sweep · docs/github-setup.md §Garage-read secrets.
+
 - **⚑ GARAGE, operator-owned residue (recovery COMPLETE + env rebuilt, #884/FU-184 archived):**
   the `garage repair blocks` hold can come off (reclaims ≈nothing now) · **do NOT delete the 3
   ERT giants** (the 2026-07-12 corpus is the first delta job's stale base — rationale in
