@@ -1610,6 +1610,38 @@ G05 failure mode (contracts emerge from patterns).
 **Consequences:** GAPS.md is public (dialogue-level facts only); TICK-LOG keeps narrative; skill
 doctrine changes stay operator-gated except plain factual wrongness.
 
+### ADR-115 — Provider selection prices the JOB: Exacto delegated for cheap classes, an overhead-cost pin for priced ones
+
+**Status:** Accepted (2026-08-26, the 0731 intake session — evidence in model-routing.md §M14).
+
+**Decision.** Provider choice is priced per successful JOB, not per token:
+`expected_cost = eff_price × tokens + p(fail | provider, model) × C_overhead`, where C_overhead
+is the measured downstream cost of a failed ride (strike + re-dispatch + coordinator session +
+review rounds). Consequences, per class (`provider_policy` in model-classes.json — git POLICY):
+**cheap coding classes DELEGATE to OpenRouter's Auto Exacto** (drop our `provider.order` pin so
+upstream's tool-call-quality ordering runs — at flash prices the failure term dominates any
+price delta we could optimize); **priced classes (research/audit/weave) keep OUR pin, upgraded**
+(§M14 pin-v2: 15% band + serving-quality tie-break, benchmark provider-floor, live
+tool-call-error floor, (model, provider) pair-cooldowns — the #783 legs).
+
+**Considered.** Exacto-only (rejected: a price doubling is real money on the priced tiers, and
+experiments need deterministic provider arms); pin-v2-only (rejected: reverse-engineers at n=dozens
+a signal upstream measures at n=millions and maintains for us — the outsource-staleness lens);
+status quo (rejected on the day's evidence: the quality-blind pin chose an fp4 serving over the
+top-quality first-party serving to save $0.0012/M while provider tool-call error rates on ONE
+model span 0.2%→40% and our strikes carry no provider).
+
+**Why.** The 0731 read: the M4 pin structurally samples the mid/bottom of the serving-quality
+distribution (Relace/OpenInference/DeepInfra; DeepSeek first-party never ridden), a 39.6%
+tool-error provider (DigitalOcean) sat pin-eligible at 99.6% uptime, and the elite tier
+(Fireworks 0.23%) costs ~3× on prices where 3× ≈ cents/month against ride-deaths that cost
+coordinator sessions.
+
+**Consequences.** The scout canary rides its class's provider policy (representativeness = same
+policy, not same provider); `@provider_slot`/`@slug` arms (built, PR#963) stay the experiment
+instrument; the tool-call-error-rate feed becomes alerting + pin input, never blind trust;
+0731's re-admission to model_tiers rides the §M14 matrix run. Build pointer: FU-186.
+
 ### ADR-114 — Garage rf=3 across physical zones; engines replicate, Longhorn stores singles
 
 **Status:** Accepted (2026-08-24, operator design session over the garagehq real-world/layout
