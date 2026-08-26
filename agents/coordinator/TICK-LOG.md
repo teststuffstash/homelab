@@ -5334,3 +5334,28 @@ first live ADR-110 maintenance session before the ADR existed.
   hg5d has 1), and the nix-cache pod ALSO sits on hp-01. #500 is a genuinely separate cause
   (nginx cache pinned at max_size=8g → continuous LRU eviction) that shares sda as amplifier.
   Fix ranking reported to operator; no mutations applied (diagnosis question).
+
+## 2026-08-26 ~08:00Z — triage + backlog drain (operator-directed), fixes executed, #745 COMPLETE
+
+- **#745 COMPLETE:** the operator's host apply first hit a miss of mine — `merge_gh_app_id`
+  still referenced at 3 ruleset bypass-actor sites after I removed the declaration; restored
+  as a git DEFAULT (id 4207260, not sensitive — better than injection; `c3f3f5c9`) — then
+  `0 added, 0 changed, 2 destroyed`. Issue closed.
+- **Triage closes (evidence in each):** #111 (superseded by cutover) · #698 (driver retired;
+  counter resets 09-01; FU-183 belt live) · #534 (longhorn-manager fleet Running) · #811
+  (loki quota already 16Gi, 58% used, loki healthy 35h) · **#500 (fix had ALREADY shipped as
+  PR#512 8 days ago — PVC 20Gi/max_size 16g live, cache 61% — the issue outlived its fix,
+  FU-133's no-state-after-filing class)** · #940 was already closed as #937's dup at 06:39.
+- **Queued ×8 (mechanical, machine lane):** #937 (wedged-vs-booting pre-flight), #851
+  (fixture executes busy_fps), #888 (anchor the FU-147 probe), #914 (board --machine scope
+  assert), #945 (shadow idempotency tag × model), #456 (phone-home killswitch leak — re-fired
+  08-24), #867 (burst spread — the concentration fix #103 also waits on), agent-runtime#95.
+- **hp-01 (operator correction: BOTH disks are old cheap SSDs — sdb only looked fast because
+  idle):** the win is SEPARATION, not disk quality — patched nodes.longhorn.io hp-01
+  default-disk `allowScheduling: false` + `evictionRequested: true` (2 replicas draining to
+  hg5d/elsewhere; Longhorn IO leaves the root disk's queue). Imperative, Longhorn-node-object
+  class (the longhorn-register precedent).
+- **Grafana → CNPG Postgres: PR#948** (grafana-pg cluster in monitoring, GF_DATABASE_* env,
+  CNPG-generated secret; second commit widens the CNPG alert namespace regex to `monitoring`
+  — the new DB would have run outside its own belts). No durable state to migrate (sqlite was
+  on emptyDir). Shepherd watches merge + rollout.
