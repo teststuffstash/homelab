@@ -9,8 +9,6 @@
 #   2. item_class_push is called with the queued-held classification
 #   3. The logic runs under set -u and completes without crashing on undefined variables
 #
-pins:
-  - homelab#913
 name: queued-classification-held
 mode: actions
 source: agents/coordinator-scan.sh
