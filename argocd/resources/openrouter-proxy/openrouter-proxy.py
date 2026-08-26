@@ -3067,7 +3067,18 @@ class Proxy(BaseHTTPRequestHandler):
                             at_provider_pin = _at_tok
                             # Best-effort cap lookup for an explicit slug: its ranked entry, when
                             # the M4 machinery knows one; an unranked slug keeps the global floor.
-                            _sp = pin_for(normalize_model(_m_base))
+                            _nm = normalize_model(_m_base)
+                            _sp = pin_for(_nm)
+                            if _sp is None and _nm.endswith(":free"):
+                                # Same :free fallback as the numeric slot arm above — pin_for
+                                # short-circuits :free before ranking, and without the ranked
+                                # entry a slug-pinned free ride keeps the unclamped global
+                                # MAX_TOKENS_FLOOR, reopening the -32602 truncation class this
+                                # clamp exists to close (PR#963 review, sibling-case gap).
+                                try:
+                                    _sp = compute_pin(_nm)
+                                except Exception:
+                                    _sp = None
                             for _entry in ((_sp or {}).get("ranked") or []):
                                 if isinstance(_entry, dict) and _entry.get("slug") == _at_tok:
                                     at_pin_maxc = _entry.get("max_completion")
