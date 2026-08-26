@@ -181,6 +181,7 @@ spec:
                 ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
                 # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
                 # (coordinate-argo.yaml). Applies inside <loop_ns>.
+                # homelab#867 soft Longhorn-disk de-preference — same rationale.
                 podSpecPatch: |
                   topologySpreadConstraints:
                     - maxSkew: 1
@@ -189,6 +190,16 @@ spec:
                       labelSelector:
                         matchExpressions:
                           - { key: workflows.argoproj.io/workflow, operator: Exists }
+                  affinity:
+                    nodeAffinity:
+                      preferredDuringSchedulingIgnoredDuringExecution:
+                        - weight: 10
+                          preference:
+                            matchExpressions:
+                              - key: node.longhorn.io/create-default-disk
+                                operator: NotIn
+                                values:
+                                  - "true"
                 arguments:
                   parameters:
                     - { name: repo, value: PLACEHOLDER }
@@ -272,6 +283,7 @@ spec:
       - configMapKeyRef: { name: subscription-capacity, key: claude }
   # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
   # (coordinate-argo.yaml). Verbatim copy; keep in sync.
+  # homelab#867 soft Longhorn-disk de-preference — same rationale.
   podSpecPatch: |
     topologySpreadConstraints:
       - maxSkew: 1
@@ -280,6 +292,16 @@ spec:
         labelSelector:
           matchExpressions:
             - { key: workflows.argoproj.io/workflow, operator: Exists }
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 10
+            preference:
+              matchExpressions:
+                - key: node.longhorn.io/create-default-disk
+                  operator: NotIn
+                  values:
+                    - "true"
   entrypoint: main
   arguments:
     parameters:

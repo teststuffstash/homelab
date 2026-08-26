@@ -5468,3 +5468,12 @@ first live ADR-110 maintenance session before the ADR existed.
   (park-drain opening act + the stint + the name-anchor ruling input), no persistent monitors
   were armed this session (interactive throughout), background drains die with the session —
   the #952 approval is the one carried command.
+
+## 2026-08-26 ~10:15Z — park-drain: the two carried PRs landed (interim session)
+
+- The master-side docs-lint break (#953, filed by the ci-red fleet ruling) had redded both
+  armed PRs: shipped the §1 content unblock direct to master (31c69e53 — stint's home doc
+  linked in meta-state, check #3 green), branch-updated both PRs against it, executed the
+  carried #952 verdict (codeowner approve → auto-merge; #867 closed), verified #951
+  auto-merge (#914 closed), cleared both `agent/error` labels. #953 stays queued for the
+  gate-behaviour leg only (scope comment left on the issue); workflows leg operator-lane.

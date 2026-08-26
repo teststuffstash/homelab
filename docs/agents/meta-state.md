@@ -14,11 +14,10 @@ meant to avoid.)
   park bot-approved — batch-drain §REVIEW first (the ADR-110 amortization). ⚠ Two are REAL
   reads, not skims: **#938** (sentinel-edge doorbell-collapse) and **#933** (the G-B
   checkpoint un-wedge — its merge is what lets G-B assemble; the morning-read items follow:
-  assembly PR → codeowner tax → probe-platform first tick, FU-102). Carry-overs with verdicts
-  already formed: **PR#952** (fix #867, spread + Longhorn de-preference — gate read DONE
-  2026-08-26, label distribution verified; approve when current+green:
-  `gh pr review 952 -R teststuffstash/homelab --approve`), and **PR#951** approved at head
-  (auto-merge completes on green — verify it landed). **#946 needs a SEAT RUN after #945
+  assembly PR → codeowner tax → probe-platform first tick, FU-102). Carry-overs LANDED
+  2026-08-26 morning: PR#952 approved+merged (the carried verdict), PR#951 auto-merged —
+  both had parked red on the master-side docs-lint break, now #953 (queued; content leg done,
+  the gate behaviour is the remaining scope). **#946 needs a SEAT RUN after #945
   merges** (blocked-by edge wired; the 🔓 clause surfaces it). **PR#925** (fstrim): sentinel
   green since the node-maintenance baseline — confirm it merged via the reflex. **#915**: fix
   round riding the sentinel-coverage ask; the operator's own 20:37Z review is the final gate.
