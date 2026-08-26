@@ -604,7 +604,7 @@ fi
 # (deterministic awk-insert, no YAML dependency) so the worker cannot skip reading it.
 # >>>REPLAY:render_env_card>>>
 render_env_card() {
-  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}"
+  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}"
   # ═══ MAINTAINER NOTE — read before editing (this comment is NOT sent to the agent) ═══
   # Everything printf'd below is injected VERBATIM into the stack agent's prompt. Keep that text
   # MINIMAL and stack-agnostic: the rule + the value it needs to ACT, nothing else. All homelab-
@@ -641,7 +641,7 @@ render_env_card() {
   else
     pkg_why="upstream is reachable today (egress monitor mode) but WILL be blocked at enforcement — use the proxies anyway so the ride stays reproducible"
   fi
-  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), **HTTP-only**; python → pip/uv against pypi.org + files.pythonhosted.org (open on the python egress profile)."
+  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against pypi.org + files.pythonhosted.org (open on the python egress profile)."
 
   # WHY: docs/spikes/context-repos.md pilot (circles-only today). Read-only reference clones; the
   # spike's measurement is whether transcripts ever show /work/context reads, so the card ADVERTISES
@@ -1517,11 +1517,12 @@ if [ -n "$DOCKER" ]; then
   # egress CNP drops the docker.io FQDNs: mirror down ⇒ pulls hang ⇒ AgentWorkerEgressDropped.
   MIRROR_DOCKER_IO="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}"
   MIRROR_GHCR="${AGENT_MIRROR_GHCR-http://192.168.40.21}"
+  MIRROR_MCR="${AGENT_MIRROR_MCR-http://192.168.40.31}"
   # nix-cache via its BGP VIP (FU-073e): the entrypoint's default is the ClusterIP service DNS,
   # unreachable from a kata guest (FU-072) — without this override a docker ride's `devbox
   # install` fell back to cache.nixos.org over the WAN (~4 min cold, measured 2026-07-14).
   NIX_CACHE_VIP="${AGENT_NIX_CACHE_URL-http://192.168.40.23}"
-  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"'
+  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"\n        - name: REGISTRY_MIRROR_MCR\n          value: "'"$MIRROR_MCR"$'"'
   DOCKER_MOUNT=$'\n        - { name: docker-run, mountPath: /docker-run }'
   DOCKER_VOLUMES=$'\n    - name: docker-run\n      emptyDir: {}\n    - name: docker-lib\n      ephemeral:\n        volumeClaimTemplate:\n          spec:\n            accessModes: ["ReadWriteOnce"]\n            volumeMode: Block\n            storageClassName: longhorn-scratch\n            resources: { requests: { storage: 20Gi } }'
   # NATIVE SIDECAR (initContainers + restartPolicy Always): the kubelet terminates it when the
