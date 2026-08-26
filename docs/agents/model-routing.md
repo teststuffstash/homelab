@@ -890,6 +890,21 @@ price term re-enters (→ our pin, upgraded). One formula, two regimes.
 | priced (research / audit / weave / judges) | **`pin-v2`** | M4 + (1) the 15% band with a serving-quality tie-break inside it (native/fp8 over fp4 → per-provider Exacto benchmark score → market cache-hit); (2) a permissive benchmark provider-floor (drop only KNOWN scores ≫ below the model's provider median; slug-keyed join — display names differ); (3) a live tool-call-error floor from the `stats/tool-call-error-rate` feed (exclude ≥10% 5d-avg; de-prefer >2× model median in-band); (4) (model, provider) pair-cooldowns fed by the proxy's own tool-call validation — the #783 provider-attribution legs |
 | experiments (scout matrix / canary arms) | **explicit `@` arms** (PR#963): `@<provider_slot>` (eff-ranked index, typed 400 when unresolvable) or `@<slug>`, `allow_fallbacks: false`; `:exacto` forwards un-pinned | the reproducibility instrument — never the production policy |
 
+**⚠ Exacto ↔ prompt caching (operator find, 2026-08-26 — upstream
+[docs/guides/routing/auto-exacto](https://openrouter.ai/docs/guides/routing/auto-exacto)):**
+Auto Exacto reorders providers on EVERY tool-calling request, overriding the sticky routing
+prompt caching rides — in a tool loop it can deprioritize the cache-warm provider mid-session
+(upstream's own words: cache misses mid-conversation). That collides head-on with M4's doctrine
+(cache lives AT the provider; caching provider > cheaper provider) and with this fleet's
+cacheRead-dominated token shape. Consequences, folded into the build order: the step-1 flip is
+judged on OBSERVED per-arm cache-hit (`router_observed_cache_hit` + the `/generation` harvest),
+never price+tool-error alone — at flash prices the failure term may still dominate the cache
+penalty, but that is the A/B's question, not an assumption. If Exacto loses on cache economics,
+the opt-out shapes are `sort: "price"` in the provider object or the `:floor` variant (both keep
+sticky routing, both subtractive like the pin-skip), or Tool Search `defer_loading: true` to
+shrink the cached prefix until an Exacto collision is tolerable. The priced classes are
+unaffected — pin-v2 keeps the session pin, which is itself the cache-stickiness mechanism.
+
 **The scout representativeness principle:** a canary rides the provider policy of the CLASS it
 feeds — same policy, not same provider (an Exacto-routed class gets Exacto-routed canaries;
 pinning them would make the evidence LESS representative). Newcomer cold-start (Exacto has no
