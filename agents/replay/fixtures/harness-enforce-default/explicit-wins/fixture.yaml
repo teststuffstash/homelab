@@ -1,0 +1,9 @@
+# homelab#990 guard, the operator-override arm: an EXPLICIT --harness opencode (HARNESS_SET=1)
+# is never overridden, enforcement or not — the flip applies only to the baked default.
+name: harness-enforce-default-explicit-wins
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-enforce-default
+  - file:../flip/post.sh

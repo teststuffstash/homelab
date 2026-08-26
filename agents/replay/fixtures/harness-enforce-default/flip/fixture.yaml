@@ -1,0 +1,12 @@
+# homelab#990 — the enforce-default harness guard: under an ENFORCED egress, a ride whose
+# harness is the launcher's baked DEFAULT (opencode, no --harness given) flips to goose,
+# because opencode's un-suppressible SDK-init fetches (models.opencode.ai / npmjs) have no
+# timeout and the CNP deny black-holes them (issue-272-r1 wedged twice, 2026-08-26).
+# THE CONTRACT: EGRESS_ENFORCE=true ∧ HARNESS=opencode ∧ no HARNESS_SET → goose, one loud line.
+name: harness-enforce-default-flip
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-enforce-default
+  - file:post.sh

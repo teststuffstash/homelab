@@ -1,0 +1,2 @@
+OUT HARNESS: opencode
+RC 0
