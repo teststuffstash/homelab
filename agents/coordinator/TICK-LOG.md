@@ -5605,3 +5605,32 @@ first live ADR-110 maintenance session before the ADR existed.
   path, #963/#967 re-reviewing on the pushed rounds, sleep #123-r1 chainless ride Running.
   Everything on armed machinery; nothing held by the seat. Fresh session picks up #982 (meta-state
   row rewritten).
+
+## 2026-08-26 ~19:55Z — evening arc closes: #963's clobbered push, the opencode enforce wedge, sleep proven chainless (wind-down)
+
+- **The #986 find (operator pasted PR#963):** the seat's fix push — VERIFIED at the ref by
+  ls-remote — was silently CLOBBERED by the in-cluster updater: `update-pr-branch.sh` calls
+  update-branch with NO `expected_head_sha`, so a racing author push is overwritten by the
+  merge computed from the stale head. Refutes merge-path.md §Failure modes' "worst residual
+  race is a duplicate review". Re-landed + verified through the racing window; #986 queued
+  (one API field + doctrine correction + updater fixture row).
+- **#272's day, three failure classes on one issue:** (1) the first chainless draw
+  (opencode×flash) wedged pre-LLM — opencode SDK-init fetches (models.opencode.ai/npmjs, no
+  kill knob per the launcher's own L1812 note) have NO timeout, and enforce:true black-holes
+  them: four SYN_SENT to CF :443, 0-byte run.log, would have slept to the 4h deadline (the
+  second 4h burn today — both FU-187's class; tracker extended with the reap-skips-finalize
+  half). Filed **#990** (hostAliases fail-fast) + shipped **PR#991** (durable workaround:
+  enforced-egress rides never DEFAULT to opencode; the harness default lives at
+  agent-session.sh:48; claims read hoisted out of the docker conditional so EGRESS_* sees
+  every path; replay family harness-enforce-default ×3, suite 284/284). (2) goose×flash
+  hand-ride struck http-401-storm (OR key 401ed mid-run — single sighting, watch). (3) the
+  running ride = operator hand-dispatch claude/haiku r1 (the sleep#48 precedent).
+- **Sleep chainless PROVEN:** #123 r1 → PR#133 (the Playwright gate!), ci-red → r2 riding.
+- **The pin = the priority knob (operator ask, #936):** confirmed built — the scan splits
+  isPinned queued issues into punits, dispatched first (FU-110's mapping). #936 pinned +
+  doorbell rung; unpin at merge.
+- **#985 verdict resolved at the source:** issue #981 gained its Touches: declaration; the
+  CHANGES_REQUESTED (governance-path escape read off the EMPTY issue footprint) dismissed per
+  the #141 terminal — re-review pending. #967 bot-approved + armed. #976 merged.
+- Wind-down: monitors none, background ride streams killed (the rides are in-cluster,
+  finalize is in-pod), transcripts synced.
