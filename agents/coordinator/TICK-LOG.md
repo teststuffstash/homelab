@@ -5378,3 +5378,15 @@ first live ADR-110 maintenance session before the ADR existed.
   reviewer-touches/sentinel-exempt (end-to-end), 3 sibling fixtures updated for the new CALL,
   full clause-replay 271/271, docs-graph green. Rubric passage extended (.agents/review.md,
   operator-direct class).
+
+## 2026-08-26 ~08:05Z — grafana on postgres, VERIFIED (PR#948 merged)
+
+- PR#948 merged via the author==sole-codeowner waiver (my own approval was structurally
+  refused — bot approval + green completed auto-merge, the documented path). Isolated
+  end-state check: `GF_DATABASE_TYPE=postgres` active, grafana-pg 2/2 ready, new pod stable
+  after the expected bootstrap crashloop (3 restarts while CNPG initialized), LAN /api/health
+  200, and **0 SQLITE_BUSY / database-locked lines in 10m** (vs 2,886/6h this morning). Pod
+  still on hp-01 by scheduler's choice — fine: the DB is off node-local disks, which was the
+  fix. The SQLITE_BUSY class is closed; #938 (sentinel-edge flood) + #867 (spread, queued)
+  remain the IO-pressure fixes on their own tracks.
+- oracle-fleet allure-publish rerun still in flight (the #926 grant-timing question).
