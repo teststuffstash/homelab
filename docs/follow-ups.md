@@ -568,9 +568,13 @@ the block needs pruning, not more headings.
       no kill, no alert). The storm watchdog pattern-matches run.log LINES, so an empty log
       can't trip it (its header names this "quiet loop" class as uncovered since
       openrouter-operator#14); `AgentQueueStalled` is suppressed BY the running pod; phase
-      metrics only push at finalize. **Next:** pick the cheap belt — a no-growth clause in
-      agent-storm-watchdog (run.log unchanged for Nm ⇒ same kill path), or the proxy-side
-      signal (key silent Nm while its ride pod Runs). Relates FU-072 (this trigger's cause).
+      metrics only push at finalize. ⚠ The reap ALSO skips finalize (2026-08-26 second half:
+      no strike comment, no label flip — a goal child re-enters the FU-143 ⛔ hold and costs a
+      SECOND seat re-queue, both paid on #272 in one day). **Next:** pick the cheap belt — a
+      no-growth clause in agent-storm-watchdog (run.log unchanged for Nm ⇒ same kill path,
+      WITH strike bookkeeping — that also beats the reap to the kill), or the proxy-side
+      signal (key silent Nm while its ride pod Runs); the SIGTERM-trap finalize on deadline
+      is the agent-runtime half. Relates FU-072 (this trigger's cause).
 
 - [ ] **FU-164** — **doc-heat: transcript-derived read heat over repo markdown — POINTER.**
       Question, heat doctrine (heat × class × age; blind spots; approximate lines), v0 (jail
