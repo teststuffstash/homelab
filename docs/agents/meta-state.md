@@ -8,32 +8,39 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ S5 (corpus diet) IS OPEN — [stint](chainless-redesign.md) #979, originals #981–#984 (2026-08-26 evening corpus
-  session).** The park-drain opening act RAN: outage set all merged (#915/#962/#951/#952/#925);
-  gate reads landed #964 (approved, CLEAN — confirm merged) + #965 (merged); seat fix rounds
-  pushed onto **#963** (the `@<slug>` arm's `:free` compute_pin fallback) and **#967** (the two
-  tool-error numbers reconciled + the **Exacto↔caching caveat**, operator find: Auto Exacto
-  reorders providers per request and busts sticky-routing prompt caches — §M14 now judges the
-  step-1 flip on OBSERVED per-arm cache-hit; opt-outs `sort:price`/`:floor`/defer_loading) —
-  both re-enter review on new content, watch them land. **#981 SHIPPED as PR#985** (armed):
-  ADR-116 name-anchor ruling — provenance FU refs never scrub, TODO shapes = `FU: FU-NNN` +
-  `Tracked by` lines only (colon-form measured AMBIGUOUS), DANGLING re-scoped to ≥ Next-free,
-  new TODO-RETIRED (fail)/TODO-ARCHIVED (warn); the 29-entry expiry sweep rode the same PR
-  (zero TODO-shaped refs among them, measured). The new warn surfaced **5 real stale
-  pointers** (gap registers at archived FU-068/FU-142/FU-133/FU-143 in the FSM yamls, spike
-  Tracked-by at FU-160) → fix in **#984**. **NEXT: #982** (heading §-codes + docs-graph-lint
-  check #4, shadow-first); **#983/#984 unblock when PR#985 merges**. Still-queued codeowner
-  issues stand from the prior handover: #928 #929 #932 #933 #937 #938 #888 #945 #456 #110,
-  agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's merge lets G-B
-  assemble → assembly PR → codeowner tax → probe-platform first tick, FU-102); **#946 needs a
-  seat run after #945 merges**; #953 queued (docs-lint gate behaviour).
+- **⚑ S5 (corpus diet) IS OPEN — [stint](chainless-redesign.md) #979, originals #981–#984
+  (opened by the 2026-08-26 evening corpus session; wind-down ~19:5xZ).** Park-drain DONE
+  (outage set + #964/#965 landed; #963 MERGED after the seat's `:free`-fallback round — ⚠ its
+  first push was CLOBBERED by the updater race, filed+queued as **#986**: update-branch without
+  `expected_head_sha` overwrote a verified push on PR#963; the fix is one API field). **#967**
+  (ADR-115 + §M14 + the Exacto↔caching caveat) bot-APPROVED + armed, lands on its cycle.
+  **#981 SHIPPED as PR#985**: ADR-116 name-anchor ruling + the 29-entry expiry sweep; its
+  CHANGES_REQUESTED (issue #981 had no `Touches:` → governance-path escape read) was fixed at
+  the SOURCE (declaration added to the issue body) + verdict dismissed per the #141 terminal —
+  re-review pending, watch it land. The TODO-ARCHIVED warn's 5 stale pointers → **#984**.
+  **NEXT: #982** (heading §-codes + lint check #4, shadow); **#983/#984 unblock on PR#985's
+  merge**. **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
+  UNPIN at its merge. Still-queued codeowner issues stand: #928 #929 #932 #933 #937 #938 #888
+  #945 #456 #110, agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's
+  merge lets G-B assemble → assembly PR → codeowner tax → probe-platform, FU-102); **#946
+  needs a seat run after #945**; #953 queued (docs-lint gate behaviour — its class fired AGAIN
+  this session: the meta-state ⚓-term break, second instance on the thread).
 
-- **⚑ ORACLE AND SLEEP ARE CHAINLESS (oracle: 2026-08-26 13:59Z, oracle-iac#387; sleep:
-  2026-08-26 ~18:10Z, sleep-iac#77 + mirror homelab#976 armed; 0731 out of model_tiers,
-  homelab#960).** Acceptance watch: first routed rides land clean (oracle = #272-r1 on plain
-  flash; sleep = **sleep-tracking#123-r1, dispatched ~18:12Z after the seat cleared its 9-day
-  `agent/error` latch** — blocker #122 merged, resumable branch stands, chainless routed ride
-  Running at wind-down). No chain-exhausted defers on either stack. **NEXT PHASE = FU-186
+- **⚑ ORACLE AND SLEEP ARE CHAINLESS (oracle: oracle-iac#387; sleep: sleep-iac#77 + mirror
+  homelab#976 MERGED; 0731 out of model_tiers, homelab#960).** **Sleep is PROVEN end-to-end:**
+  #123 (the 9-day agent/error latch, seat-cleared) rode chainless r1 → **PR#133** (the
+  Playwright render gate), ci-red machinery dispatched r2, riding at wind-down — the loop is
+  healthy. **Oracle's #272 is the hard case:** the first chainless draw (opencode×flash)
+  WEDGED pre-LLM — opencode's un-suppressible SDK-init fetches have no timeout under oracle's
+  enforce:true (filed **#990**, queued; durable workaround = **PR#991**: enforced-egress rides
+  never DEFAULT to opencode, replay-pinned, in review); the goose×flash hand-ride then struck
+  **http-401-storm** (the OR key 401ed mid-run — single sighting, watch for recurrence on the
+  next ordinary oracle dispatch); the ride now running is the operator hand-dispatch
+  **claude/haiku r1** (~10m at wind-down; subscription rail, sidesteps both harness classes +
+  the OR credential). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
+  on the opencode draw; the edge dies when #990 closes. If the haiku ride terminals without a
+  PR, it lands in the FU-143 ⛔ hold again — next session checks the board. Two 4h burns today
+  were FU-187's class (quiet stall, reap skips finalize — tracker extended with the reap half). **NEXT PHASE = FU-186
   (ADR-115, ruled 2026-08-26):** step 1 the `provider_policy` knob + no-pin/Exacto flip for
   cheap coding, step 2 the 0731 matrix run (intake mode + `@` arms are BUILT, PR#963 —
   arms: default-pin / no-pin-exacto / @deepseek / @relace control, rung-2 task, both
