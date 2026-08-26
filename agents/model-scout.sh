@@ -484,7 +484,9 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     # A multi-arm walk that never went clean: bench-capable ⇒ inconclusive (the contradiction
     # rule, provider-generalized — the per-arm rows carry the typed detail); unbenched ⇒ the
     # last typed verdict stands.
-    if [ "$cell_verdict" != "clean" ] && [ -n "${CELL_PROVIDERS:-}" ] && [ "$benched" = "true" ]; then
+    # `void` stays void — a platform artifact (v2 runner death, zero spend) is not a claim
+    # about the model, so it must not become `inconclusive` either (review catch, PR#963).
+    if [ "$cell_verdict" != "clean" ] && [ "$cell_verdict" != "void" ] && [ -n "${CELL_PROVIDERS:-}" ] && [ "$benched" = "true" ]; then
       cell_verdict="inconclusive"
     fi
     scout_canary_mint "$id" "$is_free" "$harness" cleanup || true
@@ -588,10 +590,13 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
   else
     TITLE="🔭 model scout: $(jq length "$WORK/ranked.json") new candidate model(s) ($(date -u +%F))"
     [ -n "${INTAKE:-}" ] && TITLE="🔭 model scout: operator intake — $(jq length "$WORK/ranked.json") model(s) ($(date -u +%F))"
-    BODY="$(jq -r --arg ceiling "$CEILING" '
-      "Weekly model scout (REPORT-ONLY, FU-062 / docs/agents/model-routing.md §M7): models whose BASE"
-      + " id is NEW on OpenRouter since the last tick, advertise `tools`, and are `:free` or ≤ $" + $ceiling
-      + "/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in.\n\n"
+    # The intro must tell the truth about how the candidates got here: the intake path bypasses
+    # the newness diff AND the ceiling (review catch, PR#963) — a false "NEW … ≤ $ceiling" framing
+    # would mislead exactly the graduation read this digest exists for.
+    INTRO="Weekly model scout (REPORT-ONLY, FU-062 / docs/agents/model-routing.md §M7): models whose BASE id is NEW on OpenRouter since the last tick, advertise \`tools\`, and are \`:free\` or ≤ \$${CEILING}/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in."
+    [ -n "${INTAKE:-}" ] && INTRO="Operator INTAKE (REPORT-ONLY, model-scout --intake): explicitly requested catalog ids ridden through the SAME legs as newcomers (enrich → bench → rank → canary). The newness diff and the \$${CEILING}/M price ceiling are BYPASSED — these models are listed because the operator asked, not because they are new or cheap. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in."
+    BODY="$(jq -r --arg intro "$INTRO" '
+      $intro + "\n\n"
       + "| # | model | AA int/code/agentic | effective $/M in | price note | pinned provider | uptime | providers | canary |\n"
       + "|---|---|---|---|---|---|---|---|---|\n"
       + (to_entries | map(((.key + 1) | tostring) as $n | .value
