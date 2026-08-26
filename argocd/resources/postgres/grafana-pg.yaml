@@ -1,0 +1,33 @@
+# CNPG Postgres for Grafana (homelab#500's neighbour — the 2026-08-25/26 SQLITE_BUSY incidents).
+# Grafana's sqlite lived on emptyDir, i.e. the ROOT DISK of whatever node it lands on — an
+# fsync-sensitive single-writer DB sharing one cheap SSD's queue with every pod's emptyDir,
+# image pulls and Longhorn replicas (hp-01: 175ms avg writes under the agent burst, ~8 lock
+# errors/min). Postgres on Longhorn takes the DB off node-local disks entirely and ends the
+# sqlite lock class. State starts fresh by design: the sqlite file was on emptyDir, so nothing
+# durable existed to migrate (dashboards/datasources are sidecar-provisioned, admin creds are
+# env-injected from `grafana-admin`).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: grafana-pg
+  namespace: monitoring
+spec:
+  instances: 2
+  # FU-082: a BestEffort database is first in the OOM-kill order under node memory pressure.
+  # Requests lift it to Burstable; the limit is headroom, not a tight cap (infisical-pg pattern).
+  resources:
+    requests: { cpu: "100m", memory: "256Mi" }
+    limits: { memory: "512Mi" }
+  monitoring:
+    enablePodMonitor: true
+  storage:
+    size: 2Gi
+    storageClass: longhorn
+  bootstrap:
+    initdb:
+      database: grafana
+      owner: grafana
+      # No `secret:` — CNPG generates the app credentials itself (`grafana-pg-app`,
+      # basic-auth: username/password), which the grafana Deployment consumes via
+      # envValueFrom in argocd/platform/values/kube-prometheus-stack.yaml. Unlike
+      # infisical-pg there is no tofu-side connection string to keep in sync.
