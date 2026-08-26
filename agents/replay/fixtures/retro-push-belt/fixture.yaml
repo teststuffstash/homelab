@@ -1,0 +1,26 @@
+# retro-push-belt — the pushgateway push with retry and failure surface (FU-176 / #932).
+#
+# THE CONTRACT: retro-argo.yaml's push belt (~:414-444) pushes the
+# retro_report_last_success_timestamp metric to the pushgateway, retries once on failure,
+# and on final failure writes a marker file, commits it, pushes it, and amends the PR body
+# with a ⚠ warning. A belt whose own failure is a TTL'd log line is not a belt (FU-108 class).
+#
+# Rows: `push-ok` (first curl succeeds — the clean path) · `push-retry-ok` (first curl fails,
+# retry succeeds — the retry leg is real) · `push-fails` (both curls fail — the full failure
+# surface: marker, commit, push, PR body amendment).
+name: retro-push-belt
+mode: table
+source: agents/coordinator/retro-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:retro-push-belt
+  - file:post.sh
+env:
+  - DATE=2026-08-11
+  - STACK=oracle
+  - RUN=r3
+  - BR=retro/2026-08-11-oracle-r3
+  - GH_TOKEN=stub-token
+  - DEAD_NOTE=
+  - DATE_TS=1723400000
+rows: rows.psv
