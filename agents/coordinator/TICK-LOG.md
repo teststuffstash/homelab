@@ -5423,3 +5423,17 @@ first live ADR-110 maintenance session before the ADR existed.
   SPECS_S3_* prove organically (next release-corpus run / next specs push, WEB-03 belt behind
   the latter). Meta-state row cleared. #947 merged + dedup quickfix (7d7c0f79) closed the
   r1 F1 batch item; #946←#945 edge wired earlier this hour.
+
+## 2026-08-26 ~10:00Z — the (repo, base) serialization reframe (operator catch)
+
+- Operator: "#828/#829 unfairness is the smaller problem — coordinator/reviewer are not
+  parallel per PR base." Seat verified against the corpus: the merge-path serializer's own
+  rationale (merge→behind→dismiss chain) is BASE-local, so the correct boundary is
+  (repo, base), not repo — cross-lane review/dispatch parallelism falls out, goal children
+  still serialize among themselves, the assembly PR rides the master lane. Measured famines
+  (goal #278: 361 min; v1.1: queue 3,550 vs pod 605) are the cross-lane class this removes.
+  Couples with the banked v1.3 theme-branch decomposition (themes need per-base lanes to pay).
+  Caveats: subscription semaphore stays the ceiling; ~2× and goal-time only; ADR-shaped
+  merge-path re-scoping — operator-gated. Recorded on #829 so no fix round designs the
+  priority tweak as the whole fix. No new FU (prior-art grep: nothing tracks per-base;
+  the decision, if taken, lands as an ADR + rides the next platform Goal / S5+).
