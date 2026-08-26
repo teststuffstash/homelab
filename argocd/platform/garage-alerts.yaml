@@ -1,0 +1,28 @@
+# Garage admin metrics alerts — the >80% disk belt + the table_size drop-to-zero belt, both from
+# the FU-093 ledger (docs/storage-ledger.md). These monitor what the old `monitoring.metrics.enabled:
+# false` hid: Garage exposes 48 metric families on :3903 that nobody scraped.
+#
+# The alerts are the non-shared-fate complement to the 2026-08-24 meta-wipe incident response
+# (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): Prometheus shares the cluster's
+# fate (it went read-only too that day), but a pve fill in the future may not take the whole
+# cluster — and these belts depend on Prometheus being up.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: garage-alerts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/garage-alerts
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=false]

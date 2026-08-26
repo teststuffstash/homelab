@@ -75,7 +75,9 @@ spec:
               rootDomain: .teststuff.net
         monitoring:
           metrics:
-            enabled: false
+            enabled: true
+            serviceMonitor:
+              enabled: true
         persistence:
           data:
             size: 150Gi
