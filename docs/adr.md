@@ -1689,3 +1689,26 @@ that cannot be reused cannot dangle semantically; only forward pointers can lie.
 **Consequences:** archive expiry becomes a cheap mechanical sweep (29 deleted in the ADR's own
 PR); `git log -S FU-NNN` stays the deep record; the residual risk — a genuine TODO written as a
 bare colon comment outliving its id — is accepted and left to cleanup-pass judgment.
+
+### ADR-117 — Referenced doc sections carry stable §-code heading anchors (the M-code convention generalized)
+
+**Status:** Accepted (2026-08-26, operator ruling input in the S5 stint — homelab#982; the
+sibling of ADR-116, which rules the FU-id half of the same rot problem).
+**Decision:** a doc section that other docs or code reference gets a stable CODE as its heading
+prefix (`### M14. …`; list-structured sections use a bolded lead, `- **L0b — …`), never reused
+and never renamed; the reference writes `§<CODE>`. `docs-graph-lint` check #4 enforces it
+two-way — ANCHOR-UNRESOLVED (a §-ref with no living definition) and ANCHOR-AMBIGUOUS (a code
+defined twice) — in SHADOW (warn-only) until a clean-run record flips it, the check-#3 arc.
+The `§` sigil is the opt-in: only §-referenced codes are checked, and only the doc-heat-hot
+set grows codes — cold docs are never coerced.
+**Considered:** prose section-name refs (the status quo — they rot silently on heading edits
+and no lint can see them); markdown slug anchors (`#the-section-name` — rot identically, and
+GitHub's slugs are derived, not stable); blanket-coding every heading (ceremony on cold docs
+nobody references — rejected per the doc-heat rule).
+**Why:** ids grep, headings rot — M-codes/FSM-ids/FU-ids never dangled while prose §-refs did;
+the same one-namespace property ADR-116 leans on (a never-reused name cannot dangle
+semantically, only forward pointers can lie).
+**Consequences:** referenced sections accrete codes at touch time (no big-bang renaming);
+report-local codes (retro F-codes, fixer-context L-layers) stay legal un-sigiled; a future
+§-ref to a reused code surfaces as ANCHOR-AMBIGUOUS and forces the rename the convention
+demands.
