@@ -20,7 +20,11 @@ meant to avoid.)
   registers + FU-160 spike) → **#984**. **#982 MERGED as PR#999 (20:55Z)**: ADR-117 §-code
   heading anchors + docs-graph-lint check #4 SHADOW (ANCHOR-UNRESOLVED/-AMBIGUOUS; flip to
   FAIL after a recorded clean run — the #984 comb is the natural flip read).
-  **NEXT: #983 (doc-heat trimming pass) + #984 (deep comb) — both UNBLOCKED, sitting-scale.** **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
+  **#983 MERGED as PR#1001 (21:38Z)**: 3 heat-cited trims (−214 lines from the corpus hot set,
+  incl. an ADR-111 staleness heat found that lints can't) + settle-test run 1 recorded in the
+  doc-heat spike — ≥3 bar MET; **the FU-164 promote-vs-close call is the operator's** (serve
+  the report + wire into docs-cleanup, or close the spike). **NEXT: #984 (deep comb) — the
+  LAST original, fresh-session-scale; it doubles as check #4's flip read.** **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
   UNPIN at its merge. Still-queued codeowner issues stand: #928 #929 #932 #933 #937 #938 #888
   #456 #110, agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's
   merge lets G-B assemble → assembly PR → codeowner tax → probe-platform, FU-102); **#946 is
