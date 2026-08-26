@@ -12,8 +12,9 @@
 # mints one ad-hoc. See docs/agents/merge-path.md §Chosen design ▸2 + §Updater token.
 #
 # Level-triggered: each pass re-reads the world and acts on at most one main-leg update; a lost
-# doorbell costs nothing (the */15 cron re-derives). Races cost a wasted API call, never a bad
-# merge — update-branch is idempotent at GitHub and the merge gate is GitHub's, evaluated once.
+# doorbell costs nothing (the */15 cron re-derives). Races are safe: update-branch carries
+# expected_head_sha (homelab#986), so a concurrent push causes 422 (skip, next pass re-lists)
+# instead of clobbering the commit. The merge gate is GitHub's, evaluated once.
 #
 # Ported guard history (the comments below are load-bearing — they carry the incidents):
 #   - update BEFORE review (required_approval_count: 0 in the action era): approval-then-update
@@ -31,7 +32,7 @@ REPO="${1:?usage: update-pr-branch.sh <owner/repo>}"
 # One list serves all three legs — the snapshot is per-pass by design (level-triggered; anything
 # it misses, the next pass sees).
 PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
-  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels)"
+  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid)"
 
 # Defensive: `gh pr edit --add-label` FAILS on a missing label, so create it idempotently first
 # (the AgentStack claim provisions it via IssueLabels, but this survives a not-yet-claimed repo or
@@ -58,13 +59,14 @@ pick="$(jq -r '[.[] | select(.autoMergeRequest != null and .mergeStateStatus == 
                              and .reviewDecision != "CHANGES_REQUESTED")]
                | sort_by(.createdAt) | .[0].number // empty' <<<"$PRS")"
 if [ -n "$pick" ]; then
+  pick_oid="$(jq -r --argjson n "$pick" '.[] | select(.number == $n) | .headRefOid // empty' <<<"$PRS")"
   echo "updater[$REPO]: updating #$pick (oldest armed+BEHIND, FIFO)"
-  if ! gh api -X PUT "repos/$REPO/pulls/$pick/update-branch" >/dev/null; then
-    # 422 = conflict (or already-current race). Label it so triage sees it — the DIRTY labeler
-    # below re-derives this on later passes too. Replayed: fixtures/updater `update-fail` row
-    # (per-call failure injection, STUB_GH_<slug> — homelab#740 / PR#759).
-    echo "updater[$REPO]: update of #$pick failed (422/conflict?) — labeling merge-conflict; next pass retries"
-    label_conflict "$pick"
+  if ! gh api -X PUT "repos/$REPO/pulls/$pick/update-branch" \
+    ${pick_oid:+-f expected_head_sha="$pick_oid"} >/dev/null; then
+    # 422 = conflict OR expected_head_sha race (homelab#986). Both are safe to skip: a race
+    # preserves the concurrent push's commit; a conflict is caught by the DIRTY labeler (leg 3)
+    # on the next pass. Replayed: fixtures/updater `update-fail` and `race-422` rows.
+    echo "updater[$REPO]: update of #$pick failed (422) — skipping; next pass retries"
   fi
 else
   echo "updater[$REPO]: no armed+BEHIND PR to update"
@@ -99,11 +101,13 @@ jq -r '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
              | .submittedAt] | max) as $v
         | if ($c != null and $v != null and $c > $v) then "yes" else "no" end' 2>/dev/null)" || verdict_ok=""
     fi
+    n_oid="$(jq -r --argjson n "$n" '.[] | select(.number == $n) | .headRefOid // empty' <<<"$PRS")"
     case "$verdict_ok" in
       yes)
         echo "unstrand: updating CR-and-behind PR #$n (new content since verdict)"
-        gh api -X PUT "repos/$REPO/pulls/$n/update-branch" >/dev/null \
-          || { echo "unstrand: update of #$n failed (conflict? next run retries)"; label_conflict "$n"; } ;;
+        gh api -X PUT "repos/$REPO/pulls/$n/update-branch" \
+          ${n_oid:+-f expected_head_sha="$n_oid"} >/dev/null \
+          || echo "unstrand: update of #$n failed (422) — skipping; next pass retries" ;;
       no)
         echo "unstrand: #$n CR-and-behind but NO new content since the verdict — nothing to re-review, not updating (2026-08-17 narrowing)" ;;
       *)
