@@ -70,6 +70,32 @@ accepts — or a pass showing heat added nothing over the existing lint + judgme
 promote (serve it, wire it into the docs-cleanup skill as a standing input) or close the spike
 and delete the generator.
 
+## Settle test — run 1 (2026-08-26, S5 #983)
+
+150 sessions, 101/125 files. The pass used per-line heat (cold spans = lines never TARGETED by
+a ranged read or grep — whole-file corpus loads do not flatten it), which turned out to be the
+yield; file-level cold mostly survived on class excuses, as the doctrine predicted.
+
+**Heat-cited decisions (3 accepted trims, −214 lines from the two hottest corpus docs):**
+model-routing §M10's superseded narrative (a 74-line measured-cold span → the what-stands
+block); issue-authoring's FU-143 implementation contract + soak forensics (88 cold lines of
+shipped-and-archived history → the invariant + two lessons + FSM pointers); issue-authoring's
+two-hop cascade (40 cold lines — where heat ALSO caught a staleness no lint could see: the
+section still described the ADR-111-retired hosted updater). Every line cut here was paid on
+every ~110k-token design-agents corpus load.
+
+**Candidates correctly REJECTED on class excuse (the doctrine working):**
+`tofu/cloudflare/README.md` (0 heat since 07-13 — root-README/recovery class, rare-read
+highest-value) and `spikes/no-human-in-the-loop.md` (1 hit — live spike backing FU-097, two
+inbound links). Blind spots confirmed as declared: skills/`ground-rules.md` (auto-injected,
+never Read) and cluster-consumed docs (recipes, lenses, the coordinator brief) are invisible
+to the jail-only v0 — do not judge those from this report; the v1 cluster leg is what makes
+them measurable.
+
+**Verdict input:** heat changed decisions — the ≥3 bar is met, and the line-level channel
+found both trim mass and a staleness class the lints structurally miss. The promote-vs-close
+call (serve the report; wire it into docs-cleanup as a standing input) is the operator's.
+
 ## Links
 
 FU-164 (pointer) · [context-repos.md](context-repos.md) + FU-117 (shared sweep) · FU-163 (hot

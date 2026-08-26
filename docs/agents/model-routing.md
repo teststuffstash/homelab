@@ -499,98 +499,31 @@ label) — never request-time inference in the proxy.
 > role now routes — coordinator + dispatch units via PR#801 (the goal-model case map became the
 > `goal-decompose` class in `model-classes.json`; §IL-T11's anchor moved with it), the reviewer
 > via PR#803 (decorrelation consumed as the #516 `/route` primitive, failover literal deleted in
-> authoritative mode), responder/retro/fix-debounce via PR#788 (#782). "The only caller is
-> `agent-session.sh`" and "implemented as a launcher-side case in `coordinator-scan.sh`" below
-> are HISTORY. What still stands from this section: the AUTHORING-vs-CHECKING axis (decompose =
-> reasoning tier, reviews stay sonnet-class), the `GOAL_MODEL` escape hatch (now in
-> `coordinator-session.sh`), the audit/research-classes-are-the-wrong-shape warning (heeded —
-> `goal-decompose` is its own subscription-rail class), and the `dispatch`-tier caveat at the section's end.
+> authoritative mode), responder/retro/fix-debounce via PR#788 (#782). The section's
+> launcher-era narrative was trimmed to the what-stands block below (2026-08-26, the S5
+> doc-heat pass — a 74-line measured-cold span).
 
 **ADR-096 override rule (settled, #810):** explicit CLI `--model` on coordinator/reviewer = override (route skipped, `resolve-model --model`). Scan-supplied default (`coordinatorModel`) = constraint + fail-OPEN fallback (`resolve-model --fallback`, route consulted). Retro `--cell` model = **explicit override** since #861/PR#864 (cells are experiment ARMS — ADR-104, experiments do not jitter, so the router may never collapse the A/B axis; `resolve-model --model` with `--fallback` kept for validation + the unreachable-proxy literal). `AGENT_MODEL` env = universal override (checked ahead of the route in all roles). Stated once here; the launcher comments cite this section by name.
 
-Everything above governs the **OpenRouter rail**. The coordinator does not ride it: it runs
-`claude -p` against the Claude subscription (`coordinator-claude`, `CLAUDE_CODE_OAUTH_TOKEN`) with
-`--model sonnet|opus|haiku|fable`, and its model comes from `cmodel` —
-`.spec.coordinatorModel // "sonnet"` on the live `AgentStack` claim, read by `coordinator-scan.sh`.
-Not from `agents/stacks.json` (that is a fallback for stacks absent from the cluster, and a failed
-cluster read PROBE-FAILs loudly rather than silently downgrading).
+What still stands from this section (the rest is history — PR#788/#801/#803 wired every
+role to `/route` and the launcher case maps died with them; the era's narrative is in git):
 
-**The policy already describes this lane; only the call is missing.** `role_defaults.coordinator`
-→ class `dispatch` → `rails: ["subscription"]`, `tier: "dispatch"`; `model_tiers` grades
-`claude/haiku: cheap`, `claude/sonnet: large`, `claude/opus: premium`; and `/route`'s subscription
-branch is implemented, with its own `subscription_ok(tier)` capacity gate. But `/route`'s **only
-caller is `agent-session.sh`** (the worker launcher) — `coordinator-session.sh` consults the proxy
-solely for `/loop-git-token?role=coordinator`. So a `dispatch` class floor set today changes
-nothing about a coordinator session. Written is not applied; check the caller, not the config.
+- **The AUTHORING-vs-CHECKING axis.** `goal-decompose` runs the reasoning tier (now the
+  `goal-decompose` class in `model-classes.json`, subscription rail); reviews stay
+  sonnet-class — a review is a review, proven twice on live goal-reviews (2026-08-05) and on
+  sleep-tracking#9. Escalate a specific hard goal with `GOAL_MODEL`
+  (`coordinator-session.sh`); never raise a clause's floor.
+- **The assembly reviewer must DIFFER from the decomposing model** (issue-authoring leg (c));
+  decorrelation is consumed as the #516 `/route` primitive since PR#803.
+- **`audit`/`research` classes are the wrong shape for coordination reuse** — both pin
+  `rails: ["openrouter"]` with a fusion head; coordination stays on the subscription safety
+  net (heeded: `goal-decompose` is its own subscription-rail class).
+- ⚠ **The `dispatch` tier's premise is measured FALSE and deliberately left alone**:
+  `tier_thresholds` reads "~30s dispatch units" yet 149/149 coordinator sessions exceeded 30s
+  over 7d (p50 105s, p99 1342s) — and its 0.9 utilization threshold makes coordinators defer
+  LAST. A whole-lane question; re-open with evidence about what the latch protects.
 
-**`goal-decompose` runs a reasoning tier (operator ruling, 2026-08-05).** It resolves to **opus**;
-every other clause — `goal-review` included — keeps the claim's `coordinatorModel` (sonnet). The
-axis is **AUTHORING vs CHECKING**, not goal vs routine: decompose CREATES the work, and a
-mis-scoped child burns rides and is expensive to undo once its ride opens a PR.
-
-⚠ `goal-review` was in that list for ~90 minutes and was removed the same day, on evidence. Both of
-its live runs were sonnet and both were right: the 16:32 one ruled "not yet met", correctly told
-branch-2 (a remaining child covers the gap) from branch-3 (author the missing child), authored no
-redundant child, and caught stale `Base:` prose the meta session had missed; the 18:15 one verified
-against the goal branch and the post-merge CI run rather than the labels, and left the
-human-reserved PRs alone. It also contradicted standing doctrine —
-[`reviewer-session.sh`](../../agents/reviewer-session.sh): *"Sonnet is sufficient here; opus is
-available for a genuinely high-stakes PR via `--model`, but it is not the default"* (proven on
-sleep-tracking#9, where a sonnet reviewer caught the coordinator's own misjudgment). A review is a
-review. **Escalate a specific hard goal with `GOAL_MODEL`; do not raise the floor for a clause.**
-⚠ All of this evidence comes from circles#17, a goal small enough for one ride — so it bounds what
-a *small* goal needs, not what a real one does. Re-test on the first genuinely multi-deliverable
-goal. Implemented as a launcher-side `case` in
-`coordinator-scan.sh` (ADR-094: dispatch params are launcher-owned, never LLM-assembled), with a
-`GOAL_MODEL` env escape hatch. **When the coordinator lane is wired to `/route` (post-P4, FU-095)
-this map becomes a subscription-rail reasoning class and is deleted** — note that `audit` and
-`research` are the wrong shape to reuse as-is: both pin `rails: ["openrouter"]` with an
-`openrouter/fusion` head, and coordination must stay on the subscription safety net.
-
-⚠ **A goal small enough for one ride is not a goal** (same ruling). circles#17 decomposed to two
-children while the one-shot arm reached a comparable bake+page and drew only `CHANGES_REQUESTED` —
-so the fan-out arm's advantage was never demonstrated, and the reasoning tier had nothing hard to
-chew on. Calibrate goals so decomposition and the acceptance judgement are actually load-bearing.
-
-⚖ **The goal lane's model axis is PHASE, not clause — a single `GOAL_MODEL` knob turns the wrong
-thing (operator observation, 2026-08-11, from the FU-165 pilot prep; design OPEN, deliberately
-unwired).** The goal coordinator's work is three different jobs wearing one clause family: (1) the
-INITIAL decomposition — full-context composition, deserves the big model AND special instructions
-(the FU-165 pilot runs it in the jail with the design-agents corpus loaded for exactly this
-reason); (2) the MECHANICAL goal-review ticks — "did a child close, does something cover the gap"
-— which need no strong model at all; (3) sub-issue AUTHORING from harvested follow-ups — judgment
-work again, but it arrives as a TRICKLE (one sprout per closure), and paying a full-context
-re-read per sprout is too expensive for any model. The candidate shape is therefore not a model
-knob but a CHECKPOINT structure: big model + special instructions at decompose, and again at a
-designated larger checkpoint once the initial child set completes (a batched re-read that does the
-accumulated authoring judgment in one context), with the trickle in between handled mechanically
-or queued for the checkpoint. Do NOT wire a per-stack goal-model knob before this is designed —
-it would harden the wrong axis. **RESOLVED by ADR-106 (2026-08-12): the phases are decompose /
-deterministic ticks / checkpoints / assembly / verdict — reasoning tier at decompose AND
-checkpoints (the two authoring moments), NO model on per-closure ticks (demoted to a
-deterministic burn-down append), sonnet on reviews, human at the tax + verdict.** Build rides
-Bucket A4. **Tracked by:** FU-090 (its Operator-deferred line holds the status).
-
-**The reviewer lane's one model split: the ASSEMBLY review (2026-08-06).** `review-reflex.sh`
-routes a pick whose **head** is `goal/**` — the goal→master assembly PR, the cumulative review the
-whole goal rests on — to `--model ${REVIEW_GOAL_MODEL:-sonnet} --rubric .agents/review-goal.md`
-(the rubric falls back to the generic prompt in repos that do not ship the file). Same shape as
-`GOAL_MODEL`: launcher-side `case`, env escape hatch, default **stays sonnet** per the doctrine two
-paragraphs up (a review is a review — escalate a specific hard assembly, do not raise the floor),
-and it dies the same death when the lane routes through `/route`. ⚠ The assembly reviewer must
-DIFFER from the decomposing model (issue-authoring leg (c)): with `goal-decompose` on opus, setting
-`REVIEW_GOAL_MODEL=opus` collides — escalate `GOAL_MODEL` or `REVIEW_GOAL_MODEL`, never both.
-Child PRs (`fix/*` heads *into* `goal/**`) stay on the default rubric+model path.
-
-⚠ **The `dispatch` tier's premise is measured FALSE, and is deliberately left alone for now.**
-`tier_thresholds` reads *"dispatch = ~30s dispatch units (coordinator/responder)"* and grants
-`dispatch` a **0.9** utilization threshold against `heavy`'s 0.8 — so coordinator sessions defer
-LAST, i.e. they are the most willing to consume scarce subscription headroom. Over 7 days,
-n=**149** coordinator sessions: p50 **105s**, p90 529s, p99 1342s, max 3072s, and **149 of 149
-exceeded 30s**. Not one run matched the premise. Raising goal-* to `heavy` was considered and NOT
-taken (2026-08-05) — it is a whole-lane question, not a goal-lane one, and belongs with evidence
-about what the latch is actually protecting.
-
+**Tracked by:** FU-090 (its Operator-deferred line holds the goal-lane status).
 
 ### M11. The cost ladder across RAILS — free → subscription-headroom → paid (operator direction 2026-08-08)
 
