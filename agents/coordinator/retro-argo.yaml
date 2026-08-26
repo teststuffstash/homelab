@@ -408,10 +408,40 @@ spec:
               # label set pushgateway is holding, so an old `job=retro-session` group's stale
               # sample can never mask a fresher `job=platform-retro` one; the rename only tidies
               # the grouping key, it does not need a migration step.
+              # FU-176 / #932: retry once and surface final failure as a marker file + PR body
+              # amendment instead of a TTL'd log-only WARN — a belt whose own failure is a log
+              # line that expires is not a belt (FU-108 class).
+              # >>>REPLAY:retro-push-belt>>>
+              PUSH_FAILED=0
               printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
                 | curl -s --max-time 10 --data-binary @- \
                   "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/${STACK}" \
-                || echo "WARN: pushgateway push failed — the RetroReportOverdue belt goes stale"
+                || { sleep 3 \
+                     && printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
+                        | curl -s --max-time 10 --data-binary @- \
+                          "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/${STACK}" \
+                     || PUSH_FAILED=1; }
+              if [ "$PUSH_FAILED" = 1 ]; then
+                echo "WARN: pushgateway push failed after retry — the RetroReportOverdue belt goes stale"
+                # Write a marker file the next harvest step can surface (FU-176 / #932).
+                # The file is committed to the PR branch so the next scheduled run's harvest
+                # step checks for any marker files and includes them in its PR body.
+                MARKER="docs/agents/retros/.pushgateway-failed-${DATE}-${STACK}-${RUN}"
+                date > "$MARKER"
+                echo "pushgateway push failed after retry — the RetroReportOverdue belt goes stale" >> "$MARKER"
+                git add "$MARKER"
+                git commit -m "retros: pushgateway push failed for ${STACK} ${RUN} (marker)" --allow-empty
+                git push "https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab" "HEAD:$BR"
+                # Also surface the failure in the PR body immediately.
+                # Built with printf, not a literal multi-line string: every line of this step is
+                # INSIDE a YAML `|` block scalar, so a continuation line at column 0 (which is
+                # what the note's leading blank line wants to be) silently ENDS the scalar and
+                # breaks the manifest. The escapes belong to printf; the YAML never sees a newline.
+                PUSH_WARN=$(printf '\n\n⚠ **PUSHGATEWAY PUSH FAILED** — the RetroReportOverdue alert will fire stale until the next successful push. The report itself landed successfully.')
+                gh pr edit "$BR" --repo teststuffstash/homelab \
+                  --body "FU-058 scheduled retro output — HUMAN-GATED, read before merging. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}${PUSH_WARN}"
+              fi
+              # <<<REPLAY:retro-push-belt<<<
           env:
             - { name: HOME, value: "/home/node" }
           volumeMounts:
