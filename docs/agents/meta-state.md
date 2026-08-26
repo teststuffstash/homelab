@@ -14,7 +14,17 @@ meant to avoid.)
   their living refs are PROVENANCE names in code comments/docs (FU-088 ×51, FU-069 ×26,
   FU-057 ×20 …), the same class as the exempt TICK-LOG/ADR refs, so the scrub needs the
   **name-anchor ruling** (operator: exempt provenance refs / keep permanent one-line stubs /
-  scrub-and-rename) before any mass edit; plus the deep whole-repo comb.
+  scrub-and-rename) before any mass edit; plus the deep whole-repo comb. **Ruling input
+  (operator + seat sketch, 2026-08-26 — decide IN the stint):** ids grep, headings rot — and
+  the corpus proved it internally (M-codes/FSM-ids/FU never rot; prose §-references do, and
+  docs-graph-lint cannot see them). Sketch: (a) generalize the M-code convention — stable code
+  as heading PREFIX for referenced sections, codes never reused; (b) docs-graph-lint check #4:
+  two-way §<CODE> resolution incl. code comments (the ⚓-term mechanism extended to section
+  coordinates); (c) id only the doc-heat-hot set (FU-164), never every heading; (d) the
+  name-anchor lean: EXEMPT provenance-shaped FU refs (stable coordinates, TICK-LOG/ADR class),
+  red only TODO-shaped refs to archived ids — stubs recreate a graveyard, scrub-and-rename
+  destroys the grep coordinate (../teststuff specs-for-agentic-delivery.md §one-ID-namespace +
+  deletability are the grounding).
 
 - **⚑ G-B #818 WEDGED on homelab#933 (found + filed by the 2026-08-25 sweep, queued):** all 5
   originals closed, 1 store finding, but the goal-checkpoint's child-set-complete trigger
