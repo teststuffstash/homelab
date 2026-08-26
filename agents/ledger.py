@@ -156,7 +156,7 @@ def _budget_from_cr(project: str, issue: str) -> tuple[str, float, float] | None
         print("ledger: kubectl get openrouterkeys failed for %s (%s) — CR budget fallback skipped"
               % (project, e), file=sys.stderr)
         return None
-    prefix = "%s-issue-%s" % (project, issue)
+    prefix = "%s-issue-%s-round-" % (project, issue)
     for item in data.get("items", []):
         name = item.get("metadata", {}).get("name", "")
         if not name.startswith(prefix):
