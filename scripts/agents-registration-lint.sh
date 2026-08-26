@@ -84,7 +84,11 @@ for target in agents/coordinator/git-token.yaml agents/coordinator/reviewer-git.
   done
 done
 # v2 (2026-07-10): merge-path CALLERS check — oracle-fleet ran with no update-pr-branch caller and
-# an armed PR deadlocked BEHIND (TICK-LOG meta-3). Every stack repo must carry both callers.
+# an armed PR deadlocked BEHIND (TICK-LOG meta-3). Every stack repo must carry the caller.
+# v3 (2026-08-26): the update-pr-branch caller REQUIREMENT RETIRED with the callers themselves —
+# ADR-111 moved the updater in-cluster (homelab#745), so only renovate-approve remains checkable.
+# (ci's homelab-scoped token SKIPs this whole block on foreign repos, so the stale requirement
+# only ever redded authenticated jail runs — found at the oracle-chainless mirror edit.)
 # Requires gh (CI has it); skipped loudly when absent so the lint stays runnable offline.
 # -iac repos are CI-gated deploy TARGETS (require_approval=false; FU-052 excludes them from the
 # fixer flow) — their pin PRs merge on CI alone, so the armed-PR-stall class doesn't apply.
@@ -100,7 +104,7 @@ if command -v gh >/dev/null 2>&1; then
       echo "agents-registration-lint: cannot read ${repo} with this token — callers check SKIPPED for it (probe failure ≠ missing)" >&2
       continue
     fi
-    for wf in update-pr-branch renovate-approve; do
+    for wf in renovate-approve; do
       if ! gh api "repos/${ORG:-teststuffstash}/${repo}/contents/.github/workflows/${wf}.yml" --jq .name >/dev/null 2>&1 \
          && ! gh api "repos/${ORG:-teststuffstash}/${repo}/contents/.github/workflows/${wf}.yaml" --jq .name >/dev/null 2>&1; then
         echo "MISSING: ${repo} has no .github/workflows/${wf}.y(a)ml (merge-path caller — armed PRs stall without it)" >&2
