@@ -1,11 +1,11 @@
-# homelab#456 — the pod env card ships the opencode phone-home kill-switch for EVERY ride.
+# homelab#456 — the pod env card ships the opencode OPENCODE_DISABLE_AUTOUPDATE kill-switch.
 #
-# CONDITION UNDER REPLAY. The opencode CLI's auto-update check (registry.npmjs.org, its
-# npm-distributed updater) + model-registry fetch (models.opencode.ai) were the openrouter-operator
-# POLICY_DENIED egress pair. The agent-base image bundles opencode for every harness, so the
-# kill-switch must be set UNCONDITIONALLY in the always-rendered env list — beside the
-# devbox/uv precedents, never gated on HARNESS=opencode and never handled by widening the egress
-# allowlist (the CNP correctly denies the WAN call; the tool's own check is the thing to silence).
+# CONDITION UNDER REPLAY. opencode-1.18.18's SDK initialization makes runtime fetches to
+# models.opencode.ai (model-registry) + registry.npmjs.org (provider SDK packages/@ai-sdk/*).
+# The var OPENCODE_DISABLE_AUTOUPDATE disables the periodic auto-update check but not the SDK
+# init fetches — the CNP Policy DENY is the intended backstop. The var must be set
+# UNCONDITIONALLY in the always-rendered env list beside devbox/uv precedents, never gated on
+# HARNESS=opencode, matching the doctrine in PR #503 §2 (kill at tool, do not widen extraFQDNs).
 #
 # mode: suite — the subject is a STATIC property of the launcher's pod env card, not an action
 # stream: no gh/kubectl calls, nothing to record. The suite reads the var OUT of
