@@ -1,0 +1,53 @@
+# Garage admin metrics alerts — the two FU-093 ledger belts (docs/storage-ledger.md).
+#
+# These depend on `monitoring.metrics.enabled: true` in the garage Application (which renders the
+# headless metrics Service + ServiceMonitor against :3903). Without that flag nothing scrapes
+# Garage, and these rules evaluate against an empty vector.
+#
+# ⚠ Known limit, recorded in the ledger doc: this would NOT have helped on 2026-08-24 itself
+# (Prometheus shared fate with the failure window — it went read-only too). The belt is for the
+# non-shared-fate cases.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: garage-admin-metrics
+  namespace: monitoring
+  labels:
+    app: garage-alerts
+spec:
+  groups:
+    - name: garage-admin-metrics
+      rules:
+        # DISK FULL BELT — the >80% threshold from the ledger. Garage exposes per-disk avail/total
+        # on the admin metrics endpoint; this is the direct detector for the condition that the
+        # ledger's ">80% alert" input was designed to catch.
+        - alert: GarageDiskFillingUp
+          expr: |
+            garage_local_disk_avail / garage_local_disk_total < 0.2
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage data disk is {{ $value | humanizePercentage }} full on {{ $labels.node }}"
+            description: >-
+              Garage's data disk has less than 20% available. The ledger's >80% threshold
+              (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn
+              volume or the underlying pve thin pool is filling. A full disk makes Garage go
+              read-only — the 2026-08-24 meta wipe started this way.
+        # TABLE SIZE DROP-TO-ZERO BELT — the wipe detector. A meta wipe (like the 2026-08-24
+        # incident where the LMDB came back with empty tables) makes table_size drop to zero for
+        # every table. This alert fires when ANY table that should have data reports zero size.
+        # The `for:` window avoids flapping on Garage restarts.
+        - alert: GarageTableEmpty
+          expr: |
+            table_size == 0
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage table {{ $labels.table_name }} is empty on {{ $labels.node }}"
+            description: >-
+              A Garage meta table that should hold data reports zero size. This is the pattern
+              from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md):
+              the LMDB came back with empty tables after a hard VM stop. Check Garage's health
+              (`garage status`), the meta volume, and the pod logs. If multiple tables are empty
+              simultaneously the meta store may need recovery from the snapshot belt
+              (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots).
