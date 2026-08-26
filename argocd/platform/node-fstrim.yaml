@@ -1,0 +1,27 @@
+# Periodic guest fstrim for the Talos VMs on pve's thin pool + its metering (FU-093) — the
+# automation of docs/runbook.md §"Reclaiming thin-pool space from a Talos VM", which had been a
+# manual recipe through three pool fills. Raw manifests in argocd/resources/node-fstrim/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: node-fstrim
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/node-fstrim
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    # The manifests carry their own namespaces (node-maintenance for the CronJobs, monitoring for
+    # the PrometheusRule); this is only the fallback for anything that does not.
+    namespace: node-maintenance
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
