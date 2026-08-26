@@ -92,3 +92,8 @@
 # change to its own rules — reads the rubric off the PR branch — and found this entry missing;
 # `agents/**` does not match `.agents/**`)
 /.agents/ @RasmusSoot
+
+# .claude/** — the jail skills + GAPS ledger (ADR-105): procedure the SEAT auto-loads and
+# follows. An agent merging here rewrites the operator session's own playbook — same
+# self-steering class as .agents/, and the same dotdir gap: `agents/**` does not match it.
+/.claude/ @RasmusSoot
