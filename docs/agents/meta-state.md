@@ -8,7 +8,7 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ S5 (corpus diet) IS OPEN — stint #979, originals #981–#984 (2026-08-26 evening corpus
+- **⚑ S5 (corpus diet) IS OPEN — [stint](chainless-redesign.md) #979, originals #981–#984 (2026-08-26 evening corpus
   session).** The park-drain opening act RAN: outage set all merged (#915/#962/#951/#952/#925);
   gate reads landed #964 (approved, CLEAN — confirm merged) + #965 (merged); seat fix rounds
   pushed onto **#963** (the `@<slug>` arm's `:free` compute_pin fallback) and **#967** (the two
