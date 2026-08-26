@@ -14,10 +14,12 @@ meant to avoid.)
   first push was CLOBBERED by the updater race, filed+queued as **#986**: update-branch without
   `expected_head_sha` overwrote a verified push on PR#963; the fix is one API field). **#967**
   (ADR-115 + §M14 + the Exacto↔caching caveat) bot-APPROVED + armed, lands on its cycle.
-  **#981 SHIPPED as PR#985**: ADR-116 name-anchor ruling + the 29-entry expiry sweep; its
-  CHANGES_REQUESTED (issue #981 had no `Touches:` → governance-path escape read) was fixed at
-  the SOURCE (declaration added to the issue body) + verdict dismissed per the #141 terminal —
-  re-review pending, watch it land. The TODO-ARCHIVED warn's 5 stale pointers → **#984**.
+  **#981 SHIPPED as PR#985**: ADR-116 name-anchor ruling + the 29-entry expiry sweep; round 1
+  CHANGES_REQUESTED (issue #981 had no `Touches:`) fixed at the source + dismissed; round 2
+  CHANGES_REQUESTED (real classifier bug: TODO-shape extraction swept every id on the matched
+  line, not the construct's target — FU-142 was a phantom) fixed in-PR `66a3fc17` — re-review
+  pending, watch it land. The TODO-ARCHIVED warn's **4** real stale pointers
+  (FU-068/FU-133/FU-143 gap registers + FU-160 spike) → **#984**.
   **NEXT: #982** (heading §-codes + lint check #4, shadow); **#983/#984 unblock on PR#985's
   merge**. **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
   UNPIN at its merge. Still-queued codeowner issues stand: #928 #929 #932 #933 #937 #938 #888
