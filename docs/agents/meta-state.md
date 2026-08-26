@@ -14,14 +14,13 @@ meant to avoid.)
   first push was CLOBBERED by the updater race, filed+queued as **#986**: update-branch without
   `expected_head_sha` overwrote a verified push on PR#963; the fix is one API field). **#967**
   (ADR-115 + §M14 + the Exacto↔caching caveat) bot-APPROVED + armed, lands on its cycle.
-  **#981 SHIPPED as PR#985**: ADR-116 name-anchor ruling + the 29-entry expiry sweep; round 1
-  CHANGES_REQUESTED (issue #981 had no `Touches:`) fixed at the source + dismissed; round 2
-  CHANGES_REQUESTED (real classifier bug: TODO-shape extraction swept every id on the matched
-  line, not the construct's target — FU-142 was a phantom) fixed in-PR `66a3fc17` — re-review
-  pending, watch it land. The TODO-ARCHIVED warn's **4** real stale pointers
-  (FU-068/FU-133/FU-143 gap registers + FU-160 spike) → **#984**.
-  **NEXT: #982** (heading §-codes + lint check #4, shadow); **#983/#984 unblock on PR#985's
-  merge**. **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
+  **#981 MERGED as PR#985 (20:42Z)**: ADR-116 + the 29-entry sweep; round-2 classifier bug
+  (TODO-shape extraction swept every id on the matched line — FU-142 was a phantom) fixed
+  in-PR. The TODO-ARCHIVED warn's **4** real stale pointers (FU-068/FU-133/FU-143 gap
+  registers + FU-160 spike) → **#984**. **#982 MERGED as PR#999 (20:55Z)**: ADR-117 §-code
+  heading anchors + docs-graph-lint check #4 SHADOW (ANCHOR-UNRESOLVED/-AMBIGUOUS; flip to
+  FAIL after a recorded clean run — the #984 comb is the natural flip read).
+  **NEXT: #983 (doc-heat trimming pass) + #984 (deep comb) — both UNBLOCKED, sitting-scale.** **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
   UNPIN at its merge. Still-queued codeowner issues stand: #928 #929 #932 #933 #937 #938 #888
   #945 #456 #110, agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's
   merge lets G-B assemble → assembly PR → codeowner tax → probe-platform, FU-102); **#946
