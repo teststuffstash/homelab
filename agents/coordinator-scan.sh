@@ -1950,6 +1950,16 @@ EOF_GUARDED
         # valid-looking "3" and fail later as a swallowed arithmetic error (bot review, PR#398).
         case "$gopen_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
         case "$gclosed_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
+        # FU-069 / homelab#933: the post-launch bucket (title starts with "post-launch:") is
+        # created at the first harvest/closeout while the goal is still pre-assembly (IL-T17).
+        # It is an OPEN descendant, so trigger (b) below would never see gopen_n=0 and the
+        # goal would wedge at originals-done forever. Exclude the bucket from the open count
+        # used by the child-set-complete predicate — same title convention the harvest-disposition
+        # site and the dispatch block use (sprout-report-skips-buckets, IL-T17).
+        gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
+          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
+        case "$gopen_n_ckpt" in ''|*[!0-9]*) gopen_n_ckpt="$gopen_n";; esac
         set -- $gdesc; gtotal_n=$#
         _gf_find "$slug" "$g" && gf_rc=0 || gf_rc=$?
         gfbody="$GF_BODY"
@@ -1966,7 +1976,7 @@ EOF_GUARDED
         gundisp=$(( gtot - gdisp ))
         gck=""
         [ "$gundisp" -ge "${GOAL_CHECKPOINT_N:-5}" ] && gck="findings ${gundisp} undispositioned"
-        if [ "$gopen_n" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ]; then
+        if [ "$gopen_n_ckpt" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ]; then
           gck="${gck:+${gck} + }child-set complete pre-launch"
         fi
         if [ -n "$gck" ]; then
