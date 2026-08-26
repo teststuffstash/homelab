@@ -20,6 +20,17 @@
 # is_historical: TICK-LOG (append-only journal) and adr.md (decision record) use terms
 # historically and must never be forced to grow links; meta-state is transient but LIVING
 # (its rows are re-read every session) and stays checked.
+#
+# Check #4 — §-code heading anchors, two-way resolution (S5 #982, ADR-117; SHADOW — warn-only,
+# the check-#3 arc: shadow → a recorded clean run → flip to FAIL). The convention: a section
+# other docs/code reference gets a stable CODE as heading prefix (`### M14. …`, `### A1. …`;
+# the list-structured variant is a bolded lead, `- **L0b — …`), never reused and never renamed
+# — and references write `§<CODE>` (grammar: letter + 1-2 digits + optional letter). The §
+# sigil is the OPT-IN: only §-referenced codes are checked, so cold docs are never coerced
+# into growing codes (the doc-heat rule) and un-sigiled report-local codes (retro F-codes,
+# the fixer-context L-layers) stay out of scope until someone §-references one — at which
+# point ANCHOR-AMBIGUOUS forces the rename the never-reuse rule demands. Historical docs +
+# TICK-LOG + adr.md are exempt as referencers and invisible as definition sites.
 
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -97,6 +108,29 @@ if [ -f "$GLOSS" ]; then
 $rows
 EOF_ROWS
 fi
+
+# --- 4) §-code anchors: every §CODE ref resolves to exactly one living definition (SHADOW) ---
+# Warn-only until the flip (header). Refs come from every tracked text file (code comments
+# included); definitions from living .md only. No pipe-subshell (the check-#3 trap) — but
+# shadow warns never touch $status anyway, so the capture is for the flip-day diff.
+CODE_RE='[A-Z][0-9][0-9]?[a-z]?'
+anchor_refs=$(git grep -hoE "§${CODE_RE}" -- '*.md' '*.sh' '*.py' '*.yaml' '*.yml' \
+    ":(exclude)agents/coordinator/TICK-LOG.md" ":(exclude)docs/adr.md" \
+    ":(exclude)docs/agents/retros" ":(exclude)docs/incidents" \
+    ":(exclude)docs/follow-ups-archive.md" 2>/dev/null | sed 's/^§//' | sort -u)
+for code in $anchor_refs; do
+  defs=$(git grep -nE "^#{1,6} +${code}[^A-Za-z0-9]|^- \*\*${code}[^A-Za-z0-9]" -- '*.md' \
+      ":(exclude)agents/coordinator/TICK-LOG.md" ":(exclude)docs/adr.md" \
+      ":(exclude)docs/agents/retros" ":(exclude)docs/incidents" \
+      ":(exclude)docs/follow-ups-archive.md" 2>/dev/null | cut -d: -f1,2)
+  n=$(printf '%s\n' "$defs" | grep -c . || true)
+  if [ "$n" -eq 0 ]; then
+    where=$(git grep -lF "§${code}" -- '*.md' '*.sh' '*.py' '*.yaml' '*.yml' 2>/dev/null | head -3 | tr '\n' ' ')
+    echo "WARN ANCHOR-UNRESOLVED (check #4, shadow): §${code} referenced (${where}) but no living heading/bullet defines it"
+  elif [ "$n" -gt 1 ]; then
+    echo "WARN ANCHOR-AMBIGUOUS (check #4, shadow): §${code} defined ${n}× — codes are never reused: $(printf '%s\n' "$defs" | tr '\n' ' ')"
+  fi
+done
 
 [ "$status" -eq 0 ] && echo "docs-graph: links resolve, agents doc table complete, ⚓ terms linked"
 exit "$status"
