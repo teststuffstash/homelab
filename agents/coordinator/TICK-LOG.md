@@ -5653,3 +5653,23 @@ first live ADR-110 maintenance session before the ADR existed.
   meta-state.
 - Operator note mid-session: oracle-fleet reingest+delta running — Garage ERT giants and
   gc-restarts left strictly alone.
+
+## 2026-08-26 ~20:45Z — FU-188: the authoritative review plane was dead; #994 diagnosed; wind-down (maintenance session)
+
+- **#994 (junk ring-carrying global runs) DIAGNOSED, comment on the issue:** the collapse is not
+  mis-firing — it structurally cannot absorb them (per-stack scans live in another ns; median
+  Pending dwell 0s across 126 failed runs; RBAC fine). Recommended scan-side early exit on
+  SCAN_RING_NS; Sensor filter = follow-on behind a live test. **Operator decision pending.**
+- **FU-188 filed + incident pin shipped (`1596e395`, direct-master):** oracle-fleet#277's review
+  404-looped — `/route role=reviewer` served `xiaomi/mimo-v2.5 [market]` (openrouter rail) to the
+  subscription-only reviewer; Anthropic 404s, no verdict, no `/report` ⇒ no strike ⇒ re-pick
+  (72 dispatches/24h, zero generations). Pin: reviewer downgrades authoritative→shadow in
+  reviewer-session.sh; claims could NOT flip (chainless-guard FATALs oracle/sleep workers).
+  Verification parked: PR#277's sonnet review from a post-20:15Z tick. Answered the operator's
+  codeowner question: goal rules are LIVE on oracle-fleet (`required-approval-goal`, no codeowner
+  flag on goal/**) — nothing was forgotten.
+- **#936 worker health-checked at operator ask:** riding fine 59m in — per-file promtool timing
+  with scoped timeouts (the 120s-tool-cap timeouts are the task's own subject). Unpin at merge.
+- **#974 still burning while queued:** reflex-1787775000 + coordinate-lkxr2 (ring=-, a genuine
+  sweep) OOMKilled ~20:10Z — global plane down, per-stack loops alive.
+- Wind-down: #277-verdict watch killed by process, transcripts synced, meta-state updated.
