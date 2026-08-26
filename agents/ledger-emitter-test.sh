@@ -186,7 +186,43 @@ check(row["total_cost_usd"] == 0.65, "row total_cost_usd = 0.10+0.05+0.20+0.30 =
 check(row["budget_tier"] == "sm" and row["budget_cap_usd"] == 0.5, "row budget tier/cap present")
 check(row["calibration_error"] == round(0.65 / 0.5, 3), "row calibration_error = 0.65/0.5")
 
-print("\n%d checks passed" % len(PASSED))
+# ── 6. _budget_from_cr() prefix-anchoring (homelab#929 r3) ──────────────────────────────
+# The prefix must be anchored with "-round-" so issue "92" does not match
+# "proj-issue-929-round-1". Two CRs: proj-issue-929-round-1 (tier md) and
+# proj-issue-92-round-1 (tier xs). _budget_from_cr("proj", "92") must return
+# 92's tier, not 929's.
+def fake_sh_budget(args, env=None):
+    if args[0] == "kubectl" and args[1] == "get" and args[2] == "openrouterkeys":
+        return json.dumps({
+            "items": [
+                {"metadata": {"name": "proj-issue-929-round-1",
+                              "labels": {"budget-tier": "md", "budget-estimate-usd": "0.50"}}},
+                {"metadata": {"name": "proj-issue-92-round-1",
+                              "labels": {"budget-tier": "xs", "budget-estimate-usd": "0.08"}}},
+            ]
+        })
+    raise AssertionError("fake_sh_budget unexpected: %r" % (args,))
+
+_saved_sh = ledger.sh
+ledger.sh = fake_sh_budget
+
+cr92 = ledger._budget_from_cr("proj", "92")
+check(cr92 is not None, "_budget_from_cr('proj', '92') found a CR")
+check(cr92[0] == "xs", "_budget_from_cr('proj', '92') returns tier xs (not md from 929)")
+check(cr92[1] == 0.25, "_budget_from_cr('proj', '92') returns cap 0.25 (xs tier)")
+check(cr92[2] == 0.08, "_budget_from_cr('proj', '92') returns estimate 0.08")
+
+cr929 = ledger._budget_from_cr("proj", "929")
+check(cr929 is not None, "_budget_from_cr('proj', '929') found a CR")
+check(cr929[0] == "md", "_budget_from_cr('proj', '929') returns tier md")
+check(cr929[1] == 1.0, "_budget_from_cr('proj', '929') returns cap 1.0 (md tier)")
+check(cr929[2] == 0.50, "_budget_from_cr('proj', '929') returns estimate 0.50")
+
+# No matching CR for issue 1 (no CR with prefix proj-issue-1-round-)
+cr1 = ledger._budget_from_cr("proj", "1")
+check(cr1 is None, "_budget_from_cr('proj', '1') returns None (no matching CR)")
+
+ledger.sh = _saved_sh  # restore
 PYEOF
 
 out="$(python3 "$TMP/emitter_test.py" 2>&1)"; rc=$?
