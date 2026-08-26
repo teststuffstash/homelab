@@ -5359,3 +5359,22 @@ first live ADR-110 maintenance session before the ADR existed.
   CNPG-generated secret; second commit widens the CNPG alert namespace regex to `monitoring`
   — the new DB would have run outside its own belts). No durable state to migrate (sqlite was
   on emptyDir). Shepherd watches merge + rollout.
+
+## 2026-08-26 ~08:20Z — Unbound cached-SERVFAIL incident (operator report) + #944 shipped (ADR-097 addendum 3)
+
+- **DNS:** operator's host SERVFAILed on github.com. Triage narrowed fast: Unbound UP (local
+  overrides + cloudflare.com + root SOA all NOERROR), `+cd` also SERVFAIL (not DNSSEC),
+  api.github.com/raw.githubusercontent.com NOERROR — **the github.com APEX alone**, i.e. a
+  cached SERVFAIL/bad RRset in Unbound. `POST /api/unbound/service/restart` (wallet API creds)
+  → OK → operator confirmed resolution (140.82.121.3) within a minute. One occurrence — no
+  belt filed (≥2 rule); recurrence candidate: a blackbox DNS probe through Unbound.
+- **#944 → ADR-097 addendum 3, built + shipped:** the fourth compelled class is CONTENT-keyed
+  — `sentinel_only_paths` (touches-check.sh) classifies files whose whole diff is REPLAY
+  marker comments; `touches_check` gains optional arg-3 skip (both branches); the reviewer's
+  TOUCHESPART fetches the PR diff and passes the set (fail-conservative on no diff). Route 2
+  (declaration ceremony) rejected — it is the ceremony addendum 1 dissolved, and PR#941 paid
+  it. Gates: touches-check-test extended (skip both branches, mixed negative, classifier rows
+  incl. indented + smuggled-trailing-content), new replay fixture
+  reviewer-touches/sentinel-exempt (end-to-end), 3 sibling fixtures updated for the new CALL,
+  full clause-replay 271/271, docs-graph green. Rubric passage extended (.agents/review.md,
+  operator-direct class).
