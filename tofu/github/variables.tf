@@ -109,8 +109,17 @@ variable "protected_repos" {
   }
 }
 
-# The homelab-merge App vars were RETIRED 2026-08-26 with the MERGE_GH_APP_* org secrets (ADR-111
-# cutover, homelab#745) — the in-cluster updater sources the key via Infisical→ESO instead.
+# The homelab-merge App id — still needed as the ruleset BYPASS ACTOR (repo_rulesets.tf ×3:
+# required_checks, required_approval_goal, workflow_push_guard), which is why it survived the
+# 2026-08-26 retirement of the MERGE_GH_APP_* org secrets (ADR-111 cutover, homelab#745 — the
+# in-cluster updater sources the App KEY via Infisical→ESO; the private-key var is gone).
+# The id is NOT sensitive, so it lives here as a default instead of a github-tf.sh injection —
+# a bare `tofu apply` works without the cred dir.
+variable "merge_gh_app_id" {
+  description = "homelab-merge GitHub App id (ruleset bypass actor; not sensitive)."
+  type        = string
+  default     = "4207260"
+}
 
 # The homelab-deploy App id — NOT sensitive (the key is). Published as the DEPLOY_APP_ID Actions secret
 # (actions_secrets.tf) the sleep-tracking deploy workflow reads to mint a sleep-iac-scoped token. Empty
