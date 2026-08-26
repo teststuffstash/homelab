@@ -19,6 +19,7 @@ mode: actions
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
+  - block:busy-fps
   - file:cases.sh
   - block:footprint-hold
   - file:post.sh

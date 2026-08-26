@@ -995,10 +995,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # Direction 2 of the homelab#822 goal exemption: a `task/goal` issue contributes NO entry to
     # busy_fps, so it does not hold sibling dispatches (cross-reference fp_goal_exempt in
     # agents/footprint.sh — both readers share `task/goal` as the exemption key).
+    # >>>REPLAY:busy-fps>>>
     busy_fps="$(printf '%s' "$inprog" | jq -r '.[]
       | select(((.labels|map(.name))|index("task/goal"))|not)
       | ([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(","))
       | if . == "" then "*" else . end')"
+    # <<<REPLAY:busy-fps<<<
     # ── FU-143 (contract points 1+2): a goal child cannot self-close ──────────────────────────
     # An OPEN in-progress issue whose body declares `Base: goal/**` and whose referencing PR
     # MERGED into exactly that base is FINISHED work the closing keyword could not close
