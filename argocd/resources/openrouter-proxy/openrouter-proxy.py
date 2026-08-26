@@ -1263,6 +1263,15 @@ def compute_pin(model: str) -> dict | None:
                 "basis": "market" if is_market(best) else "list",
                 # ADR-096 P3: the pinned provider's effective $/M input — the /route ordering key.
                 "eff_in": round(eff(best), 6),
+                # provider_slot resolution basis (2026-08-26, the M13 slot verb on the provider
+                # axis): the SELECTED pool, eff-ordered (uptime breaks the all-$0 ties a :free
+                # model's pool degenerates to) — slot N = ranked[N-1]. Entries carry the
+                # provider's OWN max_completion so an @-pinned ride clamps the max_tokens floor
+                # against the provider actually serving it, not the M4 favorite (PR#963 review —
+                # the -32602 class would otherwise re-enter through the pin built to study it).
+                "ranked": [{"slug": e2["slug"] or e2["provider"],
+                            "max_completion": e2["max_completion"]}
+                           for e2 in sorted(pool, key=lambda e3: (eff(e3), -(e3["uptime"] or 0.0)))][:10],
             }
     return None
 
@@ -3009,6 +3018,77 @@ class Proxy(BaseHTTPRequestHandler):
                             self.close_connection = True
                             return
                     notes = []
+                    # CELL PROVIDER PIN (2026-08-26, the 0731 matrix / #783 provider attribution):
+                    # a `@<provider-slug>` suffix on the model id is OUR proxy's grammar — in-band
+                    # through every harness (-m / GOOSE_MODEL) — pinning EXACTLY that provider with
+                    # allow_fallbacks: false and suppressing the M4 pin: a benchmark cell must fail
+                    # as THAT provider's typed verdict, never slide to a sibling. Stripped before
+                    # upstream. A `:exacto` suffix conversely forwards UNTOUCHED with the M4 pin
+                    # skipped — exacto's whole point is upstream's tool-call-quality ordering,
+                    # which an injected provider.order would override. Both parsed here, before
+                    # cooldown/circuit keying, so evidence stays keyed on the BASE model id.
+                    at_provider_pin = None
+                    _m_raw = str(payload["model"])
+                    if "@" in _m_raw:
+                        _m_base, _at_tok = _m_raw.rsplit("@", 1)
+                        payload["model"] = _m_base
+                        at_pin_maxc = None
+                        if _at_tok.isdigit():
+                            # provider_slot — the M13 slot verb on the PROVIDER axis: N indexes
+                            # the proxy's eff-ranked eligible endpoints for the base model. An
+                            # unresolvable slot is a TYPED refusal, never a silent fallback —
+                            # the caller's slot walk needs a clean end.
+                            _slot = int(_at_tok)
+                            _nm = normalize_model(_m_base)
+                            _sp = pin_for(_nm)
+                            if _sp is None and _nm.endswith(":free"):
+                                # pin_for short-circuits :free (M4 sidestep) before ranking —
+                                # but a slot ride is EVIDENCE work and free candidates are
+                                # first-class intake citizens (PR#963 review). Uncached direct
+                                # compute; slot volume is canary-scale.
+                                try:
+                                    _sp = compute_pin(_nm)
+                                except Exception:
+                                    _sp = None
+                            _ranked = (_sp or {}).get("ranked") or []
+                            if _slot < 1 or _slot > len(_ranked):
+                                log(f"POST {self.path} → 400 provider_slot {_slot} unresolvable"
+                                    f" (depth {len(_ranked)}) model={_m_base}")
+                                self._reply_json(400, {"error": {
+                                    "code": "provider-slot-unresolvable",
+                                    "message": f"provider_slot {_slot} unresolvable for"
+                                               f" {_m_base} (ranked depth {len(_ranked)})"}})
+                                return
+                            _entry = _ranked[_slot - 1]
+                            at_provider_pin = _entry["slug"]
+                            at_pin_maxc = _entry.get("max_completion")
+                            notes.append(f"at-pin:slot{_slot}={at_provider_pin}")
+                        else:
+                            at_provider_pin = _at_tok
+                            # Best-effort cap lookup for an explicit slug: its ranked entry, when
+                            # the M4 machinery knows one; an unranked slug keeps the global floor.
+                            _nm = normalize_model(_m_base)
+                            _sp = pin_for(_nm)
+                            if _sp is None and _nm.endswith(":free"):
+                                # Same :free fallback as the numeric slot arm above — pin_for
+                                # short-circuits :free before ranking, and without the ranked
+                                # entry a slug-pinned free ride keeps the unclamped global
+                                # MAX_TOKENS_FLOOR, reopening the -32602 truncation class this
+                                # clamp exists to close (PR#963 review, sibling-case gap).
+                                try:
+                                    _sp = compute_pin(_nm)
+                                except Exception:
+                                    _sp = None
+                            for _entry in ((_sp or {}).get("ranked") or []):
+                                if isinstance(_entry, dict) and _entry.get("slug") == _at_tok:
+                                    at_pin_maxc = _entry.get("max_completion")
+                                    break
+                            notes.append(f"at-pin:{at_provider_pin}")
+                        payload["provider"] = {"order": [at_provider_pin],
+                                               "allow_fallbacks": False}
+                    exacto_no_pin = str(payload["model"]).endswith(":exacto")
+                    if exacto_no_pin:
+                        notes.append("exacto:no-pin")
                     or_model = normalize_model(str(payload["model"]))
                     # ADR-107 / homelab#445: the opencode legs — a model id starting with
                     # `opencode-go/` (Go rail) or `opencode/` (Zen free rail) routes to the
@@ -3063,9 +3143,10 @@ class Proxy(BaseHTTPRequestHandler):
                             self.wfile.write(reject)
                             self.close_connection = True
                             return
-                        pin = pin_for(str(payload["model"]))
-                        # An explicit `provider` (a harness/opencode.json that CAN carry prefs, or a
-                        # hand-crafted request) always wins — never overwrite policy already in the body.
+                        pin = None if exacto_no_pin else pin_for(str(payload["model"]))
+                        # An explicit `provider` (a harness/opencode.json that CAN carry prefs, a
+                        # hand-crafted request, or the @provider suffix above) always wins — never
+                        # overwrite policy already in the body.
                         if isinstance(payload.get("provider"), dict):
                             or_provider = (payload["provider"].get("order") or [None])[0]
                         if pin and "provider" not in payload:
@@ -3077,7 +3158,12 @@ class Proxy(BaseHTTPRequestHandler):
                         # max_tokens to MAX_TOKENS_FLOOR, clamped to the pinned endpoint's
                         # max_completion_tokens when known. An explicit value ABOVE the floor wins.
                         floor = MAX_TOKENS_FLOOR
-                        if pin and isinstance(pin.get("max_completion"), int):
+                        if at_provider_pin is not None:
+                            # @-pinned ride: clamp against the provider ACTUALLY serving it —
+                            # the M4 favorite's cap is a different provider's fact (PR#963).
+                            if isinstance(at_pin_maxc, int):
+                                floor = min(floor, at_pin_maxc)
+                        elif pin and isinstance(pin.get("max_completion"), int):
                             floor = min(floor, pin["max_completion"])
                         current = payload.get("max_tokens")
                         if floor > 0 and (not isinstance(current, int) or current < floor):

@@ -62,12 +62,39 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
+# OPERATOR INTAKE (2026-08-26, the 0731 case): --intake <id>[,<id>…] (or env SCOUT_INTAKE) rides
+# EXPLICIT catalog ids through the SAME legs as newcomers — enrich → bench → rank → canary →
+# rotation store → digest — so an "oldie" enters the system by the same structured path a
+# new-model diff candidate does. The diff/snapshot half is BYPASSED and the snapshot NEVER
+# advances: intake is stateless and idempotent. The price ceiling deliberately does not gate an
+# intake (the operator asked by name); the `tools` requirement stands (a toolless model cannot
+# ride any harness).
+INTAKE="${SCOUT_INTAKE:-}"
+while [ $# -gt 0 ]; do case "$1" in
+  --intake) INTAKE="$2"; shift 2 ;;
+  *) echo "model-scout: unknown arg $1 (only --intake <ids-csv>)" >&2; exit 2 ;;
+esac; done
+
 ORG="${ORG:-teststuffstash}"
 DIGEST_REPO="${DIGEST_REPO:-homelab}"
 CEILING="${PRICE_CEILING:-0.50}"   # $/M headline gate for paid newcomers (:free always passes)
 CANARY="${CANARY:-1}"              # 0 = v1 report-only behavior
 CANARY_PROJECT="${CANARY_PROJECT:-openrouter-operator}"  # platform-stack fixer ns hosts the rides
 MAX_CANARIES="${MAX_CANARIES:-3}"  # per tick — the rest of a big batch waits for graduation anyway
+# ADR-112: a verdict is the (model × harness) cell VECTOR, never one harness's failure. The cron
+# default stays the single opencode cell (cost + unchanged behavior); an intake run widens it,
+# e.g. SCOUT_CANARY_HARNESSES="opencode goose". claude is NOT a valid cell yet — its in-cluster
+# OpenRouter leg is the missing rail (chainless-redesign.md §The decisions (3)).
+CANARY_HARNESSES="${SCOUT_CANARY_HARNESSES:-opencode}"
+# Provider arms per cell + the retry/RESELECT budget (operator, 2026-08-26). Tokens are
+# provider_slot INTEGERS (the M13 slot verb on the provider axis — the proxy resolves N against
+# its eff-ranked eligible endpoints and echoes the slug) or explicit slugs (the operator escape
+# hatch for named arms); "" = the proxy's own M4 pin, the cron default. SCOUT_CELL_ATTEMPTS caps
+# rides per (model, harness) cell; a reselect ALWAYS moves to the NEXT arm (#783: serving-shaped
+# failures exclude the (model, provider) pair — never a blind same-pair retry). With no arm list
+# the old bench-contradiction single same-arm retry stands (cron behavior unchanged).
+CELL_PROVIDERS="${SCOUT_CELL_PROVIDERS:-}"
+CELL_ATTEMPTS="${SCOUT_CELL_ATTEMPTS:-2}"
 ENDPOINT="${AGENT_TS_ENDPOINT:-http://garage.garage.svc.cluster.local:3900}"
 BUCKET="${AGENT_TS_BUCKET:-agent-transcripts}"
 STATE="s3://${BUCKET}/_model-scout/known-models.json"
@@ -151,7 +178,9 @@ scout_get_model() { # <model-id> → decoded get-model payload on stdout; non-ze
 # below. And the verdict feed into the router's rotation store (ADR-096) is itself a seam — a
 # TokenReview-gated POST that no-ops without the in-cluster SA token (jail runs).
 PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
-SA_TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
+# Overridable so a JAIL intake run can feed the store too: /rotation TokenReviews any
+# agent-coordinator SA, and the jail can mint one (kubectl -n agent-coordinator create token …).
+SA_TOKEN_FILE="${SCOUT_SA_TOKEN_FILE:-/var/run/secrets/kubernetes.io/serviceaccount/token}"
 rotation_post() { # <source> <entry-json> — one rotation-store entry (POST /rotation, best-effort)
   [ -s "$SA_TOKEN_FILE" ] || return 0
   curl -fsS -m 5 -X POST -H 'Content-Type: application/json' \
@@ -162,9 +191,11 @@ rotation_post() { # <source> <entry-json> — one rotation-store entry (POST /ro
     || log "rotation: POST failed (non-fatal)"
 }
 
-scout_canary_mint() { # <id> <is_free> [cleanup] → 0 minted / cleaned; 1 = mint-failed; 2 = never-minted
-  local id="$1" is_free="$2" mode="${3:-}"
-  local sess="scout-$(printf '%s' "$id" | tr '/:.' '---')"
+scout_canary_mint() { # <id> <is_free> <harness> [cleanup] → 0 minted / cleaned; 1 = mint-failed; 2 = never-minted
+  local id="$1" is_free="$2" harness="$3" mode="${4:-}"
+  # The session (and so the key, the Secret, the pod name) is CELL-keyed — two harness cells of
+  # one model must not share an idempotency key or the second cell reuses the first's ride.
+  local sess="scout-$(printf '%s' "$id" | tr '/:.' '---')-${harness}"
   local key="${CANARY_PROJECT}-${sess}"
   if [ "$mode" = "cleanup" ]; then
     kubectl -n "$CANARY_PROJECT" delete openrouterkey "$key" --ignore-not-found >&2 2>/dev/null || true
@@ -194,17 +225,32 @@ YAML
   return 0
 }
 
-scout_canary_ride() { # <id> <is_free> [retry] → the AGENT_RUN_STATS json on stdout (may be empty)
-  local id="$1" is_free="$2" out
-  local sess="scout-$(printf '%s' "$id" | tr '/:.' '---')"
+scout_canary_ride() { # <id> <arm> <is_free> <harness> <attempt> → the AGENT_RUN_STATS json on stdout
+  # <arm> = "" (proxy's own pin) | a provider_slot integer | a provider slug — rides in-band as
+  # the `@` suffix our proxy resolves. The SESSION stays keyed on the bare (id, harness) cell;
+  # the attempt number rides --round so each arm's pod/transcript is distinct.
+  local id="$1" arm="$2" is_free="$3" harness="$4" attempt="${5:-1}" out
+  local rid="$id"; [ -n "$arm" ] && rid="${id}@${arm}"
+  local sess="scout-$(printf '%s' "$id" | tr '/:.' '---')-${harness}"
   local secret="${CANARY_PROJECT}-session-${sess}-openrouter"
   # Headless ride; --harness opencode carries the model via -m. agent-finalize writes the ledger
   # row (model label = $id) + transcript. We read its error_class from the stats line. The `retry`
   # marker is a label the contradiction rule stamps; production rides are identical either way.
   # The full provider-prefixed id must be composed launcher-side to reach opencode's -m correctly.
-  out="$(bash "$HERE/agent-session.sh" "$CANARY_PROJECT" --harness opencode --model "openrouter/$id" \
-      --task "$sess" --openrouter-secret "$secret" \
-      --run "opencode run -m \"openrouter/$id\" \"Reply with ONLY the first markdown heading text of README.md (no other words).\"" 2>&1)" || true
+  # One trivial closed task, per (harness, provider-arm) attempt. goose takes the prompt via
+  # `goose run --text` (the model reaches it as GOOSE_MODEL from --model — the launcher's own
+  # threading; the `@` suffix rides inside it and resolves at the proxy).
+  local prompt="Reply with ONLY the first markdown heading text of README.md (no other words)."
+  case "$harness" in
+    goose)
+      out="$(bash "$HERE/agent-session.sh" "$CANARY_PROJECT" --harness goose --model "openrouter/$rid" \
+          --task "$sess" --round "$attempt" --openrouter-secret "$secret" \
+          --run "goose run --text \"$prompt\"" 2>&1)" || true ;;
+    *)
+      out="$(bash "$HERE/agent-session.sh" "$CANARY_PROJECT" --harness opencode --model "openrouter/$rid" \
+          --task "$sess" --round "$attempt" --openrouter-secret "$secret" \
+          --run "opencode run -m \"openrouter/$rid\" \"$prompt\"" 2>&1)" || true ;;
+  esac
   printf '%s\n' "$out" | grep -E "AGENT_RUN_STATS|PREFLIGHT|403|guardrail" >&2 || true
   printf '%s' "$out" | sed -n 's/.*AGENT_RUN_STATS \(.*\)/\1/p' | tail -1
 }
@@ -223,6 +269,24 @@ CURRENT_N="$(jq length "$WORK/current.json")"
 [ "$CURRENT_N" -gt 0 ] || { log "FATAL: /models returned an empty catalog — keeping the old snapshot"; exit 1; }
 jq '[.[].id] | sort' "$WORK/current.json" > "$WORK/ids.json"
 log "catalog: ${CURRENT_N} models"
+
+# 1b. OPERATOR INTAKE — explicit ids replace the diff as the candidate source; everything
+#     downstream (enrich → bench → rank → canary → store → digest) is identical. No snapshot
+#     read, no advance: stateless and idempotent.
+if [ -n "${INTAKE:-}" ]; then
+  printf '%s' "$INTAKE" | tr ',' '\n' | jq -R 'select(length > 0)' | jq -s . > "$WORK/intake-ids.json"
+  jq --slurpfile want "$WORK/intake-ids.json" \
+     '[.[] | select(.id as $i | ($want[0] | index($i)) != null)]' \
+     "$WORK/current.json" > "$WORK/intake-found.json"
+  MISSING="$(jq -r --slurpfile got "$WORK/intake-found.json" \
+     '[.[] | select(. as $i | ($got[0] | map(.id) | index($i)) | not)] | join(", ")' "$WORK/intake-ids.json")"
+  [ -n "$MISSING" ] && log "intake: NOT in the live catalog (skipped): ${MISSING}"
+  TOOLLESS="$(jq -r '[.[] | select(.tools | not) | .id] | join(", ")' "$WORK/intake-found.json")"
+  [ -n "$TOOLLESS" ] && log "intake: no \`tools\` support (skipped — cannot ride any harness): ${TOOLLESS}"
+  jq '[.[] | select(.tools)]' "$WORK/intake-found.json" > "$WORK/candidates.json"
+  SUPPRESSED_LINE=""
+  log "intake: $(jq length "$WORK/candidates.json") candidate(s) by operator request — diff/snapshot bypassed, ceiling not applied"
+else
 
 # 2. Previous snapshot. First run = bootstrap: nothing to diff, just save the baseline.
 #    The snapshot stays a list of FULL ids (leg 1 derives bases at diff time): a format change here
@@ -279,6 +343,7 @@ SUPPRESSED_LINE=""
 if [ "$SUP_BATCH" -gt 0 ] || [ "$SUP_VARIANT" -gt 0 ]; then
   SUPPRESSED_LINE=$'\n\n*Suppressed by the base-id diff (§M7 leg 1): '"${SUP_BATCH}"' `:batch` re-listing(s) — an async endpoint cannot serve an interactive session — and '"${SUP_VARIANT}"' other suffix variant(s) of a base already known or already listed above. A variant is not a newcomer.*'
 fi
+fi # end of the diff-vs-intake candidate source split
 # <<<REPLAY:scout-diff<<<
 
 if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
@@ -375,46 +440,71 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
   # the trivial closed task (seam), classifies the TYPED verdict, and applies the contradiction
   # rule. Echoes the verdict word to stdout; all logs go to stderr so stdout stays parseable.
   # Best-effort: any failure returns a marked verdict, never aborts the tick.
-  canary_one() { # <id> <is_free> <benched> → one typed verdict word
-    local id="$1" is_free="$2" benched="$3" gname verdict stats retry_v mrc
+  canary_one() { # <id> <is_free> <benched> <harness> → one typed CELL verdict word
+    # The cell = (model, harness). Inside it, ARMS: the CELL_PROVIDERS tokens (provider_slot
+    # ints / slugs, ridden as the `@` suffix), or one default arm (the proxy's own M4 pin).
+    # SCOUT_CELL_ATTEMPTS is the retry/RESELECT budget: a non-clean attempt moves to the NEXT
+    # arm (#783 — never a blind same-pair retry), except the legacy single same-arm
+    # bench-contradiction retry when no arm list is configured (cron behavior unchanged).
+    # Every ATTEMPT writes its own row (model, harness, provider, attempt, verdict) — the
+    # provider-attributable evidence the strike store cannot record yet.
+    local id="$1" is_free="$2" benched="$3" harness="$4" gname cell_verdict="" v mrc attempt=0 arm
+    local arms="${CELL_PROVIDERS:-}"
+    [ -n "$arms" ] || arms="_default"
     if [ "$is_free" = "true" ]; then gname="only-free"; else gname="\$0.05 cap"; fi
-    scout_canary_mint "$id" "$is_free" || mrc=$?
+    scout_canary_mint "$id" "$is_free" "$harness" || mrc=$?
     case "${mrc:-0}" in
       0) : ;;
       1) echo "mint-failed"; return 0 ;;
       2) echo "key-never-minted"; return 0 ;;
     esac
-    log "canary: dispatching $id (${gname})"
-    verdict="$(scout_classify "$(scout_canary_ride "$id" "$is_free")")"
-    # Contradiction rule (leg 4): canary-fail ∧ benchmark-capable ⇒ suspect-infra, retry once,
-    # else `inconclusive` — never `failed`. An UNBENCHED model's typed failure stands as-is.
-    # "void" verdicts are platform artifacts (v2 runner death, zero spend) — they do NOT trigger
-    # the contradiction rule, since they are not model failures.
-    if [ "$verdict" != "clean" ] && [ "$verdict" != "void" ] && [ "$benched" = "true" ]; then
-      log "canary: $id — contradiction (suspect-infra: bench-capable, rail not clean: ${verdict}) — retrying once"
-      retry_v="$(scout_classify "$(scout_canary_ride "$id" "$is_free" retry)")"
-      if [ "$retry_v" = "clean" ]; then
-        verdict="clean"
-        log "canary: $id — retry clean (${gname})"
-      else
-        verdict="inconclusive"
-        log "canary: $id — retry ${retry_v} — inconclusive (bench says capable, rail disagrees twice)"
+    for arm in $arms; do
+      attempt=$((attempt+1))
+      [ "$attempt" -le "${CELL_ATTEMPTS:-2}" ] || { log "canary: $id/$harness — attempts budget (${CELL_ATTEMPTS:-2}) spent"; break; }
+      [ "$arm" = "_default" ] && arm=""
+      log "canary: dispatching $id harness=$harness arm=${arm:-<proxy-pin>} attempt=$attempt (${gname})"
+      v="$(scout_classify "$(scout_canary_ride "$id" "$arm" "$is_free" "$harness" "$attempt")")"
+      jq -cn --arg m "$id" --arg h "$harness" --arg p "$arm" --arg v "$v" \
+        --argjson a "$attempt" --argjson f "$([ "$is_free" = "true" ] && echo true || echo false)" \
+        '{model:$m, harness:$h, provider:$p, attempt:$a, canary_verdict:$v, free:$f}' >> "$WORK/canary.jsonl"
+      cell_verdict="$v"
+      [ "$v" = "clean" ] && break
+      # Legacy contradiction retry — only when no arm list gives the budget anything to reselect.
+      if [ "${CELL_PROVIDERS:-}" = "" ] && [ "$v" != "void" ] && [ "$benched" = "true" ] && [ "$attempt" -lt "${CELL_ATTEMPTS:-2}" ]; then
+        attempt=$((attempt+1))
+        log "canary: $id/$harness — contradiction (bench-capable, rail ${v}) — one same-arm retry"
+        v="$(scout_classify "$(scout_canary_ride "$id" "" "$is_free" "$harness" "$attempt")")"
+        jq -cn --arg m "$id" --arg h "$harness" --arg p "" --arg v "$v" \
+          --argjson a "$attempt" --argjson f "$([ "$is_free" = "true" ] && echo true || echo false)" \
+          '{model:$m, harness:$h, provider:$p, attempt:$a, canary_verdict:$v, free:$f}' >> "$WORK/canary.jsonl"
+        if [ "$v" = "clean" ]; then cell_verdict="clean"
+        else cell_verdict="inconclusive"; log "canary: $id/$harness — retry ${v} — inconclusive"; fi
       fi
+    done
+    # A multi-arm walk that never went clean: bench-capable ⇒ inconclusive (the contradiction
+    # rule, provider-generalized — the per-arm rows carry the typed detail); unbenched ⇒ the
+    # last typed verdict stands.
+    # `void` stays void — a platform artifact (v2 runner death, zero spend) is not a claim
+    # about the model, so it must not become `inconclusive` either (review catch, PR#963).
+    if [ "$cell_verdict" != "clean" ] && [ "$cell_verdict" != "void" ] && [ -n "${CELL_PROVIDERS:-}" ] && [ "$benched" = "true" ]; then
+      cell_verdict="inconclusive"
     fi
-    # The ephemeral key's cleanup; the transcript/ledger row persists as the durable record.
-    scout_canary_mint "$id" "$is_free" cleanup || true
-    printf '%s' "$verdict"
+    scout_canary_mint "$id" "$is_free" "$harness" cleanup || true
+    printf '%s' "${cell_verdict:-no-stats}"
   }
 
   CANARY_BLOCK=""
   if [ "$CANARY" = "1" ]; then
     log "canary: riding up to ${MAX_CANARIES} candidate(s) in ns ${CANARY_PROJECT}"
     : > "$WORK/canary.jsonl"
+    : > "$WORK/canary-cells.jsonl"
     jq -r --argjson n "$MAX_CANARIES" '.[0:$n][] | "\(.model) \(.free) \(.bench.benched)"' "$WORK/ranked.json" \
       | while read -r cid cfree cbenched; do
-          verdict="$(canary_one "$cid" "$cfree" "$cbenched")"
-          jq -cn --arg m "$cid" --arg v "$verdict" --argjson f "$cfree" \
-            '{model:$m, canary_verdict:$v, free:$f}' >> "$WORK/canary.jsonl"
+          for ch in ${CANARY_HARNESSES:-opencode}; do
+            verdict="$(canary_one "$cid" "$cfree" "$cbenched" "$ch")"
+            jq -cn --arg m "$cid" --arg h "$ch" --arg v "$verdict" --argjson f "$cfree" \
+              '{model:$m, harness:$h, canary_verdict:$v, free:$f}' >> "$WORK/canary-cells.jsonl"
+          done
         done
     # Common-cause (leg 4): the WHOLE tick's verdicts (≥2 of them) identical and non-clean ⇒ the
     # scout's own plumbing is the common factor, not the models — ONE scout-infra datum, zero
@@ -425,11 +515,12 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     COMMON_CAUSE="$(jq -s -r '
       map(.canary_verdict) as $v
       | if ($v | length) >= 2 and (all($v[]; . == $v[0])) and ($v[0] != "clean") then $v[0]
-        else empty end' "$WORK/canary.jsonl" 2>/dev/null || true)"
+        else empty end' "$WORK/canary-cells.jsonl" 2>/dev/null || true)"
     if [ -n "$COMMON_CAUSE" ]; then
       log "canary: common cause — all canaried verdicts identical (${COMMON_CAUSE}) — ONE scout-infra datum, zero per-model verdicts (leg 4)"
       rotation_post "canary" "$(jq -cn --arg v "$COMMON_CAUSE" '{model:"_scout-infra", canary_verdict:$v}')" || true
       : > "$WORK/canary.jsonl"
+      : > "$WORK/canary-cells.jsonl"
       CANARY_BLOCK=$'\n\n**Canary rides** (FU-062/FU-024/FU-161 — trivial closed rail ride, ephemeral capped key):\n\n*Common cause: every canaried verdict was identical (`'"${COMMON_CAUSE}"$'`) — ONE `_scout-infra` datum posted to the rotation store, zero per-model verdicts (leg 4). The rail, not the models, is the likely cause.*'
     else
       while IFS= read -r entry; do
@@ -443,14 +534,18 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     # (uncanaried rows keep "—"). ranked.json is ONE array (slurp → [$r[0]]); canary.jsonl is a
     # STREAM of objects (slurp → $c is the array itself). temp+mv: the slurpfile must read the
     # pre-merge ranked.json.
-    jq -n --slurpfile r "$WORK/ranked.json" --slurpfile c "$WORK/canary.jsonl" '
-      ($c | INDEX(.model)) as $cv
-      | [ $r[0][] | . + {canary: ($cv[.model].canary_verdict // "")} ]' \
+    # The digest's canary column carries the CELL VECTOR (ADR-112): "opencode=clean goose=…".
+    jq -n --slurpfile r "$WORK/ranked.json" --slurpfile c "$WORK/canary-cells.jsonl" '
+      ($c | group_by(.model) | map({key: .[0].model,
+            value: (map(.harness + "=" + .canary_verdict) | join(" "))}) | from_entries) as $cv
+      | [ $r[0][] | . + {canary: ($cv[.model] // "")} ]' \
       > "$WORK/ranked.canary.json" && mv "$WORK/ranked.canary.json" "$WORK/ranked.json"
     if [ -s "$WORK/canary.jsonl" ]; then
-      ROWS="$(jq -s -r '.[] | "| `" + .model + "` | " + .canary_verdict
+      ROWS="$(jq -s -r '.[] | "| `" + .model + "` | " + .harness + " | "
+        + (if .provider == "" then "proxy pin" else .provider end)
+        + " | " + (.attempt | tostring) + " | " + .canary_verdict
         + (if .free then " (only-free)" else " ($0.05 cap)" end) + " |"' "$WORK/canary.jsonl")"
-      CANARY_BLOCK=$'\n\n**Canary rides** (FU-062/FU-024/FU-161 — trivial closed rail ride, ephemeral capped key; `only-free` = proxy 403s any paid model pre-spend):\n\n| model | canary verdict |\n|---|---|\n'"$ROWS"$'\n\n*A TYPED verdict carries the launcher'"'"'s `error_class`, never a bare `failed`: `clean` = the model completed a real tool-calling ride on a budget-capped key; `auth-storm`/`timeout`/`harness-death`/`budget-403`/… = the rail or the key failed, typed; `suspect-infra`/`inconclusive` = a benchmark-capable model that fails the rail (contradiction rule, leg 4). A canary verdict is evidence for graduation, not automatic graduation. Full outcome + transcript in the ledger (model label).*'
+      CANARY_BLOCK=$'\n\n**Canary rides** (FU-062/FU-024/FU-161 + ADR-112 cells — one row per ATTEMPT: (model × harness × provider-arm); `proxy pin` = the M4 default, a named arm = the `@` provider_slot/slug pin with fallbacks OFF; `only-free` = proxy 403s any paid model pre-spend):\n\n| model | harness | provider arm | attempt | verdict |\n|---|---|---|---|---|\n'"$ROWS"$'\n\n*A TYPED verdict carries the launcher'"'"'s `error_class`, never a bare `failed`: `clean` = the model completed a real tool-calling ride on a budget-capped key; `auth-storm`/`timeout`/`harness-death`/`budget-403`/… = the rail or the key failed, typed; `suspect-infra`/`inconclusive` = a benchmark-capable model that fails the rail (contradiction rule, leg 4). A canary verdict is evidence for graduation, not automatic graduation. Full outcome + transcript in the ledger (model label).*'
     fi
   fi
   # <<<REPLAY:scout-canary<<<
@@ -470,17 +565,38 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
   #    either way (point 5). Strategy (homelab#877): skip loudly, log withheld model ids so
   #    newcomers are recoverable from the tick's own output.
   BENCHED_N="$(jq '[.[] | select(.bench.benched)] | length' "$WORK/ranked.json")"
-  EVIDENCE_CANARIED_N="$(jq '[.[] | select((.canary // "") != "" and (.canary != "void" and .canary != "no-stats" and .canary != "unknown" and .canary != "mint-failed" and .canary != "key-never-minted" and .canary != "harness-death" and .canary != "auth-storm" and .canary != "budget-403" and .canary != "timeout" and .canary != "suspect-infra" and .canary != "inconclusive"))] | length' "$WORK/ranked.json")"
+  # Evidence is judged per ATTEMPT row (a cell whose second arm went clean is evidence even
+  # though its first arm died) — same non-evidence list, now against canary.jsonl.
+  # ⚠ jq 1.6 on a MISSING input file prints a result AND exits non-zero, so `jq … || echo 0`
+  # captures "0\n0" and inverts the gate (found by the bench fixtures, 2026-08-26) — existence
+  # is tested first and the value is integer-normalized, never trusted.
+  EVIDENCE_CANARIED_N=0
+  if [ -s "$WORK/canary.jsonl" ]; then
+    EVIDENCE_CANARIED_N="$(jq -s '[group_by(.model)[] | select(any(.[];
+        (.canary_verdict != "void" and .canary_verdict != "no-stats" and .canary_verdict != "unknown"
+         and .canary_verdict != "mint-failed" and .canary_verdict != "key-never-minted"
+         and .canary_verdict != "harness-death" and .canary_verdict != "auth-storm"
+         and .canary_verdict != "budget-403" and .canary_verdict != "timeout"
+         and .canary_verdict != "suspect-infra" and .canary_verdict != "inconclusive")))] | length' \
+      "$WORK/canary.jsonl" 2>/dev/null)" || EVIDENCE_CANARIED_N=0
+    case "$EVIDENCE_CANARIED_N" in ''|*[!0-9]*) EVIDENCE_CANARIED_N=0;; esac
+  fi
   if [ "$BENCHED_N" -eq 0 ] && [ "$EVIDENCE_CANARIED_N" -eq 0 ]; then
-    WITHHELD="$(jq -r '[.[] | select((.canary // "") == "" or (.canary == "void" or .canary == "no-stats" or .canary == "unknown" or .canary == "mint-failed" or .canary == "key-never-minted" or .canary == "harness-death" or .canary == "auth-storm" or .canary == "budget-403" or .canary == "timeout" or .canary == "suspect-infra" or .canary == "inconclusive")) | .model + " (canary: " + (.canary // "none") + ")"] | join(", ")' "$WORK/ranked.json")"
+    # This branch means NOTHING carried evidence — list every ranked row with its cell vector
+    # (the .canary field is the joined "harness=verdict" string since the ADR-112 cells).
+    WITHHELD="$(jq -r '[.[] | .model + " (canary: " + (if (.canary // "") == "" then "none" else .canary end) + ")"] | join(", ")' "$WORK/ranked.json")"
     log "scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): ${WITHHELD} — gh issue create NOT run"
     log "scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/agents/model-routing.md §M7 leg 4)"
   else
     TITLE="🔭 model scout: $(jq length "$WORK/ranked.json") new candidate model(s) ($(date -u +%F))"
-    BODY="$(jq -r --arg ceiling "$CEILING" '
-      "Weekly model scout (REPORT-ONLY, FU-062 / docs/agents/model-routing.md §M7): models whose BASE"
-      + " id is NEW on OpenRouter since the last tick, advertise `tools`, and are `:free` or ≤ $" + $ceiling
-      + "/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in.\n\n"
+    [ -n "${INTAKE:-}" ] && TITLE="🔭 model scout: operator intake — $(jq length "$WORK/ranked.json") model(s) ($(date -u +%F))"
+    # The intro must tell the truth about how the candidates got here: the intake path bypasses
+    # the newness diff AND the ceiling (review catch, PR#963) — a false "NEW … ≤ $ceiling" framing
+    # would mislead exactly the graduation read this digest exists for.
+    INTRO="Weekly model scout (REPORT-ONLY, FU-062 / docs/agents/model-routing.md §M7): models whose BASE id is NEW on OpenRouter since the last tick, advertise \`tools\`, and are \`:free\` or ≤ \$${CEILING}/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in."
+    [ -n "${INTAKE:-}" ] && INTRO="Operator INTAKE (REPORT-ONLY, model-scout --intake): explicitly requested catalog ids ridden through the SAME legs as newcomers (enrich → bench → rank → canary). The newness diff and the \$${CEILING}/M price ceiling are BYPASSED — these models are listed because the operator asked, not because they are new or cheap. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in."
+    BODY="$(jq -r --arg intro "$INTRO" '
+      $intro + "\n\n"
       + "| # | model | AA int/code/agentic | effective $/M in | price note | pinned provider | uptime | providers | canary |\n"
       + "|---|---|---|---|---|---|---|---|---|\n"
       + (to_entries | map(((.key + 1) | tostring) as $n | .value
@@ -522,5 +638,11 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
 fi
 
 # 5. Advance the snapshot (also when zero candidates — non-candidate newcomers are old news now).
+#    NEVER in intake mode: intake is stateless by contract — advancing here would mark every
+#    model current at intake time as "known" and silently swallow the next cron tick's real diff.
+if [ -n "${INTAKE:-}" ]; then
+  log "intake done — snapshot untouched (stateless by contract)"
+  exit 0
+fi
 scout_state_write "$WORK/ids.json" || log "scout: snapshot write failed (non-fatal, next tick will retry)"
 log "snapshot advanced (${CURRENT_N} known models); scout tick done"
