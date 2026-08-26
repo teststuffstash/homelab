@@ -565,9 +565,12 @@ NS="$PROJECT"
 # session dispatched a docker-repo worker without --docker; the duplicate-dispatch dance cost a
 # pod). Explicit --docker always wins; a failed probe leaves it unset and WARNS (the CI gate
 # catches a wrong-mode ride — degrade loudly, never guess).
-if [ -z "$DOCKER" ] && command -v "$KUBECTL" >/dev/null 2>&1; then
+if command -v "$KUBECTL" >/dev/null 2>&1; then
+  # The claims read runs even when --docker was explicit (homelab#990): the egress knobs it
+  # yields drive the env card AND the enforce-default harness guard below, and both must see
+  # the truth on every dispatch path — not only the docker-auto-derive one.
   if claims_json="$("$KUBECTL" $KUBE get agentstacks.platform.teststuff.net -o json 2>/dev/null)"; then
-    if [ "$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" \
+    if [ -z "$DOCKER" ] && [ "$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" \
         '[.items[].spec.repos[] | select(.name == $p and (.fixer.docker == true))] | length' 2>/dev/null)" -gt 0 ] 2>/dev/null; then
       DOCKER=1
       echo "→ --docker derived from the AgentStack claim (fixer.docker=true for ${PROJECT})"
@@ -576,9 +579,23 @@ if [ -z "$DOCKER" ] && command -v "$KUBECTL" >/dev/null 2>&1; then
     EGRESS_ENFORCE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.enforce]|map(select(.!=null))|first // empty' 2>/dev/null)"
     EGRESS_PROFILE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.profile]|map(select(.!=null))|first // empty' 2>/dev/null)"
   else
-    echo "WARN: agentstacks probe failed — cannot derive --docker; pass it explicitly for docker-gated repos" >&2
+    echo "WARN: agentstacks probe failed — cannot derive --docker or the egress knobs; pass --docker explicitly for docker-gated repos" >&2
   fi
 fi
+# >>>REPLAY:harness-enforce-default>>>
+# homelab#990 DURABLE WORKAROUND (operator, 2026-08-26): opencode's SDK-init fetches
+# (models.opencode.ai / registry.npmjs.org — no kill knob on the pinned build, the L1812 block)
+# carry NO timeout, and under an ENFORCED egress the CNP deny is a silent SYN black-hole — the
+# ride wedges pre-LLM and sleeps to the 4h deadline (first chainless oracle ride, issue-272-r1,
+# 2026-08-26 ×2). So an enforced-egress ride never takes opencode BY DEFAULT: goose rides the
+# slot. An explicit --harness opencode still wins (operator override), and a model-derived
+# harness (claude rails) is untouched — this guard fires only on the baked default.
+# Delete this block when #990's fail-fast lands.
+if [ "${EGRESS_ENFORCE:-}" = "true" ] && [ "$HARNESS" = "opencode" ] && [ -z "${HARNESS_SET:-}" ]; then
+  echo "→ homelab#990 workaround: enforced egress + default harness → goose (opencode wedges on un-suppressible SDK-init fetches under enforcement)"
+  HARNESS="goose"
+fi
+# <<<REPLAY:harness-enforce-default<<<
 # ── FU-114 L1: the platform ENVIRONMENT CARD (docs/agents/fixer-context.md) ──────────────────
 # Composed from the SAME knobs the launcher just used to BUILD this ride (--docker, egress), so it
 # is accurate by construction — never the stale "no-real-data sandbox" framing that primed the #48
