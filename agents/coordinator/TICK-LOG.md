@@ -5314,3 +5314,23 @@ first live ADR-110 maintenance session before the ADR existed.
   #745/Sep-1 minutes reset), #114 (active soak), #221, #500 (recommend queue: grow the
   nix-cache PVC per the oversize-caches doctrine), #811 (loki healthy 35h; quota residual
   unverified), #857 (recent), #887/#628/#940/#944 (deliberate).
+
+## 2026-08-26 ~07:40Z — ADR-111 cutover executed (#745) + the hp-01/grafana diagnosis (operator questions)
+
+- **Cutover (operator: "if no point waiting, let's do it" — there wasn't: Sep-1 only restores
+  minutes for the thing being deleted, and the in-cluster leg was observed servicing both paths
+  during this morning's drain):** callers deleted via API in 9 repos (issue listed 5; the file
+  existed in 9 + homelab), homelab caller + reusable deleted, MP-T02 re-anchored (executed
+  `fixtures/updater` replay, `pins: [MP-T02]`, unreplayed disposition dropped), doc currency,
+  `MERGE_GH_APP_*` removed from tofu/github (`b68e4ee4`). Residual: the HOST-side
+  `devbox run github-tofu apply` destroys the two org secrets; #745 closes with it.
+- **hp-01/grafana diagnosis (probes):** grafana STILL locking — 2,886 SQLITE_BUSY/6h — because
+  its sqlite is on **emptyDir on hp-01's ROOT disk** (`sda4` /var): a Longhorn disk can never
+  reach it, so yesterday's new disk (sdb → `hg5d`, healthy: 0.4ms writes, ~empty) structurally
+  couldn't help. `sda` measured: **54% io-util sustained, 175ms avg write latency** (both disks
+  rotational=0 — sda is a *slow-under-load* SSD), CPU 76% busy / 83% peak = busy but not the
+  bottleneck. Compounding: the scheduler is again concentrating the whole burst on hp-01
+  (#867's pattern), the Longhorn DEFAULT disk still points at the root fs (2 replicas on sda;
+  hg5d has 1), and the nix-cache pod ALSO sits on hp-01. #500 is a genuinely separate cause
+  (nginx cache pinned at max_size=8g → continuous LRU eviction) that shares sda as amplifier.
+  Fix ranking reported to operator; no mutations applied (diagnosis question).

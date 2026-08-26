@@ -29,12 +29,12 @@ meant to avoid.)
   child is minted at the ~2026-09-03 paid-flash revert** (sequencing ruled A, 2026-08-25 —
   acceptance: zero chain-exhausted defers on subscription-only classes).
 
-- **⚑ S7 (#741): the #745 cutover is UN-PARKED (read executed 2026-08-26, PASSED vacuously —
-  zero open PRs on the 4 private repos, no BEHIND stalls).** The cutover work itself is
-  seat-lane (retires hosted callers across repos — `.github/**`); hosted callers on the
-  private repos stay dead until Sep-1 anyway (minutes exhausted, overage OFF), which makes
-  cutting over cheaper, not riskier. Silences `a3628730` + `5400ed94…` self-expire 2026-09-01.
-  (S4 #762 + #420 stint closes executed 2026-08-26 — trees empty, off the calendar.)
+- **⚑ S7 (#741): the #745 cutover EXECUTED 2026-08-26** (operator-directed): callers deleted in
+  9 repos + homelab's caller + the reusable (`b68e4ee4`); MP-T02 re-anchored on the in-cluster
+  pieces with the executed `fixtures/updater` replay; `MERGE_GH_APP_*` removed from tofu/github.
+  **ONE remaining act, HOST-side: `devbox run github-tofu apply`** (destroys the two org
+  secrets — admin PAT is outside the jail); #745 closes with it. Silences `a3628730` +
+  `5400ed94…` self-expire 2026-09-01. (S4 #762 + #420 stint closes executed 2026-08-26.)
 
 - **⚑ Retro (FU-058): r1 DELIVERED 2026-08-25** (PR#918; the batch = #927–#929 queued, #930
   SEAT lane: the DELIM-FIELD transport-lint signature — `scripts/` deny path; #931 OPERATOR
