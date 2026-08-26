@@ -130,7 +130,7 @@ else
       "repos": [$iac, $main],
       "mainRepo": $main,
       "coordinatorModel": "sonnet",
-      "workerModel": "deepseek/deepseek-v4-flash-0731",
+      "workerModel": "deepseek/deepseek-v4-flash",
       "workerModelFallbacks": ["xiaomi/mimo-v2.5", "tencent/hy3", "claude/haiku"]
     }]' agents/stacks.json > agents/stacks.json.tmp && mv agents/stacks.json.tmp agents/stacks.json
     echo "  stacks.json: added $STACK (models = the current evidence-based default chain)"
