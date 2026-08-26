@@ -8,23 +8,32 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ NEXT SESSION = the S5 [stint](chainless-redesign.md) (operator, 2026-08-25): corpus diet — doc-heat + measured
-  trimming (FU-164 is the instrument), post-closure by design.** The 2026-08-25 docs-cleanup
-  deliberately left for it: the **29 remaining STALE-ARCHIVE ids** (the lint list) — most of
-  their living refs are PROVENANCE names in code comments/docs (FU-088 ×51, FU-069 ×26,
-  FU-057 ×20 …), the same class as the exempt TICK-LOG/ADR refs, so the scrub needs the
-  **name-anchor ruling** (operator: exempt provenance refs / keep permanent one-line stubs /
-  scrub-and-rename) before any mass edit; plus the deep whole-repo comb. **Ruling input
-  (operator + seat sketch, 2026-08-26 — decide IN the stint):** ids grep, headings rot — and
-  the corpus proved it internally (M-codes/FSM-ids/FU never rot; prose §-references do, and
+- **⚑ NEXT SESSION = S5 (corpus diet), with a PARK-DRAIN OPENING ACT (handover, 2026-08-26
+  wind-down).** Open with the codeowner queue: the ~9 still-queued issues (#928 #929 #932 #933
+  #937 #938 #888 #945 #456 #110, agent-runtime#95, #923's shadow arm) are producing PRs that
+  park bot-approved — batch-drain §REVIEW first (the ADR-110 amortization). ⚠ Two are REAL
+  reads, not skims: **#938** (sentinel-edge doorbell-collapse) and **#933** (the G-B
+  checkpoint un-wedge — its merge is what lets G-B assemble; the morning-read items follow:
+  assembly PR → codeowner tax → probe-platform first tick, FU-102). Carry-overs with verdicts
+  already formed: **PR#952** (fix #867, spread + Longhorn de-preference — gate read DONE
+  2026-08-26, label distribution verified; approve when current+green:
+  `gh pr review 952 -R teststuffstash/homelab --approve`), and **PR#951** approved at head
+  (auto-merge completes on green — verify it landed). **#946 needs a SEAT RUN after #945
+  merges** (blocked-by edge wired; the 🔓 clause surfaces it). **PR#925** (fstrim): sentinel
+  green since the node-maintenance baseline — confirm it merged via the reflex. **#915**: fix
+  round riding the sentinel-coverage ask; the operator's own 20:37Z review is the final gate.
+  **Then the stint: corpus diet** — doc-heat + measured trimming (FU-164 the instrument),
+  post-closure by design. The 2026-08-25 docs-cleanup left it the **29 STALE-ARCHIVE ids**
+  (most living refs are PROVENANCE names — FU-088 ×51, FU-069 ×26, FU-057 ×20 …), needing the
+  **name-anchor ruling** (operator: decide IN the stint) before any mass edit; plus the deep
+  whole-repo comb. **Ruling input (operator + seat sketch, 2026-08-26):** ids grep, headings
+  rot — the corpus proved it internally (M-codes/FSM-ids/FU never rot; prose §-refs do, and
   docs-graph-lint cannot see them). Sketch: (a) generalize the M-code convention — stable code
-  as heading PREFIX for referenced sections, codes never reused; (b) docs-graph-lint check #4:
-  two-way §<CODE> resolution incl. code comments (the ⚓-term mechanism extended to section
-  coordinates); (c) id only the doc-heat-hot set (FU-164), never every heading; (d) the
-  name-anchor lean: EXEMPT provenance-shaped FU refs (stable coordinates, TICK-LOG/ADR class),
-  red only TODO-shaped refs to archived ids — stubs recreate a graveyard, scrub-and-rename
-  destroys the grep coordinate (../teststuff specs-for-agentic-delivery.md §one-ID-namespace +
-  deletability are the grounding).
+  as heading PREFIX for referenced sections, never reused; (b) docs-graph-lint check #4:
+  two-way §<CODE> resolution incl. code comments (the ⚓-term mechanism extended; shadow-first
+  like #767); (c) id only the doc-heat-hot set; (d) name-anchor lean: EXEMPT provenance-shaped
+  FU refs (stable coordinates, TICK-LOG/ADR class), red only TODO-shaped refs to archived ids
+  (../teststuff specs-for-agentic-delivery.md §one-ID-namespace + deletability ground it).
 
 - **⚑ G-B #818 WEDGED on homelab#933 (found + filed by the 2026-08-25 sweep, queued):** all 5
   originals closed, 1 store finding, but the goal-checkpoint's child-set-complete trigger
@@ -39,11 +48,11 @@ meant to avoid.)
   child is minted at the ~2026-09-03 paid-flash revert** (sequencing ruled A, 2026-08-25 —
   acceptance: zero chain-exhausted defers on subscription-only classes).
 
-- **⚑ S7 (#741): the #745 cutover is COMPLETE 2026-08-26** — callers ×10 + reusable deleted,
-  MP-T02 re-anchored (executed `fixtures/updater` replay), org secrets DESTROYED by the
-  operator's host apply (after the bypass-actor var restore, `c3f3f5c9`). Acceptance watch:
-  hosted updater runs structurally 0; no BEHIND PR >30m anywhere. Silences `a3628730` +
-  `5400ed94…` self-expire 2026-09-01. (S4 #762 + #420 stint closes executed 2026-08-26.)
+- **⚑ S7/#745 COMPLETE 2026-08-26** (callers ×10 + reusable deleted, org secrets destroyed,
+  MP-T02 re-anchored). Acceptance watch: no BEHIND PR >30m anywhere; hosted updater runs
+  structurally 0. Silences `a3628730` + `5400ed94…` self-expire 2026-09-01. **S8 (merge
+  lanes) is on the work map** — (repo, base) serialization + goal v1.3 themes as ONE stint
+  after S5; #829 absorbed at its authoring (de-queued, agent-fix kept).
 
 - **⚑ Retro (FU-058): r1 DELIVERED 2026-08-25** (PR#918; the batch = #927–#929 queued, #930
   SEAT lane: the DELIM-FIELD transport-lint signature — `scripts/` deny path; #931 OPERATOR
