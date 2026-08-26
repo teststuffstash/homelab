@@ -40,17 +40,11 @@ meant to avoid.)
   lane: the `.agents/` pair). #932 queued (the silent success-push belt). **Next unattended
   Mon 08-31 05:00Z fire = the clean acceptance.**
 
-- **⚑ GARAGE copied-credential rotation (HOST-side, found 2026-08-26 — the third #926
-  consumer class):** three GitHub-secret COPIES of re-created Garage keys are stale. Rotate per
-  the DOCUMENTED recipe (docs/github-setup.md §Garage-read secrets — the connection Secret is
-  the value's source of truth, and it is verified CURRENT post-rebuild: writer id matches the
-  live key): `kubectl get secret <conn> -n <ns> -o jsonpath=… | base64 -d | gh secret set …` —
-  oracle-fleet `ALLURE_S3_*` ← `allure-reports-s3` writer pair (proven stale: CI publish denied
-  twice, live creds probe-write OK) · oracle-fleet `ERT_S3_READER_*` ← `ert-snapshots-s3`
-  reader pair · circles `SPECS_S3_*` ← `circles-specs-s3` writer pair (both untested since the
-  wipe, same class). Acceptance:
-  `gh run rerun 32941605062 --repo teststuffstash/oracle-fleet --failed` green.
-  Copy-holder table: docs/garage.md §metadata-restore sweep.
+- **⚑ GARAGE copied-credential rotation (HOST-side, one command now):** the mapping is CODE —
+  `scripts/github-secrets-sync.sh` (operator direction 2026-08-26; `--check` verified all 3
+  sources current in-jail). On the host: **`devbox run github-secrets-sync`**, then acceptance
+  `gh run rerun 32941605062 --repo teststuffstash/oracle-fleet --failed` green. Class + design:
+  docs/garage.md §metadata-restore sweep · docs/github-setup.md §Garage-read secrets.
 
 - **⚑ GARAGE, operator-owned residue (recovery COMPLETE + env rebuilt, #884/FU-184 archived):**
   the `garage repair blocks` hold can come off (reclaims ≈nothing now) · **do NOT delete the 3

@@ -166,13 +166,20 @@ workflow gets `GITHUB_TOKEN` with repo-scoped `packages: write` free, auto-rotat
 `ERT_S3_READER_*`): set imperatively from the cluster-minted key — the value's source of truth is
 the Crossplane Workspace connection secret, NOT KeePass/tofu (codifying the value into
 `tofu/github` would give it a second home; this crosses the cluster↔GitHub barrier by design).
-Set/rotate (repo admin, e.g. from the host):
+**The repo↔credential MAPPING is code** (operator direction 2026-08-26, after the 08-24 Garage
+rebuild left three stale copies that had to be re-derived by hand):
+[`scripts/github-secrets-sync.sh`](../scripts/github-secrets-sync.sh) holds the one table —
+repo × connection Secret × reader/writer pair × GitHub secret prefix — reads the values live
+from the cluster, and sets them all. Set/rotate (repo admin, from the host):
 
 ```sh
-kubectl get secret ert-snapshots-s3 -n oracle-fleet -o jsonpath='{.data.reader_access_key_id}' \
-  | base64 -d | gh secret set ERT_S3_READER_ACCESS_KEY_ID -R teststuffstash/oracle-fleet
-# …and the same for reader_secret_access_key → ERT_S3_READER_SECRET_ACCESS_KEY
+devbox run github-secrets-sync              # sync every mapped copy
+devbox run github-secrets-sync -- --check   # inventory + source probe (jail-safe)
 ```
+
+A stack that grows a publish/release workflow adds its ROW to the script's mapping in the same
+change (new-stack.sh step G says so). After any Garage metadata restore, run the sync — copies
+are the one consumer class no reconcile heals (docs/garage.md §metadata-restore sweep).
 
 The jail PAT deliberately lacks the Secrets permission (verified 403 again 2026-08-04, on both
 `actions/secrets` and `actions/secrets/public-key` — the write path) — setting these is an operator

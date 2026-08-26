@@ -5401,3 +5401,15 @@ first live ADR-110 maintenance session before the ADR existed.
   + `ERT_S3_READER_*`, circles `SPECS_S3_*` (specs-site last ran 08-08 — untested since the
   wipe, presumed stale). Rotation is host-side (jail PAT cannot write repo secrets) — commands
   in the meta-state row; docs/garage.md sweep section gains the copy-holder table.
+
+## 2026-08-26 ~08:55Z — github-secrets-sync built (operator direction: the copy mapping becomes code)
+
+- Operator overruled keep-the-ruling: the repo↔credential MAPPING must be executable IaC even
+  if the values stay imperative — "keeping the mapping current instead of re-deriving it every
+  time". Built `scripts/github-secrets-sync.sh` + `devbox run github-secrets-sync`: the table
+  (repo | ns | connection Secret | reader/writer pair | GH prefix) is the one home; values read
+  live from the connection Secrets; `gh secret set` host-side (loud 403 guidance in-jail);
+  `--check` is the jail-safe inventory+source probe — ran clean, all 3 ids match live keys.
+  Pointers converged: github-setup.md recipe → the script; garage.md copy-holder table →
+  pointer; new-stack.sh step G → add-a-row + run. Value-in-tofu stays rejected (second
+  home/state copy — the documented ruling); the script is the middle the operator asked for.
