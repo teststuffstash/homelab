@@ -41,6 +41,7 @@ harvest-goal-closed	harvest
 harvest-goal-open-exhausted	harvest
 harvest-goal-open-funded	harvest
 harvest-master-inert	harvest
+item-class-batch/item-class-batch	item-class-batch
 ledger-emitter-rounds	ledger-emitter-rounds
 model-id-parse-drift	model-id-parse-drift
 opencode-phonehome-killswitch	opencode-phonehome-killswitch

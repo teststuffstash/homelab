@@ -187,6 +187,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
+| `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `item-class/item-class` | actions | - | `agents/coordinator-scan.sh` | - |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
@@ -203,6 +204,8 @@ is stale, so it cannot drift the way the prose register did.
 | `pr-cap-per-base` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/collision` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |
+| `queued-classification/held` | actions | - | `agents/coordinator-scan.sh` | - |
+| `queued-classification/ready` | actions | - | `agents/coordinator-scan.sh` | - |
 | `rail-degrade/rail-degrade` | suite | - | `-` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
