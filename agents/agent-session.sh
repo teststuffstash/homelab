@@ -1101,15 +1101,31 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     # (b) live-worker cap per project: default WIP=1; a repo with independent TRACK lanes
     # (TRACKS.md) may run one worker per lane — the dispatcher sets AGENT_WIP_LIMIT=<lanes>
     # (added 2026-07-10 when #2/#3 opened the first two-lane parallel dispatch).
+    # >>>REPLAY:fu042-wip-cap>>>
     PF_LIMIT="${AGENT_WIP_LIMIT:-1}"
     # phase!=terminal, NOT phase=Running: a kata pod boots in Pending longer than a tick
     # interval — the Running filter double-dispatched #55 across consecutive ticks (2026-07-21).
-    PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" \
-      --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+    # FU-042 leg (b) / #937: a Pending pod that is Unschedulable (wedged) does NOT hold a WIP
+    # slot — it will never run, so it is not live work. A 30-second grace period prevents a
+    # briefly-unschedulable new pod from being discounted instantly.
+    PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" -o json 2>/dev/null \
+      | jq '[.items[] | select(
+        .status.phase != "Succeeded" and .status.phase != "Failed" and
+        (
+          .status.phase == "Running" or .status.phase == "Unknown"
+          or
+          (.status.phase == "Pending" and (
+            ([.status.conditions[]? | select(.type == "PodScheduled" and .status == "False" and .reason == "Unschedulable")] | length) == 0
+            or
+            (now - (.metadata.creationTimestamp | fromdateiso8601)) < 30
+          ))
+        )
+      )] | length')"
     if [ "${PF_LIVE:-0}" -ge "$PF_LIMIT" ]; then
       echo "PREFLIGHT REFUSED: ${PF_LIVE} agent pod(s) Running in ns ${NS} ≥ WIP limit ${PF_LIMIT} (FU-042; AGENT_WIP_LIMIT raises it for multi-track dispatch)." >&2
       exit 3
     fi
+    # <<<REPLAY:fu042-wip-cap<<<
     # (d) FU-118: an offline `devbox add` writes a `placeholder-<system>-<pkg>` store path into
     # devbox.lock that commits fine but hard-fails the NEXT round's bootstrap `devbox install`
     # (`path-info --offline` on a nonexistent path) BEFORE the agent runs — an opaque, unrecoverable
