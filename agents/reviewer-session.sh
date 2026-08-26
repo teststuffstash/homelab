@@ -172,6 +172,16 @@ _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {
 _stack_rmode="$(printf '%s' "$_srow" | jq -r '.routerMode // ""')"
 if [ -z "${AGENT_ROUTER:-}" ] && [ -n "$_stack_rmode" ]; then AGENT_ROUTER="$_stack_rmode"; fi
 AGENT_ROUTER="${AGENT_ROUTER:-shadow}"
+# FU-188 INCIDENT PIN (2026-08-26): the review-class route can return an openrouter-rail model
+# (the ADR-115 market basis), which this subscription-only session cannot ride — the pod is
+# hardwired to the /anthropic surface, so the ride 404s with no verdict AND no strike
+# (oracle-fleet#277: 72 dead dispatches/24h, zero generations, router re-picks forever). Until
+# FU-188 legs (a)+(b) land, the reviewer consults in shadow at most; workers are untouched
+# (chainless stacks REQUIRE authoritative — agent-session.sh chainless-guard).
+if [ "$AGENT_ROUTER" = "authoritative" ]; then
+  echo "→ router: authoritative DOWNGRADED to shadow for the reviewer (FU-188 incident pin)"
+  AGENT_ROUTER="shadow"
+fi
 if [ "$AGENT_ROUTER" != "off" ]; then
   ROUTER_URL="${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}"
   # No chain sent for reviewer — the class policy (class review) orders the rails server-side.
