@@ -14,7 +14,10 @@ resources:
 
 # Per-issue drill-down over the agent_run_* labels this pushgateway carries (project/issue/round/
 # role) + the OTLP claude_code_* metrics + Loki worker logs. Same sidecar-discovery pattern as
-# github-exporter's dashboard; the three aggregate agent dashboards live in tofu/dashboards/.
+# github-exporter's dashboard; the remaining aggregate agent dashboards (agent-running,
+# agent-cost) still live in tofu/dashboards/ — model-health moved HERE 2026-08-26 (v2: windowed
+# pivot + evidence trail + router-store provider split; the Part A‴ ConfigMap-beside-collector
+# vehicle, so an edit lands via merge instead of an operator tofu apply).
 configMapGenerator:
   - name: grafana-dashboard-agent-issue
     files:
@@ -22,3 +25,9 @@ configMapGenerator:
     options:
       labels:
         grafana_dashboard: "1" # the Grafana sidecar discovers this label across ALL namespaces
+  - name: grafana-dashboard-model-health
+    files:
+      - agent-model-health.json=dashboard-model-health.json
+    options:
+      labels:
+        grafana_dashboard: "1"
