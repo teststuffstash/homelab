@@ -868,7 +868,9 @@ into the mechanism layer):
 **The decision record is ADR-115; this section owns the mechanism.** Born from the 0731 intake
 read (TICK-LOG 2026-08-26; digest homelab#966): the M4 pin optimizes effective $/M with an
 uptime floor and is blind to serving QUALITY — measured on one model, provider tool-call error
-rates span 0.2%→39.6% and GPQA 68.7→90.0 (quantization + serving stack, not weights), our pin
+rates span 0.2%→39.6% (single-snapshot, across providers; one provider's DAILY series ranges
+wider — DigitalOcean 29–56% over the probed window, the Evidence base below) and GPQA 68.7→90.0
+(quantization + serving stack, not weights), our pin
 sampled the mid/bottom of that distribution exclusively, and uptime cannot see the failure class
 (a malformed tool call arrives inside a 200). The missing term is **overhead cost**:
 
@@ -897,7 +899,9 @@ canary rows should carry the SERVED slug from the harvest, not `provider:""`.
 
 **Evidence base (2026-08-26, all live-probed):** the pin picked Relace fp4 over DeepSeek
 first-party (native, top GPQA/TAU, 95% market cache, 100% uptime) for $0.0012/M; DigitalOcean
-pin-eligible at 29–56% tool-error; our 0731 traffic = Relace/OpenInference/DeepInfra only,
+pin-eligible at 29–56% tool-error (per-endpoint DAILY series from the found
+`stats/tool-call-error-rate` endpoint — a multi-day range, which is why it exceeds the
+single-snapshot spread's 39.6% max); our 0731 traffic = Relace/OpenInference/DeepInfra only,
 strikes un-attributable (#783); the elite tool-call tier (Fireworks 0.23%) never sampled, ~3×
 price ≈ cents/month at fleet volume. Rung-1 canaries pass on BOTTOM-quartile providers
 (homelab#966: both harnesses clean via OpenInference/Relace), so the discriminating evidence
