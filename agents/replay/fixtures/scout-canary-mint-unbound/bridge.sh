@@ -13,4 +13,4 @@ CANARY_PROJECT="teststuffstash"
 
 # Call the cleanup path — this is the code path that was dying with `sess: unbound variable`.
 # After the fix (separate `local` declarations), both `sess` and `key` expand correctly.
-scout_canary_mint "test/model" "true" "cleanup"
+scout_canary_mint "test/model" "true" "opencode" "cleanup"

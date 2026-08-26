@@ -1,5 +1,5 @@
-# fixture-dir -> family  (FU-167 cleanup move 5; agents/replay/README.md §The cleanup contract)
 # Tables (fix-debounce, fu088-ladder, go-rail-latch, goal-ancestor, goal-budget-refusal, retro-harvest, scout-canary-filing-gate, summary-comment) stay at depth 1 and are NOT listed.
+# fixture-dir -> family  (FU-167 cleanup move 5; agents/replay/README.md §The cleanup contract)
 _selftest-missing-sentinel	_selftest
 _selftest-unrecorded-read	_selftest
 _selftest-wrong-expectation	_selftest
@@ -93,6 +93,7 @@ scan-wedge-alert	scan-wedge-alert
 scout-bench-mcp-error	scout-bench
 scout-bench-ranked-columns	scout-bench
 scout-bench-unkeyed-unbenched	scout-bench
+scout-intake-stateless	scout-intake-stateless
 scout-variant-batch-rollout	scout-variant
 scout-variant-known-base	scout-variant
 session-atomic-gate	session-atomic-gate

@@ -1,0 +1,20 @@
+# OPERATOR INTAKE (2026-08-26, the 0731 case) — explicit ids ride the SAME legs as newcomers;
+# the diff/snapshot half is BYPASSED and the snapshot is NEVER touched.
+#
+# CONDITION UNDER REPLAY. `--intake` / SCOUT_INTAKE fills candidates.json straight from the live
+# catalog. THE CONTRACT:
+#   1. an id absent from the catalog is SKIPPED with a loud line (never invented);
+#   2. an id without `tools` is SKIPPED with a loud line (it cannot ride any harness);
+#   3. a present, tools-capable id becomes a candidate — the price CEILING is deliberately not
+#      applied (the operator asked by name);
+#   4. NO snapshot read and NO snapshot write happen — the bridge's state seams record a CALL if
+#      ever invoked, so a stateful regression turns the stream red by construction.
+name: scout-intake-stateless
+mode: actions
+source: agents/model-scout.sh
+parts:
+  - block:scout-seams
+  - file:bridge.sh
+  - block:scout-diff
+env:
+  - INTAKE=deepseek/deepseek-v4-flash-0731,google/gemini-3.5-flash-001,ghost/not-listed

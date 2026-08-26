@@ -1263,6 +1263,12 @@ def compute_pin(model: str) -> dict | None:
                 "basis": "market" if is_market(best) else "list",
                 # ADR-096 P3: the pinned provider's effective $/M input — the /route ordering key.
                 "eff_in": round(eff(best), 6),
+                # provider_slot resolution basis (2026-08-26, the M13 slot verb on the provider
+                # axis): the SELECTED pool, eff-ordered — slot N = ranked[N-1]. Callers name a
+                # rank, never a slug; the served slug is echoed in notes + the /generation
+                # harvest, which is what makes a slot walk reproducible after the fact.
+                "ranked": [e2["slug"] or e2["provider"]
+                           for e2 in sorted(pool, key=eff)][:10],
             }
     return None
 
@@ -3009,6 +3015,46 @@ class Proxy(BaseHTTPRequestHandler):
                             self.close_connection = True
                             return
                     notes = []
+                    # CELL PROVIDER PIN (2026-08-26, the 0731 matrix / #783 provider attribution):
+                    # a `@<provider-slug>` suffix on the model id is OUR proxy's grammar — in-band
+                    # through every harness (-m / GOOSE_MODEL) — pinning EXACTLY that provider with
+                    # allow_fallbacks: false and suppressing the M4 pin: a benchmark cell must fail
+                    # as THAT provider's typed verdict, never slide to a sibling. Stripped before
+                    # upstream. A `:exacto` suffix conversely forwards UNTOUCHED with the M4 pin
+                    # skipped — exacto's whole point is upstream's tool-call-quality ordering,
+                    # which an injected provider.order would override. Both parsed here, before
+                    # cooldown/circuit keying, so evidence stays keyed on the BASE model id.
+                    at_provider_pin = None
+                    _m_raw = str(payload["model"])
+                    if "@" in _m_raw:
+                        _m_base, _at_tok = _m_raw.rsplit("@", 1)
+                        payload["model"] = _m_base
+                        if _at_tok.isdigit():
+                            # provider_slot — the M13 slot verb on the PROVIDER axis: N indexes
+                            # the proxy's eff-ranked eligible endpoints for the base model. An
+                            # unresolvable slot is a TYPED refusal, never a silent fallback —
+                            # the caller's slot walk needs a clean end.
+                            _slot = int(_at_tok)
+                            _sp = pin_for(normalize_model(_m_base))
+                            _ranked = (_sp or {}).get("ranked") or []
+                            if _slot < 1 or _slot > len(_ranked):
+                                log(f"POST {self.path} → 400 provider_slot {_slot} unresolvable"
+                                    f" (depth {len(_ranked)}) model={_m_base}")
+                                self._reply_json(400, {"error": {
+                                    "code": "provider-slot-unresolvable",
+                                    "message": f"provider_slot {_slot} unresolvable for"
+                                               f" {_m_base} (ranked depth {len(_ranked)})"}})
+                                return
+                            at_provider_pin = _ranked[_slot - 1]
+                            notes.append(f"at-pin:slot{_slot}={at_provider_pin}")
+                        else:
+                            at_provider_pin = _at_tok
+                            notes.append(f"at-pin:{at_provider_pin}")
+                        payload["provider"] = {"order": [at_provider_pin],
+                                               "allow_fallbacks": False}
+                    exacto_no_pin = str(payload["model"]).endswith(":exacto")
+                    if exacto_no_pin:
+                        notes.append("exacto:no-pin")
                     or_model = normalize_model(str(payload["model"]))
                     # ADR-107 / homelab#445: the opencode legs — a model id starting with
                     # `opencode-go/` (Go rail) or `opencode/` (Zen free rail) routes to the
@@ -3063,9 +3109,10 @@ class Proxy(BaseHTTPRequestHandler):
                             self.wfile.write(reject)
                             self.close_connection = True
                             return
-                        pin = pin_for(str(payload["model"]))
-                        # An explicit `provider` (a harness/opencode.json that CAN carry prefs, or a
-                        # hand-crafted request) always wins — never overwrite policy already in the body.
+                        pin = None if exacto_no_pin else pin_for(str(payload["model"]))
+                        # An explicit `provider` (a harness/opencode.json that CAN carry prefs, a
+                        # hand-crafted request, or the @provider suffix above) always wins — never
+                        # overwrite policy already in the body.
                         if isinstance(payload.get("provider"), dict):
                             or_provider = (payload["provider"].get("order") or [None])[0]
                         if pin and "provider" not in payload:
