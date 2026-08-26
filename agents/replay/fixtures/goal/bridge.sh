@@ -17,3 +17,6 @@ repo="$IN_REPO"
 openall="$(cat "$REPLAY_FIXTURE/world/openall.json")"
 orphans=""
 units=""
+# ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
+# so a harness running one extracted block has no flush to assert on.
+item_class_push() { :; }

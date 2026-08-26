@@ -70,3 +70,9 @@ EOF
 
 # Make functions available to subshells
 export -f bash gh stacks_json scan_phase dispatch_phase
+
+# PR#915 (2026-08-26): the hard-exit path now flushes the item-class accumulator first. The
+# composed clause cannot see the real function (self-contained blocks — the RC-127 trap), so a
+# recording stub PINS that the flush happens before the exit; the -scan sibling never reaches
+# the hard exit and needs none.
+item_class_flush() { printf 'CALL item_class_flush\n' >> "$REPLAY_ACTIONS"; }
