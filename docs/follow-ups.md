@@ -50,10 +50,12 @@ tracker.
   commit as the fix, trimmed to the grep residue (what shipped / when / acceptance evidence /
   gotcha — a few lines) with an *(archived YYYY-MM-DD)* stamp. References elsewhere stay legal
   while the id is archived; when the entry expires out of the archive (≈a month, once stable),
-  delete it and scrub remaining references in living code/docs — TICK-LOG/ADR/incident references
-  are historical and exempt. **Scrubbing a pointer item's id = repointing, not deleting**: the
-  code/doc comment loses the `FU-NNN` but gains a link to the doc that survived, so the trail
-  doesn't go cold. `devbox run follow-ups-lint` checks all of this.
+  delete it and scrub only the **TODO-shaped** references — `FU: FU-NNN` gap-register cells and
+  `Tracked by` lines (ADR-116, the name-anchor ruling). Every other reference is a **provenance
+  name** — a stable coordinate in a never-reused namespace — and stays untouched, forever.
+  **Repointing a TODO-shaped ref = the doc link survives**: the pointer loses the `FU-NNN` but
+  gains a link to the doc that outlived it, so the trail doesn't go cold.
+  `devbox run follow-ups-lint` checks all of this (TODO-RETIRED fails, TODO-ARCHIVED warns).
   **Then ask who was waiting on it** — `grep -n 'FU-NNN' docs/follow-ups.md` and re-read every
   hit as if filed today. Resolution is a graph walk, not a single edit: the item you just closed
   is often the reason another was deferred, and that one may now be a five-minute fix that
