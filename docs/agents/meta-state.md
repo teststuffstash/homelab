@@ -19,9 +19,11 @@ meant to avoid.)
   both had parked red on the master-side docs-lint break, now #953 (queued; content leg done,
   the gate behaviour is the remaining scope). **#946 needs a SEAT RUN after #945
   merges** (blocked-by edge wired; the 🔓 clause surfaces it). **PR#925** (fstrim): sentinel
-  green since the node-maintenance baseline — confirm it merged via the reflex. **#915**: the last
-  blocker seat-fixed 2026-08-26 ~14:05Z (flush-before-exit + fixture); bot re-review rides the
-  push — the remaining gate is the OPERATOR re-reading their own 20:37Z CHANGES_REQUESTED.
+  green since the node-maintenance baseline — confirm it merged via the reflex. **#915**: DONE on the
+  human side 2026-08-26 ~18:45Z (operator-sitting approval supersedes the 20:37Z CR; taxonomy
+  residue = #968 bound to #913) — waits ONLY on the GitHub Actions outage clearing (ci queued;
+  auto-merge armed). Same for #962/#963/#965/#967: all approved+armed, land on recovery —
+  verify the five merged, then nothing remains from this arc.
   **Then the [stint](chainless-redesign.md): corpus diet** — doc-heat + measured trimming (FU-164 the instrument),
   post-closure by design. The 2026-08-25 docs-cleanup left it the **29 STALE-ARCHIVE ids**
   (most living refs are PROVENANCE names — FU-088 ×51, FU-069 ×26, FU-057 ×20 …), needing the
