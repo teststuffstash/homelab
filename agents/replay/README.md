@@ -203,8 +203,8 @@ is stale, so it cannot drift the way the prose register did.
 | `pr-cap-per-base` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/collision` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |
-| `queued-classification/ready` | actions | - | `agents/coordinator-scan.sh` | - |
 | `queued-classification/held` | actions | - | `agents/coordinator-scan.sh` | - |
+| `queued-classification/ready` | actions | - | `agents/coordinator-scan.sh` | - |
 | `rail-degrade/rail-degrade` | suite | - | `-` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
