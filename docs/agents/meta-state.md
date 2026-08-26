@@ -127,6 +127,12 @@ meant to avoid.)
   (repin to WWID, FU-076's neighbourhood) · stack leftovers: circles#77 ci-red triage,
   oracle-fleet#259 rework per the seat read, circles-iac deploy-bump generator fix before
   the next circles build (circles-iac#71/#68).
+- **⚠ 7d SUBSCRIPTION WINDOW at 0.91 (21:51Z 08-26; gate 0.95, reset ~08-29 21:00Z —
+  SubscriptionWeeklyPoolLow firing):** ~4 points of headroom for THREE DAYS of fleet
+  subscription draw (reviews, coordinators, claude-tier rides). Corpus sessions are the big
+  draw — prefer maintenance-weight sessions until the reset; #984 (a full corpus load + comb)
+  should wait for it or be a deliberate spend call. A latched week routes roles through the
+  chunk-H failover (coordinators stay latched by ruling).
 - **Soaks** (each owned by an FU/issue — this line is only the calendar): retro Mon 08-31
   unattended fire (FU-058 clean acceptance) ·
   minRunners readout · FU-148 first organic environmental-red retry · or-op#34 first
