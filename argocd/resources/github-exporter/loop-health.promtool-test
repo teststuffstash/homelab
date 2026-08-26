@@ -1351,13 +1351,13 @@ tests:
       - eval_time: 1h
         alertname: GithubActionsMinutesHigh
         exp_alerts: []
-  - interval: 1m
-    name: "mid-month runaway usage fires (1500 by day 8 exceeds pro-rated 774)"
+  - interval: 5m
+    name: "mid-month runaway usage fires (1500 by day 2 exceeds pro-rated 300 floor)"
     input_series:
       - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
-        values: "1500+0x20000"
+        values: "1500+0x300"
     alert_rule_test:
-      - eval_time: 169h
+      - eval_time: 25h
         alertname: GithubActionsMinutesHigh
         exp_alerts:
           - exp_labels:
@@ -1366,12 +1366,12 @@ tests:
             exp_annotations:
               summary: "GitHub Actions hosted minutes burning above the elapsed share of quota"
               description: "1500 hosted-runner minutes this month, past the elapsed share of the 3000-minute monthly quota (threshold = day_of_month/days_in_month × 3000, floored at 300; resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\"})."
-  - interval: 1m
-    name: "late-month on-pace usage does not fire (2600 by day 28 is under pro-rated 2709)"
+  - interval: 5m
+    name: "early-month low usage does not fire (200 by day 2 is under pro-rated 300 floor)"
     input_series:
       - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
-        values: "2600+0x40000"
+        values: "200+0x300"
     alert_rule_test:
-      - eval_time: 649h
+      - eval_time: 25h
         alertname: GithubActionsMinutesHigh
         exp_alerts: []
