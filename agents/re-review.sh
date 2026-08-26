@@ -383,26 +383,34 @@ EOF
     continue
   fi
 
+  # >>>REPLAY:re-review-shadow-skip-tag>>>
   # BOT REVIEW R4 #3: Idempotency check BEFORE claude call (with --paginate, fail loud on gh error)
   idem_tag="<!-- re-review:${headsha8}-${snap_ts} -->"
-  # Same set -e pattern as the S3 guard (bot review r5): the failure branch must be reachable.
-  if ! existing_comments_out="$(gh api "/repos/teststuffstash/${snap_project}/issues/${snap_pr}/comments" --paginate --slurp 2>&1)"; then
-    echo "  IDEMPOTENCY-UNKNOWN: gh api comments failed — skipping this snapshot"
-    echo "  $existing_comments_out" >&2
-    continue
-  fi
-  existing_comments="$existing_comments_out"
-  # Flatten slurped pages first — per-page jq yields "0\n0" on >30-comment PRs, which != "0",
-  # silently skipping the snapshot FOREVER (bot review r5, the fail-silent half).
-  tag_exists=$(echo "$existing_comments" | jq -r --arg tag "$idem_tag" '[.[][] | select(.body | contains($tag))] | length' 2>/dev/null || echo "ERR")
-  if [ "$tag_exists" = "ERR" ]; then
-    echo "  IDEMPOTENCY-UNKNOWN: tag-count jq failed — skipping this snapshot"
-    continue
-  fi
+  # Shadow mode (--shadow) NEVER posts to the PR — the idempotency tag exists to prevent
+  # double-posting comments, so there is nothing to guard against. Skip the gate entirely
+  # in shadow mode, allowing --shadow --model <X> to re-review a snapshot that already
+  # carries a live re-review comment from a different model (homelab#945 — the A5 evidence
+  # instrument needs exactly this: divergence measurement against already-landed verdicts).
+  if [ "$SHADOW" -eq 0 ]; then
+    # Same set -e pattern as the S3 guard (bot review r5): the failure branch must be reachable.
+    if ! existing_comments_out="$(gh api "/repos/teststuffstash/${snap_project}/issues/${snap_pr}/comments" --paginate --slurp 2>&1)"; then
+      echo "  IDEMPOTENCY-UNKNOWN: gh api comments failed — skipping this snapshot"
+      echo "  $existing_comments_out" >&2
+      continue
+    fi
+    existing_comments="$existing_comments_out"
+    # Flatten slurped pages first — per-page jq yields "0\n0" on >30-comment PRs, which != "0",
+    # silently skipping the snapshot FOREVER (bot review r5, the fail-silent half).
+    tag_exists=$(echo "$existing_comments" | jq -r --arg tag "$idem_tag" '[.[][] | select(.body | contains($tag))] | length' 2>/dev/null || echo "ERR")
+    if [ "$tag_exists" = "ERR" ]; then
+      echo "  IDEMPOTENCY-UNKNOWN: tag-count jq failed — skipping this snapshot"
+      continue
+    fi
 
-  if [ "$tag_exists" != "0" ]; then
-    echo "  SKIP: comment with tag already exists"
-    continue
+    if [ "$tag_exists" != "0" ]; then
+      echo "  SKIP: comment with tag already exists"
+      continue
+    fi
   fi
 
   # Step 6: Invoke claude for re-review
@@ -518,6 +526,7 @@ EOF
       echo "  POST-FAILED: gh pr comment returned non-zero — snapshot processed but comment not posted" >&2
     fi
   fi
+  # <<<REPLAY:re-review-shadow-skip-tag<<<
 
   # Print summary line
   echo ""
