@@ -1,15 +1,16 @@
 # homelab#892 — the EMITTER half of the attention layer v1.
 #
-# CONDITION UNDER REPLAY. The item_class_push function sends `agent_item_class` and
-# `agent_item_class_since_timestamp_seconds` series to the pushgateway (job `agent_board`,
-# grouped per namespace). The push is per (repo, item, class, who) tuple, and the whole
-# namespace group is replaced per tick.
+# CONDITION UNDER REPLAY. The item_class_push and item_class_flush functions implement
+# batched pushgateway updates for `agent_item_class` and `agent_item_class_since_timestamp_seconds`
+# series (job `agent_board`, grouped per namespace).
 #
-# THE CONTRACT:
-#   1. ONE push per tuple, to the NAMESPACE-keyed group (`…/job/agent_board/namespace/…`)
-#      with the labels as metric labels.
+# THE CONTRACT (as restructured per #913):
+#   1. item_class_push accumulates rows in ITEM_CLASS_ROWS; item_class_flush does ONE curl POST
+#      per (tick, namespace) to the NAMESPACE-keyed group (`…/job/agent_board/namespace/…`),
+#      replacing all series of these metrics in that group.
 #   2. `agent_item_class` is a gauge set to 1.
-#   3. `agent_item_class_since_timestamp_seconds` is a gauge set to the current epoch.
+#   3. `agent_item_class_since_timestamp_seconds` is a gauge set to the FIRST-transition epoch
+#      (preserved from prior ticks if the item remains in the same class; re-stamped on entry).
 #   4. Every degenerate path (no gateway, no pod identity) returns 0 silently.
 name: item-class
 mode: actions
