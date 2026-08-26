@@ -40,7 +40,13 @@ meant to avoid.)
   the OR credential). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
   on the opencode draw; the edge dies when #990 closes. If the haiku ride terminals without a
   PR, it lands in the FU-143 ⛔ hold again — next session checks the board. Two 4h burns today
-  were FU-187's class (quiet stall, reap skips finalize — tracker extended with the reap half). **NEXT PHASE = FU-186
+  were FU-187's class (quiet stall, reap skips finalize — tracker extended with the reap half).
+  **MCR mirror = PR#992** (armed; operator ruling on the sleep#123 Playwright thread —
+  additional registries are inevitable): mcr.microsoft.com pull-through @ 192.168.40.31, CNP
+  leg + env card REGISTRY_MIRROR_MCR wired. AFTER it merges+syncs: comment on sleep#123 that
+  the MS Playwright image is now pullable via the mirror (pin the image tag to the pip
+  playwright version) — the nix-chromium route may land first (r2 riding); the image is the
+  redirect if the browser-launch grind continues. **NEXT PHASE = FU-186
   (ADR-115, ruled 2026-08-26):** step 1 the `provider_policy` knob + no-pin/Exacto flip for
   cheap coding, step 2 the 0731 matrix run (intake mode + `@` arms are BUILT, PR#963 —
   arms: default-pin / no-pin-exacto / @deepseek / @relace control, rung-2 task, both
