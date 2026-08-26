@@ -189,6 +189,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/opencode` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/re-review-shadow-skip-tag` | actions | - | `agents/re-review.sh` | - |
 | `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -672,3 +673,10 @@ Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the
   `podSpecPatch` — no clause reads it, no branch turns on it, and the diff emits no action
   stream. Evidence rather than assertion — the full suite stays green on the change with every
   `expected/actions.txt` untouched.
+- **homelab#974 (2026-08-26, PR #1000)** — `limits.memory` raised from `512Mi` to `1Gi` in
+  `agents/coordinator/coordinate-argo.yaml` (the `coordinate` WorkflowTemplate's main
+  container). A container resource declaration to the kubelet/scheduler — no clause reads it,
+  no branch turns on it, and the diff emits no action stream. Same class as the #103 / #867
+  placement-and-resources entries: the harness asserts a clause's `gh`/`kubectl` calls, and
+  this diff emits none. Evidence rather than assertion — the full suite stays green on the
+  change with every `expected/actions.txt` untouched.
