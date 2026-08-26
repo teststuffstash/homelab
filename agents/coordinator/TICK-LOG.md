@@ -5413,3 +5413,13 @@ first live ADR-110 maintenance session before the ADR existed.
   Pointers converged: github-setup.md recipe → the script; garage.md copy-holder table →
   pointer; new-stack.sh step G → add-a-row + run. Value-in-tofu stays rejected (second
   home/state copy — the documented ruling); the script is the middle the operator asked for.
+
+## 2026-08-26 ~09:30Z — copied-credential rotation CLOSED (acceptance green)
+
+- Operator ran `devbox run github-secrets-sync` (3/3 pairs set) + the oracle-fleet rerun:
+  **e2e=success ci=success** (verified isolated). The 07:16 allure denial thread is closed
+  end-to-end: root cause (stale GitHub-secret copies of re-created Garage keys) → mechanism
+  (github-secrets-sync, the mapping as code) → rotation → green. ERT_S3_READER_* and circles
+  SPECS_S3_* prove organically (next release-corpus run / next specs push, WEB-03 belt behind
+  the latter). Meta-state row cleared. #947 merged + dedup quickfix (7d7c0f79) closed the
+  r1 F1 batch item; #946←#945 edge wired earlier this hour.
