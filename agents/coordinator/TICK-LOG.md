@@ -5437,3 +5437,34 @@ first live ADR-110 maintenance session before the ADR existed.
   merge-path re-scoping — operator-gated. Recorded on #829 so no fix round designs the
   priority tweak as the whole fix. No new FU (prior-art grep: nothing tracks per-base;
   the decision, if taken, lands as an ADR + rides the next platform Goal / S5+).
+
+## 2026-08-26 ~10:30Z — S8 shaped: merge lanes as ONE piece (operator direction)
+
+- Operator: the (repo, base) parallelism + banked v1.3 theme branches "need to be a bigger
+  piece done together" — how: stint or Goal? Ruled STINT (S8 on the work map): the
+  deliverables are the goal lane's OWN machinery (self-reference — a Goal rewriting the lanes
+  it rides), G-A's day-1 retro already measured platform-Goals-degenerate-to-stints (the tax
+  v1.3 removes), and S7 is the precedent. Shape: ADR pair in one sitting at the stint head →
+  six originals (reflex/updater/scan per-base lanes + theme mechanics + FSM/doc currency +
+  per-lane famine gauges) → the DOGFOOD outside the stint (first new platform Goal runs a
+  theme; acceptance = per-lane famine numbers + codeowner-tax-per-theme vs G-A baseline).
+  Sequenced after S5. #829 de-queued into S8 (absorption at authoring); #828 stays queued
+  (independent). Parent authored at the last moment per the map's own rule.
+
+## 2026-08-26 ~11:00Z — session wind-down (the cleanup-before-S5 session, full arc)
+
+- **The day, compressed:** board 52 issues/6 PRs → triage drained (11 closes incl. #500's
+  already-shipped fix, 9 queues to the machine lane, dedups, the #745 un-park read + #762/#420
+  stint closes) · ADR-111 cutover EXECUTED end-to-end (#745 closed; github-secrets-sync born
+  from its allure fallout — the copied-credential class now code) · grafana → CNPG postgres
+  VERIFIED (0 SQLITE_BUSY; PR#948) · hp-01 root disk out of Longhorn (separation, per the
+  operator's both-disks-are-cheap correction) · Unbound cached-SERVFAIL incident (restart,
+  cleared) · ADR-097 addendum 3 shipped (#944; sentinel-only compelled class, content-keyed)
+  · retro rounds now bind as stint-kind containers (#949) · #946←#945 edge wired · the
+  (repo, base) reframe recorded (#829) and packaged with v1.3 themes as **S8 on the work map**
+  · gate reads: #939/#941/#942/#943/#947(+dedup quickfix)/#950/#951 merged-or-approved,
+  #952 read-done (approve on green — handover).
+- **Wind-down ritual:** transcripts synced (4 files), meta-state rewritten as the S5 handover
+  (park-drain opening act + the stint + the name-anchor ruling input), no persistent monitors
+  were armed this session (interactive throughout), background drains die with the session —
+  the #952 approval is the one carried command.
