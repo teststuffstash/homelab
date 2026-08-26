@@ -20,7 +20,11 @@ meant to avoid.)
   registers + FU-160 spike) → **#984**. **#982 MERGED as PR#999 (20:55Z)**: ADR-117 §-code
   heading anchors + docs-graph-lint check #4 SHADOW (ANCHOR-UNRESOLVED/-AMBIGUOUS; flip to
   FAIL after a recorded clean run — the #984 comb is the natural flip read).
-  **NEXT: #983 (doc-heat trimming pass) + #984 (deep comb) — both UNBLOCKED, sitting-scale.** **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
+  **#983 MERGED as PR#1001 (21:38Z)**: 3 heat-cited trims (−214 lines from the corpus hot set,
+  incl. an ADR-111 staleness heat found that lints can't) + settle-test run 1 recorded in the
+  doc-heat spike — ≥3 bar MET; **the FU-164 promote-vs-close call is the operator's** (serve
+  the report + wire into docs-cleanup, or close the spike). **NEXT: #984 (deep comb) — the
+  LAST original, fresh-session-scale; it doubles as check #4's flip read.** **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
   UNPIN at its merge. Still-queued codeowner issues stand: #928 #929 #932 #933 #937 #938 #888
   #456 #110, agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's
   merge lets G-B assemble → assembly PR → codeowner tax → probe-platform, FU-102); **#946 is
@@ -36,8 +40,9 @@ meant to avoid.)
   WEDGED pre-LLM — opencode's un-suppressible SDK-init fetches have no timeout under oracle's
   enforce:true (filed **#990**, queued; durable workaround = **PR#991**: enforced-egress rides
   never DEFAULT to opencode, replay-pinned, in review); the goose×flash hand-ride then struck
-  **http-401-storm** (the OR key 401ed mid-run — single sighting, watch for recurrence on the
-  next ordinary oracle dispatch); the operator hand-dispatch **claude/haiku r1 DELIVERED:
+  **http-401-storm** (recurrence CONFIRMED — 3× in ~3h, machine-filed as **#1004** via the
+  fleet-fault rule; seat triage 21:47Z: account clean at $10.58/latch-0 → per-session-key,
+  the mint-path/PATCH family — correlate strike times vs key mint times, comment on the issue); the operator hand-dispatch **claude/haiku r1 DELIVERED:
   oracle-fleet PR#277** (opened 2026-08-26 19:00Z, #272 → `agent/review`, riding the loop —
   no FU-143 hold). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
   on the opencode draw; the edge dies when #990 closes. **⚠ FU-188 (found on #277's review,
@@ -122,6 +127,12 @@ meant to avoid.)
   (repin to WWID, FU-076's neighbourhood) · stack leftovers: circles#77 ci-red triage,
   oracle-fleet#259 rework per the seat read, circles-iac deploy-bump generator fix before
   the next circles build (circles-iac#71/#68).
+- **⚠ 7d SUBSCRIPTION WINDOW at 0.91 (21:51Z 08-26; gate 0.95, reset ~08-29 21:00Z —
+  SubscriptionWeeklyPoolLow firing):** ~4 points of headroom for THREE DAYS of fleet
+  subscription draw (reviews, coordinators, claude-tier rides). Corpus sessions are the big
+  draw — prefer maintenance-weight sessions until the reset; #984 (a full corpus load + comb)
+  should wait for it or be a deliberate spend call. A latched week routes roles through the
+  chunk-H failover (coordinators stay latched by ruling).
 - **Soaks** (each owned by an FU/issue — this line is only the calendar): retro Mon 08-31
   unattended fire (FU-058 clean acceptance) ·
   minRunners readout · FU-148 first organic environmental-red retry · or-op#34 first

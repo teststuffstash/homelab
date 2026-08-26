@@ -486,93 +486,25 @@ reconciling invariant: **an issue closes when its work lands on the branch its `
 declares as its definition of done** — master for an ordinary stack (#32: don't close early),
 `goal/**` for a goal child (here: close on the goal-branch merge). One rule, two instantiations.
 
-**The implementation contract** (the tracker points here; assembled 2026-08-06, walked against the
-live clauses — ship 1–6 as ONE unit, before circles#29's first child merges. **Points 1–6 shipped
-2026-08-06, `e66b421`** — scan + play, fixture-proven, live-scan clean; the same commit revived
-the changes-requested clause, dead since `671a053` scoped it on an unfetched `author` field.
-Point 7, the merge doorbell, remains):
+**The implementation contract SHIPPED 2026-08-06** (`e66b421`, points 1–6 as one unit — scan +
+play, fixture-proven; the merge doorbell followed as point 7): C6 widened and `Base:`-keyed
+(`goal/**` only — "any non-default base" recreates #32's early close), C4/C5 excluding the same
+set in the same commit, goal-branch verification, `Base:`-inheriting harvest, queued-at-harvest
+sprouts, and a descendants-not-children `goal-review` read. The guard set and its incident
+history live as the [IL-T06/IL-T08](issue-lifecycle-fsm.md) anchors; the same week's two soak
+failures left the lane's two standing lessons:
 
-1. **C6 widened AND `Base:`-keyed**: also match an OPEN issue with a non-terminal `agent/*` label
-   whose referencing PR MERGED into the base its own `Base:` line declares — `goal/**` only,
-   NEVER "any non-default base" (that recreates #32's early close on ordinary stacked PRs, and it
-   is the same doctrine as arming: the `goal/` prefix is what carries the ruleset).
-2. **C4/C5 excludes the same set in the same commit.** Its abandoned-probe reads OPEN PRs only, so
-   a merged-into-goal PR looks abandoned; `c4c5-redispatch` OUTRANKS `merged-closeout` in the
-   dispatch priority, so without the exclusion the widened C6 unit is starved every scan while
-   merged work gets re-ridden.
-3. **The play verifies against the GOAL branch** (not master CI, not ArgoCD) and runs the FULL
-   closeout: flip, close, harvest. The interim hand-close (`agent/done` + close) suppresses C6
-   entirely (`agent/done` is excluded from its predicate) — #22/#23's review `Follow-ups:` were
-   never harvested; that silent loss is part of what the fix removes.
-4. **Harvest copies `Base:` from the originating child** — a goal-lane sprout's code exists only
-   on the goal branch. On the goal's close/merge, retarget surviving sprouts to master (branch
-   auto-delete kills their base).
-5. **Goal-lane sprouts are QUEUED at harvest**, not inert — next section.
-6. **`goal-review` reads DESCENDANTS, not direct children** — the same bug-shape the budget gate
-   already fixed in `agent-session.sh` (direct children [14,15] vs actual descendants
-   [14,15,17,18,21]): a sprout at depth 2 closing must re-fire the predicate, and "goal met" must
-   see open sprouts in the subtree.
-7. **Only after 1–6**: the `pull_request: closed && merged` workflow POSTing `/coordinate`
-   (`383f5bb`) — before C6 is widened, a merge notification has nothing to trigger.
-
-#### ⛔ The soak FAILED on its first child (2026-08-06) — the input, not the logic
-
-circles#36 merged into `goal/29-p0-complete` at 09:27:44 **citing only its sibling `#31`, never its
-own issue `#30`**. Point 1 matches a merged PR into the declared base **whose body cites the
-issue**, so `ghit=0`, #30 never entered `c6g`, and point 2's exclusion — which keys on that same set
-— had nothing to exclude. C4/C5 then read `agent/in-progress` + no open PR as abandoned and
-dispatched a ride onto already-merged work. The point-7 doorbell fired correctly throughout.
-
-**Points 1–7 are implemented correctly. The assumption they rest on is that a PR names its issue,
-and nothing enforced it.** On a `goal/**` base the closing keyword is inert, so nothing even
-motivates the model to write one. That is `agent-runtime#32`, open since before this run and
-correctly predicting the cost — *"duplicate dispatch on a goal issue costs a whole ride"*. FU-143's
-goal lane had an **undeclared dependency** on it.
-
-⚠ **Nothing can recover the link after the fact.** GitHub holds no relation between #30 and #36 —
-no closing keyword, no bare mention, therefore no cross-reference event either. Do not try to
-reconstruct it from branch names (`fix/p0-bake-config-model` carries no number) or from timing
-(two children can merge in one window).
-
-**So the scan stopped guessing** (`12e7fcf`): a goal-based `agent/in-progress` issue with no open PR
-and no citing merged PR is **held out of C4/C5 and reported** under ⛔, never re-dispatched. The
-asymmetry is what decides it — holding costs one manual close; guessing costs a duplicate ARMED PR
-onto a protected goal branch that auto-merges. Ordinary issues are untouched.
-
-**That is containment, not the fix.** The fix is `agent-runtime#34` (finalize prepends
-`Implements #<n>` when the body does not already match) and it only takes effect once the
-`agent-base` image is rebuilt and `AGENT_BASE_IMAGE` re-pinned in homelab. Re-soak after that.
-
-#### ⛔ The SAME citation then fired C6 the other way (2026-08-06, ~10:57Z) — `e704c36`
-
-One bad citation did **both halves of the damage**, and the second half is the dangerous one.
-Because #36's body says *"that's the sibling issue (#31)"*, the moment **#31** was un-parked and
-re-queued, C6's goal-child leg evaluated `ghit>0` (a merged PR into `goal/29-p0-complete` "citing"
-#31) and `gref=0` (its ride had not opened a PR yet) — and dispatched **`merged-closeout` for #31
-while #31's own ride was Running**. Had it completed, it would have flipped `agent/done`, CLOSED
-the issue, fired `goal-review`, and unblocked `#32` → `#18`/`#19` on **work that does not exist**,
-while the live ride's PR arrived orphaned against a closed issue.
-
-**Root cause: a bare `#<n>` cannot distinguish "the PR that IMPLEMENTS this issue" from "a PR that
-NAMES it as a sibling seam" — and #29's decomposition RULES REQUIRE seams pinned naming the
-producing/consuming sibling.** So this is systematic for every goal child, not a fluke of one
-model's phrasing. The hazard was predicted in `meta-state.md` for the `gref` (open-PR) side, where
-the cost is a starved closeout; nobody looked at the `ghit` (merged-PR) side, where the cost is a
-false completion. **When a probe can err in two directions, price both — the asymmetry decides the
-predicate.**
-
-Fixed by requiring a **strong link** — `implements|closes|fixes|resolves` + `#<n>` — exactly the
-line `agent-runtime#34` makes `finalize` guarantee, so the predicate MEETS that fix rather than
-racing it. Until that image ships nothing matches here and children are hand-closed (unchanged from
-the containment above), and every held child is now REPORTED under ⛔ rather than silently dropped.
-
-⚠ **The `gref` side is deliberately still a bare mention.** Its failure direction is *hold*, which
-is the safe one. Narrowing both at once during a live soak would change two variables under test.
-
-⚠ **The item session's own live-state re-read caught the stale dispatch** (*"Exiting clean, no
-writes made"* — the FU-121 belt), on both the 10:57Z and 11:00Z ticks. That belt is an LLM
-judgement, not a guarantee, and it burns a session per firing. **A belt is not a guard**: it is
-evidence the guard was missing, never a reason to skip building it.
+- **A bare `#<n>` cannot distinguish "implements" from "names a sibling seam"** — circles#36
+  cited only its sibling, which first STARVED the closeout (`ghit=0`, C4/C5 re-rode merged work)
+  and then fired C6 falsely the other way (a `merged-closeout` dispatched at a RIDING issue —
+  a false completion, the dangerous direction). The predicate now requires a STRONG link
+  (`implements|closes|fixes|resolves #n` — exactly what agent-runtime#34's finalize
+  guarantees), while the `gref` (open-PR) side deliberately stays a bare mention: its failure
+  direction is *hold*, the safe one. **When a probe can err in two directions, price both —
+  the asymmetry decides the predicate.**
+- **A belt is not a guard.** The item session's live-state re-read caught both stale dispatches
+  ("exiting clean, no writes made") — an LLM judgement that burns a session per firing, which
+  is evidence the guard was missing, never a reason to skip building it.
 
 ### The goal lane owns its sprouts — no selfQueue (operator ruling 2026-08-06)
 
@@ -596,10 +528,6 @@ at the merge boundary.
 
 ### Who updates what when a branch moves — the two-hop cascade
 
-⚠ The original note here said *"the updater needed no change — a stacked PR is excluded twice over,
-neither based on master nor armed."* **Half of that is now false**: since 2026-08-05 a `goal/**`
-child IS armed. Corrected:
-
 ```
 master
  └── goal/<issue>-<slug>        PR: goal → master      draft, NEVER armed
@@ -607,32 +535,18 @@ master
        └── fix/<slug>           PR: fix  → goal        armed
 ```
 
-**A commit on master does not reach the children.** It makes only the *goal → master* PR BEHIND;
-the children's base has not moved. The children go BEHIND only when the GOAL BRANCH itself moves —
-which happens when a sibling merges into it, or when someone updates it from master.
-
-| hop | which PR | scheduled `update-pr-branch.yml` | the scan's FU-124 nudge |
-|---|---|---|---|
-| master → goal | `goal → master` | ✗ requires `require_auto_merge_enabled`; this PR is never armed | ✗ same armed requirement |
-| goal → fix | `fix → goal` | ✗ hardcoded `base: master` (the action takes a literal branch, not a pattern) | ✅ **no base filter — covers any armed BEHIND PR** |
-
-So **the top hop is manual and the bottom hop is automatic.** Updating the goal branch from master
-is a human act (`gh api -X PUT repos/…/pulls/<goal-pr>/update-branch`), which is defensible — master
-churn should not continuously rebase an integration branch under review — but it is a real step, and
-forgetting it is how a base-side fix fails to reach the children. It bit exactly once: the CI-trigger
-fix landed on master and the children could not see it until the goal branch was refreshed, because
-`pull_request` evaluates the workflow from the merge of head into BASE.
-
-⚠ The bottom hop only works because the FU-124 nudge was REPAIRED on 2026-08-05: it selected on
-`mergeStateStatus`, which was never in its `--json` field list, so jq read null and it had never
-fired since it was written. Do not remove it assuming the scheduled workflow covers this — the
-scheduled one cannot, and its cadence differs anyway (`*/15` for master vs `*/30` for the scan).
-
-**The coupling to remember:** a required check on a branch pattern is only real if the workflow
-producing it TRIGGERS on that pattern. Requiring `ci` on `goal/**` while the workflow said
-`branches: [master]` left an APPROVED, armed PR permanently BLOCKED on a check that could never
-report. The ruleset and the trigger have to move together — and the trigger has to reach the goal
-branch, not just master.
+**A commit on master does not reach the children** — it makes only the *goal → master* PR
+BEHIND; the children go BEHIND only when the GOAL BRANCH itself moves (a sibling merges into
+it, or someone updates it from master). The **top hop is manual** (`gh api -X PUT
+repos/…/pulls/<goal-pr>/update-branch` — defensible: master churn should not continuously
+rebase an integration branch under review, but forgetting it is how a base-side fix fails to
+reach the children, since `pull_request` evaluates the workflow from the merge of head into
+BASE). The **bottom hop is automatic**: the in-cluster updater (ADR-111,
+[merge-path.md](merge-path.md)) selects on armed + BEHIND with no base filter, so armed
+`fix → goal` children ride it like any PR. The coupling to remember: **a required check on a
+branch pattern is only real if the workflow producing it TRIGGERS on that pattern** —
+requiring `ci` on `goal/**` while the workflow said `branches: [master]` left an approved,
+armed PR permanently BLOCKED on a check that could never report.
 
 ## Dependencies: native `blockedBy` is the only reader (FU-111 — retired the body line 2026-08-07)
 
