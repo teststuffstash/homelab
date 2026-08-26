@@ -188,6 +188,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/opencode` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/re-review-shadow-skip-tag` | actions | - | `agents/re-review.sh` | - |
 | `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
