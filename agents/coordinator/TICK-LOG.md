@@ -5477,3 +5477,38 @@ first live ADR-110 maintenance session before the ADR existed.
   carried #952 verdict (codeowner approve → auto-merge; #867 closed), verified #951
   auto-merge (#914 closed), cleared both `agent/error` labels. #953 stays queued for the
   gate-behaviour leg only (scope comment left on the issue); workflows leg operator-lane.
+
+## 2026-08-26 ~14:20Z — oracle goes CHAINLESS; model-health v2; the 0731 read (session arc)
+
+- **Operator rulings:** NO oracle deny — the stack goes chainless (the resolution class is
+  routing, not per-stack denies); **0731 classification = PLATFORM debt** — the pending matrix
+  run (all harnesses × a provider spread + the `:exacto` variant) re-admits it with evidence;
+  workers-the-platform-provides is the frame.
+- **The 0731 read, evidence assembled:** lifetime 4 goose rides — 1 clean (oracle#260,
+  2026-08-19: the platform deny's REVISIT condition was MET and nothing surfaced it) / 3
+  goose-32602 (sleep#123 08-17, oracle#271+#272 08-26) vs plain flash 101/1 on the same arm.
+  Provider join (router /generation harvest × the operator's AutoExacto upload): ~30% of 0731
+  generations rode bottom-quartile-quality providers (OpenInference GPQA 68.7%, DigitalOcean
+  TAU-Bench 58.4%); DeepSeek first-party (top quality, cheapest effective input, 94.7% cache)
+  served ZERO — the M4 pin is quality-blind by design. Upstream: per-provider tool-call error
+  rates are website-only (no API/MCP surface — probed); the signal is consumable blind via
+  Auto Exacto / `:exacto` (model-routing.md §API surface gained the probed rows, PR#959).
+- **Executed:** oracle-iac#387 (routerMode authoritative, chain deleted; one dup-key fixup —
+  the claim already declared routerMode) + sleep-iac#76 (0731→plain flash primary; model_tiers
+  cannot drop a chained model — the router-self-test invariant found the coupling) +
+  homelab#960 (mirrors + 0731 out of model_tiers + the registration-lint update-pr-branch
+  caller requirement retired — ADR-111 residue that only redded authenticated jail runs).
+  Claim synced 13:59Z; **first chainless oracle ride = #272-r1 on routed
+  deepseek/deepseek-v4-flash (openrouter rail)**.
+- **#272 unstick (operator catch):** the strike left the FU-143 goal-child hold (worker
+  terminal + no PR + PR#275 sibling-seam mention = undecidable, held by design). Seat verify
+  (nothing banked) → hand re-queue → doorbell → routed re-ride.
+- **Model-health dashboard v2 (PR#958 + targeted tofu destroy):** windowed pivot (push_time
+  join — the time picker now drives every panel), evidence-trail table (GitHub links),
+  served-provider split, strikes, rail costs; moved to the ConfigMap-beside-collector vehicle,
+  same uid. The old three-panel lifetime v1 could not answer "how many 0731 strikes today".
+- **Codeowner drain (ADR-110 reads):** #954/#955/#956/#957 read + merged (small class);
+  #955's overstating marker-reader comment quickfixed on master post-merge. **#915** (operator
+  nudge): rounds were spent — seat-authored the one remaining blocker (item_class_flush before
+  the FU-146 hard exit, pinned via recording stub; 279/279 replays) onto the branch; the
+  operator's own 20:37Z CHANGES_REQUESTED is the final gate.
