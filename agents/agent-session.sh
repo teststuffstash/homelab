@@ -1809,13 +1809,11 @@ ${DIND_CONTAINER}
           value: "1"
         - name: DEVBOX_DISABLE_TELEMETRY
           value: "1"
-        # homelab#792: the pinned build does not expose a separate models-fetch knob; the CNP Policy
-        # DENY to models.opencode.ai is the backstop (add a dedicated env var here if one appears).
-        # opencode CLI's own phone-home (homelab#456, 2026-08-17): the auto-update check
-        # (registry.npmjs.org, its npm-distributed updater) + model-registry fetch
-        # (models.opencode.ai) were the openrouter-operator POLICY_DENIED pair — the image bundles
-        # opencode for every harness, so kill at the tool for ALL rides, not the allowlist, matching
-        # the devbox/uv precedents above (undocumented but functional — anomalyco/opencode#1793).
+        # opencode-1.18.18: SDK init fetches to models.opencode.ai + registry.npmjs.org are
+        # not suppressible on the pinned build (tested 2026-08-26: no knob found). OPENCODE_DISABLE_AUTOUPDATE
+        # silences the periodic autoupdate check only, not one-time SDK init fetches. The CNP Policy DENY
+        # to models.opencode.ai + registry.npmjs.org is the intended backstop (homelab#792, #456 r2).
+        # These are expected drops per PR #503 doctrine (kill at tool, not extraFQDNs).
         - name: OPENCODE_DISABLE_AUTOUPDATE
           value: "1"
         # 2026-08-08 (operator + the homelab#107 21:35Z triage, same conclusion): uv with an
