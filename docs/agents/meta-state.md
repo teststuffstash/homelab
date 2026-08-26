@@ -22,7 +22,7 @@ meant to avoid.)
   merges** (blocked-by edge wired; the 🔓 clause surfaces it). **PR#925** (fstrim): sentinel
   green since the node-maintenance baseline — confirm it merged via the reflex. **#915**: fix
   round riding the sentinel-coverage ask; the operator's own 20:37Z review is the final gate.
-  **Then the stint: corpus diet** — doc-heat + measured trimming (FU-164 the instrument),
+  **Then the [stint](chainless-redesign.md): corpus diet** — doc-heat + measured trimming (FU-164 the instrument),
   post-closure by design. The 2026-08-25 docs-cleanup left it the **29 STALE-ARCHIVE ids**
   (most living refs are PROVENANCE names — FU-088 ×51, FU-069 ×26, FU-057 ×20 …), needing the
   **name-anchor ruling** (operator: decide IN the stint) before any mass edit; plus the deep
