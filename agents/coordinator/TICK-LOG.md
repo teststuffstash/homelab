@@ -5437,3 +5437,16 @@ first live ADR-110 maintenance session before the ADR existed.
   merge-path re-scoping — operator-gated. Recorded on #829 so no fix round designs the
   priority tweak as the whole fix. No new FU (prior-art grep: nothing tracks per-base;
   the decision, if taken, lands as an ADR + rides the next platform Goal / S5+).
+
+## 2026-08-26 ~10:30Z — S8 shaped: merge lanes as ONE piece (operator direction)
+
+- Operator: the (repo, base) parallelism + banked v1.3 theme branches "need to be a bigger
+  piece done together" — how: stint or Goal? Ruled STINT (S8 on the work map): the
+  deliverables are the goal lane's OWN machinery (self-reference — a Goal rewriting the lanes
+  it rides), G-A's day-1 retro already measured platform-Goals-degenerate-to-stints (the tax
+  v1.3 removes), and S7 is the precedent. Shape: ADR pair in one sitting at the stint head →
+  six originals (reflex/updater/scan per-base lanes + theme mechanics + FSM/doc currency +
+  per-lane famine gauges) → the DOGFOOD outside the stint (first new platform Goal runs a
+  theme; acceptance = per-lane famine numbers + codeowner-tax-per-theme vs G-A baseline).
+  Sequenced after S5. #829 de-queued into S8 (absorption at authoring); #828 stays queued
+  (independent). Parent authored at the last moment per the map's own rule.
