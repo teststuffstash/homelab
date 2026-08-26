@@ -5589,3 +5589,19 @@ first live ADR-110 maintenance session before the ADR existed.
 - **Next: the S5 corpus-diet stint proper** (operator go: "continue with the corpus cleanup
   stint") — parent + originals authored this session; name-anchor ruling executes before any
   mass edit.
+
+## 2026-08-26 ~19:00Z — S5 original 1 ships; wind-down (ctx 502k, the one-stint rule)
+
+- **Stint #979 authored** (originals #981–#984, lineage + blocked-by edges wired). **#981
+  SHIPPED same session as PR#985** (armed): ADR-116 — FU ids are stable coordinates, provenance
+  refs never scrub; TODO shapes = `FU: FU-NNN` + `Tracked by` only (colon-form measured
+  ambiguous against live usage — `# FU-085: this run may have opened…` is provenance); DANGLING
+  re-scoped to ≥ Next-free; TODO-RETIRED fails / TODO-ARCHIVED warns, both probe-tested red on
+  a staged synthetic; the 29-entry expiry sweep in the same PR (measured FIRST: zero TODO-shaped
+  refs among the 29 — the old scrub-all convention would have been pure provenance destruction).
+  New warn's first catch: 5 live stale pointers (FSM gap registers at archived
+  FU-068/142/133/143, spike Tracked-by at FU-160) → #984's list.
+- **Wind-down state:** #964 approved CLEAN (merging), #976/#985 armed on the updater+reflex
+  path, #963/#967 re-reviewing on the pushed rounds, sleep #123-r1 chainless ride Running.
+  Everything on armed machinery; nothing held by the seat. Fresh session picks up #982 (meta-state
+  row rewritten).
