@@ -216,14 +216,12 @@ and self-heal when a key is re-created; a **GitHub Actions secret holds a copy**
 reconcile can reach — after the 08-24 rebuild the copy authenticated against a re-created key
 world and got `Insufficient permissions` on every write, while the live `allure-reports-writer`
 credentials worked perfectly through the same endpoint (probed). GitHub secrets are write-only,
-so the fix is always rotation, host-side (`gh secret set`, the jail PAT cannot write repo
-secrets). The known copy-holders — re-verify this list when a workflow adds an `*_S3_*` secret:
-
-| repo | secrets | Garage key |
-|---|---|---|
-| oracle-fleet | `ALLURE_S3_ACCESS_KEY_ID/SECRET_ACCESS_KEY` | `allure-reports-writer` |
-| oracle-fleet | `ERT_S3_READER_ACCESS_KEY_ID/SECRET_ACCESS_KEY` | `ert-snapshots-reader` |
-| circles | `SPECS_S3_ACCESS_KEY_ID/SECRET_ACCESS_KEY` | `circles-specs-writer` |
+so the fix is always rotation, host-side. **The copy-holder mapping lives as CODE in
+[`scripts/github-secrets-sync.sh`](../scripts/github-secrets-sync.sh)** (one home — never
+re-derive it): after any metadata restore, `devbox run github-secrets-sync` on the host
+re-syncs every mapped copy from the connection Secrets;
+`devbox run github-secrets-sync -- --check` (jail-safe) inventories the mapping and probes the
+cluster side.
 
 **When there is no snapshot and no backup covering the window**, the objects are still recoverable:
 blocks are content-addressed and only a *manual* `garage repair blocks` reaps orphans, and LMDB's
