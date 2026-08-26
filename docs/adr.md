@@ -1222,6 +1222,20 @@ declarations plus the regenerated view merge-path-lint reds when stale). Evidenc
 ride was compelled outside its `Touches:` by exactly these two, one day after the first
 addendum. Depth-guarded — nested suite scripts (`agents/coordinator/*-test.sh`) and non-fsm
 docs stay ordinary declared surfaces. One predicate (`fp_replay_exempt`), both consumers.
+**Addendum 3 — source-side REPLAY sentinels, content-keyed (2026-08-26, homelab#944, seat
+ruling under the same rationale):** the fourth compelled class cannot be path-keyed — the
+harness extractor is sentinel-only, so pinning a block of ANY script compels planting
+`# >>>REPLAY:<name>>>>`/`# <<<REPLAY:<name><<<` markers in that script, and a path class
+(`agents/*.sh`) would exempt real edits to the workers' own governors. So this class is
+CONTENT-verified: `sentinel_only_paths` (`touches-check.sh`) classifies from the PR diff —
+a file qualifies iff its entire +/- delta is marker comments — and `touches_check` skips
+qualifying files (reviewer-side only; callers without diff access stay strict). Evidence:
+PR#941's 4-comment-line escape blocked a round the ratchet itself had compelled, resolved
+only by per-issue `Touches:` amendment ceremony. **Considered:** declaration-side rule
+("a governance-path pin must declare the file at authoring") — rejected as the same ceremony
+addendum 1 dissolved, invisible until a round is already blocked. Residual (accepted, same
+disposition as addenda 1–2): a marker-shaped line inside a heredoc/string is content — the
+rubric's ordinary diff read is the guard.
 
 ### ADR-098 — Recipe validity is a platform gate, not a stack CI check
 

@@ -3,6 +3,7 @@
 
 ISSUE="123"
 REPO_SLUG="teststuffstash/homelab"
+PR_NUMBER="123"
 # PR diff includes governance and non-governance paths, some inside and some outside declared
 # Touches. The agents/replay/ path is DELIBERATE and must NOT appear in the expected stream:
 # since the ADR-097 addendum (2026-08-18) the replay tree is exempt from escape computation —
@@ -26,6 +27,11 @@ gh() {
     *"--jq"*".body"*)
       # Issue body with Touches: line declaring only argocd/ and docs/
       printf 'This issue fixes ADR-097.\n\nTouches: argocd/**, docs/**\n'
+      return 0
+      ;;
+    *"pr diff"*)
+      # #944: the sentinel-only classifier fetches the PR diff; this fixture's condition has
+      # no sentinel-only files, so an empty diff keeps the pinned behaviour unchanged.
       return 0
       ;;
     *)

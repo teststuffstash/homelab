@@ -2,6 +2,7 @@
 
 ISSUE="124"
 REPO_SLUG="teststuffstash/homelab"
+PR_NUMBER="123"
 # PR diff includes only paths covered by declared Touches
 CHANGED=$(cat <<'EOF'
 argocd/resources/app1.yaml
@@ -19,6 +20,11 @@ gh() {
     *"--jq"*".body"*)
       # Issue body with Touches: line covering argocd
       printf 'Fix deployment issue.\n\nTouches: argocd/**\n'
+      return 0
+      ;;
+    *"pr diff"*)
+      # #944: the sentinel-only classifier fetches the PR diff; this fixture's condition has
+      # no sentinel-only files, so an empty diff keeps the pinned behaviour unchanged.
       return 0
       ;;
     *)
