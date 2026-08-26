@@ -381,11 +381,10 @@ Codifiable scaffolding done. The remainder, in order (then loop the lint):
        2. the stack's -iac — a Gateway on the 40.x VIP + one HTTPRoute per hostname. NOT homelab's.
        3. OPERATOR, once, and the jail cannot do it: the repo Actions secrets for the publish
           workflow, from the Crossplane-minted connection Secret. The jail PAT deliberately lacks
-          the Secrets permission (docs/github-setup.md), so this is a host-side step:
-            kubectl get secret <stack>-specs-s3 -n <stack> \
-              -o jsonpath='{.data.writer_access_key_id}' | base64 -d \
-              | gh secret set SPECS_S3_ACCESS_KEY_ID -R $ORG/$MAIN
-            # …and writer_secret_access_key -> SPECS_S3_SECRET_ACCESS_KEY
+          the Secrets permission (docs/github-setup.md), so this is a host-side step — add the
+          stack's ROW to the MAPPING in scripts/github-secrets-sync.sh (repo | ns |
+          <stack>-specs-s3 | writer | SPECS_S3), commit it, then:
+            devbox run github-secrets-sync
           Use the WRITER pair. The reader pair authenticates fine and then 403s on upload.
        WHY THIS IS EASY TO MISS: specs-publish.sh SOFT-SKIPS when the credentials are absent, so
        until step 3 lands CI is green and the site is empty. WEB-03 probes the served site rather
