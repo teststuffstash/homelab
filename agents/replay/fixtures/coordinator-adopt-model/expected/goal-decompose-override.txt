@@ -1,0 +1,4 @@
+OUT MODEL=opus
+ERR → coordinator model: role=coordinator class=goal-decompose → claude/fable
+ERR → coordinator model: GOAL_MODEL=opus wins (env escape hatch, goal-decompose)
+RC 0
