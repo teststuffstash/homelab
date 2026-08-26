@@ -18,4 +18,4 @@ HERE="/replay/agents"
 # Call scout_canary_ride with deepseek/deepseek-v4-flash (the test model from the issue evidence).
 # The stub records the agent-session.sh invocation (the bash call above).
 # After the fix, the recorded command will show `-m "openrouter/deepseek/deepseek-v4-flash"`.
-scout_canary_ride "deepseek/deepseek-v4-flash" "false"
+scout_canary_ride "deepseek/deepseek-v4-flash" "" "false" "opencode" "1"

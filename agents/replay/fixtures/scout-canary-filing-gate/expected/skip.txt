@@ -1,16 +1,16 @@
-CALL scout_canary_mint model=newco/spark:free free=true
-CALL scout_canary_ride model=newco/spark:free
-CALL scout_canary_mint model=newco/spark:free cleanup
-CALL scout_canary_mint model=qwen/qwen3.8-27b free=false
-CALL scout_canary_ride model=qwen/qwen3.8-27b
-CALL scout_canary_mint model=qwen/qwen3.8-27b cleanup
+CALL scout_canary_mint model=newco/spark:free free=true harness=opencode
+CALL scout_canary_ride model=newco/spark:free harness=opencode attempt=1
+CALL scout_canary_mint model=newco/spark:free harness=opencode cleanup
+CALL scout_canary_mint model=qwen/qwen3.8-27b free=false harness=opencode
+CALL scout_canary_ride model=qwen/qwen3.8-27b harness=opencode attempt=1
+CALL scout_canary_mint model=qwen/qwen3.8-27b harness=opencode cleanup
 CALL rotation_post source=canary entry={"model":"_scout-infra","canary_verdict":"auth-storm"}
 OUT ROW 1 newco/spark:free benched=false canary=
 OUT ROW 2 qwen/qwen3.8-27b benched=false canary=
 ERR canary: riding up to 3 candidate(s) in ns teststuffstash
-ERR canary: dispatching newco/spark:free (only-free)
-ERR canary: dispatching qwen/qwen3.8-27b ($0.05 cap)
+ERR canary: dispatching newco/spark:free harness=opencode arm=<proxy-pin> attempt=1 (only-free)
+ERR canary: dispatching qwen/qwen3.8-27b harness=opencode arm=<proxy-pin> attempt=1 ($0.05 cap)
 ERR canary: common cause — all canaried verdicts identical (auth-storm) — ONE scout-infra datum, zero per-model verdicts (leg 4)
-ERR scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): newco/spark:free (canary: ), qwen/qwen3.8-27b (canary: ) — gh issue create NOT run
+ERR scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): newco/spark:free (canary: none), qwen/qwen3.8-27b (canary: none) — gh issue create NOT run
 ERR scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/agents/model-routing.md §M7 leg 4)
 RC 0

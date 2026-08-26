@@ -277,6 +277,7 @@ is stale, so it cannot drift the way the prose register did.
 | `scout-canary-filing-gate` | table | - | `agents/model-scout.sh` | - |
 | `scout-canary-mint-unbound` | actions | - | `agents/model-scout.sh` | - |
 | `scout-canary-ride-model-prefix` | actions | - | `agents/model-scout.sh` | - |
+| `scout-intake-stateless` | actions | - | `agents/model-scout.sh` | - |
 | `scout-state-unkeyed` | actions | - | `agents/model-scout.sh` | - |
 | `scout-variant/batch-rollout` | actions | - | `agents/model-scout.sh` | - |
 | `scout-variant/known-base` | actions | - | `agents/model-scout.sh` | - |

@@ -23,19 +23,22 @@ cp "$REPLAY_FIXTURE/world/scout/ranked.json" "$WORK/ranked.json"
 # The canary I/O seams, recorded. A ride with no recorded stats DIES — the harness's standing rule:
 # serving "no-stats" on an unrecorded model would be the exact false green this family exists to
 # prevent (a canary that silently did not run would still produce a clean-looking stream).
-scout_canary_mint() { # <id> <is_free> [cleanup] — the OpenRouterKey CR lifecycle is outside this fixture
-  local id="$1" is_free="$2" mode="${3:-}"
+scout_canary_mint() { # <id> <is_free> <harness> [cleanup] — the OpenRouterKey CR lifecycle is outside this fixture
+  local id="$1" is_free="$2" harness="$3" mode="${4:-}"
   if [ "$mode" = "cleanup" ]; then
-    printf 'CALL scout_canary_mint model=%s cleanup\n' "$id" >> "$REPLAY_ACTIONS"
+    printf 'CALL scout_canary_mint model=%s harness=%s cleanup\n' "$id" "$harness" >> "$REPLAY_ACTIONS"
   else
-    printf 'CALL scout_canary_mint model=%s free=%s\n' "$id" "$is_free" >> "$REPLAY_ACTIONS"
+    printf 'CALL scout_canary_mint model=%s free=%s harness=%s\n' "$id" "$is_free" "$harness" >> "$REPLAY_ACTIONS"
   fi
   return 0
 }
-scout_canary_ride() { # <id> <is_free> [retry] — serves the recorded AGENT_RUN_STATS line
-  local id="$1" is_free="$2" retry="${3:-}" suffix="" f
-  [ -n "$retry" ] && suffix=".retry"
-  printf 'CALL scout_canary_ride model=%s%s\n' "$id" "${retry:+ retry}" >> "$REPLAY_ACTIONS"
+scout_canary_ride() { # <id> <arm> <is_free> <harness> <attempt> — serves the recorded AGENT_RUN_STATS line
+  # World files stay keyed by the BARE id; attempt >1 on the default arm serves the `.retry`
+  # recording (the pre-cell fixtures' contradiction worlds carry exactly that file).
+  local id="$1" arm="$2" is_free="$3" harness="$4" attempt="${5:-1}" suffix="" f
+  [ "$attempt" -gt 1 ] && [ -z "$arm" ] && suffix=".retry"
+  printf 'CALL scout_canary_ride model=%s%s harness=%s attempt=%s%s\n' \
+    "$id" "${arm:+@$arm}" "$harness" "$attempt" "${suffix:+ retry-world}" >> "$REPLAY_ACTIONS"
   f="$REPLAY_FIXTURE/world/canary/$(printf '%s' "$id" | tr '/:.' '---')${suffix}.stats"
   [ -f "$f" ] || { printf 'replay-bridge: no recorded canary stats for %s (tried %s)\n' "$id" "$f" >&2; exit 9; }
   cat "$f"
