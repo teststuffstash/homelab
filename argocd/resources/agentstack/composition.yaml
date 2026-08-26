@@ -1197,6 +1197,7 @@ spec:
                 - toCIDR:
                     - 192.168.40.20/32 # docker.io mirror VIP
                     - 192.168.40.21/32 # ghcr mirror VIP
+                    - 192.168.40.31/32 # mcr.microsoft.com mirror VIP (2026-08-26, the Playwright image)
                   toPorts:
                     - ports:
                         - { port: "80", protocol: TCP }

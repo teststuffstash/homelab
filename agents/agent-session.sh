@@ -565,9 +565,12 @@ NS="$PROJECT"
 # session dispatched a docker-repo worker without --docker; the duplicate-dispatch dance cost a
 # pod). Explicit --docker always wins; a failed probe leaves it unset and WARNS (the CI gate
 # catches a wrong-mode ride — degrade loudly, never guess).
-if [ -z "$DOCKER" ] && command -v "$KUBECTL" >/dev/null 2>&1; then
+if command -v "$KUBECTL" >/dev/null 2>&1; then
+  # The claims read runs even when --docker was explicit (homelab#990): the egress knobs it
+  # yields drive the env card AND the enforce-default harness guard below, and both must see
+  # the truth on every dispatch path — not only the docker-auto-derive one.
   if claims_json="$("$KUBECTL" $KUBE get agentstacks.platform.teststuff.net -o json 2>/dev/null)"; then
-    if [ "$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" \
+    if [ -z "$DOCKER" ] && [ "$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" \
         '[.items[].spec.repos[] | select(.name == $p and (.fixer.docker == true))] | length' 2>/dev/null)" -gt 0 ] 2>/dev/null; then
       DOCKER=1
       echo "→ --docker derived from the AgentStack claim (fixer.docker=true for ${PROJECT})"
@@ -576,9 +579,23 @@ if [ -z "$DOCKER" ] && command -v "$KUBECTL" >/dev/null 2>&1; then
     EGRESS_ENFORCE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.enforce]|map(select(.!=null))|first // empty' 2>/dev/null)"
     EGRESS_PROFILE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.profile]|map(select(.!=null))|first // empty' 2>/dev/null)"
   else
-    echo "WARN: agentstacks probe failed — cannot derive --docker; pass it explicitly for docker-gated repos" >&2
+    echo "WARN: agentstacks probe failed — cannot derive --docker or the egress knobs; pass --docker explicitly for docker-gated repos" >&2
   fi
 fi
+# >>>REPLAY:harness-enforce-default>>>
+# homelab#990 DURABLE WORKAROUND (operator, 2026-08-26): opencode's SDK-init fetches
+# (models.opencode.ai / registry.npmjs.org — no kill knob on the pinned build, the L1812 block)
+# carry NO timeout, and under an ENFORCED egress the CNP deny is a silent SYN black-hole — the
+# ride wedges pre-LLM and sleeps to the 4h deadline (first chainless oracle ride, issue-272-r1,
+# 2026-08-26 ×2). So an enforced-egress ride never takes opencode BY DEFAULT: goose rides the
+# slot. An explicit --harness opencode still wins (operator override), and a model-derived
+# harness (claude rails) is untouched — this guard fires only on the baked default.
+# Delete this block when #990's fail-fast lands.
+if [ "${EGRESS_ENFORCE:-}" = "true" ] && [ "$HARNESS" = "opencode" ] && [ -z "${HARNESS_SET:-}" ]; then
+  echo "→ homelab#990 workaround: enforced egress + default harness → goose (opencode wedges on un-suppressible SDK-init fetches under enforcement)"
+  HARNESS="goose"
+fi
+# <<<REPLAY:harness-enforce-default<<<
 # ── FU-114 L1: the platform ENVIRONMENT CARD (docs/agents/fixer-context.md) ──────────────────
 # Composed from the SAME knobs the launcher just used to BUILD this ride (--docker, egress), so it
 # is accurate by construction — never the stale "no-real-data sandbox" framing that primed the #48
@@ -587,7 +604,7 @@ fi
 # (deterministic awk-insert, no YAML dependency) so the worker cannot skip reading it.
 # >>>REPLAY:render_env_card>>>
 render_env_card() {
-  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}"
+  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}"
   # ═══ MAINTAINER NOTE — read before editing (this comment is NOT sent to the agent) ═══
   # Everything printf'd below is injected VERBATIM into the stack agent's prompt. Keep that text
   # MINIMAL and stack-agnostic: the rule + the value it needs to ACT, nothing else. All homelab-
@@ -624,7 +641,7 @@ render_env_card() {
   else
     pkg_why="upstream is reachable today (egress monitor mode) but WILL be blocked at enforcement — use the proxies anyway so the ride stays reproducible"
   fi
-  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), **HTTP-only**; python → pip/uv against pypi.org + files.pythonhosted.org (open on the python egress profile)."
+  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against pypi.org + files.pythonhosted.org (open on the python egress profile)."
 
   # WHY: docs/spikes/context-repos.md pilot (circles-only today). Read-only reference clones; the
   # spike's measurement is whether transcripts ever show /work/context reads, so the card ADVERTISES
@@ -1084,15 +1101,31 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     # (b) live-worker cap per project: default WIP=1; a repo with independent TRACK lanes
     # (TRACKS.md) may run one worker per lane — the dispatcher sets AGENT_WIP_LIMIT=<lanes>
     # (added 2026-07-10 when #2/#3 opened the first two-lane parallel dispatch).
+    # >>>REPLAY:fu042-wip-cap>>>
     PF_LIMIT="${AGENT_WIP_LIMIT:-1}"
     # phase!=terminal, NOT phase=Running: a kata pod boots in Pending longer than a tick
     # interval — the Running filter double-dispatched #55 across consecutive ticks (2026-07-21).
-    PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" \
-      --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+    # FU-042 leg (b) / #937: a Pending pod that is Unschedulable (wedged) does NOT hold a WIP
+    # slot — it will never run, so it is not live work. A 30-second grace period prevents a
+    # briefly-unschedulable new pod from being discounted instantly.
+    PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" -o json 2>/dev/null \
+      | jq '[.items[] | select(
+        .status.phase != "Succeeded" and .status.phase != "Failed" and
+        (
+          .status.phase == "Running" or .status.phase == "Unknown"
+          or
+          (.status.phase == "Pending" and (
+            ([.status.conditions[]? | select(.type == "PodScheduled" and .status == "False" and .reason == "Unschedulable")] | length) == 0
+            or
+            (now - (.metadata.creationTimestamp | fromdateiso8601)) < 30
+          ))
+        )
+      )] | length')"
     if [ "${PF_LIVE:-0}" -ge "$PF_LIMIT" ]; then
       echo "PREFLIGHT REFUSED: ${PF_LIVE} agent pod(s) Running in ns ${NS} ≥ WIP limit ${PF_LIMIT} (FU-042; AGENT_WIP_LIMIT raises it for multi-track dispatch)." >&2
       exit 3
     fi
+    # <<<REPLAY:fu042-wip-cap<<<
     # (d) FU-118: an offline `devbox add` writes a `placeholder-<system>-<pkg>` store path into
     # devbox.lock that commits fine but hard-fails the NEXT round's bootstrap `devbox install`
     # (`path-info --offline` on a nonexistent path) BEFORE the agent runs — an opaque, unrecoverable
@@ -1500,11 +1533,12 @@ if [ -n "$DOCKER" ]; then
   # egress CNP drops the docker.io FQDNs: mirror down ⇒ pulls hang ⇒ AgentWorkerEgressDropped.
   MIRROR_DOCKER_IO="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}"
   MIRROR_GHCR="${AGENT_MIRROR_GHCR-http://192.168.40.21}"
+  MIRROR_MCR="${AGENT_MIRROR_MCR-http://192.168.40.31}"
   # nix-cache via its BGP VIP (FU-073e): the entrypoint's default is the ClusterIP service DNS,
   # unreachable from a kata guest (FU-072) — without this override a docker ride's `devbox
   # install` fell back to cache.nixos.org over the WAN (~4 min cold, measured 2026-07-14).
   NIX_CACHE_VIP="${AGENT_NIX_CACHE_URL-http://192.168.40.23}"
-  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"'
+  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"\n        - name: REGISTRY_MIRROR_MCR\n          value: "'"$MIRROR_MCR"$'"'
   DOCKER_MOUNT=$'\n        - { name: docker-run, mountPath: /docker-run }'
   DOCKER_VOLUMES=$'\n    - name: docker-run\n      emptyDir: {}\n    - name: docker-lib\n      ephemeral:\n        volumeClaimTemplate:\n          spec:\n            accessModes: ["ReadWriteOnce"]\n            volumeMode: Block\n            storageClassName: longhorn-scratch\n            resources: { requests: { storage: 20Gi } }'
   # NATIVE SIDECAR (initContainers + restartPolicy Always): the kubelet terminates it when the

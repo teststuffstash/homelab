@@ -173,6 +173,7 @@ is stale, so it cannot drift the way the prose register did.
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
 | `footprint-hold-goal-exempt` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
+| `fu042-wip-cap` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder` | table | - | `agents/agent-session.sh` | - |
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -181,6 +182,9 @@ is stale, so it cannot drift the way the prose register did.
 | `goal-budget-gate` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal` | table | - | `agents/agent-session.sh` | - |
 | `goal` | table | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 IL-T19 IL-T20 IL-T21 IL-T22 |
+| `harness-enforce-default/explicit-wins` | actions | - | `agents/agent-session.sh` | - |
+| `harness-enforce-default/flip` | actions | - | `agents/agent-session.sh` | - |
+| `harness-enforce-default/monitor-untouched` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |

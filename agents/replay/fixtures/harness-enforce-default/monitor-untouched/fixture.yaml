@@ -1,0 +1,10 @@
+# homelab#990 guard, the monitor-mode arm: with egress NOT enforced (empty/false — the fleet
+# default), the baked opencode default stands — the guard is scoped to exactly the defect
+# boundary (enforce:true), never a fleet-wide harness change.
+name: harness-enforce-default-monitor-untouched
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-enforce-default
+  - file:../flip/post.sh

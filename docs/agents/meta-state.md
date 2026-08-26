@@ -14,10 +14,12 @@ meant to avoid.)
   first push was CLOBBERED by the updater race, filed+queued as **#986**: update-branch without
   `expected_head_sha` overwrote a verified push on PR#963; the fix is one API field). **#967**
   (ADR-115 + §M14 + the Exacto↔caching caveat) bot-APPROVED + armed, lands on its cycle.
-  **#981 SHIPPED as PR#985**: ADR-116 name-anchor ruling + the 29-entry expiry sweep; its
-  CHANGES_REQUESTED (issue #981 had no `Touches:` → governance-path escape read) was fixed at
-  the SOURCE (declaration added to the issue body) + verdict dismissed per the #141 terminal —
-  re-review pending, watch it land. The TODO-ARCHIVED warn's 5 stale pointers → **#984**.
+  **#981 SHIPPED as PR#985**: ADR-116 name-anchor ruling + the 29-entry expiry sweep; round 1
+  CHANGES_REQUESTED (issue #981 had no `Touches:`) fixed at the source + dismissed; round 2
+  CHANGES_REQUESTED (real classifier bug: TODO-shape extraction swept every id on the matched
+  line, not the construct's target — FU-142 was a phantom) fixed in-PR `66a3fc17` — re-review
+  pending, watch it land. The TODO-ARCHIVED warn's **4** real stale pointers
+  (FU-068/FU-133/FU-143 gap registers + FU-160 spike) → **#984**.
   **NEXT: #982** (heading §-codes + lint check #4, shadow); **#983/#984 unblock on PR#985's
   merge**. **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
   UNPIN at its merge. Still-queued codeowner issues stand: #928 #929 #932 #933 #937 #938 #888
@@ -35,12 +37,26 @@ meant to avoid.)
   enforce:true (filed **#990**, queued; durable workaround = **PR#991**: enforced-egress rides
   never DEFAULT to opencode, replay-pinned, in review); the goose×flash hand-ride then struck
   **http-401-storm** (the OR key 401ed mid-run — single sighting, watch for recurrence on the
-  next ordinary oracle dispatch); the ride now running is the operator hand-dispatch
-  **claude/haiku r1** (~10m at wind-down; subscription rail, sidesteps both harness classes +
-  the OR credential). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
-  on the opencode draw; the edge dies when #990 closes. If the haiku ride terminals without a
-  PR, it lands in the FU-143 ⛔ hold again — next session checks the board. Two 4h burns today
-  were FU-187's class (quiet stall, reap skips finalize — tracker extended with the reap half). **NEXT PHASE = FU-186
+  next ordinary oracle dispatch); the operator hand-dispatch **claude/haiku r1 DELIVERED:
+  oracle-fleet PR#277** (opened 2026-08-26 19:00Z, #272 → `agent/review`, riding the loop —
+  no FU-143 hold). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
+  on the opencode draw; the edge dies when #990 closes. **⚠ FU-188 (found on #277's review,
+  2026-08-26 evening): the review plane was DEAD on every authoritative stack** — `/route
+  role=reviewer` served `xiaomi/mimo-v2.5 [market]` (openrouter rail) to the subscription-only
+  reviewer → instant Anthropic 404, no verdict, no strike, router re-picks forever (72
+  dispatches/24h, zero generations; two dead rounds on #277 pre-fix, 19:47Z + 20:00Z).
+  **Incident pin LIVE (`1596e395`, direct-master):** reviewer-session downgrades
+  authoritative→shadow for itself; workers untouched (chainless-guard REQUIRES authoritative
+  — a claim flip would FATAL oracle/sleep worker dispatches). **VERIFIED 2026-08-26 20:22Z
+  (the S5-continuation session): the pin works live** — the 20:15Z tick logged `authoritative
+  DOWNGRADED to shadow for the reviewer (FU-188 incident pin)` (shadow would-be:
+  `xiaomi/mimo-v2.5 [market]`), served sonnet, and PR#277 got a real CHANGES_REQUESTED
+  verdict at 20:22:54Z — the review plane is back; #277's fix round is the oracle loop's.
+  Durable legs = FU-188 (a/b/c); the pin comes out with (a)+(b). Two 4h burns today
+  were FU-187's class (quiet stall, reap skips finalize — tracker extended with the reap half).
+  **MCR mirror LIVE** (PR#992 merged 2026-08-26 19:33Z; pull-through verified via the VIP,
+  `playwright/python` tags served; sleep#123 commented with the image-redirect option — it
+  stands if the nix-chromium browser-launch grind on sleep PR#133 continues). **NEXT PHASE = FU-186
   (ADR-115, ruled 2026-08-26):** step 1 the `provider_policy` knob + no-pin/Exacto flip for
   cheap coding, step 2 the 0731 matrix run (intake mode + `@` arms are BUILT, PR#963 —
   arms: default-pin / no-pin-exacto / @deepseek / @relace control, rung-2 task, both
@@ -85,11 +101,22 @@ meant to avoid.)
   a dead doorbell edge remains. The emitter hunt (the scan states wake source per dispatch)
   is the next concrete action, tracked on #459 + FU-168.
 
+- **⚠ #974 (coordinate/reflex OOM at 512Mi) still burning while queued:** global doorbell +
+  reflex backstop down; sightings at wind-down (operator): `coordinator-reflex-1787775000`
+  OOMKilled 20:10Z + `coordinate-lkxr2` OOMKilled with **ring=- (a GENUINE full sweep, not
+  the #994 junk shape)** — the board-covering global scan is really down, only per-stack
+  loops are alive. Fix = machine-lane cap bump
+  (queued, measured-sizing triage on the thread); **#994 holds the routing decision** the
+  operator still owes (scan-side early exit recommended — its cost goes UP when #974 lands;
+  diagnosis comment on the issue, 2026-08-26).
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — readout pending; revert to
   0 if no win; residual setup cost = homelab#518 (its promtool child #936 queued 2026-08-25:
   loop-health fixture = 107.6s of the 130s lint step).
 - **Small live residue:** wk-metal-04 `kubernetes_labels.longhorn_bulk_zone` field-manager
-  CONFLICT kills FULL tofu applies (targeted fine) — chase before the next broad apply ·
+  CONFLICT kills FULL tofu applies (targeted fine) — chase before the next broad apply
+  (probed 2026-08-26: live managedFields show `Terraform` owning
+  `topology.kubernetes.io/zone` CLEANLY, no rival manager on the label — likely cleared by
+  the last targeted apply; unreproducible read-only, verdict = the next full apply) ·
   proxy zen leg live-smoke still unrun (`opencode/nemotron-3-ultra-free` through the
   in-cluster proxy) · the openrouter-proxy FU-021 comment repoint rides the next functional
   proxy change · hp-01 `install_disk: /dev/sda` is still a NAME with two identical disks
@@ -97,7 +124,7 @@ meant to avoid.)
   oracle-fleet#259 rework per the seat read, circles-iac deploy-bump generator fix before
   the next circles build (circles-iac#71/#68).
 - **Soaks** (each owned by an FU/issue — this line is only the calendar): retro Mon 08-31
-  unattended fire (FU-058 clean acceptance) · argo second backlog sweep (#521, ~due) ·
+  unattended fire (FU-058 clean acceptance) ·
   minRunners readout · FU-148 first organic environmental-red retry · or-op#34 first
   daily-429 · renovate-approve one-approval-per-head (#114) ·
   CiDispatchStalled quiet-month window opens ~09-11 (FU-150) · **paid-flash REVERT

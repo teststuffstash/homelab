@@ -5634,3 +5634,42 @@ first live ADR-110 maintenance session before the ADR existed.
   the #141 terminal — re-review pending. #967 bot-approved + armed. #976 merged.
 - Wind-down: monitors none, background ride streams killed (the rides are in-cluster,
   finalize is in-pod), transcripts synced.
+
+## 2026-08-26 ~19:55Z — MCR mirror rollout verified + mechanical meta-state sweep (maintenance session)
+
+- **MCR mirror LIVE end-to-end:** PR#992 merged 19:33Z, ArgoCD synced in ~30s; verified by a
+  pull-through `playwright/python` tags fetch via the VIP (`http://192.168.40.31/v2/…` returned
+  upstream tags incl. v1.62.0). sleep#123 commented with the image-redirect option
+  (pin the image tag to the pip-resolved playwright version; PR#133 floats `>=1.62.0`).
+- **oracle#272 board check:** the claude/haiku r1 hand-dispatch DELIVERED — oracle-fleet
+  PR#277 (19:00Z), issue → `agent/review`. No FU-143 hold.
+- **#521 second backlog sweep executed** (the scheduled residue from the 08-18 close): 258
+  pre-default `Succeeded` workflows with `finishedAt` < now−7d deleted, 1145 → 887; the #510
+  TTL defaults own the curve alone now. Recorded on #521. (High absolute count = today's
+  oracle reingest+delta burst, 540 workflows created 08-26 — TTLs out on its own.)
+- **wk-metal-04 zone-label conflict probed read-only:** live managedFields show `Terraform`
+  owning `topology.kubernetes.io/zone` cleanly (kata label is Talos/kubelet-side, disjoint) —
+  likely cleared by the last targeted apply; verdict at the next full apply. Breadcrumb in
+  meta-state.
+- Operator note mid-session: oracle-fleet reingest+delta running — Garage ERT giants and
+  gc-restarts left strictly alone.
+
+## 2026-08-26 ~20:45Z — FU-188: the authoritative review plane was dead; #994 diagnosed; wind-down (maintenance session)
+
+- **#994 (junk ring-carrying global runs) DIAGNOSED, comment on the issue:** the collapse is not
+  mis-firing — it structurally cannot absorb them (per-stack scans live in another ns; median
+  Pending dwell 0s across 126 failed runs; RBAC fine). Recommended scan-side early exit on
+  SCAN_RING_NS; Sensor filter = follow-on behind a live test. **Operator decision pending.**
+- **FU-188 filed + incident pin shipped (`1596e395`, direct-master):** oracle-fleet#277's review
+  404-looped — `/route role=reviewer` served `xiaomi/mimo-v2.5 [market]` (openrouter rail) to the
+  subscription-only reviewer; Anthropic 404s, no verdict, no `/report` ⇒ no strike ⇒ re-pick
+  (72 dispatches/24h, zero generations). Pin: reviewer downgrades authoritative→shadow in
+  reviewer-session.sh; claims could NOT flip (chainless-guard FATALs oracle/sleep workers).
+  Verification parked: PR#277's sonnet review from a post-20:15Z tick. Answered the operator's
+  codeowner question: goal rules are LIVE on oracle-fleet (`required-approval-goal`, no codeowner
+  flag on goal/**) — nothing was forgotten.
+- **#936 worker health-checked at operator ask:** riding fine 59m in — per-file promtool timing
+  with scoped timeouts (the 120s-tool-cap timeouts are the task's own subject). Unpin at merge.
+- **#974 still burning while queued:** reflex-1787775000 + coordinate-lkxr2 (ring=-, a genuine
+  sweep) OOMKilled ~20:10Z — global plane down, per-stack loops alive.
+- Wind-down: #277-verdict watch killed by process, transcripts synced, meta-state updated.
