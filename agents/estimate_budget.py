@@ -520,13 +520,23 @@ def session_secret_name(project: str, session: str) -> str:
 
 
 def emit_cr(est: Estimate, *, project: str, session: str, ttl_hours: float) -> str:
-    """Render an ephemeral OpenRouterKey CR sized to the estimate (consumed by openrouter-operator)."""
+    """Render an ephemeral OpenRouterKey CR sized to the estimate (consumed by openrouter-operator).
+
+    Retro r1 F6: the CR carries metadata.labels so the ledger (agents/ledger.py) can read the
+    estimator's own pick_tier result and point estimate — calibration_error is now computed on
+    every capped ride, not only agent-budget/*-override-labelled ones.
+    """
     expires = (datetime.now(UTC) + timedelta(hours=ttl_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     name = f"{project}-{session}".replace("_", "-").lower()
     return (
         "apiVersion: openrouter.teststuff.net/v1alpha1\n"
         "kind: OpenRouterKey\n"
-        f"metadata: {{ name: {name}, namespace: {project} }}\n"
+        f"metadata:\n"
+        f"  name: {name}\n"
+        f"  namespace: {project}\n"
+        f"  labels:\n"
+        f"    budget-tier: {est.tier}\n"
+        f"    budget-estimate-usd: \"{est.estimate_usd}\"\n"
         "spec:\n"
         f"  project: {project}\n"
         f"  budgetUSD: {est.cap_usd}            # tier {est.tier}; estimate ${est.estimate_usd}\n"
@@ -710,6 +720,10 @@ def _self_test() -> None:
     assert session_secret_name("p", "issue-7-round-1") == "p-session-issue-7-round-1-openrouter"
     cr = emit_cr(free, project="p", session="issue-7-round-1", ttl_hours=2)
     assert "secretName: p-session-issue-7-round-1-openrouter" in cr and "ephemeral: true" in cr
+    # Retro r1 F6: the CR carries budget-tier and budget-estimate-usd labels so the ledger can
+    # read the estimator's own pick_tier result even without an agent-budget/* override label.
+    assert "budget-tier: xs" in cr
+    assert "budget-estimate-usd: \"0.0\"" in cr
 
     # the autopsy scenario: paid qwen, looping, no cache → a real (capped) cost
     paid = estimate(issue_tokens=1000, model="qwen/qwen3-coder", price_override=1.15)
