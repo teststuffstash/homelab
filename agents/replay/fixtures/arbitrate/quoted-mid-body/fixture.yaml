@@ -1,0 +1,24 @@
+# A world where a comment QUOTES `ARBITRATE` mid-body must NOT count as an arbitration
+# event, so the FU-147 re-label still fires (marker doctrine, IL-T26, homelab#244).
+#
+# The arbitration-event probe was tightened from `test("ARBITRATE")` (un-anchored) to
+# `startswith("ARBITRATE")` (start-anchored), matching the ledger's `STRIKE_RE` shape.
+# A mid-body quote like `> ARBITRATE (changes-requested no-op round...)` must not
+# suppress the re-label — "talking about the terminal is not the terminal".
+#
+# This fixture records a world where:
+#   - Two stats comments ("Agent run stats") exist after the last commit (no-op evidence)
+#   - A comment QUOTES "ARBITRATE" mid-body (as a blockquote from a previous arbitration)
+#   - No comment starts with "ARBITRATE"
+#   - The NOOP_ROUND_JQ should return "1" — the mid-body ARBITRATE is NOT detected as
+#     an arbitration event, so the FU-147 re-label fires.
+name: arbitrate-quoted-mid-body
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:round-evidence
+  - file:../fu147-refire-blocked/bridge.sh
+  - file:../fu147-refire-blocked/post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

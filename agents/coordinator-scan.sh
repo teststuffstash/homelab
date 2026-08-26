@@ -227,7 +227,7 @@ STATS_TS_DEF='def stats_ts: [ .comments[]? | (.body // "") as $b
 NOOP_ROUND_JQ="${STATS_TS_DEF}"'
   ([.commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
   | ([ stats_ts[] | select($head == "" or . > $head) ] | length) as $after
-  | ([ .comments[]? | select((.body // "") | test("ARBITRATE")) | .createdAt ] | max // "") as $arb_ts
+  | ([ .comments[]? | select((.body // "") | startswith("ARBITRATE")) | .createdAt ] | max // "") as $arb_ts
   | ([ stats_ts[] | select($head == "" or . > $head) ] | max // "") as $newest_noop_ts
   | if $after >= 2 and ($arb_ts == "" or $newest_noop_ts > $arb_ts) then "1" else "" end'
 # <<<REPLAY:round-evidence<<<
