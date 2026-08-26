@@ -423,9 +423,9 @@ spec:
                      || PUSH_FAILED=1; }
               if [ "$PUSH_FAILED" = 1 ]; then
                 echo "WARN: pushgateway push failed after retry — the RetroReportOverdue belt goes stale"
-                # Write a marker file the next harvest step can surface (FU-176 / #932).
-                # The file is committed to the PR branch so the next scheduled run's harvest
-                # step checks for any marker files and includes them in its PR body.
+                # Write a marker file (FU-176 / #932). Committed to the PR branch, so it lands
+                # IN the human-gated retro PR's own diff — that reader is the belt. No automated
+                # marker reader exists yet (the PR-body ⚠ below is the immediate surface).
                 MARKER="docs/agents/retros/.pushgateway-failed-${DATE}-${STACK}-${RUN}"
                 date > "$MARKER"
                 echo "pushgateway push failed after retry — the RetroReportOverdue belt goes stale" >> "$MARKER"
