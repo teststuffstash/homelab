@@ -30,6 +30,7 @@ spec:
             - circles
             - circles-iac
             - homelab
+            - node-maintenance
             - oracle-fleet
             - oracle-iac
             - secrets-demo
