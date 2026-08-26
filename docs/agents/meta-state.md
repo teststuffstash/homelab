@@ -37,11 +37,13 @@ meant to avoid.)
 
 - **⚑ ORACLE IS CHAINLESS (2026-08-26 13:59Z — oracle-iac#387; sleep off 0731 via sleep-iac#76;
   0731 out of model_tiers, homelab#960).** Acceptance watch: first routed oracle rides land clean
-  (first = #272-r1 on plain flash); no chain-exhausted defers on oracle. **NEXT PHASE (operator):
-  the 0731 matrix run** — (harness: goose/claude/opencode) × (provider spread incl. `:exacto`,
-  DeepSeek-first-party pin, one bottom-quartile control) on xs canary tasks; inputs banked in
-  TICK-LOG 2026-08-26 ~14:20Z (the Exacto upload = uploads/0731-auto-exacto.txt, the provider
-  join, the RSC-stream surface). Re-admission to model_tiers rides the verdict.
+  (first = #272-r1 on plain flash); no chain-exhausted defers on oracle. **NEXT PHASE = FU-186
+  (ADR-115, ruled 2026-08-26):** step 1 the `provider_policy` knob + no-pin/Exacto flip for
+  cheap coding, step 2 the 0731 matrix run (intake mode + `@` arms are BUILT, PR#963 —
+  arms: default-pin / no-pin-exacto / @deepseek / @relace control, rung-2 task, both
+  harnesses), verdict = the model_tiers re-admission PR. Full design + evidence:
+  model-routing.md §M14. First intake digest = homelab#966 (both rung-1 cells CLEAN on
+  bottom-quartile providers — rung 1 does not discriminate).
 
 - **⚑ G-B #818 WEDGED on homelab#933 (found + filed by the 2026-08-25 sweep, queued):** all 5
   originals closed, 1 store finding, but the goal-checkpoint's child-set-complete trigger
