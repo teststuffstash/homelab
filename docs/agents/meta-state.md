@@ -40,8 +40,9 @@ meant to avoid.)
   WEDGED pre-LLM — opencode's un-suppressible SDK-init fetches have no timeout under oracle's
   enforce:true (filed **#990**, queued; durable workaround = **PR#991**: enforced-egress rides
   never DEFAULT to opencode, replay-pinned, in review); the goose×flash hand-ride then struck
-  **http-401-storm** (the OR key 401ed mid-run — single sighting, watch for recurrence on the
-  next ordinary oracle dispatch); the operator hand-dispatch **claude/haiku r1 DELIVERED:
+  **http-401-storm** (recurrence CONFIRMED — 3× in ~3h, machine-filed as **#1004** via the
+  fleet-fault rule; seat triage 21:47Z: account clean at $10.58/latch-0 → per-session-key,
+  the mint-path/PATCH family — correlate strike times vs key mint times, comment on the issue); the operator hand-dispatch **claude/haiku r1 DELIVERED:
   oracle-fleet PR#277** (opened 2026-08-26 19:00Z, #272 → `agent/review`, riding the loop —
   no FU-143 hold). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
   on the opencode draw; the edge dies when #990 closes. **⚠ FU-188 (found on #277's review,
