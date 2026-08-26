@@ -189,11 +189,14 @@ spec:
                   additionalProperties:
                     type: string
                     enum: [advisory, blocking]
-                    default: advisory
                     description: >-
                       advisory — lens findings are Follow-ups, never the verdict.
                       blocking — lens findings MAY determine the verdict (the lens text
                       carries the posture line so the reviewer knows it matters).
+                      NOTE: CRD structural-schema defaulting does NOT synthesize absent map
+                      keys under additionalProperties — this default only applies when the
+                      key is present. The real fallback is the shell `// "advisory"` in
+                      reviewer-session.sh (replay-pinned).
                 responder:
                   type: object
                   description: >-
