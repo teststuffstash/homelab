@@ -8,38 +8,32 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ NEXT SESSION = S5 (corpus diet), with a PARK-DRAIN OPENING ACT (handover, 2026-08-26
-  wind-down).** Open with the codeowner queue: the ~9 still-queued issues (#928 #929 #932 #933
-  #937 #938 #888 #945 #456 #110, agent-runtime#95, #923's shadow arm) are producing PRs that
-  park bot-approved — batch-drain §REVIEW first (the ADR-110 amortization). ⚠ Two are REAL
-  reads, not skims: **#938** (sentinel-edge doorbell-collapse) and **#933** (the G-B
-  checkpoint un-wedge — its merge is what lets G-B assemble; the morning-read items follow:
-  assembly PR → codeowner tax → probe-platform first tick, FU-102). Carry-overs LANDED
-  2026-08-26 morning: PR#952 approved+merged (the carried verdict), PR#951 auto-merged —
-  both had parked red on the master-side docs-lint break, now #953 (queued; content leg done,
-  the gate behaviour is the remaining scope). **#946 needs a SEAT RUN after #945
-  merges** (blocked-by edge wired; the 🔓 clause surfaces it). **PR#925** (fstrim): sentinel
-  green since the node-maintenance baseline — confirm it merged via the reflex. **#915**: DONE on the
-  human side 2026-08-26 ~18:45Z (operator-sitting approval supersedes the 20:37Z CR; taxonomy
-  residue = #968 bound to #913) — waits ONLY on the GitHub Actions outage clearing (ci queued;
-  auto-merge armed). Same for #962/#963/#965/#967: all approved+armed, land on recovery —
-  verify the five merged, then nothing remains from this arc.
-  **Then the [stint](chainless-redesign.md): corpus diet** — doc-heat + measured trimming (FU-164 the instrument),
-  post-closure by design. The 2026-08-25 docs-cleanup left it the **29 STALE-ARCHIVE ids**
-  (most living refs are PROVENANCE names — FU-088 ×51, FU-069 ×26, FU-057 ×20 …), needing the
-  **name-anchor ruling** (operator: decide IN the stint) before any mass edit; plus the deep
-  whole-repo comb. **Ruling input (operator + seat sketch, 2026-08-26):** ids grep, headings
-  rot — the corpus proved it internally (M-codes/FSM-ids/FU never rot; prose §-refs do, and
-  docs-graph-lint cannot see them). Sketch: (a) generalize the M-code convention — stable code
-  as heading PREFIX for referenced sections, never reused; (b) docs-graph-lint check #4:
-  two-way §<CODE> resolution incl. code comments (the ⚓-term mechanism extended; shadow-first
-  like #767); (c) id only the doc-heat-hot set; (d) name-anchor lean: EXEMPT provenance-shaped
-  FU refs (stable coordinates, TICK-LOG/ADR class), red only TODO-shaped refs to archived ids
-  (../teststuff specs-for-agentic-delivery.md §one-ID-namespace + deletability ground it).
+- **⚑ S5 (corpus diet) IS OPEN — stint #979, originals #981–#984 (2026-08-26 evening corpus
+  session).** The park-drain opening act RAN: outage set all merged (#915/#962/#951/#952/#925);
+  gate reads landed #964 (approved, CLEAN — confirm merged) + #965 (merged); seat fix rounds
+  pushed onto **#963** (the `@<slug>` arm's `:free` compute_pin fallback) and **#967** (the two
+  tool-error numbers reconciled + the **Exacto↔caching caveat**, operator find: Auto Exacto
+  reorders providers per request and busts sticky-routing prompt caches — §M14 now judges the
+  step-1 flip on OBSERVED per-arm cache-hit; opt-outs `sort:price`/`:floor`/defer_loading) —
+  both re-enter review on new content, watch them land. **#981 SHIPPED as PR#985** (armed):
+  ADR-116 name-anchor ruling — provenance FU refs never scrub, TODO shapes = `FU: FU-NNN` +
+  `Tracked by` lines only (colon-form measured AMBIGUOUS), DANGLING re-scoped to ≥ Next-free,
+  new TODO-RETIRED (fail)/TODO-ARCHIVED (warn); the 29-entry expiry sweep rode the same PR
+  (zero TODO-shaped refs among them, measured). The new warn surfaced **5 real stale
+  pointers** (gap registers at archived FU-068/FU-142/FU-133/FU-143 in the FSM yamls, spike
+  Tracked-by at FU-160) → fix in **#984**. **NEXT: #982** (heading §-codes + docs-graph-lint
+  check #4, shadow-first); **#983/#984 unblock when PR#985 merges**. Still-queued codeowner
+  issues stand from the prior handover: #928 #929 #932 #933 #937 #938 #888 #945 #456 #110,
+  agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's merge lets G-B
+  assemble → assembly PR → codeowner tax → probe-platform first tick, FU-102); **#946 needs a
+  seat run after #945 merges**; #953 queued (docs-lint gate behaviour).
 
-- **⚑ ORACLE IS CHAINLESS (2026-08-26 13:59Z — oracle-iac#387; sleep off 0731 via sleep-iac#76;
-  0731 out of model_tiers, homelab#960).** Acceptance watch: first routed oracle rides land clean
-  (first = #272-r1 on plain flash); no chain-exhausted defers on oracle. **NEXT PHASE = FU-186
+- **⚑ ORACLE AND SLEEP ARE CHAINLESS (oracle: 2026-08-26 13:59Z, oracle-iac#387; sleep:
+  2026-08-26 ~18:10Z, sleep-iac#77 + mirror homelab#976 armed; 0731 out of model_tiers,
+  homelab#960).** Acceptance watch: first routed rides land clean (oracle = #272-r1 on plain
+  flash; sleep = **sleep-tracking#123-r1, dispatched ~18:12Z after the seat cleared its 9-day
+  `agent/error` latch** — blocker #122 merged, resumable branch stands, chainless routed ride
+  Running at wind-down). No chain-exhausted defers on either stack. **NEXT PHASE = FU-186
   (ADR-115, ruled 2026-08-26):** step 1 the `provider_policy` knob + no-pin/Exacto flip for
   cheap coding, step 2 the 0731 matrix run (intake mode + `@` arms are BUILT, PR#963 —
   arms: default-pin / no-pin-exacto / @deepseek / @relace control, rung-2 task, both
