@@ -51,7 +51,7 @@ blocks below. Before any assignment: `git grep <ip>` + `nmap -sn <candidates>`.
 - **Per-stack subdomain delegation** (ADR-092): a stack that opts in gets ONE VIP pair for its
   whole `*.<stack>.teststuff.net` — a `3.0/24` HAProxy wildcard-TLS VIP mirroring the stack's
   in-cluster Gateway VIP (`40.x`), and a WILDCARD Unbound override so every `<svc>.<stack>` name
-  resolves to it. First: **oracle** `3.22 ↔ 40.22` (40.20/.21 = registry mirrors, ADR-091). New
+  resolves to it. First: **oracle** `3.22 ↔ 40.22` (40.20/.21/.31 = registry mirrors, ADR-091). New
   names under the subdomain cost **no** new VIP — the in-cluster gateway host-routes them.
   Assigned so far: **oracle** `3.22 ↔ 40.22`, **sleep** `3.26 ↔ 40.26`, **circles** `3.28 ↔ 40.28`; plain LB (no HAProxy pair): `40.29` otel-collector LAN OTLP (jail telemetry, 2026-08-08)
   (2026-08-04 — `40.10`–`40.27` were all taken, so the mirror convention put circles at `.28`). This is
