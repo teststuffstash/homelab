@@ -518,6 +518,11 @@ role to `/route` and the launcher case maps died with them; the era's narrative 
 - **`audit`/`research` classes are the wrong shape for coordination reuse** — both pin
   `rails: ["openrouter"]` with a fusion head; coordination stays on the subscription safety
   net (heeded: `goal-decompose` is its own subscription-rail class).
+- ⚠ **A goal small enough for one ride is not a goal** (same ruling era): circles#17
+  decomposed to two children while a one-shot arm reached comparable output, so neither the
+  fan-out's advantage nor the reasoning tier was ever load-bearing — calibrate goals so
+  decomposition and the acceptance judgement actually carry weight
+  ([research-and-specs.md](research-and-specs.md) step 5 cites this as its evidence).
 - ⚠ **The `dispatch` tier's premise is measured FALSE and deliberately left alone**:
   `tier_thresholds` reads "~30s dispatch units" yet 149/149 coordinator sessions exceeded 30s
   over 7d (p50 105s, p99 1342s) — and its 0.9 utilization threshold makes coordinators defer
