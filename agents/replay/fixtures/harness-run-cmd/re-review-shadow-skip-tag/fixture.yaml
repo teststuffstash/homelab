@@ -1,0 +1,21 @@
+# homelab#945 — re-review.sh shadow mode: the idempotency tag is not keyed on $MODEL.
+#
+# CONDITION UNDER REPLAY. A shadow re-review invocation with --model opencode/big-pickle
+# against a snapshot that already carries a live re-review comment (tag exists). Shadow
+# mode skips the idempotency gate entirely (it never posts to the PR, so there is nothing
+# to guard against), so the claude call proceeds despite the tag.
+#
+# THE CONTRACT:
+#   1. The model id is passed through verbatim to claude (--model opencode/big-pickle).
+#   2. No verdict-posting call (gh pr comment) is in the composed command.
+#   3. The shadow-re-review marker is present in the output.
+#   4. The rail is attributed in the report header.
+#   5. The idempotency gate is skipped in shadow mode — the claude call proceeds even
+#      though a tag-bearing comment already exists on the PR.
+name: harness-run-cmd-re-review-shadow-skip-tag
+mode: actions
+source: agents/re-review.sh
+parts:
+  - file:bridge.sh
+  - block:re-review-shadow-skip-tag
+  - file:post.sh
