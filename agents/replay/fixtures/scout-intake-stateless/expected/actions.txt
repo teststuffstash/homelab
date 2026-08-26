@@ -1,0 +1,6 @@
+CALL curl GET https://openrouter.ai/api/v1/models
+OUT catalog: 7 models
+OUT intake: NOT in the live catalog (skipped): ghost/not-listed
+OUT intake: no `tools` support (skipped — cannot ride any harness): google/gemini-3.5-flash-001
+OUT intake: 1 candidate(s) by operator request — diff/snapshot bypassed, ceiling not applied
+RC 0

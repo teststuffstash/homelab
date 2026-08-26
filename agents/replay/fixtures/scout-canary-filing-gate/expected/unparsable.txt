@@ -1,11 +1,11 @@
-CALL scout_canary_mint model=midco/echo:free free=true
-CALL scout_canary_ride model=midco/echo:free
-CALL scout_canary_mint model=midco/echo:free cleanup
-CALL rotation_post source=canary entry={"model":"midco/echo:free","canary_verdict":"unknown","free":true}
-OUT ROW 1 midco/echo:free benched=false canary=unknown
+CALL scout_canary_mint model=midco/echo:free free=true harness=opencode
+CALL scout_canary_ride model=midco/echo:free harness=opencode attempt=1
+CALL scout_canary_mint model=midco/echo:free harness=opencode cleanup
+CALL rotation_post source=canary entry={"model":"midco/echo:free","harness":"opencode","provider":"","attempt":1,"canary_verdict":"unknown","free":true}
+OUT ROW 1 midco/echo:free benched=false canary=opencode=unknown
 OUT CANARY midco/echo:free unknown free=true
 ERR canary: riding up to 3 candidate(s) in ns teststuffstash
-ERR canary: dispatching midco/echo:free (only-free)
-ERR scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): midco/echo:free (canary: unknown) — gh issue create NOT run
+ERR canary: dispatching midco/echo:free harness=opencode arm=<proxy-pin> attempt=1 (only-free)
+ERR scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): midco/echo:free (canary: opencode=unknown) — gh issue create NOT run
 ERR scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/agents/model-routing.md §M7 leg 4)
 RC 0
