@@ -89,6 +89,14 @@ rules:
   # them to the responder Role. If a claim declares a verb/resource pair NOT listed here,
   # the compose fails with "attempting to grant RBAC permissions not currently held" and
   # the claim engineer must add the missing pair to this block.
+  #
+  # NOTE — secrets is deliberately NOT pre-granted here. It is a materially more sensitive
+  # class than the other remediation targets (pods, configmaps, deployments), and no claim
+  # today declares a secrets remediation pair. If a claim does, the compose will fail with
+  # "attempting to grant RBAC permissions not currently held" — a loud, self-describing
+  # failure that tells the claim engineer to add the missing pair. A silent standing grant
+  # has no such tell. Add secrets here only when a consumer exists and the minimal-privilege
+  # case has been reviewed.
   - apiGroups: [""]
     resources: [pods, pods/log, pods/status]
     verbs: [get, list, watch, patch, delete]
@@ -96,7 +104,7 @@ rules:
     resources: [configmaps, endpoints, events, persistentvolumeclaims, persistentvolumeclaims/status, services]
     verbs: [get, list, watch, patch, delete]
   - apiGroups: [""]
-    resources: [secrets, serviceaccounts]
+    resources: [serviceaccounts]
     verbs: [get, list, watch]
   - apiGroups: [apps]
     resources: [deployments, deployments/scale, deployments/status, statefulsets, statefulsets/status, daemonsets]
