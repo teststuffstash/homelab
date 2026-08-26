@@ -1,0 +1,9 @@
+CALL gh pr list --repo teststuffstash/homelab --state merged --limit 40 --json body --jq [.[].body // ""]
+CALL gh issue edit 80 --repo teststuffstash/homelab --add-label agent/queued
+CALL gh issue edit 80 --repo teststuffstash/homelab --remove-label agent/review
+CALL gh issue view 80 --repo teststuffstash/homelab --json labels --jq [.labels[].name]|join(",")
+CALL gh issue comment 80 --repo teststuffstash/homelab --body 🤖 **Phantom `agent/review` cleared — re-queued `agent/queued`** (deterministic scan belt, homelab#928).\n\nAudit, as of `TIMESTAMP`:\n\n- **No open PR** references `#80` (every open PR body in `teststuffstash/homelab` was checked), and no merged PR mentions it either.\n- **The state persisted.** The issue had been untouched for Nm — past the Nm guard, which is one full scan interval plus margin, so this is not a review-flip race.\n\nThe label was a terminal sink invisible to every scan class: the issue held `agent/review` but no open PR existed to review. Re-queueing it as `agent/queued` makes it visible to dispatch again.\n\nIf a PR really is open, its body is what proves it — the clause holds as soon as one references the issue. Re-applying `agent/review` by hand with no PR behind it will simply be cleared again after the guard window.
+OUT ORPHAN [homelab] ⚠ phantom `agent/review` RECONCILED → `agent/queued`: issue #80 (no open PR, state persisted Nm — audit commented; homelab#928). Frees its ADR-097 footprint; dispatch resumes on the next pass.
+OUT ORPHAN [homelab] ⛔ agent/review phantom-label belt HELD — issue #81 is mentioned by a MERGED PR: this may be finished work whose reference did not close it, not an abandoned review. Re-queueing it would re-ride merged work — verify by hand.
+OUT REACHED: end
+RC 0
