@@ -1,0 +1,14 @@
+=== scenario 1: queued issue with no blockers (qdeps empty after dash normalization) ===
+CALL item_class_push homelab issue-100 queued-ready machine
+RESULT scenario=1 classification=queued-ready
+=== scenario 2: queued issue with blockers (qdeps non-empty) ===
+CALL item_class_push homelab issue-101 queued-held machine
+RESULT scenario=2 classification=queued-held
+=== scenario 3: pinned queued-ready issue ===
+CALL item_class_push homelab issue-102 queued-ready machine
+RESULT scenario=3 classification=queued-ready pinned=true
+=== scenario 4: queued-held with parent issue ===
+CALL item_class_push homelab issue-103 queued-held machine
+RESULT scenario=4 classification=queued-held has_parent=true
+=== end ===
+RC 0

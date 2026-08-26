@@ -1573,10 +1573,6 @@ EOF_GUARDED
         continue
       fi
       # <<<REPLAY:pr-cap-per-base<<<
-      # >>>REPLAY:queued-classification>>>
-      # Queued issue classification: determine if queued-ready or queued-held based on blocker status
-      # and push to the metrics belt for board rendering. This block sits outside all other REPLAY
-      # extraction regions and feeds the coordinator's dispatch decision (queued-dispatch unit).
       if [ -n "$stale" ]; then
         iss="${iss}  issue #${qnum} — ${qtitle} [⚠ dep${stale} closed as not-planned — premise may be dead]\n"
       else
@@ -1636,6 +1632,7 @@ EOF_GUARDED
       # the parent before acting instead of judging the child in isolation. Free — `parent` rides
       # the issue-list call above, no extra request against the App's GraphQL pool. Empty for the
       # ordinary case (no parent), which parses back to the 4-field shape unchanged.
+      # >>>REPLAY:queued-classification>>>
       # Classify the queued issue based on blocker status (qdeps is normalized to empty if "-")
       if [ -z "$qdeps" ]; then
         qclass_item="queued-ready"
@@ -1648,10 +1645,10 @@ EOF_GUARDED
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       fi
       item_class_push "$repo" "issue-${qnum}" "$qclass_item" "machine"
+      # <<<REPLAY:queued-classification<<<
     done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
             | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), (((.parent.number // "") | tostring) | if . == "" then "-" else . end), (([.body // "" | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "" | if . == "" then "-" else . end)) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
-    # <<<REPLAY:queued-classification<<<
     # ── the goal lane (FU-090 leg (c) 2026-08-05; per-closure session DEMOTED by ADR-106 (3) 2026-08-12) ───────────────────────────────────────────────
     # The forest/trees rule's third leg: a goal must be RE-EVALUATED, not merely survive its
     # children. Fires when a child CLOSES — not only when the last one does (operator, 2026-08-05:
