@@ -5283,3 +5283,34 @@ first live ADR-110 maintenance session before the ADR existed.
   new pathology: a freshly-uncordoned node attracts the whole burst). Residual: one old
   `iac-sentinel-edge-l4p6k` Failed exit-1 run (54m prior, siblings green since — cron
   self-healed; unexplained, noted only).
+
+## 2026-08-26 ~06:30Z — cleanup sweep before S5 (corpus session; operator: "clean the current state", + "is PR#915 stuck?")
+
+- **PR#915 read:** not machine-stuck — the loop ran it correctly (2 strikes → ci-red rounds →
+  a FU-147 no-op-round arbitrate → dismissal → re-review) until the operator's own 20:37Z
+  ADR-110 CHANGES_REQUESTED landed; the coordinator then parked #913 `agent/blocked` 21:13Z
+  (label-only — no audit comment, a visibility defect noted on the PR). The `$qblockers`
+  scan-killer half is FIXED and bot-verified; the missing half is the replay pin (the queued
+  classification block sits outside every REPLAY sentinel). **Command:** un-parked #913
+  (`agent/review` restored), posted the audit + the reviewer's ask verbatim on #915 — the
+  machine delivers the fixture round; the operator's review stays the final gate.
+- **Codeowner queue (ADR-110 gate reads, all four small class):** #939 ephemeral toleration
+  (merged), #941 model-parse replay pin, #942 strike/PR-absence decouple (#866), #943
+  re-review --shadow (the #923 pickle arm's instrument) — background drain shepherds
+  update→CI→approve; #939 landed during the session.
+- **PR#925 sentinel red = the fence working:** the new `node-maintenance` Namespace needed the
+  /policy/ baseline; widened by one name direct-to-master (`d155104f`, codeowner path,
+  operator session). #925 goes green on the next sentinel tick, then the reflex reviews it.
+- **Armed calendar items executed (all three were ≥08-26):** the #745 un-park read PASSED
+  vacuously (zero open PRs on all four private repos — no BEHIND stalls; the cutover itself
+  is now actionable, seat-lane since it touches .github/** fleet-wide) · stint parents
+  **#762 (S4)** and **#420 (Go rail part 1)** closed — trees empty at every depth, >72h quiet.
+- **Triage sweep (alert board near-clean: only CodeownerParkWaiting ×4 = the drain,
+  GithubActionsMinutesHigh = #698/#745, AgentDispatchCronWoken = the FU-168 soak-fail):**
+  #884 closed (specs.oracle 200, garage recovery complete, FU-184) · #875 hand-closed (the
+  70bddd33 commit keyword never fired) · #110 QUEUED to the fixer lane (third OOM at the
+  already-bumped limit — directive: fix the growth or bump with rationale) · kept with cause:
+  #103 (live again 08-25, wk-01 memory pressure), #107 (egress-noise ledger), #111 (waits
+  #745/Sep-1 minutes reset), #114 (active soak), #221, #500 (recommend queue: grow the
+  nix-cache PVC per the oversize-caches doctrine), #811 (loki healthy 35h; quota residual
+  unverified), #857 (recent), #887/#628/#940/#944 (deliberate).

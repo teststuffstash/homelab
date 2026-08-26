@@ -29,11 +29,12 @@ meant to avoid.)
   child is minted at the ~2026-09-03 paid-flash revert** (sequencing ruled A, 2026-08-25 —
   acceptance: zero chain-exhausted defers on subscription-only classes).
 
-- **⚑ S7 (#741): #745 cutover un-park read executes at a sweep ≥2026-08-26** — hosted callers
-  on the 4 private repos fail until Sep-1 (minutes exhausted, overage OFF), so the read is
-  "no BEHIND stalls on private repos over a few days" (currently vacuously clean — zero open
-  PRs there). Silences `a3628730` + `5400ed94…` self-expire 2026-09-01. **S4 #762 close also
-  armed, executes ≥08-26** (same calendar as #420's recheck).
+- **⚑ S7 (#741): the #745 cutover is UN-PARKED (read executed 2026-08-26, PASSED vacuously —
+  zero open PRs on the 4 private repos, no BEHIND stalls).** The cutover work itself is
+  seat-lane (retires hosted callers across repos — `.github/**`); hosted callers on the
+  private repos stay dead until Sep-1 anyway (minutes exhausted, overage OFF), which makes
+  cutting over cheaper, not riskier. Silences `a3628730` + `5400ed94…` self-expire 2026-09-01.
+  (S4 #762 + #420 stint closes executed 2026-08-26 — trees empty, off the calendar.)
 
 - **⚑ Retro (FU-058): r1 DELIVERED 2026-08-25** (PR#918; the batch = #927–#929 queued, #930
   SEAT lane: the DELIM-FIELD transport-lint signature — `scripts/` deny path; #931 OPERATOR
@@ -67,7 +68,7 @@ meant to avoid.)
 - **Soaks** (each owned by an FU/issue — this line is only the calendar): retro Mon 08-31
   unattended fire (FU-058 clean acceptance) · argo second backlog sweep (#521, ~due) ·
   minRunners readout · FU-148 first organic environmental-red retry · or-op#34 first
-  daily-429 · renovate-approve one-approval-per-head (#114) · #420 + #762 closes ≥08-26 ·
+  daily-429 · renovate-approve one-approval-per-head (#114) ·
   CiDispatchStalled quiet-month window opens ~09-11 (FU-150) · **paid-flash REVERT
   ~2026-09-03 / fixup-end / OR depletion, whichever first** (PR#715; the claim comment
   carries the record; the FU-095 flip child mints at the revert; Go re-flip = FU-181).
