@@ -1,0 +1,55 @@
+# Metering for the guest-fstrim belt (FU-093) — see fstrim.yaml for why the belt exists.
+#
+# The pve layer has NO exporter: nothing in or out of the cluster watches the thin pool, which is
+# exactly why it filled three times without a single alert (storage-ledger.md §"A THIRD sum").
+# These rules cannot watch the pool either. What they CAN watch is whether the one mechanism that
+# returns blocks to it is still running — a dead reclaim path is the leading indicator, and it is
+# the part that failed silently before: every trim so far was a human noticing.
+#
+# The series come from the CronJob's pushgateway post (job="node_fstrim", node=<node>). Pushed
+# metrics persist after a Job ends, which is what makes the staleness rule work: the timestamp
+# stops advancing rather than disappearing.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: node-fstrim
+  namespace: monitoring
+  labels:
+    app: node-fstrim
+spec:
+  groups:
+    - name: node-fstrim
+      rules:
+        # The trim ran and FAILED. rc is pushed verbatim, so any non-zero is the fstrim exit code.
+        - alert: NodeFstrimFailed
+          expr: node_fstrim_success != 0
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "fstrim failed on {{ $labels.node }} (rc={{ $value }})"
+            description: >-
+              The guest trim exited non-zero, so freed blocks on this node were NOT returned to
+              pve's LVM thin pool. The pool only ratchets up; three fills have frozen wk-01 twice
+              and wiped Garage's metadata. Read the Job log in ns node-maintenance, then check the
+              pool directly on pve with `lvs -o lv_name,data_percent pve`.
+        # The trim STOPPED running. Daily schedule → 3 days is two missed runs, not one late one.
+        # This is the rule that would have caught what actually happened historically: nothing
+        # failed, the reclaim simply had no owner.
+        - alert: NodeFstrimStale
+          expr: time() - node_fstrim_last_run_timestamp > 259200
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "No successful fstrim on {{ $labels.node }} for {{ $value | humanizeDuration }}"
+            description: >-
+              The only mechanism that returns freed blocks to pve's thin pool has not run on this
+              node. Nothing else meters that pool, so this alert is the whole warning. Check the
+              CronJob in ns node-maintenance (`kubectl -n node-maintenance get cronjob,job`) and
+              the pool's headroom on pve — at 100% every VM on it goes read-only together.
+        # NO alert on "reclaimed a lot". It was written as severity: info and
+        # prometheus-rules-lint correctly refused it — InfoInhibitor silently suppresses info, so
+        # it would have dispatched to nothing. Promoting it to warning is worse: the first runs
+        # against a pool at 77% will reclaim tens of GiB by design, so it would fire on arrival
+        # and stay fired. `node_fstrim_bytes_trimmed` is pushed regardless and is the series to
+        # graph when attributing churn (registry-mirror GC, Longhorn replica churn, loki
+        # retention are the known three).
