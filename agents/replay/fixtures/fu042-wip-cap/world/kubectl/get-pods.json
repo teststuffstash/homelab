@@ -10,7 +10,11 @@
       "status": {
         "phase": "Running",
         "conditions": [
-          {"type": "PodScheduled", "status": "True", "lastTransitionTime": "2026-08-26T19:20:01Z"}
+          {
+            "type": "PodScheduled",
+            "status": "True",
+            "lastTransitionTime": "2026-08-26T19:20:01Z"
+          }
         ]
       }
     },
@@ -22,7 +26,28 @@
       "status": {
         "phase": "Pending",
         "conditions": [
-          {"type": "PodScheduled", "status": "False", "reason": "Unschedulable", "message": "0/4 nodes available: 4 node(s) didn't match pod affinity rules."}
+          {
+            "type": "PodScheduled",
+            "status": "False",
+            "reason": "Unschedulable",
+            "message": "0/4 nodes available: 4 node(s) didn't match pod affinity rules."
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "name": "agent-session-test-project-ghi56",
+        "creationTimestamp": "2026-08-26T19:10:00Z"
+      },
+      "status": {
+        "phase": "Unknown",
+        "conditions": [
+          {
+            "type": "PodScheduled",
+            "status": "Unknown",
+            "lastTransitionTime": "2026-08-26T19:10:01Z"
+          }
         ]
       }
     }

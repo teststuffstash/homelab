@@ -8,9 +8,9 @@
 # that will never run (#778 finding #5, #919).
 #
 # THE CONTRACT (one world, one arm):
-#   World: one Running pod + one Pending Unschedulable old pod (created >30s ago).
-#   With WIP=2, the count of 1 (wedged excluded) passes — the fixture asserts that the
-#   Unschedulable pod is discounted and the dispatch proceeds.
+#   World: one Running pod + one Unknown pod + one Pending Unschedulable old pod (created >30s ago).
+#   With WIP=3, the count of 2 (Running + Unknown counted, wedged excluded) passes — the fixture
+#   asserts that the Unschedulable pod is discounted, the Unknown pod is counted, and dispatch proceeds.
 name: fu042-wip-cap
 mode: actions
 source: agents/agent-session.sh

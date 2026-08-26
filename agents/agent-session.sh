@@ -1112,7 +1112,7 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
       | jq '[.items[] | select(
         .status.phase != "Succeeded" and .status.phase != "Failed" and
         (
-          .status.phase == "Running"
+          .status.phase == "Running" or .status.phase == "Unknown"
           or
           (.status.phase == "Pending" and (
             ([.status.conditions[]? | select(.type == "PodScheduled" and .status == "False" and .reason == "Unschedulable")] | length) == 0
