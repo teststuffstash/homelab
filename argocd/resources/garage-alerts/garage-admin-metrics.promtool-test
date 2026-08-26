@@ -1,0 +1,150 @@
+# Behaviour fixture for the garage-admin-metrics alerts (FU-093 last unmetered tier).
+#
+#   devbox run -- promtool test rules argocd/resources/garage-alerts/garage-admin-metrics.promtool-test
+#
+# CLOCK: promtool's test clock starts at 0. Range selectors are LEFT-OPEN in Prometheus 3.x, so
+# `[10m]` at t sees (t-10m, t] — a last real sample at T stays in range through T+9m at a 1m
+# interval and is gone at T+10m. Every boundary claim below is pinned by a promql_expr_test rather
+# than counted in a comment.
+rule_files:
+  - garage-admin-metrics.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1/4 — DISK FILLING UP: the >80% threshold ───────────────────────────────────────────────
+  # Garage's data disk is at 85% (avail/total = 0.15). The alert should fire after `for: 30m`.
+  - interval: 1m
+    name: "GarageDiskFillingUp fires after 30m when disk is >80% full"
+    input_series:
+      - series: 'garage_local_disk_avail{node="garage-0",device="data"}'
+        values: "15+0x120"
+      - series: 'garage_local_disk_total{node="garage-0",device="data"}'
+        values: "100+0x120"
+    alert_rule_test:
+      # `for: 30m` honoured — silent before the window
+      - eval_time: 29m
+        alertname: GarageDiskFillingUp
+        exp_alerts: []
+      # fires at 30m
+      - eval_time: 31m
+        alertname: GarageDiskFillingUp
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: garage-0
+              device: data
+            exp_annotations:
+              summary: "Garage data disk is 15% full on garage-0"
+              description: "Garage's data disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
+
+  # ── 2/4 — DISK RECOVERS: the alert resolves when avail rises above 20% ──────────────────────
+  # Disk was at 85% (avail=15), then space is freed and avail goes to 25. The alert should
+  # resolve at the next evaluation after the condition clears.
+  - interval: 1m
+    name: "GarageDiskFillingUp resolves when disk drops below 80%"
+    input_series:
+      - series: 'garage_local_disk_avail{node="garage-0",device="data"}'
+        values: "15+0x40 25+0x120"
+      - series: 'garage_local_disk_total{node="garage-0",device="data"}'
+        values: "100+0x200"
+    alert_rule_test:
+      # fires at 30m as before
+      - eval_time: 31m
+        alertname: GarageDiskFillingUp
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: garage-0
+              device: data
+            exp_annotations:
+              summary: "Garage data disk is 15% full on garage-0"
+              description: "Garage's data disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
+      # avail jumps to 25 at t=41m → ratio = 0.25, condition clears → alert resolves
+      - eval_time: 42m
+        alertname: GarageDiskFillingUp
+        exp_alerts: []
+
+  # ── 3/4 — TABLE EMPTY: the wipe detector ────────────────────────────────────────────────────
+  # A table that should have data reports zero size. The alert should fire after `for: 5m`.
+  - interval: 1m
+    name: "GarageTableEmpty fires after 5m when a table is empty"
+    input_series:
+      - series: 'table_size{node="garage-0",table_name="block"}'
+        values: "0+0x60"
+      - series: 'table_size{node="garage-0",table_name="object"}'
+        values: "1048576+0x60"
+    alert_rule_test:
+      # `for: 5m` honoured
+      - eval_time: 4m
+        alertname: GarageTableEmpty
+        exp_alerts: []
+      # fires at 5m for the empty table only
+      - eval_time: 6m
+        alertname: GarageTableEmpty
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: garage-0
+              table_name: block
+            exp_annotations:
+              summary: "Garage table block is empty on garage-0"
+              description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots)."
+
+  # ── 4/4 — TABLE RECOVERS: the alert resolves when data reappears ────────────────────────────
+  # A table was empty (wipe), then data is restored (e.g. from snapshot). The alert should
+  # resolve at the next evaluation after the condition clears.
+  - interval: 1m
+    name: "GarageTableEmpty resolves when table_size becomes non-zero"
+    input_series:
+      - series: 'table_size{node="garage-0",table_name="block"}'
+        values: "0+0x20 1048576+0x120"
+    alert_rule_test:
+      # fires at 5m
+      - eval_time: 6m
+        alertname: GarageTableEmpty
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: garage-0
+              table_name: block
+            exp_annotations:
+              summary: "Garage table block is empty on garage-0"
+              description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots)."
+      # data restored at t=21m → table_size=1048576 → condition clears → alert resolves
+      - eval_time: 22m
+        alertname: GarageTableEmpty
+        exp_alerts: []
+  # ── 5/6 — COVERAGE GUARD: a dead scrape is a page, not calm (seat, PR#965 gate read) ────────
+  # Neither family exists (ServiceMonitor mismatch / metrics token / name drift). The two belts
+  # above are structurally blind in this state; the guard is what says so.
+  - interval: 1m
+    name: "GarageAdminMetricsAbsent fires when the scrape serves neither family"
+    input_series: []
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: GarageAdminMetricsAbsent
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: GarageAdminMetricsAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Garage admin-metrics families are absent — the disk/table belts are blind"
+              description: "The garage-admin-metrics belts (GarageDiskFillingUp, GarageTableEmpty) read garage_local_disk_total and table_size, and at least one family is absent from Prometheus — the scrape is not working (ServiceMonitor selector, metrics token, or a metric-name drift), so those belts cannot fire regardless of Garage's state. Fix the scrape; do not silence this without confirming both families exist."
+
+  # ── 6/6 — COVERAGE GUARD stays silent when both families are served ────────────────────────
+  - interval: 1m
+    name: "GarageAdminMetricsAbsent silent when both families exist"
+    input_series:
+      - series: 'garage_local_disk_avail{node="garage-0",device="data"}'
+        values: "80+0x60"
+      - series: 'garage_local_disk_total{node="garage-0",device="data"}'
+        values: "100+0x60"
+      - series: 'table_size{node="garage-0",table_name="block"}'
+        values: "1048576+0x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: GarageAdminMetricsAbsent
+        exp_alerts: []
