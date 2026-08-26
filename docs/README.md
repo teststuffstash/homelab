@@ -57,4 +57,8 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 - One directory per service under `docs/`, each with a `README.md` written from a service
   perspective (what's deployed, how to configure, how to maintain, dependencies, risks, next steps).
 - Diagrams as **Mermaid** (renders on GitHub) — prefer C4 context/container levels.
+- A doc section other docs/code reference gets a **stable §-code heading anchor** (`### M14. …`
+  referenced as `§M14`) — never reused, never renamed; hot docs only, and the `§` sigil is what
+  the lint checks. Convention + mechanism: `scripts/docs-graph-lint.sh` header, check #4
+  (ADR-117, S5 #982).
 - Images go in the service's `images/` subdir, compressed (~1280 px, target <300 KB).
