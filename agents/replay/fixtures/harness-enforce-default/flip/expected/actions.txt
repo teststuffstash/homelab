@@ -1,0 +1,3 @@
+OUT → homelab#990 workaround: enforced egress + default harness → goose (opencode wedges on un-suppressible SDK-init fetches under enforcement)
+OUT HARNESS: goose
+RC 0
