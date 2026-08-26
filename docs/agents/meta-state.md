@@ -35,11 +35,10 @@ meant to avoid.)
   enforce:true (filed **#990**, queued; durable workaround = **PR#991**: enforced-egress rides
   never DEFAULT to opencode, replay-pinned, in review); the goose×flash hand-ride then struck
   **http-401-storm** (the OR key 401ed mid-run — single sighting, watch for recurrence on the
-  next ordinary oracle dispatch); the ride now running is the operator hand-dispatch
-  **claude/haiku r1** (~10m at wind-down; subscription rail, sidesteps both harness classes +
-  the OR credential). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
-  on the opencode draw; the edge dies when #990 closes. If the haiku ride terminals without a
-  PR, it lands in the FU-143 ⛔ hold again — next session checks the board. Two 4h burns today
+  next ordinary oracle dispatch); the operator hand-dispatch **claude/haiku r1 DELIVERED:
+  oracle-fleet PR#277** (opened 2026-08-26 19:00Z, #272 → `agent/review`, riding the loop —
+  no FU-143 hold). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
+  on the opencode draw; the edge dies when #990 closes. Two 4h burns today
   were FU-187's class (quiet stall, reap skips finalize — tracker extended with the reap half).
   **MCR mirror LIVE** (PR#992 merged 2026-08-26 19:33Z; pull-through verified via the VIP,
   `playwright/python` tags served; sleep#123 commented with the image-redirect option — it
@@ -92,7 +91,10 @@ meant to avoid.)
   0 if no win; residual setup cost = homelab#518 (its promtool child #936 queued 2026-08-25:
   loop-health fixture = 107.6s of the 130s lint step).
 - **Small live residue:** wk-metal-04 `kubernetes_labels.longhorn_bulk_zone` field-manager
-  CONFLICT kills FULL tofu applies (targeted fine) — chase before the next broad apply ·
+  CONFLICT kills FULL tofu applies (targeted fine) — chase before the next broad apply
+  (probed 2026-08-26: live managedFields show `Terraform` owning
+  `topology.kubernetes.io/zone` CLEANLY, no rival manager on the label — likely cleared by
+  the last targeted apply; unreproducible read-only, verdict = the next full apply) ·
   proxy zen leg live-smoke still unrun (`opencode/nemotron-3-ultra-free` through the
   in-cluster proxy) · the openrouter-proxy FU-021 comment repoint rides the next functional
   proxy change · hp-01 `install_disk: /dev/sda` is still a NAME with two identical disks
@@ -100,7 +102,7 @@ meant to avoid.)
   oracle-fleet#259 rework per the seat read, circles-iac deploy-bump generator fix before
   the next circles build (circles-iac#71/#68).
 - **Soaks** (each owned by an FU/issue — this line is only the calendar): retro Mon 08-31
-  unattended fire (FU-058 clean acceptance) · argo second backlog sweep (#521, ~due) ·
+  unattended fire (FU-058 clean acceptance) ·
   minRunners readout · FU-148 first organic environmental-red retry · or-op#34 first
   daily-429 · renovate-approve one-approval-per-head (#114) ·
   CiDispatchStalled quiet-month window opens ~09-11 (FU-150) · **paid-flash REVERT
