@@ -5543,3 +5543,16 @@ first live ADR-110 maintenance session before the ADR existed.
 - **In flight at wind-down (all machine-owned):** #963/#965/#967 auto-merge on their re-review
   rounds; #915 waits ONLY on the operator's own 20:37Z re-read; oracle #272-r1 (first chainless
   ride, routed plain flash) still riding — the loop owns it either way.
+
+## 2026-08-26 ~18:50Z — #915 closed out; GitHub Actions major outage parks the drain (wind-down 2)
+
+- **#915 finished (operator sitting):** the 20:37Z CHANGES_REQUESTED superseded by a fresh
+  operator-identity approval (every demanded item verified on head: the -z "$qdeps" fix,
+  the queued-classification sentinel + rows, the flush-vs-hard-exit fix); the non-blocking
+  taxonomy findings became **#968** (bound to #913) instead of dying as PR-body prose.
+  Auto-merge re-armed after a close/reopen ci re-trigger.
+- **GitHub Actions MAJOR OUTAGE (githubstatus.com, ~18:4xZ):** the re-trigger fired into a
+  dead queue — that also explains #915's runless 13:58Z head. Operator ruling: do NOT re-run
+  queued work, do NOT change capacity off this state. #915/#962/#963/#965/#967 are all
+  approved+armed and land unattended on recovery; cluster-resident legs (review, sentinel)
+  kept working throughout — an unplanned ADR-111 validation.
