@@ -133,6 +133,83 @@ test_escapes "replay-adjacent path is not exempt" \
   "$(printf 'agents/replay-foo/file.sh\n')" \
   "agents/replay-foo/file.sh|governance"
 
+# ── CASE 14: the sentinel-only class (ADR-097 addendum 3, homelab#944) — arg-3 skip ────────
+# test_escapes has no arg-3 slot, so these call touches_check directly.
+_sent_case() {
+  local desc="$1" declared="$2" paths="$3" sentinels="$4" expected="$5" result
+  result="$(touches_check "$declared" "$paths" "$sentinels" 2>/dev/null || true)"
+  if [ "$result" != "$expected" ]; then
+    echo "FAIL: $desc"; echo "  expected: '$expected'"; echo "  got: '$result'"
+    fails=$((fails + 1))
+  fi
+}
+# declared branch: a governance file in the sentinel-only set is not an escape
+_sent_case "sentinel-only file skipped (declared branch)" \
+  "argocd/**" \
+  "$(printf 'argocd/x.yaml\nagents/coordinator-session.sh\n')" \
+  "agents/coordinator-session.sh" \
+  ""
+# undeclared branch: same skip
+_sent_case "sentinel-only file skipped (undeclared branch)" \
+  "" \
+  "$(printf 'agents/coordinator-session.sh\ndocs/new.md\n')" \
+  "agents/coordinator-session.sh" \
+  "docs/new.md"
+# a file NOT in the sentinel set keeps ordinary escape semantics (the mixed-diff negative:
+# sentinel_only_paths never emits a mixed file, so it never reaches arg 3)
+_sent_case "non-sentinel governance file still escapes beside a sentinel one" \
+  "argocd/**" \
+  "$(printf 'agents/coordinator-session.sh\nagents/model-scout.sh\n')" \
+  "agents/coordinator-session.sh" \
+  "agents/model-scout.sh|governance"
+
+# ── CASE 15: the sentinel_only_paths classifier itself ─────────────────────────────────────
+_diff_fixture="$(cat <<'EOF_DIFF'
+diff --git a/agents/a.sh b/agents/a.sh
+index 1111111..2222222 100644
+--- a/agents/a.sh
++++ b/agents/a.sh
+@@ -1,3 +1,5 @@
+ x=1
++# >>>REPLAY:some-block>>>
+ y=2
++# <<<REPLAY:some-block<<<
+diff --git a/agents/b.sh b/agents/b.sh
+index 3333333..4444444 100644
+--- a/agents/b.sh
++++ b/agents/b.sh
+@@ -1,2 +1,4 @@
+ x=1
++# >>>REPLAY:other>>>
++real_change=1
++# <<<REPLAY:other<<<
+diff --git a/agents/c.sh b/agents/c.sh
+index 5555555..6666666 100644
+--- a/agents/c.sh
++++ b/agents/c.sh
+@@ -1,2 +1,3 @@
+ x=1
++plain=1
+EOF_DIFF
+)"
+_cls_result="$(sentinel_only_paths "$_diff_fixture")"
+if [ "$_cls_result" != "agents/a.sh" ]; then
+  echo "FAIL: sentinel_only_paths classifier — expected 'agents/a.sh', got '$_cls_result'"
+  fails=$((fails + 1))
+fi
+# indented markers qualify (extract() trims leading whitespace the same way)
+_ind_diff="$(printf 'diff --git a/agents/d.sh b/agents/d.sh\n--- a/agents/d.sh\n+++ b/agents/d.sh\n@@ -1,2 +1,4 @@\n x=1\n+    # >>>REPLAY:deep>>>\n+    # <<<REPLAY:deep<<<\n')"
+if [ "$(sentinel_only_paths "$_ind_diff")" != "agents/d.sh" ]; then
+  echo "FAIL: sentinel_only_paths — indented markers should qualify"
+  fails=$((fails + 1))
+fi
+# a sentinel-SHAPED line with trailing content does NOT qualify
+_smug_diff="$(printf 'diff --git a/agents/e.sh b/agents/e.sh\n--- a/agents/e.sh\n+++ b/agents/e.sh\n@@ -1,1 +1,2 @@\n x=1\n+# >>>REPLAY:name>>> ; rm -rf /\n')"
+if [ -n "$(sentinel_only_paths "$_smug_diff")" ]; then
+  echo "FAIL: sentinel_only_paths — a marker line with trailing content must not qualify"
+  fails=$((fails + 1))
+fi
+
 if [ "$fails" -gt 0 ]; then
   echo "touches-check-test: ${fails} FAILED"
   exit 1

@@ -1,0 +1,19 @@
+# homelab#944 / ADR-097 addendum 3 — the sentinel-only compelled class, wired end to end.
+#
+# CONDITION UNDER REPLAY. PR closes issue #123 (Touches: argocd/**, docs/**); the diff also
+# touches agents/coordinator-session.sh — a governance path OUTSIDE the footprint — but that
+# file's ENTIRE delta is two REPLAY sentinel marker pairs (the run.sh extract() grammar), the
+# edit a `block:` fixture cannot exist without.
+#
+# THE CONTRACT:
+#   1. sentinel_only_paths classifies the file from the PR diff (content, never path)
+#   2. touches_check receives the set as arg 3 and the file is NOT an escape
+#   3. the outcome is "no escapes" — the compelled edit draws no [GOVERNANCE] block
+#   (the mixed-diff negative — one real line beside the markers ⇒ still an escape — is pinned
+#   in agents/touches-check-test.sh, where content rows are cheap)
+name: reviewer-touches-sentinel-exempt
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-touches-check
