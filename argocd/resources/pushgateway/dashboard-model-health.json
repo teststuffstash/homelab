@@ -1,0 +1,1372 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "title": "agent-issue drill-down",
+      "type": "link",
+      "url": "/d/agent-issue",
+      "targetBlank": false
+    },
+    {
+      "title": "goals registry",
+      "type": "link",
+      "url": "/d/agent-goals",
+      "targetBlank": false
+    },
+    {
+      "title": "subscriptions headroom",
+      "type": "link",
+      "url": "/d/claude-subscription",
+      "targetBlank": false
+    }
+  ],
+  "title": "Agents \u2014 model health",
+  "uid": "agent-model-health",
+  "tags": [
+    "agents",
+    "fu-057"
+  ],
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "description": "The FU-057 model-health pivot, v2 (2026-08-26): the TIME PICKER drives every panel \u2014 pushgateway groups are joined on their push_time_seconds, so 'last 24h' means rides pushed in the last 24h (v1 was lifetime-only). Sources: pushgateway agent_run_* (the dispatched/requested view, per ride) + the egress proxy's router store (served providers, strikes, serving quality). Known blind spots, by design of the sources: a ride that dies before agent-finalize pushes nothing (FU-131); strikes carry no model/provider dimension on this surface (#783); subscription rides carry no USD cost (homelab#348 \u2014 absent, never zero).",
+  "templating": {
+    "list": [
+      {
+        "name": "model",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(agent_run_total, model)",
+          "refId": "model"
+        },
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "label": "model (dispatched)",
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Worker rides (window)",
+      "description": "Rides whose stats were pushed inside the picked time range. The range picker drives EVERY panel on this page (the pushgateway join). A ride that died before agent-finalize pushed nothing and is invisible here \u2014 the strike comment on its issue is the only record (FU-131 class).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(agent_run_total{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)) or vector(0)",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "id": 1,
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Clean rate (window)",
+      "description": "clean / all pushed rides in the window, over the $model selection.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "green",
+                "value": 0.9
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(agent_run_total{exit_status=\"clean\",model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)) / clamp_min(sum(agent_run_total{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)), 1)",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 5,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Harness-death rate (window)",
+      "description": "The strike-class outcome (goose -32602 truncation, auth-storm cousins land in their own exit_status).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(agent_run_total{exit_status=\"harness-death\",model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)) / clamp_min(sum(agent_run_total{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)), 1)",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 10,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "OpenRouter spend (window)",
+      "description": "\u03a3 agent_run_cost_usd over rides pushed in the window. OPENROUTER RAIL ONLY: subscription and Go-rail rides push no USD cost \u2014 absent is not zero (homelab#348); window-draw is the claude-subscription dashboard's.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(agent_run_cost_usd{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)) or vector(0)",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "id": 4,
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 15,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Strikes (window)",
+      "description": "Router-store strikes (all models \u2014 the store's Prometheus surface carries error_class only, no model dimension until the #783 provider-attribution leg). Per-model strike evidence = the harness-death rows below + AGENT_STRIKE comments on the issues.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(router_strikes_total[$__range])) or vector(0)",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "id": 5,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Model pivot \u2014 outcomes in the picked window",
+      "description": "The FU-057 blacklist pivot, windowed: the time picker decides the evidence window (24h for 'today', 90d for lifetime-ish \u2014 pushgateway retention is the true bound). model = the DISPATCHED id (requested; served-model drift has its own belt, RouterRunModelDrift). $/clean and \u03a3cost are OpenRouter-rail only \u2014 subscription rides push no USD (absent \u2260 zero, homelab#348).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Clean %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.7
+                    },
+                    {
+                      "color": "green",
+                      "value": 0.9
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Harness deaths"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "\u03a3 cost (OR)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "$ / clean ride (OR)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg duration"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "Rides",
+            "desc": true
+          }
+        ],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model) (agent_run_total{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model) (agent_run_total{exit_status=\"clean\",model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model) (agent_run_total{exit_status=\"harness-death\",model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model) (agent_run_total{exit_status!~\"clean|harness-death\",model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model) (agent_run_total{exit_status=\"clean\",model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)) / sum by (model) (agent_run_total{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "F",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model) (agent_run_cost_usd{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "G",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model) (agent_run_cost_usd{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)) / clamp_min(sum by (model) (agent_run_total{exit_status=\"clean\",model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)), 1)",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "H",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "avg by (model) (agent_run_duration_s{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "renameByName": {
+              "model": "Model",
+              "Value #A": "Rides",
+              "Value #B": "Clean",
+              "Value #C": "Harness deaths",
+              "Value #D": "Other failures",
+              "Value #E": "Clean %",
+              "Value #F": "\u03a3 cost (OR)",
+              "Value #G": "$ / clean ride (OR)",
+              "Value #H": "avg duration"
+            }
+          }
+        }
+      ],
+      "id": 6,
+      "gridPos": {
+        "h": 11,
+        "w": 14,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "barchart",
+      "title": "Outcomes by model (window)",
+      "description": "Same data as the pivot, as marks. clean=green, harness-death=red, everything else the muted classic palette.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisLabel": ""
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "clean"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "harness-death"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ci-failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "stacking": "normal",
+        "xTickLabelSpacing": 100,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model, exit_status) (agent_run_total{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "model",
+            "columnField": "exit_status",
+            "valueField": "Value"
+          }
+        }
+      ],
+      "id": 7,
+      "gridPos": {
+        "h": 11,
+        "w": 10,
+        "x": 14,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Evidence trail \u2014 every ride in the window",
+      "description": "One row per pushed ride (agent-finalize's view: a ride that died pre-finalize is missing \u2014 its AGENT_STRIKE comment is then the only record). Issue links to GitHub; full drill-down (logs, phases, tokens) is the agent-issue dashboard. Sorted newest first.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pushed"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "duration"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "issue"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "open the issue",
+                    "url": "https://github.com/teststuffstash/${__data.fields.project}/issues/${__data.fields.issue}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "exit_status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "clean": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "harness-death": {
+                        "color": "red",
+                        "index": 1
+                      },
+                      "ci-failed": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "auth-storm": {
+                        "color": "red",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "pushed",
+            "desc": true
+          }
+        ],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(push_time_seconds{job=\"agent_run\"} * 1000) * on(project, issue, round, role) group_left(model, exit_status, harness) (agent_run_total{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "agent_run_cost_usd{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "agent_run_duration_s{model=~\"$model\"} and on(project, issue, round, role) (time() - push_time_seconds{job=\"agent_run\"} < $__range_s)",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "project",
+                "issue",
+                "round",
+                "model",
+                "harness",
+                "exit_status",
+                "Value #A",
+                "Value #B",
+                "Value #C"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value #A": "pushed",
+              "Value #B": "cost",
+              "Value #C": "duration"
+            }
+          }
+        }
+      ],
+      "id": 8,
+      "gridPos": {
+        "h": 13,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Served providers per model (router store, window)",
+      "description": "The egress proxy's /generation harvest: what actually SERVED each OpenRouter completion. This is where requested\u2260served and provider skew become visible. Strikes carry NO provider yet (#783) \u2014 a model whose deaths cluster here on one provider is the re-open signal that ruling named. Tool-call error rates per provider exist only on OpenRouter's website (Auto Exacto signal \u2014 no API; probed 2026-08-26).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "generations"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "generations",
+            "desc": true
+          }
+        ],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model, provider) (increase(router_generations_total{model=~\"$model\"}[$__range])) > 0",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model, provider) (increase(router_generation_cost_usd_total{model=~\"$model\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value #A": "generations",
+              "Value #B": "cost"
+            }
+          }
+        }
+      ],
+      "id": 9,
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Serving quality per model (router store, live gauges)",
+      "description": "Decode tokens/sec is the tie-break metric cache cannot flatter (\u00a7M9: cache accelerates prefill only \u2014 laguna's 306s turns rode a 94% cache hit). Cache-hit is the measured h behind effective pricing.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cache hit"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "decode tok/s"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "decode tok/s",
+            "desc": true
+          }
+        ],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "router_observed_decode_tps{model=~\"$model\"}",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "router_observed_cache_hit{model=~\"$model\"}",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "model",
+                "Value #A",
+                "Value #B"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value #A": "decode tok/s",
+              "Value #B": "cache hit"
+            }
+          }
+        }
+      ],
+      "id": 10,
+      "gridPos": {
+        "h": 10,
+        "w": 6,
+        "x": 12,
+        "y": 28
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Strikes by error_class (window)",
+      "description": "increase(router_strikes_total) over the picked range. error_class only \u2014 the store records (task, model) rows but its Prometheus surface aggregates them (#783 adds the model/provider dims). The fleet rule (same class on \u22652 issues in 24h \u2192 ONE AGENT_ERROR) reads the comment channel, not this.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (error_class) (increase(router_strikes_total[$__range])) > 0",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "editorMode": "code",
+          "legendFormat": "{{error_class}}"
+        }
+      ],
+      "id": 11,
+      "gridPos": {
+        "h": 10,
+        "w": 6,
+        "x": 18,
+        "y": 28
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Cost by rail \u00d7 project (accumulated)",
+      "description": "agent_run_cost_usd_by_rail \u2014 the #278/FU-131 rail-typed accounting leg. USD is the OpenRouter rail's currency; subscription/Go rides draw WINDOWS, not dollars (see the 'Agent subscriptions \u2014 headroom' dashboard, uid claude-subscription). Accumulated since last pushgateway restart, not windowed.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rides"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "cost",
+            "desc": true
+          }
+        ],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (project, rail) (agent_run_cost_usd_by_rail)",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (project, rail) (agent_run_count_by_rail)",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value #A": "cost",
+              "Value #B": "rides"
+            }
+          }
+        }
+      ],
+      "id": 12,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 38
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    }
+  ]
+}
