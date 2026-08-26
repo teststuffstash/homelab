@@ -19,8 +19,9 @@ meant to avoid.)
   both had parked red on the master-side docs-lint break, now #953 (queued; content leg done,
   the gate behaviour is the remaining scope). **#946 needs a SEAT RUN after #945
   merges** (blocked-by edge wired; the 🔓 clause surfaces it). **PR#925** (fstrim): sentinel
-  green since the node-maintenance baseline — confirm it merged via the reflex. **#915**: fix
-  round riding the sentinel-coverage ask; the operator's own 20:37Z review is the final gate.
+  green since the node-maintenance baseline — confirm it merged via the reflex. **#915**: the last
+  blocker seat-fixed 2026-08-26 ~14:05Z (flush-before-exit + fixture); bot re-review rides the
+  push — the remaining gate is the OPERATOR re-reading their own 20:37Z CHANGES_REQUESTED.
   **Then the [stint](chainless-redesign.md): corpus diet** — doc-heat + measured trimming (FU-164 the instrument),
   post-closure by design. The 2026-08-25 docs-cleanup left it the **29 STALE-ARCHIVE ids**
   (most living refs are PROVENANCE names — FU-088 ×51, FU-069 ×26, FU-057 ×20 …), needing the
@@ -33,6 +34,14 @@ meant to avoid.)
   like #767); (c) id only the doc-heat-hot set; (d) name-anchor lean: EXEMPT provenance-shaped
   FU refs (stable coordinates, TICK-LOG/ADR class), red only TODO-shaped refs to archived ids
   (../teststuff specs-for-agentic-delivery.md §one-ID-namespace + deletability ground it).
+
+- **⚑ ORACLE IS CHAINLESS (2026-08-26 13:59Z — oracle-iac#387; sleep off 0731 via sleep-iac#76;
+  0731 out of model_tiers, homelab#960).** Acceptance watch: first routed oracle rides land clean
+  (first = #272-r1 on plain flash); no chain-exhausted defers on oracle. **NEXT PHASE (operator):
+  the 0731 matrix run** — (harness: goose/claude/opencode) × (provider spread incl. `:exacto`,
+  DeepSeek-first-party pin, one bottom-quartile control) on xs canary tasks; inputs banked in
+  TICK-LOG 2026-08-26 ~14:20Z (the Exacto upload = uploads/0731-auto-exacto.txt, the provider
+  join, the RSC-stream surface). Re-admission to model_tiers rides the verdict.
 
 - **⚑ G-B #818 WEDGED on homelab#933 (found + filed by the 2026-08-25 sweep, queued):** all 5
   originals closed, 1 store finding, but the goal-checkpoint's child-set-complete trigger
