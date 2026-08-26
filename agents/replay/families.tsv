@@ -94,6 +94,7 @@ scan-wedge-alert	scan-wedge-alert
 scout-bench-mcp-error	scout-bench
 scout-bench-ranked-columns	scout-bench
 scout-bench-unkeyed-unbenched	scout-bench
+scout-intake-stateless	scout-intake-stateless
 scout-variant-batch-rollout	scout-variant
 scout-variant-known-base	scout-variant
 session-atomic-gate	session-atomic-gate
