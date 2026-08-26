@@ -41,13 +41,16 @@ meant to avoid.)
   Mon 08-31 05:00Z fire = the clean acceptance.**
 
 - **⚑ GARAGE copied-credential rotation (HOST-side, found 2026-08-26 — the third #926
-  consumer class):** three GitHub-secret COPIES of re-created Garage keys are stale — rotate
-  with `gh secret set` from `garage key info --show-secret`: oracle-fleet `ALLURE_S3_*` ←
-  `allure-reports-writer` (proven: CI publish denied twice, live key probe-writes OK),
-  oracle-fleet `ERT_S3_READER_*` ← `ert-snapshots-reader`, circles `SPECS_S3_*` ←
-  `circles-specs-writer` (both untested since the wipe, same class). Then
-  `gh run rerun 32941605062 --repo teststuffstash/oracle-fleet --failed` is the acceptance.
-  Table: docs/garage.md §metadata-restore sweep.
+  consumer class):** three GitHub-secret COPIES of re-created Garage keys are stale. Rotate per
+  the DOCUMENTED recipe (docs/github-setup.md §Garage-read secrets — the connection Secret is
+  the value's source of truth, and it is verified CURRENT post-rebuild: writer id matches the
+  live key): `kubectl get secret <conn> -n <ns> -o jsonpath=… | base64 -d | gh secret set …` —
+  oracle-fleet `ALLURE_S3_*` ← `allure-reports-s3` writer pair (proven stale: CI publish denied
+  twice, live creds probe-write OK) · oracle-fleet `ERT_S3_READER_*` ← `ert-snapshots-s3`
+  reader pair · circles `SPECS_S3_*` ← `circles-specs-s3` writer pair (both untested since the
+  wipe, same class). Acceptance:
+  `gh run rerun 32941605062 --repo teststuffstash/oracle-fleet --failed` green.
+  Copy-holder table: docs/garage.md §metadata-restore sweep.
 
 - **⚑ GARAGE, operator-owned residue (recovery COMPLETE + env rebuilt, #884/FU-184 archived):**
   the `garage repair blocks` hold can come off (reclaims ≈nothing now) · **do NOT delete the 3
