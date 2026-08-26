@@ -990,6 +990,13 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,updatedAt \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${inprog:-null}" || inprog='[]'
+    # review_only (homelab#928): issues with agent/review but NOT agent/in-progress — used by the
+    # phantom-label belt inside C4/C5 to detect phantom agent/review labels (no open PR, no merged
+    # PR mentioning it, persisted past C4C5_PERSIST_S). Queried here alongside $inprog because the
+    # C4/C5 clause is gated by a pod-probe and may be skipped; the variable is cheap and consistent.
+    review_only="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,updatedAt \
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/review")) and (($L|index("agent/in-progress"))|not))]' 2>/dev/null || echo '[]')"
+    jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
     # ADR-097: one line per in-progress issue = its declared footprint; missing Touches: → `*`
     # (exclusive). The queued predicate below holds any unit whose footprint intersects a line.
     # Direction 2 of the homelab#822 goal exemption: a `task/goal` issue contributes NO entry to
@@ -2443,6 +2450,98 @@ EOF_GUARDED
                 done
               fi
             fi
+            # >>>REPLAY:review-phantom-belt>>>
+            # ── THE BELT (homelab#928): RECONCILE the phantom `agent/review` label ──────────────
+            # A phantom `agent/review` is a terminal sink invisible to every scan class: the issue
+            # holds `agent/review` but no open PR references it (the PR was closed/merged without
+            # the label being cleaned up, or the review-flip belt flipped it and the PR was then
+            # closed without merging). homelab#778 sat 18h56m in this state until a goal checkpoint
+            # hand-corrected it — the stall held goal #775's flip criterion. IL-T16 reconciles the
+            # identical phantom mode for `agent/in-progress`; this belt extends the same predicate
+            # to `agent/review`, verbatim shape, restoring `agent/queued`.
+            # Two holds before it writes, both fail-SAFE — an unreadable probe HOLDS, it never
+            # clears (rule #6: never fail INTO a write):
+            #   (c) PERSISTENCE. The issue must have been quiet (`updatedAt`) past C4C5_PERSIST_S
+            #       to avoid racing with the review-flip belt or a PR that just landed.
+            #   (d) NO MERGED PR mentions the issue. A PR merged with a NON-closing reference
+            #       leaves exactly this state, and re-queueing it re-rides finished work (the
+            #       FU-143 lesson, one lane over). A bare mention is enough to hold: holding costs a
+            #       report line, guessing costs a duplicate ride.
+            # Anything the belt HOLDS keeps today's behaviour exactly — reported, and the
+            # merged-closeout unit (C6) still carries it. Anything it CLEARS becomes an ordinary
+            # `agent/queued` item again and the normal dispatch path owns it on the next pass.
+            review_phantom_cleared=""
+            review_phantom_cands=""
+            # review_only is queried above the C4/C5 clause (same as $inprog) and provided by the
+            # bridge in replay. The jq validation is the same guard $inprog uses.
+            jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
+            # a human gate is never re-dispatched — agent/blocked and agent/error are never re-queued
+            # by the belt (mirrors C4C5_SEL); a re-queue would hand a human-held issue back to dispatch
+            [ -n "$dispatchable" ] && review_phantom_cands="$(printf '%s' "$review_only" \
+              | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
+                '[.[] | (.labels|map(.name)) as $L
+                       | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
+                       | (.number|tostring) as $n
+                       | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
+                       | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+                       | "\($n)|\(.updatedAt // "")"] | .[]')"
+            if [ -n "$review_phantom_cands" ]; then
+              now_s="$(date -u +%s)"
+              review_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || review_merged=""
+              if ! jq -e . >/dev/null 2>&1 <<<"${review_merged:-null}"; then
+                orphans="${orphans}[$repo] ⚠ PROBE_FAILED (merged PRs) — the agent/review phantom-label belt held every candidate this tick (rule #6)\n"
+              else
+                for cand in $review_phantom_cands; do
+                  rcn="${cand%%|*}"; rcupd="${cand#*|}"
+                  # jq parses the timestamps — same reader the pod janitor uses. An UNPARSEABLE
+                  # stamp yields -1, which is < the window, so it holds.
+                  rcage="$(jq -rn --arg t "$rcupd" --argjson now "$now_s" \
+                    '($t | fromdateiso8601? // null) as $s | if $s == null then -1 else ($now - $s) end' 2>/dev/null || echo -1)"
+                  case "$rcage" in ''|*[!0-9-]*) rcage=-1;; esac
+                  if [ "$rcage" -lt "$C4C5_PERSIST_S" ]; then
+                    orphans="${orphans}[$repo] ⏳ agent/review phantom-label belt HELD — issue #${rcn} was touched $(( rcage < 0 ? 0 : rcage / 60 ))m ago (< the ${C4C5_PERSIST_S}s transition-race guard, or an unreadable timestamp); re-checked next scan\n"
+                    continue
+                  fi
+                  if [ "$(jq -r --argjson nn "$rcn" '[.[] | select(test("#\($nn)\\b"))] | length' <<<"$review_merged" 2>/dev/null || echo 1)" -gt 0 ]; then
+                    orphans="${orphans}[$repo] ⛔ agent/review phantom-label belt HELD — issue #${rcn} is mentioned by a MERGED PR: this may be finished work whose reference did not close it, not an abandoned review. Re-queueing it would re-ride merged work — verify by hand.\n"
+                    continue
+                  fi
+                  # ⚠ ORDER IS LOAD-BEARING, and `gh issue edit --add-label X --remove-label Y` is
+                  # NOT atomic: if the add fails while the remove lands, the issue holds no lifecycle
+                  # label at all and goes invisible to EVERY clause. Add `agent/queued` FIRST,
+                  # remove `agent/review` SECOND, then RE-READ and prove the end state.
+                  # ⚠ `set -euo pipefail` is on: a bare `A && B` whose result is non-zero is NOT in a
+                  # condition context and would ABORT THE WHOLE SCAN mid-write. The `if` and the
+                  # `|| true` are what keep a refused write a REPORTED write.
+                  rok=""
+                  if gh issue edit "$rcn" --repo "$slug" --add-label agent/queued >/dev/null 2>&1; then
+                    gh issue edit "$rcn" --repo "$slug" --remove-label agent/review >/dev/null 2>&1 || true
+                  fi
+                  rend="$(gh issue view "$rcn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
+                  case ",${rend}," in
+                    *",agent/queued,"*) case ",${rend}," in *",agent/review,"*) : ;; *) rok=1;; esac;;
+                  esac
+                  if [ -n "$rok" ]; then
+                    gh issue comment "$rcn" --repo "$slug" --body "$(printf '%s\n' \
+                      "🤖 **Phantom \`agent/review\` cleared — re-queued \`agent/queued\`** (deterministic scan belt, homelab#928)." \
+                      "" \
+                      "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
+                      "" \
+                      "- **No open PR** references \`#${rcn}\` (every open PR body in \`${slug}\` was checked), and no merged PR mentions it either." \
+                      "- **The state persisted.** The issue had been untouched for $(( rcage / 60 ))m — past the $(( C4C5_PERSIST_S / 60 ))m guard, which is one full scan interval plus margin, so this is not a review-flip race." \
+                      "" \
+                      "The label was a terminal sink invisible to every scan class: the issue held \`agent/review\` but no open PR existed to review. Re-queueing it as \`agent/queued\` makes it visible to dispatch again." \
+                      "" \
+                      "If a PR really is open, its body is what proves it — the clause holds as soon as one references the issue. Re-applying \`agent/review\` by hand with no PR behind it will simply be cleared again after the guard window." )" >/dev/null 2>&1 || true
+                    review_phantom_cleared="${review_phantom_cleared}${rcn} "
+                    orphans="${orphans}[$repo] ⚠ phantom \`agent/review\` RECONCILED → \`agent/queued\`: issue #${rcn} (no open PR, state persisted $(( rcage / 60 ))m — audit commented; homelab#928). Frees its ADR-097 footprint; dispatch resumes on the next pass.\n"
+                  else
+                    orphans="${orphans}[$repo] ⛔ agent/review phantom-label reconcile FAILED or landed HALF-APPLIED on issue #${rcn} — labels are now [${rend}]. Check by hand: with NEITHER label the issue is invisible to every clause; with BOTH it still holds its footprint.\n"
+                  fi
+                done
+              fi
+            fi
+            # <<<REPLAY:review-phantom-belt<<<
             # >>>REPLAY:c4c5-derivations>>>
             v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
               --arg done "${c4c5_cleared:-}${infeas_done:-}" \

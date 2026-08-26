@@ -241,6 +241,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-rank-snapshot-exclusion/retro-rank-snapshot-exclusion` | suite | - | `-` | - |
 | `review-flip-belt/probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-flip-belt/review-flip-belt` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
+| `review-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T27 |
 | `reviewer-currency/behind-skips` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/probe-fail-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
