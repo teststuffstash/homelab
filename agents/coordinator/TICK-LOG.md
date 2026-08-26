@@ -5556,3 +5556,36 @@ first live ADR-110 maintenance session before the ADR existed.
   queued work, do NOT change capacity off this state. #915/#962/#963/#965/#967 are all
   approved+armed and land unattended on recovery; cluster-resident legs (review, sentinel)
   kept working throughout — an unplanned ADR-111 validation.
+
+## 2026-08-26 ~18:20Z — S5 opens with the park-drain; SLEEP GOES CHAINLESS; #123 unlatched (corpus session)
+
+- **Outage recovery verified:** #915/#962/#951/#952/#925 all merged unattended (the armed set
+  landed on Actions recovery, as ruled). Codeowner gate reads (ADR-110): **#964** approved
+  (small — ledger pick_tier fallback, retro r1 F6; bot caught+verified the prefix-anchor bug
+  in-PR) and **#965** re-approved at head e4fc68ac (the prior seat approval was dismissed by
+  the seat's own coverage-guard push; merged). Seat fix rounds pushed: **#963** (the
+  explicit-slug `@` arm gains the numeric arm's `:free` compute_pin fallback — the reviewer's
+  sibling-case gap; proxy self-test PASS) and **#967** (the two tool-error numbers reconciled:
+  0.2→39.6% = single-snapshot cross-provider spread, 29–56% = DigitalOcean's per-endpoint
+  DAILY series from the found endpoint — both sites now say which measurement they are).
+- **§M14 gains the Exacto↔caching caveat (operator find, upstream
+  docs/guides/routing/auto-exacto):** Auto Exacto reorders providers per tool-calling request,
+  overriding the sticky routing prompt caching rides — collides with M4's
+  caching-provider-first doctrine and the fleet's cacheRead-dominated shape. Pushed onto
+  PR#967: the step-1 flip is judged on OBSERVED per-arm cache-hit (already in the matrix
+  criteria); opt-outs if Exacto loses = `sort: "price"` / `:floor` (keep sticky) or Tool
+  Search `defer_loading`. Priced classes unaffected (pin-v2 keeps the session pin).
+- **SLEEP IS CHAINLESS (sleep-iac#77 merged, claim synced authoritative ~18:10Z; mirror =
+  homelab#976, armed):** second stack after oracle — chain deleted, routerMode authoritative,
+  claudeTier blocks kept (subscription rail stays a routed candidate).
+- **sleep-tracking#123 UNLATCHED (the operator's "where they got stuck"):** the 2026-08-17
+  fleet ruling (3× goose-32602 in 6.5h) had left `agent/error` standing 9 days — its cause
+  class (0731 + mimo) is out of the rotation since homelab#960/the 08-18 eviction. Pre-checks:
+  blocker #122 CLOSED, resumable branch `fix/123-playwright-render-gate` alive, no open PRs.
+  Re-queued (add-queued-first, breaker cleared second, end state verified:
+  agent-fix+agent/queued+task/build), audit comment on the thread, ONE doorbell rung
+  (`reflex-now.sh coordinate-sleep sleep-agents`). Acceptance watch: first routed sleep ride
+  lands clean (chainless, routed model, --work-branch resume).
+- **Next: the S5 corpus-diet stint proper** (operator go: "continue with the corpus cleanup
+  stint") — parent + originals authored this session; name-anchor ruling executes before any
+  mass edit.
