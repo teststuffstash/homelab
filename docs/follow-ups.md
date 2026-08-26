@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-188** (FU-183 and FU-185 were each minted out of order while this line lagged; 183 is archived, 184 minted 2026-08-25). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-189** (FU-183 and FU-185 were each minted out of order while this line lagged; 183 is archived, 184 minted 2026-08-25). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -575,6 +575,17 @@ the block needs pruning, not more headings.
       WITH strike bookkeeping — that also beats the reap to the kill), or the proxy-side
       signal (key silent Nm while its ride pod Runs); the SIGTERM-trap finalize on deadline
       is the agent-runtime half. Relates FU-072 (this trigger's cause).
+
+- [ ] **FU-188** — **Reviewer 404-loop under authoritative routing** (oracle-fleet#277, 2026-08-26):
+      `/route role=reviewer` → `xiaomi/mimo-v2.5 [market]` rail=openrouter, but the reviewer is
+      subscription-only by construction (hardwired `/anthropic` surface, no key_ref) → Anthropic
+      404s the id instantly, no verdict — and no `/report` ⇒ no strike: 72 dispatches/24h, zero
+      generations, the router re-picks forever; review plane dead on every authoritative stack.
+      Legs: (a) reviewer adopts only rideable rails (subscription/opencode-go; the PR#991 family);
+      (b) router never serves the openrouter rail to role=reviewer; (c) api_error terminals
+      report ⇒ strike (relates FU-187's skipped-finalize). **Interim pin LIVE 2026-08-26** —
+      reviewer downgrades authoritative→shadow (reviewer-session.sh, grep FU-188); remove with
+      (a)+(b). Claims can't flip instead: chainless stacks FATAL workers (chainless-guard).
 
 - [ ] **FU-164** — **doc-heat: transcript-derived read heat over repo markdown — POINTER.**
       Question, heat doctrine (heat × class × age; blind spots; approximate lines), v0 (jail
