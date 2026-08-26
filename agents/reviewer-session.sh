@@ -366,7 +366,7 @@ fi
 if gh pr diff ${PR} 2>/dev/null | grep -qE \
   '^\+.*(import|from|using|require)\s+.*(auth|jwt|oauth|saml|oidc|csrf|cors|bcrypt|argon2|passport)' \
   || gh pr diff ${PR} 2>/dev/null | grep -qE \
-  '^\+.*(func.*(Login|Logout|Auth|Authenticate|Authorize|Register|Signup|Token|Session|Refresh|Middleware|Guard)[^a-z]|def.*(login|logout|auth|authenticate|authorize|register|signup|session|token|refresh|middleware|guard)[^a-z])' \
+  '^\+.*(func.*[^A-Z](Login|Logout|Auth|Authenticate|Authorize|Register|Signup|Token|Session|Refresh|Middleware|Guard)|def.*[^a-z](login|logout|auth|authenticate|authorize|register|signup|session|token|refresh|middleware|guard))' \
   || gh pr diff ${PR} 2>/dev/null | grep -qE \
   '^\+.*(session\.(Save|Get|Set|Delete|Destroy|Regenerate|Start|Create)[^a-z]|csrf\.(Protect|Token|Middleware)|cors\.(New|Allow|Handle)|ParseForm|ParseMultipartForm|\.Bind\(|\.Validate\(|\.Sanitize\(|\.Escape\()' \
   || gh pr diff ${PR} 2>/dev/null | grep -qE \
