@@ -1,0 +1,25 @@
+# homelab#913 — queued issue classification: held (has blockers)
+#
+# CONDITION UNDER REPLAY. This fixture extracts the queued-classification block and pins
+# the case where qdeps contains one or more blocker references, resulting in the
+# queued-held classification.
+#
+# THE CONTRACT:
+#   1. When qdeps is non-empty (has blocker references), qclass_item is set to "queued-held"
+#   2. item_class_push is called with the queued-held classification
+#   3. The logic runs under set -u and completes without crashing on undefined variables
+#
+pins:
+  - homelab#913
+name: queued-classification-held
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:queued-classification
+  - file:post.sh
+env:
+  - AGENT_PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - SCAN_PHASE_PGW=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - SCAN_PHASE_POD=coordinate-homelab-1
+  - SCAN_PHASE_NS=homelab-agents
