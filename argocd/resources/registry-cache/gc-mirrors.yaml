@@ -67,7 +67,7 @@ spec:
               args:
                 - |
                   set -eu
-                  for app in mirror-ghcr mirror-docker-io; do
+                  for app in mirror-ghcr mirror-docker-io mirror-mcr; do
                     echo "→ restarting $app (its initContainer collects garbage before serving)"
                     kubectl delete pod -n registry-cache -l "app=$app" --wait=false
                   done
@@ -75,7 +75,7 @@ spec:
                   # nothing looks identical to one that worked, and this line is the only place
                   # anyone would notice.
                   sleep 120
-                  for app in mirror-ghcr mirror-docker-io; do
+                  for app in mirror-ghcr mirror-docker-io mirror-mcr; do
                     echo "→ $app now:"
                     kubectl get pod -n registry-cache -l "app=$app" \
                       -o custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[0].ready,START:.status.startTime
