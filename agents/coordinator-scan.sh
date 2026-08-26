@@ -3192,6 +3192,12 @@ EOF_GUARDED
         tried_units="${tried_units} ${unit}"
         # Continue the retry loop (stay in while, re-find a unit)
       elif [ $dispatch_rc -ne 0 ]; then
+        # PR#915 review (2026-08-26 07:45Z finding): the batch accumulator dies with the process —
+        # flush the tick's classified rows BEFORE the hard exit, or every stack already scanned
+        # this pass loses its agent_item_class series whenever one dispatch hard-fails (the
+        # pre-batch behavior was push-per-item and never had this window). Idempotent: the flush
+        # clears the accumulator, so the ordinary end-of-pass flush becomes a no-op.
+        item_class_flush
         exit $dispatch_rc
       else
         # Success
