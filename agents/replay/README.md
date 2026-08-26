@@ -653,3 +653,11 @@ Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the
   create call is not stubbed by any fixture; the toleration only changes which nodes the
   scheduler considers, not what the script sends to the API). The full suite passes unchanged
   — no clause logic moved, no fixture applies.
+- **homelab#867 (2026-08-26, PR #952)** — the #103 soft `topologySpreadConstraints` block
+  extended to the `agents/coordinator/*-argo.yaml` workflow specs it had never reached, plus a
+  soft `nodeAffinity` `preferredDuringSchedulingIgnoredDuringExecution` de-preference (weight
+  10) for nodes labelled `node.longhorn.io/create-default-disk=true`. Same class as the #103
+  entry that opens this register: pod *placement* declared to the kube-scheduler through
+  `podSpecPatch` — no clause reads it, no branch turns on it, and the diff emits no action
+  stream. Evidence rather than assertion — the full suite stays green on the change with every
+  `expected/actions.txt` untouched.
