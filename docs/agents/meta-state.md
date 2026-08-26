@@ -38,7 +38,17 @@ meant to avoid.)
   next ordinary oracle dispatch); the operator hand-dispatch **claude/haiku r1 DELIVERED:
   oracle-fleet PR#277** (opened 2026-08-26 19:00Z, #272 → `agent/review`, riding the loop —
   no FU-143 hold). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
-  on the opencode draw; the edge dies when #990 closes. Two 4h burns today
+  on the opencode draw; the edge dies when #990 closes. **⚠ FU-188 (found on #277's review,
+  2026-08-26 evening): the review plane was DEAD on every authoritative stack** — `/route
+  role=reviewer` served `xiaomi/mimo-v2.5 [market]` (openrouter rail) to the subscription-only
+  reviewer → instant Anthropic 404, no verdict, no strike, router re-picks forever (72
+  dispatches/24h, zero generations; two dead rounds on #277 pre-fix, 19:47Z + 20:00Z).
+  **Incident pin LIVE (`1596e395`, direct-master):** reviewer-session downgrades
+  authoritative→shadow for itself; workers untouched (chainless-guard REQUIRES authoritative
+  — a claim flip would FATAL oracle/sleep worker dispatches). **VERIFY next session: PR#277
+  carries a sonnet review from a post-20:15Z cron tick** (the pin's first live exercise; if
+  still verdictless, read the reviewer pod log for the "DOWNGRADED to shadow (FU-188)" line).
+  Durable legs = FU-188 (a/b/c); the pin comes out with (a)+(b). Two 4h burns today
   were FU-187's class (quiet stall, reap skips finalize — tracker extended with the reap half).
   **MCR mirror LIVE** (PR#992 merged 2026-08-26 19:33Z; pull-through verified via the VIP,
   `playwright/python` tags served; sleep#123 commented with the image-redirect option — it
@@ -87,6 +97,14 @@ meant to avoid.)
   a dead doorbell edge remains. The emitter hunt (the scan states wake source per dispatch)
   is the next concrete action, tracked on #459 + FU-168.
 
+- **⚠ #974 (coordinate/reflex OOM at 512Mi) still burning while queued:** global doorbell +
+  reflex backstop down; sightings at wind-down (operator): `coordinator-reflex-1787775000`
+  OOMKilled 20:10Z + `coordinate-lkxr2` OOMKilled with **ring=- (a GENUINE full sweep, not
+  the #994 junk shape)** — the board-covering global scan is really down, only per-stack
+  loops are alive. Fix = machine-lane cap bump
+  (queued, measured-sizing triage on the thread); **#994 holds the routing decision** the
+  operator still owes (scan-side early exit recommended — its cost goes UP when #974 lands;
+  diagnosis comment on the issue, 2026-08-26).
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — readout pending; revert to
   0 if no win; residual setup cost = homelab#518 (its promtool child #936 queued 2026-08-25:
   loop-health fixture = 107.6s of the 130s lint step).
