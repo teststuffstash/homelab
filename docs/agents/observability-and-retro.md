@@ -523,6 +523,19 @@ measured: every r3 change that got its own per-repo issue landed within a day (c
 #78); the one delegated to "the next recipe touch" was missed by that very touch (#257's
 recipe half — commit 8bc4ecb edited the exact file and did not carry it).
 
+**A round's process-change batch binds under ONE round container — stint-kind (operator
+ruling 2026-08-26, homelab#949 is the shape).** A retro round is epic-shaped: a bounded
+original set (the report's batch), a possible defect tail, and a natural closeout moment.
+Whoever files the batch (the seat today; the harvest shell if the lane ever self-files)
+mints a label-inert parent (`retro-batch: <series>-rN` — never `task/goal`, never `agent/*`)
+and binds each filed issue as a native sub-issue; the children still ride their own lanes
+individually. The lineage contract's rules apply unchanged
+([issue-authoring.md](issue-authoring.md) §The lineage contract) — a defect in a batch fix
+binds to the round, and close = tree-empty at a sweep. The closeout READ is free by
+construction: the next report's predecessor-scoring (step 4 above) already judges the batch,
+so the sweep after it is the earliest close. r1's batch was bound retroactively (#949);
+"standalone (retro process-change batch)" body lines are superseded by the container from r2 on.
+
 **Cadence status (corrected 2026-08-11):** unsuspended 2026-08-03 — but the lane had NEVER run
 end-to-end until 2026-08-11: five latent bugs (guard busy-probe read kubectl's stderr as pods;
 missing `AWS_REGION` in tsenv; harvest artifacts root-owned; a whole-ledger 146KB brief blew the
