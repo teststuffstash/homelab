@@ -12,5 +12,12 @@
     "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "task/fix"}],
     "body": "Document when an issue footprint frees.\n\nTouches: docs/agents/\n",
     "updatedAt": "2026-08-25T06:05:00Z"
+  },
+  {
+    "number": 82,
+    "title": "review-held issue test case",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "agent/blocked"}],
+    "body": "Test case for agent/review + agent/blocked exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:10:00Z"
   }
 ]

@@ -2412,9 +2412,13 @@ EOF_GUARDED
             # review_only is queried above the C4/C5 clause (same as $inprog) and provided by the
             # bridge in replay. The jq validation is the same guard $inprog uses.
             jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
+            # a human gate is never re-dispatched — agent/blocked and agent/error are never re-queued
+            # by the belt (mirrors C4C5_SEL); a re-queue would hand a human-held issue back to dispatch
             [ -n "$dispatchable" ] && review_phantom_cands="$(printf '%s' "$review_only" \
               | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
-                '[.[] | (.number|tostring) as $n
+                '[.[] | (.labels|map(.name)) as $L
+                       | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
+                       | (.number|tostring) as $n
                        | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
                        | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                        | "\($n)|\(.updatedAt // "")"] | .[]')"

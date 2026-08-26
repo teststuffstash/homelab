@@ -322,6 +322,8 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "ORDER IS LOAD-BEARING" }
       - desc: "probe failure holds every candidate and writes nothing (rule #6 — never fail INTO a write)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "the phantom-label belt held every candidate" }
+      - desc: "human-gate exclusion — agent/blocked and agent/error are never re-queued by the belt (mirrors C4C5_SEL); a re-queue would hand a human-held issue back to dispatch"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "a human gate is never re-dispatched" }
     incidents:
       - "2026-08-09 homelab#778: PR#790 closed unmerged at the fan-out pilot's close — 18h56m stall, invisible to every scan class until a goal checkpoint hand-corrected it, holding a flip criterion"
 
