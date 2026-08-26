@@ -136,7 +136,11 @@ again 2026-08-24 (the autoextend belt fired at 80% on 08-17 and failed exactly a
 below predicted — 257 VG extents left), froze wk-01 twice, and wiped Garage's metadata:
 [incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md). `discard=on` returns
 nothing on its own — Talos guests never fstrim, so freed blocks only came back with the 08-07
-and 08-24 manual trims. Metering + periodic trim are the FU-093 first priority now.
+and 08-24 manual trims. **The trim is automated since 2026-08-25** — a daily privileged CronJob
+per pool VM, `argocd/resources/node-fstrim/`, with the reclaim pushed to the pushgateway and two
+alerts on the belt itself (below). It went in at 78.72% and took the pool to **62.99%** on its
+first run: wk-02 returned 236 GiB, wk-01 76 GiB, cp-01 and wk-03 36 GiB each. Metering the *pool*
+is still open — nothing outside pve can see it.
 Pool extended by 15G from VG free, `thin_pool_autoextend_threshold` set
 to 80 (LVM warned it was disabled; it is a belt that can only consume free VG extents, not
 capacity), then `discard=on` + `ssd=1` on wk-02's scsi0 and a trim:
@@ -237,6 +241,18 @@ threshold**.
   decision, not a rubber stamp. **135Gi/150 (90%) since 2026-08-04** — `tofu-state` took 1Gi
   ([`tofu-state.md`](tofu-state.md)); it was sized against the actual 1.4MB main-root state
   precisely because the tier has no room for a round-number guess.
+- **Guest fstrim — BUILT 2026-08-25** (`argocd/resources/node-fstrim/`, FU-093's "periodic trim").
+  A daily CronJob per pool VM (`zone: proxmox`), staggered, privileged, `/var` hostPath'd; the
+  runbook recipe made a schedule. It pushes `node_fstrim_bytes_trimmed` / `_success` /
+  `_last_run_timestamp` per node, and `NodeFstrimFailed` + `NodeFstrimStale` alert on the belt —
+  because the historical failure was not a trim that broke, it was a reclaim path with no owner.
+  ⚠ What this does NOT do: watch the pool. There is still no pve exporter, so if the trim keeps up
+  nobody learns the pool's level; the alerts prove the mechanism runs, not that it is sufficient.
+  ⚠ Nor does it reach **ci-runner-01** — same pool, not a k8s node; it is an ordinary Linux guest
+  and its own `fstrim.timer` is the cover. Unverified, and worth a look.
+  ⚠ Second layer, not built: a Longhorn `filesystem-trim` RecurringJob. A node-level fstrim cannot
+  reclaim space *inside* a replica's sparse file, so volume-level churn needs its own trim before
+  the node one can see it.
 - **Garage metering** — still the open item, but **smaller than it reads: the exporter is already
   running.** Measured 2026-08-25 by scraping `http://<garage-pod-ip>:3903/metrics` with the admin
   token: **48 metric families**, served regardless of the chart's `monitoring.metrics.enabled:

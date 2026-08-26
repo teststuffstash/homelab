@@ -219,6 +219,12 @@ Two prerequisites, then the trim:
    qm pending 8112 | grep scsi0     # cur == new once applied
    ```
 2. **Run `fstrim` from a privileged pod on the node.** This is the part that surprises:
+
+   **This is automated since 2026-08-25** — `argocd/resources/node-fstrim/` runs exactly this,
+   daily, on every pool VM, and alerts if it stops (`NodeFstrimStale`). Reach for the manual form
+   below only for a one-off on a node the CronJob does not cover (ci-runner-01) or when you need
+   the reclaim NOW rather than at 03:00.
+
    ```
    kubectl run wk02-fstrim -n kata-spike --image=alpine:3.20 --restart=Never \
      --overrides='{"spec":{"nodeName":"wk-02","tolerations":[{"operator":"Exists"}],
