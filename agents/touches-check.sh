@@ -25,15 +25,47 @@ governance_paths() {
   return 1
 }
 
-# touches_check <declared-touches> <newline-separated-paths> → escape set with governance markers
+# sentinel_only_paths <unified-diff-text> → newline list of changed files whose ENTIRE +/-
+# content delta is REPLAY sentinel marker comments (homelab#944, ADR-097 addendum 3). The
+# fourth compelled-counterpart class, and the one that cannot be path-keyed: run.sh extract()
+# is sentinel-only, so pinning a block of ANY script requires planting the markers in that
+# script — a comment-only edit the ratchet itself demands. Path-keying it (`agents/*.sh`)
+# would exempt real edits to the launcher/scan/reflex — the exact worker-edits-its-own-governor
+# hazard the escape check exists for — so this class is CONTENT-verified from the diff instead:
+# a file qualifies iff it has ≥1 sentinel line and ZERO other added/removed content lines
+# (extract()'s exact grammar, leading whitespace trimmed). A mixed diff qualifies nowhere and
+# keeps ordinary escape semantics; an unavailable diff yields the empty set — conservative,
+# the exemption simply doesn't engage. Residual (accepted, same disposition as the other three
+# classes): a sentinel-shaped line inside a heredoc/string is content — the review rubric's
+# ordinary read of the diff is the guard, never this classifier.
+sentinel_only_paths() {
+  printf '%s\n' "${1:-}" | awk '
+    function flush() { if (f != "" && sent > 0 && dirty == 0) print f }
+    /^diff --git / { flush(); f = ""; sent = 0; dirty = 0; next }
+    /^\+\+\+ b\// { f = substr($0, 7); next }
+    /^(--- |\+\+\+ |@@ |index |new file|deleted file|similarity |rename |old mode|new mode)/ { next }
+    /^[+-]/ {
+      line = substr($0, 2)
+      sub(/^[ \t]+/, "", line)
+      if (line ~ /^# >>>REPLAY:[A-Za-z0-9._-]+>>>$/ || line ~ /^# <<<REPLAY:[A-Za-z0-9._-]+<<<$/) sent++
+      else dirty++
+    }
+    END { flush() }
+  '
+}
+
+# touches_check <declared-touches> <newline-separated-paths> [<sentinel-only-paths>] → escape set
 # Input:
 #   $1 = declared Touches line (comma-separated paths; can be empty/"*" for undeclared)
 #   $2 = newline-separated list of changed paths from the PR diff
+#   $3 = OPTIONAL newline-separated list of sentinel-only paths (from sentinel_only_paths over
+#        the SAME PR's diff) — each is skipped like the fp_replay_exempt classes, in BOTH
+#        branches. Callers without diff access pass nothing and get the stricter behaviour.
 # Output:
 #   newline-separated list of escaped paths; each line is "path" or "path|governance"
 #   Empty output = no escapes (all paths covered by declared touches)
 touches_check() {
-  local declared="$1" paths="$2"
+  local declared="$1" paths="$2" sentinel_only="${3:-}"
   local path marker
 
   # Undeclared Touches (empty string or "*") → all paths escape.
@@ -44,6 +76,7 @@ touches_check() {
     while IFS= read -r path; do
       [ -n "$path" ] || continue
       fp_replay_exempt "$path" && continue
+      if [ -n "$sentinel_only" ] && printf '%s\n' "$sentinel_only" | grep -qxF -- "$path"; then continue; fi
       marker="$(governance_paths "$path")" || marker=""
       if [ -n "$marker" ]; then
         printf '%s|%s\n' "$path" "$marker"
@@ -64,6 +97,8 @@ EOF_PATHS
     # strips replay entries from both lists, so without this skip an exempt changed path would
     # read as "no conflict" and surface as an ESCAPE, inverting the exemption.
     fp_replay_exempt "$path" && continue
+    # Addendum 3 (#944): sentinel-only files, content-verified by the caller.
+    if [ -n "$sentinel_only" ] && printf '%s\n' "$sentinel_only" | grep -qxF -- "$path"; then continue; fi
     # Treat the changed path as a singleton footprint entry and check against declared
     if ! fp_conflict "$declared" "$path"; then
       # Path does not conflict with declared touches → it's escaped
