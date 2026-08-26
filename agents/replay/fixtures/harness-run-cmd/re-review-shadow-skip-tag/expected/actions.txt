@@ -1,3 +1,22 @@
 CALL claude -p Test prompt for shadow re-review with existing tag. --model opencode/big-pickle --output-format json
+OUT → invoking claude for re-review...
+OUT   sonnet: APPROVE → AGREE
+OUT 
+OUT === shadow-re-review ===
+OUT snapshot: /tmp/test-snapshot
+OUT project: test-project
+OUT pr: 42
+OUT headsha: abc12345
+OUT model: opencode/big-pickle
+OUT rail: openrouter
+OUT recorded_model: claude-sonnet-4-20250514
+OUT recorded_verdict: APPROVED
+OUT re-review_verdict: APPROVE
+OUT compare_result: AGREE
+OUT 
+OUT --- findings ---
+OUT Shadow re-review findings.
+OUT --- end findings ---
+OUT === end shadow-re-review ===
 OUT claude_reply: {"result": "{\"verdict\": \"APPROVE\", \"findings\": \"Shadow re-review findings.\"}"}
 RC 0

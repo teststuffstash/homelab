@@ -17,5 +17,5 @@ mode: actions
 source: agents/re-review.sh
 parts:
   - file:bridge.sh
-  - block:re-review-shadow
+  - block:re-review-shadow-skip-tag
   - file:post.sh
