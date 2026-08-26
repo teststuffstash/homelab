@@ -8,6 +8,7 @@ arbitrate-first-tick	arbitrate
 arbitrate-fu147-refire-blocked	arbitrate
 arbitrate-landing-sequence	arbitrate
 arbitrate-probe-unreadable	arbitrate
+arbitrate-quoted-mid-body	arbitrate
 argv-payload-over-ceiling	argv-payload
 argv-payload-retro-handoff	argv-payload
 argv-payload-warn-band	argv-payload
