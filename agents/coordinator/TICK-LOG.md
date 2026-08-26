@@ -5673,3 +5673,31 @@ first live ADR-110 maintenance session before the ADR existed.
 - **#974 still burning while queued:** reflex-1787775000 + coordinate-lkxr2 (ring=-, a genuine
   sweep) OOMKilled ~20:10Z — global plane down, per-stack loops alive.
 - Wind-down: #277-verdict watch killed by process, transcripts synced, meta-state updated.
+
+## 2026-08-26 ~21:10Z — S5 continuation: originals 1+2 landed; FU-188 verified + postmortem; #995 gate read (corpus session)
+
+- **PR#985 round 2 (reviewer catch, real):** the TODO-shape classifier extracted every id on a
+  matched line, not the construct's target — FU-142 was a phantom (5→4 real stale pointers).
+  Fixed in-PR (`66a3fc17`); MERGED 20:42Z. ADR-116 live.
+- **#982 → PR#999 MERGED 20:55Z:** ADR-117 §-code heading anchors + docs-graph-lint check #4
+  (SHADOW; both arms probe-tested on a staged synthetic; live tree 21 codes all unique).
+  Issue #982 got its `Touches:` at authoring — the #985 round-1 lesson applied at the source.
+- **FU-188 pin VERIFIED live** (20:22:54Z sonnet verdict on oracle-fleet#277; the DOWNGRADED
+  log line confirmed). **Postmortem landed** (`docs/incidents/2026-08-26-reviewer-404-loop.md`):
+  empty-subscription-pool + silent rail skip + per-stack flip arming a per-role change; the
+  belt audit (exit contract redded workflows nobody consumes; both drift belts out of scope by
+  key; shadow divergence at a ~90% baseline). **Operator ruling recorded:** the combination
+  table — yaml-in-git, DATED status rows (`works|not-yet|disabled`), strike-out-to-disable —
+  FU-188 reshaped as the pointer, legs (a)–(d); charter flip-acceptance gains the per-role
+  flip rule. `dispatch`/`goal-decompose` survived on `rails:["subscription"]` + fail-open
+  fallback — the review class's one extra rail token was the whole working-vs-dead split.
+- **#995 codeowner read (ADR-110):** merged 20:30Z — FU-042 wedged-pod WIP discount, additive,
+  fixture-pinned; watch item commented (kata-tier capacity-Unschedulable is a QUEUE not a
+  wedge; refine to affinity-only-wedged if a docker-repo double-ride ever surfaces).
+- **Sightings:** sleep #123-r3 spent ~65m in devbox install (chromium-151 on wk-metal-03) —
+  the nix-chromium grind continues; the sleep#123 image-redirect option gains evidence ·
+  iac-sentinel edge queue SATURATED (5–12 pending all evening, mutex serial drain ≈ arrival
+  rate; heartbeat stayed fresh — capacity smell for the #974 sizing thread, not a wedge) ·
+  models.opencode.ai drops on sleep = the #456 phone-home class, ride healthy.
+- **Wind-down at ctx 536k (the ≥500k rule):** #983/#984 to a FRESH corpus session (#984 comb
+  doubles as check #4's flip read). Monitors killed by process; transcripts synced.

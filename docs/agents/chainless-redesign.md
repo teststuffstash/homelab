@@ -340,6 +340,14 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
    fleet exposure — compat fidelity is per-model, as the glm shorthand bug showed.
 4. **P4-flip evidence** — the shadow ladder read with real urgency data (the caller gap closed
    2026-08-13, PR#408: labels + work-branch urgency now ride `/route` bodies).
+5. **Per-role flip discipline (FU-188, 2026-08-26):** any flip of a role-carrying knob
+   (`routerMode`, chainless) ENUMERATES the roles it arms, and each role's authoritative path
+   has ≥1 exercised run before the flip — the chainless stack flips promoted the reviewer de
+   facto on worker-only evidence, and its authoritative branch premiered in production on
+   three stacks (the review plane died silently:
+   [`../incidents/2026-08-26-reviewer-404-loop.md`](../incidents/2026-08-26-reviewer-404-loop.md)).
+   Shadow soaks are read per (role, lane) against the flip that arms them, never as a fleet
+   divergence rate.
 
 ## Build order (jail-subagent chunks; platform loop reviews)
 
