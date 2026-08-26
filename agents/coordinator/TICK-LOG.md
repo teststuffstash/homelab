@@ -5512,3 +5512,34 @@ first live ADR-110 maintenance session before the ADR existed.
   nudge): rounds were spent — seat-authored the one remaining blocker (item_class_flush before
   the FU-146 hard exit, pinned via recording stub; 279/279 replays) onto the branch; the
   operator's own 20:37Z CHANGES_REQUESTED is the final gate.
+
+## 2026-08-26 ~17:30Z — the 0731 intake arc closes: ADR-115, the found endpoint, the gate reads (wind-down)
+
+- **The correlation read (operator ask):** model-wide OpenRouter tool-call error rates DON'T
+  correlate with our failures (0731 is globally the better tool-caller — inverted vs our fleet
+  record); PROVIDER identity does (our pin samples the mid/bottom of a 0.2%→40% per-provider
+  error spread; strike-day 0731 draw was ~88% Relace-fp4 at its 72h uptime low; DeepSeek
+  first-party — top quality, cheapest effective, 100% up — got zero rides). fp4-vs-fp8 is
+  small per step and compounds over agentic horizons — serving-level comparisons only.
+- **Endpoint FOUND:** `/api/frontend/v1/stats/tool-call-error-rate?permaslug=<dated>` —
+  unauthenticated, per-endpoint daily series (the Performance-tab data; DigitalOcean at
+  29–56% while 99.6% "up"). API-surface row added (§M14 PR).
+- **ADR-115 ruled (operator):** provider choice priced per successful JOB
+  (eff_price×tokens + p(fail)×C_overhead). Cheap coding DELEGATES to Auto Exacto
+  (subtractive — drop the pin, keep max_price); priced classes get pin-v2 (band +
+  quality tie-break + benchmark floor + live tool-call-error floor + #783 pair-cooldowns);
+  experiments keep the `@` arms; the scout canary rides its class's provider policy
+  (representativeness = same policy). Doc: model-routing.md §M14; build pointer FU-186;
+  live decision-table receipts: today's pick = Relace-fp4 over first-party for $0.0012/M.
+- **PR#963 (scout intake + @arms) review round:** all four findings fixed (void stays void;
+  intake-honest digest intro; :free @slot resolution past pin_for's sidestep; @-pin
+  max_tokens clamps against the SERVING provider — the -32602 class kept out of the
+  instrument built to study it).
+- **Gate reads:** #962 approved (the #933 G-B un-wedge — checkpoint-scoped bucket exclusion,
+  fail-safe fallback); #965 approved WITH a seat addition pushed in-PR
+  (GarageAdminMetricsAbsent — both new belts were silent-when-dead on the meta-wipe class;
+  its rollout firing is the scrape's acceptance test; also caught: append-to-file-without
+  trailing-newline glues into a folded YAML scalar — promtool caught it). ADR-115+§M14 = PR#967.
+- **In flight at wind-down (all machine-owned):** #963/#965/#967 auto-merge on their re-review
+  rounds; #915 waits ONLY on the operator's own 20:37Z re-read; oracle #272-r1 (first chainless
+  ride, routed plain flash) still riding — the loop owns it either way.

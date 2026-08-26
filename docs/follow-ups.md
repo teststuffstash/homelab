@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-186** (FU-183 and FU-185 were each minted out of order while this line lagged; 183 is archived, 184 minted 2026-08-25). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-187** (FU-183 and FU-185 were each minted out of order while this line lagged; 183 is archived, 184 minted 2026-08-25). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -507,6 +507,15 @@ the block needs pruning, not more headings.
       fault, verdicts void — the models carry no evidence either way). **Next:** the residue
       — first-fire proof, Go cells (post Sep-13), rung-2/FU-095(c), pool depth, void the
       tainted rotation rows — owned by G-A child homelab#778 (re-scoped, Goal #775). Related: #235's belt (machine lane owns it).
+
+- [ ] **FU-186** — **Provider selection priced per successful job (ADR-115): POINTER.** Design +
+      evidence + 4-step build order: [`docs/agents/model-routing.md`](agents/model-routing.md)
+      §M14 (Exacto delegated for cheap coding; pin-v2 with the overhead-cost term for priced
+      classes; the scout rides its class's provider policy; `@` arms = the experiment
+      instrument, shipped PR#963). **Next:** step 1 — the `provider_policy` class knob + the
+      no-pin/Exacto flip, then the 0731 matrix run (step 2) whose verdict is the model_tiers
+      re-admission PR. Relates ADR-115, ADR-096 §M4/M8, FU-095, homelab#966 (intake digest),
+      the #783 provider-attribution legs.
 
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design,
       pilots, the strike/§M10 rulings: [`docs/agents/model-routing.md`](agents/model-routing.md)
