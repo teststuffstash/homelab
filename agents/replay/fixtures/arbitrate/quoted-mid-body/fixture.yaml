@@ -12,8 +12,6 @@
 #   - No comment starts with "ARBITRATE"
 #   - The NOOP_ROUND_JQ should return "1" — the mid-body ARBITRATE is NOT detected as
 #     an arbitration event, so the FU-147 re-label fires.
-pins:
-  - MP-T11
 name: arbitrate-quoted-mid-body
 mode: actions
 source: agents/coordinator-scan.sh
