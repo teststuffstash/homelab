@@ -212,6 +212,59 @@ DIFF
 _go "$TMP/diff_validate.txt"
 want "1h: ParseForm → ASVS attached" "asvs"
 
+# 1i: Python is_authenticated (snake_case past-participle — issue#970)
+cat > "$TMP/diff_is_authenticated.txt" <<'DIFF'
+diff --git a/app/auth.py b/app/auth.py
+index 123..456 100644
+--- a/app/auth.py
++++ b/app/auth.py
+@@ -1,3 +1,5 @@
++def is_authenticated(self):
++    return self.session is not None
+DIFF
+_go "$TMP/diff_is_authenticated.txt"
+want "1i: def is_authenticated → ASVS attached" "asvs"
+
+# 1j: Go IsAuthenticated (CamelCase compound — issue#970)
+cat > "$TMP/diff_IsAuthenticated.txt" <<'DIFF'
+diff --git a/cmd/middleware.go b/cmd/middleware.go
+index 123..456 100644
+--- a/cmd/middleware.go
++++ b/cmd/middleware.go
+@@ -1,3 +1,5 @@
++func IsAuthenticated(r *http.Request) bool {
++    return r.Header.Get("Authorization") != ""
++}
+DIFF
+_go "$TMP/diff_IsAuthenticated.txt"
+want "1j: func IsAuthenticated → ASVS attached" "asvs"
+
+# 1k: Python registered_users (register + ed — issue#970)
+cat > "$TMP/diff_registered_users.txt" <<'DIFF'
+diff --git a/app/views.py b/app/views.py
+index 123..456 100644
+--- a/app/views.py
++++ b/app/views.py
+@@ -1,3 +1,5 @@
++def registered_users():
++    return User.query.all()
+DIFF
+_go "$TMP/diff_registered_users.txt"
+want "1k: def registered_users → ASVS attached" "asvs"
+
+# 1l: Python authorization_check (auth + orization — issue#970)
+cat > "$TMP/diff_authorization_check.txt" <<'DIFF'
+diff --git a/app/guards.py b/app/guards.py
+index 123..456 100644
+--- a/app/guards.py
++++ b/app/guards.py
+@@ -1,3 +1,5 @@
++def authorization_check(token):
++    return verify(token)
+DIFF
+_go "$TMP/diff_authorization_check.txt"
+want "1l: def authorization_check → ASVS attached" "asvs"
+
 # ── 2 ── non-matching diffs ─────────────────────────────────────────────────────────────────────
 section "2 — non-matching diffs (no auth/input/session signals)"
 
@@ -262,6 +315,32 @@ wantnot "2c: manifest change → no ASVS" "asvs"
 : > "$TMP/diff_empty.txt"
 _go "$TMP/diff_empty.txt"
 wantnot "2d: empty diff → no ASVS" "asvs"
+
+# 2e: Python retokenize (token as substring, NOT at word start — issue#970 over-match guard)
+cat > "$TMP/diff_retokenize.txt" <<'DIFF'
+diff --git a/app/parser.py b/app/parser.py
+index 123..456 100644
+--- a/app/parser.py
++++ b/app/parser.py
+@@ -1,3 +1,5 @@
++def retokenize(text):
++    return text.split()
+DIFF
+_go "$TMP/diff_retokenize.txt"
+wantnot "2e: def retokenize → no ASVS" "asvs"
+
+# 2f: Python desession (session as substring, NOT at word start — issue#970 over-match guard)
+cat > "$TMP/diff_desession.txt" <<'DIFF'
+diff --git a/app/cache.py b/app/cache.py
+index 123..456 100644
+--- a/app/cache.py
++++ b/app/cache.py
+@@ -1,3 +1,5 @@
++def desession(data):
++    return data.strip()
+DIFF
+_go "$TMP/diff_desession.txt"
+wantnot "2f: def desession → no ASVS" "asvs"
 
 
 # ── 3 ── edge cases ────────────────────────────────────────────────────────────────────────────
