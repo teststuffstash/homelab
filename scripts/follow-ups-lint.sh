@@ -82,14 +82,19 @@ done
 # TODO-shaped references (name-anchor ruling, header): the two forward-pointing shapes must
 # resolve to an OPEN item. Open → fine; archived → warn (resolved work still pointed at as
 # open); neither (deleted/burned) → fail. One repo pass, then classify per id.
+# ⚠ Only the id that is the TARGET of the construct is TODO-shaped — a line's OTHER FU
+# mentions are ordinary provenance (iac-lane-fsm IAC-G08: a disposition cell naming one id
+# plus a provenance mention of another in the same row's prose), so the extraction pulls
+# the id out of the construct match, never off the whole line.
 open_ids=$(grep -oE '^- \[ \] \*\*FU-[0-9]{3}\*\*' "$TRACKER" | grep -o 'FU-[0-9][0-9][0-9]' | sort -u)
 archived_ids=$([ -f "$ARCHIVE" ] && grep -oE '^- \*\*FU-[0-9]{3}\*\*' "$ARCHIVE" | grep -o 'FU-[0-9][0-9][0-9]' | sort -u || true)
+todo_re='FU: FU-[0-9]{3}|Tracked [Bb]y[:* ]*FU-[0-9]{3}'
 # shellcheck disable=SC2086 # HIST_EXCLUDES is a list of pathspecs
-todo_lines=$(git grep -nE 'FU: FU-[0-9]{3}|Tracked [Bb]y' -- ":(exclude)$TRACKER" ":(exclude)$ARCHIVE" $HIST_EXCLUDES 2>/dev/null || true)
+todo_lines=$(git grep -nE "$todo_re" -- ":(exclude)$TRACKER" ":(exclude)$ARCHIVE" $HIST_EXCLUDES 2>/dev/null || true)
 todo_report=$(printf '%s\n' "$todo_lines" | while IFS= read -r line; do
   [ -n "$line" ] || continue
   loc=${line%%:*}:$(printf '%s' "${line#*:}" | cut -d: -f1)
-  for id in $(printf '%s' "$line" | grep -o 'FU-[0-9][0-9][0-9]' | sort -u); do
+  for id in $(printf '%s' "$line" | grep -oE "$todo_re" | grep -o 'FU-[0-9][0-9][0-9]' | sort -u); do
     if printf '%s\n' "$open_ids" | grep -qx "$id"; then
       :
     elif printf '%s\n' "$archived_ids" | grep -qx "$id"; then
