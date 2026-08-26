@@ -578,16 +578,16 @@ the block needs pruning, not more headings.
       signal (key silent Nm while its ride pod Runs); the SIGTERM-trap finalize on deadline
       is the agent-runtime half. Relates FU-072 (this trigger's cause).
 
-- [ ] **FU-188** — **Reviewer 404-loop under authoritative routing** (oracle-fleet#277, 2026-08-26):
-      `/route role=reviewer` → `xiaomi/mimo-v2.5 [market]` rail=openrouter, but the reviewer is
-      subscription-only by construction (hardwired `/anthropic` surface, no key_ref) → Anthropic
-      404s the id instantly, no verdict — and no `/report` ⇒ no strike: 72 dispatches/24h, zero
-      generations, the router re-picks forever; review plane dead on every authoritative stack.
-      Legs: (a) reviewer adopts only rideable rails (subscription/opencode-go; the PR#991 family);
-      (b) router never serves the openrouter rail to role=reviewer; (c) api_error terminals
-      report ⇒ strike (relates FU-187's skipped-finalize). **Interim pin LIVE 2026-08-26** —
-      reviewer downgrades authoritative→shadow (reviewer-session.sh, grep FU-188); remove with
-      (a)+(b). Claims can't flip instead: chainless stacks FATAL workers (chainless-guard).
+- [ ] **FU-188** — **Reviewer 404-loop / the combination table — POINTER.** Postmortem + belt
+      audit + the operator's yaml-in-git ruling:
+      [`incidents/2026-08-26-reviewer-404-loop.md`](incidents/2026-08-26-reviewer-404-loop.md).
+      Build = the declared role×harness×rail×model table in git (rows are DATED status claims,
+      `works | not-yet | disabled(reason→link)` — strike-out-to-disable replaces bash literals);
+      router filters on it + the request's capability vector; launcher derives from it. Legs:
+      (a) rideable-rails adoption (b) router refusal + empty-rail skip row (c) reviewer
+      api_error → `/report` ⇒ strike (d) zero-output belt. **Pin LIVE** (reviewer
+      authoritative→shadow, grep FU-188); out with (a)+(b). Absorbs PR#991's literal + the
+      AVX2 pin as rows at build. Next: schema design pass, then issue tree.
 
 - [ ] **FU-164** — **doc-heat: transcript-derived read heat over repo markdown — POINTER.**
       Question, heat doctrine (heat × class × age; blind spots; approximate lines), v0 (jail
