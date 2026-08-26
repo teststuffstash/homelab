@@ -47,9 +47,11 @@ meant to avoid.)
   dispatches/24h, zero generations; two dead rounds on #277 pre-fix, 19:47Z + 20:00Z).
   **Incident pin LIVE (`1596e395`, direct-master):** reviewer-session downgrades
   authoritative→shadow for itself; workers untouched (chainless-guard REQUIRES authoritative
-  — a claim flip would FATAL oracle/sleep worker dispatches). **VERIFY next session: PR#277
-  carries a sonnet review from a post-20:15Z cron tick** (the pin's first live exercise; if
-  still verdictless, read the reviewer pod log for the "DOWNGRADED to shadow (FU-188)" line).
+  — a claim flip would FATAL oracle/sleep worker dispatches). **VERIFIED 2026-08-26 20:22Z
+  (the S5-continuation session): the pin works live** — the 20:15Z tick logged `authoritative
+  DOWNGRADED to shadow for the reviewer (FU-188 incident pin)` (shadow would-be:
+  `xiaomi/mimo-v2.5 [market]`), served sonnet, and PR#277 got a real CHANGES_REQUESTED
+  verdict at 20:22:54Z — the review plane is back; #277's fix round is the oracle loop's.
   Durable legs = FU-188 (a/b/c); the pin comes out with (a)+(b). Two 4h burns today
   were FU-187's class (quiet stall, reap skips finalize — tracker extended with the reap half).
   **MCR mirror LIVE** (PR#992 merged 2026-08-26 19:33Z; pull-through verified via the VIP,
