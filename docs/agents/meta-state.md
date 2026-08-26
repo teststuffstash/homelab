@@ -22,9 +22,10 @@ meant to avoid.)
   FAIL after a recorded clean run — the #984 comb is the natural flip read).
   **NEXT: #983 (doc-heat trimming pass) + #984 (deep comb) — both UNBLOCKED, sitting-scale.** **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
   UNPIN at its merge. Still-queued codeowner issues stand: #928 #929 #932 #933 #937 #938 #888
-  #945 #456 #110, agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's
-  merge lets G-B assemble → assembly PR → codeowner tax → probe-platform, FU-102); **#946
-  needs a seat run after #945**; #953 queued (docs-lint gate behaviour — its class fired AGAIN
+  #456 #110, agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's
+  merge lets G-B assemble → assembly PR → codeowner tax → probe-platform, FU-102); **#946 is
+  UNBLOCKED (#945 merged as PR#996, 21:19Z)** — the A5 evidence seed is a seat run of
+  `re-review.sh --shadow --model opencode/big-pickle` over #923's set, ready any sitting; #953 queued (docs-lint gate behaviour — its class fired AGAIN
   this session: the meta-state ⚓-term break, second instance on the thread).
 
 - **⚑ ORACLE AND SLEEP ARE CHAINLESS (oracle: oracle-iac#387; sleep: sleep-iac#77 + mirror
@@ -100,14 +101,13 @@ meant to avoid.)
   a dead doorbell edge remains. The emitter hunt (the scan states wake source per dispatch)
   is the next concrete action, tracked on #459 + FU-168.
 
-- **⚠ #974 (coordinate/reflex OOM at 512Mi) still burning while queued:** global doorbell +
-  reflex backstop down; sightings at wind-down (operator): `coordinator-reflex-1787775000`
-  OOMKilled 20:10Z + `coordinate-lkxr2` OOMKilled with **ring=- (a GENUINE full sweep, not
-  the #994 junk shape)** — the board-covering global scan is really down, only per-stack
-  loops are alive. Fix = machine-lane cap bump
-  (queued, measured-sizing triage on the thread); **#994 holds the routing decision** the
-  operator still owes (scan-side early exit recommended — its cost goes UP when #974 lands;
-  diagnosis comment on the issue, 2026-08-26).
+- **#974 FIXED — PR#1000 merged 21:18Z (ADR-110 read):** coordinate WorkflowTemplate limit
+  512Mi→1Gi (measured: 442Mi survivor peak; requests untouched), the global scan plane
+  recovers from the next sync. **#994 still holds the routing decision** the operator owes
+  (scan-side early exit recommended — its cost goes UP now that #974 landed; diagnosis
+  comment on the issue, 2026-08-26). Related sighting on **#938** (sentinel edge convoy,
+  recurrence comment 2026-08-26 ~21:17Z): head-blind `{wake: edge}` payloads confirmed, 17
+  pending identical sweeps at peak, arrival source = updater head churn after merge bursts.
 - **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — readout pending; revert to
   0 if no win; residual setup cost = homelab#518 (its promtool child #936 queued 2026-08-25:
   loop-health fixture = 107.6s of the 130s lint step).
