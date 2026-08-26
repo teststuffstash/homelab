@@ -261,7 +261,7 @@ else
 fi
 
 # Check that common remediation verbs are pre-granted
-for verb_resource in "pods:get,list,watch,patch,delete" "configmaps:get,list,watch,patch,delete" "deployments:get,list,watch,patch,delete" "secrets:get,list,watch"; do
+for verb_resource in "pods:get,list,watch,patch,delete" "configmaps:get,list,watch,patch,delete" "deployments:get,list,watch,patch,delete" "serviceaccounts:get,list,watch"; do
   resource="${verb_resource%%:*}"
   verbs="${verb_resource#*:}"
   if grep -q "$resource" "$RBAC" 2>/dev/null; then
