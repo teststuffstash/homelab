@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-187** (FU-183 and FU-185 were each minted out of order while this line lagged; 183 is archived, 184 minted 2026-08-25). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-188** (FU-183 and FU-185 were each minted out of order while this line lagged; 183 is archived, 184 minted 2026-08-25). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -124,7 +124,10 @@ six OVERSIZE items pointer-ized into
       the same node can). Symptom matrix, what's ruled out, and the next probes:
       [`docs/spikes/kata-service-vip.md`](spikes/kata-service-vip.md). Workaround in place (kata
       CI-gate pods use `dnsPolicy: None` + the LAN resolver) — fine for k3d/registry work, blocks
-      in-cluster consumers like Garage transcript upload. Relates FU-116.
+      in-cluster consumers like Garage transcript upload. **⚠ 2026-08-26: the workaround's
+      dispatch-time endpoint-IP rewrite goes stale when the proxy rolls mid-ride and black-holes
+      the ride's LLM rail** (issue-272-r1 slept to the 4h deadline; evidence in the spike doc) —
+      root-causing this, or a headless-Service name, closes that too. Relates FU-116, FU-187.
 - [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: pull-mirror the
       **homelab** repo itself into Forgejo (the `sleep-lab` org mirrors exist since 2026-06-21) —
       ⚠ **and those mirrors are BROKEN since the 2026-08-04 Forgejo DB migration**: pod logs show
@@ -558,6 +561,16 @@ the block needs pruning, not more headings.
       acceptance. Relates FU-095, FU-090(c), ADR-104.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
+
+- [ ] **FU-187** — **Quiet-stall detection: a Running agent pod with a silent rail is invisible
+      to every belt** (agent-oracle-fleet-issue-272-r1, 2026-08-26: opencode slept ~3h on a
+      black-holed proxy IP — zero sockets, 0-byte run.log — until the 4h activeDeadline reap;
+      no kill, no alert). The storm watchdog pattern-matches run.log LINES, so an empty log
+      can't trip it (its header names this "quiet loop" class as uncovered since
+      openrouter-operator#14); `AgentQueueStalled` is suppressed BY the running pod; phase
+      metrics only push at finalize. **Next:** pick the cheap belt — a no-growth clause in
+      agent-storm-watchdog (run.log unchanged for Nm ⇒ same kill path), or the proxy-side
+      signal (key silent Nm while its ride pod Runs). Relates FU-072 (this trigger's cause).
 
 - [ ] **FU-164** — **doc-heat: transcript-derived read heat over repo markdown — POINTER.**
       Question, heat doctrine (heat × class × age; blind spots; approximate lines), v0 (jail
