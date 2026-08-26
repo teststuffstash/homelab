@@ -29,11 +29,10 @@ meant to avoid.)
   child is minted at the ~2026-09-03 paid-flash revert** (sequencing ruled A, 2026-08-25 —
   acceptance: zero chain-exhausted defers on subscription-only classes).
 
-- **⚑ S7 (#741): the #745 cutover EXECUTED 2026-08-26** (operator-directed): callers deleted in
-  9 repos + homelab's caller + the reusable (`b68e4ee4`); MP-T02 re-anchored on the in-cluster
-  pieces with the executed `fixtures/updater` replay; `MERGE_GH_APP_*` removed from tofu/github.
-  **ONE remaining act, HOST-side: `devbox run github-tofu apply`** (destroys the two org
-  secrets — admin PAT is outside the jail); #745 closes with it. Silences `a3628730` +
+- **⚑ S7 (#741): the #745 cutover is COMPLETE 2026-08-26** — callers ×10 + reusable deleted,
+  MP-T02 re-anchored (executed `fixtures/updater` replay), org secrets DESTROYED by the
+  operator's host apply (after the bypass-actor var restore, `c3f3f5c9`). Acceptance watch:
+  hosted updater runs structurally 0; no BEHIND PR >30m anywhere. Silences `a3628730` +
   `5400ed94…` self-expire 2026-09-01. (S4 #762 + #420 stint closes executed 2026-08-26.)
 
 - **⚑ Retro (FU-058): r1 DELIVERED 2026-08-25** (PR#918; the batch = #927–#929 queued, #930
