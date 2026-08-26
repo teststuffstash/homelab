@@ -1,0 +1,8 @@
+# coordinator-adopt-model — decision table. Row state (RESOLVED, RESOLVE_CLASS, GOAL_MODEL,
+# INITIAL_MODEL) lives in rows/<id>/vars.sh, not in this table.
+# id                     | world | patch | env | expect                     | params
+routed-fable             |       |       |     | routed-fable               |
+bare-sonnet              |       |       |     | bare-sonnet                |
+goal-decompose-override  |       |       |     | goal-decompose-override    |
+goal-decompose-bare      |       |       |     | goal-decompose-bare        |
+no-resolved              |       |       |     | no-resolved                |
