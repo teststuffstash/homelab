@@ -1,60 +1,18 @@
 === push: held-merged-unlinked (who=operator) ===
-CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_board/namespace/homelab-agents
-STDIN # TYPE agent_item_class gauge
-STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
-STDIN agent_item_class{repo="homelab",item="833",class="held-merged-unlinked",who="operator"} 1
-STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
-STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="833",class="held-merged-unlinked",who="operator"} 1786465900
 RETURN 0
 === push: queued-held-by-ghost (who=operator) ===
-CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_board/namespace/homelab-agents
-STDIN # TYPE agent_item_class gauge
-STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
-STDIN agent_item_class{repo="homelab",item="834",class="queued-held-by-ghost",who="operator"} 1
-STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
-STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="834",class="queued-held-by-ghost",who="operator"} 1786465900
 RETURN 0
 === push: riding (who=machine) ===
-CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_board/namespace/homelab-agents
-STDIN # TYPE agent_item_class gauge
-STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
-STDIN agent_item_class{repo="homelab",item="889",class="riding",who="machine"} 1
-STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
-STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="889",class="riding",who="machine"} 1786465900
 RETURN 0
 === push: container (who=none) ===
-CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_board/namespace/homelab-agents
-STDIN # TYPE agent_item_class gauge
-STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
-STDIN agent_item_class{repo="homelab",item="840",class="container",who="none"} 1
-STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
-STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="840",class="container",who="none"} 1786465900
 RETURN 0
 === push: backlog-aggregate (who=operator) ===
-CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_board/namespace/homelab-agents
-STDIN # TYPE agent_item_class gauge
-STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
-STDIN agent_item_class{repo="homelab",item="aggregate",class="backlog-aggregate",who="operator"} 1
-STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
-STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="aggregate",class="backlog-aggregate",who="operator"} 1786465900
 RETURN 0
 === push: gateway disabled ===
 RETURN 0
 === push: no pod identity ===
 RETURN 0
 === push: gateway refuses ===
-CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_board/namespace/homelab-agents
-STDIN # TYPE agent_item_class gauge
-STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
-STDIN agent_item_class{repo="homelab",item="999",class="riding",who="machine"} 1
-STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
-STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="999",class="riding",who="machine"} 1786465900
 RETURN 0
 === end ===
 RC 0

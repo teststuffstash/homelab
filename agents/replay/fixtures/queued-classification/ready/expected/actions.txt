@@ -1,0 +1,3 @@
+CALL item_class_push homelab issue-100 queued-ready machine
+OUT RESULT classification=queued-ready
+RC 0
