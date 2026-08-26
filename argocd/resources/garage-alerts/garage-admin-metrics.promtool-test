@@ -115,3 +115,36 @@ tests:
       - eval_time: 22m
         alertname: GarageTableEmpty
         exp_alerts: []
+  # ── 5/6 — COVERAGE GUARD: a dead scrape is a page, not calm (seat, PR#965 gate read) ────────
+  # Neither family exists (ServiceMonitor mismatch / metrics token / name drift). The two belts
+  # above are structurally blind in this state; the guard is what says so.
+  - interval: 1m
+    name: "GarageAdminMetricsAbsent fires when the scrape serves neither family"
+    input_series: []
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: GarageAdminMetricsAbsent
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: GarageAdminMetricsAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Garage admin-metrics families are absent — the disk/table belts are blind"
+              description: "The garage-admin-metrics belts (GarageDiskFillingUp, GarageTableEmpty) read garage_local_disk_total and table_size, and at least one family is absent from Prometheus — the scrape is not working (ServiceMonitor selector, metrics token, or a metric-name drift), so those belts cannot fire regardless of Garage's state. Fix the scrape; do not silence this without confirming both families exist."
+
+  # ── 6/6 — COVERAGE GUARD stays silent when both families are served ────────────────────────
+  - interval: 1m
+    name: "GarageAdminMetricsAbsent silent when both families exist"
+    input_series:
+      - series: 'garage_local_disk_avail{node="garage-0",device="data"}'
+        values: "80+0x60"
+      - series: 'garage_local_disk_total{node="garage-0",device="data"}'
+        values: "100+0x60"
+      - series: 'table_size{node="garage-0",table_name="block"}'
+        values: "1048576+0x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: GarageAdminMetricsAbsent
+        exp_alerts: []
