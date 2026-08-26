@@ -1,0 +1,19 @@
+# homelab#937 — FU-042 leg (b) WIP cap: a wedged (Unschedulable) Pending pod does NOT hold a
+# WIP slot, while a booting Pending pod still does (the #55 counter-constraint). A 30-second
+# grace period prevents a briefly-unschedulable new pod from being discounted instantly.
+#
+# CONDITION UNDER REPLAY. The launcher pre-flight counts live agent pods per project and refuses
+# dispatch when the count reaches the WIP limit. The old predicate counted every non-terminal
+# pod (Pending + Running), which was correct for booting pods (#55) but wrong for wedged pods
+# that will never run (#778 finding #5, #919).
+#
+# THE CONTRACT (one world, one arm):
+#   World: one Running pod + one Pending Unschedulable old pod (created >30s ago).
+#   With WIP=2, the count of 1 (wedged excluded) passes — the fixture asserts that the
+#   Unschedulable pod is discounted and the dispatch proceeds.
+name: fu042-wip-cap
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu042-wip-cap
