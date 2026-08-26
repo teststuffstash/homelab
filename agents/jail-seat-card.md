@@ -58,7 +58,8 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
   Do not grow a second copy in the tracker afterwards; edit the doc.
 - **Resolved something?** Move the item to `docs/follow-ups-archive.md` (trimmed to a few lines,
   `(archived YYYY-MM-DD)`) in the same commit as the fix. Archive entries expire after ≈a month:
-  delete + scrub remaining refs in living code/docs (TICK-LOG/ADR refs are historical, exempt).
+  delete the entry + scrub only TODO-shaped refs (`FU: FU-NNN` cells, `Tracked by` lines —
+  ADR-116); bare id mentions are provenance names and stay, forever.
   A pointer item's **doc survives archival** — it's documentation, not tracker residue.
   `devbox run follow-ups-lint` catches dangling references, stale archive entries, oversized
   items, and broken/un-backlinked pointers.

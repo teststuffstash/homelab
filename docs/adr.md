@@ -1667,3 +1667,25 @@ Longhorn footprint from the same metal disks.
 **Consequences:** layout ops get a version-disciplined script (apply-once-per-version, single
 RPC host); `docs/garage.md` §Target architecture carries the mechanism; FU-137 tracks
 delivery; SERVICES.md unchanged (endpoints stay).
+
+### ADR-116 — FU ids are stable coordinates: provenance refs never scrub (the name-anchor ruling)
+
+**Status:** Accepted (2026-08-26, operator ruling input in the S5 stint — homelab#981; the
+2026-08-25 docs-cleanup measured the problem: 29 expired archive entries whose living refs are
+overwhelmingly provenance names, FU-088 ×51, FU-069 ×26, FU-057 ×20).
+**Decision:** an `FU-NNN` string in living code/docs is by default a **provenance name** — a
+stable coordinate in the never-reused id namespace — legal forever, surviving the archive
+entry's expiry. Only **TODO-shaped** references must resolve to open work, and the mechanized
+shapes are exactly two: `FU: FU-NNN` (FSM gap-register disposition cells) and `Tracked by`
+lines. `follow-ups-lint` enforces it: DANGLING now fires only at/past the tracker's Next-free
+counter (a typo'd id that never existed); TODO-RETIRED (fail) / TODO-ARCHIVED (warn) police the
+two forward-pointing shapes.
+**Considered:** scrub-all-on-expiry (the prior convention — measured as mass destruction of
+design provenance for zero drift protection); colon-form comments as a third TODO shape
+(measured ambiguous: `# FU-085: this run may have opened…` is provenance, not a TODO); heading
+renames per doc (rot addressed separately — the §-code convention, S5 #982).
+**Why:** one-ID-namespace + deletability (../teststuff specs-for-agentic-delivery.md): a name
+that cannot be reused cannot dangle semantically; only forward pointers can lie.
+**Consequences:** archive expiry becomes a cheap mechanical sweep (29 deleted in the ADR's own
+PR); `git log -S FU-NNN` stays the deep record; the residual risk — a genuine TODO written as a
+bare colon comment outliving its id — is accepted and left to cleanup-pass judgment.
