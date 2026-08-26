@@ -5634,3 +5634,22 @@ first live ADR-110 maintenance session before the ADR existed.
   the #141 terminal — re-review pending. #967 bot-approved + armed. #976 merged.
 - Wind-down: monitors none, background ride streams killed (the rides are in-cluster,
   finalize is in-pod), transcripts synced.
+
+## 2026-08-26 ~19:55Z — MCR mirror rollout verified + mechanical meta-state sweep (maintenance session)
+
+- **MCR mirror LIVE end-to-end:** PR#992 merged 19:33Z, ArgoCD synced in ~30s; verified by a
+  pull-through `playwright/python` tags fetch via the VIP (`http://192.168.40.31/v2/…` returned
+  upstream tags incl. v1.62.0). sleep#123 commented with the image-redirect option
+  (pin the image tag to the pip-resolved playwright version; PR#133 floats `>=1.62.0`).
+- **oracle#272 board check:** the claude/haiku r1 hand-dispatch DELIVERED — oracle-fleet
+  PR#277 (19:00Z), issue → `agent/review`. No FU-143 hold.
+- **#521 second backlog sweep executed** (the scheduled residue from the 08-18 close): 258
+  pre-default `Succeeded` workflows with `finishedAt` < now−7d deleted, 1145 → 887; the #510
+  TTL defaults own the curve alone now. Recorded on #521. (High absolute count = today's
+  oracle reingest+delta burst, 540 workflows created 08-26 — TTLs out on its own.)
+- **wk-metal-04 zone-label conflict probed read-only:** live managedFields show `Terraform`
+  owning `topology.kubernetes.io/zone` cleanly (kata label is Talos/kubelet-side, disjoint) —
+  likely cleared by the last targeted apply; verdict at the next full apply. Breadcrumb in
+  meta-state.
+- Operator note mid-session: oracle-fleet reingest+delta running — Garage ERT giants and
+  gc-restarts left strictly alone.
