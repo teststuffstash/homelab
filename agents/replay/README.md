@@ -234,6 +234,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-key/minted` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/pinned` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/subscription` | actions | - | `agents/retro-session.sh` | - |
+| `retro-push-belt` | table | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-rank-snapshot-exclusion/retro-rank-snapshot-exclusion` | suite | - | `-` | - |
 | `review-flip-belt/probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-flip-belt/review-flip-belt` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |

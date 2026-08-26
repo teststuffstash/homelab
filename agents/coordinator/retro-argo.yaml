@@ -411,6 +411,7 @@ spec:
               # FU-176 / #932: retry once and surface final failure as a marker file + PR body
               # amendment instead of a TTL'd log-only WARN — a belt whose own failure is a log
               # line that expires is not a belt (FU-108 class).
+              # >>>REPLAY:retro-push-belt>>>
               PUSH_FAILED=0
               printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
                 | curl -s --max-time 10 --data-binary @- \
@@ -440,6 +441,7 @@ spec:
                 gh pr edit "$BR" --repo teststuffstash/homelab \
                   --body "FU-058 scheduled retro output — HUMAN-GATED, read before merging. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}${PUSH_WARN}"
               fi
+              # <<<REPLAY:retro-push-belt<<<
           env:
             - { name: HOME, value: "/home/node" }
           volumeMounts:
