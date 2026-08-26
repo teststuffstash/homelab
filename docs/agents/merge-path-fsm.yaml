@@ -77,25 +77,27 @@ transitions:
 
   - id: MP-T02
     name: updater brings a behind PR current
-    owner: update-pr-branch reusable workflow (adRise action, homelab-merge App)
+    owner: in-cluster updater (ADR-111 — exporter edge + */15 Argo CronWorkflow → agents/update-pr-branch.sh, homelab-merge App via ESO; hosted reusable retired 2026-08-26, homelab#745)
     when: "behind ∧ green ∧ armed ∧ ¬conflicted ∧ ¬changes_requested — oldest first, ONE per run"
     emits: branch_updated
     status: guarded
-    unreplayed: "third-party GitHub-hosted action — config pinned by anchors, behavior owned upstream"
+    replay:
+      - agents/replay/fixtures/updater
     guards:
       - desc: "FIFO + one-per-run + armed-only"
-        anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "require_auto_merge_enabled" }
-      - desc: "doorbell dedup (billing, 2026-07-24): push bursts collapse to running + latest
-          queued — safe because level-triggered; cancel-in-progress DELIBERATELY false (killing an
-          in-flight run can drop the 422→merge-conflict labeling, MP-T06 — the silent-park class)"
-        anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "cancel-in-progress: false" }
+        anchor: { file: agents/update-pr-branch.sh, pattern: "oldest armed\\+BEHIND, FIFO" }
+      - desc: "burst serialization: ONE mutex across edge + cron submissions (Cron Forbid cannot
+          see Sensor submissions), so push bursts serialize instead of racing — and an in-flight
+          pass is never killed, preserving the 422→merge-conflict labeling MP-T06 depends on
+          (the cancel-in-progress: false rationale of the hosted era, carried by the mutex now)"
+        anchor: { file: agents/coordinator/update-pr-argo.yaml, pattern: "synchronization" }
       - desc: "the CR∧BEHIND unstrand belt fires ONLY on new content since the newest reviewer
           verdict (non-merge commits — the reflex's reviewable_again shape; updater merges are not
           content or the belt feeds itself) and never on agent/error / agent/arbitrate PRs.
           Measured 2026-08-17: the unconditional belt spent 34 branch updates + ~35 CI runs
           keeping unmergeable PRs current in one busy-master day (#473 ×16 parked, #475 ×18
           breaker-latched); unreadable probe data HOLDS, never updates"
-        anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "new content since verdict" }
+        anchor: { file: agents/update-pr-branch.sh, pattern: "unstrand" }
     incidents: ["2026-07-09 oracle-fleet#6 (changes-requested refusal deadlock → MP-T04's BEHIND exception)"]
 
   - id: MP-T03
