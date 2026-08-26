@@ -32,6 +32,7 @@ Bearer <key>` everywhere; "probed" = verified against our account, with date.
 | MCP `https://mcp.openrouter.ai/mcp` | `list-daily-model-rankings` (rotation feed, top-30 daily, live since 2026-07-27), `list-models`/`get-model`, `search-docs`, **`list-benchmarks`**, **`list-task-classifications`**, `get-endpoint-uptime-history`, `list-presets`/`get-preset` | standard API key works for rankings (no OAuth dance, 2026-08-02); full tool set via OAuth (7-day key, $10 cap, includes BILLABLE `send-message`). Probed 2026-08-03 (OAuth): `list-benchmarks` sources = `artificial-analysis` (AA intelligence/coding/agentic composite indices, ~126 models) **and `openrouter` — OpenRouter's OWN evals (gpqa_diamond accuracy + $/task), i.e. the formerly session-gated frontend data**; `list-task-classifications` = 7d traffic share per task tag (incl. `code:devops_config`, `devops`, `security_audit`, `research_report`) with top-10 models each; `get-endpoint-uptime-history` = 72h hourly per-provider uptime **with quantization in the endpoint label** (fp8/fp4 — the §M4 staleness/quant filter's data). **Probed 2026-08-03: the standard account key pulls `list-benchmarks` AND `list-task-classifications`** (jail replay of the proxy's exact `_mcp_call` shape with the `router-account-key` Secret) — the scout's weekly capability/market pull is fully automatable server-side; OAuth is only needed for the interactive/billable tools |
 | provisioning keys API | mint per-run capped keys (the ADR-081 runtime-key design) | scout canary keys ride this with `only-free` guardrail (FU-024) |
 | frontend `/api/frontend/v1/stats/effective-pricing?permaslug=` | per-provider 30d market effective prices + REAL cache-hit (the §M3 market basis) | works **unauthenticated** (2026-08-26). ⚠ takes the **DATED permaslug** (`deepseek-v4-flash-20260731`), never the model id (`…-0731`) — the wrong form returns an EMPTY payload, not an error. The proxy already derives it from `/endpoints` tag names (`_PERMASLUG_RE`); a hand probe must too. Ranks effective **input** price only — output price and quality are not in it |
+| frontend `/api/frontend/v1/stats/tool-call-error-rate?permaslug=` | per-ENDPOINT daily tool-call error-rate series (the Performance-tab modal's data — the Auto Exacto quality signal itself) | found 2026-08-26 after the RSC row below couldn't reach it (the tab lazy-loads); unauthenticated; endpoint ids join to providers via `endpointStats`/`/endpoints`. THE §M14 pin-v2 live-floor input + a fleet alerting feed (a provider at 39.6% tool-error read 99.6% *uptime* — "up" ≠ "works") |
 | model-page RSC stream (`GET openrouter.ai/<author>/<slug>` + `RSC: 1` header) | the Performance-tab data as React-Query dehydrated state, keyed by dated permaslug: **`benchmarkScores`** (per-provider Auto-Exacto benchmark rows — gpqa_diamond + TAU-Bench score, `run_count`, `endpoint_id`, 32d rolling — the quality table behind Exacto routing), **`endpointStats`** (per-provider latency/throughput **percentiles** p50–p99, `is_deranked`, `capacity_tpm`, quantization — richer than `/endpoints`), **`appStats`** (daily model-level `total_tool_calls` + `requests_with_tool_call_errors` → the model-wide tool-call error rate), `uptimeRecent`, `topColos` | probed 2026-08-26 (the 0731 read). Unauthenticated. ⚠ the PER-PROVIDER **Tool Call / Structured Output Error Rate** table lazy-loads on tab open and is NOT in the initial stream — its endpoint is unfound (candidate paths under `/api/frontend/v1/stats/*` all 404); the website is the only reader today. The signal is still CONSUMABLE blind: **Auto Exacto** reorders providers by it on every tool-calling request by default, and the **`:exacto`** model-variant suffix applies it explicitly — ⚠ an explicit §M4 `provider.order` pin presumably suppresses it (unverified; the 0731 matrix run tests this) |
 
 Roster additions probed 2026-08-26 on the MCP row (standard `router-account-key`, no OAuth):
@@ -861,6 +862,81 @@ into the mechanism layer):
   with their reason; the roster + pool version print before any dispatch, and `--dry-run` stops
   there. Pinned by `agents/replay/fixtures/research-draw-roster` (recorded from `router.route()`
   against the shipped pool table). Build: FU-162.
+
+### M14. Provider selection — priced per successful JOB (ADR-115, 2026-08-26)
+
+**The decision record is ADR-115; this section owns the mechanism.** Born from the 0731 intake
+read (TICK-LOG 2026-08-26; digest homelab#966): the M4 pin optimizes effective $/M with an
+uptime floor and is blind to serving QUALITY — measured on one model, provider tool-call error
+rates span 0.2%→39.6% (single-snapshot, across providers; one provider's DAILY series ranges
+wider — DigitalOcean 29–56% over the probed window, the Evidence base below) and GPQA 68.7→90.0
+(quantization + serving stack, not weights), our pin
+sampled the mid/bottom of that distribution exclusively, and uptime cannot see the failure class
+(a malformed tool call arrives inside a 200). The missing term is **overhead cost**:
+
+    expected_cost(provider) = eff_price × expected_tokens
+                            + p(fail | provider, model) × C_overhead
+
+`C_overhead` = the measured downstream cost of a failed ride (strike handling + re-dispatch +
+coordinator session + review rounds + wall clock; ~$0.5–2 plus latency, from our own ledger).
+At flash prices the failure term dominates any price delta (→ delegate); at research prices the
+price term re-enters (→ our pin, upgraded). One formula, two regimes.
+
+**Class policy (`provider_policy` in model-classes.json — git-side, per the git/cluster split):**
+
+| class tier | policy | mechanism |
+|---|---|---|
+| cheap coding (`coding` on flash-class models) | **`exacto`** — no `provider.order` injected; Auto Exacto (ON by default upstream for tool requests) owns the ordering; keep only `max_price` | subtractive: the pin injection is skipped; the FU-088/M12 gates, `MAX_TOKENS_FLOOR`, and the `/generation` harvest (attribution) are unchanged |
+| priced (research / audit / weave / judges) | **`pin-v2`** | M4 + (1) the 15% band with a serving-quality tie-break inside it (native/fp8 over fp4 → per-provider Exacto benchmark score → market cache-hit); (2) a permissive benchmark provider-floor (drop only KNOWN scores ≫ below the model's provider median; slug-keyed join — display names differ); (3) a live tool-call-error floor from the `stats/tool-call-error-rate` feed (exclude ≥10% 5d-avg; de-prefer >2× model median in-band); (4) (model, provider) pair-cooldowns fed by the proxy's own tool-call validation — the #783 provider-attribution legs |
+| experiments (scout matrix / canary arms) | **explicit `@` arms** (PR#963): `@<provider_slot>` (eff-ranked index, typed 400 when unresolvable) or `@<slug>`, `allow_fallbacks: false`; `:exacto` forwards un-pinned | the reproducibility instrument — never the production policy |
+
+**⚠ Exacto ↔ prompt caching (operator find, 2026-08-26 — upstream
+[docs/guides/routing/auto-exacto](https://openrouter.ai/docs/guides/routing/auto-exacto)):**
+Auto Exacto reorders providers on EVERY tool-calling request, overriding the sticky routing
+prompt caching rides — in a tool loop it can deprioritize the cache-warm provider mid-session
+(upstream's own words: cache misses mid-conversation). That collides head-on with M4's doctrine
+(cache lives AT the provider; caching provider > cheaper provider) and with this fleet's
+cacheRead-dominated token shape. Consequences, folded into the build order: the step-1 flip is
+judged on OBSERVED per-arm cache-hit (`router_observed_cache_hit` + the `/generation` harvest),
+never price+tool-error alone — at flash prices the failure term may still dominate the cache
+penalty, but that is the A/B's question, not an assumption. If Exacto loses on cache economics,
+the opt-out shapes are `sort: "price"` in the provider object or the `:floor` variant (both keep
+sticky routing, both subtractive like the pin-skip), or Tool Search `defer_loading: true` to
+shrink the cached prefix until an Exacto collision is tolerable. The priced classes are
+unaffected — pin-v2 keeps the session pin, which is itself the cache-stickiness mechanism.
+
+**The scout representativeness principle:** a canary rides the provider policy of the CLASS it
+feeds — same policy, not same provider (an Exacto-routed class gets Exacto-routed canaries;
+pinning them would make the evidence LESS representative). Newcomer cold-start (Exacto has no
+history on a new model → early ordering ≈ uninformed) is absorbed by the existing attempts
+budget + the served-slug harvest; provider DIAGNOSIS stays the `@`-arm matrix's job. Follow-up:
+canary rows should carry the SERVED slug from the harvest, not `provider:""`.
+
+**Evidence base (2026-08-26, all live-probed):** the pin picked Relace fp4 over DeepSeek
+first-party (native, top GPQA/TAU, 95% market cache, 100% uptime) for $0.0012/M; DigitalOcean
+pin-eligible at 29–56% tool-error (per-endpoint DAILY series from the found
+`stats/tool-call-error-rate` endpoint — a multi-day range, which is why it exceeds the
+single-snapshot spread's 39.6% max); our 0731 traffic = Relace/OpenInference/DeepInfra only,
+strikes un-attributable (#783); the elite tool-call tier (Fireworks 0.23%) never sampled, ~3×
+price ≈ cents/month at fleet volume. Rung-1 canaries pass on BOTTOM-quartile providers
+(homelab#966: both harnesses clean via OpenInference/Relace), so the discriminating evidence
+needs rung-2-size tasks × provider arms.
+
+**Build order (fresh-session pickup — FU-186):**
+
+1. **Exacto flip for cheap coding** — `provider_policy` knob in model-classes.json + the proxy
+   skipping pin injection for that policy (keep `max_price`); trial-gated: the matrix A/B below
+   judges it before it becomes standing.
+2. **The 0731 matrix run** (the re-admission evidence): intake mode (built) ×
+   `SCOUT_CANARY_HARNESSES="opencode goose"` × arms {default-pin, no-pin/exacto, `@deepseek`,
+   `@relace` control} on a rung-2-sized task (the trivial ride does not reproduce the failure
+   class), judged on death rate / $/clean / cache-hit from the harvest. Verdict lands as the
+   model_tiers re-admission PR citing the digest chain.
+3. **pin-v2** for the priced classes (the four legs above; the tie-break is `compute_pin`'s
+   `ranked` sort key growing quality terms — the plumbing shipped in PR#963).
+4. **The proxy tool-call validator** → `router_tool_call_errors{model, provider}` (our-traffic
+   twin of the upstream feed) + pair-cooldowns + the model-health dashboard column + an
+   alert on our traffic landing on a high-error serving.
 
 ## The sleep-stack pilots — task-class routing + multi-harness evidence (FU-095)
 
