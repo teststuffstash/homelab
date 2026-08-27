@@ -30,6 +30,12 @@ meant to avoid.)
   from the jail (BGP advertised, TLS OK) and all seven signatures reproduce there: granted
   `oracle-fleet`/`oracle-agents` **200**; `platform-agents`/`agent-coordinator`/**`fake`** **403**;
   no header **400**; no token **401**; `POST .../push` **404**. **ADR-118 IS COMPLETE.**
+  **CONFIRMED FROM THE ORACLE STACK JAIL** (operator relay, 2026-08-27 evening): the workbench SA
+  reads tenant `oracle-fleet` (series + range both return) and gets a clean 403 on `fake` — the
+  door works from the consumer side, not just from the seat's probe. Operator accepts that
+  pre-flip history is out of reach; the requirement was **log access during the NEXT delta run**,
+  which is met — `oracle-fleet` and `oracle-agents` are both ingesting post-flip (31.4 KB / 31.6 KB
+  at wind-down) and both are granted. `oracle-iac` reads 0 only because it runs no pods.
   **⚠ ONE MOTIVATING CLAIM DID NOT SURVIVE THE TEST → FU-194:** homelab#541 promises "any session
   with LogQL access reads kernel-log lines", and that is STILL false for a jail — `kmsg-reader`
   sits in ns `loki`, so kernel lines are tenant `loki`, which no jail is granted and none should
