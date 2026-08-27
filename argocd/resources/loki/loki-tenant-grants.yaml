@@ -6,9 +6,25 @@
 # absence of one is a 403. No code decides this and no query is parsed — that is the entire point
 # of choosing an RBAC-shaped gate over a bespoke endpoint (ADR-118).
 #
-# Reading the grants is therefore an ordinary RBAC question, answerable without this file:
-#   kubectl auth can-i get logs.loki.teststuff.net -n oracle-fleet \
-#     --as=system:serviceaccount:oracle-fleet:oracle-workbench
+# Reading the grants is therefore an ordinary RBAC question, answerable without this file — but it
+# has to be asked with a SubjectAccessReview, NOT with `kubectl auth can-i`:
+#
+#   kubectl create -o jsonpath='{.status.allowed} {.status.reason}{"\n"}' -f - <<'EOF'
+#   apiVersion: authorization.k8s.io/v1
+#   kind: SubjectAccessReview
+#   spec:
+#     user: system:serviceaccount:oracle-fleet:oracle-workbench
+#     resourceAttributes: { group: loki.teststuff.net, resource: logs, verb: get, namespace: oracle-fleet }
+#   EOF
+#
+# ⚠ `kubectl auth can-i get logs.loki.teststuff.net -n <ns> --as=…` answers **no for every
+# namespace, including granted ones** — it did when it was the recipe printed here, and it was
+# wrong then too (found by running it, 2026-08-27). `logs.loki.teststuff.net` is a PSEUDO-resource
+# with no CRD, so kubectl's RESTMapper cannot resolve it into (group, resource) and the SAR it
+# sends does not match these rules. The SAR above states the attributes explicitly, which is
+# exactly what loki-rbac-proxy does per request — so it tests the real path, and `can-i` never did.
+# A false "no" here is the dangerous direction: it reads as "the door is broken" or "my new grant
+# did not take", and invites re-granting something that was already granted.
 #
 # ⚠ CONSUMER SCOPE (operator direction 2026-08-27): the ONLY consumer is the oracle stack jail's
 # workbench SA. In-cluster agents are deliberately NOT bound — the loop reaches Loki's ClusterIP
@@ -23,9 +39,11 @@
 # repo namespace — mechanism = platform, policy = stack (ADR-085). Hand-written is correct for
 # one consumer; it stops being correct at the second.
 #
-# ⚠ INERT UNTIL THE FLIP. While loki-config.yaml has `auth_enabled: false`, Loki ignores
-# X-Scope-OrgID and the door is not exposed, so these grants authorize nothing that is served.
-# They land here first so the flip change stays purely the flip.
+# ✅ LIVE since 2026-08-27 (rollout steps 2+3). These grants were inert when written — Loki ignored
+# X-Scope-OrgID and the door was not exposed — which is why they could land before the flip and
+# keep the flip change purely the flip. They now authorize real reads at
+# https://192.168.40.32:8443. Verified by SubjectAccessReview at step 3: allowed on oracle-fleet /
+# oracle-agents / oracle-iac, refused on platform-agents, agent-coordinator, monitoring and loki.
 ---
 # oracle: the workbench SA is namespace-admin in oracle-fleet and nothing cluster-scoped (the
 # FU-080 credential airlock). These bindings do not widen that — a log read is not an API verb on
