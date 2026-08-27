@@ -381,8 +381,13 @@ went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merg
   agent-coordinator ns, arc-runner image) with rules and engines from THIS repo's master —
   the PR tree arrives as a tarball (data, never executed; no helm/hooks in v1 — raw-YAML pass,
   the render pass is v2). **Engines (operator ruling: no engine sprawl — Kyverno is THE rule
-  engine, CLI seat now, the admission-controller seat is its future; NB no prior roadmap record
-  of kyverno was found — this ruling is the record):** `policy/iac/*.yaml` (5 Kyverno policies:
+  engine for THIS, the CLI seat; NB no prior roadmap record of kyverno was found — this ruling is
+  the record. ⚠ NARROWED 2026-08-27: the earlier "the admission-controller seat is its future"
+  read as Kyverno having already won that seat. It has not — the ADMISSION seat is a separate,
+  OPEN choice between Kyverno and OPA Gatekeeper, deliberately gated on a SECOND use case before
+  deciding, per the ≥2-pattern rule. The two seats are different jobs: the sentinel evaluates a
+  PR tree offline, while admission puts a webhook in the pod-creation path where `failurePolicy`
+  and availability dominate. Tracked with its first use case as FU-191):** `policy/iac/*.yaml` (5 Kyverno policies:
   raw-Secret, public-bucket, explicit-Delete deletionPolicy, VIP∈192.168.32.0/19,
   cluster-scoped power kinds — all synthetically verified firing), gitleaks (secret values,
   fleet-standard), and a bash path-rule (worker-authored PRs must not touch
