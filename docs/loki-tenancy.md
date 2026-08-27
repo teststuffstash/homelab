@@ -30,7 +30,12 @@ Two consequences worth naming, because both look like bugs later:
   access reads kernel-log lines with NO new RBAC, NO talosctl."* That is the only occurrence of
   "LogQL" in the platform. No script, env var, egress leg or runbook recipe provided it — the
   carve-out's value proposition was unreachable by the lane it was written for. This doc is what
-  makes that sentence true.
+  makes that sentence reachable — **but not yet true for a stack jail**, and the gap is a
+  consequence of tenant == namespace: `kmsg-reader` is a DaemonSet in namespace `loki`, so kernel
+  lines land in tenant **`loki`** (verified 2026-08-27: 11 kmsg streams under that tenant, zero
+  under any other). Granting a jail that tenant would hand it the log store's own namespace, so no
+  jail has it, and "any session with LogQL access reads kernel-log lines" still does not hold for
+  the sessions the carve-out was written for. **FU-194** carries the fix.
 
 ## `auth_enabled: true` is the data model, not the enforcement
 
@@ -272,6 +277,10 @@ confidentiality against a LAN MITM, not authentication.
 exists for a namespace of that name, and none does, deliberately: `fake` holds *every* namespace's
 logs from before 2026-08-27, so granting it would hand a jail the whole cluster. It ages out of the
 168h query window around 2026-09-03.
+
+**Kernel logs are NOT reachable this way**, despite homelab#541 saying they are. `kmsg-reader` runs
+in namespace `loki`, so `/dev/kmsg` lines are tenant `loki` — the log store's own namespace, which
+no jail is granted and none should be. See §The problem, stated exactly and **FU-194**.
 
 ## Tightening — what this deliberately does not do
 

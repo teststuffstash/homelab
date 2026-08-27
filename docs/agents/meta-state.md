@@ -26,10 +26,20 @@ meant to avoid.)
   stopped cluster-wide log ingest had the rollout been one step instead of three.
   ⚠ `StatefulSet/loki` reads permanently OutOfSync (pre-existing ArgoCD `volumeClaimTemplates`
   papercut) — **"Synced" is not a usable verification signal**; read the live pod.
-  **Step 3** = the `192.168.40.32` VIP + the oracle jail usage note; grants for
-  `oracle-workbench` are already merged and inert. **FU-192** carries step 2's three deferred
-  residues (Grafana's snapshot tenant list; per-tenant ingest sizing, due ~2026-09-03; the OTel
-  rail's static tenant) — (b) is the one with a date.
+  **Step 3 = PR#1012, MERGED and VERIFIED AT THE REAL VIP** — `192.168.40.32:8443` is reachable
+  from the jail (BGP advertised, TLS OK) and all seven signatures reproduce there: granted
+  `oracle-fleet`/`oracle-agents` **200**; `platform-agents`/`agent-coordinator`/**`fake`** **403**;
+  no header **400**; no token **401**; `POST .../push` **404**. **ADR-118 IS COMPLETE.**
+  **⚠ ONE MOTIVATING CLAIM DID NOT SURVIVE THE TEST → FU-194:** homelab#541 promises "any session
+  with LogQL access reads kernel-log lines", and that is STILL false for a jail — `kmsg-reader`
+  sits in ns `loki`, so kernel lines are tenant `loki`, which no jail is granted and none should
+  be. Either move the DaemonSet to its own namespace or fix the carve-out's text; it currently
+  promises a capability nothing provides. Found by testing the claim, not restating it.
+  Residues: **FU-192** (Grafana's snapshot tenant list; per-tenant ingest sizing, due
+  ~2026-09-03 — the one with a date; the OTel rail's static tenant) and **FU-193** (the door's
+  self-signed, unpinnable cert). Also fixed in step 3: the `kubectl auth can-i` grant-audit recipe
+  in `loki-tenant-grants.yaml` answered **no for every namespace including granted ones** (pseudo-
+  resource, no CRD → RESTMapper cannot resolve it); replaced with an explicit SubjectAccessReview.
 
 - **⚑ Two open items from the same session, both filed, neither started:** FU-190 (a mounted
   ConfigMap change does not roll its workload — hand-bumped annotation, silent when forgotten)

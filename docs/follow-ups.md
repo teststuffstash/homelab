@@ -107,6 +107,17 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
+- [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
+      ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
+      carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating
+      use case for the whole read door. But `kmsg-reader` runs in namespace `loki`, so its lines are
+      tenant **`loki`** (verified: 11 kmsg streams there, 0 elsewhere), and granting a jail that
+      tenant hands over the log store's own namespace. **Next:** either move `kmsg-reader` to its
+      own namespace so the tenant is grantable alone (one namespace + a RoleBinding), or accept
+      kernel truth as operator-only and FIX THE CARVE-OUT TEXT in
+      `agents/coordinator/agent-read-rbac.yaml`, which promises a capability nothing provides.
+      Detail: [`loki-tenancy.md`](loki-tenancy.md) §How a stack jail reads its logs. Relates FU-193.
+
 - [ ] **FU-193** — **The Loki read door serves a self-signed, unpinnable cert** (2026-08-27,
       ADR-118 step 3). kube-rbac-proxy gets no `--tls-cert-file`, so it generates a cert at startup
       and a new one on every restart — callers use `curl -k` and cannot pin. Authentication is
