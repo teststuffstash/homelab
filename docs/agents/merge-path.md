@@ -492,9 +492,10 @@ floor only policy and scheduling help, which is why the O(N²) options above are
   The updater needs neither: Actions `concurrency` groups serialize its runs natively (⚠ its
   sibling `renovate-approve` DID need exactly this — per-PR group + fail-closed dup-check,
   homelab#114, 2026-08-11), and
-  update-branch is idempotent at GitHub (422 "already up to date"). Worst residual race anywhere
-  is a duplicate review — wasted tokens, never a bad merge (the merge gate is GitHub's, evaluated
-  once).
+  update-branch now carries `expected_head_sha` (homelab#986), so a concurrent push causes 422
+  ("head branch was modified") instead of clobbering the commit — the race is safe, the next pass
+  re-lists the new head. Without `expected_head_sha` the race could silently overwrite a
+  concurrent author push (seen live on PR#963).
 - **Updater token** — must be an App token, not `GITHUB_TOKEN` (its pushes wouldn't re-trigger
   CI). Minted from a **dedicated, minimal `homelab-merge` App** (`actions/create-github-app-token`,
   App id + private key as the `MERGE_GH_APP_*` org Actions secrets). Grant:
@@ -512,12 +513,11 @@ floor only policy and scheduling help, which is why the O(N²) options above are
 - **Review reflex dies** — PRs accumulate approved=0; nothing merges; nothing breaks. The `*/15`
   CronWorkflow backstop re-lists next tick and resumes (and covers a missed exporter POST too).
   Same level-triggered posture as the coordinator doctrine.
-- **Worker still pushing while updater updates** — prevented by ordering, not locking: the updater
-  only touches PRs that are green + auto-merge-armed, and arming happens at the *end* of the worker
-  session. A worker addressing review feedback re-pushes to its own branch — but at that moment the
-  PR has no approval and isn't behind-and-armed-and-green in a way that attracts the updater
-  mid-push; worst case a merge-commit lands under it and `git pull` resolves (merge, never rebase —
-  no rewritten history, no force-push confusion).
+- **Worker still pushing while updater updates** — the ordering claim is refuted (homelab#986,
+  seen live on PR#963): a fix round pushed at an armed+BEHIND PR can race with the updater's
+  update-branch call. The fix is `expected_head_sha` (passed from the picker's `headRefOid` field):
+  a concurrent push causes 422 instead of clobbering the commit. The updater skips the 422 and
+  the next pass re-lists the new head (level-triggered; the commit is preserved).
 
 ## Rollout — COMPLETE (all four phases shipped by 2026-07-17, ADR-093)
 
