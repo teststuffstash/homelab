@@ -1,6 +1,7 @@
-# homelab#990 — opencode hostAliases fail-fast: stub models.dev + models.opencode.ai to 127.0.0.1
-# unconditionally on opencode rides. When EGRESS_PROFILE=node, registry.npmjs.org is NOT stubbed
-# (it is legitimate node ecosystem traffic).
+# homelab#990 — opencode hostAliases fail-fast: on ENFORCED opencode rides (the gate is
+# HARNESS=opencode ∧ EGRESS_ENFORCE=true — monitor-mode gets no stubs, see the monitor-mode row),
+# stub models.dev + models.opencode.ai to 127.0.0.1. When EGRESS_PROFILE=node,
+# registry.npmjs.org is NOT stubbed (it is legitimate node ecosystem traffic).
 #
 # CONDITION UNDER REPLAY: HARNESS=opencode, EGRESS_PROFILE=node.
 # THE CONTRACT: HOST_ALIASES is non-empty and carries only models.dev + models.opencode.ai.

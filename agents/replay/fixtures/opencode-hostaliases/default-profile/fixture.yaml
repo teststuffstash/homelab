@@ -1,6 +1,7 @@
-# homelab#990 — opencode hostAliases fail-fast: stub models.dev + models.opencode.ai to 127.0.0.1
-# unconditionally on opencode rides, and registry.npmjs.org when the egress profile is NOT
-# "node" (where the CNP denies it anyway — this converts silent-drop → fast-fail).
+# homelab#990 — opencode hostAliases fail-fast: on ENFORCED opencode rides (the gate is
+# HARNESS=opencode ∧ EGRESS_ENFORCE=true — monitor-mode gets no stubs, see the monitor-mode row),
+# stub models.dev + models.opencode.ai to 127.0.0.1, and registry.npmjs.org when the egress
+# profile is NOT "node" (where the CNP denies it anyway — silent-drop → fast-fail).
 #
 # CONDITION UNDER REPLAY: HARNESS=opencode, EGRESS_PROFILE unset (default/non-node profile).
 # THE CONTRACT: HOST_ALIASES is non-empty and carries all three stubs.
