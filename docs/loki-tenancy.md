@@ -42,6 +42,22 @@ it sets `X-Scope-OrgID: platform` and reads the platform's logs. Same blast radi
 So the end state is tenancy **plus** exactly one trusted hop that derives the header's legitimacy
 from an authenticated identity. They are two halves of one mechanism.
 
+The same sentence has a **write-side** consequence that is easy to miss and expensive to miss: if
+the header must be present, then *every writer* must send one or its pushes 400. There are **two**,
+and only one of them lives in `argocd/resources/loki/`:
+
+| writer | tenant | how |
+|---|---|---|
+| Alloy DaemonSet | the pod's namespace | `stage.tenant` per entry (`alloy-config.yaml`) |
+| OTel collector (the A0 telemetry rail) | static `monitoring` | exporter header (`otel-collector/otel-config.yaml`) |
+
+The collector was found during step 2 by grepping for the push endpoint rather than by reading the
+loki directory; it forwards OTLP from claude-code roles across stacks, so it has no namespace to
+derive a tenant from and takes a static one — the collector's own namespace, which keeps the
+invariant that every tenant is a real namespace and therefore has a possible RoleBinding. Had it
+been missed, the flip would have taken the agent telemetry log rail down while Alloy kept working,
+which is the hardest shape of this failure to attribute.
+
 What tenancy buys the hop is worth stating, because it is the argument for doing the data model at
 all rather than only the gate: with tenancy the hop **authorizes one header value**. Without it, the
 hop must parse and rewrite LogQL — a security-critical parser, kept correct forever against label
@@ -99,10 +115,11 @@ size. Revisit if a consumer appears that genuinely needs cross-namespace LogQL i
 | piece | what it does |
 |---|---|
 | `alloy-config.yaml` | `loki.process` + `stage.tenant { label = "namespace" }` between the source and the write — the tenant is stamped per ENTRY, not per discovery target (see the warning above) |
-| `loki-config.yaml` | `auth_enabled: true`; per-tenant ruler rule directories |
+| `loki-config.yaml` | `auth_enabled: true`; `querier.multi_tenant_queries_enabled` for the operator's datasource. **No ruler** — see §The belt could not stay in the ruler |
 | `loki-rbac-proxy.yaml` | kube-rbac-proxy: TokenReview → SubjectAccessReview (namespace rewritten from `X-Scope-OrgID`) → proxy to Loki. `--allow-paths` restricted to the READ surface |
 | `loki-tenant-grants.yaml` | one RoleBinding per (consumer, tenant) — the entire access-control surface |
-| `grafana-loki-datasource.yaml` | the operator's all-tenant datasource, header-pinned |
+| `grafana-loki-datasource.yaml` | the operator's all-tenant datasource — an ENUMERATED tenant list, because Loki has no wildcard. §What tenancy costs the operator |
+| `otel-collector/otel-config.yaml` | the *second* Loki writer (the A0 telemetry rail) — static `X-Scope-OrgID: monitoring`, since OTLP records carry no namespace to derive from |
 
 **The caller self-asserts the tenant and is then authorized for it.** Assert one you have no
 RoleBinding for and the answer is 403, not that tenant's logs — the property plain `auth_enabled:
@@ -113,6 +130,72 @@ authorized-for-X-queried-Y gap.
 tenant-scoped *reader* could **write** log lines — forging evidence in the store an incident is
 later reconstructed from.
 
+## The belt could not stay in the ruler
+
+This design originally planned "per-tenant ruler dirs" for homelab#811's `LokiPodLogVolumeHigh`.
+That plan was wrong, and it is worth recording why, because the reasoning generalises to anything
+that enumerates tenants.
+
+Loki's ruler with `storage.type: local` reads rules from **`/etc/loki/rules/<tenant>/`**, and a rule
+in directory `X` evaluates over tenant `X` **only**. Under `auth_enabled: false` there was one
+directory — `fake` — and one mount. Under tenant == namespace there are as many directories as there
+are namespaces (**33** when step 2 landed), each needing its own mount of the same ConfigMap. Worse
+than the bulk: the mount list is static, so a namespace created afterwards gets no rule directory,
+and its logs are watched by nothing. No error, no gap signal — the belt is simply green.
+
+That is a strictly worse failure than the one #811 asked for a belt against, because #811's whole
+lesson was that *nothing watched log volume*. Rebuilding the guard in a form a new namespace escapes
+silently reproduces the original defect on a delay.
+
+The belt moved to an ordinary `PrometheusRule` instead
+([`prometheusrule.yaml`](../argocd/resources/loki/prometheusrule.yaml),
+`LokiNamespaceLogVolumeHigh`), which is better than the original plan rather than a concession to
+it:
+
+- `loki_distributor_bytes_received_total` **already carries a `tenant` label** — pinned `fake` before
+  the flip, per-namespace after it, with no configuration anywhere. A new namespace is covered the
+  moment it logs, because its series appears on its own.
+- the expr became **promtool-testable**. LogQL is not, so the per-pod rule was the one strap in this
+  belt verified by eyeball; it is now pinned in `loki-ingest.promtool-test` alongside the other two.
+- it removes the ruler from the design entirely — config stanza, ConfigMap and mount all gone.
+- it sits in the same file as the two aggregate straps it is meant to be read with.
+
+**What it costs is granularity: pod → namespace.** Re-measured live on 2026-08-27 rather than
+inherited from the #811 write-up, the loudest healthy *whole namespace* is `argocd` at 2.0 KB/s
+(then `garage` 1.5, `forgejo` 0.6). The unchanged 25 KB/s threshold therefore keeps ~12x headroom
+over the loudest legitimate namespace and sits ~24x under the #811 flood (590 KB/s) — it still
+discriminates at the coarser grain. What it can no longer see is one chatty pod inside an already
+busy namespace, which is accepted: pod attribution is one Grafana query away and the alert carries
+it.
+
+## What tenancy costs the operator
+
+Two regressions land with step 2. Neither is a defect to file; both are properties of tenant ==
+namespace that the original design did not state, and an operator who meets them without warning
+will read them as breakage.
+
+**There is no all-namespace query any more.** Loki has no wildcard tenant — the multi-tenant read
+syntax is `X-Scope-OrgID: a|b|c` and nothing accepts `*`. So the pre-tenancy habit of
+`{namespace=~".+"}` across the cluster has no equivalent, and an "everything" view must **enumerate
+its tenants**. Grafana's datasource therefore carries a committed list that is a snapshot: a
+namespace added later is invisible in Grafana until someone edits the file, with the regeneration
+one-liner in that file's header. This is deliberately *not* the failure that moved the #811 belt out
+of the ruler — a stale list is felt the instant an operator looks for a namespace and finds nothing,
+whereas a lapsed alert is invisible by construction. Making it self-maintaining is **FU-192**.
+
+**Grafana's Live tail stops working** on that datasource: upstream returns HTTP 400 from
+`GET /loki/api/v1/tail` when more than one tenant is named. Search, Explore and dashboards are
+unaffected. A single-tenant datasource would tail fine, which is the shape to reach for if tailing
+turns out to matter.
+
+One more thing that changes quietly, and is the reason step 2 does not silently double as a limits
+change: **`limits_config` is per tenant.** With one tenant, `ingestion_rate_mb: 8` was an effective
+whole-cluster ceiling; from the flip every namespace gets its own 8 MB/s and the aggregate ceiling
+rises ~32x. The number is left at 8 on purpose — that is no per-tenant regression, and sizing a real
+per-tenant limit needs the per-namespace baselines the flip itself produces. Until FU-192 does that,
+ADR-118's "per-tenant ingest limits" win is **not yet banked**: the #811 containment is still the
+alert belt plus the Garage bucket cap.
+
 ## Rollout
 
 Ordered so the irreversible step is verified rather than leapt, and so no step leaves a gate that
@@ -121,7 +204,7 @@ looks real and is not.
 | # | change | what it verifies before the next step |
 |---|---|---|
 | 1 | Alloy `stage.tenant`; the proxy, its RBAC, the grants — **ClusterIP only, no VIP** | `loki_write_*{tenant="<namespace>"}` on a running Alloy — verified AT THE SENDER, because a single-tenant Loki overrides the header to `fake` and can never confirm it. Ingest unchanged; nothing is served, so nothing can regress |
-| 2 | `auth_enabled: true`; per-tenant ruler dirs; Grafana datasource header | Grafana Explore still returns logs; `LokiPodLogVolumeHigh` still evaluates; Alloy pushes are accepted (a rejected push is the failure mode to watch — Alloy retries, so a short outage loses nothing) |
+| 2 | `auth_enabled: true`; the #811 belt moved to a PrometheusRule; **both** writers' headers; Grafana's enumerated datasource | Grafana Explore still returns logs; `LokiNamespaceLogVolumeHigh` evaluates per namespace; **both** Alloy and the OTel collector are accepted (a rejected push is the failure mode to watch — both retry, so a short outage loses nothing) |
 | 3 | the LoadBalancer VIP + the jail's usage note | the oracle workbench SA reads `oracle-fleet` and is **refused** `platform` |
 
 **Step 1 must not be exposed.** Until step 2 flips the flag, Loki ignores `X-Scope-OrgID` entirely

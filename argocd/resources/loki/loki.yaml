@@ -14,6 +14,14 @@ spec:
   template:
     metadata:
       labels: { app: loki }
+      annotations:
+        # FU-190: this dir is plain manifests (no kustomize configMapGenerator, unlike
+        # argocd/resources/otel-collector/), so a loki-config edit does NOT roll this pod on its
+        # own. Bump on every loki-config.yaml change. Until ADR-118 step 2 there was no annotation
+        # here at all — the auth_enabled flip would have sat in the ConfigMap, unapplied, while
+        # everything looked Synced. It only rolled in that PR because the same change removed the
+        # ruler-rules volume; without that coincidence the flip would have been invisible.
+        config-hash: v1-adr118-auth-enabled
     spec:
       securityContext:
         runAsNonRoot: true
@@ -50,7 +58,6 @@ spec:
             periodSeconds: 30
           volumeMounts:
             - { name: config, mountPath: /etc/loki }
-            - { name: ruler-rules, mountPath: /etc/loki/rules/fake }  # homelab#811 volume belt
             - { name: data, mountPath: /loki }
           resources:
             requests: { cpu: "200m", memory: "512Mi" }
@@ -58,8 +65,6 @@ spec:
       volumes:
         - name: config
           configMap: { name: loki-config }
-        - name: ruler-rules
-          configMap: { name: loki-ruler-rules }
   volumeClaimTemplates:
     - metadata:
         name: data

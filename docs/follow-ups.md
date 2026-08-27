@@ -107,6 +107,16 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
+- [ ] **FU-192** — **Three residues of the ADR-118 tenancy flip, all deferred deliberately**
+      (2026-08-27, step 2). (a) Grafana's tenant list is a SNAPSHOT — Loki has no wildcard tenant,
+      so an all-namespace view must enumerate, and a namespace added later is invisible there
+      until someone edits the datasource. (b) `ingestion_rate_mb` is PER TENANT, so the flip
+      raised the aggregate ceiling ~32x; left at 8 until the flip's own per-namespace baselines
+      exist — **due ~2026-09-03**, and until then ADR-118's "per-tenant ingest limits" win is not
+      banked. (c) the OTel rail writes under a static `monitoring` tenant. **Next:** (b) — the
+      only one with a date and real evidence. Detail + options:
+      [`loki-tenancy.md`](loki-tenancy.md) §What tenancy costs the operator.
+
 - [ ] **FU-191** — **The admission-controller seat: engine UNDECIDED (Kyverno vs OPA Gatekeeper),
       gated on a SECOND use case** (operator, 2026-08-27). §L0b settled the **CLI** seat only; a
       webhook in the pod-creation path is a different job (`failurePolicy`, HA — a broken one
@@ -121,13 +131,13 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-190** — **A mounted-ConfigMap change in `argocd/resources/**` does not roll its
       workload; the trigger is a hand-bumped annotation, and forgetting it is SILENT** —
       `kubectl get cm` shows the new config while every pod runs the old, so a probe that reads
-      the ConfigMap passes. Found live 2026-08-27 (ADR-118's `__tenant_id__` synced while the
-      Alloy pods were 1–2 months old); the evidence and the near-miss are written at the site,
-      [`argocd/resources/loki/alloy.yaml`](../argocd/resources/loki/alloy.yaml) `config-hash`.
-      **Next:** audit which other raw resources mount ConfigMaps — the count decides between a
-      kustomize `configMapGenerator` (real hash, no human step) and a CI check that reds when a
-      `*-config.yaml` moves without its consumer's annotation. Relates ADR-083 (an accepted cost
-      of raw-over-Helm, previously unrecorded).
+      the ConfigMap passes. TWICE live on 2026-08-27: ADR-118's `__tenant_id__` (Alloy pods 1–2
+      months old), then `StatefulSet/loki` with **no annotation at all**. Evidence at the sites,
+      [`alloy.yaml`](../argocd/resources/loki/alloy.yaml) + `loki.yaml` `config-hash`.
+      **Next:** audit which other raw resources mount ConfigMaps — the count decides between
+      kustomize `configMapGenerator` (no human step, proven in-repo:
+      [`otel-collector/`](../argocd/resources/otel-collector/kustomization.yaml)) and a CI check
+      reddening on a `*-config.yaml` moved without its consumer's annotation. Relates ADR-083.
 
 - [ ] **FU-137** — **Garage durability: POINTER.** The risk fired 2026-08-24 — meta LMDB wiped
       in the pve thin-pool incident, Aug-4 backup restored same day

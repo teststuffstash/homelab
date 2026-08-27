@@ -1,5 +1,31 @@
 # Loki datasource for Grafana, discovered by the grafana-sc-datasources sidecar (label
 # grafana_datasource=1, watches the monitoring namespace). No tofu / additionalDataSources edit.
+#
+# ADR-118 step 2 made this header MANDATORY: Loki runs auth_enabled: true, so a request without
+# X-Scope-OrgID is HTTP 400, not an all-tenant read. Grafana therefore names the tenants it wants.
+#
+# ⚠ THE TENANT LIST IS A SNAPSHOT, AND THAT IS THE UNCOMFORTABLE PART OF THIS FILE.
+# Loki has no wildcard tenant — verified: the multi-tenant read syntax is `X-Scope-OrgID: a|b|c`
+# and nothing accepts `*`. With tenant == namespace there is consequently NO all-namespace query,
+# so an operator-facing "everything" view has to enumerate. A namespace added after this list was
+# written is invisible in Grafana until someone edits this file. That is a real regression against
+# the pre-tenancy `{namespace=~".+"}` query and it is tracked as FU-192 with the self-maintaining
+# options (generate the block from the cluster; alert on tenant-count drift).
+# It is deliberately NOT the same failure as the one that moved the #811 belt out of the Loki
+# ruler: this list going stale is felt the moment an operator looks for a namespace and sees
+# nothing, whereas a lapsed alert is invisible by construction. The BELT covers new namespaces
+# automatically (prometheusrule.yaml); only this convenience view enumerates.
+#
+# ⚠ Grafana's LIVE TAIL does not work on this datasource. Upstream: GET /loki/api/v1/tail returns
+# 400 when more than one tenant is named. Explore/search/dashboards are unaffected.
+#
+# `fake` leads the list on purpose — every chunk written before the flip is under that tenant, and
+# max_query_lookback is 168h, so it stops mattering ~7 days after step 2 lands. Do not drop it
+# earlier or pre-flip history disappears from Grafana while it is still queryable.
+#
+# Regenerate the list (a snapshot of namespaces that actually run pods, `fake` prepended):
+#   devbox run -- kubectl --kubeconfig tofu/kubeconfig get pods -A --no-headers \
+#     | awk '{print $1}' | sort -u | paste -sd'|' | sed 's/^/fake|/'
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -19,3 +45,7 @@ data:
         isDefault: false
         jsonData:
           maxLines: 1000
+          httpHeaderName1: X-Scope-OrgID
+        secureJsonData:
+          # snapshot 2026-08-27 (ADR-118 step 2)
+          httpHeaderValue1: "fake|agent-coordinator|agent-egress|arc-runners|arc-systems|argo|argo-events|argocd|cf-api-proxy|circles-agents|cloudflared|cnpg-system|crossplane-system|devbox-search|external-secrets|forgejo|forgejo-runner|garage|home-assistant|infisical|kube-system|loki|longhorn-system|monitoring|nix-cache|node-maintenance|openrouter-operator|oracle-agents|oracle-fleet|platform-agents|registry-cache|sleep-agents|sleep-tracking|unifi"
