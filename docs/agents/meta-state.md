@@ -8,40 +8,40 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ ADR-118 Loki tenancy — STEP 1 DONE, STEP 2 IS THE NEXT SESSION'S** (2026-08-27 corpus
-  session; design [`loki-tenancy.md`](../loki-tenancy.md), rollout table there is authoritative).
-  Merged: #1008 (proxy + grants + write half), #1009 **in flight, armed, APPROVED** (the
-  `stage.tenant` correction — CHECK IT MERGED FIRST). Step 1 serves nothing by design: ClusterIP
-  only, no VIP, because a gate in front of a single-tenant Loki authorizes one tenant and returns
-  all of them.
-  **Before flipping `auth_enabled: true`, verify at the SENDER** — `loki_write_*{tenant="<ns>"}`
-  on a live Alloy pod (a single-tenant Loki overrides the header to `fake` and structurally
-  cannot confirm it). Two near-misses already cost by this rollout, both caught by that habit:
-  the un-bumped `config-hash` (`0270ab10`, FU-190 — config in the cluster, not in effect) and
-  `__tenant_id__`-in-relabel silently sending no header at all (#1009).
-  **⚠ STEP 2 SCOPE CHANGED, and this is the pickup's real content.** The plan said "per-tenant
-  ruler dirs". With tenant==namespace that is **33 tenants** = 33 mounts of the same rule, and a
-  new namespace silently loses the belt. Do NOT do that. Instead move the #811
-  `LokiPodLogVolumeHigh` belt out of the Loki ruler to an ordinary PrometheusRule:
-  `loki_distributor_bytes_received_total` **already carries a `tenant` label** (pinned `fake`
-  today, verified live) and becomes per-namespace the moment tenancy is on. Granularity drops
-  pod→namespace, which the #811 evidence says still discriminates (offender 590 KB/s vs the
-  next-chattiest whole namespace 2.8 KB/s). Operator has NOT ruled on this — it is a
-  recommendation with evidence, not a decision.
-  Also step 2: Grafana datasource needs the all-tenant header (`fake` included, so pre-flip
-  history stays readable for its remaining 7 days). ⚠ `StatefulSet/loki` reads permanently
-  OutOfSync (pre-existing ArgoCD `volumeClaimTemplates` papercut) — **"Synced" is not a usable
-  verification signal**; read the live pod.
-  Step 3 = the `192.168.40.32` VIP + the oracle jail usage note; grants for `oracle-workbench`
-  are already merged and inert.
+- **⚑ ADR-118 Loki tenancy — STEPS 1+2 SHIPPED, STEP 3 IS THE NEXT SESSION'S** (2026-08-27;
+  design [`loki-tenancy.md`](../loki-tenancy.md), rollout table there is authoritative).
+  Merged: #1008 (proxy + grants + write half), #1009 (the `stage.tenant` correction).
+  **Step 2 = PR#1010, opened + armed 2026-08-27 ~17:0xZ** — `auth_enabled: true`, the #811 belt
+  moved out of the ruler, both writers' headers, Grafana's enumerated datasource. **Operator
+  ruled both open questions** (belt → PrometheusRule + drop the ruler; `ingestion_rate_mb` stays
+  8 + document + FU).
+  **⚠ FIRST THING ON PICKUP: confirm #1010 MERGED and then verify the flip AT THE SENDER** —
+  `loki_write_dropped_entries_total{reason="rate_limited"|"ingester_error",tenant=…}` on live
+  Alloy pods, and that Grafana Explore still returns logs. A rejected push is the failure mode;
+  Alloy retries, so a short outage loses lines only if it runs long. Pre-flip the sender was
+  verified clean on two nodes (cp-01 4 tenants, wk-02 21, no empty tenant).
+  **THREE near-misses this rollout, all caught by verifying at the sender rather than trusting a
+  green sync** — the un-bumped `config-hash` (`0270ab10`, FU-190), `__tenant_id__`-in-relabel
+  sending no header at all (#1009), and **the OTel collector as an unnoticed SECOND Loki writer**
+  (#1010; would have 400'd the A0 telemetry rail while Alloy kept working). Each would have
+  stopped cluster-wide log ingest had the rollout been one step instead of three.
+  ⚠ `StatefulSet/loki` reads permanently OutOfSync (pre-existing ArgoCD `volumeClaimTemplates`
+  papercut) — **"Synced" is not a usable verification signal**; read the live pod.
+  **Step 3** = the `192.168.40.32` VIP + the oracle jail usage note; grants for
+  `oracle-workbench` are already merged and inert. **FU-192** carries step 2's three deferred
+  residues (Grafana's snapshot tenant list; per-tenant ingest sizing, due ~2026-09-03; the OTel
+  rail's static tenant) — (b) is the one with a date.
 
 - **⚑ Two open items from the same session, both filed, neither started:** FU-190 (a mounted
   ConfigMap change does not roll its workload — hand-bumped annotation, silent when forgotten)
   and FU-191 (the admission-controller seat is an OPEN Kyverno-vs-Gatekeeper choice; operator
   wants a SECOND use case before deciding — use case 1 is tenant labelling, which is what would
-  let ADR-118 go tenant==stack). Also unfiled and owed: the #1003 arbitrate-debounce observation
-  — three `arbitrate` units in eight minutes on byte-identical state
-  (`c7cb240f21fe`/`dcd4cbb787c6`/`31fd63cf7fc1`), where homelab#198 should have cost zero rides.
+  let ADR-118 go tenant==stack). The #1003 arbitrate observation is now **FILED as #1011** — and
+  the original sighting was WRONG: the three fingerprints differ, so the state was not
+  byte-identical and #198's debounce held. The real cause, verified from #1003's check timeline,
+  is that `STATE_FP_JQ` keys on every check's conclusion, so checks arriving/completing one at a
+  time re-arm arbitration (3 opus rides, all ruling "escalate, human is next mover"). #198's
+  symptom through a different door.
 
 - **⚑ S5 (corpus diet) IS OPEN — [stint](chainless-redesign.md) #979, originals #981–#984
   (opened by the 2026-08-26 evening corpus session; wind-down ~19:5xZ).** Park-drain DONE
