@@ -1490,6 +1490,25 @@ if [ "$HARNESS" = "opencode" ]; then
   AFFINITY=$'  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n          - matchExpressions:\n              - { key: homelab.io/cpu-avx2, operator: In, values: ["true"] }'
 fi
 
+# >>>REPLAY:opencode-hostaliases>>>
+# homelab#990: opencode's SDK-init fetches to models.dev + models.opencode.ai carry NO timeout
+# under enforced egress (CNP deny is a silent SYN black-hole). Stub them to 127.0.0.1 so the
+# init fails fast (instant RST) instead of wedging to the 4h deadline.
+# registry.npmjs.org is stubbed only when the egress profile does not include node (where the
+# CNP denies it anyway — this converts silent-drop → fast-fail).
+#
+# Why kill-at-the-tool (homelab#456) doesn't cover this: the SDK-init fetches are NOT
+# suppressible on the pinned opencode build (tested 2026-08-26: no knob found), so the
+# resolver (hostAliases) is the only remaining kill point.
+HOST_ALIASES=""
+if [ "$HARNESS" = "opencode" ] && [ "${EGRESS_ENFORCE:-}" = "true" ]; then
+  HOST_ALIASES=$'  hostAliases:\n    - ip: "127.0.0.1"\n      hostnames:\n        - "models.dev"\n        - "models.opencode.ai"'
+  if [ "${EGRESS_PROFILE:-}" != "node" ]; then
+    HOST_ALIASES="${HOST_ALIASES}"$'\n    - ip: "127.0.0.1"\n      hostnames:\n        - "registry.npmjs.org"'
+  fi
+fi
+# <<<REPLAY:opencode-hostaliases<<<
+
 # ── docker-mode pod fragments (kata microVM + dind sidecar; every accommodation is a spike
 # finding, docs/spikes/kata-ci-gate.md): RuntimeClass kata schedules onto the kata-labeled
 # laptops + tolerates the compute taint by itself. dnsPolicy None + LAN resolver = the FU-072
@@ -1824,6 +1843,7 @@ spec:
       effect: NoSchedule
 ${AFFINITY}
 ${KATA_BLOCK}
+${HOST_ALIASES}
   securityContext:
     fsGroup: 1000          # make the shared uv-cache RWX volume writable for the non-root (1000) user
 ${DIND_CONTAINER}

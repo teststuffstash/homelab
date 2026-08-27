@@ -1,0 +1,13 @@
+# homelab#990 — opencode hostAliases fail-fast: monitor-mode rides (EGRESS_ENFORCE unset/false)
+# get no stubs; the gate requires enforce=true. Under monitor-mode the CNP lets everything
+# through, so there is no wedge to fix.
+#
+# CONDITION UNDER REPLAY: HARNESS=opencode, EGRESS_ENFORCE unset, EGRESS_PROFILE unset.
+# THE CONTRACT: HOST_ALIASES is empty.
+name: opencode-hostaliases-monitor-mode
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:opencode-hostaliases
+  - file:post.sh
