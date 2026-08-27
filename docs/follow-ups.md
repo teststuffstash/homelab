@@ -107,6 +107,15 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
+- [ ] **FU-193** — **The Loki read door serves a self-signed, unpinnable cert** (2026-08-27,
+      ADR-118 step 3). kube-rbac-proxy gets no `--tls-cert-file`, so it generates a cert at startup
+      and a new one on every restart — callers use `curl -k` and cannot pin. Authentication is
+      unaffected (the bearer token is TokenReviewed server-side), so this is
+      confidentiality-vs-LAN-MITM, not identity. **Next:** decide whether a jail-facing API earns a
+      `teststuff.net` HAProxy/ACME pair (ADR-088) or whether LAN-trust is the right posture, as
+      `argo.teststuff.net` already chose. Detail: [`loki-tenancy.md`](loki-tenancy.md) §How a stack
+      jail reads its logs.
+
 - [ ] **FU-192** — **Three residues of the ADR-118 tenancy flip, all deferred deliberately**
       (2026-08-27, step 2). (a) Grafana's tenant list is a SNAPSHOT — Loki has no wildcard tenant,
       so an all-namespace view must enumerate, and a namespace added later is invisible there

@@ -205,7 +205,14 @@ looks real and is not.
 |---|---|---|
 | 1 | Alloy `stage.tenant`; the proxy, its RBAC, the grants — **ClusterIP only, no VIP** | `loki_write_*{tenant="<namespace>"}` on a running Alloy — verified AT THE SENDER, because a single-tenant Loki overrides the header to `fake` and can never confirm it. Ingest unchanged; nothing is served, so nothing can regress |
 | 2 | `auth_enabled: true`; the #811 belt moved to a PrometheusRule; **both** writers' headers; Grafana's enumerated datasource | Grafana Explore still returns logs; `LokiNamespaceLogVolumeHigh` evaluates per namespace; **both** Alloy and the OTel collector are accepted (a rejected push is the failure mode to watch — both retry, so a short outage loses nothing) |
-| 3 | the LoadBalancer VIP + the jail's usage note | the oracle workbench SA reads `oracle-fleet` and is **refused** `platform` |
+| 3 | the LoadBalancer VIP (`192.168.40.32`) + the jail's usage note | the oracle workbench SA reads `oracle-fleet` and is **refused** `platform` |
+
+**Step 3 acceptance PASSED 2026-08-27**, probed with a real `oracle-workbench` token against the
+running proxy — every signature, not just the happy path: `oracle-fleet` and `oracle-agents` **200**;
+`platform-agents`, `agent-coordinator` and **`fake`** all **403**; no header **400**; no token
+**401**; `POST /loki/api/v1/push` **404**, so the write surface is genuinely unproxied. `fake` being
+refused is the one worth naming — it holds every namespace's pre-flip logs, so it is deliberately
+granted to nobody.
 
 **Step 2 verified live 2026-08-27 17:17–17:20Z** (PR#1010), at the points the failure modes
 actually live rather than by a green sync: the running pod resolves `auth_enabled: true` +
@@ -225,6 +232,46 @@ a Loki restart costs latency, not lines.
 
 **Existing chunks stay under tenant `fake`.** They are readable by naming it, and with a 168h
 `max_query_lookback` the old tenant stops mattering within a week — a cutover that completes itself.
+
+## How a stack jail reads its logs
+
+The door is `https://192.168.40.32:8443`, serving Loki's **read** API only. A stack jail already
+holds what it needs: `stack-jail-init.sh` writes a 72h `<stack>-workbench` ServiceAccount token into
+`~/.kube/config`, and that SA is the identity the grants are written for.
+
+```sh
+TOKEN=$(kubectl config view --raw -o jsonpath='{.users[0].user.token}')
+
+curl -sk -H "Authorization: Bearer $TOKEN" -H "X-Scope-OrgID: oracle-fleet" \
+  --get 'https://192.168.40.32:8443/loki/api/v1/query_range' \
+  --data-urlencode 'query={namespace="oracle-fleet"}' \
+  --data-urlencode 'start='"$(date -u -d '1 hour ago' +%s)" \
+  --data-urlencode 'limit=100'
+```
+
+Four things decide whether a call works, and each has a distinct failure signature:
+
+| you get | it means |
+|---|---|
+| `401` | no bearer token, or the token expired — mint a new session (the token is 72h) |
+| `403` | you asserted a tenant you have no RoleBinding for. This is the gate working |
+| `400` | no `X-Scope-OrgID` at all — the **proxy** fail-closes (`len(allAttrs) == 0`) before Loki is reached |
+| a hang | not this door — an `enforce: true` stack's own CNP has no `loki` leg (the FU-020 signature) |
+| `404` on `/loki/api/v1/push` | the write surface is not proxied at all (`--allow-paths`), so a reader cannot forge log lines |
+
+**One tenant per request**, and the tenant is a namespace. `a|b|c` reaches Loki's multi-tenant read
+syntax but not this door: the proxy splits per header *occurrence*, so it would authorize against a
+namespace literally named `a|b|c` (§Why tenant == namespace). Query the three oracle tenants as
+three calls.
+
+`curl -k` is required: the proxy serves a self-signed cert regenerated at each restart, so there is
+nothing stable to pin (FU-193). The token is TokenReviewed server-side, so this weakens
+confidentiality against a LAN MITM, not authentication.
+
+**Pre-flip history is under tenant `fake`** and is readable by asserting it — but only if a grant
+exists for a namespace of that name, and none does, deliberately: `fake` holds *every* namespace's
+logs from before 2026-08-27, so granting it would hand a jail the whole cluster. It ages out of the
+168h query window around 2026-09-03.
 
 ## Tightening — what this deliberately does not do
 

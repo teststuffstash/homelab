@@ -1,10 +1,10 @@
 # loki-rbac-proxy — the AUTHENTICATED, TENANT-SCOPED read door onto Loki.
 #
-# WHY THIS EXISTS. Loki is single-tenant today (`auth_enabled: false` — loki-config.yaml), so
-# reachability IS authorisation: anything that can open a socket to loki.loki.svc:3100 reads every
-# namespace's logs — other stacks' worker stdout, agent-coordinator, agent-egress, CNPG/Infisical,
-# every node's /dev/kmsg via kmsg-reader. There is no middle state, which is why a stack jail has
-# had NO log access at all rather than scoped access.
+# WHY THIS EXISTS. Loki WAS single-tenant (`auth_enabled: false`) until 2026-08-27, so reachability
+# IS authorisation for anything that can open a socket to loki.loki.svc:3100 — other stacks' worker
+# stdout, agent-coordinator, agent-egress, CNPG/Infisical, every node's /dev/kmsg via kmsg-reader.
+# There was no middle state, which is why a stack jail had NO log access at all rather than scoped
+# access. (In-cluster reach is still unscoped BY DESIGN — see the SCOPE banner below.)
 #
 # Loki's own answer to that is `auth_enabled: true` + `X-Scope-OrgID`, and it is worth being precise
 # about what that flag does: it does NOT make Loki authenticate. It makes Loki REQUIRE and TRUST the
@@ -32,11 +32,19 @@
 #   Grafana datasource at this service. Do NOT do that piecemeal — a half-move leaves ingest
 #   unauthenticated while reads look gated.
 #
-# ⚠ NOT SERVING YET. This lands BEFORE `auth_enabled: true` (loki-config.yaml) on purpose: until
-# that flips, Loki IGNORES X-Scope-OrgID and would return ALL tenants' logs to a caller this proxy
-# authorized for one — a gate that looks real and is not. That is why there is no LoadBalancer
-# Service here and no jail-facing address anywhere: this is ClusterIP-only until the flip lands and
-# is verified. See docs/loki-tenancy.md §Rollout for the ordered steps and what each one verifies.
+# ✅ SERVING since 2026-08-27 (rollout step 3) at https://192.168.40.32:8443 — see the LoadBalancer
+# Service at the bottom of this file. It became safe to expose only when `auth_enabled: true`
+# landed and was verified (step 2): before that Loki IGNORED X-Scope-OrgID and would have returned
+# ALL tenants' logs to a caller this proxy authorized for one — a gate that looks real and is not.
+# That ordering is the whole reason the rollout is three steps; docs/loki-tenancy.md §Rollout.
+#
+# ⚠ TLS IS A SELF-SIGNED, IN-MEMORY CERT — kube-rbac-proxy generates one at startup because no
+# --tls-cert-file is given ("Generating self signed cert as no cert is provided" in this pod's log,
+# confirmed live). It is regenerated on every restart, so it cannot be pinned across rolls and
+# callers use `curl -k`. Authentication does NOT depend on it: the bearer token is TokenReviewed
+# server-side, so a MITM on the LAN could observe a query and its results but cannot forge an
+# identity. Giving this a real cert means a hostname + the OPNsense HAProxy/ACME path (ADR-088),
+# which is FU-193 — deliberately not bundled into the exposure step.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -167,9 +175,8 @@ spec:
         - name: config
           configMap: { name: loki-rbac-proxy-config }
 ---
-# ClusterIP ONLY — see the NOT SERVING YET banner at the top of this file. The LoadBalancer VIP
-# (192.168.40.32, next free in the cluster LB pool per docs/ip-plan.md) lands in the same change as
-# `auth_enabled: true`, never before it.
+# The in-cluster address. Kept alongside the VIP below so nothing in-cluster has to leave the
+# cluster to reach the door.
 apiVersion: v1
 kind: Service
 metadata:
@@ -178,6 +185,38 @@ metadata:
   labels: { app: loki-rbac-proxy }
 spec:
   type: ClusterIP
+  selector: { app: loki-rbac-proxy }
+  ports:
+    - { name: https, port: 8443, targetPort: 8443 }
+---
+# THE JAIL-FACING DOOR (rollout step 3, 2026-08-27). VIP 192.168.40.32 — next free in the cluster
+# LB pool, verified live against every assigned VIP (.10–.31 all taken); docs/ip-plan.md. Plain LB
+# with no HAProxy/hostname pair, the same shape as the otel-collector LAN door (40.29) and for the
+# same reason: the consumer is a jail's kubectl-shaped tooling, not a browser.
+#
+# ⚠ WHY EXPOSING *THIS* ON A VIP IS SAFE WHEN EXPOSING LOKI WOULD NOT BE. ADR-118 rejected putting
+# Loki itself on a VIP because WireGuard clients see VIPs, so an unauthenticated Loki would publish
+# every cluster log to every device on the network. This Service fronts the PROXY: every request is
+# TokenReviewed and then SubjectAccessReviewed against the tenant it asserts, and a request with no
+# token never reaches Loki. The VIP's reach is therefore the same LAN+VPN surface, but its
+# authorisation is RBAC rather than "can you open a socket".
+#
+# Verified at this address before it was documented (step 3 acceptance, ADR-118): the oracle
+# workbench SA reads oracle-fleet / oracle-agents / oracle-iac and is REFUSED platform-agents,
+# agent-coordinator, monitoring and loki. Recipe for a stack jail: docs/loki-tenancy.md
+# §How a stack jail reads its logs.
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-rbac-proxy-lb
+  namespace: loki
+  labels:
+    app: loki-rbac-proxy
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.32"
+spec:
+  type: LoadBalancer
   selector: { app: loki-rbac-proxy }
   ports:
     - { name: https, port: 8443, targetPort: 8443 }
