@@ -1712,3 +1712,33 @@ semantically, only forward pointers can lie).
 report-local codes (retro F-codes, fixer-context L-layers) stay legal un-sigiled; a future
 §-ref to a reused code surfaces as ANCHOR-AMBIGUOUS and forces the rename the convention
 demands.
+
+### ADR-118 — Loki multi-tenancy is the data model; an RBAC-authorizing proxy is the enforcement
+**Status:** Accepted (2026-08-27). **Decision:** give per-tenant log reads a **two-part** mechanism —
+`auth_enabled: true` on Loki with **tenant == namespace** (Alloy sets the reserved `__tenant_id__`
+from `__meta_kubernetes_namespace`, one relabel rule, no mapping table), plus **kube-rbac-proxy**
+in front doing TokenReview → SubjectAccessReview with the SAR's namespace rewritten from
+`X-Scope-OrgID`. Scoping is then ordinary RBAC: a RoleBinding for `loki-tenant-reader` in ns `<n>`
+IS "may read tenant `<n>`". First and only consumer: the **oracle stack jail's workbench SA**.
+Design, rollout order and the tightening path: [`loki-tenancy.md`](loki-tenancy.md).
+**Considered:** tenancy ALONE (rejected — `auth_enabled` does not authenticate, it *requires and
+trusts* the header, so direct reach still reads any tenant); a query-rewriting endpoint on the
+egress proxy WITHOUT tenancy (rejected — a security-critical LogQL parser kept correct forever over
+co-mingled chunks, where one bug is full disclosure; it is bespoke there only because that proxy
+also injects credentials, which a read gate never does); tenant == STACK (rejected — needs a
+namespace→stack map inside Alloy, a second reader of the claims beside `stacks_json()`, and the SAR
+rewrite splits per header OCCURRENCE not per delimiter, so Loki's `a|b|c` syntax cannot be
+authorized in one call anyway); Traefik ForwardAuth / Gateway API `ext_authz` / oauth2-proxy / a
+mesh (rejected — a second ingress controller, not first-class in Cilium, needs the PLANNED IdP, and
+standing "no Istio" respectively); exposing Loki itself on a VIP (rejected — unauthenticated, and
+WireGuard clients see VIPs, so that publishes all cluster logs to every device on the network).
+**Why:** the binary today is nothing-or-everything, and the platform already asserts a "LogQL
+access" capability (homelab#541's kmsg carve-out) that nothing provides. Tenancy also brings
+per-tenant ingest limits — the homelab#811 containment that did not exist — and per-tenant
+retention. kube-rbac-proxy is adopted with its alpha/non-sigs status recorded rather than glossed:
+the trade bought is declarative RBAC over code, and its failure mode is "jail log reads stop".
+**Consequences:** rollout is three ordered steps and step 1 must NOT be exposed (a proxy in front of
+a single-tenant Loki authorizes one tenant and serves all — the one state worse than nothing);
+in-cluster reach stays unscoped by design, so the door is bypassable from inside until Loki binds
+to localhost and Alloy's writes get their own gate; a second consumer stack turns the hand-written
+grants into an AgentStack claim knob (mechanism = platform, policy = stack).

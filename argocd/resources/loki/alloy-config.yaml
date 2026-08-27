@@ -38,6 +38,26 @@ data:
         source_labels = ["__meta_kubernetes_pod_label_app"]
         target_label  = "app"
       }
+      // ADR-118, the WRITE half of Loki multi-tenancy. `__tenant_id__` is Alloy's reserved
+      // per-entry tenant label: loki.write consumes it and sets X-Scope-OrgID per push, so one
+      // write component still serves every tenant. Reserved `__`-prefixed labels are stripped
+      // from the stored stream, so this adds no cardinality.
+      //
+      // tenant == NAMESPACE, deliberately, and the reason is on the READ side: the
+      // authorizing proxy in front of Loki splits its authorization header per OCCURRENCE, not
+      // per delimiter (verified in kube-rbac-proxy v0.22.1 pkg/proxy/proxy.go), so Loki's
+      // `a|b|c` multi-tenant syntax would authorize against a namespace literally named "a|b|c".
+      // One tenant per query is the shape that works, and namespace needs no mapping table here
+      // — nothing in this file changes when a stack gains a namespace. Full reasoning:
+      // docs/loki-tenancy.md §Why tenant == namespace.
+      //
+      // ⚠ INERT until loki-config.yaml flips `auth_enabled: true` — a single-tenant Loki ignores
+      // the header entirely. Landing the write half FIRST is what makes the flip verifiable
+      // instead of a leap; docs/loki-tenancy.md §Rollout has the ordered steps.
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "__tenant_id__"
+      }
     }
 
     loki.source.kubernetes "pods" {
