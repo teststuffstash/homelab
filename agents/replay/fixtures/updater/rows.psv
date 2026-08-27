@@ -1,10 +1,11 @@
 # updater — the decision table (family contract in fixture.yaml; legs 1-3).
 # id                  | world | patch (relpath @ patches/*.jq)          | env | expect        | params
 armed-only-noop       | board |                                         |     | noop          |
-fifo-pick             | board | gh/pr-list.json @ patches/add-two-behind.jq |  | picks         | n=101
-unstrand-yes          | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-yes  | n=120
+fifo-pick             | board | gh/pr-list.json @ patches/add-two-behind.jq |  | picks         | n=101 oid=abc123def456
+unstrand-yes          | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-yes  | n=120 oid=jkl012mno345
 unstrand-no           | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-no   | n=120
 unstrand-unreadable   | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-hold | n=120
 conflict-dirty        | board | gh/pr-list.json @ patches/dirty-90.jq       |  | dirty-label   | n=90
 conflict-clear        | board | gh/pr-list.json @ patches/label-conflict-90.jq | | label-clear | n=90
 update-fail           | board | gh/pr-list.json @ patches/conflict-101.jq  | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | update-fail |
+race-422              | board | gh/pr-list.json @ patches/race-101.jq       | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | race-422    |
