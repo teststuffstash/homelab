@@ -24,7 +24,7 @@ spec:
         # BUMP THIS IN THE SAME COMMIT AS ANY alloy-config.yaml CHANGE.
         # (The durable fix is a real content hash — needs a kustomize configMapGenerator here,
         # which this directory does not use today; FU-190.)
-        config-hash: v2-adr118-tenant-id
+        config-hash: v3-adr118-stage-tenant
     spec:
       serviceAccountName: alloy
       tolerations:
