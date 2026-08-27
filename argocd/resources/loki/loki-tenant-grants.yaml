@@ -1,0 +1,68 @@
+# loki-tenant-grants — WHO may read WHICH tenant. One RoleBinding per (consumer, tenant).
+#
+# This file is the whole access-control surface of the read door: `loki-rbac-proxy` rewrites the
+# X-Scope-OrgID header into a SubjectAccessReview scoped to the namespace of that name, so a
+# RoleBinding for `loki-tenant-reader` IN namespace <ns> is exactly "may read tenant <ns>", and the
+# absence of one is a 403. No code decides this and no query is parsed — that is the entire point
+# of choosing an RBAC-shaped gate over a bespoke endpoint (ADR-118).
+#
+# Reading the grants is therefore an ordinary RBAC question, answerable without this file:
+#   kubectl auth can-i get logs.loki.teststuff.net -n oracle-fleet \
+#     --as=system:serviceaccount:oracle-fleet:oracle-workbench
+#
+# ⚠ CONSUMER SCOPE (operator direction 2026-08-27): the ONLY consumer is the oracle stack jail's
+# workbench SA. In-cluster agents are deliberately NOT bound — the loop reaches Loki's ClusterIP
+# directly today (unscoped, exactly as before this change), and wiring it through the door is a
+# separate decision with its own tightening work. Adding a consumer here is one RoleBinding; do not
+# add one without the tenancy question that comes with it (docs/loki-tenancy.md §Tightening).
+#
+# ⚠ WHY THIS IS PLATFORM-SIDE AND NOT IN oracle-iac. A grant TO a stack identity FOR a platform
+# service is platform policy, the same side of the line as `agent-read-*` in
+# agents/coordinator/agent-read-rbac.yaml. The graduation path when a second stack wants this is
+# the standing one: an AgentStack claim knob whose Composition renders these RoleBindings per
+# repo namespace — mechanism = platform, policy = stack (ADR-085). Hand-written is correct for
+# one consumer; it stops being correct at the second.
+#
+# ⚠ INERT UNTIL THE FLIP. While loki-config.yaml has `auth_enabled: false`, Loki ignores
+# X-Scope-OrgID and the door is not exposed, so these grants authorize nothing that is served.
+# They land here first so the flip change stays purely the flip.
+---
+# oracle: the workbench SA is namespace-admin in oracle-fleet and nothing cluster-scoped (the
+# FU-080 credential airlock). These bindings do not widen that — a log read is not an API verb on
+# any real resource, and the pseudo-resource is served only by the proxy.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: oracle-workbench-logs
+  namespace: oracle-fleet
+  annotations:
+    homelab.teststuff.net/rationale: >-
+      The oracle stack jail reads its own pipeline logs (the ert-pipeline DAG runs here). Before
+      this, an Argo workflow's pods were GC'd at completion and the session concluded the logs were
+      unrecoverable — they were in Loki the whole time, with no door to reach them through.
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: loki-tenant-reader }
+subjects:
+  - { kind: ServiceAccount, name: oracle-workbench, namespace: oracle-fleet }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: oracle-workbench-logs
+  namespace: oracle-iac
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: loki-tenant-reader }
+subjects:
+  - { kind: ServiceAccount, name: oracle-workbench, namespace: oracle-fleet }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: oracle-workbench-logs
+  namespace: oracle-agents
+  annotations:
+    homelab.teststuff.net/rationale: >-
+      The loop home — coordinate-oracle / review-oracle / janitor-oracle CronWorkflow pods. This is
+      where "why did my stack's loop do that" is answered, so it is the tenant the jail reaches for
+      second-most often after oracle-fleet.
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: loki-tenant-reader }
+subjects:
+  - { kind: ServiceAccount, name: oracle-workbench, namespace: oracle-fleet }
