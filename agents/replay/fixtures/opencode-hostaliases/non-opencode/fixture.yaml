@@ -1,0 +1,12 @@
+# homelab#990 — opencode hostAliases fail-fast: non-opencode harnesses (goose, claude) get no
+# hostAliases stubs — they don't have the un-suppressible SDK-init fetches.
+#
+# CONDITION UNDER REPLAY: HARNESS=goose, EGRESS_PROFILE unset.
+# THE CONTRACT: HOST_ALIASES is empty.
+name: opencode-hostaliases-non-opencode
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:opencode-hostaliases
+  - file:post.sh
