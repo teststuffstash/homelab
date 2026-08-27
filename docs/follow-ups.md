@@ -107,6 +107,17 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
+- [ ] **FU-191** — **The admission-controller seat: engine UNDECIDED (Kyverno vs OPA Gatekeeper),
+      gated on a SECOND use case** (operator, 2026-08-27). §L0b settled the **CLI** seat only; a
+      webhook in the pod-creation path is a different job (`failurePolicy`, HA — a broken one
+      blocks pod creation cluster-wide), so it is decided on evidence per the ≥2-pattern rule,
+      not by the CLI incumbent. **Use case 1** is tenant labelling — mutating a pod to carry the
+      tenant its namespace declares, which is what would let ADR-118 go tenant==**stack** without
+      a namespace→stack map in Alloy ([`loki-tenancy.md`](loki-tenancy.md) §Why tenant ==
+      namespace). **Next:** collect use case 2, then judge on webhook blast radius, authoring
+      model, and whether ONE engine can serve both seats. ⚠ Nothing is built until it is chosen.
+      Relates FU-106 (IAC-G04), ADR-118; the §L0b narrowing is [`iac-lane.md`](agents/iac-lane.md).
+
 - [ ] **FU-190** — **A mounted-ConfigMap change in `argocd/resources/**` does not roll its
       workload; the trigger is a hand-bumped annotation, and forgetting it is SILENT** —
       `kubectl get cm` shows the new config while every pod runs the old, so a probe that reads
