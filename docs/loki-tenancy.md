@@ -74,8 +74,18 @@ lines gives clean per-tenant SARs, but Go joins repeated headers as `a, b` on th
 Loki's syntax either.
 
 So a caller queries **one tenant per request**, and the tenant that costs nothing to derive is the
-namespace: Alloy sets `__tenant_id__` from `__meta_kubernetes_namespace` in one relabel rule, with
-no mapping table anywhere and nothing to update when a stack gains a namespace.
+namespace: Alloy stamps it with `loki.process` + `stage.tenant { label = "namespace" }`, reading the
+`namespace` label the pod relabel already sets — no mapping table anywhere, and nothing to update
+when a stack gains a namespace.
+
+⚠ **It must be that component, not a relabel rule**, and the first cut got this wrong: setting
+`__tenant_id__` in `discovery.relabel` silently did nothing, because `__`-prefixed labels are TARGET
+metadata and are dropped before entries reach `loki.write`. Alloy's own metric read
+`loki_write_sent_entries_total{tenant=""}` and the upstream docs say it outright — *"If no
+`tenant_id` is provided, the component assumes that the Loki instance at `endpoint` is running in
+single-tenant mode and no `X-Scope-OrgID` header is sent."* Caught by probing a running pod before
+the flip; shipped together, Loki would have rejected every push and cluster-wide ingest would have
+stopped.
 
 The rejected alternative was tenant == stack, which matches the platform's ownership unit
 (`docs/agents/platform-and-stacks.md` §Why per-stack) and would let one query span a stack. It needs
@@ -88,7 +98,7 @@ size. Revisit if a consumer appears that genuinely needs cross-namespace LogQL i
 
 | piece | what it does |
 |---|---|
-| `alloy-config.yaml` | `__tenant_id__` ← `__meta_kubernetes_namespace`. Reserved `__`-prefixed labels are stripped from the stored stream, so this adds no cardinality |
+| `alloy-config.yaml` | `loki.process` + `stage.tenant { label = "namespace" }` between the source and the write — the tenant is stamped per ENTRY, not per discovery target (see the warning above) |
 | `loki-config.yaml` | `auth_enabled: true`; per-tenant ruler rule directories |
 | `loki-rbac-proxy.yaml` | kube-rbac-proxy: TokenReview → SubjectAccessReview (namespace rewritten from `X-Scope-OrgID`) → proxy to Loki. `--allow-paths` restricted to the READ surface |
 | `loki-tenant-grants.yaml` | one RoleBinding per (consumer, tenant) — the entire access-control surface |
@@ -110,7 +120,7 @@ looks real and is not.
 
 | # | change | what it verifies before the next step |
 |---|---|---|
-| 1 | Alloy `__tenant_id__`; the proxy, its RBAC, the grants — **ClusterIP only, no VIP** | Alloy targets carry the label and ingest is unchanged. Loki still ignores the header, so nothing is served and nothing can regress |
+| 1 | Alloy `stage.tenant`; the proxy, its RBAC, the grants — **ClusterIP only, no VIP** | `loki_write_*{tenant="<namespace>"}` on a running Alloy — verified AT THE SENDER, because a single-tenant Loki overrides the header to `fake` and can never confirm it. Ingest unchanged; nothing is served, so nothing can regress |
 | 2 | `auth_enabled: true`; per-tenant ruler dirs; Grafana datasource header | Grafana Explore still returns logs; `LokiPodLogVolumeHigh` still evaluates; Alloy pushes are accepted (a rejected push is the failure mode to watch — Alloy retries, so a short outage loses nothing) |
 | 3 | the LoadBalancer VIP + the jail's usage note | the oracle workbench SA reads `oracle-fleet` and is **refused** `platform` |
 
