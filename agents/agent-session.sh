@@ -1496,8 +1496,12 @@ fi
 # init fails fast (instant RST) instead of wedging to the 4h deadline.
 # registry.npmjs.org is stubbed only when the egress profile does not include node (where the
 # CNP denies it anyway — this converts silent-drop → fast-fail).
+#
+# Why kill-at-the-tool (homelab#456) doesn't cover this: the SDK-init fetches are NOT
+# suppressible on the pinned opencode build (tested 2026-08-26: no knob found), so the
+# resolver (hostAliases) is the only remaining kill point.
 HOST_ALIASES=""
-if [ "$HARNESS" = "opencode" ]; then
+if [ "$HARNESS" = "opencode" ] && [ "${EGRESS_ENFORCE:-}" = "true" ]; then
   HOST_ALIASES=$'  hostAliases:\n    - ip: "127.0.0.1"\n      hostnames:\n        - "models.dev"\n        - "models.opencode.ai"'
   if [ "${EGRESS_PROFILE:-}" != "node" ]; then
     HOST_ALIASES="${HOST_ALIASES}"$'\n    - ip: "127.0.0.1"\n      hostnames:\n        - "registry.npmjs.org"'
