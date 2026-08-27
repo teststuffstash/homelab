@@ -13,7 +13,18 @@ spec:
     metadata:
       labels: { app: alloy }
       annotations:
-        config-hash: v1
+        # ⚠ THE ONLY THING THAT ROLLS THIS DaemonSet WHEN alloy-config.yaml CHANGES. A ConfigMap
+        # edit alone does NOT restart pods (raw manifests compute no checksum, and alloy's args
+        # carry no reload flag), so an un-bumped value here means the change is IN THE CLUSTER and
+        # NOT IN EFFECT — the written-is-not-applied class, and silent: `kubectl get cm` shows the
+        # new config while every pod still runs the old one. Caught live 2026-08-27: ADR-118's
+        # `__tenant_id__` rule synced into the ConfigMap while the pods dated from 2026-06-29,
+        # 07-28 and 08-18. Had `auth_enabled: true` landed on top of that, every push would have
+        # been rejected for a missing tenant and cluster-wide ingest would have stopped.
+        # BUMP THIS IN THE SAME COMMIT AS ANY alloy-config.yaml CHANGE.
+        # (The durable fix is a real content hash — needs a kustomize configMapGenerator here,
+        # which this directory does not use today; FU-190.)
+        config-hash: v2-adr118-tenant-id
     spec:
       serviceAccountName: alloy
       tolerations:

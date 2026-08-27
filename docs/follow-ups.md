@@ -107,6 +107,17 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
+- [ ] **FU-190** — **A mounted-ConfigMap change in `argocd/resources/**` does not roll its
+      workload; the trigger is a hand-bumped annotation, and forgetting it is SILENT** —
+      `kubectl get cm` shows the new config while every pod runs the old, so a probe that reads
+      the ConfigMap passes. Found live 2026-08-27 (ADR-118's `__tenant_id__` synced while the
+      Alloy pods were 1–2 months old); the evidence and the near-miss are written at the site,
+      [`argocd/resources/loki/alloy.yaml`](../argocd/resources/loki/alloy.yaml) `config-hash`.
+      **Next:** audit which other raw resources mount ConfigMaps — the count decides between a
+      kustomize `configMapGenerator` (real hash, no human step) and a CI check that reds when a
+      `*-config.yaml` moves without its consumer's annotation. Relates ADR-083 (an accepted cost
+      of raw-over-Helm, previously unrecorded).
+
 - [ ] **FU-137** — **Garage durability: POINTER.** The risk fired 2026-08-24 — meta LMDB wiped
       in the pve thin-pool incident, Aug-4 backup restored same day
       ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884).
