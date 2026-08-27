@@ -13,6 +13,17 @@
 #   3. THE RAMP IS RELATIVE. The same 20KB/s that case 2 tolerates would, on a system already
 #      averaging 15KB/s, also stay quiet (8x15=120KB/s threshold) — asserted implicitly by case
 #      1's baseline week never firing either alert.
+#   4. THE PER-NAMESPACE STRAP ATTRIBUTES, AND DOES IT EARLIER THAN THE AGGREGATE ONES (case 3
+#      below, added with ADR-118 step 2). This is the strap that replaced the Loki ruler's
+#      per-pod LogQL alert, and the property worth pinning is the one the granularity change put
+#      in doubt: a single namespace flooding at the #811 rate fires it, WITH the offending tenant
+#      in the alert labels, while quiet neighbours stay silent. It also fires FIRST — at +1h vs
+#      the aggregate strap's +1h30m. That gap is the `for:` durations (30m vs 1h), not the
+#      thresholds: 590KB/s clears both the 25KB/s per-namespace and the 120KB/s aggregate line
+#      within the same rate30m window. So the attributing strap is also the earliest one.
+#      Case 3 also pins the negative that the coarser grain made non-obvious: the loudest healthy
+#      namespace measured live (argocd, 2.0KB/s) does not fire, i.e. 25000 is not too tight at
+#      namespace granularity.
 #
 # The input is the raw distributor counter (per-5m increments = B/s x 300); the recording rule
 # under test is what turns it into the rate the alerts read.
@@ -66,3 +77,35 @@ tests:
       - eval_time: 2d6h
         alertname: LokiIngestVolumeHigh
         exp_alerts: []
+  # ── 3. PER-NAMESPACE: the flood is attributed to ONE tenant, neighbours stay quiet ────────────
+  - interval: 5m
+    name: one namespace at the #811 rate fires the namespace strap at +1h, before the aggregate
+    input_series:
+      # the offender: 3h at 590000 B/s (1.77e8/step) — the measured #811 rate, in ONE namespace
+      - series: 'loki_distributor_bytes_received_total{tenant="agent-coordinator",job="loki",namespace="loki"}'
+        values: "0+177000000x36"
+      # the loudest HEALTHY namespace measured live 2026-08-27: argocd at 2000 B/s (6e5/step)
+      - series: 'loki_distributor_bytes_received_total{tenant="argocd",job="loki",namespace="loki"}'
+        values: "0+600000x36"
+      # a quiet neighbour: 200 B/s (6e4/step)
+      - series: 'loki_distributor_bytes_received_total{tenant="loki",job="loki",namespace="loki"}'
+        values: "0+60000x36"
+    alert_rule_test:
+      # rate30m saturates by +30m; for: 30m puts the namespace strap at +1h. ONLY the offender.
+      - eval_time: 1h5m
+        alertname: LokiNamespaceLogVolumeHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tenant: agent-coordinator
+      # the aggregate absolute strap (for: 1h) has NOT fired yet at that point — the namespace
+      # strap is the earlier signal as well as the attributing one
+      - eval_time: 1h5m
+        alertname: LokiIngestVolumeHigh
+        exp_alerts: []
+      # ...and it does fire later, so the two are ordered, not redundant
+      - eval_time: 1h35m
+        alertname: LokiIngestVolumeHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning

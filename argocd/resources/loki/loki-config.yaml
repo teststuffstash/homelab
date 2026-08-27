@@ -8,7 +8,12 @@ metadata:
   namespace: loki
 data:
   config.yaml: |
-    auth_enabled: false
+    auth_enabled: true               # ADR-118 step 2. NOT authentication — it makes Loki REQUIRE
+                                     # and TRUST X-Scope-OrgID; the authenticating hop is
+                                     # loki-rbac-proxy.yaml. Every WRITER must send the header or
+                                     # its pushes 400: Alloy (stage.tenant, per namespace) and the
+                                     # OTel collector (static `monitoring`, otel-config.yaml).
+                                     # docs/loki-tenancy.md.
 
     server:
       http_listen_port: 3100
@@ -57,20 +62,36 @@ data:
                                       # scarce thing in incident archaeology (the 3-day-stall class)
       reject_old_samples: true
       reject_old_samples_max_age: 168h
+      # ⚠ limits_config is PER TENANT. Until ADR-118 step 2 there was one tenant, so these two
+      # numbers were an effective whole-cluster ceiling; from the flip each namespace gets its own
+      # 8 MB/s, and the aggregate ceiling rose ~32x as a SIDE EFFECT of the flip. Left at 8
+      # deliberately (no per-tenant regression) — sizing a real per-tenant limit needs the
+      # per-namespace baselines the flip itself produces, and tightening trades bucket-fill risk
+      # for 429s and dropped lines. FU-192 sizes it after a week of data. Until then the #811
+      # containment is the alert belt (prometheusrule.yaml) + the Garage bucket cap, NOT this.
       ingestion_rate_mb: 8
       ingestion_burst_size_mb: 16
       volume_enabled: true
       max_query_lookback: 168h
 
-    ruler:                            # homelab#811: the per-pod log-volume belt runs IN the ruler
-      storage:                        # (LogQL — per-pod volume never leaves Loki); rules come from
-        type: local                   # the loki-ruler-rules ConfigMap mounted under
-        local:                        # /etc/loki/rules/<tenant>; "fake" is the single-tenant dir
-          directory: /etc/loki/rules  # name when auth_enabled=false.
-      rule_path: /loki/ruler-scratch  # scratch on the PVC (ruler needs a writable copy)
-      alertmanager_url: http://alertmanager-operated.monitoring.svc.cluster.local:9093
-      enable_alertmanager_v2: true    # AM >=0.27 removed the v1 API; without this every
-                                      # notification 404s silently
+    querier:
+      multi_tenant_queries_enabled: true   # lets ONE query span tenants via `X-Scope-OrgID: a|b|c`
+                                           # — the operator's Grafana datasource is the only user
+                                           # (grafana-loki-datasource.yaml). Key placement verified
+                                           # against the running binary's own resolved config
+                                           # (`loki -print-config-stderr`), not the docs, which do
+                                           # not list it. ⚠ upstream: /loki/api/v1/tail 400s when
+                                           # more than one tenant is named, so Grafana's Live tail
+                                           # does not work on that datasource (FU-192).
+
+    # NO ruler block, deliberately. homelab#811's per-pod belt used to run here, reading LogQL rules
+    # from /etc/loki/rules/<tenant>. That does not survive tenancy: with tenant == namespace, a rule
+    # in the `fake` dir evaluates over a tenant nothing writes to any more — the belt goes silently
+    # green — and covering every tenant would mean one mount per namespace, so namespace N+1 loses
+    # the belt with nothing saying so. The belt moved to an ordinary PrometheusRule instead
+    # (prometheusrule.yaml, LokiNamespaceLogVolumeHigh): loki_distributor_bytes_received_total
+    # already carries a `tenant` label, so a new namespace is covered the moment it logs, and the
+    # expr became promtool-testable, which the LogQL one never was. docs/loki-tenancy.md §Rollout.
 
     analytics:
       reporting_enabled: false
