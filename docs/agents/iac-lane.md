@@ -409,6 +409,12 @@ went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merg
   Same central-ownership model for secrets scanning: `policy/iac/gitleaks.toml` (documented-FP
   allowlist) is passed with `--config` from the sentinel's own master clone — exceptions and
   scanner config are never read from the scanned PR tree, which a hostile PR controls.
+  ⚠ **The ordering rule that falls out, which costs one red cycle to learn:** a PR adding a NEW
+  cluster-scoped resource is red until its name is on **master**, because the run judging it reads
+  master's baseline and not the PR's copy. So the exception lands FIRST, as its own change — which
+  also puts `policy/iac/exceptions/*` in the CODEOWNERS / `.github/workflows/**` class: self-gating
+  is impossible, so it is operator-direct by necessity, not convenience. Seen live on homelab#1008
+  (ADR-118's read door, three names), fixed by `105f6db3` landing the baseline separately.
   **Measured overhead (2026-08-03, both -iac repos at master):** fetch ~0.7–1.0s · collect
   ~0.2s · kyverno ~0.7–0.8s (5 policies × 17–25 docs) · gitleaks ~0.14s · **total ~1.8–2.1s
   serial per PR head**. Parallelizing engines saves <1s while ARC job overhead is ~10–30s and
