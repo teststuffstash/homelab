@@ -11,15 +11,14 @@ meant to avoid.)
 - **⚑ ADR-118 Loki tenancy — STEPS 1+2 SHIPPED, STEP 3 IS THE NEXT SESSION'S** (2026-08-27;
   design [`loki-tenancy.md`](../loki-tenancy.md), rollout table there is authoritative).
   Merged: #1008 (proxy + grants + write half), #1009 (the `stage.tenant` correction).
-  **Step 2 = PR#1010, opened + armed 2026-08-27 ~17:0xZ** — `auth_enabled: true`, the #811 belt
-  moved out of the ruler, both writers' headers, Grafana's enumerated datasource. **Operator
-  ruled both open questions** (belt → PrometheusRule + drop the ruler; `ingestion_rate_mb` stays
-  8 + document + FU).
-  **⚠ FIRST THING ON PICKUP: confirm #1010 MERGED and then verify the flip AT THE SENDER** —
-  `loki_write_dropped_entries_total{reason="rate_limited"|"ingester_error",tenant=…}` on live
-  Alloy pods, and that Grafana Explore still returns logs. A rejected push is the failure mode;
-  Alloy retries, so a short outage loses lines only if it runs long. Pre-flip the sender was
-  verified clean on two nodes (cp-01 4 tenants, wk-02 21, no empty tenant).
+  **Step 2 = PR#1010, MERGED 17:17:24Z and VERIFIED LIVE 17:17–17:20Z** — `auth_enabled: true`,
+  the #811 belt moved out of the ruler, both writers' headers, Grafana's enumerated datasource.
+  Operator ruled both open questions (belt → PrometheusRule + drop the ruler; `ingestion_rate_mb`
+  stays 8 + document + FU). Verified at the failure points, not by a green sync: per-namespace
+  tenants at the distributor with no `fake`; **zero rejected pushes** (`loki_api_v1_push`
+  203×204, `otlp_v1_logs` 7×204, `loki_discarded_samples_total` empty); multi-tenant read returns
+  logs; no header = **401**; Grafana datasource reloaded 200 OK. Evidence in
+  [`loki-tenancy.md`](../loki-tenancy.md) §Rollout.
   **THREE near-misses this rollout, all caught by verifying at the sender rather than trusting a
   green sync** — the un-bumped `config-hash` (`0270ab10`, FU-190), `__tenant_id__`-in-relabel
   sending no header at all (#1009), and **the OTel collector as an unnoticed SECOND Loki writer**

@@ -11,7 +11,7 @@ data:
     auth_enabled: true               # ADR-118 step 2. NOT authentication — it makes Loki REQUIRE
                                      # and TRUST X-Scope-OrgID; the authenticating hop is
                                      # loki-rbac-proxy.yaml. Every WRITER must send the header or
-                                     # its pushes 400: Alloy (stage.tenant, per namespace) and the
+                                     # its pushes 401: Alloy (stage.tenant, per namespace) and the
                                      # OTel collector (static `monitoring`, otel-config.yaml).
                                      # docs/loki-tenancy.md.
 

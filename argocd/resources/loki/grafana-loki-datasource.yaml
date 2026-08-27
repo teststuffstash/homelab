@@ -2,7 +2,7 @@
 # grafana_datasource=1, watches the monitoring namespace). No tofu / additionalDataSources edit.
 #
 # ADR-118 step 2 made this header MANDATORY: Loki runs auth_enabled: true, so a request without
-# X-Scope-OrgID is HTTP 400, not an all-tenant read. Grafana therefore names the tenants it wants.
+# X-Scope-OrgID is HTTP 401, not an all-tenant read. Grafana therefore names the tenants it wants.
 #
 # ⚠ THE TENANT LIST IS A SNAPSHOT, AND THAT IS THE UNCOMFORTABLE PART OF THIS FILE.
 # Loki has no wildcard tenant — verified: the multi-tenant read syntax is `X-Scope-OrgID: a|b|c`

@@ -19,7 +19,7 @@ exporters:
     headers:
       # ADR-118 step 2 flipped Loki to auth_enabled: true, which REQUIRES X-Scope-OrgID on every
       # push — this collector is the second Loki writer (Alloy is the other) and would otherwise
-      # 400 on every batch, silently taking the A0 agent-telemetry log rail down with it. Alloy
+      # 401 on every batch, silently taking the A0 agent-telemetry log rail down with it. Alloy
       # derives its tenant per entry from the pod's namespace; this rail has no namespace to
       # derive (it forwards OTLP from claude-code roles across stacks), so it gets a STATIC tenant
       # — `monitoring`, the collector's own namespace, which keeps ADR-118's invariant that every

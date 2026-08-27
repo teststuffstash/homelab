@@ -43,7 +43,7 @@ So the end state is tenancy **plus** exactly one trusted hop that derives the he
 from an authenticated identity. They are two halves of one mechanism.
 
 The same sentence has a **write-side** consequence that is easy to miss and expensive to miss: if
-the header must be present, then *every writer* must send one or its pushes 400. There are **two**,
+the header must be present, then *every writer* must send one or its pushes 401. There are **two**,
 and only one of them lives in `argocd/resources/loki/`:
 
 | writer | tenant | how |
@@ -206,6 +206,15 @@ looks real and is not.
 | 1 | Alloy `stage.tenant`; the proxy, its RBAC, the grants — **ClusterIP only, no VIP** | `loki_write_*{tenant="<namespace>"}` on a running Alloy — verified AT THE SENDER, because a single-tenant Loki overrides the header to `fake` and can never confirm it. Ingest unchanged; nothing is served, so nothing can regress |
 | 2 | `auth_enabled: true`; the #811 belt moved to a PrometheusRule; **both** writers' headers; Grafana's enumerated datasource | Grafana Explore still returns logs; `LokiNamespaceLogVolumeHigh` evaluates per namespace; **both** Alloy and the OTel collector are accepted (a rejected push is the failure mode to watch — both retry, so a short outage loses nothing) |
 | 3 | the LoadBalancer VIP + the jail's usage note | the oracle workbench SA reads `oracle-fleet` and is **refused** `platform` |
+
+**Step 2 verified live 2026-08-27 17:17–17:20Z** (PR#1010), at the points the failure modes
+actually live rather than by a green sync: the running pod resolves `auth_enabled: true` +
+`multi_tenant_queries_enabled: true` with no ruler mount; the distributor counts bytes under
+**per-namespace tenants** and no `fake`; **both** writers are accepted with zero rejections
+(`loki_api_v1_push` 203×204, `otlp_v1_logs` 7×204) and `loki_discarded_samples_total` is empty; a
+multi-tenant read returns logs across namespaces; a request with **no** header is **401**; Grafana's
+sidecar reloaded the datasource (200 OK). Note the WAL replays pre-flip streams as `user=fake` right
+after the roll — that is history being flushed, not the flip failing.
 
 **Step 1 must not be exposed.** Until step 2 flips the flag, Loki ignores `X-Scope-OrgID` entirely
 and would return every tenant's logs to a caller this proxy authorized for one. That is the one
