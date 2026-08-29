@@ -35,11 +35,17 @@ spec:
               read-only — the 2026-08-24 meta wipe started this way.
         # TABLE SIZE DROP-TO-ZERO BELT — the wipe detector. A meta wipe (like the 2026-08-24
         # incident where the LMDB came back with empty tables) makes table_size drop to zero for
-        # every table. This alert fires when ANY table that should have data reports zero size.
-        # The `for:` window avoids flapping on Garage restarts.
+        # every table. This alert fires when ANY table that HELD DATA IN THE LAST 7 DAYS reports
+        # zero size. The `max_over_time` clause is what keeps it off the by-design-empty tables
+        # (admin_token, k2v_index_counter_v2, k2v_item, multipart_upload, bucket_mpu_counter),
+        # which is why the plain `table_size == 0` form was replaced (#977, #1013).
+        # ⚠ BOUND: that clause is a ROLLING WINDOW, not "was ever populated". A wipe still
+        # unrecovered 7 days after the drop stops alerting — every sample in the window is 0 by
+        # then. 7d is chosen to sit far outside any plausible detection window; the latch that
+        # would remove the bound entirely is #1015. The `for:` window avoids flapping on restarts.
         - alert: GarageTableEmpty
           expr: |
-            table_size == 0 and max_over_time(table_size[24h]) > 0
+            table_size == 0 and max_over_time(table_size[7d]) > 0
           for: 5m
           labels: { severity: warning }
           annotations:
@@ -51,6 +57,9 @@ spec:
               (`garage status`), the meta volume, and the pod logs. If multiple tables are empty
               simultaneously the meta store may need recovery from the snapshot belt
               (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots).
+              This belt only fires within 7 days of the drop — if it resolves without the table
+              refilling, the window has slid past the drop rather than the store having recovered;
+              check `table_size` directly.
         # COVERAGE GUARD (seat, PR#965 gate read) — the two belts above die SILENTLY if the new
         # :3903 scrape never works (a metrics token, a ServiceMonitor mismatch, or a metric-name
         # drift like `table_size` vs a prefixed family — unverifiable until the scrape is live):
