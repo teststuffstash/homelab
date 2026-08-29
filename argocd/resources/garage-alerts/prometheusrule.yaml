@@ -39,7 +39,7 @@ spec:
         # The `for:` window avoids flapping on Garage restarts.
         - alert: GarageTableEmpty
           expr: |
-            table_size == 0
+            table_size == 0 and max_over_time(table_size[24h]) > 0
           for: 5m
           labels: { severity: warning }
           annotations:

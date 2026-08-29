@@ -1,11 +1,3 @@
-# Hand copy of the garage-admin-metrics group from prometheusrule.yaml.
-# Regenerate after every expr edit with:
-#
-#   yq -o=json '{"groups": [{"name": "garage-admin-metrics", "rules": [.spec.groups[].rules[]]}]}' argocd/resources/garage-alerts/prometheusrule.yaml | yq -P '.'
-#
-# ⚠ NOT DRIFT-PINNED (the general harness that would extract `.spec.groups` at run time lives in
-# `scripts/**` + `.github/**`, outside the fixer lane's tier — homelab#337). A stale hand copy
-# tests the OLD expr and passes VACUOUSLY. Re-copy after every expr edit.
 groups:
   - name: garage-admin-metrics
     rules:
@@ -20,7 +12,7 @@ groups:
           description: Garage's data disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way.
       - alert: GarageTableEmpty
         expr: |
-          table_size == 0
+          table_size == 0 and max_over_time(table_size[24h]) > 0
         for: 5m
         labels:
           severity: warning
