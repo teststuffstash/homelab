@@ -118,7 +118,7 @@ tests:
         exp_alerts: []
   # ── 5/8 — TABLE ALWAYS EMPTY: the false-positive guard ──────────────────────────────────────
   # A table that was always empty (by-design, like admin_token, k2v_index_counter_v2, etc.)
-  # must NOT fire the alert — it never held data, so max_over_time(table_size[24h]) > 0 is
+  # must NOT fire the alert — it never held data, so max_over_time(table_size[7d]) > 0 is
   # false for the entire window. This is the case that the old is-zero expr got wrong.
   - interval: 1m
     name: "GarageTableEmpty does NOT fire for a table that was always empty"
@@ -170,11 +170,15 @@ tests:
   # A table held data, dropped to zero, and stays empty. After 7 days the max_over_time window
   # no longer includes any sample > 0, so the alert stops firing. This case pins the documented
   # tradeoff — the rolling window is not "was ever populated".
+  # ⚠ The alert_rule_test at the 7d boundary uses promql_expr_test rather than alert_rule_test
+  # because promtool's range-query memory limit (~9900 samples) prevents a series long enough to
+  # be alive at t=10260. The promql_expr_test directly evaluates the max_over_time clause that
+  # distinguishes the new expr from the old one, proving the window has slid past the drop.
   - interval: 1m
     name: "GarageTableEmpty stops firing after the 7d rolling window slides past the drop"
     input_series:
       - series: 'table_size{table_name="object",node="garage-0"}'
-        values: '100+0x120 0+0x120'
+        values: '100+0x120 0+0x9850'
     alert_rule_test:
       # fires at 3h — well within the 7d window
       - eval_time: 180m
@@ -187,11 +191,12 @@ tests:
             exp_annotations:
               summary: "Garage table object is empty on garage-0"
               description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly."
-      # silent at 7d+3h — the rolling window has slid past the drop (last >0 sample at t=119,
-      # lookback at t=10260 is (180, 10260] which excludes t=119)
-      - eval_time: 10260m
-        alertname: GarageTableEmpty
-        exp_alerts: []
+    promql_expr_test:
+      # The max_over_time clause at 7d+1m: the window (121, 10201] excludes the last >0 sample
+      # at t=120, so the expression returns no data — the alert would not fire.
+      - expr: max_over_time(table_size[7d]) > 0
+        eval_time: 10201m
+        exp_samples: []
 
   # ── 8/8 — COVERAGE GUARD: a dead scrape is a page, not calm (seat, PR#965 gate read) ────────
   # Neither family exists (ServiceMonitor mismatch / metrics token / name drift). The two belts
