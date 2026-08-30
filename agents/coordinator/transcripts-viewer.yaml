@@ -67,12 +67,41 @@ spec:
               export AWS_ACCESS_KEY_ID="$READER_ID" AWS_SECRET_ACCESS_KEY="$READER_SECRET" AWS_REGION=garage
               mkdir -p /data/claude/projects /data/goose/sessions /mirror
               while true; do
-                s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" sync "s3://agent-transcripts/*" /mirror/ \
+                # Bound the source selection to the retention window (7 days, homelab#110): the
+                # prune below removes old data from /mirror, but without filtering the sync it
+                # re-downloads everything on the next tick — the working set trends back to
+                # full-bucket size. s5cmd --include is an allowlist, so only run directories
+                # whose date stamp falls within the window are synced. Root-level files without
+                # a run-date (_ledger.jsonl, _model-scout/) are excluded — sync.py only walks
+                # directories with manifest.json, so they are not needed.
+                RETENTION_DAYS=7
+                INC=(); for d in $(seq 0 "$RETENTION_DAYS"); do
+                  INC+=(--include "*-$(date -u -d "-${d} days" +%Y%m%d)T*")
+                done
+                s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" sync "${INC[@]}" "s3://agent-transcripts/*" /mirror/ \
                   || echo "bucket sync failed (retrying next tick)"
                 # Re-exec the mapper each tick so a ConfigMap edit (transcripts-sync-script.yaml) is
                 # picked up without rolling the pod: cwd-rewrite of claude jsonl (FU-061 grouping) +
                 # goose sessions.db merge (FU-057 rendering).
                 python3 /app/sync.py || echo "sync.py failed (retrying next tick)"
+                # Prune mirror and derived data older than retention window (7 days, homelab#110):
+                # the mirror grows unboundedly with agent activity — each memory-limit bump (256Mi →
+                # 512Mi → 2Gi) only bought time until the next OOM. Bounding the working set here
+                # prevents episode four without a fourth re-bump. The S3 bucket (durable record) is
+                # untouched; only the local emptyDir mirror + derived /data are pruned.
+                # Depth: bucket keys are <project>/<task>/<run-dir>/ (3 levels), so prune at
+                # -mindepth 3 to reach the run-dir level where mtime tracks actual age, not the
+                # project dir which is refreshed by unrelated sibling activity.
+                find /mirror -mindepth 3 -maxdepth 3 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+                find /mirror -mindepth 1 -maxdepth 2 -type d -empty -delete 2>/dev/null || true
+                # /data/claude/projects/<project>--<taskkey>/ is flat: sync.py writes one JSONL per
+                # run into a SHARED label dir, and the coordinator's taskkey is hardcoded `_ticks`
+                # (agents/coordinator-session.sh:301,303), so `<project>--_ticks/` gains a file every
+                # tick forever and its directory mtime never goes stale. Prune the FILES by their own
+                # mtime — a directory-level check cannot bound an ever-growing shared directory — then
+                # reap the label dirs that emptied out.
+                find /data/claude/projects -mindepth 2 -maxdepth 2 -type f -name '*.jsonl' -mtime +7 -delete 2>/dev/null || true
+                find /data/claude/projects -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null || true
                 sleep 300
               done
           env:
@@ -106,6 +135,9 @@ spec:
             # memory 128Mi/512Mi → 256Mi/2Gi (homelab#110, 2026-08-24): the 512Mi ceiling set
             # 2026-08-07 (verified against a 328M mirror then) OOMKilled again after /mirror
             # organically grew to 1.4G — same growth pattern as the CPU bump, not a leak.
+            # Growth fix (homelab#110, 2026-08-30): the bash loop now prunes /mirror + /data
+            # older than 7 days each tick, so the working set is bounded by the retention window
+            # rather than growing unboundedly. The 2Gi ceiling stays as a safety net.
             limits:   { cpu: "1", memory: "2Gi" }
       volumes:
         - name: claude-data
