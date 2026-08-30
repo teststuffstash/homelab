@@ -92,10 +92,26 @@ disabled_repos() {
     | "\(.) \($stack)"' 2>/dev/null
 }
 
-usage() { echo "usage: reviewer-optout.sh <repo> | --filter <repo>…" >&2; exit 2; }
+usage() { echo "usage: reviewer-optout.sh <repo> | --filter <repo>… | --lens-map <repo>" >&2; exit 2; }
 [ $# -gt 0 ] || usage
 
 MODE="predicate"
+if [ "$1" = "--lens-map" ]; then
+  # Output a JSON map of lens → posture for the given repo from the SAME single claim read.
+  # Uses the shared CLAIMS read (probe_claims) so it costs no extra cluster call; fail-closed
+  # on an unreadable claim (returns "{}", exit 1).
+  _map_repo="$2"
+  if ! probe_claims; then
+    say "claims read PROBE-FAILED (kubectl get $CRD) — lens posture is UNKNOWN; returning empty map (advisory for all lenses)."
+    exit 1
+  fi
+  printf '%s' "$CLAIMS" | jq -r --arg repo "$_map_repo" '
+    .items[]
+    | select(.spec.repos[]? | (if type == "object" then .name else . end) == $repo)
+    | .spec.lenses // {}
+  ' 2>/dev/null || echo "{}"
+  exit 0
+fi
 if [ "$1" = "--filter" ]; then MODE="filter"; shift; fi
 [ $# -gt 0 ] || usage
 

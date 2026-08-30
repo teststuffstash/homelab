@@ -102,6 +102,24 @@ if ! bash "$HERE/reviewer-optout.sh" "$PROJECT"; then
 fi
 # <<<REPLAY:optout-gate<<<
 
+# ── THE SLO TEETH GATE (homelab#831, FU-104) ──────────────────────────────────────────────────
+# Honor the stack's error budget burn state HERE, at the one point ALL dispatch sites pass
+# through: the reflex tick AND the primary edge path (github-exporter → Sensor → review
+# WorkflowTemplate). The teeth shipped inside the reflex tick alone, so on a burnt stack the
+# edge path still dispatched a review, approved it, and auto-merge still fired — exactly the
+# homelab#204 shape one lane over. slo-teeth.sh is the single read and the single (FAIL-OPEN)
+# posture; it prints its own reason to stderr.
+# FIRST, deliberately: before the head-sha probe, before the latch, before the pod. A burnt
+# stack must cost neither a GitHub call nor a subscription session.
+# FAIL-OPEN: a dead Prometheus must never freeze every merge lane (rule #6 in reverse —
+# availability of the gate < the gate). An unreachable metric is NOT evidence of a burnt budget.
+# >>>REPLAY:slo-teeth-gate>>>
+if ! bash "$HERE/slo-teeth.sh" "$PROJECT"; then
+  echo "→ review of ${PROJECT}#${PR} NOT dispatched — stack error budget burnt (auto-merge lane demoted to human, FU-104)"
+  exit 0
+fi
+# <<<REPLAY:slo-teeth-gate<<<
+
 # FU-080 perStack (mirror of coordinator-session.sh): --loop-ns runs the reviewer pod in the stack's
 # loop home as agentstack-loop, fetching the review-bot token (loop-reviewer-git-<stack>) per-run
 # from the broker. The reviewer-git secretKeyRef/volume below stay optional:true — inert in that ns;
@@ -291,6 +309,14 @@ DEPTH RULE (this PR closes issue #$issue, which sits at follow-up depth $sprout_
 }
 # <<<REPLAY:s6-child-1-depth-rule<<<
 
+# FU-101 lens posture: read the per-stack lenses→posture map from the SAME single claim read
+# that feeds the optout gate (reviewer-optout.sh). This costs zero extra cluster calls and
+# cannot straddle a claim edit the way two reads can. Fail-closed: unreadable → empty map
+# (every lens stays advisory, consistent with the optout gate's posture).
+# >>>REPLAY:lens-posture-gate>>>
+LENS_MAP="$(bash "$HERE/reviewer-optout.sh" --lens-map "$PROJECT" 2>/dev/null || echo "{}")"
+# <<<REPLAY:lens-posture-gate<<<
+
 PREP=$(cat <<PREP
 set -e
 ${LOOP_FETCH}gh repo clone ${REPO_SLUG} /work/repo -- --quiet
@@ -342,15 +368,47 @@ if printf '%s\n' "\$CHANGED" | grep -qE '^charts?/templates/|^(argocd|k8s|manife
    || gh pr diff ${PR} 2>/dev/null | grep -qE '^\+.*kind: *(Deployment|StatefulSet|DaemonSet|CronJob)\b'; then
   LENSES="\$LENSES k8s-prod"
 fi
+# >>>REPLAY:asvs-predicate>>>
+# ASVS lens: code-class predicate for auth/input/session code (issue#833).
+# Prefers quiet miss — see agents/lenses/asvs.md for false-positive analysis.
+# Signals: auth imports, auth function definitions, session management, input parsing,
+# new public endpoint route registrations across Go/Python/TypeScript.
+if gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(import|from|using|require)\s+.*(auth|jwt|oauth|saml|oidc|csrf|cors|bcrypt|argon2|passport)' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(func.*[^A-Z](Login|Logout|Auth|Authenticate|Authorize|Register|Signup|Token|Session|Refresh|Middleware|Guard)|def.*[^a-z](login|logout|auth|authenticate|authorize|register|signup|session|token|refresh|middleware|guard))' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(session\.(Save|Get|Set|Delete|Destroy|Regenerate|Start|Create)[^a-z]|csrf\.(Protect|Token|Middleware)|cors\.(New|Allow|Handle)|ParseForm|ParseMultipartForm|\.Bind\(|\.Validate\(|\.Sanitize\(|\.Escape\()' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(http\.(Handle|HandleFunc|ServeMux)|HandleFunc\(|mux\.(NewRouter|Handle|Methods|Headers)|gin\.(Default|New|Group|RouterGroup)|echo\.(New|Group|Route)|chi\.(NewRouter|Route|Group|Mux))' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(router\.(get|post|put|delete|patch|GET|POST|PUT|DELETE|PATCH)\(|@(Get|Post|Put|Delete|Patch)\(|app\.(get|post|put|delete|patch|route|router)|@app\.route\(|@router\.(get|post|put|delete|patch)\(|\.add_url_rule\()'; then
+  LENSES="\$LENSES asvs"
+fi
+# <<<REPLAY:asvs-predicate<<<
 SYSFILE=/tmp/review-system.md
 if [ -f "${RUBRIC}" ]; then cp "${RUBRIC}" "\$SYSFILE"; else : > "\$SYSFILE"; fi
+# Lens posture map from the single claim read (FU-101): absent lenses → advisory
+LENS_MAP='$LENS_MAP'
+# >>>REPLAY:lens-posture-handling>>>
 for l in \$LENSES; do
+  _posture=\$(printf '%s' "\$LENS_MAP" | jq -r --arg l "\$l" '.[\$l] // "advisory"' 2>/dev/null || echo "advisory")
   if { printf '\n\n---\n\n'; curl -fsS --max-time 10 "\$LENS_BASE/\$l.md"; } >> "\$SYSFILE"; then
-    echo "→ lens attached: \$l (advisory — FU-101)"
+    if [ "\$_posture" = "blocking" ]; then
+      printf '\n**POSTURE: blocking** — findings from this lens MAY determine the verdict.\n' >> "\$SYSFILE"
+      echo "→ lens attached: \$l (BLOCKING — \$_posture)"
+    else
+      echo "→ lens attached: \$l (advisory — FU-101)"
+    fi
   else
-    echo "WARN: lens \$l fetch failed — review proceeds without it (advisory-only, never blocks)"
+    if [ "\$_posture" = "blocking" ]; then
+      echo "WARN: lens \$l fetch FAILED — lens is BLOCKING for this stack, but review proceeds without it (a blocking lens that cannot be fetched must NOT silently become advisory)"
+    else
+      echo "WARN: lens \$l fetch failed — review proceeds without it (advisory-only, never blocks)"
+    fi
   fi
 done
+# <<<REPLAY:lens-posture-handling<<<
 RUBRIC_FLAG=""
 [ -s "\$SYSFILE" ] && RUBRIC_FLAG="--append-system-prompt-file \$SYSFILE"
 echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: \${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
