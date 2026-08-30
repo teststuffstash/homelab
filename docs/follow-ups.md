@@ -253,12 +253,6 @@ six OVERSIZE items pointer-ized into
       end-state (what stays human-gated and why):
       [`docs/spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
       Relates FU-051, FU-012, ADR-093 (Argo as the candidate runner for the ansible Jobs).
-- [ ] **FU-052** — **Onboard the remaining three app repos** — snore-recorder, agent-runtime,
-      agent-coordinator (sleep-tracking + openrouter-operator are done). What a repo needs, and
-      what's already collapsed into the AgentStack claim: `ROADMAP.md` → Programs in flight →
-      "Onboard every app repo". Still per-repo and manual: `.agents/` recipes, the `stacks.json`
-      entry, and the GitHub side — FU-070's `new-stack --from` is the collapse for that.
-      Relates FU-070, FU-048.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content

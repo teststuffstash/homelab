@@ -146,10 +146,13 @@ coordinator-reflex: all three stacks listed from claims, no fallback warning).
 
 | Stack | Claim |
 |---|---|
-| oracle | `oracle-iac//oracle-fleet/agent/agentstack.yaml` (reference; egress ENFORCED) |
-| sleep | `sleep-iac//sleep-tracking/agent/agentstack.yaml` (egress MONITOR) |
-| platform | `agents/fixer/openrouter-operator/agentstack.yaml` (no `-iac` repo — homelab IS its deployment truth; egress MONITOR) |
-| circles | `circles-iac//circles/agent/agentstack.yaml` (bootstrap 2026-08-03) |
+| oracle | `oracle-iac//oracle-fleet/agent/agentstack.yaml` (reference; oracle-fleet egress ENFORCED, oracle-iac monitor) |
+| sleep | `sleep-iac//sleep-tracking/agent/agentstack.yaml` (sleep-tracking egress ENFORCED; sleep-iac + snore-recorder monitor) |
+| platform | `agents/fixer/openrouter-operator/agentstack.yaml` (no `-iac` repo — homelab IS its deployment truth; ALL fixer repos egress ENFORCED) |
+| circles | `circles-iac//circles/agent/agentstack.yaml` (bootstrap 2026-08-03; egress monitor) |
+
+(Enforce states re-read from the live claims 2026-08-30 — the claim, not this table, is the
+authority; re-check before citing.)
 
 **stacks.json is NOT deleted — it is the committed MIRROR of the claims.** Two consumers a
 cluster claim cannot serve keep it alive: the registration lint's repo universe in CI (no cluster
