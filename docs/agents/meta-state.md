@@ -101,7 +101,10 @@ meant to avoid.)
   `Touches: argocd/resources/openrouter-proxy/**`; sibling #1018 (machine-filed same morning)
   root-causes the continuous 403 half as a MISSING FU-138 Role in agent-coordinator — land
   together. The storm's three latches (oracle-fleet#283/#279/#278) seat-cleared + re-queued
-  2026-08-30, un-corking the #281 delta chain and goal-270's tail); the operator hand-dispatch **claude/haiku r1 DELIVERED:
+  2026-08-30, un-corking the #281 delta chain and goal-270's tail. **#1004 FIXED same day —
+  PR#1019 (loop-authored: fail-closed ref resolution + short negative TTL) merged 07:15Z,
+  issue auto-closed; #1018 (the missing FU-138 Role in agent-coordinator, the 403 half) is
+  QUEUED and codeowner-parks at merge (`Touches: agents/coordinator/rbac.yaml`)**); the operator hand-dispatch **claude/haiku r1 DELIVERED:
   oracle-fleet PR#277** (opened 2026-08-26 19:00Z, #272 → `agent/review`, riding the loop —
   no FU-143 hold). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
   on the opencode draw; the edge dies when #990 closes. **⚠ FU-188 (found on #277's review,
@@ -233,7 +236,10 @@ standing set below; what differs is cadence and the act rule:
   cache-warm (a wake within TTL is a ~0.1× cache read; past it, a full re-read — the Part A″
   arithmetic, [observability-and-retro.md](observability-and-retro.md) §Part A″). Maintenance
   sessions keep 7200s (light context, cold wakes are cheap). An expected wait past the TTL with
-  nothing in flight = WIND DOWN deliberately (write the pickup, kill monitors by process, exit).
+  nothing in flight = WIND DOWN deliberately (write the pickup, **push the batched direct
+  commits — ONE master push through the githooks/pre-push lint gate, the 2026-08-30 batch
+  rule (seat card §How changes land)** — kill monitors by process, run jail-transcripts-sync,
+  exit).
 - **Act rule**: a watch event outside the session's type is RECORDED for the other type (board /
   a meta-state row), never acted on — design-shaped events don't get improvised without the
   corpus (the /design ruling applied to watch events); agents-lane events don't derail a
