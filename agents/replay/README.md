@@ -271,6 +271,8 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-go-failover/limited` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/shadow-both-limited` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/shadow-go-available` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-mcp-prep/absent` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-mcp-prep/present` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-optout/reviewer-optout` | suite | - | `-` | - |
 | `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-absent` | actions | - | `agents/reviewer-session.sh` | - |

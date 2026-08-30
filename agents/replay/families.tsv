@@ -34,12 +34,12 @@ goal-nonassembly-merge-inert	goal
 goal-reverted	goal
 goal-validated	goal
 harness-run-cmd-claude	harness-run-cmd
+harness-run-cmd-claude-mcp	harness-run-cmd
 harness-run-cmd-go	harness-run-cmd
 harness-run-cmd-goose	harness-run-cmd
 harness-run-cmd-goose-mcp	harness-run-cmd
 harness-run-cmd-re-review-shadow	harness-run-cmd
 harness-run-cmd-re-review-shadow-skip-tag	harness-run-cmd
-harness-run-cmd/claude-mcp	harness-run-cmd
 harvest-deep-sprout	harvest
 harvest-goal-closed	harvest
 harvest-goal-open-exhausted	harvest
@@ -82,6 +82,8 @@ reviewer-currency-probe-fail-proceeds	reviewer-currency
 reviewer-go-failover-available	reviewer-go-failover
 reviewer-go-failover-explicit-model	reviewer-go-failover
 reviewer-go-failover-limited	reviewer-go-failover
+reviewer-mcp-prep-absent	reviewer-mcp-prep
+reviewer-mcp-prep-present	reviewer-mcp-prep
 reviewer-optout	reviewer-optout
 reviewer-touches-escapes-computed	reviewer-touches
 reviewer-touches-escapes-none	reviewer-touches

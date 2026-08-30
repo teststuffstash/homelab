@@ -112,6 +112,24 @@ if [ -n "$_mcp_knob" ]; then
   MCP_ENDPOINT="${_mcp_knob%%|*}"
   MCP_TOOLS="${_mcp_knob#*|}"
 fi
+# >>>REPLAY:reviewer-mcp-prep>>>
+# Build the MCP config at launcher level (not inside the PREP heredoc) so the pod's env does not
+# need MCP_ENDPOINT/MCP_TOOLS. The base64 encoding is shell-safe for the unquoted <<PREP heredoc.
+# Knob absent → MCP_PREP is empty → nothing rendered. Unparseable tools → loud degrade, no attach.
+MCP_PREP=""
+if [ -n "${MCP_ENDPOINT:-}" ]; then
+  MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" \
+    '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}' 2>/dev/null)" || MCP_CONFIG_JSON=""
+  if [ -n "$MCP_CONFIG_JSON" ]; then
+    MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
+    MCP_PREP="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json
+export CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json
+echo '→ MCP config written'"
+  else
+    echo "→ MCP knob unreadable for ${PROJECT} — no MCP attached (fail-closed, #1041)" >&2
+  fi
+fi
+# <<<REPLAY:reviewer-mcp-prep<<<
 # FU-080 perStack (mirror of coordinator-session.sh): --loop-ns runs the reviewer pod in the stack's
 # loop home as agentstack-loop, fetching the review-bot token (loop-reviewer-git-<stack>) per-run
 # from the broker. The reviewer-git secretKeyRef/volume below stay optional:true — inert in that ns;
@@ -306,16 +324,9 @@ set -e
 ${LOOP_FETCH}gh repo clone ${REPO_SLUG} /work/repo -- --quiet
 cd /work/repo
 gh pr checkout ${PR}
-# MCP config (#1041): write the config file when the stack declares an MCP endpoint.
-# The CLAUDE_CODE_MCP_CONFIG env var is set so claude loads the MCP server at startup.
-# ⚠ Inside the unquoted <<PREP heredoc, every $ must be escaped so the pod's shell sees it,
-# not the launcher. The jq-internal refs ($url, $tools) are jq variables, not shell variables.
-if [ -n "\${MCP_ENDPOINT:-}" ]; then
-  jq -cn --arg url "\${MCP_ENDPOINT}" --argjson tools "\${MCP_TOOLS:-[]}" \
-    '{mcp_servers: [{name: "stack-mcp", url: \$url, tools: \$tools}]}' > /tmp/mcp-config.json
-  export CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json
-  echo "→ MCP config written: \${MCP_ENDPOINT}"
-fi
+# MCP config (#1041): injected from the launcher-side MCP_PREP (built above the replay region).
+# Knob absent → MCP_PREP is empty → blank line, nothing attached.
+${MCP_PREP}
 # FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
 # the worker rounds + coordinator ticks for the same issue. Resolve via GitHub's closing-issue
 # reference ("Fixes #N"); fall back to pr-<N> when the PR closes no issue.
