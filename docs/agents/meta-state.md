@@ -8,7 +8,36 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ DESIGN QUESTION (operator, 2026-08-30): stack→platform communication — how a stack routes
+- **⚑ 2026-08-30 EVENING SESSION OUTPUTS — the pickup set:**
+  - **G-B COMPLETE to post-launch**: assembly merged as PR#1037 (reopened from #1030 under the
+    operator identity — the governance-lint author trap, filed #1036 operator-lane; one
+    hardening commit `ce4bbbcc` closed the responder-dial comma-splice past the secrets
+    carve-out). `probe-platform` CronWorkflow rendered; #1026/#1027 queued at merge → fixed
+    same day (PR#1047/#1050, codeowner-read + approved at wind-down, with #1032).
+    **VERIFY next session: #818 wears `goal/post-launch`** (the scan's IL-T18 leg was pending
+    at wind-down) + the first `probe-platform` tick report.
+  - **#1038 (reviewer 403s on every issue read) FIXED `ca87b799`**: the App grant existed since
+    FU-069(b) — both MINT sites omitted `issues`; re-minted + verified 200, sleep#137/#135
+    un-wedged (stale verdict dismissed, agent/error cleared). Durables: ground-rules
+    escalation-verify + GitHub-signature bullets (PR#1044, fixture-fixed), github-apps.yaml
+    symptom index, GAPS design-agents-G3 promoted (asks-are-claims).
+  - **G-F LAUNCHED → homelab#1039** (stack MCP attachment; branch `goal/1039-stack-mcp`,
+    decompose rung). #289 un-parked (oracle owns its deliverables). Work-map rows G-F + G-G.
+  - **ADR-119 landed via PR#1052** (capability-request lane w/ intent grammar +
+    secure-by-default + the file-direct escalation terminal + coordinator-brief filing
+    contract + `platform-request` claim label + glossary rows); the Goal consumer card via
+    PR#1051. Build residue queued: #1053 (Base:-mandatory decompose lint), #1054 (board
+    fingerprint slice), #1055 (reviewer L1 capability card + never-fail-into-a-verdict).
+    **Open residue of the sitting: the PR-shaped re-entry edge** (a review mid-flight blocked
+    on a platform fault has no blockedBy-style resume; the issue-shaped path rides FU-087).
+  - **Oracle-side next (the oracle jail's, per the cross-stack ruling)**: the seed batch as
+    TWO intent requests (`public-edge.anonymous-safe-serving` #175, `public-edge.
+    client-observability` #176) — WAF moved into G-G's default-hardening; the #176 rescope +
+    blockedBy edges; oracle-fleet#293's codeowner read; the prober class-1 brief (#289).
+  - PRs #1044/#1051/#1052 were auto-merging at wind-down — confirm landed.
+
+- **⚑ DESIGN QUESTION (operator, 2026-08-30) — LARGELY DISCHARGED 2026-08-30 evening
+  (ADR-119): stack→platform communication — how a stack routes
   a problem/request TO the platform instead of into the undifferentiated human bucket.**
   `agent/blocked` ("needs a human") is correct on the platform repo — one context — but on a
   stack it conflates two destinations: platform/infra (homelab jail's problem) vs business
