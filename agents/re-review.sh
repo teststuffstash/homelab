@@ -82,6 +82,28 @@ eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
 # For shadow mode, attribute the rail in the report header.
 echo "→ re-review: model=$MODEL rail=$MODEL_RAIL harness=$MODEL_HARNESS resolved=$MODEL_MODEL"
 
+# Pin-by-DECLARATION, not pin-to-anthropic (homelab#946's first run, 2026-08-30): the unset
+# block above strips INHERITED plumbing — right for the default sonnet duty, but an explicit
+# opencode-rail --model (the A5 shadow instrument, `opencode/big-pickle`) then has no rail at
+# all and plain claude 404s it against api.anthropic.com on every snapshot, with stderr
+# discarded. For an explicitly-declared opencode/* or opencode-go/* model, the jail shim
+# (scripts/claude-model-shim.py — routes by body model id, credential per rail) IS the rail:
+# require a live listener and point claude at it deliberately. Fail loudly, never fall back —
+# a shadow report silently produced by the wrong model is worse than no report (#515 class).
+case "$MODEL" in
+  opencode/*|opencode-go/*)
+    SHIM_PORT="${SHIM_PORT:-18091}"
+    if ! curl -fsS -m 2 -o /dev/null "http://127.0.0.1:${SHIM_PORT}/" 2>/dev/null && \
+       ! (exec 3<>"/dev/tcp/127.0.0.1/${SHIM_PORT}") 2>/dev/null; then
+      echo "re-review: model $MODEL rides the jail shim and no listener is up on 127.0.0.1:${SHIM_PORT}" >&2
+      echo "           start one (scripts/claude-go.sh spawns it, or run scripts/claude-model-shim.py) and retry" >&2
+      exit 3
+    fi
+    export ANTHROPIC_BASE_URL="http://127.0.0.1:${SHIM_PORT}"
+    echo "→ re-review: opencode rail — ANTHROPIC_BASE_URL pinned to the jail shim (:${SHIM_PORT})"
+    ;;
+esac
+
 # Temp dir with cleanup trap
 TMPDIR_BASE="${TMPDIR:-/tmp}"
 WORK_DIR=$(mktemp -d "${TMPDIR_BASE}/re-review.XXXXXX")
