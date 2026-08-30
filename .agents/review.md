@@ -74,7 +74,8 @@ at all. What no longer qualifies as a follow-up: anything the branch could have 
   shipped is a real defect, not a nit. `docs/follow-ups.md` is single-writer (operator/meta): a
   worker appending to it is blocking.
 - **Path tier decides who merges, and the PR should say so.** Tier 1 (`argocd/resources/**`) merges
-  on CI; `argocd/platform/**`, `tofu/`, `ansible/`, `opnsense/`, `machines/` need a human. If the
+  on CI; `argocd/platform/**`, `tofu/`, `ansible/`, `opnsense/`, `machines/`, **and `docs/`**
+  (CODEOWNERS `/docs/` since 2026-08-04 — the platform's memory) need a human. If the
   diff needs a human and the body does not say it, that is a follow-up — someone will otherwise
   wait in silence for an auto-merge that cannot come.
 
