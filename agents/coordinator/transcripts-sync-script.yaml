@@ -157,7 +157,10 @@ data:
                 break
             except sqlite3.OperationalError:
                 continue
-        goose.execute("DELETE FROM messages WHERE session_id NOT IN (SELECT id FROM sessions)")
+        try:
+            goose.execute("DELETE FROM messages WHERE session_id NOT IN (SELECT id FROM sessions)")
+        except sqlite3.OperationalError:
+            pass  # sessions table doesn't exist yet (cold start, homelab#110)
         goose.commit()
         goose.close()
         print("sync: mapped %d claude jsonl, merged %d goose session db(s), pruned goose sessions >%dd"
