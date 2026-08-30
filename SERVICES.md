@@ -31,7 +31,7 @@ truth.
 | **Per-stack subdomain delegation** | 🟢 LIVE | Cilium Gateway API — a stack gets `*.<stack>.teststuff.net` delegated to its own in-cluster Gateway; add hostnames as **HTTPRoutes in your `-iac` repo** (no homelab change). **Opt-in** per stack. Delegated, all three end-to-end: **oracle** (`3.22 ↔ 40.22` — `specs.oracle`/`mcp.oracle`) · **sleep** (`3.26 ↔ 40.26`, wired 2026-07-27 — `specs.sleep` routing since 2026-07-28) · **circles** (`3.28 ↔ 40.28`, homelab half 2026-08-04, circles-iac Gateway + `specs.circles` the same day — plus per-PR `specs-<n>.circles` preview routes). | `cilium` GatewayClass in-cluster · HAProxy wildcard-cert frontend → the stack's gateway VIP | ADR-092; homelab `stack_gateways` in `ansible/group_vars/opnsense.yml`, `argocd/platform/gateway*.yaml` + `*-gateway-refgrant.yaml` |
 | **metrics-server** | 🟢 LIVE | `kubectl top` / HPA | in-cluster | `argocd/platform/metrics-server.yaml` (migrated off tofu 2026-08-04, the ArgoCD-lever canary) |
 | **ArgoCD** | 🟢 LIVE | GitOps CD (reconciles `argocd/` from GitHub) | `argocd.teststuff.net` · in-cluster | ADR-005; `argocd/README.md` |
-| **Postgres (CloudNativePG)** | 🟢 LIVE | Relational DB — per-app HA `Cluster` CRs | in-cluster `<cluster>-rw.<ns>.svc:5432` | ADR-046; declare a CNPG `Cluster` in your namespace |
+| **Postgres (CloudNativePG)** | 🟢 LIVE | Relational DB — per-app HA `Cluster` CRs | in-cluster `<cluster>-rw.<ns>.svc:5432` | ADR-046; consumer card [`docs/postgres.md`](docs/postgres.md) |
 | **Infisical** | 🟢 LIVE | Secrets manager (the source ESO reads) | `infisical.teststuff.net` · in-cluster | ADR-062; `devbox run infisical-secret`, [`docs/secrets.md`](docs/secrets.md) |
 | **External Secrets Operator** | 🟢 LIVE | Syncs Infisical → native k8s Secrets | in-cluster (`ClusterSecretStore` `infisical`) | ADR-062; [`docs/secrets.md`](docs/secrets.md) |
 | **Crossplane (+ provider-terraform)** | 🟢 LIVE | Reconciles app-owned resources (Garage buckets/keys) from `Workspace` CRs | in-cluster | ADR-076; [`docs/patterns/app-owned-resources.md`](docs/patterns/app-owned-resources.md) |
@@ -70,7 +70,8 @@ truth.
   (S3 artifact repo, rendered per-namespace when a multi-step DAG needs it). Mechanism = platform,
   policy = stack (ADR-085). First consumer: oracle-fleet ingestion.
 - **Database (Postgres/CNPG):** declare a `postgresql.cnpg.io/v1` `Cluster` in your namespace; consume
-  the operator-generated `<cluster>-app` secret (or supply your own). Example: `argocd/resources/postgres/`.
+  the **CNPG-generated** `<cluster>-app` secret (minted by the CloudNativePG k8s operator, not a
+  human). Consumer card: [`docs/postgres.md`](docs/postgres.md); example: `argocd/resources/postgres/`.
 - **Dashboards (Grafana):** for "me"-facing views. For non-technical "Others", see ADR-072 (gated on
   the PLANNED IDP).
 
