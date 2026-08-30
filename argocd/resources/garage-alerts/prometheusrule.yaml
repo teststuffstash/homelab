@@ -23,13 +23,13 @@ spec:
         # ledger's ">80% alert" input was designed to catch.
         - alert: GarageDiskFillingUp
           expr: |
-            garage_local_disk_avail / garage_local_disk_total < 0.2
+            1 - garage_local_disk_avail / garage_local_disk_total > 0.8
           for: 30m
           labels: { severity: warning }
           annotations:
-            summary: "Garage data disk is {{ $value | humanizePercentage }} full on {{ $labels.node }}"
+            summary: "Garage disk is {{ $value | humanizePercentage }} full on {{ $labels.volume }}"
             description: >-
-              Garage's data disk has less than 20% available. The ledger's >80% threshold
+              Garage's disk has less than 20% available. The ledger's >80% threshold
               (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn
               volume or the underlying pve thin pool is filling. A full disk makes Garage go
               read-only — the 2026-08-24 meta wipe started this way.
@@ -49,7 +49,7 @@ spec:
           for: 5m
           labels: { severity: warning }
           annotations:
-            summary: "Garage table {{ $labels.table_name }} is empty on {{ $labels.node }}"
+            summary: "Garage table {{ $labels.table_name }} is empty on {{ $labels.pod }}"
             description: >-
               A Garage meta table that should hold data reports zero size. This is the pattern
               from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md):
