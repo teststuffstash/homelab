@@ -5095,6 +5095,141 @@ data: [DONE]
     check("headroom: skipping " + ref_no_session_no_cr not in _out and "headroom: " + ref_no_session_no_cr + ": auth/key failed" in _out,
           "non-session no-CR: probed, residue skip is session-specific")
 
+    # ── #1021: cred-unresolved → 502 + negative-cache TTL coverage ─────────────────────────────
+    # PR #1019 landed the cred-unresolved → 502 and negative-cache TTL fix but added no
+    # self-test assertions. The paths have zero live occurrences, so the self-test is the
+    # only regression guard. Coverage extends to sibling paths _resolve_loop_git and
+    # _resolve_git_token (same negative-cache TTL pattern).
+    print("\n=== Cred-unresolved → 502 test (homelab#1004 / #1021) ===")
+    # An unresolvable ref: must produce a local 502 and never forward credential-less.
+    seen.clear()
+    st, data = call("gpt-4o", extra_headers={
+        "Authorization": "Bearer ref:default/nonexistent",
+    })
+    check(st == 502, "cred-unresolved: unresolvable ref returns 502")
+    check("openrouter" not in seen and "anthropic" not in seen,
+          "cred-unresolved: no upstream received the request (fail-closed)")
+
+    print("\n=== Negative-cache TTL test for _resolve_ref (homelab#1004 / #1021) ===")
+    # A failed resolve must NOT poison the cache for the full REF_CACHE_TTL_S (60s).
+    # Negative entries evaporate after NEGATIVE_CACHE_TTL_S (5s), so the next request
+    # retries the K8s call naturally.
+    ref_key = "default/test-negative-cache"
+    now = time.time()
+    _refs[ref_key] = (now + NEGATIVE_CACHE_TTL_S, None)
+
+    # First request: negative cache hit → 502
+    seen.clear()
+    st, data = call("gpt-4o", extra_headers={
+        "Authorization": f"Bearer ref:{ref_key}",
+    })
+    check(st == 502, "negative-cache _resolve_ref: first request 502 (negative cache hit)")
+
+    # Record the cache entry's expiry
+    with _refs_lock:
+        cached = _refs.get(ref_key)
+    first_expiry = cached[0] if cached else 0.0
+    check(first_expiry > now, "negative-cache _resolve_ref: cache entry has future expiry")
+
+    # Wait for negative TTL to expire
+    time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
+
+    # Second request: cache expired, re-resolution attempted → 502 again (no K8s API)
+    seen.clear()
+    st, data = call("gpt-4o", extra_headers={
+        "Authorization": f"Bearer ref:{ref_key}",
+    })
+    check(st == 502, "negative-cache _resolve_ref: second request 502 (re-resolution attempted)")
+
+    # Verify cache entry was refreshed (new expiry, meaning re-resolution happened)
+    with _refs_lock:
+        cached = _refs.get(ref_key)
+    second_expiry = cached[0] if cached else 0.0
+    check(second_expiry > first_expiry + NEGATIVE_CACHE_TTL_S * 0.5,
+          f"negative-cache _resolve_ref: cache entry refreshed "
+          f"(first expiry {first_expiry:.1f} → second {second_expiry:.1f})")
+    # Clean up
+    _refs.pop(ref_key, None)
+
+    print("\n=== Negative-cache TTL test for _resolve_git_token (homelab#1004 / #1021) ===")
+    # Same negative-cache TTL pattern in the sibling path _resolve_git_token.
+    # Seed the cache with a negative entry, verify it's used, then verify re-resolution
+    # after TTL expiry via the /git-token HTTP handler.
+    git_ref = "agent-coordinator/agent-git-test-neg-cache#git"
+    now = time.time()
+    _refs[git_ref] = (now + NEGATIVE_CACHE_TTL_S, None)
+
+    # First request: negative cache hit → 404 (unresolvable)
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/git-token?ns=test-neg-cache")
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 404,
+          "negative-cache _resolve_git_token: first request 404 (negative cache hit)")
+
+    # Record the cache entry's expiry
+    with _refs_lock:
+        cached = _refs.get(git_ref)
+    first_expiry = cached[0] if cached else 0.0
+    check(first_expiry > now, "negative-cache _resolve_git_token: cache entry has future expiry")
+
+    # Wait for negative TTL to expire
+    time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
+
+    # Second request: cache expired, re-resolution attempted → 404 again (no K8s API)
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/git-token?ns=test-neg-cache")
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 404,
+          "negative-cache _resolve_git_token: second request 404 (re-resolution attempted)")
+
+    # Verify cache entry was refreshed
+    with _refs_lock:
+        cached = _refs.get(git_ref)
+    second_expiry = cached[0] if cached else 0.0
+    check(second_expiry > first_expiry + NEGATIVE_CACHE_TTL_S * 0.5,
+          f"negative-cache _resolve_git_token: cache entry refreshed "
+          f"(first expiry {first_expiry:.1f} → second {second_expiry:.1f})")
+    # Clean up
+    _refs.pop(git_ref, None)
+
+    print("\n=== Negative-cache TTL test for _resolve_loop_git (homelab#1004 / #1021) ===")
+    # Same negative-cache TTL pattern in the sibling path _resolve_loop_git.
+    # Tested via direct call since the /loop-git-token handler gates on TokenReview
+    # (which fails without a K8s API) before reaching _resolve_loop_git.
+    loop_ref = "agent-coordinator/test-loop-neg-cache#loop"
+    now = time.time()
+    _refs[loop_ref] = (now + NEGATIVE_CACHE_TTL_S, None)
+
+    # Verify the negative entry is cached
+    with _refs_lock:
+        cached = _refs.get(loop_ref)
+    check(cached is not None and cached[1] is None,
+          "negative-cache _resolve_loop_git: negative entry cached")
+    first_expiry = cached[0] if cached else 0.0
+    check(first_expiry > now, "negative-cache _resolve_loop_git: cache entry has future expiry")
+
+    # Wait for negative TTL to expire
+    time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
+
+    # Call _resolve_loop_git directly — it will try K8s API (fails), cache new negative entry
+    result = _resolve_loop_git("test-loop-neg-cache", "test-ns")
+    check(result is None,
+          "negative-cache _resolve_loop_git: re-resolution returns None (no K8s API)")
+
+    # Verify cache entry was refreshed
+    with _refs_lock:
+        cached = _refs.get(loop_ref)
+    second_expiry = cached[0] if cached else 0.0
+    check(second_expiry > first_expiry + NEGATIVE_CACHE_TTL_S * 0.5,
+          f"negative-cache _resolve_loop_git: cache entry refreshed "
+          f"(first expiry {first_expiry:.1f} → second {second_expiry:.1f})")
+    # Clean up
+    _refs.pop(loop_ref, None)
+
     print()
     if not fails:
         print("self-test: PASS")
