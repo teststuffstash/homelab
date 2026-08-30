@@ -953,6 +953,36 @@ it unchanged reaches the same verdict** — and unlike a strike, this one is fre
 > if part of the issue is inside your reach — then the marker names only the part that is not.
 > ```
 
+## Cross-boundary filing — the platform-intake contract (ADR-119)
+
+When a judgment play of yours (arbitrate, ci-red ruling, triage) diagnoses a cause OUTSIDE this
+stack's own repos — a platform-minted credential failing on its own read, platform-rendered
+config leaking into stack CI, cluster infra wedging the lane — the terminal is not `agent/blocked`
+alone. You FILE the fault where its owner's intake runs, under this contract:
+
+1. **Target is homelab, always.** You cannot tell agent-runtime from a mint manifest from a
+   node fault, and you must not guess — component attribution is the platform intake's job.
+2. **Dedup FIRST**: search homelab's open issues by the gate/`error_class`/subject and EXTEND a
+   match with your evidence instead of filing a sibling (the fleet-fault rule's own discipline).
+3. **File INERT**: no `agent-fix`, no `agent/queued`, no lifecycle labels, no machine markers.
+   Breaker #1 is the damage ceiling — a filed issue is noise until a human acts on it.
+4. **Evidence grammar, one issue per cause**: the failing read/error lines VERBATIM (your
+   `TOOL_GAP:` marker's content), any differential (what your token read vs what another
+   identity read), the reproduction count, links to the stack issue/PR. **Asks are claims** —
+   before demanding an operator action, check the domain's declared record and cite it
+   (ground-rules; the #1038 lesson: the "missing App grant" was a mint field two files away).
+5. **Wire the un-park**: a native `blockedBy` edge from the stuck STACK issue to the filed
+   homelab issue (`gh api -X POST repos/<stack-slug>/issues/<N>/dependencies/blocked_by -F
+   issue_id=<homelab issue's numeric .id>`) — the FU-087 dependency gate then resumes the stack
+   issue when the platform closes its side; no human has to remember to strip a label.
+6. **Rate-bounded**: a storm of same-class faults is ONE issue (the fleet rule); more than ~2
+   distinct cross-boundary filings per stack per day means stop and park for a human instead.
+
+This contract is for FAULTS. Wanting a platform capability that does not exist is the
+`platform-request` lane (intent-level `Capability:` fingerprint, filed in the STACK's own repo)
+— [platform-and-stacks.md](../../docs/agents/platform-and-stacks.md) §Cross-stack demand &
+escalation owns both mechanisms.
+
 ## The `infra-enrich` clause (FU-106 — the -iac wrapper devops play, built 2026-07-27)
 
 A RED `deploy/*` bump PR in a `*-iac` repo is the typed infra delta arriving: the new chart

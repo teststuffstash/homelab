@@ -1753,3 +1753,31 @@ a single-tenant Loki authorizes one tenant and serves all — the one state wors
 in-cluster reach stays unscoped by design, so the door is bypassable from inside until Loki binds
 to localhost and Alloy's writes get their own gate; a second consumer stack turns the hand-written
 grants into an AgentStack claim knob (mechanism = platform, policy = stack).
+
+### ADR-119 — Stack→platform communication: the claim is the API; demand travels as intents, escalation files direct (2026-08-30)
+
+**Decision (three parts).** (1) *Doctrine*: a Goal is stack-scoped; code write never crosses
+stacks; cross-stack need travels as claim-contract fields requested through the
+capability-request lane, plus native `blockedBy` edges for sequencing. (2) *The lane*: a stack
+files an issue in its OWN repo labeled `platform-request` with an intent-level `Capability:`
+fingerprint (an outcome on a surface — `public-edge.abuse-fairness` — never a vendor/mechanism
+name: mechanism knowledge is the platform's, ADR-085 drawn through the request grammar); the
+homelab board groups by fingerprint (the ≥2-stacks generalization gate becomes a count);
+approval is PULL-only with a disposition comment always (rejection included). A capability whose
+honest consumer answer is always "yes" (security, performance) is a DEFAULT of its profile,
+never requestable. (3) *Escalation*: a stack-lane judgment terminal that diagnoses a
+cross-boundary cause FILES direct on homelab — dedup-first, inert, evidence-grammar (the filing
+contract in the coordinator brief) — plus a cross-repo `blockedBy` edge from the stuck stack
+issue, so un-park rides the existing FU-087 dependency gate. The stack names the boundary
+crossing; the platform's own intake names the lane (mechanical vs agents-machinery).
+**Considered:** mechanism-named fingerprints (systematically miss normal-consumer demand — the
+WAF case); destination labels on stack repos (passive state on repos the platform deliberately
+does not sweep — needs a new cross-stack reader); stack-side platform-component classification
+(the same knowledge asymmetry as the fingerprints). **Why:** three scars in one week —
+proposals hand-routed as gitignored uploads; sleep#133's arbitrate ruled "infra, not logic"
+with nowhere to route; #1038 reached the platform only via the fleet rule's ≥2 gate and its
+un-park was manual. **Consequences:** mechanism = platform-and-stacks.md §Cross-stack demand &
+escalation; filing contract = agents/coordinator/README.md; label via the claim taxonomy.
+Damage ceiling: filed-inert (breaker #1) + dedup + rate cap; gate-the-merge unchanged. Honest
+limit: the lane cannot carry unknown-unknowns — profile defaults for the yes/yes class and the
+FU-049 catalog carry those.
