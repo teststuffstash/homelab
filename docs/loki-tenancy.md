@@ -114,6 +114,8 @@ a namespace→stack map inside Alloy's config — a **second reader** of the Age
 `coordinator-scan.sh`'s `stacks_json()`, and a silent mis-tenanting whenever a namespace does not
 match its stack's name. Paying that to avoid three queries instead of one is the wrong trade at this
 size. Revisit if a consumer appears that genuinely needs cross-namespace LogQL in a single query.
+The mutating-admission route to tenant == stack (a webhook stamping pods with their stack's tenant)
+is use case 1 of the UNDECIDED admission-controller seat — tracked by **FU-191**.
 
 ## The components
 

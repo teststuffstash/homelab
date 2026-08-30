@@ -8,8 +8,10 @@ time is platform overhead, not work.
 **Evidence** (all durable): the ring-woken scan pod log (`coordinate-perstack-mnhzm`), the item
 coordinator session log (`coordinator-172525`), PR metadata (commit/PR/CI/merge timestamps), the
 pod's own run-stats line (358s, $0.0085, deepseek-v4-flash), and the ride transcript in
-`s3://agent-transcripts/oracle-iac/issue-361/`. Tracked by: **FU-160** (turn this one-off
-reconstruction into standing metrics + an alert).
+`s3://agent-transcripts/oracle-iac/issue-361/`. The standing metrics + alert this asked for
+shipped 2026-08-12 (`agent_run_phase_seconds`, launcher + in-pod halves —
+[observability-and-retro.md](../agents/observability-and-retro.md) §Part A′); the shave
+candidates below remain this spike's living content.
 
 ## Dispatch: 2m16s (file → coordinator claim)
 

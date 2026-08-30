@@ -540,34 +540,3 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   operator clicks → clears; proven on the workflows:write grant AND it caught the reviewer's
   forgotten grants same day); the human view SERVED at **apps.teststuff.net** (/apps,
   never committed — CI-auto-commit rejected: GITHUB_TOKEN pushes trigger no workflows).
-- **FU-091** — Queue-liveness alert (queued work + idle loop must page). *(archived 2026-07-25)*
-  Built the day it was filed (2026-07-21) and never closed: `AgentQueueStalled` (queued>0 ∧ zero
-  worker pods ∧ zero open PRs, 2h warning) + the `github_agent_issue_labels` gauge live in the
-  github-exporter's prometheusrule.yaml — matches the item's spec near-verbatim.
-- **FU-050** — coordinator-reflex CronJob + unsuspend autonomy switch. *(archived 2026-07-25)*
-  Superseded by the Argo migration: `coordinator-reflex` is an unsuspended Argo CronWorkflow
-  (reflexes-argo.yaml) ticking */10 for weeks; the acceptance round ran clean 2026-07-12 and the
-  CronJob + suspend switch it documents no longer exist. Red-beyond-T residue moved to FU-086's
-  open list (the exporter's CI metrics carry the out-of-band half).
-- **FU-062** — Model routing umbrella (chains + strikes + registry + scout). *(archived 2026-07-25)*
-  At its own stated close condition: all four legs live (registry, strikes, proxy injection,
-  scout+canary), doctrine home = docs/agents/model-routing.md, and FU-095 carries the next
-  routing evolution (task-class chains). Two open umbrellas over one doctrine invite drift.
-- **FU-031** — thinkcentre BIOS → disk-first. *(archived 2026-07-25, WON'T DO — operator ruling)*
-  Stays PXE-first: the slow-PXE pain was the bad cable (fixed 2026-06-11), not the boot order;
-  PXE-first keeps machines wipeable without console access, and on a full-lab restart OPNsense
-  (which PXE depends on) is the long pole anyway — the timeout doesn't add wall-clock that matters.
-- **FU-028** — Longhorn on the ephemeral laptops → KubeDaemonSetMisScheduled/stale-PDB. *(archived 2026-07-25)*
-  Overtaken by ADR-089: wk-metal-01 is the bulk storage tier ON PURPOSE (taintToleration +
-  disk-selector fence in longhorn.tf). Live-verified: 0 misscheduled DS pods, no PDB alert
-  firing. wk-metal-02's idle Longhorn system pods (~200Mi) accepted as toleration blast radius.
-- **FU-029** — Longhorn dashboard "Alerts" panel empty by design. *(archived 2026-07-25)*
-  Panel 48 repointed to a Prometheus table over `ALERTS{alertname=~"Longhorn.*"}`
-  (tofu/dashboards/longhorn.json).
-- **FU-030** — Loki 7-day retention: revisit after usage. *(archived 2026-07-25)*
-  Measured: 12MiB used of 10Gi after 26 days (ingest verified queryable via the API).
-  Retention raised 168h→720h — volume trivial, history is what incidents need.
-- **FU-082** — wk-01 OOMController serial kills (BestEffort estate). *(archived 2026-07-25)*
-  All legs done across 07-16/17 (requests+alert+rebalance+cluster-wide sweep — see git);
-  final residue verified live 2026-07-25: Home Assistant (512Mi req) and unifi-mongo (256Mi
-  req) both Burstable, git matches. PodSigkilled alert remains as the sentinel.
