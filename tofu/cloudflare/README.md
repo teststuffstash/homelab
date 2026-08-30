@@ -1,7 +1,9 @@
 # tofu/cloudflare
 
 Remote access to **Home Assistant** over a Cloudflare Tunnel, gated by **mTLS** (client
-certificate), all as code. Separate root + state (like `tofu/provisioning/`). Design record:
+certificate) — plus the **minutark.ee product-zone bootstrap** — all as code. Separate root +
+encrypted remote state in Garage since 2026-08-04 (`backend.tf`; creds/runbook:
+[`docs/tofu-state.md`](../../docs/tofu-state.md)). Design record:
 [`docs/cloudflare.md`](../../docs/cloudflare.md).
 
 Provider: `cloudflare/cloudflare` **v5** (pinned 5.19.x). The v5 rewrite renamed/restructured
@@ -29,6 +31,7 @@ most resources — everything here was validated against the v5 schema.
 | `dns.tf` | `ha` CNAME → tunnel (proxied); `*.local` A → 127.0.0.1 (DNS-only, work envs) |
 | `mtls.tf` | client key+CSR (`tls`), CF managed-CA signs it, per-host mTLS enable, WAF enforce rule |
 | `outputs.tf` | tunnel id, `ha_url`, client cert/key (sensitive), `make_p12_command` |
+| `minutark.tf` | minutark.ee product-zone bootstrap — hygiene records, TLS 1.2 floor, always-HTTPS, DNSSEC (oracle-iac#351) |
 
 ## Prereqs
 

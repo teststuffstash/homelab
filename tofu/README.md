@@ -6,7 +6,7 @@ carries the platform substrate that ArgoCD can't manage for itself (ADR-005): st
 Garage, Forgejo, ArgoCD + its bootstrap seeds. Grew out of ROADMAP.md Phases 1–2.
 
 > **Status: APPLIED & LIVE.** Talos `v1.13.2` / Kubernetes `v1.36.1`, Cilium `1.19.1`
-> (kube-proxy-free). Nodes: VMs cp-01 `.51` / wk-01 `.61` / wk-02 `.62` **+ bare-metal**
+> (kube-proxy-free). Nodes: VMs cp-01 `.51` / wk-01 `.61` / wk-02 `.62` / wk-03 `.63` **+ bare-metal**
 > thinkcentre `.53`, hp-01 `.54`, wk-metal-01 `.182` (X240), wk-metal-02 `.183` (X250),
 > wk-metal-03 `.184`, wk-metal-04 `.186` (kata) — all
 > `Ready`. **Longhorn** is the storage; Home Assistant, the **UniFi controller**, and the
@@ -37,6 +37,8 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
   service routing). (Stateful services are on **Longhorn** now — the old `/var/mnt/*` hostPath
   kubelet `extraMounts` were removed; Longhorn uses `/var/lib/longhorn`.)
 - `image.tf` — Talos Image Factory schematic (+ qemu-guest-agent) and the node download.
+- `kata.tf` — the `kata` RuntimeClass (the `metal_kata` schematic's runtime half; nodes flagged
+  `kata: true` in `machines/machines.yaml`).
 - `cilium.tf` — Cilium Helm release. `kubeProxyReplacement=true` via Talos KubePrism
   (`localhost:7445`), `bgpControlPlane.enabled`, Talos-specific cgroup/capabilities,
   `operator.replicas=1`. Recreating the cluster restores the CNI (boot-from-git).
@@ -59,8 +61,8 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
   `../argocd/platform/kube-prometheus-stack.yaml`) — BGP VIPs `.13`/`.11`/`.14` unchanged.
 - *(`metrics-server.tf` is gone — release 1 of the same lever, now
   `../argocd/platform/metrics-server.yaml`.)*
-- `argocd.tf` — ArgoCD install + bootstrap secret seeds + the three app-of-apps roots
-  (platform, sleep, oracle)
+- `argocd.tf` — ArgoCD install + bootstrap secret seeds + the four app-of-apps roots
+  (platform, sleep, oracle, circles)
   (`../argocd/README.md`); `infisical/` (sub-root) declares the Infisical project + ESO identity.
 - `garage.tf` — Garage's namespace, its two secrets and the S3 VIP Service. **The release moved to
   ArgoCD 2026-08-04** (FU-136), vendored chart at `../argocd/charts/garage/` — outside `tofu/` so
@@ -157,6 +159,7 @@ goes in git.
 
 ## Not included yet (next steps)
 
-- FU-012 — remote/encrypted state backend (currently local state).
+- FU-012 — remote/encrypted state backend (THIS root's state is still local; cloudflare/
+  provisioning/infisical migrated to encrypted Garage state 2026-08-04 — `docs/tofu-state.md`).
 - FU-013 — Home Assistant `/config` → object-storage (S3) backup (Longhorn covers in-cluster
   replication, not off-cluster DR).

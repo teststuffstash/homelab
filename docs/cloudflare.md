@@ -8,7 +8,7 @@ from the phone" (2026-06) is now a platform capability (ADR-101). Status snapsho
 |---|---|
 | Zone on Cloudflare (NS cutover, ACME DNS-01 swap) | ✅ LIVE 2026-06-06 (§History) |
 | Remote access `ha.teststuff.net` — tunnel + client-cert mTLS | ✅ LIVE, phone-verified (§Remote access) |
-| **PublicRoute XRD** (ADR-101) — public ingress as a claim | ✅ **BUILT + ARMED 2026-08-08 — zero consumers yet** (§PublicRoute) |
+| **PublicRoute XRD** (ADR-101) — public ingress as a claim | ✅ **BUILT + ARMED 2026-08-08**; consumer #1 = the minutark placeholder claim (oracle-iac, 2026-08-12 — §Zone classes); the operator-witnessed test claim is still owed (FU-039) (§PublicRoute) |
 | Observability — read token, GraphQL, cloudflared metrics | ✅ LIVE (§Observability) |
 | Full-LAN remote access | Not Cloudflare — WireGuard on OPNsense (ADR-090) |
 
@@ -53,7 +53,7 @@ Naming + XRD field shape land with the build (glossary row in the coining commit
 |---|---|
 | XRD + Composition deployed (Established/Offered) | ✅ |
 | Armed — `CLOUDFLARE_INGRESS_WRITE` minted+stored, ESO synced, provider pod carries it in-process | ✅ (verified by exec) |
-| First consumer — an echo/test claim | ☐ **operator-witnessed, next act** |
+| First consumer — the minutark placeholder claim (oracle-iac) landed 2026-08-12 (§Zone classes); the operator-witnessed echo/test claim is still the FU-039 next act | 🟡 |
 | `ha.teststuff.net` retrofit = consumer #2 (retires `tofu/cloudflare/` + the write-key) | ☐ operator-witnessed, after the test claim |
 | Zone-phase ruleset aggregation (cache rules / api-no-challenge Skip) | ☐ deliberately deferred until ≥ consumer #2 (the ≥2-projects rule) |
 | Product zones (a claim owning a whole zone, e.g. the IdP/oracle-sales domains) | ☐ future — §Zone classes |

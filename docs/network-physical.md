@@ -25,16 +25,16 @@ Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; 
                 └─┬───┬───┬───┬───┬───┬───┬──┘
                   │   │   │   │   │   │   │
    Proxmox "pve" ◄┘   │   │   │   │   │   └─► TP-Link PoE switch
-   (X99, .3)          │   │   │   │   │         └─► Basement AP (U6Lite, .63)
+   (X99, .3)          │   │   │   │   │         └─► Basement AP (U6Lite, .13)
    └ vmbr0:           │   │   │   │   │
      ├ Talos VMs      │   │   │   │   └─► Ubiquiti PoE switch (.11, USW-Lite)
      │  cp-01 .51     │   │   │   │        ├─► 2nd-floor AP (U6Lite, .12)
      │  wk-01 .61     │   │   │   │        └─► Office: 5-port (UNMANAGED)
      │  wk-02 .62     │   │   │   │             ├─► Office AP (UAP-AC-Lite, .14)
-     ├ ci-runner-01   │   │   │   │             ├─► pop-os (.57)
-     │  (VM 9001, .55)│   │   │   │             ├─► wk-metal-03 (.184)
-     └ Matchbox       │   │   │   │             └─► wk-metal-04 (.186)
-       LXC .30        │   │   │   │
+     │  wk-03 .63     │   │   │   │             ├─► pop-os (.57)
+     ├ ci-runner-01   │   │   │   │             ├─► wk-metal-03 (.184)
+     │  (VM 9001, .55)│   │   │   │             └─► wk-metal-04 (.186)
+     └ Matchbox .30   │   │   │   │
                       │   │   │   └─► hp-01 (.54)
    ThinkCentre Edge ◄─┘   │   └─► wk-metal-02 (.183)
    (.53)                  └─► wk-metal-01 (.182)
@@ -51,7 +51,6 @@ Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; 
   cable** — 100Mbps + link flapping — replaced 2026-06-11; PXE has worked since.)
 - **Unmanaged switches** (TP-Link 10-port, office 5-port) → no STP forwarding delay to
   blame for a PXE-vs-STP race.
-- OPT1–OPT3 on the Intel card: not documented here yet (purpose/!connection TBD).
 - The managed UniFi switch (.11) is **downstream** of the core switch; wk-metal-03/-04 and
   pop-os (the jail host) sit below it on the office 5-port.
 
@@ -66,12 +65,12 @@ graph TD
   SW10 --> WM2["wk-metal-02 (.183)"]
   SW10 --> POE1[TP-Link PoE switch]
   SW10 --> UBNT["Ubiquiti PoE switch (.11)"]
-  POE1 --> APB["Basement AP (.63)"]
+  POE1 --> APB["Basement AP (.13)"]
   UBNT --> AP2["2nd-floor AP (.12)"]
   UBNT --> SW5[Office 5-port unmanaged]
   SW5 --> APO["Office AP (.14)"]
   SW5 --> POP["pop-os (.57)"]
   SW5 --> WM3["wk-metal-03 (.184)"]
   SW5 --> WM4["wk-metal-04 (.186)"]
-  PVE --- VMS["Talos VMs .51/.61/.62 + ci-runner-01 .55 + Matchbox LXC .30 (vmbr0)"]
+  PVE --- VMS["Talos VMs .51/.61/.62/.63 + ci-runner-01 .55 + Matchbox LXC .30 (vmbr0)"]
 ```

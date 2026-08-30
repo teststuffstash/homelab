@@ -19,8 +19,10 @@ of this repo._
 - **oracle-iac is private** → ArgoCD reads it via the `repo-oracle-iac-github` repository Secret
   (`tofu/argocd.tf`, same org PAT as `repo-homelab-github`) instead of anonymously. If that PAT is
   fine-grained/repo-scoped, oracle-iac must be added to its repository list.
-- **One namespace** (`oracle-fleet`), not two — the fleet monorepo is a single deployable stack
-  (gateway + MCP servers); more namespaces would need AppProject + namespaces-file additions.
+- **Namespaces:** `oracle-fleet` (the single deployable stack — gateway + MCP servers — and the
+  only AppProject destination) plus the agent-platform pair added since: `oracle-iac` (the fixer
+  ns, FU-106 2026-08-02) and `oracle-agents` (the graduated loop home). App workloads stay in
+  `oracle-fleet`; a NEW app namespace still needs AppProject + namespaces-file additions.
 - **Subdomain delegation (ADR-092, first consumer)**: oracle is the first stack to own
   `*.oracle.teststuff.net`. Platform side (homelab): the `oracle-wildcard` cert + `stack_gateways`
   entry (`3.22 ↔ 40.22`) in `group_vars/opnsense.yml`, the `cilium` GatewayClass + Gateway API CRDs

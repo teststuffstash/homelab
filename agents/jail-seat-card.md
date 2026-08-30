@@ -2,7 +2,7 @@
 
 > The SEAT's procedure card (FU-117 third context, S4 #764) — the sibling of
 > [`jail-subagent-card.md`](jail-subagent-card.md) (subagents) and
-> `ground-rules.md` (pod workers — lands with PR#768). Composed into the seat's session context
+> `ground-rules.md` (pod workers — shipped PR#768, 2026-08-23). Composed into the seat's session context
 > by the MONO jail's bootstrap: claude-jail cats its shared container card + THIS file into
 > **`/workspace/homelab/CLAUDE.local.md`** (gitignored here; auto-loaded by Claude Code) — the
 > homelab-scoped target, so the seat card loads ONLY for sessions actually seated in this repo,
@@ -84,9 +84,10 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
 > ⚠ **THIS SECTION IS FOR THE JAIL META-SESSION ONLY — if you are an agent riding this repo from
 > the fixer lane, it does NOT apply to you: open a PR and let the reviewer gate it, exactly as in a
 > stack repo.** homelab has a live fixer lane (`platform` claim → `repos[homelab].fixer`), so this
-> file IS read by worker agents, and "work directly on master" is the one instruction here that
-> would be actively wrong for them. Per-context guidance is an open design question the operator
-> owns; until it lands, this banner is the guard.
+> file is readable by worker agents (never auto-loaded — the composed CLAUDE.local.md reaches the
+> seat only, per the role×context×source map in `docs/agents/roles.md` §Context delivery), and
+> "work directly on master" is the one instruction here that would be actively wrong for them —
+> this banner keeps the scope explicit.
 
 **The default REVERSED 2026-08-12 (operator): jail sessions ship substantive changes as PRs —
 PR + watch + fix.** The old direct-to-master default predates the bot reviewer on the platform

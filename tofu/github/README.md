@@ -17,9 +17,11 @@ Two layers (per the chosen design):
 Plus, the repos themselves are managed here (fully, not click-ops):
 - **Repos** (`repos.tf`, `github_repository`, adopted via `import` blocks): every writable setting is
   declared — visibility, merge methods, and the auto-merge + auto-delete-branch that complete the flow.
-- **Agent labels** (`labels.tf`, `github_issue_label`): the coordinator's state-machine label taxonomy
-  (`agent-fix`, `agent/*`, `agent-budget/*`) — non-authoritative, so other labels are left alone.
-  Shrank to **homelab only** — the stack repos' labels are claim-owned (FU-068).
+- **Deploy keys** (`deploy_keys.tf`): the rasmus-soot-cv write deploy key + its org PR-ruleset
+  exclusion (#751; key material in the wallet, `homelab-cv-deploy/`).
+- **Agent labels** — NOT here anymore: `labels.tf` was retired 2026-08-04 (FU-068); the whole
+  taxonomy is claim-owned (AgentStack `labels:` → authoritative IssueLabels,
+  `docs/agents/agentstack.md`).
 - **App installation scope** — NOT manageable here. `github_app_installation_repositories` reads via
   `GET /user/installations/{id}/repositories`, a user-to-server endpoint that a **fine-grained PAT
   can't access (403)** — and this root is deliberately fine-grained-PAT-only. So which repos an App is
@@ -48,9 +50,9 @@ owner:
 - **Resource owner:** `teststuffstash`  ← the single-org scoping; the token can reach nothing else
 - **Repository access:** All repositories (or just the agent-target repos)
 - **Organization permissions → Administration: Read and write**  ← unblocks the org ruleset
-- **Organization permissions → Secrets: Read and write**  ← for the org Actions secrets (actions_secrets.tf; the `MERGE_GH_APP_*` updater creds — 403 on `/orgs/*/actions/secrets/public-key` without it)
+- **Organization permissions → Secrets: Read and write**  ← for the org Actions secrets (actions_secrets.tf; `DEPLOY_APP_*`/`RENOVATE_APP_*`/`REVIEWER_APP_*` — the `MERGE_GH_APP_*` pair retired 2026-08-26, ADR-111; 403 on `/orgs/*/actions/secrets/public-key` without it)
 - **Repository permissions → Administration: Read and write**  ← for the per-repo rulesets + `github_repository` (repos.tf)
-- **Repository permissions → Issues: Read and write**  ← for the agent labels (labels.tf; labels live under Issues, not Administration)
+- **Repository permissions → Issues: Read and write**  ← historical grant for the retired labels.tf era; labels are claim-owned now (harmless to keep — labels live under Issues, not Administration)
 
 If the org enforces PAT approval the token sits "pending"; approve it yourself as owner. Then:
 

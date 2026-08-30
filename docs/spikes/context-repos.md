@@ -4,8 +4,9 @@ _Opened 2026-08-04 (operator + jail session). Status: **pilot BUILT 2026-08-04**
 `agent-session.sh` grew a repeatable `--context-repo` flag, a circles-only default
 (circles-iac + homelab), a clone prelude on the launcher-owned RUN_CMD (agent-runtime
 untouched), and an env-card bullet; first test ride = a circles#6 proxy run. Sightings home:
-`docs/agents/roles.md` §Context delivery (FU-117); this spike is that item's first deliberate
-data-gathering leg._
+`docs/agents/roles.md` §Context delivery (FU-117); this spike was that item's first deliberate
+data-gathering leg — FU-117 closed 2026-08-23 WITHOUT it, so the sweep is OVERDUE and is
+carried by FU-164's v1 cluster leg (doc-heat.md names it)._
 
 ## Question
 
@@ -32,7 +33,7 @@ The single `/work/repo` clone **was never decided — no ADR owns it**:
   to inject" (the meta-15 add-then-remove flip-flop). Stack CLAUDE.md files then stated it as an
   invariant ("Workers clone ONLY this repo; the dispatched issue carries all cross-repo context").
 - The early argument — *"homelab is public; an agent that needs it can clone it from GitHub"* —
-  survives only as a comment (`agents/coordinator-session.sh:145`) and **remains network-true**:
+  survives only in this spike (its launcher comment has since been rewritten) and **remains network-true**:
   `github.com` / `codeload.github.com` / `*.githubusercontent.com` are in the baseline `toFQDNs`
   allowlist (agentstack `composition.yaml` §egress). What forbids the clone today is recipe text
   ("no homelab checkout" — the research recipes) — **prompt, not policy**. We are one sentence
@@ -85,9 +86,12 @@ models compulsively re-grep).
 - Mostly **(a)** → promote: `contextRepos:` claim knob rendered by the Composition + an ADR;
   retire the "issue carries ALL cross-repo context" invariant (issue-injection stays for facts
   that live in no repo).
-- Mostly **(c)** → close the spike: keep the doctrine, delete the flag, and the FU-117 refactor
-  proceeds on the issue-injection model with confidence.
-- Mixed / **(b)**-heavy → the FU-117 role × context × source map decides per context class.
+- Mostly **(c)** → close the spike: keep the doctrine, delete the flag, and the refactor stays on the
+  issue-injection model (which is what SHIPPED — S4 2026-08-23, FU-117 archived: the
+  role×context×source map at `docs/agents/roles.md` §Context delivery landed WITHOUT this
+  pilot's data; the open question left for this spike is only whether its data argues for a
+  `contextRepos:` claim knob on top).
+- Mixed / **(b)**-heavy → the role × context × source map (`docs/agents/roles.md` §Context delivery) decides per context class.
 
 ## Links
 

@@ -166,11 +166,10 @@ reproducibility — we're ahead here. Banks the reproducibility leg early; usefu
 > before Phase 3 started — **agent worker pods need k3d/kind for `devbox run ci` gates** (laptop/CI
 > parity), and a Kata microVM gives them a real Linux box with rootful podman *without* granting
 > node-privileged containers (the FU-020/ADR-087 sandbox survives; Cilium egress still applies at
-> the veth). Hardware verified: `/dev/kvm` present on wk-metal-01/02 (X240/X250); RAM is the
-> constraint (~8G/laptop ⇒ one ~4G microVM at a time — matches the WIP=1 agent model). Sequencing:
-> the agent-CI spike (RuntimeClass `kata` + extension in the metal image schematic, wk-metal-02
-> first — wk-metal-01 also carries longhorn-bulk replicas since ADR-089) proves the primitive;
-> Tekton+Chains later rides the same RuntimeClass. Kata is necessary-not-sufficient for L3 (the
+> the veth). **The primitive is LIVE since 2026-07-14**: RuntimeClass `kata` (`tofu/kata.tf`) +
+> the `metal_kata` schematic (`tofu/image.tf`) run agent worker rides as kata microVMs today on
+> FOUR nodes (`machines.yaml` `kata: true`: wk-metal-01..03 ~8G laptops ⇒ one ~4-5G microVM each,
+> plus wk-metal-04, the roomy 16G desktop). Tekton+Chains later rides the same RuntimeClass. Kata is necessary-not-sufficient for L3 (the
 > provenance non-falsifiability comes from the Chains key split); for the agent gate it is
 > sufficient alone. Phase 4's CoCo is the same primitive again on SEV-SNP hardware — one
 > RuntimeClass, three consumers.

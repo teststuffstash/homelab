@@ -9,9 +9,10 @@ record is [ADR-118](adr.md); the manifests are
 
 ## The problem, stated exactly
 
-Loki runs `auth_enabled: false`, which means one implicit tenant (`fake`). Alloy's pod discovery
-carries no namespace filter and nothing guards ns `loki` at the network layer — there is no
-NetworkPolicy anywhere in this repo, and no `CiliumClusterwideNetworkPolicy` at all. So
+Loki RAN `auth_enabled: false` (fixed by this design's step 2, live 2026-08-27), which meant one
+implicit tenant (`fake`). Alloy's pod discovery carries no namespace filter and nothing guards ns
+`loki` at the network layer — no vanilla NetworkPolicy or `CiliumClusterwideNetworkPolicy` exists
+(the composed per-fixer-ns worker CNPs gate EGRESS from worker pods, not ingress to Loki). So
 **reachability is authorisation**: anything that can open a socket to `loki.loki.svc:3100` reads
 every namespace's logs.
 
@@ -230,9 +231,10 @@ multi-tenant read returns logs across namespaces; a request with **no** header i
 sidecar reloaded the datasource (200 OK). Note the WAL replays pre-flip streams as `user=fake` right
 after the roll — that is history being flushed, not the flip failing.
 
-**Step 1 must not be exposed.** Until step 2 flips the flag, Loki ignores `X-Scope-OrgID` entirely
-and would return every tenant's logs to a caller this proxy authorized for one. That is the one
-configuration in this design that is worse than doing nothing, because it looks like a gate.
+**Step 1 must not be exposed** — the rollout-ordering lesson, kept: until step 2 flipped the flag
+(2026-08-27), Loki ignored `X-Scope-OrgID` entirely and would have returned every tenant's logs to
+a caller the proxy authorized for one. That configuration is worse than doing nothing, because it
+looks like a gate.
 
 **Rollback** is per step and cheap: revert the ConfigMap and restart. Alloy buffers and retries, so
 a Loki restart costs latency, not lines.

@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-189** (FU-183 and FU-185 were each minted out of order while this line lagged; 183 is archived, 184 minted 2026-08-25). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-195** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -671,7 +671,8 @@ the block needs pruning, not more headings.
 - [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** The rule, history (Longhorn
       metering 2026-08-04, the ADR-089 quota arming 2026-08-07, the 08-24 third-100% incident)
       and status detail: [`docs/storage-ledger.md`](storage-ledger.md). Garage metrics leg
-      queued 2026-08-25 as homelab#934 (machine-owned); pve fstrim SCHEDULED (PR#925 daily
+      SHIPPED by the machine lane (#934 → #965, 2026-08-25/26 — belts live, defect tail
+      #977/#978 riding); pve fstrim SCHEDULED (PR#925 daily
       CronJob, first run 78.72%→62.99%). **Next:** the pve thin-pool Data% metric + alert (the
       pool ITSELF is still unmetered — the new belts prove the trim runs, not that it
       suffices); then a Longhorn `filesystem-trim` RecurringJob (node fstrim cannot reclaim
@@ -697,13 +698,13 @@ the block needs pruning, not more headings.
       wk-metal-02's cable / switch port; evidence + counters on homelab#117.
 - [ ] **FU-155** — **PSI-stall shared-fate kills RECUR on hardened nodes: POINTER.** Mechanism,
       evidence (the broken cadence premise, the 2026-08-17 victim-surface shrink, the 08-24
-      service-tier recurrence + pre-upgrade `oomactions` capture, cilium-agent's BestEffort
+      service-tier recurrence + pre-upgrade `oomactions` capture, cilium-agent's residual
       exposure) and the ⚖ recommendation: [`docs/spikes/talos-psi-thresholds.md`](spikes/talos-psi-thresholds.md)
       §7 Evidence updates (#157/PR#160; symptom thread homelab#857 — recurred again 08-25
       during the hp-01 maintenance window). Scope REOPENED 2026-08-24: Option A's v1.13.8 pin
       now reads ALL metal nodes (nocloud VMs stay excluded). **Next:** operator rules
-      tune-vs-accept (the pin experiment first; cilium-agent requests are part of the same
-      ruling). Relates FU-139/FU-112, ADR-044.
+      tune-vs-accept (the pin experiment first; cilium-agent's residual pod-level exposure —
+      container req=limits since 07-28, pod still Burstable — folds into the same ruling). Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios

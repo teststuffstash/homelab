@@ -34,7 +34,7 @@ conviction (the contracts-emerge-from-patterns rule) and never by self-editing m
 - **≲5-minute factual fixes skip the ledger** — edit the skill, done.
 - An entry that grows into real deferred WORK graduates to a proper `FU-NNN`
   (`docs/follow-ups.md` stays the only tracker); the entry becomes a pointer line.
-- **Glance-step**: every skill opens by glancing at its GAPS section — unpromoted sightings
+- **Glance-step**: every skill opens by glancing at its GAPS section (an absent section = no sightings yet) — unpromoted sightings
   apply until closed.
 - GAPS.md is in a PUBLIC repo — dialogue-level facts only, never tool output.
 

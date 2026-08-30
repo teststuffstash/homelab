@@ -84,7 +84,7 @@ cannot key on the repo. It keys on the **path**.
 
 | paths | applied by | agent may author | gate |
 |---|---|---|---|
-| `docs/**` | nothing | ✅ | CI |
+| `docs/**` | nothing | ✅ | **codeowner** (CODEOWNERS `/docs/` since 2026-08-04 — the docs are the platform's memory) |
 | `argocd/resources/**` | ArgoCD — merge *is* deploy | ✅ | CI (see the check-coverage caveat below) |
 | `argocd/platform/**` | ArgoCD app-of-apps, `prune: true` | ✅ | **codeowner** — an edit here *deletes* services |
 | `tofu/*.tf` (root) | `tofu apply` | ✅ | **codeowner**; apply stays out-of-band (cone rule) |

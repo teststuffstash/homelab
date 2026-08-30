@@ -31,7 +31,7 @@ Fixed cost beats itemized honesty here: ~110k tokens, pre-authorized, paid ONCE 
      `unreplayed:` fields and the gap registers — the exact miss that once justified reading the
      sources. The YAMLs add only code anchors (file+regex); read one on demand when EDITING a
      guard/transition, never for a design sitting.
-   - `agents/README.md` (launcher) + `agents/coordinator/README.md` (the brief — 19k tokens and
+   - `agents/README.md` (launcher) + `agents/coordinator/README.md` (the brief — ~23k tokens and
      load-bearing; a docs/agents glob misses it)
    - `agents/replay/README.md` **through the generated index only** (doctrine + cleanup contract
      + index, ≈ the first third). The per-family essays below the index are touch-time reference

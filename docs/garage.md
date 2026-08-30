@@ -12,7 +12,7 @@ point for the sleep-tracking pipeline (ADR-045) and a future home for Longhorn/H
 - **Region:** `garage` (S3 clients must set this). **Addressing:** path-style.
 
 > Single-node trial: `replication_factor = 1`, one StatefulSet replica, meta+data on Longhorn.
-> Not HA — that waits for the 3-node build (ADR-030). The bytes are data; the layout/config is code.
+> Not HA — that waits for the 3-node build (ADR-114). The bytes are data; the layout/config is code.
 
 ## One-time layout bootstrap (after the first `tofu apply`)
 
@@ -88,7 +88,7 @@ Measured 2026-08-04, because "can I afford to lose this?" deserves numbers rathe
 GB / 252k objects of it. Everything else together is ~3.3 GB, and the part that is genuinely
 irreplaceable is small: `agent-transcripts` (491 MB, the loop's own observability record) and the
 `sleep-*` buckets (27.5 MB of real personal data). `allure-reports` and `oracle-specs` regenerate
-from CI and from `specs/` in the stack repos; `loki` self-expires at 7 days.
+from CI and from `specs/` in the stack repos; `loki` chunks self-expire at 30 days (the 7-day figure is the query horizon, not retention).
 
 **⚠ `ert-snapshots` is NOT the cheap-to-lose bucket this section called it until 2026-08-25.** The
 old reading — "the oracle-fleet ingestion re-downloads its source zip, so losing it costs a long
@@ -275,7 +275,7 @@ field → `topology.kubernetes.io/zone`: physical box = zone, every pve-pool VM 
 
 ## Static-website serving (3902, live 2026-07-14)
 
-`s3.web.rootDomain = ".teststuff.net"` (garage.tf): any **website-enabled** bucket is served
+`s3.web.rootDomain = ".teststuff.net"` (`argocd/platform/garage.yaml`): any **website-enabled** bucket is served
 anonymously at `https://<global_alias>.teststuff.net` (HAProxy VIP → 40.16:3902 → Garage web;
 the S3 API keeps 403ing anonymous reads — this is the one browser-consumable seam). Because the
 **bucket alias IS the hostname**, website bucket aliases MUST be stack-namespaced
