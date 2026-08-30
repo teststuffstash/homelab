@@ -30,12 +30,14 @@ write_files:
   # reachable from the LAN). Hub-only by dockerd design (ghcr can't be daemon-mirrored); plain
   # http, hence insecure-registries. Written before the get.docker.com install, so dockerd
   # starts with it. Mirror down ⇒ dockerd falls back to Docker Hub (unlike the agent rides,
-  # this host's egress is unrestricted).
+  # this host's egress is unrestricted). 192.168.40.31 (MCR mirror, ADR-091 extension PR#992)
+  # joined 2026-08-30: sleep's render gate host-pulls playwright/python through it (sleep#133)
+  # — applied live the same day per the inotify precedent below; this template covers recreates.
   - path: /etc/docker/daemon.json
     permissions: '0644'
     owner: root:root
     content: |
-      {"registry-mirrors": ["http://192.168.40.20"], "insecure-registries": ["192.168.40.20"]}
+      {"registry-mirrors": ["http://192.168.40.20"], "insecure-registries": ["192.168.40.20", "192.168.40.31"]}
   # kind exhausts the Debian-default 128 inotify instances once ≥3 clusters coexist (two runner
   # slots + one leaked cluster is enough): the freshest cluster's CoreDNS starves and every DNS
   # lookup fails Errno -3 while pod/node status stays green (measured 116/128 with two leaked
