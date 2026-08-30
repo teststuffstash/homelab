@@ -504,6 +504,23 @@ def _resolve_git_token(ns: str) -> str | None:
     return token_value
 
 
+def _resolve_role_from_ref(ref: str) -> str:
+    """Determine the agent role from a credential ref string.
+
+    Convention: refs in loop namespaces (<stack>-agents) are probe-class sessions.
+    All other refs are worker-class sessions. This is a proxy-side mapping table
+    (the -agents suffix convention), keeping the launcher out of the identity
+    decision — the caller cannot assert a role it does not hold.
+    """
+    try:
+        ns, _ = ref.split("/", 1)
+        if ns.endswith("-agents"):
+            return "probe"
+    except (ValueError, AttributeError):
+        pass
+    return "worker"
+
+
 def _inject_ref_auth(headers: dict) -> str:
     """Rewrite `Authorization: Bearer ref:<ns>/<name>` to the real key. Returns a note suffix.
 
@@ -2819,6 +2836,13 @@ class Proxy(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
+        # ADR-096 P3: credential-derived role identity — the proxy determines the caller's role
+        # from the ref namespace (loop namespaces <stack>-agents are probe-class; all others are
+        # worker-class). The caller cannot assert a role it does not hold.
+        _role = "worker"
+        _auth_hdr = self.headers.get("Authorization", "")
+        if _auth_hdr.startswith("Bearer ref:"):
+            _role = _resolve_role_from_ref(_auth_hdr[len("Bearer ref:"):].strip())
         if self.path == "/report":
             # ADR-096: post-run attribution from the launcher finalizer (M5). The AGENT_STRIKE
             # GitHub comment remains the human/audit twin — this is the queryable one. In-cluster
@@ -3279,7 +3303,7 @@ class Proxy(BaseHTTPRequestHandler):
                 pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
                       cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg, or_leg=or_leg,
-                      role="worker")
+                      role=_role)
 
 
 def main() -> int:
@@ -5096,6 +5120,67 @@ data: [DONE]
           "list failed → probed, fail-open")
     check("headroom: skipping " + ref_no_session_no_cr not in _out and "headroom: " + ref_no_session_no_cr + ": auth/key failed" in _out,
           "non-session no-CR: probed, residue skip is session-specific")
+
+    # ── Role identity from credential ref (issue #1057) ─────────────────────────────────
+    # Test _resolve_role_from_ref with probe refs (loop namespace ending in -agents)
+    check(_resolve_role_from_ref("platform-agents/claude-session") == "probe",
+          "probe role from platform-agents ref")
+    check(_resolve_role_from_ref("sleep-agents/claude-session") == "probe",
+          "probe role from sleep-agents ref")
+    # Test _resolve_role_from_ref with worker refs (project namespaces)
+    check(_resolve_role_from_ref("homelab/claude-session") == "worker",
+          "worker role from homelab ref")
+    check(_resolve_role_from_ref("agent-runtime/openrouter-key") == "worker",
+          "worker role from agent-runtime ref")
+    # Test _resolve_role_from_ref with invalid refs
+    check(_resolve_role_from_ref("") == "worker",
+          "worker role from empty ref")
+    check(_resolve_role_from_ref("no-slash") == "worker",
+          "worker role from ref without slash")
+
+    # ── Request-path role threading (issue #1057) ──────────────────────────────────────
+    # Verify that do_POST passes the determined role to _forward by monkeypatching.
+    # Create a mock handler with a probe credential and verify _forward receives role="probe".
+    _saved_forward = Proxy._forward
+    _captured_role = [None]
+
+    def _mock_forward(self, body, note, or_model=None, or_provider=None,
+                      cb_session=None, go_leg=False, zen_leg=False, or_leg=False,
+                      role="worker"):
+        _captured_role[0] = role
+        # Don't actually forward — just record the role
+        self.send_response(200)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    Proxy._forward = _mock_forward
+
+    # Build a mock request with a probe credential
+    _mock = Proxy
+    _req = _mock.__new__(_mock)
+    _req.headers = {"Authorization": "Bearer ref:platform-agents/claude-session",
+                    "Content-Type": "application/json",
+                    "Content-Length": "0"}
+    _req.path = "/chat/completions"
+    _req.command = "POST"
+    _req.rfile = io.BytesIO(b"")
+    _req.send_response = lambda s: None
+    _req.send_header = lambda k, v: None
+    _req.end_headers = lambda: None
+    _req.wfile = io.BytesIO()
+    _req.close_connection = False
+    _req.request_version = "HTTP/1.1"
+    _req.protocol_version = "HTTP/1.1"
+    _req.log_message = lambda *a: None
+
+    try:
+        _req.do_POST()
+        check(_captured_role[0] == "probe",
+              f"do_POST passes role=probe for probe ref (got {_captured_role[0]})")
+    except Exception as e:
+        check(False, f"do_POST with probe ref raised: {e}")
+    finally:
+        Proxy._forward = _saved_forward
 
     print()
     if not fails:
