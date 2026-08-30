@@ -8,7 +8,9 @@
 #                           → label goal/post-launch, comment, STAYS OPEN (no close)
 # checkpoint-due          = pre-launch goal, findings store 6/1 → ONE goal-checkpoint unit
 # nonassembly-merge-inert = pre-launch goal, a merged goal-CHILD's PR (goal/** BASE) → burn-down
-#                           written, NO per-closure unit, GACTED <none>
+#                           written + goal-checkpoint unit (trigger b: child-set complete pre-launch,
+#                           post-launch bucket excluded from gopen_n_ckpt), GACTED <none>
+#                           Still asserts: a merged goal-CHILD's PR produces NO per-closure unit
 abandoned          | terminal | openall.json @ patches/verdict-abandoned.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | abandoned
 assembly-complete  | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | assembly-complete
 checkpoint-due     | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | checkpoint-due
