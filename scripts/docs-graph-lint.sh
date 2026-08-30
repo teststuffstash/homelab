@@ -3,6 +3,15 @@
 # "Link, don't restate"). The reader-side rule (enter at the owning doc, chase links)
 # only works if links resolve and the index is complete; this holds both.
 #
+# WHO RUNS IT (the homelab#953 disposition, 2026-08-30): the PR lane via the required `ci`
+# check, and — the previously ungated lane — every DIRECT master push via the committed
+# `githooks/pre-push` (core.hooksPath, re-wired by the jail entrypoint). Direct pushes bypass
+# CI as OrgAdmin, and checks #3/#4 are repo-wide, so an ungated master push could red every
+# open PR at once (three live instances, 2026-08-26 ×2 + 2026-08-30). The gate sits at the
+# push client because the jail/host checkout is the only author of direct pushes; the
+# repo-wide (not diff-scoped) shape of #3/#4 is DELIBERATE and unchanged — strict
+# up-to-date-branch means a PR always lints the true post-merge world.
+#
 # FAILS on (living docs only):
 # - DANGLING: a relative .md link whose target file does not exist
 # - ORPHAN: a docs/agents/*.md that docs/agents/README.md (the doc table) never links
