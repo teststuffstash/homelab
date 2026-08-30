@@ -14,4 +14,6 @@ KUBE=""
 # reach the network is a replay that goes green for the wrong reason. Shadowing `python3` with a
 # function is the same seam shape the responder fixtures use for `curl`; it pins ONLY the price, so
 # the real estimator, the real tier logic and the real emit_cr rendering are all under assertion.
+# The same shadow also covers the inline python3 parser that reads metadata.name/spec.secretName
+# from the emitted CR (shape-agnostic — handles both inline flow and block style, homelab#989).
 python3() { command python3 "$@" --price-per-mtok 0.30; }
