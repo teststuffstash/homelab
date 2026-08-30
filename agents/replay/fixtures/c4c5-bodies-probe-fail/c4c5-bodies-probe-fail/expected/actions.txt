@@ -1,4 +1,4 @@
-CALL gh pr list --repo teststuffstash/homelab --state open --json body --jq [.[].body]
+CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json body --jq [.[].body]
 OUT INFEAS <empty>
 OUT ORPHAN [homelab] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)
 OUT REACHED: end
