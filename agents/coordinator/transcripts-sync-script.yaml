@@ -25,7 +25,7 @@ data:
   sync.py: |
     #!/usr/bin/env python3
     """Map the mirrored agent-transcripts bucket into the layouts cchv scans (FU-061 + FU-057)."""
-    import json, os, sqlite3, sys, traceback
+    import json, os, sqlite3, sys, time, traceback
 
     MIRROR = "/mirror"
     CLAUDE_PROJECTS = "/data/claude/projects"
@@ -143,8 +143,28 @@ data:
                     goose_n += 1
                 except Exception:
                     traceback.print_exc()
+        # Prune goose sessions older than retention window (7 days, homelab#110): the cumulative
+        # goose DB grows unboundedly as the bucket grows — each merge adds sessions but nothing
+        # removes them. Bound the DB by deleting sessions whose created_at is past the window.
+        # The S3 bucket (durable record) is untouched; only the local derived DB is pruned.
+        RETENTION_DAYS = 7
+        cutoff_iso = time.strftime(
+            "%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - RETENTION_DAYS * 86400)
+        )
+        for col in ("created_at", "updated_at"):
+            try:
+                goose.execute("DELETE FROM sessions WHERE %s < ?" % col, (cutoff_iso,))
+                break
+            except sqlite3.OperationalError:
+                continue
+        try:
+            goose.execute("DELETE FROM messages WHERE session_id NOT IN (SELECT id FROM sessions)")
+        except sqlite3.OperationalError:
+            pass  # sessions table doesn't exist yet (cold start, homelab#110)
+        goose.commit()
         goose.close()
-        print("sync: mapped %d claude jsonl, merged %d goose session db(s)" % (claude_n, goose_n), flush=True)
+        print("sync: mapped %d claude jsonl, merged %d goose session db(s), pruned goose sessions >%dd"
+              % (claude_n, goose_n, RETENTION_DAYS), flush=True)
 
     if __name__ == "__main__":
         try:
