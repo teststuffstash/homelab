@@ -153,6 +153,7 @@ is stale, so it cannot drift the way the prose register did.
 | `argv-payload/over-ceiling` | actions | - | `agents/agent-session.sh` | - |
 | `argv-payload/retro-handoff` | actions | - | `agents/retro-session.sh` | - |
 | `argv-payload/warn-band` | actions | - | `agents/agent-session.sh` | - |
+| `asvs` | suite | - | `-` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-footprint-mismatch/body-footprint-mismatch` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -201,6 +202,7 @@ is stale, so it cannot drift the way the prose register did.
 | `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `item-class/item-class` | actions | - | `agents/coordinator-scan.sh` | - |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
+| `lens-posture/lens-posture` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
@@ -233,6 +235,7 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-cause-line/issue-unreadable` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/malformed` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/valid` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-graduation/responder-graduation` | suite | - | `-` | - |
 | `responder-reopen/fix-verdict` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-reopen/report-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
@@ -301,6 +304,7 @@ is stale, so it cannot drift the way the prose register did.
 | `session-belt/fast-path-probe-fail` | actions | - | `agents/coordinator-scan.sh` | - |
 | `session-belt/fast-path` | actions | - | `agents/coordinator-scan.sh` | - |
 | `session-belt/queued` | actions | - | `agents/coordinator-scan.sh` | - |
+| `slo-teeth/slo-teeth` | suite | - | `-` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
