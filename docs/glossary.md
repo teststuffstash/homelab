@@ -22,7 +22,7 @@ mission) would drown the check in false positives and stay judgment-lint territo
 
 | Term | Meaning | Owning doc |
 |---|---|---|
-| **Goal** (capital, issue type) | ADR-102's funded container: `task/goal` label + one machine-parsed `Budget:` line, decompose → assembly → post-launch → human verdict terminal | [`agents/issue-authoring.md`](agents/issue-authoring.md) §The goal container |
+| **Goal** (capital, issue type) | ADR-102's funded container: `task/goal` label + one machine-parsed `Budget:` line, decompose → assembly → post-launch → human verdict terminal | [`agents/issue-authoring.md`](agents/issue-authoring.md) §The goal container (consumer card at the top of that section — authoring needs nothing else) |
 | **mission** (research) | the research-lane dispatch unit — prepares the contract a Goal then implements. Carries NO label today (the legacy `goal` label is gone and never had a machine reader — FU-163, resolved 2026-08-23); **`mission`** is the reserved dispatch-label name for when FU-090(c) graduates | [`agents/research-and-specs.md`](agents/research-and-specs.md) |
 | *goal (prose)* | ⛔ retired in agents docs — say **Goal** (the type), **mission** (research), or "intent/target" in plain prose | — |
 | **lens** | the reviewer machinery × a brief sourced from an EXTERNALLY MAINTAINED standard, selected by a deterministic artifact-class predicate. Not a role; not a prose "viewpoint" | [`agents/roles.md`](agents/roles.md) §Lenses |
