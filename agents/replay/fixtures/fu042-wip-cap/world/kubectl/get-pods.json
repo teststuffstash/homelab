@@ -50,6 +50,21 @@
           }
         ]
       }
+    },
+    {
+      "metadata": {
+        "name": "agent-session-test-project-jkl78",
+        "creationTimestamp": "2026-08-26T19:15:00Z"
+      },
+      "status": {
+        "conditions": [
+          {
+            "type": "PodScheduled",
+            "status": "True",
+            "lastTransitionTime": "2026-08-26T19:15:01Z"
+          }
+        ]
+      }
     }
   ]
 }
