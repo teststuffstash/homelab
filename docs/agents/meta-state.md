@@ -57,7 +57,9 @@ meant to avoid.)
      never greens it; the ci-red machinery owns the fix round. At merge, HAND-CLOSE issue
      #123 with `agent/done` (its PR link is `Implements`, not a closing keyword).
   3. ~~oracle-fleet PR#294~~ MERGED 11:14Z.
-  4. oracle PR#293's red is CONTENT (assert-delta) — the ci-red machinery owns it; hands off.
+  4. oracle PR#293: the ci-red machinery FIXED its content red — now bot-approved + green,
+     **codeowner-parked 30m+** (CodeownerParkWaiting firing, seen by the 2026-08-30 mechanical
+     sweep trial) — a corpus session's ADR-110 read.
   ⚠ probe gotcha re-proven ×2 today: `statusCheckRollup` in any gh query hard-fails on this
   PAT (a 2h watch ran blind) — read CI via `gh run list`.
 
