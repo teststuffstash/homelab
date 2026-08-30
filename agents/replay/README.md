@@ -284,6 +284,8 @@ is stale, so it cannot drift the way the prose register did.
 | `route-request/labels` | actions | - | `agents/agent-session.sh` | - |
 | `route-request/workbranch-tight` | actions | - | `agents/agent-session.sh` | - |
 | `run-phase-metric/run-phase-metric` | actions | - | `agents/agent-session.sh` | - |
+| `scan-governance/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
+| `scan-governance/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-guarded/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-guarded/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-phase-marker/scan-phase-marker` | actions | - | `agents/coordinator-scan.sh` | - |
