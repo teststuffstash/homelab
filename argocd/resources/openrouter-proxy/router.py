@@ -177,22 +177,26 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                         conn.execute(f"ALTER TABLE go_usage ADD COLUMN {_gocol}")
                     except sqlite3.OperationalError:
                         pass  # duplicate column — schema already current
-                # homelab#1042: model_cooldowns grew role-scoped PRIMARY KEY(model, role) so
-                # probe-class sessions never latch the fixer lanes' router state. The old table
-                # has model as sole PK and no role column — rebuild from scratch because SQLite
-                # cannot change a PRIMARY KEY by ALTER. Idempotent: the temp table creation
-                # fails on a re-run (table already exists) and the except swallows it.
+                # homelab#1042: model_cooldowns grew role-scoped PRIMARY KEY(model, role). SQLite
+                # cannot change a PK by ALTER, so this rebuilds — which means it MUST NOT re-run
+                # after a successful migration (the INSERT ... SELECT would force role='worker'
+                # back onto scoped rows, and collide with the PK when both roles exist). The
+                # sibling migrations above are idempotent by construction; a rebuild is not, so
+                # it is guarded on the actual old shape.
                 try:
-                    conn.execute("CREATE TABLE model_cooldowns_new("
-                                 "model TEXT, role TEXT DEFAULT 'worker', until REAL, streak INTEGER, "
-                                 "reason TEXT, set_ts REAL, PRIMARY KEY(model, role))")
-                    conn.execute(
-                        "INSERT INTO model_cooldowns_new(model, role, until, streak, reason, set_ts) "
-                        "SELECT model, 'worker', until, streak, reason, set_ts FROM model_cooldowns")
-                    conn.execute("DROP TABLE model_cooldowns")
-                    conn.execute("ALTER TABLE model_cooldowns_new RENAME TO model_cooldowns")
+                    _cool_cols = [r[1] for r in conn.execute("PRAGMA table_info(model_cooldowns)")]
+                    if _cool_cols and "role" not in _cool_cols:
+                        conn.execute("DROP TABLE IF EXISTS model_cooldowns_new")  # stray from a failed run
+                        conn.execute("CREATE TABLE model_cooldowns_new("
+                                     "model TEXT, role TEXT DEFAULT 'worker', until REAL, streak INTEGER, "
+                                     "reason TEXT, set_ts REAL, PRIMARY KEY(model, role))")
+                        conn.execute(
+                            "INSERT INTO model_cooldowns_new(model, role, until, streak, reason, set_ts) "
+                            "SELECT model, 'worker', until, streak, reason, set_ts FROM model_cooldowns")
+                        conn.execute("DROP TABLE model_cooldowns")
+                        conn.execute("ALTER TABLE model_cooldowns_new RENAME TO model_cooldowns")
                 except sqlite3.OperationalError:
-                    pass  # already migrated — temp table creation fails on re-run
+                    pass  # schema already current
                 if attempt != ":memory:":
                     conn.execute("PRAGMA journal_mode=WAL")
                 conn.commit()
@@ -1653,6 +1657,7 @@ def metrics_lines() -> list[str]:
 def self_test() -> int:
     """In-memory round-trip; the CI gate (`devbox run router-self-test`). Also parses
     model-classes.json when it sits beside this file (the deployed layout)."""
+    global _conn, _persistent
     import tempfile
     init(None, os.path.join(os.path.dirname(os.path.abspath(__file__)), "model-classes.json")
          if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -1715,36 +1720,50 @@ def self_test() -> int:
     # ── homelab#1042: model_cooldowns PVC migration test ──
     # The self-test normally starts from a FRESH schema (:memory: via init(None)), so it never
     # exercises the "table already exists with the old 5-column shape" path that the live PVC
-    # store has. This replays the real sequence (old schema → migration → new schema) on a
-    # throwaway file DB and asserts the rebuilt PRIMARY KEY and data survival.
+    # store has. This creates an old-schema file DB, calls init() twice (the second call is
+    # the one that would silently re-latch or drop the store with the unguarded migration),
+    # and asserts the probe row survives both calls. The global connection is saved before
+    # and restored after so the rest of the test's in-memory data is not lost.
+    _saved_conn, _saved_persistent = _conn, _persistent
     _mig_cool_db = tempfile.mktemp(suffix=".db")
-    _mig_cool = sqlite3.connect(_mig_cool_db)
-    _mig_cool.execute("""CREATE TABLE model_cooldowns(
-      model TEXT PRIMARY KEY, until REAL, streak INTEGER, reason TEXT, set_ts REAL)""")
-    _mig_cool.execute("INSERT INTO model_cooldowns VALUES(?,?,?,?,?)",
-                      ("old-model-a", 99999.0, 2, "429-burst", 10000.0))
-    # Run the migration (same SQL as in init())
-    _mig_cool.execute("CREATE TABLE model_cooldowns_new("
-                      "model TEXT, role TEXT DEFAULT 'worker', until REAL, streak INTEGER, "
-                      "reason TEXT, set_ts REAL, PRIMARY KEY(model, role))")
-    _mig_cool.execute(
-        "INSERT INTO model_cooldowns_new(model, role, until, streak, reason, set_ts) "
-        "SELECT model, 'worker', until, streak, reason, set_ts FROM model_cooldowns")
-    _mig_cool.execute("DROP TABLE model_cooldowns")
-    _mig_cool.execute("ALTER TABLE model_cooldowns_new RENAME TO model_cooldowns")
-    # Pre-existing row survived as role='worker'
-    assert _mig_cool.execute(
-        "SELECT model, role, until, streak, reason FROM model_cooldowns").fetchall() == [
-        ("old-model-a", "worker", 99999.0, 2, "429-burst")], \
-        "pre-existing row must survive migration with role='worker'"
-    # PRIMARY KEY is now (model, role) — can insert a row with same model but different role
-    _mig_cool.execute("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
-                      ("old-model-a", "probe", 88888.0, 1, "429-burst", 20000.0))
-    assert len(_mig_cool.execute(
-        "SELECT model, role FROM model_cooldowns ORDER BY role").fetchall()) == 2, \
-        "rebuilt PK (model, role) must allow same model with different roles"
-    _mig_cool.close()
-    os.unlink(_mig_cool_db)
+    try:
+        # Build the OLD 5-column schema (no role, model-only PK) — exactly what a pre-#1042 PVC
+        # store looks like.
+        _mig_cool = sqlite3.connect(_mig_cool_db)
+        _mig_cool.execute("""CREATE TABLE model_cooldowns(
+          model TEXT PRIMARY KEY, until REAL, streak INTEGER, reason TEXT, set_ts REAL)""")
+        _mig_cool.execute("INSERT INTO model_cooldowns VALUES(?,?,?,?,?)",
+                          ("old-model-a", 99999.0, 2, "429-burst", 10000.0))
+        _mig_cool.close()
+        # First call: migrates the old schema to the new role-scoped PK.
+        init(_mig_cool_db)
+        assert _persistent, "init() must report persistent=True for a file DB"
+        # Insert a probe row for the same model — this is the case that would collide on PK
+        # and drop the store if the migration re-ran.
+        _mig_cool = sqlite3.connect(_mig_cool_db)
+        _mig_cool.execute("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
+                          ("old-model-a", "probe", 88888.0, 1, "429-burst", 20000.0))
+        _mig_cool.execute("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
+                          ("old-model-a", "worker", 77777.0, 0, "", 30000.0))
+        _mig_cool.commit()
+        _mig_cool.close()
+        # Second call: the guarded migration must NOT re-run, leaving the probe row intact.
+        init(_mig_cool_db)
+        assert _persistent, "init() must stay persistent after second call (migration must not drop the store)"
+        _mig_cool = sqlite3.connect(_mig_cool_db)
+        _probe_rows = _mig_cool.execute(
+            "SELECT model, role FROM model_cooldowns WHERE role='probe'").fetchall()
+        assert len(_probe_rows) == 1 and _probe_rows[0] == ("old-model-a", "probe"), \
+            "probe row must survive second init() call — migration must not re-run and relabel it"
+        _all_rows = _mig_cool.execute(
+            "SELECT model, role FROM model_cooldowns ORDER BY role").fetchall()
+        assert len(_all_rows) == 2, \
+            "both worker and probe rows for the same model must survive second init() call"
+        _mig_cool.close()
+    finally:
+        if os.path.exists(_mig_cool_db):
+            os.unlink(_mig_cool_db)
+        _conn, _persistent = _saved_conn, _saved_persistent
     assert strikes_for("issue-19", "circles") == ["deepseek/deepseek-v4-flash"]
     # Recording is not acting: enforcement stays OFF until a policy decision (see STRIKE_ENFORCE).
     assert STRIKE_ENFORCE is False, "strike enforcement must default OFF — routing is unchanged by design"
