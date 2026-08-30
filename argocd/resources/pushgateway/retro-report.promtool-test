@@ -38,7 +38,7 @@
 # a second alert in this file would need its own witness rules copy, and one alert's worth of
 # manual verification does not earn that permanent upkeep). Swapping this file's rules copy back
 # to the pre-#591 expr, `(time() - (max(retro_report_last_success_timestamp) or vector(0))) > 8 *
-# 86400`, and re-running `promtool test rules` against case (b) below REDS at its 18h assertion
+# 86400`, and re-running `promtool test rules` against case (b) below REDS at its 198h assertion
 # — `exp_alerts: []` fails because the old expr fires (fallback-to-epoch-0 plus `time()` past 8d
 # in absolute test-clock terms, regardless of how recent the real, now-invisible push was). Cases
 # (a) and (c) are unaffected by the swap: neither one ever has an absent CURRENT sample, so the
@@ -62,31 +62,34 @@ tests:
         exp_alerts: []
 
   # ── (b) THE RESTART GAP — the exact 2026-08-17 shape ─────────────────────────────────────────
-  # A success lands at test-hour 5 (value 18000 = 5*3600) and the pushgateway is wiped one
-  # hour later (`stale` at hour 6, nothing pushed again for the rest of the test). At every eval
-  # below the real success is well under 8 days old (5h, then 13h, then 20h) — the bridge must
-  # read straight through the wipe and stay quiet. The timeline is shifted 180h earlier than the
-  # original fixture (which had the push at hour 185) to reduce the number of evaluation steps
-  # from 205 to 25 while preserving the same relative ages and the same bridge semantics.
-  - interval: 1h
+  # A success lands at test-hour 184 (value 662400 = 184*3600) and the pushgateway is wiped
+  # two hours later (`stale` at hour 186, nothing pushed again for the rest of the test). At
+  # every eval below the real success is well under 8 days old (6h, then 14h, then 22h) — the
+  # bridge must read straight through the wipe and stay quiet. The interval is widened from 1h
+  # to 2h (vs the original fixture's 1h) to reduce evaluation steps from 205 to 104 while
+  # keeping at least one eval_time past 192h (the absolute threshold where the pre-#591 expr's
+  # epoch-fallback bug fires) so the regression pin is preserved.
+  - interval: 2h
     name: "(b) a pushgateway wipe of a <8d-old success must not page"
     input_series:
       - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
-        values: "_x5 18000 stale"
+        values: "_x92 662400 stale"
     alert_rule_test:
-      # 10h: real success age is 10-5 = 5h. The bridge finds the real 18000 sample inside its
-      # 8d lookback window and stays quiet.
-      - eval_time: 10h
+      # 190h: real success age is 190-184 = 6h. The bridge finds the real 662400 sample inside
+      # its 8d lookback window and stays quiet. time() = 684000 < 691200, so the old expr also
+      # stays quiet here — this eval is a bridge-correctness check, not a regression pin.
+      - eval_time: 190h
         alertname: RetroReportOverdue
         exp_alerts: []
-      # 18h: real success age is 18-5 = 13h. Still comfortably <8d — the bridge reads straight
-      # through the wipe marker at t=6h.
-      - eval_time: 18h
+      # 198h: real success age is 198-184 = 14h. Still <8d — the bridge reads straight through
+      # the wipe. time() = 712800 > 691200, so the old expr would false-fire here: this eval
+      # IS the regression pin — swapping to the pre-#591 expr REDS at this assertion.
+      - eval_time: 198h
         alertname: RetroReportOverdue
         exp_alerts: []
-      # 25h: real success age is now 20h — still <8d. Sustained correctness, not a one-shot
-      # pass: the bridge does not degrade as raw time() drifts further from epoch 0.
-      - eval_time: 25h
+      # 206h: real success age is now 22h — still <8d. Sustained correctness: the bridge does
+      # not degrade as raw time() drifts further from epoch 0. Old expr still false-fires.
+      - eval_time: 206h
         alertname: RetroReportOverdue
         exp_alerts: []
 
