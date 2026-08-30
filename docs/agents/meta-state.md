@@ -58,7 +58,8 @@ meant to avoid.)
   time re-arm arbitration (3 opus rides, all ruling "escalate, human is next mover"). #198's
   symptom through a different door.
 
-- **⚑ S5 (corpus diet): ORIGINALS 4/4 DONE 2026-08-30 — closeout 1 posted on #979; the parent
+- **⚑ S5 (corpus diet) [stint](chainless-redesign.md) #979: ORIGINALS 4/4 DONE 2026-08-30 —
+  closeout 1 posted on the parent; it
   sits in its ≥72h quiet window (close at a later sweep).** #984 (the deep comb) landed as
   PR#1017: lint set drained, ~35 files truth-synced, FU-052 archived, FU counter 189→195,
   **docs-graph-lint check #4 FLIPPED shadow→FAIL** (the comb was the clean run), and
