@@ -222,6 +222,33 @@ check(cr929[2] == 0.50, "_budget_from_cr('proj', '929') returns estimate 0.50")
 cr1 = ledger._budget_from_cr("proj", "1")
 check(cr1 is None, "_budget_from_cr('proj', '1') returns None (no matching CR)")
 
+# ── 7. _budget_from_cr() deterministic tie-break (homelab#987) ──────────────────────────
+# When multiple CRs match the same issue prefix (multiple rounds), the function must
+# return the highest round number's tier/estimate deterministically, not the first in
+# kubectl's arbitrary item order.
+def fake_sh_tiebreak(args, env=None):
+    if args[0] == "kubectl" and args[1] == "get" and args[2] == "openrouterkeys":
+        # Items in REVERSE round order to catch non-deterministic first-match.
+        return json.dumps({
+            "items": [
+                {"metadata": {"name": "proj-issue-42-round-1",
+                              "labels": {"budget-tier": "xs", "budget-estimate-usd": "0.08"}}},
+                {"metadata": {"name": "proj-issue-42-round-3",
+                              "labels": {"budget-tier": "md", "budget-estimate-usd": "0.50"}}},
+                {"metadata": {"name": "proj-issue-42-round-2",
+                              "labels": {"budget-tier": "sm", "budget-estimate-usd": "0.25"}}},
+            ]
+        })
+    raise AssertionError("fake_sh_tiebreak unexpected: %r" % (args,))
+
+ledger.sh = fake_sh_tiebreak
+
+cr42 = ledger._budget_from_cr("proj", "42")
+check(cr42 is not None, "_budget_from_cr('proj', '42') found a CR (tie-break test)")
+check(cr42[0] == "md", "_budget_from_cr('proj', '42') returns tier md (highest round 3, not xs from round 1)")
+check(cr42[1] == 1.0, "_budget_from_cr('proj', '42') returns cap 1.0 (md tier)")
+check(cr42[2] == 0.50, "_budget_from_cr('proj', '42') returns estimate 0.50 (from round 3)")
+
 ledger.sh = _saved_sh  # restore
 PYEOF
 
