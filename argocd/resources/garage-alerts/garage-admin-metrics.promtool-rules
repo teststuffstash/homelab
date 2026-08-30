@@ -23,7 +23,7 @@ groups:
           description: Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way.
       - alert: GarageTableEmpty
         expr: |
-          table_size == 0 and max_over_time(table_size[7d]) > 0 and table_name !~ "multipart_upload|bucket_mpu_counter"
+          table_size{table_name!~"multipart_upload|bucket_mpu_counter"} == 0 and max_over_time(table_size[7d]) > 0
         for: 5m
         labels:
           severity: warning

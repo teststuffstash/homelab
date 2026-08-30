@@ -49,7 +49,7 @@ spec:
         # would fail open (a future table is unwatched forever). Same rot, opposite blast radius.
         - alert: GarageTableEmpty
           expr: |
-            table_size == 0 and max_over_time(table_size[7d]) > 0 and table_name !~ "multipart_upload|bucket_mpu_counter"
+            table_size{table_name!~"multipart_upload|bucket_mpu_counter"} == 0 and max_over_time(table_size[7d]) > 0
           for: 5m
           labels: { severity: warning }
           annotations:
