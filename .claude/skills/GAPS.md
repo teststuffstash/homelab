@@ -43,6 +43,14 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       conversation). A number in corpus prose describing live config is a status claim; the
       deployment/ConfigMap is the authority. **promoted→** the skill's output contract gains
       the live-state-claims-verified rule (statuses AND config constants), same commit.
+- [x] design-agents-G3 — a machine-filed issue's DEMANDED OPERATOR ACTION was relayed verbatim
+      ("grant Issues:Read on the reviewer App — console class, needs you") without checking the
+      declared record one grep away (docs/github-apps.yaml carried issues:write since FU-069(b);
+      the quiet GithubAppPermissionDrift alert alone refuted the ask — the real gap was the token
+      MINT). The G1 class one ring out: an escalation ASK is a live-state claim too. Sighted
+      2026-08-30 (operator catch: "still multiple rounds escalate to me doing a manual click
+      instead of a simple grep/curl"). **promoted→** the skill's output contract gains
+      asks-are-claims, same commit; the fleet half is the ground-rules bullet (PR#1044).
 - [ ] design-agents-G2 — a lifecycle LABEL was reported as activity ("#833 is riding —
       in-progress") from a live `gh` read alone: the label is a CLAIM, and the state is the
       JOIN (label × live pod × PR state) — the issue's PR had merged 8h earlier with no pod
