@@ -1,0 +1,47 @@
+# homelab#993 — the pre-dispatch GOVERNANCE intersection, both directions in one action stream.
+#
+# WHAT IT PINS. `scripts/governance-lint.sh` refuses any worker-authored PR diff that touches
+# governance paths (`.github/`, `.agents/`, `scripts/`, `policy/`, `devbox.json`, `devbox.lock`,
+# `CODEOWNERS`). These paths are structurally red because CI runs from the PR branch — a
+# worker-App-authored diff touching any of them goes red on a step no fix round can turn green.
+# Before this check the scan dispatched such issues anyway and the constraint was discovered by
+# burning a round (#953, two coordinator rides that both concluded "not dispatchable").
+#
+# THE NINE CASES, and what each one exists to stop a later edit from breaking:
+#   #993  `agents/coordinator-scan.sh, agents/replay/` → DISPATCHED. This very issue. A substring
+#         grep would hit `.agents/` here and hold the fix for the bug forever; `fp_conflict` is
+#         path-boundary aware, which is why it is reused rather than re-implemented. `agents/`
+#         does NOT match `\.agents/` (the dot-prefix distinguishes it).
+#   #1000 `.github/workflows/ci.yaml` → HELD. The canonical governance path: CI workflows run
+#         from the PR branch, so a worker edit here is structurally red.
+#   #1001 `scripts/governance-lint.sh` → HELD. The lint itself is a governance path — a worker
+#         editing it could neuter the check.
+#   #1002 `argocd/resources/loki/` → DISPATCHED. The main lane is untouched by this check.
+#   #1003 `*` → DISPATCHED. The no-`Touches:` sentinel conflicts with everything by design
+#         (agents/footprint.sh); reading it as governed would stop dispatching every
+#         unfootprinted issue in the repo.
+#   #1004 `policy/` → HELD. Policy files are governance paths.
+#   #1005 `devbox.json` → HELD. devbox.json is a governance path (CI runs from the PR branch).
+#   #1006 `CODEOWNERS` → HELD. CODEOWNERS is a governance path.
+#   #1007 `.agents/fix.yaml` → HELD. `.agents/` is a governance path (the next fix round reads
+#         from the PR branch).
+#   #1008 oracle-fleet, `scripts/` → DISPATCHED. The GOVERNANCE set is THIS repo's CI's. A stack
+#         repo that happens to own a same-named path is not touching this repo's file.
+#
+# NO LABEL WRITE IS ASSERTED FOR FREE: the action stream carries no `gh` call at all. This clause
+# is a router, not a gate — `agent/blocked` is a human gate, and a governance overlap may be only
+# part of an issue's scope. A future edit that "helpfully" parks the issue shows up here as a new
+# call.
+#
+# The GOVERNANCE set is read from the REAL `scripts/governance-lint.sh` in the checkout, not
+# recorded into `world/`: the acceptance criterion is that exactly ONE definition exists, so a
+# fixture holding a second copy would defeat the change it is pinning. Offline either way.
+name: scan-governance-pre-dispatch
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:governance-set
+  - file:cases.sh
+  - block:governance-hold
+  - file:post.sh
