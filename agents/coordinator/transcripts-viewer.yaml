@@ -73,6 +73,13 @@ spec:
                 # picked up without rolling the pod: cwd-rewrite of claude jsonl (FU-061 grouping) +
                 # goose sessions.db merge (FU-057 rendering).
                 python3 /app/sync.py || echo "sync.py failed (retrying next tick)"
+                # Prune mirror and derived data older than retention window (7 days, homelab#110):
+                # the mirror grows unboundedly with agent activity — each memory-limit bump (256Mi →
+                # 512Mi → 2Gi) only bought time until the next OOM. Bounding the working set here
+                # prevents episode four without a fourth re-bump. The S3 bucket (durable record) is
+                # untouched; only the local emptyDir mirror + derived /data are pruned.
+                find /mirror -maxdepth 1 -mindepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+                find /data/claude/projects -maxdepth 1 -mindepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
                 sleep 300
               done
           env:
@@ -106,6 +113,9 @@ spec:
             # memory 128Mi/512Mi → 256Mi/2Gi (homelab#110, 2026-08-24): the 512Mi ceiling set
             # 2026-08-07 (verified against a 328M mirror then) OOMKilled again after /mirror
             # organically grew to 1.4G — same growth pattern as the CPU bump, not a leak.
+            # Growth fix (homelab#110, 2026-08-30): the bash loop now prunes /mirror + /data
+            # older than 7 days each tick, so the working set is bounded by the retention window
+            # rather than growing unboundedly. The 2Gi ceiling stays as a safety net.
             limits:   { cpu: "1", memory: "2Gi" }
       volumes:
         - name: claude-data
