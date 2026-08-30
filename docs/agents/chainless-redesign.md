@@ -1,9 +1,12 @@
 # The chainless redesign — a harness matrix, N subscription rails, every role routed (ADR-107 charter)
 
-**Status: CHARTER (operator direction, 2026-08-13 — the subscription-autopsy session). Design
-accepted in principle; build NOT started.** This doc owns the redesign's decisions, the claim-knob
-ledger, the OpenCode Go rail evidence, and the build plan — so the direction survives any one
-session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (§M8–M13) and the
+**Status: CHARTER (operator direction, 2026-08-13), build LARGELY EXECUTED** — chunks A–H
+shipped (2026-08-13/14), role wiring landed via Goal G-A homelab#775 (2026-08-23: every role
+routes), oracle + sleep run chainless (oracle-iac#387, sleep-iac#77), and the platform's
+chainless flip rode the same wave; what remains is flip acceptance 2–4, the FU-186/ADR-115
+provider legs, and build-order item 6 (the legacy-deletion sweep). This doc owns the redesign's
+decisions, the claim-knob ledger, the OpenCode Go rail evidence, and the build plan — so the
+direction survives any one session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (§M8–M13) and the
 claim by [`agentstack.md`](agentstack.md); this doc records what CHANGES in each and why. The
 decision record is **ADR-107** (decision 3 superseded by **ADR-112**, the harness matrix); the
 day's probe evidence is TICK-LOG 2026-08-13.

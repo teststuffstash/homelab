@@ -84,7 +84,7 @@ cannot key on the repo. It keys on the **path**.
 
 | paths | applied by | agent may author | gate |
 |---|---|---|---|
-| `docs/**` | nothing | ✅ | CI |
+| `docs/**` | nothing | ✅ | **codeowner** (CODEOWNERS `/docs/` since 2026-08-04 — the docs are the platform's memory) |
 | `argocd/resources/**` | ArgoCD — merge *is* deploy | ✅ | CI (see the check-coverage caveat below) |
 | `argocd/platform/**` | ArgoCD app-of-apps, `prune: true` | ✅ | **codeowner** — an edit here *deletes* services |
 | `tofu/*.tf` (root) | `tofu apply` | ✅ | **codeowner**; apply stays out-of-band (cone rule) |
@@ -532,10 +532,10 @@ canaries prove nothing here.
 Tracked on FU-106; the gap register (IAC-G01..G06, `iac-lane-fsm.yaml` — G07 shipped without
 ever entering it) IS the list. The order as EXECUTED: G07 + G02 + G03 (2026-08-02) → G05
 rung-0 (sleep-tracking#113) + G04 sentinel v1 shadow (2026-08-03).
-**The G01 ENFORCEMENT flip: BUILT 2026-08-18 (§L0b — status posting, homelab baseline, required
-check + push ruleset in tofu); activation = the operator's App `statuses:write` grant + the
-host-side `github-tofu apply`. Remaining after that: the G06 advisory lens; window rungs 1/2
-when oracle's gateway metering (T3c) exists.**
+**The G01 ENFORCEMENT flip: LIVE since 2026-08-18 (§L0b — status posting, homelab baseline,
+required check + push ruleset in tofu; the grant + apply landed the same day, and the sentinel
+has red-cycled a real PR since — homelab#1008's baseline-ordering catch). Remaining: the G06
+advisory lens; window rungs 1/2 when oracle's gateway metering (T3c) exists.**
 **Historical reprioritization note (2026-08-02, commit-history audit):** G07 pin-follow was the
 biggest *mechanical* win (no LLM, deterministic, the most frequent human commit in oracle-iac)
 and can ship independently of the order above; and once oracle-iac gains a fixer block (the

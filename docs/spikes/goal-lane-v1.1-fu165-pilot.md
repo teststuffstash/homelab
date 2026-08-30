@@ -34,7 +34,8 @@ exhibit is a claude.ai artifact ("Goal #278 — sprout DAG") — THIS file is th
    jail's verify-then-commit lane checks PRESENCE, not BEHAVIOR (an alert that applies passes;
    one that cannot fire doesn't fail) — the debt source, now countered by the CI-required
    behaviour fixtures the goal shipped. **Falsifiable prediction: the next platform goal's
-   sprouts-per-ride lands well under 1.2; if not, the degeneracy reading returns.** Inflow per generation 12/13/11/13/8
+   sprouts-per-ride lands well under 1.2; if not, the degeneracy reading returns.** (No
+   verdict recorded against G-A/G-B as of 2026-08-30 — compute it at the next Goal closeout.) Inflow per generation 12/13/11/13/8
    (flat, no die-off), ≈1.2 sprouts per closed ride, generation 5 = 7-of-8 still open. The
    terminators were external: the budget gate ($18>$15 at 18:47Z, raised; $62>$60 at 02:07Z →
    sprouts filed inert) and the operator's verdict gate. Also per-event cadence everywhere:
@@ -70,16 +71,17 @@ exhibit is a claude.ai artifact ("Goal #278 — sprout DAG") — THIS file is th
    composes with the mutex/stream fix: collapse ends the convoy, detach ends the hold.
 6. **Operator directives on the goal thread have no machine consumer.** The closeout charter
    comment was executed only because the seat re-read it; the close-time terminal (IL-T19) is
-   deterministic and a closed goal draws no sessions. (Now FU-166 leg (b)'s named source.)
+   deterministic and a closed goal draws no sessions. (Consumer SHIPPED: `src_goalcmt` in
+   `agents/meta-events.sh` — FU-166 archived 2026-08-12.)
 7. **The budget machinery's own defects surfaced live and were fixed in-run**: the one-hop
    ancestor walk gating rides against the budget-less bucket (#367/PR#378), the refusal-comment
    re-spam (#361), the ratio-join emptiness (#348) — the pilot's second deliverable working as
    intended.
 
-## What settles it
+## What settled it (→ ADR-106, 2026-08-12)
 
-The v1.2 design session (FU-168: ADR-094 concurrency + ADR-097 fence, "no pre-committed shape;
-the numbers decide"), plus the sibling decisions it composes with: #295 bucket semantics
+The v1.2 design session (ADR-106; FU-168 carries the build/soak residue — its (a) concurrency
+half shipped 2026-08-12, the soak read failed 2026-08-25 and the emitter hunt rides #459), plus the sibling decisions it composes with: #295 bucket semantics
 (finding 1), the typed worker-findings disposition gate (finding 2), §M10 checkpoint cadence
 (finding 3), FU-166(b) event-driven seat watches (finding 6). Plus the stack-scope question
 (operator, 2026-08-12): v1.1 ran ONE cross-repo child end-to-end (agent-runtime#66 → its PR#67,

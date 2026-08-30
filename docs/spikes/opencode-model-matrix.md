@@ -37,7 +37,8 @@ opencode's phrase is "Nx **usage**", i.e. N× ALLOWANCE (half-off at 2x). Same t
 signs; opencode's poor word choice, and exactly how this register's first reading went wrong.
 Read "usage" as "value you receive", never "cost you pay". Bonus from the same dump: cached
 rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
-⚠ **LIMIT-SIDE SEMANTICS MEASURED 2026-08-17** (console usage dump `uploads/opencode-go.txt`
+⚠ **LIMIT-SIDE SEMANTICS MEASURED 2026-08-17** (a console usage dump — transient jail upload,
+not retained; the durable record is the gometer draw-pricing commit + TICK-LOG 2026-08-17 —
 reconciled against a known workload — the 509-call jail subagent wave, sole account traffic):
 **the window draws at LIST price on RAW tokens — cache discounts do NOT apply to window draw —
 halved for badged models.** Sample arithmetic: 50.56M flash input × $0.14/M ÷ 2 ≈ $3.54 ≈ the
@@ -69,7 +70,7 @@ use DRAW, not billed. (Window accounting fix: the gometer draw-pricing + epoch-a
 | qwen3.7-max | 2.50/7.50/0.50/3.125 | $60 | — | untested | untested | |
 | qwen3.7-plus | ≤256k: 0.40/1.60/0.04/0.50 · >256k: 1.20/4.80/0.12/1.50 | $60 | — | untested | untested | |
 | qwen3.6-plus | ≤256k: 0.50/3.00/0.05/0.625 · >256k: 2.00/6.00/0.20/2.50 | $60 | — | untested | untested | |
-| gpt-5.6-luna | ≤272k: 0.20/1.20/0.02/0.25 · >272k: 0.40/1.80/0.04/0.50 | $15 | 2x | ✗ **400 empty-body (raw 08-17), tools AND `tool_choice`-forced** — response is a message-shaped shell (`chatcmpl_` id, empty text, `stop_reason:null`) over HTTP 400 | ✗ **plain text ALSO 400s (raw 08-17)** — the ONLY row broken on the compat surface even without tools | ✅ works in the **opencode client** (operator Build session 08-13, 2.8s); ✅ **OpenAI surface `/chat/completions` + function tool → clean `tool_calls` (raw 08-17)** — cheapest cached-read in the table, but unreachable from claude-code lanes until a translator (#448 class) lands. translator (shim, #448) serves this via the OpenAI surface as of 2026-08-17 |
+| gpt-5.6-luna | ≤272k: 0.20/1.20/0.02/0.25 · >272k: 0.40/1.80/0.04/0.50 | $15 | 2x | ✗ **400 empty-body (raw 08-17), tools AND `tool_choice`-forced** — response is a message-shaped shell (`chatcmpl_` id, empty text, `stop_reason:null`) over HTTP 400 | ✗ **plain text ALSO 400s (raw 08-17)** — the ONLY row broken on the compat surface even without tools | ✅ works in the **opencode client** (operator Build session 08-13, 2.8s); ✅ **OpenAI surface `/chat/completions` + function tool → clean `tool_calls` (raw 08-17)** — cheapest cached-read in the table; the translator (shim, #448 — closed 2026-08-17) serves it from claude-code lanes via the OpenAI surface |
 | grok-4.5 | 2.00/6.00/0.30/– | $15 | — | untested | untested | |
 | hy3 / hy3-preview | hy3: 0.14/0.58/0.035/– · preview unpriced | $60/? | — | untested | untested | hy3 = retro-proven audit tier upstream |
 
@@ -111,6 +112,7 @@ Candidate rung-0 on this rail (largely the OpenRouter free-rung families). ⚠ Z
 Full coverage of the Go list + Zen free tier on the anthropic-compat path (one `tool_use`
 round-trip each — cents; deepseek rows CLOSED 08-13 post-opt-in), one `opencode`-harness
 column datum for a model the compat path fails (mimo or glm — does their native client succeed
-where the shim can't?), and the badge-semantics decider from the console. Then the table
+where the shim can't?). (The badge-semantics decider RESOLVED in this file — billing 08-13,
+limit-side 08-17.) Then the table
 graduates into the scout's Go-rail canary duty (charter build order step 2) and this spike
 becomes its seed data.

@@ -5,7 +5,7 @@ decision** — the tune-vs-accept call is the operator's (⚖ below). **Nothing 
 document is findings only.
 **Environment:** Talos **v1.13.2** (pinned, `tofu/variables.tf:57`) / Kubernetes v1.36.1; the
 ephemeral/kata tier (`wk-metal-01/02/03` 8GB, `wk-metal-04` 16GB), hardened 2026-07-28 by the
-FU-112(b) kubelet reservations (`tofu/metal.tf:116-141`).
+FU-112(b) kubelet reservations (`tofu/metal.tf` — the `systemReserved`/`kubeReserved` block, ~L68-85).
 **Symptom being explained:** one PSI fire SIGKILLs 4–5 unrelated pods within a second, repeating
 several times an afternoon on `wk-metal-03` (homelab#63/#65/#100/#101; incident
 `docs/incidents/2026-07-27-kata-ride-oom-cascade.md`).
@@ -109,7 +109,7 @@ kills an **arbitrary** one and reports `score: 0`. Fixed upstream in v1.13.8 by
 | `cgroupRankingExpression` | same doc | yes |
 | `sampleInterval` | same doc (default 500 ms) | yes — `ticker.Reset()` |
 | `strictCgroupClassOrdering` | same doc, **v1.13.8+ only** (absent in v1.13.2) | yes |
-| kubelet `systemReserved`/`kubeReserved`/`evictionHard` | `machine.kubelet.extraConfig` — already set for the kata tier, `tofu/metal.tf:116-141` | yes |
+| kubelet `systemReserved`/`kubeReserved`/`evictionHard` | `machine.kubelet.extraConfig` — already set for the kata tier, `tofu/metal.tf` ~L68-85 | yes |
 | swap device | `SwapVolumeConfig` doc (`website/content/v1.13/reference/configuration/block/swapvolumeconfig.md`) | provisions a partition |
 | zswap | `ZswapConfig` doc (`maxPoolPercent`, `shrinkerEnabled`) | yes, but see §4 |
 | kubelet `failSwapOn` | Talos already defaults it to **false** (`internal/app/machined/pkg/controllers/k8s/kubelet_spec.go:365`) | n/a |
@@ -129,12 +129,12 @@ Composing §1 with what this repo declares for those nodes:
 
 | Pod on a kata node | QoS / `memory.max` | Rank score under the default expression |
 |---|---|---|
-| the agent ride + dind (`agents/agent-session.sh:944-1001`, requests **=** limits) | Guaranteed, limit set | **0.0** (and likely not even enumerated, §1.3) |
+| the agent ride + dind (`agents/agent-session.sh` `AGENT_LIMITS`, ~L1535-1545, requests **=** limits) | Guaranteed, limit set | **0.0** (and likely not even enumerated, §1.3) |
 | `cilium-agent` (`tofu/cilium.tf:88`, 512Mi req=limit) | Guaranteed, limit set | **0.0** |
-| `longhorn-manager` / `longhorn-driver` (`tofu/longhorn.tf:161-162`) | Guaranteed, limit set | **0.0** |
+| `longhorn-manager` / `longhorn-driver` (`tofu/longhorn.tf` ~L180-181) | Guaranteed, limit set | **0.0** |
 | `cilium-envoy` (`tofu/cilium.tf:79`, requests only) | **Burstable, no limit** | 0.5 × ~20Mi |
-| `hubble-relay` (`tofu/cilium.tf:75`), `node-exporter` (`kube-prometheus-stack.yaml:345`) | **Burstable, no limit** | 0.5 × ~30Mi |
-| `longhorn` `instance-manager` / `engine-image` — Longhorn-managed, the chart's resource keys don't reach them (`tofu/longhorn.tf:155-160`) | **BestEffort, no limit** | 1.0 × current — the **top-ranked victim on any node they run on** |
+| `hubble-relay` (`tofu/cilium.tf:75`), `node-exporter` (`kube-prometheus-stack.yaml` ~L424) | **Burstable, no limit** | 0.5 × ~30Mi |
+| `longhorn` `instance-manager` / `engine-image` — Longhorn-managed, the chart's resource keys don't reach them (`tofu/longhorn.tf` ~L175-179) | **BestEffort, no limit** | 1.0 × current — the **top-ranked victim on any node they run on** |
 
 So on the hardened tier the **only** selectable victims are small, limit-less platform daemons —
 tens of MiB each. The ~5Gi kata ride that *causes* the stall is structurally unselectable. Each
@@ -168,7 +168,7 @@ Two corollaries worth stating plainly:
 ## 3. Per-node tunability — yes, cleanly
 
 `OOMConfig` is a **machine-config document**, and `data "talos_machine_configuration" "metal"` is
-`for_each`-ed over `var.metal_nodes` (`tofu/metal.tf:74-79`), with `config_patches` already
+`for_each`-ed over `local.metal_nodes` (`tofu/metal.tf` ~L23-24), with `config_patches` already
 composed per node (that is how `homelab.io/kata`, the kubelet reservations and the `HostnameConfig`
 doc are applied to *only* some nodes). A patch gated on `each.value.kata` — or on an explicit node
 list — therefore reaches the ephemeral tier and **cannot** touch `cp-01`/`wk-01`/`wk-02`/
@@ -202,11 +202,11 @@ touch the service tier.
 
 | # | Option | Concrete change | Blast radius | Evidence that would validate it |
 |---|---|---|---|---|
-| **A** | **Upgrade the ephemeral tier to Talos ≥ v1.13.6** | `var.talos_version` (or a tier-local pin) → `v1.13.8`; metal nodes upgrade via `talosctl upgrade` — safe on metal, **never** on the nocloud VMs (`docs/runbook.md:173`) | Node reboots, one at a time. v1.13.6 adds `time_since_trigger > duration("5s")` to branch A; v1.13.8 adds `SelectVictim` (`score > 0` floor, no more random zero-score victim) + `strictCgroupClassOrdering`. Kubernetes stays 1.36.1. **Not** the 1.14 jump FU-033 gates | `talosctl -n <ip> get oomactions` shows fires ≥5 s apart and never `score: 0`; PodSigkilled bursts collapse from 4–5 to ≤1 per event |
+| **A** | **Upgrade the ephemeral tier to Talos ≥ v1.13.6** | `var.talos_version` (or a tier-local pin) → `v1.13.8`; metal nodes upgrade via `talosctl upgrade` — safe on metal, **never** on the nocloud VMs (`docs/runbook.md` §talosctl-upgrade warning) | Node reboots, one at a time. v1.13.6 adds `time_since_trigger > duration("5s")` to branch A; v1.13.8 adds `SelectVictim` (`score > 0` floor, no more random zero-score victim) + `strictCgroupClassOrdering`. Kubernetes stays 1.36.1. **Not** the 1.14 jump FU-033 gates | `talosctl -n <ip> get oomactions` shows fires ≥5 s apart and never `score: 0`; PodSigkilled bursts collapse from 4–5 to ≤1 per event |
 | **B** | **Tune the CEL expressions per node** (§3) | Backport the 5 s debounce into `triggerExpression`; optionally a ranking expression that can select the hog (e.g. drop the `memory_max.hasValue() → 0.0` short-circuit and rank on `memory_current` within `kubepods/*`) | Config-only, live, reversible, tier-scoped. **Risk:** hand-written CEL that Talos will *silently ignore* if only one field is set (§1.5); and a ranking change that makes the ride selectable means the ride gets SIGKILLed with no grace — an agent round dies hard instead of a daemon | Same `oomactions` check; plus a deliberately hostile ride (the 07-28 meta-15 recipe in the incident doc) where the *victim is the ride*, `cilium`/`longhorn` untouched, node survives |
 | **C** | **Swap and/or zswap** | `SwapVolumeConfig` (partition on the install SSD) ± `ZswapConfig{maxPoolPercent, shrinkerEnabled}` | ⚠ **zswap alone does nothing** — it is a compressed cache *in front of* a swap device; no swap volume, no effect. And Kubernetes `LimitedSwap` is **Burstable-only**, so our Guaranteed rides can never use it. What swap *would* buy is headroom for the **`System`/`podruntime` cgroups** — which is exactly what branch A keys on. Costs SSD write endurance on 128–500GB consumer SATA disks; swapping a kata microVM's RSS is latency-catastrophic if it ever happens | `node_pressure_memory_*` (node-exporter) for the System side falling below the 5% avg10 bar during a ride; `oomactions` empty across a full ride |
-| **D** | **Tighten the rides / stop overcommitting the node** | Lower `AGENT_LIMITS`/dind (`agents/agent-session.sh:944-1001`), or enforce one ride per 8GB node and send docker rides to the 16GB `wk-metal-04` | Fewer/slower concurrent rides; no platform change; addresses the *cause* (the node is genuinely at its limit) rather than the killer's behaviour | A ride that never drives System-cgroup `full` avg10 over 5% — visible in node-exporter PSI without any Talos change |
-| **E** | **Accept + teach the responder the signature** | Leave Talos alone; aggregate N PodSigkilled within one window into a single issue and name the mechanism in the `PodSigkilled` description (`argocd/platform/values/kube-prometheus-stack.yaml:130-137` already documents the two-causes split) | No infra risk. Kills keep happening: `cilium-envoy`/`hubble-relay`/`node-exporter` restart, which is survivable, but it is *chance* that the un-limited pods on that tier are all restartable | One issue per burst instead of 4–5; comment-rate audit (FU-155) stops needing hand-reconstruction |
+| **D** | **Tighten the rides / stop overcommitting the node** | Lower `AGENT_LIMITS`/dind (`agents/agent-session.sh` ~L1535-1545), or enforce one ride per 8GB node and send docker rides to the 16GB `wk-metal-04` | Fewer/slower concurrent rides; no platform change; addresses the *cause* (the node is genuinely at its limit) rather than the killer's behaviour | A ride that never drives System-cgroup `full` avg10 over 5% — visible in node-exporter PSI without any Talos change |
+| **E** | **Accept + teach the responder the signature** | Leave Talos alone; aggregate N PodSigkilled within one window into a single issue and name the mechanism in the `PodSigkilled` description (`argocd/platform/values/kube-prometheus-stack.yaml` — the `PodSigkilled` description, ~L140 — already documents the causes split) | No infra risk. Kills keep happening: `cilium-envoy`/`hubble-relay`/`node-exporter` restart, which is survivable, but it is *chance* that the un-limited pods on that tier are all restartable | One issue per burst instead of 4–5; comment-rate audit (FU-155) stops needing hand-reconstruction |
 
 Note that **B, C, D and E are all reachable after A**, and A changes the numbers every one of them
 would be tuned against. A is also the only option that fixes §1.4 (the random zero-score victim),
@@ -271,10 +271,12 @@ Check 2 in particular converts this whole document from "mechanism that fits the
   ~2.5h, visible only by hand-auditing comments across 3 issues.
 - **2026-08-17 — victim surface shrunk**: the two biggest UNLIMITED pods got limits (#485
   Prometheus 8Gi marker-limit, #487 workflow-controller 1Gi) — the OOMController's
-  preferred-victim set no longer contains them. ⚠ Still IN the set: `cilium-agent` runs
-  BestEffort (`resources: {}`; homelab#63's evidence, closed into FU-155 2026-08-18 — ≥4
-  restarts on wk-metal-03 alone). Whether to give it requests is part of the tune-vs-accept
-  ruling; the §5 pin experiment comes first.
+  preferred-victim set no longer contains them. ⚠ CORRECTED 2026-08-30: the 08-17 "cilium-agent runs
+  BestEffort" reading here was WRONG — its container has carried requests == limits 512Mi
+  since 2026-07-28 (`tofu/cilium.tf`, FU-112(b); #63 closed 2026-08-18). Live-checked: the
+  POD reports Burstable (sibling containers unbounded), so a residual pod-level exposure
+  remains but not the 1.0-weight BestEffort top rank; it folds into the tune-vs-accept
+  ruling, and the §5 pin experiment comes first.
 - **2026-08-24 — recurs on the SERVICE tier** (homelab#857: thinkcentre, a 5-kill branch-A
   burst in ~2s at 10:52Z). The §6 `oomactions` capture RAN pre-upgrade (evidence on #857):
   all scores nonzero = the ranked-Burstable path, NOT the §1.4 zero-score bug. Scope

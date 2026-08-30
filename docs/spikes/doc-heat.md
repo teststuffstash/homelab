@@ -14,8 +14,9 @@ read from B) — reliably enough to drive docs-cleanup deletions with evidence i
 
 - **The living/historical split already exists** (`scripts/docs-graph-lint.sh` `is_historical()`
   + the docs-cleanup Hard rules + /design layer 4) — the report CONSUMES it, never re-invents
-  it. Cold sediment is the system working. (Second consumer of the split — promotion of the
-  case list to one shared home is now warranted.)
+  it. Cold sediment is the system working. (A second consumer of the split now exists; if a
+  third arrives, promoting the case list to one shared home rides an ordinary docs-cleanup —
+  the ≥2-pattern rule's call, not a deferral.)
 - **Deletion signal = heat × class × age — never heat alone.** Recovery runbooks are rare-read,
   highest-value (boot-from-git); brand-new files are cold by age, not by worth (v0's own first
   run listed the just-committed skills files as cold-living — correctly, and uselessly without
@@ -46,8 +47,8 @@ list"). The data schema carries a `source` dimension from day one (`jail` today)
 
 ## v1 (next) — cluster leg, separate + combined views
 
-Same parser over `s3://agent-transcripts` slices (transcripts-sync; FU-140 notes the one-PVC
-coverage gap) with `/work/repo` + `/work/context/<name>` path normalization. **Operator
+Same parser over `s3://agent-transcripts` slices (transcripts-sync; the one-PVC coverage gap
+closed with FU-140, archived 2026-08-12 — cluster slices are complete) with `/work/repo` + `/work/context/<name>` path normalization. **Operator
 requirement (2026-08-11): jail and cluster stay viewable separately AND combined — not a full
 merge.** This leg simultaneously delivers the [context-repos](context-repos.md) spike's overdue
 measurement sweep (its load-bearing / redundant / untouched classification) — one parser, two
@@ -63,12 +64,12 @@ namespaced alias (`homelab-doc-heat` — the alias IS the hostname, `docs/garage
 sign-before-haproxy order). Deliberately NOT built in v0 — the report must first prove it
 changes docs-cleanup decisions.
 
-## What would settle it
+## What would settle it — MET (settle test run 1, below)
 
-One docs-cleanup pass that cites heat evidence for ≥3 delete/merge/move decisions the operator
-accepts — or a pass showing heat added nothing over the existing lint + judgment. Then either
-promote (serve it, wire it into the docs-cleanup skill as a standing input) or close the spike
-and delete the generator.
+The bar was: one docs-cleanup pass citing heat evidence for ≥3 delete/merge/move decisions the
+operator accepts. Run 1 (2026-08-26, the S5 #983 trims) met it. What remains is the OPERATOR's
+promote-vs-close call (FU-164): serve the report + wire it into the docs-cleanup skill, or
+close the spike and delete the generator.
 
 ## Settle test — run 1 (2026-08-26, S5 #983)
 
@@ -98,7 +99,7 @@ call (serve the report; wire it into docs-cleanup as a standing input) is the op
 
 ## Links
 
-FU-164 (pointer) · [context-repos.md](context-repos.md) + FU-117 (shared sweep) · FU-163 (hot
-ungreppable terms could feed the glossary) · FU-058 (retro transcript slices precedent) ·
-FU-140 (cluster capture gap) · docs-cleanup skill (the consumer) · `scripts/docs-graph-lint.sh`
+FU-164 (pointer) · [context-repos.md](context-repos.md) (the shared sweep — FU-117 archived) ·
+[`docs/glossary.md`](../glossary.md) (live — hot ungreppable terms feed it; FU-163 archived) ·
+FU-058 (retro transcript slices precedent) · docs-cleanup skill (the consumer) · `scripts/docs-graph-lint.sh`
 (the living/historical split).

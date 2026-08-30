@@ -37,7 +37,7 @@ To change *behaviour* (not just values), edit the role's `roles/opnsense-<x>/tas
 bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml         # + any extra ansible args
 ```
 
-The wrapper sources creds from `~/.claude/homelab-opnsense/{key,secret}`, builds the `httpx`
+The wrapper sources creds from the KeePass wallet (`opnsense-api-key`/`-secret`), falling back to `~/.claude/homelab-opnsense/{key,secret}`, builds the `httpx`
 interpreter from `ansible/controller-env`, installs the collection if missing, and passes the
 interpreter as `-e` (required — `devbox run` strips the env var).
 

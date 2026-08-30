@@ -284,7 +284,7 @@ classes** — stages 4 and 5 are where the gaps are.
 ### 3. Test / lint
 
 What `ci` gates on a homelab PR today: the authoritative list is `.github/workflows/ci.yaml`
-(~22 steps — highlights: `argocd-validate-pins`, `agents-registration-lint`, `merge-path-lint`,
+(~28 `devbox run` steps + 3 inline blocks — highlights: `argocd-validate-pins`, `agents-registration-lint`, `merge-path-lint`,
 `github-apps-lint`, `router-self-test`, `manifest-lint` (kubeconform, since 2026-08-04),
 `prometheus-rules-lint` (promtool, since 2026-08-11 — FU-158), the ADR-103 replay ratchet,
 `tofu fmt -check`). ⚠ homelab has NO `devbox run ci` aggregate task — the workflow is the list.
@@ -350,10 +350,10 @@ A bump is not done when it merges; it is done when nothing broke. What exists an
 | Signal | Exists? | Notes |
 |---|---|---|
 | ArgoCD app health / sync status | ✅ | shallow — see above |
-| Prometheus + Alertmanager → responder triage | ✅ | one bounded LLM session per new fingerprint (FU-133 is the live pointer) |
+| Prometheus + Alertmanager → responder triage | ✅ | one bounded LLM session per new fingerprint ([`agents/iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues"; FU-133, archived) |
 | Blackbox probes on service endpoints | ✅ | FU-099 — seconds-grade, dumb |
 | Deep [contract probe](glossary.md) post-deploy | ❌ | the **prober** role ([`agents/roles.md`](agents/roles.md) §prober, FU-102) — the real acceptance signal |
-| Storage-cap breach visibility | ❌ | Garage exports **no** metrics at all; Longhorn per-disk unwatched ([`storage-ledger.md`](storage-ledger.md), FU-093) |
+| Storage-cap breach visibility | ✅ | Garage admin metrics scraped + `garage-alerts` belts since #965 (2026-08-25); Longhorn metering since 2026-08-04 — the pve thin-pool `Data%` is FU-093's remaining gap ([`storage-ledger.md`](storage-ledger.md)) |
 | **Renovate liveness** | ❌ | **nothing watches whether Renovate did anything** — the finding at the top of this doc |
 | Drift between tofu applies | ❌ | FU-097 |
 

@@ -25,7 +25,7 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 | [follow-ups-archive.md](follow-ups-archive.md) | Resolved-FU residue — rolling buffer (≈a month) of archived items, trimmed to the grep residue |
 | [incidents/](incidents/README.md) | **Postmortems** — one file per incident: timeline, root cause, collateral, fixes, probe lesson. The FU carries only the residual work |
 | [spikes/](spikes/) | Investigations with no decision yet — findings + what would settle it |
-| [storage-ledger.md](storage-ledger.md) | Who owns the SUM of each storage tier's caps + tier eligibility rulings; Longhorn metering built 2026-08-04, quota armed 2026-08-07 — the Garage half still exports no metrics (FU-093) |
+| [storage-ledger.md](storage-ledger.md) | Who owns the SUM of each storage tier's caps + tier eligibility rulings; Longhorn metering built 2026-08-04, quota armed 2026-08-07, Garage admin metrics + belts since #965 (2026-08-25); the pve thin-pool Data% is FU-093's remaining gap |
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
 | [secrets.md](secrets.md) | Secrets platform how-to — KeePass Tier-0 → Infisical → ESO; bootstrap order, day-2 recipes (ADR-062) |
 | [ci.md](ci.md) | CI / forges two-tier model (GitHub ARC vs Forgejo act_runner), the `devbox run` seam, nix-in-CI |

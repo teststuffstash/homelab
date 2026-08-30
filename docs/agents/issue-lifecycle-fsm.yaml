@@ -592,12 +592,6 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "A POST-LAUNCH BUCKET IS NOT A SPROUT" }
 
 gaps:
-  - id: IL-G01
-    name: "first live closeout unproven"
-    detail: "FU-143 points 1–7 are fixture-proven and live-scan clean, but no goal child has merged
-      through the widened C6 yet — the first child of circles#29 is the proof."
-    fu: FU-143
-
   - id: IL-G02
     name: "goal branch creation is manual"
     detail: "Nothing creates goal/<n>-<slug> from master; circles#29's ⛔ section assigns it to the

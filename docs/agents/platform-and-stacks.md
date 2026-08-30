@@ -110,9 +110,10 @@ plane, without copying scripts into its repo. What the stack writes is the **cla
 Pragmatic stand-ins that already run, structured to become the above:
 
 - **`agents/stacks.json`** — a claim-shaped list of stacks
-  (`{name, repos, mainRepo, coordinatorModel, workerModel}`). This is the temporary home of what will become
-  one `AgentStack` claim per stack, living in each `-iac` repo. Header comment says so. `mainRepo` (see below)
-  is stack policy: the coordinator's cwd.
+  (`{name, repos, mainRepo, coordinatorModel, workerModel}`). The claims EXIST now (step 3
+  below, done 2026-07-12) — this file survives as their **committed mirror** (the CI/registration
+  lint's universe + the probe-failed belt; [`agentstack.md`](agentstack.md) §Consumption).
+  `mainRepo` (see below) is stack policy: the coordinator's cwd.
 - **`agents/coordinator-scan.sh`** (`devbox run coordinator-scan`) — the **deterministic gate** in front of
   the LLM coordinator: per stack, list open issues/PRs and answer "is there anything a coordinator tick
   would act on?" (predicate in the script header, mirrors `coordinator/README.md` §State machine). Reports
@@ -227,7 +228,9 @@ What saturates first:
 - **ARC runner pool:** ~25h runner wall/week, capacity fine; the compounding cost is
   single-repo DRAIN LATENCY on full-stack-gate repos (~25–30 min/merge serialized) — FU-015
   (shipped) halves the constant; keep batches small.
-- **Updater/API:** free at any plausible scale (reusable org workflow, 3-line callers).
+- **Updater/API:** free at any plausible scale (in-cluster since ADR-111 — exporter edge +
+  one `*/15` Argo cron over the whole repo universe; the hosted reusable + callers retired
+  2026-08-26).
 
 **What breaks first:** reviewer quota on burst days (stagger Renovate; dep-bump policy decided
 — FU-046) → single-repo drain latency → nothing in the merge mechanics itself (per-repo chains

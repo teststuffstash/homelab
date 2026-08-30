@@ -16,7 +16,7 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
 `argocd/platform/circles-{project,namespaces}.yaml`) (helm: argocd-apps), source = GitHub (FU-007: Forgejo later)
                           │
           "platform" ─► argocd/platform/*.yaml  (child Applications, ordered by sync-wave)
-             Sync waves 0→6 — authoritative list = the `argocd.argoproj.io/sync-wave`
+             Sync waves -1→6 — authoritative list = the `argocd.argoproj.io/sync-wave`
              annotations in `argocd/platform/*.yaml`.
              agent-fixer = an ApplicationSet with four generators (homelab `agents/fixer/*`,
              sleep-iac `*/agent`, oracle-iac `*/agent`, circles-iac `*/agent`)
@@ -36,11 +36,14 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
 |---|---|---|
 | `infisical-secrets` (ENCRYPTION_KEY, AUTH_SECRET) | tofu ← KeePass | not in git |
 | `infisical-db` (DB_CONNECTION_URI), `infisical-pg-app` | tofu ← KeePass | not in git |
-| `repo-homelab-github` (ArgoCD git cred for the private homelab repo) | tofu ← KeePass | not in git |
+| `repo-homelab-github` (ArgoCD git cred for the homelab repo — seeded when it was private; the repo is public now, the cred is harmless) | tofu ← KeePass | not in git |
 | `repo-oracle-iac-github` (ArgoCD git cred for the private oracle-iac repo) | tofu ← KeePass | not in git |
 | `repo-ghcr-charts-oci` (ArgoCD OCI/helm cred for the PRIVATE oracle-fleet-ingester chart; classic read:packages PAT) | tofu ← KeePass | not in git |
 | `infisical-machine-identity` (ESO→Infisical auth) | `tofu/infisical/` (Infisical TF provider) | not in git |
 | every app secret after that | Infisical → ESO → namespace Secret | — |
+
+(The table is deliberately PARTIAL — the full seeded set incl. `repo-forgejo-oci` and the
+Infisical bootstrap cred is `tofu/argocd.tf`, the authority the diagram already defers to.)
 
 The CNPG cluster's app password is **supplied** (the `infisical-pg-app` basic-auth secret),
 not generated, so tofu can build a matching `DB_CONNECTION_URI` deterministically.

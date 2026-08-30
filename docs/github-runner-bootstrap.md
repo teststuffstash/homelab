@@ -54,7 +54,7 @@ This saves the App **id**, **client id**, and **private key** to `~/.claude/home
 ```
 https://github.com/organizations/teststuffstash/settings/apps/<slug>/installations
 ```
-Open it, **Install**, and select the two repos (or *All repositories*). This is what creates the
+Open it, **Install**, and select the three repos (or *All repositories*). This is what creates the
 installation whose id step 4 discovers.
 
 ## 3. Mint the ghcr pull PAT (1 click)
@@ -144,7 +144,7 @@ devbox run -- kubectl --kubeconfig tofu/kubeconfig -n arc-runners get pods -w   
 
 - **Rotate the App key:** regenerate it in the App settings, re-run `secrets` (ESO repropagates within
   `refreshInterval`, 1h).
-- **Tear down:** delete the three `argocd/platform/arc-*.yaml` + `github-runner-secrets.yaml` (ArgoCD
+- **Tear down:** delete the two `argocd/platform/arc-*.yaml` + `github-runner-secrets.yaml` (ArgoCD
   prunes), uninstall the App from the org. The Forgejo Tier-B runner is unaffected.
 
 ## Notes

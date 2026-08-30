@@ -53,5 +53,5 @@ that grant, coordinator-dispatched kata rides shipped raw service URLs and the c
 `ConnectionRefused` (oracle-fleet#52 r1 strike). Note that this is a *consequence* of the workaround,
 not of the bug: rewriting to endpoint IPs is only necessary because VIPs don't work.
 
-Related: FU-116 (kata ride storage, separate root cause — see
+Related: FU-116 (archived 2026-08-02 — kata ride storage, separate root cause — see
 [the OOM cascade incident](../incidents/2026-07-27-kata-ride-oom-cascade.md)), `docs/spikes/kata-ci-gate.md`.

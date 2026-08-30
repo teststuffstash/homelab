@@ -24,9 +24,9 @@ jointly blow the tier — which is exactly what happened.
 (CI builds and the like) — single-node replica-1 Optane of modest speed; NEVER load-bearing
 data/metadata (Garage-meta migration onto it was proposed and REJECTED).
 
-Two things to read off it. **`bulk`'s 90% is deliberate, not drift** — the registry mirrors were
-oversized on purpose (see homelab#116 below), which spends nominal headroom to buy the thing that
-actually matters, and physical sits at 39%. **`std`'s comfort is new**: it had two zones and
+Two things to read off it. **`bulk`'s ~88% committed is deliberate, not drift** — the registry
+mirrors were oversized on purpose (see homelab#116 below), which spends nominal headroom to buy
+the thing that actually matters, and physical sits at 68% (the 2026-08-25 table above). **`std`'s comfort is new**: it had two zones and
 hp-01 at 105% until wk-02 moved into it the same day.
 
 **hp-01 was the tight node and no knob fixed it** — 104% of allocatable, 70% physical, 43.3G of
@@ -71,8 +71,9 @@ A ledger that isn't measured is a spreadsheet. Four sightings in six days, all t
 
 1. **2026-07-22** — Garage exports **no** metrics to Prometheus at all (checked: zero `garage_*`
    series). Breaches surface only as faulted writes.
-2. **2026-07-25** — Garage LMDB-full at 03:42 surfaced only as a failed sleep-ingester Job (meta
-   volume has been 10Gi since).
+2. **2026-07-25** — Garage LMDB-full at 03:42 surfaced only as a failed sleep-ingester Job (the meta
+   volume was 10Gi from then until the 2026-08-25 rebuild grew it to 30Gi, rf=1 on wk-02 —
+   FU-137).
 3. **2026-07-25** — the **Longhorn** side of the bulk tier: 9 retro rides' 20Gi scratch allocations
    pushed both bulk disks past `storageScheduled` cap → new scratch PVCs faulted
    (`ReplicaSchedulingFailure`) → every ride/worker Init wedged. Immediate mitigations: scan
@@ -129,7 +130,9 @@ never returned to the pool. That is why the guest could use 118G while the pool 
 treated as the reliable half of the bulk tier precisely because it is a VM that never powers off
 — while its bytes sat on a single consumer NVMe, shared with three other VMs, on a pool with 2.9G
 to spare. The two laptops/desktops it was trusted over are independent physical disks in
-independent boxes. That reasoning is what moved Garage's replicas to them (ADR-089 addendum).
+independent boxes. That reasoning is what moved Garage's replicas to them (ADR-089 addendum). (The META volume
+moved back to a single wk-02 replica on 2026-08-25 to buy restore headroom — FU-137's trailing
+⚠; the ADR-114 build-out is what returns its redundancy.)
 
 **RESOLVED 2026-08-07 — and it did not hold.** The pool refilled to 100% by 2026-08-18 and
 again 2026-08-24 (the autoextend belt fired at 80% on 08-17 and failed exactly as the caveat
@@ -253,30 +256,16 @@ threshold**.
   ⚠ Second layer, not built: a Longhorn `filesystem-trim` RecurringJob. A node-level fstrim cannot
   reclaim space *inside* a replica's sparse file, so volume-level churn needs its own trim before
   the node one can see it.
-- **Garage metering** — still the open item, but **smaller than it reads: the exporter is already
-  running.** Measured 2026-08-25 by scraping `http://<garage-pod-ip>:3903/metrics` with the admin
-  token: **48 metric families**, served regardless of the chart's `monitoring.metrics.enabled:
-  false`. That flag gates the headless **`garage-metrics` Service** — the `port: 3903` block in
-  `argocd/charts/garage/templates/service.yaml` — not the exporter; the ServiceMonitor has its own
-  gate, `monitoring.metrics.serviceMonitor.enabled`. So the gap is two values: with the first
-  false, 3903 appears in **no** Service (`garage`, `garage-headless` and the `garage-s3`
-  LoadBalancer all expose 3900/3902 only) and nothing can scrape a port that is already answering.
-  Two of the families are worth naming because they are what this section has been asking for:
-  - **`garage_local_disk_avail` / `garage_local_disk_total`** — the usage half, per volume, which
-    is the ">80% alert" above.
-  - **`table_size{table_name=…}`** — per-table row counts. That is a direct detector for the
-    2026-08-24 class of loss ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)):
-    an empty-tabled DB is `table_size` collapsing to 0, which no amount of request-rate or
-    queue-length watching says. ⚠ It would **not** have helped on the day — Prometheus was pinned
-    to wk-01 by its own Longhorn PVC and was dark 14:18→15:45 while the wipe happened at 15:31, so
-    every Prometheus-scraped signal shared fate with the failure. Alerting on it is worth doing for
-    the *next* one; the shared-fate half is a separate question this ledger does not own.
-
-  Upstream's [dashboard](https://garagehq.deuxfleurs.fr/documentation/cookbook/monitoring/)
-  (`script/telemetry/grafana-garage-dashboard-prometheus.json`) is **not** that alert: its ten
-  panels are S3/web/RPC request and error rates, block I/O bytes, the resync queue and two table
-  *queue-length* gauges. It predates `table_size` and never plots it — useful as a starting board,
-  not as the metering this section is waiting for.
+- **Garage metering — BUILT 2026-08-25/26** (homelab#934 → #965, `3d5fa082`): the chart flags
+  flipped (`monitoring.metrics.enabled` + `serviceMonitor.enabled` in
+  `argocd/platform/garage.yaml`), so the already-running exporter's 48 families are scraped, and
+  `argocd/resources/garage-alerts/prometheusrule.yaml` ships the two belts this section asked
+  for — **`GarageDiskFillingUp`** (`garage_local_disk_avail/total < 0.2`, the usage half) and
+  **`GarageTableEmpty`** (`table_size == 0` — the direct detector for the
+  [2026-08-24 wipe class](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)), plus
+  `GarageAdminMetricsAbsent` as the scrape-coverage belt, promtool-fixtured. ⚠ Shared-fate
+  caveat stands: on the day, Prometheus was dark while the wipe happened — the belt is for the
+  NEXT one. Defect tail riding the loop: #977/#978 (+ their #1015/#1016 sprouts).
 - **Longhorn metering — BUILT 2026-08-04** (`02cf8bb`,
   `argocd/resources/longhorn-alerts/prometheusrule.yaml`). Both sums, as specified:
   `LonghornDiskFillingUp`/`LonghornDiskAlmostFull` on physical bytes (85%/93%) and

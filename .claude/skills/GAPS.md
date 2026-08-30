@@ -12,6 +12,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       pulls in the writer-side rules (`docs/README.md` §Conventions, the docs-cleanup Hard
       rules). Fix: closure gains "proposing doc changes ⇒ read §Conventions + Hard rules".
       Sighted 2026-08-11.
+- [ ] design-G2 — "multiple passes gave different answers to the same question" wasn't
+      recognized as a design-shaped trigger; the first pass ran as grep-triage and missed
+      tracker-held facts (FU-157's user-token nature; the live legacy token outside the
+      matrix). Fix: add the inconsistent-answers cue to the skill's trigger list.
+      Sighted 2026-08-11.
 
 ## meta-coordinate
 
@@ -45,8 +50,3 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       this extends it: a lifecycle label is never reported as activity without the pod/PR join
       (the seat-side twin of IL-T16's phantom-label lesson). Sighted 2026-08-24 (operator
       catch). Tooling half → the #628 observability-plane discussion.
-- [ ] design-G2 — "multiple passes gave different answers to the same question" wasn't
-      recognized as a design-shaped trigger; the first pass ran as grep-triage and missed
-      tracker-held facts (FU-157's user-token nature; the live legacy token outside the
-      matrix). Fix: add the inconsistent-answers cue to the skill's trigger list.
-      Sighted 2026-08-11.
