@@ -265,6 +265,66 @@ DIFF
 _go "$TMP/diff_authorization_check.txt"
 want "1l: def authorization_check → ASVS attached" "asvs"
 
+# 1m: Python tokenizer (keyword at name start — PR#980 deliberate over-match)
+# The word-start anchor means `def tokenizer` matches on `token` even though
+# the function is about tokenization, not auth tokens. This is the accepted
+# over-match disclosed in PR#980's body.
+cat > "$TMP/diff_tokenizer_py.txt" <<'DIFF'
+diff --git a/app/nlp.py b/app/nlp.py
+index 123..456 100644
+--- a/app/nlp.py
++++ b/app/nlp.py
+@@ -1,3 +1,5 @@
++def tokenizer(text):
++    return text.split()
+DIFF
+_go "$TMP/diff_tokenizer_py.txt"
+want "1m: def tokenizer → ASVS attached (PR#980 deliberate over-match)" "asvs"
+
+# 1n: Python sessionize (keyword at name start — PR#980 deliberate over-match)
+# Same word-start anchor behaviour: `def sessionize` matches on `session`.
+cat > "$TMP/diff_sessionize_py.txt" <<'DIFF'
+diff --git a/app/nlp.py b/app/nlp.py
+index 123..456 100644
+--- a/app/nlp.py
++++ b/app/nlp.py
+@@ -1,3 +1,5 @@
++def sessionize(data):
++    return data.strip()
+DIFF
+_go "$TMP/diff_sessionize_py.txt"
+want "1n: def sessionize → ASVS attached (PR#980 deliberate over-match)" "asvs"
+
+# 1o: Go Tokenizer (keyword at name start — PR#980 deliberate over-match)
+# Go equivalent: `func Tokenizer` matches on `Token` via the [^A-Z] anchor.
+cat > "$TMP/diff_tokenizer_go.txt" <<'DIFF'
+diff --git a/pkg/nlp/tokenizer.go b/pkg/nlp/tokenizer.go
+index 123..456 100644
+--- a/pkg/nlp/tokenizer.go
++++ b/pkg/nlp/tokenizer.go
+@@ -1,3 +1,5 @@
++func Tokenizer(text string) []string {
++    return strings.Fields(text)
++}
+DIFF
+_go "$TMP/diff_tokenizer_go.txt"
+want "1o: func Tokenizer → ASVS attached (PR#980 deliberate over-match)" "asvs"
+
+# 1p: Go Sessionize (keyword at name start — PR#980 deliberate over-match)
+# Go equivalent: `func Sessionize` matches on `Session` via the [^A-Z] anchor.
+cat > "$TMP/diff_sessionize_go.txt" <<'DIFF'
+diff --git a/pkg/nlp/sessionize.go b/pkg/nlp/sessionize.go
+index 123..456 100644
+--- a/pkg/nlp/sessionize.go
++++ b/pkg/nlp/sessionize.go
+@@ -1,3 +1,5 @@
++func Sessionize(data string) string {
++    return strings.TrimSpace(data)
++}
+DIFF
+_go "$TMP/diff_sessionize_go.txt"
+want "1p: func Sessionize → ASVS attached (PR#980 deliberate over-match)" "asvs"
+
 # ── 2 ── non-matching diffs ─────────────────────────────────────────────────────────────────────
 section "2 — non-matching diffs (no auth/input/session signals)"
 
