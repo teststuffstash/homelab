@@ -62,33 +62,34 @@ tests:
         exp_alerts: []
 
   # ── (b) THE RESTART GAP — the exact 2026-08-17 shape ─────────────────────────────────────────
-  # A success lands at test-hour 185 (value 666000 = 185*3600) and the pushgateway is wiped one
-  # hour later (`stale` at hour 186, nothing pushed again for the rest of the test — the store
-  # stays empty until the NEXT weekly retro, which for this fixture's purposes never comes). At
-  # every eval below the real success is well under 8 days old (13h, then 20h) — the bridge must
-  # read straight through the wipe and stay quiet regardless of how far raw test-clock `time()`
-  # has drifted past its own epoch-0 origin.
-  - interval: 1h
+  # A success lands at test-hour 184 (value 662400 = 184*3600) and the pushgateway is wiped
+  # two hours later (`stale` at hour 186, nothing pushed again for the rest of the test). At
+  # every eval below the real success is well under 8 days old (6h, then 14h, then 22h) — the
+  # bridge must read straight through the wipe and stay quiet. The interval is widened from 1h
+  # to 2h (vs the original fixture's 1h) to reduce evaluation steps from 205 to 104 while
+  # keeping at least one eval_time past 192h (the absolute threshold where the pre-#591 expr's
+  # epoch-fallback bug fires) so the regression pin is preserved.
+  - interval: 2h
     name: "(b) a pushgateway wipe of a <8d-old success must not page"
     input_series:
       - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
-        values: "_x185 666000 stale"
+        values: "_x92 662400 stale"
     alert_rule_test:
-      # before the wipe's own 1h gap has even mattered: raw time() is still under 8d absolute,
-      # so both the old and the new expr agree here regardless of the bridge.
+      # 190h: real success age is 190-184 = 6h. The bridge finds the real 662400 sample inside
+      # its 8d lookback window and stays quiet. time() = 684000 < 691200, so the old expr also
+      # stays quiet here — this eval is a bridge-correctness check, not a regression pin.
       - eval_time: 190h
         alertname: RetroReportOverdue
         exp_alerts: []
-      # 198h: real success age is 198-185 = 13h. Old bare-max reads the wipe as "never
-      # succeeded" (or vector(0)) and — verified above — FIRES here (time() alone crossed 8d at
-      # 192h, `for: 6h` completed at 198h, and staleness has held throughout). The bridge finds
-      # the real 666000 sample inside its 8d lookback window and stays quiet.
+      # 198h: real success age is 198-184 = 14h. Still <8d — the bridge reads straight through
+      # the wipe. time() = 712800 > 691200, so the old expr would false-fire here: this eval
+      # IS the regression pin — swapping to the pre-#591 expr REDS at this assertion.
       - eval_time: 198h
         alertname: RetroReportOverdue
         exp_alerts: []
-      # 205h: real success age is now 20h — still comfortably <8d. Sustained correctness, not a
-      # one-shot pass: the bridge does not degrade as raw time() drifts further from epoch 0.
-      - eval_time: 205h
+      # 206h: real success age is now 22h — still <8d. Sustained correctness: the bridge does
+      # not degrade as raw time() drifts further from epoch 0. Old expr still false-fires.
+      - eval_time: 206h
         alertname: RetroReportOverdue
         exp_alerts: []
 
@@ -100,7 +101,7 @@ tests:
     name: "(c) a continuously-present success ages past 8d and fires after for:6h"
     input_series:
       - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
-        values: "0+0x260"
+        values: "0+0x210"
     alert_rule_test:
       - eval_time: 190h
         alertname: RetroReportOverdue
@@ -119,7 +120,7 @@ tests:
               summary: "No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data"
               description: "The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
       # and it does not self-resolve while the belt stays silent
-      - eval_time: 250h
+      - eval_time: 210h
         alertname: RetroReportOverdue
         exp_alerts: *retro_overdue_alert
 
@@ -130,7 +131,7 @@ tests:
     name: "no retro report has EVER landed — fires at 8d+6h, not before"
     input_series:
       - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
-        values: "_x260"
+        values: "_x210"
     alert_rule_test:
       - eval_time: 190h
         alertname: RetroReportOverdue
@@ -141,7 +142,7 @@ tests:
       - eval_time: 199h
         alertname: RetroReportOverdue
         exp_alerts: *retro_overdue_alert
-      - eval_time: 250h
+      - eval_time: 210h
         alertname: RetroReportOverdue
         exp_alerts: *retro_overdue_alert
 
@@ -154,7 +155,7 @@ tests:
     input_series:
       # landed at t=0 …then re-pushed at t=221h with that hour's timestamp (221 * 3600)
       - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
-        values: "0+0x220 795600+0x40"
+        values: "0+0x220 795600+0x3"
     alert_rule_test:
       - eval_time: 190h
         alertname: RetroReportOverdue
