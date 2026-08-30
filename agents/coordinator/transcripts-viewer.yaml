@@ -89,7 +89,11 @@ spec:
                 # 512Mi → 2Gi) only bought time until the next OOM. Bounding the working set here
                 # prevents episode four without a fourth re-bump. The S3 bucket (durable record) is
                 # untouched; only the local emptyDir mirror + derived /data are pruned.
-                find /mirror -maxdepth 1 -mindepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+                # Depth: bucket keys are <project>/<task>/<run-dir>/ (3 levels), so prune at
+                # -mindepth 3 to reach the run-dir level where mtime tracks actual age, not the
+                # project dir which is refreshed by unrelated sibling activity.
+                find /mirror -mindepth 3 -maxdepth 3 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+                find /mirror -mindepth 1 -maxdepth 2 -type d -empty -delete 2>/dev/null || true
                 find /data/claude/projects -maxdepth 1 -mindepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
                 sleep 300
               done
