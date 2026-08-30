@@ -367,6 +367,7 @@ spec:
               permissions:           # the reviewer set (mirror agents/coordinator/reviewer-git.yaml)
                 contents: write
                 pull_requests: write
+                issues: read    # resolve the issue a PR claims to fix + the depth-rule parent walk — the mint omitted it while the App grant existed, homelab#1038 (4 false scope-authorization blocks on sleep-tracking#137)
                 checks: read
                 statuses: read
                 actions: read   # the reviewer never reruns workflows — the FU-148 write is COORDINATOR-only (the 2026-08-09 flip here was wrong; github-apps-lint caught it on PR#199)

@@ -122,9 +122,9 @@ six OVERSIZE items pointer-ized into
       registry** — a cache can't express policy retention ("2 latest prod releases + latest
       built"; homelab#116's GC ate digest-pinned images for exactly this reason); push-mode
       `registry:3` (Garage s3 driver candidate), release pipeline pushes, oracle-iac pins it;
-      needs its ADR (backend, auth, retention, ghcr's remaining role). **Next:** v0 shipped as
-      PR#1034 — post-merge the operator mints (Tier-0): `bash scripts/ghcr-mirror-pat-bootstrap.sh
-      create` → `secrets` → bounce `mirror-ghcr` → `verify`. Then v1 needs its ADR.
+      needs its ADR (backend, auth, retention, ghcr's remaining role). **v0 LIVE 2026-08-30**
+      (PR#1034 + operator mint): mirror serves the private corpus anonymously on the LAN, 720h TTL,
+      Talos containerd pulls observed through it. **Next:** the v1 ADR.
 
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
