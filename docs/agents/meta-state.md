@@ -8,6 +8,22 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ DESIGN QUESTION (operator, 2026-08-30): stack→platform communication — how a stack routes
+  a problem/request TO the platform instead of into the undifferentiated human bucket.**
+  `agent/blocked` ("needs a human") is correct on the platform repo — one context — but on a
+  stack it conflates two destinations: platform/infra (homelab jail's problem) vs business
+  logic (the stack jail's). Root pattern the operator named: too much platform development has
+  run with the PLATFORM as client/driver, not the stacks. Motivating cases: sleep-tracking
+  PR#133/#123 (arbitrate's own terminal ruling says "infra, not logic" — a platform env var,
+  `REGISTRY_MIRROR_MCR`, leaked into stack CI — yet lands as plain `agent/blocked` with nowhere
+  to route); the two oracle-fleet `uploads/PROPOSAL-*.md` (gitignored — minutark cross-stack
+  launch, which itself sketches a §3 "capability-request lane"; goal consumer card, hand-routed
+  "via the mono seat — this jail has no homelab write path"). The `tools/handoff.md` channel is
+  human-at-keyboard + host-file-only — machine lane can't reach it. Candidate shapes: stacks
+  labelling their own issues by escalation destination (e.g. split `agent/blocked` platform/stack
+  at arbitrate time), and/or a lane for stacks to file issues/proposals/requests on the platform
+  repo. Deliberately NOT an FU (operator direction) — pick up in a design-agents session.
+
 - **⚑ ADR-118 Loki tenancy — STEPS 1+2 SHIPPED, STEP 3 IS THE NEXT SESSION'S** (2026-08-27;
   design [`loki-tenancy.md`](../loki-tenancy.md), rollout table there is authoritative).
   Merged: #1008 (proxy + grants + write half), #1009 (the `stage.tenant` correction).
