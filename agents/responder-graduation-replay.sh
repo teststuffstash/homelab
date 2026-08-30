@@ -253,26 +253,69 @@ section "5 — escalation-check mirror in rbac.yaml"
 RBAC="$ROOT/argocd/resources/agentstack/rbac.yaml"
 [ -f "$RBAC" ] || { bad "E1: rbac.yaml not found" "$RBAC"; } && ok "E1: rbac.yaml exists"
 
+# Extract the responder graduation dial mirror block — from the comment header to the next
+# `---` separator. This scopes every assertion to the mirror block alone, so a match
+# outside it (e.g. serviceaccounts at L71 in the compose grant) does not false-pass.
+MIRROR="$(awk '/^  # Responder graduation dial/{p=1} p; /^---/{if(p) exit}' "$RBAC")"
+
 # Check that the responder escalation-check mirror section exists
-if grep -q "Responder graduation dial" "$RBAC" 2>/dev/null; then
+if echo "$MIRROR" | grep -q "Responder graduation dial" 2>/dev/null; then
   ok "E2: responder graduation dial section exists in rbac.yaml"
 else
   bad "E2: responder graduation dial section NOT found in rbac.yaml" "Expected comment 'Responder graduation dial'"
 fi
 
-# Check that common remediation verbs are pre-granted
-for verb_resource in "pods:get,list,watch,patch,delete" "configmaps:get,list,watch,patch,delete" "deployments:get,list,watch,patch,delete" "serviceaccounts:get,list,watch"; do
+# Check that common remediation verbs are pre-granted — scoped to the mirror block only,
+# and asserting BOTH the resource AND the verbs (not just the resource name).
+# The mirror block pre-grants these verb/resource pairs (rbac.yaml L107-113):
+#   pods, pods/log, pods/status  →  get, list, watch, patch, delete
+#   configmaps, endpoints, events, persistentvolumeclaims, persistentvolumeclaims/status, services  →  get, list, watch, patch, delete
+#   serviceaccounts  →  get, list, watch
+# Resources and verbs are on SEPARATE YAML lines, so we check each pair by extracting
+# the rule block that contains the resource and verifying its verbs line.
+for verb_resource in "pods:get,list,watch,patch,delete" "configmaps:get,list,watch,patch,delete" "serviceaccounts:get,list,watch"; do
   resource="${verb_resource%%:*}"
   verbs="${verb_resource#*:}"
-  if grep -q "$resource" "$RBAC" 2>/dev/null; then
-    ok "E3: $resource verbs pre-granted in escalation mirror"
-  else
+  # Find the rule block containing this resource — a `- apiGroups:` line followed by
+  # `resources:` containing the resource name, then `verbs:` with the expected verbs.
+  # Use awk to extract the verbs line following the resources line that has this resource.
+  found_verbs="$(echo "$MIRROR" | awk -v r="$resource" '
+    /- apiGroups:/ { in_rule=1; rule="" }
+    in_rule { rule = rule $0 ORS }
+    /resources:/ && $0 ~ r { has_resource=1 }
+    /verbs:/ && has_resource { print $0; has_resource=0; in_rule=0 }
+  ')"
+  if [ -z "$found_verbs" ]; then
     bad "E3: $resource NOT found in escalation mirror" "The responder dial may fail at compose time"
+    continue
+  fi
+  # Check each expected verb appears in the verbs line
+  missing=""
+  for v in ${verbs//,/ }; do
+    if echo "$found_verbs" | grep -q "\[.*$v" 2>/dev/null; then
+      :  # verb found
+    else
+      missing="$missing $v"
+    fi
+  done
+  if [ -n "$missing" ]; then
+    bad "E3: $resource — missing verb(s):$missing in escalation mirror" "The responder dial may fail at compose time"
+  else
+    ok "E3: $resource verbs ($verbs) pre-granted in escalation mirror"
   fi
 done
 
+# Assert that secrets is deliberately NOT pre-granted in the mirror block.
+# The grep is scoped to the mirror block, so a mention of "secrets" in the prose comment
+# (L93-99) does not false-pass — we check for an actual resources: [secrets] rule entry.
+if echo "$MIRROR" | grep -q "resources: \[.*secrets" 2>/dev/null; then
+  bad "E3a: secrets IS pre-granted in escalation mirror — should be absent" "The secrets carve-out (rbac.yaml L93-99) is violated"
+else
+  ok "E3a: secrets deliberately NOT pre-granted in escalation mirror (carve-out holds)"
+fi
+
 # Check that the responder section includes the escalation-check warning
-if grep -q "attempting to grant RBAC permissions not currently held" "$RBAC" 2>/dev/null; then
+if echo "$MIRROR" | grep -q "attempting to grant RBAC permissions not currently held" 2>/dev/null; then
   ok "E4: escalation-check warning present in rbac.yaml"
 else
   bad "E4: escalation-check warning NOT found" "The escalation check comment is missing"
