@@ -283,6 +283,11 @@ MAX_TOKENS_FLOOR = int(os.environ.get("MAX_TOKENS_FLOOR", "16384"))
 # get-secret RBAC from becoming a generic secret oracle. Short cache = revocation latency.
 SESSION_KEY_LABEL = "openrouter.teststuff.net/session-key"
 REF_CACHE_TTL_S = int(os.environ.get("REF_CACHE_TTL_S", "60"))
+# FU-069 addendum 4 / homelab#1004: a failed resolve must not poison the cache for the full
+# REF_CACHE_TTL_S — a single transient k8s API blip would serve the stale failure for 60 s and
+# burn every request in that window into the auth circuit-breaker. Negative entries evaporate
+# after this short window, so the next request retries the k8s call naturally.
+NEGATIVE_CACHE_TTL_S = int(os.environ.get("NEGATIVE_CACHE_TTL_S", "5"))
 # FU-134: the /search capability. A cheap, widely-available model is enough — the SEARCH does the
 # work, the model only summarizes and cites. Overridable per request; keep the default reachable on
 # every rail so no stack has to know about it.
@@ -380,7 +385,10 @@ def _resolve_ref(ref: str) -> dict | None:
     except Exception as e:  # noqa: BLE001 — a failed resolve degrades to passthrough (upstream 401s the ref)
         log(f"ref: resolve failed for {ref}: {e}")
     with _refs_lock:
-        _refs[ref] = (now + REF_CACHE_TTL_S, resolved)
+        # homelab#1004: negative entries (resolved is None) get a short TTL so a transient k8s
+        # API blip doesn't poison the cache for the full window — the next request retries naturally.
+        ttl = REF_CACHE_TTL_S if resolved is not None else NEGATIVE_CACHE_TTL_S
+        _refs[ref] = (now + ttl, resolved)
     return resolved
 
 
@@ -451,7 +459,10 @@ def _resolve_loop_git(secret_name: str, for_ns: str) -> str | None:
     except Exception as e:  # noqa: BLE001
         log(f"loop-git: resolve failed for {secret_name}: {e}")
     with _refs_lock:
-        _refs[ref] = (now + REF_CACHE_TTL_S, token_value)
+        # homelab#1004: negative entries (token_value is None) get a short TTL so a transient k8s
+        # API blip doesn't poison the cache for the full window — the next request retries naturally.
+        ttl = REF_CACHE_TTL_S if token_value is not None else NEGATIVE_CACHE_TTL_S
+        _refs[ref] = (now + ttl, token_value)
     return token_value
 
 
@@ -486,12 +497,22 @@ def _resolve_git_token(ns: str) -> str | None:
     except Exception as e:  # noqa: BLE001
         log(f"git-token: resolve failed for {ns}: {e}")
     with _refs_lock:
-        _refs[ref] = (now + REF_CACHE_TTL_S, token_value)
+        # homelab#1004: negative entries (token_value is None) get a short TTL so a transient k8s
+        # API blip doesn't poison the cache for the full window — the next request retries naturally.
+        ttl = REF_CACHE_TTL_S if token_value is not None else NEGATIVE_CACHE_TTL_S
+        _refs[ref] = (now + ttl, token_value)
     return token_value
 
 
 def _inject_ref_auth(headers: dict) -> str:
-    """Rewrite `Authorization: Bearer ref:<ns>/<name>` to the real key. Returns a note suffix."""
+    """Rewrite `Authorization: Bearer ref:<ns>/<name>` to the real key. Returns a note suffix.
+
+    Returns "+cred" on success. Returns "+cred-unresolved" on failure — the caller MUST
+    refuse the request locally (502) rather than forwarding credential-less, because a single
+    upstream 401 latches the auth circuit-breaker for the rest of the ride (ADR-096 addendum 3,
+    homelab#1004). On failure the Authorization header is removed from the dict so it is never
+    forwarded.
+    """
     auth = next((k for k in headers if k.lower() == "authorization"), None)
     if not auth or not headers[auth].startswith("Bearer ref:"):
         return ""
@@ -500,7 +521,10 @@ def _inject_ref_auth(headers: dict) -> str:
     if resolved:
         headers[auth] = "Bearer " + resolved["key"]
         return "+cred"
-    return "+cred-unresolved"  # forwarded as-is; upstream will 401 loudly (never fail silently)
+    # homelab#1004: fail CLOSED — remove the header so it is never forwarded credential-less.
+    # A typed local refusal (502) is louder than a laundered upstream 401 that latches the breaker.
+    del headers[auth]
+    return "+cred-unresolved"
 
 
 def _guardrail_reject(self_ref: str, model: str) -> bytes | None:
@@ -2093,7 +2117,17 @@ class Proxy(BaseHTTPRequestHandler):
                 auth_v = next((v for k, v in self.headers.items() if k.lower() == "authorization"), None)
                 if auth_v:
                     allowed["Authorization"] = auth_v
-                note += _inject_ref_auth(allowed)  # This mutates allowed["Authorization"]
+                _inject_suffix = _inject_ref_auth(allowed)
+                # homelab#1004: fail CLOSED — a ref that cannot be resolved must never be
+                # forwarded credential-less (a single upstream 401 latches the circuit-breaker).
+                if "+cred-unresolved" in _inject_suffix:
+                    log(f"{self.command} {self.path} → 502 [or-leg] model={or_model or '-'} - "
+                        f"credential ref could not be resolved — refusing locally (homelab#1004)")
+                    self._reply_json(502, {
+                        "error": "or-leg credential ref could not be resolved — refusing locally"
+                    })
+                    return
+                note += _inject_suffix
                 # Check if the resolved auth is a subscription oauth token — refuse it loudly
                 auth_k = next((k for k in allowed if k.lower() == "authorization"), None)
                 if auth_k and allowed[auth_k].startswith("Bearer sk-ant-oat"):
@@ -2108,7 +2142,17 @@ class Proxy(BaseHTTPRequestHandler):
             # Strip anthropic-beta headers (Anthropic-specific, not needed for Go/Zen/OpenRouter)
             headers = {k: v for k, v in headers.items() if k.lower() != "anthropic-beta"}
         else:
-            note += _inject_ref_auth(headers)  # ADR-087: opaque-ref -> real key, every method/path
+            _inject_suffix = _inject_ref_auth(headers)
+            # homelab#1004: fail CLOSED — a ref that cannot be resolved must never be forwarded
+            # credential-less (a single upstream 401 latches the circuit-breaker).
+            if "+cred-unresolved" in _inject_suffix:
+                log(f"{self.command} {self.path} → 502 [ref-unresolved] - "
+                    f"credential ref could not be resolved — refusing locally (homelab#1004)")
+                self._reply_json(502, {
+                    "error": "credential ref could not be resolved — refusing locally"
+                })
+                return
+            note += _inject_suffix
         # ADR-107 / homelab#445: oauth-beta reinjection is Anthropic-specific — never run for
         # opencode rails or the or_leg. The allowlist already strips anthropic-beta, but explicit.
         if anthropic and not go_leg and not zen_leg and not or_leg:
