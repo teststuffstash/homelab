@@ -37,15 +37,19 @@ spec:
         # incident where the LMDB came back with empty tables) makes table_size drop to zero for
         # every table. This alert fires when ANY table that HELD DATA IN THE LAST 7 DAYS reports
         # zero size. The `max_over_time` clause is what keeps it off the by-design-empty tables
-        # (admin_token, k2v_index_counter_v2, k2v_item, multipart_upload, bucket_mpu_counter),
-        # which is why the plain `table_size == 0` form was replaced (#977, #1013).
+        # (admin_token, k2v_index_counter_v2, k2v_item), which is why the plain `table_size == 0`
+        # form was replaced (#977, #1013).
         # ⚠ BOUND: that clause is a ROLLING WINDOW, not "was ever populated". A wipe still
         # unrecovered 7 days after the drop stops alerting — every sample in the window is 0 by
         # then. 7d is chosen to sit far outside any plausible detection window; the latch that
         # would remove the bound entirely is #1015. The `for:` window avoids flapping on restarts.
+        # ⚠ DENY-LIST: multipart_upload and bucket_mpu_counter are transient by design — an
+        # in-flight multipart upload makes them non-zero, and completing it returns them to zero.
+        # A deny-list fails safe (every new table is watched by default) whereas an allow-list
+        # would fail open (a future table is unwatched forever). Same rot, opposite blast radius.
         - alert: GarageTableEmpty
           expr: |
-            table_size == 0 and max_over_time(table_size[7d]) > 0
+            table_size == 0 and max_over_time(table_size[7d]) > 0 and table_name !~ "multipart_upload|bucket_mpu_counter"
           for: 5m
           labels: { severity: warning }
           annotations:

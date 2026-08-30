@@ -6,9 +6,9 @@
 # ⚠ THE RECIPE ABOVE DOES NOT ROUND-TRIP COMMENTS — it will delete this header. Re-add this block
 # BY HAND after every regenerate (PR #1014 lost it exactly this way).
 #
-# ⚠ NOT DRIFT-PINNED (the general harness that would extract `.spec.groups` at run time lives in
-# `scripts/**` + `.github/**`, outside the fixer lane's tier — homelab#337). A stale hand copy
-# tests the OLD expr and passes VACUOUSLY. Re-copy after every expr edit.
+# ⚠ DRIFT-PINNED since #375 — scripts/prometheus-rules-lint.sh asserts expr+for equality for
+# every alert name shared with the PrometheusRule. A stale hand copy fails the required `ci`
+# check. Re-copy after every expr edit.
 groups:
   - name: garage-admin-metrics
     rules:
@@ -23,7 +23,7 @@ groups:
           description: Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way.
       - alert: GarageTableEmpty
         expr: |
-          table_size == 0 and max_over_time(table_size[7d]) > 0
+          table_size == 0 and max_over_time(table_size[7d]) > 0 and table_name !~ "multipart_upload|bucket_mpu_counter"
         for: 5m
         labels:
           severity: warning
