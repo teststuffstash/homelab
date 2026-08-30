@@ -249,6 +249,48 @@ check(cr42[0] == "md", "_budget_from_cr('proj', '42') returns tier md (highest r
 check(cr42[1] == 1.0, "_budget_from_cr('proj', '42') returns cap 1.0 (md tier)")
 check(cr42[2] == 0.50, "_budget_from_cr('proj', '42') returns estimate 0.50 (from round 3)")
 
+# ── 8. _budget_from_cr() malformed label handling (homelab#988) ──────────────────────────
+# A malformed budget-estimate-usd label (e.g. "abc") must not crash the function — the
+# per-item processing is wrapped in try/except so the malformed CR is skipped loudly and
+# other CRs are still considered.
+def fake_sh_malformed(args, env=None):
+    if args[0] == "kubectl" and args[1] == "get" and args[2] == "openrouterkeys":
+        return json.dumps({
+            "items": [
+                {"metadata": {"name": "proj-issue-99-round-1",
+                              "labels": {"budget-tier": "xs", "budget-estimate-usd": "abc"}}},
+                {"metadata": {"name": "proj-issue-99-round-2",
+                              "labels": {"budget-tier": "sm", "budget-estimate-usd": "0.25"}}},
+            ]
+        })
+    raise AssertionError("fake_sh_malformed unexpected: %r" % (args,))
+
+ledger.sh = fake_sh_malformed
+
+cr99 = ledger._budget_from_cr("proj", "99")
+check(cr99 is not None, "_budget_from_cr('proj', '99') found a CR despite malformed label on round 1")
+check(cr99[0] == "sm", "_budget_from_cr('proj', '99') returns tier sm (from valid round 2, not crashed by round 1)")
+check(cr99[1] == 0.5, "_budget_from_cr('proj', '99') returns cap 0.5 (sm tier)")
+check(cr99[2] == 0.25, "_budget_from_cr('proj', '99') returns estimate 0.25 (from valid round 2)")
+
+# All CRs malformed — must return None, not crash
+def fake_sh_all_malformed(args, env=None):
+    if args[0] == "kubectl" and args[1] == "get" and args[2] == "openrouterkeys":
+        return json.dumps({
+            "items": [
+                {"metadata": {"name": "proj-issue-100-round-1",
+                              "labels": {"budget-tier": "xs", "budget-estimate-usd": "abc"}}},
+                {"metadata": {"name": "proj-issue-100-round-2",
+                              "labels": {"budget-tier": "sm", "budget-estimate-usd": "xyz"}}},
+            ]
+        })
+    raise AssertionError("fake_sh_all_malformed unexpected: %r" % (args,))
+
+ledger.sh = fake_sh_all_malformed
+
+cr100 = ledger._budget_from_cr("proj", "100")
+check(cr100 is None, "_budget_from_cr('proj', '100') returns None when all CRs have malformed labels (no crash)")
+
 ledger.sh = _saved_sh  # restore
 PYEOF
 
