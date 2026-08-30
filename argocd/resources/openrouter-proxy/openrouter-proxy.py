@@ -2009,7 +2009,7 @@ class Proxy(BaseHTTPRequestHandler):
     def _forward(self, body: bytes | None, note: str,
                  or_model: str | None = None, or_provider: str | None = None,
                  cb_session: str | None = None, go_leg: bool = False, zen_leg: bool = False,
-                 or_leg: bool = False) -> None:
+                 or_leg: bool = False, role: str = "worker") -> None:
         # homelab#22: every forwarded request is registered in-flight for its full lifetime —
         # try/finally so a handler exception can never leak a phantom entry into the gauge.
         key = threading.get_ident()
@@ -2019,7 +2019,7 @@ class Proxy(BaseHTTPRequestHandler):
         try:
             self._forward_upstream(body, note, or_model=or_model, or_provider=or_provider,
                                    cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg,
-                                   or_leg=or_leg)
+                                   or_leg=or_leg, role=role)
         finally:
             with _inflight_lock:
                 _inflight.pop(key, None)
@@ -2027,7 +2027,8 @@ class Proxy(BaseHTTPRequestHandler):
     def _forward_upstream(self, body: bytes | None, note: str,
                           or_model: str | None = None, or_provider: str | None = None,
                           cb_session: str | None = None, go_leg: bool = False,
-                          zen_leg: bool = False, or_leg: bool = False) -> None:
+                          zen_leg: bool = False, or_leg: bool = False,
+                          role: str = "worker") -> None:
         started = time.time()
         anthropic = self.path.startswith("/anthropic/")
         # ADR-107 (homelab#421): Go leg routing is by MODEL, not path — check it FIRST.
@@ -2209,9 +2210,9 @@ class Proxy(BaseHTTPRequestHandler):
             elif 200 <= status < 300:
                 note += _or_capacity_clear("2xx on the openrouter leg")
             # addendum 4: and the model cooldown state (temporary blacklist + auto-recovery)
-            cd = router.cooldown_note(or_model, status)
+            cd = router.cooldown_note(or_model, status, role=role)
             if cd:
-                hold = router.active_cooldowns().get(or_model) or {}
+                hold = router.active_cooldowns(role=role).get(or_model) or {}
                 log(f"cooldown {cd}: model={or_model} "
                     + (f"reason={hold.get('reason')} streak={hold.get('streak')} "
                        f"hold={hold.get('remaining_s')}s" if cd == "tripped"
@@ -3277,7 +3278,8 @@ class Proxy(BaseHTTPRequestHandler):
             except ValueError:
                 pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
-                      cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg, or_leg=or_leg)
+                      cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg, or_leg=or_leg,
+                      role="worker")
 
 
 def main() -> int:
