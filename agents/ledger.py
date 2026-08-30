@@ -157,6 +157,7 @@ def _budget_from_cr(project: str, issue: str) -> tuple[str, float, float] | None
               % (project, e), file=sys.stderr)
         return None
     prefix = "%s-issue-%s-round-" % (project, issue)
+    best = None  # (round_num, tier, cap, estimate_usd)
     for item in data.get("items", []):
         name = item.get("metadata", {}).get("name", "")
         if not name.startswith(prefix):
@@ -167,7 +168,15 @@ def _budget_from_cr(project: str, issue: str) -> tuple[str, float, float] | None
         if tier and estimate_usd is not None:
             cap = TIERS.get(tier)
             if cap is not None:
-                return tier, cap, float(estimate_usd)
+                suffix = name[len(prefix):]
+                try:
+                    rnd = int(suffix)
+                except (ValueError, TypeError):
+                    rnd = 0
+                if best is None or rnd > best[0]:
+                    best = (rnd, tier, cap, float(estimate_usd))
+    if best is not None:
+        return best[1], best[2], best[3]
     return None
 
 
