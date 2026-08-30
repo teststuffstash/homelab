@@ -578,6 +578,11 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
     # FU-114 L1: capture the egress knobs from the SAME claim read for the environment card (below).
     EGRESS_ENFORCE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.enforce]|map(select(.!=null))|first // empty' 2>/dev/null)"
     EGRESS_PROFILE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.profile]|map(select(.!=null))|first // empty' 2>/dev/null)"
+    # MCP knob from the SAME claim read (stack-wide spec.mcp, #1041). The knob is at the
+    # AgentStack level, not per-repo — find the stack whose repos include this project.
+    # Absent = no MCP attached; the env card and --mcp-config are gated on this being non-empty.
+    MCP_ENDPOINT="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.endpoint] | first // empty' 2>/dev/null)"
+    MCP_TOOLS="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.tools] | first // empty' 2>/dev/null)"
   else
     echo "WARN: agentstacks probe failed — cannot derive --docker or the egress knobs; pass --docker explicitly for docker-gated repos" >&2
   fi
@@ -711,6 +716,17 @@ render_env_card() {
   if [ -n "${GOAL_CARD:-}" ]; then
     printf '%s\n' "- **This issue is one child of a GOAL.** It was split out so a single ride could finish it — deliver YOUR issue, not the goal. But the goal is what your work is finally judged against, so if finishing your slice would leave the goal's acceptance unreachable, say so in the PR body rather than quietly widening scope (a scope change belongs in a new issue for the owning concern — TRACKS rule 2). The parent, Goal + Acceptance only:"
     printf '%s\n' "$GOAL_CARD" | sed 's/^/  > /'
+  fi
+  # WHY: Rung A evidence (oracle-fleet docs/feedback-rung-a.md, PR #295): organic feedback filing
+  # 0/3; with a directed-act line 10/12; instructive voice executes 10/10; harness/model elicitation
+  # from tool-description meta 0/10. The session cannot reliably report its own harness and model —
+  # the launcher knows both, so the launcher stamps them (L1 provable-not-describable rule).
+  # WHY: version skew — production serves the pinned release over the released corpus; a worktree
+  # runs HEAD. Name the pin so a prod/worktree behavioral diff is interpretable rather than mysterious.
+  # Both lines are gated on the MCP knob being present (no MCP = no feedback tool to direct).
+  if [ -n "${MCP_ENDPOINT:-}" ]; then
+    printf '%s\n' "- **Feedback tool: available** (harness: ${HARNESS}, model: ${MODEL}). File structured feedback using the MCP tool — the harness and model above are stamped by the launcher, not self-reported."
+    printf '%s\n' "- **Version skew:** Production serves ${AGENT_BASE_IMAGE##*:} (pinned release); this worktree runs HEAD. If behavior differs from production, the pin is the reference."
   fi
 }
 # <<<REPLAY:render_env_card<<<
@@ -1008,6 +1024,16 @@ if [ -n "${RECIPE:-}" ]; then
   # (homelab#256, docs/agents/retros/2026-08-11-oracle-r3-context.md F1). The proxy's completion
   # floor cannot stand in for it: that rewrites the UPSTREAM request and cannot govern goose's own
   # client-side emit ceiling. The claude arm stays untouched — the var is goose's.
+  # ── MCP config (#1041): build the --mcp-config JSON from the claim knob ──────────────────────
+  # Rendered only when the stack declares spec.mcp.endpoint. The config is base64-carried into the
+  # pod command so the harness can write it to a temp file and pass it as --mcp-config.
+  # For goose: --mcp-config /tmp/mcp-config.json; for claude: injected via the claude.json config.
+  MCP_PRELUDE=""
+  if [ -n "${MCP_ENDPOINT:-}" ]; then
+    MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}')"
+    MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
+    MCP_PRELUDE="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json; "
+  fi
   # >>>REPLAY:harness-run-cmd>>>
   # A claude ride MUST carry --model: without the flag the CLI runs its own DEFAULT — measured
   # 2026-08-13 as claude-opus-5[1m] on this image — not the dispatched model. Every claude/haiku
@@ -1037,7 +1063,7 @@ if [ -n "${RECIPE:-}" ]; then
   case "$_claude_model" in opencode-go/deepseek-v4-flash) _go_ctx="CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 ";; *) _go_ctx="";; esac
   case "$HARNESS" in
     claude) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}claude -p --model ${_claude_model} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
-    goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}";;
+    goose)  RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}${MCP_CONFIG_B64:+ --mcp-config /tmp/mcp-config.json}";;
     opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
   esac
   # <<<REPLAY:harness-run-cmd<<<

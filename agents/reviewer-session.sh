@@ -102,6 +102,18 @@ if ! bash "$HERE/reviewer-optout.sh" "$PROJECT"; then
 fi
 # <<<REPLAY:optout-gate<<<
 
+# ── MCP knob read (#1041) ──────────────────────────────────────────────────────────────────────
+# Follow the reviewer-optout.sh posture exactly: same kubectl read, same fail-closed (unknown =
+# no MCP attached). The MCP endpoint is stack-wide (spec.mcp), not per-repo — find the stack
+# whose repos include this project. Absent = no MCP config rendered.
+MCP_ENDPOINT=""; MCP_TOOLS=""
+CRD="${AGENTSTACK_CRD:-agentstacks.platform.teststuff.net}"
+if claims_json="$("$KUBECTL" $KUBE get "$CRD" -o json 2>/dev/null)"; then
+  MCP_ENDPOINT="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.endpoint] | first // empty' 2>/dev/null)"
+  MCP_TOOLS="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.tools] | first // empty' 2>/dev/null)"
+fi
+# <<<REPLAY:mcp-knob-read>>>
+
 # FU-080 perStack (mirror of coordinator-session.sh): --loop-ns runs the reviewer pod in the stack's
 # loop home as agentstack-loop, fetching the review-bot token (loop-reviewer-git-<stack>) per-run
 # from the broker. The reviewer-git secretKeyRef/volume below stay optional:true — inert in that ns;
@@ -296,6 +308,14 @@ set -e
 ${LOOP_FETCH}gh repo clone ${REPO_SLUG} /work/repo -- --quiet
 cd /work/repo
 gh pr checkout ${PR}
+# MCP config (#1041): write the config file when the stack declares an MCP endpoint.
+# The CLAUDE_CODE_MCP_CONFIG env var is set so claude loads the MCP server at startup.
+if [ -n "${MCP_ENDPOINT:-}" ]; then
+  jq -cn --arg url "${MCP_ENDPOINT}" --argjson tools '${MCP_TOOLS:-[]}' \
+    '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}' > /tmp/mcp-config.json
+  export CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json
+  echo "→ MCP config written: ${MCP_ENDPOINT}"
+fi
 # FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
 # the worker rounds + coordinator ticks for the same issue. Resolve via GitHub's closing-issue
 # reference ("Fixes #N"); fall back to pr-<N> when the PR closes no issue.
