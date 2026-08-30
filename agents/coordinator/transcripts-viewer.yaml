@@ -94,7 +94,14 @@ spec:
                 # project dir which is refreshed by unrelated sibling activity.
                 find /mirror -mindepth 3 -maxdepth 3 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
                 find /mirror -mindepth 1 -maxdepth 2 -type d -empty -delete 2>/dev/null || true
-                find /data/claude/projects -maxdepth 1 -mindepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+                # /data/claude/projects/<project>--<taskkey>/ is flat: sync.py writes one JSONL per
+                # run into a SHARED label dir, and the coordinator's taskkey is hardcoded `_ticks`
+                # (agents/coordinator-session.sh:301,303), so `<project>--_ticks/` gains a file every
+                # tick forever and its directory mtime never goes stale. Prune the FILES by their own
+                # mtime — a directory-level check cannot bound an ever-growing shared directory — then
+                # reap the label dirs that emptied out.
+                find /data/claude/projects -mindepth 2 -maxdepth 2 -type f -name '*.jsonl' -mtime +7 -delete 2>/dev/null || true
+                find /data/claude/projects -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null || true
                 sleep 300
               done
           env:
