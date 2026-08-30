@@ -41,6 +41,19 @@ the gap, so the class needs a GUARD, not another warning. Two mechanical signatu
                        it). Fixed shape: define the function at top level and inject it with
                        `$(declare -f name)`, which is exempt (command-substitution output is not
                        re-expanded).
+  DELIM-FIELD          a variable-headed `grep` pattern probing a `|`-delimited table without an
+                       anchor (retro r1 F2, homelab#930: PR#631 r1, PR#863 r1/r3, PR#858 r3 — 4
+                       CI-green blocking rounds in one window). `grep -m1 "$key|" table` matches
+                       any row whose key merely CONTAINS the value ("deepseek" hits
+                       "deepseek-v4|…"); under `-F` an anchor is impossible (`^` is literal).
+                       Fixed shapes: anchored BRE `grep "^$key|"` (default grep is BRE — `|` stays
+                       literal) or awk field equality (`awk -F'|' -v k="$key" '$1==k'`).
+                       ⚠ The family's OTHER shape — `IFS=$'\t' read` over a table with an
+                       optional-EMPTY field (tab is IFS-whitespace, so runs collapse and fields
+                       shift) — is documented here but NOT mechanized: five live, correct
+                       tab-read sites exist in agents/ (their producers guarantee non-empty
+                       fields), so a static signature would be pure noise. Revisit on the next
+                       incident of that shape.
 
 Both are HEURISTICS on purpose (#197): a false positive costs a review prompt, a false negative is
 instance #5. The discriminator that keeps the current tree green: the OUTER
@@ -54,8 +67,8 @@ Usage:
   prompt-transport-lint.py FILE [FILE...]  # lint exactly these files
   prompt-transport-lint.py --self-test     # fixtures only
 
-NOT WIRED INTO CI YET — `.github/workflows/ci.yaml` + the `devbox.json` alias are the operator lane
-and follow the merge (the #133/#173/#184 boundary). Until then: `python3 scripts/prompt-transport-lint.py`.
+Wired into CI (`devbox run prompt-transport-lint`, .github/workflows/ci.yaml) — the header's old
+"not wired yet" note is history; run it locally the same way.
 """
 import re
 import subprocess
@@ -105,6 +118,13 @@ DOLLAR_ANY_RE = re.compile(r"(?<!\\)\$")
 # A block that never closes its quote would swallow the rest of the file and turn one typo into a
 # whole-file false positive. Cap it: past this many lines the scanner gives up on that assignment.
 MAX_BLOCK_LINES = 80
+# DELIM-FIELD: everything after a grep call on the line (a quoted pattern may itself contain `|`,
+# so the span deliberately does NOT stop at shell pipe chars — the quoted-string extraction below
+# is what scopes it), and a double-quoted string inside that span. VAR-headed = the pattern begins
+# with an interpolation.
+GREP_CALL_RE = re.compile(r"\bgrep\b(.*)$")
+DQ_STRING_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
+VAR_HEAD_RE = re.compile(r"^\$\{?[A-Za-z_]")
 
 
 def scan_quotes(text, in_single, in_double):
@@ -380,6 +400,53 @@ def check_sq_prose(heredocs):
     return out
 
 
+def check_delim_field(lines):
+    """DELIM-FIELD: a variable-headed grep pattern probing a `|`-delimited table, unanchored.
+
+    Line-local by design (the call shape is one line wherever it appears — plain code, an
+    assignment block, or a heredoc-shipped script body), so this scans raw lines and skips only
+    comment lines. Two firing shapes, one message each:
+
+      * regex grep, pattern starts with `$var` and contains `|`, no `^` anchor — a value that is
+        a PREFIX of another value matches the wrong row (PR#631's class);
+      * `-F` grep whose pattern interpolates a variable and contains `|` — `-F` makes `^` literal,
+        so the call CANNOT be anchored; the fix is anchored BRE or awk field equality.
+
+    The tab-`read` half of the retro F2 family is documented in the header and deliberately not
+    mechanized (five live correct sites; see the signature table).
+    """
+    out = []
+    for no, text in enumerate(lines, 1):
+        if text.lstrip().startswith("#") or "grep" not in text:
+            continue
+        m = GREP_CALL_RE.search(text)
+        if not m:
+            continue
+        span = m.group(1)
+        for sm in DQ_STRING_RE.finditer(span):
+            pat = sm.group(1)
+            if "|" not in pat or "$" not in pat:
+                continue
+            fixed = bool(re.search(r"(?:^|\s)-[a-zA-Z]*F[a-zA-Z]*\b", span[: sm.start()]))
+            if fixed and (VAR_HEAD_RE.match(pat) or pat.startswith("^$")):
+                out.append((no, "DELIM-FIELD", (
+                    "`grep -F` with an interpolated `|`-delimited table pattern — under -F a `^` "
+                    "is LITERAL, so this probe cannot be anchored and a value that is a prefix of "
+                    "another value matches the wrong row (retro r1 F2, homelab#930). Use anchored "
+                    "BRE (`grep \"^$key|\"` — default grep is BRE, `|` stays literal) or awk field "
+                    "equality (`awk -F'|' -v k=\"$key\" '$1==k'`)."
+                ), text.strip()))
+            elif not fixed and VAR_HEAD_RE.match(pat):
+                out.append((no, "DELIM-FIELD", (
+                    "variable-headed pattern against a `|`-delimited table without a `^` anchor — "
+                    "a key that is a PREFIX of another key matches the wrong row (retro r1 F2, "
+                    "homelab#930: PR#631/#863/#858 all shipped this CI-green). Anchor it "
+                    "(`grep \"^$key|\"`) or use awk field equality (`awk -F'|' -v k=\"$key\" "
+                    "'$1==k'`)."
+                ), text.strip()))
+    return out
+
+
 def check_jq_quoting(blocks, plain):
     """JQ-QUOTING: `jq -R` output interpolated into a string a shell later re-expands."""
     def jq_hits(lines):
@@ -448,6 +515,7 @@ def lint(path):
         + check_heredoc_fn_dollar(heredocs)
         + check_sq_prose(heredocs)
         + check_jq_quoting(blocks, plain)
+        + check_delim_field(lines)
     )
 
 

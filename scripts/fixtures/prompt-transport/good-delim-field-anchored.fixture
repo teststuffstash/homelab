@@ -1,0 +1,8 @@
+# DELIM-FIELD negative controls — the FIXED shapes and the neighbours that must stay clean.
+# EXPECT: clean
+MODEL="deepseek"
+row=$(grep -m1 "^$MODEL|" agents/model-table.psv)          # anchored BRE — | stays literal
+tier=$(awk -F'|' -v k="$MODEL" '$1==k' tiers.psv)          # field equality, the preferred fix
+plain=$(grep -F "literal|text" file.txt)                   # no interpolation — a fixed probe
+name=$(grep -m1 "$MODEL" names.txt)                        # var-headed but no delimiter in it
+piped=$(grep -c error log.txt | tr -d ' ')                 # ordinary pipe after grep
