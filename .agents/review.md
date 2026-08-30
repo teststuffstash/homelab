@@ -42,6 +42,10 @@ judged PER PATH (`docs/agents/iac-lane.md` §The platform lane) rather than per 
   ordinary work; an edit/removal is acceptable ONLY when the same PR deliberately changes the
   pinned behaviour (the ADR-103 ratchet flow) and the body says so explicitly — an unexplained
   weakened assertion is blocking no matter how plausible the diff reads.
+- **A VACUOUS pin** (retro r1 F3): a NEW replay world, `expected/actions.txt` row, or
+  `agents/*-test.sh` pin that does not fail against the pre-fix source is blocking — the ratchet
+  gates weakening, this gates vacuity ("additive rows are ordinary work" is not a licence for
+  pins that prove nothing). The PR body shows the red run against the pre-fix source.
 
 ## In-diff findings BLOCK — fix them in THIS PR (codeowner economics, operator 2026-08-12)
 
