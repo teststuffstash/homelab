@@ -17,9 +17,9 @@ tests:
   - interval: 1m
     name: "GarageDiskFillingUp fires after 30m when disk is >80% full"
     input_series:
-      - series: 'garage_local_disk_avail{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_avail{pod="garage-0",volume="data"}'
         values: "15+0x120"
-      - series: 'garage_local_disk_total{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_total{pod="garage-0",volume="data"}'
         values: "100+0x120"
     alert_rule_test:
       # `for: 30m` honoured — silent before the window
@@ -32,11 +32,11 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
-              device: data
+              pod: garage-0
+              volume: data
             exp_annotations:
-              summary: "Garage data disk is 15% full on garage-0"
-              description: "Garage's data disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
+              summary: "Garage disk is 85% full on data"
+              description: "Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
 
   # ── 2/4 — DISK RECOVERS: the alert resolves when avail rises above 20% ──────────────────────
   # Disk was at 85% (avail=15), then space is freed and avail goes to 25. The alert should
@@ -44,9 +44,9 @@ tests:
   - interval: 1m
     name: "GarageDiskFillingUp resolves when disk drops below 80%"
     input_series:
-      - series: 'garage_local_disk_avail{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_avail{pod="garage-0",volume="data"}'
         values: "15+0x40 25+0x120"
-      - series: 'garage_local_disk_total{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_total{pod="garage-0",volume="data"}'
         values: "100+0x200"
     alert_rule_test:
       # fires at 30m as before
@@ -55,11 +55,11 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
-              device: data
+              pod: garage-0
+              volume: data
             exp_annotations:
-              summary: "Garage data disk is 15% full on garage-0"
-              description: "Garage's data disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
+              summary: "Garage disk is 85% full on data"
+              description: "Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
       # avail jumps to 25 at t=41m → ratio = 0.25, condition clears → alert resolves
       - eval_time: 42m
         alertname: GarageDiskFillingUp
@@ -71,9 +71,9 @@ tests:
   - interval: 1m
     name: "GarageTableEmpty fires after 5m when a table drops to zero"
     input_series:
-      - series: 'table_size{node="garage-0",table_name="block"}'
+      - series: 'table_size{pod="garage-0",table_name="block"}'
         values: "1048576+0x20 0+0x60"
-      - series: 'table_size{node="garage-0",table_name="object"}'
+      - series: 'table_size{pod="garage-0",table_name="object"}'
         values: "1048576+0x60"
     alert_rule_test:
       # `for: 5m` honoured — silent before the drop window
@@ -86,7 +86,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
+              pod: garage-0
               table_name: block
             exp_annotations:
               summary: "Garage table block is empty on garage-0"
@@ -98,7 +98,7 @@ tests:
   - interval: 1m
     name: "GarageTableEmpty resolves when data reappears after a drop"
     input_series:
-      - series: 'table_size{node="garage-0",table_name="block"}'
+      - series: 'table_size{pod="garage-0",table_name="block"}'
         values: "1048576+0x20 0+0x20 1048576+0x120"
     alert_rule_test:
       # fires at 5m after the drop (t=20)
@@ -107,7 +107,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
+              pod: garage-0
               table_name: block
             exp_annotations:
               summary: "Garage table block is empty on garage-0"
@@ -123,7 +123,7 @@ tests:
   - interval: 1m
     name: "GarageTableEmpty does NOT fire for a table that was always empty"
     input_series:
-      - series: 'table_size{node="garage-0",table_name="admin_token"}'
+      - series: 'table_size{pod="garage-0",table_name="admin_token"}'
         values: "0+0x60"
     alert_rule_test:
       # never fires — no prior data means max_over_time is always 0
@@ -140,7 +140,7 @@ tests:
   - interval: 1m
     name: "GarageTableEmpty keeps firing on a wipe that stays unrecovered for days (the 24h-window regression guard)"
     input_series:
-      - series: 'table_size{table_name="object",node="garage-0"}'
+      - series: 'table_size{table_name="object",pod="garage-0"}'
         values: '100+0x120 0+0x2880'
     alert_rule_test:
       # fires at 3h — well within the 7d window
@@ -149,7 +149,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
+              pod: garage-0
               table_name: object
             exp_annotations:
               summary: "Garage table object is empty on garage-0"
@@ -160,7 +160,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
+              pod: garage-0
               table_name: object
             exp_annotations:
               summary: "Garage table object is empty on garage-0"
@@ -177,7 +177,7 @@ tests:
   - interval: 1m
     name: "GarageTableEmpty stops firing after the 7d rolling window slides past the drop"
     input_series:
-      - series: 'table_size{table_name="object",node="garage-0"}'
+      - series: 'table_size{table_name="object",pod="garage-0"}'
         values: '100+0x120 0+0x9850'
     alert_rule_test:
       # fires at 3h — well within the 7d window
@@ -186,7 +186,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
+              pod: garage-0
               table_name: object
             exp_annotations:
               summary: "Garage table object is empty on garage-0"
@@ -221,11 +221,11 @@ tests:
   - interval: 1m
     name: "GarageAdminMetricsAbsent silent when both families exist"
     input_series:
-      - series: 'garage_local_disk_avail{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_avail{pod="garage-0",volume="data"}'
         values: "80+0x60"
-      - series: 'garage_local_disk_total{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_total{pod="garage-0",volume="data"}'
         values: "100+0x60"
-      - series: 'table_size{node="garage-0",table_name="block"}'
+      - series: 'table_size{pod="garage-0",table_name="block"}'
         values: "1048576+0x60"
     alert_rule_test:
       - eval_time: 40m
