@@ -150,6 +150,35 @@ spec:
                       default: 0.99
                       description: "30-day availability target; 1 - this = the error budget."
                   required: [endpoint]
+                mcp:
+                  type: object
+                  description: >-
+                    MCP (Model Context Protocol) tool server endpoint for agent sessions
+                    (stack-wide). When present, the Composition renders the endpoint's HOST
+                    (derived from the URL) into every fixer repo's worker egress CNP
+                    (toFQDNs leg) — the agent session connects to this server for tool calls
+                    (statute, search, give_feedback).
+                    NO default on this object ON PURPOSE: an omitted defaulted object is
+                    stamped into the stored claim by the API server and permanently OutOfSyncs
+                    every claim file that does not carry it (the 2026-07-16 claudeTier lesson).
+                    Absent = no MCP attached. The endpoint field takes a URL (scheme + host +
+                    path, e.g. https://mcp.oracle.teststuff.net/mcp); the Composition derives
+                    the bare HOST from it for the CNP toFQDNs leg. That host must be an FQDN,
+                    never a service VIP (FU-072/kata: kata guests cannot reach service VIPs).
+                    This is DISTINCT from spec.slo.endpoint (which is the blackbox probe target
+                    for FU-104 availability monitoring); they may share a URL for a given stack
+                    but serve different consumers and must not be conflated.
+                  properties:
+                    endpoint:
+                      type: string
+                      description: "The MCP server URL — scheme + host + path (e.g. https://mcp.oracle.teststuff.net/mcp). The launcher passes it to --mcp-config verbatim; the Composition derives the bare HOST from it for the worker CNP toFQDNs leg. That host must be an FQDN, never a service VIP (kata guests cannot reach service VIPs, FU-072)."
+                    tools:
+                      type: array
+                      items:
+                        type: string
+                      default: []
+                      description: "Tool names this MCP endpoint exposes (statute, search, give_feedback, etc.). Informational — the Composition does not consume this field."
+                  required: [endpoint]
                 prober:
                   type: object
                   description: >-
