@@ -1,8 +1,11 @@
 # Spike — doc-heat: measure which markdown actually gets read
 
-_Opened 2026-08-11 (operator + jail design session). Status: **v0 BUILT** — jail-transcript
-parser + static report: `devbox run doc-heat` → `~/.claude/doc-heat/report.html`. Tracker
-pointer: FU-164._
+_Opened 2026-08-11 (operator + jail design session). Status: **PROMOTED 2026-08-30 (operator
+ruling — the settle bar was met by run 1, S5 #983)**: doc-heat is a STANDING docs-cleanup
+input (the skill's comb step names it), not an open experiment. v0 = jail-transcript parser +
+static report: `devbox run doc-heat` → `~/.claude/doc-heat/report.html`. ⚠ Heat data from
+before the S5 rewrite describes text that no longer exists — the first post-S5 read is dated
+on the tracker (due ~2026-09-06). Tracker pointer: FU-164._
 
 ## Question
 

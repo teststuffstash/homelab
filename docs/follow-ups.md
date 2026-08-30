@@ -585,11 +585,13 @@ the block needs pruning, not more headings.
 - [ ] **FU-164** — **doc-heat: transcript-derived read heat over repo markdown — POINTER.**
       Question, heat doctrine (heat × class × age; blind spots; approximate lines), v0 (jail
       parser + static report, `devbox run doc-heat`) and the serving plan:
-      [`docs/spikes/doc-heat.md`](spikes/doc-heat.md) (opened 2026-08-11). **Next:** run a
-      docs-cleanup pass WITH the report (the spike's settle test); then the v1 cluster leg
+      [`docs/spikes/doc-heat.md`](spikes/doc-heat.md). **PROMOTED 2026-08-30** (operator —
+      settle bar met by run 1): standing docs-cleanup input, wired into the skill's comb step.
+      **Next: the first post-S5 heat read, due ~2026-09-06** (a week's fresh transcripts —
+      pre-S5 heat describes text the comb rewrote); then the v1 cluster leg
       (`s3://agent-transcripts`, path normalization, jail/cluster separate + combined views —
-      operator requirement), which also delivers context-repos.md's measurement sweep.
-      Relates FU-117, FU-163, FU-058, FU-140.
+      operator requirement), which also delivers context-repos.md's overdue measurement sweep.
+      Relates FU-058.
 
 - [ ] **FU-058** — **Retro P3: POINTER.** The 08-24 fire FAILED (529 storm + #861, fixed
       PR#864); **the re-fire DELIVERED 2026-08-25** — platform r1 landed (PR#918), its batch
