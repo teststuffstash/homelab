@@ -794,6 +794,16 @@ FQDN until gate configs route ghcr per-tool; **Talos node-level `machine.registr
 ci-runner-01 + ARC wiring deferred** (FU-073 carries the remainder). Gotcha for every future
 VIP-consuming netpol: pod→LB-VIP flows are policy-evaluated **post-DNAT against the backend
 identity** (Hubble-verified, even from kata) — allow with `toEndpoints`, not a VIP CIDR.
+_Update 2026-08-30 (FU-196 v0):_ `mirror-ghcr` gains **optional upstream credentials**
+(classic PAT `read:packages`, ESO-delivered, minted by `scripts/ghcr-mirror-pat-bootstrap.sh`)
+— the original "anonymous works for all we consume" premise broke when the private oracle
+corpus (~6GB) landed: Talos nodes already route ghcr through the mirror, but private pulls
+fell back to ghcr directly (a 429 storm degraded the oracle-fleet#274 bring-up; a pod move
+during a ghcr outage would degrade serving). **Accepted consequence:** packages the credential
+can read become LAN-readable unauthenticated through the cache — scope it with a machine user
+granted per-package read (the mint script prints both routes). ghcr TTL 168h→720h (corpus-class
+re-pulls cost what a wipe costs). Policy-retention ("keep 2 latest prod releases") remains
+inexpressible in a pull-through cache — that is FU-196 v1 (hosted registry), not this update.
 
 ### ADR-092 — Per-stack subdomain delegation: `*.<stack>.teststuff.net` → an in-cluster gateway
 **Status:** Accepted (2026-07-15). Executes the **HTTPS-names leg of FU-039** (the "homelab as

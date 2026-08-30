@@ -119,6 +119,7 @@ as if at home; recipe in `docs/runbook.md`.
   `opnsense-playbook.sh`, `infisical-{secret,harden}.sh`,
   `github-runner-bootstrap.sh` + `github-app-bootstrap.sh` + `gh-app-runner-token.sh` (GitHub Apps),
   `github-exporter-pat-bootstrap.sh` (PAT for the GitHub→Prometheus poller),
+  `ghcr-mirror-pat-bootstrap.sh` (upstream PAT for the ghcr mirror's private images, FU-196),
   `new-agent-repo.sh` (scaffold a repo into tofu/github), `garage-s3.sh`, `talos-usb.sh`,
   `longhorn-register-optane.sh`, `make-client-p12.sh` (phone mTLS cert, pinned openssl),
   `coordinator-logs.sh`/`render-transcript.py` (+ `--dialogue`), `follow-ups-lint.sh`,

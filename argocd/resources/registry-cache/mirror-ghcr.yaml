@@ -92,7 +92,21 @@ spec:
           image: registry:3.0.0
           env:
             - { name: REGISTRY_PROXY_REMOTEURL, value: "https://ghcr.io" }
-            - { name: REGISTRY_PROXY_TTL, value: "168h" }
+            # 168h→720h 2026-08-30 (FU-196): this mirror now also carries the private oracle
+            # corpus (~6GB/release) — a TTL eviction there re-costs a full upstream pull, which
+            # is exactly the ghcr-dependence the credential below exists to remove. Same
+            # headroom logic as the 100Gi oversize: the wipe threshold stays the only real valve.
+            - { name: REGISTRY_PROXY_TTL, value: "720h" }
+            # FU-196 v0: upstream auth so private org images cache too. optional: true — until
+            # the operator mints the PAT (scripts/ghcr-mirror-pat-bootstrap.sh) the secret is
+            # absent and the mirror serves anonymously, exactly as before. The env lands only
+            # on pod restart after the secret appears (FU-190 class) — bounce the pod once.
+            - name: REGISTRY_PROXY_USERNAME
+              valueFrom:
+                secretKeyRef: { name: mirror-ghcr-upstream-auth, key: username, optional: true }
+            - name: REGISTRY_PROXY_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mirror-ghcr-upstream-auth, key: password, optional: true }
             - { name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true" }
             - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
             # ⚠ BLOB-DESCRIPTOR CACHE OFF (homelab#240, 2026-08-11). The image default is

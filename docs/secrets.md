@@ -147,7 +147,10 @@ credentials get the same shape:
   listable org-side for org-granted ones.
 - **Declared where not**: file-shaped credentials (client `.p12`s, App private keys with known
   rotation policy) get their expiry read from the artifact itself (`openssl`) or from the mint
-  code (tofu `expires_on`) — rendered into the exporter's config, never hand-copied.
+  code (tofu `expires_on`) — rendered into the exporter's config, never hand-copied. Classic
+  PATs are declared too: the ghcr-mirror pull PAT (FU-196, `scripts/ghcr-mirror-pat-bootstrap.sh`
+  — classic because ghcr ignores fine-grained PATs) stores its mint-page date as
+  `GHCR_MIRROR_PULL_EXPIRY` beside the token, ready for this belt.
 - **Renewal ≠ rotation bookkeeping**: the alert names the credential; the runbook is the minting
   root's own apply (`devbox run cloudflare-token-tofu apply`, `github-tofu`, …) + the printed
   re-store checklist. Retirement counts as resolution — a superseded credential (e.g. the broad
