@@ -103,7 +103,7 @@ variable "protected_repos" {
     oracle-fleet        = { required_checks = ["ci"], require_code_owner_review = true }                                          # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
     oracle-iac          = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # sleep-iac shape: CI + sentinel, no review; PRIVATE → the one repo the push guard can exist on
     sleep-iac           = { required_checks = ["ci", "iac-sentinel"], require_approval = false }                                  # public → no push ruleset possible
-    sleep-tracking      = { required_checks = ["ci"] }
+    sleep-tracking      = { required_checks = ["ci", "system-test"] } # system-test = the kind+Playwright render gate (sleep goal #121); job name, not the workflow name "integration"
     snore-recorder      = { required_checks = ["ci"] } # PR `ci` check confirmed live 2026-07-24 (PR #8 era runs)
     # agent-runtime  = { required_checks = [...] }     # needs a pull_request-triggered check first
   }
