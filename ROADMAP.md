@@ -194,7 +194,7 @@ shapes use the same readable **`2026.<m>.<d>-g<sha>`** version and a first-party
 | app + chart | the `-iac` bump (sleep-tracking → sleep-iac) | ✅ proven E2E |
 | operator / controller | Helm chart to **ghcr OCI** (ADR-084); `deploy.yaml` opens a bump PR in homelab/argocd; the app is multi-source (OCI chart + homelab `$values`), gated by `argocd-validate-pins` | ✅ live |
 | image consumed by pods | version-pinned in `agents/images.env` + `agents/coordinator/*-argo.yaml`, off `:latest` — cacheable, traceable; each build's deploy-pin bumps it | ✅ live |
-| snore-recorder | ArgoCD **PostSync hook Job** in sleep-iac (in-cluster `ansible-playbook`; failed playbook = failed sync = red app; `syncPolicy.retry` = backoff; nightly CronJob for the offline-Pi gap) | 🟡 platform half done — DHCP reservation + `SNORE_DEPLOY_SSH_KEY` in Infisical; sleep-iac side pending |
+| snore-recorder | ArgoCD **PostSync hook Job** in sleep-iac (in-cluster `ansible-playbook`; failed playbook = failed sync = red app; `syncPolicy.retry` = backoff; nightly CronJob for the offline-Pi gap) | ✅ built 2026-08-02 (sleep-iac#13–16 + snore-recorder#15; FU-051's residue = observing one organic build→pin→Pi-converge run) |
 | homelab | a deploy TARGET whose gate is now PATH-based, not CI-only: `require_approval = true` + `require_code_owner_review = true` with a repo-root `CODEOWNERS` (FU-068, 2026-08-04), and `ci` grew past `argocd-validate-pins` to `manifest-lint` (kubeconform) + `tofu fmt` + the model/router/FSM lints. `docs/agents/iac-lane.md` §The platform lane | ✅ |
 
 **The other half (FU-097): the surfaces ArgoCD and tofu do NOT reconcile.** A merged change to
@@ -218,7 +218,7 @@ First deliverable is a per-surface ruling table (automate / human-applied + belt
 the automated ones one surface at a time. ADR-093 makes Argo the candidate runner for the ansible
 Jobs.
 
-### Onboard every app repo to the agentic loop by default (FU-052, FU-070)
+### Onboard every app repo to the agentic loop by default (FU-070; FU-052 archived 2026-08-30 — every repo is on)
 
 Direction 2026-07-06: the full flow — merge-path auto-merge **and** the fixer (NL issue → worker →
 PR → review → merge) — should be the **default** for app repos, not bespoke per repo.
@@ -232,16 +232,16 @@ namespace, and the repo in `agents/stacks.json`.
 Layer 2's k8s infra is now **one `AgentStack` claim per stack** (ADR-085,
 [`docs/agents/agentstack.md`](docs/agents/agentstack.md)) rather than a fixer block per repo. Still
 per-repo and manual: the `.agents/` recipes, the `stacks.json` entry, and the GitHub side. The
-collapse of the last of it is a **`stack-template` org repo** (FU-070) — `is_template = true`,
-instantiated via `gh repo create --template` before `new-agent-repo.sh` — carrying the CLAUDE.md
-skeleton, `.agents/` skeletons, devbox `ci` + `scan-secrets`, and the merge-path caller workflows.
-stack-lint's REPO-03/04/05 already verify the result.
+collapse of the last of it is **`new-stack --from <donor>`** (FU-070 — the template-repo idea was
+REJECTED 2026-08-03: unexercised templates are stale by construction; the living donor checkout is
+copied instead). stack-lint's REPO-03/04/05 already verify the result.
 
 **Onboarded:** sleep-tracking (reference), openrouter-operator, **homelab** (fixer lane
-FU-068/FU-142, live since 2026-08), **agent-runtime** (PR#37, 2026-08-07), **sleep-iac**
-(FU-106). **To onboard:** snore-recorder + agent-coordinator — both already carry AgentStack-claim k8s
-infra (sleep/platform claims); the missing layer is the REPO side (`.agents/` recipes +
-GitHub-side callers), not cluster infra.
+FU-068/FU-142, live since 2026-08), **agent-runtime** (PR#37, 2026-08-07 + the claim's fixer flip
+2026-08-08), **sleep-iac** + **oracle-iac** (FU-106), **snore-recorder** (2026-08-02, FU-051 —
+recipes + deploy-pin via #15, fixer block sleep-iac#57). **agent-coordinator stays context-only by
+ruling** (2026-07-16, kept in the platform claim: its content is tier-3 loop machinery, no
+repo-side lane) — so the onboarding program has no repo left; new repos enter via `new-stack`.
 
 ### The platform lane sheds the meta crutch (direction, operator 2026-08-08)
 
@@ -295,13 +295,13 @@ Bucket A/B enumeration in `docs/agents/meta-state.md`.
 
 | # | stint | pointers |
 |---|---|---|
-| S1 | platform retro split — **parent #587 authored**, next session, deadline Mon 08-24 (organic acceptance = the cron fire) | FU-058 |
+| S1 | platform retro split — **DONE 2026-08-19 (stint #587)**; the 08-24 fire failed (529 storm + #861, fixed PR#864), the re-fire DELIVERED r1 2026-08-25; residual acceptance = the Mon 08-31 clean unattended fire | FU-058 |
 | S2 | replay cleanup completion — **DONE 2026-08-19 (stint #661: batches 2–4 + fold-in landed, the #354 adversarial acceptance PASSED first try)**; residual moves ride FU-167 by fix-density | FU-167, homelab#661 |
 | S3 | belts & lint upkeep — sentinel pushgateway blind: DONE 2026-08-19 (FU-176 archived); transport-lint signatures: DONE (homelab#564 closed 2026-08-19); remaining: ratchet `unreplayed` backfill, by fix-density | the FSM `unreplayed` rows |
-| S4 | context & vocabulary: the role×context×source dedup + the mission rename sweep | FU-117, FU-163 |
-| S5 | corpus diet: doc-heat + measured trimming (`scripts/session-ctx.sh --big` is the instrument). **Deliberately LAST — after the FU drain + G-A (operator ruling, 2026-08-23): trimming before closure preserves the status scaffolding (FU pointers, "shipped-but", ⚠ blocks) and gets redone when G-A's legacy sweep deletes what it describes; a post-closure trim writes the corpus self-referential — statements, not pointers-and-apologies. Doc-heat also reads better then: goal-era transcripts are the honest heat data.** | FU-164 |
-| S6 | epic post-deploy mechanic — **originals 7/7 DONE 2026-08-20 (stint #716, one session; closeout 1 on the parent)**: contract rule 8 + rule-7 lane split, reviewer depth guard (PR#727 — incl. the seat-caught heredoc generation-time corruption class, → #734), responder `Cause:` bind, brief play doors, unbound-sprout belt, seat pastes, retro filing rule. **TREE EMPTY same day** (4 sprouts drained, all harvest-bound at honest depth; + the HEREDOC-FN-DOLLAR lint signature); parent open in its quiet window (closes ≥08-23); per-repo fix.yaml pastes trail at fix-density | FU-090, homelab#716 |
-| S7 | merge-path updater in-cluster (ADR-111 — kills the ~4,800 min/mo hosted-cron burn, #698) + the FU-183 pro-rated burn alert — **parent #741 authored 2026-08-21 (children #742–#746); LAUNCH PARKED on Anthropic weekly headroom (95% at authoring)** | ADR-111, FU-183, homelab#741 |
+| S4 | context & vocabulary — **DONE 2026-08-23 (stint #762)**: role×context×source dedup, jail cards, glossary + mission rename (FU-117 + FU-163 both archived) | — |
+| S5 | corpus diet — **LAUNCHED 2026-08-26 (stint #979**, originals #981–#984: ADR-116 sweep, ADR-117 §-anchors, heat-cited trims, the deep comb**)**. The 2026-08-23 sequencing ruling (last, after the FU drain + G-A) held: trimming before closure preserves the status scaffolding; doc-heat reads better on goal-era transcripts | FU-164, homelab#979 |
+| S6 | epic post-deploy mechanic — **originals 7/7 DONE 2026-08-20 (stint #716, one session; closeout 1 on the parent)**: contract rule 8 + rule-7 lane split, reviewer depth guard (PR#727 — incl. the seat-caught heredoc generation-time corruption class, → #734), responder `Cause:` bind, brief play doors, unbound-sprout belt, seat pastes, retro filing rule. **TREE EMPTY same day** (4 sprouts drained, all harvest-bound at honest depth; + the HEREDOC-FN-DOLLAR lint signature); parent CLOSED after its quiet window; per-repo fix.yaml pastes trail at fix-density | FU-090, homelab#716 |
+| S7 | merge-path updater in-cluster — **DONE 2026-08-26 (stint #741, cutover #745)**: exporter edge + */15 Argo cron running `agents/update-pr-branch.sh`, ten callers + the hosted reusable deleted, `MERGE_GH_APP_*` org secrets destroyed, the FU-183 pro-rated burn alert live (PR#756). Acceptance watch: no BEHIND PR >30m; hosted updater runs structurally 0 | ADR-111, homelab#741 |
 | S8 | **merge lanes — (repo, base) serialization + goal v1.3 theme branches, ONE piece (operator, 2026-08-26).** Head = the ADR pair in one sitting: (repo, base) as the serialization unit (the reflex/updater/scan lanes split per base — the merge→behind→dismiss chain is base-local, TICK-LOG 2026-08-26 + #829's reframe comment) + theme-branch adoption (the banked v1.3 block promotes; version-table row "design accepted, build = S8"). Originals ≈ reflex per-base pick, updater per-base pick, scan per-lane walk + caps (ABSORBS #829), theme mechanics (decompose play ≥2-shared-surface, rule-7 depth-guard re-key, master-refresh hop), FSM/doc currency, per-lane famine gauges. **Dogfood deliberately OUTSIDE the stint**: the first new platform Goal after S8 runs a theme; acceptance = per-lane famine numbers + codeowner-tax-per-theme vs G-A's per-child baseline. After S5 | issue-authoring.md §⚖ BANKED (v1.3), #829 (absorbed at authoring), #828 (independent, stays queued), FU-168 |
 
 **Goal candidates** (authored AT LAUNCH, in rough order — the Goal dogfood begins here once the

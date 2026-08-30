@@ -20,8 +20,8 @@ are maxed. Reproducible.
 > returns a plausible constant. Reloading the config entry republishes the cached value once
 > (`last_updated` moves, the number does not) — not a fix. `HomeAssistantPowerSensorStale`
 > (`argocd/resources/homeassistant-alerts/`) now catches this. Existing results below were taken
-> while the plugs worked and remain valid; NEW wall measurements are blocked until Tuya is
-> restored or the plugs move to local control.
+> while the plugs worked and remain valid. (The block on new measurements ended with the
+> 2026-08-07 tuya-local cutover below — measurements resumed.)
 
 ### Restoring them: `tuya-local` only — reflashing is ruled out
 
@@ -222,5 +222,6 @@ Notes:
   draw at full load with a charged battery.
 - **Plug identification (bonus):** stressing the X240 made `laptop3` jump while `laptop4` stayed
   flat → `laptop3` = X240 (wk-metal-01), `laptop4` = X250 (wk-metal-02).
-- Not measured: `hp-01` (no smart plug); `pve` / `opnsense` (didn't want to stress the
+- Not measured: `hp-01` (has `sensor.plug_hp_*` since the 2026-08-18 rename — a plug exists now,
+  a stress run just never happened); `pve` / `opnsense` (didn't want to stress the
   hypervisor / router) — idle draws from the dashboard are ~127 W / ~57 W.

@@ -551,10 +551,11 @@ unrun and must skip the empty report. Standing lane bounds from the
 first real pass: the brief is a bounded worst-K ledger slice (never the whole ledger), and the
 cell pipeline runs `pipefail`. **The platform-series build wave landed 2026-08-19** (the #587
 stint: rename + ride-ns guard #623, fleet read token + KPI drop #619, content floor #620,
-RetroReportOverdue restart-gap hardening #623) — the first unattended PLATFORM fire is the
-Mon 2026-08-24 05:00 UTC cron, the wave's organic acceptance. Remaining FU-058 legs: ledger
-emitter gaps (brief-v2(b) + r4's three blind spots), MCP transcript slices, stack retros
-second (§The split point 2).
+RetroReportOverdue restart-gap hardening #623). The first unattended platform fire (Mon
+2026-08-24) FAILED (the 529 storm + the #861 cell-model collapse, fixed PR#864); the re-fire
+DELIVERED platform r1 2026-08-25 (PR#918; batch #927–#932) — the clean unattended acceptance
+is the Mon 2026-08-31 cron (FU-058). Remaining FU-058 legs: ledger emitter gaps (brief-v2(b) +
+r4's three blind spots), MCP transcript slices, stack retros second (§The split point 2).
 
 #### The multi-model pilot — runs 1+2 (2026-07-25) and what they taught
 

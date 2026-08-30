@@ -76,6 +76,11 @@ follows fix-density per ADR-103, never big-bang):
    templates + 3 per-row, 2 named jq patches, all 8 original streams reproduced exactly).
    Patches are named files (`patches/*.jq`) — raw jq in a cell collides with the psv delimiter
    and a named patch reads as the condition it encodes.
+   **Batches 2–4 executed by [stint](../../docs/agents/chainless-redesign.md) #661
+   (2026-08-19):** go-rail-latch 11→1,
+   fu088-ladder + goal-budget-refusal 5+5→2, retro-harvest + summary-comment 5+4→2
+   (PRs #673/#677/#681, every stream byte-exact); the #354 post-refactor adversarial
+   acceptance PASSED first try (PR#684, record on #666).
 3. **Generated register** — `run.sh --index --write` renders the family/world/row table from
    fixture metadata (the `merge-path-lint --write` pattern, currency-checked in CI). The
    hand-appended prose register below retires; this README keeps only doctrine — the ~8 seam
@@ -106,7 +111,8 @@ follows fix-density per ADR-103, never big-bang):
    pins a jq-version float format awaiting its emitter fix (the versions gap below).
 7. **Suite fold-in** — the standalone `*-replay.sh`/`*-test.sh` harness scripts register as
    `mode: suite` entries (scripts stay put; `entrypoint:` points at them) so "executed replay"
-   has one runner and one index. Rolling, by fix-density.
+   has one runner and one index. Bulk executed by stint #661 (PR#671, 5 standalone harnesses
+   → `mode: suite`); stragglers roll by fix-density.
 
 Until the moves land: new families SHOULD follow the target shape where cheap (name your world,
 share it by reference within the family, keep contract prose in ONE header) — and every

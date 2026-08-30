@@ -1715,8 +1715,9 @@ demands.
 
 ### ADR-118 — Loki multi-tenancy is the data model; an RBAC-authorizing proxy is the enforcement
 **Status:** Accepted (2026-08-27). **Decision:** give per-tenant log reads a **two-part** mechanism —
-`auth_enabled: true` on Loki with **tenant == namespace** (Alloy sets the reserved `__tenant_id__`
-from `__meta_kubernetes_namespace`, one relabel rule, no mapping table), plus **kube-rbac-proxy**
+`auth_enabled: true` on Loki with **tenant == namespace** (Alloy stamps the tenant from the pod's `namespace` label — no mapping table; ⚠ correction
+#1009: the relabel-rule form written here silently no-ops (`__`-prefixed labels drop before
+`loki.write`) — shipped as `stage.tenant`, see loki-tenancy.md §Why tenant == namespace), plus **kube-rbac-proxy**
 in front doing TokenReview → SubjectAccessReview with the SAR's namespace rewritten from
 `X-Scope-OrgID`. Scoping is then ordinary RBAC: a RoleBinding for `loki-tenant-reader` in ns `<n>`
 IS "may read tenant `<n>`". First and only consumer: the **oracle stack jail's workbench SA**.

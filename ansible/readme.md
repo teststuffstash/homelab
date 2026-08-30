@@ -1,6 +1,6 @@
 # `ansible/` — OPNsense + Matchbox as code (roles layout)
 
-Two control targets, each driven by **thin playbooks that call roles**:
+Three control targets, each driven by **thin playbooks that call roles**:
 - **`opnsense`** — the router @ `192.168.2.1`, configured via its REST API *from the controller*
   (`connection: local`, the `oxlorg.opnsense` collection).
 - **`matchbox`** — the PXE provisioning LXC @ `192.168.2.30`, configured over SSH.
@@ -42,6 +42,7 @@ because their real values are here, not baked in).
 | `matchbox-ipxe-tftp.yml` | `matchbox-ipxe-tftp` | iPXE binaries + TFTP (PXE stage-1) |
 | `matchbox-proxydhcp.yml` | `matchbox-proxydhcp` | dnsmasq proxy-DHCP boot server |
 | `matchbox-talos-assets.yml` | `matchbox-talos-assets` | Talos kernel/initramfs into Matchbox assets |
+| `pve-upgrade.yml` | — | in-major Proxmox dist-upgrade + `/etc/pve` snapshot (never reboots); `devbox run -- ansible-playbook ansible/pve-upgrade.yml` |
 
 ## Running
 

@@ -8,8 +8,10 @@ time is platform overhead, not work.
 **Evidence** (all durable): the ring-woken scan pod log (`coordinate-perstack-mnhzm`), the item
 coordinator session log (`coordinator-172525`), PR metadata (commit/PR/CI/merge timestamps), the
 pod's own run-stats line (358s, $0.0085, deepseek-v4-flash), and the ride transcript in
-`s3://agent-transcripts/oracle-iac/issue-361/`. Tracked by: **FU-160** (turn this one-off
-reconstruction into standing metrics + an alert).
+`s3://agent-transcripts/oracle-iac/issue-361/`. The standing metrics + alert this asked for
+shipped 2026-08-12 (`agent_run_phase_seconds`, launcher + in-pod halves —
+[observability-and-retro.md](../agents/observability-and-retro.md) §Part A′); the shave
+candidates below remain this spike's living content.
 
 ## Dispatch: 2m16s (file → coordinator claim)
 
@@ -39,8 +41,9 @@ reconstruction into standing metrics + an alert).
   scan's homelab clone (~25s) — a sparse checkout (the scan needs `agents/` + `stacks.json`,
   not the tree) could cut ~15–20s.
 - **Pod spin-up ×2 (51s + 34s) is the dominant fixed overhead** (~16% of total). Whether the
-  image was node-cached is UNKNOWN for this specimen (events aged out before capture — FU-160
-  makes this a metric so it stops being unknowable). Adjacent hazard observed the same evening:
+  image was node-cached was UNKNOWN for this specimen (events aged out before capture; the
+  shipped `pod-spinup` phase metric makes a cold pull visible as a NUMBER — the cache FACT
+  itself is still unemitted, see §shipped below). Adjacent hazard observed the same evening:
   a fleet ride pulled `devbox-cache:latest` fresh — a `:latest` tag defeats the node cache
   (the agents/README pinned-versions warning, live).
 - **The coordinator added no value on this item** — claim, dup-check, tier estimate, key mint
@@ -59,7 +62,7 @@ reconstruction into standing metrics + an alert).
   Below that: pod scheduling and model round-trip latency — structural unless workers stay
   warm, which is a cost trade to price deliberately.
 
-## What would settle it (→ FU-160)
+## What settled it (FU-160, archived 2026-08-12)
 
 Phase timings as standing metrics, not archaeology: emit per-ride
 `agent_run_phase_seconds{phase=dispatch-wait|pod-spinup|clone|llm-loop|gates|pr-open|ci|merge-wait}`

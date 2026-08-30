@@ -246,7 +246,7 @@ Two prerequisites, then the trim:
   the **pve host root** instead. Check `mount` succeeded before trimming.
 
 There is no `talosctl fstrim`, and Talos' `VolumeConfig` for EPHEMERAL exposes no `discard` mount
-option, so this pod is the mechanism. Applies equally to cp-01, wk-01 and ci-runner-01.
+option, so this pod is the mechanism. Applies equally to cp-01, wk-01, wk-03 and ci-runner-01.
 
 ## CloudNativePG (Postgres)
 
@@ -398,7 +398,7 @@ Unbound DNS, so `*.teststuff.net` resolves like at home. Tunnel subnet `192.168.
 
 ## Meta-session watch scripts (jail tooling)
 
-The six `agents/meta-*.sh` scripts are **jail meta-session machinery, not agent-platform
+The seven `agents/meta-*.sh` scripts are **jail meta-session machinery, not agent-platform
 mechanism** — they run as Monitor probes inside the operator's meta-coordination sessions
 (operator ruling 2026-08-10: the pointer lives in [`agents/roles.md`](agents/roles.md)
 §meta-coordinator, the documentation lives here). When and how to arm them is
@@ -407,7 +407,8 @@ the durable what-each-is:
 
 | script | what it watches | cadence/shape |
 |---|---|---|
-| `meta-needs-attention.sh` | unreviewed platform PRs, `agent/blocked`, unlabeled>24h, stack codeowner parks | persistent Monitor, REQUIRED each meta session |
+| `meta-events.sh` | the FU-166(b) consolidated 120s edge-detected loop — needs-meta absorbed as a `--once` source, goal-thread User comments, aggregated alerts, doorbell famine, SEATPR terminals | persistent Monitor, **REQUIRED each meta session** (meta-state §Re-arm) |
+| `meta-needs-attention.sh` | unreviewed platform PRs, `agent/blocked`, unlabeled>24h, stack codeowner parks | legacy standalone — absorbed as a meta-events source; do NOT double-arm beside it |
 | `meta-throughput.sh` | queue-vs-movement per stack (a THROUGHPUT-STALL line is an incident, not calm) | run FIRST on every heartbeat sweep |
 | `meta-alert-crosscheck.sh` | firing Alertmanager alerts vs the board (what fired that no session owns) | each heartbeat sweep, after throughput |
 | `meta-watch-loop.sh` | per-stack loop events (ride opens, verdicts, merges) | OPTIONAL rollout-time tool (~10 routine events per real signal) |

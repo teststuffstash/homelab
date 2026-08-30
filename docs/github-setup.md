@@ -21,7 +21,7 @@ this is the broader catalog.
 > is the source of truth and the change flow** (PR it first with a `why` per permission → the
 > github-exporter `GithubAppPermissionDrift` alert rings until the UI click + install approval
 > land → clears). `scripts/github-apps.sh` is the outside-jail deep verify (report to /tmp); the always-current view is SERVED at
-> the github-exporter `/apps` page (in-cluster `github-exporter.monitoring.svc:9504/apps`; humans port-forward). `devbox run github-apps-lint` (in ci) proves every mint
+> **`https://apps.teststuff.net/apps`** (in-cluster `github-exporter.monitoring.svc:9504/apps`). `devbox run github-apps-lint` (in ci) proves every mint
 > site's request ⊆ the declaration. Creation is ONE script — `scripts/github-app-bootstrap.sh
 > <slug> manifest|catch|convert` — whose manifest is built FROM the yaml (the six per-App
 > scripts keep only their secrets/verify plumbing; their creation subcommands are retired stubs).
@@ -66,15 +66,15 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
   outside collaborators".** Because the self-hosted runners are inside the cluster, this stops a
   **fork PR** from running untrusted code on a homelab node without an explicit click.
 - **Actions enabled** per repo (usually on by default; the bootstrap `access` step asserts it).
-- **Org Actions secrets** — the only workflow-visible secrets the platform needs, `visibility = all` so
-  every agent repo's workflow reads them. Used by the **updater** workflow (docs/agents/merge-path.md)
-  (`update-pr-branch.yml`), which mints a **homelab-merge** App token so its branch-update push
-  re-triggers CI (a bare `GITHUB_TOKEN` push would not):
+- **Org Actions secrets** — the workflow-visible App credentials (the `MERGE_GH_APP_*` pair
+  RETIRED 2026-08-26 with the ADR-111 in-cluster updater cutover — the merge App key now reaches
+  its consumer via ESO, never the CI plane):
 
   | secret | value |
   |---|---|
-  | `MERGE_GH_APP_ID` | the `homelab-merge` App id — not sensitive (`~/.claude/homelab-github-merge/app-id`) |
-  | `MERGE_GH_APP_PRIVATE_KEY` | the App private key — **durable source is Infisical** `MERGE_GH_APP_PRIVATE_KEY` (pushed by `github-app-bootstrap.sh homelab-merge`); local copy at `~/.claude/homelab-github-merge/private-key.pem` |
+  | `DEPLOY_APP_ID` / `DEPLOY_APP_PRIVATE_KEY` | the `homelab-deploy` App (deploy-pin PRs) — ⚠ visibility SELECTED, not `all` |
+  | `RENOVATE_APP_ID` / `RENOVATE_APP_PRIVATE_KEY` | the Renovate App |
+  | `REVIEWER_APP_ID` / `REVIEWER_APP_PRIVATE_KEY` | the `homelab-reviewer` App |
 
   **Managed as code** in [`tofu/github/actions_secrets.tf`](../tofu/github/actions_secrets.tf) (same root
   as the rulesets/repos/labels), and applied via **one wrapper** that loads the org admin token + both
@@ -82,11 +82,13 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
   ```sh
   devbox run github-tofu plan     # then: devbox run github-tofu apply   (OUTSIDE the jail)
   ```
-  `scripts/github-tf.sh` sources `TF_VAR_merge_gh_app_{id,private_key}` from the merge cred dir and
+  `scripts/github-tf.sh` sources the `TF_VAR_{deploy,renovate,reviewer}_app_*` pairs (the merge
+  App retired from this root 2026-08-26, ADR-111) and
   `GITHUB_TOKEN` from the dedicated org-admin wallet (`~/Documents/homelab-admin.kdbx`, entry
   `github-homelab-admin`, keyfile `~/Documents/homelab-admin.keyx` — override via `GH_ADMIN_KP_DB`/`GH_ADMIN_KP_KEY`/`GH_ADMIN_KP_ENTRY`).
-  This is the one spot the merge App key is
-  deliberately *copied* out of Infisical into GitHub (Actions can't read Infisical). ⚠ The github
+  This is the one spot those App keys are
+  deliberately *copied* out of Infisical into GitHub (Actions can't read Infisical; the merge
+  key left this class at the ADR-111 cutover — ESO delivers it in-cluster). ⚠ The github
   provider stores the value in this root's **state** (local + gitignored) — a second at-rest copy of a
   Tier secret, kept minimal by using the dedicated least-privilege App; see the file header.
 
@@ -109,7 +111,7 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
   too, but **not tofu's** — `labels.tf` was retired 2026-08-04 (FU-068); they are claim-owned
   (AgentStack `labels:` → IssueLabels, [`docs/agents/agentstack.md`](agents/agentstack.md)). The admin
   PAT still needs **Issues: R/W** for other repo state and **Organization → Secrets: R/W** for the
-  `MERGE_GH_APP_*` org Actions secrets (`actions_secrets.tf`) — see the scope list in
+  `DEPLOY_APP_*`/`RENOVATE_APP_*`/`REVIEWER_APP_*` org Actions secrets (`actions_secrets.tf`) — see the scope list in
   [`tofu/github/README.md`](../tofu/github/README.md).
 - **Default runner** — repos using homelab CI set `runs-on: homelab-ephemeral`; the rest use
   `ubuntu-latest`.
