@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-196** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-197** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -106,6 +106,25 @@ six OVERSIZE items pointer-ized into
       super admin today, signups disabled).
 
 ## GitOps & platform
+
+- [ ] **FU-196** — **The ghcr mirror cannot serve private org images — a 6GB single point of
+      ghcr-dependence for the oracle corpus** (2026-08-30, surfaced by the oracle-fleet#274 Rung A
+      bring-up: ghcr 429-rate-limited the `ert-corpus` blob; the mirror couldn't help — anonymous
+      upstream, ADR-091's "all we consume [was] public" predates the private corpus). Talos nodes
+      ALREADY route ghcr via `192.168.40.21` (`tofu/talos.tf`), so containerd silently falls back
+      to direct ghcr for private pulls: a serving-pod move during a ghcr outage/429 storm =
+      degraded or down. Two steps (operator, 2026-08-30): **v0 = mirror creds** — scoped
+      machine-user PAT (per-package read: `ert-corpus` + `oracle-fleet-ingester`) as `mirror-ghcr`
+      proxy creds via ESO; ADR-091 update accepts LAN-readability of those packages + longer TTL.
+      PAT documented durably per doctrine (operator): a `scripts/ghcr-mirror-pat-bootstrap.sh`
+      mint script (`github-exporter-pat-bootstrap.sh` shape — account, scopes, package grants,
+      Infisical key), expiry into the FU-156 gauge, secrets.md row. **v1 = a HOSTED local
+      registry** — a cache can't express policy retention ("2 latest prod releases + latest
+      built"; homelab#116's GC ate digest-pinned images for exactly this reason); push-mode
+      `registry:3` (Garage s3 driver candidate), release pipeline pushes, oracle-iac pins it;
+      needs its ADR (backend, auth, retention, ghcr's remaining role). **Next:** v0 shipped as
+      PR#1034 — post-merge the operator mints (Tier-0): `bash scripts/ghcr-mirror-pat-bootstrap.sh
+      create` → `secrets` → bounce `mirror-ghcr` → `verify`. Then v1 needs its ADR.
 
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
