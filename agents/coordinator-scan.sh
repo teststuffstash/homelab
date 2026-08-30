@@ -51,6 +51,12 @@ SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
 # Parallelism ceilings (ADR-097): hard per-repo worker max, and the TRACKS-rule-1 open-PR bound
 # (updater churn is O(open PRs × merges)) that holds NEW work regardless of footprints.
 REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
+# `gh issue list` DEFAULTS TO 30 RESULTS (newest first) — with no --limit the scan's whole world
+# silently shrank to the 30 newest open issues once a repo grew past that (found 2026-08-30:
+# homelab at 46 open, floor #840 — queued #110 was invisible to every sweep for 24 days, and two
+# live goals sat below the window). Every issue/PR list call carries this limit; the openall
+# fetch warns LOUDLY when it fills up (no silent caps).
+ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"
 
 # ── PIN-ONLY GUARDED PATHS — a pre-dispatch routing check (homelab#309) ─────────────────────────
 # `scripts/pin-only-lint.sh` refuses any PR that writes anything but a pin line into its carved-out
@@ -972,9 +978,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # non-dispatchable tracking state. Deriving beats a second call — the App's GraphQL pool is
     # what this loop actually runs out of (FU-084).
     openall_fetch_rc=0
-    openall="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy,parent,author 2>/dev/null)" || openall_fetch_rc=$?
+    openall="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body,isPinned,blockedBy,parent,author 2>/dev/null)" || openall_fetch_rc=$?
     jq -e . >/dev/null 2>&1 <<<"${openall:-null}" || { openall='[]'; openall_fetch_rc=1; }
     if [ "$openall_fetch_rc" != 0 ]; then openall='[]'; fi
+    if [ "$(printf '%s' "$openall" | jq 'length' 2>/dev/null || echo 0)" -ge "$ISSUE_LIST_LIMIT" ]; then
+      echo "[$repo] ⚠ TRUNCATED: open-issue fetch filled ISSUE_LIST_LIMIT=$ISSUE_LIST_LIMIT — the oldest open issues are INVISIBLE to this scan; raise the limit"
+    fi
     queued="$(printf '%s' "$openall" \
       | jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"${queued:-null}" || queued='[]'
@@ -987,14 +996,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # `updatedAt` is fetched for the homelab#155 belt's persistence guard (condition (c)) — read
     # the mergeStateStatus warning by the PR fetch below before touching this list: a selector
     # field that is not in --json comes back absent and silently matches nothing.
-    inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,updatedAt \
+    inprog="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body,updatedAt \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${inprog:-null}" || inprog='[]'
     # review_only (homelab#928): issues with agent/review but NOT agent/in-progress — used by the
     # phantom-label belt inside C4/C5 to detect phantom agent/review labels (no open PR, no merged
     # PR mentioning it, persisted past C4C5_PERSIST_S). Queried here alongside $inprog because the
     # C4/C5 clause is gated by a pod-probe and may be skipped; the variable is cheap and consistent.
-    review_only="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,updatedAt \
+    review_only="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body,updatedAt \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/review")) and (($L|index("agent/in-progress"))|not))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
     # ADR-097: one line per in-progress issue = its declared footprint; missing Touches: → `*`
@@ -1029,7 +1038,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # base — sat open with nothing to claim it. C6's own CLOSED-issue leg has always accepted both
     # states; this leg was the odd one out. $inprog is left ALONE on purpose: it also feeds the
     # ADR-097 footprint holds, and widening those is a different decision.
-    goalcand="$(gh issue list --repo "$slug" --state open --json number,title,labels,body \
+    goalcand="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/in-progress")) or ($L|index("agent/review"))))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${goalcand:-null}" || goalcand='[]'
     goalbased="$(printf '%s' "$goalcand" | jq -r '.[]
@@ -1049,7 +1058,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     goalbased_nums="$(printf '%s' "$goalbased" | sed 's/|.*//' | tr '\n' ' ')"
     if [ -n "$goalbased" ]; then
       gmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || gmerged='X'
-      gopen="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body // ""]' 2>/dev/null)" || gopen='X'
+      gopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body // ""]' 2>/dev/null)" || gopen='X'
       if jq -e . >/dev/null 2>&1 <<<"${gmerged:-null}" && jq -e . >/dev/null 2>&1 <<<"${gopen:-null}"; then
         for gb in $goalbased; do
           gn="${gb%%|*}"; gbase="${gb#*|}"
@@ -1107,7 +1116,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # `body` is fetched for the FU-146 per-item hold: it carries the `Implements #<n>` line that
     # agent-runtime#34 now guarantees, which is the only reliable PR-to-issue key (branch names
     # are not — circles#31 rode `fix/p0-bake-resolution`, #32 rode `fix/32-p0-page-sunburst`).
-    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName 2>/dev/null)" || prsjson='[]'
+    prsjson="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName 2>/dev/null)" || prsjson='[]'
     jq -e . >/dev/null 2>&1 <<<"${prsjson:-null}" || prsjson='[]'
     # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
     # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
@@ -1273,7 +1282,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # above still probes each dep with `gh issue view` because it needs what the nodes do NOT
     # carry — `stateReason` (NOT_PLANNED ⇒ stale premise) and the dep's own edges (cycles).
     # >>>REPLAY:sprout-report>>>
-    inert="$(gh issue list --repo "$slug" --state open \
+    inert="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" \
       --json number,title,author,labels,createdAt,blockedBy 2>/dev/null)" || inert='[]'
     jq -e . >/dev/null 2>&1 <<<"${inert:-null}" || inert='[]'
     # Unlabelled = no `agent*` label at all, the same predicate meta-needs-attention.sh clause 3
@@ -1989,15 +1998,15 @@ EOF_GUARDED
     # <<<REPLAY:goal-lane<<<
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 native blocked-by; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ blocked-by CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
-    swept="$(gh issue list --repo "$slug" --state open --json number,title,labels \
+    swept="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels \
       --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("direction-change"))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
     [ -n "$swept" ] && orphans="${orphans}[$repo] ⚠ direction-change — human sweep needed BEFORE dispatch:\n${swept}\n"
     # FU-069(a): `agent/error` = the anomaly circuit-breaker (merge-path.md §Runaway dispatch) —
     # HUMAN-FIRST, excluded from every actionable clause above/below. Reported so it never rots
     # silently, but a tick must not touch it (no dispatch, no relabel, no arbitration).
-    errs="$( { gh issue list --repo "$slug" --state open --json number,title,labels \
+    errs="$( { gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels \
         --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true; \
-      gh pr list --repo "$slug" --state open --json number,title,labels \
+      gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels \
         --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true; } )"
     [ -n "$errs" ] && orphans="${orphans}[$repo] ⚠ agent/error (anomaly breaker, FU-069) — human-first, NOT dispatched:\n${errs}\n"
     # `major` is now set on Renovate majors too (renovate-global.json), so gate the major clause on
@@ -2139,7 +2148,7 @@ EOF_GUARDED
     # actionable, above), major/awaiting-human (parked on a human by design), agent/error
     # (human-first). Report-only: the fix is `gh pr merge --auto` or an explicit parking label —
     # arm-at-open is operator discipline (merge-path.md).
-    orph="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest \
+    orph="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest \
       --jq '[.[]|(.labels|map(.name)) as $L|select((.autoMergeRequest==null)
         and (([$L[]|select(.=="automerge" or .=="deps-review" or .=="major" or .=="major/awaiting-human" or .=="merge-conflict" or .=="agent/error")]|length)==0)
         and (.reviewDecision!="CHANGES_REQUESTED"))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
@@ -2222,7 +2231,7 @@ EOF_GUARDED
             --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
         if [ -z "$PODS" ]; then
           # >>>REPLAY:c4c5-bodies-probe>>>
-          if BODIES="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body]' 2>/dev/null)"; then
+          if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then
             # The open-PR body probe is guarded the same way its kubectl sibling above is: a probe
             # failure is REPORTED (`⚠ PROBE_FAILED (open PRs)`) and the WHOLE clause is skipped for
             # this repo this tick — it must never fail INTO a wake (rule #6). An empty array is the
@@ -2634,7 +2643,7 @@ EOF_GUARDED
     # (labeling is cheap + idempotent).
     # `body` rides this list for the FU-146 per-item hold below — without it the hold's issue-link
     # capture is always empty and the hold silently never fires (fail-safe, but useless).
-    red_probe="$(gh pr list --repo "$slug" --state open --json number,labels,author,autoMergeRequest,headRefOid,headRefName,statusCheckRollup,body 2>/dev/null)" || red_probe=''
+    red_probe="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,labels,author,autoMergeRequest,headRefOid,headRefName,statusCheckRollup,body 2>/dev/null)" || red_probe=''
     if [ -n "$red_probe" ] && jq -e . >/dev/null 2>&1 <<<"${red_probe:-null}"; then
       # MANDATE check (homelab#88, sleep-tracking#113 livelock 2026-08-03): red CI on a PR the
       # loop did NOT author is the author's to fix — the scan kept dispatching sessions at a
@@ -2859,7 +2868,7 @@ EOF_GUARDED
     # so `$(gh … || echo '[]')` concatenates body+[] (live crash 2026-07-12, a nonexistent claim repo).
     # Meta-5 probe rule: a failed probe's stdout is NOT a value — validate or zero it.
     heads="$(gh api "repos/$slug/branches?per_page=100" --jq '[.[].name | select(test("^(fix|feat|agent)/"))]' 2>/dev/null)" || heads='[]'
-    prheads="$(gh pr list --repo "$slug" --state open --json headRefName --jq '[.[].headRefName]' 2>/dev/null)" || prheads='[]'
+    prheads="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json headRefName --jq '[.[].headRefName]' 2>/dev/null)" || prheads='[]'
     jq -e . >/dev/null 2>&1 <<<"${heads:-null}" || heads='[]'
     jq -e . >/dev/null 2>&1 <<<"${prheads:-null}" || prheads='[]'
     # A branch owned by a RUNNING ride is not stale — the worker pushes its branch before the PR
