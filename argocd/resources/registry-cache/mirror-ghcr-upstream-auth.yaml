@@ -1,0 +1,27 @@
+# FU-196 v0: upstream credentials for the ghcr pull-through mirror, so it can cache + serve the
+# org's PRIVATE images (the oracle corpus + serving image). Minted by
+# scripts/ghcr-mirror-pat-bootstrap.sh (classic PAT, read:packages — ghcr ignores fine-grained
+# PATs); value lives in Infisical. The mirror consumes this via `optional: true` secretKeyRefs
+# (mirror-ghcr.yaml), so a missing/unsynced secret leaves the mirror serving anonymously —
+# never broken. NB: proxy auth is UPSTREAM-only; the mirror still answers the LAN
+# unauthenticated, which is the consequence the ADR-091 update accepts for these packages.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: mirror-ghcr-upstream-auth
+  namespace: registry-cache
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: infisical
+    kind: ClusterSecretStore
+  target:
+    name: mirror-ghcr-upstream-auth
+    creationPolicy: Owner
+  data:
+    - secretKey: username
+      remoteRef:
+        key: GHCR_MIRROR_PULL_USERNAME
+    - secretKey: password
+      remoteRef:
+        key: GHCR_MIRROR_PULL_TOKEN
