@@ -57,7 +57,9 @@ meant to avoid.)
      never greens it; the ci-red machinery owns the fix round. At merge, HAND-CLOSE issue
      #123 with `agent/done` (its PR link is `Implements`, not a closing keyword).
   3. ~~oracle-fleet PR#294~~ MERGED 11:14Z.
-  4. oracle PR#293's red is CONTENT (assert-delta) — the ci-red machinery owns it; hands off.
+  4. oracle PR#293: the ci-red machinery FIXED its content red — now bot-approved + green,
+     **codeowner-parked 30m+** (CodeownerParkWaiting firing, seen by the 2026-08-30 mechanical
+     sweep trial) — a corpus session's ADR-110 read.
   ⚠ probe gotcha re-proven ×2 today: `statusCheckRollup` in any gh query hard-fails on this
   PAT (a 2h watch ran blind) — read CI via `gh run list`.
 
@@ -131,13 +133,16 @@ meant to avoid.)
   **#983 MERGED as PR#1001 (21:38Z)**: 3 heat-cited trims (−214 lines from the corpus hot set,
   incl. an ADR-111 staleness heat found that lints can't) + settle-test run 1 recorded in the
   doc-heat spike — ≥3 bar MET; **the FU-164 promote-vs-close call is the operator's** (serve
-  the report + wire into docs-cleanup, or close the spike).  **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
-  UNPIN at its merge. Still-queued codeowner issues stand: #928 #929 #932 #933 #937 #938 #888
-  #456 #110, agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's
-  merge lets G-B assemble → assembly PR → codeowner tax → probe-platform, FU-102); **#946 is
-  UNBLOCKED (#945 merged as PR#996, 21:19Z)** — the A5 evidence seed is a seat run of
-  `re-review.sh --shadow --model opencode/big-pickle` over #923's set, ready any sitting; #953 queued (docs-lint gate behaviour — its class fired AGAIN
-  this session: the meta-state ⚓-term break, second instance on the thread).
+  the report + wire into docs-cleanup, or close the spike).
+  **Queued-list RECONCILED 2026-08-30 (midday session):** #928 #929 #932 #933 #937 #888 #456 +
+  agent-runtime#95 all CLOSED by the machine lane; #936 merged + UNPINNED. The two survivors had
+  structural causes, both fixed/routed 2026-08-30: **#110** was INVISIBLE (the scan's `gh issue
+  list` calls silently capped at 30 — fixed direct-master `088ac3b9`, ISSUE_LIST_LIMIT + loud
+  truncation warn; #110 now the platform loop's actionable unit) and **#938** was scan-refused
+  every tick (guarded-path Touches) — de-queued + de-suitabilized to the operator lane, comment
+  on the issue. **#946 is UNBLOCKED (#945 merged as PR#996)** — the A5 evidence seed is a seat
+  run of `re-review.sh --shadow --model opencode/big-pickle` over #923's set, ready any sitting;
+  #953 queued (docs-lint gate behaviour).
 
 - **⚑ ORACLE AND SLEEP ARE CHAINLESS (oracle: oracle-iac#387; sleep: sleep-iac#77 + mirror
   homelab#976 MERGED; 0731 out of model_tiers, homelab#960).** **Sleep is PROVEN end-to-end:**
@@ -199,7 +204,9 @@ meant to avoid.)
 
 - **⚑ S7/#745 COMPLETE 2026-08-26** (callers ×10 + reusable deleted, org secrets destroyed,
   MP-T02 re-anchored). Acceptance watch: no BEHIND PR >30m anywhere; hosted updater runs
-  structurally 0. Silences `a3628730` + `5400ed94…` self-expire 2026-09-01. **S8 (merge
+  structurally 0. ⚠ Both S7 silences were WIPED by the 2026-08-25 Alertmanager restart
+  (silences sit on emptyDir — FU-195): `a3628730` is moot (callers disabled at source);
+  `5400ed94` re-created as `1ac4049c` to 09-01 (the #698 minutes mute, was re-firing). **S8 (merge
   lanes) is on the work map** — (repo, base) serialization + goal v1.3 themes as ONE stint
   after S5; #829 absorbed at its authoring (de-queued, agent-fix kept).
 
@@ -228,16 +235,18 @@ meant to avoid.)
   comment on the issue, 2026-08-26). Related sighting on **#938** (sentinel edge convoy,
   recurrence comment 2026-08-26 ~21:17Z): head-blind `{wake: edge}` payloads confirmed, 17
   pending identical sweeps at peak, arrival source = updater head churn after merge bursts.
-- **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — readout pending; revert to
-  0 if no win; residual setup cost = homelab#518 (its promtool child #936 queued 2026-08-25:
-  loop-health fixture = 107.6s of the 130s lint step).
+- **CI-wall trial SETTLED 2026-08-30: `minRunners: 1` KEPT** — readout (ci.yaml pickup latency,
+  n=40/window): median 22s→3s, p90 300s→3s, max 648s→7s; comments settled in arc-runners.yaml.
+  Residual setup cost = homelab#518 (its promtool child #936 merged — the loop-health fixture
+  lint cost).
 - **Small live residue:** wk-metal-04 `kubernetes_labels.longhorn_bulk_zone` field-manager
   CONFLICT kills FULL tofu applies (targeted fine) — chase before the next broad apply
   (probed 2026-08-26: live managedFields show `Terraform` owning
   `topology.kubernetes.io/zone` CLEANLY, no rival manager on the label — likely cleared by
   the last targeted apply; unreproducible read-only, verdict = the next full apply) ·
-  proxy zen leg live-smoke still unrun (`opencode/nemotron-3-ultra-free` through the
-  in-cluster proxy) · the openrouter-proxy FU-021 comment repoint rides the next functional
+  ~~proxy zen leg live-smoke~~ DONE 2026-08-30 (200 `[zen-leg+zen+zen-auth-swap]` through the
+  in-cluster proxy, real nemotron completion; ⚠ free-rail latency ~68s — smoke probes need
+  >60s timeouts) · the openrouter-proxy FU-021 comment repoint rides the next functional
   proxy change · hp-01 `install_disk: /dev/sda` is still a NAME with two identical disks
   (repin to WWID, FU-076's neighbourhood) · stack leftovers: circles#77 ci-red triage,
   oracle-fleet#259 rework per the seat read, circles-iac deploy-bump generator fix before

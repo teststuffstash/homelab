@@ -1,6 +1,7 @@
 # The runner scale set — ephemeral GitHub Actions runners registered org-wide on teststuffstash.
-# Workflows target them with `runs-on: homelab-ephemeral`. Scale-to-zero (minRunners 0); a job
-# spins an ephemeral pod, it runs, then it's torn down. Pinned to the ephemeral laptop tier so CI
+# Workflows target them with `runs-on: homelab-ephemeral`. One warm runner (minRunners 1, settled
+# 2026-08-30 — see the readout at the field below); each job's pod is ephemeral: it runs, then it's
+# torn down and a fresh one pre-warms. Pinned to the ephemeral laptop tier so CI
 # noise/privilege stays off the service nodes (same tier as the Forgejo runner).
 #
 # Wave 5 — after github-runner-secrets (wave 4) creates the arc-runners ns + the arc-github-app
@@ -35,10 +36,11 @@ spec:
           namespace: arc-systems
           name: arc-controller-gha-rs-controller
         runnerScaleSetName: homelab-ephemeral
-        # minRunners 0→1 TRIAL (operator, 2026-08-18, toward a ~2-min ci wall): scale-from-zero made
-        # every first job pay pod spin-up + registration — measured runs spent ~4min queued against a
-        # 2m38s job. One warm runner ≈ 2.5Gi resident on the ephemeral tier. Measure via run
-        # startedAt→job-start deltas; revert to 0 if the win doesn't show or the tier needs the RAM.
+        # minRunners 1 SETTLED (trial 2026-08-18 → readout 2026-08-30, ci.yaml job pickup latency,
+        # created_at→started_at, n=40 per window): 0 → median 22s / mean 99s / p90 300s / max 648s;
+        # 1 → median 3s / p90 3s / max 7s. The warm runner deletes the cold-start tail (pod spin-up
+        # + registration, minutes at p90) for ~2.5Gi resident on the ephemeral tier. Revisit only
+        # if the tier needs the RAM back.
         minRunners: 1
         # 2 ephemeral nodes (wk-metal-01/-02, ~4 CPU + 7 GB each). Since 2026-08-11 runner pods carry
         # memory REQUESTS (~2.5Gi/pod incl. dind) + a soft hostname spread (see the template comment), so

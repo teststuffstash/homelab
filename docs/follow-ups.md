@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-195** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-196** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -126,6 +126,16 @@ six OVERSIZE items pointer-ized into
       `teststuff.net` HAProxy/ACME pair (ADR-088) or whether LAN-trust is the right posture, as
       `argo.teststuff.net` already chose. Detail: [`loki-tenancy.md`](loki-tenancy.md) §How a stack
       jail reads its logs.
+
+- [ ] **FU-195** — **Alertmanager silences do not survive a pod restart** — the `…-alertmanager-db`
+      volume (nflog + silences) is a bare emptyDir, no volumeClaimTemplate. Found 2026-08-30: the
+      2026-08-25 17:31Z restart silently wiped both S7 silences (`a3628730` — moot, callers since
+      disabled at source; `5400ed94` — the #698 minutes mute, which let `GithubActionsMinutesHigh`
+      re-fire days early; re-created as `1ac4049c` to 09-01). Why deferred: storage needs a values
+      change + rollout on the monitoring stack, not a quickfix. **Next:** add
+      `alertmanagerSpec.storage` (small Longhorn PVC) in `kube-prometheus-stack.yaml` values, or
+      rule that silences are ephemeral-by-design and belt-worthy mutes must be PrometheusRule
+      changes instead.
 
 - [ ] **FU-192** — **Three residues of the ADR-118 tenancy flip, all deferred deliberately**
       (2026-08-27, step 2). (a) Grafana's tenant list is a SNAPSHOT — Loki has no wildcard tenant,
