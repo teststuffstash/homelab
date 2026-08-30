@@ -239,6 +239,17 @@ run_actions() {   # run_actions <fixture-dir> <name>
   # Every composition opens with the scan's own `set -euo pipefail`, so "this survives -e" is
   # asserted by every fixture rather than claimed once.
   printf 'set -euo pipefail\n' > "$comp"
+
+  # Prepend the source's config-defaults block if it has one (e.g. coordinator-scan.sh's
+  # >>>REPLAY:config-defaults>>> block around top-of-file VAR="${VAR:-…}" assignments).
+  # This ensures extracted clause blocks see the same defaults the full scan does, even
+  # under `set -u` — without duplicating the default in every fixture's env: or bridge.
+  if [ -n "$src" ] && [ -f "$ROOT/$src" ]; then
+    if extract "config-defaults" "$ROOT/$src" > "$TMP/$name.config-defaults" 2>/dev/null; then
+      [ -s "$TMP/$name.config-defaults" ] && { cat "$TMP/$name.config-defaults" >> "$comp"; printf '\n' >> "$comp"; }
+    fi
+  fi
+
   while IFS= read -r part; do
     [ -n "$part" ] || continue
     case "$part" in

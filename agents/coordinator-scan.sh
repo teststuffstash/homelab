@@ -36,7 +36,15 @@
 #   bash agents/coordinator-scan.sh --spawn    # for each stack with work, spawn a headless coordinator tick
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# >>>REPLAY:config-defaults>>>
+# Config defaults that extracted clause blocks depend on. The replay harness (run.sh)
+# prepends this block to every composition sourced from coordinator-scan.sh, so a
+# `set -u` clause never hits an unbound variable whose default lives outside the block.
+# Add new defaults here when a replayed block references them.
 ORG="${ORG:-teststuffstash}"
+REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
+ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"
+# <<<REPLAY:config-defaults<<<
 STACKS_FILE="${STACKS_FILE:-${HERE}/stacks.json}"
 SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
 # ADR-097 footprint-intersection dispatch: the predicate lives in a sourceable helper so the
@@ -48,15 +56,6 @@ SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
 # ADR-106 (3): the findings-store helpers (burn-down write + checkpoint counts) — the store
 # format's ONE home; the coordinator session uses the same file's CLI verbs.
 . "${HERE}/goal-findings.sh"
-# Parallelism ceilings (ADR-097): hard per-repo worker max, and the TRACKS-rule-1 open-PR bound
-# (updater churn is O(open PRs × merges)) that holds NEW work regardless of footprints.
-REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
-# `gh issue list` DEFAULTS TO 30 RESULTS (newest first) — with no --limit the scan's whole world
-# silently shrank to the 30 newest open issues once a repo grew past that (found 2026-08-30:
-# homelab at 46 open, floor #840 — queued #110 was invisible to every sweep for 24 days, and two
-# live goals sat below the window). Every issue/PR list call carries this limit; the openall
-# fetch warns LOUDLY when it fills up (no silent caps).
-ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"
 
 # ── PIN-ONLY GUARDED PATHS — a pre-dispatch routing check (homelab#309) ─────────────────────────
 # `scripts/pin-only-lint.sh` refuses any PR that writes anything but a pin line into its carved-out
