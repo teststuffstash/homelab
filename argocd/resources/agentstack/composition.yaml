@@ -103,6 +103,7 @@ spec:
                   (dict "name" "goal/validated" "color" "0b6b3a" "description" "Verdict: production confirms the idea — goal closed met + close sweep (ADR-102; human-applied)")
                   (dict "name" "goal/reverted" "color" "d93f0b" "description" "Verdict: production refutes the idea — goal closed successfully-refuted, descendants close with it (ADR-102; human-applied)")
                   (dict "name" "goal/abandoned" "color" "6a737d" "description" "Verdict: budget exhausted before a verdict — goal closed not-planned, descendants left open but inert (ADR-102; human-applied)")
+                  (dict "name" "platform-request" "color" "1d76db" "description" "Capability-request lane (ADR-119): intent-level platform demand - pull-only, disposition always")
                   (dict "name" "merge-conflict" "color" "e11d21" "description" "PR branch conflicts with master — updater can't auto-resolve; needs a worker re-run or rebase")
                   (dict "name" "major" "color" "b60205" "description" "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)")
                   (dict "name" "major/awaiting-human" "color" "d93f0b" "description" "Major bump: migration documented, CI green, reviewer-approved — a human merges")
