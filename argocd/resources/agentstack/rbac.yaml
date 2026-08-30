@@ -97,6 +97,13 @@ rules:
   # failure that tells the claim engineer to add the missing pair. A silent standing grant
   # has no such tell. Add secrets here only when a consumer exists and the minimal-privilege
   # case has been reviewed.
+  #
+  # SCOPE — CORE GROUP ONLY, matching what the Composition can render: the responder Role
+  # template hardcodes `apiGroups: [""]` (composition.yaml), so a non-core pair (deployments,
+  # jobs, CNPs) is structurally unrenderable today and pre-granting for it would be a standing
+  # cluster-wide grant nothing can consume (the 2026-08-30 assembly read dropped exactly those
+  # rows). When a consumer needs a non-core pair, the verbs schema grows an `apiGroup` field
+  # and its pre-grant row lands here in the same change — same one-change discipline as secrets.
   - apiGroups: [""]
     resources: [pods, pods/log, pods/status]
     verbs: [get, list, watch, patch, delete]
@@ -106,18 +113,6 @@ rules:
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get, list, watch]
-  - apiGroups: [apps]
-    resources: [deployments, deployments/scale, deployments/status, statefulsets, statefulsets/status, daemonsets]
-    verbs: [get, list, watch, patch, delete]
-  - apiGroups: [batch]
-    resources: [jobs, cronjobs]
-    verbs: [get, list, watch, delete]
-  - apiGroups: [networking.k8s.io]
-    resources: [ingresses, networkpolicies]
-    verbs: [get, list, watch, patch, delete]
-  - apiGroups: [cilium.io]
-    resources: [ciliumnetworkpolicies, ciliumnetworkpolicies/status]
-    verbs: [get, list, watch, patch, delete]
   # ADR-089 quota-as-contract: the Composition has been able to compose a per-repo ResourceQuota
   # since the tier work landed, but the block is gated on `{{- if $r.storage }}` and NO claim had
   # ever set `storage` — so this grant was never needed and its absence never showed. Arming the

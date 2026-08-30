@@ -236,8 +236,8 @@ spec:
             rules:
             {{- range $v := $resp.verbs }}
               - apiGroups: [""]
-                resources: [{{ $v.resource }}]
-                verbs: [{{ $v.verb }}]
+                resources: [{{ $v.resource | quote }}]
+                verbs: [{{ $v.verb | quote }}]
             {{- end }}
             ---
             apiVersion: rbac.authorization.k8s.io/v1
@@ -265,8 +265,8 @@ spec:
             rules:
             {{- range $v := $resp.verbs }}
               - apiGroups: [""]
-                resources: [{{ $v.resource }}]
-                verbs: [{{ $v.verb }}]
+                resources: [{{ $v.resource | quote }}]
+                verbs: [{{ $v.verb | quote }}]
             {{- end }}
             ---
             apiVersion: rbac.authorization.k8s.io/v1

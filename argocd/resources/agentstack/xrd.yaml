@@ -233,10 +233,17 @@ spec:
                         properties:
                           resource:
                             type: string
-                            description: "Kubernetes resource name, plural (e.g. pods, deployments, configmaps)."
+                            # One resource name only. The pattern is load-bearing, not cosmetic:
+                            # the Composition splices this value into a rendered Role rule, and a
+                            # comma ("pods, secrets") would render a VALID multi-resource rule —
+                            # widening past the declared pair and past the deliberate secrets
+                            # carve-out (rbac.yaml). Belt to the template's `| quote`.
+                            pattern: "^[a-z0-9.-]+(/[a-z]+)?$"
+                            description: "Kubernetes resource name, plural, core API group only (e.g. pods, configmaps). One name — no lists."
                           verb:
                             type: string
-                            description: "Kubernetes verb (e.g. get, list, patch, delete)."
+                            pattern: "^[a-z]+$"
+                            description: "Kubernetes verb (e.g. get, list, patch, delete). One verb — no lists."
                 loop:
                   type: object
                   default: {}
