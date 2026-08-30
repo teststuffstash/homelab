@@ -23,6 +23,22 @@ meant to avoid.)
   labelling their own issues by escalation destination (e.g. split `agent/blocked` platform/stack
   at arbitrate time), and/or a lane for stacks to file issues/proposals/requests on the platform
   repo. Deliberately NOT an FU (operator direction) — pick up in a design-agents session.
+  **Third instance (2026-08-30, operator): stack ACCESS/SERVICE gaps have no tracked inventory.**
+  Case: the oracle jail had no read on its own transcripts (verified: `garage-workspace.yaml`
+  mints exactly writer=write-only for every session + reader="platform-side only" for the
+  viewer sync — NO coordinator anywhere holds transcript read, platform included; the brief's
+  "reads freely … transcripts" has no built mechanism, A2 MCP slices unbuilt/FU-058 leg); Loki
+  read was just granted via the ADR-118 door — the ONE service with a stack-scoped read, and
+  the donor shape for transcripts (per-project prefixes ≈ tenants; Garage keys are per-bucket,
+  so scoped read = per-stack buckets or an ADR-118-style proxy). No role×stack×service
+  inventory exists (grep negative: FU/ADR/GAPS); pieces = trust-boundary table + roles.md
+  boundaries (coarse prose), egress dial table (network only), `agent-read-rbac.yaml` rulings,
+  loki-tenant-grants + consumer card, oracle-iac `workbench.yaml`. Demand-side gap: TOOL_GAP
+  markers exist ONLY for cluster sessions (zero hits in jail cards/ground-rules) — the jail
+  lane, where this gap was felt, has no channel. Design direction to weigh: generate any
+  matrix from grant sources (never hand-author — FU-049's pattern), consumer-card + grants
+  file per LIVE service (loki-tenancy shape), TOOL_GAP extended to jail sessions, and the
+  capability-request lane as the routing (same door as instance 1's proposals).
 
 - **⚑ ADR-118 Loki tenancy — STEPS 1+2 SHIPPED, STEP 3 IS THE NEXT SESSION'S** (2026-08-27;
   design [`loki-tenancy.md`](../loki-tenancy.md), rollout table there is authoritative).
