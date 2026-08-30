@@ -192,6 +192,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-enforce-default/explicit-wins` | actions | - | `agents/agent-session.sh` | - |
 | `harness-enforce-default/flip` | actions | - | `agents/agent-session.sh` | - |
 | `harness-enforce-default/monitor-untouched` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/claude-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose-mcp` | actions | - | `agents/agent-session.sh` | - |
