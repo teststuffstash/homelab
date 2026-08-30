@@ -1,0 +1,83 @@
+# Garage admin metrics alerts — the two FU-093 ledger belts (docs/storage-ledger.md).
+#
+# These depend on `monitoring.metrics.enabled: true` in the garage Application (which renders the
+# headless metrics Service + ServiceMonitor against :3903). Without that flag nothing scrapes
+# Garage, and these rules evaluate against an empty vector.
+#
+# ⚠ Known limit, recorded in the ledger doc: this would NOT have helped on 2026-08-24 itself
+# (Prometheus shared fate with the failure window — it went read-only too). The belt is for the
+# non-shared-fate cases.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: garage-admin-metrics
+  namespace: monitoring
+  labels:
+    app: garage-alerts
+spec:
+  groups:
+    - name: garage-admin-metrics
+      rules:
+        # DISK FULL BELT — the >80% threshold from the ledger. Garage exposes per-disk avail/total
+        # on the admin metrics endpoint; this is the direct detector for the condition that the
+        # ledger's ">80% alert" input was designed to catch.
+        - alert: GarageDiskFillingUp
+          expr: |
+            garage_local_disk_avail / garage_local_disk_total < 0.2
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage data disk is {{ $value | humanizePercentage }} full on {{ $labels.node }}"
+            description: >-
+              Garage's data disk has less than 20% available. The ledger's >80% threshold
+              (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn
+              volume or the underlying pve thin pool is filling. A full disk makes Garage go
+              read-only — the 2026-08-24 meta wipe started this way.
+        # TABLE SIZE DROP-TO-ZERO BELT — the wipe detector. A meta wipe (like the 2026-08-24
+        # incident where the LMDB came back with empty tables) makes table_size drop to zero for
+        # every table. This alert fires when ANY table that HELD DATA IN THE LAST 7 DAYS reports
+        # zero size. The `max_over_time` clause is what keeps it off the by-design-empty tables
+        # (admin_token, k2v_index_counter_v2, k2v_item, multipart_upload, bucket_mpu_counter),
+        # which is why the plain `table_size == 0` form was replaced (#977, #1013).
+        # ⚠ BOUND: that clause is a ROLLING WINDOW, not "was ever populated". A wipe still
+        # unrecovered 7 days after the drop stops alerting — every sample in the window is 0 by
+        # then. 7d is chosen to sit far outside any plausible detection window; the latch that
+        # would remove the bound entirely is #1015. The `for:` window avoids flapping on restarts.
+        - alert: GarageTableEmpty
+          expr: |
+            table_size == 0 and max_over_time(table_size[7d]) > 0
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage table {{ $labels.table_name }} is empty on {{ $labels.node }}"
+            description: >-
+              A Garage meta table that should hold data reports zero size. This is the pattern
+              from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md):
+              the LMDB came back with empty tables after a hard VM stop. Check Garage's health
+              (`garage status`), the meta volume, and the pod logs. If multiple tables are empty
+              simultaneously the meta store may need recovery from the snapshot belt
+              (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots).
+              This belt only fires within 7 days of the drop — if it resolves without the table
+              refilling, the window has slid past the drop rather than the store having recovered;
+              check `table_size` directly.
+        # COVERAGE GUARD (seat, PR#965 gate read) — the two belts above die SILENTLY if the new
+        # :3903 scrape never works (a metrics token, a ServiceMonitor mismatch, or a metric-name
+        # drift like `table_size` vs a prefixed family — unverifiable until the scrape is live):
+        # an expr over an absent series evaluates to nothing, which is indistinguishable from
+        # "everything is fine" (the FU-108/FU-125 class). This alert is the belt's own belt: it
+        # fires while EITHER family the belts read is absent, so a dead scrape surfaces as a page
+        # instead of as permanent false calm. Expected to fire once at rollout until the
+        # ServiceMonitor's first successful scrape — that firing is the acceptance test.
+        - alert: GarageAdminMetricsAbsent
+          expr: |
+            absent(garage_local_disk_total) or absent(table_size)
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage admin-metrics families are absent — the disk/table belts are blind"
+            description: >-
+              The garage-admin-metrics belts (GarageDiskFillingUp, GarageTableEmpty) read
+              garage_local_disk_total and table_size, and at least one family is absent from
+              Prometheus — the scrape is not working (ServiceMonitor selector, metrics token,
+              or a metric-name drift), so those belts cannot fire regardless of Garage's state.
+              Fix the scrape; do not silence this without confirming both families exist.

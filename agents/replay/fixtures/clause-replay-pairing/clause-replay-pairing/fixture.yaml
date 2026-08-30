@@ -1,0 +1,44 @@
+# homelab#825 — clause-replay pairing check.
+#
+# WHY THIS IS A CHECK AND NOT A DOC LINE. The ADR-103 ratchet requires any PR changing a
+# clause file must touch agents/replay/**. An issue whose declared `Touches:` reaches any
+# ratchet clause file but does not reach agents/replay/** is structurally under-scoped: the
+# resulting PR would red on the required `ci` check. On #808 this went undetected until PR#821,
+# because the check there catches backtick-quoted body paths, and "its executed replay" is prose,
+# not a literal path. This check detects the deterministic pairing: Touches intersects the
+# ratchet clause set ∧ does not cover agents/replay/**.
+#
+# THE SIX ISSUES:
+#   #701 Touches: agents/coordinator-scan.sh
+#        touches a clause file, declares no agents/replay/** — REPORTED
+#   #702 Touches: agents/coordinator-scan.sh, agents/replay/**
+#        touches a clause file, declares agents/replay/** — NOT REPORTED
+#   #703 Touches: agents/coordinator/
+#        touches a clause file (by prefix), declares no agents/replay/** — REPORTED
+#   #704 Touches: argocd/resources/
+#        does not touch any clause file — NOT CHECKED
+#   #705 No Touches line (exclusive `*` sentinel)
+#        not checked per ADR-097 — NOT CHECKED
+#   #706 "body": null
+#        empty body — NOT CHECKED
+#
+# No `gh` call appears in the action stream on purpose — the lint rides `openall`, the fetch
+# the repo pass already made.
+# homelab#853: the parity assertion is hoisted (before the per-repo loop) and reads ci.yaml
+# at runtime; the fixture tests the per-issue pairing check only and provides the canonical
+# list + PARITY_ISSUES (empty = no drift) via bridge.sh.
+# pins: (none — report-only check, not a lifecycle transition)
+#
+# TWO ROWS:
+#   homelab-no-drift          — homelab repo, PARITY_ISSUES empty (no drift asserted)
+#   non-homelab-with-drift    — oracle-fleet repo, PARITY_ISSUES non-empty,
+#                               asserting NO CLAUSE-LIST PARITY line is emitted
+#                               (the guard `[ "$repo" = "homelab" ]` prevents it)
+name: clause-replay-pairing
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:clause-replay-pairing
+  - file:post.sh
+rows: rows.psv

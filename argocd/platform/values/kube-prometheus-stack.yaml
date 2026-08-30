@@ -69,7 +69,7 @@ additionalPrometheusRulesMap:
             annotations:
               description: 'Postgres instance {{ $labels.pod }} ({{ $labels.namespace }}) has been NotReady for 10m — the CNPG cluster is degraded (often a replica that can''t rejoin and loops on pg_rewind; the primary may be serving alone). Recovery: delete the replica''s PVC+pod so CNPG re-clones from the primary.'
               summary: CloudNativePG instance {{ $labels.pod }} not ready
-            expr: kube_pod_container_status_ready{namespace=~"forgejo|infisical",container="postgres"} == 0
+            expr: kube_pod_container_status_ready{namespace=~"forgejo|infisical|monitoring",container="postgres"} == 0
             for: 10m
             labels:
               severity: warning
@@ -77,7 +77,7 @@ additionalPrometheusRulesMap:
             annotations:
               description: '{{ $labels.pod }} ({{ $labels.namespace }}) restarted >3 times in 15m — likely a replica stuck on pg_rewind (no common timeline ancestor). Re-clone it: delete the replica''s PVC + pod.'
               summary: CloudNativePG instance {{ $labels.pod }} crash-looping
-            expr: increase(kube_pod_container_status_restarts_total{namespace=~"forgejo|infisical",container="postgres"}[15m]) > 3
+            expr: increase(kube_pod_container_status_restarts_total{namespace=~"forgejo|infisical|monitoring",container="postgres"}[15m]) > 3
             for: 0m
             labels:
               severity: warning
@@ -270,6 +270,22 @@ grafana:
     existingSecret: grafana-admin
     passwordKey: admin-password
     userKey: admin-user
+  # Grafana's DB on CNPG Postgres (argocd/resources/postgres/grafana-pg.yaml) instead of the
+  # default sqlite-on-emptyDir — the sqlite file sat on the hosting node's ROOT disk and its
+  # fsync-under-lock pattern produced the 2026-08-25/26 SQLITE_BUSY storms whenever that disk
+  # was busy (hp-01: 175ms avg writes under the agent burst). GF_DATABASE_* env wins over
+  # grafana.ini. sslmode=require: CNPG serves TLS with its own CA; require encrypts without
+  # CA verification, which is the right dial for an in-cluster ClusterIP hop.
+  env:
+    GF_DATABASE_TYPE: postgres
+    GF_DATABASE_HOST: grafana-pg-rw.monitoring.svc:5432
+    GF_DATABASE_NAME: grafana
+    GF_DATABASE_SSL_MODE: require
+  envValueFrom:
+    GF_DATABASE_USER:
+      secretKeyRef: { name: grafana-pg-app, key: username }
+    GF_DATABASE_PASSWORD:
+      secretKeyRef: { name: grafana-pg-app, key: password }
   extraContainers: |
     - name: sleep-sqlite-sync
       image: amazon/aws-cli:2.17.0
@@ -301,7 +317,12 @@ grafana:
   persistence:
     enabled: false
   plugins:
-    - frser-sqlite-datasource
+    # Pinned (FU-173): unpinned fetches the LATEST release per pod start — prod could drift
+    # from the 4.0.6 sleep integration gate with no commit anywhere. Renovate owns the bump.
+    # ⚠ Grafana's background installer parses `id@version`; the docs' legacy `id version`
+    # space form SPLITS here — "4.0.6" was installed as its own pluginId, 404'd, and
+    # crashlooped the pod (2026-08-25 20:11Z, 4 restarts before the fix).
+    - frser-sqlite-datasource@4.0.6
   resources:
     requests:
       cpu: 100m

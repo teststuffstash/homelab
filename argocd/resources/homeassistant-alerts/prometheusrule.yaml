@@ -119,14 +119,18 @@ spec:
         #   • sensor.nord_pool_ee_currency — literally always "EUR".
         #   • sensor.redmi_note_9_pro_* — companion-app push sensors from a phone that no longer
         #     reports.
-        # DELIBERATELY NOT EXCLUDED: the irrigation pump counters (sensor.office_plants_irrigation_*).
-        # They were the #221 tally's 9th member but are NOT static by construction — they sit still
-        # only when the soil is wet enough that no watering ran. Excluding them would blind this rule
-        # to the ESPHome irrigation node dying, which is exactly the class this alert exists to
-        # catch. Do not re-add them.
+        # ⚠ homelab#221 (2026-08-24, operator): the irrigation pump counters
+        # (sensor.office_plants_irrigation_pump_*_water_seconds) ARE excluded now, reversing the
+        # earlier "deliberately not excluded" stance. They sit still whenever the soil is wet
+        # enough that no watering runs — pump 3 was 4 days "stale" with the node healthy and its
+        # soil sensors updating every minute — so their staleness measures how wet the soil is,
+        # not integration health. The node-death coverage that kept them here did not go away: it
+        # moved to IrrigationNodeSilent below, which reads liveness off the node's 60s-cadence
+        # sensors and detects a dead node in ~1.5h instead of this rule's 26h. The node's soilm/
+        # wifi/uptime sensors stay under this rule — they DO move, so they cost it nothing.
         - alert: HomeAssistantSensorStale
           expr: |
-            time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|backup_(backup_manager_state|last_attempted_automatic_backup|last_successful_automatic_backup|next_scheduled_automatic_backup)|nord_pool_ee_currency|redmi_note_9_pro_(battery_level|battery_state|charger_type)).*"}[10m]) > 86400
+            time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|backup_(backup_manager_state|last_attempted_automatic_backup|last_successful_automatic_backup|next_scheduled_automatic_backup)|nord_pool_ee_currency|redmi_note_9_pro_(battery_level|battery_state|charger_type)|office_plants_irrigation_pump_[0-9]+_water_seconds).*"}[10m]) > 86400
           for: 2h
           labels:
             severity: info
@@ -134,3 +138,24 @@ spec:
             summary: "{{ $labels.entity }} has not updated in {{ $value | humanizeDuration }}"
             description: "Informational: this HA sensor has not changed in over a day. Some sensors legitimately sit still (daily totals, config-ish selects) — the point of this rule is that a whole GROUP going quiet at once is an integration dying, which is invisible otherwise because HA keeps entities `available` and serves the stale value."
             info_suppressed_ack: "Deliberately dashboard/API-only: InfoInhibitor suppresses severity:info from every dispatch path (runbook §Meta-session probe & triage discipline). Per-entity staleness is too noisy to page; the pageable form of this class is the GROUP-level integration-death alert, and this rule feeds the Alertmanager/Grafana surface a human browses."
+        # ── IrrigationNodeSilent — GROUP-level liveness for the ESPHome irrigation node ─────────
+        # (homelab#221's better algorithm). The node's fast sensors publish every 60s by config
+        # (esphome/config/office-plants-irrigation.yaml) and ADC noise keeps last_updated moving —
+        # measured worst staleness over 7d: 24.1min (soilm), 45.2min (wifi), read 2026-08-24.
+        # `min` across the five = the FRESHEST of them, so this fires only when the WHOLE node has
+        # gone quiet: one saturated/flat sensor cannot fire it alone, and one live sensor holds it
+        # down. Threshold 1h = 2.5x the worst measured soilm staleness; with `for: 30m` a dead node
+        # is caught ~1.5h in, vs the 26h+2h the generic rule above offered when the pump counters
+        # were its tripwire. The aggregation deliberately drops `entity`/`friendly_name` — the
+        # subject is the node, not any one sensor.
+        # ⚠ RESTART-GAP BRIDGED (homelab#336 — this group's class block above): same [10m] bridge,
+        # same direction argument; the min() across entities happens AFTER each series is bridged.
+        - alert: IrrigationNodeSilent
+          expr: |
+            min(time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\.office_plants_irrigation_(soilm_sens_[1-4]|wifi_signal_sensor)"}[10m])) > 3600
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "The office-plants irrigation node has been silent for over an hour"
+            description: "Every 60s-cadence sensor on the ESPHome irrigation node (4x soil moisture + wifi signal) has stopped updating at once — the node is dead, unreachable, or its HA integration is wedged (HA keeps the entities available and serves the last values, so dashboards look alive). Plants stop being watered when soil thresholds cannot be read. Check the device (devbox run irrigation-logs), then the HA ESPHome integration; service doc docs/office-plants/README.md. The pump *_water_seconds counters are NOT liveness signals — they legitimately freeze for days when soil is wet (homelab#221)."

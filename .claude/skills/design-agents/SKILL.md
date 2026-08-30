@@ -31,7 +31,7 @@ Fixed cost beats itemized honesty here: ~110k tokens, pre-authorized, paid ONCE 
      `unreplayed:` fields and the gap registers — the exact miss that once justified reading the
      sources. The YAMLs add only code anchors (file+regex); read one on demand when EDITING a
      guard/transition, never for a design sitting.
-   - `agents/README.md` (launcher) + `agents/coordinator/README.md` (the brief — 19k tokens and
+   - `agents/README.md` (launcher) + `agents/coordinator/README.md` (the brief — ~23k tokens and
      load-bearing; a docs/agents glob misses it)
    - `agents/replay/README.md` **through the generated index only** (doctrine + cleanup contract
      + index, ≈ the first third). The per-family essays below the index are touch-time reference
@@ -53,5 +53,12 @@ Fixed cost beats itemized honesty here: ~110k tokens, pre-authorized, paid ONCE 
   items, live probes (`ci.yaml`, cluster state, fixture listings), and anything operator-supplied.
   The corpus itself is one standing line — "full agents corpus" — never an enumeration; the
   operator should not have to diff a file list against their memory of the subtree.
+- **Live-state claims are verified, never quoted from the corpus** (promoted from
+  design-agents-G1, two sightings 2026-08-11 + 2026-08-23): a STATUS ("still queued") or a
+  CONFIG CONSTANT ("default 3") lifted from corpus/transient prose is re-read from its live
+  authority — the board, the deployment env, the ConfigMap — before being reported, or is
+  explicitly marked as-of-doc-date. Corpus prose describing live config is a claim about the
+  world, and the world moves between doc edits (the cap read "3" for two weeks after the
+  deployment pinned 5).
 - Everything else is inherited: state the negative on tracker greps, "no owning doc covers X" is
   a finding, assessments until the operator says land it.

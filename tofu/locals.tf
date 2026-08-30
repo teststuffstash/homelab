@@ -20,15 +20,22 @@ locals {
   # Reading a file at plan time is pure data — no provider, no state, no ordering dependency.
   machines = yamldecode(file("${path.module}/../machines/machines.yaml")).machines
 
+  # Failure-domain zones (ADR-114): machines.yaml `zone` → topology.kubernetes.io/zone.
+  # Physical box = zone; every VM on the pve thin pool = "proxmox" (one pool took several VMs
+  # at once, 2026-08-24 incident). Applied by tofu/longhorn.tf.
+  machine_zones = { for m in local.machines : m.name => m.zone if can(m.zone) }
+
   # Bare-metal Talos workers (metal.tf). Booleans are compared to `true` (not just try()-defaulted)
   # so an explicit `kata: null` in YAML degrades to false instead of erroring in a conditional.
   metal_nodes = {
     for m in local.machines : m.name => {
-      ip           = m.ip                               # DHCP-reserved IP (maintenance-mode + ongoing node address)
-      install_disk = m.install_disk                     # target disk for the install (NOT the optane cache)
-      optane_disks = tolist(try(m.optane_disks, []))    # extra disks → Longhorn "fast" tier
-      pin_hostname = try(m.pin_hostname, true) != false # HostnameConfig patch; default true
-      kata         = try(m.kata, false) == true         # metal_kata install image + homelab.io/kata label
+      ip           = m.ip           # DHCP-reserved IP (maintenance-mode + ongoing node address)
+      install_disk = m.install_disk # target disk for the install (NOT a longhorn_disks entry)
+      # Extra Longhorn disks: [{device, name, tags}] — mountpoint AND node.longhorn.io disk key
+      # are both <name>, so a rename orphans replicas. Tier comes from `tags` (ADR-089).
+      longhorn_disks = tolist(try(m.longhorn_disks, []))
+      pin_hostname   = try(m.pin_hostname, true) != false # HostnameConfig patch; default true
+      kata           = try(m.kata, false) == true         # metal_kata install image + homelab.io/kata label
     } if try(m.talos_metal_node, false) == true
   }
 

@@ -30,6 +30,7 @@ spec:
             - circles
             - circles-iac
             - homelab
+            - node-maintenance
             - oracle-fleet
             - oracle-iac
             - secrets-demo
@@ -47,6 +48,8 @@ spec:
             - alloy-logs-reader
             - crossplane-agentstack-composed
             - eso-transcripts-reader-ssrr
+            - loki-rbac-proxy-authn
+            - loki-tenant-reader
             - openrouter-proxy-semaphore
             - openrouter-proxy-tokenreview
       - resources:
@@ -59,5 +62,6 @@ spec:
             - alloy-logs-reader
             - eso-retro-git-reader-ssrr
             - eso-transcripts-reader-ssrr
+            - loki-rbac-proxy-authn
             - openrouter-proxy-semaphore
             - openrouter-proxy-tokenreview

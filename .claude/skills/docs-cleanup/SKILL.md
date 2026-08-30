@@ -49,7 +49,12 @@ the cluster; the copy nobody edits being the one somebody reads.
    status + next action, ≤10 lines); stale archive entries (>≈1 month) get deleted with their
    remaining living references scrubbed (TICK-LOG/ADR refs exempt).
 3. **The comb** — inventory `git ls-files '*.md'` minus exclusions, walk in directory chunks
-   (docs/, docs/agents/, agents/, argocd/**/README, root files, machines/, esphome/…). Per file:
+   (docs/, docs/agents/, agents/, argocd/**/README, root files, machines/, esphome/…).
+   **Run `devbox run doc-heat` first and keep the report open** (promoted 2026-08-30, FU-164):
+   heat × class × age is EVIDENCE for delete/merge/move calls — a cold, classless, old file is
+   a deletion candidate the lints can't see; a hot file deserves extra care (its errors cost
+   the most). Heat never decides alone (recovery runbooks are rare-read, highest-value), and a
+   report older than the corpus's last big rewrite is stale evidence — regenerate. Per file:
    - **statuses vs reality**: SERVICES.md LIVE/PLANNED against the cluster; "pending/planned/
      TODO" claims against git history and the tracker; dates that say "current" but aren't.
    - **references resolve**: relative md links (`test -f` the target), script/file names that

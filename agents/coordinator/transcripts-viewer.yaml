@@ -100,10 +100,13 @@ spec:
             capabilities: { drop: ["ALL"] }
             seccompProfile: { type: RuntimeDefault }
           resources:
-            requests: { cpu: "25m", memory: "128Mi" }
+            requests: { cpu: "25m", memory: "256Mi" }
             # cpu 500m → 1: the per-tick s5cmd sync + sync.py burst ran 81% CPU-throttled
             # (CPUThrottlingHigh, 2026-07-12) — slow mirrors, no benefit from the tight cap.
-            limits:   { cpu: "1", memory: "512Mi" }
+            # memory 128Mi/512Mi → 256Mi/2Gi (homelab#110, 2026-08-24): the 512Mi ceiling set
+            # 2026-08-07 (verified against a 328M mirror then) OOMKilled again after /mirror
+            # organically grew to 1.4G — same growth pattern as the CPU bump, not a leak.
+            limits:   { cpu: "1", memory: "2Gi" }
       volumes:
         - name: claude-data
           emptyDir: {}

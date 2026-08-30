@@ -565,9 +565,12 @@ NS="$PROJECT"
 # session dispatched a docker-repo worker without --docker; the duplicate-dispatch dance cost a
 # pod). Explicit --docker always wins; a failed probe leaves it unset and WARNS (the CI gate
 # catches a wrong-mode ride — degrade loudly, never guess).
-if [ -z "$DOCKER" ] && command -v "$KUBECTL" >/dev/null 2>&1; then
+if command -v "$KUBECTL" >/dev/null 2>&1; then
+  # The claims read runs even when --docker was explicit (homelab#990): the egress knobs it
+  # yields drive the env card AND the enforce-default harness guard below, and both must see
+  # the truth on every dispatch path — not only the docker-auto-derive one.
   if claims_json="$("$KUBECTL" $KUBE get agentstacks.platform.teststuff.net -o json 2>/dev/null)"; then
-    if [ "$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" \
+    if [ -z "$DOCKER" ] && [ "$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" \
         '[.items[].spec.repos[] | select(.name == $p and (.fixer.docker == true))] | length' 2>/dev/null)" -gt 0 ] 2>/dev/null; then
       DOCKER=1
       echo "→ --docker derived from the AgentStack claim (fixer.docker=true for ${PROJECT})"
@@ -576,9 +579,23 @@ if [ -z "$DOCKER" ] && command -v "$KUBECTL" >/dev/null 2>&1; then
     EGRESS_ENFORCE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.enforce]|map(select(.!=null))|first // empty' 2>/dev/null)"
     EGRESS_PROFILE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.profile]|map(select(.!=null))|first // empty' 2>/dev/null)"
   else
-    echo "WARN: agentstacks probe failed — cannot derive --docker; pass it explicitly for docker-gated repos" >&2
+    echo "WARN: agentstacks probe failed — cannot derive --docker or the egress knobs; pass --docker explicitly for docker-gated repos" >&2
   fi
 fi
+# >>>REPLAY:harness-enforce-default>>>
+# homelab#990 DURABLE WORKAROUND (operator, 2026-08-26): opencode's SDK-init fetches
+# (models.opencode.ai / registry.npmjs.org — no kill knob on the pinned build, the L1812 block)
+# carry NO timeout, and under an ENFORCED egress the CNP deny is a silent SYN black-hole — the
+# ride wedges pre-LLM and sleeps to the 4h deadline (first chainless oracle ride, issue-272-r1,
+# 2026-08-26 ×2). So an enforced-egress ride never takes opencode BY DEFAULT: goose rides the
+# slot. An explicit --harness opencode still wins (operator override), and a model-derived
+# harness (claude rails) is untouched — this guard fires only on the baked default.
+# Delete this block when #990's fail-fast lands.
+if [ "${EGRESS_ENFORCE:-}" = "true" ] && [ "$HARNESS" = "opencode" ] && [ -z "${HARNESS_SET:-}" ]; then
+  echo "→ homelab#990 workaround: enforced egress + default harness → goose (opencode wedges on un-suppressible SDK-init fetches under enforcement)"
+  HARNESS="goose"
+fi
+# <<<REPLAY:harness-enforce-default<<<
 # ── FU-114 L1: the platform ENVIRONMENT CARD (docs/agents/fixer-context.md) ──────────────────
 # Composed from the SAME knobs the launcher just used to BUILD this ride (--docker, egress), so it
 # is accurate by construction — never the stale "no-real-data sandbox" framing that primed the #48
@@ -587,7 +604,7 @@ fi
 # (deterministic awk-insert, no YAML dependency) so the worker cannot skip reading it.
 # >>>REPLAY:render_env_card>>>
 render_env_card() {
-  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}"
+  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}"
   # ═══ MAINTAINER NOTE — read before editing (this comment is NOT sent to the agent) ═══
   # Everything printf'd below is injected VERBATIM into the stack agent's prompt. Keep that text
   # MINIMAL and stack-agnostic: the rule + the value it needs to ACT, nothing else. All homelab-
@@ -618,13 +635,16 @@ render_env_card() {
   # WHY: the parenthetical must match the ACTUAL enforcement state — the FU-126 audit caught this
   # bullet asserting "egress-blocked / a miss HANGS" while the egress bullet below said "monitored,
   # not blocked" in the same card (deepseek arm flagged the contradiction).
+  # WHY: the scheme-strip caveat = sleep-tracking PR#133 / homelab#1023 — sleep's
+  # scripts/test-integration.sh:121 is the worked example. Card text stays stack-agnostic per the
+  # maintainer note above.
   local pkg_why
   if [ "${EGRESS_ENFORCE:-}" = "true" ]; then
     pkg_why="upstream is egress-blocked — a miss HANGS, it does not error"
   else
     pkg_why="upstream is reachable today (egress monitor mode) but WILL be blocked at enforcement — use the proxies anyway so the ride stays reproducible"
   fi
-  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), **HTTP-only**; python → pip/uv against pypi.org + files.pythonhosted.org (open on the python egress profile)."
+  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against pypi.org + files.pythonhosted.org (open on the python egress profile). **Pod-only caveat:** these vars exist ONLY inside agent pods; a repo script that consumes them MUST supply a default (\`\${REGISTRY_MIRROR_DOCKER_IO:-${mdio}}\`, \`\${REGISTRY_MIRROR_GHCR:-${mghcr}}\`, \`\${REGISTRY_MIRROR_MCR:-${mmcr}}\`), because the same script runs in CI/dev environments without them. **Scheme caveat:** the values carry \`http://\` (correct for containerd/k3d \`endpoint =\` config), but a bare image ref cannot carry a scheme — use \`\${VAR#*://}\` to strip it."
 
   # WHY: docs/spikes/context-repos.md pilot (circles-only today). Read-only reference clones; the
   # spike's measurement is whether transcripts ever show /work/context reads, so the card ADVERTISES
@@ -1084,15 +1104,31 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     # (b) live-worker cap per project: default WIP=1; a repo with independent TRACK lanes
     # (TRACKS.md) may run one worker per lane — the dispatcher sets AGENT_WIP_LIMIT=<lanes>
     # (added 2026-07-10 when #2/#3 opened the first two-lane parallel dispatch).
+    # >>>REPLAY:fu042-wip-cap>>>
     PF_LIMIT="${AGENT_WIP_LIMIT:-1}"
     # phase!=terminal, NOT phase=Running: a kata pod boots in Pending longer than a tick
     # interval — the Running filter double-dispatched #55 across consecutive ticks (2026-07-21).
-    PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" \
-      --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+    # FU-042 leg (b) / #937: a Pending pod that is Unschedulable (wedged) does NOT hold a WIP
+    # slot — it will never run, so it is not live work. A 30-second grace period prevents a
+    # briefly-unschedulable new pod from being discounted instantly.
+    PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" -o json 2>/dev/null \
+      | jq '[.items[] | select(
+        .status.phase != "Succeeded" and .status.phase != "Failed" and
+        (
+          .status.phase == "Running" or .status.phase == "Unknown"
+          or
+          (.status.phase == "Pending" and (
+            ([.status.conditions[]? | select(.type == "PodScheduled" and .status == "False" and .reason == "Unschedulable")] | length) == 0
+            or
+            (now - (.metadata.creationTimestamp | fromdateiso8601)) < 30
+          ))
+        )
+      )] | length')"
     if [ "${PF_LIVE:-0}" -ge "$PF_LIMIT" ]; then
       echo "PREFLIGHT REFUSED: ${PF_LIVE} agent pod(s) Running in ns ${NS} ≥ WIP limit ${PF_LIMIT} (FU-042; AGENT_WIP_LIMIT raises it for multi-track dispatch)." >&2
       exit 3
     fi
+    # <<<REPLAY:fu042-wip-cap<<<
     # (d) FU-118: an offline `devbox add` writes a `placeholder-<system>-<pkg>` store path into
     # devbox.lock that commits fine but hard-fails the NEXT round's bootstrap `devbox install`
     # (`path-info --offline` on a nonexistent path) BEFORE the agent runs — an opaque, unrecoverable
@@ -1296,6 +1332,10 @@ OC_SETUP=""; OC_ENV=""
 if [ "$HARNESS" = "opencode" ]; then
   PIN_JSON="$(python3 "$HERE/estimate_budget.py" --model "$MODEL" --lookup 2>/dev/null || true)"
   # order carries the ROUTING slug — OpenRouter matches tags ("deepinfra"), display names no-op.
+  # homelab#876: opencode silently falls back to its default model if the -m provider is not recognized.
+  # No config knob exists on the pinned binary (v1.18.13) to disable this fallback (no strict mode or
+  # provider allowlist). The fix is launcher-side: compose the full provider-prefixed ID in the CLI
+  # argument so opencode recognizes it and never reaches the fallback path.
   OC_CONFIG="$(printf '%s' "$PIN_JSON" | jq -c --arg m "$GOOSE_MODEL" '
     select(.pinned_provider != null) |
     {"$schema": "https://opencode.ai/config.json",
@@ -1453,6 +1493,25 @@ if [ "$HARNESS" = "opencode" ]; then
   AFFINITY=$'  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n          - matchExpressions:\n              - { key: homelab.io/cpu-avx2, operator: In, values: ["true"] }'
 fi
 
+# >>>REPLAY:opencode-hostaliases>>>
+# homelab#990: opencode's SDK-init fetches to models.dev + models.opencode.ai carry NO timeout
+# under enforced egress (CNP deny is a silent SYN black-hole). Stub them to 127.0.0.1 so the
+# init fails fast (instant RST) instead of wedging to the 4h deadline.
+# registry.npmjs.org is stubbed only when the egress profile does not include node (where the
+# CNP denies it anyway — this converts silent-drop → fast-fail).
+#
+# Why kill-at-the-tool (homelab#456) doesn't cover this: the SDK-init fetches are NOT
+# suppressible on the pinned opencode build (tested 2026-08-26: no knob found), so the
+# resolver (hostAliases) is the only remaining kill point.
+HOST_ALIASES=""
+if [ "$HARNESS" = "opencode" ] && [ "${EGRESS_ENFORCE:-}" = "true" ]; then
+  HOST_ALIASES=$'  hostAliases:\n    - ip: "127.0.0.1"\n      hostnames:\n        - "models.dev"\n        - "models.opencode.ai"'
+  if [ "${EGRESS_PROFILE:-}" != "node" ]; then
+    HOST_ALIASES="${HOST_ALIASES}"$'\n    - ip: "127.0.0.1"\n      hostnames:\n        - "registry.npmjs.org"'
+  fi
+fi
+# <<<REPLAY:opencode-hostaliases<<<
+
 # ── docker-mode pod fragments (kata microVM + dind sidecar; every accommodation is a spike
 # finding, docs/spikes/kata-ci-gate.md): RuntimeClass kata schedules onto the kata-labeled
 # laptops + tolerates the compute taint by itself. dnsPolicy None + LAN resolver = the FU-072
@@ -1496,11 +1555,12 @@ if [ -n "$DOCKER" ]; then
   # egress CNP drops the docker.io FQDNs: mirror down ⇒ pulls hang ⇒ AgentWorkerEgressDropped.
   MIRROR_DOCKER_IO="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}"
   MIRROR_GHCR="${AGENT_MIRROR_GHCR-http://192.168.40.21}"
+  MIRROR_MCR="${AGENT_MIRROR_MCR-http://192.168.40.31}"
   # nix-cache via its BGP VIP (FU-073e): the entrypoint's default is the ClusterIP service DNS,
   # unreachable from a kata guest (FU-072) — without this override a docker ride's `devbox
   # install` fell back to cache.nixos.org over the WAN (~4 min cold, measured 2026-07-14).
   NIX_CACHE_VIP="${AGENT_NIX_CACHE_URL-http://192.168.40.23}"
-  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"'
+  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"\n        - name: REGISTRY_MIRROR_MCR\n          value: "'"$MIRROR_MCR"$'"'
   DOCKER_MOUNT=$'\n        - { name: docker-run, mountPath: /docker-run }'
   DOCKER_VOLUMES=$'\n    - name: docker-run\n      emptyDir: {}\n    - name: docker-lib\n      ephemeral:\n        volumeClaimTemplate:\n          spec:\n            accessModes: ["ReadWriteOnce"]\n            volumeMode: Block\n            storageClassName: longhorn-scratch\n            resources: { requests: { storage: 20Gi } }'
   # NATIVE SIDECAR (initContainers + restartPolicy Always): the kubelet terminates it when the
@@ -1775,8 +1835,18 @@ spec:
   # projected token (Composition renders the SA per fixer ns; no RBAC grants attached).
   serviceAccountName: agentstack-worker
   terminationGracePeriodSeconds: 5
+  # FU-136 / homelab#919: non-docker rides (goose, claude, opencode) need the ephemeral-tier
+  # toleration to schedule onto the compute/burst nodes (wk-metal-01..04, wk-03) that carry
+  # homelab.io/ephemeral=true:NoSchedule. Docker rides get this via kata RuntimeClass already.
+  # The AVX2 nodeAffinity (opencode only) is orthogonal — goose/claude run fine on non-AVX2 nodes.
+  tolerations:
+    - key: homelab.io/ephemeral
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
 ${AFFINITY}
 ${KATA_BLOCK}
+${HOST_ALIASES}
   securityContext:
     fsGroup: 1000          # make the shared uv-cache RWX volume writable for the non-root (1000) user
 ${DIND_CONTAINER}
@@ -1796,13 +1866,11 @@ ${DIND_CONTAINER}
           value: "1"
         - name: DEVBOX_DISABLE_TELEMETRY
           value: "1"
-        # homelab#792: the pinned build does not expose a separate models-fetch knob; the CNP Policy
-        # DENY to models.opencode.ai is the backstop (add a dedicated env var here if one appears).
-        # opencode CLI's own phone-home (homelab#456, 2026-08-17): the auto-update check
-        # (registry.npmjs.org, its npm-distributed updater) + model-registry fetch
-        # (models.opencode.ai) were the openrouter-operator POLICY_DENIED pair — the image bundles
-        # opencode for every harness, so kill at the tool for ALL rides, not the allowlist, matching
-        # the devbox/uv precedents above (undocumented but functional — anomalyco/opencode#1793).
+        # opencode-1.18.18: SDK init fetches to models.opencode.ai + registry.npmjs.org are
+        # not suppressible on the pinned build (tested 2026-08-26: no knob found). OPENCODE_DISABLE_AUTOUPDATE
+        # silences the periodic autoupdate check only, not one-time SDK init fetches. The CNP Policy DENY
+        # to models.opencode.ai + registry.npmjs.org is the intended backstop (homelab#792, #456 r2).
+        # These are expected drops per PR #503 doctrine (kill at tool, not extraFQDNs).
         - name: OPENCODE_DISABLE_AUTOUPDATE
           value: "1"
         # 2026-08-08 (operator + the homelab#107 21:35Z triage, same conclusion): uv with an
@@ -1893,7 +1961,8 @@ ${DIND_CONTAINER}
         - name: AGENT_PUSHGATEWAY_URL
           value: "${PGW_URL}"
         # goose reads provider+model from env; opencode auto-detects OPENROUTER_API_KEY and takes
-        # the model via \`-m \${MODEL}\` at run time (e.g. \`opencode run -m \$MODEL "…"\`).
+        # the model as the full vendor/model id (e.g. \`openrouter/vendor/model\`). Using the
+        # stripped MODEL id (e.g. \`-m \$MODEL\`) silently falls back to opencode's default.
         - name: GOOSE_PROVIDER
           value: "openrouter"
         - name: GOOSE_MODEL
@@ -2086,20 +2155,24 @@ if [ -n "$RUN_CMD" ]; then
     fi
   fi
 
-  # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates WITHOUT an
-  # open PR is an infra strike candidate — classify it and post ONE structured comment to the ISSUE
-  # (not a PR: there is none). That comment IS the strike store: state lives in GitHub, and the
-  # coordinator greps `AGENT_STRIKE:` in issue comments to blacklist the model for this task and
-  # pick the next chain entry. Keep the first line's format STABLE — it's the machine interface.
-  # Strike semantics apply only to TASKED rides (issue-*/pr-*) — an adhoc ride (validation,
-  # experiment) expects no PR; striking it is noise (the finalize-side twin landed in
-  # agent-runtime#16 the same day).
+  # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates with a
+  # harness death is an infra strike candidate — classify it and post ONE structured comment to the ISSUE.
+  # That comment IS the strike store: state lives in GitHub, and the coordinator greps `AGENT_STRIKE:`
+  # in issue comments to blacklist the model for this task and pick the next chain entry. Keep the first
+  # line's format STABLE — it's the machine interface. Strike semantics apply only to TASKED rides
+  # (issue-*/pr-*) — an adhoc ride (validation, experiment) expects no constraints; striking it is noise
+  # (the finalize-side twin landed in agent-runtime#16 the same day). homelab#866: a harness death is
+  # defined by its signature (config-invalid, provider-5xx, etc), not by PR-absence. A fix round on an
+  # existing PR can die in its harness and must emit a strike to avoid mis-classifying it as a clean
+  # round (which would escalate the PR to arbitrate, costing a coordinator ride to re-derive "never ran").
   case "$TASK" in issue-*|pr-*) STRIKE_APPLIES=1;; *) STRIKE_APPLIES="";; esac
-  if [ -n "$STRIKE_APPLIES" ] && [ -z "$PR_URL" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
+  if [ -n "$STRIKE_APPLIES" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
+    # >>>REPLAY:strike-classifier>>>
     if [ -n "$STATS" ]; then
+      # >>>REPLAY:strike-stats-classifier>>>
       # agent-finalize already classified the run (authoritative — it saw the full log + exit code).
-      # Its exit_status maps onto the strike taxonomy; anything else (failed/no-output/ci-failed
-      # without a PR) is "unknown" — still a strike, just an unclassified one.
+      # Its exit_status maps onto the strike taxonomy; anything else (failed/no-output/ci-failed) is
+      # "unknown" — still a strike if not covered by a more specific signature, just an unclassified one.
       # homelab#804: when the exit_status is "failed" (harness exited non-zero with no matching
       # failure signature), check the run log for a config validation error — the opencode binary
       # rejects unknown config keys at startup and the pod dies in under 15s at zero cost. Map
@@ -2108,18 +2181,25 @@ if [ -n "$RUN_CMD" ]; then
       ERR_CLASS="$(printf '%s' "$STATS" | jq -r '
         (.exit_status // "") as $s
         | if $s == "no-artifact" then (.error_class // "no-pr")
-          elif (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s
+          elif $s == "budget-403" then ({"budget-exhausted-key":"budget-403-key","budget-exhausted-account":"budget-403-account","http-403-other":"http-403-other"}[.error_class // ""] // "budget-403")
+          elif (["harness-death","auth-storm","timeout"] | index($s)) then $s
           else "unknown" end' \
         2>/dev/null || echo unknown)"
       if [ "$ERR_CLASS" = "unknown" ] && grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG" 2>/dev/null; then
         ERR_CLASS="harness-death"
       fi
+      # homelab#866: provider-5xx error signature (harness-side UnknownError from the model API).
+      # Zero cost, sub-30s duration, no new artifact — a startup death like config-invalid.
+      if [ "$ERR_CLASS" = "unknown" ] && grep -qE '"name":\s*"UnknownError"|Unexpected server error' "$RUNLOG" 2>/dev/null; then
+        ERR_CLASS="harness-death"
+      fi
+      # <<<REPLAY:strike-stats-classifier<<<
     else
       # No AGENT_RUN_STATS line at all = finalize never ran (the pod died hard / wait timed out) —
-      # the PR-less death that used to be invisible. Classify the raw log jail-side with the same
-      # signatures agent-finalize uses (that script is the authoritative copy of these patterns).
-      # homelab#22: an activeDeadlineSeconds kill leaves no log signature at all — the pod's
-      # status.reason is the only evidence, and it maps to the `timeout` strike class.
+      # Classify the raw log jail-side with the same signatures agent-finalize uses (that script is
+      # the authoritative copy of these patterns). homelab#22: an activeDeadlineSeconds kill leaves
+      # no log signature at all — the pod's status.reason is the only evidence, and it maps to the
+      # `timeout` strike class.
       # >>>REPLAY:strike-quota-classifier>>>
       POD_REASON="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.reason}' 2>/dev/null || true)"
       if [ "$POD_REASON" = "DeadlineExceeded" ]; then
@@ -2131,9 +2211,17 @@ if [ -n "$RUN_CMD" ]; then
         ERR_CLASS="harness-death"
       elif grep -qiE -e '-32602|EOF while parsing|response may have been truncated|context_length_exceeded|panicked at' "$RUNLOG"; then
         ERR_CLASS="harness-death"
+      # homelab#866: provider-5xx error signature (harness-side UnknownError from the model API).
+      # Zero cost, sub-30s duration, no new artifact — a startup death like config-invalid.
+      elif grep -qE '"name":\s*"UnknownError"|Unexpected server error' "$RUNLOG"; then
+        ERR_CLASS="harness-death"
       elif grep -qiE '429.*quota|429.*limit|monthly.*limit.*reached|rate limit exceeded' "$RUNLOG"; then
         ERR_CLASS="quota"
-      elif grep -qiE 'insufficient (credit|quota|fund)|402 payment|payment required|quota exceeded|budget exceeded|key limit exceeded|out of credit' "$RUNLOG"; then
+      elif BUDGET_MATCH="$(grep -iE 'key limit exceeded' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
+        ERR_CLASS="budget-403-key"
+      elif BUDGET_MATCH="$(grep -iE 'insufficient (credit|fund)|402 payment|payment required|out of credit' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
+        ERR_CLASS="budget-403-account"
+      elif BUDGET_MATCH="$(grep -iE 'insufficient quota|quota exceeded|budget exceeded' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
         ERR_CLASS="budget-403"
       elif [ "$(grep -ciE 'authentication failed|401 unauthorized|403 forbidden|invalid api key|no auth credentials' "$RUNLOG")" -ge 3 ]; then
         ERR_CLASS="auth-storm"
@@ -2144,23 +2232,51 @@ if [ -n "$RUN_CMD" ]; then
       fi
       # <<<REPLAY:strike-quota-classifier<<<
     fi
+    # <<<REPLAY:strike-classifier<<<
     # >>>REPLAY:strike-line-format>>>
-    STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+    # homelab#866: the EMIT decision. A PR-less ride keeps FU-062 semantics unchanged — ANY
+    # classified error strikes, `unknown` included (that is the chain-walk signal). A ride WITH
+    # an open PR strikes only on a harness-death-class signature, because a clean round with a
+    # PR classifies as `unknown` and must never strike.
+    EMIT_STRIKE=""
+    case "$ERR_CLASS" in
+      harness-death|auth-storm|timeout|quota|budget-*|http-403-other) EMIT_STRIKE=1;;
+    esac
+    [ -n "${PR_URL:-}" ] || EMIT_STRIKE=1
+    # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
+    # no specific signature must not be recorded as having an error. Inside the block on purpose:
+    # this reset is behaviour replay has to pin, not control flow it may drop (PR #942 review).
+    [ -n "$EMIT_STRIKE" ] || ERR_CLASS=""
+    # STRIKE_LINE is empty exactly when EMIT_STRIKE is unset, so the gate itself is extracted and
+    # the composed replay script branches on it the way the shipped script does.
+    STRIKE_LINE=""
+    if [ -n "$EMIT_STRIKE" ]; then
+      STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+      if [ -n "${BUDGET_MATCH:-}" ]; then
+        STRIKE_LINE="${STRIKE_LINE} match=${BUDGET_MATCH}"
+      fi
+    fi
     # <<<REPLAY:strike-line-format<<<
-    echo "→ no PR opened — ${STRIKE_LINE}"
-    ISSUE_N=""
-    case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
-    SLUG=""
-    case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
-    if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
-      # ~~~ fences (not ```) so backticks inside log lines can't break out of the block.
-      STRIKE_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
-        "$STRIKE_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
-      echo "→ posting strike comment to ${SLUG}#${ISSUE_N}"
-      gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$STRIKE_BODY" 2>&1 | tail -1 \
-        || echo "  (strike comment failed — non-fatal; the strike still shows in these logs)"
-    else
-      echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
+    if [ -n "$STRIKE_LINE" ]; then
+      if [ -z "${PR_URL:-}" ]; then
+        echo "→ no PR opened — ${STRIKE_LINE}"
+      else
+        echo "→ harness death with PR — ${STRIKE_LINE}"
+      fi
+      ISSUE_N=""
+      case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
+      SLUG=""
+      case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
+      if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+        # ~~~ fences (not ```) so backticks inside log lines can't break out of the block.
+        STRIKE_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
+          "$STRIKE_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
+        echo "→ posting strike comment to ${SLUG}#${ISSUE_N}"
+        gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$STRIKE_BODY" 2>&1 | tail -1 \
+          || echo "  (strike comment failed — non-fatal; the strike still shows in these logs)"
+      else
+        echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
+      fi
     fi
   fi
 

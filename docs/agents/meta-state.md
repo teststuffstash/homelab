@@ -6,124 +6,249 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (pruned 2026-08-19 — history is TICK-LOG's; the forward plan is the ROADMAP work map)
+## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ [Stint](chainless-redesign.md) S7 (#741) LAUNCHED 2026-08-23 (operator go + latch clean).** Session 1 built all
-  three in-order children: #743 exporter edge MERGED (PR#757 — mergeStateStatus on the walk +
-  maybe_dispatch_behind + UPDATE_PR_WEBHOOK_URL env); #742 script+replay-table (PR#755) and
-  #744 manifests (PR#758, bring-up guard covers merge-order) mid-cycle at last write — finish
-  their gate reads if parked. #746 QUEUED to the cluster loop (labels + doorbell rung). **#745
-  cutover stays PARKED: un-park after a few days of the in-cluster leg observed servicing BOTH
-  paths** — read `update-pr-edge-*` workflow logs for edge-serviced updates and the cron's
-  CRON-SERVICED lines (silence there = the edge carries the load), and `gh run list` on the
-  callers showing the hosted runs idle; then #745 deletes callers/reusable/org-secrets + FSM
-  anchor repoint. ⚠ EVIDENCE READ CHANGED 2026-08-23 ~15:10Z: the private-repo hosted minutes
-  ran OUT (3000/3000, overage OFF per #698) — every hosted caller run on the 4 private repos
-  fails at job start until Sep-1, so the in-cluster leg is their SOLE server now; the un-park
-  read becomes "no BEHIND stalls on private repos over a few days" (hosted-idle is no longer
-  evidence, it is forced). Silence `a3628730` (GithubWorkflowRunFailed × update-pr-branch, ends
-  Sep-1) mutes the failure noise — sibling of `5400ed94…` (both self-expire 2026-09-01). Label-identity decision recorded in-code: merge App stays issues-less,
-  UPDATER_LABEL_TOKEN=coordinator-git.
+- **⚑ DESIGN QUESTION (operator, 2026-08-30): stack→platform communication — how a stack routes
+  a problem/request TO the platform instead of into the undifferentiated human bucket.**
+  `agent/blocked` ("needs a human") is correct on the platform repo — one context — but on a
+  stack it conflates two destinations: platform/infra (homelab jail's problem) vs business
+  logic (the stack jail's). Root pattern the operator named: too much platform development has
+  run with the PLATFORM as client/driver, not the stacks. Motivating cases: sleep-tracking
+  PR#133/#123 (arbitrate's own terminal ruling says "infra, not logic" — a platform env var,
+  `REGISTRY_MIRROR_MCR`, leaked into stack CI — yet lands as plain `agent/blocked` with nowhere
+  to route); the two oracle-fleet `uploads/PROPOSAL-*.md` (gitignored — minutark cross-stack
+  launch, which itself sketches a §3 "capability-request lane"; goal consumer card, hand-routed
+  "via the mono seat — this jail has no homelab write path"). The `tools/handoff.md` channel is
+  human-at-keyboard + host-file-only — machine lane can't reach it. Candidate shapes: stacks
+  labelling their own issues by escalation destination (e.g. split `agent/blocked` platform/stack
+  at arbitrate time), and/or a lane for stacks to file issues/proposals/requests on the platform
+  repo. Deliberately NOT an FU (operator direction) — pick up in a design-agents session.
+  **Third instance (2026-08-30, operator): stack ACCESS/SERVICE gaps have no tracked inventory.**
+  Case: the oracle jail had no read on its own transcripts (verified: `garage-workspace.yaml`
+  mints exactly writer=write-only for every session + reader="platform-side only" for the
+  viewer sync — NO coordinator anywhere holds transcript read, platform included; the brief's
+  "reads freely … transcripts" has no built mechanism, A2 MCP slices unbuilt/FU-058 leg); Loki
+  read was just granted via the ADR-118 door — the ONE service with a stack-scoped read, and
+  the donor shape for transcripts (per-project prefixes ≈ tenants; Garage keys are per-bucket,
+  so scoped read = per-stack buckets or an ADR-118-style proxy). No role×stack×service
+  inventory exists (grep negative: FU/ADR/GAPS); pieces = trust-boundary table + roles.md
+  boundaries (coarse prose), egress dial table (network only), `agent-read-rbac.yaml` rulings,
+  loki-tenant-grants + consumer card, oracle-iac `workbench.yaml`. Demand-side gap: TOOL_GAP
+  markers exist ONLY for cluster sessions (zero hits in jail cards/ground-rules) — the jail
+  lane, where this gap was felt, has no channel. Design direction to weigh: generate any
+  matrix from grant sources (never hand-author — FU-049's pattern), consumer-card + grants
+  file per LIVE service (loki-tenancy shape), TOOL_GAP extended to jail sessions, and the
+  capability-request lane as the routing (same door as instance 1's proposals).
+  **Fourth instance (2026-08-30, the #133/#293 day):** (a) a fix landed on a `goal/**` branch
+  protects NOTHING on master until assembly (oracle PR#280's venv guard — master PR#293 hit the
+  same class next day; ported as oracle-fleet PR#294); (b) long-lived RUNNER state is untracked
+  platform surface — ci-runner-01's dockerd insecure-registries lacked the new MCR VIP (first
+  HOST-level mirror pull ever, sleep#133), and its devbox venvs go stale (the y/n prompt class).
 
-- **⚑ PICKUP (2026-08-20 ~06:00Z wind-down, night session closed on operator feedback — see the
-  session-winddown memory):** in flight, all machine-owned: PR#705 (fixes #674, STRUCK_MODEL
-  chain-id) + PR#704 (fixes #676, poll_forever fixture) mid-cycle — they will park bot-approved
-  at the codeowner gate for the NEXT corpus session's read; #701 + #707 queued behind them.
-  Watch items: the hourly iac-sentinel backstop's CRON-SERVICED detector (silence over weeks =
-  retire the cron; any firing names a dead edge); #459 re-read `changes(agent_dispatch_cron_
-  woken_timestamp[24h])` post-#669/#672/#679 before hunting emitters; hosted-minutes ruling on
-  #698 = tolerated updater stalls until Sep-1 (overage stays OFF). S2 DONE (stint #661 closed,
-  #354 acceptance PASSED); S3 DONE (FU-176 archived + sentinel push/tool-error/edge chain);
-  next stints: S4, S5 (ROADMAP work map).
+- **⚑ PICKUP (the #133 tail — items 1+3 DONE 2026-08-30 midday session):**
+  1. ~~ci-runner-01 docker restart~~ DONE — restarted at idle, `docker pull
+     192.168.40.31/playwright/python:v1.62.0` verified on the runner (⚠ the suggested
+     `pgrep -f Runner.Worker` busy-check SELF-MATCHES its own ssh command line — bracket the
+     pattern: `pgrep -f "[R]unner.Worker"`; the first read was a false BUSY).
+  2. sleep-tracking PR#133 rerun DONE — the environmental half is FIXED (mirror pull green in
+     CI); the surviving red is CONTENT: `playwright/python:v1.62.0` ships browsers but NOT the
+     `playwright` pip package (verified in the pristine image; diagnosis commented on the PR,
+     fix shape = in-container `pip install playwright==1.62.0`). Deterministic — rerunning
+     never greens it; the ci-red machinery owns the fix round. At merge, HAND-CLOSE issue
+     #123 with `agent/done` (its PR link is `Implements`, not a closing keyword).
+  3. ~~oracle-fleet PR#294~~ MERGED 11:14Z.
+  4. oracle PR#293's red is CONTENT (assert-delta) — the ci-red machinery owns it; hands off.
+  ⚠ probe gotcha re-proven ×2 today: `statusCheckRollup` in any gh query hard-fails on this
+  PAT (a 2h watch ran blind) — read CI via `gh run list`.
 
-- **⚑ FU-058 stint DONE (2026-08-19, one session — #587 at final closeout; closes when docs
-  PR#624 lands). WATCH: the Mon 2026-08-24 05:00 UTC retro cron = the platform series' first
-  unattended fire, the build wave's organic acceptance** (full report per cell, content floor
-  holding, distinct files for identical cells, no false RetroReportOverdue). Post-fire read =
-  next session's first item; a failed fire is a defect on FU-058's Next.
-- **⚑ Board close-out afternoon (2026-08-19, operator-driven): the ring-heavy day's residue.**
-  Landed: #631 (exit-3 absorption + FU-121 drain — the famine class fix; watch the Failed pile
-  STOP growing and TTL out by ~Aug-22), #626 (blind-ride abort), #634+#633 (marker anchoring +
-  env-card rule), #632 (meta-events NEWISSUE source — per-repo REST walk, act rule: platform
-  repos only), #628 re-scoped as the throughput CONTAINER (legs #636 queued/#637 filed; leg 3 =
-  generalize agent-goals machinery, operator pointer in body). At session end: #641(#635)+#642(#639)
-  merged via gate reads; #643 (fixes #629 — strike model field) in its review cycle, #640
-  riding, #636 queued behind it — all machine-owned; the next session's gate reads finish them. Lineage: #629→#622→#607→
-  #600→#420 now fully native (#607's missing edge was the break). GithubRateLimitLow +
-  AgentRunInfraDeathBurst today = demand bursts, both self-resolved/accounted.
-- **⚑ Go rail EXHAUSTED for the month (console 100%/30d, resets Sep-13 ~11:30Z; weekly 99% →
-  Mon 00Z).** The 429→same-round-haiku belt is LIVE and organically proven (#607→PR#615); latch
-  persistence landed (#618→#621) AFTER the first fire — **VERIFIED 2026-08-23 ~13:47Z: the
-  PR#784 proxy roll came and `router_go_capacity_latched` stayed 1 on the fresh pod, no new
-  429 burned** (the GoCapacityLatched ALERT's `for:` clock resets on a roll — cosmetic
-  firing→pending flap, the deploy-silences-`for:` class; gauge is the truth). #420 + #540 CLOSED (operator, 2026-08-19) — the post-reset readout
-  (parity on a clean window, the 5h refusal shape, latch-survives-roll) is **FU-181**, actionable
-  after Sep-13.
-- **⚑ PRIORITY ORDER (operator ruling, 2026-08-18): OPEN ISSUES FIRST → then follow-ups/corpus
-  buildout → then stacks.** The forward plan lives in **ROADMAP §The platform work map**
-  (stints S1–S5 → Goals G-A–G-D; supersedes the old Bucket A/B worklog that sat here).
-- **⚑ G-A DAY-1 CLOSE (launched + 5 children DONE in one session, 2026-08-23; retro post-fire
-  read Mon 08-24 05:00Z stays the next session's FIRST item).** Goal = **homelab#775**
-  (`Budget: 17` = the loaded OR credit; #278 shape: master-lane children, jail-decomposed,
-  never queued; bucket #787 auto-created). DONE: #776 (carrier, PR#784), agent-runtime#81
-  (PR#82 + #785 pin), #777 (accounting, PR#786), #782 (wiring, PR#788 — a REAL FU-088
-  dual-rail regression caught+fixed in review), #778's pilot half, **#779 capacity doorbell
-  (PR#789 gate-read + merged 2026-08-23 16:26Z; proxy rolled, Go latch held 1 through the roll —
-  organic doorbell wake on a real latch clear stays a soak watch)**, PR#794 (#778 salvage,
-  merged). IN CYCLE: PR#793 (ADR-107-addendum docs — round-3 restructure pushed 2026-08-23
-  ~16:29Z: the reviewer caught the addendum reversing decision 3 against adr.md rule 2, so it is
-  now **ADR-112** + Superseded-by marker on ADR-107 (3); awaiting re-review, self-merges on bot
-  approval) · #516/PR#797 + #792/PR#800 in machine fix rounds (changes-requested at head —
-  cluster loop owns; gate reads land when they park). QUEUED: #780, #781 (wiring), #791 (proxy
-  OR-translation); #778 residue re-rides the normal lane. **HARNESS MATRIX ruling (operator,
-  in-session): claude+opencode full-support, scout probes 3 harnesses/candidate with a ~1h/2h
-  retry ladder — recorded as ADR-112 (PR#793 round 3), not an ADR-107 addendum.** **Fan-out pilot RAN +
-  CLOSED (operator): findings ledger = the #778 thread** (recipe path dispatcher-side ·
-  rounds-as-arms · ephemeral-tier toleration needed · FU-042 wedge on pending arms · opencode
-  bare `-m` = the dead-canary root cause (A/B-proven) · nemotron fabricates delivery (salvaged
-  PR#794) · citation-forced briefs for cheap reviewers · time-delta = fan-out viable).
-  OPERATOR-PENDING: the #783 strike ruling (memo posted: proposal = retire the env) · the A5
-  second-reviewer-App question (evidence route = shadow re-reviews, `--rail` flag on
-  re-review.sh unbuilt). Harvest strays #795/#796 await the goal checkpoint. laguna r4 pod was
-  left running to natural terminal (~$0, 4h key). **OR-budget ruling stands (paid-flash
-  through G-A, revert ~09-03/fixup-end/depletion); Go latched til Sep-13 (roll-persistence
-  VERIFIED).** claude-jail#2 filed: mono per-session env block + wallet-reach + forgejo SSH.
-- **minutark.ee / oracle-iac#351** — OPEN, oracle parked (operator 2026-08-11); pick up at
-  unpark. Acceptance = drift-free re-plan through the two-zone token. ⚠ `dig +short` wraps long
-  DS digests — `tr -d ' '` before grepping.
-- **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — measure run-pickup deltas
-  for a few days, revert to 0 if no win; the residual setup cost is homelab#518.
-- **Small live residue (compressed 2026-08-19):** wk-metal-04
-  `kubernetes_labels.longhorn_bulk_zone` field-manager CONFLICT kills FULL tofu applies
-  (targeted fine) — chase before the next broad apply · proxy zen leg live-smoke still unrun
-  (`opencode/nemotron-3-ultra-free` through the in-cluster proxy) · docs-cleanup residue legs:
-  FU-001 archive-expiry ref scrub (overdue), the openrouter-proxy FU-021 comment repoint (rides
-  the next functional proxy change), the five EXPIRY-HELD archive ids ruling · stack leftovers:
-  circles#77 ci-red triage, oracle-fleet#259 rework per the seat read, circles-iac deploy-bump
-  generator fix before the next circles build (circles-iac#71/#68).
-- **Soaks** (each owned by an FU/issue — this line is only the calendar): platform-retro first unattended fire Mon 08-24 05:00Z (FU-058 acceptance) · argo second backlog
-  sweep ~2026-08-25 (#521) · minRunners readout · iac-sentinel first real RED + FU-176 ·
-  router shadow/elastic cells (FU-095, PR#408) · FU-148 acceptance · FU-149 datum ~08-20 ·
-  or-op#34 first daily-429 · renovate-approve one-approval-per-head (#114) · stint
-  quiet-window closes (rule 2026-08-20, chainless §The jail stint): #420 (waits on #710) +
-  #711 — close at a sweep ≥72h after each tree's last event · **platform workers on PAID OR
-  flash (PR#715, operator 2026-08-20 — fixup window): REVERT to claude/haiku primary
-  ~2026-09-03 / fixup-wave end / OR depletion, whichever first** (claim comment carries the
-  full record; Go re-flip stays FU-181).
+- **⚑ ADR-118 Loki tenancy — STEPS 1+2 SHIPPED, STEP 3 IS THE NEXT SESSION'S** (2026-08-27;
+  design [`loki-tenancy.md`](../loki-tenancy.md), rollout table there is authoritative).
+  Merged: #1008 (proxy + grants + write half), #1009 (the `stage.tenant` correction).
+  **Step 2 = PR#1010, MERGED 17:17:24Z and VERIFIED LIVE 17:17–17:20Z** — `auth_enabled: true`,
+  the #811 belt moved out of the ruler, both writers' headers, Grafana's enumerated datasource.
+  Operator ruled both open questions (belt → PrometheusRule + drop the ruler; `ingestion_rate_mb`
+  stays 8 + document + FU). Verified at the failure points, not by a green sync: per-namespace
+  tenants at the distributor with no `fake`; **zero rejected pushes** (`loki_api_v1_push`
+  203×204, `otlp_v1_logs` 7×204, `loki_discarded_samples_total` empty); multi-tenant read returns
+  logs; no header = **401**; Grafana datasource reloaded 200 OK. Evidence in
+  [`loki-tenancy.md`](../loki-tenancy.md) §Rollout.
+  **THREE near-misses this rollout, all caught by verifying at the sender rather than trusting a
+  green sync** — the un-bumped `config-hash` (`0270ab10`, FU-190), `__tenant_id__`-in-relabel
+  sending no header at all (#1009), and **the OTel collector as an unnoticed SECOND Loki writer**
+  (#1010; would have 400'd the A0 telemetry rail while Alloy kept working). Each would have
+  stopped cluster-wide log ingest had the rollout been one step instead of three.
+  ⚠ `StatefulSet/loki` reads permanently OutOfSync (pre-existing ArgoCD `volumeClaimTemplates`
+  papercut) — **"Synced" is not a usable verification signal**; read the live pod.
+  **Step 3 = PR#1012, MERGED and VERIFIED AT THE REAL VIP** — `192.168.40.32:8443` is reachable
+  from the jail (BGP advertised, TLS OK) and all seven signatures reproduce there: granted
+  `oracle-fleet`/`oracle-agents` **200**; `platform-agents`/`agent-coordinator`/**`fake`** **403**;
+  no header **400**; no token **401**; `POST .../push` **404**. **ADR-118 IS COMPLETE.**
+  **CONFIRMED FROM THE ORACLE STACK JAIL** (operator relay, 2026-08-27 evening): the workbench SA
+  reads tenant `oracle-fleet` (series + range both return) and gets a clean 403 on `fake` — the
+  door works from the consumer side, not just from the seat's probe. Operator accepts that
+  pre-flip history is out of reach; the requirement was **log access during the NEXT delta run**,
+  which is met — `oracle-fleet` and `oracle-agents` are both ingesting post-flip (31.4 KB / 31.6 KB
+  at wind-down) and both are granted. `oracle-iac` reads 0 only because it runs no pods.
+  **⚠ ONE MOTIVATING CLAIM DID NOT SURVIVE THE TEST → FU-194:** homelab#541 promises "any session
+  with LogQL access reads kernel-log lines", and that is STILL false for a jail — `kmsg-reader`
+  sits in ns `loki`, so kernel lines are tenant `loki`, which no jail is granted and none should
+  be. Either move the DaemonSet to its own namespace or fix the carve-out's text; it currently
+  promises a capability nothing provides. Found by testing the claim, not restating it.
+  Residues: **FU-192** (Grafana's snapshot tenant list; per-tenant ingest sizing, due
+  ~2026-09-03 — the one with a date; the OTel rail's static tenant) and **FU-193** (the door's
+  self-signed, unpinnable cert). Also fixed in step 3: the `kubectl auth can-i` grant-audit recipe
+  in `loki-tenant-grants.yaml` answered **no for every namespace including granted ones** (pseudo-
+  resource, no CRD → RESTMapper cannot resolve it); replaced with an explicit SubjectAccessReview.
 
-- **⚑ S4 STINT #762: TREE EMPTY 2026-08-23 ~11:52Z, closeout 1 RUN — close ARMED, executes at
-  a sweep ≥2026-08-26** (same calendar as #420's recheck). All 5 originals + 2 sprouts closed
-  in ONE session (vs `Size: 2 sessions`); FU-117 + FU-163 archived. The jail composition is
-  LIVE both classes (claude-jail#1; operator ran `docker compose build` — sessions in
-  containers started PRE-merge still predate the composed seat card until restarted, this one
-  included). Fleet CLAUDE.md slim-down: inventoried + tiered on claude-jail#1, executable on
-  the operator's word (tier 1+2 pointer drops now unblocked; oracle-fleet's tier-3 moves ride
-  the stack env card, already live).
-  S6 #716 + S3 #711 CLOSED this session (quiet windows; #716's Container-findings disposed via
-  PR#761, deploy verified in-cluster). #420 open (#575 closed 08-23 09:50Z reset its window —
-  ≥08-26). Remaining S6 acceptance watches: unbound-sprout belt quiet; responder `Cause:`
-  organic use; Mon 08-24 05:00Z retro fire (next session's first read). **S5 deliberately
-  LAST; next stint queue: S7's #745 cutover un-park read (edge-serviced evidence).**
+- **⚑ Two open items from the same session, both filed, neither started:** FU-190 (a mounted
+  ConfigMap change does not roll its workload — hand-bumped annotation, silent when forgotten)
+  and FU-191 (the admission-controller seat is an OPEN Kyverno-vs-Gatekeeper choice; operator
+  wants a SECOND use case before deciding — use case 1 is tenant labelling, which is what would
+  let ADR-118 go tenant==stack). The #1003 arbitrate observation is now **FILED as #1011** — and
+  the original sighting was WRONG: the three fingerprints differ, so the state was not
+  byte-identical and #198's debounce held. The real cause, verified from #1003's check timeline,
+  is that `STATE_FP_JQ` keys on every check's conclusion, so checks arriving/completing one at a
+  time re-arm arbitration (3 opus rides, all ruling "escalate, human is next mover"). #198's
+  symptom through a different door.
+
+- **⚑ S5 (corpus diet) [stint](chainless-redesign.md) #979: ORIGINALS 4/4 DONE 2026-08-30 —
+  closeout 1 posted on the parent; it
+  sits in its ≥72h quiet window (close at a later sweep).** #984 (the deep comb) landed as
+  PR#1017: lint set drained, ~35 files truth-synced, FU-052 archived, FU counter 189→195,
+  **docs-graph-lint check #4 FLIPPED shadow→FAIL** (the comb was the clean run), and
+  `.agents/review.md` gained the docs/ needs-a-human tier line (operator-direct post-merge).
+  Stint history: Park-drain DONE
+  (outage set + #964/#965 landed; #963 MERGED after the seat's `:free`-fallback round — ⚠ its
+  first push was CLOBBERED by the updater race, filed+queued as **#986**: update-branch without
+  `expected_head_sha` overwrote a verified push on PR#963; the fix is one API field). **#967**
+  (ADR-115 + §M14 + the Exacto↔caching caveat) bot-APPROVED + armed, lands on its cycle.
+  **#981 MERGED as PR#985 (20:42Z)**: ADR-116 + the 29-entry sweep; round-2 classifier bug
+  (TODO-shape extraction swept every id on the matched line — FU-142 was a phantom) fixed
+  in-PR. The TODO-ARCHIVED warn's **4** real stale pointers (FU-068/FU-133/FU-143 gap
+  registers + FU-160 spike) → **#984**. **#982 MERGED as PR#999 (20:55Z)**: ADR-117 §-code
+  heading anchors + docs-graph-lint check #4 SHADOW (ANCHOR-UNRESOLVED/-AMBIGUOUS; flip to
+  FAIL after a recorded clean run — the #984 comb is the natural flip read).
+  **#983 MERGED as PR#1001 (21:38Z)**: 3 heat-cited trims (−214 lines from the corpus hot set,
+  incl. an ADR-111 staleness heat found that lints can't) + settle-test run 1 recorded in the
+  doc-heat spike — ≥3 bar MET; **the FU-164 promote-vs-close call is the operator's** (serve
+  the report + wire into docs-cleanup, or close the spike).  **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
+  UNPIN at its merge. Still-queued codeowner issues stand: #928 #929 #932 #933 #937 #938 #888
+  #456 #110, agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's
+  merge lets G-B assemble → assembly PR → codeowner tax → probe-platform, FU-102); **#946 is
+  UNBLOCKED (#945 merged as PR#996, 21:19Z)** — the A5 evidence seed is a seat run of
+  `re-review.sh --shadow --model opencode/big-pickle` over #923's set, ready any sitting; #953 queued (docs-lint gate behaviour — its class fired AGAIN
+  this session: the meta-state ⚓-term break, second instance on the thread).
+
+- **⚑ ORACLE AND SLEEP ARE CHAINLESS (oracle: oracle-iac#387; sleep: sleep-iac#77 + mirror
+  homelab#976 MERGED; 0731 out of model_tiers, homelab#960).** **Sleep is PROVEN end-to-end:**
+  #123 (the 9-day agent/error latch, seat-cleared) rode chainless r1 → **PR#133** (the
+  Playwright render gate), ci-red machinery dispatched r2, riding at wind-down — the loop is
+  healthy. **Oracle's #272 is the hard case:** the first chainless draw (opencode×flash)
+  WEDGED pre-LLM — opencode's un-suppressible SDK-init fetches have no timeout under oracle's
+  enforce:true (filed **#990**, queued; durable workaround = **PR#991**: enforced-egress rides
+  never DEFAULT to opencode, replay-pinned, in review); the goose×flash hand-ride then struck
+  **http-401-storm** (recurrence CONFIRMED — 3× in ~3h, machine-filed as **#1004** via the
+  fleet-fault rule; DIAGNOSED 2026-08-30 seat triage:
+  PROXY-side `cred-unresolved` — the proxy forwards credential-less when its k8s ref-read fails,
+  latching the auth circuit; the mint/PATCH hypothesis refuted. #1004 queued with
+  `Touches: argocd/resources/openrouter-proxy/**`; sibling #1018 (machine-filed same morning)
+  root-causes the continuous 403 half as a MISSING FU-138 Role in agent-coordinator — land
+  together. The storm's three latches (oracle-fleet#283/#279/#278) seat-cleared + re-queued
+  2026-08-30, un-corking the #281 delta chain and goal-270's tail. **#1004 FIXED same day —
+  PR#1019 (loop-authored: fail-closed ref resolution + short negative TTL) merged 07:15Z,
+  issue auto-closed; #1018 (the missing FU-138 Role in agent-coordinator, the 403 half) is
+  QUEUED and codeowner-parks at merge (`Touches: agents/coordinator/rbac.yaml`)**); the operator hand-dispatch **claude/haiku r1 DELIVERED:
+  oracle-fleet PR#277** (opened 2026-08-26 19:00Z, #272 → `agent/review`, riding the loop —
+  no FU-143 hold). #272 carries a blocked-by edge on #990 so the SCAN won't burn 4h slots
+  on the opencode draw; the edge dies when #990 closes. **⚠ FU-188 (found on #277's review,
+  2026-08-26 evening): the review plane was DEAD on every authoritative stack** — `/route
+  role=reviewer` served `xiaomi/mimo-v2.5 [market]` (openrouter rail) to the subscription-only
+  reviewer → instant Anthropic 404, no verdict, no strike, router re-picks forever (72
+  dispatches/24h, zero generations; two dead rounds on #277 pre-fix, 19:47Z + 20:00Z).
+  **Incident pin LIVE (`1596e395`, direct-master):** reviewer-session downgrades
+  authoritative→shadow for itself; workers untouched (chainless-guard REQUIRES authoritative
+  — a claim flip would FATAL oracle/sleep worker dispatches). **VERIFIED 2026-08-26 20:22Z
+  (the S5-continuation session): the pin works live** — the 20:15Z tick logged `authoritative
+  DOWNGRADED to shadow for the reviewer (FU-188 incident pin)` (shadow would-be:
+  `xiaomi/mimo-v2.5 [market]`), served sonnet, and PR#277 got a real CHANGES_REQUESTED
+  verdict at 20:22:54Z — the review plane is back; #277's fix round is the oracle loop's.
+  Durable legs = FU-188 (a/b/c); the pin comes out with (a)+(b). Two 4h burns today
+  were FU-187's class (quiet stall, reap skips finalize — tracker extended with the reap half).
+  **MCR mirror LIVE** (PR#992 merged 2026-08-26 19:33Z; pull-through verified via the VIP,
+  `playwright/python` tags served; sleep#123 commented with the image-redirect option — it
+  stands if the nix-chromium browser-launch grind on sleep PR#133 continues). **NEXT PHASE = FU-186
+  (ADR-115, ruled 2026-08-26):** step 1 the `provider_policy` knob + no-pin/Exacto flip for
+  cheap coding, step 2 the 0731 matrix run (intake mode + `@` arms are BUILT, PR#963 —
+  arms: default-pin / no-pin-exacto / @deepseek / @relace control, rung-2 task, both
+  harnesses), verdict = the model_tiers re-admission PR. Full design + evidence:
+  model-routing.md §M14. First intake digest = homelab#966 (both rung-1 cells CLEAN on
+  bottom-quartile providers — rung 1 does not discriminate).
+
+- **⚑ G-B #818 WEDGED on homelab#933 (found + filed by the 2026-08-25 sweep, queued):** all 5
+  originals closed, 1 store finding, but the goal-checkpoint's child-set-complete trigger
+  counts the OPEN post-launch bucket (#840) as an open child — assembly can never fire for a
+  goal that harvested pre-assembly. The fixed clause emits the checkpoint on its first scan;
+  then the morning-read items stand (assembly PR → codeowner tax → `probe-platform` first
+  tick — the platform prober enablement rides the assembly, FU-102).
+
+- **⚑ G-A #775 post-launch, 2 open descendants:** #778 (operator — Go posture RULED 2026-08-25:
+  janitorial/failover permanently, P4 de-gated from Sep-13, big-pickle shadow arm = #923
+  queued; FU-181 holds the post-reset hygiene legs) + #787 (container). **The FU-095 flip
+  child is minted at the ~2026-09-03 paid-flash revert** (sequencing ruled A, 2026-08-25 —
+  acceptance: zero chain-exhausted defers on subscription-only classes).
+
+- **⚑ S7/#745 COMPLETE 2026-08-26** (callers ×10 + reusable deleted, org secrets destroyed,
+  MP-T02 re-anchored). Acceptance watch: no BEHIND PR >30m anywhere; hosted updater runs
+  structurally 0. Silences `a3628730` + `5400ed94…` self-expire 2026-09-01. **S8 (merge
+  lanes) is on the work map** — (repo, base) serialization + goal v1.3 themes as ONE stint
+  after S5; #829 absorbed at its authoring (de-queued, agent-fix kept).
+
+- **⚑ Retro (FU-058): r1 DELIVERED 2026-08-25** (PR#918; the batch = #927–#929 queued, #930
+  SEAT lane: the DELIM-FIELD transport-lint signature — `scripts/` deny path; #931 OPERATOR
+  lane: the `.agents/` pair). #932 queued (the silent success-push belt). **Next unattended
+  Mon 08-31 05:00Z fire = the clean acceptance.**
+
+- **⚑ GARAGE, operator-owned residue (recovery COMPLETE + env rebuilt, #884/FU-184 archived):**
+  the `garage repair blocks` hold can come off (reclaims ≈nothing now) · **do NOT delete the 3
+  ERT giants** (the 2026-07-12 corpus is the first delta job's stale base — rationale in
+  docs/garage.md §Durability) · delete `backups/garage-meta-20260825-prerebuild/` (20 GB) +
+  `backups/garage-meta-forensics/` evidence after ~2026-09-01 · **meta volume rides rf=1 on
+  wk-02** — redundancy returns with the ADR-114 build-out, FU-137's ~08-31 deadline is
+  load-bearing.
+
+- **⚑ FU-168 soak read FAILED 2026-08-25:** cron-woken dispatches persist
+  (`changes(agent_dispatch_cron_woken_timestamp[24h])` = 2 and 5) — #459 fires legitimately,
+  a dead doorbell edge remains. The emitter hunt (the scan states wake source per dispatch)
+  is the next concrete action, tracked on #459 + FU-168.
+
+- **#974 FIXED — PR#1000 merged 21:18Z (ADR-110 read):** coordinate WorkflowTemplate limit
+  512Mi→1Gi (measured: 442Mi survivor peak; requests untouched), the global scan plane
+  recovers from the next sync. **#994 still holds the routing decision** the operator owes
+  (scan-side early exit recommended — its cost goes UP now that #974 landed; diagnosis
+  comment on the issue, 2026-08-26). Related sighting on **#938** (sentinel edge convoy,
+  recurrence comment 2026-08-26 ~21:17Z): head-blind `{wake: edge}` payloads confirmed, 17
+  pending identical sweeps at peak, arrival source = updater head churn after merge bursts.
+- **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — readout pending; revert to
+  0 if no win; residual setup cost = homelab#518 (its promtool child #936 queued 2026-08-25:
+  loop-health fixture = 107.6s of the 130s lint step).
+- **Small live residue:** wk-metal-04 `kubernetes_labels.longhorn_bulk_zone` field-manager
+  CONFLICT kills FULL tofu applies (targeted fine) — chase before the next broad apply
+  (probed 2026-08-26: live managedFields show `Terraform` owning
+  `topology.kubernetes.io/zone` CLEANLY, no rival manager on the label — likely cleared by
+  the last targeted apply; unreproducible read-only, verdict = the next full apply) ·
+  proxy zen leg live-smoke still unrun (`opencode/nemotron-3-ultra-free` through the
+  in-cluster proxy) · the openrouter-proxy FU-021 comment repoint rides the next functional
+  proxy change · hp-01 `install_disk: /dev/sda` is still a NAME with two identical disks
+  (repin to WWID, FU-076's neighbourhood) · stack leftovers: circles#77 ci-red triage,
+  oracle-fleet#259 rework per the seat read, circles-iac deploy-bump generator fix before
+  the next circles build (circles-iac#71/#68).
+- **Soaks** (each owned by an FU/issue — this line is only the calendar): retro Mon 08-31
+  unattended fire (FU-058 clean acceptance) ·
+  minRunners readout · FU-148 first organic environmental-red retry · or-op#34 first
+  daily-429 · renovate-approve one-approval-per-head (#114) ·
+  CiDispatchStalled quiet-month window opens ~09-11 (FU-150) · **paid-flash REVERT
+  ~2026-09-03 / fixup-end / OR depletion, whichever first** (PR#715; the claim comment
+  carries the record; the FU-095 flip child mints at the revert; Go re-flip = FU-181).
 
 ## Durable warnings — EVICTED (S4 #765, 2026-08-23)
 
@@ -164,7 +289,10 @@ standing set below; what differs is cadence and the act rule:
   cache-warm (a wake within TTL is a ~0.1× cache read; past it, a full re-read — the Part A″
   arithmetic, [observability-and-retro.md](observability-and-retro.md) §Part A″). Maintenance
   sessions keep 7200s (light context, cold wakes are cheap). An expected wait past the TTL with
-  nothing in flight = WIND DOWN deliberately (write the pickup, kill monitors by process, exit).
+  nothing in flight = WIND DOWN deliberately (write the pickup, **push the batched direct
+  commits — ONE master push through the githooks/pre-push lint gate, the 2026-08-30 batch
+  rule (seat card §How changes land)** — kill monitors by process, run jail-transcripts-sync,
+  exit).
 - **Act rule**: a watch event outside the session's type is RECORDED for the other type (board /
   a meta-state row), never acted on — design-shaped events don't get improvised without the
   corpus (the /design ruling applied to watch events); agents-lane events don't derail a

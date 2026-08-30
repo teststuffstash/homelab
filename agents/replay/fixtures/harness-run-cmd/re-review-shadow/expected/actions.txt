@@ -1,0 +1,3 @@
+CALL claude -p Test prompt for shadow re-review. --model opencode/big-pickle --output-format json
+OUT claude_reply: {"result": "{\"verdict\": \"APPROVE\", \"findings\": \"Shadow re-review findings.\"}"}
+RC 0

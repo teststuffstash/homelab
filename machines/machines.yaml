@@ -33,12 +33,19 @@
 # Talos / cluster flags (consumed by tofu):
 #   talos_metal_node  true ⇒ tofu/metal.tf manages this node's machine config (PXE-installed
 #                     bare-metal worker). Requires `install_disk`.
-#   install_disk      target disk for the Talos install (NOT the optane cache)
-#   optane_disks      extra block devices formatted+mounted as Longhorn "fast" disks. Mounted
-#                     UNDER /var/lib/longhorn/ on purpose: longhorn-manager only host-mounts that
-#                     path (Bidirectional propagation), so a disk anywhere else is invisible to
-#                     it. Each becomes /var/lib/longhorn/optane<N>; registered with tag "fast"
-#                     (scripts/longhorn-register-optane.sh + the longhorn-fast StorageClass).
+#   install_disk      target disk for the Talos install (NOT any longhorn_disks entry)
+#   longhorn_disks    extra block devices formatted+mounted as ADDITIONAL Longhorn disks, one
+#                     entry per device: {device, name, tags}. Mounted UNDER /var/lib/longhorn/ on
+#                     purpose: longhorn-manager only host-mounts that path (Bidirectional
+#                     propagation), so a disk anywhere else is invisible to it. Each becomes
+#                     /var/lib/longhorn/<name>, and <name> is ALSO the disk key in the
+#                     node.longhorn.io CR — so renaming one makes Longhorn see a new empty disk
+#                     and declare the old one missing. Never rename an entry that holds replicas.
+#                     `tags` selects the ADR-089 tier (docs/storage-ledger.md); registration is
+#                     scripts/longhorn-tag-disks.sh (std/bulk) or -register-optane.sh (fast).
+#                     ⚠ Prefer a /dev/disk/by-id/wwn-* device here over /dev/sdX: this directive
+#                     PARTITIONS the device, and on a box with two same-size disks a /dev/sdX that
+#                     re-enumerates would format the wrong one (hp-01, 2026-08-25).
 #   pin_hostname      pin the hostname via a HostnameConfig patch (default true). Set false for a
 #                     node that has NOT yet been reinstalled with the pinned config — otherwise a
 #                     plain `tofu apply` would push the hostname change to the *running* node and
@@ -56,6 +63,11 @@
 #                     (kubernetes_node_taint in tofu/metal.tf), so stateful workloads never land
 #                     there; explicitly-tolerating workloads still can. Applied AFTER the node
 #                     joins (docs/provisioning.md step 7).
+#   zone              failure-domain for topology.kubernetes.io/zone (ADR-114): physical box =
+#                     zone; every VM on the pve thin pool = "proxmox" (the 2026-08-24 incident
+#                     took several VMs with ONE pool). Consumed by tofu/longhorn.tf via
+#                     local.machine_zones; the label lands only on k8s nodes (ci-runner-01
+#                     carries the field as failure-domain documentation).
 #
 # NOT here (yet), on purpose — each has one home and moving it needs a file outside this change:
 #   • VM specs (vm_id/cores/memory/disk) — `var.nodes` in tofu/variables.tf, `ci-runner.tf` for
@@ -106,6 +118,7 @@ machines:
 
   - name: cp-01
     kind: vm
+    zone: proxmox
     label: "`cp-01` (VM)"
     role: k8s control plane
     hardware: Talos VM on pve
@@ -115,6 +128,7 @@ machines:
 
   - name: wk-01
     kind: vm
+    zone: proxmox
     label: "`wk-01` (VM)"
     role: k8s worker
     hardware: Talos VM on pve
@@ -123,6 +137,7 @@ machines:
 
   - name: wk-02
     kind: vm
+    zone: proxmox
     label: "`wk-02` (VM)"
     role: k8s worker + Longhorn (bulk tier)
     hardware: Talos VM on pve
@@ -131,6 +146,7 @@ machines:
 
   - name: wk-03
     kind: vm
+    zone: proxmox
     label: "`wk-03` (VM)"
     role: k8s worker, ephemeral/CI-runner tier (tainted; removable — no Longhorn disks, no kata)
     hardware: Talos VM on pve
@@ -144,6 +160,7 @@ machines:
 
   - name: thinkcentre
     kind: metal
+    zone: thinkcentre
     label: "`thinkcentre` (metal, PXE)"
     role: k8s worker + Longhorn (+ 2×Optane fast tier)
     hardware: Lenovo ThinkCentre Edge
@@ -165,7 +182,10 @@ machines:
     # No AVX2 (Pentium G840) — verified via /proc/cpuinfo.
     talos_metal_node: true
     install_disk: /dev/sdb
-    optane_disks: [/dev/nvme0n1, /dev/nvme1n1]
+    longhorn_disks:
+      # names MUST stay optane0/optane1 — they are the live Longhorn disk keys.
+      - { device: /dev/nvme0n1, name: optane0, tags: [fast] }
+      - { device: /dev/nvme1n1, name: optane1, tags: [fast] }
     pin_hostname: true
     notes: >-
       Desktop — highest absolute throughput of the tested boxes, but thirsty.
@@ -177,6 +197,7 @@ machines:
 
   - name: hp-01
     kind: metal
+    zone: hp-01
     label: "`hp-01` (metal, PXE)"
     role: k8s worker + Longhorn (WoL-capable)
     hardware: HP desktop
@@ -195,10 +216,16 @@ machines:
     # No AVX2 — verified via /proc/cpuinfo.
     talos_metal_node: true
     install_disk: /dev/sda
+    longhorn_disks:
+      # 2nd 128GB SATA SSD added 2026-08-25 to relieve the std tier — hp-01 is the node
+      # docs/storage-ledger.md calls the one place where the honest answer is buy a disk.
+      # by-id, NOT /dev/sdb: both disks are 128GB SATA and this directive partitions.
+      - { device: /dev/disk/by-id/wwn-0x500080db1007e129, name: hg5d, tags: [std] }
     notes: On the hp plug (ex-konditsioneer NOUS A1, renamed 2026-08-18) — power measurable as sensor.plug_hp_power; switch.tuyalocal_hp can cycle it, but AC-restore is flaky so WoL is the recovery path.
 
   - name: wk-metal-01
     kind: metal
+    zone: wk-metal-01
     label: "`wk-metal-01` (ThinkPad X240, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier
     hardware: Lenovo ThinkPad X240
@@ -224,6 +251,7 @@ machines:
 
   - name: wk-metal-02
     kind: metal
+    zone: wk-metal-02
     label: "`wk-metal-02` (ThinkPad X250, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node, 8GB)
     hardware: Lenovo ThinkPad X250
@@ -247,6 +275,7 @@ machines:
 
   - name: wk-metal-03
     kind: metal
+    zone: wk-metal-03
     label: "`wk-metal-03` (laptop i5-6200U, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node)
     hardware: laptop, i5-6200U (Skylake, VT-x/KVM + AVX2)
@@ -271,6 +300,7 @@ machines:
 
   - name: wk-metal-04
     kind: metal
+    zone: wk-metal-04
     label: "`wk-metal-04` (desktop i5-3570K 16GB, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier
     hardware: desktop, i5-3570K (Ivy Bridge, VT-x/EPT, no AVX2)
@@ -302,6 +332,7 @@ machines:
 
   - name: ci-runner-01
     kind: vm
+    zone: proxmox
     label: "`ci-runner-01` (VM)"
     role: GitHub Actions runner VM — Docker/binfmt builds (ADR-082)
     hardware: Debian 12 VM on pve

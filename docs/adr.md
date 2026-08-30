@@ -1222,6 +1222,20 @@ declarations plus the regenerated view merge-path-lint reds when stale). Evidenc
 ride was compelled outside its `Touches:` by exactly these two, one day after the first
 addendum. Depth-guarded — nested suite scripts (`agents/coordinator/*-test.sh`) and non-fsm
 docs stay ordinary declared surfaces. One predicate (`fp_replay_exempt`), both consumers.
+**Addendum 3 — source-side REPLAY sentinels, content-keyed (2026-08-26, homelab#944, seat
+ruling under the same rationale):** the fourth compelled class cannot be path-keyed — the
+harness extractor is sentinel-only, so pinning a block of ANY script compels planting
+`# >>>REPLAY:<name>>>>`/`# <<<REPLAY:<name><<<` markers in that script, and a path class
+(`agents/*.sh`) would exempt real edits to the workers' own governors. So this class is
+CONTENT-verified: `sentinel_only_paths` (`touches-check.sh`) classifies from the PR diff —
+a file qualifies iff its entire +/- delta is marker comments — and `touches_check` skips
+qualifying files (reviewer-side only; callers without diff access stay strict). Evidence:
+PR#941's 4-comment-line escape blocked a round the ratchet itself had compelled, resolved
+only by per-issue `Touches:` amendment ceremony. **Considered:** declaration-side rule
+("a governance-path pin must declare the file at authoring") — rejected as the same ceremony
+addendum 1 dissolved, invisible until a round is already blocked. Residual (accepted, same
+disposition as addenda 1–2): a marker-shaped line inside a heredoc/string is content — the
+rubric's ordinary diff read is the guard.
 
 ### ADR-098 — Recipe validity is a platform gate, not a stack CI check
 
@@ -1453,6 +1467,27 @@ experiment; build = G-A children (the proxy anthropic→OpenRouter translation l
 first-party plumbing) + homelab#778 (scout 3-harness cells + retry ladder); design home
 [`agents/chainless-redesign.md`](agents/chainless-redesign.md) decision 3.
 
+### ADR-113 — Bash is glue, logic is Python: shellcheck gates the glue; no wholesale rewrite
+
+**Status:** Accepted (operator ruling, 2026-08-24 — the shell audit after PR#862's refuted
+diagnosis). **Decision:** the two-language pattern already in the tree becomes the rule —
+orchestration/exec glue (dispatch, reflexes, launchers) stays bash; a component holding
+decision logic (parsers, rankers, budget/policy math) is authored in Python from birth; logic
+that grew inside glue extracts to Python at touch time, fix-density paced, never big-bang
+(ADR-103's migration rule). ShellCheck (`-S warning`) becomes a required `ci` step over the
+glue (FU-185). **Considered:** wholesale Go/Python rewrite of the orchestrators — rejected:
+the 233 replay fixtures compose bash blocks by sentinel (the ratchet is bash-native and is the
+platform's strongest safety investment), the glue's whole job is exec-ing `gh`/`kubectl`/
+`claude` so a subprocess rewrite keeps the exec-boundary hazards while paying full rewrite
+risk, and the measured defect record is ~80% domain-class (language-agnostic). Status quo —
+rejected: the shell-language class (~13 recorded ids) is disproportionately the SILENT kind
+(exit-0 deaths, fail-open, masked exits), and SC2318 names the exact `local`-expansion bug
+that killed every model-scout tick for six days (#854/#862). **Why:** measured, not tasted —
+at ~2,800-line scripts a human can no longer hold bash while LLMs can, and the lint is what
+holds them. **Consequences:** FU-185 wires the gate + burns the ~8 standing warnings; the
+inline shell in `responder-argo.yaml`/`fix-debounce-argo.yaml` is the first extraction
+candidate at its next touch; "which language" is a review-rubric question for new components.
+
 ### ADR-108 — Observability stays out of routing-critical paths; meters push, critical paths never pull Prometheus
 
 **Status:** Accepted (2026-08-13, operator ruling on homelab#438).
@@ -1574,3 +1609,137 @@ attribution easy; the corpus view is where classes emerge; single-sighting codif
 G05 failure mode (contracts emerge from patterns).
 **Consequences:** GAPS.md is public (dialogue-level facts only); TICK-LOG keeps narrative; skill
 doctrine changes stay operator-gated except plain factual wrongness.
+
+### ADR-115 — Provider selection prices the JOB: Exacto delegated for cheap classes, an overhead-cost pin for priced ones
+
+**Status:** Accepted (2026-08-26, the 0731 intake session — evidence in model-routing.md §M14).
+
+**Decision.** Provider choice is priced per successful JOB, not per token:
+`expected_cost = eff_price × tokens + p(fail | provider, model) × C_overhead`, where C_overhead
+is the measured downstream cost of a failed ride (strike + re-dispatch + coordinator session +
+review rounds). Consequences, per class (`provider_policy` in model-classes.json — git POLICY):
+**cheap coding classes DELEGATE to OpenRouter's Auto Exacto** (drop our `provider.order` pin so
+upstream's tool-call-quality ordering runs — at flash prices the failure term dominates any
+price delta we could optimize); **priced classes (research/audit/weave) keep OUR pin, upgraded**
+(§M14 pin-v2: 15% band + serving-quality tie-break, benchmark provider-floor, live
+tool-call-error floor, (model, provider) pair-cooldowns — the #783 legs).
+
+**Considered.** Exacto-only (rejected: a price doubling is real money on the priced tiers, and
+experiments need deterministic provider arms); pin-v2-only (rejected: reverse-engineers at n=dozens
+a signal upstream measures at n=millions and maintains for us — the outsource-staleness lens);
+status quo (rejected on the day's evidence: the quality-blind pin chose an fp4 serving over the
+top-quality first-party serving to save $0.0012/M while provider tool-call error rates on ONE
+model span 0.2%→40% and our strikes carry no provider).
+
+**Why.** The 0731 read: the M4 pin structurally samples the mid/bottom of the serving-quality
+distribution (Relace/OpenInference/DeepInfra; DeepSeek first-party never ridden), a 39.6%
+tool-error provider (DigitalOcean) sat pin-eligible at 99.6% uptime, and the elite tier
+(Fireworks 0.23%) costs ~3× on prices where 3× ≈ cents/month against ride-deaths that cost
+coordinator sessions.
+
+**Consequences.** The scout canary rides its class's provider policy (representativeness = same
+policy, not same provider); `@provider_slot`/`@slug` arms (built, PR#963) stay the experiment
+instrument; the tool-call-error-rate feed becomes alerting + pin input, never blind trust;
+0731's re-admission to model_tiers rides the §M14 matrix run. Build pointer: FU-186.
+
+### ADR-114 — Garage rf=3 across physical zones; engines replicate, Longhorn stores singles
+
+**Status:** Accepted (2026-08-24, operator design session over the garagehq real-world/layout
+docs; deadline-bound — oracle serves production ~2026-08-31).
+**Decision:** replicated data engines stop stacking on replicated storage. Garage moves to
+`replication_factor = 3`, one instance per physical zone (`wk-metal-01`, `wk-metal-04`,
+`proxmox`/wk-02 as the interim third — a disk added to hp-01 replaces it later via
+`layout assign` + rebalance), each on **node-local XFS** (not Longhorn; ext4 inode limits bite
+at loki/ert object counts), zones = `topology.kubernetes.io/zone` from `machines.yaml` (new
+`zone` field: physical box = zone, every pve-pool VM = `proxmox`). LMDB stays (upstream:
+recommended for rf ≥ 2; corruption recoverable from peers) with `metadata_fsync = true` + 6h
+native snapshots kept. CNPG gets the same treatment: replica-1 storage + **required**
+zone anti-affinity (soft anti-affinity healed forgejo-pg into two instances on one VM,
+then both instances in one failure domain, 2026-08-24). Backup shrinks to the
+logical-deletion class (Garage has no S3 versioning): an in-cluster CronJob syncs objects to a
+std-tier Longhorn PVC, alerting via pushgateway; offsite stays parked (FU-137).
+**Considered:** rf=3 on Longhorn (6 copies, zones opaque to Garage); SQLite engine (the
+single-node mitigation — moot at rf=3); keep rf=1 + belts only (availability gap remains — the
+2026-08-24 incident cost 70 min of platform S3 on one VM freeze).
+**Why:** the real failure domain is the pve thin pool, not a node — placement must encode it;
+Garage's whole recovery doc assumes rf ≥ 2; capacity fits by reclaiming Garage's own 150Gi×2
+Longhorn footprint from the same metal disks.
+**Consequences:** layout ops get a version-disciplined script (apply-once-per-version, single
+RPC host); `docs/garage.md` §Target architecture carries the mechanism; FU-137 tracks
+delivery; SERVICES.md unchanged (endpoints stay).
+
+### ADR-116 — FU ids are stable coordinates: provenance refs never scrub (the name-anchor ruling)
+
+**Status:** Accepted (2026-08-26, operator ruling input in the S5 stint — homelab#981; the
+2026-08-25 docs-cleanup measured the problem: 29 expired archive entries whose living refs are
+overwhelmingly provenance names, FU-088 ×51, FU-069 ×26, FU-057 ×20).
+**Decision:** an `FU-NNN` string in living code/docs is by default a **provenance name** — a
+stable coordinate in the never-reused id namespace — legal forever, surviving the archive
+entry's expiry. Only **TODO-shaped** references must resolve to open work, and the mechanized
+shapes are exactly two: `FU: FU-NNN` (FSM gap-register disposition cells) and `Tracked by`
+lines. `follow-ups-lint` enforces it: DANGLING now fires only at/past the tracker's Next-free
+counter (a typo'd id that never existed); TODO-RETIRED (fail) / TODO-ARCHIVED (warn) police the
+two forward-pointing shapes.
+**Considered:** scrub-all-on-expiry (the prior convention — measured as mass destruction of
+design provenance for zero drift protection); colon-form comments as a third TODO shape
+(measured ambiguous: `# FU-085: this run may have opened…` is provenance, not a TODO); heading
+renames per doc (rot addressed separately — the §-code convention, S5 #982).
+**Why:** one-ID-namespace + deletability (../teststuff specs-for-agentic-delivery.md): a name
+that cannot be reused cannot dangle semantically; only forward pointers can lie.
+**Consequences:** archive expiry becomes a cheap mechanical sweep (29 deleted in the ADR's own
+PR); `git log -S FU-NNN` stays the deep record; the residual risk — a genuine TODO written as a
+bare colon comment outliving its id — is accepted and left to cleanup-pass judgment.
+
+### ADR-117 — Referenced doc sections carry stable §-code heading anchors (the M-code convention generalized)
+
+**Status:** Accepted (2026-08-26, operator ruling input in the S5 stint — homelab#982; the
+sibling of ADR-116, which rules the FU-id half of the same rot problem).
+**Decision:** a doc section that other docs or code reference gets a stable CODE as its heading
+prefix (`### M14. …`; list-structured sections use a bolded lead, `- **L0b — …`), never reused
+and never renamed; the reference writes `§<CODE>`. `docs-graph-lint` check #4 enforces it
+two-way — ANCHOR-UNRESOLVED (a §-ref with no living definition) and ANCHOR-AMBIGUOUS (a code
+defined twice) — in SHADOW (warn-only) until a clean-run record flips it, the check-#3 arc.
+The `§` sigil is the opt-in: only §-referenced codes are checked, and only the doc-heat-hot
+set grows codes — cold docs are never coerced.
+**Considered:** prose section-name refs (the status quo — they rot silently on heading edits
+and no lint can see them); markdown slug anchors (`#the-section-name` — rot identically, and
+GitHub's slugs are derived, not stable); blanket-coding every heading (ceremony on cold docs
+nobody references — rejected per the doc-heat rule).
+**Why:** ids grep, headings rot — M-codes/FSM-ids/FU-ids never dangled while prose §-refs did;
+the same one-namespace property ADR-116 leans on (a never-reused name cannot dangle
+semantically, only forward pointers can lie).
+**Consequences:** referenced sections accrete codes at touch time (no big-bang renaming);
+report-local codes (retro F-codes, fixer-context L-layers) stay legal un-sigiled; a future
+§-ref to a reused code surfaces as ANCHOR-AMBIGUOUS and forces the rename the convention
+demands.
+
+### ADR-118 — Loki multi-tenancy is the data model; an RBAC-authorizing proxy is the enforcement
+**Status:** Accepted (2026-08-27). **Decision:** give per-tenant log reads a **two-part** mechanism —
+`auth_enabled: true` on Loki with **tenant == namespace** (Alloy stamps the tenant from the pod's `namespace` label — no mapping table; ⚠ correction
+#1009: the relabel-rule form written here silently no-ops (`__`-prefixed labels drop before
+`loki.write`) — shipped as `stage.tenant`, see loki-tenancy.md §Why tenant == namespace), plus **kube-rbac-proxy**
+in front doing TokenReview → SubjectAccessReview with the SAR's namespace rewritten from
+`X-Scope-OrgID`. Scoping is then ordinary RBAC: a RoleBinding for `loki-tenant-reader` in ns `<n>`
+IS "may read tenant `<n>`". First and only consumer: the **oracle stack jail's workbench SA**.
+Design, rollout order and the tightening path: [`loki-tenancy.md`](loki-tenancy.md).
+**Considered:** tenancy ALONE (rejected — `auth_enabled` does not authenticate, it *requires and
+trusts* the header, so direct reach still reads any tenant); a query-rewriting endpoint on the
+egress proxy WITHOUT tenancy (rejected — a security-critical LogQL parser kept correct forever over
+co-mingled chunks, where one bug is full disclosure; it is bespoke there only because that proxy
+also injects credentials, which a read gate never does); tenant == STACK (rejected — needs a
+namespace→stack map inside Alloy, a second reader of the claims beside `stacks_json()`, and the SAR
+rewrite splits per header OCCURRENCE not per delimiter, so Loki's `a|b|c` syntax cannot be
+authorized in one call anyway); Traefik ForwardAuth / Gateway API `ext_authz` / oauth2-proxy / a
+mesh (rejected — a second ingress controller, not first-class in Cilium, needs the PLANNED IdP, and
+standing "no Istio" respectively); exposing Loki itself on a VIP (rejected — unauthenticated, and
+WireGuard clients see VIPs, so that publishes all cluster logs to every device on the network).
+**Why:** the binary today is nothing-or-everything, and the platform already asserts a "LogQL
+access" capability (homelab#541's kmsg carve-out) that nothing provides. Tenancy also brings
+per-tenant ingest limits — the homelab#811 containment that did not exist — and per-tenant
+retention. kube-rbac-proxy is adopted with its alpha/non-sigs status recorded rather than glossed:
+the trade bought is declarative RBAC over code, and its failure mode is "jail log reads stop".
+**Consequences:** rollout is three ordered steps and step 1 must NOT be exposed (a proxy in front of
+a single-tenant Loki authorizes one tenant and serves all — the one state worse than nothing);
+in-cluster reach stays unscoped by design, so the door is bypassable from inside until Loki binds
+to localhost and Alloy's writes get their own gate; a second consumer stack turns the hand-written
+grants into an AgentStack claim knob (mechanism = platform, policy = stack).

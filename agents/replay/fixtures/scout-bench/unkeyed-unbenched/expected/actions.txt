@@ -1,5 +1,6 @@
 OUT ranked: newco/spark:free (unbenched), inclusionai/ling-3.0-flash (unbenched)
-OUT scout: digest SKIPPED — every row unbenched AND uncanaried (no graduation evidence: newco/spark:free, inclusionai/ling-3.0-flash); gh issue create NOT run (FU-161 filing gate)
+OUT scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): newco/spark:free (canary: none), inclusionai/ling-3.0-flash (canary: none) — gh issue create NOT run
+OUT scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/agents/model-routing.md §M7 leg 4)
 OUT RANK 1 newco/spark:free free=true benched=false score=-1
 OUT RANK 2 inclusionai/ling-3.0-flash free=false benched=false score=-1
 ERR get-model: no $SCOUT_MCP_KEY in this env — candidates ride unbenched

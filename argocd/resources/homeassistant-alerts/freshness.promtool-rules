@@ -30,10 +30,16 @@ groups:
           severity: warning
       - alert: HomeAssistantSensorStale
         expr: |
-          time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|backup_(backup_manager_state|last_attempted_automatic_backup|last_successful_automatic_backup|next_scheduled_automatic_backup)|nord_pool_ee_currency|redmi_note_9_pro_(battery_level|battery_state|charger_type)).*"}[10m]) > 86400
+          time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|backup_(backup_manager_state|last_attempted_automatic_backup|last_successful_automatic_backup|next_scheduled_automatic_backup)|nord_pool_ee_currency|redmi_note_9_pro_(battery_level|battery_state|charger_type)|office_plants_irrigation_pump_[0-9]+_water_seconds).*"}[10m]) > 86400
         for: 2h
         labels:
           severity: info
+      - alert: IrrigationNodeSilent
+        expr: |
+          min(time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\.office_plants_irrigation_(soilm_sens_[1-4]|wifi_signal_sensor)"}[10m])) > 3600
+        for: 30m
+        labels:
+          severity: warning
 
   # ── REGRESSION WITNESS — NOT deployed rules (the #310/#328/#335 device, homelab#336) ──────────
   # The two alerts exactly as they shipped before #336: no bridge at all. They are what make the

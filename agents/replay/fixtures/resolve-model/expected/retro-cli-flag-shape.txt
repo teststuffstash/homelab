@@ -1,0 +1,3 @@
+OUT opus
+ERR → resolve-model(retro): explicit override AGENT_MODEL=opus — routed path skipped
+RC 0

@@ -51,6 +51,12 @@ SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
 # Parallelism ceilings (ADR-097): hard per-repo worker max, and the TRACKS-rule-1 open-PR bound
 # (updater churn is O(open PRs × merges)) that holds NEW work regardless of footprints.
 REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
+# `gh issue list` DEFAULTS TO 30 RESULTS (newest first) — with no --limit the scan's whole world
+# silently shrank to the 30 newest open issues once a repo grew past that (found 2026-08-30:
+# homelab at 46 open, floor #840 — queued #110 was invisible to every sweep for 24 days, and two
+# live goals sat below the window). Every issue/PR list call carries this limit; the openall
+# fetch warns LOUDLY when it fills up (no silent caps).
+ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"
 
 # ── PIN-ONLY GUARDED PATHS — a pre-dispatch routing check (homelab#309) ─────────────────────────
 # `scripts/pin-only-lint.sh` refuses any PR that writes anything but a pin line into its carved-out
@@ -149,6 +155,84 @@ scan_phase() {   # $1 = dispatch | deterministic — record a phase transition f
   return 0
 }
 # <<<REPLAY:scan-phase<<<
+# ── ITEM CLASS EXPORT (homelab#892) — per-tick derived class → pushgateway ─────────────────────
+# The scan classifies every open issue/PR it sees into one of the derived classes below. At the
+# end of each stack's pass, the class map is pushed to the pushgateway (job `agent_board`, grouped
+# per namespace) so `board.sh --machine` can consume it from Prometheus instead of re-deriving it.
+# Group-replace per tick (FU-176 semantics): a closed item drops off at the next tick, and a quiet
+# tick that empties the group is not a health signal.
+#
+# Classes (low-cardinality enum, v1):
+#   riding, phantom, held-merged-unlinked, parked-blocked, parked-infeasible,
+#   arbitrate-standing, queued-held, queued-held-by-ghost, queued-ready,
+#   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate
+# who ∈ operator | machine | none
+# >>>REPLAY:item-class>>>
+# Per-pass accumulator: newline-joined lines "repo|item|class|who|first_timestamp"
+# Gets flushed once after the stacks loop via item_class_flush.
+ITEM_CLASS_ROWS=""
+
+item_class_push() {   # accumulate one item class row for batch push
+  local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}"
+  # Append to accumulator; caller will flush at end of stack's pass
+  ITEM_CLASS_ROWS="${ITEM_CLASS_ROWS}${repo}|${item}|${class}|${who}|...\n"
+}
+
+item_class_flush() {   # batch-push all accumulated rows, carrying first-transition timestamps
+  [ -n "$SCAN_PHASE_PGW" ] && [ -n "$SCAN_PHASE_POD" ] || return 0
+  [ -z "$ITEM_CLASS_ROWS" ] && return 0
+
+  local now rows_body metrics_before metric_line repo item class who since_ts ts_line
+  now="$(sp_now)"
+
+  # Query pushgateway to get existing metrics for timestamp carry-over (GET the group's current state)
+  # The pushgateway persists every pushed group until it is replaced, so we can read back the last tick's
+  # timestamp values and preserve them for unchanged (item, class) pairs.
+  metrics_before="$(curl -fsS --max-time 5 \
+    "${SCAN_PHASE_PGW}/metrics?job=agent_board&namespace=${SCAN_PHASE_NS}" 2>/dev/null || echo "")"
+
+  # Build the new exposition batch, preserving timestamps for unchanged items
+  rows_body="# TYPE agent_item_class gauge
+# HELP agent_item_class 1 = the scan classified this item in this class this tick.
+# TYPE agent_item_class_since_timestamp_seconds gauge
+# HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
+"
+
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    IFS='|' read -r repo item class who since_ts <<<"$line"
+    [ -n "$repo" ] && [ -n "$item" ] && [ -n "$class" ] && [ -n "$who" ] || continue
+
+    # Look up the timestamp from the previous tick (if the item+class pair existed and is unchanged)
+    # Extract from metrics_before: agent_item_class_since_timestamp_seconds{...repo="X",item="Y",class="Z",...} VALUE
+    if [ -n "$metrics_before" ]; then
+      ts_line="$(printf '%s' "$metrics_before" | grep -F "agent_item_class_since_timestamp_seconds" \
+        | grep "repo=\"${repo}\"" | grep "item=\"${item}\"" | grep "class=\"${class}\"" \
+        | grep "who=\"${who}\"" | sed 's/.*} //' | head -1 || true)"
+    else
+      ts_line=""
+    fi
+
+    # Use existing timestamp if found; otherwise use now (first transition)
+    case "$ts_line" in
+      *[0-9]*) since_ts="$ts_line" ;;
+      *) since_ts="$now" ;;
+    esac
+
+    rows_body="${rows_body}agent_item_class{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\"} 1
+agent_item_class_since_timestamp_seconds{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\"} ${since_ts}
+"
+  done <<<"$(printf '%b' "$ITEM_CLASS_ROWS")"
+
+  # Do ONE batched POST for this (tick, namespace) pair
+  printf '%s' "$rows_body" \
+    | curl -fsS --max-time 5 --data-binary @- \
+        "${SCAN_PHASE_PGW}/metrics/job/agent_board/namespace/${SCAN_PHASE_NS}" >/dev/null 2>&1 \
+    || true   # pushgateway unreachable — observability fault, never a dispatch blocker
+
+  ITEM_CLASS_ROWS=""
+}
+# <<<REPLAY:item-class<<<
 # NO-OP ROUND PREDICATE — shared by the ci-red clause (FU-115b) and changes-requested (FU-147).
 # Input: `gh pr view N --json comments,commits`. Prints "1" when the LAST completed round pushed
 # nothing. Defined once because two copies WILL drift, and this one was already wrong twice:
@@ -188,10 +272,19 @@ STATS_TS_DEF='def stats_ts: [ .comments[]? | (.body // "") as $b
     then [ $b | scan("<!-- agent-event kind=stats ts=([^ ]+) -->")[0] ]
     elif ($b | test("Agent run stats")) then [ .createdAt ]
     else [] end | .[] ];'
+# FU-147 (homelab#868): the re-label must not fire over a NEWER arbitration ruling. The 12:18
+# re-fire on PR#862 re-read "stats without commits" minutes after the 12:15 arbitration had
+# already ruled that same round a strike — the predicate had no notion of an arbitration event
+# newer than the evidence it was built on. So the no-op predicate now also requires that the
+# newest no-op stats marker POST-DATES the newest arbitration event (an "ARBITRATE" comment).
+# An arbitration event newer than the stats marker means the ruling already covered this round;
+# re-labelling would re-dispatch the same escalation the ruling just resolved.
 NOOP_ROUND_JQ="${STATS_TS_DEF}"'
   ([.commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
   | ([ stats_ts[] | select($head == "" or . > $head) ] | length) as $after
-  | if $after >= 2 then "1" else "" end'
+  | ([ .comments[]? | select((.body // "") | startswith("ARBITRATE")) | .createdAt ] | max // "") as $arb_ts
+  | ([ stats_ts[] | select($head == "" or . > $head) ] | max // "") as $newest_noop_ts
+  | if $after >= 2 and ($arb_ts == "" or $newest_noop_ts > $arb_ts) then "1" else "" end'
 # <<<REPLAY:round-evidence<<<
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
 
@@ -775,6 +868,64 @@ case "${SCAN_UNIT:-}" in ""|"-") ;; *)
 ;; esac
 
 any_work=""
+
+# ── Ratchet clause files (homelab#825, #853) ─────────────────────────────
+# CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
+# Parity assertion below verifies this list matches the regex at runtime.
+clause_files="agents/model-scout.sh
+agents/coordinator-scan.sh
+agents/review-reflex.sh
+agents/reviewer-session.sh
+agents/reviewer-optout.sh
+agents/machine-comment.sh
+agents/goal-budget.sh
+agents/agent-session.sh
+agents/retro-session.sh
+agents/argv-guard.sh
+agents/coordinator/reflexes-argo.yaml
+agents/coordinator/review-argo.yaml
+agents/coordinator/reviewer-git.yaml
+agents/coordinator/coordinate-argo.yaml
+agents/coordinator/responder-argo.yaml
+agents/coordinator/retro-argo.yaml
+agents/coordinator/fix-debounce-argo.yaml
+agents/coordinator/deploy-revert-argo.yaml"
+
+# ── PARITY ASSERTION: clause_files vs ci.yaml ratchet regex (homelab#853) ──
+# The canonical ratchet regex lives in .github/workflows/ci.yaml:118 (ONE HOME).
+# Reads the regex at runtime so no copy can silently drift. Degrade honestly:
+# if ci.yaml is unreadable, report that verification could not be done.
+# Computed once (not per-repo) since the fact is platform-wide.
+PARITY_ISSUES=""
+_pci_yaml=""
+if [ -n "${REPLAY_ROOT:-}" ] && [ -f "$REPLAY_ROOT/.github/workflows/ci.yaml" ]; then
+  _pci_yaml="$REPLAY_ROOT/.github/workflows/ci.yaml"
+elif [ -n "${HERE:-}" ] && [ -f "${HERE}/../.github/workflows/ci.yaml" ]; then
+  _pci_yaml="$(cd "${HERE}/.." && pwd)/.github/workflows/ci.yaml"
+fi
+if [ -n "$_pci_yaml" ]; then
+  _pregex=$(grep -E "grep -E.*agents/" "$_pci_yaml" | sed "s/.*grep -E '//;s/'.*//" | head -1)
+  if [ -n "$_pregex" ]; then
+    _proot="$(dirname "$(dirname "$(dirname "$_pci_yaml")")")"
+    while IFS= read -r _pfile; do
+      [ -n "$_pfile" ] || continue
+      _pfound=0
+      while IFS= read -r _pcf; do
+        [ -n "$_pcf" ] || continue
+        if [ "$_pcf" = "$_pfile" ]; then
+          _pfound=1
+          break
+        fi
+      done <<< "$clause_files"
+      [ "$_pfound" = 0 ] && PARITY_ISSUES="${PARITY_ISSUES}  PARITY FAIL: \`${_pfile}\` matches ratchet regex but is missing from \`clause_files\`\n"
+    done <<< "$(cd "$_proot" && find . -type f -not -path './.git/*' -print | sed 's|^\./||' | grep -E "$_pregex" | sort || true)"
+  else
+    PARITY_ISSUES="  PARITY FAIL: could not extract ratchet regex from .github/workflows/ci.yaml\n"
+  fi
+else
+  PARITY_ISSUES="  PARITY FAIL: .github/workflows/ci.yaml not found — cannot verify clause_files parity\n"
+fi
+
 for name in $(stacks_json | jq -r '.stacks[].name'); do
   # FU-080 perStack: a stack-scoped instance (the coordinate-<stack> CronWorkflow in
   # <stack>-agents sets SCAN_STACK) scans ONLY its own stack; the global reflex keeps sweeping
@@ -827,9 +978,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # non-dispatchable tracking state. Deriving beats a second call — the App's GraphQL pool is
     # what this loop actually runs out of (FU-084).
     openall_fetch_rc=0
-    openall="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy,parent,author 2>/dev/null)" || openall_fetch_rc=$?
+    openall="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body,isPinned,blockedBy,parent,author 2>/dev/null)" || openall_fetch_rc=$?
     jq -e . >/dev/null 2>&1 <<<"${openall:-null}" || { openall='[]'; openall_fetch_rc=1; }
     if [ "$openall_fetch_rc" != 0 ]; then openall='[]'; fi
+    if [ "$(printf '%s' "$openall" | jq 'length' 2>/dev/null || echo 0)" -ge "$ISSUE_LIST_LIMIT" ]; then
+      echo "[$repo] ⚠ TRUNCATED: open-issue fetch filled ISSUE_LIST_LIMIT=$ISSUE_LIST_LIMIT — the oldest open issues are INVISIBLE to this scan; raise the limit"
+    fi
     queued="$(printf '%s' "$openall" \
       | jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"${queued:-null}" || queued='[]'
@@ -842,14 +996,27 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # `updatedAt` is fetched for the homelab#155 belt's persistence guard (condition (c)) — read
     # the mergeStateStatus warning by the PR fetch below before touching this list: a selector
     # field that is not in --json comes back absent and silently matches nothing.
-    inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,updatedAt \
+    inprog="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body,updatedAt \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${inprog:-null}" || inprog='[]'
+    # review_only (homelab#928): issues with agent/review but NOT agent/in-progress — used by the
+    # phantom-label belt inside C4/C5 to detect phantom agent/review labels (no open PR, no merged
+    # PR mentioning it, persisted past C4C5_PERSIST_S). Queried here alongside $inprog because the
+    # C4/C5 clause is gated by a pod-probe and may be skipped; the variable is cheap and consistent.
+    review_only="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body,updatedAt \
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/review")) and (($L|index("agent/in-progress"))|not))]' 2>/dev/null || echo '[]')"
+    jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
     # ADR-097: one line per in-progress issue = its declared footprint; missing Touches: → `*`
     # (exclusive). The queued predicate below holds any unit whose footprint intersects a line.
+    # Direction 2 of the homelab#822 goal exemption: a `task/goal` issue contributes NO entry to
+    # busy_fps, so it does not hold sibling dispatches (cross-reference fp_goal_exempt in
+    # agents/footprint.sh — both readers share `task/goal` as the exemption key).
+    # >>>REPLAY:busy-fps>>>
     busy_fps="$(printf '%s' "$inprog" | jq -r '.[]
+      | select(((.labels|map(.name))|index("task/goal"))|not)
       | ([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(","))
       | if . == "" then "*" else . end')"
+    # <<<REPLAY:busy-fps<<<
     # ── FU-143 (contract points 1+2): a goal child cannot self-close ──────────────────────────
     # An OPEN in-progress issue whose body declares `Base: goal/**` and whose referencing PR
     # MERGED into exactly that base is FINISHED work the closing keyword could not close
@@ -871,7 +1038,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # base — sat open with nothing to claim it. C6's own CLOSED-issue leg has always accepted both
     # states; this leg was the odd one out. $inprog is left ALONE on purpose: it also feeds the
     # ADR-097 footprint holds, and widening those is a different decision.
-    goalcand="$(gh issue list --repo "$slug" --state open --json number,title,labels,body \
+    goalcand="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/in-progress")) or ($L|index("agent/review"))))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${goalcand:-null}" || goalcand='[]'
     goalbased="$(printf '%s' "$goalcand" | jq -r '.[]
@@ -891,7 +1058,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     goalbased_nums="$(printf '%s' "$goalbased" | sed 's/|.*//' | tr '\n' ' ')"
     if [ -n "$goalbased" ]; then
       gmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || gmerged='X'
-      gopen="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body // ""]' 2>/dev/null)" || gopen='X'
+      gopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body // ""]' 2>/dev/null)" || gopen='X'
       if jq -e . >/dev/null 2>&1 <<<"${gmerged:-null}" && jq -e . >/dev/null 2>&1 <<<"${gopen:-null}"; then
         for gb in $goalbased; do
           gn="${gb%%|*}"; gbase="${gb#*|}"
@@ -949,7 +1116,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # `body` is fetched for the FU-146 per-item hold: it carries the `Implements #<n>` line that
     # agent-runtime#34 now guarantees, which is the only reliable PR-to-issue key (branch names
     # are not — circles#31 rode `fix/p0-bake-resolution`, #32 rode `fix/32-p0-page-sunburst`).
-    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body 2>/dev/null)" || prsjson='[]'
+    prsjson="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName 2>/dev/null)" || prsjson='[]'
     jq -e . >/dev/null 2>&1 <<<"${prsjson:-null}" || prsjson='[]'
     # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
     # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
@@ -957,7 +1124,16 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # un-armed PRs charged the budget for work the updater never does: circles' twelve human-gated
     # research/comparison PRs held issue #17 out of dispatch indefinitely, silently, on 2026-08-05.
     # A parked PR awaiting a human is not churn — it is the human gate doing its job.
-    open_prs="$(jq '[.[] | select(.autoMergeRequest != null)] | length' <<<"$prsjson")"
+    # homelab#849: per-base count. Armed PRs against one base do not churn against another base's
+    # issues — master merges never re-base a goal/** child, and goal/** merges never re-base a
+    # master PR. Map baseRefName → count of armed PRs, as newline-separated "base|count" lines.
+    per_base_armed="$(jq -r '[.[] | select(.autoMergeRequest != null)]
+      | group_by(.baseRefName)
+      | map("\(.[0].baseRefName)|\(length)")
+      | .[]' <<<"$prsjson")"
+    # Default branch: a queued issue without a `Base:` body line counts against this.
+    default_branch="$(gh repo view "$slug" --json defaultBranch --jq .defaultBranch 2>/dev/null || echo "master")"
+    [ -n "$default_branch" ] || default_branch=master
     # ADR-097 project-WIP predicate (was binary WIP=1; found live meta-8: two dispatchers raced
     # #52 inside one scan window; 2026-07-21 #55: two CRON ticks raced through the phase=Running
     # filter while a kata pod sat Pending — so the probe counts everything non-terminal): the
@@ -1106,7 +1282,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # above still probes each dep with `gh issue view` because it needs what the nodes do NOT
     # carry — `stateReason` (NOT_PLANNED ⇒ stale premise) and the dep's own edges (cycles).
     # >>>REPLAY:sprout-report>>>
-    inert="$(gh issue list --repo "$slug" --state open \
+    inert="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" \
       --json number,title,author,labels,createdAt,blockedBy 2>/dev/null)" || inert='[]'
     jq -e . >/dev/null 2>&1 <<<"${inert:-null}" || inert='[]'
     # Unlabelled = no `agent*` label at all, the same predicate meta-needs-attention.sh clause 3
@@ -1191,13 +1367,96 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       | "  issue #\(.number) — \(.title)"] | .[]' 2>/dev/null)" || depold=""
     [ -n "$depold" ] && orphans="${orphans}[$repo] ⚠ RETIRED FORMAT: a \`Depends-on:\` body line gates NOTHING (FU-111 retired the reader 2026-08-07 — native blocked-by edges are the only reader). Re-author it: gh api -X POST repos/${slug}/issues/<n>/dependencies/blocked_by -F issue_id=<the BLOCKER's numeric id>, then delete the line:\n${depold}\n"
     # <<<REPLAY:depends-on-retired<<<
+    # ── BODY-TOUCHES MISMATCH (homelab#808) — report-only ──────────────────────────────────────
+    # An issue body may mandate a deliverable path that its own `Touches:` footprint does not
+    # reach — "add a shared helper `agents/foo.sh`" with a `Touches:` that names no plausible
+    # target prefix. Nothing checks this today. Report-only, no label, no gate: an omitted
+    # Touches already means exclusive, and the mismatch may be a deliberate re-scope a human
+    # should read, not a machine block.
+    # No false positive when a `Touches:` prefix covers the path by directory or glob (e.g.,
+    # `agents/` covers `agents/foo.sh`).
+    # >>>REPLAY:body-footprint-mismatch>>>
+    if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}"; then
+      bfm_lines=""
+      # Extract Touches footprint and backtick-quoted paths for each issue, then check coverage.
+      while IFS='|' read -r bfmn bfmt bfmp; do
+        [ -n "$bfmn" ] || continue
+        uncovered=""; oldifs="$IFS"; IFS=','
+        for path in $bfmp; do
+          if ! fp_conflict_strict "$bfmt" "$path"; then
+            uncovered="${uncovered} \`${path}\`"
+          fi
+        done
+        IFS="$oldifs"
+        [ -n "$uncovered" ] && bfm_lines="${bfm_lines}  issue #${bfmn} — body paths${uncovered} not covered by declared \`Touches:\` (${bfmt})\n"
+      done <<< "$(printf '%s' "$openall" | jq -r '
+        [.[] | .number as $n
+         | (.body // "") as $b
+         | select($b != "")
+         | (([$b | scan("(?mi)^[ \t]*touches:[ \t]*(.+)$")] | first // []) | first // "") as $touches
+         | select($touches != "" and $touches != "*")
+         | ([$b | scan("`([a-zA-Z0-9._/*-][a-zA-Z0-9._/*-]+)`") | .[0]] | unique) as $paths
+         | select(($paths | length) > 0)
+         | "\($n)|\($touches)|\($paths | join(","))"
+        ] | .[]
+      ' 2>/dev/null || true)"
+      [ -n "$bfm_lines" ] && orphans="${orphans}[$repo] 🏷 BODY-TOUCHES mismatch: issue body references paths outside declared footprint (homelab#808 report-only — may be a deliberate re-scope):\n${bfm_lines}\n"
+    fi
+    # <<<REPLAY:body-footprint-mismatch<<<
+    # ── CLAUSE-REPLAY PAIRING (homelab#825) — report-only ────────────────────────────────────
+    # The ADR-103 ratchet requires any PR changing a clause file must touch agents/replay/**.
+    # An issue whose declared `Touches:` reaches any ratchet clause file but does not reach
+    # agents/replay/** is structurally under-scoped: the resulting PR would red on the required
+    # `ci` check. Report-only, no label, no gate: same rule as body-footprint-mismatch.
+    # Clause list is canonical in .github/workflows/ci.yaml:118 (the ratchet definition; check
+    # there for drift). Current list extracted from that regex:
+    # >>>REPLAY:clause-replay-pairing>>>
+    if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}"; then
+      crm_lines=""
+      # `clause_files` is defined above (hoisted before the per-repo loop) — the
+      # parity assertion against ci.yaml's ratchet regex runs once there, not per-repo. See
+      # the >>>REPLAY:clause-replay-pairing>>> block before the for-name loop.
+      # Emit the parity finding once (on the main repo) rather than repeating for every stack/repo.
+      [ "$repo" = "homelab" ] && [ -n "$PARITY_ISSUES" ] && orphans="${orphans}[$repo] 🔗 CLAUSE-LIST PARITY: clause_files list does not match the ratchet regex in ci.yaml (homelab#853):\n${PARITY_ISSUES}\n"
+
+      while IFS='|' read -r crmn crmt; do
+        [ -n "$crmn" ] || continue
+        # Check if any clause file is covered by the touches footprint
+        touched_clause=""
+        while IFS= read -r cf; do
+          [ -n "$cf" ] || continue
+          if fp_conflict_strict "$crmt" "$cf"; then
+            touched_clause="$cf"
+            break
+          fi
+        done <<< "$clause_files"
+
+        # If a clause file is touched, check if agents/replay/** is also touched
+        if [ -n "$touched_clause" ]; then
+          if ! fp_conflict_strict "$crmt" "agents/replay/**"; then
+            crm_lines="${crm_lines}  issue #${crmn} — touches clause \`${touched_clause}\` but \`Touches:\` (\`${crmt}\`) does not reach \`agents/replay/**\`\n"
+          fi
+        fi
+      done <<< "$(printf '%s' "$openall" | jq -r '
+        [.[] | .number as $n
+         | (.body // "") as $b
+         | select($b != "")
+         | (([$b | scan("(?mi)^[ \t]*touches:[ \t]*(.+)$")] | first // []) | first // "") as $touches
+         | select($touches != "" and $touches != "*")
+         | "\($n)|\($touches)"
+        ] | .[]
+      ' 2>/dev/null || true)"
+      [ -n "$crm_lines" ] && orphans="${orphans}[$repo] ⚠️ CLAUSE-REPLAY pairing: issue touches a ratchet clause file but does not declare \`agents/replay/**\` (homelab#825 report-only — the PR would red on the ADR-103 ratchet):\n${crm_lines}\n"
+    fi
+    # <<<REPLAY:clause-replay-pairing<<<
     iss=""; qblocked=""; qcycles=""
     # ⚠ tab is IFS *whitespace*: POSIX read COLLAPSES consecutive tabs, so an empty middle
     # field shifts every later field left (live 2026-07-27: track-less sleep-iac#25's
     # Depends-on landed in qtracks, qdeps read empty → the FU-087 gate silently never ran and
-    # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the two
-    # optional fields; normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
-    while IFS="$(printf '\t')" read -r qnum qtitle qtouches qdeps qpin qclass qparent; do
+    # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the four
+    # optional fields (Touches, deps, parent, base — the last two joined via FU-114 L3 and
+    # homelab#849); normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
+    while IFS="$(printf '\t')" read -r qnum qtitle qtouches qdeps qpin qclass qparent qbase; do
       # FU-114 L3: the task class rides the unit (label task/* → .agents/<class>.yaml, default fix)
       [ -n "$qclass" ] || qclass="fix"
       [ -n "$qnum" ] || continue
@@ -1205,6 +1464,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       # legacy issues keep WIP=1 semantics without backfill).
       [ "$qtouches" = "-" ] && qtouches="*"
       [ "$qdeps" = "-" ] && qdeps=""
+      [ "$qparent" = "-" ] && qparent=""
+      [ "$qbase" = "-" ] && qbase=""
+      # TRACKS rule 1 per-base (homelab#849): absent `Base:` body line → default branch.
+      [ -z "$qbase" ] && qbase="$default_branch"
       blocked=""; stale=""
       for dep in $(printf '%s' "$qdeps" | tr ',' ' '); do
         dnum="${dep##*#}"; dslug="$slug"
@@ -1284,14 +1547,24 @@ EOF_GUARDED
         fi
       fi
       # <<<REPLAY:guarded-hold<<<
+      # >>>REPLAY:footprint-hold>>>
+      # ADR-097 goal exemption (homelab#822): a goal's decompose/checkpoint unit writes
+      # no code (it authorises child issues via `gh` and toggles labels, never a PR diff),
+      # so the ADR-097 footprint hold — which prevents write-surface conflicts between
+      # concurrently dispatched units — is a category error. A goal is exempt in BOTH
+      # directions: it is not held by in-progress issues' footprints and does not hold
+      # sibling dispatches.
+      if fp_goal_exempt "$qclass"; then
+        : # skip the ADR-097 footprint hold for goal-class units
       # ADR-097 footprint hold (supersedes the track-label lane hold): a queued unit is held iff
       # its declared footprint intersects ANY in-progress issue's footprint. Undeclared (`*`)
       # conflicts with everything, so a repo with any in-progress work keeps WIP=1 for legacy
       # issues; disjoint declared footprints dispatch in parallel (launcher limit rides wipmap).
-      if fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
+      elif fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
         orphans="${orphans}[$repo] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
         continue
       fi
+      # <<<REPLAY:footprint-hold<<<
       if [ -n "$wip_busy" ]; then
         orphans="${orphans}[$repo] ⏳ project WIP at ceiling (${REPO_MAX_WIP} live workers in ${repo} — ADR-097 hard max):\n  issue #${qnum} — ${qtitle}\n"
         continue
@@ -1307,13 +1580,17 @@ EOF_GUARDED
         continue
       fi
       # <<<REPLAY:session-belt-queued<<<
-      # TRACKS rule 1: NEW work is held while the repo carries ≥ REPO_PR_CAP open PRs — the
-      # updater reflex rebases every open PR on every merge (churn is O(open PRs × merges)).
-      # In-flight recovery clauses (c4c5, merge-conflict, …) are exempt: they REDUCE the count.
-      if [ "${open_prs:-0}" -ge "$REPO_PR_CAP" ]; then
-        orphans="${orphans}[$repo] ⏳ PR budget (${open_prs} open ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
+      # >>>REPLAY:pr-cap-per-base>>>
+      # TRACKS rule 1: NEW work is held while the repo carries ≥ REPO_PR_CAP armed PRs against
+      # the SAME base branch as the queued issue (homelab#849). Count per-base: master-based PRs
+      # do not hold a goal/**-based issue and vice versa. In-flight recovery clauses (c4c5,
+      # merge-conflict, …) are exempt: they REDUCE the count.
+      qbase_armed="$(printf '%s' "$per_base_armed" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
+      if [ "${qbase_armed:-0}" -ge "$REPO_PR_CAP" ]; then
+        orphans="${orphans}[$repo] ⏳ PR budget (${qbase_armed} armed PRs against ${qbase} ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
         continue
       fi
+      # <<<REPLAY:pr-cap-per-base<<<
       if [ -n "$stale" ]; then
         iss="${iss}  issue #${qnum} — ${qtitle} [⚠ dep${stale} closed as not-planned — premise may be dead]\n"
       else
@@ -1366,19 +1643,29 @@ EOF_GUARDED
         else
           units="${units}goal-decompose|${repo}|issue-${qnum}\n"
         fi
+        item_class_push "$repo" "issue-${qnum}" "container" "machine"
         continue
       fi
       # FU-090 leg (c) forest/trees: a child's unit carries its GOAL, so the item session re-reads
       # the parent before acting instead of judging the child in isolation. Free — `parent` rides
       # the issue-list call above, no extra request against the App's GraphQL pool. Empty for the
       # ordinary case (no parent), which parses back to the 4-field shape unchanged.
+      # >>>REPLAY:queued-classification>>>
+      # Classify the queued issue based on blocker status (qdeps is normalized to empty if "-")
+      if [ -z "$qdeps" ]; then
+        qclass_item="queued-ready"
+      else
+        qclass_item="queued-held"
+      fi
       if [ "$qpin" = "P" ]; then
         punits="${punits}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       else
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       fi
+      item_class_push "$repo" "issue-${qnum}" "$qclass_item" "machine"
+      # <<<REPLAY:queued-classification<<<
     done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
-            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), ((.parent.number // "") | tostring) ] | @tsv')
+            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), (((.parent.number // "") | tostring) | if . == "" then "-" else . end), (([.body // "" | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "" | if . == "" then "-" else . end)) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     # ── the goal lane (FU-090 leg (c) 2026-08-05; per-closure session DEMOTED by ADR-106 (3) 2026-08-12) ───────────────────────────────────────────────
     # The forest/trees rule's third leg: a goal must be RE-EVALUATED, not merely survive its
@@ -1672,6 +1959,16 @@ EOF_GUARDED
         # valid-looking "3" and fail later as a swallowed arithmetic error (bot review, PR#398).
         case "$gopen_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
         case "$gclosed_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
+        # FU-069 / homelab#933: the post-launch bucket (title starts with "post-launch:") is
+        # created at the first harvest/closeout while the goal is still pre-assembly (IL-T17).
+        # It is an OPEN descendant, so trigger (b) below would never see gopen_n=0 and the
+        # goal would wedge at originals-done forever. Exclude the bucket from the open count
+        # used by the child-set-complete predicate — same title convention the harvest-disposition
+        # site and the dispatch block use (sprout-report-skips-buckets, IL-T17).
+        gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
+          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
+        case "$gopen_n_ckpt" in ''|*[!0-9]*) gopen_n_ckpt="$gopen_n";; esac
         set -- $gdesc; gtotal_n=$#
         _gf_find "$slug" "$g" && gf_rc=0 || gf_rc=$?
         gfbody="$GF_BODY"
@@ -1688,27 +1985,28 @@ EOF_GUARDED
         gundisp=$(( gtot - gdisp ))
         gck=""
         [ "$gundisp" -ge "${GOAL_CHECKPOINT_N:-5}" ] && gck="findings ${gundisp} undispositioned"
-        if [ "$gopen_n" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ]; then
+        if [ "$gopen_n_ckpt" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ]; then
           gck="${gck:+${gck} + }child-set complete pre-launch"
         fi
         if [ -n "$gck" ]; then
           echo "  [$repo] goal #${g}: CHECKPOINT due (${gck}; store ${gtot} total / ${gdisp} dispositioned)"
           units="${units}goal-checkpoint|${repo}|issue-${g}\n"
+          item_class_push "$repo" "issue-${g}" "container" "machine"
         fi
       done
     fi
     # <<<REPLAY:goal-lane<<<
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 native blocked-by; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ blocked-by CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
-    swept="$(gh issue list --repo "$slug" --state open --json number,title,labels \
+    swept="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels \
       --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("direction-change"))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
     [ -n "$swept" ] && orphans="${orphans}[$repo] ⚠ direction-change — human sweep needed BEFORE dispatch:\n${swept}\n"
     # FU-069(a): `agent/error` = the anomaly circuit-breaker (merge-path.md §Runaway dispatch) —
     # HUMAN-FIRST, excluded from every actionable clause above/below. Reported so it never rots
     # silently, but a tick must not touch it (no dispatch, no relabel, no arbitration).
-    errs="$( { gh issue list --repo "$slug" --state open --json number,title,labels \
+    errs="$( { gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels \
         --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true; \
-      gh pr list --repo "$slug" --state open --json number,title,labels \
+      gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels \
         --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true; } )"
     [ -n "$errs" ] && orphans="${orphans}[$repo] ⚠ agent/error (anomaly breaker, FU-069) — human-first, NOT dispatched:\n${errs}\n"
     # `major` is now set on Renovate majors too (renovate-global.json), so gate the major clause on
@@ -1804,6 +2102,7 @@ EOF_GUARDED
         continue
       fi
       units="${units}changes-requested|${repo}|pr-${u}\n"
+      item_class_push "$repo" "pr-${u}" "riding" "machine"
     done
     # merge-conflict (MP-T06, homelab#595): the updater labels a PR `merge-conflict` when its
     # update-branch API call 422s on a DIRTY head. WORKER_AUTHOR-scoped, mirroring the
@@ -1834,10 +2133,12 @@ EOF_GUARDED
         continue
       fi
       units="${units}merge-conflict|${repo}|pr-${u}\n"
+      item_class_push "$repo" "pr-${u}" "parked-infeasible" "machine"
     done
     # <<<REPLAY:merge-conflict-gate<<<
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (.reviewDecision!="CHANGES_REQUESTED") and (($L|index("merge-conflict"))|not))|.number'); do
       units="${units}unarmed-major|${repo}|pr-${u}\n"
+      item_class_push "$repo" "pr-${u}" "orphan-unarmed" "machine"
     done
     # BACKSTOP (FU-079, generalizes the old dep-only clause): an un-armed open PR that no lane owns
     # is invisible to the ENTIRE merge path — the updater, review reflex, and auto-merge all key on
@@ -1847,7 +2148,7 @@ EOF_GUARDED
     # actionable, above), major/awaiting-human (parked on a human by design), agent/error
     # (human-first). Report-only: the fix is `gh pr merge --auto` or an explicit parking label —
     # arm-at-open is operator discipline (merge-path.md).
-    orph="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest \
+    orph="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest \
       --jq '[.[]|(.labels|map(.name)) as $L|select((.autoMergeRequest==null)
         and (([$L[]|select(.=="automerge" or .=="deps-review" or .=="major" or .=="major/awaiting-human" or .=="merge-conflict" or .=="agent/error")]|length)==0)
         and (.reviewDecision!="CHANGES_REQUESTED"))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
@@ -1930,7 +2231,7 @@ EOF_GUARDED
             --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
         if [ -z "$PODS" ]; then
           # >>>REPLAY:c4c5-bodies-probe>>>
-          if BODIES="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body]' 2>/dev/null)"; then
+          if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then
             # The open-PR body probe is guarded the same way its kubectl sibling above is: a probe
             # failure is REPORTED (`⚠ PROBE_FAILED (open PRs)`) and the WHOLE clause is skipped for
             # this repo this tick — it must never fail INTO a wake (rule #6). An empty array is the
@@ -2168,6 +2469,98 @@ EOF_GUARDED
                 done
               fi
             fi
+            # >>>REPLAY:review-phantom-belt>>>
+            # ── THE BELT (homelab#928): RECONCILE the phantom `agent/review` label ──────────────
+            # A phantom `agent/review` is a terminal sink invisible to every scan class: the issue
+            # holds `agent/review` but no open PR references it (the PR was closed/merged without
+            # the label being cleaned up, or the review-flip belt flipped it and the PR was then
+            # closed without merging). homelab#778 sat 18h56m in this state until a goal checkpoint
+            # hand-corrected it — the stall held goal #775's flip criterion. IL-T16 reconciles the
+            # identical phantom mode for `agent/in-progress`; this belt extends the same predicate
+            # to `agent/review`, verbatim shape, restoring `agent/queued`.
+            # Two holds before it writes, both fail-SAFE — an unreadable probe HOLDS, it never
+            # clears (rule #6: never fail INTO a write):
+            #   (c) PERSISTENCE. The issue must have been quiet (`updatedAt`) past C4C5_PERSIST_S
+            #       to avoid racing with the review-flip belt or a PR that just landed.
+            #   (d) NO MERGED PR mentions the issue. A PR merged with a NON-closing reference
+            #       leaves exactly this state, and re-queueing it re-rides finished work (the
+            #       FU-143 lesson, one lane over). A bare mention is enough to hold: holding costs a
+            #       report line, guessing costs a duplicate ride.
+            # Anything the belt HOLDS keeps today's behaviour exactly — reported, and the
+            # merged-closeout unit (C6) still carries it. Anything it CLEARS becomes an ordinary
+            # `agent/queued` item again and the normal dispatch path owns it on the next pass.
+            review_phantom_cleared=""
+            review_phantom_cands=""
+            # review_only is queried above the C4/C5 clause (same as $inprog) and provided by the
+            # bridge in replay. The jq validation is the same guard $inprog uses.
+            jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
+            # a human gate is never re-dispatched — agent/blocked and agent/error are never re-queued
+            # by the belt (mirrors C4C5_SEL); a re-queue would hand a human-held issue back to dispatch
+            [ -n "$dispatchable" ] && review_phantom_cands="$(printf '%s' "$review_only" \
+              | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
+                '[.[] | (.labels|map(.name)) as $L
+                       | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
+                       | (.number|tostring) as $n
+                       | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
+                       | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+                       | "\($n)|\(.updatedAt // "")"] | .[]')"
+            if [ -n "$review_phantom_cands" ]; then
+              now_s="$(date -u +%s)"
+              review_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || review_merged=""
+              if ! jq -e . >/dev/null 2>&1 <<<"${review_merged:-null}"; then
+                orphans="${orphans}[$repo] ⚠ PROBE_FAILED (merged PRs) — the agent/review phantom-label belt held every candidate this tick (rule #6)\n"
+              else
+                for cand in $review_phantom_cands; do
+                  rcn="${cand%%|*}"; rcupd="${cand#*|}"
+                  # jq parses the timestamps — same reader the pod janitor uses. An UNPARSEABLE
+                  # stamp yields -1, which is < the window, so it holds.
+                  rcage="$(jq -rn --arg t "$rcupd" --argjson now "$now_s" \
+                    '($t | fromdateiso8601? // null) as $s | if $s == null then -1 else ($now - $s) end' 2>/dev/null || echo -1)"
+                  case "$rcage" in ''|*[!0-9-]*) rcage=-1;; esac
+                  if [ "$rcage" -lt "$C4C5_PERSIST_S" ]; then
+                    orphans="${orphans}[$repo] ⏳ agent/review phantom-label belt HELD — issue #${rcn} was touched $(( rcage < 0 ? 0 : rcage / 60 ))m ago (< the ${C4C5_PERSIST_S}s transition-race guard, or an unreadable timestamp); re-checked next scan\n"
+                    continue
+                  fi
+                  if [ "$(jq -r --argjson nn "$rcn" '[.[] | select(test("#\($nn)\\b"))] | length' <<<"$review_merged" 2>/dev/null || echo 1)" -gt 0 ]; then
+                    orphans="${orphans}[$repo] ⛔ agent/review phantom-label belt HELD — issue #${rcn} is mentioned by a MERGED PR: this may be finished work whose reference did not close it, not an abandoned review. Re-queueing it would re-ride merged work — verify by hand.\n"
+                    continue
+                  fi
+                  # ⚠ ORDER IS LOAD-BEARING, and `gh issue edit --add-label X --remove-label Y` is
+                  # NOT atomic: if the add fails while the remove lands, the issue holds no lifecycle
+                  # label at all and goes invisible to EVERY clause. Add `agent/queued` FIRST,
+                  # remove `agent/review` SECOND, then RE-READ and prove the end state.
+                  # ⚠ `set -euo pipefail` is on: a bare `A && B` whose result is non-zero is NOT in a
+                  # condition context and would ABORT THE WHOLE SCAN mid-write. The `if` and the
+                  # `|| true` are what keep a refused write a REPORTED write.
+                  rok=""
+                  if gh issue edit "$rcn" --repo "$slug" --add-label agent/queued >/dev/null 2>&1; then
+                    gh issue edit "$rcn" --repo "$slug" --remove-label agent/review >/dev/null 2>&1 || true
+                  fi
+                  rend="$(gh issue view "$rcn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
+                  case ",${rend}," in
+                    *",agent/queued,"*) case ",${rend}," in *",agent/review,"*) : ;; *) rok=1;; esac;;
+                  esac
+                  if [ -n "$rok" ]; then
+                    gh issue comment "$rcn" --repo "$slug" --body "$(printf '%s\n' \
+                      "🤖 **Phantom \`agent/review\` cleared — re-queued \`agent/queued\`** (deterministic scan belt, homelab#928)." \
+                      "" \
+                      "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
+                      "" \
+                      "- **No open PR** references \`#${rcn}\` (every open PR body in \`${slug}\` was checked), and no merged PR mentions it either." \
+                      "- **The state persisted.** The issue had been untouched for $(( rcage / 60 ))m — past the $(( C4C5_PERSIST_S / 60 ))m guard, which is one full scan interval plus margin, so this is not a review-flip race." \
+                      "" \
+                      "The label was a terminal sink invisible to every scan class: the issue held \`agent/review\` but no open PR existed to review. Re-queueing it as \`agent/queued\` makes it visible to dispatch again." \
+                      "" \
+                      "If a PR really is open, its body is what proves it — the clause holds as soon as one references the issue. Re-applying \`agent/review\` by hand with no PR behind it will simply be cleared again after the guard window." )" >/dev/null 2>&1 || true
+                    review_phantom_cleared="${review_phantom_cleared}${rcn} "
+                    orphans="${orphans}[$repo] ⚠ phantom \`agent/review\` RECONCILED → \`agent/queued\`: issue #${rcn} (no open PR, state persisted $(( rcage / 60 ))m — audit commented; homelab#928). Frees its ADR-097 footprint; dispatch resumes on the next pass.\n"
+                  else
+                    orphans="${orphans}[$repo] ⛔ agent/review phantom-label reconcile FAILED or landed HALF-APPLIED on issue #${rcn} — labels are now [${rend}]. Check by hand: with NEITHER label the issue is invisible to every clause; with BOTH it still holds its footprint.\n"
+                  fi
+                done
+              fi
+            fi
+            # <<<REPLAY:review-phantom-belt<<<
             # >>>REPLAY:c4c5-derivations>>>
             v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
               --arg done "${c4c5_cleared:-}${infeas_done:-}" \
@@ -2193,6 +2586,7 @@ EOF_GUARDED
                   "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                    | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
                 units="${units}c4c5-redispatch|${repo}|issue-${u%%|*}|${u#*|}\n"
+                item_class_push "$repo" "issue-${u%%|*}" "phantom" "machine"
               done
             fi
             # <<<REPLAY:c4c5-derivations<<<
@@ -2215,13 +2609,14 @@ EOF_GUARDED
     # last arbitrate dispatch (homelab#198, fingerprint helper at the top of this file); unchanged
     # state is a REPORT line, which is what an escalation waiting on a human should look like.
     # >>>REPLAY:arbitrate-gate>>>
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")))|.number'); do
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")) and ((.autoMergeRequest==null) or (.reviewDecision!="APPROVED")))|.number'); do
       afp="$(pr_state_fp_pair "$slug" "$u")"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
         orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
         continue
       fi
       units="${units}arbitrate|${repo}|pr-${u}\n"
+      item_class_push "$repo" "pr-${u}" "arbitrate-standing" "operator"
     done
     # <<<REPLAY:arbitrate-gate<<<
 
@@ -2248,7 +2643,7 @@ EOF_GUARDED
     # (labeling is cheap + idempotent).
     # `body` rides this list for the FU-146 per-item hold below — without it the hold's issue-link
     # capture is always empty and the hold silently never fires (fail-safe, but useless).
-    red_probe="$(gh pr list --repo "$slug" --state open --json number,labels,author,autoMergeRequest,headRefOid,headRefName,statusCheckRollup,body 2>/dev/null)" || red_probe=''
+    red_probe="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,labels,author,autoMergeRequest,headRefOid,headRefName,statusCheckRollup,body 2>/dev/null)" || red_probe=''
     if [ -n "$red_probe" ] && jq -e . >/dev/null 2>&1 <<<"${red_probe:-null}"; then
       # MANDATE check (homelab#88, sleep-tracking#113 livelock 2026-08-03): red CI on a PR the
       # loop did NOT author is the author's to fix — the scan kept dispatching sessions at a
@@ -2402,6 +2797,7 @@ EOF_GUARDED
             # units-only clauses were invisible to the `[ -z "$items" ]` gate (the meta-14 stall) —
             # every dispatchable unit MUST also add an items line.
             items="${items}[$repo] PR #${u} — ${rclause} (CI red, armed; attempt $((red_rounds+1))/${RED_MAX} on ${red_rounds_key} @ ${head8})\n"
+            item_class_push "$repo" "pr-${u}" "parked-infeasible" "machine"
             red_n=$((red_n+1))
           fi
         else
@@ -2446,6 +2842,7 @@ EOF_GUARDED
       if [ "$c6_n" -lt 3 ]; then
         units="${units}merged-closeout|${repo}|issue-${gn}\n"
         items="${items}[$repo] issue #${gn} — merged-closeout (FU-143: goal child merged into ${gbase}, keyword inert)\n"
+        item_class_push "$repo" "issue-${gn}" "held-merged-unlinked" "machine"
         c6_n=$((c6_n+1))
       else
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${gn} (goal child) waits for the next pass\n"
@@ -2457,6 +2854,7 @@ EOF_GUARDED
         # trip the actionability gate + surface in the report (see the ci-red note above) —
         # otherwise a merged issue's agent/done flip + Follow-ups harvest silently never dispatches.
         items="${items}[$repo] issue #${u} — merged-closeout (closed, still non-terminal agent/*)\n"
+        item_class_push "$repo" "issue-${u}" "held-merged-unlinked" "machine"
         c6_n=$((c6_n+1))
       else
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${u} waits for the next pass\n"
@@ -2470,7 +2868,7 @@ EOF_GUARDED
     # so `$(gh … || echo '[]')` concatenates body+[] (live crash 2026-07-12, a nonexistent claim repo).
     # Meta-5 probe rule: a failed probe's stdout is NOT a value — validate or zero it.
     heads="$(gh api "repos/$slug/branches?per_page=100" --jq '[.[].name | select(test("^(fix|feat|agent)/"))]' 2>/dev/null)" || heads='[]'
-    prheads="$(gh pr list --repo "$slug" --state open --json headRefName --jq '[.[].headRefName]' 2>/dev/null)" || prheads='[]'
+    prheads="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json headRefName --jq '[.[].headRefName]' 2>/dev/null)" || prheads='[]'
     jq -e . >/dev/null 2>&1 <<<"${heads:-null}" || heads='[]'
     jq -e . >/dev/null 2>&1 <<<"${prheads:-null}" || prheads='[]'
     # A branch owned by a RUNNING ride is not stale — the worker pushes its branch before the PR
@@ -2813,6 +3211,12 @@ EOF_GUARDED
         tried_units="${tried_units} ${unit}"
         # Continue the retry loop (stay in while, re-find a unit)
       elif [ $dispatch_rc -ne 0 ]; then
+        # PR#915 review (2026-08-26 07:45Z finding): the batch accumulator dies with the process —
+        # flush the tick's classified rows BEFORE the hard exit, or every stack already scanned
+        # this pass loses its agent_item_class series whenever one dispatch hard-fails (the
+        # pre-batch behavior was push-per-item and never had this window). Idempotent: the flush
+        # clears the accumulator, so the ordinary end-of-pass flush becomes a no-op.
+        item_class_flush
         exit $dispatch_rc
       else
         # Success
@@ -2826,5 +3230,11 @@ EOF_GUARDED
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"
   fi
 done
+
+# FU-176, one scope level up (PR #915 review): SCAN_PHASE_NS is process-fixed at the top of this
+# file, so a per-stack flush would POST every stack to the SAME job=agent_board,namespace=<ns>
+# group and pushgateway's replace-by-metric-name semantics would leave only the last stack's rows.
+# Accumulate across the whole pass and flush ONCE, here, after the stacks loop.
+item_class_flush
 
 [ -n "$any_work" ] || echo "no stack has actionable work — nothing to spawn (no LLM woken)."

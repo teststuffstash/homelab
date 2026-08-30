@@ -1,0 +1,9 @@
+# homelab#892 — the board.sh --machine mode golden pinning.
+#
+# Suite mode: extends agents/board-test.sh with a --machine arm. The fixture provides
+# a recorded Prometheus world (via REPLAY_WORLD/stubs) and expected key=value line grammar.
+# Uses the declared seam PROMETHEUS_URL="${PROMETHEUS_URL:-http://stub}" for Prometheus mocking.
+name: board-machine
+mode: suite
+source: agents/board.sh
+entrypoint: agents/board-test.sh

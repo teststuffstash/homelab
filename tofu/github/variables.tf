@@ -109,22 +109,16 @@ variable "protected_repos" {
   }
 }
 
-# The homelab-merge App id — not sensitive (the private key is). Exposed to the agent repos' workflows as
-# the org Actions secret MERGE_GH_APP_ID (actions_secrets.tf), for the FU-041 updater's App-token mint.
-# Provided by scripts/github-tf.sh from the cred dir (~/.claude/homelab-github-merge/app-id) — no default,
-# so a bare `tofu apply` (without the wrapper) fails loudly rather than minting a secret with an empty id.
+# The homelab-merge App id — still needed as the ruleset BYPASS ACTOR (repo_rulesets.tf ×3:
+# required_checks, required_approval_goal, workflow_push_guard), which is why it survived the
+# 2026-08-26 retirement of the MERGE_GH_APP_* org secrets (ADR-111 cutover, homelab#745 — the
+# in-cluster updater sources the App KEY via Infisical→ESO; the private-key var is gone).
+# The id is NOT sensitive, so it lives here as a default instead of a github-tf.sh injection —
+# a bare `tofu apply` works without the cred dir.
 variable "merge_gh_app_id" {
-  description = "homelab-merge GitHub App id. Set via TF_VAR_merge_gh_app_id (scripts/github-tf.sh injects it)."
+  description = "homelab-merge GitHub App id (ruleset bypass actor; not sensitive)."
   type        = string
-}
-
-# The homelab-merge App private key. SENSITIVE — sourced from the cred-dir PEM by scripts/github-tf.sh
-# (durable copy: Infisical MERGE_GH_APP_PRIVATE_KEY); never in tfvars/git. See actions_secrets.tf's header
-# for the secrets-in-state tradeoff. No default → apply fails loudly if it isn't provided.
-variable "merge_gh_app_private_key" {
-  description = "homelab-merge GitHub App PEM private key. Set via TF_VAR_merge_gh_app_private_key (scripts/github-tf.sh)."
-  type        = string
-  sensitive   = true
+  default     = "4207260"
 }
 
 # The homelab-deploy App id — NOT sensitive (the key is). Published as the DEPLOY_APP_ID Actions secret

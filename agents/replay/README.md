@@ -76,6 +76,11 @@ follows fix-density per ADR-103, never big-bang):
    templates + 3 per-row, 2 named jq patches, all 8 original streams reproduced exactly).
    Patches are named files (`patches/*.jq`) — raw jq in a cell collides with the psv delimiter
    and a named patch reads as the condition it encodes.
+   **Batches 2–4 executed by [stint](../../docs/agents/chainless-redesign.md) #661
+   (2026-08-19):** go-rail-latch 11→1,
+   fu088-ladder + goal-budget-refusal 5+5→2, retro-harvest + summary-comment 5+4→2
+   (PRs #673/#677/#681, every stream byte-exact); the #354 post-refactor adversarial
+   acceptance PASSED first try (PR#684, record on #666).
 3. **Generated register** — `run.sh --index --write` renders the family/world/row table from
    fixture metadata (the `merge-path-lint --write` pattern, currency-checked in CI). The
    hand-appended prose register below retires; this README keeps only doctrine — the ~8 seam
@@ -106,7 +111,8 @@ follows fix-density per ADR-103, never big-bang):
    pins a jq-version float format awaiting its emitter fix (the versions gap below).
 7. **Suite fold-in** — the standalone `*-replay.sh`/`*-test.sh` harness scripts register as
    `mode: suite` entries (scripts stay put; `entrypoint:` points at them) so "executed replay"
-   has one runner and one index. Rolling, by fix-density.
+   has one runner and one index. Bulk executed by stint #661 (PR#671, 5 standalone harnesses
+   → `mode: suite`); stragglers roll by fix-density.
 
 Until the moves land: new families SHOULD follow the target shape where cheap (name your world,
 share it by reference within the family, keep contract prose in ONE header) — and every
@@ -140,15 +146,26 @@ is stale, so it cannot drift the way the prose register did.
 | `_selftest/wrong-expectation` | actions | - | `-` | - |
 | `adopted-not-queued-surfaces/adopted-not-queued-surfaces` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/first-tick` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `arbitrate/fu147-refire-blocked` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `arbitrate/landing-sequence` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/probe-unreadable` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `arbitrate/quoted-mid-body` | actions | - | `agents/coordinator-scan.sh` | - |
 | `argv-payload/over-ceiling` | actions | - | `agents/agent-session.sh` | - |
 | `argv-payload/retro-handoff` | actions | - | `agents/retro-session.sh` | - |
 | `argv-payload/warn-band` | actions | - | `agents/agent-session.sh` | - |
 | `asvs` | suite | - | `-` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
+| `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
+| `body-footprint-mismatch/body-footprint-mismatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
+| `clause-replay-pairing/clause-replay-pairing` | table | - | `agents/coordinator-scan.sh` | - |
+| `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
+| `decorrelate-resolution/empty-report` | actions | - | `agents/review-reflex.sh` | - |
+| `decorrelate-resolution/malformed-json` | actions | - | `agents/review-reflex.sh` | - |
+| `decorrelate-resolution/no-model` | actions | - | `agents/review-reflex.sh` | - |
+| `decorrelate-resolution/served-model` | actions | - | `agents/review-reflex.sh` | - |
 | `depends-on-retired-format/depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
 | `dispatch-phase/scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `dispatch-phase/session` | actions | - | `agents/coordinator-session.sh` | - |
@@ -161,7 +178,9 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-machine-markers/env-card-machine-markers-capture` | actions | - | `agents/agent-session.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
+| `footprint-hold-goal-exempt` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
+| `fu042-wip-cap` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder` | table | - | `agents/agent-session.sh` | - |
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -170,11 +189,18 @@ is stale, so it cannot drift the way the prose register did.
 | `goal-budget-gate` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal` | table | - | `agents/agent-session.sh` | - |
 | `goal` | table | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 IL-T19 IL-T20 IL-T21 IL-T22 |
+| `harness-enforce-default/explicit-wins` | actions | - | `agents/agent-session.sh` | - |
+| `harness-enforce-default/flip` | actions | - | `agents/agent-session.sh` | - |
+| `harness-enforce-default/monitor-untouched` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/opencode` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/re-review-shadow-skip-tag` | actions | - | `agents/re-review.sh` | - |
+| `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
+| `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
+| `item-class/item-class` | actions | - | `agents/coordinator-scan.sh` | - |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
 | `lens-posture/lens-posture` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
@@ -183,11 +209,20 @@ is stale, so it cannot drift the way the prose register did.
 | `merge-conflict/null-author` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `model-id-carrier` | table | - | `agents/agent-session.sh` | - |
 | `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
+| `opencode-hostaliases/default-profile` | actions | - | `agents/agent-session.sh` | - |
+| `opencode-hostaliases/monitor-mode` | actions | - | `agents/agent-session.sh` | - |
+| `opencode-hostaliases/node-profile` | actions | - | `agents/agent-session.sh` | - |
+| `opencode-hostaliases/non-opencode` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-phonehome-killswitch/opencode-phonehome-killswitch` | suite | - | `-` | - |
 | `opencode-session-config` | actions | - | `agents/agent-session.sh` | - |
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/clear` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/go` | actions | - | `agents/subscription-latch.sh` | - |
+| `pr-cap-per-base` | actions | - | `agents/coordinator-scan.sh` | - |
+| `pr-cap-per-base/collision` | actions | - | `agents/coordinator-scan.sh` | - |
+| `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |
+| `queued-classification/held` | actions | - | `agents/coordinator-scan.sh` | - |
+| `queued-classification/ready` | actions | - | `agents/coordinator-scan.sh` | - |
 | `rail-degrade/rail-degrade` | suite | - | `-` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
@@ -221,9 +256,11 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-key/minted` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/pinned` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/subscription` | actions | - | `agents/retro-session.sh` | - |
+| `retro-push-belt` | table | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-rank-snapshot-exclusion/retro-rank-snapshot-exclusion` | suite | - | `-` | - |
 | `review-flip-belt/probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-flip-belt/review-flip-belt` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
+| `review-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T27 |
 | `reviewer-currency/behind-skips` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/probe-fail-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
@@ -235,9 +272,13 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-go-failover/shadow-both-limited` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/shadow-go-available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-optout/reviewer-optout` | suite | - | `-` | - |
+| `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-route-carrier/resolved-absent` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-route-carrier/resolved-adopted` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-computed` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-none` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/multiline-union` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-touches/sentinel-exempt` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/unavailable` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/undeclared` | actions | - | `agents/reviewer-session.sh` | - |
 | `route-request/labels` | actions | - | `agents/agent-session.sh` | - |
@@ -252,6 +293,10 @@ is stale, so it cannot drift the way the prose register did.
 | `scout-bench/ranked-columns` | actions | - | `agents/model-scout.sh` | - |
 | `scout-bench/unkeyed-unbenched` | actions | - | `agents/model-scout.sh` | - |
 | `scout-canary-filing-gate` | table | - | `agents/model-scout.sh` | - |
+| `scout-canary-mint-unbound` | actions | - | `agents/model-scout.sh` | - |
+| `scout-canary-ride-model-prefix` | actions | - | `agents/model-scout.sh` | - |
+| `scout-intake-stateless` | actions | - | `agents/model-scout.sh` | - |
+| `scout-state-unkeyed` | actions | - | `agents/model-scout.sh` | - |
 | `scout-variant/batch-rollout` | actions | - | `agents/model-scout.sh` | - |
 | `scout-variant/known-base` | actions | - | `agents/model-scout.sh` | - |
 | `session-atomic-gate/session-atomic-gate` | actions | - | `agents/coordinator-session.sh` | - |
@@ -263,13 +308,13 @@ is stale, so it cannot drift the way the prose register did.
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
-| `strike-quota-classifier/strike-quota-classifier` | actions | - | `agents/agent-session.sh` | - |
+| `strike-quota-classifier/strike-quota-classifier` | table | - | `agents/agent-session.sh` | - |
 | `summary-comment` | table | - | `-` | - |
 | `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
 | `unblocked-unlabeled/blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unblocked-unlabeled/surfaces` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unit-fast-path-author/unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |
-| `updater` | table | - | `-` | - |
+| `updater` | table | - | `-` | MP-T02 |
 <!-- replay-index:end -->
 
 
@@ -627,3 +672,25 @@ Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the
   stream changes (the manifests' comment TEXT is not asserted by any fixture); the full suite
   passed unchanged. The lint's new fixtures (`scripts/fixtures/prompt-transport/`) are the
   executable pin for the class.
+- **homelab#919 (2026-08-25)** — added `homelab.io/ephemeral` toleration to the non-docker pod
+  spec in `agents/agent-session.sh`. The toleration is a YAML fragment inside an unquoted heredoc
+  (`cat <<EOF | kubectl create -f -`) that is NOT inside any `>>>REPLAY:` sentinel — the pod
+  manifest is rendered inline, not as a callable block. No action stream changes (the kubectl
+  create call is not stubbed by any fixture; the toleration only changes which nodes the
+  scheduler considers, not what the script sends to the API). The full suite passes unchanged
+  — no clause logic moved, no fixture applies.
+- **homelab#867 (2026-08-26, PR #952)** — the #103 soft `topologySpreadConstraints` block
+  extended to the `agents/coordinator/*-argo.yaml` workflow specs it had never reached, plus a
+  soft `nodeAffinity` `preferredDuringSchedulingIgnoredDuringExecution` de-preference (weight
+  10) for nodes labelled `node.longhorn.io/create-default-disk=true`. Same class as the #103
+  entry that opens this register: pod *placement* declared to the kube-scheduler through
+  `podSpecPatch` — no clause reads it, no branch turns on it, and the diff emits no action
+  stream. Evidence rather than assertion — the full suite stays green on the change with every
+  `expected/actions.txt` untouched.
+- **homelab#974 (2026-08-26, PR #1000)** — `limits.memory` raised from `512Mi` to `1Gi` in
+  `agents/coordinator/coordinate-argo.yaml` (the `coordinate` WorkflowTemplate's main
+  container). A container resource declaration to the kubelet/scheduler — no clause reads it,
+  no branch turns on it, and the diff emits no action stream. Same class as the #103 / #867
+  placement-and-resources entries: the harness asserts a clause's `gh`/`kubectl` calls, and
+  this diff emits none. Evidence rather than assertion — the full suite stays green on the
+  change with every `expected/actions.txt` untouched.

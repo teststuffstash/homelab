@@ -4819,3 +4819,907 @@ first live ADR-110 maintenance session before the ADR existed.
   quota-dead until Sep-1 anyway, in-cluster leg is sole server, files die at #745 (never
   re-enable — delete). Everything else in those repos is self-hosted (ARC/proxmox-vm) — no other
   hosted email source. Silence a3628730 stays as the self-expiring belt.
+
+## 2026-08-23 evening (G-A day 2 close + G-B launch — corpus session, /design-agents continue)
+
+- G-A: 10 more children/sprouts closed through gate reads + the machine lane (#779 doorbell,
+  #792 opencode first-party incl. the #804 DOA fix cycle, #516 decorrelation, #780/#781 role
+  wiring, #810 --model split, #814/#815/#796/#808 pins+lints). Every role routes; §M10
+  superseded-banner landed. #783 RULED (strike env retired, ADR-112 shape); G-E banked
+  (cheap-tier reliability economics — free-only fan-out trial, review-side multi-model the
+  target). Famine: gb_ledger 5s timeout vs 486KB pushgateway dump froze the G-A tree
+  (#807→PR#812 fixed; FU-182 = writer-side growth); #791 unblocked + re-rode.
+- G-B #818 LAUNCHED cluster-autonomous (details/meta-state). Launch-night defects: ADR-097
+  exclusive-hold on queued Goals (workaround + #822), PR#801's unparsed routed id (PR#824),
+  unit fast-path reviewer-only + priority starvation (findings on #822).
+- Ops: private-minutes exhaustion → 4 updater callers disabled + silence a3628730 (emails
+  stopped); loki bucket 8→16Gi unwedge (retention decision parked #811); GoCapacityLatched
+  for:-flap ×6 across proxy rolls, gauge held 1 throughout; CodeownerParkWaiting + phase-slow
+  alerts self-resolved; #500 verdict concurred + min-samples alert refinement noted.
+- Skills: design-agents-G1 promoted (live-state claims verified, never corpus-quoted — the
+  subscription-cap-3-vs-5 catch); meta-events silenced-filter quickfix landed + re-armed.
+
+## 2026-08-24 morning (mechanical jail session, no corpus — #221 pump-alert algorithm + #811 log accumulation)
+
+- #221: operator ruled pump-counter staleness ≠ health (pump 3 four days "stale", soil wet, node
+  live). PR#846: pump `*_water_seconds` counters excluded from `HomeAssistantSensorStale`; new
+  `IrrigationNodeSilent` = min() over the node's five 60s-cadence sensors stale >1h for 30m —
+  group-level liveness, ~1.5h detection vs 26h, threshold 2.5x the worst 7d soilm staleness.
+  Merged + verified live (rule loaded, pump 3+4 fires cleared). Issue keeps its tuya_local/gaas legs.
+- #811 root cause found: 48.7GiB/day — 98% of ALL Loki ingest — was prometheus-pushgateway logging
+  a ~256KB "inconsistent help strings" family dump per conflicting group pair per 30s scrape:
+  agent-finalize pushed `agent_run_phase_seconds` WITHOUT the launcher's HELP line. The ramp
+  (0.9→48.7GiB/day from 08-19) tracked group re-accumulation after the gateway pod's 08-18
+  restart, and THIS filled the loki bucket — the ~11x "growth" was the defect, not organic.
+  Fixes: agent-runtime#84 (byte-identical HELP + contract test) merged, image rebuilding; all 206
+  dead source=in-pod groups DELETEd (history stays in the TSDB); flood verified 0 lines/3m.
+  FU-182 extended (writer-side group hygiene stays its Next). Retention A/B decision stays the
+  operator's — the input changed, noted on the issue.
+- Operator: "should this have been caught earlier?" → the log-volume belt, PR#847 (merged +
+  verified live): Loki ServiceMonitor (Loki was never scraped), ruler completed (AM v2 wired) with
+  per-pod `LokiPodLogVolumeHigh` (>25KB/s ≈ 2GiB/day/pod), Prometheus `LokiIngestVolumeHigh`
+  (>120KB/s ≈ 10GiB/day) + `LokiIngestVolumeRamp` (8x own 7d avg, clamp_min 25KB/s floor — the
+  quiet-system guard). Fixture pins the flood shape + the floor. Post-merge: loki-0 rolled,
+  recording rule live (~1.4KB/s healthy baseline), ruler evaluating.
+- Reflex note: both platform PRs sat unreviewed ~25min (typical 2-11min) — review-platform rung
+  once each per the fire-once discipline; AR#84's red CI was a devbox-fetch 504 flake (rerun green).
+
+## 2026-08-24 — corpus session: G-B stall read, ADR-110 gate reads ×3, #849 filed, #835 prober delivered
+
+- Operator asked: did last night's goal stall, is it the codeowner-parked #775/#818 PRs? Read:
+  G-B #818 ran CLEAN (decompose on fable, 5 children, #831/#832 merged into goal branch by
+  22:18Z); #833/#834 then held by `⏳ PR budget (3 open ≥ cap 3)` — the three codeowner-parked
+  master PRs (#836/#837/#841, bot-approved, REVIEW_REQUIRED) ate the whole REPO_PR_CAP. Designed
+  backpressure, not a defect — but base-blind: churn products have no cross terms between bases
+  (operator's sharpening). → COMMAND: filed **#849** (count armed PRs per the queued issue's
+  target base; REPO_MAX_WIP stays base-blind), bound under #822 beside #828/#829.
+- ADR-110 gate reads ×3 (full-diff, corpus loaded): #836 (goal footprint exemption, the ruled
+  #822 fix) · #837 (#827 harness-guard test pin) · #841 (#825 clause-replay pairing lint;
+  non-blocking note: clause list duplicates ci.yaml:118 — one-home read on next touch). All
+  approved; cascade merged all three by 10:17Z; freed budget dispatched #833 organically.
+- **#835 ruling: `.agents/**` carve-out DECLINED** (operator; N=1-forever + judgment work mis-fit
+  to the fix lane). Seat delivered both halves as **PR#850** into `goal/818-assurance` (armed):
+  `.agents/probe.md` — the platform probe brief, belt-gap framing (report what is broken AND
+  unalerted; 6 checks, OK/FINDING/PROBE-FAIL contract) — + claim `prober: {enabled, 41 */6,
+  haiku}` + roles.md first-flip currency. First prober enablement anywhere. Post-merge verify:
+  `probe-platform` CronWorkflow renders in platform-agents; first tick's report is the read.
+- Overnight residue on the board: retro first unattended fire FAILED (all cells + harvest exit 1,
+  ~05:00Z; janitor died same window to Anthropic 529 — correlation unverified, transcript read
+  owed = the standing FU-058 post-fire item) · review-platform-1787515200 Failed exit 4 (one-off,
+  subsequent runs green) · #778 still agent/review with no PR (checkpoint recommends re-queue —
+  dispatch decision, not taken here).
+
+## 2026-08-24 afternoon — corpus session continued: #857 Talos capture, router-consumer audit, ADR-113, the #854/#861/#849 machine cycle
+
+- **#857 (PodSigkilled thinkcentre)**: seat ran FU-155's §6 pre-upgrade capture (9 OOMActions;
+  today = a 5-kill branch-A burst 10:52:27–29Z, all scores nonzero = ranked-Burstable, NOT the
+  §1.4 zero-score bug; kmsg corroborates incl. the dead-cgroup re-kill). Writer creds probe-clean.
+  FU-155 scope REOPENED: Option A's v1.13.8 pin now reads ALL metal nodes (aeeef7f). #110's same-
+  minute fire = DIFFERENT class (container OOM, mirror 1.4G > 512Mi) — PR#859 gate-read+armed
+  (was FU-079-orphan un-armed), merged.
+- **Retro first unattended fire FAILED** (05:00Z): cell-a 529 storm (transient), cell-b budget-403
+  — and BOTH cells rode routed hy3 instead of their configured models: /route has NO `cell` reader
+  and the #782 wiring passed the cell as --fallback. Filed #861 (→ PR#864 merged same day: cell =
+  explicit override; §M10 sentence synced direct, 46c73d5d). Re-fire after-fix = FU-058's read.
+- **Router-consumer audit (operator-pointed, stack repos incl.)**: every literal mapped to a
+  tracker home (G-A tail / FU-127 / store entry 32 for retro-cells-as-slot-draws + jail slot map);
+  smell retired: `.agents/review.yaml` sediment (zero consumers, openai/gpt-latest literal) —
+  new-stack scaffold line dropped (d78f67a), deletion issues sleep-tracking#132 + circles#83.
+- **ADR-113** (bash=glue/Python=logic, shellcheck gates, no wholesale rewrite — PR#865 merged) +
+  **FU-185** (the gate build; SC2318 names #854's exact bug; ~8 standing warnings). Operator's
+  framing recorded: at ~3k LOC a human can no longer hold bash; the lint holds the LLMs.
+- **#854 scout outage cycle**: PR#862's S3-cred diagnosis REFUTED at the gate (Loki: line-167
+  `sess: unbound` = the `local`-expansion trap, 49aa3c6c/PR#499; live write probe clean) →
+  CHANGES_REQUESTED with the literal fix → machine arbitration independently re-verified, struck
+  a harness death (r2 opencode 19s), filed #866, dispatched r3 --harness goose → r3 delivered
+  split+fixtures+honest record → approved; landing. Lesson posted on #864's thread: at a
+  codeowner park a seat finding is a blocking review or the seat's own edit, NEVER a comment.
+- **#868 filed+queued**: arbitrate churn on a LANDING PR (state-fp mutates every tick post-
+  approval → 3 sessions/5min on #862; FU-147 re-labeled over a newer arbitration ruling). Seat's
+  own miss corrected on-thread (the 13:05 session had already shed the label before my write).
+- Machine cycle also landed: #863 (per-base PR cap, fixes #849) + #858 (clause parity) mid-rounds
+  on correct bot findings; #849→#863 caught a real jq-array/@tsv truncation in review.
+- **Close of day**: #862 MERGED 13:16Z, #854 closed; hand-fired scout tick `model-scout-manual-85z7z` **Succeeded 13:39Z (20 min)** — first completed tick since PR#499, the 6-day outage over end-to-end. #858 (#853) + #863 (#849, per-base cap LIVE) merged behind it. ADR-113 merged (PR#865).
+
+## 2026-08-24 — operator-started incident session: pve thin pool 100% (3rd), wk-01 ×2, Garage meta wipe
+
+- Symptom in: "Grafana and alertmanager both don't show any data" → prometheus-0 wedged on
+  NotReady wk-01 (kubelet dead 14:18Z). VM `running` in pve but guest gone; qm reset no-op
+  (`prelaunch`, 109% CPU) → stop/start → Ready 15:18Z; second freeze 15:41Z was `io-error`
+  (pool full again) → freed space, `qm resume`.
+- Root cause `lvs pve/data` **100.00%** (dmeventd: autoextend FAILED since 08-17 22:19Z, 257
+  extents free — the storage-ledger 08-07 "resolved" caveat firing). fstrim wk-02/wk-03/wk-01/
+  cp-01 via `kubectl debug -n kube-system --profile=sysadmin` → pool **56%**.
+- 10 wk-01 pods force-deleted post-verified-power-cycle (reborn kubelet never confirms old
+  deletions); monitoring verified live end-to-end (60 targets, Grafana 200, AM API up).
+- **Garage meta LMDB came back empty-tabled** (clean open, no corruption; `metadata_fsync`
+  defaults FALSE) — Crossplane recreated all 14 buckets empty; 55GB blocks intact, Longhorn
+  snapshot `pre-restore-2026-08-24-meta-wipe` taken; local object backup = **2026-08-04** only.
+  Fixes: `metadata_fsync=true` + 6h LMDB auto-snapshot (57fbb0e5, verified live);
+  openrouter-operator OOM belt 256→512Mi (d1cdf37c). Incident doc
+  `2026-08-24-pve-thin-pool-garage-meta-wipe.md`; FU-093/FU-137 extended.
+- Responder issues #883/#885 closed on verified recovery; **#884 left open** — carries the
+  operator restore decision (Aug-4 objects vs 20-day loss on loki/transcripts/sleep).
+
+## 2026-08-24 — corpus session: gate reads over the 4 parked fixer PRs (garage restore running in a sibling session)
+
+- Session scope per operator: PR reviews only, no subagents (opencode-go slots latched), the
+  sibling session owns the Garage restore (~1h). Full design-agents corpus loaded → ADR-110
+  codeowner reads executed.
+- All four bot PRs read against the corpus and ruled SMALL → merged: #873 (arbitrate churn on a
+  landing PR, fixes #868 — SELECT excludes APPROVED+armed, FU-147 gated on fresh evidence),
+  #879 (budget-403 → -key/-account/residual split + match= line, fixes #871), #880 (scout
+  filing gate reads evidence not attempts, fixes #877), #878 (resolve-model CLI-flag replay
+  rows, fixes #870). #873 auto-merged on the codeowner approval; #879/#880/#878 admin-merged
+  (BEHIND only via disjoint sibling merges — file sets verified disjoint, re-cycling 3 bot
+  reviews would have bought nothing).
+- Gate-read findings, all on record: answered #873's reviewer TOOL_GAP from the tofu source
+  (`dismiss_stale_reviews_on_push=true`, repo_rulesets.tf:138 — residual churn real but
+  state-fp-bounded to ≤1 ride per BEHIND-after-approval cycle); filed the FU-147 un-anchored
+  `test("ARBITRATE")` marker nit as a Follow-ups bullet on my #873 approval (harvest mints it);
+  caught + directly fixed the consumer gap the #879 review sweep missed — ledger.py
+  `retry_storms` exact-membership would drop the new subclasses (quickfix `2bda99b8`,
+  prefix-match, ledger-emitter-test green 26 checks, subclass-count probed).
+- #880↔#879 interaction checked and unreachable (scout classifies STATS-borne error_class; the
+  split is raw-log-fallback-only). C6 merged-closeouts for #868/#870/#871/#877 left to the loop.
+
+- **Attention-layer landing (same session, operator "land it"):** #892 authored+queued (leg 5:
+  scan derived-class export + board --machine + AgentAttentionStanding belt), bound to #628;
+  #628 body gained legs 5–7 + the leg-4 attention-table note; doorbell rung. Earlier in the
+  sitting: #833 unwedged (PR#856 body repaired → machine C6 closed it; #834 dispatched ~40min
+  later, proving the hold-chain cost), agent-runtime#87 filed+queued (finalize weak-link check),
+  GAPS design-agents-G2 filed (label-reported-as-activity, operator catch). G-A live census:
+  4 open of 35 descendants (2 operator: #778 Go-latch split, #876 infeasible-parked; 1 riding
+  #889/PR#890; 1 container #787).
+- **Restore closed out (evening)**: all 11 buckets = backup counts (351,683 objects; allure 10-PUT
+  re-sync); specs.oracle 200; the stale-key tail found+fixed — Crossplane re-minted key ids, loki-0
+  had silently 403'd every flush ~28h (pod predated re-mint; restart), sleep-ingester's
+  Infisical-held static key copies re-imported via `garage key import` (verify job green). ESO
+  k8s-store chains self-healed, static stores didn't. Restore key deleted.
+- **ADR-114 merged (PR#886)** + zone labels applied live to all 10 nodes (machines.yaml `zone`);
+  meta snapshots → data volume; forgejo-pg-1 kicked off wk-02 (host-spread; zone-spread lands with
+  the CNPG build-out). FU-137 pointer-ized, oracle-prod-deadline-bound (~08-31).
+- Open tail: Tier-1 LMDB triage (transcripts + jail-transcripts + post-Aug-4 cloudflare tfstate)
+  on the frozen snapshots; the rf=3 build-out; `garage repair blocks` FORBIDDEN until forensics done.
+- **Tier-1 LMDB triage: POSITIVE** (evening 2): wk-02's rebuild-snapshot layer read raw (fs block
+  == LMDB page → aligned scan); 609k intact pages; transcript-bucket key census 12,989 distinct
+  keys, **10,617 in the lost Aug-4→24 window through Aug 24** — the delta's metadata is ~complete.
+  Pre-Aug-4 keys (2,369) ≈ restored backup (2,392) validates the read. Layers copied to
+  backups/garage-meta-forensics/ (jail host). Tier-2 = decode values → block hashes → reassemble →
+  re-upload; repair-blocks hold stands. Loki/grafana/sleep-ingester stale-key tail all green.
+
+## 2026-08-24 evening — Tier-2 garage forensics: the Aug-4→24 delta carved out of the orphan blocks and re-uploaded
+
+- **Tier-2 RAN AND CLOSED in one session (homelab#884).** Chain: raw layer image → LMDB leaf pages →
+  garage v2 table records → block hashes → block files on the live data volume → S3 re-upload.
+  Table markers make raw pages attributable without a b-tree: `G2s3ob` = object, `G09s3v` = version
+  (key = the 32-byte version uuid — garage Uuids are FixedBytes32, not 16), block_ref = 64-byte key,
+  merkle = `{"Leaf"|"Intermediate"}`. Object meta carries the headers under
+  `encryption.Plaintext.inner.headers`; all objects were Plaintext (no SSE), so blocks are plain zstd.
+- **Bucket attribution without the alias table**: group object rows by their 32-byte bucket-id prefix
+  and read the key shapes — `d2d517cb…` = jail-transcripts, `a8880474…` = homelab-tofu-state,
+  `8760ac06…` = agent-transcripts (also visible: loki `fake/`, allure `runs/`, oracle `parsed/`).
+- **Result: 10,846 delta objects, 2.14 GB, 100% reconstructable** — 4,846 inline (recoverable from
+  metadata alone), 6,000 block-backed, every one joined to its version row (0 orphans). Run:
+  **9,611 PUT / 1,235 already-present / 0 failures**; md5-vs-stored-etag checked per object before
+  the PUT. Live end state: agent-transcripts 13,209 objects / 2.4 GB, **jail-transcripts 224 objects
+  / 321.7 MB (a bucket with NO backup at all — fully recovered)**.
+- **Independent verify from the jail** (different path than the writer: LAN `s3.teststuff.net`, not
+  the in-cluster Service): HEAD all 10,846 → **10,843 size+etag exact**, 3 explained divergences.
+- **The 3 divergences were the real finding — mutable singletons the restore had silently REGRESSED**
+  (they existed post-restore, so the never-overwrite rule skipped them): `_ledger.jsonl` had lost
+  299 of 387 rows and `_model-scout/known-models.json` 90 of 416 ids to the Aug-4 backup. Both
+  MERGED (union, live wins per key) and re-uploaded: ledger 392 rows, scout 427 ids. Left alone, the
+  scout's next tick would have re-announced ~90 models as new and canaried them.
+- **`cloudflare/terraform.tfstate` recovered and the root is drift-free**: carved serial **2**
+  (2026-08-09 12:15Z) vs the restored **serial 1** — same lineage, swapped in (serial-1 copy kept at
+  `backups/garage-meta-forensics/cf-tfstate-serial1-preswap-20260824.tfstate`). First plan refreshed
+  every minutark/tunnel/mTLS resource clean with **1 to add**: `cloudflare_dns_record.minutark_www`,
+  which exists in Cloudflare (`www.minutark.ee` resolves) but whose state write fell in the lost
+  window — `tofu import`ed, **re-plan = No changes** (state re-encrypted, serial 3). infisical/
+  provisioning tfstates: carved == live, no action.
+- Mechanics worth keeping: RWO is a NODE-level lock, so a second pod pinned to garage-0's node
+  mounts the same PVC read-only (no host paths, no privilege); `python:3.14-slim` has stdlib
+  `compression.zstd`, so no pip in the pod; the garage image has no shell — `/garage` only.
+- Cleanup: helper pod deleted (a nodeName-pinned second mounter would pin the data volume to that
+  node), all three temp keys (`forensics-*`) deleted; artifacts in `backups/garage-meta-forensics/`.
+- ⚠ **`garage repair blocks` HOLD NOT LIFTED — now an operator decision, and it is bigger than it
+  looks**: the same machinery would recover the OUT-OF-SCOPE buckets too (loki 163k keys, allure
+  348k, oracle `parsed/` 252k, sleep), whose metadata is equally intact in the frozen layer. Running
+  repair forecloses that permanently. Scope was narrowed to transcripts when Tier-2 cost was
+  unknown; it is now a known ~1 M-object/50 GB rerun of a proven pipeline. Named on #884.
+
+## 2026-08-25 — Tier-3: the whole store carved back, an hour of Garage downtime, and blocks I destroyed
+
+- **RECOVERY COMPLETE AND VERIFIED (homelab#884, operator widened the scope).** One carve pass over
+  the same frozen layer took the **whole store: 956,600 objects, 0 orphan versions**. The
+  **bucket_alias table survived** (14 names → old ids), so buckets were identified exactly instead
+  of guessed from key shapes — which corrected a live assumption: the `parsed/` prefix is in
+  **ert-snapshots**, not an oracle bucket. `ert-snapshots` and `circles-specs` were at **0 objects
+  live** (never in the Aug-4 backup) — from-nothing recoveries like jail-transcripts.
+- **End state: 543,257 of 543,450 verified exact** on size+ETag over the LAN endpoint (a different
+  path than the writer). `ert-snapshots` is **252,366 objects / 60.4 GB — exactly the independent
+  2026-08-04 measurement in docs/garage.md**. Garage went 383,893 → **896,628 objects**, 6.5 →
+  **71.8 GiB**, refcounted blocks 86,251 → **295,148** against 294,778 block files on disk: the
+  orphan mass is fully re-adopted, so `garage repair blocks` now reclaims ≈nothing.
+- **Not restored, all accounted:** 884 blocks genuinely gone (deleted pre-wipe, rc already dropped,
+  normal GC took them) · 214 `oracle-specs` objects blocked by its 1.0 GiB bucket quota (operator:
+  not important; CI-regenerable) · 189 loki objects restored then **immediately expired by loki's
+  own 30-day retention** — dated 2026-07-25→08-03, i.e. 22–31 days old (correct behaviour, verified
+  by dating the keys, not assumed) · 4 transient 502s, all `ok` on re-check.
+- **⚠ THE RESTORE TOOK GARAGE DOWN FOR AN HOUR** (08:24–09:27Z, 503 on every write). It filled the
+  10Gi meta volume. Cause was **insert ORDER**: the carve emits page order, random against Garage's
+  key space, which fed the B-tree random inserts at ~20.3 KB/object (~8× the pre-wipe store).
+  Sorted by (bucket,key) it ran ~13 KB/object. Sorting is now build-work.py's default (PR#905/#906).
+  ⚠ the first ~30k sorted objects showed ZERO growth — that is the wipe's free pages being consumed,
+  NOT steady state; I published that window as the result and had to correct it (#906).
+- **☠ ABORTING A MULTIPART UPLOAD DESTROYS THE ORPHAN BLOCKS IT READ.** A part upload references a
+  block that had *no rc entry* (invisible to GC); aborting drops it to rc=0 = garbage, and the
+  resync worker deletes the file ~10 min later. Two killed runs + two `garage bucket
+  cleanup-incomplete-uploads` calls cost **3,952 of corpus.sqlite's 5,766 blocks** — silently, ten
+  minutes after the fact, four hours after a prescan said every block was present. The `finally:
+  abort` was mine, added in PR#901 and praised in review as hygiene. Fixed PR#907: failed uploads
+  are left dangling on purpose, and blocks are stat'd BEFORE an upload is created.
+- **corpus.sqlite REBUILT byte-exact from the intact corpus-image.oci.tar** — stream the oci-archive
+  from its blocks → the uncompressed layer tar → member `corpus/corpus.sqlite`, re-chunked into the
+  original 721 part boundaries. Computed ETag `0d5ebde5…-721` == the carved original; confirmed by
+  HEAD over the LAN path. Nothing staged on disk.
+- **Multipart part-replay proven at scale:** `corpus-image.oci.tar` (6.05 GB, 721 parts) and
+  `xml.2026.zip` (**42 GB, 629 parts**) both reproduced their exact carved ETags from orphan blocks.
+- **Live storage changes:** `meta-garage-0` **10Gi→30Gi**, `numberOfReplicas` **2→1 (wk-02)**,
+  `dataLocality` best-effort→**disabled** (unsatisfiable: garage-0 runs on wk-01, which has no
+  Longhorn disk — it was blocking every rebuild). The `std` tier cannot host a grown 2-replica meta
+  volume: hp-01 is BELOW Longhorn's 25% floor so it rejects any expansion at any size. rf=1 debt →
+  FU-137, and it makes the ADR-114 ~08-31 deadline load-bearing.
+- **⚠ Longhorn replica churn is charged to the pve thin pool** — the shuffling pushed it 69→84% with
+  1 GiB of VG left (the 08-24 corner). `fstrim` per node returned it to 69.17%; a batch loop over
+  four nodes silently did only part of the job. Run it one node at a time and READ the byte count.
+- **FU-184 filed: the metadata auto-snapshot has never worked.** `metadata_auto_snapshot_interval =
+  6h` (the 08-24 durability fix) dies every attempt with `MDB_INCOMPATIBLE`, leaving an empty dir —
+  131 of them. docs/garage.md's DR recipe said to copy `meta_snapshots/<latest>`; today that
+  restores an empty directory, and an in-progress snapshot is name-identical to a finished one (I
+  carved one mid-write: 203,744 objects, 0 version rows vs ~465k live). Recipe now carries the ⚠.
+- Cleanup done: forensics pod deleted, temp key `forensics-wide` deleted, local cred copies
+  shredded. Evidence stays frozen in `backups/garage-meta-forensics/` + the
+  `pre-restore-2026-08-24-meta-wipe` snapshot. PRs #900–#909 (nine) merged.
+
+## 2026-08-25 (evening) — FU-184: the metadata env rebuilt, snapshot belt unblocked
+
+- **Condition:** operator called the deferred `convert-db` act ("70GB free on this drive now for
+  backups"). Baseline captured first: 896,849 objects / 14 buckets / 4.28M table rows,
+  `data.mdb` 19,437,924,352 B, meta volume 62% used.
+- **The recorded order failed twice, both facts now in `docs/garage.md` §Durability.** `garage
+  convert-db -a lmdb -b lmdb` → *"input and output database engine must differ"* (v2.3.0 rejects
+  same-engine). Routed via sqlite instead → *"LMDB: error while decoding: invalid utf-8 sequence"*
+  — `list_trees()` enumerates the main db, and 8 freelist records had been stranded there by the
+  08-24 torn write, keyed by raw txnid.
+- **Root cause, from LMDB's source rather than inference** (`mdb.c:9565`): a snapshot is
+  `MDB_CP_COMPACT`, which predicts the compacted root as `next_pgno - 1 - freecount` and returns
+  `MDB_INCOMPATIBLE` when the walk disagrees — `/* page leak or corrupt DB */`. 4,745,586 pages,
+  ~550k live. The 8 junk keys sort after all 67 tree names, which is why every attempt wrote
+  ~2.28 GB before dying. Deleting them alone did NOT fix it (A/B'd offline) — the leak is the gate.
+- **Rehearsed offline on a byte-exact frozen copy before touching the volume**: compacting copy
+  fails as-is, succeeds on the rebuilt env in 14s. Only then was the live window opened.
+- **Live run:** ArgoCD `platform`+`garage` auto-sync suspended (the child app's syncPolicy is
+  itself GitOps-managed — patching only `garage` gets reverted in seconds), sts→0, Longhorn
+  snapshots `garage-meta-pre-convertdb-20260825` + `-pre-rebuild-`, two sha256-verified host
+  copies, rebuild, swap, sts→1, auto-sync restored. **18.10 GiB → 1.57 GiB**, 67 trees /
+  4,279,175 entries exact; every bucket count unchanged (only `loki` +157 / `agent-transcripts`
+  +3, both live writers). Meta volume 62% → **6%**. 161 stale snapshot dirs + the old env pruned.
+- **In-pod rebuild ABANDONED mid-run** and redone host-side: ~550k scattered 4 KiB reads over a
+  network-attached Longhorn volume ran at ~0.3 MB/s (≈90 min projected) vs ~100 MB/s for a
+  sequential `cat`. Downtime ~20 min instead of ~90.
+- **The sting:** with a healthy env the snapshot copy takes ~15 s instead of ~11 min, and the
+  page-cache burst blew Garage's 512Mi limit — `garage meta snapshot` OOM-killed the container
+  (it restarted clean, no data effect). Limit → 2Gi in PR#911. **Do not exec-trigger a snapshot
+  into garage-0.**
+- Shipped as PR#911 (script `scripts/garage-forensics/lmdb-rebuild.py` + docs + the limit).
+  ⚠ A parallel jail session merged #910 — same page-leak diagnosis, docs only — at 15:12Z while
+  this ran; the two accounts were merged into one §Durability block on rebase rather than one
+  clobbering the other.
+- **Open:** the acceptance soak — one *auto* snapshot completing, carved to the live object count.
+- **Acceptance PASSED the same evening** (no 6h soak needed): PR#911 merged 16:41Z, ArgoCD synced
+  the 2Gi limit, and `garage meta snapshot` then COMPLETED — 1,683,718,144 B, 67 trees,
+  4,280,149 entries, zero non-UTF-8 main-db keys, counts tracking live, `restarts=0`. FU-184
+  archived. Pre-rebuild copies kept in `backups/garage-meta-20260825-prerebuild/` until ~09-01.
+- **Side catch:** the `homelab-browse` key was re-minted by the 08-24 wipe **without its grants**
+  (`garage-s3` returned AccessDenied on every bucket). Re-granted read on the four sleep buckets;
+  verified by downloading `sleep-db/sleep.sqlite` over the LAN endpoint — 53,248 B, matching the
+  baseline. Other keys' grants are worth a sweep; nothing else was probed.
+- **Operator question answered by measurement, not inference** (→ PR#912, FU-093): Garage v2.3.0
+  already serves **48 metric families** on `:3903` — `monitoring.metrics.enabled: false` gates only
+  the ServiceMonitor. Nothing scrapes it because 3903 is in no Service. `table_size{table_name}` is
+  a direct detector for the 08-24 empty-table wipe and `garage_local_disk_avail` is the ledger's
+  ">80% alert". ⚠ It would NOT have helped on the day: Prometheus was pinned to wk-01 and dark
+  14:18→15:45 while the wipe was 15:31 — every scraped signal shared fate with the failure.
+  Upstream's Grafana dashboard is request/error/queue panels and predates `table_size`.
+
+## 2026-08-25 (evening, cont.) — hp-01 gets a second disk; the thin-pool trim gets a schedule
+
+- **Link survey (operator ask — "did I knock something out again?"):** all six metal NICs at
+  1000/Full including wk-metal-02. The four pve VMs report `speed=-` because virtio NICs have no
+  PHY — normal, not a fault. Worth remembering as a false-positive shape for this check.
+- **hp-01 second Longhorn disk (PR#920).** Drained + `talosctl shutdown` (cordon alone moves
+  nothing, and hp-01 was carrying ArgoCD, both Argo controllers, Alertmanager, Crossplane, ESO and
+  **2 of 3 eventbus JetStream replicas** — a hard power-off would have taken quorum with it).
+  ⚠ Longhorn's `node-drain-policy: block-if-contains-last-replica` blocks the drain via the
+  instance-manager PDB; relaxing it to `allow-if-replica-is-stopped` did NOT help (12 replicas of
+  ATTACHED volumes were running, and the PDB protects those regardless of policy). The working
+  move for short maintenance is to drain workloads and leave the instance-manager alone
+  (`--pod-selector='longhorn.io/component!=instance-manager'`) — evicting it would rebuild 14
+  replicas for a 15-minute disk swap. Policy restored.
+- The disk arrived carrying a **bootable Windows install** (MBR + 350M "System Reserved" NTFS +
+  118.9G NTFS). Operator confirmed the wipe; `talosctl wipe disk sdb` first, because Talos refuses
+  to partition a device that already has a partition table. Pinned by WWID, not /dev/sdb — two
+  identical 128G SATA SSDs in one box and `longhorn_disks` PARTITIONS what it points at.
+  `install_disk: /dev/sda` on the same node is still name-based and should follow.
+- `optane_disks` → `longhorn_disks` ({device,name,tags}) because the old field hardcoded the `fast`
+  tag, and FU-159 makes `fast` Optane scratch that is NEVER load-bearing. `tofu plan` proved the
+  generalisation inert for thinkcentre (1 to change, hp-01 only) — its names had to stay
+  optane0/optane1, which are its live node.longhorn.io disk keys.
+- **fstrim automation (PR#925, FU-093).** Daily CronJob per pool VM. Verifying before committing
+  caught two defects: the byte parser matched only util-linux's format and pushed 0 from a run
+  that reclaimed 76 GiB (busybox prints differently), and the namespace set only PodSecurity
+  `enforce`, leaving audit/warn at the cluster default. `prometheus-rules-lint` caught a third —
+  a `severity: info` alert, which InfoInhibitor silently suppresses; dropped rather than promoted.
+  **First run: pool 78.72% → 62.99%, ~384 GiB returned.**
+- ⚠ **A bisect was started and correctly interrupted by the operator**: master's clause-replay was
+  red on `doorbell-fanout-wiring/capacity`, and checking out old commits in the live tree was the
+  wrong tool. The prior-art grep I should have run FIRST found **#897** — already filed, known
+  non-hermetic (reads the LIVE FU-088 latch). Master carried its fix (190e60e6) within the hour.
+
+## 2026-08-25 (late evening) — corpus session: codeowner queue, G-A closure evidence, the credits probes
+
+- Codeowner queue cleared: #894 merged (attention-layer scaffolding; gate read found two emitter
+  defects — per-item pushgateway POST clobbers siblings, since-timestamp re-stamped per tick —
+  filed as #913, blocked-by #892, whose PR#915 was riding by session end) + #896 merged
+  (opencode full-prefix `-m`). C6 harvested #914 organically.
+- Retro re-fired post-#864 (the cell-fix): platform r1 DELIVERED (PR#918 merged — F1..F6 worth
+  the operator read; the process-change batch files at the pipeline session). cell-b died its
+  report-marker self-check again — FU-058 residue.
+- The "red master" scare = homelab#897, NOT an ADR-103 violation: the fanout-wiring capacity row
+  runs the block's source-time `case` before the latch override composes, reaching the REAL
+  subscription-latch.sh as a child process — verdict tracked the live proxy. Fixed hermetic
+  (190e60e, closes #897): the row pins an unreachable proxy so the fail-open belt path runs
+  identically everywhere. 253/253.
+- meta-events ALERT arm false mass-clear (five live alerts "cleared" at 17:31Z): the guard tested
+  the PIPELINE's exit, not curl's — fixed f703ec3. Residual: the NEEDSMETA empty-read half.
+- G-A (#775): banked docs pass executed (33f8c92) · FU-181 re-scoped + Go posture RULED
+  (janitorial+failover; big-pickle = deepseek's $0 shadow → #923 queued) · zen big-pickle FULL
+  tool-loop PASS through the proxy · go-flash per-surface split (Anthropic ride-proven, BOTH
+  served-set cells incl. qwen3.5-plus; OpenAI surface leaks DSML) — matrix rows e0ada2e ·
+  divergence read COMPLETE then CORRECTED on operator challenge (the 123 deferrals =
+  chain-exhausted on subscription-only classes, a served-walk candidate-injection gap, NOT #158;
+  fallbacks carried them at ≈$0) → `classes.dispatch` chain_head landed (b535ea0, the 08-23
+  goal-decompose precedent's second instance) · **flip sequencing RULED A** (at/after the
+  ~Sep-03 PR#715 revert; flip child = ladder promotion + flips; 07547f4).
+- #917/PR#921 breaker cleared on operator ruling (transient 5xx, haiku fallback proven serving).
+- hp-01 second-disk window (operator/opus session): #920 fmt-fixed and merged; the transient
+  Pending-rides/PDB/disk-IO alert cluster was the cordon+rebuild, all cleared.
+- Findings for the pipeline sweep: opencode 1.18.18 still probes registry.npmjs.org with
+  OPENCODE_DISABLE_AUTOUPDATE=1 set (knob regression suspect, #456 class; models.opencode.ai
+  stays the documented #792 CNP-backstop) · iac-sentinel per-head edge runs convoy on the mutex
+  under PR bursts (a cron-shaped batch sweep would collapse them) · the needs-meta
+  "no reviewer will come" arm is over-eager (4 false fires during ordinary edge latency).
+
+## 2026-08-25 evening — /board-sweep (window since ~08-23; corpus loaded; first stage of the sweep pipeline)
+
+- **Machine truth:** crosscheck clean (every firing triage-eligible alert has a ledger entry);
+  nodes 10/10 Ready; Longhorn 23 healthy / 5 detached / 0 degraded; hp-01 uncordoned post-PR#920.
+  Firing set was {RetroReportOverdue, KubeJobFailed sleep-ingester, GithubActionsMinutesHigh(#698,
+  tolerated til Sep-1), AgentRunPhaseSlow(#500), AgentDispatchCronWoken(#459)}.
+- **HANDLED (verified by substance):** #916→PR#924 (gate-read SMALL, approved, auto-merged);
+  PR#926 landed (garage grants doc); **the platform retro's first successful scheduled report
+  landed** (r1 opus, PR#918 18:01Z) — FU-058's organic acceptance, one fire late; #897 fixed by
+  the operator quickfix 190e60e6 (hand-closed, keyword didn't fire); G-B #818 all 5 originals
+  closed (post-launch, bucket #840); G-A #775 down to 2 open descendants (#778 operator, #787
+  container); machine fix rounds live on #921/#915.
+- **Drained the resolved-alert/open-issue class** (send_resolved=false gap): closed #903 (meta
+  volume 6% post-FU-184), #885 (hp-01-maintenance churn, self-healed), #860 (dup-cause of #857),
+  #538 (wk-03 7d recovered; today's note = hp-01 window), sleep-iac#75 (3 green runs; deleted the
+  lingering failed Job 29793102 → alert clears), #237 (report landed), #874 (digest read: all
+  unbenched + non-evidence canaries — nothing graduates), #235 (premise died with §M7 v3 legs 1–2).
+- **STUCK-MACHINE found + contained: the renamed platform-retro success push had NEVER landed**
+  (r4 predates the rename, 08-24 died pre-harvest, r1's push failed into a TTL'd WARN) →
+  RetroReportOverdue fired false ~2h against a landed report. True fact pushed by hand
+  (job/platform-retro/series/platform, ts = PR#918 merge), expr verified fresh; belt defect
+  filed+queued **#932**.
+- **Retro r1 process-change batch filed** (prior-art negative stated): #927 (F1 fleet-ruling-files,
+  queued) · #928 (F5 phantom agent/review predicate, queued) · #929 (F6 estimator pick_tier →
+  ledger, queued) · #930 (F2 DELIM-FIELD lint — seat lane, scripts/ deny path) · #931 (F3+F4 —
+  operator lane, .agents/** pair). Backlog triage: #866+#830 queued; #888/#851/#914 labeled
+  agent-fix (inventory); agent-runtime#93 queued; #875 quickfixed direct (70bddd33).
+- **Residual signal for the operator:** #459 is firing legitimately (changes(cron_woken[24h]) = 2
+  and 5) — cron-serviced dispatches persist post-#669/#672/#679, a dead edge remains unhunted ·
+  thinkcentre OOM bursts recurring (#857 stays the one thread; FU-155 v1.13.8 pin is the fix,
+  operator-owned) · #456 reopened 08-24 (opencode phone-home from openrouter-operator persists
+  despite the killswitch — models.opencode.ai leg) · iac-sentinel edge queue bursts to ~8 Pending
+  behind the mutex on merge-heavy evenings (drains; watch, not a defect). #745 un-park read and S4
+  #762 close both execute at a sweep ≥08-26.
+
+## 2026-08-25 late evening — fu-sweep + docs-cleanup (pipeline stages 2–3) + the mid-sweep operator asks
+
+- **fu-sweep (68 open in): FU-149 archived** (14d read: ordinary days 0–6, the 12-cap bound only
+  on real storm days — value stands) · **FU-173 pinned + archived** (PR#935; ⚠ the space form
+  `id version` SPLIT in Grafana's background installer — "4.0.6" became its own pluginId and
+  crashlooped the new RS ~20 min while the old pod kept serving; fixed 8bd4dc67 as `id@version`,
+  verified 4.0.6 in-pod + Synced/Healthy + LAN 200) · **FU-168's (a) soak read FAILED** —
+  cron-woken ≠ 0, the emitter hunt is live on #459 · **FU-147 fired live 08-24 and mis-fired**
+  (landing-PR churn, fixed #868→#873; one clean organic fire owed) · machine-lane reconcile
+  found **G-B #818 WEDGED: filed #933 queued** (checkpoint trigger (b) counts the open
+  post-launch bucket as an open child — assembly unreachable for any goal that harvested
+  pre-assembly) · **#934 queued** (Garage :3903 metrics build — PR#912 was docs-only).
+- **Operator mid-sweep asks, both delivered:** the 130s `prometheus-rules-lint` CI step —
+  measured to one fixture (`loop-health.promtool-test` = 107.6s: x40000-sample series at 1m ≈
+  28 days materialized against rules whose longest lookback is 10m) → **#936 filed+queued under
+  #518** · **PR#921 corpus gate read → APPROVED** (cross-repo budget walk: matches the v1.2
+  stack-scoped-goal ruling, fail direction conservative and strictly better than the old
+  silent-[] fail-open; non-blocking note: one REST call per tree node per evaluation).
+- **docs-cleanup (S5-bounded per operator — "anything not scrubbed here is for that stint"):**
+  meta-state pruned 279→150 lines to current truth; 6 zero-ref stale-archive entries expired
+  (FU-002/008/026/065/075/083); OVERSIZE trims FU-058/093/095/102/106/127/147/155/168/185
+  (FU-155's evidence → talos-psi spike §7); FU-180 backlink added to chainless-redesign;
+  docs-graph-lint green. **Handed to S5:** the 29 remaining STALE-ARCHIVE ids (most living refs
+  are provenance NAMES — needs the name-anchor ruling), the standing OVERSIZE set
+  (FU-039/125/161/167/169/170+DONE-MARKER/181/095), the deep whole-repo comb + doc-heat (FU-164).
+- **PR#925 conflict resolved** (its FU-093 edit vs the sweep's newer trim — took master's,
+  merge-not-clobber; BEHIND+armed, machine-owned again). NEEDSMETA empty-read flap disposed
+  into FU-185 (the masked-inner-exit class; ALERT arm's twin was f703ec39).
+
+## 2026-08-25 ~20:40Z — grafana SQLITE_BUSY (operator report): the sentinel-edge queue starving hp-01's root disk
+
+- **Condition:** operator pasted grafana `authn.service` lock errors. Read: 322 SQLITE_BUSY/30m
+  (~1/sec), pod on hp-01 (freshly uncordoned = emptiest → the scheduler put the WHOLE evening
+  burst there), `sda` 68% IO util, Longhorn rebuilds ZERO — the writers were 13 Pending + 1
+  Running duplicate `iac-sentinel-edge` workflows (the sweep session's own merges/label edits
+  rang the edge per event; each run re-scans ALL open PR heads behind the mutex) + an agent
+  ride + a coordinator session, beside grafana's fsync-sensitive sqlite on emptyDir.
+- **Command:** deleted the 13 Pending duplicates (loss-free by construction — every run scans
+  every head, */5 cron backstop re-derives; the Running one finished). `sda` 68%→6.7%,
+  grafana clean (0 SQLITE_BUSY over 2m, LAN health 200) within ~3 min of the drain.
+- **Filed:** #938 queued (port the doorbell-collapse pattern to the sentinel edge — fixed-name
+  submit or absorb-pending; the board-sweep entry's "watch, not a defect" read is REVERSED,
+  tonight it degraded a platform service) · #867 extended (the spread half — second instance,
+  new pathology: a freshly-uncordoned node attracts the whole burst). Residual: one old
+  `iac-sentinel-edge-l4p6k` Failed exit-1 run (54m prior, siblings green since — cron
+  self-healed; unexplained, noted only).
+
+## 2026-08-26 ~06:30Z — cleanup sweep before S5 (corpus session; operator: "clean the current state", + "is PR#915 stuck?")
+
+- **PR#915 read:** not machine-stuck — the loop ran it correctly (2 strikes → ci-red rounds →
+  a FU-147 no-op-round arbitrate → dismissal → re-review) until the operator's own 20:37Z
+  ADR-110 CHANGES_REQUESTED landed; the coordinator then parked #913 `agent/blocked` 21:13Z
+  (label-only — no audit comment, a visibility defect noted on the PR). The `$qblockers`
+  scan-killer half is FIXED and bot-verified; the missing half is the replay pin (the queued
+  classification block sits outside every REPLAY sentinel). **Command:** un-parked #913
+  (`agent/review` restored), posted the audit + the reviewer's ask verbatim on #915 — the
+  machine delivers the fixture round; the operator's review stays the final gate.
+- **Codeowner queue (ADR-110 gate reads, all four small class):** #939 ephemeral toleration
+  (merged), #941 model-parse replay pin, #942 strike/PR-absence decouple (#866), #943
+  re-review --shadow (the #923 pickle arm's instrument) — background drain shepherds
+  update→CI→approve; #939 landed during the session.
+- **PR#925 sentinel red = the fence working:** the new `node-maintenance` Namespace needed the
+  /policy/ baseline; widened by one name direct-to-master (`d155104f`, codeowner path,
+  operator session). #925 goes green on the next sentinel tick, then the reflex reviews it.
+- **Armed calendar items executed (all three were ≥08-26):** the #745 un-park read PASSED
+  vacuously (zero open PRs on all four private repos — no BEHIND stalls; the cutover itself
+  is now actionable, seat-lane since it touches .github/** fleet-wide) · stint parents
+  **#762 (S4)** and **#420 (Go rail part 1)** closed — trees empty at every depth, >72h quiet.
+- **Triage sweep (alert board near-clean: only CodeownerParkWaiting ×4 = the drain,
+  GithubActionsMinutesHigh = #698/#745, AgentDispatchCronWoken = the FU-168 soak-fail):**
+  #884 closed (specs.oracle 200, garage recovery complete, FU-184) · #875 hand-closed (the
+  70bddd33 commit keyword never fired) · #110 QUEUED to the fixer lane (third OOM at the
+  already-bumped limit — directive: fix the growth or bump with rationale) · kept with cause:
+  #103 (live again 08-25, wk-01 memory pressure), #107 (egress-noise ledger), #111 (waits
+  #745/Sep-1 minutes reset), #114 (active soak), #221, #500 (recommend queue: grow the
+  nix-cache PVC per the oversize-caches doctrine), #811 (loki healthy 35h; quota residual
+  unverified), #857 (recent), #887/#628/#940/#944 (deliberate).
+
+## 2026-08-26 ~07:40Z — ADR-111 cutover executed (#745) + the hp-01/grafana diagnosis (operator questions)
+
+- **Cutover (operator: "if no point waiting, let's do it" — there wasn't: Sep-1 only restores
+  minutes for the thing being deleted, and the in-cluster leg was observed servicing both paths
+  during this morning's drain):** callers deleted via API in 9 repos (issue listed 5; the file
+  existed in 9 + homelab), homelab caller + reusable deleted, MP-T02 re-anchored (executed
+  `fixtures/updater` replay, `pins: [MP-T02]`, unreplayed disposition dropped), doc currency,
+  `MERGE_GH_APP_*` removed from tofu/github (`b68e4ee4`). Residual: the HOST-side
+  `devbox run github-tofu apply` destroys the two org secrets; #745 closes with it.
+- **hp-01/grafana diagnosis (probes):** grafana STILL locking — 2,886 SQLITE_BUSY/6h — because
+  its sqlite is on **emptyDir on hp-01's ROOT disk** (`sda4` /var): a Longhorn disk can never
+  reach it, so yesterday's new disk (sdb → `hg5d`, healthy: 0.4ms writes, ~empty) structurally
+  couldn't help. `sda` measured: **54% io-util sustained, 175ms avg write latency** (both disks
+  rotational=0 — sda is a *slow-under-load* SSD), CPU 76% busy / 83% peak = busy but not the
+  bottleneck. Compounding: the scheduler is again concentrating the whole burst on hp-01
+  (#867's pattern), the Longhorn DEFAULT disk still points at the root fs (2 replicas on sda;
+  hg5d has 1), and the nix-cache pod ALSO sits on hp-01. #500 is a genuinely separate cause
+  (nginx cache pinned at max_size=8g → continuous LRU eviction) that shares sda as amplifier.
+  Fix ranking reported to operator; no mutations applied (diagnosis question).
+
+## 2026-08-26 ~08:00Z — triage + backlog drain (operator-directed), fixes executed, #745 COMPLETE
+
+- **#745 COMPLETE:** the operator's host apply first hit a miss of mine — `merge_gh_app_id`
+  still referenced at 3 ruleset bypass-actor sites after I removed the declaration; restored
+  as a git DEFAULT (id 4207260, not sensitive — better than injection; `c3f3f5c9`) — then
+  `0 added, 0 changed, 2 destroyed`. Issue closed.
+- **Triage closes (evidence in each):** #111 (superseded by cutover) · #698 (driver retired;
+  counter resets 09-01; FU-183 belt live) · #534 (longhorn-manager fleet Running) · #811
+  (loki quota already 16Gi, 58% used, loki healthy 35h) · **#500 (fix had ALREADY shipped as
+  PR#512 8 days ago — PVC 20Gi/max_size 16g live, cache 61% — the issue outlived its fix,
+  FU-133's no-state-after-filing class)** · #940 was already closed as #937's dup at 06:39.
+- **Queued ×8 (mechanical, machine lane):** #937 (wedged-vs-booting pre-flight), #851
+  (fixture executes busy_fps), #888 (anchor the FU-147 probe), #914 (board --machine scope
+  assert), #945 (shadow idempotency tag × model), #456 (phone-home killswitch leak — re-fired
+  08-24), #867 (burst spread — the concentration fix #103 also waits on), agent-runtime#95.
+- **hp-01 (operator correction: BOTH disks are old cheap SSDs — sdb only looked fast because
+  idle):** the win is SEPARATION, not disk quality — patched nodes.longhorn.io hp-01
+  default-disk `allowScheduling: false` + `evictionRequested: true` (2 replicas draining to
+  hg5d/elsewhere; Longhorn IO leaves the root disk's queue). Imperative, Longhorn-node-object
+  class (the longhorn-register precedent).
+- **Grafana → CNPG Postgres: PR#948** (grafana-pg cluster in monitoring, GF_DATABASE_* env,
+  CNPG-generated secret; second commit widens the CNPG alert namespace regex to `monitoring`
+  — the new DB would have run outside its own belts). No durable state to migrate (sqlite was
+  on emptyDir). Shepherd watches merge + rollout.
+
+## 2026-08-26 ~08:20Z — Unbound cached-SERVFAIL incident (operator report) + #944 shipped (ADR-097 addendum 3)
+
+- **DNS:** operator's host SERVFAILed on github.com. Triage narrowed fast: Unbound UP (local
+  overrides + cloudflare.com + root SOA all NOERROR), `+cd` also SERVFAIL (not DNSSEC),
+  api.github.com/raw.githubusercontent.com NOERROR — **the github.com APEX alone**, i.e. a
+  cached SERVFAIL/bad RRset in Unbound. `POST /api/unbound/service/restart` (wallet API creds)
+  → OK → operator confirmed resolution (140.82.121.3) within a minute. One occurrence — no
+  belt filed (≥2 rule); recurrence candidate: a blackbox DNS probe through Unbound.
+- **#944 → ADR-097 addendum 3, built + shipped:** the fourth compelled class is CONTENT-keyed
+  — `sentinel_only_paths` (touches-check.sh) classifies files whose whole diff is REPLAY
+  marker comments; `touches_check` gains optional arg-3 skip (both branches); the reviewer's
+  TOUCHESPART fetches the PR diff and passes the set (fail-conservative on no diff). Route 2
+  (declaration ceremony) rejected — it is the ceremony addendum 1 dissolved, and PR#941 paid
+  it. Gates: touches-check-test extended (skip both branches, mixed negative, classifier rows
+  incl. indented + smuggled-trailing-content), new replay fixture
+  reviewer-touches/sentinel-exempt (end-to-end), 3 sibling fixtures updated for the new CALL,
+  full clause-replay 271/271, docs-graph green. Rubric passage extended (.agents/review.md,
+  operator-direct class).
+
+## 2026-08-26 ~08:05Z — grafana on postgres, VERIFIED (PR#948 merged)
+
+- PR#948 merged via the author==sole-codeowner waiver (my own approval was structurally
+  refused — bot approval + green completed auto-merge, the documented path). Isolated
+  end-state check: `GF_DATABASE_TYPE=postgres` active, grafana-pg 2/2 ready, new pod stable
+  after the expected bootstrap crashloop (3 restarts while CNPG initialized), LAN /api/health
+  200, and **0 SQLITE_BUSY / database-locked lines in 10m** (vs 2,886/6h this morning). Pod
+  still on hp-01 by scheduler's choice — fine: the DB is off node-local disks, which was the
+  fix. The SQLITE_BUSY class is closed; #938 (sentinel-edge flood) + #867 (spread, queued)
+  remain the IO-pressure fixes on their own tracks.
+- oracle-fleet allure-publish rerun still in flight (the #926 grant-timing question).
+
+## 2026-08-26 ~08:40Z — oracle-fleet allure denial ROOT-CAUSED: the third #926 consumer class (copied credentials)
+
+- Rerun failed identically with grants verified healthy; the live `allure-reports-writer`
+  credentials probe-wrote through the same public endpoint fine (put+rm, no secret printed).
+  ⇒ the repo's `ALLURE_S3_*` GitHub secrets hold a PRE-WIPE COPY — the consumer shape no
+  reconcile can heal (GitHub secrets are write-only copies; in-cluster consumers read
+  connection Secrets and self-healed). Fleet inventory of the class: oracle-fleet `ALLURE_S3_*`
+  + `ERT_S3_READER_*`, circles `SPECS_S3_*` (specs-site last ran 08-08 — untested since the
+  wipe, presumed stale). Rotation is host-side (jail PAT cannot write repo secrets) — commands
+  in the meta-state row; docs/garage.md sweep section gains the copy-holder table.
+
+## 2026-08-26 ~08:55Z — github-secrets-sync built (operator direction: the copy mapping becomes code)
+
+- Operator overruled keep-the-ruling: the repo↔credential MAPPING must be executable IaC even
+  if the values stay imperative — "keeping the mapping current instead of re-deriving it every
+  time". Built `scripts/github-secrets-sync.sh` + `devbox run github-secrets-sync`: the table
+  (repo | ns | connection Secret | reader/writer pair | GH prefix) is the one home; values read
+  live from the connection Secrets; `gh secret set` host-side (loud 403 guidance in-jail);
+  `--check` is the jail-safe inventory+source probe — ran clean, all 3 ids match live keys.
+  Pointers converged: github-setup.md recipe → the script; garage.md copy-holder table →
+  pointer; new-stack.sh step G → add-a-row + run. Value-in-tofu stays rejected (second
+  home/state copy — the documented ruling); the script is the middle the operator asked for.
+
+## 2026-08-26 ~09:30Z — copied-credential rotation CLOSED (acceptance green)
+
+- Operator ran `devbox run github-secrets-sync` (3/3 pairs set) + the oracle-fleet rerun:
+  **e2e=success ci=success** (verified isolated). The 07:16 allure denial thread is closed
+  end-to-end: root cause (stale GitHub-secret copies of re-created Garage keys) → mechanism
+  (github-secrets-sync, the mapping as code) → rotation → green. ERT_S3_READER_* and circles
+  SPECS_S3_* prove organically (next release-corpus run / next specs push, WEB-03 belt behind
+  the latter). Meta-state row cleared. #947 merged + dedup quickfix (7d7c0f79) closed the
+  r1 F1 batch item; #946←#945 edge wired earlier this hour.
+
+## 2026-08-26 ~10:00Z — the (repo, base) serialization reframe (operator catch)
+
+- Operator: "#828/#829 unfairness is the smaller problem — coordinator/reviewer are not
+  parallel per PR base." Seat verified against the corpus: the merge-path serializer's own
+  rationale (merge→behind→dismiss chain) is BASE-local, so the correct boundary is
+  (repo, base), not repo — cross-lane review/dispatch parallelism falls out, goal children
+  still serialize among themselves, the assembly PR rides the master lane. Measured famines
+  (goal #278: 361 min; v1.1: queue 3,550 vs pod 605) are the cross-lane class this removes.
+  Couples with the banked v1.3 theme-branch decomposition (themes need per-base lanes to pay).
+  Caveats: subscription semaphore stays the ceiling; ~2× and goal-time only; ADR-shaped
+  merge-path re-scoping — operator-gated. Recorded on #829 so no fix round designs the
+  priority tweak as the whole fix. No new FU (prior-art grep: nothing tracks per-base;
+  the decision, if taken, lands as an ADR + rides the next platform Goal / S5+).
+
+## 2026-08-26 ~10:30Z — S8 shaped: merge lanes as ONE piece (operator direction)
+
+- Operator: the (repo, base) parallelism + banked v1.3 theme branches "need to be a bigger
+  piece done together" — how: stint or Goal? Ruled STINT (S8 on the work map): the
+  deliverables are the goal lane's OWN machinery (self-reference — a Goal rewriting the lanes
+  it rides), G-A's day-1 retro already measured platform-Goals-degenerate-to-stints (the tax
+  v1.3 removes), and S7 is the precedent. Shape: ADR pair in one sitting at the stint head →
+  six originals (reflex/updater/scan per-base lanes + theme mechanics + FSM/doc currency +
+  per-lane famine gauges) → the DOGFOOD outside the stint (first new platform Goal runs a
+  theme; acceptance = per-lane famine numbers + codeowner-tax-per-theme vs G-A baseline).
+  Sequenced after S5. #829 de-queued into S8 (absorption at authoring); #828 stays queued
+  (independent). Parent authored at the last moment per the map's own rule.
+
+## 2026-08-26 ~11:00Z — session wind-down (the cleanup-before-S5 session, full arc)
+
+- **The day, compressed:** board 52 issues/6 PRs → triage drained (11 closes incl. #500's
+  already-shipped fix, 9 queues to the machine lane, dedups, the #745 un-park read + #762/#420
+  stint closes) · ADR-111 cutover EXECUTED end-to-end (#745 closed; github-secrets-sync born
+  from its allure fallout — the copied-credential class now code) · grafana → CNPG postgres
+  VERIFIED (0 SQLITE_BUSY; PR#948) · hp-01 root disk out of Longhorn (separation, per the
+  operator's both-disks-are-cheap correction) · Unbound cached-SERVFAIL incident (restart,
+  cleared) · ADR-097 addendum 3 shipped (#944; sentinel-only compelled class, content-keyed)
+  · retro rounds now bind as stint-kind containers (#949) · #946←#945 edge wired · the
+  (repo, base) reframe recorded (#829) and packaged with v1.3 themes as **S8 on the work map**
+  · gate reads: #939/#941/#942/#943/#947(+dedup quickfix)/#950/#951 merged-or-approved,
+  #952 read-done (approve on green — handover).
+- **Wind-down ritual:** transcripts synced (4 files), meta-state rewritten as the S5 handover
+  (park-drain opening act + the stint + the name-anchor ruling input), no persistent monitors
+  were armed this session (interactive throughout), background drains die with the session —
+  the #952 approval is the one carried command.
+
+## 2026-08-26 ~10:15Z — park-drain: the two carried PRs landed (interim session)
+
+- The master-side docs-lint break (#953, filed by the ci-red fleet ruling) had redded both
+  armed PRs: shipped the §1 content unblock direct to master (31c69e53 — stint's home doc
+  linked in meta-state, check #3 green), branch-updated both PRs against it, executed the
+  carried #952 verdict (codeowner approve → auto-merge; #867 closed), verified #951
+  auto-merge (#914 closed), cleared both `agent/error` labels. #953 stays queued for the
+  gate-behaviour leg only (scope comment left on the issue); workflows leg operator-lane.
+
+## 2026-08-26 ~14:20Z — oracle goes CHAINLESS; model-health v2; the 0731 read (session arc)
+
+- **Operator rulings:** NO oracle deny — the stack goes chainless (the resolution class is
+  routing, not per-stack denies); **0731 classification = PLATFORM debt** — the pending matrix
+  run (all harnesses × a provider spread + the `:exacto` variant) re-admits it with evidence;
+  workers-the-platform-provides is the frame.
+- **The 0731 read, evidence assembled:** lifetime 4 goose rides — 1 clean (oracle#260,
+  2026-08-19: the platform deny's REVISIT condition was MET and nothing surfaced it) / 3
+  goose-32602 (sleep#123 08-17, oracle#271+#272 08-26) vs plain flash 101/1 on the same arm.
+  Provider join (router /generation harvest × the operator's AutoExacto upload): ~30% of 0731
+  generations rode bottom-quartile-quality providers (OpenInference GPQA 68.7%, DigitalOcean
+  TAU-Bench 58.4%); DeepSeek first-party (top quality, cheapest effective input, 94.7% cache)
+  served ZERO — the M4 pin is quality-blind by design. Upstream: per-provider tool-call error
+  rates are website-only (no API/MCP surface — probed); the signal is consumable blind via
+  Auto Exacto / `:exacto` (model-routing.md §API surface gained the probed rows, PR#959).
+- **Executed:** oracle-iac#387 (routerMode authoritative, chain deleted; one dup-key fixup —
+  the claim already declared routerMode) + sleep-iac#76 (0731→plain flash primary; model_tiers
+  cannot drop a chained model — the router-self-test invariant found the coupling) +
+  homelab#960 (mirrors + 0731 out of model_tiers + the registration-lint update-pr-branch
+  caller requirement retired — ADR-111 residue that only redded authenticated jail runs).
+  Claim synced 13:59Z; **first chainless oracle ride = #272-r1 on routed
+  deepseek/deepseek-v4-flash (openrouter rail)**.
+- **#272 unstick (operator catch):** the strike left the FU-143 goal-child hold (worker
+  terminal + no PR + PR#275 sibling-seam mention = undecidable, held by design). Seat verify
+  (nothing banked) → hand re-queue → doorbell → routed re-ride.
+- **Model-health dashboard v2 (PR#958 + targeted tofu destroy):** windowed pivot (push_time
+  join — the time picker now drives every panel), evidence-trail table (GitHub links),
+  served-provider split, strikes, rail costs; moved to the ConfigMap-beside-collector vehicle,
+  same uid. The old three-panel lifetime v1 could not answer "how many 0731 strikes today".
+- **Codeowner drain (ADR-110 reads):** #954/#955/#956/#957 read + merged (small class);
+  #955's overstating marker-reader comment quickfixed on master post-merge. **#915** (operator
+  nudge): rounds were spent — seat-authored the one remaining blocker (item_class_flush before
+  the FU-146 hard exit, pinned via recording stub; 279/279 replays) onto the branch; the
+  operator's own 20:37Z CHANGES_REQUESTED is the final gate.
+
+## 2026-08-26 ~17:30Z — the 0731 intake arc closes: ADR-115, the found endpoint, the gate reads (wind-down)
+
+- **The correlation read (operator ask):** model-wide OpenRouter tool-call error rates DON'T
+  correlate with our failures (0731 is globally the better tool-caller — inverted vs our fleet
+  record); PROVIDER identity does (our pin samples the mid/bottom of a 0.2%→40% per-provider
+  error spread; strike-day 0731 draw was ~88% Relace-fp4 at its 72h uptime low; DeepSeek
+  first-party — top quality, cheapest effective, 100% up — got zero rides). fp4-vs-fp8 is
+  small per step and compounds over agentic horizons — serving-level comparisons only.
+- **Endpoint FOUND:** `/api/frontend/v1/stats/tool-call-error-rate?permaslug=<dated>` —
+  unauthenticated, per-endpoint daily series (the Performance-tab data; DigitalOcean at
+  29–56% while 99.6% "up"). API-surface row added (§M14 PR).
+- **ADR-115 ruled (operator):** provider choice priced per successful JOB
+  (eff_price×tokens + p(fail)×C_overhead). Cheap coding DELEGATES to Auto Exacto
+  (subtractive — drop the pin, keep max_price); priced classes get pin-v2 (band +
+  quality tie-break + benchmark floor + live tool-call-error floor + #783 pair-cooldowns);
+  experiments keep the `@` arms; the scout canary rides its class's provider policy
+  (representativeness = same policy). Doc: model-routing.md §M14; build pointer FU-186;
+  live decision-table receipts: today's pick = Relace-fp4 over first-party for $0.0012/M.
+- **PR#963 (scout intake + @arms) review round:** all four findings fixed (void stays void;
+  intake-honest digest intro; :free @slot resolution past pin_for's sidestep; @-pin
+  max_tokens clamps against the SERVING provider — the -32602 class kept out of the
+  instrument built to study it).
+- **Gate reads:** #962 approved (the #933 G-B un-wedge — checkpoint-scoped bucket exclusion,
+  fail-safe fallback); #965 approved WITH a seat addition pushed in-PR
+  (GarageAdminMetricsAbsent — both new belts were silent-when-dead on the meta-wipe class;
+  its rollout firing is the scrape's acceptance test; also caught: append-to-file-without
+  trailing-newline glues into a folded YAML scalar — promtool caught it). ADR-115+§M14 = PR#967.
+- **In flight at wind-down (all machine-owned):** #963/#965/#967 auto-merge on their re-review
+  rounds; #915 waits ONLY on the operator's own 20:37Z re-read; oracle #272-r1 (first chainless
+  ride, routed plain flash) still riding — the loop owns it either way.
+
+## 2026-08-26 ~18:50Z — #915 closed out; GitHub Actions major outage parks the drain (wind-down 2)
+
+- **#915 finished (operator sitting):** the 20:37Z CHANGES_REQUESTED superseded by a fresh
+  operator-identity approval (every demanded item verified on head: the -z "$qdeps" fix,
+  the queued-classification sentinel + rows, the flush-vs-hard-exit fix); the non-blocking
+  taxonomy findings became **#968** (bound to #913) instead of dying as PR-body prose.
+  Auto-merge re-armed after a close/reopen ci re-trigger.
+- **GitHub Actions MAJOR OUTAGE (githubstatus.com, ~18:4xZ):** the re-trigger fired into a
+  dead queue — that also explains #915's runless 13:58Z head. Operator ruling: do NOT re-run
+  queued work, do NOT change capacity off this state. #915/#962/#963/#965/#967 are all
+  approved+armed and land unattended on recovery; cluster-resident legs (review, sentinel)
+  kept working throughout — an unplanned ADR-111 validation.
+
+## 2026-08-26 ~18:20Z — S5 opens with the park-drain; SLEEP GOES CHAINLESS; #123 unlatched (corpus session)
+
+- **Outage recovery verified:** #915/#962/#951/#952/#925 all merged unattended (the armed set
+  landed on Actions recovery, as ruled). Codeowner gate reads (ADR-110): **#964** approved
+  (small — ledger pick_tier fallback, retro r1 F6; bot caught+verified the prefix-anchor bug
+  in-PR) and **#965** re-approved at head e4fc68ac (the prior seat approval was dismissed by
+  the seat's own coverage-guard push; merged). Seat fix rounds pushed: **#963** (the
+  explicit-slug `@` arm gains the numeric arm's `:free` compute_pin fallback — the reviewer's
+  sibling-case gap; proxy self-test PASS) and **#967** (the two tool-error numbers reconciled:
+  0.2→39.6% = single-snapshot cross-provider spread, 29–56% = DigitalOcean's per-endpoint
+  DAILY series from the found endpoint — both sites now say which measurement they are).
+- **§M14 gains the Exacto↔caching caveat (operator find, upstream
+  docs/guides/routing/auto-exacto):** Auto Exacto reorders providers per tool-calling request,
+  overriding the sticky routing prompt caching rides — collides with M4's
+  caching-provider-first doctrine and the fleet's cacheRead-dominated shape. Pushed onto
+  PR#967: the step-1 flip is judged on OBSERVED per-arm cache-hit (already in the matrix
+  criteria); opt-outs if Exacto loses = `sort: "price"` / `:floor` (keep sticky) or Tool
+  Search `defer_loading`. Priced classes unaffected (pin-v2 keeps the session pin).
+- **SLEEP IS CHAINLESS (sleep-iac#77 merged, claim synced authoritative ~18:10Z; mirror =
+  homelab#976, armed):** second stack after oracle — chain deleted, routerMode authoritative,
+  claudeTier blocks kept (subscription rail stays a routed candidate).
+- **sleep-tracking#123 UNLATCHED (the operator's "where they got stuck"):** the 2026-08-17
+  fleet ruling (3× goose-32602 in 6.5h) had left `agent/error` standing 9 days — its cause
+  class (0731 + mimo) is out of the rotation since homelab#960/the 08-18 eviction. Pre-checks:
+  blocker #122 CLOSED, resumable branch `fix/123-playwright-render-gate` alive, no open PRs.
+  Re-queued (add-queued-first, breaker cleared second, end state verified:
+  agent-fix+agent/queued+task/build), audit comment on the thread, ONE doorbell rung
+  (`reflex-now.sh coordinate-sleep sleep-agents`). Acceptance watch: first routed sleep ride
+  lands clean (chainless, routed model, --work-branch resume).
+- **Next: the S5 corpus-diet stint proper** (operator go: "continue with the corpus cleanup
+  stint") — parent + originals authored this session; name-anchor ruling executes before any
+  mass edit.
+
+## 2026-08-26 ~19:00Z — S5 original 1 ships; wind-down (ctx 502k, the one-stint rule)
+
+- **Stint #979 authored** (originals #981–#984, lineage + blocked-by edges wired). **#981
+  SHIPPED same session as PR#985** (armed): ADR-116 — FU ids are stable coordinates, provenance
+  refs never scrub; TODO shapes = `FU: FU-NNN` + `Tracked by` only (colon-form measured
+  ambiguous against live usage — `# FU-085: this run may have opened…` is provenance); DANGLING
+  re-scoped to ≥ Next-free; TODO-RETIRED fails / TODO-ARCHIVED warns, both probe-tested red on
+  a staged synthetic; the 29-entry expiry sweep in the same PR (measured FIRST: zero TODO-shaped
+  refs among the 29 — the old scrub-all convention would have been pure provenance destruction).
+  New warn's first catch: 5 live stale pointers (FSM gap registers at archived
+  FU-068/142/133/143, spike Tracked-by at FU-160) → #984's list.
+- **Wind-down state:** #964 approved CLEAN (merging), #976/#985 armed on the updater+reflex
+  path, #963/#967 re-reviewing on the pushed rounds, sleep #123-r1 chainless ride Running.
+  Everything on armed machinery; nothing held by the seat. Fresh session picks up #982 (meta-state
+  row rewritten).
+
+## 2026-08-26 ~19:55Z — evening arc closes: #963's clobbered push, the opencode enforce wedge, sleep proven chainless (wind-down)
+
+- **The #986 find (operator pasted PR#963):** the seat's fix push — VERIFIED at the ref by
+  ls-remote — was silently CLOBBERED by the in-cluster updater: `update-pr-branch.sh` calls
+  update-branch with NO `expected_head_sha`, so a racing author push is overwritten by the
+  merge computed from the stale head. Refutes merge-path.md §Failure modes' "worst residual
+  race is a duplicate review". Re-landed + verified through the racing window; #986 queued
+  (one API field + doctrine correction + updater fixture row).
+- **#272's day, three failure classes on one issue:** (1) the first chainless draw
+  (opencode×flash) wedged pre-LLM — opencode SDK-init fetches (models.opencode.ai/npmjs, no
+  kill knob per the launcher's own L1812 note) have NO timeout, and enforce:true black-holes
+  them: four SYN_SENT to CF :443, 0-byte run.log, would have slept to the 4h deadline (the
+  second 4h burn today — both FU-187's class; tracker extended with the reap-skips-finalize
+  half). Filed **#990** (hostAliases fail-fast) + shipped **PR#991** (durable workaround:
+  enforced-egress rides never DEFAULT to opencode; the harness default lives at
+  agent-session.sh:48; claims read hoisted out of the docker conditional so EGRESS_* sees
+  every path; replay family harness-enforce-default ×3, suite 284/284). (2) goose×flash
+  hand-ride struck http-401-storm (OR key 401ed mid-run — single sighting, watch). (3) the
+  running ride = operator hand-dispatch claude/haiku r1 (the sleep#48 precedent).
+- **Sleep chainless PROVEN:** #123 r1 → PR#133 (the Playwright gate!), ci-red → r2 riding.
+- **The pin = the priority knob (operator ask, #936):** confirmed built — the scan splits
+  isPinned queued issues into punits, dispatched first (FU-110's mapping). #936 pinned +
+  doorbell rung; unpin at merge.
+- **#985 verdict resolved at the source:** issue #981 gained its Touches: declaration; the
+  CHANGES_REQUESTED (governance-path escape read off the EMPTY issue footprint) dismissed per
+  the #141 terminal — re-review pending. #967 bot-approved + armed. #976 merged.
+- Wind-down: monitors none, background ride streams killed (the rides are in-cluster,
+  finalize is in-pod), transcripts synced.
+
+## 2026-08-26 ~19:55Z — MCR mirror rollout verified + mechanical meta-state sweep (maintenance session)
+
+- **MCR mirror LIVE end-to-end:** PR#992 merged 19:33Z, ArgoCD synced in ~30s; verified by a
+  pull-through `playwright/python` tags fetch via the VIP (`http://192.168.40.31/v2/…` returned
+  upstream tags incl. v1.62.0). sleep#123 commented with the image-redirect option
+  (pin the image tag to the pip-resolved playwright version; PR#133 floats `>=1.62.0`).
+- **oracle#272 board check:** the claude/haiku r1 hand-dispatch DELIVERED — oracle-fleet
+  PR#277 (19:00Z), issue → `agent/review`. No FU-143 hold.
+- **#521 second backlog sweep executed** (the scheduled residue from the 08-18 close): 258
+  pre-default `Succeeded` workflows with `finishedAt` < now−7d deleted, 1145 → 887; the #510
+  TTL defaults own the curve alone now. Recorded on #521. (High absolute count = today's
+  oracle reingest+delta burst, 540 workflows created 08-26 — TTLs out on its own.)
+- **wk-metal-04 zone-label conflict probed read-only:** live managedFields show `Terraform`
+  owning `topology.kubernetes.io/zone` cleanly (kata label is Talos/kubelet-side, disjoint) —
+  likely cleared by the last targeted apply; verdict at the next full apply. Breadcrumb in
+  meta-state.
+- Operator note mid-session: oracle-fleet reingest+delta running — Garage ERT giants and
+  gc-restarts left strictly alone.
+
+## 2026-08-26 ~20:45Z — FU-188: the authoritative review plane was dead; #994 diagnosed; wind-down (maintenance session)
+
+- **#994 (junk ring-carrying global runs) DIAGNOSED, comment on the issue:** the collapse is not
+  mis-firing — it structurally cannot absorb them (per-stack scans live in another ns; median
+  Pending dwell 0s across 126 failed runs; RBAC fine). Recommended scan-side early exit on
+  SCAN_RING_NS; Sensor filter = follow-on behind a live test. **Operator decision pending.**
+- **FU-188 filed + incident pin shipped (`1596e395`, direct-master):** oracle-fleet#277's review
+  404-looped — `/route role=reviewer` served `xiaomi/mimo-v2.5 [market]` (openrouter rail) to the
+  subscription-only reviewer; Anthropic 404s, no verdict, no `/report` ⇒ no strike ⇒ re-pick
+  (72 dispatches/24h, zero generations). Pin: reviewer downgrades authoritative→shadow in
+  reviewer-session.sh; claims could NOT flip (chainless-guard FATALs oracle/sleep workers).
+  Verification parked: PR#277's sonnet review from a post-20:15Z tick. Answered the operator's
+  codeowner question: goal rules are LIVE on oracle-fleet (`required-approval-goal`, no codeowner
+  flag on goal/**) — nothing was forgotten.
+- **#936 worker health-checked at operator ask:** riding fine 59m in — per-file promtool timing
+  with scoped timeouts (the 120s-tool-cap timeouts are the task's own subject). Unpin at merge.
+- **#974 still burning while queued:** reflex-1787775000 + coordinate-lkxr2 (ring=-, a genuine
+  sweep) OOMKilled ~20:10Z — global plane down, per-stack loops alive.
+- Wind-down: #277-verdict watch killed by process, transcripts synced, meta-state updated.
+
+## 2026-08-26 ~21:10Z — S5 continuation: originals 1+2 landed; FU-188 verified + postmortem; #995 gate read (corpus session)
+
+- **PR#985 round 2 (reviewer catch, real):** the TODO-shape classifier extracted every id on a
+  matched line, not the construct's target — FU-142 was a phantom (5→4 real stale pointers).
+  Fixed in-PR (`66a3fc17`); MERGED 20:42Z. ADR-116 live.
+- **#982 → PR#999 MERGED 20:55Z:** ADR-117 §-code heading anchors + docs-graph-lint check #4
+  (SHADOW; both arms probe-tested on a staged synthetic; live tree 21 codes all unique).
+  Issue #982 got its `Touches:` at authoring — the #985 round-1 lesson applied at the source.
+- **FU-188 pin VERIFIED live** (20:22:54Z sonnet verdict on oracle-fleet#277; the DOWNGRADED
+  log line confirmed). **Postmortem landed** (`docs/incidents/2026-08-26-reviewer-404-loop.md`):
+  empty-subscription-pool + silent rail skip + per-stack flip arming a per-role change; the
+  belt audit (exit contract redded workflows nobody consumes; both drift belts out of scope by
+  key; shadow divergence at a ~90% baseline). **Operator ruling recorded:** the combination
+  table — yaml-in-git, DATED status rows (`works|not-yet|disabled`), strike-out-to-disable —
+  FU-188 reshaped as the pointer, legs (a)–(d); charter flip-acceptance gains the per-role
+  flip rule. `dispatch`/`goal-decompose` survived on `rails:["subscription"]` + fail-open
+  fallback — the review class's one extra rail token was the whole working-vs-dead split.
+- **#995 codeowner read (ADR-110):** merged 20:30Z — FU-042 wedged-pod WIP discount, additive,
+  fixture-pinned; watch item commented (kata-tier capacity-Unschedulable is a QUEUE not a
+  wedge; refine to affinity-only-wedged if a docker-repo double-ride ever surfaces).
+- **Sightings:** sleep #123-r3 spent ~65m in devbox install (chromium-151 on wk-metal-03) —
+  the nix-chromium grind continues; the sleep#123 image-redirect option gains evidence ·
+  iac-sentinel edge queue SATURATED (5–12 pending all evening, mutex serial drain ≈ arrival
+  rate; heartbeat stayed fresh — capacity smell for the #974 sizing thread, not a wedge) ·
+  models.opencode.ai drops on sleep = the #456 phone-home class, ride healthy.
+- **Wind-down at ctx 536k (the ≥500k rule):** #983/#984 to a FRESH corpus session (#984 comb
+  doubles as check #4's flip read). Monitors killed by process; transcripts synced.
+
+## 2026-08-30 — the S5 #984 corpus session (deep comb + the overnight-stall triage)
+- Corpus session (design-agents, full load). Subscription window confirmed reset (alert clear) → #984 affordable.
+- #984 executed: lint-driven set (8 STALE-ARCHIVE expired, 9 OVERSIZE pointer-ized, 4 TODO-ARCHIVED repoints — IAC-G08/IL-G01 removed as closed, IAC-G10 → accepted; FU-191 backlink), status truth-sync (ROADMAP stint rows, chainless header, retro cadence, G01 flip live, per-claim egress re-read, FU-052 ARCHIVED — onboarding has no repo left), 4-auditor whole-repo comb (~35 files; highlights: network-physical AP .63→.13 + wk-03, github-setup ADR-111 residue, runbook meta-scripts table wrong REQUIRED arm, iac-lane docs/** tier CI→codeowner, talos-psi cilium-agent BestEffort claim refuted live, Garage-metrics truth set #934→#965). docs-graph-lint check #4 flipped shadow→FAIL on the recorded clean run (red-direction probed). PR#1017 merged after 3 review rounds (r1/r2 = the Touches-footprint governance block — fixed by declaring; a stale duplicate verdict dismissed with audit message; r3 = a real in-diff table-split catch). .agents/review.md docs/-tier fix operator-direct post-merge. #979 closeout 1 posted; parent in quiet window.
+- THROUGHPUT-STALL (223 min, heartbeat catch) triaged: oracle corked by the recurring http-401-storm — proxy log shows `cred-unresolved` forwarding credential-less into the auth circuit on the STANDING key ref (mint/PATCH hypothesis refuted); #1004 commented + queued (Touches: openrouter-proxy). Machine lane independently filed #1018 (continuous 403 = missing FU-138 Role in agent-coordinator) — cross-linked. Latches oracle-fleet#283/#279/#278 cleared + re-queued (#278 verified un-merged against goal/270-feedback-intake first). Platform queue (#938/#110) = codeowner-parked by design (⛔ pin-only path / the standing read list).
+- Board residue for the next sitting: garage-alerts sprouts #1015/#1016 (machine lane active there — #1014 merged in-session), the standing codeowner read set unchanged.
+
+## 2026-08-30 — session tail (post-#984): lane change, #953 closed, FU-164 promoted, storm fix landed
+- Operator ruled the direct-master lane: COMMITS batch, ONE deliberate push at wind-down; mechanism = committed githooks/pre-push (both doc lints on any master push; core.hooksPath, claude-jail entrypoint re-wires) — hook over devbox script (mechanism > advice; rare deliberate act wants a tripwire, not a step). Verified red (§-anchor violation blocks) + green (real push) paths. Cluster-consumed writes (quickfixes, incident pins, agents/ scripts) still push at once. Seat card + memory updated.
+- homelab#953 CLOSED as resolved by the hook (its parked operator-lane leg, delivered at the push client; carve-out and diff-scoping deliberately rejected — rationale in the lint's header; residual = --no-verify/foreign-clone, named on the issue).
+- FU-164 PROMOTED (operator): doc-heat = standing docs-cleanup input (skill comb step runs the report first); first post-S5 heat read due ~2026-09-06 (dated in the tracker); v1 cluster leg next after that.
+- The 401-storm arc closed same-day: #1004 → PR#1019 (loop-authored fail-closed + negative TTL) MERGED 07:15Z, ~5h issue→prod incl. the seat's environmental-red rerun; #1018 (missing FU-138 Role, the 403-spam half) queued, codeowner-parks at merge. The morning's THROUGHPUT-STALL fully drained.
+- Wind-down: batch pushed through the hook, transcripts synced, monitors killed. Pickup for the next session: meta-state (S5 parent #979 quiet-window close ≥09-02; the standing codeowner read set; #1018's park; FU-164's 09-06 read).
+
+## 2026-08-30 — mechanical seat session (no corpus at start; design-agents corpus loaded mid-session): the stack→platform escalation arc, run by hand end to end
+- Operator question "how does a stack escalation reach the platform?" → design-agents sitting → meta-state design bullet (stack→platform communication; 4 instances logged by day's end) — deliberately no FU (operator direction).
+- sleep#133 (arbitrate-terminal, "infra not logic") → the future responder lane executed MANUALLY: `NEEDS-PLATFORM:` marker on the PR → homelab#1023 filed+queued (env-card pod-only + scheme-strip caveats; dedup negative) → loop-authored PR#1024, round-1 review caught a cross-stack pointer leaking into card text, round-2 fixed → seat codeowner read → MERGED 09:24Z, #1023 closed. Stack half: one-line default+strip pushed to the PR branch (d593710), arbitrate label cleared per the play.
+- homelab PR#1022 (FU-138 openrouterkeys:list in agent-coordinator, the 401-storm 403 half) → codeowner read (small-class) → merged 08:43Z, #1018 closed; grant verified by SubjectAccessReview as the proxy SA.
+- goal-270 triage (operator-pointed): #273 hand-closeout (PR#280 merged into goal branch; keyword inert off master + agent/error blinded C6 — the latch's designed human-first cost), #278/#279 latches were RE-latched 07:08Z seven minutes before PR#1019 merged → cleared+re-queued AFTER verifying the proxy pod rolled 07:16:43Z (FU-190 check) and #1022 landed; #270 parked to task/goal-only (hand-decompose had skipped the parking step); #274 stays operator-attended by design; oracle-iac#384 = judgment-class deploy leg.
+- sleep#133 CI: fix green, then the render gate exposed ci-runner-01's dockerd not trusting the MCR VIP (first HOST-level mirror pull) → daemon.json fixed live + codified (15b5b712); docker restart PENDING at runner-idle (meta-state PICKUP).
+- oracle PR#293: attempt-1 = the stale-venv y/n class (venv cleared live on the runner; guard ported to master as oracle-fleet PR#294, armed); attempt-2 = genuine content red (assert-delta) — machinery owns it.
+- Probe lesson re-proven twice: statusCheckRollup in a gh query hard-fails this PAT (a 2h PR watch ran blind); CI reads via `gh run list`.

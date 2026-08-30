@@ -1,0 +1,2 @@
+CALL kubectl -n agent-runs get pods -l app=agent-session,project=test-project -o json
+RC 0

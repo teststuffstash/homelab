@@ -317,12 +317,13 @@ EOF_C9
   # the run-report store and passes it as --decorrelate-from so the router excludes that family
   # across rails (#516's primitive). The proxy stores run_reports via POST /report from every
   # worker session; query the latest here.
+  # >>>REPLAY:decorrelate-resolution>>>
   decorrelate_arg=""
   if [ "$pick_issue" != "-" ] && [ -n "${PROXY_URL:-}" ]; then
     _last_report="$(curl -fsS --max-time 3 \
       "${PROXY_URL}/report/latest?task=issue-${pick_issue}" 2>/dev/null)" || _last_report=""
     if [ -n "$_last_report" ]; then
-      _last_model="$(printf '%s' "$_last_report" | jq -r '.served_model // .model // ""' 2>/dev/null)"
+      _last_model="$(printf '%s' "$_last_report" | jq -r '.served_model // .model // ""' 2>/dev/null)" || _last_model=""
       if [ -n "$_last_model" ]; then
         decorrelate_arg="--decorrelate-from $_last_model"
         log "[$repo] decorrelate_from: $_last_model (issue #${pick_issue})"
@@ -330,6 +331,7 @@ EOF_C9
     fi
   fi
   [ -n "$decorrelate_arg" ] || log "[$repo] decorrelate_from: not available (run-report query skipped or unreachable)"
+  # <<<REPLAY:decorrelate-resolution<<<
 
   # Breaker: a legit pick has ZERO bot approvals at head (the predicate filters those), <2 bot
   # verdicts at head, and fewer than ROUNDS_MAX verdicts ever ON ITS ISSUE — see the issue-keyed

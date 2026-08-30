@@ -1,0 +1,22 @@
+# homelab#849 — jq extraction coverage fixture.
+# The reviewer's round-3 CHANGES_REQUESTED (PR #863) identified that the existing
+# `pr-cap-per-base` and `pr-cap-per-base/collision` fixtures hand-construct qbase from
+# a synthetic CASES string and never execute the jq extraction line, so they prove
+# nothing about the jq pipeline. This fixture drives the extraction from real issue-body
+# JSON with a `Base: goal/**` line and a following queued issue, asserting BOTH that
+# `qbase` is the correct string and that the later issue still reaches the dispatch loop.
+#
+# Two bugs caught:
+#   1. Missing `flatten` before `first` — scan with capture group returns array of arrays,
+#      @tsv rejects it, jq halts the stream, and queued issues after one carrying a `Base:`
+#      line never reach the dispatch loop.
+#   2. The broken code would have silently truncated the queue after the first Base:-bearing
+#      issue, holding all subsequent issues regardless of their base.
+name: pr-cap-per-base-jq-extraction
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - file:cases.sh
+  - block:pr-cap-per-base
+  - file:post.sh

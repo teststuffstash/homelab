@@ -1,0 +1,30 @@
+# FU-161 leg 1 — the belt: guard the S3 state write so a genuinely absent credential degrades,
+# not kills the tick.
+#
+# CONDITION UNDER REPLAY. The `model-scout` CronWorkflow's env carries AGENT_TS_READER_ID and
+# AGENT_TS_WRITER_ID from `optional: true` secrets. In the CLUSTER these secrets DO exist
+# (`agent-transcripts-s3` in `agent-coordinator` has all four keys as of 2026-08-24), so the
+# failing state-write path is NOT the live cluster's failure mode. But the guard is still a good
+# belt: if a future configuration drift or credential rotation leaves the secrets empty, the
+# tick should degrade to a log line rather than dying under `set -e`.
+#
+# The REAL failure mode that has blocked every tick since PR#499 is the `local`-expansion bug
+# in `scout_canary_mint()` — see `scout-canary-mint-unbound` for that fixture.
+#
+# THE CONTRACT (this fixture):
+#   1. `scout_state_read` returns non-zero (empty credentials → s5cmd fails). This is the EXPECTED
+#      first-tick / unkeyed path — the scout treats it as a bootstrap tick.
+#   2. `scout_state_write` ALSO returns non-zero (same empty credentials). This is the guard that
+#      was missing: the `|| log "scout: bootstrap snapshot write failed (non-fatal)"` catches the
+#      failure, logs the event, and the script continues.
+#   3. RC 0. The tick does NOT die with exit code 1. A bootstrap tick that cannot save its snapshot
+#      is still a completed tick (the next run will try again).
+#   4. The log line "scout: bootstrap snapshot write failed (non-fatal)" is the evidence that the
+#      guard fired — removing it would make this fixture red.
+name: scout-state-unkeyed
+mode: actions
+source: agents/model-scout.sh
+parts:
+  - block:scout-seams
+  - file:bridge.sh
+  - block:scout-diff

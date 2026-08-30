@@ -1,0 +1,3 @@
+OUT MODEL=sonnet
+ERR → coordinator model: role=coordinator class=dispatch → sonnet
+RC 0

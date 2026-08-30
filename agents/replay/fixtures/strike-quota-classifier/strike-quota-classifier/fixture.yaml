@@ -1,19 +1,43 @@
-# Issue #687 leg 2: Replay coverage for the 429-quota error_class classifier
+# Issue #871 (homelab): budget-403 split — the raw-log classifier distinguishes
+# account-credit from key-limit 403s, and carries the matched log line into the
+# strike comment. Three branches:
+#   - budget-403-key:   key limit exceeded
+#   - budget-403-account: insufficient (credit|fund), 402 payment, payment required, out of credit
+#   - budget-403:       residual (insufficient quota, quota exceeded, budget exceeded)
+#
+# Issue #815 / #804 (homelab): Replay coverage for the startup-config-death strike
+# signature in BOTH classifier branches — STATS path and raw-log fallback.
+#
+# Issue #866 (homelab): Replay coverage for the provider-5xx (harness-side UnknownError)
+# strike signature in BOTH classifier branches. A zero-cost, sub-30s pod death with
+# "UnknownError" in the log must classify as harness-death to avoid mis-classifying the
+# ride as "clean" (which would escalate an existing PR to arbitrate, costing coordinator time).
 #
 # THE CONTRACT:
-#   A runlog containing a 429 quota/rate-limit message flows through the classifier
-#   (agents/agent-session.sh the raw-log fallback branch) and asserts that error_class=quota
-#   reaches the AGENT_STRIKE line.
+#   1. Config-death: The opencode binary rejects unknown config keys at startup (Configuration is
+#      invalid / Unrecognized key), causing the pod to die in under 15s at zero cost. Both classifier
+#      branches must map this signature to error_class=harness-death.
+#   2. Provider-5xx: The model API returns UnknownError (harness-side), causing the pod to die at
+#      zero cost in sub-30s with no new artifact. Both classifier branches must map this signature
+#      to error_class=harness-death.
+#   3. PR-present narrowing (homelab#866): A PR-less ride strikes on any classified error, `unknown`
+#      included (FU-062 semantics — that's the chain-walk signal). A ride WITH an open PR strikes
+#      only on harness-death, auth-storm, timeout, quota, or budget-* classes; anything else
+#      (e.g., `unknown`) must not strike and must reset ERR_CLASS to empty so the report records
+#      no error.
 #
-# CONDITION UNDER REPLAY. The classifier sits in the path where finalize never ran (no AGENT_RUN_STATS
-# line, pod died hard / wait timed out). The pod's status.reason is read via kubectl, and patterns
-# are grepped from the RUNLOG. A runlog with quota patterns triggers the quota error_class arm.
+# CONDITION UNDER REPLAY. The strike classifier sits in two branches of agent-session.sh:
+#   - STATS path (AGENT_RUN_STATS line exists): if exit_status classifies as "unknown", the
+#     run log is checked for config-death and provider-5xx signatures. Must not over-trigger on clean logs.
+#   - Raw-log fallback (no AGENT_RUN_STATS): the pod's reason and run log are classified
+#     from scratch with the same signatures. DeadlineExceeded takes precedence over the
+#     config-death/provider-5xx checks (ordering witness).
 #
 name: strike-quota-classifier
-mode: actions
+mode: table
 source: agents/agent-session.sh
 parts:
   - file:bridge.sh
-  - block:strike-quota-classifier
+  - block:strike-classifier
   - block:strike-line-format
-  - file:cases.sh
+  - file:post.sh

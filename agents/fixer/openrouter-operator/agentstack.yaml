@@ -123,11 +123,10 @@ spec:
     # (.agents/), and its content is tier-3 loop machinery.
     - name: agent-coordinator
       labels: { extra: [] }
-    # homelab: CONTEXT-ONLY (no fixer block) — FU-068, 2026-08-04. It is the platform's own -iac
-    # (ArgoCD syncs argocd/, agents/coordinator, agents/fixer/*) AND the home of the loop's own
-    # machinery, so it joins the claim for REVIEWER COVERAGE + claim-owned labels WITHOUT becoming
-    # a dispatch target: dispatchability is a fixer-block predicate, never implicit (IAC-T03), and
-    # stack-lint's is_fixer() excludes it. Whether a fixer may author here — and on which paths —
+    # homelab: joined 2026-08-04 for reviewer coverage + claim-owned labels (FU-068), and gained
+    # its FIXER BLOCK the same day (below) — it IS a dispatch target now, gated per PATH, not per
+    # repo. It is the platform's own -iac (ArgoCD syncs argocd/, agents/coordinator,
+    # agents/fixer/*) AND the home of the loop's own machinery; which paths a fixer may author
     # was SETTLED 2026-08-04/05 (FU-068 + FU-142, archived): CODEOWNERS tiers + the .agents/fix.yaml
     # scope ceiling, both described in iac-lane.md §The platform lane.
     # The labels below ADOPT the 27 that tofu forgot in the same change (labels.tf retired).

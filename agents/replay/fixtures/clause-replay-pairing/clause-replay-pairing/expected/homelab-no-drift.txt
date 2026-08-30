@@ -1,0 +1,5 @@
+OUT ORPHAN [homelab] ⚠️ CLAUSE-REPLAY pairing: issue touches a ratchet clause file but does not declare `agents/replay/**` (homelab#825 report-only — the PR would red on the ADR-103 ratchet):
+OUT ORPHAN   issue #701 — touches clause `agents/coordinator-scan.sh` but `Touches:` (`agents/coordinator-scan.sh`) does not reach `agents/replay/**`
+OUT ORPHAN   issue #703 — touches clause `agents/coordinator/reflexes-argo.yaml` but `Touches:` (`agents/coordinator/`) does not reach `agents/replay/**`
+OUT REACHED: end
+RC 0

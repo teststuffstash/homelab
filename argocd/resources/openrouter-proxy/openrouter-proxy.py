@@ -35,6 +35,7 @@ Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter 
 
 import base64
 import hashlib
+import io
 import json
 import os
 import re
@@ -71,6 +72,13 @@ GO_PREFIX = "opencode-go/"
 ZEN_UPSTREAM = os.environ.get("OPENCODE_ZEN_BASE", "https://opencode.ai/zen")
 ZEN_KEY = os.environ.get("OPENCODE_ZEN_API_KEY", GO_KEY)
 ZEN_PREFIX = "opencode/"
+# homelab#791: the OpenRouter translation leg — `openrouter/` prefixed model ids on the
+# /anthropic/* path get their Anthropic-format /v1/messages request translated to an
+# OpenAI-format /chat/completions call and forwarded to OpenRouter. The prefix is STRIPPED
+# before forwarding (OpenRouter takes bare model ids). Ported from scripts/claude-model-shim.py
+# (the jail shim is the working prototype) but WITHOUT litellm: the proxy runs stock
+# python:3.13-slim and does the translation inline with stdlib.
+OR_PREFIX = "openrouter/"
 # ADR-108: Go pricing moved to gometer.py (single home for proxy + jail shim).
 # Re-export for backwards compatibility within this file.
 GO_PRICES = gometer.GO_PRICES
@@ -275,6 +283,11 @@ MAX_TOKENS_FLOOR = int(os.environ.get("MAX_TOKENS_FLOOR", "16384"))
 # get-secret RBAC from becoming a generic secret oracle. Short cache = revocation latency.
 SESSION_KEY_LABEL = "openrouter.teststuff.net/session-key"
 REF_CACHE_TTL_S = int(os.environ.get("REF_CACHE_TTL_S", "60"))
+# FU-069 addendum 4 / homelab#1004: a failed resolve must not poison the cache for the full
+# REF_CACHE_TTL_S — a single transient k8s API blip would serve the stale failure for 60 s and
+# burn every request in that window into the auth circuit-breaker. Negative entries evaporate
+# after this short window, so the next request retries the k8s call naturally.
+NEGATIVE_CACHE_TTL_S = int(os.environ.get("NEGATIVE_CACHE_TTL_S", "5"))
 # FU-134: the /search capability. A cheap, widely-available model is enough — the SEARCH does the
 # work, the model only summarizes and cites. Overridable per request; keep the default reachable on
 # every rail so no stack has to know about it.
@@ -372,7 +385,10 @@ def _resolve_ref(ref: str) -> dict | None:
     except Exception as e:  # noqa: BLE001 — a failed resolve degrades to passthrough (upstream 401s the ref)
         log(f"ref: resolve failed for {ref}: {e}")
     with _refs_lock:
-        _refs[ref] = (now + REF_CACHE_TTL_S, resolved)
+        # homelab#1004: negative entries (resolved is None) get a short TTL so a transient k8s
+        # API blip doesn't poison the cache for the full window — the next request retries naturally.
+        ttl = REF_CACHE_TTL_S if resolved is not None else NEGATIVE_CACHE_TTL_S
+        _refs[ref] = (now + ttl, resolved)
     return resolved
 
 
@@ -443,7 +459,10 @@ def _resolve_loop_git(secret_name: str, for_ns: str) -> str | None:
     except Exception as e:  # noqa: BLE001
         log(f"loop-git: resolve failed for {secret_name}: {e}")
     with _refs_lock:
-        _refs[ref] = (now + REF_CACHE_TTL_S, token_value)
+        # homelab#1004: negative entries (token_value is None) get a short TTL so a transient k8s
+        # API blip doesn't poison the cache for the full window — the next request retries naturally.
+        ttl = REF_CACHE_TTL_S if token_value is not None else NEGATIVE_CACHE_TTL_S
+        _refs[ref] = (now + ttl, token_value)
     return token_value
 
 
@@ -478,12 +497,22 @@ def _resolve_git_token(ns: str) -> str | None:
     except Exception as e:  # noqa: BLE001
         log(f"git-token: resolve failed for {ns}: {e}")
     with _refs_lock:
-        _refs[ref] = (now + REF_CACHE_TTL_S, token_value)
+        # homelab#1004: negative entries (token_value is None) get a short TTL so a transient k8s
+        # API blip doesn't poison the cache for the full window — the next request retries naturally.
+        ttl = REF_CACHE_TTL_S if token_value is not None else NEGATIVE_CACHE_TTL_S
+        _refs[ref] = (now + ttl, token_value)
     return token_value
 
 
 def _inject_ref_auth(headers: dict) -> str:
-    """Rewrite `Authorization: Bearer ref:<ns>/<name>` to the real key. Returns a note suffix."""
+    """Rewrite `Authorization: Bearer ref:<ns>/<name>` to the real key. Returns a note suffix.
+
+    Returns "+cred" on success. Returns "+cred-unresolved" on failure — the caller MUST
+    refuse the request locally (502) rather than forwarding credential-less, because a single
+    upstream 401 latches the auth circuit-breaker for the rest of the ride (ADR-096 addendum 3,
+    homelab#1004). On failure the Authorization header is removed from the dict so it is never
+    forwarded.
+    """
     auth = next((k for k in headers if k.lower() == "authorization"), None)
     if not auth or not headers[auth].startswith("Bearer ref:"):
         return ""
@@ -492,7 +521,10 @@ def _inject_ref_auth(headers: dict) -> str:
     if resolved:
         headers[auth] = "Bearer " + resolved["key"]
         return "+cred"
-    return "+cred-unresolved"  # forwarded as-is; upstream will 401 loudly (never fail silently)
+    # homelab#1004: fail CLOSED — remove the header so it is never forwarded credential-less.
+    # A typed local refusal (502) is louder than a laundered upstream 401 that latches the breaker.
+    del headers[auth]
+    return "+cred-unresolved"
 
 
 def _guardrail_reject(self_ref: str, model: str) -> bytes | None:
@@ -698,6 +730,473 @@ def normalize_model(model: str) -> str:
     return stripped if "/" in stripped else model
 
 
+# ── OR leg: Anthropic-surface → OpenRouter translation (homelab#791) ─────────
+# When a claude-harness pod sends an /anthropic/v1/messages request with an
+# `openrouter/` model id, the proxy must translate the Anthropic-format request
+# to an OpenAI-format /chat/completions request, forward to OpenRouter, and
+# translate the response back. Ported from scripts/claude-model-shim.py (the
+# jail shim is the working prototype — scripts/claude-model-shim.py _translate)
+# but WITHOUT litellm: the proxy runs stock python:3.13-slim and does the
+# translation inline with stdlib.
+
+# OpenAI finish_reason → Anthropic stop_reason mapping
+_FINISH_REASON_MAP = {
+    "stop": "end_turn",
+    "length": "max_tokens",
+    "tool_calls": "tool_use",
+    "content_filter": "end_turn",
+}
+
+
+def _or_request_translate(body: bytes) -> tuple[dict, str]:
+    """Translate an Anthropic /v1/messages request body to OpenAI /chat/completions format.
+
+    Returns (openai_payload, bare_model) where bare_model is the model id with
+    openrouter/ prefix stripped. The returned payload dict is ready for json.dumps.
+    """
+    parsed = json.loads(body)
+    model = str(parsed.get("model") or "")
+    bare = model.removeprefix(OR_PREFIX)
+
+    out = {"model": bare}
+    messages = []
+
+    # System prompt: Anthropic has top-level "system", OpenAI puts it in messages[0]
+    system = parsed.get("system")
+    if system:
+        if isinstance(system, str):
+            messages.append({"role": "system", "content": system})
+        elif isinstance(system, list):
+            # Anthropic allows structured system prompts (list of content blocks)
+            messages.append({"role": "system", "content": system})
+
+    # Translate conversation messages
+    for msg in parsed.get("messages") or []:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        # String shorthand → blocks (same normalization as opencode legs)
+        if isinstance(content, str):
+            content = [{"type": "text", "text": content}]
+        out_msg = {"role": role, "content": content}
+        # Handle tool_use blocks in assistant messages → OpenAI tool_calls
+        if role == "assistant" and isinstance(content, list):
+            tool_calls = []
+            kept_blocks = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    tool_calls.append({
+                        "id": block.get("id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": block.get("name", ""),
+                            "arguments": json.dumps(block.get("input", {})),
+                        },
+                    })
+                else:
+                    kept_blocks.append(block)
+            if tool_calls:
+                out_msg["tool_calls"] = tool_calls
+            out_msg["content"] = kept_blocks if kept_blocks else None
+            messages.append(out_msg)
+        # Handle tool_result blocks in user messages → OpenAI tool role messages
+        elif role == "user" and isinstance(content, list):
+            # Extract tool_result blocks and convert them to separate tool-role messages
+            text_blocks = []
+            tool_results = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    tool_results.append(block)
+                else:
+                    text_blocks.append(block)
+            # Keep text blocks in the user message
+            if text_blocks:
+                out_msg["content"] = text_blocks if text_blocks else None
+                messages.append(out_msg)
+            # Each tool_result becomes a separate tool-role message
+            for tr in tool_results:
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tr.get("tool_use_id", ""),
+                    "content": tr.get("content", ""),
+                })
+        else:
+            messages.append(out_msg)
+
+    out["messages"] = messages
+
+    # Map scalar fields
+    for src, dst in [("max_tokens", "max_tokens"), ("temperature", "temperature"),
+                     ("top_p", "top_p"), ("stream", "stream"),
+                     ("metadata", "metadata")]:
+        if src in parsed:
+            out[dst] = parsed[src]
+
+    # stop_sequences → stop
+    if "stop_sequences" in parsed:
+        out["stop"] = parsed["stop_sequences"]
+
+    # Tools: Anthropic format is mostly compatible with OpenAI format
+    # Anthropic: {"name": "...", "description": "...", "input_schema": {...}}
+    # OpenAI: {"type": "function", "function": {"name": "...", "description": "...", "parameters": {...}}}
+    tools = parsed.get("tools")
+    if tools:
+        openai_tools = []
+        for t in tools:
+            if isinstance(t, dict):
+                if t.get("type") == "custom" or t.get("input_schema") is not None:
+                    # Anthropic-style tool → OpenAI function tool
+                    openai_tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": t.get("name", ""),
+                            "description": t.get("description", ""),
+                            "parameters": t.get("input_schema", {}),
+                        },
+                    })
+                elif t.get("type") == "function":
+                    # Already OpenAI format
+                    openai_tools.append(t)
+        if openai_tools:
+            out["tools"] = openai_tools
+
+    # tool_choice: Anthropic {"type": "any"} → OpenAI "auto" or {"type": "any"}
+    tool_choice = parsed.get("tool_choice")
+    if tool_choice:
+        if isinstance(tool_choice, dict) and tool_choice.get("type") == "any":
+            out["tool_choice"] = "auto"
+        elif isinstance(tool_choice, dict) and tool_choice.get("type") == "tool":
+            out["tool_choice"] = {
+                "type": "function",
+                "function": {"name": tool_choice.get("name", "")},
+            }
+        else:
+            out["tool_choice"] = tool_choice
+
+    return out, bare
+
+
+def _or_response_translate(body: bytes, model: str) -> bytes:
+    """Translate an OpenAI /chat/completions response body to Anthropic /v1/messages format.
+
+    Handles both streaming (SSE) and non-streaming (JSON) responses. For streaming,
+    each SSE data line is translated to the corresponding Anthropic SSE event.
+    """
+    text = body.decode("utf-8", errors="replace")
+
+    # Detect streaming: OpenAI SSE responses contain "data:" lines
+    if text.startswith("data: ") or "\ndata: " in text:
+        return _or_stream_translate(text, model).encode("utf-8")
+
+    # Non-streaming: parse JSON and translate
+    try:
+        parsed = json.loads(text)
+    except (ValueError, TypeError):
+        return body  # pass through on parse failure
+
+    return _or_json_response_translate(parsed, model)
+
+
+def _or_json_response_translate(parsed: dict, model: str) -> bytes:
+    """Translate a non-streaming OpenAI chat-completions JSON response to Anthropic format."""
+    choice = (parsed.get("choices") or [{}])[0]
+    msg = choice.get("message") or {}
+    finish = choice.get("finish_reason") or "stop"
+
+    content_blocks = []
+    content = msg.get("content")
+    if content:
+        if isinstance(content, str):
+            content_blocks.append({"type": "text", "text": content})
+        elif isinstance(content, list):
+            content_blocks.extend(content)
+
+    # Translate tool_calls → tool_use content blocks
+    for tc in msg.get("tool_calls") or []:
+        try:
+            inp = json.loads(tc.get("function", {}).get("arguments", "{}"))
+        except (ValueError, TypeError):
+            inp = {}
+        content_blocks.append({
+            "type": "tool_use",
+            "id": tc.get("id", ""),
+            "name": tc.get("function", {}).get("name", ""),
+            "input": inp,
+        })
+
+    usage = parsed.get("usage") or {}
+    anthropic = {
+        "id": parsed.get("id", ""),
+        "type": "message",
+        "role": msg.get("role", "assistant"),
+        "content": content_blocks,
+        "model": model,
+        "stop_reason": _FINISH_REASON_MAP.get(finish, "end_turn"),
+        "stop_sequence": None,
+        "usage": {
+            "input_tokens": usage.get("prompt_tokens", 0),
+            "output_tokens": usage.get("completion_tokens", 0),
+        },
+    }
+    return json.dumps(anthropic).encode("utf-8")
+
+
+def _or_stream_translate(sse_text: str, model: str) -> str:
+    """Translate OpenAI SSE chat-completions stream to Anthropic SSE messages format.
+
+    Maintains state across events: content block index, whether message_start has been
+    emitted, and current tool-call accumulation for tool_use blocks.
+    """
+    lines = sse_text.split("\n")
+    out_lines = []
+    # State machine for the translation
+    block_index = 0
+    sent_start = False
+    current_tool = None  # {id, name, arguments_buffer} when accumulating a tool call
+    tool_index = 0  # separate counter for tool blocks
+
+    for line in lines:
+        if not line.startswith("data: "):
+            continue
+        payload = line[len("data: "):].strip()
+        if payload == "[DONE]":
+            continue  # OpenAI end marker — Anthropic has no equivalent
+
+        try:
+            event = json.loads(payload)
+        except (ValueError, TypeError):
+            continue
+
+        choices = event.get("choices") or []
+        if not choices:
+            continue
+        delta = choices[0].get("delta") or {}
+        finish = choices[0].get("finish_reason")
+
+        # Role assignment (first event in a stream)
+        role = delta.get("role")
+        if role == "assistant" and not sent_start:
+            sent_start = True
+            out_lines.append(
+                f'event: message_start\n'
+                f'data: {json.dumps({"type": "message_start", "message": {"id": event.get("id", ""), "type": "message", "role": "assistant", "content": [], "model": model}})}\n'
+            )
+
+        # Content delta
+        content = delta.get("content")
+        if content is not None:
+            if not sent_start:
+                # Safety: emit message_start if we somehow missed it
+                sent_start = True
+                out_lines.append(
+                    f'event: message_start\n'
+                    f'data: {json.dumps({"type": "message_start", "message": {"id": event.get("id", ""), "type": "message", "role": "assistant", "content": [], "model": model}})}\n'
+                )
+            # Start a text content block on first content delta
+            if block_index == 0 and not current_tool:
+                out_lines.append(
+                    f'event: content_block_start\n'
+                    f'data: {json.dumps({"type": "content_block_start", "index": block_index, "content_block": {"type": "text", "text": ""}})}\n'
+                )
+            out_lines.append(
+                f'event: content_block_delta\n'
+                f'data: {json.dumps({"type": "content_block_delta", "index": block_index, "delta": {"type": "text_delta", "text": content}})}\n'
+            )
+
+        # Tool calls delta
+        tool_calls = delta.get("tool_calls")
+        if tool_calls:
+            for tc in tool_calls:
+                tc_idx = tc.get("index", 0)
+                fn = tc.get("function") or {}
+                fn_name = fn.get("name", "")
+                fn_args = fn.get("arguments", "")
+
+                if tc.get("id"):
+                    # New tool call starting
+                    if current_tool:
+                        # Close previous tool block
+                        out_lines.append(
+                            f'event: content_block_stop\n'
+                            f'data: {json.dumps({"type": "content_block_stop", "index": block_index})}\n'
+                        )
+                        block_index += 1
+                    current_tool = {
+                        "id": tc["id"],
+                        "name": fn_name,
+                        "arguments": fn_args or "",
+                    }
+                    # Emit content_block_start for the tool_use
+                    out_lines.append(
+                        f'event: content_block_start\n'
+                        f'data: {json.dumps({"type": "content_block_start", "index": block_index, "content_block": {"type": "tool_use", "id": current_tool["id"], "name": current_tool["name"], "input": {}}})}\n'
+                    )
+                    if fn_args:
+                        out_lines.append(
+                            f'event: content_block_delta\n'
+                            f'data: {json.dumps({"type": "content_block_delta", "index": block_index, "delta": {"type": "input_json_delta", "partial_json": fn_args}})}\n'
+                        )
+                elif current_tool and fn_args:
+                    # Accumulate arguments for existing tool call
+                    current_tool["arguments"] += fn_args
+                    out_lines.append(
+                        f'event: content_block_delta\n'
+                        f'data: {json.dumps({"type": "content_block_delta", "index": block_index, "delta": {"type": "input_json_delta", "partial_json": fn_args}})}\n'
+                    )
+
+        # Finish reason — close content blocks and emit message_delta
+        if finish:
+            if current_tool:
+                out_lines.append(
+                    f'event: content_block_stop\n'
+                    f'data: {json.dumps({"type": "content_block_stop", "index": block_index})}\n'
+                )
+                block_index += 1
+                current_tool = None
+            elif block_index == 0 and sent_start:
+                # Close the text block
+                out_lines.append(
+                    f'event: content_block_stop\n'
+                    f'data: {json.dumps({"type": "content_block_stop", "index": block_index})}\n'
+                )
+                block_index += 1
+
+            usage = event.get("usage") or {}
+            stop_reason = _FINISH_REASON_MAP.get(finish, "end_turn")
+            out_lines.append(
+                f'event: message_delta\n'
+                f'data: {json.dumps({"type": "message_delta", "delta": {"stop_reason": stop_reason, "stop_sequence": None}, "usage": {"output_tokens": usage.get("completion_tokens", 0)}})}\n'
+            )
+
+    return "\n".join(out_lines)
+
+
+class _ORStreamingTranslator:
+    """Stateful streaming translator for OpenAI SSE → Anthropic SSE events.
+
+    Processes one OpenAI SSE ``data:`` line at a time and emits the corresponding
+    Anthropic SSE event lines, preserving content-block and tool-call state across
+    successive calls so the proxy can write translated output incrementally instead
+    of buffering the entire upstream response first.
+    """
+
+    def __init__(self, model: str):
+        self.model = model
+        self.block_index = 0
+        self.sent_start = False
+        self.current_tool = None  # {id, name, arguments_buffer} when accumulating a tool call
+        self._done = False
+
+    def feed(self, event_json: dict) -> str:
+        """Process one OpenAI SSE event dict and return Anthropic SSE lines.
+
+        Returns an empty string when the event carries nothing to emit (e.g. a
+        heartbeat or an already-consumed usage-only event after message_delta).
+        """
+        if self._done:
+            return ""
+
+        out = ""
+        choices = event_json.get("choices") or []
+        if not choices:
+            return ""
+        delta = choices[0].get("delta") or {}
+        finish = choices[0].get("finish_reason")
+        event_id = event_json.get("id", "")
+
+        # Role assignment (first event in a stream)
+        role = delta.get("role")
+        if role == "assistant" and not self.sent_start:
+            self.sent_start = True
+            out += (
+                f'event: message_start\n'
+                f'data: {json.dumps({"type": "message_start", "message": {"id": event_id, "type": "message", "role": "assistant", "content": [], "model": self.model}})}\n\n'
+            )
+
+        # Content delta
+        content = delta.get("content")
+        if content is not None:
+            if not self.sent_start:
+                self.sent_start = True
+                out += (
+                    f'event: message_start\n'
+                    f'data: {json.dumps({"type": "message_start", "message": {"id": event_id, "type": "message", "role": "assistant", "content": [], "model": self.model}})}\n\n'
+                )
+            # Start a text content block on first content delta
+            if self.block_index == 0 and not self.current_tool:
+                out += (
+                    f'event: content_block_start\n'
+                    f'data: {json.dumps({"type": "content_block_start", "index": self.block_index, "content_block": {"type": "text", "text": ""}})}\n\n'
+                )
+            out += (
+                f'event: content_block_delta\n'
+                f'data: {json.dumps({"type": "content_block_delta", "index": self.block_index, "delta": {"type": "text_delta", "text": content}})}\n\n'
+            )
+
+        # Tool calls delta
+        tool_calls = delta.get("tool_calls")
+        if tool_calls:
+            for tc in tool_calls:
+                fn = tc.get("function") or {}
+                fn_name = fn.get("name", "")
+                fn_args = fn.get("arguments", "")
+
+                if tc.get("id"):
+                    # New tool call starting
+                    if self.current_tool:
+                        out += (
+                            f'event: content_block_stop\n'
+                            f'data: {json.dumps({"type": "content_block_stop", "index": self.block_index})}\n\n'
+                        )
+                        self.block_index += 1
+                    self.current_tool = {
+                        "id": tc["id"],
+                        "name": fn_name,
+                        "arguments": fn_args or "",
+                    }
+                    out += (
+                        f'event: content_block_start\n'
+                        f'data: {json.dumps({"type": "content_block_start", "index": self.block_index, "content_block": {"type": "tool_use", "id": self.current_tool["id"], "name": self.current_tool["name"], "input": {}}})}\n\n'
+                    )
+                    if fn_args:
+                        out += (
+                            f'event: content_block_delta\n'
+                            f'data: {json.dumps({"type": "content_block_delta", "index": self.block_index, "delta": {"type": "input_json_delta", "partial_json": fn_args}})}\n\n'
+                        )
+                elif self.current_tool and fn_args:
+                    # Accumulate arguments for existing tool call
+                    self.current_tool["arguments"] += fn_args
+                    out += (
+                        f'event: content_block_delta\n'
+                        f'data: {json.dumps({"type": "content_block_delta", "index": self.block_index, "delta": {"type": "input_json_delta", "partial_json": fn_args}})}\n\n'
+                    )
+
+        # Finish reason — close content blocks and emit message_delta
+        if finish:
+            if self.current_tool:
+                out += (
+                    f'event: content_block_stop\n'
+                    f'data: {json.dumps({"type": "content_block_stop", "index": self.block_index})}\n\n'
+                )
+                self.block_index += 1
+                self.current_tool = None
+            elif self.block_index == 0 and self.sent_start:
+                out += (
+                    f'event: content_block_stop\n'
+                    f'data: {json.dumps({"type": "content_block_stop", "index": self.block_index})}\n\n'
+                )
+                self.block_index += 1
+
+            usage = event_json.get("usage") or {}
+            stop_reason = _FINISH_REASON_MAP.get(finish, "end_turn")
+            out += (
+                f'event: message_delta\n'
+                f'data: {json.dumps({"type": "message_delta", "delta": {"stop_reason": stop_reason, "stop_sequence": None}, "usage": {"output_tokens": usage.get("completion_tokens", 0)}})}\n\n'
+            )
+            self._done = True
+
+        return out
+
+
 def _opencode_scrub(payload: dict, note_tag: str) -> list[str]:
     """ADR-107 / homelab#445 compat scrub shared by the Go and Zen rails. opencode.ai's
     Anthropic-compat layer mishandles STRING-shorthand message content (probed 2026-08-13:
@@ -788,6 +1287,15 @@ def compute_pin(model: str) -> dict | None:
                 "basis": "market" if is_market(best) else "list",
                 # ADR-096 P3: the pinned provider's effective $/M input — the /route ordering key.
                 "eff_in": round(eff(best), 6),
+                # provider_slot resolution basis (2026-08-26, the M13 slot verb on the provider
+                # axis): the SELECTED pool, eff-ordered (uptime breaks the all-$0 ties a :free
+                # model's pool degenerates to) — slot N = ranked[N-1]. Entries carry the
+                # provider's OWN max_completion so an @-pinned ride clamps the max_tokens floor
+                # against the provider actually serving it, not the M4 favorite (PR#963 review —
+                # the -32602 class would otherwise re-enter through the pin built to study it).
+                "ranked": [{"slug": e2["slug"] or e2["provider"],
+                            "max_completion": e2["max_completion"]}
+                           for e2 in sorted(pool, key=lambda e3: (eff(e3), -(e3["uptime"] or 0.0)))][:10],
             }
     return None
 
@@ -1459,6 +1967,35 @@ def _anthropic_latch_update(status: int, resp_headers) -> str:
     return ""
 
 
+def _process_sse_event(event_bytes: bytes,
+                       translator: _ORStreamingTranslator | None,
+                       or_model: str,
+                       wfile: io.BufferedWriter) -> _ORStreamingTranslator | None:
+    """Process one complete SSE event (bytes delimited by \\n\\n) and write translated output.
+
+    Shared by the read1 loop and the EOF-flush branch so the per-event
+    parse/translate/write logic has exactly one home (homelab#869).
+    """
+    event_text = event_bytes.decode("utf-8", errors="replace")
+    for line in event_text.split("\n"):
+        if not line.startswith("data: "):
+            continue
+        payload = line[len("data: "):].strip()
+        if payload == "[DONE]":
+            continue
+        try:
+            event = json.loads(payload)
+        except (ValueError, TypeError):
+            continue
+        if translator is None:
+            translator = _ORStreamingTranslator(or_model or "")
+        translated = translator.feed(event)
+        if translated:
+            wfile.write(translated.encode("utf-8"))
+            wfile.flush()
+    return translator
+
+
 class Proxy(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "openrouter-proxy"
@@ -1471,7 +2008,8 @@ class Proxy(BaseHTTPRequestHandler):
 
     def _forward(self, body: bytes | None, note: str,
                  or_model: str | None = None, or_provider: str | None = None,
-                 cb_session: str | None = None, go_leg: bool = False, zen_leg: bool = False) -> None:
+                 cb_session: str | None = None, go_leg: bool = False, zen_leg: bool = False,
+                 or_leg: bool = False) -> None:
         # homelab#22: every forwarded request is registered in-flight for its full lifetime —
         # try/finally so a handler exception can never leak a phantom entry into the gauge.
         key = threading.get_ident()
@@ -1480,7 +2018,8 @@ class Proxy(BaseHTTPRequestHandler):
             _inflight[key] = (label, time.time())
         try:
             self._forward_upstream(body, note, or_model=or_model, or_provider=or_provider,
-                                   cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg)
+                                   cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg,
+                                   or_leg=or_leg)
         finally:
             with _inflight_lock:
                 _inflight.pop(key, None)
@@ -1488,7 +2027,7 @@ class Proxy(BaseHTTPRequestHandler):
     def _forward_upstream(self, body: bytes | None, note: str,
                           or_model: str | None = None, or_provider: str | None = None,
                           cb_session: str | None = None, go_leg: bool = False,
-                          zen_leg: bool = False) -> None:
+                          zen_leg: bool = False, or_leg: bool = False) -> None:
         started = time.time()
         anthropic = self.path.startswith("/anthropic/")
         # ADR-107 (homelab#421): Go leg routing is by MODEL, not path — check it FIRST.
@@ -1526,6 +2065,14 @@ class Proxy(BaseHTTPRequestHandler):
                 log(f"{self.command} {self.path} → 502 [zen-leg] model={or_model or '-'} - ZEN_KEY not set")
                 self._reply_json(502, {"error": "ZEN_KEY is not set - the Zen rail has no credential"})
                 return
+        elif or_leg:  # homelab#791: OpenRouter translation leg — Anthropic surface → OpenAI format
+            # Map from /anthropic/v1/... to OpenRouter's OpenAI-format /api/v1/chat/completions.
+            # The request body was already translated to OpenAI format in do_POST; this block
+            # only adjusts the URL and tags the note so response translation fires below.
+            url = UPSTREAM + "/api/v1/chat/completions"
+            note += "+or-translate"
+            # or_leg uses ref-credential resolution, which may return a subscription oauth token.
+            # We'll handle the allowlist + oauth check below after resolving the ref.
         elif anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
             url = ANTHROPIC_UPSTREAM + self.path[len("/anthropic"):]
             note += "+anthropic"
@@ -1543,35 +2090,72 @@ class Proxy(BaseHTTPRequestHandler):
         headers = {k: v for k, v in self.headers.items() if k.lower() not in _DROP_REQ}
         # ADR-107 / homelab#445: opencode-leg auth (Go + Zen) — REPLACE all inbound auth with the
         # rail's key. The subscription oauth must NEVER reach opencode.ai.
-        if go_leg or zen_leg:
-            # SECURITY: allowlist-only headers for the third-party opencode.ai upstream — never
-            # forward inbound auth headers (case variants like AUTHORIZATION/X-API-KEY could
-            # smuggle the subscription credential past a case-sensitive strip). This is a
-            # cross-provider egress, not an operator-trusted hop; only send what the rail needs.
+        # homelab#791: or_leg (OpenRouter) also uses allowlist + ref-auth injection, but with
+        # explicit oauth-token guard (subscription oauth must never reach third-party).
+        if go_leg or zen_leg or or_leg:
+            # SECURITY: allowlist-only headers for third-party upstreams — never forward inbound
+            # auth headers (case variants like AUTHORIZATION/X-API-KEY could smuggle the subscription
+            # credential past a case-sensitive strip). This is cross-provider egress, not
+            # operator-trusted hop; only send what the rail needs.
             allowed = {}
             for k, v in self.headers.items():
                 lk = k.lower()
                 # Allow: content-type (body shape), anthropic-version (client compat), accept
                 if lk in ("content-type", "anthropic-version", "accept"):
                     allowed[k] = v
-            # Third-party Cloudflare blocks default Python-urllib UAs (live-probed 2026-08-13);
-            # send the proxy's uniform UA, never the client's.
             allowed["User-Agent"] = "homelab-openrouter-proxy"
-            # Inject our auth — both styles because opencode.ai's docs don't commit to one (and
-            # /v1/messages demands x-api-key: Bearer-only → 401, per the zen matrix).
-            rail_key = (ZEN_KEY if zen_leg else GO_KEY)
-            rail_key = (rail_key.split() or [""])[-1]  # last-token sanitization
-            allowed["x-api-key"] = rail_key
-            allowed["Authorization"] = f"Bearer {rail_key}"
+            if go_leg or zen_leg:
+                # Go/Zen: inject the rail's own key (not a ref — keys are environment secrets)
+                rail_key = (ZEN_KEY if zen_leg else GO_KEY)
+                rail_key = (rail_key.split() or [""])[-1]  # last-token sanitization
+                allowed["x-api-key"] = rail_key
+                allowed["Authorization"] = f"Bearer {rail_key}"
+                note += "+zen-auth-swap" if zen_leg else "+go-auth-swap"
+            elif or_leg:
+                # or_leg: resolve ref-auth and guard against subscription oauth egress
+                # Copy the inbound Authorization header into allowed BEFORE resolving the ref
+                auth_v = next((v for k, v in self.headers.items() if k.lower() == "authorization"), None)
+                if auth_v:
+                    allowed["Authorization"] = auth_v
+                _inject_suffix = _inject_ref_auth(allowed)
+                # homelab#1004: fail CLOSED — a ref that cannot be resolved must never be
+                # forwarded credential-less (a single upstream 401 latches the circuit-breaker).
+                if "+cred-unresolved" in _inject_suffix:
+                    log(f"{self.command} {self.path} → 502 [or-leg] model={or_model or '-'} - "
+                        f"credential ref could not be resolved — refusing locally (homelab#1004)")
+                    self._reply_json(502, {
+                        "error": "or-leg credential ref could not be resolved — refusing locally"
+                    })
+                    return
+                note += _inject_suffix
+                # Check if the resolved auth is a subscription oauth token — refuse it loudly
+                auth_k = next((k for k in allowed if k.lower() == "authorization"), None)
+                if auth_k and allowed[auth_k].startswith("Bearer sk-ant-oat"):
+                    log(f"{self.command} {self.path} → 502 [or-leg] model={or_model or '-'} - "
+                        f"subscription oauth egress blocked")
+                    self._reply_json(502, {
+                        "error": "or-leg credential guard: subscription oauth token cannot reach "
+                                 "third-party OpenRouter (ADR-087 / homelab#791)"
+                    })
+                    return
             headers = allowed
-            # Also strip anthropic-beta headers (they're Anthropic-specific, not opencode's).
+            # Strip anthropic-beta headers (Anthropic-specific, not needed for Go/Zen/OpenRouter)
             headers = {k: v for k, v in headers.items() if k.lower() != "anthropic-beta"}
-            note += "+zen-auth-swap" if zen_leg else "+go-auth-swap"
         else:
-            note += _inject_ref_auth(headers)  # ADR-087: opaque-ref -> real key, every method/path
-        # ADR-107 / homelab#445: oauth-beta reinjection is Anthropic-specific — never run for an
-        # opencode rail. The allowlist already strips anthropic-beta, but this guard is explicit.
-        if anthropic and not go_leg and not zen_leg:
+            _inject_suffix = _inject_ref_auth(headers)
+            # homelab#1004: fail CLOSED — a ref that cannot be resolved must never be forwarded
+            # credential-less (a single upstream 401 latches the circuit-breaker).
+            if "+cred-unresolved" in _inject_suffix:
+                log(f"{self.command} {self.path} → 502 [ref-unresolved] - "
+                    f"credential ref could not be resolved — refusing locally (homelab#1004)")
+                self._reply_json(502, {
+                    "error": "credential ref could not be resolved — refusing locally"
+                })
+                return
+            note += _inject_suffix
+        # ADR-107 / homelab#445: oauth-beta reinjection is Anthropic-specific — never run for
+        # opencode rails or the or_leg. The allowlist already strips anthropic-beta, but explicit.
+        if anthropic and not go_leg and not zen_leg and not or_leg:
             # Subscription oauth tokens need the oauth beta; the ANTHROPIC_AUTH_TOKEN gateway
             # path in claude-code doesn't send it (only the CLAUDE_CODE_OAUTH_TOKEN path does).
             auth_k = next((k for k in headers if k.lower() == "authorization"), None)
@@ -1657,24 +2241,84 @@ class Proxy(BaseHTTPRequestHandler):
         # still falls to READ_TIMEOUT_S, hence the one-READ_TIMEOUT_S overshoot bound above.
         read1 = getattr(resp, "read1", resp.read)  # HTTPError bodies may lack read1 (finite anyway)
         try:
-            while chunk := read1(8192):
-                self.wfile.write(chunk)
-                self.wfile.flush()
-                if or_model and len(head) < 16384:
-                    head += chunk
-                # opencode rails (Go/Zen): keep a rolling tail buffer (last 16KB) for usage extraction
-                if (go_leg or zen_leg) and 200 <= status < 300:
-                    tail = (tail + chunk)[-16384:]
-                sent += len(chunk)
-                if deadline and time.time() > deadline:
-                    with _inflight_lock:
-                        _deadline_exceeded[or_model or "other"] = \
-                            _deadline_exceeded.get(or_model or "other", 0) + 1
-                    log(f"REQUEST DEADLINE EXCEEDED: {self.command} {self.path} "
-                        f"model={or_model or '-'} — severing after {time.time() - started:.0f}s "
-                        f"(deadline {deadline_s:.0f}s, {sent}B relayed; homelab#22)")
-                    note += "+deadline-severed"
-                    break
+            if or_leg and 200 <= status < 300:
+                # homelab#791 + ADR-103: translate the OpenAI-format response to Anthropic format.
+                # Streaming (SSE) responses are translated INCREMENTALLY — each complete SSE
+                # event is translated and written as it arrives, so the downstream client never
+                # waits for the entire upstream response to complete before seeing the first
+                # token. Non-streaming (JSON) responses are buffered and translated in one pass.
+                buf = b""
+                sse_buf = b""
+                translator = None
+                is_sse = False
+                while chunk := read1(8192):
+                    if not is_sse and not buf:
+                        # Peek at the first chunk to detect SSE (data: prefix)
+                        text = chunk.decode("utf-8", errors="replace")
+                        is_sse = text.startswith("data: ") or "\ndata: " in text
+                    if is_sse:
+                        # Streaming path: accumulate line buffer, extract complete SSE
+                        # events (delimited by \n\n), translate each event incrementally
+                        # and write immediately.
+                        sse_buf += chunk
+                        sent += len(chunk)
+                        while b"\n\n" in sse_buf:
+                            event_bytes, _, sse_buf = sse_buf.partition(b"\n\n")
+                            translator = _process_sse_event(
+                                event_bytes, translator, or_model or "", self.wfile)
+                        if deadline and time.time() > deadline:
+                            with _inflight_lock:
+                                _deadline_exceeded[or_model or "other"] = \
+                                    _deadline_exceeded.get(or_model or "other", 0) + 1
+                            log(f"REQUEST DEADLINE EXCEEDED: {self.command} {self.path} "
+                                f"model={or_model or '-'} — severing after {time.time() - started:.0f}s "
+                                f"(deadline {deadline_s:.0f}s, or-leg SSE; homelab#22)")
+                            note += "+deadline-severed"
+                            break
+                    else:
+                        # Non-streaming (JSON) path: buffer and translate in one pass.
+                        buf += chunk
+                        sent += len(chunk)
+                        if deadline and time.time() > deadline:
+                            with _inflight_lock:
+                                _deadline_exceeded[or_model or "other"] = \
+                                    _deadline_exceeded.get(or_model or "other", 0) + 1
+                            log(f"REQUEST DEADLINE EXCEEDED: {self.command} {self.path} "
+                                f"model={or_model or '-'} — severing after {time.time() - started:.0f}s "
+                                f"(deadline {deadline_s:.0f}s, or-leg; homelab#22)")
+                            note += "+deadline-severed"
+                            buf = buf[:131072]
+                            break
+                if not is_sse:
+                    translated = _or_response_translate(buf, or_model or "")
+                    self.wfile.write(translated)
+                    self.wfile.flush()
+                elif sse_buf:
+                    # EOF flush (homelab#852): an upstream whose final SSE event is not
+                    # terminated by \n\n leaves residue in sse_buf. Process it as a
+                    # final event so the client receives the closing content_block_stop
+                    # / message_delta instead of a truncated stream.
+                    translator = _process_sse_event(
+                        sse_buf, translator, or_model or "", self.wfile)
+            else:
+                while chunk := read1(8192):
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+                    if or_model and len(head) < 16384:
+                        head += chunk
+                    # opencode rails (Go/Zen): keep a rolling tail buffer (last 16KB) for usage extraction
+                    if (go_leg or zen_leg) and 200 <= status < 300:
+                        tail = (tail + chunk)[-16384:]
+                    sent += len(chunk)
+                    if deadline and time.time() > deadline:
+                        with _inflight_lock:
+                            _deadline_exceeded[or_model or "other"] = \
+                                _deadline_exceeded.get(or_model or "other", 0) + 1
+                        log(f"REQUEST DEADLINE EXCEEDED: {self.command} {self.path} "
+                            f"model={or_model or '-'} — severing after {time.time() - started:.0f}s "
+                            f"(deadline {deadline_s:.0f}s, {sent}B relayed; homelab#22)")
+                        note += "+deadline-severed"
+                        break
         except OSError as e:
             log(f"{self.command} {self.path} → client/upstream dropped mid-stream: {e}")
         finally:
@@ -2394,6 +3038,7 @@ class Proxy(BaseHTTPRequestHandler):
         cb_session = None
         go_leg = False  # ADR-107 (homelab#421): Go rail routing by model prefix
         zen_leg = False  # homelab#445: Zen free rail routing by model prefix
+        or_leg = False  # homelab#791: OpenRouter translation leg
         if self.path.rstrip("/").endswith("/chat/completions") and body:
             try:
                 payload = json.loads(body)
@@ -2417,6 +3062,77 @@ class Proxy(BaseHTTPRequestHandler):
                             self.close_connection = True
                             return
                     notes = []
+                    # CELL PROVIDER PIN (2026-08-26, the 0731 matrix / #783 provider attribution):
+                    # a `@<provider-slug>` suffix on the model id is OUR proxy's grammar — in-band
+                    # through every harness (-m / GOOSE_MODEL) — pinning EXACTLY that provider with
+                    # allow_fallbacks: false and suppressing the M4 pin: a benchmark cell must fail
+                    # as THAT provider's typed verdict, never slide to a sibling. Stripped before
+                    # upstream. A `:exacto` suffix conversely forwards UNTOUCHED with the M4 pin
+                    # skipped — exacto's whole point is upstream's tool-call-quality ordering,
+                    # which an injected provider.order would override. Both parsed here, before
+                    # cooldown/circuit keying, so evidence stays keyed on the BASE model id.
+                    at_provider_pin = None
+                    _m_raw = str(payload["model"])
+                    if "@" in _m_raw:
+                        _m_base, _at_tok = _m_raw.rsplit("@", 1)
+                        payload["model"] = _m_base
+                        at_pin_maxc = None
+                        if _at_tok.isdigit():
+                            # provider_slot — the M13 slot verb on the PROVIDER axis: N indexes
+                            # the proxy's eff-ranked eligible endpoints for the base model. An
+                            # unresolvable slot is a TYPED refusal, never a silent fallback —
+                            # the caller's slot walk needs a clean end.
+                            _slot = int(_at_tok)
+                            _nm = normalize_model(_m_base)
+                            _sp = pin_for(_nm)
+                            if _sp is None and _nm.endswith(":free"):
+                                # pin_for short-circuits :free (M4 sidestep) before ranking —
+                                # but a slot ride is EVIDENCE work and free candidates are
+                                # first-class intake citizens (PR#963 review). Uncached direct
+                                # compute; slot volume is canary-scale.
+                                try:
+                                    _sp = compute_pin(_nm)
+                                except Exception:
+                                    _sp = None
+                            _ranked = (_sp or {}).get("ranked") or []
+                            if _slot < 1 or _slot > len(_ranked):
+                                log(f"POST {self.path} → 400 provider_slot {_slot} unresolvable"
+                                    f" (depth {len(_ranked)}) model={_m_base}")
+                                self._reply_json(400, {"error": {
+                                    "code": "provider-slot-unresolvable",
+                                    "message": f"provider_slot {_slot} unresolvable for"
+                                               f" {_m_base} (ranked depth {len(_ranked)})"}})
+                                return
+                            _entry = _ranked[_slot - 1]
+                            at_provider_pin = _entry["slug"]
+                            at_pin_maxc = _entry.get("max_completion")
+                            notes.append(f"at-pin:slot{_slot}={at_provider_pin}")
+                        else:
+                            at_provider_pin = _at_tok
+                            # Best-effort cap lookup for an explicit slug: its ranked entry, when
+                            # the M4 machinery knows one; an unranked slug keeps the global floor.
+                            _nm = normalize_model(_m_base)
+                            _sp = pin_for(_nm)
+                            if _sp is None and _nm.endswith(":free"):
+                                # Same :free fallback as the numeric slot arm above — pin_for
+                                # short-circuits :free before ranking, and without the ranked
+                                # entry a slug-pinned free ride keeps the unclamped global
+                                # MAX_TOKENS_FLOOR, reopening the -32602 truncation class this
+                                # clamp exists to close (PR#963 review, sibling-case gap).
+                                try:
+                                    _sp = compute_pin(_nm)
+                                except Exception:
+                                    _sp = None
+                            for _entry in ((_sp or {}).get("ranked") or []):
+                                if isinstance(_entry, dict) and _entry.get("slug") == _at_tok:
+                                    at_pin_maxc = _entry.get("max_completion")
+                                    break
+                            notes.append(f"at-pin:{at_provider_pin}")
+                        payload["provider"] = {"order": [at_provider_pin],
+                                               "allow_fallbacks": False}
+                    exacto_no_pin = str(payload["model"]).endswith(":exacto")
+                    if exacto_no_pin:
+                        notes.append("exacto:no-pin")
                     or_model = normalize_model(str(payload["model"]))
                     # ADR-107 / homelab#445: the opencode legs — a model id starting with
                     # `opencode-go/` (Go rail) or `opencode/` (Zen free rail) routes to the
@@ -2471,9 +3187,10 @@ class Proxy(BaseHTTPRequestHandler):
                             self.wfile.write(reject)
                             self.close_connection = True
                             return
-                        pin = pin_for(str(payload["model"]))
-                        # An explicit `provider` (a harness/opencode.json that CAN carry prefs, or a
-                        # hand-crafted request) always wins — never overwrite policy already in the body.
+                        pin = None if exacto_no_pin else pin_for(str(payload["model"]))
+                        # An explicit `provider` (a harness/opencode.json that CAN carry prefs, a
+                        # hand-crafted request, or the @provider suffix above) always wins — never
+                        # overwrite policy already in the body.
                         if isinstance(payload.get("provider"), dict):
                             or_provider = (payload["provider"].get("order") or [None])[0]
                         if pin and "provider" not in payload:
@@ -2485,7 +3202,12 @@ class Proxy(BaseHTTPRequestHandler):
                         # max_tokens to MAX_TOKENS_FLOOR, clamped to the pinned endpoint's
                         # max_completion_tokens when known. An explicit value ABOVE the floor wins.
                         floor = MAX_TOKENS_FLOOR
-                        if pin and isinstance(pin.get("max_completion"), int):
+                        if at_provider_pin is not None:
+                            # @-pinned ride: clamp against the provider ACTUALLY serving it —
+                            # the M4 favorite's cap is a different provider's fact (PR#963).
+                            if isinstance(at_pin_maxc, int):
+                                floor = min(floor, at_pin_maxc)
+                        elif pin and isinstance(pin.get("max_completion"), int):
                             floor = min(floor, pin["max_completion"])
                         current = payload.get("max_tokens")
                         if floor > 0 and (not isinstance(current, int) or current < floor):
@@ -2540,10 +3262,22 @@ class Proxy(BaseHTTPRequestHandler):
                         body = json.dumps(payload).encode()
                         note = "zen-leg"
                         or_model = bare  # For logging, use the bare model id
+                    elif model.startswith(OR_PREFIX):
+                        # homelab#791: OpenRouter model on the /anthropic surface — translate
+                        # the Anthropic-format request body to OpenAI chat-completions format
+                        # and forward to OpenRouter instead of Anthropic API.
+                        # _or_request_translate handles everything: string→block normalization,
+                        # tool/field mapping, and model prefix stripping.
+                        or_leg = True
+                        bare = model[len(OR_PREFIX):]
+                        translated, _ = _or_request_translate(body)
+                        body = json.dumps(translated).encode()
+                        note = "or-translate-leg"
+                        or_model = bare  # For logging, use the bare model id
             except ValueError:
                 pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
-                      cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg)
+                      cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg, or_leg=or_leg)
 
 
 def main() -> int:
@@ -3725,6 +4459,459 @@ data: [DONE]
     _go_response["body"] = b'data: {"ok":true}\n\ndata: [DONE]\n\n'
 
     # ── ADR-108 ingest self-tests (§4) ───────────────────────────────────────────────────────────
+    print("\n=== OR translation leg tests (homelab#791) ===")
+    # The OR leg translates Anthropic-format /anthropic/v1/messages requests with an
+    # `openrouter/` model to OpenAI-format /chat/completions requests, forwards to OpenRouter,
+    # and translates the OpenAI response back to Anthropic format.
+    # Ported from scripts/claude-model-shim.py (the jail shim is the working prototype).
+
+    # Override OR-specific globals for test: UPSTREAM is the OpenRouter stub
+    _or_response = {
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": "Hello from OpenRouter!"},
+                     "finish_reason": "stop"}],
+        "id": "test-gen-12345",
+        "model": "openai/gpt-5",
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+    }
+    # homelab#852: SSE stub mode flag and data for the SSE self-test row
+    _or_stub_sse = False
+    _or_stub_sse_data = b""
+
+    class ORStub(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+        def log_message(self, *_):
+            pass
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length) if length else b""
+            parsed = json.loads(body) if body else {}
+            seen["or_translate"] = {
+                "path": self.path,
+                "auth": self.headers.get("Authorization"),
+                "model": parsed.get("model") if body else None,
+                "body_raw": body,
+                "messages": parsed.get("messages") if body else None,
+            }
+            # homelab#852: SSE stub mode — return text/event-stream when flag is set.
+            # homelab#869: write in ≥2 chunks with a flush between them (no Content-Length,
+            # close-delimited) so the client observes translated bytes before the final
+            # chunk is sent — pinning incrementality, not just the EOF flush.
+            if _or_stub_sse:
+                out = _or_stub_sse_data
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                # Split at the first \n\n boundary so at least one complete SSE event
+                # is delivered in the first write, then the rest in a second write.
+                split_at = out.find(b"\n\n")
+                if split_at >= 0 and split_at + 2 < len(out):
+                    first = out[:split_at + 2]
+                    rest = out[split_at + 2:]
+                    self.wfile.write(first)
+                    self.wfile.flush()
+                    time.sleep(0.05)  # give the client a chance to read the first chunk
+                    self.wfile.write(rest)
+                    self.wfile.flush()
+                else:
+                    self.wfile.write(out)
+                    self.wfile.flush()
+                return
+            out = json.dumps(_or_response).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+    or_stub_server = ThreadingHTTPServer(("127.0.0.1", 18196), ORStub)
+    threading.Thread(target=or_stub_server.serve_forever, daemon=True).start()
+
+    # Save and redirect UPSTREAM to the OR stub so the translation leg tests use it
+    _old_upstream = UPSTREAM
+    UPSTREAM = "http://127.0.0.1:18196"
+
+    # Test 1: openrouter/ model on /anthropic path → translated to OpenAI format and back
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/openai/gpt-5",
+                  "max_tokens": 4096,
+                  "messages": [{"role": "user", "content": "Hello"}],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer OAUTH-SECRET"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    check(r.status == 200, "or-translate: 200 from Anthropic-surface OR leg")
+    o = seen.get("or_translate") or {}
+    # The forwarded request should have OpenAI format (model bare, /api/v1/chat/completions)
+    check(o.get("path") == "/api/v1/chat/completions",
+          f"or-translate: path is /api/v1/chat/completions (got {o.get('path')})")
+    check(o.get("model") == "openai/gpt-5" or o.get("model") == "gpt-5",
+          f"or-translate: openrouter/ prefix stripped (got model={o.get('model')})")
+    # Verify the response was translated back to Anthropic format
+    try:
+        resp = json.loads(data)
+        check(resp.get("type") == "message", f"or-translate: response type is 'message' (got {resp.get('type')})")
+        content = resp.get("content") or []
+        check(len(content) > 0 and content[0].get("type") == "text",
+              f"or-translate: response has text content block (got {content})")
+    except (ValueError, TypeError) as e:
+        check(False, f"or-translate: response is valid JSON (err={e}, data={data[:200]!r})")
+
+    # Test 2: tool call round-trip through the translation
+    _or_response = {
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": "call_abc123",
+                    "type": "function",
+                    "function": {
+                        "name": "bash",
+                        "arguments": '{"command": "ls -la"}',
+                    },
+                }],
+            },
+            "finish_reason": "tool_calls",
+        }],
+        "id": "test-gen-67890",
+        "model": "openai/gpt-5",
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+    }
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/anthropic/claude-3-sonnet",
+                  "max_tokens": 4096,
+                  "messages": [{"role": "user", "content": "Run a command"}],
+                  "tools": [{"name": "bash", "description": "Shell tool",
+                             "input_schema": {"type": "object", "properties": {}}}],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer OAUTH-SECRET"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    check(r.status == 200, "or-translate tool_call: 200")
+    try:
+        resp = json.loads(data)
+        content_blocks = resp.get("content") or []
+        has_tool_use = any(b.get("type") == "tool_use" for b in content_blocks)
+        check(has_tool_use, "or-translate tool_call: response has tool_use content block")
+        check(resp["stop_reason"] == "tool_use",
+              f"or-translate tool_call: stop_reason is 'tool_use' (got {resp.get('stop_reason')})")
+    except (ValueError, TypeError):
+        check(False, "or-translate tool_call: response is valid JSON")
+
+    # Test 2b: tool_result follow-up (multi-turn tool round-trip)
+    # The response to Test 2 should have had a tool_use block with an id; now we send a follow-up
+    # user message containing a tool_result block (Anthropic format: inline in content).
+    _or_response = {
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": "The directory was empty."},
+            "finish_reason": "stop",
+        }],
+        "id": "test-gen-99999",
+        "model": "openai/gpt-5",
+        "usage": {"prompt_tokens": 15, "completion_tokens": 3},
+    }
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/anthropic/claude-3-sonnet",
+                  "max_tokens": 4096,
+                  "messages": [
+                      {"role": "user", "content": "Run a command"},
+                      {"role": "assistant", "content": [
+                          {"type": "tool_use", "id": "call_abc123", "name": "bash",
+                           "input": {"command": "ls -la"}}
+                      ]},
+                      {"role": "user", "content": [
+                          {"type": "tool_result", "tool_use_id": "call_abc123",
+                           "content": "total 0"}
+                      ]},
+                  ],
+                  "tools": [{"name": "bash", "description": "Shell tool",
+                             "input_schema": {"type": "object", "properties": {}}}],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer OAUTH-SECRET"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    check(r.status == 200, "or-translate tool_result: 200")
+    o = seen.get("or_translate") or {}
+    # Verify the tool_result was translated: check that the forwarded messages include a tool-role message
+    try:
+        sent_msg = o.get("messages") or []
+        has_tool_role = any(m.get("role") == "tool" and m.get("tool_call_id") for m in sent_msg)
+        check(has_tool_role,
+              f"or-translate tool_result: forwarded request has role='tool' message with tool_call_id")
+    except (ValueError, TypeError):
+        check(False, "or-translate tool_result: forwarded body is valid JSON")
+
+    # Test 2d: tool_result.content as a LIST — forwarded verbatim per _or_request_translate
+    # Anthropic allows tool_result.content to be a list of content blocks (e.g. an image block
+    # paired with a text caption). _or_request_translate passes it through to the OpenAI tool
+    # message without stringification. This test pins the actual behaviour — a self-test row
+    # so the reviewer can see whether OR's compat layer accepts it as-is, rather than guessing.
+    _or_response = {
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": "I see the image result."},
+            "finish_reason": "stop",
+        }],
+        "id": "test-gen-list-content",
+        "model": "openai/gpt-5",
+        "usage": {"prompt_tokens": 20, "completion_tokens": 5},
+    }
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/anthropic/claude-3-sonnet",
+                  "max_tokens": 4096,
+                  "messages": [
+                      {"role": "user", "content": "Read this file"},
+                      {"role": "assistant", "content": [
+                          {"type": "tool_use", "id": "call_read123", "name": "read",
+                           "input": {"path": "/tmp/test.txt"}}
+                      ]},
+                      {"role": "user", "content": [
+                          {"type": "tool_result", "tool_use_id": "call_read123",
+                           "content": [{"type": "text", "text": "file contents here"},
+                                       {"type": "image", "source": {"type": "base64",
+                                        "media_type": "image/png",
+                                        "data": "iVBORw0KGgo="}}]}
+                      ]},
+                  ],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer OAUTH-SECRET"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    check(r.status == 200, "or-translate tool_result list content: 200")
+    o = seen.get("or_translate") or {}
+    try:
+        sent_msg = o.get("messages") or []
+        # Find the tool-role message that carries the forwarded content
+        tool_msg = next((m for m in sent_msg if m.get("role") == "tool"), None)
+        check(tool_msg is not None, "or-translate tool_result list: forwarded has tool-role message")
+        tool_content = tool_msg.get("content") if tool_msg else None
+        # The content MUST be forwarded AS THE LIST the Anthropic request sent — not
+        # stringified to a single string. This is the point of the test: pin the pass-through.
+        check(isinstance(tool_content, list),
+              f"or-translate tool_result list: content is a list (got {type(tool_content).__name__})")
+        check(len(tool_content) == 2,
+              f"or-translate tool_result list: two blocks in forwarded content (got {len(tool_content) if isinstance(tool_content, list) else 'not a list'})")
+        first_block = tool_content[0] if isinstance(tool_content, list) else {}
+        check(isinstance(first_block, dict) and first_block.get("type") == "text",
+              f"or-translate tool_result list: first block type is 'text' (got {first_block.get('type') if isinstance(first_block, dict) else 'n/a'})")
+    except (ValueError, TypeError, StopIteration):
+        check(False, "or-translate tool_result list: parseable forwarded body")
+    # Mock a ref resolution: agent-ns/openrouter-key resolves to the test key
+    _refs["agent-ns/openrouter-key"] = (time.time() + 3600, {
+        "key": "test-or-key-resolved",
+        "guardrail": "",
+        "kind": "openrouter",
+        "has_cr": False,
+    })
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/openai/gpt-5",
+                  "max_tokens": 4096,
+                  "messages": [{"role": "user", "content": "Test ref-auth"}],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:agent-ns/openrouter-key"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    check(r.status == 200, "or-translate ref-auth: 200")
+    o = seen.get("or_translate") or {}
+    # Assert the OpenRouter stub received an Authorization header
+    check(o.get("auth") is not None, f"or-translate ref-auth: Authorization header forwarded (got {o.get('auth')})")
+    # Assert it's not the raw inbound ref value, and not the raw oauth — must be the resolved key
+    check(o.get("auth") == "Bearer test-or-key-resolved",
+          f"or-translate ref-auth: Authorization is resolved key, not raw ref (got {o.get('auth')})")
+    # Clean up the mocked ref
+    _refs.pop("agent-ns/openrouter-key", None)
+
+    _refs.pop("agent-ns/openrouter-key", None)
+
+    # Test 2e: sk-ant-oat oauth-egress refusal — 502 when resolved auth starts with sk-ant-oat
+    # The refusal branch at ~L1933-1938 must return 502 with zero bytes reaching the OR stub.
+    # This test fails (pins) if the guard is removed: a resolved oauth token MUST NOT egress
+    # to third-party OpenRouter (ADR-087 / homelab#791).
+    _refs["agent-ns/oat-key"] = (time.time() + 3600, {
+        "key": "sk-ant-oat-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "guardrail": "",
+        "kind": "openrouter",
+        "has_cr": False,
+    })
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/openai/gpt-5",
+                  "max_tokens": 4096,
+                  "messages": [{"role": "user", "content": "Test oauth egress guard"}],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:agent-ns/oat-key"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    check(r.status == 502,
+          f"or-translate oauth guard: 502 on sk-ant-oat key (got {r.status})")
+    try:
+        err = json.loads(data)
+        check("credential guard" in (err.get("error") or "").lower() or "oauth" in (err.get("error") or "").lower(),
+              f"or-translate oauth guard: error body mentions credential guard or oauth (got {err.get('error')})")
+    except (ValueError, TypeError):
+        check(False, "or-translate oauth guard: error body is valid JSON")
+    # The OR stub must NOT have received the request — zero bytes forwarded
+    o = seen.get("or_translate") or {}
+    check(o.get("path") is None,
+          f"or-translate oauth guard: OR stub NOT called (path={o.get('path')})")
+    # Clean up the mocked ref
+    _refs.pop("agent-ns/oat-key", None)
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "openrouter/openai/gpt-5",
+                               "messages": [{"role": "user", "content": "Hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer OAUTH-SECRET"})
+    r = c.getresponse()
+    data = r.read()
+    c.close()
+    o = seen.get("or_translate") or {}
+    check(o.get("path") == "/api/v1/chat/completions" or o.get("model") is None,
+          "or-translate: /chat/completions with openrouter/ model passes through (not translated)")
+    # This should have hit the regular /chat/completions handler, which forwards to OpenRouter.
+    # The openrouter/ model stays as-is (normalize_model keeps /vendor/ parts intact).
+
+    # homelab#852: SSE self-test row — exercise the or_leg SSE streaming path through
+    # the real _forward_upstream. The OR stub returns text/event-stream so is_sse is
+    # True, and the last event arrives WITHOUT trailing \n\n to pin the EOF flush.
+    print("\n=== OR translation leg SSE streaming tests (homelab#852) ===")
+    _or_stub_sse = True
+    _sse_events = [
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""},
+                      "finish_reason": None}]},
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {"content": "Hello from SSE"},
+                      "finish_reason": None}]},
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {"tool_calls": [
+             {"index": 0, "id": "call_sse_001", "type": "function",
+              "function": {"name": "bash", "arguments": ""}}]},
+                      "finish_reason": None}]},
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {"tool_calls": [
+             {"index": 0, "function": {"arguments": '{"comman'}}]},
+                      "finish_reason": None}]},
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {"tool_calls": [
+             {"index": 0, "function": {"arguments": 'd": "ls -la"}'}}]},
+                      "finish_reason": None}]},
+        # Last event WITHOUT trailing \n\n — tests the EOF flush
+        {"id": "test-gen-sse-1", "object": "chat.completion.chunk",
+         "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}],
+         "usage": {"prompt_tokens": 12, "completion_tokens": 8}},
+    ]
+    _sse_text = ""
+    for e in _sse_events[:-1]:
+        _sse_text += f"data: {json.dumps(e)}\n\n"
+    _sse_text += f"data: {json.dumps(_sse_events[-1])}"  # no trailing \n\n
+    _or_stub_sse_data = _sse_text.encode("utf-8")
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/anthropic/v1/messages",
+              body=json.dumps({
+                  "model": "openrouter/openai/gpt-5",
+                  "max_tokens": 4096,
+                  "messages": [{"role": "user", "content": "SSE streaming test"}],
+              }),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer OAUTH-SECRET"})
+    r = c.getresponse()
+    # homelab#869: read incrementally to assert translated output reaches the client
+    # before the final chunk is sent (the stub writes in ≥2 chunks with a flush
+    # between them). If _forward_upstream re-buffered the upstream body, the first
+    # read would block until the stub closes the connection (~50ms+ later).
+    # Use r.fp.read1 (BufferedReader.read1) which reads at most one raw read from
+    # the underlying socket and returns immediately — unlike r.read(4096) which
+    # loops until it has accumulated 4096 bytes or hits EOF. With incremental
+    # delivery, the first chunk arrives well before the 50ms inter-chunk sleep;
+    # with buffering, the read blocks until the proxy finishes reading the stub
+    # (after the 50ms sleep) and writes all data to the client.
+    _t0 = time.monotonic()
+    first_chunk = r.fp.read1(4096)
+    _t1 = time.monotonic()
+    _elapsed = _t1 - _t0
+    body_text = first_chunk.decode("utf-8", errors="replace")
+    # Verify translated output is visible after the first chunk AND that it
+    # arrived well before the 50ms inter-chunk sleep — <30ms threshold gives
+    # ample headroom for scheduling jitter on a contended pod.
+    check("event: message_start" in body_text,
+          "or-translate sse: translated output visible before final chunk (incrementality)")
+    check(_elapsed < 0.03,
+          f"or-translate sse: incremental delivery timing (read took {_elapsed*1000:.0f}ms, "
+          f"expected <30ms — if the proxy buffered the whole upstream body, the read would "
+          f"block until the proxy finished reading the stub after the ~50ms sleep)")
+    # Read the rest of the response (r.read() reads from the same BufferedReader,
+    # continuing from where read1 left off)
+    rest = r.read()
+    body_text += rest.decode("utf-8", errors="replace")
+    c.close()
+    _or_stub_sse = False
+    _or_stub_sse_data = b""
+    check(r.status == 200, "or-translate sse: 200 from SSE streaming path")
+    # Verify the response is valid Anthropic SSE with all expected events
+    check("event: message_start" in body_text,
+          "or-translate sse: contains message_start event")
+    check("event: content_block_start" in body_text,
+          "or-translate sse: contains content_block_start event")
+    # Verify text content delta (JSON has spaces after colons)
+    check("\"text\": \"Hello from SSE\"" in body_text,
+          "or-translate sse: text content delta present")
+    # Verify tool call translation (JSON has spaces after colons)
+    check("\"id\": \"call_sse_001\"" in body_text,
+          "or-translate sse: tool call id present in response")
+    check("\"name\": \"bash\"" in body_text,
+          "or-translate sse: tool name present in response")
+    # Verify tool call arguments spanned across chunks (JSON-escaped in the output)
+    check("\\\"ls -la\\\"" in body_text,
+          "or-translate sse: tool call arguments present (split across chunks)")
+    # Verify content_block_stop events (at least one: the tool_use block close;
+    # the text block is never explicitly closed — pre-existing translator behavior)
+    stop_count = body_text.count("event: content_block_stop")
+    check(stop_count >= 1,
+          f"or-translate sse: at least 1 content_block_stop event (got {stop_count})")
+    # Verify message_delta with tool_use stop_reason (JSON has spaces after colons)
+    check("event: message_delta" in body_text,
+          "or-translate sse: contains message_delta event")
+    check("\"stop_reason\": \"tool_use\"" in body_text,
+          "or-translate sse: stop_reason is tool_use")
+
+    # Restore UPSTREAM
+    UPSTREAM = _old_upstream
+
     print("\n=== Ingest endpoint tests ===")
     INGEST_PORT = 8081  # default ingest port
     # Test 18: ingest round-trip — POST a valid row, assert /opencode-limit by_stack gains it

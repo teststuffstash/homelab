@@ -25,6 +25,27 @@ metadata:
 spec:
   entrypoint: main
   serviceAccountName: agent-coordinator
+  # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
+  # (coordinate-argo.yaml). Verbatim copy; keep in sync.
+  # homelab#867 soft Longhorn-disk de-preference — same rationale.
+  podSpecPatch: |
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchExpressions:
+            - { key: workflows.argoproj.io/workflow, operator: Exists }
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 10
+            preference:
+              matchExpressions:
+                - key: node.longhorn.io/create-default-disk
+                  operator: NotIn
+                  values:
+                    - "true"
   synchronization:
     mutexes:
       - name: iac-sentinel

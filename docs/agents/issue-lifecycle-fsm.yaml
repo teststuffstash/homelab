@@ -30,6 +30,7 @@ diagram: |
       Queued --> InProgress: queued-dispatch → ride opens PR (IL-T05)
       InProgress --> InProgress: worker died → c4c5-redispatch (IL-T06)
       InProgress --> Queued: phantom label, persisted → scan reconciles it (IL-T16)
+      Review --> Queued: phantom label, persisted → scan reconciles it (IL-T27)
       InProgress --> Blocked: worker ruled it NOT IMPLEMENTABLE → AGENT_INFEASIBLE parks it (IL-T26)
       Blocked --> Queued: a human re-scopes it and strips agent/blocked (IL-T26)
       InProgress --> ClosedByMerge: PR merges into MASTER — keyword fires (IL-T07)
@@ -305,6 +306,27 @@ transitions:
       - "2026-08-11 oracle-fleet#66: the whole deliverable was .github/workflows/ci.yaml, banned by .agents/fix.yaml. The worker correctly self-reported 'not implementable as written' — with no terminal for it, that landed as AGENT_STRIKE error_class=unknown, and the coordinator had to override the mechanical c4c5-redispatch clause BY HAND (retro r3 F4)"
       - "2026-08-11 oracle-fleet#225: 'none of that is executable by a fix-class worker (no cluster/infra access, no live-API credentials, no oracle-iac checkout)' — the worker RESCOPED itself instead, and its PR's `Fixes #225` then wrongly auto-closed the issue (reopened 19:03:31Z). Self-rescoping is what an agent does when the honest answer has no exit"
 
+  - id: IL-T27
+    name: phantom review reconciled → queued (the belt)
+    owner: coordinator-scan, deterministically — no LLM tick in the path
+    when: "agent-fix ∧ agent/review ∧ no OPEN PR referencing ∧ no MERGED PR mentions the issue ∧ the state PERSISTED past C4C5_PERSIST_S (issue quiet) → add agent/queued, remove agent/review, comment the audit. Verbatim shape of IL-T16's phantom belt applied to the review state instead of in-progress."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/review-phantom-belt
+    guards:
+      - desc: "persistence guard — never actuate on the same instant of state the scan first saw (dispatch + finalize races)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_PERSIST_S" }
+      - desc: "merged-PR hold — a non-closing reference on a merged PR leaves this exact state; holding beats re-riding finished work"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "is mentioned by a MERGED PR" }
+      - desc: "add agent/queued FIRST, remove agent/review SECOND, then re-read and prove the end state (the edit is not atomic)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "ORDER IS LOAD-BEARING" }
+      - desc: "probe failure holds every candidate and writes nothing (rule #6 — never fail INTO a write)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "the phantom-label belt held every candidate" }
+      - desc: "human-gate exclusion — agent/blocked and agent/error are never re-queued by the belt (mirrors C4C5_SEL); a re-queue would hand a human-held issue back to dispatch"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "a human gate is never re-dispatched" }
+    incidents:
+      - "2026-08-09 homelab#778: PR#790 closed unmerged at the fan-out pilot's close — 18h56m stall, invisible to every scan class until a goal checkpoint hand-corrected it, holding a flip criterion"
+
   - id: IL-T07
     name: close by master merge
     owner: GitHub (closing keyword)
@@ -570,12 +592,6 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "A POST-LAUNCH BUCKET IS NOT A SPROUT" }
 
 gaps:
-  - id: IL-G01
-    name: "first live closeout unproven"
-    detail: "FU-143 points 1–7 are fixture-proven and live-scan clean, but no goal child has merged
-      through the widened C6 yet — the first child of circles#29 is the proof."
-    fu: FU-143
-
   - id: IL-G02
     name: "goal branch creation is manual"
     detail: "Nothing creates goal/<n>-<slug> from master; circles#29's ⛔ section assigns it to the

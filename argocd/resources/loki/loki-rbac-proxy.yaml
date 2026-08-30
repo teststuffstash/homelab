@@ -1,0 +1,222 @@
+# loki-rbac-proxy — the AUTHENTICATED, TENANT-SCOPED read door onto Loki.
+#
+# WHY THIS EXISTS. Loki WAS single-tenant (`auth_enabled: false`) until 2026-08-27, so reachability
+# IS authorisation for anything that can open a socket to loki.loki.svc:3100 — other stacks' worker
+# stdout, agent-coordinator, agent-egress, CNPG/Infisical, every node's /dev/kmsg via kmsg-reader.
+# There was no middle state, which is why a stack jail had NO log access at all rather than scoped
+# access. (In-cluster reach is still unscoped BY DESIGN — see the SCOPE banner below.)
+#
+# Loki's own answer to that is `auth_enabled: true` + `X-Scope-OrgID`, and it is worth being precise
+# about what that flag does: it does NOT make Loki authenticate. It makes Loki REQUIRE and TRUST the
+# header, and upstream's design expects an authenticating proxy in front. So tenancy gives the data
+# model and this proxy gives the enforcement — they are two halves of one mechanism, not
+# alternatives. Design + the rejected alternatives: docs/loki-tenancy.md, ADR-118.
+#
+# WHAT THIS COMPONENT DOES, per request:
+#   1. authn — TokenReview on the bearer token (a Kubernetes ServiceAccount token)
+#   2. authz — SubjectAccessReview, with the SAR's `namespace` REWRITTEN from the X-Scope-OrgID
+#      header (see the config below), so scoping is ordinary RBAC rather than code
+#   3. proxies to Loki with the header intact
+#
+# The caller SELF-ASSERTS the tenant and is then AUTHORIZED for it — assert a tenant you have no
+# RoleBinding for and you get 403, not that tenant's logs. That is the property plain
+# `auth_enabled: true` lacks on its own.
+#
+# ⚠ SCOPE, DELIBERATELY NARROW (operator direction 2026-08-27): the only consumer today is a STACK
+# JAIL's workbench SA. Loki keeps its ordinary ClusterIP for in-cluster writes (Alloy) and reads
+# (Grafana), so in-cluster reach is EXACTLY as it was — no better, no worse, nothing existing can
+# regress. This gate is therefore bypassable from inside the cluster BY CONSTRUCTION, and that is
+# an accepted limitation while the consumer set is one jail SA, not a defect to file.
+#   The tightening path, for when in-cluster agents are wired (docs/loki-tenancy.md §Tightening):
+#   bind Loki to 127.0.0.1, route Alloy's writes through a second write-side gate, and point the
+#   Grafana datasource at this service. Do NOT do that piecemeal — a half-move leaves ingest
+#   unauthenticated while reads look gated.
+#
+# ✅ SERVING since 2026-08-27 (rollout step 3) at https://192.168.40.32:8443 — see the LoadBalancer
+# Service at the bottom of this file. It became safe to expose only when `auth_enabled: true`
+# landed and was verified (step 2): before that Loki IGNORED X-Scope-OrgID and would have returned
+# ALL tenants' logs to a caller this proxy authorized for one — a gate that looks real and is not.
+# That ordering is the whole reason the rollout is three steps; docs/loki-tenancy.md §Rollout.
+#
+# ⚠ TLS IS A SELF-SIGNED, IN-MEMORY CERT — kube-rbac-proxy generates one at startup because no
+# --tls-cert-file is given ("Generating self signed cert as no cert is provided" in this pod's log,
+# confirmed live). It is regenerated on every restart, so it cannot be pinned across rolls and
+# callers use `curl -k`. Authentication does NOT depend on it: the bearer token is TokenReviewed
+# server-side, so a MITM on the LAN could observe a query and its results but cannot forge an
+# identity. Giving this a real cert means a hostname + the OPNsense HAProxy/ACME path (ADR-088),
+# which is FU-193 — deliberately not bundled into the exposure step.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loki-rbac-proxy
+  namespace: loki
+---
+# The proxy's OWN identity needs exactly two cluster-scoped creates, and neither reads anything:
+# TokenReview validates a token, SubjectAccessReview asks a question RBAC already knows the answer
+# to. Same narrowness rationale as the egress proxy's tokenreview grant
+# (argocd/resources/openrouter-proxy/rbac.yaml) — this is the off-the-shelf twin of that pattern.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loki-rbac-proxy-authn
+rules:
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+  - apiGroups: [authorization.k8s.io]
+    resources: [subjectaccessreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loki-rbac-proxy-authn
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: loki-rbac-proxy-authn }
+subjects:
+  - { kind: ServiceAccount, name: loki-rbac-proxy, namespace: loki }
+---
+# The pseudo-resource a tenant read is authorized against. `loki.teststuff.net/logs` is not a CRD
+# and does not need to be: SubjectAccessReview matches resource strings, and RBAC rules are string
+# matches — the same shape kube-rbac-proxy's own examples use (`resource: namespace, subresource:
+# metrics`). The verb comes from the HTTP method (GET→get, POST→create), and Loki's query API is
+# reachable both ways, so a reader needs both.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loki-tenant-reader
+rules:
+  - apiGroups: [loki.teststuff.net]
+    resources: [logs]
+    verbs: [get, create]
+---
+# The SAR rewrite config. Verified against the v0.22.1 source before writing (pkg/proxy/proxy.go
+# GetRequestAttributes + pkg/filters/auth.go), because three properties are load-bearing and none
+# of them are obvious from the docs:
+#
+#   - MULTI-VALUE IS PER HEADER OCCURRENCE, NOT PER DELIMITER. `params` collects every occurrence
+#     of the header and emits one SAR per value. So `X-Scope-OrgID: a|b|c` — Loki's multi-tenant
+#     read syntax — is ONE value, and authorizes against a namespace literally named "a|b|c", which
+#     nothing grants. This is precisely why tenant == NAMESPACE here and a caller queries one
+#     tenant at a time; see docs/loki-tenancy.md §Why tenant == namespace.
+#   - COMBINATION IS AND. filters/auth.go loops the attribute list and 403s on the first non-allow.
+#   - A MISSING HEADER IS FAIL-CLOSED: len(allAttrs) == 0 → HTTP 400, never a pass-through.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-rbac-proxy-config
+  namespace: loki
+data:
+  config.yaml: |
+    authorization:
+      rewrites:
+        byHttpHeader:
+          name: "X-Scope-OrgID"
+      resourceAttributes:
+        apiGroup: loki.teststuff.net
+        resource: logs
+        namespace: "{{ .Value }}"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki-rbac-proxy
+  namespace: loki
+  labels: { app: loki-rbac-proxy }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: loki-rbac-proxy }
+  template:
+    metadata:
+      labels: { app: loki-rbac-proxy }
+    spec:
+      serviceAccountName: loki-rbac-proxy
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: kube-rbac-proxy
+          # ⚠ PIN + SUPPLY-CHAIN NOTE (verified 2026-08-27, do not soften this without re-checking):
+          # kube-rbac-proxy is NOT a kubernetes-sigs project. It self-describes as ALPHA ("flags,
+          # configuration, behavior and design may change significantly"), its security updates are
+          # "best effort", and its `sig-auth-acceptance` rework has not been touched since
+          # 2025-10-01. kubebuilder REMOVED it from default scaffolding on exactly these grounds.
+          # Adopted anyway, as a considered trade (ADR-118): authorization becomes declarative RBAC
+          # instead of code, the release cadence is real (v0.22.1, 2026-07-09), Red Hat maintains an
+          # active fork, and the failure mode is "jail log reads stop", never a cluster fault.
+          # The SAR-rewrite feature this design rests on SURVIVES the rework — it is promoted to a
+          # first-class pkg/authorization/rewrite package on that branch, not deprecated.
+          image: quay.io/brancz/kube-rbac-proxy:v0.22.1
+          args:
+            - --secure-listen-address=:8443
+            - --upstream=http://loki.loki.svc.cluster.local:3100/
+            - --config-file=/etc/kube-rbac-proxy/config.yaml
+            # READ SURFACE ONLY. Without this the door would also proxy Loki's push endpoint, and a
+            # tenant-scoped READER would be able to WRITE its own log lines — forging evidence in
+            # the store an incident is later reconstructed from. allow-paths is the difference
+            # between a read door and a read/write door.
+            - --allow-paths=/loki/api/v1/query,/loki/api/v1/query_range,/loki/api/v1/labels,/loki/api/v1/label/*/values,/loki/api/v1/series,/loki/api/v1/index/volume,/loki/api/v1/index/volume_range,/loki/api/v1/tail
+            - --v=2
+          ports:
+            - { name: https, containerPort: 8443 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: config, mountPath: /etc/kube-rbac-proxy, readOnly: true }
+          resources:
+            requests: { cpu: "10m", memory: "64Mi" }
+            limits:   { memory: "128Mi" }
+      volumes:
+        - name: config
+          configMap: { name: loki-rbac-proxy-config }
+---
+# The in-cluster address. Kept alongside the VIP below so nothing in-cluster has to leave the
+# cluster to reach the door.
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-rbac-proxy
+  namespace: loki
+  labels: { app: loki-rbac-proxy }
+spec:
+  type: ClusterIP
+  selector: { app: loki-rbac-proxy }
+  ports:
+    - { name: https, port: 8443, targetPort: 8443 }
+---
+# THE JAIL-FACING DOOR (rollout step 3, 2026-08-27). VIP 192.168.40.32 — next free in the cluster
+# LB pool, verified live against every assigned VIP (.10–.31 all taken); docs/ip-plan.md. Plain LB
+# with no HAProxy/hostname pair, the same shape as the otel-collector LAN door (40.29) and for the
+# same reason: the consumer is a jail's kubectl-shaped tooling, not a browser.
+#
+# ⚠ WHY EXPOSING *THIS* ON A VIP IS SAFE WHEN EXPOSING LOKI WOULD NOT BE. ADR-118 rejected putting
+# Loki itself on a VIP because WireGuard clients see VIPs, so an unauthenticated Loki would publish
+# every cluster log to every device on the network. This Service fronts the PROXY: every request is
+# TokenReviewed and then SubjectAccessReviewed against the tenant it asserts, and a request with no
+# token never reaches Loki. The VIP's reach is therefore the same LAN+VPN surface, but its
+# authorisation is RBAC rather than "can you open a socket".
+#
+# Verified at this address before it was documented (step 3 acceptance, ADR-118): the oracle
+# workbench SA reads oracle-fleet / oracle-agents / oracle-iac and is REFUSED platform-agents,
+# agent-coordinator, monitoring and loki. Recipe for a stack jail: docs/loki-tenancy.md
+# §How a stack jail reads its logs.
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-rbac-proxy-lb
+  namespace: loki
+  labels:
+    app: loki-rbac-proxy
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.32"
+spec:
+  type: LoadBalancer
+  selector: { app: loki-rbac-proxy }
+  ports:
+    - { name: https, port: 8443, targetPort: 8443 }

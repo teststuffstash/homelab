@@ -1,0 +1,18 @@
+=== push: held-merged-unlinked (who=operator) ===
+RETURN 0
+=== push: queued-held-by-ghost (who=operator) ===
+RETURN 0
+=== push: riding (who=machine) ===
+RETURN 0
+=== push: container (who=none) ===
+RETURN 0
+=== push: backlog-aggregate (who=operator) ===
+RETURN 0
+=== push: gateway disabled ===
+RETURN 0
+=== push: no pod identity ===
+RETURN 0
+=== push: gateway refuses ===
+RETURN 0
+=== end ===
+RC 0

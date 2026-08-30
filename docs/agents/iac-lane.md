@@ -84,7 +84,7 @@ cannot key on the repo. It keys on the **path**.
 
 | paths | applied by | agent may author | gate |
 |---|---|---|---|
-| `docs/**` | nothing | ✅ | CI |
+| `docs/**` | nothing | ✅ | **codeowner** (CODEOWNERS `/docs/` since 2026-08-04 — the docs are the platform's memory) |
 | `argocd/resources/**` | ArgoCD — merge *is* deploy | ✅ | CI (see the check-coverage caveat below) |
 | `argocd/platform/**` | ArgoCD app-of-apps, `prune: true` | ✅ | **codeowner** — an edit here *deletes* services |
 | `tofu/*.tf` (root) | `tofu apply` | ✅ | **codeowner**; apply stays out-of-band (cone rule) |
@@ -381,8 +381,13 @@ went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merg
   agent-coordinator ns, arc-runner image) with rules and engines from THIS repo's master —
   the PR tree arrives as a tarball (data, never executed; no helm/hooks in v1 — raw-YAML pass,
   the render pass is v2). **Engines (operator ruling: no engine sprawl — Kyverno is THE rule
-  engine, CLI seat now, the admission-controller seat is its future; NB no prior roadmap record
-  of kyverno was found — this ruling is the record):** `policy/iac/*.yaml` (5 Kyverno policies:
+  engine for THIS, the CLI seat; NB no prior roadmap record of kyverno was found — this ruling is
+  the record. ⚠ NARROWED 2026-08-27: the earlier "the admission-controller seat is its future"
+  read as Kyverno having already won that seat. It has not — the ADMISSION seat is a separate,
+  OPEN choice between Kyverno and OPA Gatekeeper, deliberately gated on a SECOND use case before
+  deciding, per the ≥2-pattern rule. The two seats are different jobs: the sentinel evaluates a
+  PR tree offline, while admission puts a webhook in the pod-creation path where `failurePolicy`
+  and availability dominate. Tracked with its first use case as FU-191):** `policy/iac/*.yaml` (5 Kyverno policies:
   raw-Secret, public-bucket, explicit-Delete deletionPolicy, VIP∈192.168.32.0/19,
   cluster-scoped power kinds — all synthetically verified firing), gitleaks (secret values,
   fleet-standard), and a bash path-rule (worker-authored PRs must not touch
@@ -409,6 +414,12 @@ went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merg
   Same central-ownership model for secrets scanning: `policy/iac/gitleaks.toml` (documented-FP
   allowlist) is passed with `--config` from the sentinel's own master clone — exceptions and
   scanner config are never read from the scanned PR tree, which a hostile PR controls.
+  ⚠ **The ordering rule that falls out, which costs one red cycle to learn:** a PR adding a NEW
+  cluster-scoped resource is red until its name is on **master**, because the run judging it reads
+  master's baseline and not the PR's copy. So the exception lands FIRST, as its own change — which
+  also puts `policy/iac/exceptions/*` in the CODEOWNERS / `.github/workflows/**` class: self-gating
+  is impossible, so it is operator-direct by necessity, not convenience. Seen live on homelab#1008
+  (ADR-118's read door, three names), fixed by `105f6db3` landing the baseline separately.
   **Measured overhead (2026-08-03, both -iac repos at master):** fetch ~0.7–1.0s · collect
   ~0.2s · kyverno ~0.7–0.8s (5 policies × 17–25 docs) · gitleaks ~0.14s · **total ~1.8–2.1s
   serial per PR head**. Parallelizing engines saves <1s while ARC job overhead is ~10–30s and
@@ -521,10 +532,10 @@ canaries prove nothing here.
 Tracked on FU-106; the gap register (IAC-G01..G06, `iac-lane-fsm.yaml` — G07 shipped without
 ever entering it) IS the list. The order as EXECUTED: G07 + G02 + G03 (2026-08-02) → G05
 rung-0 (sleep-tracking#113) + G04 sentinel v1 shadow (2026-08-03).
-**The G01 ENFORCEMENT flip: BUILT 2026-08-18 (§L0b — status posting, homelab baseline, required
-check + push ruleset in tofu); activation = the operator's App `statuses:write` grant + the
-host-side `github-tofu apply`. Remaining after that: the G06 advisory lens; window rungs 1/2
-when oracle's gateway metering (T3c) exists.**
+**The G01 ENFORCEMENT flip: LIVE since 2026-08-18 (§L0b — status posting, homelab baseline,
+required check + push ruleset in tofu; the grant + apply landed the same day, and the sentinel
+has red-cycled a real PR since — homelab#1008's baseline-ordering catch). Remaining: the G06
+advisory lens; window rungs 1/2 when oracle's gateway metering (T3c) exists.**
 **Historical reprioritization note (2026-08-02, commit-history audit):** G07 pin-follow was the
 biggest *mechanical* win (no LLM, deterministic, the most frequent human commit in oracle-iac)
 and can ship independently of the order above; and once oracle-iac gains a fixer block (the

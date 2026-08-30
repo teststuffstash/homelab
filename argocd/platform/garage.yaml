@@ -17,7 +17,16 @@
 # five phantom differences.)
 #
 # ⚠ The StatefulSet's volumeClaimTemplates are IMMUTABLE and hold 63 GB. Nothing here may change
-# `persistence` — a resize is the PV-rebind dance in docs/garage-bulk-migration.md, never an edit.
+# `persistence`, and the sizes below are NOT the live sizes — they must keep matching the existing
+# templates or the app stops syncing under selfHeal. A real resize is `kubectl patch pvc` (the
+# longhorn StorageClass sets allowVolumeExpansion — that is how meta went 10Gi -> 30Gi on
+# 2026-08-25), or the PV-rebind dance in docs/garage-bulk-migration.md to move tier/storageClass.
+# Either way the value here stays put; docs/garage.md §Durability carries the live numbers.
+#
+# Before any SUBSTANTIAL change here (replication, storage, engine, snapshots): read
+# docs/garage.md §Target architecture — it carries ADR-114 and the upstream garagehq reading
+# list that grounded the current posture (the fsync/snapshot lines below are incident response,
+# 2026-08-24 meta wipe).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -49,6 +58,16 @@ spec:
           consistencyMode: consistent
           existingRpcSecret: garage-rpc
           replicationFactor: "1"
+          # Both lines are the 2026-08-24 incident response (pve thin pool hit 100%, wk-01 froze,
+          # the meta LMDB came back with empty tables — docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md):
+          # Garage's metadata_fsync DEFAULTS TO FALSE, so a hard VM stop can lose committed metadata;
+          # the auto-snapshot is the second belt — a periodic LMDB copy inside the meta volume.
+          metadataAutoSnapshotInterval: 6h
+          additionalTopLevelConfig: |-
+            metadata_fsync = true
+            # snapshots need up to 4x the DB size — the 10Gi meta volume can't hold that
+            # (2.4GB db as of the incident); the docs' own advice is the data volume.
+            metadata_snapshots_dir = "/mnt/data/meta_snapshots"
           s3:
             api:
               region: garage
@@ -56,18 +75,31 @@ spec:
               rootDomain: .teststuff.net
         monitoring:
           metrics:
-            enabled: false
+            enabled: true
+            serviceMonitor:
+              enabled: true
         persistence:
           data:
             size: 150Gi
             storageClass: longhorn-bulk
           enabled: true
           meta:
+            # ⚠ DO NOT "correct" this to the live size. It must keep matching the StatefulSet's
+            # immutable volumeClaimTemplate (also 1Gi) or the app never syncs again under selfHeal.
+            # The real PVC is 30Gi with numberOfReplicas 1 on wk-02 (2026-08-25) — see FU-137;
+            # this number has been decorative since the volume was first resized out of band.
             size: 1Gi
             storageClass: longhorn
         resources:
           limits:
-            memory: 512Mi
+            # 512Mi until 2026-08-25, when it became the thing that broke the snapshot belt
+            # (FU-184). A metadata snapshot is an LMDB compacting copy; while the env was
+            # page-leaked it crawled for ~11 min and never finished, so its page cache never
+            # piled up. On the rebuilt 1.6 GiB env the same copy completes in ~15 s, and that
+            # burst of dirty pages exceeded 512Mi — the first successful-shaped attempt
+            # OOM-killed the container instead. Sized for the copy, not the steady state:
+            # headroom must exceed the DB size, so this rises with it. docs/garage.md §Durability.
+            memory: 2Gi
           requests:
             cpu: 100m
             memory: 128Mi

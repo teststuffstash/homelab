@@ -134,3 +134,34 @@ subjects:
   - kind: ServiceAccount
     name: agent-coordinator
     namespace: agent-coordinator
+---
+# FU-138: the openrouter-proxy's _cr_guardrail() lists openrouterkeys in the ref's namespace to
+# read the authoritative guardrail. The proxy SA has this grant in agent-egress (its own namespace)
+# and in each worker project namespace (composed by the AgentStack claim), but agent-coordinator
+# was covered by neither — and that is where the coordinator/reviewer subscription refs
+# (ref:agent-coordinator/coordinator-claude) live. Without this, every anthropic passthrough
+# request logs a 403 fallback line (fail-open, noise only). Mirrors the FU-138 grant verbatim
+# from argocd/resources/openrouter-proxy/rbac.yaml.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openrouter-proxy-guardrail
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [openrouter.teststuff.net]
+    resources: [openrouterkeys]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openrouter-proxy-guardrail
+  namespace: agent-coordinator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: openrouter-proxy-guardrail
+subjects:
+  - kind: ServiceAccount
+    name: openrouter-proxy
+    namespace: agent-egress

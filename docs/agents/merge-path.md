@@ -5,10 +5,14 @@ transition, and the worked scenarios. The lint-checked state machine is
 [`merge-path-fsm.md`](merge-path-fsm.md) / `merge-path-fsm.yaml`; the `-iac` variant is
 [`iac-lane.md`](iac-lane.md).
 
-**Where the machinery lives:** the updater and renovate-approve are **reusable org workflows** —
-[`update-pr-branch.reusable.yml`](../../.github/workflows/update-pr-branch.reusable.yml) +
-[`renovate-approve.reusable.yml`](../../.github/workflows/renovate-approve.reusable.yml) — with
-~3-line callers in each agent repo; auto-merge arming (`gh pr merge --auto --squash`) is in
+**Where the machinery lives:** the updater is **in-cluster** (ADR-111, cutover executed
+2026-08-26/homelab#745) — the exporter's `maybe_dispatch_behind` edge + a `*/15` Argo CronWorkflow
+([`../../agents/coordinator/update-pr-argo.yaml`](../../agents/coordinator/update-pr-argo.yaml))
+running [`../../agents/update-pr-branch.sh`](../../agents/update-pr-branch.sh) as the
+`homelab-merge` App via ESO ([`updater-git.yaml`](../../agents/coordinator/updater-git.yaml));
+renovate-approve remains a **reusable org workflow**
+([`renovate-approve.reusable.yml`](../../.github/workflows/renovate-approve.reusable.yml)) with
+~3-line callers; auto-merge arming (`gh pr merge --auto --squash`) is in
 [`../../agents/agent-session.sh`](../../agents/agent-session.sh); Renovate's shared classification
 is [`../../.github/renovate-global.json`](../../.github/renovate-global.json).
 
@@ -29,14 +33,16 @@ is [`../../.github/renovate-global.json`](../../.github/renovate-global.json).
 > E2E on oracle-fleet#37, merged). The `CronJob`/polling framing throughout the rest of this doc is the
 > original design; the mechanics below now read as: **edge-trigger primary, `*/15` backstop.**
 
-> **Update (2026-08-21, ADR-111 — the updater moves IN-CLUSTER; build = [stint](chainless-redesign.md) S7, homelab#741):**
-> the reusable workflow + per-repo callers (and their GitHub cron) retire in favor of the ADR-093
-> shape the review path already uses — an exporter edge (`maybe_dispatch_behind`) + a `*/15` Argo
-> CronWorkflow backstop running a platform-owned script, same `homelab-merge` App identity via ESO.
-> Why (measured): 91–96% of updater runs were the GitHub cron backstop, ~4,800 hosted min/mo at the
-> 1-min billing floor (#698), and the hosted-independence rationale below was per-leg only — CI and
-> review are cluster-resident anyway. Until S7's cutover child (homelab#745) lands, the machinery
-> described below is still what runs; this doc's "GitHub-hosted by design" rationale is superseded.
+> **Update (2026-08-21, ADR-111 — the updater moves IN-CLUSTER; build = [stint](chainless-redesign.md) S7, homelab#741;
+> CUTOVER EXECUTED 2026-08-26, homelab#745):** the reusable workflow + per-repo callers (and their
+> GitHub cron) are RETIRED in favor of the ADR-093 shape the review path already uses — an exporter
+> edge (`maybe_dispatch_behind`) + a `*/15` Argo CronWorkflow backstop running a platform-owned
+> script (`agents/update-pr-branch.sh`), same `homelab-merge` App identity via ESO. Why (measured):
+> 91–96% of updater runs were the GitHub cron backstop, ~4,800 hosted min/mo at the 1-min billing
+> floor (#698), and the hosted-independence rationale below was per-leg only — CI and review are
+> cluster-resident anyway. The `MERGE_GH_APP_*` org Actions secrets retired with it. Where the
+> prose below still describes the adRise action / reusable workflow, read it as the design-era
+> narrative; the FSM (MP-T02) carries the current anchors.
 
 > **The machine itself is MODELED, not just described:** [`merge-path-fsm.yaml`](merge-path-fsm.yaml)
 > is the machine-readable state/event/guard model — every guard anchored to code (grep-checked by
@@ -101,16 +107,16 @@ Four deterministic pieces around the existing gates:
 
 1. **Worker arms auto-merge** at PR creation: `gh pr merge <N> --auto --squash` (already documented
    in `agents/reviewer-session.sh`'s header; becomes a mandatory step in `agent-session.sh`).
-2. **Updater** — a GitHub Actions workflow per repo running
-   [`adRise/update-pr-branch`](https://github.com/adRise/update-pr-branch) (source-audited
-   2026-07-03: no bot-PR filter, unlike the `allonsy-studio` action). Config:
-   `required_approval_count: 0` (update *before* review — see ordering, below), `sort: created` +
-   `direction: asc` (FIFO; the action's default is newest-first), `require_auto_merge_enabled:
-   true`. It updates **exactly one PR per run** — the oldest open PR that is green, auto-merge-armed,
-   conflict-free, and behind — via the update-branch API (merge commit; the endpoint cannot rebase,
-   which is what we want — no history rewrite, no force-push, a stale worker clone can still
-   `git pull`). Triggers: `push` to master, CI-workflow completion, and a cron sweeper
-   (catches a PR that goes green while master is quiet).
+2. **Updater** — in-cluster since the ADR-111 cutover (2026-08-26, homelab#745):
+   [`agents/update-pr-branch.sh`](../../agents/update-pr-branch.sh), dispatched by the exporter's
+   `maybe_dispatch_behind` edge (repo-scoped, near-instant) with a `*/15` Argo CronWorkflow
+   sweeping the whole stacks.json universe
+   ([`update-pr-argo.yaml`](../../agents/coordinator/update-pr-argo.yaml)). Semantics carried over
+   from the adRise-action era unchanged: update *before* review (see ordering, below), FIFO
+   (oldest first), armed-only, and **exactly one PR per pass** — the oldest open PR that is green,
+   auto-merge-armed, conflict-free, and behind — via the update-branch API (merge commit; the
+   endpoint cannot rebase, which is what we want — no history rewrite, no force-push, a stale
+   worker clone can still `git pull`).
    **Stacked PRs are excluded twice over** (2026-08-05, the `Base:` line): the action is configured
    `base: master`, so a PR based on an unmerged branch is never selected, and such a PR is never
    armed anyway. Checked against the live workflow rather than assumed — no change was needed there,
@@ -486,9 +492,10 @@ floor only policy and scheduling help, which is why the O(N²) options above are
   The updater needs neither: Actions `concurrency` groups serialize its runs natively (⚠ its
   sibling `renovate-approve` DID need exactly this — per-PR group + fail-closed dup-check,
   homelab#114, 2026-08-11), and
-  update-branch is idempotent at GitHub (422 "already up to date"). Worst residual race anywhere
-  is a duplicate review — wasted tokens, never a bad merge (the merge gate is GitHub's, evaluated
-  once).
+  update-branch now carries `expected_head_sha` (homelab#986), so a concurrent push causes 422
+  ("head branch was modified") instead of clobbering the commit — the race is safe, the next pass
+  re-lists the new head. Without `expected_head_sha` the race could silently overwrite a
+  concurrent author push (seen live on PR#963).
 - **Updater token** — must be an App token, not `GITHUB_TOKEN` (its pushes wouldn't re-trigger
   CI). Minted from a **dedicated, minimal `homelab-merge` App** (`actions/create-github-app-token`,
   App id + private key as the `MERGE_GH_APP_*` org Actions secrets). Grant:
@@ -506,12 +513,11 @@ floor only policy and scheduling help, which is why the O(N²) options above are
 - **Review reflex dies** — PRs accumulate approved=0; nothing merges; nothing breaks. The `*/15`
   CronWorkflow backstop re-lists next tick and resumes (and covers a missed exporter POST too).
   Same level-triggered posture as the coordinator doctrine.
-- **Worker still pushing while updater updates** — prevented by ordering, not locking: the updater
-  only touches PRs that are green + auto-merge-armed, and arming happens at the *end* of the worker
-  session. A worker addressing review feedback re-pushes to its own branch — but at that moment the
-  PR has no approval and isn't behind-and-armed-and-green in a way that attracts the updater
-  mid-push; worst case a merge-commit lands under it and `git pull` resolves (merge, never rebase —
-  no rewritten history, no force-push confusion).
+- **Worker still pushing while updater updates** — the ordering claim is refuted (homelab#986,
+  seen live on PR#963): a fix round pushed at an armed+BEHIND PR can race with the updater's
+  update-branch call. The fix is `expected_head_sha` (passed from the picker's `headRefOid` field):
+  a concurrent push causes 422 instead of clobbering the commit. The updater skips the 422 and
+  the next pass re-lists the new head (level-triggered; the commit is preserved).
 
 ## Rollout — COMPLETE (all four phases shipped by 2026-07-17, ADR-093)
 

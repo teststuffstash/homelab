@@ -1,0 +1,2 @@
+[2026-08-23T12:00:00Z] Configuration is invalid: unknown key "experimental_enable_loop" in config file
+[2026-08-23T12:00:01Z] Error: failed to parse configuration

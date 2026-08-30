@@ -109,7 +109,9 @@ at 85%:
    than spilling to paid.
 
 Two more gates ride the same probe script: the **concurrency semaphore** (≥
-`SUBSCRIPTION_MAX_RUNNING`, default 3, Running pods labelled
+`SUBSCRIPTION_MAX_RUNNING` — the script default is 3 but the AUTHORITY is the proxy
+Deployment's explicit env, **5 since 2026-08-08** (the Max 5x→20x upgrade; the Argo
+`subscription-capacity` ConfigMap mirrors it and says so) — Running pods labelled
 `homelab.teststuff.net/subscription-session=claude` → defer — the proactive half that prevents
 the burst which *causes* a 429) and, for OpenRouter workers, the **account-credit floor** in
 `agent-session.sh` (FU-088b, `OPENROUTER_MIN_CREDIT`, default $0.25). That floor reads the balance
@@ -192,16 +194,17 @@ on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
   but move a workflow in-cluster for its own reasons, never just to emit; the github-exporter
   piggyback (rider on the one-poller doctrine) covers what off-cluster actors touch. ⚠ The one
   deliberately GitHub-hosted job this paragraph used to name (`update-pr-branch.reusable.yml` —
-  "the merge path must not depend on the self-hosted tier being awake") is **superseded by
-  ADR-111 (2026-08-21)**: the independence was per-leg while CI and review are cluster-resident,
-  and the GitHub cron backstop was 91–96% of the hosted-minutes burn — the updater moves
-  in-cluster (stint S7, homelab#741):
+  "the merge path must not depend on the self-hosted tier being awake") is **RETIRED — ADR-111,
+  cutover executed 2026-08-26 (homelab#745)**: the independence was per-leg while CI and review
+  are cluster-resident, and the GitHub cron backstop was 91–96% of the hosted-minutes burn — the
+  updater runs in-cluster (stint S7, homelab#741; `agents/update-pr-branch.sh` +
+  `agents/coordinator/update-pr-argo.yaml`):
 
   | scan clause (transition) | who causes it | edge emitter | latency (today: ≤10 min) |
   |---|---|---|---|
   | C4/C5: worker terminal, no PR (incl. `AGENT_STRIKE`) | `agent-session.sh` launcher — it *posts* the strike comment | launcher curls `/coordinate` right after | instant — the #29 case |
   | PR → `CHANGES_REQUESTED` (round N+1) | reviewer pod (`reviewer-session.sh` verdict) | reviewer curls after posting the verdict | instant |
-  | `merge-conflict` label appears | `update-pr-branch` — GitHub-hosted until the ADR-111 cutover (stint S7 moves the labeler in-cluster with the rest of the updater) | exporter piggyback, BUILT 2026-08-11 (#285): `maybe_dispatch_conflict` rings `/coordinate` with `{stack, loop_ns}` — the label was already in the 120 s poll, nothing read it (PR#275 waited out the cron) | ≤2 min |
+  | `merge-conflict` label appears | the in-cluster updater (`agents/update-pr-branch.sh` armed∧DIRTY labeler, leg 3 — ADR-111, cutover 2026-08-26; the 422 leg stopped labeling at homelab#986/PR#1005, so a conflict surfaces one pass later as DIRTY rather than immediately) | exporter piggyback, BUILT 2026-08-11 (#285): `maybe_dispatch_conflict` rings `/coordinate` with `{stack, loop_ns}` — the label was already in the 120 s poll, nothing read it (PR#275 waited out the cron) | ≤2 min |
   | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs — `{repo}`-only, which is now ENOUGH: the global scan resolves repo → {stack, loop_ns} and re-rings the stack's own loop (FU-144 receiver-side fan-out, built with A2) | instant (one resolver hop) |
   | issue gains `agent/queued` | whoever applies the label — a **jail LLM session** authoring issues from specs, or a hand-labelling human | **two emitters.** The authoring session rings the doorbell itself: mono jail → `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`; stack jails → curl `/coordinate` once it exists — the webhook needs **no RBAC into `agent-coordinator`**, exactly the FU-080 airlock shape. **Plus** exporter piggyback, BUILT 2026-08-18 (#505): `maybe_dispatch_queued` rings `/coordinate` with a repo-dumb `{repo, number}` on the appearance edge of `agent-fix` ∧ `agent/queued` ∧ ¬`direction-change` ∧ ¬`agent/error` (`queued_dispatchable` mirrors the scan clause label for label) — a hand-applied label rings too (the #459 gap: sleep-tracking#121; homelab#478/479/491) | instant, author-fired; exporter piggyback ≤2 min |
   | a PR MERGES (merged-closeout / the goal chain / sibling platform repos) | GitHub auto-merge — off-cluster by nature, minutes after the last in-cluster actor exited | exporter piggyback, BUILT 2026-08-12 (ADR-106 (6)): `maybe_dispatch_merged` — a number leaving the poll's open set is REST-checked once (`merged` authoritative) and rings with {stack, loop_ns}; before this NOTHING rang on merge anywhere (the v1.1 spike's finding 6 named the sibling repos; the gap was fleet-wide) | ≤2 min |

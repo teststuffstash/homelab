@@ -2,7 +2,7 @@
 
 > The SEAT's procedure card (FU-117 third context, S4 #764) — the sibling of
 > [`jail-subagent-card.md`](jail-subagent-card.md) (subagents) and
-> `ground-rules.md` (pod workers — lands with PR#768). Composed into the seat's session context
+> `ground-rules.md` (pod workers — shipped PR#768, 2026-08-23). Composed into the seat's session context
 > by the MONO jail's bootstrap: claude-jail cats its shared container card + THIS file into
 > **`/workspace/homelab/CLAUDE.local.md`** (gitignored here; auto-loaded by Claude Code) — the
 > homelab-scoped target, so the seat card loads ONLY for sessions actually seated in this repo,
@@ -58,7 +58,8 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
   Do not grow a second copy in the tracker afterwards; edit the doc.
 - **Resolved something?** Move the item to `docs/follow-ups-archive.md` (trimmed to a few lines,
   `(archived YYYY-MM-DD)`) in the same commit as the fix. Archive entries expire after ≈a month:
-  delete + scrub remaining refs in living code/docs (TICK-LOG/ADR refs are historical, exempt).
+  delete the entry + scrub only TODO-shaped refs (`FU: FU-NNN` cells, `Tracked by` lines —
+  ADR-116); bare id mentions are provenance names and stay, forever.
   A pointer item's **doc survives archival** — it's documentation, not tracker residue.
   `devbox run follow-ups-lint` catches dangling references, stale archive entries, oversized
   items, and broken/un-backlinked pointers.
@@ -83,9 +84,10 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
 > ⚠ **THIS SECTION IS FOR THE JAIL META-SESSION ONLY — if you are an agent riding this repo from
 > the fixer lane, it does NOT apply to you: open a PR and let the reviewer gate it, exactly as in a
 > stack repo.** homelab has a live fixer lane (`platform` claim → `repos[homelab].fixer`), so this
-> file IS read by worker agents, and "work directly on master" is the one instruction here that
-> would be actively wrong for them. Per-context guidance is an open design question the operator
-> owns; until it lands, this banner is the guard.
+> file is readable by worker agents (never auto-loaded — the composed CLAUDE.local.md reaches the
+> seat only, per the role×context×source map in `docs/agents/roles.md` §Context delivery), and
+> "work directly on master" is the one instruction here that would be actively wrong for them —
+> this banner keeps the scope explicit.
 
 **The default REVERSED 2026-08-12 (operator): jail sessions ship substantive changes as PRs —
 PR + watch + fix.** The old direct-to-master default predates the bot reviewer on the platform
@@ -111,6 +113,18 @@ is pure ceremony:
   CODEOWNERS, `.github/workflows/**` — self-gating is impossible, so these are operator-direct
   by necessity, not convenience
 
+**Direct commits BATCH; the push is a separate, deliberate act (operator direction,
+2026-08-30).** Every master push resets the open-PR field (strict checks → BEHIND → updater
+churn; a lint break reds every PR, the #953 class — shipped live by this session's own
+wind-down push), so: COMMIT bookkeeping freely, push it **once per session at wind-down**, not
+per commit. Only the jail reads the bookkeeping set (meta-state, TICK-LOG, GAPS, the tracker),
+and the next session reads the same on-disk tree — origin adds durability, not continuity.
+The exception keeps the old rule: **anything a CLUSTER consumer clones master for — quickfixes,
+incident pins (the FU-188 shape), agents/ script fixes — still pushes immediately.** The class
+test: does any pod need to see this? A master push runs BOTH doc lints via the committed
+`githooks/pre-push` (wired by `core.hooksPath` — the direct lane's only lint gate, since
+OrgAdmin pushes bypass CI); never `--no-verify` past it.
+
 **The codeowner gate on machine PRs runs per SESSION, not per PR (ADR-110, 2026-08-18).** For
 the maintenance stream — no Goal, reacting to alerts/board items — the human codeowner read is
 executed by the operator-started, **corpus-loaded** jail session: the seat reads each parked
@@ -127,8 +141,10 @@ Both lanes keep the standing discipline:
 
 - **Verify, then commit** — never the reverse, and never commit a change that was not applied. An
   isolated probe against the live thing, not a re-reading of the diff.
-- **Coherent units, pushed (or PR'd) right away.** An unpushed jail commit is invisible to the
-  agent loop: the coordinator/worker pods `git clone --depth 1 master`.
+- **Coherent units; PR-lane work pushed right away, bookkeeping batched to wind-down** (the
+  2026-08-30 rule above). The invisibility caveat stands for anything the loop consumes: the
+  coordinator/worker pods `git clone --depth 1 master`, so a loop-relevant commit left local
+  is a commit the loop never saw.
 - Uncommitted work from a previous session may be in the tree — check `git status` before you
   start and leave what isn't yours alone.
 - **Never pipe-filter a gate's exit** (`lint | tail -1 &&` masked a failing lint once); verify

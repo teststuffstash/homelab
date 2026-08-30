@@ -1,0 +1,10 @@
+# reviewer-route-carrier-resolved-adopted — the reviewer's /route response carries a full
+# .resolved carrier for opencode-go. The carrier is parsed, model_id.py re-derives the
+# canonical values, MODEL_RAIL=opencode-go, GO_SERVED=1.
+name: reviewer-route-carrier-resolved-adopted
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:route-request
+  - file:post.sh

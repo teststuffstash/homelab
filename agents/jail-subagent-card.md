@@ -1,7 +1,7 @@
 # Jail subagent environment card (L1)
 
 > Prepended VERBATIM by the seat to every jail-subagent dispatch prompt — the jail's answer to
-> the pod env card (`docs/agents/fixer-context.md` L1; the FU-117 "third context" gap, closed
+> the pod env card (`docs/agents/fixer-context.md` L1; the FU-117 third-context gap's SUBAGENT half, closed
 > 2026-08-13). Seat-owned and versioned: edit by PR, never improvise per-prompt. Task facts
 > (issue, acceptance, verification commands, worktree path) are the DISPATCH PROMPT's job —
 > this card carries only what is true for every jail subagent.

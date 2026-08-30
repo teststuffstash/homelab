@@ -1,0 +1,17 @@
+# strike-quota-classifier — the decision table (family contract in fixture.yaml).
+# id                          | world | patch | env | expect                  | params
+stats-config-death            |       |       |     | stats-config-death      |
+stats-unknown-clean           |       |       |     | stats-unknown-clean     |
+stats-budget-403-account      |       |       |     | stats-budget-403-account |
+stats-budget-403-key          |       |       |     | stats-budget-403-key    |
+stats-budget-403-other        |       |       |     | stats-budget-403-other  |
+stats-provider-5xx            |       |       |     | stats-provider-5xx      |
+rawlog-config-death           |       |       |     | rawlog-config-death     |
+rawlog-deadline-first         |       |       |     | rawlog-deadline-first   |
+rawlog-quota                  |       |       |     | rawlog-quota            |
+rawlog-budget-403-key         |       |       |     | rawlog-budget-403-key   |
+rawlog-budget-403-account     |       |       |     | rawlog-budget-403-account |
+rawlog-provider-5xx           |       |       |     | rawlog-provider-5xx     |
+stats-unknown-with-pr         |       |       |     | stats-unknown-with-pr   |
+stats-harness-death-with-pr   |       |       |     | stats-harness-death-with-pr |
+stats-http-403-other-with-pr  |       |       |     | stats-http-403-other-with-pr |

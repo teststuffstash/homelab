@@ -37,7 +37,8 @@ opencode's phrase is "Nx **usage**", i.e. N× ALLOWANCE (half-off at 2x). Same t
 signs; opencode's poor word choice, and exactly how this register's first reading went wrong.
 Read "usage" as "value you receive", never "cost you pay". Bonus from the same dump: cached
 rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
-⚠ **LIMIT-SIDE SEMANTICS MEASURED 2026-08-17** (console usage dump `uploads/opencode-go.txt`
+⚠ **LIMIT-SIDE SEMANTICS MEASURED 2026-08-17** (a console usage dump — transient jail upload,
+not retained; the durable record is the gometer draw-pricing commit + TICK-LOG 2026-08-17 —
 reconciled against a known workload — the 509-call jail subagent wave, sole account traffic):
 **the window draws at LIST price on RAW tokens — cache discounts do NOT apply to window draw —
 halved for badged models.** Sample arithmetic: 50.56M flash input × $0.14/M ÷ 2 ≈ $3.54 ≈ the
@@ -56,7 +57,7 @@ use DRAW, not billed. (Window accounting fix: the gometer draw-pricing + epoch-a
 | **qwen3.8-max** | 2.00/6.00/0.25/2.50 | $15 | — | ✅ (go-session probe 08-13; not independently re-verified) | ✅ | current **opus slot** |
 | glm-5.2 | 1.40/4.40/0.26/– | $60 | — | ✗ **422 on EVERY function tool** (raw+claude 08-13) | ✅ but ⚠ drops STRING-shorthand content (free-associates; blocks form fine — shim normalizes) | serves the CLI's auxiliary calls fine; tools work OpenAI-shaped on `/chat/completions` (raw 08-13, `tool_calls`) |
 | glm-5.1 / glm-5 | 5.1: 1.40/4.40/0.26/– · glm-5 unpriced | $60/? | — | untested (glm-5.2 class suspected) | untested | |
-| deepseek-v4-flash | 0.14/0.28/0.0028/– | $60 | 2x | ✅ `tool_use` round-trip (raw 08-13, **post China-opt-in** — see quirks; the earlier 403 was the un-toggled gate, not a hard lock) | ✅ (opencode client, operator 08-13, 1.4s) | cheapest priced tool-caller on every axis (cR 9× under qwen3.5-plus's derived rate) — **PROMOTED to haiku slot + subagent default 2026-08-13** (billing-semantics resolved; applies from the next claude-go launch) |
+| deepseek-v4-flash | 0.14/0.28/0.0028/– | $60 | 2x | ✅ `tool_use` round-trip (raw 08-13, **post China-opt-in** — see quirks; the earlier 403 was the un-toggled gate, not a hard lock). **Re-verified at RIDE level 2026-08-25** (claude harness → proxy Go leg, clean 4-turn tool loop, under the temporary credits window — #778 thread). ⚠ **OpenAI surface (`/chat/completions`) BROKEN as served** (seat probe 2026-08-25): the tool call leaks as raw `<｜DSML｜tool_calls>` markup in `content`, `tool_calls: null` — the glm-shorthand class; an opencode-harness cell on this model false-negatives. Compat is PER-SURFACE: Anthropic ✅ / OpenAI ✗ | ✅ (opencode client, operator 08-13, 1.4s — ⚠ predates the DSML observation; opencode may parse DSML client-side, re-verify before opencode-harness slots) | cheapest priced tool-caller on every axis (cR 9× under qwen3.5-plus's derived rate) — **PROMOTED to haiku slot + subagent default 2026-08-13** (billing-semantics resolved; applies from the next claude-go launch) |
 | deepseek-v4-pro | 0.435/0.87/0.003625/– | $15 | — | ✅ `tool_use` round-trip (raw 08-13, post opt-in) | untested | retro-proven audit tier upstream; sonnet/opus-slot candidate |
 | mimo-v2.5 | 0.14/0.28/0.0028/– | $60 | — | ✗ 400 opaque "Provider returned error" (raw 08-13) — encoding unknown, openai-shaped + opencode-client paths UNTESTED | untested | price-optimal 1× — worth the openai/opencode retry before writing off |
 | mimo-v2.5-pro | 0.435/0.87/0.003625/– | $15 | — | untested | untested | |
@@ -69,7 +70,7 @@ use DRAW, not billed. (Window accounting fix: the gometer draw-pricing + epoch-a
 | qwen3.7-max | 2.50/7.50/0.50/3.125 | $60 | — | untested | untested | |
 | qwen3.7-plus | ≤256k: 0.40/1.60/0.04/0.50 · >256k: 1.20/4.80/0.12/1.50 | $60 | — | untested | untested | |
 | qwen3.6-plus | ≤256k: 0.50/3.00/0.05/0.625 · >256k: 2.00/6.00/0.20/2.50 | $60 | — | untested | untested | |
-| gpt-5.6-luna | ≤272k: 0.20/1.20/0.02/0.25 · >272k: 0.40/1.80/0.04/0.50 | $15 | 2x | ✗ **400 empty-body (raw 08-17), tools AND `tool_choice`-forced** — response is a message-shaped shell (`chatcmpl_` id, empty text, `stop_reason:null`) over HTTP 400 | ✗ **plain text ALSO 400s (raw 08-17)** — the ONLY row broken on the compat surface even without tools | ✅ works in the **opencode client** (operator Build session 08-13, 2.8s); ✅ **OpenAI surface `/chat/completions` + function tool → clean `tool_calls` (raw 08-17)** — cheapest cached-read in the table, but unreachable from claude-code lanes until a translator (#448 class) lands. translator (shim, #448) serves this via the OpenAI surface as of 2026-08-17 |
+| gpt-5.6-luna | ≤272k: 0.20/1.20/0.02/0.25 · >272k: 0.40/1.80/0.04/0.50 | $15 | 2x | ✗ **400 empty-body (raw 08-17), tools AND `tool_choice`-forced** — response is a message-shaped shell (`chatcmpl_` id, empty text, `stop_reason:null`) over HTTP 400 | ✗ **plain text ALSO 400s (raw 08-17)** — the ONLY row broken on the compat surface even without tools | ✅ works in the **opencode client** (operator Build session 08-13, 2.8s); ✅ **OpenAI surface `/chat/completions` + function tool → clean `tool_calls` (raw 08-17)** — cheapest cached-read in the table; the translator (shim, #448 — closed 2026-08-17) serves it from claude-code lanes via the OpenAI surface |
 | grok-4.5 | 2.00/6.00/0.30/– | $15 | — | untested | untested | |
 | hy3 / hy3-preview | hy3: 0.14/0.58/0.035/– · preview unpriced | $60/? | — | untested | untested | hy3 = retro-proven audit tier upstream |
 
@@ -82,7 +83,8 @@ Candidate rung-0 on this rail (largely the OpenRouter free-rung families). ⚠ Z
 |---|---|---|
 | deepseek-v4-flash-free | ✗ 400 invalid_request (raw 08-13, provider error truncated) | |
 | mimo-v2.5-free | ✗ 400 opaque provider error (raw 08-13) | |
-| hy3-free · nemotron-3.5-lightning-free · laguna-s-2.1-free · big-pickle | untested | |
+| hy3-free · nemotron-3.5-lightning-free · laguna-s-2.1-free | untested | |
+| **big-pickle** | **OpenAI surface ✅ FULL tool loop** (seat probes 2026-08-25, via the in-cluster proxy zen leg — homelab#778 thread): plain ✅, `tool_calls` emission ✅, tool-result consumption ✅ | **REASONING model**: a small `max_tokens` is eaten entirely by `reasoning_content` (content null at 20 tokens) — give cells headroom; one schema-adherence miss observed (`file_path` for required `path`), loop-survivable. Anthropic surface untested. **Ruled role (operator 2026-08-25, #778): deepseek's $0 SHADOW** — A5 shadow re-reviews (homelab#923) + the G-E fan-out arm; not a solo-ride slot until a rung-2 canary |
 | nemotron-3-ultra-free | plain text ✅ 200 · function tool ✗ 400 — **bisected to the SURFACE (raw curl, seat 08-14)**: OpenAI `/v1/chat/completions` + function tool → ✅ clean `tool_calls`; Anthropic `/v1/messages` + the same tool as `input_schema` → ✗ 400 upstream `Input required: specify "prompt" or "messages"` (the compat translation loses the body). Minimal curl — NOT harness decoration. Same provider-400 family as the deepseek/mimo free rows | opencode client rides the OpenAI surface → tools work there (operator's opencode run, 08-14: clean 4-step shell loop — date → write → read-back → confirm — incl. the tool-result continuation); claude-code is Anthropic-only → this rail can't serve tool lanes until zen fixes the compat layer or a translator lands. **Tool-lane rung-0 candidate once translated.** translator (shim, #448) serves this via the OpenAI surface as of 2026-08-17 |
 
 ## Cross-cutting quirks (apply to every row)
@@ -110,6 +112,7 @@ Candidate rung-0 on this rail (largely the OpenRouter free-rung families). ⚠ Z
 Full coverage of the Go list + Zen free tier on the anthropic-compat path (one `tool_use`
 round-trip each — cents; deepseek rows CLOSED 08-13 post-opt-in), one `opencode`-harness
 column datum for a model the compat path fails (mimo or glm — does their native client succeed
-where the shim can't?), and the badge-semantics decider from the console. Then the table
+where the shim can't?). (The badge-semantics decider RESOLVED in this file — billing 08-13,
+limit-side 08-17.) Then the table
 graduates into the scout's Go-rail canary duty (charter build order step 2) and this spike
 becomes its seed data.

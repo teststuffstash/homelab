@@ -130,7 +130,7 @@ else
       "repos": [$iac, $main],
       "mainRepo": $main,
       "coordinatorModel": "sonnet",
-      "workerModel": "deepseek/deepseek-v4-flash-0731",
+      "workerModel": "deepseek/deepseek-v4-flash",
       "workerModelFallbacks": ["xiaomi/mimo-v2.5", "tencent/hy3", "claude/haiku"]
     }]' agents/stacks.json > agents/stacks.json.tmp && mv agents/stacks.json.tmp agents/stacks.json
     echo "  stacks.json: added $STACK (models = the current evidence-based default chain)"
@@ -194,7 +194,7 @@ if [ -n "$FROM" ]; then
     SURFACES_OPT=".github/workflows/devbox-cache.yml .github/workflows/ghcr-cleanup.yaml
       .github/workflows/renovate-approve.yaml .github/workflows/update-pr-branch.yml
       .pre-commit-config.yaml .dockerignore
-      .agents/fix.yaml .agents/review.yaml .agents/review.md .agents/research.yaml .agents/build.yaml
+      .agents/fix.yaml .agents/review.md .agents/research.yaml .agents/build.yaml
       scripts/ci.sh scripts/test-chart.sh scripts/validate-chart.sh scripts/package-chart.sh
       scripts/build-image.sh scripts/deploy-pin.sh"
     for f in $SURFACES_REQ; do dcopy req "$f"; done
@@ -381,11 +381,10 @@ Codifiable scaffolding done. The remainder, in order (then loop the lint):
        2. the stack's -iac — a Gateway on the 40.x VIP + one HTTPRoute per hostname. NOT homelab's.
        3. OPERATOR, once, and the jail cannot do it: the repo Actions secrets for the publish
           workflow, from the Crossplane-minted connection Secret. The jail PAT deliberately lacks
-          the Secrets permission (docs/github-setup.md), so this is a host-side step:
-            kubectl get secret <stack>-specs-s3 -n <stack> \
-              -o jsonpath='{.data.writer_access_key_id}' | base64 -d \
-              | gh secret set SPECS_S3_ACCESS_KEY_ID -R $ORG/$MAIN
-            # …and writer_secret_access_key -> SPECS_S3_SECRET_ACCESS_KEY
+          the Secrets permission (docs/github-setup.md), so this is a host-side step — add the
+          stack's ROW to the MAPPING in scripts/github-secrets-sync.sh (repo | ns |
+          <stack>-specs-s3 | writer | SPECS_S3), commit it, then:
+            devbox run github-secrets-sync
           Use the WRITER pair. The reader pair authenticates fine and then 403s on upload.
        WHY THIS IS EASY TO MISS: specs-publish.sh SOFT-SKIPS when the credentials are absent, so
        until step 3 lands CI is green and the site is empty. WEB-03 probes the served site rather

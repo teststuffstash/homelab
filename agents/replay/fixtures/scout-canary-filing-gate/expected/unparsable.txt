@@ -1,11 +1,11 @@
-CALL scout_canary_mint model=midco/echo:free free=true
-CALL scout_canary_ride model=midco/echo:free
-CALL scout_canary_mint model=midco/echo:free cleanup
-CALL rotation_post source=canary entry={"model":"midco/echo:free","canary_verdict":"unknown","free":true}
-CALL gh issue create --repo teststuffstash/homelab --title 🔭 model scout: 1 new candidate model(s) (<today>) --body Weekly model scout (REPORT-ONLY, FU-062 / docs/agents/model-routing.md §M7): models whose BASE id is NEW on OpenRouter since the last tick, advertise `tools`, and are `:free` or ≤ $0.50/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in.\n\n| # | model | AA int/code/agentic | effective $/M in | price note | pinned provider | uptime | providers | canary |\n|---|---|---|---|---|---|---|---|---|\n| 1 | `midco/echo:free` | `unbenched` | — | — | `—` | — | — | unknown |\n\n*effective $/M = cache-aware per-provider min at 80% cache hit (§M3); pinned provider = the tools-capable session pin `--lookup` would choose (§M4). AA indices = MCP `get-model` (§M7 leg 2); `unbenched` = not in the Artificial-Analysis feed, which is the normal state of a genuine newcomer — the canary rung, not the benchmark, is what speaks for those. `canary` = the rung-1 rail-probe verdict (§M7 leg 3), typed (`error_class` vocabulary); `—` = not canaried this tick.*\n\n**Graduation is a human call**: add worthy entries to `agents/stacks.json` `workerModelFallbacks` — evidence, not vibes. The same commit MUST add the model_tiers line (router-self-test enforces chain ⊆ tiers since 2026-08-03) — ready to paste:\n\n`"midco/echo:free": "free"` (argocd/resources/openrouter-proxy/model-classes.json — merging rolls the proxy)\n\n**Canary rides** (FU-062/FU-024/FU-161 — trivial closed rail ride, ephemeral capped key; `only-free` = proxy 403s any paid model pre-spend):\n\n| model | canary verdict |\n|---|---|\n| `midco/echo:free` | unknown (only-free) |\n\n*A TYPED verdict carries the launcher's `error_class`, never a bare `failed`: `clean` = the model completed a real tool-calling ride on a budget-capped key; `auth-storm`/`timeout`/`harness-death`/`budget-403`/… = the rail or the key failed, typed; `suspect-infra`/`inconclusive` = a benchmark-capable model that fails the rail (contradiction rule, leg 4). A canary verdict is evidence for graduation, not automatic graduation. Full outcome + transcript in the ledger (model label).*
-OUT ROW 1 midco/echo:free benched=false canary=unknown
+CALL scout_canary_mint model=midco/echo:free free=true harness=opencode
+CALL scout_canary_ride model=midco/echo:free harness=opencode attempt=1
+CALL scout_canary_mint model=midco/echo:free harness=opencode cleanup
+CALL rotation_post source=canary entry={"model":"midco/echo:free","harness":"opencode","provider":"","attempt":1,"canary_verdict":"unknown","free":true}
+OUT ROW 1 midco/echo:free benched=false canary=opencode=unknown
 OUT CANARY midco/echo:free unknown free=true
 ERR canary: riding up to 3 candidate(s) in ns teststuffstash
-ERR canary: dispatching midco/echo:free (only-free)
-ERR → posting digest issue on teststuffstash/homelab
+ERR canary: dispatching midco/echo:free harness=opencode arm=<proxy-pin> attempt=1 (only-free)
+ERR scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): midco/echo:free (canary: opencode=unknown) — gh issue create NOT run
+ERR scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/agents/model-routing.md §M7 leg 4)
 RC 0

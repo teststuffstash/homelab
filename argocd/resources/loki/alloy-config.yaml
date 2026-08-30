@@ -42,7 +42,39 @@ data:
 
     loki.source.kubernetes "pods" {
       targets    = discovery.relabel.pods.output
+      forward_to = [loki.process.tenant.receiver]
+    }
+
+    // ADR-118, the WRITE half of Loki multi-tenancy: stamp each entry's tenant so loki.write
+    // sends X-Scope-OrgID per push and one write component still serves every tenant.
+    //
+    // ⚠ IT MUST BE THIS COMPONENT, NOT A RELABEL RULE. The first cut set `__tenant_id__` in
+    // discovery.relabel and it silently did NOTHING: `__`-prefixed labels are TARGET metadata,
+    // dropped before entries reach loki.write, so no header was sent at all. Alloy's own metric
+    // told the truth — `loki_write_sent_entries_total{tenant=""}` — and the loki.write docs say
+    // it outright: "If no tenant_id is provided, the component assumes that the Loki instance at
+    // endpoint is running in single-tenant mode and no X-Scope-OrgID header is sent." Caught by
+    // probing a running pod BEFORE the auth_enabled flip; had the two shipped together, Loki
+    // would have rejected every push for a missing tenant and cluster-wide ingest would have
+    // stopped. Do not "simplify" this back into a relabel rule.
+    //
+    // `label = "namespace"` reads the namespace label the relabel above already sets — so tenant
+    // == NAMESPACE with no mapping table anywhere, and nothing in this file changes when a stack
+    // gains a namespace. The reason it is namespace and not stack is on the READ side: the
+    // authorizing proxy splits its header per OCCURRENCE, not per delimiter (verified in
+    // kube-rbac-proxy v0.22.1 pkg/proxy/proxy.go), so Loki's `a|b|c` multi-tenant syntax would
+    // authorize against a namespace literally named "a|b|c". One tenant per query is the shape
+    // that works. Full reasoning: docs/loki-tenancy.md §Why tenant == namespace.
+    //
+    // ⚠ Until loki-config.yaml flips `auth_enabled: true`, Loki OVERRIDES the header to "fake" —
+    // so this being correct is observable at Alloy (the metric above), never at Loki. That
+    // asymmetry is why step 1 is verified at the sender.
+    loki.process "tenant" {
       forward_to = [loki.write.default.receiver]
+
+      stage.tenant {
+        label = "namespace"
+      }
     }
 
     loki.write "default" {

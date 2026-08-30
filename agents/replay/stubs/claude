@@ -1,0 +1,13 @@
+#!/bin/sh
+# Fixture-backed `claude`, installed on $PATH ahead of the real one by agents/replay/run.sh.
+#
+# Returns a canned JSON response for the re-review shadow fixture. The response envelope
+# matches the --output-format json shape: {result: "<verdict JSON>"}.
+set -u
+_RP_TOOL=claude
+. "${REPLAY_STUB_DIR:?agents/replay/run.sh must export REPLAY_STUB_DIR}/_common.sh"
+
+_rp_record "$@"
+# Return a canned response matching the --output-format json envelope
+printf '{"result": "{\"verdict\": \"APPROVE\", \"findings\": \"Shadow re-review findings.\"}"}'
+exit 0

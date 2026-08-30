@@ -25,9 +25,9 @@ privileged ns) so CI noise/privilege stays off the service nodes.
 + tool versions live in the repo's `devbox.json` (+ `scripts/`), not in CI YAML. Consequences:
 
 - The same gate runs **locally and in CI**, identically (`devbox run ci` in the STACK repos —
-  homelab itself is the deliberate exception: no aggregate `ci` task, ~22 named lint tasks run
-  by `.github/workflows/ci.yaml`, which also carries three inline blocks (ratchet, pin-only,
-  pre-warm) that gate the workflow rather than the code.
+  homelab itself is the deliberate exception: no aggregate `ci` task, ~28 named `devbox run`
+  tasks run by `.github/workflows/ci.yaml`, which also carries three inline blocks (the
+  ADR-103 ratchet, `tofu fmt`, the ghcr pre-warm) that gate the workflow rather than the code.
 - Tier-A and Tier-B run the *same* logic under different forges — only `runs-on` + the registry differ.
 - Swapping the runner later (ARC → **Blacksmith**/**Chainguard**) is a `runs-on`/host change with
   **zero logic change**.
@@ -113,7 +113,7 @@ flowchart TB
     a["Runner is a <b>container</b> on a Talos node — no systemd"]
     a --> an["nix-installer → no init → 'docker shim' supervisor → ✗ docker 125"]
   end
-  subgraph pvm["Self-hosted Proxmox VM: runs-on homelab-vm (proposed)"]
+  subgraph pvm["Self-hosted Proxmox VM: runs-on proxmox-vm (LIVE — ci-runner-01, ADR-082)"]
     direction TB
     p["Debian/Ubuntu VM on pve<br/>own kernel · systemd · dockerd · <b>persistent /nix</b>"]
     p --> pn["nix-installer → systemd daemon ✓<br/>warm /nix ⇒ no multi-minute cold install"]

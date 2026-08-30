@@ -77,25 +77,30 @@ transitions:
 
   - id: MP-T02
     name: updater brings a behind PR current
-    owner: update-pr-branch reusable workflow (adRise action, homelab-merge App)
+    owner: in-cluster updater (ADR-111 — exporter edge + */15 Argo CronWorkflow → agents/update-pr-branch.sh, homelab-merge App via ESO; hosted reusable retired 2026-08-26, homelab#745)
     when: "behind ∧ green ∧ armed ∧ ¬conflicted ∧ ¬changes_requested — oldest first, ONE per run"
     emits: branch_updated
     status: guarded
-    unreplayed: "third-party GitHub-hosted action — config pinned by anchors, behavior owned upstream"
+    replay:
+      - agents/replay/fixtures/updater
     guards:
       - desc: "FIFO + one-per-run + armed-only"
-        anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "require_auto_merge_enabled" }
-      - desc: "doorbell dedup (billing, 2026-07-24): push bursts collapse to running + latest
-          queued — safe because level-triggered; cancel-in-progress DELIBERATELY false (killing an
-          in-flight run can drop the 422→merge-conflict labeling, MP-T06 — the silent-park class)"
-        anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "cancel-in-progress: false" }
+        anchor: { file: agents/update-pr-branch.sh, pattern: "oldest armed\\+BEHIND, FIFO" }
+      - desc: "burst serialization: ONE mutex across edge + cron submissions (Cron Forbid cannot
+          see Sensor submissions), so push bursts serialize instead of racing (the
+          cancel-in-progress: false rationale of the hosted era, carried by the mutex now).
+          ⚠ This used to also claim it preserved a 422→merge-conflict labeling MP-T06 depends on;
+          since homelab#986 (PR#1005) the update-branch call carries expected_head_sha and a 422
+          — conflict OR concurrent-push race — SKIPS without labeling. MP-T06 is fed by leg 3's
+          armed∧DIRTY labeler alone, one pass later"
+        anchor: { file: agents/coordinator/update-pr-argo.yaml, pattern: "synchronization" }
       - desc: "the CR∧BEHIND unstrand belt fires ONLY on new content since the newest reviewer
           verdict (non-merge commits — the reflex's reviewable_again shape; updater merges are not
           content or the belt feeds itself) and never on agent/error / agent/arbitrate PRs.
           Measured 2026-08-17: the unconditional belt spent 34 branch updates + ~35 CI runs
           keeping unmergeable PRs current in one busy-master day (#473 ×16 parked, #475 ×18
           breaker-latched); unreadable probe data HOLDS, never updates"
-        anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "new content since verdict" }
+        anchor: { file: agents/update-pr-branch.sh, pattern: "unstrand" }
     incidents: ["2026-07-09 oracle-fleet#6 (changes-requested refusal deadlock → MP-T04's BEHIND exception)"]
 
   - id: MP-T03
@@ -280,6 +285,8 @@ transitions:
     replay:
       - agents/replay/fixtures/arbitrate/first-tick
       - agents/replay/fixtures/arbitrate/probe-unreadable
+      - agents/replay/fixtures/arbitrate/landing-sequence
+      - agents/replay/fixtures/arbitrate/fu147-refire-blocked
       - agents/replay/fixtures/state-fp/state-fp
     guards:
       - desc: "reflex splits rounds-exhausted (escalation → agent/arbitrate) from impossible-state (anomaly → agent/error)"
@@ -288,6 +295,8 @@ transitions:
         anchor: { file: agents/review-reflex.sh, pattern: 'index\("agent/arbitrate"\)' }
       - desc: "scan emits arbitrate units; sibling clauses exclude the label"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'arbitrate\|' }
+      - desc: "arbitrate unit emission excludes APPROVED+armed PRs (landing-sequence exclusion — a past-arbitration state needs no escalation)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "autoMergeRequest" }
       - desc: "unchanged-state debounce: the unit is emitted only when the PR's state fingerprint (head|reviewDecision|checks|newest verdict) differs from the recorded state-fp marker — PR#234 drew 5 identical dispatches in 30m before this (homelab#198)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "STATE_FP_JQ" }
       - desc: "the play, exactly one of four: re-dispatch-with-clarification / rule-follow-up-class (terminal = dismiss the superseded reviewer verdict, homelab#141) / close-not-mergeable / escalate (meta-4 doctrine)"

@@ -163,4 +163,114 @@ present "probe-fail: PR-list probe failure is WARNed" \
   "$(cat "$TMP/probe.err")"
 
 printf '\n  %s passed, %s failed\n' "$PASS" "$FAIL"
+
+# ══ 4. --machine mode — derived classes from Prometheus (homelab#892) ════════════════════════
+# Seam: PROMETHEUS_URL=${PROMETHEUS_URL:-http://kube-prometheus-stack-prometheus.monitoring.svc:9090}
+# (overridable to http://stub for testing with a curl stub). The curl stub returns synthetic
+# agent_item_class series data in Prometheus JSON format.
+
+# Create a curl stub for Prometheus
+cat > "$TMP/bin/curl" <<'CURLSTUB'
+#!/usr/bin/env bash
+# Stub curl for Prometheus queries — matches the most specific query FIRST.
+# Distinguishes goal_descendant_info (scope resolution), agent_item_class_since_timestamp_seconds
+# (age computation), and agent_item_class (classification). Scoped variants carry an
+# item=~"..." filter that narrows the returned rows to the goal's descendants.
+if [[ "$*" == *"goal_descendant_info"* ]]; then
+  # Goal descendant info: return a strict subset of the agent_item_class items
+  # (items 833 and 834 are in scope for goal 775; 889, 840, 841, aggregate are out)
+  cat <<'JSON'
+{"status":"success","data":{"resultType":"vector","result":[
+  {"metric":{"item":"833"},"value":[1787054400,"1"]},
+  {"metric":{"item":"834"},"value":[1787054400,"1"]}
+]}}
+JSON
+elif [[ "$*" == *"agent_item_class_since_timestamp_seconds"* ]]; then
+  if [[ "$*" == *"item=~"* ]]; then
+    # Scoped timestamp series — only items in scope (833, 834)
+    cat <<'JSON'
+{"status":"success","data":{"resultType":"vector","result":[
+  {"metric":{"repo":"homelab","item":"833"},"value":[1787054400,"1787027400"]},
+  {"metric":{"repo":"homelab","item":"834"},"value":[1787054400,"1787027400"]}
+]}}
+JSON
+  else
+    # Full timestamp series: item -> start epoch in value[1]
+    cat <<'JSON'
+{"status":"success","data":{"resultType":"vector","result":[
+  {"metric":{"repo":"homelab","item":"833"},"value":[1787054400,"1787027400"]},
+  {"metric":{"repo":"homelab","item":"834"},"value":[1787054400,"1787027400"]},
+  {"metric":{"repo":"homelab","item":"889"},"value":[1787054400,"1787054040"]},
+  {"metric":{"repo":"homelab","item":"840"},"value":[1787054400,"1787054400"]},
+  {"metric":{"repo":"homelab","item":"aggregate"},"value":[1787054400,"1785931200"]}
+]}}
+JSON
+  fi
+elif [[ "$*" == *"/api/v1/query"* ]]; then
+  if [[ "$*" == *"item=~"* ]]; then
+    # Scoped class series — only items in scope (833, 834)
+    cat <<'JSON'
+{"status":"success","data":{"resultType":"vector","result":[
+  {"metric":{"repo":"homelab","item":"833","class":"held-merged-unlinked","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"834","class":"queued-held-by-ghost","who":"operator"},"value":[1787054400,"1"]}
+]}}
+JSON
+  else
+    # Full class series (includes one item absent from timestamp series to test unknown case)
+    cat <<'JSON'
+{"status":"success","data":{"resultType":"vector","result":[
+  {"metric":{"repo":"homelab","item":"833","class":"held-merged-unlinked","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"834","class":"queued-held-by-ghost","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"889","class":"riding","who":"machine"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"840","class":"container","who":"none"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"841","class":"parked-blocked","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"aggregate","class":"backlog-aggregate","who":"operator"},"value":[1787054400,"1"]}
+]}}
+JSON
+  fi
+fi
+exit 0
+CURLSTUB
+chmod +x "$TMP/bin/curl"
+
+board "$TMP/machine.actions" "$TMP/machine.err" "PROMETHEUS_URL=http://stub BOARD_NOW=$NOW" --machine platform
+if [ "$BOARD_RC" = 0 ]; then ok "machine: board.sh --machine exits 0"; else bad "machine: board.sh --machine exited $BOARD_RC"; fi
+present "machine: header has board v1 prefix" "board v1" "$BOARD_OUT"
+present "machine: header has scope=stack:platform" "scope=stack:platform" "$BOARD_OUT"
+present "machine: header has sources=labels:live pods:live derived:tick@" "sources=labels:live pods:live derived:tick@" "$BOARD_OUT"
+present "machine: held-merged-unlinked row (who=operator)" "who=operator class=held-merged-unlinked id=homelab#833" "$BOARD_OUT"
+present "machine: queued-held-by-ghost row (who=operator)" "who=operator class=queued-held-by-ghost id=homelab#834" "$BOARD_OUT"
+present "machine: computed elapsed times (7h30m for items 833 and 834)" "since=7h30m" "$BOARD_OUT"
+present "machine: backlog-aggregate row (who=operator)" "who=operator class=backlog-aggregate id=homelab/aggregate" "$BOARD_OUT"
+present "machine: riding row (who=machine) with computed age" "who=machine  class=riding id=homelab#889 age=6m" "$BOARD_OUT"
+present "machine: container row (who=none)" "who=none     class=container id=homelab#840" "$BOARD_OUT"
+present "machine: item absent from timestamp series renders unknown" "since=unknown" "$BOARD_OUT"
+absent "machine: no § REVIEW section" "§ " "$BOARD_OUT"
+absent "machine: no totals line" "totals —" "$BOARD_OUT"
+
+# ══ --scope content assertions (homelab#914) ═══════════════════════════════════════════════
+# The two --scope cases below test BOTH flag forms AND assert row content. The curl stub's
+# goal_descendant_info response seeds items 833 and 834 as descendants of goal 775, leaving
+# items 889, 840, 841, and aggregate out of scope. Assertions:
+#   - in-scope items (833, 834) ARE present in $BOARD_OUT
+#   - out-of-scope items (889, 840) ARE absent from $BOARD_OUT
+# This catches the regression class where the unwrapping bug on board.sh:220 silently returned
+# the full unscoped board while BOARD_RC=0 — the absence assertion would red.
+
+# --scope=goal:775 (equals form) — also tests the --scope=value parsing codepath
+board "$TMP/scope-eq.actions" "$TMP/scope-eq.err" "PROMETHEUS_URL=http://stub BOARD_NOW=$NOW" --machine --scope=goal:775 platform 2>/dev/null || true
+if [ "$BOARD_RC" = 0 ]; then ok "machine: --scope=goal:775 (equals form) parsing works"; else bad "machine: --scope=goal:775 parsing failed"; fi
+present "scope-eq: in-scope item 833 present" "id=homelab#833" "$BOARD_OUT"
+present "scope-eq: in-scope item 834 present" "id=homelab#834" "$BOARD_OUT"
+absent  "scope-eq: out-of-scope item 889 absent" "id=homelab#889" "$BOARD_OUT"
+absent  "scope-eq: out-of-scope item 840 absent" "id=homelab#840" "$BOARD_OUT"
+
+# --scope goal:775 (space form) — the form that was actually broken in round 3
+board "$TMP/scope-sp.actions" "$TMP/scope-sp.err" "PROMETHEUS_URL=http://stub BOARD_NOW=$NOW" --machine --scope goal:775 platform 2>/dev/null || true
+if [ "$BOARD_RC" = 0 ]; then ok "machine: --scope goal:775 (space form) parsing works"; else bad "machine: --scope goal:775 parsing failed"; fi
+present "scope-sp: in-scope item 833 present" "id=homelab#833" "$BOARD_OUT"
+present "scope-sp: in-scope item 834 present" "id=homelab#834" "$BOARD_OUT"
+absent  "scope-sp: out-of-scope item 889 absent" "id=homelab#889" "$BOARD_OUT"
+absent  "scope-sp: out-of-scope item 840 absent" "id=homelab#840" "$BOARD_OUT"
+
 [ "$FAIL" -eq 0 ] || exit 1

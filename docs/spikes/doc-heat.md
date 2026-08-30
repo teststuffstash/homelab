@@ -1,8 +1,11 @@
 # Spike — doc-heat: measure which markdown actually gets read
 
-_Opened 2026-08-11 (operator + jail design session). Status: **v0 BUILT** — jail-transcript
-parser + static report: `devbox run doc-heat` → `~/.claude/doc-heat/report.html`. Tracker
-pointer: FU-164._
+_Opened 2026-08-11 (operator + jail design session). Status: **PROMOTED 2026-08-30 (operator
+ruling — the settle bar was met by run 1, S5 #983)**: doc-heat is a STANDING docs-cleanup
+input (the skill's comb step names it), not an open experiment. v0 = jail-transcript parser +
+static report: `devbox run doc-heat` → `~/.claude/doc-heat/report.html`. ⚠ Heat data from
+before the S5 rewrite describes text that no longer exists — the first post-S5 read is dated
+on the tracker (due ~2026-09-06). Tracker pointer: FU-164._
 
 ## Question
 
@@ -14,8 +17,9 @@ read from B) — reliably enough to drive docs-cleanup deletions with evidence i
 
 - **The living/historical split already exists** (`scripts/docs-graph-lint.sh` `is_historical()`
   + the docs-cleanup Hard rules + /design layer 4) — the report CONSUMES it, never re-invents
-  it. Cold sediment is the system working. (Second consumer of the split — promotion of the
-  case list to one shared home is now warranted.)
+  it. Cold sediment is the system working. (A second consumer of the split now exists; if a
+  third arrives, promoting the case list to one shared home rides an ordinary docs-cleanup —
+  the ≥2-pattern rule's call, not a deferral.)
 - **Deletion signal = heat × class × age — never heat alone.** Recovery runbooks are rare-read,
   highest-value (boot-from-git); brand-new files are cold by age, not by worth (v0's own first
   run listed the just-committed skills files as cold-living — correctly, and uselessly without
@@ -46,8 +50,8 @@ list"). The data schema carries a `source` dimension from day one (`jail` today)
 
 ## v1 (next) — cluster leg, separate + combined views
 
-Same parser over `s3://agent-transcripts` slices (transcripts-sync; FU-140 notes the one-PVC
-coverage gap) with `/work/repo` + `/work/context/<name>` path normalization. **Operator
+Same parser over `s3://agent-transcripts` slices (transcripts-sync; the one-PVC coverage gap
+closed with FU-140, archived 2026-08-12 — cluster slices are complete) with `/work/repo` + `/work/context/<name>` path normalization. **Operator
 requirement (2026-08-11): jail and cluster stay viewable separately AND combined — not a full
 merge.** This leg simultaneously delivers the [context-repos](context-repos.md) spike's overdue
 measurement sweep (its load-bearing / redundant / untouched classification) — one parser, two
@@ -63,16 +67,42 @@ namespaced alias (`homelab-doc-heat` — the alias IS the hostname, `docs/garage
 sign-before-haproxy order). Deliberately NOT built in v0 — the report must first prove it
 changes docs-cleanup decisions.
 
-## What would settle it
+## What would settle it — MET (settle test run 1, below)
 
-One docs-cleanup pass that cites heat evidence for ≥3 delete/merge/move decisions the operator
-accepts — or a pass showing heat added nothing over the existing lint + judgment. Then either
-promote (serve it, wire it into the docs-cleanup skill as a standing input) or close the spike
-and delete the generator.
+The bar was: one docs-cleanup pass citing heat evidence for ≥3 delete/merge/move decisions the
+operator accepts. Run 1 (2026-08-26, the S5 #983 trims) met it. What remains is the OPERATOR's
+promote-vs-close call (FU-164): serve the report + wire it into the docs-cleanup skill, or
+close the spike and delete the generator.
+
+## Settle test — run 1 (2026-08-26, S5 #983)
+
+150 sessions, 101/125 files. The pass used per-line heat (cold spans = lines never TARGETED by
+a ranged read or grep — whole-file corpus loads do not flatten it), which turned out to be the
+yield; file-level cold mostly survived on class excuses, as the doctrine predicted.
+
+**Heat-cited decisions (3 accepted trims, −214 lines from the two hottest corpus docs):**
+model-routing §M10's superseded narrative (a 74-line measured-cold span → the what-stands
+block); issue-authoring's FU-143 implementation contract + soak forensics (88 cold lines of
+shipped-and-archived history → the invariant + two lessons + FSM pointers); issue-authoring's
+two-hop cascade (40 cold lines — where heat ALSO caught a staleness no lint could see: the
+section still described the ADR-111-retired hosted updater). Every line cut here was paid on
+every ~110k-token design-agents corpus load.
+
+**Candidates correctly REJECTED on class excuse (the doctrine working):**
+`tofu/cloudflare/README.md` (0 heat since 07-13 — root-README/recovery class, rare-read
+highest-value) and `spikes/no-human-in-the-loop.md` (1 hit — live spike backing FU-097, two
+inbound links). Blind spots confirmed as declared: skills/`ground-rules.md` (auto-injected,
+never Read) and cluster-consumed docs (recipes, lenses, the coordinator brief) are invisible
+to the jail-only v0 — do not judge those from this report; the v1 cluster leg is what makes
+them measurable.
+
+**Verdict input:** heat changed decisions — the ≥3 bar is met, and the line-level channel
+found both trim mass and a staleness class the lints structurally miss. The promote-vs-close
+call (serve the report; wire it into docs-cleanup as a standing input) is the operator's.
 
 ## Links
 
-FU-164 (pointer) · [context-repos.md](context-repos.md) + FU-117 (shared sweep) · FU-163 (hot
-ungreppable terms could feed the glossary) · FU-058 (retro transcript slices precedent) ·
-FU-140 (cluster capture gap) · docs-cleanup skill (the consumer) · `scripts/docs-graph-lint.sh`
+FU-164 (pointer) · [context-repos.md](context-repos.md) (the shared sweep — FU-117 archived) ·
+[`docs/glossary.md`](../glossary.md) (live — hot ungreppable terms feed it; FU-163 archived) ·
+FU-058 (retro transcript slices precedent) · docs-cleanup skill (the consumer) · `scripts/docs-graph-lint.sh`
 (the living/historical split).

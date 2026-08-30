@@ -131,6 +131,9 @@
       "garage-backup": [
         "bash scripts/garage-backup.sh \"$@\""
       ],
+      "github-secrets-sync": [
+        "bash scripts/github-secrets-sync.sh \"$@\""
+      ],
       "github-tofu": [
         "tofu -chdir=tofu/github init -input=false",
         "sh scripts/github-tf.sh \"$@\""

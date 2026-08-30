@@ -1,16 +1,20 @@
-# fixture-dir -> family  (FU-167 cleanup move 5; agents/replay/README.md §The cleanup contract)
 # Tables (fix-debounce, fu088-ladder, go-rail-latch, goal-ancestor, goal-budget-refusal, retro-harvest, scout-canary-filing-gate, summary-comment) stay at depth 1 and are NOT listed.
+# fixture-dir -> family  (FU-167 cleanup move 5; agents/replay/README.md §The cleanup contract)
 _selftest-missing-sentinel	_selftest
 _selftest-unrecorded-read	_selftest
 _selftest-wrong-expectation	_selftest
 adopted-not-queued-surfaces	adopted-not-queued-surfaces
 arbitrate-first-tick	arbitrate
+arbitrate-fu147-refire-blocked	arbitrate
+arbitrate-landing-sequence	arbitrate
 arbitrate-probe-unreadable	arbitrate
+arbitrate-quoted-mid-body	arbitrate
 argv-payload-over-ceiling	argv-payload
 argv-payload-retro-handoff	argv-payload
 argv-payload-warn-band	argv-payload
 asvs	asvs
 board-classification	board-classification
+body-footprint-mismatch	body-footprint-mismatch
 c4c5-bodies-probe-fail	c4c5-bodies-probe-fail
 c4c5-infeasible-parks	c4c5-infeasible
 c4c5-infeasible-probe-fail	c4c5-infeasible
@@ -32,11 +36,14 @@ goal-validated	goal
 harness-run-cmd-claude	harness-run-cmd
 harness-run-cmd-go	harness-run-cmd
 harness-run-cmd-goose	harness-run-cmd
+harness-run-cmd-re-review-shadow	harness-run-cmd
+harness-run-cmd-re-review-shadow-skip-tag	harness-run-cmd
 harvest-deep-sprout	harvest
 harvest-goal-closed	harvest
 harvest-goal-open-exhausted	harvest
 harvest-goal-open-funded	harvest
 harvest-master-inert	harvest
+item-class-batch/item-class-batch	item-class-batch
 ledger-emitter-rounds	ledger-emitter-rounds
 lens-posture	lens-posture
 model-id-parse-drift	model-id-parse-drift
@@ -44,6 +51,9 @@ opencode-phonehome-killswitch	opencode-phonehome-killswitch
 pick-rail-both	pick-rail
 pick-rail-clear	pick-rail
 pick-rail-go	pick-rail
+pr-cap-per-base	pr-cap-per-base
+pr-cap-per-base-collision	pr-cap-per-base
+pr-cap-per-base-jq-extraction	pr-cap-per-base
 rail-degrade	rail-degrade
 reflex-tick-proceed	reflex-tick
 reflex-tick-skip	reflex-tick
@@ -65,6 +75,7 @@ retro-key-subscription	retro-key
 retro-rank-snapshot-exclusion	retro-rank-snapshot-exclusion
 review-flip-belt	review-flip-belt
 review-flip-belt-probe-fail	review-flip-belt
+review-phantom-belt	review-phantom-belt
 reviewer-currency-behind-skips	reviewer-currency
 reviewer-currency-current-proceeds	reviewer-currency
 reviewer-currency-probe-fail-proceeds	reviewer-currency
@@ -87,6 +98,7 @@ scan-wedge-alert	scan-wedge-alert
 scout-bench-mcp-error	scout-bench
 scout-bench-ranked-columns	scout-bench
 scout-bench-unkeyed-unbenched	scout-bench
+scout-intake-stateless	scout-intake-stateless
 scout-variant-batch-rollout	scout-variant
 scout-variant-known-base	scout-variant
 session-atomic-gate	session-atomic-gate

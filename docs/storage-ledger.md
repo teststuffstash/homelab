@@ -12,28 +12,45 @@ jointly blow the tier — which is exactly what happened.
 > **A tier's committed capacity is the sum of every cap charged against it, across every repo, and
 > exactly one ledger owns that sum.** A claim that doesn't appear in the ledger doesn't exist.
 
-## Current shape (2026-08-07)
+## Current shape (2026-08-25)
 
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
-| `std` | hp-01, thinkcentre, **wk-02** | 496.6G | 410.6G | 237.3G (58%) | 193.7G (39%) |
-| `bulk` | wk-metal-01, **wk-metal-04** | 975.1G | 706.7G | 633.5G (90%) | 384.9G (39%) |
-| `fast` | thinkcentre Optane ×2 | 28.7G | 28.7G | 5.4G | 1.3G |
+| `std` | hp-01 **×2 disks**, thinkcentre, **wk-02** | 581.7G | 501.6G | 305.0G (61%) | 243.3G (42%) |
+| `bulk` | wk-metal-01, **wk-metal-04** | 908.1G | 658.1G | 580.0G (88%) | 619.9G (68%) |
+| `fast` | thinkcentre Optane ×2 | 26.7G | 26.7G | 5.0G | 1.4G |
 
 **`fast` eligibility (operator ruling 2026-08-11, FU-159):** SCRATCH for disk-write-heavy pods
 (CI builds and the like) — single-node replica-1 Optane of modest speed; NEVER load-bearing
 data/metadata (Garage-meta migration onto it was proposed and REJECTED).
 
-Two things to read off it. **`bulk`'s 90% is deliberate, not drift** — the registry mirrors were
-oversized on purpose (see homelab#116 below), which spends nominal headroom to buy the thing that
-actually matters, and physical sits at 39%. **`std`'s comfort is new**: it had two zones and
+Two things to read off it. **`bulk`'s ~88% committed is deliberate, not drift** — the registry
+mirrors were oversized on purpose (see homelab#116 below), which spends nominal headroom to buy
+the thing that actually matters, and physical sits at 68% (the 2026-08-25 table above). **`std`'s comfort is new**: it had two zones and
 hp-01 at 105% until wk-02 moved into it the same day.
 
-**hp-01 remains the tight node and no knob fixes it.** 104% of allocatable, 70% physical, and
-43.3G of that is the container image store on the smallest disk in the tier. Its reservation
-already under-covers its own images, so lowering it would only move the lie. This is the one place
-in the lab where the honest answer is *buy a disk* — and see the hypervisor section for why that
-disk cannot be a SATA SSD in pve.
+**hp-01 was the tight node and no knob fixed it** — 104% of allocatable, 70% physical, 43.3G of
+that the container image store on the smallest disk in the tier, and a reservation that did not
+even cover its own images, so lowering it would only have moved the lie. This section said the
+honest answer was *buy a disk*; **that happened on 2026-08-25**. A second 128G SATA SSD (a Toshiba
+HG5d, `hg5d`, tagged `std`) is mounted at `/var/lib/longhorn/hg5d` and adds **119.2G raw / 116.8G
+free** to the tier — declared in `machines/machines.yaml`'s `longhorn_disks`, provisioned by Talos
+at boot, registered by `scripts/longhorn-tag-disks.sh`. hp-01's original disk stays at 117G with
+its image store; the new one carries Longhorn data only, hence `storageReserved: 0`.
+
+Two things that made it more than a bolt-on. The disk arrived with a **bootable Windows install**
+(MBR, a flagged 350M "System Reserved" NTFS + 118.9G NTFS), so it needed `talosctl wipe disk` first
+— Talos refuses to partition a device that already carries a partition table. And it is now the
+*second* 128G SATA SSD in that box, which makes `/dev/sdX` an unsafe way to name either of them:
+the entry is pinned to `/dev/disk/by-id/wwn-0x500080db1007e129` precisely because `longhorn_disks`
+*partitions* what it points at. `install_disk: /dev/sda` on the same node is the remaining
+name-based selector and should follow (FU-076's neighbourhood).
+
+**The hypervisor is still not where a spare SATA SSD goes**, but the reason is cost, not
+impossibility (operator, 2026-08-25): pve's board exposes the ports and they are disabled in
+firmware, so enabling them is a BIOS session with the whole cluster down. The direction for
+ADR-114's remaining capacity is therefore **cheap boxes with their own storage**, not more disks
+in pve — see the hypervisor section for what that firmware state actually looks like.
 
 ## The double-booking that started this (2026-07-22, closing oracle-iac#40)
 
@@ -54,8 +71,9 @@ A ledger that isn't measured is a spreadsheet. Four sightings in six days, all t
 
 1. **2026-07-22** — Garage exports **no** metrics to Prometheus at all (checked: zero `garage_*`
    series). Breaches surface only as faulted writes.
-2. **2026-07-25** — Garage LMDB-full at 03:42 surfaced only as a failed sleep-ingester Job (meta
-   volume has been 10Gi since).
+2. **2026-07-25** — Garage LMDB-full at 03:42 surfaced only as a failed sleep-ingester Job (the meta
+   volume was 10Gi from then until the 2026-08-25 rebuild grew it to 30Gi, rf=1 on wk-02 —
+   FU-137).
 3. **2026-07-25** — the **Longhorn** side of the bulk tier: 9 retro rides' 20Gi scratch allocations
    pushed both bulk disks past `storageScheduled` cap → new scratch PVCs faulted
    (`ReplicaSchedulingFailure`) → every ride/worker Init wedged. Immediate mitigations: scan
@@ -112,9 +130,21 @@ never returned to the pool. That is why the guest could use 118G while the pool 
 treated as the reliable half of the bulk tier precisely because it is a VM that never powers off
 — while its bytes sat on a single consumer NVMe, shared with three other VMs, on a pool with 2.9G
 to spare. The two laptops/desktops it was trusted over are independent physical disks in
-independent boxes. That reasoning is what moved Garage's replicas to them (ADR-089 addendum).
+independent boxes. That reasoning is what moved Garage's replicas to them (ADR-089 addendum). (The META volume
+moved back to a single wk-02 replica on 2026-08-25 to buy restore headroom — FU-137's trailing
+⚠; the ADR-114 build-out is what returns its redundancy.)
 
-**RESOLVED 2026-08-07.** Pool extended by 15G from VG free, `thin_pool_autoextend_threshold` set
+**RESOLVED 2026-08-07 — and it did not hold.** The pool refilled to 100% by 2026-08-18 and
+again 2026-08-24 (the autoextend belt fired at 80% on 08-17 and failed exactly as the caveat
+below predicted — 257 VG extents left), froze wk-01 twice, and wiped Garage's metadata:
+[incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md). `discard=on` returns
+nothing on its own — Talos guests never fstrim, so freed blocks only came back with the 08-07
+and 08-24 manual trims. **The trim is automated since 2026-08-25** — a daily privileged CronJob
+per pool VM, `argocd/resources/node-fstrim/`, with the reclaim pushed to the pushgateway and two
+alerts on the belt itself (below). It went in at 78.72% and took the pool to **62.99%** on its
+first run: wk-02 returned 236 GiB, wk-01 76 GiB, cp-01 and wk-03 36 GiB each. Metering the *pool*
+is still open — nothing outside pve can see it.
+Pool extended by 15G from VG free, `thin_pool_autoextend_threshold` set
 to 80 (LVM warned it was disabled; it is a belt that can only consume free VG extents, not
 capacity), then `discard=on` + `ssd=1` on wk-02's scsi0 and a trim:
 
@@ -126,8 +156,12 @@ capacity), then `discard=on` + `ssd=1` on wk-02's scsi0 and a trim:
 253 GB returned. Recipe — including the two ways that do NOT work — in
 [`runbook.md`](runbook.md) §"Reclaiming thin-pool space from a Talos VM".
 
-⚠ **pve cannot take a SATA SSD.** Checked 2026-08-07: of 90 PCI devices the NVMe is the *only*
-mass-storage controller — no AHCI enumerated, `ahci` not loaded, `/sys/class/ata_port/` empty. The
+⚠ **pve will not take a SATA SSD without a full-cluster outage.** Checked 2026-08-07: of 90 PCI
+devices the NVMe is the *only* mass-storage controller — no AHCI enumerated, `ahci` not loaded,
+`/sys/class/ata_port/` empty. The ports are physically present and this is a firmware setting, so
+it is *possible* — it just costs a BIOS session with every VM on the box down, which is why the
+answer to "where does the next disk go" is a new cheap box, not this one (operator, 2026-08-25).
+The
 board (`INTEL X99-P4`) exposes SATA ports physically but they are disabled in firmware. The x16
 slot is permanently occupied: the box **refuses to POST without the GPU** (a GeForce 9600 GT with
 `driver=none`, so it idles at full clocks heating the M.2 beneath it — NVMe sensor 1 reads ~69°C).
@@ -210,8 +244,28 @@ threshold**.
   decision, not a rubber stamp. **135Gi/150 (90%) since 2026-08-04** — `tofu-state` took 1Gi
   ([`tofu-state.md`](tofu-state.md)); it was sized against the actual 1.4MB main-root state
   precisely because the tier has no room for a round-number guess.
-- **Garage metering** — enable the admin-API metrics (`:3903`) + a ServiceMonitor; per-bucket
-  usage-vs-cap panels; a **>80% alert**. Still the open item.
+- **Guest fstrim — BUILT 2026-08-25** (`argocd/resources/node-fstrim/`, FU-093's "periodic trim").
+  A daily CronJob per pool VM (`zone: proxmox`), staggered, privileged, `/var` hostPath'd; the
+  runbook recipe made a schedule. It pushes `node_fstrim_bytes_trimmed` / `_success` /
+  `_last_run_timestamp` per node, and `NodeFstrimFailed` + `NodeFstrimStale` alert on the belt —
+  because the historical failure was not a trim that broke, it was a reclaim path with no owner.
+  ⚠ What this does NOT do: watch the pool. There is still no pve exporter, so if the trim keeps up
+  nobody learns the pool's level; the alerts prove the mechanism runs, not that it is sufficient.
+  ⚠ Nor does it reach **ci-runner-01** — same pool, not a k8s node; it is an ordinary Linux guest
+  and its own `fstrim.timer` is the cover. Unverified, and worth a look.
+  ⚠ Second layer, not built: a Longhorn `filesystem-trim` RecurringJob. A node-level fstrim cannot
+  reclaim space *inside* a replica's sparse file, so volume-level churn needs its own trim before
+  the node one can see it.
+- **Garage metering — BUILT 2026-08-25/26** (homelab#934 → #965, `3d5fa082`): the chart flags
+  flipped (`monitoring.metrics.enabled` + `serviceMonitor.enabled` in
+  `argocd/platform/garage.yaml`), so the already-running exporter's 48 families are scraped, and
+  `argocd/resources/garage-alerts/prometheusrule.yaml` ships the two belts this section asked
+  for — **`GarageDiskFillingUp`** (`garage_local_disk_avail/total < 0.2`, the usage half) and
+  **`GarageTableEmpty`** (`table_size == 0` — the direct detector for the
+  [2026-08-24 wipe class](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)), plus
+  `GarageAdminMetricsAbsent` as the scrape-coverage belt, promtool-fixtured. ⚠ Shared-fate
+  caveat stands: on the day, Prometheus was dark while the wipe happened — the belt is for the
+  NEXT one. Defect tail riding the loop: #977/#978 (+ their #1015/#1016 sprouts).
 - **Longhorn metering — BUILT 2026-08-04** (`02cf8bb`,
   `argocd/resources/longhorn-alerts/prometheusrule.yaml`). Both sums, as specified:
   `LonghornDiskFillingUp`/`LonghornDiskAlmostFull` on physical bytes (85%/93%) and

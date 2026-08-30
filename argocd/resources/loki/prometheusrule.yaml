@@ -1,0 +1,69 @@
+# Log-volume ingest belt, aggregate half (homelab#811). WHY THIS EXISTS: on 2026-08-19..24 a
+# single pod (prometheus-pushgateway, 256KB "inconsistent help strings" lines) ramped Loki ingest
+# 0.9 → 48.7 GiB/day — 98% of everything ingested — and filled the loki Garage bucket to its hard
+# cap before anything alerted, because NOTHING watched log volume: Loki itself was not even
+# scraped. The belt has three straps across two systems:
+#   • per-namespace ABSOLUTE (LokiNamespaceLogVolumeHigh, below) — attributes the flood to ONE
+#     tenant. Was a per-POD LogQL alert in the Loki ruler until ADR-118 step 2; tenancy killed
+#     that home (a ruler rule is per-tenant-directory, so it would have needed one mount per
+#     namespace and lost every namespace added afterwards, silently). The distributor counter
+#     carries a `tenant` label for free, so this strap now covers new namespaces automatically
+#     and — unlike LogQL — is promtool-testable. Granularity cost: pod → namespace, which the
+#     #811 shape tolerates with room (see SIZING).
+#   • aggregate ABSOLUTE (LokiIngestVolumeHigh, below) — a flat ceiling no healthy day touches.
+#   • aggregate RAMP (LokiIngestVolumeRamp, below) — deviation vs the system's own 7d baseline,
+#     with a clamp_min FLOOR so a quiet system's first real logging can never fire it (a ramp
+#     alert without a floor pages on 100 B/s → 5 KB/s, which is nothing).
+# SIZING, all measured 2026-08-24: pre-flood baseline ~12-18 KB/s total (~1-1.5 GiB/day raw);
+# the #811 flood 590 KB/s (48.7 GiB/day) — 30-50x baseline. Absolute 120 KB/s ≈ 10 GiB/day sits
+# ~8x above baseline and 5x under the flood; ramp 8x-of-baseline catches a recurrence in ~2.5h
+# even if baseline drifts up; floor 25 KB/s ≈ 2 GiB/day. The distributor counter resets on a Loki
+# roll — rate() bridges resets, and the recording rule is what gives the ramp a 7d baseline that
+# survives them. Behaviour pinned in loki-ingest.promtool-test (all three alerts + the floor).
+# PER-NAMESPACE SIZING, re-measured live 2026-08-27 rather than inherited from the #811 write-up:
+# the loudest whole namespace is argocd at 2.0 KB/s (then garage 1.5, forgejo 0.6, agent-coordinator
+# 0.6, registry-cache 0.6). The 25 KB/s threshold therefore keeps ~12x headroom over the loudest
+# legitimate namespace and sits ~24x under the #811 flood (590 KB/s) — the same threshold the
+# per-pod rule used, and it still discriminates at the coarser grain. What it cannot see is one
+# chatty pod inside an already-busy namespace; that is an accepted trade, and pod attribution is
+# one Grafana query away (in the annotation below).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loki-ingest
+  namespace: loki
+  labels: { app: loki }
+spec:
+  groups:
+    - name: loki-ingest
+      rules:
+        - record: loki:distributor_ingest_bytes:rate30m
+          expr: |
+            sum(rate(loki_distributor_bytes_received_total[30m]))
+        - alert: LokiNamespaceLogVolumeHigh
+          expr: |
+            sum by (tenant) (rate(loki_distributor_bytes_received_total[30m])) > 25000
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Namespace {{ $labels.tenant }} is logging {{ $value | printf \"%.0f\" }} B/s (>2GiB/day)"
+            description: "One namespace is producing more than ~2GiB/day of log volume — the #811 class (a 256KB-per-line error flood filled the loki Garage bucket in 6 days while nothing alerted). The whole cluster's baseline is ~1-2GiB/day total and the loudest healthy namespace is ~2KB/s, so this is ~12x above normal for a single namespace. Attribute and fix the EMITTER (or its trigger) rather than raising the threshold. The tenant label IS the namespace (ADR-118). Narrow to the pod: sum by (pod) (bytes_over_time({namespace=\"{{ $labels.tenant }}\"}[6h])) in Grafana Explore, or the Loki volume API (index/volume, aggregateBy labels). Before ADR-118 this was LokiPodLogVolumeHigh, evaluated per-pod by the Loki ruler."
+        - alert: LokiIngestVolumeHigh
+          expr: |
+            loki:distributor_ingest_bytes:rate30m > 120000
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki is ingesting {{ $value | humanize }}B/s (>10GiB/day) — something is flooding the log store"
+            description: "Aggregate log ingest is ~8x the measured healthy baseline (~12-18KB/s). The #811 class: one pathological emitter filled the loki Garage bucket to its hard cap in 6 days, wedging flush AND the compactor. Attribute the namespace with LokiNamespaceLogVolumeHigh, then the pod with the volume API, then fix the EMITTER — the bucket cap is the belt, not the fix."
+        - alert: LokiIngestVolumeRamp
+          expr: |
+            loki:distributor_ingest_bytes:rate30m > clamp_min(8 * avg_over_time(loki:distributor_ingest_bytes:rate30m[7d]), 25000)
+          for: 2h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki ingest {{ $value | humanize }}B/s is >8x its own 7d average — a new log flood is ramping"
+            description: "Log volume deviates hard from this system's own trailing week. Fires only above a 25KB/s (~2GiB/day) floor, so a quiet system growing its first real workload stays silent — this alert is for the 30-100x pathological ramps (#811: 0.9→48.7GiB/day over 5 days while under every static radar until the bucket hit its cap). Attribute per-namespace via LokiNamespaceLogVolumeHigh, then per-pod via the volume API."

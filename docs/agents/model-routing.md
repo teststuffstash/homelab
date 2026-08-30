@@ -31,6 +31,17 @@ Bearer <key>` everywhere; "probed" = verified against our account, with date.
 | frontend `/api/frontend/v1/benchmarks` | model quality scores | **session-cookie-gated, API key 401s** (2026-08-02) — see MCP row |
 | MCP `https://mcp.openrouter.ai/mcp` | `list-daily-model-rankings` (rotation feed, top-30 daily, live since 2026-07-27), `list-models`/`get-model`, `search-docs`, **`list-benchmarks`**, **`list-task-classifications`**, `get-endpoint-uptime-history`, `list-presets`/`get-preset` | standard API key works for rankings (no OAuth dance, 2026-08-02); full tool set via OAuth (7-day key, $10 cap, includes BILLABLE `send-message`). Probed 2026-08-03 (OAuth): `list-benchmarks` sources = `artificial-analysis` (AA intelligence/coding/agentic composite indices, ~126 models) **and `openrouter` — OpenRouter's OWN evals (gpqa_diamond accuracy + $/task), i.e. the formerly session-gated frontend data**; `list-task-classifications` = 7d traffic share per task tag (incl. `code:devops_config`, `devops`, `security_audit`, `research_report`) with top-10 models each; `get-endpoint-uptime-history` = 72h hourly per-provider uptime **with quantization in the endpoint label** (fp8/fp4 — the §M4 staleness/quant filter's data). **Probed 2026-08-03: the standard account key pulls `list-benchmarks` AND `list-task-classifications`** (jail replay of the proxy's exact `_mcp_call` shape with the `router-account-key` Secret) — the scout's weekly capability/market pull is fully automatable server-side; OAuth is only needed for the interactive/billable tools |
 | provisioning keys API | mint per-run capped keys (the ADR-081 runtime-key design) | scout canary keys ride this with `only-free` guardrail (FU-024) |
+| frontend `/api/frontend/v1/stats/effective-pricing?permaslug=` | per-provider 30d market effective prices + REAL cache-hit (the §M3 market basis) | works **unauthenticated** (2026-08-26). ⚠ takes the **DATED permaslug** (`deepseek-v4-flash-20260731`), never the model id (`…-0731`) — the wrong form returns an EMPTY payload, not an error. The proxy already derives it from `/endpoints` tag names (`_PERMASLUG_RE`); a hand probe must too. Ranks effective **input** price only — output price and quality are not in it |
+| frontend `/api/frontend/v1/stats/tool-call-error-rate?permaslug=` | per-ENDPOINT daily tool-call error-rate series (the Performance-tab modal's data — the Auto Exacto quality signal itself) | found 2026-08-26 after the RSC row below couldn't reach it (the tab lazy-loads); unauthenticated; endpoint ids join to providers via `endpointStats`/`/endpoints`. THE §M14 pin-v2 live-floor input + a fleet alerting feed (a provider at 39.6% tool-error read 99.6% *uptime* — "up" ≠ "works") |
+| model-page RSC stream (`GET openrouter.ai/<author>/<slug>` + `RSC: 1` header) | the Performance-tab data as React-Query dehydrated state, keyed by dated permaslug: **`benchmarkScores`** (per-provider Auto-Exacto benchmark rows — gpqa_diamond + TAU-Bench score, `run_count`, `endpoint_id`, 32d rolling — the quality table behind Exacto routing), **`endpointStats`** (per-provider latency/throughput **percentiles** p50–p99, `is_deranked`, `capacity_tpm`, quantization — richer than `/endpoints`), **`appStats`** (daily model-level `total_tool_calls` + `requests_with_tool_call_errors` → the model-wide tool-call error rate), `uptimeRecent`, `topColos` | probed 2026-08-26 (the 0731 read). Unauthenticated. ⚠ the PER-PROVIDER **Tool Call / Structured Output Error Rate** table lazy-loads on tab open and is NOT in the initial stream — its endpoint is unfound (candidate paths under `/api/frontend/v1/stats/*` all 404); the website is the only reader today. The signal is still CONSUMABLE blind: **Auto Exacto** reorders providers by it on every tool-calling request by default, and the **`:exacto`** model-variant suffix applies it explicitly — ⚠ an explicit §M4 `provider.order` pin presumably suppresses it (unverified; the 0731 matrix run tests this) |
+
+Roster additions probed 2026-08-26 on the MCP row (standard `router-account-key`, no OAuth):
+`get-credits` **works with the standard account key** — the REST `/api/v1/credits` row above is
+management-key-only and grew the #180/#190 operator-gauge detour; the MCP tool may be the simpler
+leg if that chain ever needs rework (noted, not acted on). Also new: `list-providers`,
+`list-app-rankings`, `list-model-endpoints` (byte-identical field set to `/endpoints` — no error
+rates), `send-feedback` (per-generation feedback), `get-generation`, media tools
+(`generate-image`/`generate-speech`/`transcribe-audio`) and the Ori eval-harness pair.
 
 **No "top weekly / rising" view exists upstream for us**: daily popularity comes from the MCP
 rankings tool; *new* models come from the scout's weekly `/models` diff. A 1–2-week riser view
@@ -89,6 +100,24 @@ Maps 1:1 onto the `error_class` shipped with FU-057 (live in `agent-session.sh` 
 | `changes-requested`, `ci-failed` | **round** (max 3) | next round, same chain position |
 | `harness-death` (goose `-32602`), `auth-storm` (401/403), `timeout`, provider 404/5xx | **strike** per (task, model) | same round, next chain model, re-dispatch NOW |
 | `budget-403` | neither | estimator/cap problem → escalate (the existing ⚠ path) |
+
+> **Note — raw-log fallback path (homelab#871 / PR #879) split `budget-403` into subclasses.**
+> This table describes the **in-pod finalize vocabulary** (`agent-session.sh` finalize, the
+> `error_class` that lands in the ledger). A separate code path — the `agent-session.sh`
+> raw-log fallback, which greps the harness run log when the structured report
+> was never written — emits the finer-grained `budget-403-key` / `budget-403-account` plus a
+> residual `budget-403` (the subclass that the in-pod finalize would have emitted). The
+> reaction differs by subclass:
+>
+> - **`budget-403-account`**: the OpenRouter account credit is exhausted — an operator top-up,
+>   not an estimator/cap problem. No estimator change fixes it.
+> - **`budget-403-key`**: a single key hit its rate/limit cap. On a fresh key well under its
+>   account-level cap this is a mint defect (the key was issued with too-low limits).
+> - **`budget-403`** (residual): the in-pod meaning — estimator/cap problem → escalate the ⚠ path.
+>
+> The finalize twin is tracked as **agent-runtime#85** (filed by the same G-A checkpoint that
+> produced this note). When that lands the table gains real rows for the subclasses and this
+> note is replaced — it is a temporary bridge, not a permanent fixture.
 
 Chain exhausted (all models struck for this task) → `agent/blocked` with the strike list in the
 comment — that IS worth a human.
@@ -313,6 +342,37 @@ surface (§M8 classes, §M9 chainless stacks, §M13 research pools). Legs, in bu
    the scout-infra hypothesis — the stack demonstrably worked — so partial identical-failure
    groups stay per-model and ride the contradiction rule's retry; the ci-red/strike fleet rules'
    any-N≥2 reading does not import here, they have no clean-sibling refuter).
+
+   **Evidence-bearing vs non-evidence partition (FU-161 filing gate, #877).** The shipped
+   skip-log gate (`model-scout.sh:476`) cites this section; the partition itself is not a
+   sanity rule but the **gate condition** that decides whether a canary verdict counts as
+   evidence for graduation:
+
+   - **Evidence-bearing**: `clean` — the model completed a real tool-calling ride — or any
+     `error_class` NOT in the non-evidence list below (a genuine *model* outcome). The three
+     enforcement sites test the verdict STRING only, so a free-model (`only-free`) canary that
+     returns `clean` counts as evidence exactly like a budget-capped one: `.canary` is merged
+     into `ranked.json` independent of `.free` (`model-scout.sh:447-448`). On the canary path
+     `clean` is in practice the only reachable evidence-bearing verdict — the §M1 model-outcome
+     classes (`changes-requested`, `ci-failed`) are PR-ride verdicts and a canary is an adhoc,
+     no-PR probe (`model-scout.sh:347-348`);
+   - **Non-evidence (rail/platform fault, tells you nothing about the model)**: `void`,
+     `no-stats`, `unknown`, `mint-failed`, `key-never-minted`, `harness-death`, `auth-storm`,
+     `budget-403`, `timeout`, `suspect-infra`, `inconclusive`.
+
+   A row carrying a non-evidence verdict is withheld from graduation consideration. The
+   partition is enforced in three sites in `agents/model-scout.sh`, all in the digest
+   assembly section:
+
+   1. The conceptual comment at `model-scout.sh:461-470` (the source of truth for the
+      non-evidence list);
+   2. `EVIDENCE_CANARIED_N` at `model-scout.sh:472` — a jq `select` that counts models whose
+      canary verdict is *not* in the non-evidence set;
+   3. `WITHHELD` at `model-scout.sh:474` — the inverse jq `select` that names the models
+      excluded from the digest.
+
+   There is no single home for the partition; these three sites are its ground truth. When
+   a verdict is added to or removed from the non-evidence list, all three must change.
 5. **Pool curation — the §M13 duty.** The scout maintains the named class pools: ranked,
    family-deduped, disjoint bands by convention, deeper than any plausible slot ask, refreshed
    weekly from capability × market (`task_market`) × effective price × rail-compat. Diversity
@@ -439,98 +499,36 @@ label) — never request-time inference in the proxy.
 > role now routes — coordinator + dispatch units via PR#801 (the goal-model case map became the
 > `goal-decompose` class in `model-classes.json`; §IL-T11's anchor moved with it), the reviewer
 > via PR#803 (decorrelation consumed as the #516 `/route` primitive, failover literal deleted in
-> authoritative mode), responder/retro/fix-debounce via PR#788 (#782). "The only caller is
-> `agent-session.sh`" and "implemented as a launcher-side case in `coordinator-scan.sh`" below
-> are HISTORY. What still stands from this section: the AUTHORING-vs-CHECKING axis (decompose =
-> reasoning tier, reviews stay sonnet-class), the `GOAL_MODEL` escape hatch (now in
-> `coordinator-session.sh`), the audit/research-classes-are-the-wrong-shape warning (heeded —
-> `goal-decompose` is its own subscription-rail class), and the `dispatch`-tier caveat at the
-> section's end. Residue: explicit `--model` override semantics on the coordinator side is
-> homelab#810; the legacy case-map prose gets deleted with the G-A sweep.
+> authoritative mode), responder/retro/fix-debounce via PR#788 (#782). The section's
+> launcher-era narrative was trimmed to the what-stands block below (2026-08-26, the S5
+> doc-heat pass — a 74-line measured-cold span).
 
-Everything above governs the **OpenRouter rail**. The coordinator does not ride it: it runs
-`claude -p` against the Claude subscription (`coordinator-claude`, `CLAUDE_CODE_OAUTH_TOKEN`) with
-`--model sonnet|opus|haiku|fable`, and its model comes from `cmodel` —
-`.spec.coordinatorModel // "sonnet"` on the live `AgentStack` claim, read by `coordinator-scan.sh`.
-Not from `agents/stacks.json` (that is a fallback for stacks absent from the cluster, and a failed
-cluster read PROBE-FAILs loudly rather than silently downgrading).
+**ADR-096 override rule (settled, #810):** explicit CLI `--model` on coordinator/reviewer = override (route skipped, `resolve-model --model`). Scan-supplied default (`coordinatorModel`) = constraint + fail-OPEN fallback (`resolve-model --fallback`, route consulted). Retro `--cell` model = **explicit override** since #861/PR#864 (cells are experiment ARMS — ADR-104, experiments do not jitter, so the router may never collapse the A/B axis; `resolve-model --model` with `--fallback` kept for validation + the unreachable-proxy literal). `AGENT_MODEL` env = universal override (checked ahead of the route in all roles). Stated once here; the launcher comments cite this section by name.
 
-**The policy already describes this lane; only the call is missing.** `role_defaults.coordinator`
-→ class `dispatch` → `rails: ["subscription"]`, `tier: "dispatch"`; `model_tiers` grades
-`claude/haiku: cheap`, `claude/sonnet: large`, `claude/opus: premium`; and `/route`'s subscription
-branch is implemented, with its own `subscription_ok(tier)` capacity gate. But `/route`'s **only
-caller is `agent-session.sh`** (the worker launcher) — `coordinator-session.sh` consults the proxy
-solely for `/loop-git-token?role=coordinator`. So a `dispatch` class floor set today changes
-nothing about a coordinator session. Written is not applied; check the caller, not the config.
+What still stands from this section (the rest is history — PR#788/#801/#803 wired every
+role to `/route` and the launcher case maps died with them; the era's narrative is in git):
 
-**`goal-decompose` runs a reasoning tier (operator ruling, 2026-08-05).** It resolves to **opus**;
-every other clause — `goal-review` included — keeps the claim's `coordinatorModel` (sonnet). The
-axis is **AUTHORING vs CHECKING**, not goal vs routine: decompose CREATES the work, and a
-mis-scoped child burns rides and is expensive to undo once its ride opens a PR.
+- **The AUTHORING-vs-CHECKING axis.** `goal-decompose` runs the reasoning tier (now the
+  `goal-decompose` class in `model-classes.json`, subscription rail); reviews stay
+  sonnet-class — a review is a review, proven twice on live goal-reviews (2026-08-05) and on
+  sleep-tracking#9. Escalate a specific hard goal with `GOAL_MODEL`
+  (`coordinator-session.sh`); never raise a clause's floor.
+- **The assembly reviewer must DIFFER from the decomposing model** (issue-authoring leg (c));
+  decorrelation is consumed as the #516 `/route` primitive since PR#803.
+- **`audit`/`research` classes are the wrong shape for coordination reuse** — both pin
+  `rails: ["openrouter"]` with a fusion head; coordination stays on the subscription safety
+  net (heeded: `goal-decompose` is its own subscription-rail class).
+- ⚠ **A goal small enough for one ride is not a goal** (same ruling era): circles#17
+  decomposed to two children while a one-shot arm reached comparable output, so neither the
+  fan-out's advantage nor the reasoning tier was ever load-bearing — calibrate goals so
+  decomposition and the acceptance judgement actually carry weight
+  ([research-and-specs.md](research-and-specs.md) step 5 cites this as its evidence).
+- ⚠ **The `dispatch` tier's premise is measured FALSE and deliberately left alone**:
+  `tier_thresholds` reads "~30s dispatch units" yet 149/149 coordinator sessions exceeded 30s
+  over 7d (p50 105s, p99 1342s) — and its 0.9 utilization threshold makes coordinators defer
+  LAST. A whole-lane question; re-open with evidence about what the latch protects.
 
-⚠ `goal-review` was in that list for ~90 minutes and was removed the same day, on evidence. Both of
-its live runs were sonnet and both were right: the 16:32 one ruled "not yet met", correctly told
-branch-2 (a remaining child covers the gap) from branch-3 (author the missing child), authored no
-redundant child, and caught stale `Base:` prose the meta session had missed; the 18:15 one verified
-against the goal branch and the post-merge CI run rather than the labels, and left the
-human-reserved PRs alone. It also contradicted standing doctrine —
-[`reviewer-session.sh`](../../agents/reviewer-session.sh): *"Sonnet is sufficient here; opus is
-available for a genuinely high-stakes PR via `--model`, but it is not the default"* (proven on
-sleep-tracking#9, where a sonnet reviewer caught the coordinator's own misjudgment). A review is a
-review. **Escalate a specific hard goal with `GOAL_MODEL`; do not raise the floor for a clause.**
-⚠ All of this evidence comes from circles#17, a goal small enough for one ride — so it bounds what
-a *small* goal needs, not what a real one does. Re-test on the first genuinely multi-deliverable
-goal. Implemented as a launcher-side `case` in
-`coordinator-scan.sh` (ADR-094: dispatch params are launcher-owned, never LLM-assembled), with a
-`GOAL_MODEL` env escape hatch. **When the coordinator lane is wired to `/route` (post-P4, FU-095)
-this map becomes a subscription-rail reasoning class and is deleted** — note that `audit` and
-`research` are the wrong shape to reuse as-is: both pin `rails: ["openrouter"]` with an
-`openrouter/fusion` head, and coordination must stay on the subscription safety net.
-
-⚠ **A goal small enough for one ride is not a goal** (same ruling). circles#17 decomposed to two
-children while the one-shot arm reached a comparable bake+page and drew only `CHANGES_REQUESTED` —
-so the fan-out arm's advantage was never demonstrated, and the reasoning tier had nothing hard to
-chew on. Calibrate goals so decomposition and the acceptance judgement are actually load-bearing.
-
-⚖ **The goal lane's model axis is PHASE, not clause — a single `GOAL_MODEL` knob turns the wrong
-thing (operator observation, 2026-08-11, from the FU-165 pilot prep; design OPEN, deliberately
-unwired).** The goal coordinator's work is three different jobs wearing one clause family: (1) the
-INITIAL decomposition — full-context composition, deserves the big model AND special instructions
-(the FU-165 pilot runs it in the jail with the design-agents corpus loaded for exactly this
-reason); (2) the MECHANICAL goal-review ticks — "did a child close, does something cover the gap"
-— which need no strong model at all; (3) sub-issue AUTHORING from harvested follow-ups — judgment
-work again, but it arrives as a TRICKLE (one sprout per closure), and paying a full-context
-re-read per sprout is too expensive for any model. The candidate shape is therefore not a model
-knob but a CHECKPOINT structure: big model + special instructions at decompose, and again at a
-designated larger checkpoint once the initial child set completes (a batched re-read that does the
-accumulated authoring judgment in one context), with the trickle in between handled mechanically
-or queued for the checkpoint. Do NOT wire a per-stack goal-model knob before this is designed —
-it would harden the wrong axis. **RESOLVED by ADR-106 (2026-08-12): the phases are decompose /
-deterministic ticks / checkpoints / assembly / verdict — reasoning tier at decompose AND
-checkpoints (the two authoring moments), NO model on per-closure ticks (demoted to a
-deterministic burn-down append), sonnet on reviews, human at the tax + verdict.** Build rides
-Bucket A4. **Tracked by:** FU-090 (its Operator-deferred line holds the status).
-
-**The reviewer lane's one model split: the ASSEMBLY review (2026-08-06).** `review-reflex.sh`
-routes a pick whose **head** is `goal/**` — the goal→master assembly PR, the cumulative review the
-whole goal rests on — to `--model ${REVIEW_GOAL_MODEL:-sonnet} --rubric .agents/review-goal.md`
-(the rubric falls back to the generic prompt in repos that do not ship the file). Same shape as
-`GOAL_MODEL`: launcher-side `case`, env escape hatch, default **stays sonnet** per the doctrine two
-paragraphs up (a review is a review — escalate a specific hard assembly, do not raise the floor),
-and it dies the same death when the lane routes through `/route`. ⚠ The assembly reviewer must
-DIFFER from the decomposing model (issue-authoring leg (c)): with `goal-decompose` on opus, setting
-`REVIEW_GOAL_MODEL=opus` collides — escalate `GOAL_MODEL` or `REVIEW_GOAL_MODEL`, never both.
-Child PRs (`fix/*` heads *into* `goal/**`) stay on the default rubric+model path.
-
-⚠ **The `dispatch` tier's premise is measured FALSE, and is deliberately left alone for now.**
-`tier_thresholds` reads *"dispatch = ~30s dispatch units (coordinator/responder)"* and grants
-`dispatch` a **0.9** utilization threshold against `heavy`'s 0.8 — so coordinator sessions defer
-LAST, i.e. they are the most willing to consume scarce subscription headroom. Over 7 days,
-n=**149** coordinator sessions: p50 **105s**, p90 529s, p99 1342s, max 3072s, and **149 of 149
-exceeded 30s**. Not one run matched the premise. Raising goal-* to `heavy` was considered and NOT
-taken (2026-08-05) — it is a whole-lane question, not a goal-lane one, and belongs with evidence
-about what the latch is actually protecting.
-
+**Tracked by:** FU-090 (its Operator-deferred line holds the goal-lane status).
 
 ### M11. The cost ladder across RAILS — free → subscription-headroom → paid (operator direction 2026-08-08)
 
@@ -802,6 +800,81 @@ into the mechanism layer):
   with their reason; the roster + pool version print before any dispatch, and `--dry-run` stops
   there. Pinned by `agents/replay/fixtures/research-draw-roster` (recorded from `router.route()`
   against the shipped pool table). Build: FU-162.
+
+### M14. Provider selection — priced per successful JOB (ADR-115, 2026-08-26)
+
+**The decision record is ADR-115; this section owns the mechanism.** Born from the 0731 intake
+read (TICK-LOG 2026-08-26; digest homelab#966): the M4 pin optimizes effective $/M with an
+uptime floor and is blind to serving QUALITY — measured on one model, provider tool-call error
+rates span 0.2%→39.6% (single-snapshot, across providers; one provider's DAILY series ranges
+wider — DigitalOcean 29–56% over the probed window, the Evidence base below) and GPQA 68.7→90.0
+(quantization + serving stack, not weights), our pin
+sampled the mid/bottom of that distribution exclusively, and uptime cannot see the failure class
+(a malformed tool call arrives inside a 200). The missing term is **overhead cost**:
+
+    expected_cost(provider) = eff_price × expected_tokens
+                            + p(fail | provider, model) × C_overhead
+
+`C_overhead` = the measured downstream cost of a failed ride (strike handling + re-dispatch +
+coordinator session + review rounds + wall clock; ~$0.5–2 plus latency, from our own ledger).
+At flash prices the failure term dominates any price delta (→ delegate); at research prices the
+price term re-enters (→ our pin, upgraded). One formula, two regimes.
+
+**Class policy (`provider_policy` in model-classes.json — git-side, per the git/cluster split):**
+
+| class tier | policy | mechanism |
+|---|---|---|
+| cheap coding (`coding` on flash-class models) | **`exacto`** — no `provider.order` injected; Auto Exacto (ON by default upstream for tool requests) owns the ordering; keep only `max_price` | subtractive: the pin injection is skipped; the FU-088/M12 gates, `MAX_TOKENS_FLOOR`, and the `/generation` harvest (attribution) are unchanged |
+| priced (research / audit / weave / judges) | **`pin-v2`** | M4 + (1) the 15% band with a serving-quality tie-break inside it (native/fp8 over fp4 → per-provider Exacto benchmark score → market cache-hit); (2) a permissive benchmark provider-floor (drop only KNOWN scores ≫ below the model's provider median; slug-keyed join — display names differ); (3) a live tool-call-error floor from the `stats/tool-call-error-rate` feed (exclude ≥10% 5d-avg; de-prefer >2× model median in-band); (4) (model, provider) pair-cooldowns fed by the proxy's own tool-call validation — the #783 provider-attribution legs |
+| experiments (scout matrix / canary arms) | **explicit `@` arms** (PR#963): `@<provider_slot>` (eff-ranked index, typed 400 when unresolvable) or `@<slug>`, `allow_fallbacks: false`; `:exacto` forwards un-pinned | the reproducibility instrument — never the production policy |
+
+**⚠ Exacto ↔ prompt caching (operator find, 2026-08-26 — upstream
+[docs/guides/routing/auto-exacto](https://openrouter.ai/docs/guides/routing/auto-exacto)):**
+Auto Exacto reorders providers on EVERY tool-calling request, overriding the sticky routing
+prompt caching rides — in a tool loop it can deprioritize the cache-warm provider mid-session
+(upstream's own words: cache misses mid-conversation). That collides head-on with M4's doctrine
+(cache lives AT the provider; caching provider > cheaper provider) and with this fleet's
+cacheRead-dominated token shape. Consequences, folded into the build order: the step-1 flip is
+judged on OBSERVED per-arm cache-hit (`router_observed_cache_hit` + the `/generation` harvest),
+never price+tool-error alone — at flash prices the failure term may still dominate the cache
+penalty, but that is the A/B's question, not an assumption. If Exacto loses on cache economics,
+the opt-out shapes are `sort: "price"` in the provider object or the `:floor` variant (both keep
+sticky routing, both subtractive like the pin-skip), or Tool Search `defer_loading: true` to
+shrink the cached prefix until an Exacto collision is tolerable. The priced classes are
+unaffected — pin-v2 keeps the session pin, which is itself the cache-stickiness mechanism.
+
+**The scout representativeness principle:** a canary rides the provider policy of the CLASS it
+feeds — same policy, not same provider (an Exacto-routed class gets Exacto-routed canaries;
+pinning them would make the evidence LESS representative). Newcomer cold-start (Exacto has no
+history on a new model → early ordering ≈ uninformed) is absorbed by the existing attempts
+budget + the served-slug harvest; provider DIAGNOSIS stays the `@`-arm matrix's job. Follow-up:
+canary rows should carry the SERVED slug from the harvest, not `provider:""`.
+
+**Evidence base (2026-08-26, all live-probed):** the pin picked Relace fp4 over DeepSeek
+first-party (native, top GPQA/TAU, 95% market cache, 100% uptime) for $0.0012/M; DigitalOcean
+pin-eligible at 29–56% tool-error (per-endpoint DAILY series from the found
+`stats/tool-call-error-rate` endpoint — a multi-day range, which is why it exceeds the
+single-snapshot spread's 39.6% max); our 0731 traffic = Relace/OpenInference/DeepInfra only,
+strikes un-attributable (#783); the elite tool-call tier (Fireworks 0.23%) never sampled, ~3×
+price ≈ cents/month at fleet volume. Rung-1 canaries pass on BOTTOM-quartile providers
+(homelab#966: both harnesses clean via OpenInference/Relace), so the discriminating evidence
+needs rung-2-size tasks × provider arms.
+
+**Build order (fresh-session pickup — FU-186):**
+
+1. **Exacto flip for cheap coding** — `provider_policy` knob in model-classes.json + the proxy
+   skipping pin injection for that policy (keep `max_price`); trial-gated: the matrix A/B below
+   judges it before it becomes standing.
+2. **The 0731 matrix run** (the re-admission evidence): intake mode (built) ×
+   `SCOUT_CANARY_HARNESSES="opencode goose"` × arms {default-pin, no-pin/exacto, `@deepseek`,
+   `@relace` control} on a rung-2-sized task (the trivial ride does not reproduce the failure
+   class), judged on death rate / $/clean / cache-hit from the harvest. Verdict lands as the
+   model_tiers re-admission PR citing the digest chain.
+3. **pin-v2** for the priced classes (the four legs above; the tie-break is `compute_pin`'s
+   `ranked` sort key growing quality terms — the plumbing shipped in PR#963).
+4. **The proxy tool-call validator** → `router_tool_call_errors{model, provider}` (our-traffic
+   twin of the upstream feed) + pair-cooldowns + the model-health dashboard column + an
+   alert on our traffic landing on a high-error serving.
 
 ## The sleep-stack pilots — task-class routing + multi-harness evidence (FU-095)
 

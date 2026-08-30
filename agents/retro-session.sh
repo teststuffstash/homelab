@@ -49,10 +49,22 @@ while [ $# -gt 0 ]; do case "$1" in
 esac; done
 [ -n "$CELL" ] || { echo "FATAL: --cell <harness>:<model> required (e.g. claude:opus, goose:deepseek/deepseek-v4-pro)" >&2; exit 2; }
 HARNESS="${CELL%%:*}"; MODEL="${CELL#*:}"
-# G-A 9, issue #782: resolve the cell model via /route before spawning.
-# The cell string is passed as a constraint so the router sees the A/B design axis.
-# Fail-OPEN to the literal cell model when the proxy is unreachable.
-MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "$CELL" --fallback "$MODEL")"
+# ── ADR-096 override rule: retro cell model = explicit override ──
+# The retro --cell flag is MANDATORY — every retro invocation supplies one.
+# The cell model is passed as BOTH --fallback and --model (explicit override):
+#   --fallback is the resolve-model.sh validation requirement (line 47) and
+#              the fail-OPEN literal when /route is unreachable
+#   --model    makes resolve-model.sh short-circuit before the /route call,
+#              so the cell rides EXACTLY its configured model
+# This ensures the A/B experiment axis is preserved: two cells with different
+# models ride EXACTLY their configured models, and the router cannot collapse
+# them onto one pool pick (G-A #775, fixed for retro in #861).
+# The old --fallback-only semantics (issue #782 wiring) let the router's
+# dispatch verdict override the cell model, silently destroying the experiment
+# axis.  The coordinator-session.sh caller uses the same pattern (line 106).
+# Override-rule home: docs/agents/model-routing.md §M10 (the one stated home of the
+# ADR-096 override rule; cell = explicit override since #861/PR#864).
+MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "$CELL" --fallback "$MODEL" --model "$MODEL")"
 retro_project "$STACK" || exit 2
 
 # Next run id from the harvested reports (rN numbering is per-stack).

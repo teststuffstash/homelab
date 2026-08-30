@@ -1,0 +1,280 @@
+# Periodic guest fstrim for the Talos VMs on pve's LVM thin pool — the automation half of
+# docs/storage-ledger.md §"A THIRD sum: the hypervisor underneath" (FU-093).
+#
+# WHY THIS EXISTS. Deleting data inside a Talos VM does not return blocks to pve's thin pool:
+# nothing in the guest issues TRIM, so the pool only ever grows. It has now filled three times
+# (2026-08-07, 08-18, 08-24); the third froze wk-01 twice and wiped Garage's metadata
+# (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md). At 100% every VM on the pool goes
+# read-only TOGETHER — cp-01, wk-01, wk-02 and ci-runner-01, i.e. the control plane and the CI
+# runner. `discard=on` (set on all five VMs) is necessary and NOT sufficient: it only means the
+# guest's discards are honoured, and Talos never issues any. Every reclaim so far has been a human
+# running the runbook recipe by hand; 2026-08-25 found the pool back at 77.41% one day after a trim
+# took it to 47.69%, with 1.00G of VG free — so the `thin_pool_autoextend_threshold=80` belt would
+# fail exactly as it did on 08-17 (257 extents). Hence a schedule, not a reminder.
+#
+# WHY A PRIVILEGED POD AND NOT SOMETHING TIDIER — both alternatives are tried and dead
+# (docs/runbook.md §"Reclaiming thin-pool space from a Talos VM"):
+#   • `qm guest cmd <vmid> fstrim` returns {"paths": []} — Talos' qemu-guest-agent does not
+#     enumerate the guest's filesystems.
+#   • Mounting the guest partition on the pve host fails: Talos formats EPHEMERAL with XFS feature
+#     bits the Proxmox kernel cannot mount. Worse, if the mount fails and the trim runs anyway, it
+#     silently trims the pve host root instead.
+# There is no `talosctl fstrim`, and Talos' VolumeConfig for EPHEMERAL exposes no discard mount
+# option. A privileged pod with /var hostPath'd is the mechanism.
+#
+# SCOPE: the four Talos VMs on the pool (machines.yaml `zone: proxmox`). The metal nodes are
+# deliberately absent — they have real disks with no thin pool underneath, so a trim there would
+# be wear-levelling housekeeping, not the failure this addresses. ci-runner-01 shares the pool but
+# is not a k8s node; it is a normal Linux guest and is covered by its own systemd fstrim.timer —
+# verify that separately, this CronJob cannot reach it.
+#
+# One CronJob per node because a Job cannot pin different pods to different nodes, and `nodeName`
+# is what puts a pod on a specific box. They are staggered so four simultaneous discards do not
+# hit one NVMe together.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: node-maintenance
+  labels:
+    # fstrim needs CAP_SYS_ADMIN on a hostPath mount; this namespace exists so that privilege is
+    # scoped to one place instead of borrowing kata-spike/longhorn-system/monitoring.
+    # All THREE levels, as kata-spike does. Setting only `enforce` leaves audit/warn at the
+    # cluster default, which emits a "would violate PodSecurity restricted" warning on every
+    # apply — the pod runs fine, but the warning trains readers to ignore PSA warnings.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-fstrim
+  namespace: node-maintenance
+data:
+  trim.sh: |
+    #!/bin/sh
+    # Never `set -e`: a failed trim must still report, and the exit code is what the alert reads.
+    set -u
+    NODE="${NODE_NAME:-unknown}"
+    PG="${PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
+
+    # Two output shapes, and they differ by implementation — measured, not assumed:
+    #   busybox (alpine):  "/hostvar: 81594941440 bytes trimmed"
+    #   util-linux:        "/hostvar: 76 GiB (81594941440 bytes) trimmed"
+    # Matching only the parenthesised form silently pushed 0 from a run that reclaimed 76 GiB
+    # (caught on the first live run, 2026-08-25). Accept the digits before " bytes" either way.
+    out="$(fstrim -v /hostvar 2>&1)"; rc=$?
+    echo "$out"
+    bytes="$(echo "$out" | sed -n 's/.*[( ]\([0-9]\{1,\}\) bytes.*/\1/p' | head -1)"
+    [ -n "${bytes:-}" ] || bytes=0
+
+    if [ "$rc" -ne 0 ]; then
+      echo "FSTRIM-FAIL: rc=$rc on ${NODE} — pool blocks were NOT returned"
+    else
+      echo "trimmed ${bytes} bytes on ${NODE}"
+    fi
+
+    # Report the outcome, not the attempt. A trim that silently does nothing looks identical to
+    # one that worked, and the pve layer has no exporter of its own — this push is the only
+    # in-cluster evidence that the reclaim path is alive (storage-ledger.md: "a ledger that isn't
+    # measured is a spreadsheet"). Best-effort: monitoring being down must not fail the trim.
+    wget -q -O- --timeout=5 \
+      --post-data="node_fstrim_bytes_trimmed ${bytes}
+    node_fstrim_success ${rc}
+    node_fstrim_last_run_timestamp $(date +%s)
+    " "${PG}/metrics/job/node_fstrim/node/${NODE}" >/dev/null 2>&1 &&
+      echo "pushed fstrim metrics for ${NODE}" ||
+      echo "WARN could not push fstrim metrics (the trim itself already happened)"
+    exit "$rc"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-cp-01
+  namespace: node-maintenance
+spec:
+  # Daily. The pool went 47.69% -> 77.41% in a single day of ordinary churn (2026-08-25), so a
+  # weekly cadence would spend most of the week above the autoextend threshold that cannot fire.
+  # Staggered by node so four discards do not land on the one NVMe together.
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          # nodeName, not affinity: this must run on exactly this box, and it must still run when
+          # the node is cordoned for maintenance — cordon is precisely when reclaim matters.
+          nodeName: cp-01
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                # /var is where Talos puts EPHEMERAL — the partition that actually holds the
+                # container images, Longhorn replicas and logs whose deletion never reached the pool.
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-wk-01
+  namespace: node-maintenance
+spec:
+  # Daily. The pool went 47.69% -> 77.41% in a single day of ordinary churn (2026-08-25), so a
+  # weekly cadence would spend most of the week above the autoextend threshold that cannot fire.
+  # Staggered by node so four discards do not land on the one NVMe together.
+  schedule: "23 3 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          # nodeName, not affinity: this must run on exactly this box, and it must still run when
+          # the node is cordoned for maintenance — cordon is precisely when reclaim matters.
+          nodeName: wk-01
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                # /var is where Talos puts EPHEMERAL — the partition that actually holds the
+                # container images, Longhorn replicas and logs whose deletion never reached the pool.
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-wk-02
+  namespace: node-maintenance
+spec:
+  # Daily. The pool went 47.69% -> 77.41% in a single day of ordinary churn (2026-08-25), so a
+  # weekly cadence would spend most of the week above the autoextend threshold that cannot fire.
+  # Staggered by node so four discards do not land on the one NVMe together.
+  schedule: "29 3 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          # nodeName, not affinity: this must run on exactly this box, and it must still run when
+          # the node is cordoned for maintenance — cordon is precisely when reclaim matters.
+          nodeName: wk-02
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                # /var is where Talos puts EPHEMERAL — the partition that actually holds the
+                # container images, Longhorn replicas and logs whose deletion never reached the pool.
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-wk-03
+  namespace: node-maintenance
+spec:
+  # Daily. The pool went 47.69% -> 77.41% in a single day of ordinary churn (2026-08-25), so a
+  # weekly cadence would spend most of the week above the autoextend threshold that cannot fire.
+  # Staggered by node so four discards do not land on the one NVMe together.
+  schedule: "35 3 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          # nodeName, not affinity: this must run on exactly this box, and it must still run when
+          # the node is cordoned for maintenance — cordon is precisely when reclaim matters.
+          nodeName: wk-03
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                # /var is where Talos puts EPHEMERAL — the partition that actually holds the
+                # container images, Longhorn replicas and logs whose deletion never reached the pool.
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }

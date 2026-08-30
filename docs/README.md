@@ -25,7 +25,7 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 | [follow-ups-archive.md](follow-ups-archive.md) | Resolved-FU residue — rolling buffer (≈a month) of archived items, trimmed to the grep residue |
 | [incidents/](incidents/README.md) | **Postmortems** — one file per incident: timeline, root cause, collateral, fixes, probe lesson. The FU carries only the residual work |
 | [spikes/](spikes/) | Investigations with no decision yet — findings + what would settle it |
-| [storage-ledger.md](storage-ledger.md) | Who owns the SUM of each storage tier's caps + tier eligibility rulings; Longhorn metering built 2026-08-04, quota armed 2026-08-07 — the Garage half still exports no metrics (FU-093) |
+| [storage-ledger.md](storage-ledger.md) | Who owns the SUM of each storage tier's caps + tier eligibility rulings; Longhorn metering built 2026-08-04, quota armed 2026-08-07, Garage admin metrics + belts since #965 (2026-08-25); the pve thin-pool Data% is FU-093's remaining gap |
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
 | [secrets.md](secrets.md) | Secrets platform how-to — KeePass Tier-0 → Infisical → ESO; bootstrap order, day-2 recipes (ADR-062) |
 | [ci.md](ci.md) | CI / forges two-tier model (GitHub ARC vs Forgejo act_runner), the `devbox run` seam, nix-in-CI |
@@ -57,4 +57,8 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 - One directory per service under `docs/`, each with a `README.md` written from a service
   perspective (what's deployed, how to configure, how to maintain, dependencies, risks, next steps).
 - Diagrams as **Mermaid** (renders on GitHub) — prefer C4 context/container levels.
+- A doc section other docs/code reference gets a **stable §-code heading anchor** (`### M14. …`
+  referenced as `§M14`) — never reused, never renamed; hot docs only, and the `§` sigil is what
+  the lint checks. Convention + mechanism: `scripts/docs-graph-lint.sh` header, check #4
+  (ADR-117, S5 #982).
 - Images go in the service's `images/` subdir, compressed (~1280 px, target <300 KB).

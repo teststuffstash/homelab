@@ -16,6 +16,16 @@ processors:
 exporters:
   otlphttp/loki:
     endpoint: http://loki.loki.svc.cluster.local:3100/otlp
+    headers:
+      # ADR-118 step 2 flipped Loki to auth_enabled: true, which REQUIRES X-Scope-OrgID on every
+      # push — this collector is the second Loki writer (Alloy is the other) and would otherwise
+      # 401 on every batch, silently taking the A0 agent-telemetry log rail down with it. Alloy
+      # derives its tenant per entry from the pod's namespace; this rail has no namespace to
+      # derive (it forwards OTLP from claude-code roles across stacks), so it gets a STATIC tenant
+      # — `monitoring`, the collector's own namespace, which keeps ADR-118's invariant that every
+      # tenant is a real namespace and therefore has a possible RoleBinding. Coarse on purpose:
+      # per-stack telemetry tenanting would need a resource attribute to route on. FU-192.
+      X-Scope-OrgID: monitoring
   prometheus:
     endpoint: 0.0.0.0:8889
 

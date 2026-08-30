@@ -21,9 +21,10 @@ endpoint, a Postgres URL) — nothing homelab-specific beyond the CR manifests i
 | **Postgres** (HA) | a `postgresql.cnpg.io/v1` `Cluster` CR in your namespace | CloudNativePG (ADR-046) | the operator's `<cluster>-app` secret (or supply your own) |
 | **Any secret** | an `ExternalSecret` against the `infisical` `ClusterSecretStore` | ESO (ADR-062, [`../secrets.md`](../secrets.md)) | a native `Secret` in your namespace |
 
-Worked examples: `snore-recorder/infra/` (bucket created fresh + write-only key + cross-app grant),
-`sleep-tracking/infra/` (pre-existing buckets **adopted** via config-driven `import` +
-`deletionPolicy: Orphan` — never recreate resources that hold data).
+Worked examples (the CRs live in the stack's `-iac` repo since 2026-07-04 — the app-repo `infra/`
+dirs are README pointers now): `sleep-iac//snore-recorder/` (bucket created fresh + write-only key
++ cross-app grant), `sleep-iac//sleep-tracking/` (pre-existing buckets **adopted** via
+config-driven `import` + `deletionPolicy: Orphan` — never recreate resources that hold data).
 
 ## Not yet self-service (FU-039 — the platform gap)
 
@@ -85,7 +86,8 @@ tenancy boundary: the iac repo can only deploy into its own (platform-precreated
 
 1. Create the repo (homelab-side today: `tofu/github/` — FU-039) and, if it deploys in-cluster,
    its ArgoCD Application (today: `argocd/`; target: the stack's iac repo).
-2. Copy `infra/` from snore-recorder (fresh resources) or sleep-tracking (adopting existing data);
+2. Copy the resource CRs from `sleep-iac//snore-recorder/` (fresh resources) or
+   `sleep-iac//sleep-tracking/` (adopting existing data);
    set bucket/key names, add an `OpenRouterKey` if agents will work the repo.
 3. Consume the generated Secrets (`ExternalSecret` / the operator-written Secret) in your chart —
    standard `envFrom`/`secretRef`, nothing homelab-specific.

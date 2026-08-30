@@ -1,0 +1,19 @@
+# Loki self-metrics → Prometheus (homelab#811). Before this, NOTHING scraped Loki: the 48.7GiB/day
+# pushgateway help-string flood ran for 6 days with the only volume signal being the (unscraped)
+# distributor counter and the volume API a human had to query by hand. The aggregate ingest belt
+# in prometheusrule.yaml reads loki_distributor_bytes_received_total off this scrape — and since
+# ADR-118 step 2 so does the per-NAMESPACE half, because that counter carries a `tenant` label and
+# tenant == namespace. This scrape is now the whole belt; the Loki ruler is gone.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: loki
+  namespace: loki
+  labels: { app: loki }
+spec:
+  selector:
+    matchLabels: { app: loki }
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

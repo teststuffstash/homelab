@@ -1,3 +1,0 @@
-Error code 429: Rate limit exceeded
-Too many requests from this IP address
-Your account has exceeded the monthly quota limit

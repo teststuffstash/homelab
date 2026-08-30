@@ -1,0 +1,26 @@
+# A LANDING-SEQUENCE PR (homelab#868): `agent/arbitrate` cannot rule on a PR past arbitration.
+# A PR that is `reviewDecision == APPROVED` at head ∧ auto-merge-armed is past arbitration BY
+# DEFINITION — nothing an arbitrate session can rule is still open. The arbitrate clause must
+# EXCLUDE that state, the same shape as the human-owned exclusions (agent/error, agent/blocked).
+#
+# PR #234 carries `agent/arbitrate` AND is APPROVED+armed (autoMergeRequest set). The jq filter
+# must skip it entirely — no `gh pr view` probe, no unit, no orphan. The probe is unneeded
+# because the exclusion is at the SELECT level, not the debounce: the PR is not a valid
+# arbitrate candidate at all, regardless of whether its fingerprint has moved.
+#
+# PR #235 is the same FU-069 breaker as the first-tick fixture: `agent/arbitrate` + `agent/error`
+# must be dropped before the clause ever probes it.
+pins:
+  - MP-T11
+name: arbitrate-landing-sequence
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../first-tick/bridge.sh
+  - block:arbitrate-gate
+  - file:../first-tick/post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

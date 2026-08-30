@@ -12,6 +12,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       pulls in the writer-side rules (`docs/README.md` §Conventions, the docs-cleanup Hard
       rules). Fix: closure gains "proposing doc changes ⇒ read §Conventions + Hard rules".
       Sighted 2026-08-11.
+- [ ] design-G2 — "multiple passes gave different answers to the same question" wasn't
+      recognized as a design-shaped trigger; the first pass ran as grep-triage and missed
+      tracker-held facts (FU-157's user-token nature; the live legacy token outside the
+      matrix). Fix: add the inconsistent-answers cue to the skill's trigger list.
+      Sighted 2026-08-11.
 
 ## meta-coordinate
 
@@ -26,14 +31,22 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
 
 ## design-agents
 
-- [ ] design-agents-G1 — a STATUS read from `meta-state.md`/tracker was repeated in the answer
+- [x] design-agents-G1 — a STATUS read from `meta-state.md`/tracker was repeated in the answer
       ("agent-runtime#62 still queued") although the session's own live board probe contradicted
       it in-context (#62 closed 30 min after meta-state's consolidation stamp). Fix: the output
       contract gains "status claims lifted from transient docs are live-verified (or marked
       as-of-doc-date) before being reported" — the never-repeat-a-remembered-status rule applied
       to the corpus itself. Sighted 2026-08-11 (operator catch).
-- [ ] design-G2 — "multiple passes gave different answers to the same question" wasn't
-      recognized as a design-shaped trigger; the first pass ran as grep-triage and missed
-      tracker-held facts (FU-157's user-token nature; the live legacy token outside the
-      matrix). Fix: add the inconsistent-answers cue to the skill's trigger list.
-      Sighted 2026-08-11.
+      **RESIGHT 2026-08-23 (operator catch)** — the class extends to CONFIG constants, not just
+      statuses: the seat quoted workflow.md's "SUBSCRIPTION_MAX_RUNNING default 3" while the
+      deployed value had been 5 for two weeks (the operator's own dashboard said /5 in the same
+      conversation). A number in corpus prose describing live config is a status claim; the
+      deployment/ConfigMap is the authority. **promoted→** the skill's output contract gains
+      the live-state-claims-verified rule (statuses AND config constants), same commit.
+- [ ] design-agents-G2 — a lifecycle LABEL was reported as activity ("#833 is riding —
+      in-progress") from a live `gh` read alone: the label is a CLAIM, and the state is the
+      JOIN (label × live pod × PR state) — the issue's PR had merged 8h earlier with no pod
+      running (the FU-143 held class). The promoted live-state rule covered doc-sourced claims;
+      this extends it: a lifecycle label is never reported as activity without the pod/PR join
+      (the seat-side twin of IL-T16's phantom-label lesson). Sighted 2026-08-24 (operator
+      catch). Tooling half → the #628 observability-plane discussion.

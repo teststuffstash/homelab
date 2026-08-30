@@ -1,9 +1,12 @@
 # The chainless redesign — a harness matrix, N subscription rails, every role routed (ADR-107 charter)
 
-**Status: CHARTER (operator direction, 2026-08-13 — the subscription-autopsy session). Design
-accepted in principle; build NOT started.** This doc owns the redesign's decisions, the claim-knob
-ledger, the OpenCode Go rail evidence, and the build plan — so the direction survives any one
-session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (§M8–M13) and the
+**Status: CHARTER (operator direction, 2026-08-13), build LARGELY EXECUTED** — chunks A–H
+shipped (2026-08-13/14), role wiring landed via Goal G-A homelab#775 (2026-08-23: every role
+routes), oracle + sleep run chainless (oracle-iac#387, sleep-iac#77), and the platform's
+chainless flip rode the same wave; what remains is flip acceptance 2–4, the FU-186/ADR-115
+provider legs, and build-order item 6 (the legacy-deletion sweep). This doc owns the redesign's
+decisions, the claim-knob ledger, the OpenCode Go rail evidence, and the build plan — so the
+direction survives any one session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (§M8–M13) and the
 claim by [`agentstack.md`](agentstack.md); this doc records what CHANGES in each and why. The
 decision record is **ADR-107** (decision 3 superseded by **ADR-112**, the harness matrix); the
 day's probe evidence is TICK-LOG 2026-08-13.
@@ -185,6 +188,8 @@ selection-shaped moves behind `/route`.
 
 ### The cost rethink & subscription fair scheduling (operator direction, 2026-08-13)
 
+**Tracked by:** FU-180 (subscription budgets + window shares — the build pointer).
+
 `guardrail: only-free` is a legacy of the single-rail era — built to stop a stack silently
 moving from free to paid OpenRouter models, when "cost" meant one thing. The landscape it
 guarded no longer exists: two subscriptions (Anthropic, Go) whose marginal cost is ~0 but whose
@@ -249,6 +254,14 @@ like `claude/anthropic/haiku` was considered and rejected: it would be a second 
 migrate through).
 
 ## The OpenCode Go rail — probed facts (2026-08-13, wallet key `opencode-go-api-key`)
+
+> **POSTURE RULED (operator, 2026-08-25 — pinned on homelab#778):** Go serves
+> **janitorial/low-cache roles + failover backup, permanently** — window-draw at list-on-raw
+> prices cache-heavy work out (§M8 feed-4's rail affinity, measured: Go review rounds ≈$1 vs
+> OR-flash worker rides $0.03–0.05); deepseek+OpenRouter stays the economical worker ride. The
+> best find of the rail saga is the ZEN sibling's **big-pickle as deepseek's $0 shadow** (A5
+> shadow re-reviews homelab#923, the G-E fan-out arm; matrix row has the caveats). FU-181 holds
+> the post-reset hygiene legs; the P4 flip is DE-GATED from Sep-13 by the same ruling.
 
 - Endpoints: `https://opencode.ai/zen/go/v1/messages` (Anthropic-compat) ·
   `…/v1/chat/completions` (OpenAI-compat) · `…/v1/models` (25 live ids). **Bearer auth works**;
@@ -330,6 +343,14 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
    fleet exposure — compat fidelity is per-model, as the glm shorthand bug showed.
 4. **P4-flip evidence** — the shadow ladder read with real urgency data (the caller gap closed
    2026-08-13, PR#408: labels + work-branch urgency now ride `/route` bodies).
+5. **Per-role flip discipline (FU-188, 2026-08-26):** any flip of a role-carrying knob
+   (`routerMode`, chainless) ENUMERATES the roles it arms, and each role's authoritative path
+   has ≥1 exercised run before the flip — the chainless stack flips promoted the reviewer de
+   facto on worker-only evidence, and its authoritative branch premiered in production on
+   three stacks (the review plane died silently:
+   [`../incidents/2026-08-26-reviewer-404-loop.md`](../incidents/2026-08-26-reviewer-404-loop.md)).
+   Shadow soaks are read per (role, lane) against the flip that arms them, never as a fleet
+   divergence rate.
 
 ## Build order (jail-subagent chunks; platform loop reviews)
 
@@ -345,7 +366,13 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
 6. Legacy deletion in one sweep: chains, `claudeTier`, `guardrail`, the M12 branch, the M10
    case-maps, `REVIEW_GOAL_MODEL`, `GOOSE_MODEL` threading, and the retired
    `ROUTER_STRIKE_ENFORCE` read + filter branch (ruled 2026-08-23, §M1a) — each deletion site
-   is already named in its own doc.
+   is already named in its own doc. **Sweep additions + the ONE trap (goal #775 findings-store
+   entry 5, surfaced here so the sweep session needs no graph read):** three post-wiring
+   `--fallback` literals ARE sweep targets (`--fallback sonnet` on the responder + dispatch-unit
+   launchers, `--fallback "$MODEL"` on retro), but the `case "$rail" in opencode-go/*)`
+   short-circuit blocks in the two Argo lanes are **FU-088 dual-rail latch logic that must
+   SURVIVE the sweep** — they look exactly like an M10 case-map and are not one (PR#788
+   restored them after a review round dropped them once already).
 
 ## Related
 

@@ -33,3 +33,37 @@ curl() {
 
 # Export so the block and stubs see them.
 export ROLE FALLBACK CLASS CELL OVERRIDE STUB_CURL CURL_RESPONSE AGENT_EGRESS_PROXY REPLAY_ACTIONS REPLAY_WORLD
+
+# ── CLI subprocess test ──────────────────────────────────────────────────────────
+# When CLI_FLAGS is non-empty, invoke resolve-model.sh as a real subprocess through
+# the flag shape the launchers use (retro-session.sh:66, coordinator-session.sh:106/112),
+# instead of the block-level env-var entry point.  This is the ADDITIVE row the issue
+# #870 deliverable demands — the block-level rows are unchanged.
+#
+# The curl function above is a shell function inside the composed script; a subprocess
+# does not inherit it.  Create a temporary curl stub on PATH that mirrors the same
+# CALL-record + serve-or-fail contract.
+if [ -n "${CLI_FLAGS:-}" ]; then
+  _cli_stub="$(mktemp -d)"
+  cat > "$_cli_stub/curl" << 'CURLSTUB'
+#!/usr/bin/env bash
+printf 'CALL curl %s\n' "$*" >> "$REPLAY_ACTIONS"
+case "${STUB_CURL:-ok}" in
+  fail) echo "curl: (7) Failed to connect" >&2; exit 7 ;;
+esac
+if [ -n "${CURL_RESPONSE:-}" ]; then
+  printf '%s' "$CURL_RESPONSE"
+  exit 0
+fi
+exit 7
+CURLSTUB
+  chmod +x "$_cli_stub/curl"
+
+  # Run resolve-model.sh as a subprocess with the stub on PATH.
+  # The subprocess's stdout/stderr are captured by the fixture framework,
+  # and the CALL curl lines are written to the actions file by the stub.
+  PATH="$_cli_stub:$PATH" bash "$REPLAY_ROOT/agents/resolve-model.sh" $CLI_FLAGS
+  rc=$?
+  rm -rf "$_cli_stub"
+  exit $rc
+fi

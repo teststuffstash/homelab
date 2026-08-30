@@ -124,6 +124,7 @@ spec:
                 ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
                 # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
                 # below. Applies inside <loop_ns>, spreading that stack's perstack scans.
+                # homelab#867 soft Longhorn-disk de-preference — same rationale.
                 podSpecPatch: |
                   topologySpreadConstraints:
                     - maxSkew: 1
@@ -132,6 +133,16 @@ spec:
                       labelSelector:
                         matchExpressions:
                           - { key: workflows.argoproj.io/workflow, operator: Exists }
+                  affinity:
+                    nodeAffinity:
+                      preferredDuringSchedulingIgnoredDuringExecution:
+                        - weight: 10
+                          preference:
+                            matchExpressions:
+                              - key: node.longhorn.io/create-default-disk
+                                operator: NotIn
+                                values:
+                                  - "true"
                 synchronization:
                   mutexes:
                     - name: coordinator-scan
@@ -200,8 +211,11 @@ spec:
   activeDeadlineSeconds: 1800
   ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
   # homelab#103 — soft spread so concurrent coordinator workflow pods stop piling onto one node.
+  # homelab#867 — soft Longhorn-disk de-preference so burst pods avoid IO-heavy nodes.
   # ⚠ THE CANONICAL COPY OF THIS BLOCK. Every other workflow spec in agents/coordinator/*-argo.yaml
   # repeats it verbatim (YAML anchors don't cross documents) and points back here. Keep in sync.
+  # Carve-out: reflexes-argo.yaml is pin-only GUARDED — its 5 uncovered workflow specs remain
+  # unfixed by design (scripts/pin-only-lint.sh GUARDED=). The operator push route covers them.
   #   - `podSpecPatch`, not a typed field: WorkflowSpec has NO first-class topologySpreadConstraints
   #     (argo-workflows v4.0.7 — see the Field Reference; nodeSelector/tolerations/affinity are the
   #     only native scheduling knobs). The patch is a strategic merge onto the generated pod spec.
@@ -211,6 +225,12 @@ spec:
   #     useless here, where a coordinate/review/respond run is a single pod.
   #   - ScheduleAnyway, never DoNotSchedule: the schedulable pool shrinks when metal nodes sleep, so
   #     a hard constraint would wedge dispatch rather than merely leave it unbalanced.
+  #   - nodeAffinity (homelab#867): soft `preferredDuringSchedulingIgnoredDuringExecution`
+  #     de-preference for nodes carrying `node.longhorn.io/create-default-disk=true`. Weight 10 is
+  #     modest — enough to tip the scales when nodes are otherwise equal, never enough to override
+  #     the existing hostname spread or force pods onto wk-01 (the single non-Longhorn node). The
+  #     `NotIn` operator matches nodes that either lack the label or have it set to a value other
+  #     than "true", so it is a de-preference, not an exclusion.
   # Spread is namespace-scoped by design of the API (a TopologySpreadConstraint has no
   # namespaceSelector), so this balances agent-coordinator's own burst; the per-stack namespaces get
   # the same block via the inline perstack workflows above.
@@ -222,6 +242,16 @@ spec:
         labelSelector:
           matchExpressions:
             - { key: workflows.argoproj.io/workflow, operator: Exists }
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 10
+            preference:
+              matchExpressions:
+                - key: node.longhorn.io/create-default-disk
+                  operator: NotIn
+                  values:
+                    - "true"
   synchronization:
     mutexes:
       - name: coordinator-scan # one scan at a time across cron + Sensor submissions
@@ -271,4 +301,4 @@ spec:
           - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
         resources:
           requests: { cpu: "100m", memory: "256Mi" }
-          limits: { memory: "512Mi" }
+          limits: { memory: "1Gi" }

@@ -1,0 +1,45 @@
+# Read-only access to Garage's data volume, for the block-carve recovery in this directory's
+# README (homelab#884, 2026-08-24). RWO is a NODE-level lock, so a second pod on the Garage pod's
+# node may mount the same claim — no host paths and no privilege needed.
+#
+#   nodeName MUST be the node garage-0 is on:
+#     kubectl -n garage get pod garage-0 -o jsonpath='{.spec.nodeName}'
+#
+# Temporary and hand-applied: it carries no ArgoCD tracking labels, so the garage Application's
+# prune ignores it. DELETE IT when the carve is done — a nodeName-pinned second mounter would pin
+# the data volume to that node if garage-0 ever had to move.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: garage-forensics
+  namespace: garage
+spec:
+  nodeName: wk-01
+  restartPolicy: Never
+  securityContext:
+    # The block files are owned by uid/gid 1000 (Garage's own user), which is all this pod reads.
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile: { type: RuntimeDefault }
+  containers:
+    - name: work
+      # python:3.14 carries stdlib `compression.zstd` — Garage's blocks are zstd, and this is what
+      # keeps the pod free of pip.
+      image: python:3.14-slim
+      command: ["sleep", "infinity"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
+      volumeMounts:
+        - name: data
+          mountPath: /mnt/data
+          readOnly: true
+      resources:
+        requests: { cpu: 100m, memory: 256Mi }
+        limits: { memory: 2Gi }
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: data-garage-0
+        readOnly: true

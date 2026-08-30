@@ -277,8 +277,8 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
 | R6 | **Leak / hose pops off** while pumping | Low | Low–Med | **Droplet sits elevated on the reservoir box → leaks drain back into it**, limiting water damage; daytime-only, short runs. Still no leak/flow detection → Next steps |
 | R7 | **WiFi outage** → device offline | Low | Medium | APs keep serving WiFi without the controller; UniFi controller now runs in-cluster (`192.168.40.12`) |
 | R8 | **NTP unreachable** → daytime guard blocks auto watering | Low | Medium | Local OPNsense NTP + public fallback; manual Water Now unaffected |
-| R9 | **Power loss to Droplet** | Low | Medium | Auto Watering restores last state on boot; thresholds come from HA (defaults 60 %/180 s via `initial:`) |
-| R10 | **Lost OTA / API credentials** → can't manage remotely | Low | Low | OTA pw recorded in `~/.claude/homelab-droplet/`; API key in config; captive-portal/USB fallback |
+| R9 | **Power loss to Droplet** | Low | Medium | Auto Watering restores last state on boot; thresholds come from HA (defaults 60 % / 5 min via `initial:`) |
+| R10 | **Lost OTA / API credentials** → can't manage remotely | Low | Low | OTA pw + API key are wallet strings (FU-001 — the old `~/.claude/homelab-droplet/` dir is gone); captive-portal/USB fallback |
 | R11 | **Device secrets (API key, OTA/AP passwords) in the config** | — | — | ✅ Moved to `!secret` (gitignored `secrets.yaml`); API key + AP password **rotated** (OTA pw pending a USB flash) |
 
 ---
@@ -463,7 +463,8 @@ later, calibrate ml/s per pump (a slider-free constant) — deferred by choice.
 > the firmware with the counters is flashed.)
 
 ### Alerts (Alertmanager → HA)
-`PrometheusRule` `office-plants` in `monitoring.tf`: **HomeAssistantScrapeDown** (no plant
+The three rules live in `argocd/platform/values/kube-prometheus-stack.yaml` (moved off
+`tofu/monitoring.tf` by FU-136): **HomeAssistantScrapeDown** (no plant
 metrics 10m → HA down / bad token), **DropletOffline** (controller disconnected 10m),
 **SoilSensorSuspectZero** (sensor stuck at 0% for 2h). Alertmanager POSTs to the HA webhook
 `prometheus-alerts`; the automation in `packages/alerting.yaml` raises a persistent
@@ -492,7 +493,7 @@ in-RAM soil state inside `do_water_cycle`).
    ```bash
    export TF_VAR_ha_prometheus_token='<the long-lived token>'
    export TF_VAR_grafana_admin_password='<pick one>'
-   tofu apply        # adds ns monitoring, kube-prometheus-stack, Grafana VIP, scrape job, dashboard, alerts
+   tofu apply        # adds ns monitoring + the scrape job + dashboard CM (the stack itself, VIPs and alerts sync from ArgoCD — argocd/platform/kube-prometheus-stack.yaml)
    ```
 4. **Verify:** Grafana at `https://grafana.teststuff.net` (admin / your password) → *Office Plants — Irrigation*;
    Prometheus *Targets* shows `home-assistant` UP.
@@ -514,8 +515,8 @@ in-RAM soil state inside `do_water_cycle`).
 | Item | Value |
 |---|---|
 | Device IP / host | `192.168.2.245` / `office-plants-irrigation` |
-| ESPHome API | `:6053` (encrypted; key in `office-plants-irrigation.yaml`) |
-| OTA | `:3232`; password in `~/.claude/homelab-droplet/ota_password` |
+| ESPHome API | `:6053` (encrypted; key = `!secret api_encryption_key` in gitignored `esphome/config/secrets.yaml`) |
+| OTA | `:3232`; password is a wallet string (FU-001) + `!secret` in `esphome/config/secrets.yaml` |
 | WiFi SSID | `Walther` (secrets in `esphome/config/secrets.yaml`, gitignored) |
 | Pumps | `pump1=GPIO13, pump2=GPIO4, pump3=GPIO16, pump4=GPIO17` |
 | Soil sensors | `Soil1=GPIO34, Soil2=GPIO35, Soil3=GPIO32, Soil4=GPIO33` |

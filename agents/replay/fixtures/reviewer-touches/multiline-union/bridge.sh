@@ -4,6 +4,7 @@
 
 ISSUE="123"
 REPO_SLUG="teststuffstash/homelab"
+PR_NUMBER="123"
 # One path per declared line: argocd/ is covered by the FIRST line only, docs/ by the SECOND
 # only. Under a first-line-only read, docs/test.md escapes — the false-escape class this
 # fixture red-cases.
@@ -24,6 +25,11 @@ gh() {
   case "$*" in
     *"--jq"*".body"*)
       printf 'Original scope.\n\nTouches: argocd/**\n\nSecond consumer widens the footprint:\nTouches: docs/**\n'
+      return 0
+      ;;
+    *"pr diff"*)
+      # #944: the sentinel-only classifier fetches the PR diff; this fixture's condition has
+      # no sentinel-only files, so an empty diff keeps the pinned behaviour unchanged.
       return 0
       ;;
     *)

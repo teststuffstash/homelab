@@ -190,6 +190,16 @@ _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {
 _stack_rmode="$(printf '%s' "$_srow" | jq -r '.routerMode // ""')"
 if [ -z "${AGENT_ROUTER:-}" ] && [ -n "$_stack_rmode" ]; then AGENT_ROUTER="$_stack_rmode"; fi
 AGENT_ROUTER="${AGENT_ROUTER:-shadow}"
+# FU-188 INCIDENT PIN (2026-08-26): the review-class route can return an openrouter-rail model
+# (the ADR-115 market basis), which this subscription-only session cannot ride — the pod is
+# hardwired to the /anthropic surface, so the ride 404s with no verdict AND no strike
+# (oracle-fleet#277: 72 dead dispatches/24h, zero generations, router re-picks forever). Until
+# FU-188 legs (a)+(b) land, the reviewer consults in shadow at most; workers are untouched
+# (chainless stacks REQUIRE authoritative — agent-session.sh chainless-guard).
+if [ "$AGENT_ROUTER" = "authoritative" ]; then
+  echo "→ router: authoritative DOWNGRADED to shadow for the reviewer (FU-188 incident pin)"
+  AGENT_ROUTER="shadow"
+fi
 if [ "$AGENT_ROUTER" != "off" ]; then
   ROUTER_URL="${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}"
   # No chain sent for reviewer — the class policy (class review) orders the rails server-side.
@@ -206,7 +216,6 @@ if [ "$AGENT_ROUTER" != "off" ]; then
       '{stack: $stack, task: $task, role: "reviewer", session: $session,
         decorrelate_from: (if $decorrelate_from == "" then null else $decorrelate_from end),
         labels: $labels, urgency: (if $urgency == "" then null else $urgency end)}')"
-  # <<<REPLAY:route-request<<<
   _decision="$(curl -fsS --max-time 5 -H "Content-Type: application/json" \
       -d "$_req" "$ROUTER_URL/route" 2>/dev/null)" || _decision=""
   if [ -z "$_decision" ]; then
@@ -232,12 +241,13 @@ if [ "$AGENT_ROUTER" != "off" ]; then
           fi
         fi
         GO_SERVED=0
-        [ "$MODEL_RAIL" = "opencode-go" ] && GO_SERVED=1
+        [ "${MODEL_RAIL:-}" = "opencode-go" ] && GO_SERVED=1
       elif [ "$_verdict" = "defer" ]; then
         _router_defer=1
       fi
     fi
   fi
+  # <<<REPLAY:route-request<<<
 fi
 
 # In-pod prep, run under `bash -lc` so the image's gh-wrapper (reads the LIVE ~1h token from
@@ -486,7 +496,13 @@ else
     # footprint — head -1 ran the check against the stale first line and self-reported false
     # escapes on PR#759; the scan's jq `scan(...) | join(",")` has always been the union).
     DECLARED_TOUCHES=$(printf '%s' "$ISSUE_BODY" | grep -iE '^[ \t]*touches:[ \t]*' | sed -E 's/^[ \t]*touches:[ \t]*//i' | tr -d '\r' | paste -sd, -)
-    ESCAPES_RAW=$(touches_check "$DECLARED_TOUCHES" "${CHANGED:-}" 2>/dev/null) || { _tc_ok=0; ESCAPES_RAW=""; }
+    # #944 / ADR-097 addendum 3: files whose whole delta is REPLAY sentinel markers are a
+    # compelled counterpart (extract() cannot pin a block without them) — CONTENT-verified from
+    # the diff, never path-keyed. An unavailable diff yields the empty set: the exemption just
+    # doesn't engage and the check stays strict (fail-conservative, not fail-open).
+    _TC_DIFF=$(gh pr diff "${PR_NUMBER:-}" 2>/dev/null) || _TC_DIFF=""
+    _TC_SENTINEL=$(sentinel_only_paths "$_TC_DIFF" 2>/dev/null) || _TC_SENTINEL=""
+    ESCAPES_RAW=$(touches_check "$DECLARED_TOUCHES" "${CHANGED:-}" "$_TC_SENTINEL" 2>/dev/null) || { _tc_ok=0; ESCAPES_RAW=""; }
   fi
   if [ "$_tc_ok" = "1" ]; then
     if [ -n "$ESCAPES_RAW" ]; then
@@ -513,7 +529,7 @@ PROMPT="${PROMPT:-}
 
 TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — declared \`Touches:\` footprint against the changed paths:
   TOUCHES-ESCAPES: $TOUCHES_ESCAPES
-Semantics: \`none\` = every changed path is covered by the closing issue's declared footprint; \`undeclared\` = this PR closes no issue, so there is no footprint to check; \`unavailable\` = the checker could not run — treat it as NO SIGNAL, not as clean; otherwise each listed path fell OUTSIDE the declared footprint. When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`scripts/**\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`) — marked [GOVERNANCE] — the diff is BLOCKING per .agents/review.md §BLOCKING. This is computed fact for your rubric check, not a verdict."
+Semantics: \`none\` = every changed path is covered by the closing issue's declared footprint; \`undeclared\` = this PR closes no issue, so there is no footprint to check; \`unavailable\` = the checker could not run — treat it as NO SIGNAL, not as clean; otherwise each listed path fell OUTSIDE the declared footprint. Files whose ENTIRE diff is REPLAY sentinel marker comments are already excluded (ADR-097 addendum 3, homelab#944 — a compelled edit, content-verified); do not re-derive an escape for them from the raw diff. When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`scripts/**\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`) — marked [GOVERNANCE] — the diff is BLOCKING per .agents/review.md §BLOCKING. This is computed fact for your rubric check, not a verdict."
 # <<<REPLAY:reviewer-touches-check<<<
 SNIP
 )

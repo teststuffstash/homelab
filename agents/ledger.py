@@ -135,6 +135,42 @@ def _model_rail(model: str, rail: str = "") -> str:
     return "openrouter"
 
 
+def _budget_from_cr(project: str, issue: str) -> tuple[str, float, float] | None:
+    """Query the OpenRouterKey CR to get the estimator's own pick_tier result.
+
+    Retro r1 F6: the CR (created by estimate_budget.py --emit-cr) carries budget-tier and
+    budget-estimate-usd labels. When the issue has no agent-budget/* override label, the ledger
+    falls back to these labels so calibration_error is computed on every capped ride rather than
+    only override-labelled ones.
+
+    Returns (tier, cap_usd, estimate_usd) or None if no matching CR exists or the read fails.
+    The CR name follows <project>-issue-<N>-round-<r>; we list all CRs in the project namespace
+    and filter by name pattern. Best-effort: a failed read is skipped loudly, never fatal.
+    """
+    try:
+        data = json.loads(sh([
+            "kubectl", "get", "openrouterkeys", "-n", project,
+            "-o", "json",
+        ]))
+    except Exception as e:
+        print("ledger: kubectl get openrouterkeys failed for %s (%s) — CR budget fallback skipped"
+              % (project, e), file=sys.stderr)
+        return None
+    prefix = "%s-issue-%s-round-" % (project, issue)
+    for item in data.get("items", []):
+        name = item.get("metadata", {}).get("name", "")
+        if not name.startswith(prefix):
+            continue
+        labels = item.get("metadata", {}).get("labels", {})
+        tier = labels.get("budget-tier")
+        estimate_usd = labels.get("budget-estimate-usd")
+        if tier and estimate_usd is not None:
+            cap = TIERS.get(tier)
+            if cap is not None:
+                return tier, cap, float(estimate_usd)
+    return None
+
+
 def is_snapshot(issue_state, terminal_label):
     """r4 F5: a row stamped mid-flight is a snapshot, not a terminal fact. At emit time the issue
     is still OPEN (more rounds may land) or the terminal label is not one this reflex recognizes
@@ -302,6 +338,13 @@ def main():
         if summ is None:
             continue  # no transcripts captured for this issue — nothing to record yet
         cap = TIERS.get(tier)
+        # Retro r1 F6: when the issue has no agent-budget/* override label, fall back to the
+        # OpenRouterKey CR's budget-tier label (set by estimate_budget.py --emit-cr) so
+        # calibration_error is computed on every capped ride, not only override-labelled ones.
+        if cap is None:
+            cr_info = _budget_from_cr(project, issue)
+            if cr_info is not None:
+                tier, cap, _ = cr_info
         rounds = merge_rounds(summ["rounds"], strike_rounds(org, project, issue))
         summ["rounds"] = rounds
         # r4 F4: the flat fields are DERIVED from `rounds`, order-preserving — never a
@@ -309,8 +352,11 @@ def main():
         summ["models"] = [r["model"] for r in rounds]
         summ["worker_exit_statuses"] = [r["exit_status"] for r in rounds]
         summ["ci_sequence"] = [r["ci"] for r in rounds]
-        summ["retry_storms"] = sum(1 for r in rounds
-                                   if (r["exit_status"] or r["error_class"]) in ("auth-storm", "budget-403"))
+        # budget-403 is prefix-matched: the raw-log classifier split it into -key/-account
+        # subclasses (homelab#871) and the strike comment is this reader's source.
+        summ["retry_storms"] = sum(
+            1 for v in ((r["exit_status"] or r["error_class"]) for r in rounds)
+            if v == "auth-storm" or v.startswith("budget-403"))
         rec = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "key": key, "project": project, "issue": issue, "stack": repos.get(project, ""),
