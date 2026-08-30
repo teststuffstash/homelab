@@ -1,0 +1,23 @@
+#!/bin/sh
+# pre-push — the jail's direct-to-master tripwire (operator direction, 2026-08-30).
+# A master push from the jail bypasses CI (OrgAdmin), so THIS is the only lint gate that
+# lane has — the 2026-08-30 miss (a bookkeeping push shipped a TERM-UNLINKED break and
+# redded every open PR, the #953 class) is the founding incident. Branch pushes are
+# untouched: the PR lane's required checks own them.
+# Wired via `git config core.hooksPath githooks` (set by the jail entrypoint; persists in
+# the host-side .git/config regardless).
+remote_master_touched=0
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  [ "$remote_ref" = "refs/heads/master" ] && remote_master_touched=1
+done
+[ "$remote_master_touched" -eq 1 ] || exit 0
+echo "pre-push: master push — running the doc lints (docs-graph-lint + follow-ups-lint)" >&2
+cd "$(git rev-parse --show-toplevel)" || exit 1
+if ! devbox run docs-graph-lint >&2; then
+  echo "pre-push: BLOCKED — docs-graph-lint red. Fix, commit, push again." >&2; exit 1
+fi
+if ! devbox run follow-ups-lint >&2; then
+  echo "pre-push: BLOCKED — follow-ups-lint red. Fix, commit, push again." >&2; exit 1
+fi
+echo "pre-push: lints green — pushing master" >&2
+exit 0

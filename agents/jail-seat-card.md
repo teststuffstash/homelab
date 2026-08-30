@@ -113,6 +113,18 @@ is pure ceremony:
   CODEOWNERS, `.github/workflows/**` — self-gating is impossible, so these are operator-direct
   by necessity, not convenience
 
+**Direct commits BATCH; the push is a separate, deliberate act (operator direction,
+2026-08-30).** Every master push resets the open-PR field (strict checks → BEHIND → updater
+churn; a lint break reds every PR, the #953 class — shipped live by this session's own
+wind-down push), so: COMMIT bookkeeping freely, push it **once per session at wind-down**, not
+per commit. Only the jail reads the bookkeeping set (meta-state, TICK-LOG, GAPS, the tracker),
+and the next session reads the same on-disk tree — origin adds durability, not continuity.
+The exception keeps the old rule: **anything a CLUSTER consumer clones master for — quickfixes,
+incident pins (the FU-188 shape), agents/ script fixes — still pushes immediately.** The class
+test: does any pod need to see this? A master push runs BOTH doc lints via the committed
+`githooks/pre-push` (wired by `core.hooksPath` — the direct lane's only lint gate, since
+OrgAdmin pushes bypass CI); never `--no-verify` past it.
+
 **The codeowner gate on machine PRs runs per SESSION, not per PR (ADR-110, 2026-08-18).** For
 the maintenance stream — no Goal, reacting to alerts/board items — the human codeowner read is
 executed by the operator-started, **corpus-loaded** jail session: the seat reads each parked
@@ -129,8 +141,10 @@ Both lanes keep the standing discipline:
 
 - **Verify, then commit** — never the reverse, and never commit a change that was not applied. An
   isolated probe against the live thing, not a re-reading of the diff.
-- **Coherent units, pushed (or PR'd) right away.** An unpushed jail commit is invisible to the
-  agent loop: the coordinator/worker pods `git clone --depth 1 master`.
+- **Coherent units; PR-lane work pushed right away, bookkeeping batched to wind-down** (the
+  2026-08-30 rule above). The invisibility caveat stands for anything the loop consumes: the
+  coordinator/worker pods `git clone --depth 1 master`, so a loop-relevant commit left local
+  is a commit the loop never saw.
 - Uncommitted work from a previous session may be in the tree — check `git status` before you
   start and leave what isn't yours alone.
 - **Never pipe-filter a gate's exit** (`lint | tail -1 &&` masked a failing lint once); verify
