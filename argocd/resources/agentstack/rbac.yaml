@@ -80,6 +80,39 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get, list, watch, create, update, patch, delete]
+  # Responder graduation dial (goal#818 / FU-103): the Composition composes per-namespace
+  # Role + RoleBinding granting the claim-declared verb/resource pairs to the responder
+  # identity (agentstack-loop SA). To COMPOSE a Role that grants verb V on resource R,
+  # Crossplane's own SA must already HOLD V on R (k8s privilege-escalation prevention).
+  # The common remediation verbs below are pre-granted so the compose passes for any
+  # reasonable whitelist. Crossplane never USES these verbs — they exist so it can hand
+  # them to the responder Role. If a claim declares a verb/resource pair NOT listed here,
+  # the compose fails with "attempting to grant RBAC permissions not currently held" and
+  # the claim engineer must add the missing pair to this block.
+  #
+  # NOTE — secrets is deliberately NOT pre-granted here. It is a materially more sensitive
+  # class than the other remediation targets (pods, configmaps, deployments), and no claim
+  # today declares a secrets remediation pair. If a claim does, the compose will fail with
+  # "attempting to grant RBAC permissions not currently held" — a loud, self-describing
+  # failure that tells the claim engineer to add the missing pair. A silent standing grant
+  # has no such tell. Add secrets here only when a consumer exists and the minimal-privilege
+  # case has been reviewed.
+  #
+  # SCOPE — CORE GROUP ONLY, matching what the Composition can render: the responder Role
+  # template hardcodes `apiGroups: [""]` (composition.yaml), so a non-core pair (deployments,
+  # jobs, CNPs) is structurally unrenderable today and pre-granting for it would be a standing
+  # cluster-wide grant nothing can consume (the 2026-08-30 assembly read dropped exactly those
+  # rows). When a consumer needs a non-core pair, the verbs schema grows an `apiGroup` field
+  # and its pre-grant row lands here in the same change — same one-change discipline as secrets.
+  - apiGroups: [""]
+    resources: [pods, pods/log, pods/status]
+    verbs: [get, list, watch, patch, delete]
+  - apiGroups: [""]
+    resources: [configmaps, endpoints, events, persistentvolumeclaims, persistentvolumeclaims/status, services]
+    verbs: [get, list, watch, patch, delete]
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    verbs: [get, list, watch]
   # ADR-089 quota-as-contract: the Composition has been able to compose a per-repo ResourceQuota
   # since the tier work landed, but the block is gated on `{{- if $r.storage }}` and NO claim had
   # ever set `storage` — so this grant was never needed and its absence never showed. Arming the
