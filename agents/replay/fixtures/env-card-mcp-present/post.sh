@@ -4,6 +4,7 @@ GROUND_RULES_FILE="${GROUND_RULES_FILE:-$REPLAY_ROOT/agents/ground-rules.md}"
 ROUND=1
 ROUNDS_MAX=3
 HARNESS="goose"
+MODEL="deepseek/deepseek-v4-flash"
 EGRESS_ENFORCE="true"
 DOCKER=""
 BASE_REF="master"
