@@ -12,6 +12,7 @@ arbitrate-quoted-mid-body	arbitrate
 argv-payload-over-ceiling	argv-payload
 argv-payload-retro-handoff	argv-payload
 argv-payload-warn-band	argv-payload
+asvs	asvs
 board-classification	board-classification
 body-footprint-mismatch	body-footprint-mismatch
 c4c5-bodies-probe-fail	c4c5-bodies-probe-fail
@@ -44,6 +45,7 @@ harvest-goal-open-funded	harvest
 harvest-master-inert	harvest
 item-class-batch/item-class-batch	item-class-batch
 ledger-emitter-rounds	ledger-emitter-rounds
+lens-posture	lens-posture
 model-id-parse-drift	model-id-parse-drift
 opencode-phonehome-killswitch	opencode-phonehome-killswitch
 pick-rail-both	pick-rail
@@ -60,6 +62,7 @@ responder-cause-line-absent	responder-cause-line
 responder-cause-line-already-bound	responder-cause-line
 responder-cause-line-malformed	responder-cause-line
 responder-cause-line-valid	responder-cause-line
+responder-graduation	responder-graduation
 responder-reopen-fix-verdict	responder-reopen
 responder-reopen-report-only	responder-reopen
 responder-selfref-platform-machinery	responder-selfref
@@ -103,6 +106,7 @@ session-belt-c4c5	session-belt
 session-belt-fast-path	session-belt
 session-belt-fast-path-probe-fail	session-belt
 session-belt-queued	session-belt
+slo-teeth	slo-teeth
 sprout-report-skips-buckets	sprout-report-skips-buckets
 sprout-report-unbound	sprout-report-unbound
 state-fp	state-fp
