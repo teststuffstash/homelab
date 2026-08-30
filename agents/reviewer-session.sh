@@ -103,16 +103,16 @@ fi
 # <<<REPLAY:optout-gate<<<
 
 # ── MCP knob read (#1041) ──────────────────────────────────────────────────────────────────────
-# Follow the reviewer-optout.sh posture exactly: same kubectl read, same fail-closed (unknown =
-# no MCP attached). The MCP endpoint is stack-wide (spec.mcp), not per-repo — find the stack
-# whose repos include this project. Absent = no MCP config rendered.
+# Read from reviewer-optout.sh's mcp_knob() — the ONE claims read for reviewer dispatch
+# (homelab#204 two-readers-one-mirror class). The MCP endpoint is stack-wide (spec.mcp), not
+# per-repo. Absent = no MCP config rendered.
 MCP_ENDPOINT=""; MCP_TOOLS=""
-CRD="${AGENTSTACK_CRD:-agentstacks.platform.teststuff.net}"
-if claims_json="$("$KUBECTL" $KUBE get "$CRD" -o json 2>/dev/null)"; then
-  MCP_ENDPOINT="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.endpoint] | first // empty' 2>/dev/null)"
-  MCP_TOOLS="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.tools] | first // empty' 2>/dev/null)"
+_mcp_knob="$(bash "$HERE/reviewer-optout.sh" --mcp-knob "$PROJECT" 2>/dev/null)" || _mcp_knob=""
+if [ -n "$_mcp_knob" ]; then
+  MCP_ENDPOINT="${_mcp_knob%%|*}"
+  MCP_TOOLS="${_mcp_knob#*|}"
 fi
-# <<<REPLAY:mcp-knob-read>>>
+# <<<REPLAY:mcp-knob-read<<<
 
 # FU-080 perStack (mirror of coordinator-session.sh): --loop-ns runs the reviewer pod in the stack's
 # loop home as agentstack-loop, fetching the review-bot token (loop-reviewer-git-<stack>) per-run
@@ -311,7 +311,7 @@ gh pr checkout ${PR}
 # MCP config (#1041): write the config file when the stack declares an MCP endpoint.
 # The CLAUDE_CODE_MCP_CONFIG env var is set so claude loads the MCP server at startup.
 if [ -n "${MCP_ENDPOINT:-}" ]; then
-  jq -cn --arg url "${MCP_ENDPOINT}" --argjson tools '${MCP_TOOLS:-[]}' \
+  jq -cn --arg url "${MCP_ENDPOINT}" --argjson tools "${MCP_TOOLS:-[]}" \
     '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}' > /tmp/mcp-config.json
   export CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json
   echo "→ MCP config written: ${MCP_ENDPOINT}"

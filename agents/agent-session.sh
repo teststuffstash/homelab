@@ -582,7 +582,7 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
     # AgentStack level, not per-repo — find the stack whose repos include this project.
     # Absent = no MCP attached; the env card and --mcp-config are gated on this being non-empty.
     MCP_ENDPOINT="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.endpoint] | first // empty' 2>/dev/null)"
-    MCP_TOOLS="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.tools] | first // empty' 2>/dev/null)"
+    MCP_TOOLS="$(printf '%s' "$claims_json" | jq -rc --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.tools] | first // empty' 2>/dev/null)"
   else
     echo "WARN: agentstacks probe failed — cannot derive --docker or the egress knobs; pass --docker explicitly for docker-gated repos" >&2
   fi
@@ -735,6 +735,7 @@ render_env_card() {
 # the card, splice it into the recipe at the marker, base64-carry the augmented recipe, and wrap the
 # harness-specific invocation. Both harnesses read the SAME augmented recipe (goose natively; claude
 # as an appended system prompt — it parses the goose YAML fine, agent-runtime#14).
+[ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest) — sourced before the env card is rendered so ${AGENT_BASE_IMAGE} is available (homelab#1041)
 if [ -n "${RECIPE:-}" ]; then
   # FU-114 L3: deterministic task-type recipe selection (docs/agents/fixer-context.md). The
   # dispatcher passes the DEFAULT recipe (.agents/fix.yaml); if the issue carries a `task/<class>`
@@ -1024,17 +1025,20 @@ if [ -n "${RECIPE:-}" ]; then
   # (homelab#256, docs/agents/retros/2026-08-11-oracle-r3-context.md F1). The proxy's completion
   # floor cannot stand in for it: that rewrites the UPSTREAM request and cannot govern goose's own
   # client-side emit ceiling. The claude arm stays untouched — the var is goose's.
+  # >>>REPLAY:harness-run-cmd>>>
   # ── MCP config (#1041): build the --mcp-config JSON from the claim knob ──────────────────────
   # Rendered only when the stack declares spec.mcp.endpoint. The config is base64-carried into the
   # pod command so the harness can write it to a temp file and pass it as --mcp-config.
   # For goose: --mcp-config /tmp/mcp-config.json; for claude: injected via the claude.json config.
+  # ⚠ This block sits INSIDE the replay region because replay clauses run self-contained — a shared
+  # helper defined at the script top is invisible to them (proven by RC-127). The MCP_PRELUDE and
+  # MCP_CONFIG_B64 variables are consumed by the goose case below, inside the same region.
   MCP_PRELUDE=""
   if [ -n "${MCP_ENDPOINT:-}" ]; then
     MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}')"
     MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
     MCP_PRELUDE="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json; "
   fi
-  # >>>REPLAY:harness-run-cmd>>>
   # A claude ride MUST carry --model: without the flag the CLI runs its own DEFAULT — measured
   # 2026-08-13 as claude-opus-5[1m] on this image — not the dispatched model. Every claude/haiku
   # ride since the harness landed (103 on the platform stack in the last 7d alone, ~$419
@@ -1069,7 +1073,6 @@ if [ -n "${RECIPE:-}" ]; then
   # <<<REPLAY:harness-run-cmd<<<
 fi
 
-[ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
 IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}}"
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"
 SECRET="${OR_SECRET:-${PROJECT}-openrouter}"  # operator-minted, budget-capped. Default: the shared standing key; the coordinator passes --openrouter-secret to bind a per-session ephemeral key instead
