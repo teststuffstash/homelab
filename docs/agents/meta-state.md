@@ -45,16 +45,18 @@ meant to avoid.)
   platform surface — ci-runner-01's dockerd insecure-registries lacked the new MCR VIP (first
   HOST-level mirror pull ever, sleep#133), and its devbox venvs go stale (the y/n prompt class).
 
-- **⚑ PICKUP (2026-08-30 session wind-down — the #133 tail, all mechanical):**
-  1. ci-runner-01 docker RESTART pending at runner-idle — `daemon.json` already carries
-     `192.168.40.31` (applied live, codified `15b5b712`); at idle: `sudo systemctl restart
-     docker`, then verify `docker pull 192.168.40.31/playwright/python:v1.62.0` (key:
-     `~/.claude/homelab-forgejo/id_ed25519`, `debian@192.168.2.55`; busy-check
-     `pgrep -f Runner.Worker` first — a restart mid-job kills it).
-  2. Then rerun sleep-tracking PR#133's `integration` workflow (environmental comment + rerun
-     once, ci-red play) — run 33299341555's sibling; at merge, HAND-CLOSE issue #123 with
-     `agent/done` (its PR link is `Implements`, not a closing keyword).
-  3. oracle-fleet PR#294 (venv-guard port, armed) rides the normal lane — verify it lands.
+- **⚑ PICKUP (the #133 tail — items 1+3 DONE 2026-08-30 midday session):**
+  1. ~~ci-runner-01 docker restart~~ DONE — restarted at idle, `docker pull
+     192.168.40.31/playwright/python:v1.62.0` verified on the runner (⚠ the suggested
+     `pgrep -f Runner.Worker` busy-check SELF-MATCHES its own ssh command line — bracket the
+     pattern: `pgrep -f "[R]unner.Worker"`; the first read was a false BUSY).
+  2. sleep-tracking PR#133 rerun DONE — the environmental half is FIXED (mirror pull green in
+     CI); the surviving red is CONTENT: `playwright/python:v1.62.0` ships browsers but NOT the
+     `playwright` pip package (verified in the pristine image; diagnosis commented on the PR,
+     fix shape = in-container `pip install playwright==1.62.0`). Deterministic — rerunning
+     never greens it; the ci-red machinery owns the fix round. At merge, HAND-CLOSE issue
+     #123 with `agent/done` (its PR link is `Implements`, not a closing keyword).
+  3. ~~oracle-fleet PR#294~~ MERGED 11:14Z.
   4. oracle PR#293's red is CONTENT (assert-delta) — the ci-red machinery owns it; hands off.
   ⚠ probe gotcha re-proven ×2 today: `statusCheckRollup` in any gh query hard-fails on this
   PAT (a 2h watch ran blind) — read CI via `gh run list`.
