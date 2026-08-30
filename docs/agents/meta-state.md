@@ -133,13 +133,16 @@ meant to avoid.)
   **#983 MERGED as PR#1001 (21:38Z)**: 3 heat-cited trims (−214 lines from the corpus hot set,
   incl. an ADR-111 staleness heat found that lints can't) + settle-test run 1 recorded in the
   doc-heat spike — ≥3 bar MET; **the FU-164 promote-vs-close call is the operator's** (serve
-  the report + wire into docs-cleanup, or close the spike).  **#936 is PINNED** (the FU-110 pin = the scan's priority knob, punits-first) —
-  UNPIN at its merge. Still-queued codeowner issues stand: #928 #929 #932 #933 #937 #938 #888
-  #456 #110, agent-runtime#95, #923's shadow arm — **#938 + #933 are REAL reads** (#933's
-  merge lets G-B assemble → assembly PR → codeowner tax → probe-platform, FU-102); **#946 is
-  UNBLOCKED (#945 merged as PR#996, 21:19Z)** — the A5 evidence seed is a seat run of
-  `re-review.sh --shadow --model opencode/big-pickle` over #923's set, ready any sitting; #953 queued (docs-lint gate behaviour — its class fired AGAIN
-  this session: the meta-state ⚓-term break, second instance on the thread).
+  the report + wire into docs-cleanup, or close the spike).
+  **Queued-list RECONCILED 2026-08-30 (midday session):** #928 #929 #932 #933 #937 #888 #456 +
+  agent-runtime#95 all CLOSED by the machine lane; #936 merged + UNPINNED. The two survivors had
+  structural causes, both fixed/routed 2026-08-30: **#110** was INVISIBLE (the scan's `gh issue
+  list` calls silently capped at 30 — fixed direct-master `088ac3b9`, ISSUE_LIST_LIMIT + loud
+  truncation warn; #110 now the platform loop's actionable unit) and **#938** was scan-refused
+  every tick (guarded-path Touches) — de-queued + de-suitabilized to the operator lane, comment
+  on the issue. **#946 is UNBLOCKED (#945 merged as PR#996)** — the A5 evidence seed is a seat
+  run of `re-review.sh --shadow --model opencode/big-pickle` over #923's set, ready any sitting;
+  #953 queued (docs-lint gate behaviour).
 
 - **⚑ ORACLE AND SLEEP ARE CHAINLESS (oracle: oracle-iac#387; sleep: sleep-iac#77 + mirror
   homelab#976 MERGED; 0731 out of model_tiers, homelab#960).** **Sleep is PROVEN end-to-end:**
@@ -201,7 +204,9 @@ meant to avoid.)
 
 - **⚑ S7/#745 COMPLETE 2026-08-26** (callers ×10 + reusable deleted, org secrets destroyed,
   MP-T02 re-anchored). Acceptance watch: no BEHIND PR >30m anywhere; hosted updater runs
-  structurally 0. Silences `a3628730` + `5400ed94…` self-expire 2026-09-01. **S8 (merge
+  structurally 0. ⚠ Both S7 silences were WIPED by the 2026-08-25 Alertmanager restart
+  (silences sit on emptyDir — FU-195): `a3628730` is moot (callers disabled at source);
+  `5400ed94` re-created as `1ac4049c` to 09-01 (the #698 minutes mute, was re-firing). **S8 (merge
   lanes) is on the work map** — (repo, base) serialization + goal v1.3 themes as ONE stint
   after S5; #829 absorbed at its authoring (de-queued, agent-fix kept).
 
