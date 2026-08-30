@@ -983,6 +983,7 @@ spec:
             {{- $extra := default (list) (get $eg "extraFQDNs") }}
             {{- $enforce := default false (get $eg "enforce") }}
             {{- $docker := default false (get $fx "docker") }}
+            {{- $mcp := $xr.spec.mcp }}
             ---
             # Transcript-capture WRITE-ONLY S3 key, mirrored in-namespace (FU-080 a): worker pods
             # secretKeyRef it locally, so no launcher reads key material and no cross-namespace
@@ -1252,6 +1253,11 @@ spec:
                     {{- end }}
                     {{- range $f := $extra }}
                     - { matchName: {{ $f }} } # extraFQDNs (earned from a monitor-phase harvest)
+                    {{- end }}
+                    {{- if $mcp }}
+                    # MCP endpoint (stack-wide, from spec.mcp.endpoint) — the agent session's
+                    # tool server; must be an FQDN, never a service VIP (FU-072/kata).
+                    - { matchName: {{ $mcp.endpoint }} }
                     {{- end }}
                     {{- if $docker }}
                     # docker=true: docker.io pulls ride the FU-073 mirror (toCIDR above) since
