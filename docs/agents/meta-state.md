@@ -235,16 +235,18 @@ meant to avoid.)
   comment on the issue, 2026-08-26). Related sighting on **#938** (sentinel edge convoy,
   recurrence comment 2026-08-26 ~21:17Z): head-blind `{wake: edge}` payloads confirmed, 17
   pending identical sweeps at peak, arrival source = updater head churn after merge bursts.
-- **CI-wall trial (2026-08-18): `minRunners: 1`** on arc-runners — readout pending; revert to
-  0 if no win; residual setup cost = homelab#518 (its promtool child #936 queued 2026-08-25:
-  loop-health fixture = 107.6s of the 130s lint step).
+- **CI-wall trial SETTLED 2026-08-30: `minRunners: 1` KEPT** — readout (ci.yaml pickup latency,
+  n=40/window): median 22s→3s, p90 300s→3s, max 648s→7s; comments settled in arc-runners.yaml.
+  Residual setup cost = homelab#518 (its promtool child #936 merged — the loop-health fixture
+  lint cost).
 - **Small live residue:** wk-metal-04 `kubernetes_labels.longhorn_bulk_zone` field-manager
   CONFLICT kills FULL tofu applies (targeted fine) — chase before the next broad apply
   (probed 2026-08-26: live managedFields show `Terraform` owning
   `topology.kubernetes.io/zone` CLEANLY, no rival manager on the label — likely cleared by
   the last targeted apply; unreproducible read-only, verdict = the next full apply) ·
-  proxy zen leg live-smoke still unrun (`opencode/nemotron-3-ultra-free` through the
-  in-cluster proxy) · the openrouter-proxy FU-021 comment repoint rides the next functional
+  ~~proxy zen leg live-smoke~~ DONE 2026-08-30 (200 `[zen-leg+zen+zen-auth-swap]` through the
+  in-cluster proxy, real nemotron completion; ⚠ free-rail latency ~68s — smoke probes need
+  >60s timeouts) · the openrouter-proxy FU-021 comment repoint rides the next functional
   proxy change · hp-01 `install_disk: /dev/sda` is still a NAME with two identical disks
   (repin to WWID, FU-076's neighbourhood) · stack leftovers: circles#77 ci-red triage,
   oracle-fleet#259 rework per the seat read, circles-iac deploy-bump generator fix before
