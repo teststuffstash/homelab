@@ -24,6 +24,9 @@
 # ONE SEAM: `python3`, shadowed in the bridge to pin the PRICE (--price-per-mtok). The real
 # estimate_budget.py still runs, so the CR asserted here is emit_cr's true rendering; what the seam
 # removes is the live registry fetch, which no fixture may depend on.
+# The same shadow also covers the inline python3 parser (homelab#989) that reads metadata.name and
+# spec.secretName from the emitted CR shape-agnostically — the parser receives the price flag as an
+# extra argv element and ignores it, so the seam is transparent to both call sites.
 name: retro-key-minted
 mode: actions
 source: agents/retro-session.sh
