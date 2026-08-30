@@ -34,6 +34,7 @@ goal-nonassembly-merge-inert	goal
 goal-reverted	goal
 goal-validated	goal
 harness-run-cmd-claude	harness-run-cmd
+harness-run-cmd/claude-mcp	harness-run-cmd
 harness-run-cmd-go	harness-run-cmd
 harness-run-cmd-goose	harness-run-cmd
 harness-run-cmd-goose-mcp	harness-run-cmd
