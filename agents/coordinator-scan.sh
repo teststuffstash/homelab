@@ -2122,7 +2122,8 @@ EOF_GOVERNANCE
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|select(((.headRefName // "")|startswith("goal/")) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
       orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
     done
-    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (.reviewDecision=="CHANGES_REQUESTED") and (.author.login==$wa) and (((.headRefName // "")|startswith("goal/"))|not))|.number'); do
+    # >>>REPLAY:changes-requested-gate>>>
+    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("agent/blocked"))|not) and (.reviewDecision=="CHANGES_REQUESTED") and (.author.login==$wa) and (((.headRefName // "")|startswith("goal/"))|not))|.number'); do
       # ADR-094 project-WIP hold, same rationale as the queued gate above (meta-9, 2026-07-21:
       # while #60's fix round ran, every tick woke a redundant judge whose dispatch the launcher's
       # WIP=1 pre-flight would refuse — the Running worker IS this unit's in-flight work; C4/C5
@@ -2188,6 +2189,7 @@ EOF_GOVERNANCE
       units="${units}changes-requested|${repo}|pr-${u}\n"
       item_class_push "$repo" "pr-${u}" "riding" "machine"
     done
+    # <<<REPLAY:changes-requested-gate<<<
     # merge-conflict (MP-T06, homelab#595): the updater labels a PR `merge-conflict` when its
     # update-branch API call 422s on a DIRTY head. WORKER_AUTHOR-scoped, mirroring the
     # changes-requested clause above (671a053): the fix-round play only has a mandate over

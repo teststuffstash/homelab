@@ -1,0 +1,27 @@
+# changes-requested/dispatched (homelab#1097) — a worker-authored PR with CHANGES_REQUESTED and
+# NO `agent/blocked` label passes the jq selector and dispatches a fix round.
+#
+# CONDITION UNDER REPLAY. PR #1095 is worker-authored, CHANGES_REQUESTED, and carries NO exclusion
+# label. The jq selector admits it, the FU-146 holds find no live pod, the BLOCKED-SOURCE hold
+# finds no linked issue, the WIP gate is clear, and the FU-147 no-op probe finds a fresh PR with
+# no prior round — so the unit is emitted.
+#
+# THE CONTRACT:
+#   1. A `gh pr view` call is made for the FU-147 no-op probe.
+#   2. A UNIT is emitted for the PR.
+#   3. No ORPHAN line is produced.
+pins:
+  - MP-T11
+name: changes-requested-dispatched
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
