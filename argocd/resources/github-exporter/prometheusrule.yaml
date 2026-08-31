@@ -685,7 +685,7 @@ spec:
         # so the expr is presence-only: >0 or hotfix="true" means blocking edges exist.
         - alert: BlockingCodeownerParkWaiting
           expr: max by (owner, repo, pr, issue) (max_over_time(github_pull_request_park_blocking_count[10m])) > 0
-            or max by (owner, repo, pr, issue) (max_over_time(github_pull_request_park_blocking_count{hotfix="true"}[10m])) > 0
+            or max by (owner, repo, pr, issue) (max_over_time(github_pull_request_park_blocking_count{hotfix="true"}[10m]))
           for: 10m
           labels:
             severity: warning

@@ -1,0 +1,27 @@
+# Behaviour fixture for BlockingCodeownerParkWaiting (homelab#1115) — the no-seat BELT half of
+# the 2026-08-31 blocking-park direction. Extracted from prometheusrule.yaml for promtool test
+# consumption.
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/blocking-park.promtool-test
+#
+# Named .promtool-rules rather than .yaml: manifest-lint kubeconforms EVERY *.yaml under
+# argocd/resources and a non-manifest there would fail it.
+#
+# THE COPY CANNOT DRIFT SILENTLY: `devbox run exporter-self-test` (gated in CI) reads the alert
+# out of both files and asserts expr/for/labels are identical. Regenerate after editing the alert
+# in prometheusrule.yaml:
+#   yq '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] | select(.alert == "BlockingCodeownerParkWaiting")]}]}' \
+#     argocd/resources/github-exporter/prometheusrule.yaml
+groups:
+  - name: github
+    rules:
+      - alert: BlockingCodeownerParkWaiting
+        expr: max by (owner, repo, pr, issue) (max_over_time(github_pull_request_park_blocking_count[10m])) > 0
+          or max by (owner, repo, pr, issue) (max_over_time(github_pull_request_park_blocking_count{hotfix="true"}[10m]))
+        for: 10m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: "Blocking codeowner park: {{ $labels.repo }}#{{ $labels.pr }} gates blocked work (issue #{{ $labels.issue }})"
+          description: "PR {{ $labels.repo }}#{{ $labels.pr }} is codeowner-parked and its closing issue #{{ $labels.issue }} has {{ $value }} blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.pr }}"
