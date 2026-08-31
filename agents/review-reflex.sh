@@ -304,7 +304,7 @@ EOF_C9
     # neither names an issue (then only the per-PR count applies). Boundary-anchored on purpose:
     # issue-15 must not match a fix/issue-156-... branch.
     | ((((.headRefName // "") | capture("issue-(?<i>[0-9]+)(-|$)") | .i)
-        // ((.body // "") | capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i)
+        // ((.body // "") | capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i)
         // "-")) as $ikey
     | "\(.number) \($verdicts | length) \($at_head | length) \([ $at_head[] | select(.state == "APPROVED") ] | length) \(.headRefName // "-") \($ikey)"
   ')"
@@ -380,7 +380,7 @@ EOF_C9
                 --json number,headRefName,body,reviews 2>/dev/null)"; then
       sib_sum="$(printf '%s' "$sib" | jq -r --arg bot "$REVIEWER_LOGIN" --arg n "$pick_issue" '
         def refs($n): ((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)"))
-                      or ((.body // "") | test("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"));
+                      or ((.body // "") | test("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"));
         [ .[] | select(refs($n)) ]
         | "\(length) \([ .[] | .reviews[]?
               | select((.author.login // "") | startswith($bot))

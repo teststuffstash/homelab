@@ -967,7 +967,7 @@ fast_unit_dispatch() {
     # Same predicate and same fail-safes as the main path: no link or no pod probe → fall through
     # unchanged, and the hold needs a LIVE pod so it self-releases and cannot wedge.
     fpr_issue="$(jq -r '(.body // "")
-        | (capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' \
+        | (capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' \
         <<<"$fprjson" 2>/dev/null)" || fpr_issue=""
     if [ -n "$fpr_issue" ] \
        && jq -e --arg pat "issue-${fpr_issue}-" \
@@ -1242,7 +1242,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           # is already deployed fleet-wide and its trailer is the recipes own convention.
           ghit="$(jq -r --arg b "$gbase" --argjson n "$gn" \
             '[.[] | select(.baseRefName == $b)
-                  | select((((.body // "") | test("(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
+                  | select((((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
                         or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))] | length' <<<"$gmerged")" || ghit=0
           # Reported, never silent: a merged PR MENTIONS it but no strong link ⇒ ambiguous, held.
           gmention="$(jq -r --arg b "$gbase" --argjson n "$gn" \
@@ -2304,7 +2304,7 @@ EOF_GOVERNANCE
       # hold is conditioned on a LIVE pod, so it self-releases when that pod exits; it cannot wedge.
       pr_issue="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[] | select(.number == $n)
           | (.body // "")
-          | (capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || pr_issue=""
+          | (capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || pr_issue=""
       if [ -n "$pr_issue" ] && [ -n "$WIPPODS_JSON" ] \
          && printf '%s' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${pr_issue}-" \
               '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
@@ -2465,7 +2465,7 @@ EOF_GOVERNANCE
           [.[] | (.labels|map(.name)) as $L
                 | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                 | .number as $n
-                | select([$prs[] | select(((.body // "") | test("(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i"))
+                | select([$prs[] | select(((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i"))
                                    or ((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i")))] | length > 0)
                 | "\($n)"] | .[]')" 2>/dev/null || flip_cands=""
         for fcn in $flip_cands; do
@@ -3046,7 +3046,7 @@ EOF_GOVERNANCE
         # Same predicate and fail-safes as the other two: no issue link or no pod probe → falls
         # through unchanged (can only ADD holds), and the hold needs a LIVE pod so it self-releases.
         red_issue="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body // "")
-            | (capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || red_issue=""
+            | (capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || red_issue=""
         if [ -n "$red_issue" ] && [ -n "$WIPPODS_JSON" ] \
            && printf '%s' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${red_issue}-" \
                 '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
@@ -3120,7 +3120,7 @@ EOF_GOVERNANCE
                           --json number,headRefName,body,comments 2>/dev/null)"; then
             red_sum="$(printf '%s' "$red_sib" | jq -r --arg n "$red_key" "${STATS_TS_DEF}"'
               def refs($n): ((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)"))
-                            or ((.body // "") | test("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"));
+                            or ((.body // "") | test("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"));
               [ .[] | select(refs($n)) ]
               | "\(length) \([ .[] | stats_ts[] ] | length)"
             ' 2>/dev/null)" || red_sum=""
