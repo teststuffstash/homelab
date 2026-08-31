@@ -436,6 +436,7 @@ recipe). One source per concern, delivered to the roles that need it.
 
 The stack declares `slo: {endpoint, probe, availability, errorBudget}` on its AgentStack claim;
 the platform renders the FU-099 blackbox probe, burn-rate alerts, the responder's alert edge,
-and the teeth: **a stack that burnt its error budget gets its auto-merge lane demoted to
-codeowner-gated** (FU-104). Zero opinions in any brief; "harder to ship something that breaks"
-enforced by contract.
+and the teeth: **on a burnt stack, reviewer dispatch is parked at every dispatch site — no new bot
+approval is minted, so every unapproved PR is codeowner-gated in effect** (FU-104). A PR already
+approved-at-head with auto-merge armed still merges: the teeth withdraw no approval and disarm no
+PR. Zero opinions in any brief; "harder to ship something that breaks" enforced by contract.
