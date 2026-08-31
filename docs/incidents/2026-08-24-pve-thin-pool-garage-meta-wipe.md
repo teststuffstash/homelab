@@ -203,3 +203,13 @@ file also exists as a member inside the intact `corpus-image.oci.tar`.
 
 - **FU-093** — pve thin-pool metering (the third sum) + periodic guest fstrim.
 - **FU-137** — offsite/backup gap; now carries the #884 restore decision and backup cadence.
+
+## Addendum (2026-08-31): the restore left oracle-specs frozen for a week
+
+The Aug-4 backup restored `oracle-specs` at 1.07 GB — already **over its 1 Gi quota** — so every
+PUT after the restore was rejected `403 Bucket size quota is reached` while oracle-fleet's publish
+CI stayed green (mc mirror swallows per-object 403s, oracle-fleet#318). The specs web surface
+served the exact restore state until the oracle jail noticed on 08-31 (handoff → diagnosed from
+garage-0 logs). Fix: quota 1Gi→5Gi in oracle-iac (`allure-workspace.yaml`, PR #446); the general
+lesson is that a restore can silently violate ADR-089 quotas-as-contract — the restored size never
+got checked against the claims.
