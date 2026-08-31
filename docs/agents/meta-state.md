@@ -8,6 +8,18 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-08-31 MORNING OPERATOR SESSION (wind-down ~06:55Z) — verify tail for the next session:**
+  - **oracle-fleet#285/PR#305**: seat re-fired the red edge (manual CI rerun → failure 06:51Z,
+    the deterministic `BASE_LOEMIND: unbound variable` at e2e-kind.sh:481) so the red-doorbell
+    wakes the ci-red round with WORKING creds. **VERIFY a round-2 dispatch landed on #285**; if
+    the edge produced nothing, the ci-red selector has a gap (the #1097 neighbourhood) — that
+    was the "8h silence" mechanism: no new red edge since 20:01Z, not a debounce.
+  - **PR#1094 (retro r2)**: gate executed option 2 (`7fb70fdb`), auto-merge armed — confirm
+    merged; then #1096's fix PR#1099 (CI rerun in flight post-`cbe0aa80`) — confirm green+merged.
+  - #1060 + #1096 queued; #1097 in-progress; #994 operator-held. Retro stint container =
+    NEXT CORPUS SESSION's authoring act (ruling in the retro bullet below).
+  - #946 seed: paced runner found no Zen window 05:35–06:35Z (all 429) — killed at wind-down;
+    3 cells outstanding, recipe on the issue.
 - **⚑ 2026-08-30/31 OVERNIGHT UNATTENDED SESSION (codeowner+board, TICK-LOG entry) — the pickup set:**
   - ~~OPERATOR: OpenRouter credit~~ TOPPED UP 2026-08-31 ($5.66 → $15.66); the 00:37Z alert was
     the runway rule (credit < 2× trailing-24h burn), gauge read true throughout. Drain autopsy:
