@@ -567,7 +567,7 @@ TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — declared \`Touches:\` footpr
   TOUCHES-ESCAPES: $TOUCHES_ESCAPES
 Semantics: \`none\` = every changed path is covered by the closing issue's declared footprint; \`undeclared\` = this PR closes no issue, so there is no footprint to check; \`unavailable\` = the checker could not run — treat it as NO SIGNAL, not as clean; otherwise each listed path fell OUTSIDE the declared footprint. Files whose ENTIRE diff is REPLAY sentinel marker comments are already excluded (ADR-097 addendum 3, homelab#944 — a compelled edit, content-verified); do not re-derive an escape for them from the raw diff. When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`scripts/**\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`) — marked [GOVERNANCE] — the diff is BLOCKING per .agents/review.md §BLOCKING. This is computed fact for your rubric check, not a verdict.
 
-ISSUE_UNREADABLE: $ISSUE_UNREADABLE
+ISSUE_UNREADABLE: ${ISSUE_UNREADABLE:-0}
 If set (1), the linked issue could not be read (403/NOT_FOUND) by the reviewer's own credential. Do NOT emit a content verdict from this premise. Instead, emit a TOOL_GAP line naming the issue read failure and post a standing-aside comment with pre=issue-unreadable. The exit-contract terminal handling applies (homelab#1055)."
 # <<<REPLAY:reviewer-touches-check<<<
 SNIP
