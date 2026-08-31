@@ -19,8 +19,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Single-line assignments — ci.yaml `eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"`s
-# these verbatim; keep them one line, single-quoted, eval-safe.
+# Single-line assignments — kept one line, single-quoted, eval-safe, so ci.yaml's pending
+# one-home flip (#518, operator-direct, after this lands) can
+# `eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"` them verbatim. Until that flip,
+# ci.yaml carries its own inline copies — edit BOTH when a trigger set changes.
 PROM_PATHS='^(argocd/|tofu/|scripts/prometheus-rules-lint\.sh|devbox\.(json|lock)$)'
 CLAUSE_PATHS='^(agents/|devbox\.(json|lock)$)'
 
