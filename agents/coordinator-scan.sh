@@ -2209,10 +2209,6 @@ EOF_GOVERNANCE
         # goal would wedge at originals-done forever. Exclude the bucket from the open count
         # used by the child-set-complete predicate — same title convention the harvest-disposition
         # site and the dispatch block use (sprout-report-skips-buckets, IL-T17).
-        # homelab#1124: the assembly-complete trigger's descendant read — the fixpoint walk above
-        # (gdesc) already walks the full descendant tree, not only direct children. The checkpoint
-        # play (README §goal-checkpoint) also re-reads the tree at PR-open time as a race guard.
-        gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
           '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
            | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
         case "$gopen_n_ckpt" in ''|*[!0-9]*) gopen_n_ckpt="$gopen_n";; esac
