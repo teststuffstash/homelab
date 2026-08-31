@@ -1,0 +1,4 @@
+OUT MCP_PREP: printf '%s' 'eyJtY3Bfc2VydmVycyI6W3sibmFtZSI6InN0YWNrLW1jcCIsInVybCI6Imh0dHBzOi8vbWNwLm9yYWNsZS50ZXN0c3R1ZmYubmV0L21jcCIsInRvb2xzIjpbInN0YXR1dGUiLCJzZWFyY2giLCJnaXZlX2ZlZWRiYWNrIl19XX0=' | base64 -d > /tmp/mcp-config.json
+OUT export CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json
+OUT echo '→ MCP config written'
+RC 0
