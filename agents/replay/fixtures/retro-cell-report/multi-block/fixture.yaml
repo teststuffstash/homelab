@@ -15,8 +15,8 @@
 #      inter-block text are dropped.
 #   3. The success line names the CELL and the extracted SIZE. The size is the assertion that
 #      the check extracted only the last block (not the concatenation of all four).
-#   4. 1772 bytes is the last block's content (the real report) — same as the `present/`
-#      fixture's report body. If the extraction ever concatenates blocks again, this number
+#   4. 1769 bytes is the last block's content (the real report — the pinned size in
+#      expected/actions.txt). If the extraction ever concatenates blocks again, this number
 #      grows (the three skeletons add ~400 bytes each).
 name: retro-cell-report-multi-block
 mode: actions

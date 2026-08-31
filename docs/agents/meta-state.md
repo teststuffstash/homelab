@@ -8,18 +8,40 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ 2026-08-31 MORNING OPERATOR SESSION (wind-down ~06:55Z) — verify tail for the next session:**
-  - **oracle-fleet#285/PR#305**: seat re-fired the red edge (manual CI rerun → failure 06:51Z,
-    the deterministic `BASE_LOEMIND: unbound variable` at e2e-kind.sh:481) so the red-doorbell
-    wakes the ci-red round with WORKING creds. **VERIFY a round-2 dispatch landed on #285**; if
-    the edge produced nothing, the ci-red selector has a gap (the #1097 neighbourhood) — that
-    was the "8h silence" mechanism: no new red edge since 20:01Z, not a debounce.
-  - **PR#1094 (retro r2)**: gate executed option 2 (`7fb70fdb`), auto-merge armed — confirm
-    merged; then #1096's fix PR#1099 (CI rerun in flight post-`cbe0aa80`) — confirm green+merged.
-  - #1060 + #1096 queued; #1097 in-progress; #994 operator-held. Retro stint container =
-    NEXT CORPUS SESSION's authoring act (ruling in the retro bullet below).
-  - #946 seed: paced runner found no Zen window 05:35–06:35Z (all 429) — killed at wind-down;
-    3 cells outstanding, recipe on the issue.
+- **⚑ 2026-08-31 morning verify tail — RESOLVED by the 07:00Z corpus session (retro-first):**
+  - **oracle-fleet#285: NO round-2 landed off the 06:51Z rerun red, and it structurally cannot**
+    — both wake paths are deaf to a same-head CI rerun (exporter red edge dedups per `head_sha`;
+    the `state-fp` written 21:01Z hashes byte-identical when the rerun reds the same
+    conclusions). Filed+queued **#1108** (fix shapes: `(head_sha, run_attempt)` dedup key, or a
+    run-attempt input to the ci-red fp only — #1011 runs the opposite direction on arbitrate);
+    blockedBy edge wired #285→#1108 (the ADR-119 un-park shape, seat door included now).
+    **#285 stays wedged until #1108 lands**; the content fix itself is known (`BASE_LOEMIND`
+    unbound, e2e-kind.sh:481).
+  - PR#1094 + PR#1099 MERGED 07:05Z (seat codeowner reads; #1096 auto-closed by the merge).
+    probe-platform's 06:41Z tick VERIFIED past auth (the #1085 fix live): 6 checks, 1 finding,
+    0 probe-fails — the finding is the known-benign `logging` OutOfSync (the loki
+    `volumeClaimTemplates` papercut); do not re-derive it on future probe reads.
+  - #946 seed: 3 cells outstanding, recipe on the issue (Zen 429 weather). #994 operator-held.
+- **⚑ 2026-08-31 CORPUS SESSION rulings (the drainage-economics discussion — operator-ruled,
+  TICK-LOG entry has the arc):** the drainage round/branch/triage design is **BANKED** —
+  measured 1 stack-blocking : 16 nice-to-have on the live pile, and the seat gate-reads every
+  diff anyway (ADR-110 is the binding resource), so meta-coordination economics win at current
+  volume. Standing policy: **(1)** blocking defects (incoming blockedBy from a stuck stack
+  issue / live wedge / 🚨) queue immediately, master-lane, hotfix-class — and every filing door
+  including the seat WIRES the edge; **(2)** the nice-to-have pile is corpus-session batch work
+  (board aggregate is the reader; queue a handful, gate-read the parks in the same sitting) —
+  no new machinery; **(3)** the Touches classifier (one-home owned/deny tables) survives as a
+  LINT (stops burned rides on operator-lane touches, feeds the operator slice) — #1102 to be
+  re-scoped to exactly that + the edge discipline. Banked-design trigger: revisit if parked-PR
+  volume actually freezes dispatch or session-cadence drain visibly stops sufficing. Also
+  ruled en route: post-launch goal fixes target MASTER (v1.2 stands); goal-tree members' queue
+  gap (filing doors don't consult the IL-T15 grant — #1060/#1028 evidence) folds into the same
+  re-scope. **CONFIRMED verbatim by the operator 08-31 + one addition: the jail watches
+  blocking-class codeowner parks ACTIVELY** — jail half BUILT (meta-events `BLOCKPARK` source,
+  PR#1114, verified on the live #1108→#285 edge), no-seat belt half queued (#1115, exporter
+  blocking-count + `BlockingCodeownerParkWaiting`, machine-merge path). Second banked idea,
+  operator's own words "not yet": an AUTOMATED design-agents corpus read on codeowner-parked
+  BLOCKING issues — revisit when blocking-park volume makes seat-cadence reads the bottleneck.
 - **⚑ 2026-08-30/31 OVERNIGHT UNATTENDED SESSION (codeowner+board, TICK-LOG entry) — the pickup set:**
   - ~~OPERATOR: OpenRouter credit~~ TOPPED UP 2026-08-31 ($5.66 → $15.66); the 00:37Z alert was
     the runway rule (credit < 2× trailing-24h burn), gauge read true throughout. Drain autopsy:
@@ -284,21 +306,20 @@ meant to avoid.)
   lanes) is on the work map** — (repo, base) serialization + goal v1.3 themes as ONE stint
   after S5; #829 absorbed at its authoring (de-queued, agent-fix kept).
 
-- **⚑ Retro (FU-058): r2 FIRED ON SCHEDULE Mon 08-31 05:00Z — acceptance NOT clean but close**
-  (PR#1094): opus report coherent + read at the gate; deepseek cell's file carried 3 empty
-  template echoes + a leaked harness line (harvest sed re-arm, **#1096 queued**) — seat executed
-  the human gate as arbitration option 2 (junk stripped `7fb70fdb`, four-attempt evidence kept
-  as a note), reviewer re-picks, auto-merge armed. Episode also filed **#1097**
-  (changes-requested clause ignores agent/blocked on the PR — loop already riding it).
-  **OPERATOR RULED 2026-08-31: the r2 process-change table gets its OWN goal/stint container,
-  authored by the NEXT corpus session** (author-at-last-moment — no parent issue minted yet).
-  Table's top rows for that sitting: loop-filed
-  control-path defects must carry `agent-fix`+`agent/queued` (7 inert instances, 29.1
-  issue-days); predicate-REPLACE diffs must enumerate the old accepted-input set (6/31
-  blocking rounds); identical `(model,error_class)` re-strike routes to agent/error not
-  another ride (the #304 shape, 3/5 rides wasted); two one-line ledger fixes
-  (`is_snapshot` case, `calibration_error` denominator). r1 residue: #930 SEAT / #931
-  OPERATOR lanes still open.
+- **⚑ Retro (FU-058): r2 landed END-TO-END 08-31, batch largely DRAINED same day.** Reports
+  merged (PR#1094, human gate = arbitration option 2); harvest extractor fixed (#1096 →
+  PR#1099 merged: awk last-block + `retro-cell-report/multi-block` fixture). **Batch container
+  #1101 (`retro-batch: platform-r2`, the #949 shape)** — children: #1103 (F2) DONE
+  operator-direct `255b0edc`; #1104 (F3) → PR#1110 MERGED; #1105 (F4+F6) → PR#1111 MERGED;
+  #1106 (F5, agent/done reconciler) queued, riding; **#1102 (F1) DE-QUEUED + to be RE-SCOPED**
+  per the drainage-economics ruling (see the 08-31 rulings bullet) into the Touches-classifier
+  LINT + the blockedBy filing-edge discipline + the goal-grant consult; #1107 (pin-vacuity
+  gate, operator-lane) inert. Also merged at the same gate sitting: PR#1100 (#1097's
+  agent/blocked exclusion), PR#1091 (#1055's capability card + unreadable-input terminal),
+  PR#1112 (#1060's closing-keyword refs — seat resolved its conflict on-branch, MERGED 07:57Z,
+  #1060 closed). Correction from the live read: r1 residue #930/#931 both
+  CLOSED (landed 08-30 evening). Clean-acceptance watch moves to r3 (Mon 09-07); containers
+  #949 + #1101 close at post-r3 sweeps (predecessor-scoring is the closeout read).
 
 - **⚑ GARAGE, operator-owned residue (recovery COMPLETE + env rebuilt, #884/FU-184 archived):**
   the `garage repair blocks` hold can come off (reclaims ≈nothing now) · **do NOT delete the 3
@@ -336,8 +357,9 @@ meant to avoid.)
   (repin to WWID, FU-076's neighbourhood) · stack leftovers: circles#77 ci-red triage,
   oracle-fleet#259 rework per the seat read, circles-iac deploy-bump generator fix before
   the next circles build (circles-iac#71/#68).
-- **Soaks** (each owned by an FU/issue — this line is only the calendar): retro Mon 08-31
-  unattended fire (FU-058 clean acceptance) ·
+- **Soaks** (each owned by an FU/issue — this line is only the calendar): retro Mon 09-07
+  unattended fire (FU-058 clean acceptance — r2 close-but-not-clean, the #1096 class now
+  fixture-pinned) ·
   minRunners readout · FU-148 first organic environmental-red retry · or-op#34 first
   daily-429 · renovate-approve one-approval-per-head (#114) ·
   CiDispatchStalled quiet-month window opens ~09-11 (FU-150) · **paid-flash REVERT
