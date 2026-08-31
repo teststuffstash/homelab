@@ -5220,7 +5220,7 @@ data: [DONE]
 
     def _mock_forward(self, body, note, or_model=None, or_provider=None,
                       cb_session=None, go_leg=False, zen_leg=False, or_leg=False,
-                      role="worker"):
+                      role="worker", _cred_was_cached=False):
         _captured_role[0] = role
         # Don't actually forward — just record the role
         self.send_response(200)
