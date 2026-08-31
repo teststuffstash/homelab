@@ -42,6 +42,21 @@ meant to avoid.)
   blocking-count + `BlockingCodeownerParkWaiting`, machine-merge path). Second banked idea,
   operator's own words "not yet": an AUTOMATED design-agents corpus read on codeowner-parked
   BLOCKING issues — revisit when blocking-park volume makes seat-cadence reads the bottleneck.
+- **⚑ 2026-08-31 BOARD DRAIN (operator-ordered "clear/queue the board more") — the batch:**
+  QUEUED homelab #975 #1011(+Touches authored) #1006 #828 #1015 #972 #968 #1113 #1056(+Touches
+  authored, FU-020 monitor-first noted) #1117 #1118 + agent-runtime #97 #98(fold note: same
+  file, first ride may cover both) + agent-runtime#99 (the #1069 split: typed input-unreadable
+  finalize exit; blockedBy edge #1069→ar#99; #1069 keeps only the per-repo recipe paste).
+  #1116 arrived pre-queued (defect in PR#1112's own regex). CLOSED: #1098 + #966 (scout intake
+  reads — no graduation, rulings on the issues), #1109 (seat quickfix `76fcbcda`).
+  **#938 FIXED seat-direct `eb638b21`** (sentinel doorbell-collapse absorb — live probe pending
+  at the note's writing). LEFT with owners: #887 (observe/soak) · #107 #114 #459 (soak calendar)
+  · #946 (Zen weather) · #949 (quiet window) · #628 (container) · #857 (maintenance-session
+  class) · #518 (runner infra) · #289 (oracle's) · or-op#34 (soak) · #1036 #1028 #1107 #1102
+  (operator-lane sittings). Gate reads for the resulting parks: this session while it lives,
+  then the next corpus session — expect a park convoy on the scan-touching set (#975 #1011
+  #1006 #828 #968 serialize on coordinator-scan.sh footprints). Lint debt noted at the push:
+  FU-196 oversize + 4 stale-archive entries (FU-073/084/089/098) — next docs-cleanup.
 - **⚑ 2026-08-30/31 OVERNIGHT UNATTENDED SESSION (codeowner+board, TICK-LOG entry) — the pickup set:**
   - ~~OPERATOR: OpenRouter credit~~ TOPPED UP 2026-08-31 ($5.66 → $15.66); the 00:37Z alert was
     the runway rule (credit < 2× trailing-24h burn), gauge read true throughout. Drain autopsy:
