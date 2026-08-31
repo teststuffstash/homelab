@@ -311,8 +311,8 @@ meant to avoid.)
   LINT + the blockedBy filing-edge discipline + the goal-grant consult; #1107 (pin-vacuity
   gate, operator-lane) inert. Also merged at the same gate sitting: PR#1100 (#1097's
   agent/blocked exclusion), PR#1091 (#1055's capability card + unreadable-input terminal),
-  PR#1112 (#1060's closing-keyword refs — seat resolved its conflict on-branch, re-riding CI
-  at wind-down; confirm merged). Correction from the live read: r1 residue #930/#931 both
+  PR#1112 (#1060's closing-keyword refs — seat resolved its conflict on-branch, MERGED 07:57Z,
+  #1060 closed). Correction from the live read: r1 residue #930/#931 both
   CLOSED (landed 08-30 evening). Clean-acceptance watch moves to r3 (Mon 09-07); containers
   #949 + #1101 close at post-r3 sweeps (predecessor-scoring is the closeout read).
 
