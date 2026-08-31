@@ -194,6 +194,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
 | `fu042-wip-cap` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder` | table | - | `agents/agent-session.sh` | - |
+| `fu124-nudge` | table | board | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `go-rail-latch` | table | - | `agents/agent-session.sh` | - |
