@@ -1,4 +1,5 @@
 CALL gh issue list --repo teststuffstash/circles --state open --limit 200 --json number,title,author,labels,createdAt,blockedBy
+CALL item_class_push circles aggregate backlog-aggregate operator
 OUT ORPHAN [circles] ⏸ backlog: 1 suitable-unqueued (oldest #82 since 2026-08-05) — agent-fix without a state label; ordinary backlog (ADR-109), expand: devbox run board -- <stack> --full
 OUT ORPHAN [circles] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):
 OUT ORPHAN   issue #81 — generate-evidence.py: case-id fallback silently degrades (by homelab-agents-1234)

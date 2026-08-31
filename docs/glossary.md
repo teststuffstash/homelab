@@ -48,6 +48,7 @@ mission) would drown the check in false positives and stay judgment-lint territo
 | **`Capability:`** (body line) | the lane's machine fingerprint — an INTENT on a surface (`public-edge.abuse-fairness`), never a vendor/mechanism name (the WAF asymmetry) | same section |
 | **⚓ system testing** | logic against real components in kind (Garage + app + Grafana + Playwright — the ADR-082 shape) | [`agents/model-routing.md`](agents/model-routing.md) §terminology ruling (2026-07-27) |
 | **e2e** | reserved for the ACTUAL target environment (synthetic production traffic) — not the kind gate | same ruling |
+| **diff-ci** | the local pre-flight: `devbox run diff-ci` runs only the CI gates the current diff can affect, from the path→task map in `scripts/diff-ci.sh` — the ONE HOME ci.yaml's skip step eval-extracts its trigger regexes from (#518, flip live 2026-08-31). CI stays authoritative; PR-context gates (pin-only/governance/ratchet) run only there | [`ci.md`](ci.md) |
 
 ## Pending renames (recorded here, executed by the FU-163 sweep)
 
