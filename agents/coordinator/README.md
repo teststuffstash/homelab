@@ -1168,6 +1168,13 @@ first:
 The **image-build CI needs no token** — it pushes to ghcr with the job's built-in `GITHUB_TOKEN`
 (`packages: write`). The only *new* credential the coordinator adds is this runtime `coordinator-git`.
 
+## Goal decompose — Base: mandatory on task/goal (homelab#1053)
+
+The scan's `goal-decompose` clause now refuses a `task/goal` whose body omits the `Base:` line
+(ADR-1053 / consumer card change 4). `Base: master` is legal and explicit — but a direct-master
+Goal is more likely a stint; confirm it earns `task/goal` before cutting children. Softens at
+v1.3 theme adoption (S8).
+
 ## See also
 
 Deploy is hands-off and not yours: the app repo's `deploy` workflow builds and opens an
