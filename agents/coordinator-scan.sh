@@ -892,7 +892,9 @@ fast_unit_dispatch() {
       && { echo "unit fast-path: agent/error breaker on the PR — human-first"; return 0; }
   fi
   if ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
-    echo "unit fast-path: capacity limited (FU-088) — no dispatch (cron sweep re-checks)"; return 0
+    echo "unit fast-path: capacity limited (FU-088) — no dispatch (cron sweep re-checks)"
+    item_class_push "$frepo" "$fitem" "deferred-capacity" "machine"
+    return 0
   fi
   # WIP probe, same shape as the main loop (null-strip is load-bearing — issue-96):
   # probe failure pins wip=1 (belt-only), never blocks the in-flight fix round.
@@ -1422,7 +1424,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         | select(length > 0)
         | (sort_by(.createdAt)[0]) as $old
         | "\(length) suitable-unqueued (oldest #\($old.number) since \(($old.createdAt // "unknown")[0:10]))"' 2>/dev/null || true)"
-    [ -n "$adopted" ] && orphans="${orphans}[$repo] ⏸ backlog: ${adopted} — agent-fix without a state label; ordinary backlog (ADR-109), expand: devbox run board -- <stack> --full\n"
+    if [ -n "$adopted" ]; then
+      orphans="${orphans}[$repo] ⏸ backlog: ${adopted} — agent-fix without a state label; ordinary backlog (ADR-109), expand: devbox run board -- <stack> --full\n"
+      item_class_push "$repo" "aggregate" "backlog-aggregate" "operator"
+    fi
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
     # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so
     # they never rot silently. Anything the clause above already named is EXCLUDED: same issue,
@@ -1602,6 +1607,30 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       done
       if [ -n "$blocked" ]; then
         qblocked="${qblocked}  issue #${qnum} — ${qtitle} (waiting${blocked})\n"
+        item_class_push "$repo" "issue-${qnum}" "parked-blocked" "operator"
+        continue
+      fi
+      # ── HOLD-CHAIN PROPAGATION (queued-held-by-ghost, #833) ────────────────────────────────
+      # A dependency that is CLOSED may itself have open blockers — the hold propagates through
+      # the chain. This is the "ghost" hold: the direct dependency is gone, but its own blocker
+      # still holds this issue transitively. Check each dependency's blockedBy for open nodes.
+      ghost_held=""
+      for dep in $(printf '%s' "$qdeps" | tr ',' ' '); do
+        dnum="${dep##*#}"; dslug="$slug"
+        case "$dep" in *"/"*"#"*) dslug="${dep%#*}";; esac
+        case "$dnum" in ''|*[!0-9]*) continue;; esac
+        if depjson="$(gh issue view "$dnum" --repo "$dslug" --json state,stateReason,blockedBy 2>/dev/null </dev/null)"; then
+          if [ "$(jq -r .state <<<"$depjson")" = "CLOSED" ]; then
+            ghost_open="$(printf '%s' "$depjson" | jq -r '[((.blockedBy // {}).nodes // [])[] | select(.state == "OPEN") | .number] | .[]' 2>/dev/null || true)"
+            if [ -n "$ghost_open" ]; then
+              ghost_held="${ghost_held} ${dslug}#${dnum}(ghost:${ghost_open})"
+            fi
+          fi
+        fi
+      done
+      if [ -n "$ghost_held" ]; then
+        orphans="${orphans}[$repo] ⏳ queued-held-by-ghost — dependency closed but its own blocker still open (hold-chain propagation, #833):\n  issue #${qnum} — ${qtitle} (${ghost_held})\n"
+        item_class_push "$repo" "issue-${qnum}" "queued-held-by-ghost" "operator"
         continue
       fi
       # ADR-094 scheduling predicates (deterministic — the LLM never picks):
@@ -1653,6 +1682,7 @@ EOF_GUARDED
         fi
         if [ -n "$ghit" ]; then
           orphans="${orphans}[$repo] ⛔ pin-only GUARDED path — NOT dispatched (a PR may write only a pin line there, so \`ci\` is structurally red; the route is an operator push to master — CODEOWNERS §Carve-outs). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches} → guarded:${ghit})\n"
+          item_class_push "$repo" "issue-${qnum}" "guarded-path" "operator"
           continue
         fi
       fi
@@ -2765,7 +2795,14 @@ EOF_GOVERNANCE
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                | "  issue #\($n) — \(.title) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]"')"
-            [ -n "$ambig" ] && orphans="${orphans}[$repo] ⛔ goal child in an undecidable state — C4/C5 held rather than guessing:\n${ambig}\n"
+            if [ -n "$ambig" ]; then
+              orphans="${orphans}[$repo] ⛔ goal child in an undecidable state — C4/C5 held rather than guessing:\n${ambig}\n"
+              # Push the weak-link class for each ambiguous issue (#833, who=operator)
+              while IFS= read -r ambig_line; do
+                ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
+                [ -n "$ambig_n" ] && item_class_push "$repo" "issue-${ambig_n}" "held-merged-unlinked" "operator"
+              done <<< "$ambig"
+            fi
             if [ -n "$dispatchable" ]; then
               # An issue the belt RE-QUEUED is deliberately excluded: it is a plain queued item now,
               # and emitting the unit too would race the queued lane onto the same issue. An issue
@@ -3126,7 +3163,7 @@ EOF_GOVERNANCE
       if [ "$c6_n" -lt 3 ]; then
         units="${units}merged-closeout|${repo}|issue-${gn}\n"
         items="${items}[$repo] issue #${gn} — merged-closeout (FU-143: goal child merged into ${gbase}, keyword inert)\n"
-        item_class_push "$repo" "issue-${gn}" "held-merged-unlinked" "machine"
+        item_class_push "$repo" "issue-${gn}" "riding" "machine"
         c6_n=$((c6_n+1))
       else
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${gn} (goal child) waits for the next pass\n"
@@ -3138,7 +3175,7 @@ EOF_GOVERNANCE
         # trip the actionability gate + surface in the report (see the ci-red note above) —
         # otherwise a merged issue's agent/done flip + Follow-ups harvest silently never dispatches.
         items="${items}[$repo] issue #${u} — merged-closeout (closed, still non-terminal agent/*)\n"
-        item_class_push "$repo" "issue-${u}" "held-merged-unlinked" "machine"
+        item_class_push "$repo" "issue-${u}" "riding" "machine"
         c6_n=$((c6_n+1))
       else
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${u} waits for the next pass\n"
