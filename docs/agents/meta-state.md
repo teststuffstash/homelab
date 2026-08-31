@@ -22,9 +22,14 @@ meant to avoid.)
     `41 */6`) gets past auth; read the report from Loki tenant `platform-agents` by pod name
     (podGC eats stdout — the prober's no-durable-sink gap, now proven; roles.md already lists
     🌱-filing as missing).
-  - #946 (A5 seed): instrument now actually runnable (S3 grant restored + re-review.sh rail pin
-    `9fc46e50`); blocked ONLY on Zen free-tier 429 (18/18 attempts over ~2h) — one-call retry
-    recipe on the issue.
+  - #946 (A5 seed): 1 of 4 cells DONE 2026-08-31 (pr-440 shadow report produced in a Zen
+    capacity window); the other 3 re-429'd on review-size prompts — free tier admits trickle,
+    not sustained. Retry recipe on the issue; partial result commented there.
+  - oracle-fleet#304 → homelab#1093 RESOLVED 2026-08-31 (seat): 5 strikes' `cred-unresolved`
+    was the UNLABELED legacy `oracle-fleet-openrouter` Secret (proxy requires the session-key
+    label; operator never heals Secret drift → openrouter-operator#53). Hand-labeled, verified
+    200 `[+cred]` through the exact ref; #304 un-blocked, #1092 hand-closed. Coordinator
+    TOOL_GAP (create-but-not-comment on homelab) → #1095.
   - Watch-noise candidates (next meta-events/needs-meta touch): FAMINE emits per count-delta not
     threshold-crossing (dozens of noise pairs/night); "unlabeled >24h" false-flags containers
     (#949 retro-batch, #840/#787 buckets) — wants the sprout-report-skips-buckets exclusion.
