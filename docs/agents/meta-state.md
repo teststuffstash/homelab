@@ -36,7 +36,12 @@ meant to avoid.)
   volume actually freezes dispatch or session-cadence drain visibly stops sufficing. Also
   ruled en route: post-launch goal fixes target MASTER (v1.2 stands); goal-tree members' queue
   gap (filing doors don't consult the IL-T15 grant — #1060/#1028 evidence) folds into the same
-  re-scope.
+  re-scope. **CONFIRMED verbatim by the operator 08-31 + one addition: the jail watches
+  blocking-class codeowner parks ACTIVELY** — jail half BUILT (meta-events `BLOCKPARK` source,
+  PR#1114, verified on the live #1108→#285 edge), no-seat belt half queued (#1115, exporter
+  blocking-count + `BlockingCodeownerParkWaiting`, machine-merge path). Second banked idea,
+  operator's own words "not yet": an AUTOMATED design-agents corpus read on codeowner-parked
+  BLOCKING issues — revisit when blocking-park volume makes seat-cadence reads the bottleneck.
 - **⚑ 2026-08-30/31 OVERNIGHT UNATTENDED SESSION (codeowner+board, TICK-LOG entry) — the pickup set:**
   - ~~OPERATOR: OpenRouter credit~~ TOPPED UP 2026-08-31 ($5.66 → $15.66); the 00:37Z alert was
     the runway rule (credit < 2× trailing-24h burn), gauge read true throughout. Drain autopsy:
