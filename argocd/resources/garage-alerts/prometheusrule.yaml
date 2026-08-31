@@ -41,8 +41,13 @@ spec:
         # form was replaced (#977, #1013).
         # ⚠ BOUND: that clause is a ROLLING WINDOW, not "was ever populated". A wipe still
         # unrecovered 7 days after the drop stops alerting — every sample in the window is 0 by
-        # then. 7d is chosen to sit far outside any plausible detection window; the latch that
-        # would remove the bound entirely is #1015. The `for:` window avoids flapping on restarts.
+        # then. 7d is chosen to sit far outside any plausible detection window. The latch that
+        # would remove the bound entirely was considered and rejected in #1015: a latch would
+        # make any future transient table's first firing permanent instead of self-clearing in
+        # 7d, and the un-latching question (how to unlatch a table legitimately removed by a
+        # schema change) has no bounded answer. The rolling window is the right stopping point
+        # — a bounded false positive (7d) is preferable to a permanent one. The `for:` window
+        # avoids flapping on restarts.
         # ⚠ DENY-LIST: multipart_upload and bucket_mpu_counter are transient by design — an
         # in-flight multipart upload makes them non-zero, and completing it returns them to zero.
         # A deny-list fails safe (every new table is watched by default) whereas an allow-list
