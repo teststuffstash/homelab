@@ -1,0 +1,3 @@
+OUT cell self-check: goose:deepseek/deepseek-v4-pro produced a report (1769 bytes)
+OUT REACHED: cell exits 0 — the DAG marks this cell Succeeded
+RC 0

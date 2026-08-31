@@ -68,6 +68,7 @@ responder-reopen-report-only	responder-reopen
 responder-selfref-platform-machinery	responder-selfref
 responder-selfref-unlabelled	responder-selfref
 retro-cell-report-missing	retro-cell-report
+retro-cell-report-multi-block	retro-cell-report
 retro-cell-report-present	retro-cell-report
 retro-key-minted	retro-key
 retro-key-minted-block-style	retro-key
