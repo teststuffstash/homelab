@@ -177,6 +177,9 @@ present "probe-fail: issue-list probe failure is WARNed (with the loud-absence c
 present "probe-fail: PR-list probe failure is WARNed" \
   "WARN board: teststuffstash/circles PR list PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" \
   "$(cat "$TMP/probe.err")"
+present "probe-fail: platform-request probe failure is WARNed" \
+  "WARN board: teststuffstash/circles platform-request probe PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" \
+  "$(cat "$TMP/probe.err")"
 
 printf '\n  %s passed, %s failed\n' "$PASS" "$FAIL"
 
@@ -267,6 +270,7 @@ absent "machine: no totals line" "totals —" "$BOARD_OUT"
 present "machine: platform-request row" "who=operator class=platform-request" "$BOARD_OUT"
 present "machine: platform-request capability" "capability=public-edge.abuse-fairness" "$BOARD_OUT"
 present "machine: platform-request stacks count" "stacks=1" "$BOARD_OUT"
+present "machine: platform-request oldest age" "oldest=17d" "$BOARD_OUT"
 
 # ══ --scope content assertions (homelab#914) ═══════════════════════════════════════════════
 # The two --scope cases below test BOTH flag forms AND assert row content. The curl stub's

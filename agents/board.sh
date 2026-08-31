@@ -198,6 +198,7 @@ if [ -n "$KUBECTL" ]; then
   fi
 fi
 if [ -z "$all_repos" ]; then
+  echo "WARN board: all-stacks agentstacks read PROBE-FAILED — repos from $STACKS_FILE only" >&2
   all_repos="$(jq -r '[.stacks[].repos[]?] | unique | .[]' "$STACKS_FILE" 2>/dev/null || true)"
 fi
 
@@ -209,7 +210,18 @@ demand_json="[]"
 for repo in $all_repos; do
   case "$repo" in */*) slug="$repo";; *) slug="$ORG/$repo";; esac
   preqs="$(gh issue list --repo "$slug" --state open --label "platform-request" --limit 50 --json number,title,createdAt,body,labels 2>/dev/null)" || preqs=""
-  jq -e . >/dev/null 2>&1 <<<"${preqs:-null}" || preqs="[]"
+  if [ -z "$preqs" ]; then
+    # gh failed — distinguish missing label (zero demand, quiet) from real probe failure
+    preqs_err="$({ gh issue list --repo "$slug" --state open --label "platform-request" --limit 50 --json number,title,createdAt,body,labels 2>&1 1>/dev/null; } || true)"
+    if printf '%s' "$preqs_err" | grep -qi "could not find any label"; then
+      preqs="[]"
+    else
+      echo "WARN board: $slug platform-request probe PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" >&2
+      preqs="[]"; nfail=$((nfail + 1))
+    fi
+  else
+    jq -e . >/dev/null 2>&1 <<<"${preqs:-null}" || preqs="[]"
+  fi
   if [ "$preqs" != "[]" ]; then
     rstacks="$(printf '%s' "$stack_index" | jq -r --arg r "$repo" 'to_entries[] | select(.value | index($r)) | .key' | tr '\n' ',' | sed 's/,$//')"
     [ -z "$rstacks" ] && rstacks="unknown"
@@ -242,8 +254,8 @@ if [ "$(printf '%s' "$demand_json" | jq 'length')" -gt 0 ]; then
   ] | .[]')"
 
   # Machine format: one row per capability group
-  demand_rows="$(printf '%s' "$groups" | jq -r '
-    .[] | "who=operator class=platform-request capability=\(.capability) stacks=\(.stack_count) oldest=\(.oldest_created)"
+  demand_rows="$(printf '%s' "$groups" | jq -r "$JQ"'
+    .[] | "who=operator class=platform-request capability=\(.capability) stacks=\(.stack_count) oldest=\(((now - .oldest_created) / 86400 | floor) as $d | if $d < 1 then "<1d" else "\($d)d" end)"
   ')"
 fi
 
