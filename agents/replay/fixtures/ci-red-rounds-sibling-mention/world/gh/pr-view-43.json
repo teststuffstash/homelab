@@ -1,0 +1,24 @@
+{
+  "comments": [
+    {
+      "author": { "login": "homelab-agents-1234" },
+      "createdAt": "2026-08-09T07:30:00Z",
+      "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T07:30:00Z` · **run stats** — `claude/haiku` · $0 · 411s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T07:30:00Z -->"
+    },
+    {
+      "author": { "login": "homelab-agents-1234" },
+      "createdAt": "2026-08-09T08:30:00Z",
+      "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T08:30:00Z` · **run stats** — `claude/haiku` · $0 · 402s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T08:30:00Z -->"
+    }
+  ],
+  "commits": [
+    {
+      "messageHeadline": "e2e: widen the dedup window assertion",
+      "committedDate": "2026-08-09T09:00:00Z"
+    },
+    {
+      "messageHeadline": "Merge branch 'master' into fix/issue-19-thing",
+      "committedDate": "2026-08-09T09:30:00Z"
+    }
+  ]
+}

@@ -2819,7 +2819,7 @@ EOF_GOVERNANCE
         # trips); the issue-keyed sum is the CEILING and can only RAISE the count, never lower it.
         # FAIL-OPEN, matching this clause's guarded-probe posture: an unreadable list warns and leaves
         # the per-PR count standing — the window is the newest 100 PRs, so a miss only UNDER-counts.
-        # ⚠ The sibling-match rule (branch `issue-<n>-`, else body `#<n>`, both boundary-anchored) is
+        # ⚠ The sibling-match rule (branch `issue-<n>-`, else body closing keyword `#<n>`, both boundary-anchored) is
         # duplicated in review-reflex.sh's issue-keyed verdict ceiling. Change both or neither.
         # The key falls back to the fix/issue-<n>- branch convention when the body carries no closing
         # keyword; `red_issue` above stays body-only on purpose (it gates the per-item holds).
@@ -2833,7 +2833,7 @@ EOF_GOVERNANCE
                           --json number,headRefName,body,comments 2>/dev/null)"; then
             red_sum="$(printf '%s' "$red_sib" | jq -r --arg n "$red_key" "${STATS_TS_DEF}"'
               def refs($n): ((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)"))
-                            or ((.body // "") | test("(^|[^0-9])#" + $n + "([^0-9]|$)"));
+                            or ((.body // "") | test("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"));
               [ .[] | select(refs($n)) ]
               | "\(length) \([ .[] | stats_ts[] ] | length)"
             ' 2>/dev/null)" || red_sum=""
