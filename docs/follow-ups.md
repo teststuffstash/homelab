@@ -598,16 +598,19 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
-- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: GC'd workflows leak their sync
-      locks and Pending piles up silently** (2026-08-31, operator-spotted on the dashboards:
-      claude semaphore 5/5 with 1 real runner, `coordinator-scan` mutex held by a GC-deleted
-      workflow, 56 coordinate ticks Pending ~1h; controller restart rebuilt lock state and
-      drained it in minutes). Postmortem + belt audit:
+- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: the sync manager's in-memory
+      state can corrupt under a fast-failure storm and Pending then piles up silently**
+      (2026-08-31, operator-spotted on the dashboards: waiters told "5/5" against a
+      provably EMPTY semaphore for 65+ min after the #1136 exit-128 storm; 56 coordinate
+      ticks Pending; controller restart rebuilt lock state and drained it in minutes; the
+      Loki acquire/release ledger acquitted the first GC-leak theory). Postmortem + belt
+      audit + the storm→wedge trigger note:
       [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
-      **Next:** an alert on the wedge shape — Argo's Pending count high-and-not-draining while
+      **Next:** an alert on the wedge shape — Argo Pending high-and-not-draining while
       `anthropic_subscription_semaphore_running` ≈ 0 (verify the controller metrics scrape
-      first) — into `argo-workflows-alerts` with promtool cover; and check upstream argo for a
-      GC-release fix (`v4.0.7` today) before any bump. Relates FU-187 (sibling belt-blindness).
+      first) — into `argo-workflows-alerts` with promtool cover; and check upstream argo
+      sync-manager fixes (`v4.0.7` today; the #12194 regression class) before any bump.
+      Relates FU-187 (sibling belt-blindness).
 
 - [ ] **FU-187** — **Quiet-stall detection: a Running agent pod with a silent rail is invisible
       to every belt** (issue-272-r1, 2026-08-26: opencode slept ~3h on a black-holed proxy IP,
