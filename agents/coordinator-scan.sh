@@ -113,7 +113,7 @@ governance_paths() {   # → one governance PATH per line. NO output = could not
   [ -n "$GOVERNANCE" ] || return 1
   # The lint holds its set as a regex anchored pattern (`^(path1|path2|...)$`);
   # strip the outer anchors, split on `|`, strip trailing `$` anchors, then drop regex escapes.
-  printf '%s\n' "$GOVERNANCE" | sed 's/^\^(//; s/\$)//' | tr '|' '\n' | sed 's/\$//; s/\\././g' | grep -v '^[[:space:]]*$'
+  printf '%s\n' "$GOVERNANCE" | sed 's/^\^(//; s/\$)//' | tr '|' '\n' | sed 's/\$//; s/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$'
 }
 # Read ONCE per scan; the empty-vs-unreadable distinction is made at the use site, where it holds
 # work rather than releasing it (rule #6 — never fail INTO a dispatch).
