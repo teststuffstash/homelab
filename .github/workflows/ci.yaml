@@ -41,8 +41,14 @@ jobs:
       # survive step boundaries within a job; each writes <name>.rc when done and its collect
       # step replays the log and exits with it, so failure attribution stays per-suite.
       # Changed-paths via the API, not git — the checkout is shallow (the ADR-103 ratchet
-      # learned this on #214); this is also the job's first `devbox run`, so the nix closure
-      # warm is paid HERE, before the background starts race for it.
+      # learned this on #214).
+      # The warm-up below MUST come first on every event: devbox's first run creates the venv
+      # non-atomically, and two concurrent first runs die on EEXIST — proven by this
+      # structure's own verification dispatch (run 33409776004, 2026-08-31: the ∥ starts
+      # raced validate-pins because the PR-only diff step had skipped).
+      - name: Warm the devbox closure (once, before anything runs ∥)
+        run: devbox run -- true
+
       - name: Changed paths (skip map for the background suites)
         id: diff
         if: github.event_name == 'pull_request'
