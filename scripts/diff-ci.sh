@@ -2,10 +2,13 @@
 # diff-ci — run only the CI gates the current diff can affect (#518, 2026-08-31): the local
 # pre-flight for agents and the seat. Same devbox tasks CI runs, scoped by a path→task map.
 #
-# ONE HOME: this map is the canonical statement of "which paths feed which gate".
-# `.github/workflows/ci.yaml`'s changed-paths step eval-extracts PROM_PATHS/CLAUSE_PATHS from
-# THIS file (the scripts/pin-only-lint.sh one-home pattern) — edit trigger sets here, never
-# inline there. CI stays AUTHORITATIVE: a too-narrow mapping here costs a surprise red in CI,
+# ONE HOME (target): this map is the canonical statement of "which paths feed which gate".
+# `.github/workflows/ci.yaml`'s changed-paths step still carries its own inline regex copies —
+# the flip to eval-extracting PROM_PATHS/CLAUSE_PATHS from THIS file (the
+# scripts/pin-only-lint.sh one-home pattern) is a follow-up operator-direct change that lands
+# AFTER this script is on master; until then, edit BOTH when a trigger set changes (the
+# coverage belt below is the drift net). CI stays AUTHORITATIVE: a too-narrow mapping here
+# costs a surprise red in CI,
 # never a merged defect (CI's skip map only covers the two heavy suites; everything else
 # always runs there). The PR-context gates (pin-only-lint, governance-lint, the ADR-103
 # ratchet) need the PR's base/author and do not run here.
@@ -67,6 +70,20 @@ for t in $ci_tasks; do
   for p in $PR_ONLY; do [ "$p" = "$t" ] && hit=true; done
   $hit || { echo "diff-ci: FAIL — ci.yaml runs '$t' but the map here doesn't know it; add a row (one home)" >&2; exit 2; }
 done
+# `devbox run -- <cmd …>` lines start with `-`, invisible to the extraction above (#1147 review
+# follow-up). Match the full remainder against the MAP keys. Utility invocations that are not
+# gates are exempt by FIRST TOKEN (`gh` = PR-data fetches inside PR-context steps, `true` = the
+# devbox warm-up) — a new `-- <tool>` gate reds here until it gets a MAP row or a conscious
+# exemption, which is the belt doing its job.
+while IFS= read -r dd; do
+  [ -n "$dd" ] || continue
+  case "${dd#-- }" in gh\ *|true) continue;; esac
+  hit=false
+  for entry in "${MAP[@]}"; do [ "${entry%%:*}" = "$dd" ] && { hit=true; break; }; done
+  $hit || { echo "diff-ci: FAIL — ci.yaml runs 'devbox run $dd' but the map here doesn't know it; add a row (one home)" >&2; exit 2; }
+done <<EOF_DDBELT
+$(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run -- .*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' | sort -u)
+EOF_DDBELT
 
 BASE="${1:-origin/master}"
 base=$(git merge-base "$BASE" HEAD) || { echo "diff-ci: cannot find merge-base with $BASE (fetch it first?)" >&2; exit 2; }
