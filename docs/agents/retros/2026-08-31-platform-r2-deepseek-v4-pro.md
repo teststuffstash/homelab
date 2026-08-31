@@ -1,36 +1,10 @@
-# platform loop retro r2 — <your model name>
-## Summary (≤5 lines)
-## Findings (ranked, ≤6)
-## Proposed process changes (table: change | artifact | expected saving | confidence)
-## Task granularity (per deep-dive task: chunked-right / should-have-been-one / fan-out — evidence)
-## Wins to codify (or "none observed")
-## Platform KPIs (bucket-A count · trend · proposed next gate)
-## Predecessor score (or "no merged predecessor changes")
-## Evidence confidence (what you could NOT verify and why)
-END-RETRO-REPORT
-BEGIN-RETRO-REPORT
-# platform loop retro r2 — <your model name>
-## Summary (≤5 lines)
-## Findings (ranked, ≤6)
-## Proposed process changes (table: change | artifact | expected saving | confidence)
-## Task granularity (per deep-dive task: chunked-right / should-have-been-one / fan-out — evidence)
-## Wins to codify (or "none observed")
-## Platform KPIs (bucket-A count · trend · proposed next gate)
-## Predecessor score (or "no merged predecessor changes")
-## Evidence confidence (what you could NOT verify and why)
-END-RETRO-REPORT
-BEGIN-RETRO-REPORT
-# platform loop retro r2 — <your model name>
-## Summary (≤5 lines)
-## Findings (ranked, ≤6)
-## Proposed process changes (table: change | artifact | expected saving | confidence)
-## Task granularity (per deep-dive task: chunked-right / should-have-been-one / fan-out — evidence)
-## Wins to codify (or "none observed")
-## Platform KPIs (bucket-A count · trend · proposed next gate)
-## Predecessor score (or "no merged predecessor changes")
-## Evidence confidence (what you could NOT verify and why)
-END-RETRO-REPORTNow let me check if `RETRO_GH_TOKEN` is available and try to access some issue trails for verification
-BEGIN-RETRO-REPORT
+> [Seat note, 2026-08-31 human gate: the harvest committed three empty template echoes and a
+> leaked harness line ahead of this report (the #1096 sed re-arm defect, stripped in this
+> commit). The four-attempt fact they evidenced is preserved here: this cell emitted three
+> unfilled skeletons before producing the filled report below — a live instance of its own F1.
+> The "goose (claude-sonnet-4)" self-signature is the model's own placeholder fill; the cell
+> rode its configured deepseek-v4-pro (no fallback path in this lane, homelab#269).]
+
 # platform loop retro r2 — goose (claude-sonnet-4)
 ## Summary (≤5 lines)
 Deepseek/open-code v4-flash fails on first round in 11/40 tasks (nonzero-exit-1, budget exhaustion, truncation), forcing a 1-round tax as the chain swaps to haiku. Oracle-fleet auth-storms (11 http-401 events across 6 tasks on Aug 30) burned ~1M wall-seconds with no fleet-level circuit breaker. Budget estimator sm tier ($0.50) still undershoots: homelab#1041 hit $0.5245 at calibration_error 1.049. Reviewer round-trips inflated to 4–6 rounds/PR (design max: 3) across homelab#913, #853, #892. Retro r1 predecessor changes (all 6 closed) did not reduce rounds/issue — avg rose from 3.1 to 5.0, though the 5-day post-r1 window is dominated by the oracle-fleet auth-storm cluster.
