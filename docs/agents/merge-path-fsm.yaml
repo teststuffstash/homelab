@@ -310,6 +310,7 @@ transitions:
     status: guarded
     replay:
       - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-rounds-two-channels
+      - agents/replay/fixtures/ci-red-rounds-sibling-mention
     guards:
       - desc: "content-based: attempts = durable run-stats-comment count (not the old 4h updatedAt timer a no-op comment reset), dispatch cap 2/repo/scan"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red" }
