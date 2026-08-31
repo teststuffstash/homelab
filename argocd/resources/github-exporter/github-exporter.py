@@ -1181,7 +1181,7 @@ def collect_open_prs(lines):
                             body = pr_detail.get("body") or ""
                             # Parse "Fixes #N" or "Closes #N" (GitHub's closing keywords)
                             closing_match = re.search(
-                                r"(?i)(?:close|fix|resolve)(?:e?[ds]|ing)?\s+#(\d+)", body)
+                                r"(?i)(?:clos|fix|resolv)(?:e[ds]?|ing)?\s+#(\d+)", body)
                             if closing_match:
                                 closing_issue = int(closing_match.group(1))
                                 blocking = gh(
