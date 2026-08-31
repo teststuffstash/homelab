@@ -1,0 +1,28 @@
+# changes-requested/blocked-held (homelab#1097) — a PR labelled `agent/blocked` with
+# CHANGES_REQUESTED is EXCLUDED by the PR-label exclusion set and must NOT dispatch.
+#
+# CONDITION UNDER REPLAY. PR #1094 is worker-authored, CHANGES_REQUESTED, and carries the
+# `agent/blocked` label (the coordinator's own escalate terminal). The jq selector's PR-label
+# exclusion set now includes `agent/blocked` beside its three same-class neighbours
+# (`major/awaiting-human`, `agent/error`, `agent/arbitrate`), so the PR is filtered out before
+# any probe or hold is reached.
+#
+# THE CONTRACT:
+#   1. No `gh pr view` call is made — the PR never enters the loop body.
+#   2. No UNIT is emitted.
+#   3. No ORPHAN line is produced — the exclusion is silent, matching the behaviour of the
+#      three existing exclusion labels.
+pins:
+  - MP-T11
+name: changes-requested-blocked-held
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
