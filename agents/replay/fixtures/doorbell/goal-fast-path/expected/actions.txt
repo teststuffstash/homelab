@@ -27,4 +27,3 @@ OUT unit fast-path: goal #9 has no Base: body line — refusing to dispatch
 OUT RETURN 0
 OUT REACHED: end
 RC 0
-
