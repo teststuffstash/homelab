@@ -32,7 +32,7 @@ spec:
   startingDeadlineSeconds: 300
   workflowSpec:
     serviceAccountName: agent-coordinator
-    # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
+    # homelab#103 soft hostname spread — rationale on the `switchboard` WorkflowTemplate (coordinate-argo.yaml — was `coordinate`, ADR-120)
     # (coordinate-argo.yaml). Verbatim copy; keep in sync.
     # homelab#867 soft Longhorn-disk de-preference — same rationale.
     podSpecPatch: |

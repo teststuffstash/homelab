@@ -1781,3 +1781,25 @@ escalation; filing contract = agents/coordinator/README.md; label via the claim 
 Damage ceiling: filed-inert (breaker #1) + dedup + rate cap; gate-the-merge unchanged. Honest
 limit: the lane cannot carry unknown-unknowns — profile defaults for the yes/yes class and the
 FU-049 catalog carry those.
+
+### ADR-120 — The global coordinate surface is the switchboard: a Sensor-edge resolver, its cron retired (2026-08-31)
+
+**Decision.** With all four stacks graduated, the global coordinate machinery is rebranded to
+what it actually does: the **switchboard** — the `/coordinate` Sensor's global trigger + a
+`switchboard` WorkflowTemplate whose run resolves repo-dumb rings to their stack's doorbell
+(FU-144) and fans capacity transitions out fleet-wide (issue#779), then exits before any GitHub
+listing (`coordinator-scan.sh --switchboard`). It holds no mutex and no subscription semaphore.
+The `coordinator-reflex` global cron and `devbox run coordinate-now` are RETIRED; the per-stack
+`coordinate-<stack>` crons are the level-triggered failure detector. An ungraduated stack
+therefore has NO scan path until its claim flips `loop.perStack`/`graduated` — the switchboard
+warns loudly per ring. The shared `/coordinate` webhook path is deliberately unchanged (payloads
+route; renaming the wire would break every emitter for no stack-facing clarity).
+**Considered:** keep-as-is (92% of global runs were full board sweeps that dispatched nothing —
+homelab#994, worsened by #974's 1Gi cap); scan-side early exit alone (kills the waste but keeps
+the "coordinator" name that misroutes stack sessions — the FU-163 stale-by-addition collision);
+Sensor-side loop_ns filter (Argo data-filter validation risk = the FU-085 lost-edge class;
+optional follow-on). **Why:** measured — 110/119 junk runs (2026-08-26), 18/18 no-op cron ticks
+over 3h (2026-08-31), cron fan-out structurally forbidden, per-stack crons already carry the
+backstop duty. **Consequences:** coordinate-argo.yaml + the scan's switchboard terminal
+(replay: `doorbell/switchboard-*` ×4); reflexes-argo.yaml + devbox.json operator-direct
+(eae8c51f); closes homelab#994; glossary row `switchboard`.

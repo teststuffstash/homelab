@@ -201,8 +201,9 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
   `coordinate-<stack>` CronWorkflow into `<stack>-agents` (claim `loop.perStack`), running as the
   namespaced `agentstack-loop` SA with broker-fetched, stack-scoped git tokens (TokenReview'd
   `/loop-git-token`); oracle graduated 2026-07-18 and runs per-stack since. **COMPLETE 2026-07-27 (circles joined 2026-08-03 — four):
-  all stacks graduated (coordinate + review loops in-ns, 2026-07-26); the global scan/reflex
-  skips graduated stacks; the per-stack review EDGE shipped as FU-100 (2026-07-27).** model-scout +
+  all stacks graduated (coordinate + review loops in-ns, 2026-07-26); the global surface is the
+  ADR-120 **[switchboard](workflow.md)** since 2026-08-31 (Sensor-edge resolver — repo-dumb rings + capacity
+  fan-out; the coordinator-reflex cron retired, per-stack crons are the failure detector); the per-stack review EDGE shipped as FU-100 (2026-07-27).** model-scout +
   ledger stay global. [`agentstack.md`](agentstack.md) §Decisions.
 
 ## Stack economics — scaling the merge path (moved from merge-path.md, 2026-07-27 / FU-107)

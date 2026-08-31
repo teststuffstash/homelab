@@ -168,9 +168,13 @@ until relaunched (the 2026-08-17 drift: six hours at ~7% of true draw).
 LIVE since 2026-07-17: the `/coordinate` doorbell endpoint on the `agent-loop` webhook
 EventSource, the `coordinator` Sensor, and the `coordinate` WorkflowTemplate
 ([`../../agents/coordinator/coordinate-argo.yaml`](../../agents/coordinator/coordinate-argo.yaml));
-the `*/30` `coordinator-reflex` CronWorkflow is the level-triggered BACKSTOP, `workflowTemplateRef`ing
-the same template (the design sting that motivated it: oracle-fleet#29's C4/C5 re-tick sat waiting
-on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
+the per-stack `coordinate-<stack>` CronWorkflows are the level-triggered BACKSTOP (the design
+sting that motivated the edge: oracle-fleet#29's C4/C5 re-tick sat waiting on cron minutes after
+its `AGENT_STRIKE` comment landed). **The GLOBAL cron (`coordinator-reflex`) retired 2026-08-31
+(ADR-120)** — with every stack graduated it caught nothing by construction (dispatch skipped every
+stack; fan-out is edge-wakes-only), and the global Sensor surface was rebranded the
+**switchboard**: a resolver that patches repo-dumb rings through to their stack and fans capacity
+transitions out, never a board scan. The design, as built:
 
 - **The event is a doorbell, never a work item.** The Sensor submits a Workflow that re-runs the
   deterministic scan, which re-lists GitHub and applies the FULL predicate — including the C4/C5
@@ -205,7 +209,7 @@ on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
   | C4/C5: worker terminal, no PR (incl. `AGENT_STRIKE`) | `agent-session.sh` launcher — it *posts* the strike comment | launcher curls `/coordinate` right after | instant — the #29 case |
   | PR → `CHANGES_REQUESTED` (round N+1) | reviewer pod (`reviewer-session.sh` verdict) | reviewer curls after posting the verdict | instant |
   | `merge-conflict` label appears | the in-cluster updater (`agents/update-pr-branch.sh` armed∧DIRTY labeler, leg 3 — ADR-111, cutover 2026-08-26; the 422 leg stopped labeling at homelab#986/PR#1005, so a conflict surfaces one pass later as DIRTY rather than immediately) | exporter piggyback, BUILT 2026-08-11 (#285): `maybe_dispatch_conflict` rings `/coordinate` with `{stack, loop_ns}` — the label was already in the 120 s poll, nothing read it (PR#275 waited out the cron) | ≤2 min |
-  | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs — `{repo}`-only, which is now ENOUGH: the global scan resolves repo → {stack, loop_ns} and re-rings the stack's own loop (FU-144 receiver-side fan-out, built with A2) | instant (one resolver hop) |
+  | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs — `{repo}`-only, which is now ENOUGH: the switchboard (ADR-120; was the global scan) resolves repo → {stack, loop_ns} and re-rings the stack's own loop (FU-144 receiver-side fan-out, built with A2) | instant (one resolver hop) |
   | issue gains `agent/queued` | whoever applies the label — a **jail LLM session** authoring issues from specs, or a hand-labelling human | **two emitters.** The authoring session rings the doorbell itself: mono jail → `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`; stack jails → curl `/coordinate` once it exists — the webhook needs **no RBAC into `agent-coordinator`**, exactly the FU-080 airlock shape. **Plus** exporter piggyback, BUILT 2026-08-18 (#505): `maybe_dispatch_queued` rings `/coordinate` with a repo-dumb `{repo, number}` on the appearance edge of `agent-fix` ∧ `agent/queued` ∧ ¬`direction-change` ∧ ¬`agent/error` (`queued_dispatchable` mirrors the scan clause label for label) — a hand-applied label rings too (the #459 gap: sleep-tracking#121; homelab#478/479/491) | instant, author-fired; exporter piggyback ≤2 min |
   | a PR MERGES (merged-closeout / the goal chain / sibling platform repos) | GitHub auto-merge — off-cluster by nature, minutes after the last in-cluster actor exited | exporter piggyback, BUILT 2026-08-12 (ADR-106 (6)): `maybe_dispatch_merged` — a number leaving the poll's open set is REST-checked once (`merged` authoritative) and rings with {stack, loop_ns}; before this NOTHING rang on merge anywhere (the v1.1 spike's finding 6 named the sibling repos; the gap was fleet-wide) | ≤2 min |
 
@@ -236,8 +240,8 @@ and the github-exporter's five dispatchers — review (FU-100), CI-red (FU-115),
 since 2026-08-12** (the ⚠ block above): repo-dumb payloads are the SUPPORTED shape now, and new
 emitters should prefer them over learning stack mechanics. The operator-lane note stands for the
 files themselves (`.github/**` executes from a PR's own branch, so the fixer lane may not edit
-them), and `devbox run coordinate-now` remains
-the global reflex's deliberate manual caller — its wakes now fan out too when edge-shaped.
+them). `devbox run coordinate-now` retired with the global cron (ADR-120) — wake a stack via
+`devbox run ring <stack>` or `scripts/reflex-now.sh coordinate-<stack> <stack>-agents`.
 The old two-readers trap (emitters read the mirror, the scan reads the live claim) is CLOSED for
 this path by construction: the resolver runs inside the scan and reads the same `stacks_json()`
 merge (claim wins) the skip decision itself uses — one reader, one source. `coordinate-ring.sh`

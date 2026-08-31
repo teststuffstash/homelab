@@ -1,0 +1,3 @@
+CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"stack":"circles","loop_ns":"circles-agents","unit":"changes-requested|circles|pr-9"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
+OUT   fan-out: doorbell rung for graduated stack circles ({"stack":"circles","loop_ns":"circles-agents","unit":"changes-requested|circles|pr-9"})
+RC 0
