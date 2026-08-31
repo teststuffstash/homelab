@@ -278,7 +278,9 @@ meant to avoid.)
   the human gate as arbitration option 2 (junk stripped `7fb70fdb`, four-attempt evidence kept
   as a note), reviewer re-picks, auto-merge armed. Episode also filed **#1097**
   (changes-requested clause ignores agent/blocked on the PR — loop already riding it).
-  **Opus report's process-change table is OPERATOR-READ pending** — top rows: loop-filed
+  **OPERATOR RULED 2026-08-31: the r2 process-change table gets its OWN goal/stint container,
+  authored by the NEXT corpus session** (author-at-last-moment — no parent issue minted yet).
+  Table's top rows for that sitting: loop-filed
   control-path defects must carry `agent-fix`+`agent/queued` (7 inert instances, 29.1
   issue-days); predicate-REPLACE diffs must enumerate the old accepted-input set (6/31
   blocking rounds); identical `(model,error_class)` re-strike routes to agent/error not
