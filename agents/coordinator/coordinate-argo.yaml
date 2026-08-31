@@ -171,7 +171,13 @@ spec:
                             || { echo "FATAL: loop-git token fetch refused/failed — not scanning blind"; exit 1; }
                           export GH_TOKEN
                           rm -rf /work/homelab
-                          git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
+                          # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
+                          # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
+                          # old anonymous behavior (degrade, never a new hard dependency).
+                          _cu="https://github.com/teststuffstash/homelab.git"
+                          [ -n "${GH_TOKEN:-}" ] && _cu="https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab.git"
+                          git clone --depth 1 -b master "$_cu" /work/homelab
                           export SCAN_STACK={{workflow.parameters.stack}} LOOP_NS={{workflow.parameters.loop_ns}}
                           export SCAN_UNIT='{{workflow.parameters.unit}}'
                           exec bash /work/homelab/agents/coordinator-scan.sh --spawn
@@ -280,7 +286,13 @@ spec:
             set -e
             echo "coordinate: doorbell scope={{workflow.parameters.repo}} unit={{workflow.parameters.unit}} ring_ns={{workflow.parameters.ring_ns}} (unit '-' = full scan)"
             rm -rf /work/homelab
-            git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
+            # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
+            # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
+            # old anonymous behavior (degrade, never a new hard dependency).
+            _cu="https://github.com/teststuffstash/homelab.git"
+            [ -n "${GH_TOKEN:-}" ] && _cu="https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab.git"
+            git clone --depth 1 -b master "$_cu" /work/homelab
             export SCAN_UNIT='{{workflow.parameters.unit}}'
             # FU-144 receiver-side fan-out inputs: the ring's repo scope + whether it was
             # already routed per-stack (coordinator-scan.sh §doorbell-fanout reads both).

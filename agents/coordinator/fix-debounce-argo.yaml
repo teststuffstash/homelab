@@ -209,7 +209,13 @@ spec:
             set -euo pipefail
             echo "fix-debounce decide — payload: $PAYLOAD dry-run: $DRY_RUN"
             rm -rf /work/homelab
-            git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
+            # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
+            # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
+            # old anonymous behavior (degrade, never a new hard dependency).
+            _cu="https://github.com/teststuffstash/homelab.git"
+            [ -n "${GH_TOKEN:-}" ] && _cu="https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab.git"
+            git clone --depth 1 -b master "$_cu" /work/homelab
 
             # ── the pending set, LIVE (repo list = the AgentStack claims' repos + homelab) ────
             # The claims also feed a repo→stack→loop-ns map: after queueing, the debouncer rings
