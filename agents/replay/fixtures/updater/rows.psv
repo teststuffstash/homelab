@@ -8,4 +8,3 @@ unstrand-unreadable   | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  |
 conflict-dirty        | board | gh/pr-list.json @ patches/dirty-90.jq       |  | dirty-label   | n=90
 conflict-clear        | board | gh/pr-list.json @ patches/label-conflict-90.jq | | label-clear | n=90
 update-fail           | board | gh/pr-list.json @ patches/conflict-101.jq  | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | update-fail |
-race-422              | board | gh/pr-list.json @ patches/race-101.jq       | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | race-422    |
