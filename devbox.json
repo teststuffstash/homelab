@@ -184,6 +184,9 @@
       "state-fp-replay": [
         "bash agents/state-fp-replay.sh"
       ],
+      "diff-ci": [
+        "bash scripts/diff-ci.sh \"$@\""
+      ],
       "clause-replay": [
         "bash agents/replay/run.sh"
       ],

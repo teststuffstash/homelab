@@ -31,7 +31,12 @@ privileged ns) so CI noise/privilege stays off the service nodes.
   rather than the code. Since 2026-08-31 (#518) the heavy suites (`prometheus-rules-lint`,
   `clause-replay`) and the pin-bump pre-warm run **backgrounded ∥ the serial steps** with
   start/collect step pairs, and the heavies **skip entirely** when the PR's changed paths
-  cannot affect them — locally they are ordinary serial `devbox run` tasks.
+  cannot affect them — locally they are ordinary serial `devbox run` tasks, and
+  **`devbox run diff-ci`** is the local pre-flight that mirrors the whole idea: it runs only
+  the gates the current diff can affect, from the path→task map in `scripts/diff-ci.sh` — the
+  intended one home for the trigger regexes (the workflow's skip step still carries inline
+  copies; the eval-extraction flip is a pending operator-direct follow-up, #518). A coverage
+  belt inside diff-ci fails if ci.yaml runs a task the map doesn't know.
 - Tier-A and Tier-B run the *same* logic under different forges — only `runs-on` + the registry differ.
 - Swapping the runner later (ARC → **Blacksmith**/**Chainguard**) is a `runs-on`/host change with
   **zero logic change**.
