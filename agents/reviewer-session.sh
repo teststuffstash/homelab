@@ -495,6 +495,15 @@ if [ "\${SPROUT_DEPTH:-0}" -ge 2 ]; then
 fi
 PREP
 )
+# Dispatch-time syntax guard (homelab#1113): verify each assembled heredoc parses before
+# spawning a pod. The defect class lives in the ASSEMBLED pod script, not in the source file,
+# so it is invisible to `bash -n` on this file and invisible to replay.
+# An apostrophe in an interpolated variable (e.g. CAPABILITY_CARD from reviewer-git.yaml)
+# would break the single-quoted PROMPT='...' assembly — this catches it host-side.
+if ! printf '%s\n' "$PREP" | bash -n /dev/stdin 2>/dev/null; then
+  echo "FATAL: PREP heredoc has a syntax error — review dispatch aborted before pod creation (homelab#1113)" >&2
+  exit 1
+fi
 
 # ── TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — a POD-SIDE part, quoted heredoc ──────────
 # Runs in the pod AFTER $PREP (so $ISSUE, $CHANGED and $PROMPT already exist there), which is why
@@ -570,6 +579,10 @@ If set (1), the linked issue could not be read (403/NOT_FOUND) by the reviewer's
 # <<<REPLAY:reviewer-touches-check<<<
 SNIP
 )
+if ! printf '%s\n' "$TOUCHESPART" | bash -n /dev/stdin 2>/dev/null; then
+  echo "FATAL: TOUCHESPART heredoc has a syntax error — review dispatch aborted before pod creation (homelab#1113)" >&2
+  exit 1
+fi
 
 # §A1 transcript capture: the upload function + an EXIT trap are installed BEFORE the prep — so a
 # failed clone/checkout (set -e) still uploads a manifest recording the attempt (the design's
@@ -651,6 +664,11 @@ upload_transcripts() {
 trap 'rc=$?; upload_transcripts; exit $rc' EXIT
 SNIP
 )
+if ! printf '%s\n' "$UPLOADER" | bash -n /dev/stdin 2>/dev/null; then
+  echo "FATAL: UPLOADER heredoc has a syntax error — review dispatch aborted before pod creation (homelab#1113)" >&2
+  exit 1
+fi
+
 # The run tail: claude's result JSON goes to a file (not the live stream), the upload runs (its log
 # lines join the "preamble" the launcher passes through), and the result is cat'ed LAST so the
 # launcher's "JSON = from the first ^{ line" parse stays intact. Exit code stays claude's.
@@ -729,6 +747,18 @@ cat /tmp/result.json
 exit "$FINAL"
 SNIP
 )
+if ! printf '%s\n' "$RUNPART" | bash -n /dev/stdin 2>/dev/null; then
+  echo "FATAL: RUNPART heredoc has a syntax error — review dispatch aborted before pod creation (homelab#1113)" >&2
+  exit 1
+fi
+# Combined syntax guard: verify the full assembled pod script parses before spawning a pod.
+# This catches cross-part issues (e.g. a function defined in UPLOADER called in RUNPART that
+# would be syntactically valid in isolation but malformed in combination).
+_COMBINED="$(printf '%s\n%s\n%s\n%s' "$UPLOADER" "$PREP" "$TOUCHESPART" "$RUNPART")"
+if ! printf '%s\n' "$_COMBINED" | bash -n /dev/stdin 2>/dev/null; then
+  echo "FATAL: combined pod script has a syntax error — review dispatch aborted before pod creation (homelab#1113)" >&2
+  exit 1
+fi
 ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s\n%s' "$UPLOADER" "$PREP" "$TOUCHESPART" "$RUNPART" | jq -Rs .)]"
 
 # >>>REPLAY:reviewer-go-failover-gate>>>
