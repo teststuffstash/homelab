@@ -1,0 +1,132 @@
+# Behaviour fixture for BlockingCodeownerParkWaiting (homelab#1115) — the no-seat BELT half of
+# the 2026-08-31 blocking-park direction. Tests that the alert fires on both disjuncts:
+#   (a) blocking_count > 0 (genuine blocked work waiting on the park)
+#   (b) hotfix="true" even when blocking_count == 0 (🚨 closing issue, presence-only)
+# and stays silent when neither condition holds.
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/blocking-park.promtool-test
+#
+# Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under
+# argocd/resources, and a non-manifest there would fail it.
+#
+# CLOCK: promtool's test clock starts at 0.
+rule_files:
+  - blocking-park.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── Shape 1 — blocking_count > 0, no hotfix ──────────────────────────────────────────────────
+  # A codeowner-parked PR whose closing issue has 3 blocking dependency edges. The >0 disjunct
+  # fires after `for: 10m`.
+  - interval: 1m
+    name: blocking_count > 0 fires after 10m
+    input_series:
+      - series: 'github_pull_request_park_blocking_count{owner="teststuffstash",repo="homelab",pr="101",issue="42"}'
+        values: "3+0x60"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              owner: teststuffstash
+              repo: homelab
+              pr: "101"
+              issue: "42"
+            exp_annotations:
+              summary: "Blocking codeowner park: homelab#101 gates blocked work (issue #42)"
+              description: "PR homelab#101 is codeowner-parked and its closing issue #42 has 3 blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/teststuffstash/homelab/pull/101"
+
+  # ── Shape 2 — hotfix="true", blocking_count == 0 ─────────────────────────────────────────────
+  # A 🚨-titled closing issue with zero blocking edges must still fire (presence-only disjunct).
+  # This is the case the original `> 0` on both disjuncts would have missed — the fix round 2
+  # finding. Note: `hotfix` is a selector-only label — `max by (owner, repo, pr, issue)` drops it
+  # from the aggregation result, so it does NOT appear on the firing alert's labels.
+  - interval: 1m
+    name: hotfix=true with count 0 fires after 10m
+    input_series:
+      - series: 'github_pull_request_park_blocking_count{owner="teststuffstash",repo="homelab",pr="202",issue="99",hotfix="true"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              owner: teststuffstash
+              repo: homelab
+              pr: "202"
+              issue: "99"
+            exp_annotations:
+              summary: "Blocking codeowner park: homelab#202 gates blocked work (issue #99)"
+              description: "PR homelab#202 is codeowner-parked and its closing issue #99 has 0 blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/teststuffstash/homelab/pull/202"
+
+  # ── Shape 3 — hotfix="true" AND blocking_count > 0 ───────────────────────────────────────────
+  # Both disjuncts are true; the alert fires once (the `or` collapses identical label sets).
+  # `hotfix` is selector-only and does not survive the `max by` aggregation.
+  - interval: 1m
+    name: hotfix=true with count > 0 fires once
+    input_series:
+      - series: 'github_pull_request_park_blocking_count{owner="teststuffstash",repo="homelab",pr="303",issue="77",hotfix="true"}'
+        values: "5+0x60"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              owner: teststuffstash
+              repo: homelab
+              pr: "303"
+              issue: "77"
+            exp_annotations:
+              summary: "Blocking codeowner park: homelab#303 gates blocked work (issue #77)"
+              description: "PR homelab#303 is codeowner-parked and its closing issue #77 has 5 blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/teststuffstash/homelab/pull/303"
+
+  # ── Guard 1 — no blocking edges, no hotfix ───────────────────────────────────────────────────
+  # A parked PR whose closing issue has zero blocking edges and is not a 🚨 must NOT fire.
+  - interval: 1m
+    name: count 0 without hotfix stays silent
+    input_series:
+      - series: 'github_pull_request_park_blocking_count{owner="teststuffstash",repo="homelab",pr="404",issue="55"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts: []
+
+  # ── Guard 2 — absent series (absent-when-unreadable) ─────────────────────────────────────────
+  # The FU-108 read-honesty rule: a failed blocking-edge read emits NO series. No series means
+  # no alert — the alert must not fire on absence.
+  - interval: 1m
+    name: absent series (unreadable) stays silent
+    input_series: []
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: BlockingCodeownerParkWaiting
+        exp_alerts: []

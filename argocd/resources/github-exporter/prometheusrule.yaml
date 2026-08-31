@@ -676,6 +676,25 @@ spec:
           annotations:
             summary: "Codeowner park: {{ $labels.repo }}#{{ $labels.number }} bot-approved + green for 30m+"
             description: "PR {{ $labels.repo }}#{{ $labels.number }} is bot-APPROVED with CI green, yet reviewDecision stays REVIEW_REQUIRED — a CODEOWNERS path needs the delegated human read; no machinery can move it (the reflex refuses approved heads by design). https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }}"
+        # #1115: the no-seat BELT half — a parked PR whose closing issue GATES wedged work
+        # (incoming dependencies/blocking edges — the ADR-119 un-park shape, or a 🚨/hotfix-class
+        # issue) is the one park class with real urgency and deserves its own, tighter alert so
+        # the no-seat case is covered (session-liveness doctrine: a belt outside the session).
+        # Distinct name, tighter window than CodeownerParkWaiting's 30m.
+        # github_pull_request_park_blocking_count is absent-when-unreadable (the FU-108 rule),
+        # so the expr is presence-only: >0 or hotfix="true" means blocking edges exist.
+        - alert: BlockingCodeownerParkWaiting
+          expr: max by (owner, repo, pr, issue) (max_over_time(github_pull_request_park_blocking_count[10m])) > 0
+            or max by (owner, repo, pr, issue) (max_over_time(github_pull_request_park_blocking_count{hotfix="true"}[10m]))
+          for: 10m
+          labels:
+            severity: warning
+            # homelab#239: the remedy is a delegated codeowner READ — an operator act by
+            # construction; a worker dispatched at this alert could only re-conclude that.
+            platform_machinery: "true"
+          annotations:
+            summary: "Blocking codeowner park: {{ $labels.repo }}#{{ $labels.pr }} gates blocked work (issue #{{ $labels.issue }})"
+            description: "PR {{ $labels.repo }}#{{ $labels.pr }} is codeowner-parked and its closing issue #{{ $labels.issue }} has {{ $value }} blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.pr }}"
 
     # ── ADR-107 flip-acceptance 1: the requested≠served model drift belt (homelab#515) ──────────
     # PR#407's class — every claude/haiku worker ride silently running the CLI default

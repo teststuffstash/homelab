@@ -999,6 +999,8 @@ def collect_open_prs(lines):
         "# HELP github_pull_request_label 1 per label on each open PR (agent/error = automation circuit breaker — alerted).",
         "# TYPE github_pull_request_reviews_recent gauge",
         "# HELP github_pull_request_reviews_recent APPROVED/CHANGES_REQUESTED reviews per author in the trailing hour — a healthy worker↔reviewer iteration tops ~3, a dispatch loop runs 8+.",
+        "# TYPE github_pull_request_park_blocking_count gauge",
+        "# HELP github_pull_request_park_blocking_count Blocking-dependency count for the closing issue of a codeowner-parked PR (absent-when-unreadable — the FU-108 read-honesty rule; hotfix=\"true\" when the closing issue title starts with 🚨).",
     ]
     global _goal_fields_ok
     cursor = None
@@ -1170,6 +1172,37 @@ def collect_open_prs(lines):
                         and ci_state in ("success", "none"):
                     if bot_approved_at:
                         lines.append(metric("github_pull_request_codeowner_park", ident, 1))
+                        # #1115: blocking-edge read for PARKED PRs only — resolve the closing issue
+                        # and read its blocking dependencies. One REST call per parked PR (parks are
+                        # few, so the pool cost is ~0). Absent-when-unreadable (the FU-108 rule):
+                        # a failed read emits NO series, never a fake zero.
+                        try:
+                            pr_detail = gh(f"/repos/{repo['name']}/pulls/{pr['number']}")
+                            body = pr_detail.get("body") or ""
+                            # Parse "Fixes #N" or "Closes #N" (GitHub's closing keywords)
+                            closing_match = re.search(
+                                r"(?i)(?:clos|fix|resolv)(?:e[ds]?|ing)?\s+#(\d+)", body)
+                            if closing_match:
+                                closing_issue = int(closing_match.group(1))
+                                blocking = gh(
+                                    f"/repos/{repo['name']}/issues/{closing_issue}/dependencies/blocking")
+                                blocking_count = len(blocking) if isinstance(blocking, list) else 0
+                                block_labels = {"owner": ORG, "repo": repo["name"],
+                                                "pr": str(pr["number"]),
+                                                "issue": str(closing_issue)}
+                                # Check if the closing issue title starts with 🚨 (hotfix)
+                                try:
+                                    issue_data = gh(
+                                        f"/repos/{repo['name']}/issues/{closing_issue}")
+                                    if (issue_data.get("title") or "").startswith("\U0001f6a8"):
+                                        block_labels["hotfix"] = "true"
+                                except Exception:
+                                    pass  # issue read failure is not fatal — emit without hotfix
+                                lines.append(metric(
+                                    "github_pull_request_park_blocking_count",
+                                    block_labels, blocking_count))
+                        except Exception:
+                            pass  # absent-when-unreadable — emit nothing on failure
                     else:
                         lines.append(metric("github_pull_request_reflex_wait", ident, 1))
                 # Trailing-1h window, NOT reviews-since-head-commit: the commit OBJECT is
