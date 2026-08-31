@@ -375,7 +375,7 @@ def main():
             "key": key, "project": project, "issue": issue, "stack": repos.get(project, ""),
             "terminal_label": label, "issue_state": state, "closed_at": closed_at,
             "budget_tier": tier, "budget_cap_usd": cap,
-            "calibration_error": round(summ["total_cost_usd"] / (cap * len(rounds)), 3) if cap else None,
+            "calibration_error": round(summ["total_cost_usd"] / (cap * len(rounds)), 3) if cap and rounds else None,
         }
         rec.update(summ)
         # r4 F5: mark mid-flight stamps — at emit time the issue is still OPEN or the terminal
