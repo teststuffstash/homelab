@@ -1,0 +1,13 @@
+# homelab#1041 — the env card with the MCP knob present. Pins that the two MCP-gated lines
+# (feedback tool + version skew) are emitted when the stack declares spec.mcp.endpoint.
+#
+# CONDITION UNDER REPLAY. render_env_card() with MCP_ENDPOINT set to the oracle stack's endpoint.
+# AGENT_BASE_IMAGE is set so the version-skew line resolves (sourced from images.env before the
+# card is rendered in the real launcher).
+name: env-card-mcp-present
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:render_env_card
+  - file:pre.sh
+  - file:post.sh

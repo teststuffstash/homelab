@@ -1,0 +1,18 @@
+# homelab#1041 — the WORKER's goose arm with the MCP knob present. Pins that the MCP prelude
+# (base64 decode to /tmp/mcp-config.json) and --mcp-config flag are emitted when the stack
+# declares spec.mcp.{endpoint,tools}.
+#
+# CONDITION UNDER REPLAY. Same as harness-run-cmd-goose, but with MCP_ENDPOINT and MCP_TOOLS
+# set so the MCP prelude block inside the replay region fires.
+#
+# THE CONTRACT:
+#   1. MCP_PRELUDE contains the base64 decode command for the MCP config.
+#   2. The goose case appends `--mcp-config /tmp/mcp-config.json` to the RUN_CMD.
+#   3. The rest of the pod command is unmoved: context prelude, recipe decode, GOOSE_MAX_TOKENS.
+name: harness-run-cmd-goose-mcp
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-run-cmd
+  - file:post.sh

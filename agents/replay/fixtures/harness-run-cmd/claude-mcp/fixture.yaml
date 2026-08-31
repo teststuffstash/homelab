@@ -1,0 +1,18 @@
+# homelab#1041 — the REVIEWER's claude arm with the MCP knob present. Pins that the MCP prelude
+# (base64 decode to /tmp/mcp-config.json) and CLAUDE_CODE_MCP_CONFIG env var are emitted when
+# the stack declares spec.mcp.{endpoint,tools}.
+#
+# CONDITION UNDER REPLAY. Same as harness-run-cmd-claude, but with MCP_ENDPOINT and MCP_TOOLS
+# set so the MCP prelude block inside the replay region fires.
+#
+# THE CONTRACT:
+#   1. MCP_PRELUDE contains the base64 decode command for the MCP config.
+#   2. The claude case prepends CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json to the RUN_CMD.
+#   3. The rest of the pod command is unmoved: context prelude, recipe decode, --model, --max-turns.
+name: harness-run-cmd-claude-mcp
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-run-cmd
+  - file:post.sh

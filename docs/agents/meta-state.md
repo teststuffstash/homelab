@@ -8,20 +8,33 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ 2026-08-31 morning verify tail — RESOLVED by the 07:00Z corpus session (retro-first):**
-  - **oracle-fleet#285: NO round-2 landed off the 06:51Z rerun red, and it structurally cannot**
-    — both wake paths are deaf to a same-head CI rerun (exporter red edge dedups per `head_sha`;
-    the `state-fp` written 21:01Z hashes byte-identical when the rerun reds the same
-    conclusions). Filed+queued **#1108** (fix shapes: `(head_sha, run_attempt)` dedup key, or a
-    run-attempt input to the ci-red fp only — #1011 runs the opposite direction on arbitrate);
-    blockedBy edge wired #285→#1108 (the ADR-119 un-park shape, seat door included now).
-    **#285 stays wedged until #1108 lands**; the content fix itself is known (`BASE_LOEMIND`
-    unbound, e2e-kind.sh:481).
-  - PR#1094 + PR#1099 MERGED 07:05Z (seat codeowner reads; #1096 auto-closed by the merge).
-    probe-platform's 06:41Z tick VERIFIED past auth (the #1085 fix live): 6 checks, 1 finding,
-    0 probe-fails — the finding is the known-benign `logging` OutOfSync (the loki
-    `volumeClaimTemplates` papercut); do not re-derive it on future probe reads.
-  - #946 seed: 3 cells outstanding, recipe on the issue (Zen 429 weather). #994 operator-held.
+- **⚑ 2026-08-31 CORPUS SESSION WIND-DOWN (~11:45Z) — the fresh-session pickup set:**
+  - **Goal #1039 assembly MERGED 11:39Z (PR#1119, full codeowner read done)** → VERIFY the next
+    scan pass: `goal/post-launch` lands via IL-T18 (`Assembly-for:` trailer verified
+    line-anchored pre-merge), #1117/#1118 close via the Base:-keyed C6 (their fixes are on the
+    merged branch — PR#1128/#1130). ArgoCD syncs the MCP claim knob + composition; the oracle
+    jail can then claim `spec.mcp`.
+  - **⏰ #1134 operator-lane residue HAS A DEADLINE**: kyverno pinned 1.18.2 (`cd3e5a87`) after
+    1.19.0 froze the merge path 45 min (the required sentinel check red on 8/8 PRs; tool-error
+    discrimination now ported). **Adapt to 1.19.0 + unpin BEFORE the weekly devbox-update
+    re-bumps** (`--exceptions` flag = prime suspect: the failing repos are exactly the ones
+    with exception files); the pin holds the line meanwhile, and the discrimination turns any
+    repeat into self-healing `error` statuses, not false violations.
+  - **#1136 residue**: anonymous-clone throttling (47 failed workflows ~10:45–11:10Z) — all 14
+    homelab workflow clone sites now authenticate (`13e51ddc`, verified in-cluster); residue =
+    confirm the Failed-workflow inflow stayed zero + sweep the STACK loop namespaces' templates
+    for the same anonymous pattern.
+  - **oracle-fleet#285 stays wedged on #1108** (queued; rerun-red wake gap; blockedBy edge
+    wired — the BLOCKPARK watch flags its fix PR's park). Queued convoy still riding: #975
+    #1011 #1006 #828 #1056 #1113 #1116 #1124 #1125 (DNS belt) #1108 + sprouts #1137/#1138
+    (inert) — next corpus session gate-reads the parks; agent-runtime #97/#98/#99 all merged.
+  - Watch upgrades LIVE in the re-armed monitor: BLOCKPARK source (Prometheus-primary),
+    stable FAMINE key, container exclusion — the three noise classes are code now.
+  - probe-platform verified past auth (#1085 live; the one finding = known loki OutOfSync
+    papercut — don't re-derive). #946 seed: 3 cells (Zen weather). #994 operator-held.
+    #1133 (renovate arc-runner pin) was converging under rebase churn — confirm merged.
+  - Retro r3 (Mon 09-07) runs under the NEW cost-model ranking (PR#1127); its
+    predecessor-scoring is the r2-batch closeout read (#949 + #1101 close at the sweep after).
 - **⚑ 2026-08-31 CORPUS SESSION rulings (the drainage-economics discussion — operator-ruled,
   TICK-LOG entry has the arc):** the drainage round/branch/triage design is **BANKED** —
   measured 1 stack-blocking : 16 nice-to-have on the live pile, and the seat gate-reads every

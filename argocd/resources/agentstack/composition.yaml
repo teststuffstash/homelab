@@ -1092,6 +1092,7 @@ spec:
             {{- $extra := default (list) (get $eg "extraFQDNs") }}
             {{- $enforce := default false (get $eg "enforce") }}
             {{- $docker := default false (get $fx "docker") }}
+            {{- $mcp := $xr.spec.mcp }}
             ---
             # Transcript-capture WRITE-ONLY S3 key, mirrored in-namespace (FU-080 a): worker pods
             # secretKeyRef it locally, so no launcher reads key material and no cross-namespace
@@ -1361,6 +1362,14 @@ spec:
                     {{- end }}
                     {{- range $f := $extra }}
                     - { matchName: {{ $f }} } # extraFQDNs (earned from a monitor-phase harvest)
+                    {{- end }}
+                    {{- if $mcp }}
+                    {{- $mcpHost := $mcp.endpoint | trimPrefix "https://" | trimPrefix "http://" | splitList "/" | first | splitList ":" | first }}
+                    # MCP endpoint HOST, derived from spec.mcp.endpoint. The knob holds a URL —
+                    # the launcher's --mcp-config needs the whole thing (#1041) — but toFQDNs
+                    # matches a DNS query name, so the leg takes the bare host. That host must be
+                    # an FQDN, never a service VIP (FU-072/kata).
+                    - { matchName: {{ $mcpHost }} }
                     {{- end }}
                     {{- if $docker }}
                     # docker=true: docker.io pulls ride the FU-073 mirror (toCIDR above) since

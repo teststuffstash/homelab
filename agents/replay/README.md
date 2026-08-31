@@ -181,6 +181,8 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-ground-rules/missing` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-ground-rules/unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-machine-markers/env-card-machine-markers-capture` | actions | - | `agents/agent-session.sh` | - |
+| `env-card-mcp-present` | actions | - | `agents/agent-session.sh` | - |
+| `env-card-mcp-present/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
 | `footprint-hold-goal-exempt` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -197,8 +199,10 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-enforce-default/explicit-wins` | actions | - | `agents/agent-session.sh` | - |
 | `harness-enforce-default/flip` | actions | - | `agents/agent-session.sh` | - |
 | `harness-enforce-default/monitor-untouched` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/claude-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/goose-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/re-review-shadow-skip-tag` | actions | - | `agents/re-review.sh` | - |
@@ -279,6 +283,8 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-go-failover/limited` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/shadow-both-limited` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/shadow-go-available` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-mcp-prep/absent` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-mcp-prep/present` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-optout/reviewer-optout` | suite | - | `-` | - |
 | `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-absent` | actions | - | `agents/reviewer-session.sh` | - |

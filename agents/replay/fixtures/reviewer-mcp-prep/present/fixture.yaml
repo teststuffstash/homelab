@@ -1,0 +1,20 @@
+# homelab#1041 — reviewer MCP prep with the knob present. Pins that the launcher-side block
+# builds MCP_PREP containing the base64-decode + export CLAUDE_CODE_MCP_CONFIG + echo lines
+# when the stack declares spec.mcp.{endpoint,tools}.
+#
+# CONDITION UNDER REPLAY. MCP_ENDPOINT and MCP_TOOLS are set (matching the oracle stack's claim:
+# slo.endpoint: https://mcp.oracle.teststuff.net/mcp, tools: statute, search, give_feedback).
+# The block builds the MCP config JSON, base64-encodes it, and sets MCP_PREP.
+#
+# THE CONTRACT:
+#   1. MCP_PREP contains the base64-decode command for the MCP config.
+#   2. MCP_PREP contains the export CLAUDE_CODE_MCP_CONFIG line.
+#   3. MCP_PREP contains the "→ MCP config written" echo.
+#   4. Decoding the base64 blob yields the expected mcp_servers JSON.
+name: reviewer-mcp-prep-present
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-mcp-prep
+  - file:post.sh
