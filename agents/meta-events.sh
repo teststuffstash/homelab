@@ -303,8 +303,17 @@ WAVEIDS
 
 tick() {
   TICK=$((TICK+1))
-  [ $((TICK % 2)) -eq 1 ] && src_needsmeta
-  [ $((TICK % 2)) -eq 0 ] && src_blockpark
+  # ONCE_ALL (the --once contract): a cold-state single pass must print the FULL standing set —
+  # the fresh-session bootstrap view — so BOTH parity-gated sources run (PR#1114 review catch:
+  # the even-tick gate alone made --once structurally blind to BLOCKPARK, the one class it
+  # exists to surface ahead of the pile).
+  if [ "${ONCE_ALL:-0}" = 1 ]; then
+    src_needsmeta
+    src_blockpark
+  else
+    [ $((TICK % 2)) -eq 1 ] && src_needsmeta
+    [ $((TICK % 2)) -eq 0 ] && src_blockpark
+  fi
   src_newissue
   src_seatpr
   src_goalcmt
@@ -313,6 +322,6 @@ tick() {
   src_stint
 }
 
-if [ "${1:-}" = "--once" ]; then TICK=0; tick; exit 0; fi
+if [ "${1:-}" = "--once" ]; then TICK=0; ONCE_ALL=1; tick; exit 0; fi
 echo "meta-events: loop up (interval ${INTERVAL}s, state $STATE)"
 while true; do tick; sleep "$INTERVAL"; done
