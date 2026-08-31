@@ -1523,7 +1523,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       done
       if [ -n "$blocked" ]; then
         qblocked="${qblocked}  issue #${qnum} — ${qtitle} (waiting${blocked})\n"
-        item_class_push "$repo" "issue-${qnum}" "parked-blocked" "machine"
+        item_class_push "$repo" "issue-${qnum}" "parked-blocked" "operator"
         continue
       fi
       # ── HOLD-CHAIN PROPAGATION (queued-held-by-ghost, #833) ────────────────────────────────
@@ -1598,7 +1598,7 @@ EOF_GUARDED
         fi
         if [ -n "$ghit" ]; then
           orphans="${orphans}[$repo] ⛔ pin-only GUARDED path — NOT dispatched (a PR may write only a pin line there, so \`ci\` is structurally red; the route is an operator push to master — CODEOWNERS §Carve-outs). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches} → guarded:${ghit})\n"
-          item_class_push "$repo" "issue-${qnum}" "guarded-path" "machine"
+          item_class_push "$repo" "issue-${qnum}" "guarded-path" "operator"
           continue
         fi
       fi
