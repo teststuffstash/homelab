@@ -1033,11 +1033,17 @@ if [ -n "${RECIPE:-}" ]; then
   # ⚠ This block sits INSIDE the replay region because replay clauses run self-contained — a shared
   # helper defined at the script top is invisible to them (proven by RC-127). The MCP_PRELUDE and
   # MCP_CONFIG_B64 variables are consumed by the goose case below, inside the same region.
+  # Unparseable tools → loud degrade, no attach — same guard as the reviewer arm; an aborted
+  # launcher here is fleet-wide, so this sibling must never be the one that keeps set -e alive.
   MCP_PRELUDE=""
   if [ -n "${MCP_ENDPOINT:-}" ]; then
-    MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}')"
-    MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
-    MCP_PRELUDE="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json; "
+    MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}' 2>/dev/null)" || MCP_CONFIG_JSON=""
+    if [ -n "$MCP_CONFIG_JSON" ]; then
+      MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
+      MCP_PRELUDE="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json; "
+    else
+      echo "agent-session: MCP tools knob unparseable — dispatching WITHOUT MCP attach" >&2
+    fi
   fi
   # A claude ride MUST carry --model: without the flag the CLI runs its own DEFAULT — measured
   # 2026-08-13 as claude-opus-5[1m] on this image — not the dispatched model. Every claude/haiku
