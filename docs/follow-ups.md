@@ -183,8 +183,11 @@ six OVERSIZE items pointer-ized into
       the ConfigMap passes. TWICE live on 2026-08-27: ADR-118's `__tenant_id__` (Alloy pods 1–2
       months old), then `StatefulSet/loki` with **no annotation at all**. Evidence at the sites,
       [`alloy.yaml`](../argocd/resources/loki/alloy.yaml) + `loki.yaml` `config-hash`.
-      **Next:** audit which other raw resources mount ConfigMaps — the count decides between
-      kustomize `configMapGenerator` (no human step, proven in-repo:
+      THIRD sighting 2026-08-31: `blackbox/blackbox.yaml` (no annotation) — PR#1141's
+      `dns_github` module synced but the 5d-old pod served 400s to every probe scrape
+      (`blackbox-unbound-github` TargetDown ~3h) until a manual `/-/reload`; the new belt
+      shipped dead. **Next:** audit which other raw resources mount ConfigMaps — the count
+      decides between kustomize `configMapGenerator` (no human step, proven in-repo:
       [`otel-collector/`](../argocd/resources/otel-collector/kustomization.yaml)) and a CI check
       reddening on a `*-config.yaml` moved without its consumer's annotation. Relates ADR-083.
 
