@@ -2685,6 +2685,100 @@ EOF_GOVERNANCE
         echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
       fi
     fi
+    # ── THE BELT (homelab#1106): RECONCILE the phantom `agent/done` label ──────────────────────
+    # A closed issue with a merged PR mentioning it, still labelled `agent/blocked` or
+    # `agent/review` past C4C5_PERSIST_S, gets `agent/done`. This is bookkeeping on dead state:
+    # the issue is already CLOSED, so a wrong flip costs a mislabeled closed issue, not a
+    # duplicate ride. The merged-closeout clause (C6) is the primary path; this belt catches
+    # cases where C6 was skipped (e.g. the issue was closed by keyword before C6 ran, or the
+    # merged PR's reference was non-closing and the issue was closed by hand).
+    #
+    # Two holds before it writes, both fail-SAFE — an unreadable probe HOLDS, it never clears
+    # (rule #6: never fail INTO a write):
+    #   (c) PERSISTENCE. The issue must have been quiet (`updatedAt`) past C4C5_PERSIST_S
+    #       to avoid racing with the merged-closeout clause.
+    #   (d) A MERGED PR must mention the issue. Without a merged PR, the issue may have been
+    #       closed for reasons unrelated to agent work — holding beats guessing.
+    # Anything the belt HOLDS keeps today's behaviour exactly — reported, and the merged-closeout
+    # unit (C6) still carries it. Anything it CLEARS becomes an ordinary `agent/done` issue.
+    # >>>REPLAY:done-phantom-belt>>>
+    done_phantom_cleared=""
+    done_phantom_cands=""
+    # Query CLOSED issues that still carry stale lifecycle labels. `gh issue list --state closed`
+    # returns issues closed in the last ~30 days by default; the `--limit` bounds the window.
+    # agent/error is excluded (human-first, never auto-relabel).
+    done_closed="$(gh issue list --repo "$slug" --state closed --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,updatedAt \
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/blocked")) or ($L|index("agent/review"))) and (($L|index("agent/error"))|not))]' 2>/dev/null || echo '[]')"
+    jq -e . >/dev/null 2>&1 <<<"${done_closed:-null}" || done_closed='[]'
+    [ -n "$dispatchable" ] && done_phantom_cands="$(printf '%s' "$done_closed" \
+      | jq -r --arg done "${done_phantom_cleared:-}" \
+        '[.[] | (.labels|map(.name)) as $L
+               | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked")) or ($L|index("agent/review"))))
+               | (.number|tostring) as $n
+               | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
+               | "\($n)|\(.updatedAt // "")"] | .[]')"
+    if [ -n "$done_phantom_cands" ]; then
+      now_s="$(date -u +%s)"
+      done_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || done_merged=""
+      if ! jq -e . >/dev/null 2>&1 <<<"${done_merged:-null}"; then
+        orphans="${orphans}[$repo] ⚠ PROBE_FAILED (merged PRs) — the agent/done phantom-label belt held every candidate this tick (rule #6)\n"
+      else
+        for cand in $done_phantom_cands; do
+          dcn="${cand%%|*}"; dcupd="${cand#*|}"
+          # jq parses the timestamps — same reader the pod janitor uses. An UNPARSEABLE
+          # stamp yields -1, which is < the window, so it holds.
+          dcage="$(jq -rn --arg t "$dcupd" --argjson now "$now_s" \
+            '($t | fromdateiso8601? // null) as $s | if $s == null then -1 else ($now - $s) end' 2>/dev/null || echo -1)"
+          case "$dcage" in ''|*[!0-9-]*) dcage=-1;; esac
+          if [ "$dcage" -lt "$C4C5_PERSIST_S" ]; then
+            orphans="${orphans}[$repo] ⏳ agent/done phantom-label belt HELD — issue #${dcn} was touched $(( dcage < 0 ? 0 : dcage / 60 ))m ago (< the ${C4C5_PERSIST_S}s transition-race guard, or an unreadable timestamp); re-checked next scan\n"
+            continue
+          fi
+          # A merged PR must mention the issue — otherwise the close may be unrelated to agent work.
+          if [ "$(jq -r --argjson nn "$dcn" '[.[] | select(test("#\($nn)\\b"))] | length' <<<"$done_merged" 2>/dev/null || echo 0)" -eq 0 ]; then
+            orphans="${orphans}[$repo] ⏳ agent/done phantom-label belt HELD — issue #${dcn} is NOT mentioned by any merged PR: the close may be unrelated to agent work. Holding beats guessing.\n"
+            continue
+          fi
+          # ⚠ ORDER IS LOAD-BEARING, and `gh issue edit --add-label X --remove-label Y` is
+          # NOT atomic: if the add fails while the remove lands, the issue holds no lifecycle
+          # label at all and goes invisible to EVERY clause. Add `agent/done` FIRST,
+          # remove the stale label SECOND, then RE-READ and prove the end state.
+          # ⚠ `set -euo pipefail` is on: a bare `A && B` whose result is non-zero is NOT in a
+          # condition context and would ABORT THE WHOLE SCAN mid-write. The `if` and the
+          # `|| true` are what keep a refused write a REPORTED write.
+          # The jq filter already selected for agent/blocked or agent/review, so we know
+          # one of them is present. Try removing both; the one that doesn't exist fails
+          # harmlessly under `|| true`.
+          dok=""
+          if gh issue edit "$dcn" --repo "$slug" --add-label agent/done >/dev/null 2>&1; then
+            gh issue edit "$dcn" --repo "$slug" --remove-label agent/blocked >/dev/null 2>&1 || true
+            gh issue edit "$dcn" --repo "$slug" --remove-label agent/review >/dev/null 2>&1 || true
+          fi
+          dend="$(gh issue view "$dcn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
+          case ",${dend}," in
+            *",agent/done,"*) case ",${dend}," in *",agent/blocked,"*|*",agent/review,"*) : ;; *) dok=1;; esac;;
+          esac
+          if [ -n "$dok" ]; then
+            gh issue comment "$dcn" --repo "$slug" --body "$(printf '%s\n' \
+              "🤖 **Stale label reconciled → \`agent/done\`** (deterministic scan belt, homelab#1106)." \
+              "" \
+              "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
+              "" \
+              "- **Issue is CLOSED** and a merged PR mentions \`#${dcn}\`." \
+              "- **The stale label persisted.** The issue had been untouched for $(( dcage / 60 ))m — past the $(( C4C5_PERSIST_S / 60 ))m guard." \
+              "" \
+              "The merged-closeout clause (C6) is the primary path for this transition; this belt catches cases where C6 was skipped. The issue is already closed, so this is bookkeeping on dead state — the label now reflects the merged terminal." \
+              "" \
+              "If the issue is genuinely not done (e.g. the merged PR was a partial fix), reopen it and re-apply the appropriate lifecycle label. Re-applying a stale label by hand on a closed issue will simply be cleared again after the guard window." )" >/dev/null 2>&1 || true
+            done_phantom_cleared="${done_phantom_cleared}${dcn} "
+            orphans="${orphans}[$repo] ⚠ stale label RECONCILED → \`agent/done\`: issue #${dcn} (closed, merged PR mentions it, state persisted $(( dcage / 60 ))m — audit commented; homelab#1106).\n"
+          else
+            orphans="${orphans}[$repo] ⛔ agent/done phantom-label reconcile FAILED or landed HALF-APPLIED on issue #${dcn} — labels are now [${dend}]. Check by hand.\n"
+          fi
+        done
+      fi
+    fi
+    # <<<REPLAY:done-phantom-belt<<<
     # arbitrate (FU-086 / MP-G04, built 2026-07-27): the review reflex labels a rounds-exhausted
     # PR `agent/arbitrate` (escalation, NOT anomaly — agent/error stays for impossible states).
     # The coordinator is the designed tie-breaker: one unit per labeled PR; the item session
