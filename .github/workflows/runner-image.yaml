@@ -138,8 +138,9 @@ jobs:
           # master's and GitHub rejects the App push as "updating a workflow file without
           # workflows permission" — over files this bump never touches (live 2026-07-26: a
           # renovate.yaml comment edit that landed on master mid-build). Re-apply the sed on
-          # fresh master; delete any stale branch first.
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}" --delete "$BRANCH" 2>/dev/null || true
+          # fresh master. NEVER delete the branch first: delete+recreate while a pin PR is
+          # open desyncs the PR's head (mergeable stuck UNKNOWN — wedged #1133 and #1142);
+          # the force-push below replaces a stale ref via a clean `synchronize` instead.
           git fetch origin master && git checkout -B "$BRANCH" origin/master
           sed -i -E "s|(arc-runner:)[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]{12}|\1${{ steps.tag.outputs.tag }}|g" \
             argocd/platform/arc-runners.yaml agents/coordinator/reflexes-argo.yaml
