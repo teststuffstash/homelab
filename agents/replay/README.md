@@ -248,6 +248,7 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-subject/witness-unopted` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `retro-cell-report/longlog` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/missing` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
+| `retro-cell-report/multi-block` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/present` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/skeleton` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-gh-token-env/set` | actions | - | `agents/agent-session.sh` | - |
