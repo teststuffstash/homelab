@@ -230,24 +230,31 @@ src_seatpr() {
 # + one dependencies read per parked closing issue (parks are few; ~7 REST/tick amortized).
 # A failed read HOLDS the source (rule #6) — a blind tick must not clear a standing block line.
 src_blockpark() {
-  local tmp repos stack_repos r prs ok=1
+  local tmp pk parks r n ok=1
   tmp="$(mktemp)"; : > "$tmp"
-  if ! stack_repos="$(jq -r '.stacks[].repos[]' "$HERE/stacks.json" 2>/dev/null)" || [ -z "$stack_repos" ]; then
-    hold_source blockpark "stacks.json repo universe unreadable"; rm -f "$tmp"; return
+  # PROMETHEUS-PRIMARY for the park set (the clause-4/FU-166(a) pattern — one-computer rule):
+  # the exporter series `github_pull_request_codeowner_park` bakes the parked predicate
+  # CORRECTLY — reviews[] not latestReviews (the PR#235 approve-then-comment hole this
+  # source's first cut reintroduced; PR#1114 r2 review) plus the bot-author check — so this
+  # source never re-derives it, and the per-tick cost drops to one query + one gh read per
+  # PARKED PR (parks are few). Liveness: the `or (count(...) * 0)` sibling trick — an empty
+  # park set counts only while the same collector walk proves itself; anything else HOLDS
+  # (rule #6). The blocking-edge join stays here: parked PR → closing issue →
+  # `dependencies/blocking` (the ADR-119 un-park direction) or a 🚨 hotfix-class title.
+  if ! pk="$(curl -ksS --max-time 10 "$PROM/api/v1/query" \
+        --data-urlencode 'query=github_pull_request_codeowner_park or (count(github_pull_request_open) * 0)' 2>/dev/null)" \
+     || ! jq -e '.status == "success" and (.data.result | length > 0)' >/dev/null 2>&1 <<<"${pk:-null}"; then
+    hold_source blockpark "codeowner-park series unreadable (prometheus/exporter)"; rm -f "$tmp"; return
   fi
-  repos="$(printf '%s\n%s\n' "$stack_repos" "$(printf '%s\n' $SEAT_REPOS)" | sort -u)"
-  for r in $repos; do
-    prs="$(gh pr list -R "$ORG/$r" --state open --limit 20 \
-        --json number,reviewDecision,latestReviews,closingIssuesReferences 2>/dev/null)" || { ok=0; continue; }
-    # parked = REVIEW_REQUIRED with a bot approval at latestReviews; emit per closing issue
-    local rows irepo inum ititle bcount
-    rows="$(printf '%s' "$prs" | jq -r '.[]
-        | select(.reviewDecision=="REVIEW_REQUIRED")
-        | select([.latestReviews[]? | select(.state=="APPROVED")] | length > 0)
-        | .number as $pr | (.closingIssuesReferences[]? // empty)
-        | "\($pr)\t\(.repository.name // "")\t\(.number)\t\((.title // "")[0:60])"' 2>/dev/null)" || { ok=0; continue; }
-    [ -n "$rows" ] || continue
-    while IFS=$'\t' read -r prn irepo inum ititle; do
+  parks="$(jq -r '.data.result[]? | select(.metric.repo != null and .metric.number != null)
+                  | "\(.metric.repo)\t\(.metric.number)"' <<<"$pk" 2>/dev/null)"
+  while IFS="$(printf '\t')" read -r r n; do
+    [ -n "${n:-}" ] || continue
+    local refs irepo inum ititle bcount
+    refs="$(gh pr view "$n" -R "$ORG/$r" --json closingIssuesReferences \
+        --jq '(.closingIssuesReferences[]? // empty) | "\(.repository.name // "")\t\(.number)\t\((.title // "")[0:60])"' 2>/dev/null)" || { ok=0; continue; }
+    [ -n "$refs" ] || continue
+    while IFS="$(printf '\t')" read -r irepo inum ititle; do
       [ -n "${inum:-}" ] || continue
       [ -n "$irepo" ] || irepo="$r"
       if ! bcount="$(gh api "repos/$ORG/$irepo/issues/$inum/dependencies/blocking" --jq 'length' 2>/dev/null)"; then
@@ -255,16 +262,18 @@ src_blockpark() {
       fi
       if [ "${bcount:-0}" -gt 0 ] 2>/dev/null; then
         printf 'BLOCKPARK|%s#%s|park gates %s blocked issue(s) via %s#%s — read it AHEAD of the pile\n' \
-          "$r" "$prn" "$bcount" "$irepo" "$inum" >> "$tmp"
+          "$r" "$n" "$bcount" "$irepo" "$inum" >> "$tmp"
       elif printf '%s' "$ititle" | grep -q '🚨'; then
         printf 'BLOCKPARK|%s#%s|park on hotfix-class issue %s#%s (🚨) — read it AHEAD of the pile\n' \
-          "$r" "$prn" "$irepo" "$inum" >> "$tmp"
+          "$r" "$n" "$irepo" "$inum" >> "$tmp"
       fi
-    done <<BPROWS
-$rows
-BPROWS
-  done
-  if [ "$ok" = 1 ]; then diff_source blockpark "$tmp"; else hold_source blockpark "pr/dependencies read failed for ≥1 repo"; fi
+    done <<BPREFS
+$refs
+BPREFS
+  done <<BPARKS
+$parks
+BPARKS
+  if [ "$ok" = 1 ]; then diff_source blockpark "$tmp"; else hold_source blockpark "pr/dependencies read failed for >=1 park"; fi
   rm -f "$tmp"
 }
 
