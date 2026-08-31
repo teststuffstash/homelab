@@ -8,6 +8,23 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-08-31 EVENING CORPUS SESSION WIND-DOWN — the fresh-session pickup set (TICK-LOG has
+  the arc):**
+  - **VERIFY the switchboard cutover** (ADR-120; PR#1158 + eae8c51f): ArgoCD synced the rename
+    (WorkflowTemplate `switchboard` exists, `coordinate` gone, no coordinator-reflex cron); the
+    next graduated ring produces a seconds-long `switchboard-*` run (Loki ns agent-coordinator),
+    NOT a 1Gi board sweep; #994 auto-closed at merge. A wedged cutover shows as per-stack loops
+    still fine (they are independent) + repo-dumb rings falling to per-stack crons.
+  - Gate-read the next park convoy: queued set riding = #1148 #1149 #1151 #1152(leg2 merged via
+    PR#1155) #1153(blockedBy #1151) #1006-tail + agent-runtime #104 #105 #107 (finalize,
+    footprint-serialized). #1150 inert (assembly-CR→checkpoint edge — needs an ADR-110 read).
+  - #946/A5 CLOSED-shaped: seed 4/4 + free-tier comparison posted (no free reviewer; big-pickle
+    shadow-only, tolerant parse + one retry). Durable rec unfiled as issue: opencode-harness
+    branch in re-review.sh for opencode/* models (small seat PR when wanted).
+  - Oracle handoff done/ (2 tasks 2026-08-31) is disposable once read.
+  - Monitor hygiene for watch scripts: gh --jq takes NO --arg; reviewDecision never changes
+    across CR→CR re-verdicts (key on newest-verdict timestamp) — both bit this session.
+
 - **⚑ 2026-08-31 CORPUS SESSION WIND-DOWN (~11:45Z) — the fresh-session pickup set:**
   - **Goal #1039 assembly MERGED 11:39Z (PR#1119, full codeowner read done)** → VERIFY the next
     scan pass: `goal/post-launch` lands via IL-T18 (`Assembly-for:` trailer verified
@@ -473,10 +490,6 @@ standing set below; what differs is cadence and the act rule:
 - Probe hygiene: probes in SCRIPT FILES, dry-run under the real interpreter; watch the FAILURE
   signature explicitly; `PROBE-FAIL` over silent empty state. Monitors survive `/clear` and are
   invisible to TaskList — find leftovers by process and kill before re-arming.
-- **#518 one-home flip** (seat, after homelab PR#1147 merges — parked on reviewer at wind-down
-  2026-08-31): switch ci.yaml's inline PROM_PATHS/CLAUSE_PATHS greps to
-  `eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"` (+CLAUSE) in the changed-paths step —
-  operator-direct, must land AFTER the script exists on master.
 - **oracle-specs quota** (either jail, after oracle-iac#446 merges — auto-merge armed, CI green):
   verify `garage bucket info oracle-specs` shows 5Gi, then any fleet CI re-publish
   re-materializes the specs sites; close-purge of dead pr-*/ prefixes tracked oracle-fleet#318.
