@@ -94,6 +94,17 @@ groups:
         labels:
           severity: warning
 
+  # ── UnboundGithubServfail (homelab#1125) — DNS probe through Unbound for github names ────────
+  # expr and for byte-identical to the CR in blackbox.yaml; annotations stripped per the
+  # file convention (they are runbook prose, not firing behaviour).
+  - name: unbound-github
+    rules:
+      - alert: UnboundGithubServfail
+        expr: probe_success == 0
+        for: 3m
+        labels:
+          severity: warning
+
   # ── DIRECTION WITNESS — `max_over_time`, the class's default and the wrong function here ──────
   # Class rule (ii) at GithubRateLimitLow: `max_over_time` is the alert-PRESERVING function only
   # where HIGH is the bad reading. `probe_success == 0` is the opposite, so max holds the
