@@ -371,7 +371,7 @@ EOF_C9
   # FAIL-OPEN on a bad read (the FU-104 posture — availability of the gate < the gate): warn loudly
   # and let the per-PR count stand rather than park a lane on a flaky list. The window is the newest
   # 100 PRs of the repo, so anything missed can only UNDER-count.
-  # ⚠ The sibling-match rule (branch `issue-<n>-`, else body `#<n>`, both boundary-anchored) is
+  # ⚠ The sibling-match rule (branch `issue-<n>-`, else body closing keyword `#<n>`, both boundary-anchored) is
   # duplicated in coordinator-scan.sh's ci-red clause, which counts run-stats rounds on the same
   # key. Two copies WILL drift — change both or neither.
   rounds_total="$v_total"; rounds_key="PR #${pick}"
@@ -380,7 +380,7 @@ EOF_C9
                 --json number,headRefName,body,reviews 2>/dev/null)"; then
       sib_sum="$(printf '%s' "$sib" | jq -r --arg bot "$REVIEWER_LOGIN" --arg n "$pick_issue" '
         def refs($n): ((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)"))
-                      or ((.body // "") | test("(^|[^0-9])#" + $n + "([^0-9]|$)"));
+                      or ((.body // "") | test("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"));
         [ .[] | select(refs($n)) ]
         | "\(length) \([ .[] | .reviews[]?
               | select((.author.login // "") | startswith($bot))
