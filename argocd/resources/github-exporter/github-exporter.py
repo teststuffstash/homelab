@@ -150,6 +150,9 @@ _body = "# poller has not completed a cycle yet\n"
 _errors = 0
 _last_success = 0
 _dupes = 0  # duplicate sample lines collapsed by dedupe_exposition (#153) — 0 in a healthy poller
+_carryover = {}  # collector.__name__ → its last successful lines, republished while a new cycle
+                 # re-runs that collector (fixes the per-cycle no-data blinks on scrape); popped on
+                 # failure so a failed walk still publishes NOTHING for its families (absent ≠ zero)
 _first_successful_poll = True  # homelab#648: skip job timings backfill on first poll to avoid ~25m startup delay
 _review_dispatched = set()  # (repo, number, head_sha) already POSTed this process lifetime
 _cired_dispatched = set()   # (repo, number, head_sha) already red-doorbelled this lifetime (FU-115)
@@ -251,7 +254,7 @@ def metric(name, labels, value):
     return f"{name}{{{inner}}} {value}"
 
 
-def dedupe_exposition(lines):
+def dedupe_exposition(lines, count=True):
     """Collapse repeated samples of the same series, LAST WRITE WINS — the structural belt (#153).
 
     A series appearing twice in one exposition is exactly what Prometheus reports as "error on
@@ -267,7 +270,8 @@ def dedupe_exposition(lines):
     the scrape parser, which reads line by line, has always accepted it.) Identical header lines
     collapse to one, since some text parsers reject a second `# HELP` for a name. Counts what it
     collapsed into `_dupes`, which rides the exposition as a counter: if a new duplication path ever
-    appears, this fixes the metrics AND says so, instead of hiding it."""
+    appears, this fixes the metrics AND says so, instead of hiding it. `count=False` skips the
+    counter — for the cross-cycle carryover merge, where same-series overlap is expected."""
     global _dupes
     out, at, meta = [], {}, set()
     for line in lines:
@@ -279,7 +283,8 @@ def dedupe_exposition(lines):
         series = line.rsplit(" ", 1)[0]  # values never contain a space; label values are esc()aped
         if series in at:
             out[at[series]] = line
-            _dupes += 1
+            if count:
+                _dupes += 1
             continue
         at[series] = len(out)
         out.append(line)
@@ -1803,10 +1808,19 @@ def _run_poll_cycle(collectors):
     """Run one collection cycle: iterate collectors, accumulate/dedupe lines, publish incrementally.
 
     Returns True iff all collectors succeeded; False if any failed. Updates module globals:
-    _body (published lines + self-metrics), _dupes (dedup counter), _last_success (only on success).
-    """
+    _body (published lines + self-metrics), _dupes (dedup counter), _last_success (only on success),
+    _carryover (per-collector last successful lines).
+
+    Each publish also carries the PREVIOUS successful lines of every collector that hasn't run yet
+    this cycle. Without that, the first publish of a cycle dropped all later collectors' series for
+    the ~1 min the two GraphQL/Actions walks take, and any scrape landing in that window read
+    "No data" on every table riding those series (the agent-running queue panels blinked every
+    cycle; diagnosed 2026-08-31: 68/361 range points had github_agent_issue absent while
+    collector-1 series were present, errors_total 0). A FAILED collector still publishes nothing
+    for its families — its carryover is popped, keeping absent ≠ zero for the alerts."""
     global _body, _errors, _last_success, _first_successful_poll
-    accumulated = []  # all lines published so far this cycle
+    accumulated = []  # this cycle's deduped lines so far — dupe counting is per fresh cycle only
+    pending = [c.__name__ for c in collectors]  # not yet run this cycle → carryover applies
     ok = True
     for collector in collectors:
         try:
@@ -1814,15 +1828,13 @@ def _run_poll_cycle(collectors):
             collector(collector_lines)
             # Accumulate this collector's lines and deduplicate the full body so far
             accumulated.extend(collector_lines)
-            # Publish incrementally: accumulated lines + self-metrics, deduplicated each time
             before = _dupes
             published = dedupe_exposition(accumulated)  # dedupe the accumulated body
             accumulated = published  # keep only deduped lines for the next collector
             if _dupes > before:
                 print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) in {collector.__name__} "
                       f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
-            # Self-metrics: always appended, so they are always present even during a cold start
-            _publish_with_self_metrics(published)
+            _carryover[collector.__name__] = collector_lines
             # Clear _first_successful_poll once workflow_runs itself succeeds (not when all collectors do)
             if collector.__name__ == "collect_workflow_runs":
                 _first_successful_poll = False
@@ -1830,13 +1842,16 @@ def _run_poll_cycle(collectors):
             ok = False
             _errors += 1
             print(f"{collector.__name__} failed: {exc}", flush=True)
-            # Even on failure, publish what we have so far so the dashboard is never blank
-            before = _dupes
-            published = dedupe_exposition(accumulated)
-            accumulated = published  # keep only deduped lines for the next collector
-            if _dupes > before:
-                print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) after {collector.__name__} failure "
-                      f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
+            _carryover.pop(collector.__name__, None)  # absent ≠ zero: a failed walk publishes nothing
+            published = accumulated
+        # Publish: previous cycle's lines for the collectors still pending, then this cycle's fresh
+        # lines (carryover first, so a series present in both resolves to the fresh value —
+        # dedupe is last-write-wins). Self-metrics always appended, present even during cold start.
+        pending.remove(collector.__name__)
+        carry = [line for name in pending for line in _carryover.get(name, [])]
+        if carry:
+            _publish_with_self_metrics(dedupe_exposition(carry + published, count=False))
+        else:
             _publish_with_self_metrics(published)
     # Only update _last_success on a fully successful cycle (all collectors succeeded)
     if ok:
@@ -1986,15 +2001,19 @@ def _test_poll_forever_incremental_cycles():
 
     Verifies that (a) _body grows monotonically across collectors, (b) _dupes counts
     each real duplicate exactly once per cycle (the #669 round-2 regression), and
-    (c) _last_success advances only on a fully-successful cycle. The test calls the
-    real _run_poll_cycle() seam with fake collectors, asserting on MODULE GLOBALS."""
-    global _body, _dupes, _last_success, _first_successful_poll, _errors
+    (c) _last_success advances only on a fully-successful cycle; plus the carryover
+    semantics (the 2026-08-31 no-data-blink fix): (d) mid-cycle, a not-yet-rerun
+    collector's previous series stay published, and (e) a FAILED collector's series
+    vanish — absent ≠ zero survives. The test calls the real _run_poll_cycle() seam
+    with fake collectors, asserting on MODULE GLOBALS."""
+    global _body, _dupes, _last_success, _first_successful_poll, _errors, _carryover
     saved_time = time.time
     saved_first_successful_poll = _first_successful_poll
     saved_body = _body
     saved_dupes = _dupes
     saved_last_success = _last_success
     saved_errors = _errors
+    saved_carryover = _carryover
 
     cycle_times = [1000.0]  # mutable clock for time.time() mock
     def _mock_time():
@@ -2023,6 +2042,17 @@ def _test_poll_forever_incremental_cycles():
         """Failing collector: raises an exception."""
         raise RuntimeError("simulated collector failure")
 
+    def _collector2_expects_carryover(lines):
+        """Runs where _collector2 would: by now only _collector1 has re-run this cycle, so
+        _collector3's PREVIOUS series (job5) must still be in the published body (d)."""
+        assert 'test_metric{job="job5"} 5' in _body, \
+            "carryover: collector3's previous series must survive collector1's mid-cycle publish"
+        _collector2(lines)
+
+    def _collector3_fails(lines):
+        raise RuntimeError("simulated collector3 failure")
+    _collector3_fails.__name__ = _collector3.__name__  # fail the collector that HAS carryover
+
     try:
         time.time = _mock_time
 
@@ -2031,6 +2061,7 @@ def _test_poll_forever_incremental_cycles():
         _body = "# initial\n"
         _last_success = 0
         _errors = 0
+        _carryover = {}
         cycle_times[0] = 1000.0
 
         # Call the real _run_poll_cycle() with fake collectors
@@ -2070,6 +2101,21 @@ def _test_poll_forever_incremental_cycles():
         assert ok is True, "cycle 3 should succeed"
         assert _last_success == 3000, "_last_success should advance on full success (was 0, now should be 3000)"
 
+        # Test cycle 4 (d): mid-cycle, collector3's previous series must still be published —
+        # the probe collector asserts on _body from inside the cycle.
+        cycle_times[0] = 4000.0
+        ok = _run_poll_cycle((_collector1, _collector2_expects_carryover, _collector3))
+        assert ok is True, "cycle 4 should succeed (carryover probe asserts inside)"
+
+        # Test cycle 5 (e): the collector WITH carryover fails — its series must vanish
+        # (absent ≠ zero), while the successful collectors' series stay.
+        cycle_times[0] = 5000.0
+        ok = _run_poll_cycle((_collector1, _collector2, _collector3_fails))
+        assert ok is False, "cycle 5 should fail"
+        assert 'test_metric{job="job5"} 5' not in _body, \
+            "a failed collector's carryover must be dropped — absent ≠ zero"
+        assert 'test_metric{job="job2"} 2' in _body, "successful collectors' series must stay"
+
     finally:
         time.time = saved_time
         _first_successful_poll = saved_first_successful_poll
@@ -2077,6 +2123,7 @@ def _test_poll_forever_incremental_cycles():
         _dupes = saved_dupes
         _last_success = saved_last_success
         _errors = saved_errors
+        _carryover = saved_carryover
 
 
 def self_test():
