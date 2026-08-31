@@ -74,7 +74,7 @@ an ephemeral in-cluster runner** — same policy question, same per-project answ
   endpoint IPs at dispatch (`resolve_ep` in agent-session.sh) — kata guests can't reach service
   VIPs (FU-072); delete the rewrites when that lands.
 
-## The MCP knob (`spec.mcp`, FU-1039)
+## The MCP knob (`spec.mcp`, #1039)
 
 `spec.mcp` is a **stack-wide** knob declaring the stack's MCP (Model Context Protocol) tool server
 endpoint. When present, the Composition renders the endpoint's HOST (derived from the URL) into
