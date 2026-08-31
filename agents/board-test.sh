@@ -71,13 +71,15 @@ board() {
 readonly_calls() { # readonly_calls <desc> <actions-file>
   local desc="$1" act="$2" n
   n="$(grep -c . "$act" 2>/dev/null || true)"
-  if [ "$n" = 3 ] \
-     && [ "$(grep -c '^CALL kubectl' "$act" || true)" = 1 ] \
-     && [ "$(grep -c '^CALL gh issue list ' "$act" || true)" = 1 ] \
+  # The platform-request slice (ADR-119) adds 2 more calls: kubectl get all agentstacks
+  # and gh issue list --label platform-request. Total = 5.
+  if [ "$n" = 5 ] \
+     && [ "$(grep -c '^CALL kubectl' "$act" || true)" = 2 ] \
+     && [ "$(grep -c '^CALL gh issue list ' "$act" || true)" = 2 ] \
      && [ "$(grep -c '^CALL gh pr list ' "$act" || true)" = 1 ]; then
-    ok "$desc — exactly 3 reads (kubectl claim + issue list + pr list), no mutations"
+    ok "$desc — exactly 5 reads (2 kubectl + 2 issue list + 1 pr list), no mutations"
   else
-    bad "$desc — expected exactly 3 read calls (claim, issue list, pr list)" "$(cat "$act")"
+    bad "$desc — expected exactly 5 read calls (2 kubectl + 2 issue list + 1 pr list)" "$(cat "$act")"
   fi
 }
 
@@ -128,6 +130,14 @@ present "solve: the error-latched seat PR shows under SOLVE"        "⛔ circles
 present "backlog: aggregate pins count + oldest math" \
   "circles: 3 suitable-unqueued (oldest 17d)" "$SEC_BACKLOG"
 absent "backlog: a state-labelled issue is not suitable-unqueued"         "circles#110" "$SEC_BACKLOG"
+# ── the DEMAND section (ADR-119) ──────────────────────────────────────────────────────────────
+SEC_DEMAND="$(section '§ DEMAND (platform-request)' "$BOARD_OUT")"
+present "demand: platform-request section renders" "§ DEMAND (platform-request)" "$BOARD_OUT"
+present "demand: capability fingerprint shown" "public-edge.abuse-fairness" "$SEC_DEMAND"
+present "demand: oldest age shown" "oldest 17d" "$SEC_DEMAND"
+present "demand: stack count shown" "1 stacks" "$SEC_DEMAND"
+present "demand: first issue listed" "circles#116 public edge fairness" "$SEC_DEMAND"
+present "demand: second issue listed" "circles#117 circles edge fairness" "$SEC_DEMAND"
 
 # ══ 2. --full expands the backlog beneath the unchanged aggregate ═════════════════════════════
 board "$TMP/full.actions" "$TMP/full.err" "" platform --full
@@ -143,6 +153,12 @@ present "full: aggregate line unchanged under --full" "circles: 3 suitable-unque
 present "full: backlog detail is sorted by number (oldest first)" "  circles#108 suitable backlog older (17d)" "$BOARD_OUT"
 present "full: backlog detail includes the newer row"             "  circles#109 suitable backlog newer (16d)" "$BOARD_OUT"
 present "full: backlog detail includes the bot row"               "  circles#113 bot queued fix (17d)" "$BOARD_OUT"
+# ── DEMAND section under --full (ADR-119) ─────────────────────────────────────────────────────
+SEC_DEMAND_FULL="$(section '§ DEMAND (platform-request)' "$BOARD_OUT")"
+present "full-demand: platform-request section renders" "§ DEMAND (platform-request)" "$BOARD_OUT"
+present "full-demand: capability fingerprint shown" "public-edge.abuse-fairness" "$SEC_DEMAND_FULL"
+present "full-demand: oldest age shown" "oldest 17d" "$SEC_DEMAND_FULL"
+present "full-demand: stack count shown" "1 stacks" "$SEC_DEMAND_FULL"
 
 # ══ 3. the PROBE-FAILED loudness — a failed read is a WARN + a skipped repo, never a clean ═══
 # board.sh cannot regress to fail-open: a gh probe that dies must still surface as a loud,
@@ -160,6 +176,9 @@ present "probe-fail: issue-list probe failure is WARNed (with the loud-absence c
   "$(cat "$TMP/probe.err")"
 present "probe-fail: PR-list probe failure is WARNed" \
   "WARN board: teststuffstash/circles PR list PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" \
+  "$(cat "$TMP/probe.err")"
+present "probe-fail: platform-request probe failure is WARNed" \
+  "WARN board: teststuffstash/circles platform-request probe PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" \
   "$(cat "$TMP/probe.err")"
 
 printf '\n  %s passed, %s failed\n' "$PASS" "$FAIL"
@@ -247,6 +266,11 @@ present "machine: container row (who=none)" "who=none     class=container id=hom
 present "machine: item absent from timestamp series renders unknown" "since=unknown" "$BOARD_OUT"
 absent "machine: no § REVIEW section" "§ " "$BOARD_OUT"
 absent "machine: no totals line" "totals —" "$BOARD_OUT"
+# ── platform-request rows in machine mode (ADR-119) ────────────────────────────────────────────
+present "machine: platform-request row" "who=operator class=platform-request" "$BOARD_OUT"
+present "machine: platform-request capability" "capability=public-edge.abuse-fairness" "$BOARD_OUT"
+present "machine: platform-request stacks count" "stacks=1" "$BOARD_OUT"
+present "machine: platform-request oldest age" "oldest=17d" "$BOARD_OUT"
 
 # ══ --scope content assertions (homelab#914) ═══════════════════════════════════════════════
 # The two --scope cases below test BOTH flag forms AND assert row content. The curl stub's
