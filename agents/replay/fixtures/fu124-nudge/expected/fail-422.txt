@@ -1,0 +1,3 @@
+CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/101/update-branch -f expected_head_sha=abc123def456
+OUT   [testrepo] FU-124: update-branch on PR #101 failed (422 = race safe; other = investigate) — updater cron remains the backstop
+RC 0

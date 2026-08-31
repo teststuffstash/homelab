@@ -1,0 +1,5 @@
+# fu124-nudge — decision table
+# id       | world | patch (relpath @ patches/*.jq)          | env | expect       | params
+noop      | board |                                           |     | noop         |
+success   | board | gh/pr-list.json @ patches/add-behind.jq   |     | success      |
+fail-422  | board | gh/pr-list.json @ patches/add-behind.jq   | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | fail-422 |

@@ -1,0 +1,24 @@
+# fu124-nudge — the FU-124 deterministic nudge (homelab#1006, third call site of the #986 defect class)
+#
+# WHAT IT PINS. The coordinator-scan's FU-124 nudge loop calls `gh api -X PUT .../update-branch`
+# for every armed+BEHIND PR. After homelab#1006, it passes `expected_head_sha` from the PR's
+# `headRefOid` (fetched in the `prsjson` snapshot), preventing the clobber-race that #986 fixed
+# in `update-pr-branch.sh`. The failure message is reworded to acknowledge 422 as a safe race
+# outcome rather than misreporting it as a token-scope gap.
+#
+# THE CONTRACT:
+#   1. No armed+BEHIND PRs → no call, no output (level-triggered idempotency)
+#   2. One armed+BEHIND PR → nudge called with expected_head_sha, success message printed
+#   3. One armed+BEHIND PR, API fails → failure message printed (422 = race safe; other = investigate)
+#
+# The `prsjson` snapshot is set up by the bridge from the world file. The `gh api` call is a
+# mutation (PUT), so the stub records it and returns success by default. For the failure row,
+# the per-call override STUB_GH_<slug> injects the failure.
+name: fu124-nudge
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:fu124-nudge
+world: board
+rows: rows.psv
