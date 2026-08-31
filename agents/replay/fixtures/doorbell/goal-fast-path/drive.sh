@@ -11,4 +11,12 @@ echo "REACHED: issue no longer agent/queued — settles, full scan decides"
 fast_unit_dispatch "goal-decompose|circles|issue-7"
 printf 'RETURN %s\n' "$?"
 
+echo "REACHED: legitimate goal-checkpoint unit — dispatches"
+fast_unit_dispatch "goal-checkpoint|circles|issue-8"
+printf 'RETURN %s\n' "$?"
+
+echo "REACHED: valueless Base: on decompose leg — refuses"
+fast_unit_dispatch "goal-decompose|circles|issue-9"
+printf 'RETURN %s\n' "$?"
+
 echo "REACHED: end"

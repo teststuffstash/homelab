@@ -15,6 +15,11 @@
 #                     (the loop may not authorise its own goal); the ring settles, full scan
 #                     decides.
 #   moved-on          issue no longer carries agent/queued — settles, full scan decides.
+#   checkpoint-dispatch  goal-checkpoint|circles|issue-8 with a LIVE goal (open, task/goal,
+#                     agent/blocked, no agent/error) — the fast path dispatches. agent/blocked
+#                     is NOT a breaker for checkpoint, and agent/queued is NOT required.
+#   valueless-base    goal-decompose|circles|issue-9 with a Base: line that has no content
+#                     after the colon — the fast path REFUSES (homelab#828 r2 finding 2).
 name: doorbell-goal-fast-path
 mode: actions
 source: agents/coordinator-scan.sh

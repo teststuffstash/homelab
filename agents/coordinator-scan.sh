@@ -800,11 +800,11 @@ fast_unit_dispatch() {
   fi
   [ "$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.coordinatorEnabled // false')" = "true" ] \
     || { echo "unit fast-path: coordinator.enabled=false for ${fstack}"; return 1; }
-  # ── GOAL-CLAUSE BRANCH: issue-shaped re-validation ────────────────────────────────────────
-  # goal-decompose and goal-checkpoint units carry issue-N items. Re-validate live with an
-  # issue-shaped probe that is no weaker than the main scan's predicate for these clauses
-  # (homelab#828). Probe failure → full scan decides (conservative, unchanged).
-  if [ "$fclause" = "goal-decompose" ] || [ "$fclause" = "goal-checkpoint" ]; then
+  # ── GOAL-DECOMPOSE BRANCH: issue-shaped re-validation ─────────────────────────────────────
+  # goal-decompose units carry issue-N items. Re-validate live with an issue-shaped probe that
+  # is no weaker than the main scan's predicate for these clauses (homelab#828).
+  # Probe failure → full scan decides (conservative, unchanged).
+  if [ "$fclause" = "goal-decompose" ]; then
     fijson="$(gh issue view "${fitem#issue-}" --repo "${ORG}/${frepo}" \
       --json state,labels,body 2>/dev/null)" \
       || { echo "unit fast-path: issue probe FAILED"; return 1; }
@@ -831,12 +831,38 @@ fast_unit_dispatch() {
       echo "unit fast-path: goal #${fitem#issue-}: could not read who applied agent/queued — refusing to dispatch (fail-closed)"
       return 0
     fi
-    # Base: line mandatory on task/goal containers (homelab#1053).
+    # Base: line mandatory on task/goal containers (homelab#1053). Mirror the main scan's
+    # regex: require at least one character after the colon (homelab#828 r2 finding 2).
     fqbody="$(jq -r '.body // ""' <<<"$fijson")"
-    if ! printf '%s' "$fqbody" | grep -qi '^base[[:space:]]*:' >/dev/null 2>&1; then
+    if ! printf '%s' "$fqbody" | grep -qiP '^[ \t]*base:[ \t]*.+' >/dev/null 2>&1; then
       echo "unit fast-path: goal #${fitem#issue-} has no Base: body line — refusing to dispatch"
       return 0
     fi
+    # Re-validated. Set fprjson to empty so the PR-specific checks below are skipped.
+    fprjson=""
+  # ── GOAL-CHECKPOINT BRANCH: issue-shaped re-validation ────────────────────────────────────
+  # goal-checkpoint units carry issue-N items. Re-validate live with an issue-shaped probe
+  # that is no weaker than the main scan's predicate for this clause (homelab#828).
+  # A checkpoint-eligible goal carries task/goal + agent/blocked by design — agent/queued is
+  # NOT required and agent/blocked is NOT a breaker for this clause.
+  # Probe failure → full scan decides (conservative, unchanged).
+  elif [ "$fclause" = "goal-checkpoint" ]; then
+    fijson="$(gh issue view "${fitem#issue-}" --repo "${ORG}/${frepo}" \
+      --json state,labels 2>/dev/null)" \
+      || { echo "unit fast-path: issue probe FAILED"; return 1; }
+    [ "$(jq -r .state <<<"$fijson")" = "OPEN" ] || { echo "unit fast-path: issue not open"; return 0; }
+    # Must still carry task/goal (the label that makes it a goal).
+    jq -e '.labels|map(.name)|index("task/goal")' >/dev/null <<<"${fijson:-null}" \
+      || { echo "unit fast-path: issue no longer task/goal"; return 0; }
+    # Breaker: agent/error (FU-069 human-first) only. agent/blocked is NOT a breaker for
+    # checkpoint — a checkpoint-eligible goal carries agent/blocked by design.
+    jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"${fijson:-null}" \
+      && { echo "unit fast-path: agent/error breaker on the issue — human-first"; return 0; }
+    # Breaker #1 (actor probe) is intentionally SKIPPED for checkpoint: the main scan does
+    # not apply it at the checkpoint site, and the fqactor probe reads agent/queued events
+    # which a checkpoint-eligible goal never has — an unchanged port would fail-closed on
+    # empty and settle every legitimate checkpoint unit (homelab#828 r2 finding 1).
+    # Base: check is also skipped — the main scan does not gate Base: at checkpoint.
     # Re-validated. Set fprjson to empty so the PR-specific checks below are skipped.
     fprjson=""
   else
