@@ -2191,7 +2191,7 @@ EOF_GOVERNANCE
         ' 2>/dev/null)" || cr_reviews=""
       fi
       if [ -n "$cr_reviews" ]; then
-        head8="$(printf '%s' "$cr_probe" | jq -r '[.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .oid][0] // ""' 2>/dev/null | head -c8)"
+        head8="$(printf '%s' "$cr_probe" | jq -r '([.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | head -c8)"
         orphans="${orphans}[$repo] ⏳ changes-requested held (re-review pending — round pushed ${head8}):\n  PR #${u}\n"
         continue
       fi

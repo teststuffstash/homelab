@@ -8,6 +8,10 @@
 # (2026-08-26T17:31:42Z) is newer than the newest review (2026-08-26T17:23:07Z), so the hold fires.
 # The FU-147 no-op probe is never reached.
 #
+# The world carries TWO non-merge commits (round 1 aaaaaaaa1111, round 2 cccccccc1111), both older
+# than any merge commit. This pins the oid-selection behaviour: the probe MUST pick the NEWEST
+# (cccccccc1111, via sort_by(.committedDate) | last) rather than index 0 (aaaaaaaa1111).
+#
 # THE CONTRACT:
 #   1. A `gh pr view` call is made for the reviewable_again probe (with reviews added).
 #   2. No UNIT is emitted — the hold fires.
