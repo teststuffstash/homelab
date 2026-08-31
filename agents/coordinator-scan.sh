@@ -42,8 +42,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # `set -u` clause never hits an unbound variable whose default lives outside the block.
 # Add new defaults here when a replayed block references them.
 ORG="${ORG:-teststuffstash}"
-REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
-ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"
+REPO_MAX_WIP="${REPO_MAX_WIP:-3}"   # ADR-097 hard ceiling: concurrent workers per repo. TRACKS rule 1 counts armed PRs per base; was binary WIP=1 until meta-8 proved two dispatchers race inside one scan window (2026-07-21 #55). 3 allows slack for a second worker without unbounded concurrency.
+ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"   # homelab#840: gh's unstated 30-result default silently hid queued #110 for 24 days (46 open issues, window floor #840). 200 is well above any repo's open-issue count; the scan prints a loud TRUNCATED warning if the fetch fills the limit.
 # <<<REPLAY:config-defaults<<<
 STACKS_FILE="${STACKS_FILE:-${HERE}/stacks.json}"
 SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
