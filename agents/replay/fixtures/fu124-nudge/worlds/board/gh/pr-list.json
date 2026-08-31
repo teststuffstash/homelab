@@ -1,0 +1,14 @@
+[
+  {
+    "number": 90,
+    "mergeStateStatus": "CLEAN",
+    "autoMergeRequest": { "enabledAt": "2026-08-20T10:01:00Z" },
+    "headRefOid": "abc123def456"
+  },
+  {
+    "number": 91,
+    "mergeStateStatus": "BEHIND",
+    "autoMergeRequest": null,
+    "headRefOid": "789012ghi345"
+  }
+]
