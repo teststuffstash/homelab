@@ -29,8 +29,8 @@
 # an auto-detect that falls back to "treat as report" would commit the raw log as the report,
 # the failure class this helper exists to close.
 #   log    — <in> is a RIDE LOG: BOTH markers are REQUIRED. The block between them is extracted
-#            with the harvest's OWN extraction command, verbatim —
-#            `sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' | sed '1d;$d'` — so the
+#            with the harvest's OWN extraction: the awk last-complete-block pass below
+#            (homelab#1096 — the old repeating sed range concatenated every block) — so the
 #            self-check and the harvest can never disagree about what a "report" is
 #            (agents/coordinator/retro-argo.yaml, both callers). Missing/partial markers →
 #            reason `no-markers`, whatever else the log contains.
