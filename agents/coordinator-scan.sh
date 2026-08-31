@@ -351,6 +351,20 @@ STATE_FP_JQ='[ "head=" + (.headRefOid // "")
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
                     | .submittedAt ] | max // "")
   ] | join("|")'
+# ci-red clause fingerprint (homelab#1108): same as STATE_FP_JQ but folds each check's startedAt
+# into the checks line, so a CI rerun (same head_sha, new startedAt) changes the hash and the
+# debounce releases. Deliberately NOT used by arbitrate — per-check churn was re-arming arbitrate
+# as noise (homelab#1011); the two clauses want different sensitivity, which is itself the finding.
+STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
+  , "review=" + (.reviewDecision // "NONE")
+  , "checks=" + ([ .statusCheckRollup[]?
+                   | ((.name // .context // "?") + "="
+                      + (((.conclusion // .state) // "") | if . == "" then "PENDING" else . end)
+                      + "@" + (.startedAt // "")) ]
+                 | sort | join(","))
+  , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
+                    | .submittedAt ] | max // "")
+  ] | join("|")'
 # Newest recorded marker, by comment createdAt — `last` on the raw list would trust gh ordering.
 STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}")) ]
   | sort_by(.createdAt) | last // {})
@@ -358,18 +372,25 @@ STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-
   | sub("^state-fp:"; "")'
 # <<<REPLAY:state-fp-jq<<<
 
-# pr_state_fp_pair <slug> <pr> → "<current>|<recorded>", either side empty when unknown.
+# pr_state_fp_pair <slug> <pr> [clause] → "<current>|<recorded>", either side empty when unknown.
 # ONE probe answers both halves, so the comparison can never straddle two snapshots of the PR.
-# Always exits 0: under `set -e` a probe failure here must skip the guard, never kill the scan.
+# When clause is "ci-red" uses STATE_FP_JQ_CIRED (includes check startedAt — homelab#1108) so a
+# CI rerun changes the fingerprint; other clauses use STATE_FP_JQ (homelab#1011: per-check churn
+# must NOT re-arm arbitrate). Always exits 0: under `set -e` a probe failure here must skip the
+# guard, never kill the scan.
 # >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
   # Declared on their own line, never `local x="$(cmd)"` — that form makes `local` the command
   # whose status is tested, so the `|| fallback` and `set -e` both read the wrong exit code.
-  local fp_probe fp_raw fp_prev fp_cur
+  local fp_probe fp_raw fp_prev fp_cur fp_jq
   fp_probe="$(gh pr view "$2" --repo "$1" \
       --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments 2>/dev/null)" || fp_probe=''
   if ! jq -e . >/dev/null 2>&1 <<<"${fp_probe:-null}"; then printf '%s|%s\n' '' ''; return 0; fi
-  fp_raw="$(printf '%s' "$fp_probe" | jq -r "$STATE_FP_JQ" 2>/dev/null)" || fp_raw=''
+  case "${3:-}" in
+    ci-red) fp_jq="$STATE_FP_JQ_CIRED" ;;
+    *)      fp_jq="$STATE_FP_JQ" ;;
+  esac
+  fp_raw="$(printf '%s' "$fp_probe" | jq -r "$fp_jq" 2>/dev/null)" || fp_raw=''
   fp_prev="$(printf '%s' "$fp_probe" | jq -r "$STATE_FP_LAST_JQ" 2>/dev/null)" || fp_prev=''
   fp_cur=''
   # `sha256sum` is coreutils, which this script already requires (`date -u -d`), but a missing
@@ -3101,7 +3122,7 @@ EOF_GOVERNANCE
           # the anti-livelock), and `continue` before the cap so a debounced PR never spends one of
           # the two dispatch slots a live red PR could use.
           # >>>REPLAY:ci-red-gate>>>
-          rfp="$(pr_state_fp_pair "$slug" "$u")"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
+          rfp="$(pr_state_fp_pair "$slug" "$u" ci-red)"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
           if [ -n "$rfp_cur" ] && [ "$rfp_cur" = "$rfp_prev" ]; then
             orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
             continue
@@ -3386,13 +3407,13 @@ EOF_GOVERNANCE
     # >>>REPLAY:dispatch-marker>>>
     case "${uclause}:${uitem}" in
       arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*|merge-conflict:pr-*)
-        dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "${uitem#pr-}")"; dfp="${dfp%%|*}"
+        dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "${uitem#pr-}" "${uclause}")"; dfp="${dfp%%|*}"
         if [ -z "$dfp" ]; then
           echo "  WARN: state fingerprint unreadable for ${urepo} ${uitem} — dispatching anyway; the ${uclause} debounce cannot arm this pass (homelab#198)" >&2
         elif ! gh pr comment "${uitem#pr-}" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
               "🤖 \`state-fp:${dfp}\` — deterministic scan dispatching a \`${uclause}\` unit at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
               "" \
-              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
+              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
           echo "  WARN: could not record state-fp on ${urepo} ${uitem} (gh write refused?) — dispatching anyway; the ${uclause} clause will re-emit on unchanged state (homelab#198)" >&2
         fi
         ;;
