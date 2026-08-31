@@ -102,6 +102,7 @@ evaluate() {
   repo="$1"; ref="$2"; pr="$3"; author="$4"
   VIOLATIONS=0
   GITLEAKS_TOOL_ERROR=0
+  KYVERNO_TOOL_ERROR=0
   tree="$WORK/${repo}-${ref}"
   t0=$(now_ms)
   mkdir -p "$tree"
@@ -160,10 +161,23 @@ evaluate() {
     krc=$?
     if [ $krc -ne 0 ]; then
       nfail="$(printf '%s' "$kout" | grep -oE 'fail: [0-9]+' | grep -oE '[0-9]+' | head -1)"
-      VIOLATIONS=$((VIOLATIONS + ${nfail:-1}))
-      log "[$repo#$pr@$ref] VIOLATION kyverno (${nfail:-?} failing):"
-      printf '%s\n' "$kout" | grep -E "fail|→|message" | head -20 | sed 's/^/    /'
-      metric "iac_sentinel_violations{repo=\"$repo\",pr=\"$pr\",rule=\"kyverno\"} ${nfail:-1}"
+      if [ -z "$nfail" ]; then
+        # homelab#1134 — the gitleaks discrimination, ported: kyverno exiting non-zero WITHOUT a
+        # `fail: N` summary is the ENGINE erroring (a broken binary, a flag change, a loader
+        # regression — the 1.19.0 bump froze 8/8 open PRs this way), not a manifest violating a
+        # policy. A tool error is a PROBE failure: error status, healed next tick — never a
+        # "violation" with rule `?` and no detail, which reads as a policy verdict and is
+        # permanent instead of self-healing.
+        log "[$repo#$pr@$ref] kyverno TOOL ERROR (rc=$krc, no fail-summary) — probe failed, not a finding:"
+        printf '%s\n' "$kout" | head -8 | sed 's/^/    /'
+        metric "iac_sentinel_probe_failed{repo=\"$repo\",pr=\"$pr\"} 1"
+        KYVERNO_TOOL_ERROR=1
+      else
+        VIOLATIONS=$((VIOLATIONS + nfail))
+        log "[$repo#$pr@$ref] VIOLATION kyverno (${nfail} failing):"
+        printf '%s\n' "$kout" | grep -E "fail|→|message" | head -20 | sed 's/^/    /'
+        metric "iac_sentinel_violations{repo=\"$repo\",pr=\"$pr\",rule=\"kyverno\"} ${nfail}"
+      fi
     fi
   fi
   t_kyverno=$(( $(now_ms) - t0 ))
@@ -236,10 +250,10 @@ for repo in $SENTINEL_REPOS; do
       fi
     fi
     if evaluate "$repo" "$sha" "$num" "$author"; then
-      if [ "${GITLEAKS_TOOL_ERROR:-0}" -ne 0 ]; then
+      if [ "${GITLEAKS_TOOL_ERROR:-0}" -ne 0 ] || [ "${KYVERNO_TOOL_ERROR:-0}" -ne 0 ]; then
         # an engine that could not run means the verdict is INCOMPLETE — fail closed as a probe
         # error (never success, and never a "violation" with a bogus reason); next tick retries.
-        post_status "$repo" "$sha" error "sentinel probe failed (gitleaks tool error) — retries next tick"
+        post_status "$repo" "$sha" error "sentinel probe failed (engine tool error) — retries next tick"
       elif [ "$VIOLATIONS" -eq 0 ]; then
         post_status "$repo" "$sha" success "0 violations (kyverno + gitleaks + path-rule)"
       else
