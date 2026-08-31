@@ -222,7 +222,10 @@ catalog problem.
   scoped; item sessions dispatch into the loop home (`coordinator-session.sh --loop-ns`) and
   reach the fixer namespaces through the cross-ns loop RoleBindings — no cluster-scoped grant.
   The GLOBAL reflex SKIPS graduated stacks (a fourth knob, `loop.graduated`, also renders the
-  per-stack `review-<stack>` cron); Argo Events (bus + Sensors) deliberately stay global —
+  per-stack `review-<stack>` cron) — and since ADR-120 (2026-08-31) the global coordinate surface
+  is the **[switchboard](../glossary.md)**: Sensor-edge-only resolver (repo-dumb rings + capacity fan-out), its
+  cron retired, so an UNGRADUATED stack has NO scan path until its claim flips these knobs
+  (the switchboard warns per ring); Argo Events (bus + Sensors) deliberately stay global —
   trigger plumbing is dumb pipe, and a per-stack JetStream bus is 3×1Gi of state for near-zero
   event volume; the global Sensors route graduated events INTO `<stack>-agents` data-driven
   (`body.loop_ns` — coordinate doorbell, and the review edge since FU-100, 2026-07-27). Oracle

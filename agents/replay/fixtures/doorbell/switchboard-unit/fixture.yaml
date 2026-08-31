@@ -1,0 +1,16 @@
+# switchboard-unit (ADR-120 / FU-144 delegation) — a repo-dumb UNIT ring resolves its repo to a
+# graduated stack and forwards the unit in the re-ring (delegation, never a weaker check: the
+# stack's own scan re-validates). The run ends there; no board scan.
+name: switchboard-unit
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:../switchboard-shared/bridge.sh
+  - block:doorbell-fanout
+  - block:switchboard
+env:
+  - SPAWN=1
+  - SWITCHBOARD=1
+  - SCAN_RING_NS=-
+  - SCAN_UNIT=changes-requested|circles|pr-9
+  - SCAN_REPO=circles

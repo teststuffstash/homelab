@@ -669,12 +669,13 @@ spec:
             ---
             # The stack's OWN coordinate backstop (FU-080 endgame shape): scan scoped to this
             # stack (SCAN_STACK), running in {{ $loopns }} as agentstack-loop, git creds fetched
-            # per-op from the proxy (TokenReview) — zero Secrets in this namespace. The GLOBAL
-            # coordinator-reflex keeps running as the migration belt (compare-then-write +
-            # idempotency guards make dual-run safe) UNTIL a stack sets loop.graduated: the global
-            # scan then SKIPS it (coordinator-scan.sh) and the doorbell edge routes here (the global
-            # `coordinator` Sensor inlines a per-stack Workflow from the emitter body — see
-            # coordinate-argo.yaml §per-stack routing). The two flip together off ONE flag.
+            # per-op from the proxy (TokenReview) — zero Secrets in this namespace. This cron IS
+            # the level-triggered failure detector for the stack (ADR-120: the global
+            # coordinator-reflex retired 2026-08-31 — the global surface is the SWITCHBOARD,
+            # Sensor-edge-only resolver; an UNGRADUATED stack therefore has NO scan path until
+            # loop.perStack/graduated flip — the switchboard warns per ring). The doorbell edge
+            # routes here (the global `coordinator` Sensor inlines a per-stack Workflow from the
+            # emitter body — see coordinate-argo.yaml §per-stack routing).
             apiVersion: argoproj.io/v1alpha1
             kind: CronWorkflow
             metadata:

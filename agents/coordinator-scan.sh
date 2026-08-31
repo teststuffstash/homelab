@@ -23,9 +23,9 @@
 # probe — a 403 skips it loudly); rounds-exhausted = the arbitrate clause (both 2026-07-27). Both
 # of those two are CURRENCY-gated as well as condition-gated (homelab#198): a condition that holds
 # over unchanged PR state is a report line, not a fresh unit — see §PR STATE FINGERPRINT below. The
-# `coordinator-reflex` CronJob (agents/coordinator/coordinator-reflex.yaml, FU-050) runs `--spawn` on a
-# schedule — deployed SUSPENDED until the operator flips it (kubectl patch cronjob coordinator-reflex
-# -n agent-coordinator -p '{"spec":{"suspend":false}}').
+# per-stack `coordinate-<stack>` CronWorkflows run `--spawn` on their schedules (the level
+# backstop); the GLOBAL surface is the switchboard (`--switchboard`, ADR-120) — Sensor-edge only,
+# its `coordinator-reflex` cron retired 2026-08-31 (18/18 no-op ticks; nothing to catch).
 #
 # STACK SOURCE — `stacks_json()` is the single swap-point: TODAY it reads agents/stacks.json; the
 # TARGET is the cluster, where each stack's -iac repo owns a Crossplane `AgentStack` claim and this reads
@@ -47,6 +47,10 @@ ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"   # homelab#840: gh's unstated 30-re
 # <<<REPLAY:config-defaults<<<
 STACKS_FILE="${STACKS_FILE:-${HERE}/stacks.json}"
 SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
+# ADR-120: --switchboard = the global Sensor edge's mode. Spawn semantics for the fan-out gates
+# (fanout_eligible tests SPAWN), plus the SWITCHBOARD terminal below — resolve/fan out, then
+# exit BEFORE any GitHub listing. The global instance never board-scans any more.
+SWITCHBOARD=""; [ "${1:-}" = "--switchboard" ] && { SPAWN=1; SWITCHBOARD=1; }
 # ADR-097 footprint-intersection dispatch: the predicate lives in a sourceable helper so the
 # double-dispatch belt (agents/footprint-test.sh, in ci) exercises the exact code the scan runs.
 # Source touches-check.sh which contains fp_norm_entry, fp_pair_conflict, fp_conflict,
@@ -382,7 +386,7 @@ pr_state_fp_pair() {
 # <<<REPLAY:state-fp-pair<<<
 
 # homelab#155 belt: how long a phantom `agent/in-progress` (no pod, no PR) must PERSIST before the
-# scan reconciles the label itself. One full scan interval is the */10 coordinator-reflex cron
+# scan reconciles the label itself. One full scan interval is the */30 per-stack coordinate-<stack> cron
 # (agents/coordinator/reflexes-argo.yaml); 15 min is that plus margin for cron jitter and the
 # doorbell, so the belt can never actuate on the same instant of state it first observed. The
 # asymmetry sets the default: a phantom held one extra pass costs 10 minutes, a wrongly cleared
@@ -429,8 +433,9 @@ fi
 #   - FULL scans only. A unit fast-path scan (SCAN_UNIT set) is NARROWER than a pending full
 #     sweep — absorbing one would silently drop work (rule #6).
 #   - Name prefix `coordinate` catches the Sensor's `coordinate-`/`coordinate-perstack-` and the
-#     per-stack `coordinate-<stack>` cron children; it deliberately misses `coordinator-reflex`
-#     (different spelling), `review-*`, `janitor-*` — those are different functions, not rings.
+#     per-stack `coordinate-<stack>` cron children; it deliberately misses `switchboard-*`
+#     (the ADR-120 global runs — seconds-long resolvers, nothing to absorb), `review-*`,
+#     `janitor-*` — those are different functions, not rings.
 #   - Fail-open, loudly: an unreadable list or refused delete absorbs nothing and the extra
 #     workflow just runs behind the mutex — today's behavior, never a lost edge.
 # >>>REPLAY:doorbell-collapse>>>
@@ -752,6 +757,47 @@ case "${SCAN_SOURCE:-}" in capacity)
   fi
 ;; esac
 # <<<REPLAY:doorbell-fanout<<<
+
+# ── SWITCHBOARD TERMINAL (ADR-120, homelab#994) ────────────────────────────────────────────────
+# The global instance is a RESOLVER, not a coordinator: with every stack graduated it may only
+# (1) drop a ring the Sensor already routed per-stack (the #994 junk shape — 92% of global runs
+# were full board sweeps that dispatched nothing by construction), (2) finish after the capacity
+# fan-out above, (3) delegate a repo-dumb unit ring to its stack's own loop (FU-144), or
+# (4) fan a repo-dumb full ring out to the graduated stacks. It NEVER lists GitHub. A dropped or
+# ineligible ring costs nothing durable — the per-stack */30 crons re-derive all real work (the
+# level-triggered failure detector; the global cron that used to shadow them retired with this).
+# >>>REPLAY:switchboard>>>
+if [ -n "${SWITCHBOARD:-}" ]; then
+  case "${SCAN_SOURCE:-}" in capacity)
+    echo "switchboard: capacity fan-out complete — no board scan (ADR-120)"; exit 0
+  ;; esac
+  case "${SCAN_RING_NS:-}" in ""|"-") ;; *)
+    echo "switchboard: ring already carried loop_ns=${SCAN_RING_NS} — the perstack trigger routed it; nothing to do (homelab#994)"; exit 0
+  ;; esac
+  if [ "${SCAN_UNIT:-"-"}" != "-" ]; then
+    swb_repo="$(printf '%s' "$SCAN_UNIT" | cut -d'|' -f2)"
+    swb_stack="$(stacks_json | jq -r --arg r "$swb_repo" '[.stacks[]|select(.repos|index($r))|.name]|first // ""')"
+    if [ -n "$swb_stack" ] && [ "$(stacks_json | jq -r --arg n "$swb_stack" '.stacks[]|select(.name==$n)|.graduated // false')" = "true" ]; then
+      if fanout_eligible; then
+        fanout_ring "$swb_stack" "$SCAN_UNIT"
+      else
+        echo "switchboard: unit ring for ${swb_stack} not fan-out-eligible (latched/unreadable wake) — its per-stack cron re-derives the work"
+      fi
+    else
+      echo "switchboard: unit ring for repo ${swb_repo} resolves to no graduated stack — dropped (per-stack crons re-derive real work)" >&2
+    fi
+    exit 0
+  fi
+  for swb_stack in $(stacks_json | jq -r '.stacks[].name'); do
+    if [ "$(stacks_json | jq -r --arg n "$swb_stack" '.stacks[]|select(.name==$n)|.graduated // false')" = "true" ]; then
+      fanout_graduated_stack "$swb_stack"
+    else
+      echo "⚠ switchboard: stack ${swb_stack} is NOT graduated — the global board scan retired with ADR-120, so NO scan path serves it; set loop.perStack/graduated on its claim or it gets no coordination" >&2
+    fi
+  done
+  exit 0
+fi
+# <<<REPLAY:switchboard<<<
 
 # FU-085/FU-086(1) compound: an edge that already KNOWS its unit (a reviewer verdict is
 # item-shaped — reviewer-session.sh computes `changes-requested|repo|pr-N` in SCRIPT code,

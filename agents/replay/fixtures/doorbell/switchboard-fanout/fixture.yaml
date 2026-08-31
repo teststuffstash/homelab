@@ -1,0 +1,17 @@
+# switchboard-fanout (ADR-120 / FU-144) — a repo-dumb full ring: the graduated stack is rung
+# with its resolved {stack, loop_ns}; the NOT-graduated stack draws the loud no-scan-path warn
+# (the global board scan is retired, so an ungraduated stack has NO coordination until its
+# claim flips loop.perStack/graduated — the warn is the only surface that says so).
+name: switchboard-fanout
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:../switchboard-shared/bridge.sh
+  - block:doorbell-fanout
+  - block:switchboard
+env:
+  - SPAWN=1
+  - SWITCHBOARD=1
+  - SCAN_RING_NS=-
+  - SCAN_UNIT=-
+  - SCAN_REPO=all

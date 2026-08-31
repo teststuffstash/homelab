@@ -1,0 +1,2 @@
+OUT switchboard: ring already carried loop_ns=circles-agents — the perstack trigger routed it; nothing to do (homelab#994)
+RC 0

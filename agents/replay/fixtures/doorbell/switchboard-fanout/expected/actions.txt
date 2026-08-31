@@ -1,0 +1,4 @@
+CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"stack":"circles","loop_ns":"circles-agents","unit":"-"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
+OUT   fan-out: doorbell rung for graduated stack circles ({"stack":"circles","loop_ns":"circles-agents","unit":"-"})
+ERR ⚠ switchboard: stack newborn is NOT graduated — the global board scan retired with ADR-120, so NO scan path serves it; set loop.perStack/graduated on its claim or it gets no coordination
+RC 0

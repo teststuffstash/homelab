@@ -1090,7 +1090,7 @@ devbox run coordinator-session
 # scope a first run to one item
 devbox run coordinator-session -- --seed "Work PR #18 on sleep-tracking to major/awaiting-human."
 
-# headless one tick — the exact call the coordinator-reflex Argo CronWorkflow makes (ADR-093)
+# headless one tick — the exact call the per-stack coordinate-<stack> CronWorkflows make (ADR-093; the global coordinator-reflex retired 2026-08-31, ADR-120)
 devbox run coordinator-session -- --run-tick
 ```
 

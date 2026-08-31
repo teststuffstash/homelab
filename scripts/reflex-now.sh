@@ -4,15 +4,14 @@
 # `argo submit --from cronworkflow/<name>` (no argo CLI in devbox): read the CronWorkflow, wrap its
 # workflowSpec in a Workflow, create it. Replaces the pre-Argo `kubectl create job --from=cronjob/…`.
 #
-#   devbox run coordinate-now       →  bash scripts/reflex-now.sh coordinator-reflex
 #   devbox run review-reflex-now    →  bash scripts/reflex-now.sh review-reflex
 #   bash scripts/reflex-now.sh coordinate-circles circles-agents    # a PER-STACK scan
 #
-# ⚠ `coordinate-now` fires the GLOBAL scan, which SKIPS every graduated stack (FU-144) — so for a
-# graduated stack it wakes a run that prints `skipped ×N` and nothing else. Ring the stack's OWN
-# CronWorkflow instead, via the second argument. Measured 2026-08-06 on circles#29: a human
-# labelling `agent/queued` rings nothing at all, and the issue waited 8m35s for the `*/30` cron —
-# the mono-jail row in workflow.md §Triggers promised an edge that graduation had already killed.
+# ⚠ There is NO global coordinator to fire any more (ADR-120): the `coordinator-reflex` cron and
+# `devbox run coordinate-now` retired 2026-08-31 — the global surface is the SWITCHBOARD (Sensor
+# edge only; resolves repo-dumb rings, fans out capacity). To wake a stack, ring ITS OWN
+# CronWorkflow via the second argument (`coordinate-<stack> <stack>-agents`), or
+# `devbox run ring <stack>` for the webhook path.
 #
 # Fire ONCE and let the loop own it — NEVER poll-loop this (the reflexes' `gh … list --json` calls
 # are GraphQL against the App installation's 5000/hr pool; that loop is the FU-084 burn). Typical
@@ -20,7 +19,7 @@
 # (workflow.md §Triggers ▸ coordinator Sensor). Stack jails have no RBAC here BY DESIGN — they get
 # the `/coordinate` webhook doorbell instead (FU-085).
 set -euo pipefail
-NAME="${1:?usage: reflex-now.sh <cronworkflow-name> [namespace]  (coordinator-reflex | review-reflex | coordinate-<stack>)}"
+NAME="${1:?usage: reflex-now.sh <cronworkflow-name> [namespace]  (review-reflex | coordinate-<stack> | janitor-<stack>)}"
 NS="${2:-agent-coordinator}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 KUBECTL=(kubectl)

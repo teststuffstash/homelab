@@ -1,0 +1,16 @@
+# switchboard-routed (ADR-120, homelab#994) — a ring that already carried loop_ns was routed by
+# the perstack Sensor trigger; the switchboard run drops it BEFORE any fan-out or listing. This
+# is the #994 junk shape (92% of global runs) reduced to one echo + exit 0.
+name: switchboard-routed
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:../switchboard-shared/bridge.sh
+  - block:doorbell-fanout
+  - block:switchboard
+env:
+  - SPAWN=1
+  - SWITCHBOARD=1
+  - SCAN_RING_NS=circles-agents
+  - SCAN_UNIT=-
+  - SCAN_REPO=all
