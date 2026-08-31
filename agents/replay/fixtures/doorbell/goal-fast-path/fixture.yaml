@@ -1,0 +1,32 @@
+# doorbell-goal-fast-path (homelab#828) — the doorbell fast-path accepts goal-decompose /
+# goal-checkpoint units with issue-N items, re-validating them with an ISSUE-shaped probe no
+# weaker than the main scan's predicate for those clauses.
+#
+# CONDITION UNDER REPLAY. `fast_unit_dispatch` used to whitelist ONLY changes-requested + pr-N,
+# so a ring of `{unit: "goal-decompose|…|issue-N"}` returned 200, fell through to the full scan,
+# and was subject to the same priority ordering that starved it. Found live at the G-B launch
+# (2026-08-23) while goal #818 sat footprint-held: the operator's unit ring produced no
+# fast-path dispatch.
+#
+# THE CONTRACT, one leg each:
+#   dispatches        goal-decompose|circles|issue-5 with a LIVE issue (open, agent/queued, no
+#                     breakers, Base: line, queued by a User) — the fast path dispatches.
+#   bot-queued        same world but agent/queued was applied by a Bot — breaker #1 REFUSES
+#                     (the loop may not authorise its own goal); the ring settles, full scan
+#                     decides.
+#   moved-on          issue no longer carries agent/queued — settles, full scan decides.
+#   checkpoint-dispatch  goal-checkpoint|circles|issue-8 with a LIVE goal (open, task/goal,
+#                     agent/blocked, no agent/error) — the fast path dispatches. agent/blocked
+#                     is NOT a breaker for checkpoint, and agent/queued is NOT required.
+#   valueless-base    goal-decompose|circles|issue-9 with a Base: line that has no content
+#                     after the colon — the fast path REFUSES (homelab#828 r2 finding 2).
+name: doorbell-goal-fast-path
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:unit-fast-path
+  - file:drive.sh
+env:
+  - ORG=teststuffstash
+  - SCAN_STACK=circles

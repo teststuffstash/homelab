@@ -1,0 +1,4 @@
+{
+  "state": "OPEN",
+  "labels": [{"name": "task/goal"}, {"name": "agent/blocked"}]
+}
