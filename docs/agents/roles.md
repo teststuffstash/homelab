@@ -160,7 +160,7 @@ tier allowed, dual-model worth it) are FU-095's.
   (platform stack, homelab#835)**: claim knob `spec.prober {enabled, schedule, model}` renders `probe-<stack>`
   (CronWorkflow, loop ns) running `<mainRepo>/.agents/probe.md` on the SUBSCRIPTION
   (claude/haiku — operator direction 2026-08-07, platform roles ride the subscription;
-  latch-gated). Report-only BY CONSTRUCTION: the pod holds no git/gh credential. Still
+  latch-gated). no git/cluster writes by construction (operator ruling 2026-08-30). A feedback row filed through a stack's own MCP is a report into that stack's product sink — not a write to git or the cluster. Still
   missing: the post-deploy sync-succeeded edge, 🌱 issue filing, (endpoint, digest) keying —
   and every stack brief but the platform's (`homelab/.agents/probe.md`, #835 — belt-gap
   framing: report what is broken AND unalerted; content shape still awaits the ≥2-projects
@@ -173,14 +173,18 @@ tier allowed, dual-model worth it) are FU-095's.
   operator's framing question comes first: what is a PROBE vs an E2E TEST — what should run ONCE
   as a smoke gate on a change, and what deserves a cron? "The simplistic probe is not the
   solution to all problems" — don't reach for the probe hammer on every nail-shaped problem.**
-  - *Two MCP-attachment modes for an agentic probe* (found reading the rendered template: as
-    built, the `claude -p` session has NO MCP wiring — no `--mcp-config`, endpoint not even in
-    env; the brief carries everything and the session probes with raw streamable-HTTP JSON-RPC
-    via curl, the meta-11 shape). Raw-HTTP tests the WIRE contract with no client-library
-    smoothing — arguably the stronger canary; `--mcp-config` harness-attached (an `.mcp.json`
-    rendered from a claim endpoint field) tests what a real consumer experiences, including
-    client-side schema conformance. Candidate sequencing: raw-HTTP brief first (zero machinery),
-    harness-attached as a second case once a second stack's brief exists (≥2-projects rule).
+  - **Sanctioned class: two MCP-attachment modes for an agentic probe** (Goal #1039). The
+    probe session has two wiring modes, sequenced deliberately:
+    **Class 1 — raw-HTTP** (zero machinery, tests the wire contract first). The brief carries
+    everything; the session probes with raw streamable-HTTP JSON-RPC via curl — the meta-11
+    shape. No MCP config, no client-library smoothing; arguably the stronger canary.
+    **Class 2 — harness-attached** (behind the AgentStack MCP knob, tests what a real consumer
+    experiences including client-side schema conformance). Rendered from the claim's MCP
+    endpoint; the knob is referenced by issue (Goal #1039), not by field path — the field
+    path's home is the XRD + `docs/agents/agentstack.md`.
+    **Cell doctrine:** KPI cells are the census-derived consumer-assistant set, with pinned
+    experiment arms per ADR-104 (deterministic slot draws on curated pools): explicit
+    overrides, never routed.
   - *Probe vs e2e-test split (undecided):* oracle's `probe-e2e.sh` in kind mode is closer to an
     E2E TEST (deterministic serve leg, fixture corpus, asserts on transcripts) — a per-change,
     run-once artifact; the prober's cron probe is a CANARY against the LIVE contract (drift,
