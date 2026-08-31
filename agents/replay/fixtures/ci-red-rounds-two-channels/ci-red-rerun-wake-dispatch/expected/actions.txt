@@ -1,0 +1,11 @@
+CALL gh pr view 43 --repo teststuffstash/circles --json comments,commits
+CALL gh pr list --repo teststuffstash/circles --state all --limit 100 --json number,headRefName,body,comments
+CALL gh pr view 43 --repo teststuffstash/circles --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments
+OUT ATTEMPTS 1
+OUT NOOP <none>
+OUT RED_ROUNDS 1
+OUT RED_ROUNDS_KEY PR #43
+OUT ORPHANS 
+OUT UNITS 
+OUT REACHED: end
+RC 0
