@@ -197,5 +197,35 @@
    "is_bot": false,
    "login": "RasmusSoot"
   }
+ },
+ {
+  "number": 116,
+  "title": "public edge fairness",
+  "labels": [
+   {
+    "name": "platform-request"
+   }
+  ],
+  "body": "Capability: public-edge.abuse-fairness\n\nSome details about the request.",
+  "createdAt": "2026-08-01T00:00:00Z",
+  "author": {
+   "is_bot": false,
+   "login": "alice"
+  }
+ },
+ {
+  "number": 117,
+  "title": "circles edge fairness",
+  "labels": [
+   {
+    "name": "platform-request"
+   }
+  ],
+  "body": "Capability: public-edge.abuse-fairness\n\nCircles also needs this capability.",
+  "createdAt": "2026-08-10T00:00:00Z",
+  "author": {
+   "is_bot": false,
+   "login": "bob"
+  }
  }
 ]
