@@ -459,6 +459,13 @@ job, in order (re-read live state first, exit clean if someone already closed it
    **INERT by loop-safety
    breaker #1: never add `agent-fix` or `agent/queued`** — the scan's 🌱 clause surfaces them
    for human triage.
+   **blockedBy filing-edge (homelab#1152)**: when the filed defect wedges live work, wire the
+   native `blockedBy` edge FROM the stuck issue in the same act (`gh api -X POST
+   repos/<slug>/issues/<STUCK>/dependencies/blocked_by -F issue_id=<FILED's numeric .id>`) and
+   say BLOCKING in the filed body + your closing comment. The labels STAY inert — breaker #1 is
+   not yours to override: the edge is what un-parks (the FU-087 gate releases the stuck issue
+   when the filed defect closes), and the blocking-park surfaces (BLOCKPARK, the board's
+   blocking count) put it in front of the human who queues.
    Dedup before filing: skip a bullet whose substance already has an open issue (search by the
    spec ID or key phrase); say which you skipped and why in the closing comment.
    **Then LINK each harvested issue as a native sub-issue** (FU-090 sprout index, 2026-08-02 —
@@ -537,6 +544,11 @@ the product:
 4. **Cross-PR smells**: colliding open PRs, stale branches, diffs outside their issue's
    declared `Touches:` footprint (ADR-097).
 5. **Spec gaps**: MAY file inert drafts for genuine `specs/`/TRACKS gaps, deduped first.
+   **blockedBy filing-edge (homelab#1152)**: when a filed spec-gap draft wedges live work, wire
+   the native `blockedBy` edge FROM the stuck issue in the same act (`gh api -X POST
+   repos/<slug>/issues/<STUCK>/dependencies/blocked_by -F issue_id=<DRAFT's numeric .id>`) and
+   name it a BLOCKING finding in the report headline. Your write tier is unchanged — inert
+   drafts only; the edge + the blocking-park surfaces carry the urgency to the human.
 6. **Tool-gap inventory (TOOL_GAP, homelab#536)** — the capability-demand reader. Aggregate the
    session-issued `TOOL_GAP:` marker lines across the stack's repos (issue comments + PR bodies,
    trailing ~30d) into a `tool × count × sample-need` inventory, so the operator reads demand
@@ -590,6 +602,12 @@ Then put the parent in the **non-dispatchable tracking state** (operator ruling 
 at-least-once dispatch cannot re-decompose it: remove `agent/queued`, leave `agent-fix`, add
 `agent/blocked` with a comment listing the children. Queue the children (`agent-fix` +
 `agent/queued`) — they are ordinary units from here.
+**blockedBy filing-edge (homelab#1152)**: when a child wedges live work (a sibling or the goal
+itself is stuck on it), wire the native `blockedBy` edge FROM the stuck issue in the same act
+(`gh api -X POST repos/<slug>/issues/<STUCK>/dependencies/blocked_by -F
+issue_id=<CHILD's numeric .id>`). Children keep their ordinary goal-lane queueing (you already
+queue them under the human-authorised goal, `Base:` inherited) — the edge adds the un-park, not
+a lane change.
 
 **Keep the forest in view.** The failure this clause must not have is: decompose once, then only
 ever look at children again. Concretely, today the sub-issue lineage is WRITE-ONLY — the harvest
@@ -622,6 +640,11 @@ and `Budget:` has room — the same goal_budget arithmetic the launcher pre-flig
 budget = mint UNLABELLED and say so), or **drop** (one reason line in your goal comment). Then
 advance the marker: `bash /work/homelab/agents/goal-findings.sh advance <owner/repo> <goal-n>
 <total>`. A store you cannot read is a loud line on the goal, not a guess.
+**blockedBy filing-edge (homelab#1152)**: when a minted child wedges live work (a sibling or
+the goal itself is stuck on it), wire the native `blockedBy` edge FROM the stuck issue in the
+same act (`gh api -X POST repos/<slug>/issues/<STUCK>/dependencies/blocked_by -F
+issue_id=<CHILD's numeric .id>`). Minting/queueing authority is unchanged (the goal-grant
+arithmetic above) — the edge adds the un-park, not a lane change.
 
 **THEN, when trigger (b) or the burn-down says the tree is done**, re-read the goal's acceptance
 criteria in full and look at what actually shipped in the closed children — the merged diffs, not
@@ -717,7 +740,13 @@ Read the diff + the whole review thread, then rule — exactly one of:
   edge semantics / spec ambiguity / new-code corners). File the fix as its own issue, comment
   the ruling — **and LINK the filed issue as a native sub-issue of the issue whose PR was arbitrated**
   (lineage contract rule 3; use the same `sub_issues` POST as the merged-closeout harvest, bind at
-  filing regardless of door). Then **finish the terminal mechanically: dismiss the superseded verdict**
+  filing regardless of door). **blockedBy filing-edge (homelab#1152)**: when the filed defect wedges live work
+  (the PR's issue is stuck on it), wire the native `blockedBy` edge FROM the stuck issue in the
+  same act (`gh api -X POST repos/<slug>/issues/<STUCK>/dependencies/blocked_by -F
+  issue_id=<FILED's numeric .id>`) and say BLOCKING in the ruling comment. The filed issue's
+  labels follow this play's existing rules (`agent-fix` + track, NOT `agent/queued`) — the edge
+  un-parks via the FU-087 gate; queue authority stays where it is.
+  Then **finish the terminal mechanically: dismiss the superseded verdict**
   (next section). Do NOT stop at the comment: a ruling is not a verdict, the PR still carries
   CHANGES_REQUESTED, and nothing else in the loop can mint the approval you just ruled for.
 - **Close as not-mergeable**: master is better off without it. Close the PR with the reasoning,

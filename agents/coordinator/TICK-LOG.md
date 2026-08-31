@@ -5783,3 +5783,39 @@ first live ADR-110 maintenance session before the ADR existed.
 - **Oracle handoff (garage-specs-web-read-path-stale) CLOSED**: not split-brain — `oracle-specs` restored 2026-08-24 already OVER its 1Gi quota; every PUT since 403'd while mc-mirror CI stayed green. oracle-iac PR#446 (1Gi→5Gi, auto-merge armed) + oracle-fleet#318 (publish must verify its write; pr-*/ close-purge) + incident addendum (restore can silently violate ADR-089 quotas). Remains: post-merge quota verify + fleet re-publish (either side).
 - agent-runtime#102 queued on operator ask (agent/queued+agent-fix+task/fix, matching recent convention).
 - Wind-down: bookkeeping batch-pushed once through the hook; watchers killed; #1147 + oracle-iac#446 parked on their machine lanes.
+
+## 2026-08-31 — evening corpus session (codeowner reads first → switchboard)
+
+- **Corpus loaded** (/design-agents "codeowner reads first"). Gate reads ×6 over the day's parks:
+  #1146/#1140/#1139/#1145 (morning convoy — all merged; #1146 nit: reviewable_again predicate's
+  second copy), #1154 (approved; nit: 403 lost its ⚠ in the reword), #1155 (CAUGHT a governance
+  escape — five loop-door bullets granted "queue immediately / override the inert breaker";
+  corrected in-diff: edges wire, labels stay inert, FU-087 gate is the un-park; bot re-reviews).
+- **Seat PR #1147** (diff-ci, #518): reviewer's honest-wording block fixed across 4 spots over
+  two rounds (round 3 caught the 4th), belt gained the `devbox run --` leg; MERGED → the #518
+  one-home flip executed operator-direct (deec18cf: ci.yaml eval-extracts PROM/CLAUSE_PATHS,
+  fail-closed) + docs flipped to present tense.
+- **Oracle handoff ×2 processed** (double-dispatch/#308 strand; stray PR #317): root-caused BOTH
+  to missing goal-head exclusions — ci-red clause AND the verdict-unit fast path (probe lacks
+  headRefName; "cheaper, never weaker" broken). Filed+queued #1148 (both sites, one fixture
+  wave), #1149 (IL-G06 revisit condition met — strong-link strand belt), #1150 (inert:
+  assembly-CR→checkpoint edge design gap), agent-runtime#107 (finalize closing-keyword lint);
+  stray `agent/review` cleaned off goal oracle-fleet#281.
+- **#1102 re-scope filed per operator design**: legs → #1151 (Touches classifier LINT),
+  #1152 (filing-edge discipline), #1153 (goal-grant consult, blockedBy #1151); all queued,
+  bound under #1102. agent-runtime #104/#105/#107 queued (operator).
+- **#946 A5 seed COMPLETE (4/4) + free-tier reviewer comparison** (operator-driven): the Zen
+  quota model corrected — the opencode CLI reaches big-pickle where raw API 429s (mechanism
+  unidentified; per-model: nemotron/ling/mimo hang at review size, tiny OK); OR-nemotron:free =
+  fast first-party serving, same wrong-side verdict as big-pickle (both APPROVE the state kimi
+  correctly blocked); hy3-free rotated out upstream. Conclusion: no free reviewer; big-pickle
+  stays shadow-only. Durable rec on the issue: opencode-harness branch in re-review.sh.
+- **ADR-120 SWITCHBOARD** (operator: "rebrand the global coordinator"): #994 answered — the
+  global cron caught nothing (18/18 no-op ticks, fan-out is edge-only by code); part 1
+  operator-direct eae8c51f (coordinator-reflex cron + coordinate-now retired), part 2 = PR#1158
+  (rename, --switchboard terminal, no mutex/semaphore, 4 replay fixtures, 319/0 suite, alert
+  regex + witness re-sync, ADR-120 + glossary ⚓ switchboard). Fixes #994 at merge.
+- Monitor defects found live: gh --jq takes no --arg (silent empty probe), reviewDecision is a
+  dead key across CR→CR re-verdicts (both watches rebuilt).
+- Wind-down trigger (operator): #1154 + #1155 + #1158 landed. #1154's momentary sentinel red =
+  the fail-closed probe-error state, self-healed next tick (the #1134 discrimination working).
