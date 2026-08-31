@@ -64,13 +64,15 @@ jobs:
           devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
             --paginate --jq '.[].filename' > /tmp/ci-changed-files
           prom=false; clause=false
-          # prometheus-rules-lint reads every PrometheusRule under argocd/ + tofu/ AND
-          # drift-pins the hand-copy fixture files against their CRs — the honest trigger
-          # set is the whole manifest tree, not "files named prometheus".
-          grep -qE '^(argocd/|tofu/|scripts/prometheus-rules-lint\.sh|devbox\.(json|lock)$)' /tmp/ci-changed-files && prom=true
-          # clause-replay extracts its clause blocks from agents/ scripts + manifests and
-          # replays fixtures under agents/replay/ — all of it lives under agents/.
-          grep -qE '^(agents/|devbox\.(json|lock)$)' /tmp/ci-changed-files && clause=true
+          # ONE HOME (#518, the pin-only-lint pattern): the trigger regexes live in
+          # scripts/diff-ci.sh (single-line, single-quoted, eval-safe by contract there) —
+          # eval-extracted here so the local pre-flight and CI's skip map cannot drift.
+          # Rationale for each set is documented at the definitions.
+          eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"
+          eval "$(grep -m1 '^CLAUSE_PATHS=' scripts/diff-ci.sh)"
+          [ -n "$PROM_PATHS" ] && [ -n "$CLAUSE_PATHS" ] || { echo "FATAL: could not extract PROM_PATHS/CLAUSE_PATHS from scripts/diff-ci.sh — skip map unavailable, failing closed"; exit 1; }
+          grep -qE "$PROM_PATHS" /tmp/ci-changed-files && prom=true
+          grep -qE "$CLAUSE_PATHS" /tmp/ci-changed-files && clause=true
           { echo "prom=$prom"; echo "clause=$clause"; } >> "$GITHUB_OUTPUT"
           echo "skip map: prometheus-rules-lint=$prom clause-replay=$clause ($(grep -c . /tmp/ci-changed-files) changed file(s))"
 
