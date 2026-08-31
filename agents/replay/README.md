@@ -254,6 +254,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-gh-token-env/unset` | actions | - | `agents/agent-session.sh` | - |
 | `retro-harvest` | table | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-key/minted-block-style` | actions | - | `agents/retro-session.sh` | - |
+| `retro-key/minted-labels-first` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/minted` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/pinned` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/subscription` | actions | - | `agents/retro-session.sh` | - |
