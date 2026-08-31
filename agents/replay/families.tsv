@@ -29,6 +29,7 @@ env-card-machine-markers-capture	env-card-machine-markers
 env-card-mcp-present	env-card-mcp-present
 env-card-mcp-present/opencode	env-card-mcp-present
 footprint-conflict-predicate	footprint-conflict-predicate
+fu124-nudge	fu124-nudge
 goal-abandoned	goal
 goal-assembly-complete	goal
 goal-checkpoint-due	goal

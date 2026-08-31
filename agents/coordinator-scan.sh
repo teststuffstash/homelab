@@ -1248,7 +1248,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # `body` is fetched for the FU-146 per-item hold: it carries the `Implements #<n>` line that
     # agent-runtime#34 now guarantees, which is the only reliable PR-to-issue key (branch names
     # are not — circles#31 rode `fix/p0-bake-resolution`, #32 rode `fix/32-p0-page-sunburst`).
-    prsjson="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName 2>/dev/null)" || prsjson='[]'
+    prsjson="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName,headRefOid 2>/dev/null)" || prsjson='[]'
     jq -e . >/dev/null 2>&1 <<<"${prsjson:-null}" || prsjson='[]'
     # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
     # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
@@ -2237,13 +2237,17 @@ EOF_GOVERNANCE
     # DETERMINISTIC nudge: call the update-branch API directly — idempotent at GitHub (422 =
     # already current), self-limiting (a nudged PR stops being BEHIND), FAIL-LOUD on 403 (a
     # token-scope gap must be visible, not silent). No LLM, no unit, no session.
+    # >>>REPLAY:fu124-nudge>>>
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|select((.autoMergeRequest!=null) and (.mergeStateStatus=="BEHIND"))|.number'); do
-      if gh api -X PUT "repos/${slug}/pulls/${u}/update-branch" >/dev/null 2>&1; then
+      u_oid="$(printf '%s' "$prsjson" | jq -r --argjson u "$u" '.[]|select(.number==$u)|.headRefOid//""')"
+      if gh api -X PUT "repos/${slug}/pulls/${u}/update-branch" \
+        ${u_oid:+-f expected_head_sha="$u_oid"} >/dev/null 2>&1; then
         echo "  [$repo] FU-124: nudged updater — update-branch on armed BEHIND PR #${u}"
       else
-        echo "  [$repo] ⚠ FU-124: update-branch API FAILED for PR #${u} (token scope? conflict?) — updater cron remains the backstop"
+        echo "  [$repo] FU-124: update-branch on PR #${u} failed (422 = race safe; other = investigate) — updater cron remains the backstop"
       fi
     done
+    # <<<REPLAY:fu124-nudge<<<
     # ADR-094 units: each predicate row IS an action class — (clause, repo, item), the LLM never picks.
     # AUTHOR-scoped (2026-08-02, found live on snore#15): the fix-round play only has a mandate
     # over WORKER-authored PRs (same WORKER_AUTHOR scope as the reflex's C9). A human/operator PR
