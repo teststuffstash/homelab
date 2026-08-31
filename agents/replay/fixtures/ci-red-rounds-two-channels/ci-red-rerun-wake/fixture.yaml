@@ -1,19 +1,18 @@
-# ADR-103 / homelab#1108 — the ci-red rerun wake path, pinned.
+# ADR-103 / homelab#1108 — the ci-red rerun wake path: DEBOUNCE case, pinned.
 #
 # CONDITION UNDER REPLAY. A red PR (#43, branch `fix/issue-1108-ci-red-rerun-wake`) that has
-# completed ONE fix round (attempts=1 < RED_MAX=3). The thread carries a previous state-fp marker
-# from an earlier dispatch. The CI has been re-run on the same head, so the checks now have
-# DIFFERENT startedAt values than the state that produced the recorded marker. The ci-red clause
-# uses STATE_FP_JQ_CIRED which folds each check's startedAt into the fingerprint, so the current
-# hash differs from the recorded one — the debounce releases and the clause emits a dispatch.
+# completed ONE fix round (attempts=1 < RED_MAX=3). The thread carries a state-fp marker from an
+# earlier ci-red dispatch (`state-fp:b123683ec476`). NO CI rerun has happened since: the checks
+# still carry the same startedAt values (2026-08-31T07:00:00Z) that produced the recorded marker,
+# and head, conclusions, reviewDecision and the newest verdict are unchanged too. The ci-red clause
+# uses STATE_FP_JQ_CIRED (each check's startedAt folded into the fingerprint), so the current hash
+# EQUALS the recorded one — the debounce HOLDS: a report line is emitted, no unit.
 #
-# WHY THIS FIXTURE EXISTS. Before homelab#1108, the ci-red clause keyed its state-fp dedup on
-# (head_sha, check conclusions, reviewDecision, newest verdict) — the same STATE_FP_JQ the
-# arbitrate clause uses. A CI rerun on an unchanged head produces the same fingerprint, so the
-# debounce held and the PR was wedged: no new round, ever, until a human pushed a commit. The fix
-# adds STATE_FP_JQ_CIRED that folds each check's startedAt into the hash, so a rerun changes the
-# fingerprint and re-arms the gate. This fixture pins that the ci-red-gate does NOT debounce when
-# startedAt has moved, and a dispatch unit IS emitted.
+# WHY THIS FIXTURE EXISTS. It is the complement of `ci-red-rerun-wake-dispatch`, and it is the half
+# that guards against over-correcting homelab#1108. Folding startedAt into the ci-red fingerprint
+# re-arms the gate on a rerun (that sibling pins it); this fixture pins that it does NOT re-arm on
+# anything else — an unchanged red PR still costs one report line per tick, not one ride per tick
+# (homelab#198). Losing that would trade oracle-fleet#285's wedge for a dispatch loop.
 #
 # THE CONTRACT:
 #   1. attempts = 1 — one new-shape stats marker.
@@ -22,9 +21,9 @@
 #   3. attempts(1) < RED_MAX(3), so the issue-keyed ceiling IS checked — `gh pr list` is called.
 #      Only PR #43 references issue #1108 (via branch), so red_sib_n=1, not > red_rounds(1).
 #   4. The ci-red-gate block calls pr_state_fp_pair with "ci-red". The current fingerprint
-#      (computed with startedAt=2026-08-31T07:00:00Z) differs from the recorded marker
-#      (state-fp:aaaaaaaaaaaa, written when startedAt was 2026-08-31T06:00:00Z), so the gate
-#      does NOT debounce — the dispatch proceeds.
+#      (b123683ec476, computed with startedAt=2026-08-31T07:00:00Z) MATCHES the recorded marker
+#      (`state-fp:b123683ec476`), so the gate DEBOUNCES: the clause appends the
+#      `⏳ ci-red DEBOUNCED — PR #43 …` orphans line and continues without emitting a unit.
 #   5. Three calls: `gh pr view 43` (round evidence), `gh pr list` (issue-keyed ceiling),
 #      `gh pr view 43` (state-fp pair).
 pins:
