@@ -1,0 +1,18 @@
+# switchboard-capacity (ADR-120 / issue#779) — a capacity ring fans out to every graduated
+# stack (the doorbell-fanout block's own capacity case) and the switchboard terminal then ends
+# the run without a board scan. The ungraduated stack gets no capacity ring.
+name: switchboard-capacity
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:../switchboard-shared/bridge.sh
+  - block:doorbell-fanout
+  - block:switchboard
+env:
+  - SPAWN=1
+  - SWITCHBOARD=1
+  - SCAN_RING_NS=-
+  - SCAN_UNIT=-
+  - SCAN_REPO=all
+  - SCAN_SOURCE=capacity
+  - SCAN_RAIL=go
