@@ -997,6 +997,42 @@ spec:
               data:
                 - secretKey: AUTH_TOKEN
                   remoteRef: { key: COORDINATOR_CLAUDE_OAUTH_TOKEN }
+            ---
+            # ADR-087 leg A (loop-ns variant): the egress proxy resolves ref:<loopns>/<secret> by
+            # reading LABELED session Secrets here. Same Role+RoleBinding as the fixer-ns variant
+            # below, but rendered into {{ $loopns }} so the prober's ref:{{ $loopns }}/claude-session
+            # resolves (homelab#1085 — the fixer-ns variant never renders into the loop ns).
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: agentstack-proxy-session-keys
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-proxy-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [""]
+                resources: [secrets]
+                verbs: [get]
+              # FU-138: the proxy reads the OpenRouterKey CR that OWNS a session Secret, because
+              # the CR (rendered from this claim) is the authoritative guardrail — the Secret's
+              # GUARDRAIL is only written when the operator mints, so it goes stale silently.
+              # list-only, namespaced: a CR spec carries budget/guardrail, never the key itself.
+              - apiGroups: [openrouter.teststuff.net]
+                resources: [openrouterkeys]
+                verbs: [list]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: agentstack-proxy-session-keys
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-proxy-rolebinding
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-proxy-session-keys }
+            subjects:
+              - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }
             {{- end }}
             {{- end }}
             {{- range $r := $xr.spec.repos }}
