@@ -2209,6 +2209,7 @@ EOF_GOVERNANCE
         # goal would wedge at originals-done forever. Exclude the bucket from the open count
         # used by the child-set-complete predicate — same title convention the harvest-disposition
         # site and the dispatch block use (sprout-report-skips-buckets, IL-T17).
+        gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
           '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
            | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
         case "$gopen_n_ckpt" in ''|*[!0-9]*) gopen_n_ckpt="$gopen_n";; esac
