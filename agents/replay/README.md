@@ -178,6 +178,10 @@ is stale, so it cannot drift the way the prose register did.
 | `doorbell/fanout-wiring` | table | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/goal-fast-path` | actions | - | `agents/coordinator-scan.sh` | - |
+| `doorbell/switchboard-capacity` | actions | - | `agents/coordinator-scan.sh` | - |
+| `doorbell/switchboard-fanout` | actions | - | `agents/coordinator-scan.sh` | - |
+| `doorbell/switchboard-routed` | actions | - | `agents/coordinator-scan.sh` | - |
+| `doorbell/switchboard-unit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `env-card-ground-rules/empty` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-ground-rules/missing` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-ground-rules/unreadable` | actions | - | `agents/agent-session.sh` | - |

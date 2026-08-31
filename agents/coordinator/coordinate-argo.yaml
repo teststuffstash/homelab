@@ -1,6 +1,11 @@
 # Coordinator edge-trigger (FU-085, docs/agents/workflow.md §Triggers ▸ "The coordinator Sensor")
-# — the review-argo.yaml pattern applied to the coordinator: POST /coordinate {repo} on the
-# agent-loop EventSource → this Sensor → a `coordinate` Workflow running the deterministic scan.
+# — POST /coordinate on the agent-loop EventSource → this Sensor → one of TWO triggers:
+# a loop_ns-carrying ring submits the per-stack scan into <loop_ns> (the real coordinator work),
+# and everything else submits the SWITCHBOARD (ADR-120) — the global surface, rebranded to what
+# it actually is now that all stacks are graduated: a resolver that patches repo-dumb rings
+# through to their stack's own doorbell (FU-144) and fans capacity transitions out fleet-wide
+# (issue#779). It never board-scans and never dispatches; its old */10 cron backstop retired
+# with ADR-120 (the per-stack crons are the failure detector).
 #
 # THE EVENT IS A DOORBELL, NEVER A WORK ITEM: the payload only scopes (`{repo}`, v1 logs it and
 # re-lists everything); the scan re-applies the FULL predicate (C4/C5 probes, FU-080
@@ -10,11 +15,10 @@
 # verdict, devbox-update at PR-open; the mono jail keeps `devbox run coordinate-now` (kubectl
 # path); stack jails curl this webhook — no RBAC into agent-coordinator needed (airlock-aligned).
 #
-# Serialization: the `coordinator-scan` mutex (here, in the WorkflowTemplate) makes Sensor
-# submissions and the */10 CronWorkflow backstop (reflexes-argo.yaml, workflowTemplateRef to the
-# SAME template) mutually exclusive — Cron `Forbid` alone does NOT see Sensor submissions. The
-# Sensor trigger rateLimit is the dumb outer belt. Cron demotes */10 → */30 after the edge proves
-# itself in live use (FU-084 GraphQL burn).
+# Serialization: the switchboard holds NO mutex and NO subscription semaphore (ADR-120) — a run
+# is a seconds-long resolver that lists no GitHub state and spawns no LLM, so serializing it (or
+# billing it a claude slot, as the old global template did) was pure queueing waste. The Sensor
+# trigger rateLimit is the belt; per-stack scans keep their own namespaced mutex.
 # ADR-106 (5) — the goal-#278 famine fixes, both receiver-side (coordinator-scan.sh):
 #   COLLAPSE: a starting full scan absorbs every PENDING sibling `coordinate*` workflow in its
 #   namespace before it lists GitHub (those rings are older than the re-list, so nothing is
@@ -60,7 +64,7 @@ spec:
   triggers:
     - rateLimit: { unit: Minute, requestsPerUnit: 2 } # dumb outer belt vs emitter storms
       template:
-        name: submit-coordinate
+        name: submit-switchboard
         conditions: "coordinate-dep" # scope to the global dep so a graduated POST can't gate it
         argoWorkflow:
           operation: submit
@@ -69,10 +73,10 @@ spec:
               apiVersion: argoproj.io/v1alpha1
               kind: Workflow
               metadata:
-                generateName: coordinate-
+                generateName: switchboard-
                 namespace: agent-coordinator
               spec:
-                workflowTemplateRef: { name: coordinate }
+                workflowTemplateRef: { name: switchboard }
                 arguments:
                   parameters:
                     - { name: repo, value: "all" }
@@ -122,7 +126,7 @@ spec:
                 serviceAccountName: agentstack-loop
                 activeDeadlineSeconds: 1800
                 ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
-                # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
+                # homelab#103 soft hostname spread — rationale on the `switchboard` WorkflowTemplate (coordinate-argo.yaml — was `coordinate`, ADR-120)
                 # below. Applies inside <loop_ns>, spreading that stack's perstack scans.
                 # homelab#867 soft Longhorn-disk de-preference — same rationale.
                 podSpecPatch: |
@@ -203,14 +207,15 @@ spec:
             - src: { dependencyName: coordinate-perstack, dataKey: body.rail, value: "" }
               dest: spec.arguments.parameters.4.value
 ---
-# The coordinate Workflow — the coordinator-reflex CronWorkflow's inline container, extracted so
-# the cron backstop and the Sensor edge both workflowTemplateRef ONE definition (the review-argo
-# refactor shape). Carries the FU-088 subscription semaphore + the coordinator-scan mutex for
-# every submission path.
+# The switchboard WorkflowTemplate (ADR-120; was `coordinate`, the coordinator-reflex cron's
+# extracted container). Sensor-edge only now: it runs the scan in `--switchboard` mode — drop an
+# already-routed ring (#994), finish the capacity fan-out, or resolve a repo-dumb ring to its
+# stack's doorbell — and exits before any GitHub listing. No mutex, no subscription semaphore
+# (nothing here scans or spawns), and the memory limit is sized for a clone + jq, not a board sweep.
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: coordinate
+  name: switchboard
   namespace: agent-coordinator
 spec:
   serviceAccountName: agent-coordinator
@@ -258,16 +263,11 @@ spec:
                   operator: NotIn
                   values:
                     - "true"
-  synchronization:
-    mutexes:
-      - name: coordinator-scan # one scan at a time across cron + Sensor submissions
-    semaphores:
-      - configMapKeyRef: { name: subscription-capacity, key: claude } # FU-088 pool
   arguments:
     parameters:
       - { name: repo, value: "all" }
       - { name: unit, value: "-" } # FU-085 compound: "-" = full scan; else the scoped fast-path
-      - { name: ring_ns, value: "-" } # FU-144: the POST's loop_ns ("-" = repo-dumb ring → the scan may fan out; the cron backstop inherits the default and never fans out anyway — its wake source is cron)
+      - { name: ring_ns, value: "-" } # FU-144: the POST's loop_ns ("-" = repo-dumb ring → fan out; non-empty = the perstack trigger already routed it, the run exits at the switchboard terminal)
       - { name: source, value: "" } # issue#779: capacity doorbell source (empty = not a capacity ring)
       - { name: rail, value: "" } # issue#779: capacity doorbell rail
   entrypoint: main
@@ -277,14 +277,14 @@ spec:
   templates:
     - name: main
       metadata:
-        labels: { app: coordinate-workflow }
+        labels: { app: switchboard-workflow }
       container:
         image: ghcr.io/teststuffstash/agent-coordinator
         command: ["bash", "-lc"]
         args:
           - |
             set -e
-            echo "coordinate: doorbell scope={{workflow.parameters.repo}} unit={{workflow.parameters.unit}} ring_ns={{workflow.parameters.ring_ns}} (unit '-' = full scan)"
+            echo "switchboard: ring scope={{workflow.parameters.repo}} unit={{workflow.parameters.unit}} ring_ns={{workflow.parameters.ring_ns}} (resolver only — ADR-120)"
             rm -rf /work/homelab
             # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
             # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
@@ -301,7 +301,7 @@ spec:
             # issue#779 capacity doorbell: the ring source and rail for capacity fan-out
             export SCAN_SOURCE='{{workflow.parameters.source}}'
             export SCAN_RAIL='{{workflow.parameters.rail}}'
-            exec bash /work/homelab/agents/coordinator-scan.sh --spawn
+            exec bash /work/homelab/agents/coordinator-scan.sh --switchboard
         env:
           - { name: HOME, value: "/home/node" }
           - { name: ORG, value: "teststuffstash" }
@@ -312,5 +312,5 @@ spec:
           - { name: work, mountPath: /work }
           - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
         resources:
-          requests: { cpu: "100m", memory: "256Mi" }
-          limits: { memory: "1Gi" }
+          requests: { cpu: "50m", memory: "128Mi" }
+          limits: { memory: "512Mi" }
