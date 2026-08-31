@@ -26,8 +26,12 @@ privileged ns) so CI noise/privilege stays off the service nodes.
 
 - The same gate runs **locally and in CI**, identically (`devbox run ci` in the STACK repos —
   homelab itself is the deliberate exception: no aggregate `ci` task, ~28 named `devbox run`
-  tasks run by `.github/workflows/ci.yaml`, which also carries three inline blocks (the
-  ADR-103 ratchet, `tofu fmt`, the ghcr pre-warm) that gate the workflow rather than the code.
+  tasks run by `.github/workflows/ci.yaml`, which also carries inline blocks (the ADR-103
+  ratchet, `tofu fmt`, the ghcr pre-warm, the changed-paths skip map) that gate the workflow
+  rather than the code. Since 2026-08-31 (#518) the heavy suites (`prometheus-rules-lint`,
+  `clause-replay`) and the pin-bump pre-warm run **backgrounded ∥ the serial steps** with
+  start/collect step pairs, and the heavies **skip entirely** when the PR's changed paths
+  cannot affect them — locally they are ordinary serial `devbox run` tasks.
 - Tier-A and Tier-B run the *same* logic under different forges — only `runs-on` + the registry differ.
 - Swapping the runner later (ARC → **Blacksmith**/**Chainguard**) is a `runs-on`/host change with
   **zero logic change**.
