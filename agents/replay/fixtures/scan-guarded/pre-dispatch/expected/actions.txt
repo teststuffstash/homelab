@@ -1,3 +1,6 @@
+CALL item_class_push homelab issue-299 guarded-path machine
+CALL item_class_push homelab issue-400 guarded-path machine
+CALL item_class_push homelab issue-405 guarded-path machine
 OUT DISPATCH #309 (homelab, declared: agents/coordinator-scan.sh, agents/replay/)
 OUT DISPATCH #401 (homelab, declared: argocd/resources/loki/)
 OUT DISPATCH #402 (homelab, declared: *)
