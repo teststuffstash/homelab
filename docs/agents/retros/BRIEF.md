@@ -105,6 +105,29 @@ Additionally:
 
 Anti-goals: no platform rewrites; no more than 6 findings; no finding without ledger evidence.
 
+## The cost model your "expected saving" column MUST use (operator ruling, 2026-08-31)
+
+Denominate savings in the platform's real cost rails, most expensive first — never in bare
+machine round-counts (r2's F4 priced a fix in reviewer rides, the cheapest resource on the
+board, while the operator's time went unmeasured):
+
+1. **Operator time: €100/h WITH BATCH-ENTRY SEMANTICS** — an operator interaction costs
+   `E/B + minutes×(100/60)` where E ≈ €17–25 is the fixed sit-down cost (keyboard, monitor,
+   context reload) amortized over the B items handled in that sitting. A change that avoids one
+   OUT-OF-SITTING summons (an escalation, a lone park, an alert pair) saves a full E (~€20–30);
+   one that merely trims an in-sitting item saves €3–8. Nothing else on this list reaches E per
+   event.
+2. **Paid API (OpenRouter): billed dollars** (the `/generation` harvest — exact).
+3. **Subscription draw: report BOTH prices** — cash-amortized (monthly fee × share of the
+   binding window drawn: the honest steady-state cost; marginal ≈ $0 under headroom) and
+   API-equivalent (list × tokens — the routing/saturation value; the Go meter computes this
+   natively). A saving denominated in reviewer/coordinator rides is THIS rail at its amortized
+   price, i.e. usually cents.
+
+Full model: [`../chainless-redesign.md`](../chainless-redesign.md) §The cost rethink
+(direction 5). A proposed change whose only saving is rail 2–3 says so honestly; a change
+claiming rail-1 savings names the operator-touch class it removes.
+
 ## Output contract (strict)
 
 When a retro finding becomes a process-change issue, its parent issue is the finding's ORIGIN
