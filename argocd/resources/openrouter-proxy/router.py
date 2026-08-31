@@ -1478,7 +1478,10 @@ def status_summary() -> dict:
         "SELECT decision, rail, model, reason, COUNT(*) FROM decisions WHERE ts > ? "
         "GROUP BY decision, rail, model, reason ORDER BY 5 DESC LIMIT 20", (now - 86400,))
     return {
-        "cooldowns_active": active_cooldowns(now),
+        "cooldowns_active": {
+            "worker": active_cooldowns(now, role="worker"),
+            "probe": active_cooldowns(now, role="probe"),
+        },
         "decisions_24h": [
             {"decision": d, "rail": rl, "model": m, "reason": rs, "n": n}
             for d, rl, m, rs, n in decisions_24h],
@@ -1556,9 +1559,10 @@ def metrics_lines() -> list[str]:
     else:
         lines.append("router_provider_events_total 0")
     lines += ["# TYPE router_cooldowns_active gauge",
-              "# HELP router_cooldowns_active Models currently held out of the routing pool (addendum-4 temporary blacklist).",
-              f"router_cooldowns_active {len(active_cooldowns(now))}",
-              "# TYPE router_decisions_total counter",
+              "# HELP router_cooldowns_active Models currently held out of the routing pool per role (addendum-4 temporary blacklist)."]
+    for _role in ("worker", "probe"):
+        lines.append(f'router_cooldowns_active{{role="{_role}"}} {len(active_cooldowns(now, role=_role))}')
+    lines += ["# TYPE router_decisions_total counter",
               "# HELP router_decisions_total /route outcomes by decision and defer reason."]
     dec = _read("SELECT decision, COALESCE(NULLIF(reason,''),'-'), COUNT(*) FROM decisions "
                 "GROUP BY decision, reason")
@@ -2680,6 +2684,44 @@ def self_test() -> int:
                           f'{f"  (${p}/M prompt)" if p is not None else "  (not in registry — verify price)"}')
                 raise AssertionError(
                     f"model_tiers must cover every stacks.json chain entry; missing: {missing}")
+    # ── homelab#1117: active_cooldowns() role filter on status/metrics call sites ──
+    # A model with BOTH a worker-scoped and a probe-scoped cooldown must not collapse into one
+    # entry. The status payload must show both roles; the metrics gauge must carry a role label.
+    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
+           ("dual-role-model", "worker", time.time() + 86400, 1, "429-burst", time.time()))
+    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
+           ("dual-role-model", "probe", time.time() + 86400, 2, "429-burst", time.time()))
+    _now_1117 = time.time()
+    _all_cool = active_cooldowns(_now_1117)  # no role filter — the OLD shape (collapses)
+    # The unfiltered call returns a dict keyed by model, so two rows for the same model
+    # collapse into one (last row wins). This is the bug the issue exists to fix — the
+    # role-filtered calls below prove the data is not lost, just invisible without a role.
+    assert "dual-role-model" in _all_cool, \
+        "dual-role-model must appear in unfiltered active_cooldowns() (collapsed but present)"
+    _worker_cool = active_cooldowns(_now_1117, role="worker")
+    _probe_cool = active_cooldowns(_now_1117, role="probe")
+    assert "dual-role-model" in _worker_cool, \
+        "dual-role-model must appear in worker-scoped active_cooldowns()"
+    assert "dual-role-model" in _probe_cool, \
+        "dual-role-model must appear in probe-scoped active_cooldowns()"
+    assert len(_worker_cool) + len(_probe_cool) == 2, \
+        f"worker+probe cooldowns must not collapse: worker={len(_worker_cool)} probe={len(_probe_cool)}"
+    _status = status_summary()
+    assert "worker" in _status["cooldowns_active"], \
+        "status_summary() cooldowns_active must have a 'worker' key"
+    assert "probe" in _status["cooldowns_active"], \
+        "status_summary() cooldowns_active must have a 'probe' key"
+    assert "dual-role-model" in _status["cooldowns_active"]["worker"], \
+        "dual-role-model must appear in status worker cooldowns"
+    assert "dual-role-model" in _status["cooldowns_active"]["probe"], \
+        "dual-role-model must appear in status probe cooldowns"
+    _metrics_body = "\n".join(metrics_lines())
+    assert 'router_cooldowns_active{role="worker"}' in _metrics_body, \
+        "metrics must have a role=worker gauge line"
+    assert 'router_cooldowns_active{role="probe"}' in _metrics_body, \
+        "metrics must have a role=probe gauge line"
+    # Clean up the test rows so they don't pollute later assertions
+    _write("DELETE FROM model_cooldowns WHERE model='dual-role-model'", ())
     print("router self-test: OK "
           f"(classes {'loaded' if _classes else 'absent — jail run without the file is fine'})")
     return 0
