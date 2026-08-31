@@ -253,9 +253,6 @@
       "review-reflex-now": [
         "bash scripts/reflex-now.sh review-reflex"
       ],
-      "coordinate-now": [
-        "bash scripts/reflex-now.sh coordinator-reflex"
-      ],
       "estimate-budget": [
         "python3 agents/estimate_budget.py \"$@\""
       ],
