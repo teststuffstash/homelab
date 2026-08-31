@@ -723,8 +723,10 @@ render_env_card() {
   # the launcher knows both, so the launcher stamps them (L1 provable-not-describable rule).
   # WHY: version skew — production serves the pinned release over the released corpus; a worktree
   # runs HEAD. Name the pin so a prod/worktree behavioral diff is interpretable rather than mysterious.
-  # Both lines are gated on the MCP knob being present (no MCP = no feedback tool to direct).
-  if [ -n "${MCP_ENDPOINT:-}" ]; then
+  # Both lines are gated on the MCP knob being present AND the harness actually attaching the
+  # config (no MCP = no feedback tool to direct). The opencode arm never attaches --mcp-config
+  # (#1039 non-goal), so the card must not claim the tool is available on that harness.
+  if [ -n "${MCP_ENDPOINT:-}" ] && [ "$HARNESS" != "opencode" ]; then
     printf '%s\n' "- **Feedback tool: available** (harness: ${HARNESS}, model: ${MODEL}). File structured feedback using the MCP tool — the harness and model above are stamped by the launcher, not self-reported."
     printf '%s\n' "- **Version skew:** Production serves ${AGENT_BASE_IMAGE##*:} (pinned release); this worktree runs HEAD. If behavior differs from production, the pin is the reference."
   fi
@@ -1074,7 +1076,7 @@ if [ -n "${RECIPE:-}" ]; then
   case "$HARNESS" in
     claude) RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}${MCP_CONFIG_B64:+CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json }claude -p --model ${_claude_model} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
     goose)  RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}${MCP_CONFIG_B64:+ --mcp-config /tmp/mcp-config.json}";;
-    opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP not wired: opencode's MCP config mechanism is unknown for this image — see #1041
+    opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP not wired: explicit non-goal of #1039 — opencode's MCP config mechanism is unknown for this pinned image, and enforced-egress rides never default to opencode per homelab#990
   esac
   # <<<REPLAY:harness-run-cmd<<<
 fi
