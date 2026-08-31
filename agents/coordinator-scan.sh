@@ -765,8 +765,21 @@ case "${SCAN_SOURCE:-}" in capacity)
 fast_unit_dispatch() {
   fu="$1"
   fclause="${fu%%|*}"; frest="${fu#*|}"; frepo="${frest%%|*}"; fitem="${frest#*|}"
-  [ "$fclause" = "changes-requested" ] || { echo "unit fast-path: clause '${fclause}' not whitelisted"; return 1; }
-  case "$fitem" in pr-[1-9]*) ;; *) echo "unit fast-path: malformed item '${fitem}'"; return 1;; esac
+  # Accept changes-requested (PR-shaped) OR goal-decompose/goal-checkpoint (issue-shaped).
+  # The goal clauses open new work (decompose a goal into child issues, or checkpoint a goal's
+  # burn-down) — they are NOT fix rounds, so the re-validation below is issue-shaped, not PR-shaped.
+  case "$fclause" in
+    changes-requested)
+      case "$fitem" in pr-[1-9]*) ;; *)
+        echo "unit fast-path: malformed item '${fitem}' for clause '${fclause}'"; return 1;;
+      esac ;;
+    goal-decompose|goal-checkpoint)
+      case "$fitem" in issue-[1-9]*) ;; *)
+        echo "unit fast-path: malformed item '${fitem}' for clause '${fclause}'"; return 1;;
+      esac ;;
+    *)
+      echo "unit fast-path: clause '${fclause}' not whitelisted"; return 1;;
+  esac
   fstack="$(stacks_json | jq -r --arg r "$frepo" '[.stacks[]|select(.repos|index($r))|.name]|first // ""')"
   [ -n "$fstack" ] || { echo "unit fast-path: repo ${frepo} in no stack"; return 1; }
   # Scoping mirrors the main loop: a per-stack instance only serves its own stack; the global
@@ -787,26 +800,97 @@ fast_unit_dispatch() {
   fi
   [ "$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.coordinatorEnabled // false')" = "true" ] \
     || { echo "unit fast-path: coordinator.enabled=false for ${fstack}"; return 1; }
-  # Re-validate the item live (at-least-once delivery): still open, still CHANGES_REQUESTED,
-  # no breaker label. Probe failure → full scan decides (conservative).
-  # `body` rides this existing call for the FU-146 per-item hold below — no extra request.
-  fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels,body,author 2>/dev/null)" \
-    || { echo "unit fast-path: PR probe FAILED"; return 1; }
-  [ "$(jq -r .state <<<"$fprjson")" = "OPEN" ] || { echo "unit fast-path: PR not open"; return 0; }
-  [ "$(jq -r .reviewDecision <<<"$fprjson")" = "CHANGES_REQUESTED" ] || { echo "unit fast-path: verdict moved on"; return 0; }
-  # homelab#397 (rule #6 — the compound was WEAKER than the scan on exactly this predicate): the
-  # main path scopes changes-requested to the WORKER author (671a053 — the snore#15 per-tick
-  # sonnet leak), and the reviewer rings on EVERY verdict citing "the scan re-applies the full
-  # predicate". This path re-validated everything BUT author, so each human/jail PR verdict
-  # burned a no-mandate session — hot since the PR-lane reversal (#387: #386/#396 both drew one
-  # on day one). Guard sits BEFORE the latch/WIP probes: no spend on a unit with no mandate.
-  fauthor="$(jq -r '.author.login // ""' <<<"$fprjson")"
-  if [ "$fauthor" != "${WORKER_AUTHOR:-app/homelab-agents-1234}" ]; then
-    echo "unit fast-path: PR author '${fauthor}' is not the worker lane — no fix-round mandate (homelab#397); settled"
-    return 0
+  # ── GOAL-DECOMPOSE BRANCH: issue-shaped re-validation ─────────────────────────────────────
+  # goal-decompose units carry issue-N items. Re-validate live with an issue-shaped probe that
+  # is no weaker than the main scan's predicate for these clauses (homelab#828).
+  # Probe failure → full scan decides (conservative, unchanged).
+  if [ "$fclause" = "goal-decompose" ]; then
+    fijson="$(gh issue view "${fitem#issue-}" --repo "${ORG}/${frepo}" \
+      --json state,labels,body 2>/dev/null)" \
+      || { echo "unit fast-path: issue probe FAILED"; return 1; }
+    [ "$(jq -r .state <<<"$fijson")" = "OPEN" ] || { echo "unit fast-path: issue not open"; return 0; }
+    # Must still carry agent/queued (the label that makes it dispatchable).
+    jq -e '.labels|map(.name)|index("agent/queued")' >/dev/null <<<"${fijson:-null}" \
+      || { echo "unit fast-path: issue no longer agent/queued"; return 0; }
+    # Breaker labels: agent/error (FU-069 human-first) and agent/blocked (human-waiting).
+    jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"${fijson:-null}" \
+      && { echo "unit fast-path: agent/error breaker on the issue — human-first"; return 0; }
+    jq -e '.labels|map(.name)|index("agent/blocked")' >/dev/null <<<"${fijson:-null}" \
+      && { echo "unit fast-path: agent/blocked on the issue — human-waiting"; return 0; }
+    # BREAKER #1 (homelab#828, ported from the main scan's goal-decompose gate): the actor who
+    # applied agent/queued must not be a Bot — the loop may not authorise its own goal.
+    # Same predicate as the main scan: last `labeled` event for agent/queued, actor.type.
+    # Fail-closed: unreadable → refuse (an unreadable authorisation is not an authorisation).
+    fqactor="$(gh api "repos/${ORG}/${frepo}/issues/${fitem#issue-}/events" --paginate \
+      --jq '[.[] | select(.event=="labeled" and .label.name=="agent/queued")] | last | .actor.type // ""' 2>/dev/null || echo "")"
+    if [ "$fqactor" = "Bot" ]; then
+      echo "unit fast-path: goal #${fitem#issue-} was queued by a BOT — refusing to dispatch (breaker #1: a human must authorise a goal)"
+      return 0
+    fi
+    if [ -z "$fqactor" ]; then
+      echo "unit fast-path: goal #${fitem#issue-}: could not read who applied agent/queued — refusing to dispatch (fail-closed)"
+      return 0
+    fi
+    # Base: line mandatory on task/goal containers (homelab#1053). Mirror the main scan's
+    # regex: require at least one character after the colon (homelab#828 r2 finding 2).
+    fqbody="$(jq -r '.body // ""' <<<"$fijson")"
+    if ! printf '%s' "$fqbody" | grep -qiP '^[ \t]*base:[ \t]*.+' >/dev/null 2>&1; then
+      echo "unit fast-path: goal #${fitem#issue-} has no Base: body line — refusing to dispatch"
+      return 0
+    fi
+    # Re-validated. Set fprjson to empty so the PR-specific checks below are skipped.
+    fprjson=""
+  # ── GOAL-CHECKPOINT BRANCH: issue-shaped re-validation ────────────────────────────────────
+  # goal-checkpoint units carry issue-N items. Re-validate live with an issue-shaped probe
+  # that is no weaker than the main scan's predicate for this clause (homelab#828).
+  # A checkpoint-eligible goal carries task/goal + agent/blocked by design — agent/queued is
+  # NOT required and agent/blocked is NOT a breaker for this clause.
+  # Probe failure → full scan decides (conservative, unchanged).
+  elif [ "$fclause" = "goal-checkpoint" ]; then
+    fijson="$(gh issue view "${fitem#issue-}" --repo "${ORG}/${frepo}" \
+      --json state,labels 2>/dev/null)" \
+      || { echo "unit fast-path: issue probe FAILED"; return 1; }
+    [ "$(jq -r .state <<<"$fijson")" = "OPEN" ] || { echo "unit fast-path: issue not open"; return 0; }
+    # Must still carry task/goal (the label that makes it a goal).
+    jq -e '.labels|map(.name)|index("task/goal")' >/dev/null <<<"${fijson:-null}" \
+      || { echo "unit fast-path: issue no longer task/goal"; return 0; }
+    # Breaker: agent/error (FU-069 human-first) only. agent/blocked is NOT a breaker for
+    # checkpoint — a checkpoint-eligible goal carries agent/blocked by design.
+    jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"${fijson:-null}" \
+      && { echo "unit fast-path: agent/error breaker on the issue — human-first"; return 0; }
+    # Breaker #1 (actor probe) is intentionally SKIPPED for checkpoint: the main scan does
+    # not apply it at the checkpoint site, and the fqactor probe reads agent/queued events
+    # which a checkpoint-eligible goal never has — an unchanged port would fail-closed on
+    # empty and settle every legitimate checkpoint unit (homelab#828 r2 finding 1).
+    # Base: check is also skipped — the main scan does not gate Base: at checkpoint.
+    # Re-validated. Set fprjson to empty so the PR-specific checks below are skipped.
+    fprjson=""
+  else
+    # ── PR-CLAUSE BRANCH: existing PR-shaped re-validation ──────────────────────────────────
+    # Re-validate the item live (at-least-once delivery): still open, still CHANGES_REQUESTED,
+    # no breaker label. Probe failure → full scan decides (conservative).
+    # `body` rides this existing call for the FU-146 per-item hold below — no extra request.
+    fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels,body,author 2>/dev/null)" \
+      || { echo "unit fast-path: PR probe FAILED"; return 1; }
   fi
-  jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"${fprjson:-null}" \
-    && { echo "unit fast-path: agent/error breaker on the PR — human-first"; return 0; }
+  # PR-specific re-validation checks (only when fprjson is set — i.e., changes-requested clause).
+  if [ -n "$fprjson" ]; then
+    [ "$(jq -r .state <<<"$fprjson")" = "OPEN" ] || { echo "unit fast-path: PR not open"; return 0; }
+    [ "$(jq -r .reviewDecision <<<"$fprjson")" = "CHANGES_REQUESTED" ] || { echo "unit fast-path: verdict moved on"; return 0; }
+    # homelab#397 (rule #6 — the compound was WEAKER than the scan on exactly this predicate): the
+    # main path scopes changes-requested to the WORKER author (671a053 — the snore#15 per-tick
+    # sonnet leak), and the reviewer rings on EVERY verdict citing "the scan re-applies the full
+    # predicate". This path re-validated everything BUT author, so each human/jail PR verdict
+    # burned a no-mandate session — hot since the PR-lane reversal (#387: #386/#396 both drew one
+    # on day one). Guard sits BEFORE the latch/WIP probes: no spend on a unit with no mandate.
+    fauthor="$(jq -r '.author.login // ""' <<<"$fprjson")"
+    if [ "$fauthor" != "${WORKER_AUTHOR:-app/homelab-agents-1234}" ]; then
+      echo "unit fast-path: PR author '${fauthor}' is not the worker lane — no fix-round mandate (homelab#397); settled"
+      return 0
+    fi
+    jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"${fprjson:-null}" \
+      && { echo "unit fast-path: agent/error breaker on the PR — human-first"; return 0; }
+  fi
   if ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
     echo "unit fast-path: capacity limited (FU-088) — no dispatch (cron sweep re-checks)"; return 0
   fi
