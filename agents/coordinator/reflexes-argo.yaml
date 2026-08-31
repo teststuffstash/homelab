@@ -92,27 +92,12 @@ spec:
             requests: { cpu: "100m", memory: "256Mi" }
             limits: { memory: "512Mi" }
 ---
-# Coordinator tick — the LLM sibling (dispatches workers, spends budget). UNSUSPENDED 2026-07-17
-# (operator, meta-7): the FU-050 switch is now the per-stack FU-080 knob — the scan spawns ONLY
-# for stacks whose claim sets coordinator.enabled=true (oracle first; sleep/platform stay off).
-apiVersion: argoproj.io/v1alpha1
-kind: CronWorkflow
-metadata:
-  name: coordinator-reflex
-  namespace: agent-coordinator
-spec:
-  schedules:
-    - "*/10 * * * *"
-  suspend: false # GLOBAL KILL SWITCH RELEASED 2026-07-28 (meta-15, operator "enable the world" after Phase 4). per-stack autonomy via claim coordinator.enabled (FU-080)
-  concurrencyPolicy: Forbid
-  startingDeadlineSeconds: 60
-  # FU-085 refactor: the scan container lives in the `coordinate` WorkflowTemplate
-  # (coordinate-argo.yaml) — this cron is the level-triggered BACKSTOP, the /coordinate Sensor is
-  # the edge. The template carries the FU-088 semaphore + the coordinator-scan mutex (Forbid
-  # doesn't see Sensor submissions). Demote */10 → */30 once the edge proves itself in live use.
-  workflowSpec:
-    workflowTemplateRef: { name: coordinate }
----
+# Coordinator tick — RETIRED 2026-08-31 (ADR-120, the switchboard rebrand): the global cron
+# backstop caught nothing by construction once all stacks graduated (dispatch skipped every
+# stack; fan-out is edge-wakes-only by design), measured as 18/18 no-op ticks over 3h. The
+# per-stack coordinate-<stack> crons are the level-triggered failure detector. The global
+# Sensor edge survives as the SWITCHBOARD (coordinate-argo.yaml): resolve repo-dumb rings +
+# capacity fan-out, never a board scan.
 # Model scout — weekly catalog diff + canary (FU-062). GLOBAL (fleet-wide by nature).
 apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
