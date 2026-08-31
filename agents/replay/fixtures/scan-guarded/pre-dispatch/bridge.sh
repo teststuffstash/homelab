@@ -10,3 +10,9 @@ HERE="$REPLAY_ROOT/agents"
 # and the guarded check must use the same path-boundary reasoning, not a private copy of it.
 . "${HERE}/footprint.sh"
 orphans=""
+
+# ── stub ── item_class_push is defined in the item-class block; the guarded-hold block calls it
+# but this fixture tests only the guarded-hold logic. Shim to capture calls instead.
+item_class_push() {
+  printf 'CALL item_class_push %s %s %s %s\n' "$1" "$2" "$3" "$4" >> "$REPLAY_ACTIONS"
+}
