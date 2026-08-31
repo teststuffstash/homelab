@@ -9,8 +9,10 @@ meant to avoid.)
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ 2026-08-30/31 OVERNIGHT UNATTENDED SESSION (codeowner+board, TICK-LOG entry) — the pickup set:**
-  - **OPERATOR: OpenRouter account credit NEARLY EXHAUSTED** (alert 00:37Z) — top-up is Tier-0/money;
-    until then M12 degrade + the PR#715 revert-at-depletion condition carry the mechanics.
+  - ~~OPERATOR: OpenRouter credit~~ TOPPED UP 2026-08-31 ($5.66 → $15.66); the 00:37Z alert was
+    the runway rule (credit < 2× trailing-24h burn), gauge read true throughout. Drain autopsy:
+    ~$4/day rides per-(issue,round) session keys — the standing $5-weekly stack keys sit idle
+    (homelab lifetime $0), so no aggregate per-stack brake exists; that gap is FU-180's charter.
   - Board fully drained: the 15 queued individual issues + 5 sprouts all merged+closed (11 seat
     codeowner reads, rationale on each approval). G-B verify items DONE: **#818 wears
     goal/post-launch** (unblocked by PR#1062 — the >100-char label descriptions had frozen every
@@ -20,15 +22,25 @@ meant to avoid.)
     `41 */6`) gets past auth; read the report from Loki tenant `platform-agents` by pod name
     (podGC eats stdout — the prober's no-durable-sink gap, now proven; roles.md already lists
     🌱-filing as missing).
-  - #946 (A5 seed): instrument now actually runnable (S3 grant restored + re-review.sh rail pin
-    `9fc46e50`); blocked ONLY on Zen free-tier 429 (18/18 attempts over ~2h) — one-call retry
-    recipe on the issue.
+  - #946 (A5 seed): 1 of 4 cells DONE 2026-08-31 (pr-440 shadow report produced in a Zen
+    capacity window); the other 3 re-429'd on review-size prompts — free tier admits trickle,
+    not sustained. Retry recipe on the issue; partial result commented there.
+  - oracle-fleet#304 → homelab#1093 RESOLVED 2026-08-31 (seat): 5 strikes' `cred-unresolved`
+    was the UNLABELED legacy `oracle-fleet-openrouter` Secret (proxy requires the session-key
+    label; operator never heals Secret drift → openrouter-operator#53). Hand-labeled, verified
+    200 `[+cred]` through the exact ref; #304 un-blocked, #1092 hand-closed. Coordinator
+    TOOL_GAP (create-but-not-comment on homelab) → #1095.
   - Watch-noise candidates (next meta-events/needs-meta touch): FAMINE emits per count-delta not
     threshold-crossing (dozens of noise pairs/night); "unlabeled >24h" false-flags containers
     (#949 retro-batch, #840/#787 buckets) — wants the sprout-report-skips-buckets exclusion.
   - #1069 (workers silently no-op when App GraphQL pool exhausted — measured on #969 r2) sits
     inert for 🌱 triage; fix shape spans recipe + agent-runtime exit contract.
-  - goal/1039 (G-F): #1058 in its round-2 fix cycle — the loop's; #938/#994 stay operator-routed.
+  - goal/1039 (G-F): #1058 terminal resolved as option 1 BY HAND (`f776ebc3`) → reviewer
+    re-approved + **MERGED 05:43Z**. #1041 hand-closed agent/done (goal-branch merge fires no
+    Fixes keyword — the sleep#123 shape); parent #1039's stale `agent/blocked` removed (it was
+    gating the scan off the whole tree — the "children not queueing" symptom). All 4 originals
+    now done → goal checkpoint/assembly fires on the next scan (#933's fixed clause).
+    #938/#994 stay operator-routed.
 - **⚑ 2026-08-30 EVENING SESSION OUTPUTS — the pickup set:**
   - **G-B COMPLETE to post-launch**: assembly merged as PR#1037 (reopened from #1030 under the
     operator identity — the governance-lint author trap, filed #1036 operator-lane; one
@@ -260,10 +272,19 @@ meant to avoid.)
   lanes) is on the work map** — (repo, base) serialization + goal v1.3 themes as ONE stint
   after S5; #829 absorbed at its authoring (de-queued, agent-fix kept).
 
-- **⚑ Retro (FU-058): r1 DELIVERED 2026-08-25** (PR#918; the batch = #927–#929 queued, #930
-  SEAT lane: the DELIM-FIELD transport-lint signature — `scripts/` deny path; #931 OPERATOR
-  lane: the `.agents/` pair). #932 queued (the silent success-push belt). **Next unattended
-  Mon 08-31 05:00Z fire = the clean acceptance.**
+- **⚑ Retro (FU-058): r2 FIRED ON SCHEDULE Mon 08-31 05:00Z — acceptance NOT clean but close**
+  (PR#1094): opus report coherent + read at the gate; deepseek cell's file carried 3 empty
+  template echoes + a leaked harness line (harvest sed re-arm, **#1096 queued**) — seat executed
+  the human gate as arbitration option 2 (junk stripped `7fb70fdb`, four-attempt evidence kept
+  as a note), reviewer re-picks, auto-merge armed. Episode also filed **#1097**
+  (changes-requested clause ignores agent/blocked on the PR — loop already riding it).
+  **Opus report's process-change table is OPERATOR-READ pending** — top rows: loop-filed
+  control-path defects must carry `agent-fix`+`agent/queued` (7 inert instances, 29.1
+  issue-days); predicate-REPLACE diffs must enumerate the old accepted-input set (6/31
+  blocking rounds); identical `(model,error_class)` re-strike routes to agent/error not
+  another ride (the #304 shape, 3/5 rides wasted); two one-line ledger fixes
+  (`is_snapshot` case, `calibration_error` denominator). r1 residue: #930 SEAT / #931
+  OPERATOR lanes still open.
 
 - **⚑ GARAGE, operator-owned residue (recovery COMPLETE + env rebuilt, #884/FU-184 archived):**
   the `garage repair blocks` hold can come off (reclaims ≈nothing now) · **do NOT delete the 3
