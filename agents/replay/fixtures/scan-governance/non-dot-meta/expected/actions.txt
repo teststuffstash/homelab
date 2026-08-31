@@ -1,0 +1,5 @@
+OUT DISPATCH #1101 (homelab, declared: something.else)
+OUT ORPHAN [homelab] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:
+OUT ORPHAN   issue #1100 — a path with a literal plus sign (declared: something+else → governance: something+else)
+OUT REACHED: end
+RC 0
