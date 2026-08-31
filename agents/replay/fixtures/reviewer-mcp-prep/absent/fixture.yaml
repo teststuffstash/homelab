@@ -1,0 +1,15 @@
+# homelab#1041 — reviewer MCP prep with the knob absent. Pins that MCP_PREP is empty when the
+# stack declares no spec.mcp.{endpoint,tools}, so nothing is rendered in the PREP heredoc.
+#
+# CONDITION UNDER REPLAY. MCP_ENDPOINT and MCP_TOOLS are unset (absent knob). The block leaves
+# MCP_PREP as the empty string.
+#
+# THE CONTRACT:
+#   1. MCP_PREP is empty — nothing rendered.
+name: reviewer-mcp-prep-absent
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-mcp-prep
+  - file:post.sh

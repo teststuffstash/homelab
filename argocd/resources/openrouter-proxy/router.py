@@ -85,7 +85,8 @@ CREATE TABLE IF NOT EXISTS circuit_events(
 CREATE TABLE IF NOT EXISTS openrouter_keys(
   ref TEXT PRIMARY KEY, first_seen REAL, last_seen REAL);
 CREATE TABLE IF NOT EXISTS model_cooldowns(
-  model TEXT PRIMARY KEY, until REAL, streak INTEGER, reason TEXT, set_ts REAL);
+  model TEXT, role TEXT DEFAULT 'worker', until REAL, streak INTEGER, reason TEXT, set_ts REAL,
+  PRIMARY KEY(model, role));
 CREATE TABLE IF NOT EXISTS capability(
   model TEXT, source TEXT, intelligence REAL, coding REAL, agentic REAL, updated_ts REAL,
   PRIMARY KEY(model, source));
@@ -176,6 +177,26 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                         conn.execute(f"ALTER TABLE go_usage ADD COLUMN {_gocol}")
                     except sqlite3.OperationalError:
                         pass  # duplicate column — schema already current
+                # homelab#1042: model_cooldowns grew role-scoped PRIMARY KEY(model, role). SQLite
+                # cannot change a PK by ALTER, so this rebuilds — which means it MUST NOT re-run
+                # after a successful migration (the INSERT ... SELECT would force role='worker'
+                # back onto scoped rows, and collide with the PK when both roles exist). The
+                # sibling migrations above are idempotent by construction; a rebuild is not, so
+                # it is guarded on the actual old shape.
+                try:
+                    _cool_cols = [r[1] for r in conn.execute("PRAGMA table_info(model_cooldowns)")]
+                    if _cool_cols and "role" not in _cool_cols:
+                        conn.execute("DROP TABLE IF EXISTS model_cooldowns_new")  # stray from a failed run
+                        conn.execute("CREATE TABLE model_cooldowns_new("
+                                     "model TEXT, role TEXT DEFAULT 'worker', until REAL, streak INTEGER, "
+                                     "reason TEXT, set_ts REAL, PRIMARY KEY(model, role))")
+                        conn.execute(
+                            "INSERT INTO model_cooldowns_new(model, role, until, streak, reason, set_ts) "
+                            "SELECT model, 'worker', until, streak, reason, set_ts FROM model_cooldowns")
+                        conn.execute("DROP TABLE model_cooldowns")
+                        conn.execute("ALTER TABLE model_cooldowns_new RENAME TO model_cooldowns")
+                except sqlite3.OperationalError:
+                    pass  # schema already current
                 if attempt != ":memory:":
                     conn.execute("PRAGMA journal_mode=WAL")
                 conn.commit()
@@ -955,14 +976,16 @@ def _cooldown_cfg() -> dict:
             "max_s": int(cfg.get("max_s", 3600))}
 
 
-def cooldown_note(model: str, status: int) -> str | None:
+def cooldown_note(model: str, status: int, role: str = "worker") -> str | None:
     """Fold one passive provider event into the cooldown state. Returns 'tripped'/'cleared'
-    for the data plane's log line, else None. Called AFTER record_provider_event."""
+    for the data plane's log line, else None. Called AFTER record_provider_event.
+    Cooldowns are scoped by (model, role) so probe-class sessions never latch the shared
+    router state the fixer lanes read (homelab#1042)."""
     now = time.time()
     if 200 <= status < 300:
         # Verified working for OUR account — clear any hold and reset the escalation streak.
-        if _read("SELECT 1 FROM model_cooldowns WHERE model=?", (model,)):
-            _write("DELETE FROM model_cooldowns WHERE model=?", (model,))
+        if _read("SELECT 1 FROM model_cooldowns WHERE model=? AND role=?", (model, role)):
+            _write("DELETE FROM model_cooldowns WHERE model=? AND role=?", (model, role))
             return "cleared"
         return None
     if status < 400:
@@ -980,24 +1003,32 @@ def cooldown_note(model: str, status: int) -> str | None:
         (rows[0][3] or 0), (rows[0][4] or 0)
     if n < cfg["min_events"] or bad / n < cfg["bad_share"]:
         return None
-    cur = _read("SELECT until, streak FROM model_cooldowns WHERE model=?", (model,))
+    cur = _read("SELECT until, streak FROM model_cooldowns WHERE model=? AND role=?", (model, role))
     if cur and cur[0][0] > now:
         return None  # already holding — don't extend on every event inside the window
     streak = (cur[0][1] if cur else 0) + 1
     hold = min(cfg["base_s"] * (2 ** (streak - 1)), cfg["max_s"])
     reason = ("429-burst" if n429 >= max(nauth, n5xx) else
               "auth-burst" if nauth >= n5xx else "5xx-burst")
-    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?)",
-           (model, now + hold, streak, reason, now))
+    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
+           (model, role, now + hold, streak, reason, now))
     return "tripped"
 
 
-def active_cooldowns(now: float | None = None) -> dict[str, dict]:
+def active_cooldowns(now: float | None = None, role: str | None = None) -> dict[str, dict]:
+    """Return active cooldowns. When role is given, filter to that role's cooldowns only
+    (homelab#1042 — probe-class sessions never latch the fixer lanes' router state)."""
     now = now or time.time()
+    if role:
+        rows = _read(
+            "SELECT model, until, streak, reason FROM model_cooldowns WHERE role=? AND until > ?",
+            (role, now))
+    else:
+        rows = _read(
+            "SELECT model, until, streak, reason FROM model_cooldowns WHERE until > ?",
+            (now,))
     return {m: {"until": u, "remaining_s": round(u - now), "streak": s, "reason": r}
-            for m, u, s, r in _read(
-                "SELECT model, until, streak, reason FROM model_cooldowns WHERE until > ?",
-                (now,))}
+            for m, u, s, r in rows}
 
 
 def _rotation_candidates(cinfo: dict) -> list[str]:
@@ -1256,7 +1287,7 @@ def route(payload: dict, ctx: dict) -> dict:
     # an empty set, which is exactly the behaviour the loop has had all along — now on purpose.
     struck = set(strikes_for(str(payload.get("task") or ""), str(payload.get("stack") or ""))) \
         if STRIKE_ENFORCE else set()
-    cool = active_cooldowns(now)
+    cool = active_cooldowns(now, role=role)
     skipped: list[dict] = list(pre_skipped)
     eligible: list[tuple[str, str]] = []
     for m in chain:
@@ -1330,7 +1361,8 @@ def route(payload: dict, ctx: dict) -> dict:
         break
     if result:
         half_open = bool(_read(
-            "SELECT 1 FROM model_cooldowns WHERE model=? AND until <= ?", (result["model"], now)))
+            "SELECT 1 FROM model_cooldowns WHERE model=? AND role=? AND until <= ?",
+            (result["model"], role, now)))
         decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
                     "half_open": half_open, "skipped": skipped, "jitter": jitter_on, **result}
     else:
@@ -1446,7 +1478,10 @@ def status_summary() -> dict:
         "SELECT decision, rail, model, reason, COUNT(*) FROM decisions WHERE ts > ? "
         "GROUP BY decision, rail, model, reason ORDER BY 5 DESC LIMIT 20", (now - 86400,))
     return {
-        "cooldowns_active": active_cooldowns(now),
+        "cooldowns_active": {
+            "worker": active_cooldowns(now, role="worker"),
+            "probe": active_cooldowns(now, role="probe"),
+        },
         "decisions_24h": [
             {"decision": d, "rail": rl, "model": m, "reason": rs, "n": n}
             for d, rl, m, rs, n in decisions_24h],
@@ -1524,9 +1559,10 @@ def metrics_lines() -> list[str]:
     else:
         lines.append("router_provider_events_total 0")
     lines += ["# TYPE router_cooldowns_active gauge",
-              "# HELP router_cooldowns_active Models currently held out of the routing pool (addendum-4 temporary blacklist).",
-              f"router_cooldowns_active {len(active_cooldowns(now))}",
-              "# TYPE router_decisions_total counter",
+              "# HELP router_cooldowns_active Models currently held out of the routing pool per role (addendum-4 temporary blacklist)."]
+    for _role in ("worker", "probe"):
+        lines.append(f'router_cooldowns_active{{role="{_role}"}} {len(active_cooldowns(now, role=_role))}')
+    lines += ["# TYPE router_decisions_total counter",
               "# HELP router_decisions_total /route outcomes by decision and defer reason."]
     dec = _read("SELECT decision, COALESCE(NULLIF(reason,''),'-'), COUNT(*) FROM decisions "
                 "GROUP BY decision, reason")
@@ -1625,6 +1661,8 @@ def metrics_lines() -> list[str]:
 def self_test() -> int:
     """In-memory round-trip; the CI gate (`devbox run router-self-test`). Also parses
     model-classes.json when it sits beside this file (the deployed layout)."""
+    global _conn, _persistent
+    import tempfile
     init(None, os.path.join(os.path.dirname(os.path.abspath(__file__)), "model-classes.json")
          if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                         "model-classes.json")) else None)
@@ -1683,6 +1721,53 @@ def self_test() -> int:
         ("pr", None), ("harness-death", "subscription-fallback")], \
         "ALTER'd layout must match the CREATE TABLE one — else the positional write is off by a column"
     _mig.close()
+    # ── homelab#1042: model_cooldowns PVC migration test ──
+    # The self-test normally starts from a FRESH schema (:memory: via init(None)), so it never
+    # exercises the "table already exists with the old 5-column shape" path that the live PVC
+    # store has. This creates an old-schema file DB, calls init() twice (the second call is
+    # the one that would silently re-latch or drop the store with the unguarded migration),
+    # and asserts the probe row survives both calls. The global connection is saved before
+    # and restored after so the rest of the test's in-memory data is not lost.
+    _saved_conn, _saved_persistent = _conn, _persistent
+    _mig_cool_db = tempfile.mktemp(suffix=".db")
+    try:
+        # Build the OLD 5-column schema (no role, model-only PK) — exactly what a pre-#1042 PVC
+        # store looks like.
+        _mig_cool = sqlite3.connect(_mig_cool_db)
+        _mig_cool.execute("""CREATE TABLE model_cooldowns(
+          model TEXT PRIMARY KEY, until REAL, streak INTEGER, reason TEXT, set_ts REAL)""")
+        _mig_cool.execute("INSERT INTO model_cooldowns VALUES(?,?,?,?,?)",
+                          ("old-model-a", 99999.0, 2, "429-burst", 10000.0))
+        _mig_cool.close()
+        # First call: migrates the old schema to the new role-scoped PK.
+        init(_mig_cool_db)
+        assert _persistent, "init() must report persistent=True for a file DB"
+        # Insert a probe row for the same model — this is the case that would collide on PK
+        # and drop the store if the migration re-ran.
+        _mig_cool = sqlite3.connect(_mig_cool_db)
+        _mig_cool.execute("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
+                          ("old-model-a", "probe", 88888.0, 1, "429-burst", 20000.0))
+        _mig_cool.execute("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
+                          ("old-model-a", "worker", 77777.0, 0, "", 30000.0))
+        _mig_cool.commit()
+        _mig_cool.close()
+        # Second call: the guarded migration must NOT re-run, leaving the probe row intact.
+        init(_mig_cool_db)
+        assert _persistent, "init() must stay persistent after second call (migration must not drop the store)"
+        _mig_cool = sqlite3.connect(_mig_cool_db)
+        _probe_rows = _mig_cool.execute(
+            "SELECT model, role FROM model_cooldowns WHERE role='probe'").fetchall()
+        assert len(_probe_rows) == 1 and _probe_rows[0] == ("old-model-a", "probe"), \
+            "probe row must survive second init() call — migration must not re-run and relabel it"
+        _all_rows = _mig_cool.execute(
+            "SELECT model, role FROM model_cooldowns ORDER BY role").fetchall()
+        assert len(_all_rows) == 2, \
+            "both worker and probe rows for the same model must survive second init() call"
+        _mig_cool.close()
+    finally:
+        if os.path.exists(_mig_cool_db):
+            os.unlink(_mig_cool_db)
+        _conn, _persistent = _saved_conn, _saved_persistent
     assert strikes_for("issue-19", "circles") == ["deepseek/deepseek-v4-flash"]
     # Recording is not acting: enforcement stays OFF until a policy decision (see STRIKE_ENFORCE).
     assert STRIKE_ENFORCE is False, "strike enforcement must default OFF — routing is unchanged by design"
@@ -2108,19 +2193,42 @@ def self_test() -> int:
     # free model starts 429ing: burst past min_events/bad_share trips a cooldown
     for _ in range(8):
         record_provider_event("inclusionai/ling-3.0-flash:free", "novita", 429)
-    assert cooldown_note("inclusionai/ling-3.0-flash:free", 429) == "tripped"
-    assert "inclusionai/ling-3.0-flash:free" in active_cooldowns()
+    assert cooldown_note("inclusionai/ling-3.0-flash:free", 429, role="worker") == "tripped"
+    assert "inclusionai/ling-3.0-flash:free" in active_cooldowns(role="worker")
     d2 = route(dict(base), CTX)
     assert d2["decision"] == "dispatch" and d2["model"] == "deepseek/deepseek-v4-flash", d2
     assert any(s["reason"] == "cooldown:429-burst" for s in d2["skipped"]), d2["skipped"]
     # the hold expires ("the model comes back online") → half-open: cheapest wins again
-    assert _write("UPDATE model_cooldowns SET until=? WHERE model=?",
+    assert _write("UPDATE model_cooldowns SET until=? WHERE model=? AND role='worker'",
                   (time.time() - 1, "inclusionai/ling-3.0-flash:free"))
     d3 = route(dict(base), CTX)
     assert d3["decision"] == "dispatch" and d3["model"] == "inclusionai/ling-3.0-flash:free", d3
     assert d3["half_open"], "an expired-cooldown pick must be flagged half-open"
     # a 2xx clears the row + streak; a re-trip would have doubled the hold before that
-    assert cooldown_note("inclusionai/ling-3.0-flash:free", 200) == "cleared"
+    assert cooldown_note("inclusionai/ling-3.0-flash:free", 200, role="worker") == "cleared"
+    # ── homelab#1042: role-scoped cooldowns — probe-class sessions never latch the fixer lanes' state ──
+    # Trip a cooldown with role="probe" — a worker route() must NOT see it.
+    for _ in range(8):
+        record_provider_event("inclusionai/ling-3.0-flash:free", "novita", 429)
+    assert cooldown_note("inclusionai/ling-3.0-flash:free", 429, role="probe") == "tripped"
+    assert "inclusionai/ling-3.0-flash:free" in active_cooldowns(role="probe"), \
+        "probe-scoped cooldown must be visible to probe role"
+    assert "inclusionai/ling-3.0-flash:free" not in active_cooldowns(role="worker"), \
+        "probe-scoped cooldown must NOT be visible to worker role"
+    # A worker route() must still see the model as available (no worker-scoped cooldown)
+    d_probe_cool = route(dict(base), CTX)
+    assert d_probe_cool["decision"] == "dispatch" and d_probe_cool["model"] == "inclusionai/ling-3.0-flash:free", \
+        f"worker route must dispatch the free model despite probe cooldown: {d_probe_cool}"
+    # A probe route() must see the model as unavailable (probe-scoped cooldown active)
+    d_probe_route = route(dict(base, role="probe"), CTX)
+    assert d_probe_route["decision"] == "dispatch" and d_probe_route["model"] == "deepseek/deepseek-v4-flash", \
+        f"probe route must skip the free model due to probe-scoped cooldown: {d_probe_route}"
+    assert any(s["reason"] == "cooldown:429-burst" for s in d_probe_route["skipped"]), \
+        f"probe route must cite cooldown in skipped: {d_probe_route['skipped']}"
+    # Clean up: clear the probe-scoped cooldown
+    assert cooldown_note("inclusionai/ling-3.0-flash:free", 200, role="probe") == "cleared"
+    assert "inclusionai/ling-3.0-flash:free" not in active_cooldowns(role="probe"), \
+        "probe-scoped cooldown must be cleared by 2xx"
     assert not _read("SELECT 1 FROM model_cooldowns WHERE model='inclusionai/ling-3.0-flash:free'")
     # claim deny + strike filtering → chain-exhausted escalates; cooldown-only defer retries
     dd = route(dict(base, chain=["deepseek/deepseek-v4-flash"],
@@ -2345,9 +2453,9 @@ def self_test() -> int:
         f"denied + decorrelate_from must defer chain-exhausted: {_dc4}"
     # Cooldown + decorrelate_from: a model on cooldown with decorrelate_from set to an unrelated
     # family must retain its retry_after_s (not lose it to the decorrelate: branch).
-    cooldown_note("inclusionai/ling-3.0-flash:free", 429)
+    cooldown_note("inclusionai/ling-3.0-flash:free", 429, role="worker")
     _now = time.time()
-    _write("UPDATE model_cooldowns SET until=? WHERE model=?",
+    _write("UPDATE model_cooldowns SET until=? WHERE model=? AND role='worker'",
            (_now + 99999, "inclusionai/ling-3.0-flash:free"))
     _dc5 = route(dict(base, chain=["inclusionai/ling-3.0-flash:free"],
                       decorrelate_from="tencent/hy3"), CTX)
@@ -2355,9 +2463,9 @@ def self_test() -> int:
         f"cooldown + decorrelate_from must defer cooldown: {_dc5}"
     assert _dc5.get("retry_after_s") is not None, \
         "cooldown + decorrelate_from must carry retry_after_s"
-    _write("UPDATE model_cooldowns SET until=? WHERE model=?",
+    _write("UPDATE model_cooldowns SET until=? WHERE model=? AND role='worker'",
            (_now - 1, "inclusionai/ling-3.0-flash:free"))
-    cooldown_note("inclusionai/ling-3.0-flash:free", 200)
+    cooldown_note("inclusionai/ling-3.0-flash:free", 200, role="worker")
     # Mixed decorrelate + deny: two models, one decorrelated (vendor deepseek), one denied.
     # With the all() guard, this must defer chain-exhausted (not relabel decorrelate:deepseek).
     _dc6 = route(dict(base, chain=["deepseek/deepseek-v4-flash", "moonshotai/kimi-k3"],
@@ -2368,15 +2476,15 @@ def self_test() -> int:
     # Mixed decorrelate + cooldown: two models, one decorrelated (vendor deepseek), one on
     # cooldown (moonshotai/kimi-k3). Must defer cooldown (not decorrelate) and carry retry_after_s.
     _now2 = time.time()
-    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?)",
-           ("moonshotai/kimi-k3", _now2 + 99999, 1, "429-burst", _now2))
+    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
+           ("moonshotai/kimi-k3", "worker", _now2 + 99999, 1, "429-burst", _now2))
     _dc7 = route(dict(base, chain=["deepseek/deepseek-v4-flash", "moonshotai/kimi-k3"],
                       decorrelate_from="opencode-go/deepseek-v4-flash"), CTX)
     assert _dc7["decision"] == "defer" and _dc7["reason"] == "cooldown", \
         f"mixed decorrelate+cooldown must defer cooldown: {_dc7}"
     assert _dc7.get("retry_after_s") is not None, \
         "mixed decorrelate+cooldown must carry retry_after_s"
-    _write("DELETE FROM model_cooldowns WHERE model=?", ("moonshotai/kimi-k3",))
+    _write("DELETE FROM model_cooldowns WHERE model=? AND role='worker'", ("moonshotai/kimi-k3",))
     # ── vendor_family() direct assertions ──
     assert vendor_family("opencode-go/deepseek-v4-flash") == "deepseek", \
         f"rail-prefixed deepseek → deepseek: {vendor_family('opencode-go/deepseek-v4-flash')}"
@@ -2576,6 +2684,44 @@ def self_test() -> int:
                           f'{f"  (${p}/M prompt)" if p is not None else "  (not in registry — verify price)"}')
                 raise AssertionError(
                     f"model_tiers must cover every stacks.json chain entry; missing: {missing}")
+    # ── homelab#1117: active_cooldowns() role filter on status/metrics call sites ──
+    # A model with BOTH a worker-scoped and a probe-scoped cooldown must not collapse into one
+    # entry. The status payload must show both roles; the metrics gauge must carry a role label.
+    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
+           ("dual-role-model", "worker", time.time() + 86400, 1, "429-burst", time.time()))
+    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?,?)",
+           ("dual-role-model", "probe", time.time() + 86400, 2, "429-burst", time.time()))
+    _now_1117 = time.time()
+    _all_cool = active_cooldowns(_now_1117)  # no role filter — the OLD shape (collapses)
+    # The unfiltered call returns a dict keyed by model, so two rows for the same model
+    # collapse into one (last row wins). This is the bug the issue exists to fix — the
+    # role-filtered calls below prove the data is not lost, just invisible without a role.
+    assert "dual-role-model" in _all_cool, \
+        "dual-role-model must appear in unfiltered active_cooldowns() (collapsed but present)"
+    _worker_cool = active_cooldowns(_now_1117, role="worker")
+    _probe_cool = active_cooldowns(_now_1117, role="probe")
+    assert "dual-role-model" in _worker_cool, \
+        "dual-role-model must appear in worker-scoped active_cooldowns()"
+    assert "dual-role-model" in _probe_cool, \
+        "dual-role-model must appear in probe-scoped active_cooldowns()"
+    assert len(_worker_cool) + len(_probe_cool) == 2, \
+        f"worker+probe cooldowns must not collapse: worker={len(_worker_cool)} probe={len(_probe_cool)}"
+    _status = status_summary()
+    assert "worker" in _status["cooldowns_active"], \
+        "status_summary() cooldowns_active must have a 'worker' key"
+    assert "probe" in _status["cooldowns_active"], \
+        "status_summary() cooldowns_active must have a 'probe' key"
+    assert "dual-role-model" in _status["cooldowns_active"]["worker"], \
+        "dual-role-model must appear in status worker cooldowns"
+    assert "dual-role-model" in _status["cooldowns_active"]["probe"], \
+        "dual-role-model must appear in status probe cooldowns"
+    _metrics_body = "\n".join(metrics_lines())
+    assert 'router_cooldowns_active{role="worker"}' in _metrics_body, \
+        "metrics must have a role=worker gauge line"
+    assert 'router_cooldowns_active{role="probe"}' in _metrics_body, \
+        "metrics must have a role=probe gauge line"
+    # Clean up the test rows so they don't pollute later assertions
+    _write("DELETE FROM model_cooldowns WHERE model='dual-role-model'", ())
     print("router self-test: OK "
           f"(classes {'loaded' if _classes else 'absent — jail run without the file is fine'})")
     return 0

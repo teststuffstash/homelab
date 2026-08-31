@@ -92,7 +92,21 @@ disabled_repos() {
     | "\(.) \($stack)"' 2>/dev/null
 }
 
-usage() { echo "usage: reviewer-optout.sh <repo> | --filter <repo>… | --lens-map <repo>" >&2; exit 2; }
+# ── MCP knob read (#1041) ──────────────────────────────────────────────────────────────────────
+# Expose the stack-wide spec.mcp.{endpoint,tools} for a given repo, from the SAME claims read.
+# The MCP endpoint is stack-wide, not per-repo — find the stack whose repos include this project.
+# Absent = no MCP attached. Callers source this file and call mcp_knob().
+# Usage: mcp_knob <repo>  →  prints "endpoint|tools" (| separated) or empty string.
+mcp_knob() {
+  local repo="$1"
+  printf '%s' "$CLAIMS" | jq -r --arg p "$repo" '
+    .items[]
+    | select(any(.spec.repos[]; .name == $p))
+    | "\(.spec.mcp.endpoint // "")|\(.spec.mcp.tools // [])"
+    | select(startswith("|") | not)' 2>/dev/null | head -1
+}
+
+usage() { echo "usage: reviewer-optout.sh <repo> | --filter <repo>… | --lens-map <repo> | --mcp-knob <repo>" >&2; exit 2; }
 [ $# -gt 0 ] || usage
 
 MODE="predicate"
@@ -112,7 +126,9 @@ if [ "$1" = "--lens-map" ]; then
   ' 2>/dev/null || echo "{}"
   exit 0
 fi
-if [ "$1" = "--filter" ]; then MODE="filter"; shift; fi
+if [ "$1" = "--filter" ]; then MODE="filter"; shift
+elif [ "$1" = "--mcp-knob" ]; then MODE="mcp-knob"; shift
+fi
 [ $# -gt 0 ] || usage
 
 if ! probe_claims; then
@@ -136,6 +152,10 @@ allowed() {  # allowed <repo> → 0 clear, 1 opted out (reason on stderr)
 
 if [ "$MODE" = "filter" ]; then
   for r in "$@"; do allowed "$r" && printf '%s\n' "$r"; done
+  exit 0
+fi
+if [ "$MODE" = "mcp-knob" ]; then
+  mcp_knob "$1"
   exit 0
 fi
 allowed "$1"

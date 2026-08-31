@@ -516,6 +516,23 @@ def _resolve_git_token(ns: str) -> str | None:
     return token_value
 
 
+def _resolve_role_from_ref(ref: str) -> str:
+    """Determine the agent role from a credential ref string.
+
+    Convention: refs in loop namespaces (<stack>-agents) are probe-class sessions.
+    All other refs are worker-class sessions. This is a proxy-side mapping table
+    (the -agents suffix convention), keeping the launcher out of the identity
+    decision — the caller cannot assert a role it does not hold.
+    """
+    try:
+        ns, _ = ref.split("/", 1)
+        if ns.endswith("-agents"):
+            return "probe"
+    except (ValueError, AttributeError):
+        pass
+    return "worker"
+
+
 def _inject_ref_auth(headers: dict) -> str:
     """Rewrite `Authorization: Bearer ref:<ns>/<name>` to the real key. Returns a note suffix.
 
@@ -2058,7 +2075,7 @@ class Proxy(BaseHTTPRequestHandler):
     def _forward(self, body: bytes | None, note: str,
                  or_model: str | None = None, or_provider: str | None = None,
                  cb_session: str | None = None, go_leg: bool = False, zen_leg: bool = False,
-                 or_leg: bool = False, _cred_was_cached: bool = False) -> None:
+                 or_leg: bool = False, role: str = "worker", _cred_was_cached: bool = False) -> None:
         # homelab#22: every forwarded request is registered in-flight for its full lifetime —
         # try/finally so a handler exception can never leak a phantom entry into the gauge.
         key = threading.get_ident()
@@ -2068,7 +2085,7 @@ class Proxy(BaseHTTPRequestHandler):
         try:
             self._forward_upstream(body, note, or_model=or_model, or_provider=or_provider,
                                    cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg,
-                                   or_leg=or_leg, _cred_was_cached=_cred_was_cached)
+                                   or_leg=or_leg, role=role, _cred_was_cached=_cred_was_cached)
         finally:
             with _inflight_lock:
                 _inflight.pop(key, None)
@@ -2077,7 +2094,7 @@ class Proxy(BaseHTTPRequestHandler):
                           or_model: str | None = None, or_provider: str | None = None,
                           cb_session: str | None = None, go_leg: bool = False,
                           zen_leg: bool = False, or_leg: bool = False,
-                          _cred_was_cached: bool = False) -> None:
+                          role: str = "worker", _cred_was_cached: bool = False) -> None:
         started = time.time()
         anthropic = self.path.startswith("/anthropic/")
         # ADR-107 (homelab#421): Go leg routing is by MODEL, not path — check it FIRST.
@@ -2273,9 +2290,9 @@ class Proxy(BaseHTTPRequestHandler):
             elif 200 <= status < 300:
                 note += _or_capacity_clear("2xx on the openrouter leg")
             # addendum 4: and the model cooldown state (temporary blacklist + auto-recovery)
-            cd = router.cooldown_note(or_model, status)
+            cd = router.cooldown_note(or_model, status, role=role)
             if cd:
-                hold = router.active_cooldowns().get(or_model) or {}
+                hold = router.active_cooldowns(role=role).get(or_model) or {}
                 log(f"cooldown {cd}: model={or_model} "
                     + (f"reason={hold.get('reason')} streak={hold.get('streak')} "
                        f"hold={hold.get('remaining_s')}s" if cd == "tripped"
@@ -2882,6 +2899,13 @@ class Proxy(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
+        # ADR-096 P3: credential-derived role identity — the proxy determines the caller's role
+        # from the ref namespace (loop namespaces <stack>-agents are probe-class; all others are
+        # worker-class). The caller cannot assert a role it does not hold.
+        _role = "worker"
+        _auth_hdr = self.headers.get("Authorization", "")
+        if _auth_hdr.startswith("Bearer ref:"):
+            _role = _resolve_role_from_ref(_auth_hdr[len("Bearer ref:"):].strip())
         if self.path == "/report":
             # ADR-096: post-run attribution from the launcher finalizer (M5). The AGENT_STRIKE
             # GitHub comment remains the human/audit twin — this is the queryable one. In-cluster
@@ -3353,7 +3377,7 @@ class Proxy(BaseHTTPRequestHandler):
                 pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
                       cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg, or_leg=or_leg,
-                      _cred_was_cached=_cred_was_cached)
+                      role=_role, _cred_was_cached=_cred_was_cached)
 
 
 def main() -> int:
@@ -5171,6 +5195,66 @@ data: [DONE]
     check("headroom: skipping " + ref_no_session_no_cr not in _out and "headroom: " + ref_no_session_no_cr + ": auth/key failed" in _out,
           "non-session no-CR: probed, residue skip is session-specific")
 
+    # ── Role identity from credential ref (issue #1057) ─────────────────────────────────
+    # Test _resolve_role_from_ref with probe refs (loop namespace ending in -agents)
+    check(_resolve_role_from_ref("platform-agents/claude-session") == "probe",
+          "probe role from platform-agents ref")
+    check(_resolve_role_from_ref("sleep-agents/claude-session") == "probe",
+          "probe role from sleep-agents ref")
+    # Test _resolve_role_from_ref with worker refs (project namespaces)
+    check(_resolve_role_from_ref("homelab/claude-session") == "worker",
+          "worker role from homelab ref")
+    check(_resolve_role_from_ref("agent-runtime/openrouter-key") == "worker",
+          "worker role from agent-runtime ref")
+    # Test _resolve_role_from_ref with invalid refs
+    check(_resolve_role_from_ref("") == "worker",
+          "worker role from empty ref")
+    check(_resolve_role_from_ref("no-slash") == "worker",
+          "worker role from ref without slash")
+
+    # ── Request-path role threading (issue #1057) ──────────────────────────────────────
+    # Verify that do_POST passes the determined role to _forward by monkeypatching.
+    # Create a mock handler with a probe credential and verify _forward receives role="probe".
+    _saved_forward = Proxy._forward
+    _captured_role = [None]
+
+    def _mock_forward(self, body, note, or_model=None, or_provider=None,
+                      cb_session=None, go_leg=False, zen_leg=False, or_leg=False,
+                      role="worker", _cred_was_cached=False):
+        _captured_role[0] = role
+        # Don't actually forward — just record the role
+        self.send_response(200)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    Proxy._forward = _mock_forward
+
+    # Build a mock request with a probe credential
+    _mock = Proxy
+    _req = _mock.__new__(_mock)
+    _req.headers = {"Authorization": "Bearer ref:platform-agents/claude-session",
+                    "Content-Type": "application/json",
+                    "Content-Length": "0"}
+    _req.path = "/chat/completions"
+    _req.command = "POST"
+    _req.rfile = io.BytesIO(b"")
+    _req.send_response = lambda s: None
+    _req.send_header = lambda k, v: None
+    _req.end_headers = lambda: None
+    _req.wfile = io.BytesIO()
+    _req.close_connection = False
+    _req.request_version = "HTTP/1.1"
+    _req.protocol_version = "HTTP/1.1"
+    _req.log_message = lambda *a: None
+
+    try:
+        _req.do_POST()
+        check(_captured_role[0] == "probe",
+              f"do_POST passes role=probe for probe ref (got {_captured_role[0]})")
+    except Exception as e:
+        check(False, f"do_POST with probe ref raised: {e}")
+    finally:
+        Proxy._forward = _saved_forward
     # ── #1021: cred-unresolved → 502 + negative-cache TTL coverage ─────────────────────────────
     # PR #1019 landed the cred-unresolved → 502 and negative-cache TTL fix but added no
     # self-test assertions. The paths have zero live occurrences, so the self-test is the

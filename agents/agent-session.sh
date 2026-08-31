@@ -578,6 +578,11 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
     # FU-114 L1: capture the egress knobs from the SAME claim read for the environment card (below).
     EGRESS_ENFORCE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.enforce]|map(select(.!=null))|first // empty' 2>/dev/null)"
     EGRESS_PROFILE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.profile]|map(select(.!=null))|first // empty' 2>/dev/null)"
+    # MCP knob from the SAME claim read (stack-wide spec.mcp, #1041). The knob is at the
+    # AgentStack level, not per-repo — find the stack whose repos include this project.
+    # Absent = no MCP attached; the env card and --mcp-config are gated on this being non-empty.
+    MCP_ENDPOINT="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.endpoint] | first // empty' 2>/dev/null)"
+    MCP_TOOLS="$(printf '%s' "$claims_json" | jq -rc --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.tools] | first // empty' 2>/dev/null)"
   else
     echo "WARN: agentstacks probe failed — cannot derive --docker or the egress knobs; pass --docker explicitly for docker-gated repos" >&2
   fi
@@ -712,6 +717,19 @@ render_env_card() {
     printf '%s\n' "- **This issue is one child of a GOAL.** It was split out so a single ride could finish it — deliver YOUR issue, not the goal. But the goal is what your work is finally judged against, so if finishing your slice would leave the goal's acceptance unreachable, say so in the PR body rather than quietly widening scope (a scope change belongs in a new issue for the owning concern — TRACKS rule 2). The parent, Goal + Acceptance only:"
     printf '%s\n' "$GOAL_CARD" | sed 's/^/  > /'
   fi
+  # WHY: Rung A evidence (oracle-fleet docs/feedback-rung-a.md, PR #295): organic feedback filing
+  # 0/3; with a directed-act line 10/12; instructive voice executes 10/10; harness/model elicitation
+  # from tool-description meta 0/10. The session cannot reliably report its own harness and model —
+  # the launcher knows both, so the launcher stamps them (L1 provable-not-describable rule).
+  # WHY: version skew — production serves the pinned release over the released corpus; a worktree
+  # runs HEAD. Name the pin so a prod/worktree behavioral diff is interpretable rather than mysterious.
+  # Both lines are gated on the MCP knob being present AND the harness actually attaching the
+  # config (no MCP = no feedback tool to direct). The opencode arm never attaches --mcp-config
+  # (#1039 non-goal), so the card must not claim the tool is available on that harness.
+  if [ -n "${MCP_ENDPOINT:-}" ] && [ "$HARNESS" != "opencode" ]; then
+    printf '%s\n' "- **Feedback tool: available** (harness: ${HARNESS}, model: ${MODEL}). File structured feedback using the MCP tool — the harness and model above are stamped by the launcher, not self-reported."
+    printf '%s\n' "- **Version skew:** Production serves ${AGENT_BASE_IMAGE##*:} (pinned release); this worktree runs HEAD. If behavior differs from production, the pin is the reference."
+  fi
 }
 # <<<REPLAY:render_env_card<<<
 
@@ -719,6 +737,7 @@ render_env_card() {
 # the card, splice it into the recipe at the marker, base64-carry the augmented recipe, and wrap the
 # harness-specific invocation. Both harnesses read the SAME augmented recipe (goose natively; claude
 # as an appended system prompt — it parses the goose YAML fine, agent-runtime#14).
+[ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest) — sourced before the env card is rendered so ${AGENT_BASE_IMAGE} is available (homelab#1041)
 if [ -n "${RECIPE:-}" ]; then
   # FU-114 L3: deterministic task-type recipe selection (docs/agents/fixer-context.md). The
   # dispatcher passes the DEFAULT recipe (.agents/fix.yaml); if the issue carries a `task/<class>`
@@ -1009,6 +1028,25 @@ if [ -n "${RECIPE:-}" ]; then
   # floor cannot stand in for it: that rewrites the UPSTREAM request and cannot govern goose's own
   # client-side emit ceiling. The claude arm stays untouched — the var is goose's.
   # >>>REPLAY:harness-run-cmd>>>
+  # ── MCP config (#1041): build the --mcp-config JSON from the claim knob ──────────────────────
+  # Rendered only when the stack declares spec.mcp.endpoint. The config is base64-carried into the
+  # pod command so the harness can write it to a temp file and pass it as --mcp-config.
+  # For goose: --mcp-config /tmp/mcp-config.json; for claude: injected via the claude.json config.
+  # ⚠ This block sits INSIDE the replay region because replay clauses run self-contained — a shared
+  # helper defined at the script top is invisible to them (proven by RC-127). The MCP_PRELUDE and
+  # MCP_CONFIG_B64 variables are consumed by the goose case below, inside the same region.
+  # Unparseable tools → loud degrade, no attach — same guard as the reviewer arm; an aborted
+  # launcher here is fleet-wide, so this sibling must never be the one that keeps set -e alive.
+  MCP_PRELUDE=""
+  if [ -n "${MCP_ENDPOINT:-}" ]; then
+    MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}' 2>/dev/null)" || MCP_CONFIG_JSON=""
+    if [ -n "$MCP_CONFIG_JSON" ]; then
+      MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
+      MCP_PRELUDE="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json; "
+    else
+      echo "agent-session: MCP tools knob unparseable — dispatching WITHOUT MCP attach" >&2
+    fi
+  fi
   # A claude ride MUST carry --model: without the flag the CLI runs its own DEFAULT — measured
   # 2026-08-13 as claude-opus-5[1m] on this image — not the dispatched model. Every claude/haiku
   # ride since the harness landed (103 on the platform stack in the last 7d alone, ~$419
@@ -1036,14 +1074,13 @@ if [ -n "${RECIPE:-}" ]; then
   # the script top is invisible to them (proven by RC-127 in the first fixture run).
   case "$_claude_model" in opencode-go/deepseek-v4-flash) _go_ctx="CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 ";; *) _go_ctx="";; esac
   case "$HARNESS" in
-    claude) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}claude -p --model ${_claude_model} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
-    goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}";;
-    opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
+    claude) RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}${MCP_CONFIG_B64:+CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json }claude -p --model ${_claude_model} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
+    goose)  RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}${MCP_CONFIG_B64:+ --mcp-config /tmp/mcp-config.json}";;
+    opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP not wired: explicit non-goal of #1039 — opencode's MCP config mechanism is unknown for this pinned image, and enforced-egress rides never default to opencode per homelab#990
   esac
   # <<<REPLAY:harness-run-cmd<<<
 fi
 
-[ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
 IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}}"
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"
 SECRET="${OR_SECRET:-${PROJECT}-openrouter}"  # operator-minted, budget-capped. Default: the shared standing key; the coordinator passes --openrouter-secret to bind a per-session ephemeral key instead
