@@ -189,7 +189,7 @@ def is_snapshot(issue_state, terminal_label):
     is still OPEN (more rounds may land) or the terminal label is not one this reflex recognizes
     (the only terminal labels today are agent/done | agent/blocked). Historical rows predating the
     flag carry no `snapshot` field and are treated as NOT snapshot by the retro's pain-rank."""
-    return issue_state == "open" or terminal_label not in TERMINAL_LABELS
+    return str(issue_state).lower() == "open" or terminal_label not in TERMINAL_LABELS
 
 
 def strike_rounds(org, project, issue):
@@ -375,7 +375,7 @@ def main():
             "key": key, "project": project, "issue": issue, "stack": repos.get(project, ""),
             "terminal_label": label, "issue_state": state, "closed_at": closed_at,
             "budget_tier": tier, "budget_cap_usd": cap,
-            "calibration_error": round(summ["total_cost_usd"] / cap, 3) if cap else None,
+            "calibration_error": round(summ["total_cost_usd"] / (cap * len(rounds)), 3) if cap else None,
         }
         rec.update(summ)
         # r4 F5: mark mid-flight stamps — at emit time the issue is still OPEN or the terminal
