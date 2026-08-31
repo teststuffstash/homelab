@@ -1,0 +1,5 @@
+CALL gh pr view 1096 --repo teststuffstash/homelab --json comments,commits,reviews
+OUT ORPHAN [homelab] ⏳ changes-requested held (re-review pending — round pushed cccccccc):
+OUT ORPHAN   PR #1096
+OUT REACHED: end
+RC 0

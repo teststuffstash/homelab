@@ -2258,7 +2258,27 @@ EOF_GOVERNANCE
       # goose-32602 truncation, reported `exit_status: clean`, banked nothing, and only a human
       # asking "where is the commit?" caught it. Reached only with NO live worker (both holds
       # above ran first), so a running round is never mistaken for a finished one.
-      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits 2>/dev/null)" || cr_probe=''
+      # Also carries the reviewable_again probe (homelab#975): reviews added to the same fetch.
+      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits,reviews 2>/dev/null)" || cr_probe=''
+      # reviewable_again hold (homelab#975): a fix round that pushed a new commit is the
+      # reviewer's work item, not the coordinator's — the next bot verdict retires the clause.
+      # Same predicate as review-reflex.sh:279 (newest non-merge commit > newest
+      # APPROVED/CHANGES_REQUESTED review). Fail-safe: a failed or empty probe falls through.
+      cr_reviews=""
+      if [ -n "$cr_probe" ]; then
+        cr_reviews="$(printf '%s' "$cr_probe" | jq -r '
+          def newest_review_at:
+            ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
+          def newest_commit_at:
+            ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
+          if newest_commit_at != "" and newest_commit_at > newest_review_at then "held" else "" end
+        ' 2>/dev/null)" || cr_reviews=""
+      fi
+      if [ -n "$cr_reviews" ]; then
+        head8="$(printf '%s' "$cr_probe" | jq -r '([.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | head -c8)"
+        orphans="${orphans}[$repo] ⏳ changes-requested held (re-review pending — round pushed ${head8}):\n  PR #${u}\n"
+        continue
+      fi
       cr_noop=""
       if [ -n "$cr_probe" ]; then
         cr_noop="$(printf '%s' "$cr_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || cr_noop=""
