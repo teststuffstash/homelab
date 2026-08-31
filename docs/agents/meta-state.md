@@ -9,8 +9,10 @@ meant to avoid.)
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ 2026-08-30/31 OVERNIGHT UNATTENDED SESSION (codeowner+board, TICK-LOG entry) — the pickup set:**
-  - **OPERATOR: OpenRouter account credit NEARLY EXHAUSTED** (alert 00:37Z) — top-up is Tier-0/money;
-    until then M12 degrade + the PR#715 revert-at-depletion condition carry the mechanics.
+  - ~~OPERATOR: OpenRouter credit~~ TOPPED UP 2026-08-31 ($5.66 → $15.66); the 00:37Z alert was
+    the runway rule (credit < 2× trailing-24h burn), gauge read true throughout. Drain autopsy:
+    ~$4/day rides per-(issue,round) session keys — the standing $5-weekly stack keys sit idle
+    (homelab lifetime $0), so no aggregate per-stack brake exists; that gap is FU-180's charter.
   - Board fully drained: the 15 queued individual issues + 5 sprouts all merged+closed (11 seat
     codeowner reads, rationale on each approval). G-B verify items DONE: **#818 wears
     goal/post-launch** (unblocked by PR#1062 — the >100-char label descriptions had frozen every
