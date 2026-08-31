@@ -45,9 +45,15 @@ jobs:
       # The warm-up below MUST come first on every event: devbox's first run creates the venv
       # non-atomically, and two concurrent first runs die on EEXIST — proven by this
       # structure's own verification dispatch (run 33409776004, 2026-08-31: the ∥ starts
-      # raced validate-pins because the PR-only diff step had skipped).
+      # raced validate-pins because the PR-only diff step had skipped). It also snapshots the
+      # devbox env: the ∥ suites run their underlying scripts BARE under that snapshot,
+      # because EVERY `devbox run` rewrites .devbox/gen/scripts/ and a concurrent serial
+      # `devbox run` then dies on "text file busy" (PR #1139's run 33410609342) — only the
+      # serial steps may invoke devbox itself.
       - name: Warm the devbox closure (once, before anything runs ∥)
-        run: devbox run -- true
+        run: |
+          devbox run -- true
+          devbox shellenv > /tmp/devbox-env.sh
 
       - name: Changed paths (skip map for the background suites)
         id: diff
@@ -74,15 +80,16 @@ jobs:
       - name: PrometheusRule exprs parse — start ∥ (devbox run prometheus-rules-lint)
         if: github.event_name != 'pull_request' || steps.diff.outputs.prom == 'true'
         run: |
-          # detach fully (own fds, no step pipes) — a leaked step fd can hold the step open
-          ( devbox run prometheus-rules-lint; echo $? > /tmp/prom-lint.rc ) > /tmp/prom-lint.log 2>&1 < /dev/null &
+          # detach fully (own fds, no step pipes) — a leaked step fd can hold the step open.
+          # Bare script under the shellenv snapshot, NOT `devbox run` — see the warm-up step.
+          ( source /tmp/devbox-env.sh && bash scripts/prometheus-rules-lint.sh; echo $? > /tmp/prom-lint.rc ) > /tmp/prom-lint.log 2>&1 < /dev/null &
 
       # ADR-103 leg 1: every committed clause replay executes on every push — the generalized
       # harness (agents/replay/, homelab#206). Runs ∥; verdict at "— collect" below.
       - name: Clause replays — start ∥ (devbox run clause-replay)
         if: github.event_name != 'pull_request' || steps.diff.outputs.clause == 'true'
         run: |
-          ( devbox run clause-replay; echo $? > /tmp/clause-replay.rc ) > /tmp/clause-replay.log 2>&1 < /dev/null &
+          ( source /tmp/devbox-env.sh && bash agents/replay/run.sh; echo $? > /tmp/clause-replay.rc ) > /tmp/clause-replay.log 2>&1 < /dev/null &
 
       # Mirror pre-warm (#80): when THIS PR changes the runner-image pin, pull the new image's
       # blobs through the LAN ghcr mirror once while CI gates the merge — the ≤maxRunners node
