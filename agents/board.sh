@@ -210,17 +210,10 @@ demand_json="[]"
 for repo in $all_repos; do
   case "$repo" in */*) slug="$repo";; *) slug="$ORG/$repo";; esac
   preqs="$(gh issue list --repo "$slug" --state open --label "platform-request" --limit 50 --json number,title,createdAt,body,labels 2>/dev/null)" || preqs=""
+  jq -e . >/dev/null 2>&1 <<<"${preqs:-null}" || preqs=""
   if [ -z "$preqs" ]; then
-    # gh failed — distinguish missing label (zero demand, quiet) from real probe failure
-    preqs_err="$({ gh issue list --repo "$slug" --state open --label "platform-request" --limit 50 --json number,title,createdAt,body,labels 2>&1 1>/dev/null; } || true)"
-    if printf '%s' "$preqs_err" | grep -qi "could not find any label"; then
-      preqs="[]"
-    else
-      echo "WARN board: $slug platform-request probe PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" >&2
-      preqs="[]"; nfail=$((nfail + 1))
-    fi
-  else
-    jq -e . >/dev/null 2>&1 <<<"${preqs:-null}" || preqs="[]"
+    echo "WARN board: $slug platform-request probe PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" >&2
+    preqs="[]"; nfail=$((nfail + 1))
   fi
   if [ "$preqs" != "[]" ]; then
     rstacks="$(printf '%s' "$stack_index" | jq -r --arg r "$repo" 'to_entries[] | select(.value | index($r)) | .key' | tr '\n' ',' | sed 's/,$//')"
