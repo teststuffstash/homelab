@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-198** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-199** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -597,6 +597,17 @@ the block needs pruning, not more headings.
       acceptance. Relates FU-095, FU-090(c), ADR-104.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
+
+- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: the sync manager's in-memory
+      state can corrupt under a fast-failure storm and Pending then piles up silently**
+      (2026-08-31, operator-spotted: waiters told "5/5" against a provably empty semaphore
+      for 65+ min after the #1136 exit-128 storm; controller restart drained it in minutes).
+      Postmortem + belt audit + evidence + the storm→wedge trigger note:
+      [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
+      **Next:** an alert on the wedge shape — Argo Pending high-and-not-draining while
+      `anthropic_subscription_semaphore_running` ≈ 0 — into `argo-workflows-alerts` with
+      promtool cover; check upstream sync-manager fixes (`v4.0.7` today) before any bump.
+      Relates FU-187 (sibling belt-blindness).
 
 - [ ] **FU-187** — **Quiet-stall detection: a Running agent pod with a silent rail is invisible
       to every belt** (issue-272-r1, 2026-08-26: opencode slept ~3h on a black-holed proxy IP,
