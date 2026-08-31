@@ -1,0 +1,5 @@
+{
+  "state": "OPEN",
+  "labels": [],
+  "body": "Base: master\n\nTouches: agents/coordinator-scan.sh\n"
+}

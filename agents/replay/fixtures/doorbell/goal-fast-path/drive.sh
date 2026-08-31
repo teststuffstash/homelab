@@ -1,0 +1,14 @@
+# ── drive ── three legs: valid goal-decompose dispatches, bot-queued is refused, moved-on settles.
+echo "REACHED: legitimate goal-decompose unit — dispatches"
+fast_unit_dispatch "goal-decompose|circles|issue-5"
+printf 'RETURN %s\n' "$?"
+
+echo "REACHED: bot-queued goal — breaker #1 refuses"
+fast_unit_dispatch "goal-decompose|circles|issue-6"
+printf 'RETURN %s\n' "$?"
+
+echo "REACHED: issue no longer agent/queued — settles, full scan decides"
+fast_unit_dispatch "goal-decompose|circles|issue-7"
+printf 'RETURN %s\n' "$?"
+
+echo "REACHED: end"

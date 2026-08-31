@@ -1,0 +1,18 @@
+CALL gh issue view 5 --repo teststuffstash/circles --json state,labels,body
+CALL gh api repos/teststuffstash/circles/issues/5/events --paginate --jq [.[] | select(.event=="labeled" and .label.name=="agent/queued")] | last | .actor.type // ""
+CALL kubectl -n circles get pods -l app=agent-session,project=circles --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL kubectl -n circles-agents get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL gh issue view 6 --repo teststuffstash/circles --json state,labels,body
+CALL gh api repos/teststuffstash/circles/issues/6/events --paginate --jq [.[] | select(.event=="labeled" and .label.name=="agent/queued")] | last | .actor.type // ""
+CALL gh issue view 7 --repo teststuffstash/circles --json state,labels,body
+OUT REACHED: legitimate goal-decompose unit — dispatches
+OUT → unit fast-path dispatch for circles: circles issue-5 (goal-decompose, model sonnet, wip 1)
+OUT RETURN 0
+OUT REACHED: bot-queued goal — breaker #1 refuses
+OUT unit fast-path: goal #6 was queued by a BOT — refusing to dispatch (breaker #1: a human must authorise a goal)
+OUT RETURN 0
+OUT REACHED: issue no longer agent/queued — settles, full scan decides
+OUT unit fast-path: issue no longer agent/queued
+OUT RETURN 0
+OUT REACHED: end
+RC 0
