@@ -169,6 +169,16 @@ while true; do
                    | select(.title != "Dependency Dashboard")
                    | select(.body // "" | test("(^|\\n)alert-fp:") | not)
                    | select(.title | startswith("stint:") | not)
+                   # CONTAINERS are label-inert BY DESIGN and legitimately long-lived — flagging
+                   # them is the false-positive class the 2026-08-30/31 sessions logged nightly
+                   # (#840/#787 post-launch buckets, #949/#1101 retro-batch parents). The
+                   # sprout-report-skips-buckets exclusion ported (IL-T17: a bucket is a
+                   # CONTAINER, not a work item; retro-batch = the observability-and-retro
+                   # section-B2 shape). Lifecycle owners: the goal checkpoint and the retro
+                   # predecessor-score sweep, never this triage clause. NO APOSTROPHES in this
+                   # comment — it lives inside the single-quoted jq program.
+                   | select(.title | startswith("post-launch:") | not)
+                   | select(.title | startswith("retro-batch:") | not)
                    | "NEEDS-META triage: \($r)#\(.number) unlabeled >24h — invisible to every clause"' 2>/dev/null)
     [ -n "$unl" ] && out="$out$unl"$'\n'
   done
