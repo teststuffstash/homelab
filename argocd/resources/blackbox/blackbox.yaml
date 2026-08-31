@@ -17,6 +17,20 @@ data:
         http:
           preferred_ip_protocol: ip4
           follow_redirects: true
+      # DNS probe through Unbound for github names (homelab#1125): probes Unbound itself at
+      # 192.168.2.1:53 for api.github.com A record. A SERVFAIL (cached or fresh) or empty answer
+      # fails the probe — the regex matches any non-empty A answer. Two cached-SERVFAIL incidents
+      # on 2026-08-26 and 2026-08-31; the alert routes to the responder for report-only triage.
+      dns_github:
+        prober: dns
+        timeout: 10s
+        dns:
+          preferred_ip_protocol: ip4
+          query_name: api.github.com
+          query_type: A
+          validate_answer_rrs:
+            fail_if_not_matches_regexp:
+              - ".*"
       # MCP gateway aliveness: a JSON-RPC initialize POST. 401 is a PASS — it proves the gateway
       # PROCESS answered (auth-gate before the stdio child); the outage signature was 5xx/503
       # from HAProxy over dead children. The child-exercising tools/call check is the PROBER
@@ -94,6 +108,24 @@ spec:
         - https://argo.teststuff.net
         - https://transcripts.local.teststuff.net
         - https://specs.oracle.teststuff.net
+---
+# DNS probe through Unbound for github names (homelab#1125). Targets Unbound's own resolver
+# at 192.168.2.1:53, not the pod resolver chain, so the belt localizes the layer the way the
+# hand triage did. The dns_github module validates a non-empty A answer for api.github.com.
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: unbound-github
+  namespace: monitoring
+spec:
+  jobName: blackbox-unbound-github
+  interval: 60s
+  module: dns_github
+  prober: { url: blackbox-exporter.monitoring.svc:9115 }
+  targets:
+    staticConfig:
+      static:
+        - 192.168.2.1:53
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -181,3 +213,15 @@ spec:
           annotations:
             summary: "Synthetic probe failing: {{ $labels.instance }}"
             description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster. ⚠ Since homelab#336 the expr reads a 5m range, so this means at least one failed probe in every 5m window across those ten minutes, and up to 5m may have passed since the last one — check probe_success{instance=\"{{ $labels.instance }}\"} before concluding it is still down."
+        # Unbound cached SERVFAIL for github names (homelab#1125). Two incidents on 2026-08-26
+        # and 2026-08-31; the fault is a cached RRset that STANDS until acted on, so a short
+        # window is honest — both incidents lasted well past 3m. Routes to the responder for
+        # report-only triage (cluster-external infra, operator/maintenance lane).
+        - alert: UnboundGithubServfail
+          expr: probe_success{instance="192.168.2.1:53",job="blackbox-unbound-github"} == 0
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Unbound not answering for api.github.com"
+            description: "SERVFAIL/no answer for api.github.com through Unbound (192.168.2.1:53) — check for a cached SERVFAIL (TICK-LOG 2026-08-26/08-31); if so, POST /api/unbound/service/restart, wallet API creds."
