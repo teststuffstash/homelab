@@ -419,9 +419,10 @@ job, in order (re-read live state first, exit clean if someone already closed it
    **GOAL-CHILD leg (FU-143): the issue arrives OPEN**, because its PR merged into the
    `goal/**` base its `Base:` line declares and the closing keyword only fires on
    default-branch merges. Verify against the GOAL BRANCH, not master: the referencing PR's
-   `baseRefName` equals the declared base, and `ci` on the goal branch head is green
-   (`gh run list --branch <goal-branch>`). The master/-iac checks below do NOT apply — this
-   code is not on master yet; the assembly PR is where that gets judged. Do not reopen
+   `baseRefName` equals the declared base, and `ci` on the PR head is green
+   (`gh pr view <PR> --json headRefOid | jq -r .headRefOid` then `gh run list --commit <sha>`).
+   The master/-iac checks below do NOT apply — this code is not on master yet; the assembly PR
+   is where that gets judged. Do not reopen
    anything here; a wrong-looking outcome is a comment on the GOAL — the next goal-checkpoint reads it.
    **-iac repos verify the CLUSTER, not GitHub (IAC-G03, 2026-08-02):** in an `*-iac` repo the
    definition of done is *reconciled-and-healthy*, so before flipping the label also check —

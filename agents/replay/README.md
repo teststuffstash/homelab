@@ -697,3 +697,4 @@ Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the
   placement-and-resources entries: the harness asserts a clause's `gh`/`kubectl` calls, and
   this diff emits none. Evidence rather than assertion — the full suite stays green on the
   change with every `expected/actions.txt` untouched.
+- **homelab#1035 (2026-08-30, PR #1078)** — two rationale comments restored inside the `>>>REPLAY:config-defaults>>>` block of `agents/coordinator-scan.sh` (`REPO_MAX_WIP=3` citing ADR-097/TRACKS rule 1; `ISSUE_LIST_LIMIT=200` citing the homelab#840 24-day-invisible-queued-issue finding). Comment-only — no value, predicate, or control-flow changed, so the extracted clause values are byte-identical and no action stream moves. Evidence rather than assertion — `devbox run clause-replay` 298 passed, every `expected/actions.txt` untouched.
