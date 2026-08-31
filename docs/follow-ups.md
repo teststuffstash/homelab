@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-197** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-198** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -436,6 +436,15 @@ the block needs pruning, not more headings.
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 
+- [ ] **FU-197** — **manifest-lint fetches every kubeconform schema from raw.githubusercontent.com
+      on each CI run — uncached, so a GitHub-raw hiccup reds the required check.** Bit PR#1099
+      (2026-08-31): the runner got HTTP 400 on a schema fetch (a guaranteed-404 kustomization
+      lookup; the jail saw 404 for the same URL) and kubeconform hard-failed the lint. The
+      kustomization class is excluded now (`manifest-lint.sh`, same commit), but every REAL schema
+      fetch (~101/run) still rides the public internet with no mirror — unlike images (ghcr/MCR
+      mirrors) and nix (shared /nix). **Next:** vendor the used schema set into the repo (or bake a
+      `-schema-location` cache into the warm ARC runner volume) so the lint is hermetic; grep
+      showed no existing FU/ADR covers schema caching (FU-144 is the schema-BLIND-kinds half).
 - [ ] **FU-154** — **Closing a PR and opening a new one RESETS the anti-livelock bound.**
       `RED_ROUNDS_MAX=3` counts `Agent run stats` comments **per PR**; circles#19 consumed five
       rounds across PR#50 (2) + fresh #51 (1) after earlier rounds elsewhere. Same class as
