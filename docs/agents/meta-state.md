@@ -8,6 +8,27 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-08-30/31 OVERNIGHT UNATTENDED SESSION (codeowner+board, TICK-LOG entry) — the pickup set:**
+  - **OPERATOR: OpenRouter account credit NEARLY EXHAUSTED** (alert 00:37Z) — top-up is Tier-0/money;
+    until then M12 degrade + the PR#715 revert-at-depletion condition carry the mechanics.
+  - Board fully drained: the 15 queued individual issues + 5 sprouts all merged+closed (11 seat
+    codeowner reads, rationale on each approval). G-B verify items DONE: **#818 wears
+    goal/post-launch** (unblocked by PR#1062 — the >100-char label descriptions had frozen every
+    *-labels MR since the goal labels were added), #775 hand-labeled to match its real state.
+  - **First probe-platform tick FAILED (cred-unresolved) → #1085 filed+fixed+merged same night**
+    (loop-ns proxy session-keys Role was never rendered). VERIFY the next tick (06:41Z / 12:41Z —
+    `41 */6`) gets past auth; read the report from Loki tenant `platform-agents` by pod name
+    (podGC eats stdout — the prober's no-durable-sink gap, now proven; roles.md already lists
+    🌱-filing as missing).
+  - #946 (A5 seed): instrument now actually runnable (S3 grant restored + re-review.sh rail pin
+    `9fc46e50`); blocked ONLY on Zen free-tier 429 (18/18 attempts over ~2h) — one-call retry
+    recipe on the issue.
+  - Watch-noise candidates (next meta-events/needs-meta touch): FAMINE emits per count-delta not
+    threshold-crossing (dozens of noise pairs/night); "unlabeled >24h" false-flags containers
+    (#949 retro-batch, #840/#787 buckets) — wants the sprout-report-skips-buckets exclusion.
+  - #1069 (workers silently no-op when App GraphQL pool exhausted — measured on #969 r2) sits
+    inert for 🌱 triage; fix shape spans recipe + agent-runtime exit contract.
+  - goal/1039 (G-F): #1058 in its round-2 fix cycle — the loop's; #938/#994 stay operator-routed.
 - **⚑ 2026-08-30 EVENING SESSION OUTPUTS — the pickup set:**
   - **G-B COMPLETE to post-launch**: assembly merged as PR#1037 (reopened from #1030 under the
     operator identity — the governance-lint author trap, filed #1036 operator-lane; one
