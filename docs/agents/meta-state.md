@@ -473,3 +473,10 @@ standing set below; what differs is cadence and the act rule:
 - Probe hygiene: probes in SCRIPT FILES, dry-run under the real interpreter; watch the FAILURE
   signature explicitly; `PROBE-FAIL` over silent empty state. Monitors survive `/clear` and are
   invisible to TaskList — find leftovers by process and kill before re-arming.
+- **#518 one-home flip** (seat, after homelab PR#1147 merges — parked on reviewer at wind-down
+  2026-08-31): switch ci.yaml's inline PROM_PATHS/CLAUSE_PATHS greps to
+  `eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"` (+CLAUSE) in the changed-paths step —
+  operator-direct, must land AFTER the script exists on master.
+- **oracle-specs quota** (either jail, after oracle-iac#446 merges — auto-merge armed, CI green):
+  verify `garage bucket info oracle-specs` shows 5Gi, then any fleet CI re-publish
+  re-materializes the specs sites; close-purge of dead pr-*/ prefixes tracked oracle-fleet#318.
