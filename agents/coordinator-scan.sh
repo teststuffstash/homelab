@@ -1490,6 +1490,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       [ "$qtouches" = "-" ] && qtouches="*"
       [ "$qdeps" = "-" ] && qdeps=""
       [ "$qparent" = "-" ] && qparent=""
+      qbase_raw="$qbase"  # save before defaulting: "-" means absent (homelab#1053)
       [ "$qbase" = "-" ] && qbase=""
       # TRACKS rule 1 per-base (homelab#849): absent `Base:` body line → default branch.
       [ -z "$qbase" ] && qbase="$default_branch"
@@ -1682,6 +1683,7 @@ EOF_GOVERNANCE
       # Why it exists: circles#17 was a goal handed to a builder (nothing distinguished the two),
       # and produced "analysed everything, built nothing" twice with no cap near binding.
       # Design + the forest/trees rule: docs/agents/issue-authoring.md §Leg (c).
+      # >>>REPLAY:goal-decompose>>>
       if [ "$qclass" = "goal" ]; then
         # BREAKER #1, moved UP not away (issue-authoring.md §Leg (c)): a goal's children are queued
         # by the coordinator, and the thing that authorises them is that a HUMAN queued the GOAL.
@@ -1711,6 +1713,14 @@ EOF_GOVERNANCE
           orphans="${orphans}[$repo] ⛔ goal #${qnum}: could not read who applied agent/queued — refusing to decompose (fail-closed; an unreadable authorisation is not an authorisation)\n"
           continue
         fi
+        # ADR-1053 / homelab#1053: Base: is mandatory on task/goal containers (consumer card
+        # change 4). A task/goal with agent/queued and no Base: line never reaches a decompose
+        # sitting. The refusal comment names the two legal values and links the consumer card.
+        # Base: master PASSES (the choice being explicit is the point).
+        if [ "$qbase_raw" = "-" ]; then
+          orphans="${orphans}[$repo] ⛔ goal #${qnum} has no \`Base:\` body line — a \`task/goal\` container MUST declare a \`Base:\` line (\`Base: master\` or \`Base: goal/<branch>\`). See docs/agents/issue-authoring.md §Creating a Goal — the consumer card.\n"
+          continue
+        fi
         if [ "$qpin" = "P" ]; then
           punits="${punits}goal-decompose|${repo}|issue-${qnum}\n"
         else
@@ -1719,6 +1729,7 @@ EOF_GOVERNANCE
         item_class_push "$repo" "issue-${qnum}" "container" "machine"
         continue
       fi
+      # <<<REPLAY:goal-decompose<<<
       # FU-090 leg (c) forest/trees: a child's unit carries its GOAL, so the item session re-reads
       # the parent before acting instead of judging the child in isolation. Free — `parent` rides
       # the issue-list call above, no extra request against the App's GraphQL pool. Empty for the
