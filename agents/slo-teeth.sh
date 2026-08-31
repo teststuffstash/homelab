@@ -31,6 +31,12 @@
 # budget. An unread claim IS not permission to approve; an unreachable metric IS not evidence of
 # a burnt budget. These are deliberately asymmetric and the asymmetry is load-bearing.
 #
+# THE RESIDUAL (the in-flight window). The teeth park dispatch; they do NOT withdraw an approval
+# already given and do NOT disarm an armed PR. A PR that already carries a bot approval at head
+# with auto-merge armed still merges once it becomes mergeable — which is not only "at the instant
+# of burn": such a PR merges whenever CI goes green or the updater brings it current, potentially
+# well into the burn.
+#
 # The budget-burnt state lives ONLY in Prometheus. agents/stacks.json is the committed mirror for
 # the repo→stack mapping and is read here; it does NOT carry `slo` — teaching it to would be a
 # second copy of the very fact this file exists to read once. Don't.

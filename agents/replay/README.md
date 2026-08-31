@@ -172,6 +172,7 @@ is stale, so it cannot drift the way the prose register did.
 | `depends-on-retired-format/depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
 | `dispatch-phase/scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `dispatch-phase/session` | actions | - | `agents/coordinator-session.sh` | - |
+| `done-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T28 |
 | `doorbell/collapse` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout-wiring` | table | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout` | actions | - | `agents/coordinator-scan.sh` | - |
