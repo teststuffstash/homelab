@@ -1,0 +1,14 @@
+# homelab#1118 — the env card with the MCP knob present on the opencode arm. Pins that the
+# two MCP-gated lines (feedback tool + version skew) are NOT emitted when the harness is
+# opencode, because that arm never attaches --mcp-config (#1039 non-goal).
+#
+# CONDITION UNDER REPLAY. render_env_card() with MCP_ENDPOINT set to the oracle stack's endpoint
+# and HARNESS=opencode. AGENT_BASE_IMAGE is set so the version-skew line would resolve if it
+# were emitted (it should not be).
+name: env-card-mcp-present-opencode
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:render_env_card
+  - file:pre.sh
+  - file:post.sh
