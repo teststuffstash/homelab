@@ -240,6 +240,33 @@ dollars. Three directions replace it (they refine the ledger's per-rail `budgets
    from worker rows to the full role set; and a child's budget reservation prices the EXPECTED
    WHOLE CYCLE (ride + review rounds + closeout), never the worker cap alone.
 
+5. **Everything gets a dollar amount, and the operator is a RAIL (operator direction,
+   2026-08-31 — the r2-F4 correction: a fix priced in reviewer rides optimized the cheapest
+   resource on the board while the jail line read $2.55K/wk and the operator's hours went
+   unmeasured).** The full price list, most expensive first:
+   - **Operator time: €100/h with BATCH-ENTRY semantics.** An interaction costs
+     `E/B + minutes×(100/60)` — E ≈ €17–25 is the fixed sit-down cost (keyboard, monitor,
+     context reload), amortized over the B items handled in that sitting. Consequences that
+     become arithmetic instead of doctrine: an out-of-sitting summons (lone escalation, alert
+     pair, single park) bills a full E ≈ €20–30 even for a "30-second" click; a batched
+     codeowner read bills €3–8; assembly/theme concentration of N reads saves (N−1)×E; noise
+     reduction (FAMINE dedup, asks-are-claims, BLOCKPARK ordering) is rail-1 work with real
+     euros attached. The measurement side exists: hands-on hours from the synced jail session
+     data (the operator's claude-time method), touch-counts from codeowner-merge/escalation
+     events by the operator identity.
+   - **Paid API: billed dollars** (exact, harvested).
+   - **Subscription draw: THREE prices, each answering its own question** — marginal (≈$0
+     under headroom; the M11 ladder's routing input, unchanged), cash-amortized (monthly fee ×
+     share of the binding window drawn — the steady-state per-ride cost and the
+     portfolio/second-subscription question), and API-equivalent (list × tokens — the
+     cross-rail routing comparison and the saturation-displacement value; the Go meter
+     computes this natively, the Anthropic half needs tokens×list over the OTLP data).
+   Consumers, in adoption order: the retro brief's expected-saving column (BRIEF.md carries
+   the ranking rule), seat/design decisions (priced by hand from this list), and eventually
+   the M8 feed-4 job pricing, whose expected-cost formula gains the
+   `p(operator_touch) × (E/B + item)` term. The `Budget:` line's currency stays USD; a goal
+   whose real spend is operator sittings is priced honestly only under this direction.
+
 Build home: a later wave of #420 (after the reviewer failover ships); the accounting half
 rides #278/FU-131. Nothing here changes chunk A–F scope — the only-free interaction stays the
 explicit conservative deny until budget-typing lands.
