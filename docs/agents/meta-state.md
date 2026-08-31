@@ -35,10 +35,12 @@ meant to avoid.)
     (#949 retro-batch, #840/#787 buckets) — wants the sprout-report-skips-buckets exclusion.
   - #1069 (workers silently no-op when App GraphQL pool exhausted — measured on #969 r2) sits
     inert for 🌱 triage; fix shape spans recipe + agent-runtime exit contract.
-  - goal/1039 (G-F): #1058 hit its arbitration terminal (3× CHANGES_REQUESTED, #1041
-    `agent/blocked` 22:07Z) → resolved 2026-08-31 as option 1 BY HAND (seat commit `f776ebc3`,
-    the worker-arm jq guard; label removed, bound honoured — no round 6). Reviewer re-pick +
-    merge into goal/1039-stack-mcp is the loop's; #938/#994 stay operator-routed.
+  - goal/1039 (G-F): #1058 terminal resolved as option 1 BY HAND (`f776ebc3`) → reviewer
+    re-approved + **MERGED 05:43Z**. #1041 hand-closed agent/done (goal-branch merge fires no
+    Fixes keyword — the sleep#123 shape); parent #1039's stale `agent/blocked` removed (it was
+    gating the scan off the whole tree — the "children not queueing" symptom). All 4 originals
+    now done → goal checkpoint/assembly fires on the next scan (#933's fixed clause).
+    #938/#994 stay operator-routed.
 - **⚑ 2026-08-30 EVENING SESSION OUTPUTS — the pickup set:**
   - **G-B COMPLETE to post-launch**: assembly merged as PR#1037 (reopened from #1030 under the
     operator identity — the governance-lint author trap, filed #1036 operator-lane; one
@@ -270,10 +272,19 @@ meant to avoid.)
   lanes) is on the work map** — (repo, base) serialization + goal v1.3 themes as ONE stint
   after S5; #829 absorbed at its authoring (de-queued, agent-fix kept).
 
-- **⚑ Retro (FU-058): r1 DELIVERED 2026-08-25** (PR#918; the batch = #927–#929 queued, #930
-  SEAT lane: the DELIM-FIELD transport-lint signature — `scripts/` deny path; #931 OPERATOR
-  lane: the `.agents/` pair). #932 queued (the silent success-push belt). **Next unattended
-  Mon 08-31 05:00Z fire = the clean acceptance.**
+- **⚑ Retro (FU-058): r2 FIRED ON SCHEDULE Mon 08-31 05:00Z — acceptance NOT clean but close**
+  (PR#1094): opus report coherent + read at the gate; deepseek cell's file carried 3 empty
+  template echoes + a leaked harness line (harvest sed re-arm, **#1096 queued**) — seat executed
+  the human gate as arbitration option 2 (junk stripped `7fb70fdb`, four-attempt evidence kept
+  as a note), reviewer re-picks, auto-merge armed. Episode also filed **#1097**
+  (changes-requested clause ignores agent/blocked on the PR — loop already riding it).
+  **Opus report's process-change table is OPERATOR-READ pending** — top rows: loop-filed
+  control-path defects must carry `agent-fix`+`agent/queued` (7 inert instances, 29.1
+  issue-days); predicate-REPLACE diffs must enumerate the old accepted-input set (6/31
+  blocking rounds); identical `(model,error_class)` re-strike routes to agent/error not
+  another ride (the #304 shape, 3/5 rides wasted); two one-line ledger fixes
+  (`is_snapshot` case, `calibration_error` denominator). r1 residue: #930 SEAT / #931
+  OPERATOR lanes still open.
 
 - **⚑ GARAGE, operator-owned residue (recovery COMPLETE + env rebuilt, #884/FU-184 archived):**
   the `garage repair blocks` hold can come off (reclaims ≈nothing now) · **do NOT delete the 3
