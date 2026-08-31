@@ -2,7 +2,8 @@
 # meta-events.sh — THE consolidated meta-seat event loop (FU-166 leg (b), 2026-08-12).
 #
 # One Monitor arms this; it polls cheap on a 120s tick, diffs each source against durable state,
-# Sources: needsmeta · newissue (org-wide, 24h window) · seatpr · goalcmt · alert · famine · stint.
+# Sources: needsmeta · newissue (org-wide, 24h window) · seatpr · goalcmt · alert · famine ·
+# stint · blockpark (blocking-class codeowner parks — 2026-08-31).
 # and prints ONLY deltas — a quiet loop wakes nobody (a Monitor line is what wakes the seat, so
 # edge-detection IS the token economy). ~2-min worst-case latency on the classes the seat serves.
 #
@@ -211,6 +212,57 @@ src_seatpr() {
   rm -f "$tmp"
 }
 
+# BLOCKPARK — blocking-class codeowner parks (operator direction, 2026-08-31: "the jail should
+# monitor for these blocking type codeowner reviews more actively"). The drainage-economics
+# ruling made BLOCKING the only class with machinery urgency, and its test structural: a parked
+# PR whose closing issue BLOCKS other work (incoming `dependencies/blocking` edges — the ADR-119
+# un-park shape) or is hotfix-class (🚨 title). Ordinary parks stay NEEDSMETA/CodeownerParkWaiting
+# territory; this source exists so a park that gates a wedged stack ride surfaces as its own
+# high-priority class instead of blending into the park pile.
+# Parked predicate = OPEN ∧ reviewDecision REVIEW_REQUIRED ∧ a bot APPROVED among latestReviews
+# (green-at-review is implied by the bot verdict; no statusCheckRollup — the jail-PAT hard-fail
+# class). Every 2nd tick (even ticks — needsmeta takes odd), one pr-list per claim-universe repo
+# + one dependencies read per parked closing issue (parks are few; ~7 REST/tick amortized).
+# A failed read HOLDS the source (rule #6) — a blind tick must not clear a standing block line.
+src_blockpark() {
+  local tmp repos stack_repos r prs ok=1
+  tmp="$(mktemp)"; : > "$tmp"
+  if ! stack_repos="$(jq -r '.stacks[].repos[]' "$HERE/stacks.json" 2>/dev/null)" || [ -z "$stack_repos" ]; then
+    hold_source blockpark "stacks.json repo universe unreadable"; rm -f "$tmp"; return
+  fi
+  repos="$(printf '%s\n%s\n' "$stack_repos" "$(printf '%s\n' $SEAT_REPOS)" | sort -u)"
+  for r in $repos; do
+    prs="$(gh pr list -R "$ORG/$r" --state open --limit 20 \
+        --json number,reviewDecision,latestReviews,closingIssuesReferences 2>/dev/null)" || { ok=0; continue; }
+    # parked = REVIEW_REQUIRED with a bot approval at latestReviews; emit per closing issue
+    local rows irepo inum ititle bcount
+    rows="$(printf '%s' "$prs" | jq -r '.[]
+        | select(.reviewDecision=="REVIEW_REQUIRED")
+        | select([.latestReviews[]? | select(.state=="APPROVED")] | length > 0)
+        | .number as $pr | (.closingIssuesReferences[]? // empty)
+        | "\($pr)\t\(.repository.name // "")\t\(.number)\t\((.title // "")[0:60])"' 2>/dev/null)" || { ok=0; continue; }
+    [ -n "$rows" ] || continue
+    while IFS=$'\t' read -r prn irepo inum ititle; do
+      [ -n "${inum:-}" ] || continue
+      [ -n "$irepo" ] || irepo="$r"
+      if ! bcount="$(gh api "repos/$ORG/$irepo/issues/$inum/dependencies/blocking" --jq 'length' 2>/dev/null)"; then
+        ok=0; continue
+      fi
+      if [ "${bcount:-0}" -gt 0 ] 2>/dev/null; then
+        printf 'BLOCKPARK|%s#%s|park gates %s blocked issue(s) via %s#%s — read it AHEAD of the pile\n' \
+          "$r" "$prn" "$bcount" "$irepo" "$inum" >> "$tmp"
+      elif printf '%s' "$ititle" | grep -q '🚨'; then
+        printf 'BLOCKPARK|%s#%s|park on hotfix-class issue %s#%s (🚨) — read it AHEAD of the pile\n' \
+          "$r" "$prn" "$irepo" "$inum" >> "$tmp"
+      fi
+    done <<BPROWS
+$rows
+BPROWS
+  done
+  if [ "$ok" = 1 ]; then diff_source blockpark "$tmp"; else hold_source blockpark "pr/dependencies read failed for ≥1 repo"; fi
+  rm -f "$tmp"
+}
+
 # STINT — the jail stint's burn-down (2026-08-19, chainless-redesign §The jail stint). Armed by
 # the seat writing "owner/repo#N" to $STATE/stint at stint start; absent/empty = the source emits
 # a clear-set (stale lines from a disarmed stint edge out). One sub-issue list per tick. The
@@ -252,6 +304,7 @@ WAVEIDS
 tick() {
   TICK=$((TICK+1))
   [ $((TICK % 2)) -eq 1 ] && src_needsmeta
+  [ $((TICK % 2)) -eq 0 ] && src_blockpark
   src_newissue
   src_seatpr
   src_goalcmt
