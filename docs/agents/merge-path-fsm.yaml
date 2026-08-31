@@ -290,6 +290,7 @@ transitions:
       - agents/replay/fixtures/state-fp/state-fp
       - agents/replay/fixtures/changes-requested/blocked-held
       - agents/replay/fixtures/changes-requested/dispatched
+      - agents/replay/fixtures/changes-requested/reviewable-again-held
     guards:
       - desc: "reflex splits rounds-exhausted (escalation → agent/arbitrate) from impossible-state (anomaly → agent/error)"
         anchor: { file: agents/review-reflex.sh, pattern: "ROUNDS EXHAUSTED" }
@@ -305,6 +306,8 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "STATE_FP_JQ" }
       - desc: "the play, exactly one of four: re-dispatch-with-clarification / rule-follow-up-class (terminal = dismiss the superseded reviewer verdict, homelab#141) / close-not-mergeable / escalate (meta-4 doctrine)"
         anchor: { file: agents/coordinator/README.md, pattern: "arbitrate. clause" }
+      - desc: "changes-requested clause holds when newest non-merge commit post-dates the newest review — the pushed fix round is already in flight and the next bot verdict retires the clause (homelab#975)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "reviewable_again" }
     incidents: ["MP-G04 origin: tie-break rows existed only as breaker counts — the coordinator never got the structured dispatch"]
 
   - id: MP-T12
