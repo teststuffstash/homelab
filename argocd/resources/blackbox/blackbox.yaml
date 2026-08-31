@@ -218,10 +218,10 @@ spec:
         # window is honest — both incidents lasted well past 3m. Routes to the responder for
         # report-only triage (cluster-external infra, operator/maintenance lane).
         - alert: UnboundGithubServfail
-          expr: probe_success == 0
+          expr: probe_success{instance="192.168.2.1:53",job="blackbox-unbound-github"} == 0
           for: 3m
           labels:
             severity: warning
           annotations:
-            summary: "Unbound cached SERVFAIL for github names"
-            description: "probe_success == 0 for api.github.com through Unbound (192.168.2.1:53) — cached SERVFAIL. POST /api/unbound/service/restart, wallet API creds. TICK-LOG 2026-08-26/08-31"
+            summary: "Unbound not answering for api.github.com"
+            description: "SERVFAIL/no answer for api.github.com through Unbound (192.168.2.1:53) — check for a cached SERVFAIL (TICK-LOG 2026-08-26/08-31); if so, POST /api/unbound/service/restart, wallet API creds."
