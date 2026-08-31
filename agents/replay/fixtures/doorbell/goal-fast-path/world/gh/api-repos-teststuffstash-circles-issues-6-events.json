@@ -1,0 +1,3 @@
+[
+  {"event": "labeled", "label": {"name": "agent/queued"}, "actor": {"type": "Bot"}}
+]

@@ -177,6 +177,7 @@ is stale, so it cannot drift the way the prose register did.
 | `doorbell/collapse` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout-wiring` | table | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout` | actions | - | `agents/coordinator-scan.sh` | - |
+| `doorbell/goal-fast-path` | actions | - | `agents/coordinator-scan.sh` | - |
 | `env-card-ground-rules/empty` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-ground-rules/missing` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-ground-rules/unreadable` | actions | - | `agents/agent-session.sh` | - |
