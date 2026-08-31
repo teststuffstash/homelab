@@ -10,13 +10,13 @@ meant to avoid.)
 
 - **⚑ 2026-08-31 EVENING CORPUS SESSION WIND-DOWN — the fresh-session pickup set (TICK-LOG has
   the arc):**
-  - **VERIFY the switchboard cutover** (ADR-120; PR#1158 + eae8c51f): ArgoCD synced the rename
-    (WorkflowTemplate `switchboard` exists, `coordinate` gone, no coordinator-reflex cron); the
-    next graduated ring produces a seconds-long `switchboard-*` run (Loki ns agent-coordinator),
-    NOT a 1Gi board sweep; #994 auto-closed at merge. A wedged cutover shows as per-stack loops
-    still fine (they are independent) + repo-dumb rings falling to per-stack crons.
-  - Gate-read the next park convoy: queued set riding = #1148 #1149 #1151 #1152(leg2 merged via
-    PR#1155) #1153(blockedBy #1151) #1006-tail + agent-runtime #104 #105 #107 (finalize,
+  - **[Switchboard](../glossary.md) cutover VERIFIED LIVE at wind-down** (ADR-120; PR#1158 + eae8c51f, #994
+    closed): template synced + old pruned + cron gone, and a live probe ring produced
+    `switchboard-wnl7b` — 31s, the #994 routed-ring drop line, no board sweep. Nothing left to
+    verify; watch only for a repo-dumb emitter surprise (a Renovate/devbox-update ring should
+    show a switchboard run that fans out, then the per-stack run).
+  - Gate-read the next park convoy: queued set riding = #1148 #1149 #1151 #1153(blockedBy #1151);
+    #1152 DONE (PR#1155 merged 20:22Z with the codeowner breaker-correction) #1006-tail + agent-runtime #104 #105 #107 (finalize,
     footprint-serialized). #1150 inert (assembly-CR→checkpoint edge — needs an ADR-110 read).
   - #946/A5 CLOSED-shaped: seed 4/4 + free-tier comparison posted (no free reviewer; big-pickle
     shadow-only, tolerant parse + one retry). Durable rec unfiled as issue: opencode-harness
