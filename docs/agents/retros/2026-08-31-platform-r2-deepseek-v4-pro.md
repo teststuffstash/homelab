@@ -3,7 +3,14 @@
 > commit). The four-attempt fact they evidenced is preserved here: this cell emitted three
 > unfilled skeletons before producing the filled report below — a live instance of its own F1.
 > The "goose (claude-sonnet-4)" self-signature is the model's own placeholder fill; the cell
-> rode its configured deepseek-v4-pro (no fallback path in this lane, homelab#269).]
+> rode its configured deepseek-v4-pro (no fallback path in this lane, homelab#269).
+> Second seat note, 2026-08-31 (operator catch): F5's MECHANISM is wrong — goose-32602 is
+> OUTPUT-side truncation of a single large tool call (~15k; the oracle-fleet#1 founding
+> postmortem, model-routing.md §M1), bounded by max_tokens/provider output caps, which is why
+> the shipped mitigation is the proxy's 16k MAX_TOKENS_FLOOR. It is not input-context overflow
+> (deepseek-v4-flash is a 1M-window model), and F5's proposed pre-flight input-context gate
+> would be a structural no-op. The recurrence DATA stands; the proposal was never filed
+> (the batch took the opus table only — #1101).]
 
 # platform loop retro r2 — goose (claude-sonnet-4)
 ## Summary (≤5 lines)

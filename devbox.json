@@ -71,7 +71,7 @@
       "version": "latest"
     },
     "kyverno": {
-      "version": "latest"
+      "version": "1.18.2"
     },
     "gitleaks": {
       "version": "latest"
