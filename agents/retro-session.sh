@@ -202,10 +202,26 @@ section = None
 
 for line in text.splitlines():
     # Inline flow: metadata: { name: foo, namespace: bar, ... }
+    # Depth-matched brace scan: finds the matching '}' for the first '{', so nested
+    # objects (e.g. labels: { budget-tier: xs }) don't truncate the inner content
+    # before later keys (homelab#1075 — a key-order reshape of emit_cr that placed a
+    # nested object before 'name' would silently empty KEY_NAME under the old
+    # first-brace-pair split).
     m = re.match(r'^(\w+):\s*\{', line)
     if m:
         section = m.group(1)
-        inner = line[line.index('{'):line.index('}')]
+        start = line.index('{')
+        depth = 0
+        end = start
+        for i in range(start, len(line)):
+            if line[i] == '{':
+                depth += 1
+            elif line[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        inner = line[start:end]
         for k, v in re.findall(r'(\w+):\s*([^\s,}]+)', inner):
             data[f"{section}.{k}"] = v.strip('"')
         continue
