@@ -70,6 +70,8 @@ responder-selfref-unlabelled	responder-selfref
 retro-cell-report-missing	retro-cell-report
 retro-cell-report-present	retro-cell-report
 retro-key-minted	retro-key
+retro-key-minted-block-style	retro-key
+retro-key-minted-labels-first	retro-key
 retro-key-pinned	retro-key
 retro-key-subscription	retro-key
 retro-rank-snapshot-exclusion	retro-rank-snapshot-exclusion
