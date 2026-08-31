@@ -1,0 +1,28 @@
+# changes-requested/reviewable-again-held (homelab#975) — a PR with CHANGES_REQUESTED where the
+# newest non-merge commit post-dates the newest review. The reviewable_again hold fires and the
+# unit is NOT dispatched — the next bot verdict retires the clause.
+#
+# CONDITION UNDER REPLAY. PR #1096 is worker-authored, CHANGES_REQUESTED, and carries NO exclusion
+# label. The jq selector admits it, the FU-146 holds find no live pod, the BLOCKED-SOURCE hold
+# finds no linked issue, the WIP gate is clear. The reviewable_again probe finds the newest commit
+# (2026-08-26T17:31:42Z) is newer than the newest review (2026-08-26T17:23:07Z), so the hold fires.
+# The FU-147 no-op probe is never reached.
+#
+# THE CONTRACT:
+#   1. A `gh pr view` call is made for the reviewable_again probe (with reviews added).
+#   2. No UNIT is emitted — the hold fires.
+#   3. An ORPHAN line is produced explaining the hold.
+pins:
+  - MP-T11
+name: changes-requested-reviewable-again-held
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab

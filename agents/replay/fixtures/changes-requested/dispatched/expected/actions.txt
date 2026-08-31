@@ -1,4 +1,4 @@
-CALL gh pr view 1095 --repo teststuffstash/homelab --json comments,commits
+CALL gh pr view 1095 --repo teststuffstash/homelab --json comments,commits,reviews
 OUT UNIT changes-requested|homelab|pr-1095
 OUT REACHED: end
 RC 0
