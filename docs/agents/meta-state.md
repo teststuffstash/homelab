@@ -30,7 +30,10 @@ meant to avoid.)
     (#949 retro-batch, #840/#787 buckets) — wants the sprout-report-skips-buckets exclusion.
   - #1069 (workers silently no-op when App GraphQL pool exhausted — measured on #969 r2) sits
     inert for 🌱 triage; fix shape spans recipe + agent-runtime exit contract.
-  - goal/1039 (G-F): #1058 in its round-2 fix cycle — the loop's; #938/#994 stay operator-routed.
+  - goal/1039 (G-F): #1058 hit its arbitration terminal (3× CHANGES_REQUESTED, #1041
+    `agent/blocked` 22:07Z) → resolved 2026-08-31 as option 1 BY HAND (seat commit `f776ebc3`,
+    the worker-arm jq guard; label removed, bound honoured — no round 6). Reviewer re-pick +
+    merge into goal/1039-stack-mcp is the loop's; #938/#994 stay operator-routed.
 - **⚑ 2026-08-30 EVENING SESSION OUTPUTS — the pickup set:**
   - **G-B COMPLETE to post-launch**: assembly merged as PR#1037 (reopened from #1030 under the
     operator identity — the governance-lint author trap, filed #1036 operator-lane; one
