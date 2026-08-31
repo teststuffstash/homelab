@@ -32,6 +32,41 @@ trap 'rm -rf "$WORK"' EXIT
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 now_ms() { date +%s%3N; }
 
+# doorbell-collapse (homelab#938 -- ADR-106 (5), ported from coordinator-scan.sh): the
+# evaluation is UNSCOPED (re-lists every open head), so N queued sibling submissions re-scan ONE
+# world serially behind the mutex -- a merge-heavy evening queued 14, and the clone+tarball IO
+# degraded a co-scheduled grafana for half an hour (hp-01 sda at 68% util). A STARTING evaluation
+# therefore ABSORBS Pending siblings before its own listing (delete-then-list: a ring arriving
+# after the delete creates a fresh Pending, which correctly survives for the next pass). Self is
+# Running, not Pending; the HOSTNAME-prefix check is the belt for the no-status-yet window.
+# In-cluster only (a jail/manual run has no workflow world); a failed list absorbs NOTHING --
+# extra wakes just queue behind the mutex as today (rule #6).
+absorb_pending_sentinel_rings() {
+  [ -f /var/run/secrets/kubernetes.io/serviceaccount/namespace ] || return 0
+  local ns raw names n
+  ns="$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+  if ! raw="$(kubectl -n "$ns" get workflows -o json 2>/dev/null)" \
+     || ! jq -e . >/dev/null 2>&1 <<<"${raw:-null}"; then
+    log "doorbell-collapse: workflow list PROBE-FAILED in ${ns} -- absorbing nothing (extra wakes just queue)"
+    return 0
+  fi
+  names="$(jq -r --arg self "${HOSTNAME:-}" '.items[]?
+      | (.metadata.name // "") as $n
+      | select($n | startswith("iac-sentinel"))
+      | select(($self | startswith($n)) | not)
+      | select((.status.phase // "Pending") == "Pending")
+      | $n' <<<"$raw" 2>/dev/null)" || names=""
+  for n in $names; do
+    if kubectl -n "$ns" delete workflow "$n" --ignore-not-found >/dev/null 2>&1; then
+      log "doorbell-collapse: absorbed pending sentinel ring ${ns}/${n} -- this run's re-list covers it"
+    else
+      log "doorbell-collapse: could not delete ${ns}/${n} (RBAC?) -- it runs behind the mutex instead"
+    fi
+  done
+  return 0
+}
+absorb_pending_sentinel_rings
+
 METRICS=""
 metric() { METRICS="${METRICS}$1\n"; }
 
