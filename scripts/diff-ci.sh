@@ -2,12 +2,10 @@
 # diff-ci — run only the CI gates the current diff can affect (#518, 2026-08-31): the local
 # pre-flight for agents and the seat. Same devbox tasks CI runs, scoped by a path→task map.
 #
-# ONE HOME (target): this map is the canonical statement of "which paths feed which gate".
-# `.github/workflows/ci.yaml`'s changed-paths step still carries its own inline regex copies —
-# the flip to eval-extracting PROM_PATHS/CLAUSE_PATHS from THIS file (the
-# scripts/pin-only-lint.sh one-home pattern) is a follow-up operator-direct change that lands
-# AFTER this script is on master; until then, edit BOTH when a trigger set changes (the
-# coverage belt below is the drift net). CI stays AUTHORITATIVE: a too-narrow mapping here
+# ONE HOME: this map is the canonical statement of "which paths feed which gate".
+# `.github/workflows/ci.yaml`'s changed-paths step eval-extracts PROM_PATHS/CLAUSE_PATHS from
+# THIS file (the scripts/pin-only-lint.sh one-home pattern; the #518 flip landed 2026-08-31) —
+# edit trigger sets here, never inline there. CI stays AUTHORITATIVE: a too-narrow mapping here
 # costs a surprise red in CI,
 # never a merged defect (CI's skip map only covers the two heavy suites; everything else
 # always runs there). The PR-context gates (pin-only-lint, governance-lint, the ADR-103
@@ -19,10 +17,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Single-line assignments — kept one line, single-quoted, eval-safe, so ci.yaml's pending
-# one-home flip (#518, operator-direct, after this lands) can
-# `eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"` them verbatim. Until that flip,
-# ci.yaml carries its own inline copies — edit BOTH when a trigger set changes.
+# Single-line assignments — ci.yaml `eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"`s
+# these verbatim (the #518 flip, live 2026-08-31); keep them one line, single-quoted, eval-safe.
 PROM_PATHS='^(argocd/|tofu/|scripts/prometheus-rules-lint\.sh|devbox\.(json|lock)$)'
 CLAUSE_PATHS='^(agents/|devbox\.(json|lock)$)'
 
