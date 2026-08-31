@@ -600,16 +600,13 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: the sync manager's in-memory
       state can corrupt under a fast-failure storm and Pending then piles up silently**
-      (2026-08-31, operator-spotted on the dashboards: waiters told "5/5" against a
-      provably EMPTY semaphore for 65+ min after the #1136 exit-128 storm; 56 coordinate
-      ticks Pending; controller restart rebuilt lock state and drained it in minutes; the
-      Loki acquire/release ledger acquitted the first GC-leak theory). Postmortem + belt
-      audit + the storm→wedge trigger note:
+      (2026-08-31, operator-spotted: waiters told "5/5" against a provably empty semaphore
+      for 65+ min after the #1136 exit-128 storm; controller restart drained it in minutes).
+      Postmortem + belt audit + evidence + the storm→wedge trigger note:
       [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
       **Next:** an alert on the wedge shape — Argo Pending high-and-not-draining while
-      `anthropic_subscription_semaphore_running` ≈ 0 (verify the controller metrics scrape
-      first) — into `argo-workflows-alerts` with promtool cover; and check upstream argo
-      sync-manager fixes (`v4.0.7` today; the #12194 regression class) before any bump.
+      `anthropic_subscription_semaphore_running` ≈ 0 — into `argo-workflows-alerts` with
+      promtool cover; check upstream sync-manager fixes (`v4.0.7` today) before any bump.
       Relates FU-187 (sibling belt-blindness).
 
 - [ ] **FU-187** — **Quiet-stall detection: a Running agent pod with a silent rail is invisible
