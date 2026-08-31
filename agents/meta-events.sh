@@ -2,7 +2,8 @@
 # meta-events.sh — THE consolidated meta-seat event loop (FU-166 leg (b), 2026-08-12).
 #
 # One Monitor arms this; it polls cheap on a 120s tick, diffs each source against durable state,
-# Sources: needsmeta · newissue (org-wide, 24h window) · seatpr · goalcmt · alert · famine · stint.
+# Sources: needsmeta · newissue (org-wide, 24h window) · seatpr · goalcmt · alert · famine ·
+# stint · blockpark (blocking-class codeowner parks — 2026-08-31).
 # and prints ONLY deltas — a quiet loop wakes nobody (a Monitor line is what wakes the seat, so
 # edge-detection IS the token economy). ~2-min worst-case latency on the classes the seat serves.
 #
@@ -165,7 +166,12 @@ src_famine() {
   awk -v v="$v" 'BEGIN{exit !(v>=8)}' && level=high
   [ "$prev" = high ] && awk -v v="$v" 'BEGIN{exit !(v<=2)}' && level=ok
   echo "$level" > "$STATE/famine.level"
-  if [ "$level" = high ]; then printf 'FAMINE|convoy|pending workflows ≥8 (now %s)\n' "$v" > "$tmp"; else : > "$tmp"; fi
+  # STABLE set-line key (the meta-state watch-noise candidate, proven live 3× on 2026-08-31
+  # morning): embedding the live count re-keyed the line on every count DELTA, emitting a
+  # clear+event pair while the level never dropped — the alert-source keyed-on-identity rule
+  # applied here. The count lives in the state file for anyone who asks; the line is the edge.
+  echo "$v" > "$STATE/famine.count"
+  if [ "$level" = high ]; then printf 'FAMINE|convoy|pending workflows past the >=8 raise threshold (live count: famine.count in the state dir)\n' > "$tmp"; else : > "$tmp"; fi
   diff_source famine "$tmp"; rm -f "$tmp"
 }
 
@@ -211,6 +217,66 @@ src_seatpr() {
   rm -f "$tmp"
 }
 
+# BLOCKPARK — blocking-class codeowner parks (operator direction, 2026-08-31: "the jail should
+# monitor for these blocking type codeowner reviews more actively"). The drainage-economics
+# ruling made BLOCKING the only class with machinery urgency, and its test structural: a parked
+# PR whose closing issue BLOCKS other work (incoming `dependencies/blocking` edges — the ADR-119
+# un-park shape) or is hotfix-class (🚨 title). Ordinary parks stay NEEDSMETA/CodeownerParkWaiting
+# territory; this source exists so a park that gates a wedged stack ride surfaces as its own
+# high-priority class instead of blending into the park pile.
+# Parked predicate = OPEN ∧ reviewDecision REVIEW_REQUIRED ∧ a bot APPROVED among latestReviews
+# (green-at-review is implied by the bot verdict; no statusCheckRollup — the jail-PAT hard-fail
+# class). Every 2nd tick (even ticks — needsmeta takes odd), one pr-list per claim-universe repo
+# + one dependencies read per parked closing issue (parks are few; ~7 REST/tick amortized).
+# A failed read HOLDS the source (rule #6) — a blind tick must not clear a standing block line.
+src_blockpark() {
+  local tmp pk parks r n ok=1
+  tmp="$(mktemp)"; : > "$tmp"
+  # PROMETHEUS-PRIMARY for the park set (the clause-4/FU-166(a) pattern — one-computer rule):
+  # the exporter series `github_pull_request_codeowner_park` bakes the parked predicate
+  # CORRECTLY — reviews[] not latestReviews (the PR#235 approve-then-comment hole this
+  # source's first cut reintroduced; PR#1114 r2 review) plus the bot-author check — so this
+  # source never re-derives it, and the per-tick cost drops to one query + one gh read per
+  # PARKED PR (parks are few). Liveness: the `or (count(...) * 0)` sibling trick — an empty
+  # park set counts only while the same collector walk proves itself; anything else HOLDS
+  # (rule #6). The blocking-edge join stays here: parked PR → closing issue →
+  # `dependencies/blocking` (the ADR-119 un-park direction) or a 🚨 hotfix-class title.
+  if ! pk="$(curl -ksS --max-time 10 "$PROM/api/v1/query" \
+        --data-urlencode 'query=github_pull_request_codeowner_park or (count(github_pull_request_open) * 0)' 2>/dev/null)" \
+     || ! jq -e '.status == "success" and (.data.result | length > 0)' >/dev/null 2>&1 <<<"${pk:-null}"; then
+    hold_source blockpark "codeowner-park series unreadable (prometheus/exporter)"; rm -f "$tmp"; return
+  fi
+  parks="$(jq -r '.data.result[]? | select(.metric.repo != null and .metric.number != null)
+                  | "\(.metric.repo)\t\(.metric.number)"' <<<"$pk" 2>/dev/null)"
+  while IFS="$(printf '\t')" read -r r n; do
+    [ -n "${n:-}" ] || continue
+    local refs irepo inum ititle bcount
+    refs="$(gh pr view "$n" -R "$ORG/$r" --json closingIssuesReferences \
+        --jq '(.closingIssuesReferences[]? // empty) | "\(.repository.name // "")\t\(.number)\t\((.title // "")[0:60])"' 2>/dev/null)" || { ok=0; continue; }
+    [ -n "$refs" ] || continue
+    while IFS="$(printf '\t')" read -r irepo inum ititle; do
+      [ -n "${inum:-}" ] || continue
+      [ -n "$irepo" ] || irepo="$r"
+      if ! bcount="$(gh api "repos/$ORG/$irepo/issues/$inum/dependencies/blocking" --jq 'length' 2>/dev/null)"; then
+        ok=0; continue
+      fi
+      if [ "${bcount:-0}" -gt 0 ] 2>/dev/null; then
+        printf 'BLOCKPARK|%s#%s|park gates %s blocked issue(s) via %s#%s — read it AHEAD of the pile\n' \
+          "$r" "$n" "$bcount" "$irepo" "$inum" >> "$tmp"
+      elif printf '%s' "$ititle" | grep -q '🚨'; then
+        printf 'BLOCKPARK|%s#%s|park on hotfix-class issue %s#%s (🚨) — read it AHEAD of the pile\n' \
+          "$r" "$n" "$irepo" "$inum" >> "$tmp"
+      fi
+    done <<BPREFS
+$refs
+BPREFS
+  done <<BPARKS
+$parks
+BPARKS
+  if [ "$ok" = 1 ]; then diff_source blockpark "$tmp"; else hold_source blockpark "pr/dependencies read failed for >=1 park"; fi
+  rm -f "$tmp"
+}
+
 # STINT — the jail stint's burn-down (2026-08-19, chainless-redesign §The jail stint). Armed by
 # the seat writing "owner/repo#N" to $STATE/stint at stint start; absent/empty = the source emits
 # a clear-set (stale lines from a disarmed stint edge out). One sub-issue list per tick. The
@@ -251,7 +317,17 @@ WAVEIDS
 
 tick() {
   TICK=$((TICK+1))
-  [ $((TICK % 2)) -eq 1 ] && src_needsmeta
+  # ONCE_ALL (the --once contract): a cold-state single pass must print the FULL standing set —
+  # the fresh-session bootstrap view — so BOTH parity-gated sources run (PR#1114 review catch:
+  # the even-tick gate alone made --once structurally blind to BLOCKPARK, the one class it
+  # exists to surface ahead of the pile).
+  if [ "${ONCE_ALL:-0}" = 1 ]; then
+    src_needsmeta
+    src_blockpark
+  else
+    [ $((TICK % 2)) -eq 1 ] && src_needsmeta
+    [ $((TICK % 2)) -eq 0 ] && src_blockpark
+  fi
   src_newissue
   src_seatpr
   src_goalcmt
@@ -260,6 +336,6 @@ tick() {
   src_stint
 }
 
-if [ "${1:-}" = "--once" ]; then TICK=0; tick; exit 0; fi
+if [ "${1:-}" = "--once" ]; then TICK=0; ONCE_ALL=1; tick; exit 0; fi
 echo "meta-events: loop up (interval ${INTERVAL}s, state $STATE)"
 while true; do tick; sleep "$INTERVAL"; done

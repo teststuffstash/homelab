@@ -323,7 +323,13 @@ spec:
             [ "${COUNT:-0}" -gt 0 ] || { echo "no firing alerts in payload — resolve leg done, nothing to triage"; exit 0; }
 
             rm -rf /work/homelab
-            git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
+            # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
+            # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
+            # old anonymous behavior (degrade, never a new hard dependency).
+            _cu="https://github.com/teststuffstash/homelab.git"
+            [ -n "${GH_TOKEN:-}" ] && _cu="https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab.git"
+            git clone --depth 1 -b master "$_cu" /work/homelab
 
             TODAY="$(date -u +%Y-%m-%d)"
             # FU-113(a): every non-triaging outcome writes a LEDGER MARKER (value forms that do
