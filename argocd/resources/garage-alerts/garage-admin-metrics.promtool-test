@@ -17,9 +17,9 @@ tests:
   - interval: 1m
     name: "GarageDiskFillingUp fires after 30m when disk is >80% full"
     input_series:
-      - series: 'garage_local_disk_avail{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_avail{pod="garage-0",volume="data"}'
         values: "15+0x120"
-      - series: 'garage_local_disk_total{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_total{pod="garage-0",volume="data"}'
         values: "100+0x120"
     alert_rule_test:
       # `for: 30m` honoured — silent before the window
@@ -32,11 +32,11 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
-              device: data
+              pod: garage-0
+              volume: data
             exp_annotations:
-              summary: "Garage data disk is 15% full on garage-0"
-              description: "Garage's data disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
+              summary: "Garage disk is 85% full on data"
+              description: "Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
 
   # ── 2/4 — DISK RECOVERS: the alert resolves when avail rises above 20% ──────────────────────
   # Disk was at 85% (avail=15), then space is freed and avail goes to 25. The alert should
@@ -44,9 +44,9 @@ tests:
   - interval: 1m
     name: "GarageDiskFillingUp resolves when disk drops below 80%"
     input_series:
-      - series: 'garage_local_disk_avail{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_avail{pod="garage-0",volume="data"}'
         values: "15+0x40 25+0x120"
-      - series: 'garage_local_disk_total{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_total{pod="garage-0",volume="data"}'
         values: "100+0x200"
     alert_rule_test:
       # fires at 30m as before
@@ -55,11 +55,11 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
-              device: data
+              pod: garage-0
+              volume: data
             exp_annotations:
-              summary: "Garage data disk is 15% full on garage-0"
-              description: "Garage's data disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
+              summary: "Garage disk is 85% full on data"
+              description: "Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
       # avail jumps to 25 at t=41m → ratio = 0.25, condition clears → alert resolves
       - eval_time: 42m
         alertname: GarageDiskFillingUp
@@ -71,9 +71,9 @@ tests:
   - interval: 1m
     name: "GarageTableEmpty fires after 5m when a table drops to zero"
     input_series:
-      - series: 'table_size{node="garage-0",table_name="block"}'
+      - series: 'table_size{pod="garage-0",table_name="block"}'
         values: "1048576+0x20 0+0x60"
-      - series: 'table_size{node="garage-0",table_name="object"}'
+      - series: 'table_size{pod="garage-0",table_name="object"}'
         values: "1048576+0x60"
     alert_rule_test:
       # `for: 5m` honoured — silent before the drop window
@@ -86,7 +86,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
+              pod: garage-0
               table_name: block
             exp_annotations:
               summary: "Garage table block is empty on garage-0"
@@ -98,7 +98,7 @@ tests:
   - interval: 1m
     name: "GarageTableEmpty resolves when data reappears after a drop"
     input_series:
-      - series: 'table_size{node="garage-0",table_name="block"}'
+      - series: 'table_size{pod="garage-0",table_name="block"}'
         values: "1048576+0x20 0+0x20 1048576+0x120"
     alert_rule_test:
       # fires at 5m after the drop (t=20)
@@ -107,7 +107,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
+              pod: garage-0
               table_name: block
             exp_annotations:
               summary: "Garage table block is empty on garage-0"
@@ -123,7 +123,7 @@ tests:
   - interval: 1m
     name: "GarageTableEmpty does NOT fire for a table that was always empty"
     input_series:
-      - series: 'table_size{node="garage-0",table_name="admin_token"}'
+      - series: 'table_size{pod="garage-0",table_name="admin_token"}'
         values: "0+0x60"
     alert_rule_test:
       # never fires — no prior data means max_over_time is always 0
@@ -131,7 +131,23 @@ tests:
         alertname: GarageTableEmpty
         exp_alerts: []
 
-  # ── 6/8 — 7D WINDOW GUARD: a wipe still unrecovered past 24h keeps firing (the regression guard)
+  # ── 6/9 — MPU CYCLING: a transient table that cycles 2→0 must NOT fire ────────────────────
+  # multipart_upload and bucket_mpu_counter are transient by design — an in-flight multipart
+  # upload makes them non-zero, and completing it returns them to zero. This is a normal 2→0
+  # transition, and "held data in the last 7d" cannot distinguish it from the wipe pattern.
+  # The deny-list (table_name !~ "multipart_upload|bucket_mpu_counter") is what drops them.
+  - interval: 1m
+    name: "GarageTableEmpty does NOT fire for a transient MPU table cycling 2→0"
+    input_series:
+      - series: 'table_size{pod="garage-0",table_name="multipart_upload"}'
+        values: "2+0x10 0+0x60"
+    alert_rule_test:
+      # never fires — the deny-list excludes multipart_upload from matching
+      - eval_time: 30m
+        alertname: GarageTableEmpty
+        exp_alerts: []
+
+  # ── 7/9 — 7D WINDOW GUARD: a wipe still unrecovered past 24h keeps firing (the regression guard)
   # A table held data, then dropped to zero (the meta-wipe pattern), and stays empty for over a
   # week. The alert must keep firing at 48h (which the round-1 24h window would have missed) and
   # at 6d, and only stop after the 7d rolling window slides past the drop. This case pins the
@@ -140,7 +156,7 @@ tests:
   - interval: 1m
     name: "GarageTableEmpty keeps firing on a wipe that stays unrecovered for days (the 24h-window regression guard)"
     input_series:
-      - series: 'table_size{table_name="object",node="garage-0"}'
+      - series: 'table_size{table_name="object",pod="garage-0"}'
         values: '100+0x120 0+0x2880'
     alert_rule_test:
       # fires at 3h — well within the 7d window
@@ -149,7 +165,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
+              pod: garage-0
               table_name: object
             exp_annotations:
               summary: "Garage table object is empty on garage-0"
@@ -160,13 +176,13 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
+              pod: garage-0
               table_name: object
             exp_annotations:
               summary: "Garage table object is empty on garage-0"
               description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly."
 
-  # ── 7/8 — 7D BOUNDARY: the rolling window slides past the drop after 7 days ────────────────
+  # ── 8/9 — 7D BOUNDARY: the rolling window slides past the drop after 7 days ────────────────
   # A table held data, dropped to zero, and stays empty. After 7 days the max_over_time window
   # no longer includes any sample > 0, so the alert stops firing. This case pins the documented
   # tradeoff — the rolling window is not "was ever populated".
@@ -177,7 +193,7 @@ tests:
   - interval: 1m
     name: "GarageTableEmpty stops firing after the 7d rolling window slides past the drop"
     input_series:
-      - series: 'table_size{table_name="object",node="garage-0"}'
+      - series: 'table_size{table_name="object",pod="garage-0"}'
         values: '100+0x120 0+0x9850'
     alert_rule_test:
       # fires at 3h — well within the 7d window
@@ -186,7 +202,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              node: garage-0
+              pod: garage-0
               table_name: object
             exp_annotations:
               summary: "Garage table object is empty on garage-0"
@@ -198,7 +214,7 @@ tests:
         eval_time: 10201m
         exp_samples: []
 
-  # ── 8/8 — COVERAGE GUARD: a dead scrape is a page, not calm (seat, PR#965 gate read) ────────
+  # ── 9/9 — COVERAGE GUARD: a dead scrape is a page, not calm (seat, PR#965 gate read) ────────
   # Neither family exists (ServiceMonitor mismatch / metrics token / name drift). The two belts
   # above are structurally blind in this state; the guard is what says so.
   - interval: 1m
@@ -217,15 +233,15 @@ tests:
               summary: "Garage admin-metrics families are absent — the disk/table belts are blind"
               description: "The garage-admin-metrics belts (GarageDiskFillingUp, GarageTableEmpty) read garage_local_disk_total and table_size, and at least one family is absent from Prometheus — the scrape is not working (ServiceMonitor selector, metrics token, or a metric-name drift), so those belts cannot fire regardless of Garage's state. Fix the scrape; do not silence this without confirming both families exist."
 
-  # ── 8/8 — COVERAGE GUARD stays silent when both families are served ────────────────────────
+  # ── 9/9 — COVERAGE GUARD stays silent when both families are served ────────────────────────
   - interval: 1m
     name: "GarageAdminMetricsAbsent silent when both families exist"
     input_series:
-      - series: 'garage_local_disk_avail{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_avail{pod="garage-0",volume="data"}'
         values: "80+0x60"
-      - series: 'garage_local_disk_total{node="garage-0",device="data"}'
+      - series: 'garage_local_disk_total{pod="garage-0",volume="data"}'
         values: "100+0x60"
-      - series: 'table_size{node="garage-0",table_name="block"}'
+      - series: 'table_size{pod="garage-0",table_name="block"}'
         values: "1048576+0x60"
     alert_rule_test:
       - eval_time: 40m

@@ -1,0 +1,21 @@
+{
+  "apiVersion": "platform.teststuff.net/v1",
+  "kind": "AgentStackList",
+  "items": [
+    {
+      "apiVersion": "platform.teststuff.net/v1",
+      "kind": "AgentStack",
+      "metadata": {
+        "name": "platform",
+        "namespace": "agents"
+      },
+      "spec": {
+        "repos": [
+          {
+            "name": "circles"
+          }
+        ]
+      }
+    }
+  ]
+}

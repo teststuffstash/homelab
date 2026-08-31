@@ -99,10 +99,11 @@ spec:
                   (dict "name" "task/fix" "color" "bfdadc" "description" "Fixer task class: fix a bug (default recipe .agents/fix.yaml) — FU-114 L3")
                   (dict "name" "task/build" "color" "bfdadc" "description" "Fixer task class: build a deliverable (recipe .agents/build.yaml) — FU-114 L3")
                   (dict "name" "task/goal" "color" "5319e7" "description" "Routes to the coordinator's goal-decompose play, not a worker recipe — FU-090 leg (c)")
-                  (dict "name" "goal/post-launch" "color" "d4c5f9" "description" "Assembly merged — built as specified. A MIDPOINT: the goal stays OPEN, shipping to production (ADR-102)")
+                  (dict "name" "goal/post-launch" "color" "d4c5f9" "description" "Assembly merged — built as specified. MIDPOINT: goal stays OPEN, shipping to production (ADR-102)")
                   (dict "name" "goal/validated" "color" "0b6b3a" "description" "Verdict: production confirms the idea — goal closed met + close sweep (ADR-102; human-applied)")
-                  (dict "name" "goal/reverted" "color" "d93f0b" "description" "Verdict: production refutes the idea — goal closed successfully-refuted, descendants close with it (ADR-102; human-applied)")
-                  (dict "name" "goal/abandoned" "color" "6a737d" "description" "Verdict: budget exhausted before a verdict — goal closed not-planned, descendants left open but inert (ADR-102; human-applied)")
+                  (dict "name" "goal/reverted" "color" "d93f0b" "description" "Verdict: production refutes it — closed successfully-refuted, descendants close with it (ADR-102)")
+                  (dict "name" "goal/abandoned" "color" "6a737d" "description" "Verdict: budget out before a verdict — closed not-planned, descendants left open but inert (ADR-102)")
+                  (dict "name" "platform-request" "color" "1d76db" "description" "Capability-request lane (ADR-119): intent-level platform demand - pull-only, disposition always")
                   (dict "name" "merge-conflict" "color" "e11d21" "description" "PR branch conflicts with master — updater can't auto-resolve; needs a worker re-run or rebase")
                   (dict "name" "major" "color" "b60205" "description" "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)")
                   (dict "name" "major/awaiting-human" "color" "d93f0b" "description" "Major bump: migration documented, CI green, reviewer-approved — a human merges")
@@ -212,6 +213,77 @@ spec:
                         summary: "{{ $sloStack }} error budget burnt — auto-merge lane parked"
                         description: "30d availability is below the claim's target; the review reflex parks this stack's auto-merge lane (PRs wait for a human) until the budget recovers (FU-104)."
             {{- end }}
+            {{- if and $xr.spec.responder (default false (get $xr.spec.responder "enabled")) }}
+            {{- $resp := $xr.spec.responder }}
+            {{- $stack := $xr.metadata.name }}
+            {{- $loopns := printf "%s-agents" $stack }}
+            ---
+            # Responder remediation Role (FU-103 / goal#818) — the graduated imperative-remediation
+            # dial. Renders ONLY when the claim carries responder.enabled: true (no XRD default on
+            # the object: absent = nothing rendered, the responder stays breaker-gated). Grants
+            # exactly the declared verb/resource pairs and no others, scoped to every namespace
+            # the stack owns. Both the loop namespace and each fixer-enabled repo namespace get
+            # a Role + RoleBinding, bound to the agentstack-loop SA (the responder's identity).
+            # A consumer must be wired to read the grant and act on it — this PR ships NO consumer;
+            # report-only remains the default posture (goal #818 §assembly).
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: agentstack-responder
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-responder-role-loop
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+            {{- range $v := $resp.verbs }}
+              - apiGroups: [""]
+                resources: [{{ $v.resource | quote }}]
+                verbs: [{{ $v.verb | quote }}]
+            {{- end }}
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: agentstack-responder
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-responder-rb-loop
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-responder }
+            subjects:
+              - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $loopns }} }
+            {{- range $r := $xr.spec.repos }}
+            {{- if $r.fixer }}
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: agentstack-responder
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-responder-role-{{ $r.name }}
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+            {{- range $v := $resp.verbs }}
+              - apiGroups: [""]
+                resources: [{{ $v.resource | quote }}]
+                verbs: [{{ $v.verb | quote }}]
+            {{- end }}
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: agentstack-responder
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-responder-rb-{{ $r.name }}
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-responder }
+            subjects:
+              - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $loopns }} }
+            {{- end }}
+            {{- end }}
+            {{- end }}
             {{- if and $xr.spec.loop (get $xr.spec.loop "perStack") }}
             {{- $stack := $xr.metadata.name }}
             {{- $loopns := printf "%s-agents" $stack }}
@@ -296,6 +368,7 @@ spec:
               permissions:           # the reviewer set (mirror agents/coordinator/reviewer-git.yaml)
                 contents: write
                 pull_requests: write
+                issues: read    # resolve the issue a PR claims to fix + the depth-rule parent walk — the mint omitted it while the App grant existed, homelab#1038 (4 false scope-authorization blocks on sleep-tracking#137)
                 checks: read
                 statuses: read
                 actions: read   # the reviewer never reruns workflows — the FU-148 write is COORDINATOR-only (the 2026-08-09 flip here was wrong; github-apps-lint caught it on PR#199)
@@ -924,6 +997,42 @@ spec:
               data:
                 - secretKey: AUTH_TOKEN
                   remoteRef: { key: COORDINATOR_CLAUDE_OAUTH_TOKEN }
+            ---
+            # ADR-087 leg A (loop-ns variant): the egress proxy resolves ref:<loopns>/<secret> by
+            # reading LABELED session Secrets here. Same Role+RoleBinding as the fixer-ns variant
+            # below, but rendered into {{ $loopns }} so the prober's ref:{{ $loopns }}/claude-session
+            # resolves (homelab#1085 — the fixer-ns variant never renders into the loop ns).
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: agentstack-proxy-session-keys
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-proxy-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [""]
+                resources: [secrets]
+                verbs: [get]
+              # FU-138: the proxy reads the OpenRouterKey CR that OWNS a session Secret, because
+              # the CR (rendered from this claim) is the authoritative guardrail — the Secret's
+              # GUARDRAIL is only written when the operator mints, so it goes stale silently.
+              # list-only, namespaced: a CR spec carries budget/guardrail, never the key itself.
+              - apiGroups: [openrouter.teststuff.net]
+                resources: [openrouterkeys]
+                verbs: [list]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: agentstack-proxy-session-keys
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-proxy-rolebinding
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-proxy-session-keys }
+            subjects:
+              - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }
             {{- end }}
             {{- end }}
             {{- range $r := $xr.spec.repos }}

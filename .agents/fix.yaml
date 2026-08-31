@@ -29,12 +29,15 @@ instructions: |
   # The issue's `Touches:` line is your declared surface. These tiers are the CEILING over it:
   # a `Touches:` line may narrow them, never widen them.
 
-  MAY AUTHOR — merge is gated by CI (and, while the scaffold lasts, a code owner):
-  - `argocd/resources/**` — the manifests ArgoCD applies. This is the main lane.
-  - `docs/**` — EXCEPT `docs/follow-ups.md`, which is single-writer by contract (operator/meta
-    only). A finding that wants to be tracked goes in your PR body, never into that file.
+  MAY AUTHOR — merge is gated by CI:
+  - `argocd/resources/**` — the manifests ArgoCD applies. This is the main lane. (The codeowner
+    scaffold that once held this path was removed 2026-08-18 when the iac-sentinel check went
+    enforcing — the gate here is the sentinel + CI, not a human.)
 
   MAY AUTHOR, but a HUMAN merges it — say so in the PR body so nobody waits in silence:
+  - `docs/**` — `/docs/` is CODEOWNERS-owned PERMANENTLY (2026-08-04 — the platform's memory).
+    EXCEPT `docs/follow-ups.md`, which is single-writer by contract (operator/meta only). A
+    finding that wants to be tracked goes in your PR body, never into that file.
   - `argocd/platform/**` (syncs with prune: true — an edit here DELETES services)
   - `tofu/*.tf`, `ansible/**`, `opnsense/**`, `machines/**` (applied out-of-band to live machines)
 
@@ -105,6 +108,14 @@ instructions: |
     one on this repo's very first ride. `Fixes` is right HERE because homelab PRs target master;
     a PR on a non-default base wants a non-closing form instead, so it cannot close its issue by
     merging into a branch that has not landed (agent-runtime#32).
+  - Sibling-site sweep (retro r1 F4): if the finding is a PATTERN (a call site, a `case` arm, a
+    rail lane, a per-repo loop), the PR body lists every sibling site of the changed predicate
+    and states which were fixed and why the rest need no change.
+  - Replacement enumeration (retro r2 F2): if the diff REPLACES an existing predicate, filter,
+    selector or gate, the PR body lists the input cases the old one accepted and states, case by
+    case, which the new one still accepts. The sibling-site sweep above is the FORWARD half; this
+    is the BACKWARD one — six of one window's blocking verdicts were replacements that silently
+    accepted fewer cases than the code they replaced.
 
   Anomaly circuit-breaker (FU-069): duplicate bot comments piling up, labels contradicting the
   dispatch, an open PR already covering this issue — do NOT work around it:

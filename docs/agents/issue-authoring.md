@@ -600,6 +600,69 @@ parked "until board scale pays"; the sprout index is what makes them pay.
 
 ## The goal container — lifecycle v3 (ADR-102, 2026-08-09)
 
+### Creating a Goal — the consumer card
+
+Everything a stack needs to author and drive a Goal is in this card; **everything below it is
+machinery that reacts to a well-formed container** — you don't need to read it to file one.
+(Consumer-card shape per the loki-tenancy precedent; proposed from the oracle jail 2026-08-27/30,
+landed 2026-08-30. Worked example: oracle-fleet#270.)
+
+**The skeleton** (title `Goal: <intent in one line>`, label `task/goal`):
+
+```markdown
+Budget: <N>
+Verdict-authority: human | kpi
+Production-leg: <deploy surface | operator live-probe | explicit evidence-in-lieu statement>
+Base: goal/<n>-<slug> | master
+
+## Goal
+<intent in a paragraph + an acid test — the concrete case that must be expressible/passing>
+
+<design pins — decisions already settled; children elaborate them, never contradict them>
+
+## Acceptance
+1. <numbered, checkable>
+
+## Out of scope
+<named, so sprouts don't drift in>
+```
+
+**The six rules you drive** (the machine handles the rest):
+
+1. The header lines are machine-parsed — exactly one `Budget:` line, ever; prose
+   references money only by pointing at that line.
+2. **`Base:` is a forced choice, never a default**: `goal/<n>-<slug>` (children stack on the
+   assembly branch; one codeowner read of the net swap) or an explicit `master` (children land
+   piecewise; there is no assembly read). Children inherit the line **verbatim** at decompose
+   (the decompose play) — a Goal that omits it sends every child to master silently
+   (oracle-fleet#281). Fill in `<n>` after filing; the branch itself is a manual operator step
+   (IL-G02). **Choosing `master` is a smell to justify**: a Goal whose children all land
+   directly on master is more likely a stint — say why it's a Goal anyway, or run it as one.
+   (Softens at v1.3 theme adoption, S8: a themed Goal legitimately declares `master` while its
+   level-2 themes carry their own `goal/<n>-<theme>` branches — see §⚖ BANKED below.)
+3. Children are **native sub-issues** and bind at filing — never floating issues that mention
+   the Goal.
+4. Decompose and checkpoint sittings load the stack's design corpus first (e.g. oracle-fleet:
+   `/design`) — the reasoning seat reads the plan before authoring or re-cutting children.
+   (Binds the jail/operator sittings; the cluster decompose approximates it by reading the
+   goal's cited docs.)
+5. **Merge is a midpoint.** Assembly merge opens the post-launch sub-issue; every sprout from
+   descendant-PR reviews harvests there, drawing the same budget. Do not treat assembly as done.
+6. The Goal closes at **tree-empty + terminal verdict** (per `Verdict-authority:`), never at
+   merge, never by declaring victory in a comment.
+
+**Failure signatures** (each is a scar this doc already records):
+
+| symptom | it means |
+|---|---|
+| two `Budget:` lines (prose `€12`, footer `$16`) | the machine line is the only truth — #29's trap; fix the container, don't annotate it |
+| no `Production-leg:` | this Goal can never reach a terminal verdict — only assembly-complete; add the leg or an explicit evidence-in-lieu statement |
+| no `Base:` line on the Goal | children inherit nothing and dispatch against master silently; the assembly read dissolves piecewise (oracle-fleet#281: #283/#284 went to master against the recorded goal-branch placement, every downstream gate green) |
+| `Base: master` on a Goal | legitimate only with a stated reason — a direct-master Goal is more likely a **stint** (operator, 2026-08-30); if no reason survives writing it down, it isn't a Goal |
+| children filed without sub-issue binding | an orphan tree nothing owns (goal-174: 19 sprouts, 3 generations, still growing 34h after close) |
+| Goal closed at assembly merge | post-launch sprouts fall into master-limbo — reopen; the post-launch sub-issue is the harvest target |
+| lowercase "goal" in agents-corpus prose | retired term — say **Goal** (the type), **mission** (research), or "intent/target" |
+
 Supersedes the goal-half of this doc's earlier close semantics (harvest-time queueing after
 close, IL-G04's unbuilt gauge, the retarget-to-master drift). Validated retroactively against
 circles #17→#29 (the machine ruled #17 "goal met" 100 minutes before the operator refuted it and

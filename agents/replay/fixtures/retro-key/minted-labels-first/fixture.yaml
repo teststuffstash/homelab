@@ -1,0 +1,23 @@
+# homelab#1075 — labels-first sibling of retro-key-minted. The CR reaches the parser with
+# `labels` BEFORE `name` in the inline-flow metadata line. Under the old first-brace-pair
+# split (line.index('{'):line.index('}')), the nested `labels: { … }` object's closing `}`
+# would truncate the inner content before reaching `name`, silently emptying KEY_NAME.
+# The depth-matched brace scan (homelab#1075) correctly finds the outer matching `}` and
+# preserves all keys regardless of order.
+#
+# ONE SEAM: `python3`, shadowed in the bridge to pin the PRICE (--price-per-mtok) AND
+# reorder the emitted CR's inline-flow metadata keys so `labels` precedes `name`.
+# The real estimate_budget.py still runs, so the CR asserted here is emit_cr's true
+# rendering; what the seam adds is the key-order transformation that proves the parser
+# is order-agnostic.
+name: retro-key-minted-labels-first
+mode: actions
+source: agents/retro-session.sh
+parts:
+  - file:bridge.sh
+  - block:retro-session-key
+  - file:post.sh
+scrub:
+  # `expiresAt` is now+4h by construction. The TTL is asserted by its presence and shape, not by a
+  # wall-clock value that would red this fixture one second after it was recorded.
+  - s#^STDIN   expiresAt: ".*"$#STDIN   expiresAt: "<now+4h>"#

@@ -16,7 +16,9 @@
 # pin, and the CRON-SERVICED detector line is asserted operationally (log-read), not replayed.
 # Base world `board` is CLEAN (#90 armed∧CLEAN + #91 unarmed∧BEHIND = the armed-only witness);
 # each row patches its condition in. The 422-on-update branch is pinned by the `update-fail` row
-# (per-call failure injection, STUB_GH_<slug> — homelab#740 / PR#759).
+# (per-call failure injection, STUB_GH_<slug> — homelab#740 / PR#759). The race-422 row was
+# dropped (homelab#1007): `agents/update-pr-branch.sh` deliberately no longer distinguishes race
+# from conflict on 422, so `update-fail` covers both — a distinct row would be byte-identical.
 pins:
   - MP-T02
 name: updater

@@ -1,12 +1,7 @@
 CALL curl -s --max-time 10 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/oracle
 CALL curl -s --max-time 10 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/oracle
-CALL date 
-CALL git add docs/agents/retros/.pushgateway-failed-2026-08-11-oracle-r3
-CALL git commit -m retros: pushgateway push failed for oracle r3 (marker) --allow-empty
-CALL git push https://x-access-token:stub-token@github.com/teststuffstash/homelab HEAD:retro/2026-08-11-oracle-r3
 CALL gh pr edit retro/2026-08-11-oracle-r3 --repo teststuffstash/homelab --body FU-058 scheduled retro output — HUMAN-GATED, read before merging. Cross-review legs: run `agents/retro-session.sh oracle --cell <other-cell> --review docs/agents/retros/<report>.md` per report.\n\n⚠ **PUSHGATEWAY PUSH FAILED** — the RetroReportOverdue alert will fire stale until the next successful push. The report itself landed successfully.
 OUT WARN: pushgateway push failed after retry — the RetroReportOverdue belt goes stale
 OUT PUSH_FAILED: 1 — both curls failed, failure surface activated
-OUT MARKER: present — 1723400000pushgateway push failed after retry — the RetroReportOverdue belt goes stale
 OUT PUSH_WARN: contains the ⚠ pushgateway failure warning
 RC 0

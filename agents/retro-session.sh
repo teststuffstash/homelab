@@ -186,8 +186,65 @@ else
   # Read the CR's OWN fields rather than reconstructing either name: metadata.name and secretName
   # differ by a `-session-` infix, and reconstructing the Secret from the CR name is precisely what
   # crash-loops a worker on "secret not found" (coordinator README §step 5).
-  KEY_NAME="$(sed -n 's/^metadata: *{ *name: *\([^,]*\),.*/\1/p' "$KEY_CR")"
-  KEY_SECRET="$(sed -n 's/^  secretName: *//p' "$KEY_CR")"
+  # Uses python3 (shape-agnostic — handles both inline flow and block style metadata, so emit_cr
+  # is free to change rendering without breaking the retro lane). python3 is already a hard
+  # dependency of this exact code path (estimate_budget.py two lines above).
+  read -r KEY_NAME KEY_SECRET <<< "$(python3 - "$KEY_CR" <<'PY'
+import sys, re
+
+with open(sys.argv[1]) as f:
+    text = f.read()
+
+# Build a simple key-value map from the YAML, handling both inline flow
+# { key: val, ... } and block style key: val indentation.
+data = {}
+section = None
+
+for line in text.splitlines():
+    # Inline flow: metadata: { name: foo, namespace: bar, ... }
+    # Depth-matched brace scan: finds the matching '}' for the first '{', so nested
+    # objects (e.g. labels: { budget-tier: xs }) don't truncate the inner content
+    # before later keys (homelab#1075 — a key-order reshape of emit_cr that placed a
+    # nested object before 'name' would silently empty KEY_NAME under the old
+    # first-brace-pair split).
+    m = re.match(r'^(\w+):\s*\{', line)
+    if m:
+        section = m.group(1)
+        start = line.index('{')
+        depth = 0
+        end = start
+        for i in range(start, len(line)):
+            if line[i] == '{':
+                depth += 1
+            elif line[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        inner = line[start:end]
+        for k, v in re.findall(r'(\w+):\s*([^\s,}]+)', inner):
+            data[f"{section}.{k}"] = v.strip('"')
+        continue
+
+    # Section header (block style): metadata:
+    m = re.match(r'^(\w+):\s*$', line)
+    if m:
+        section = m.group(1)
+        continue
+
+    # Indented key: value (block style)
+    m = re.match(r'^\s+(\w+):\s*(.*)', line)
+    if m and section:
+        data[f"{section}.{m.group(1)}"] = m.group(2).strip()
+
+name = data.get('metadata.name')
+secret = data.get('spec.secretName')
+if name and secret:
+    print(name, secret)
+else:
+    sys.exit(1)
+PY
+)"
   if [ -z "$KEY_NAME" ] || [ -z "$KEY_SECRET" ]; then
     echo "FATAL: could not read name/secretName out of the emitted CR ($KEY_CR) — estimate_budget.py's emit_cr shape moved" >&2
     exit 1

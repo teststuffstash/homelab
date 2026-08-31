@@ -206,6 +206,72 @@ spec:
                       type: string
                       default: haiku
                       description: Claude model alias for the probe session (subscription rail).
+                lenses:
+                  type: object
+                  description: >-
+                    Per-stack knob graduating a named lens from advisory to blocking (FU-101).
+                    Each key is a lens name (e.g. k8s-prod, helm); the value is the posture.
+                    Absent = every lens stays advisory. NO default on this object on purpose:
+                    an omitted defaulted object is stamped into the stored claim by the API
+                    server and permanently OutOfSyncs every claim that does not carry it
+                    (the 2026-07-16 claudeTier lesson — same rule as prober).
+                  additionalProperties:
+                    type: string
+                    enum: [advisory, blocking]
+                    description: >-
+                      advisory — lens findings are Follow-ups, never the verdict.
+                      blocking — lens findings MAY determine the verdict (the lens text
+                      carries the posture line so the reviewer knows it matters).
+                      NOTE: CRD structural-schema defaulting does NOT synthesize absent map
+                      keys under additionalProperties. The fallback is the shell `// "advisory"`
+                      in reviewer-session.sh (replay-pinned).
+                responder:
+                  type: object
+                  description: >-
+                    The graduated imperative-remediation knob (roles.md §responder). NO default
+                    on this object ON PURPOSE: an omitted defaulted object is stamped into the
+                    stored claim by the API server and permanently OutOfSyncs every claim file
+                    that does not carry it (the 2026-07-16 claudeTier lesson). Absent = no
+                    remediation Role rendered — the responder keeps its report-only breakers
+                    ("no kubectl mutations", one-issue-max, inert labels). Enabling the dial
+                    does not by itself make the responder mutate anything; a consumer must be
+                    wired to read the grant and act on it (this PR ships NO consumer — report-only
+                    remains the default posture; see goal #818 §assembly).
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: >-
+                        Render a scoped remediation Role + RoleBinding in every stack namespace,
+                        granting the declared verb/resource pairs to the responder's identity
+                        (agentstack-loop SA). Default OFF — the responder stays breaker-gated;
+                        even when enabled, nothing reads the dial yet (no consumer in this PR).
+                    verbs:
+                      type: array
+                      description: >-
+                        Remediation verb/resource pairs the Role grants. Each entry declares
+                        one resource (plural) and one verb. The rendered Role grants exactly
+                        these pairs and no others, scoped to every namespace the stack owns
+                        (the loop namespace + each fixer-enabled repo namespace). Define only
+                        the minimum needed for the alert class being remediated. The escalation
+                        check mirror (rbac.yaml) pre-grants common remediation verbs so the
+                        compose passes for any reasonable whitelist — see the comment there.
+                      items:
+                        type: object
+                        required: [resource, verb]
+                        properties:
+                          resource:
+                            type: string
+                            # One resource name only. The pattern is load-bearing, not cosmetic:
+                            # the Composition splices this value into a rendered Role rule, and a
+                            # comma ("pods, secrets") would render a VALID multi-resource rule —
+                            # widening past the declared pair and past the deliberate secrets
+                            # carve-out (rbac.yaml). Belt to the template's `| quote`.
+                            pattern: "^[a-z0-9.-]+(/[a-z]+)?$"
+                            description: "Kubernetes resource name, plural, core API group only (e.g. pods, configmaps). One name — no lists."
+                          verb:
+                            type: string
+                            pattern: "^[a-z]+$"
+                            description: "Kubernetes verb (e.g. get, list, patch, delete). One verb — no lists."
                 loop:
                   type: object
                   default: {}

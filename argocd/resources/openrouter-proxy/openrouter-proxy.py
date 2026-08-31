@@ -392,6 +392,18 @@ def _resolve_ref(ref: str) -> dict | None:
     return resolved
 
 
+def _is_negative_cache_hit(ref: str) -> bool:
+    """homelab#1020: True if ref is currently cached as unresolvable (None) with future expiry.
+
+    A cached negative hit means the last resolve attempt failed and we're still inside the
+    NEGATIVE_CACHE_TTL_S window — a transient blip, not a fresh failure. The circuit breaker
+    must NOT count these, because a single transient k8s API blip must not latch a circuit
+    (PR #1019 / homelab#1004)."""
+    with _refs_lock:
+        hit = _refs.get(ref)
+        return hit is not None and hit[1] is None and hit[0] > time.time()
+
+
 GIT_TOKEN_LABEL = "homelab.teststuff.net/agent-git-token"
 # FU-080 loop tokens: per-STACK coordinator/reviewer git tokens (issues:write over one stack's
 # repos — strictly more privilege than a worker token), minted centrally in agent-coordinator by
@@ -617,11 +629,11 @@ def _cb_update(session: str, model: str, status: int) -> None:
             for k in [k for k, v in _cb.items() if now - v["ts"] > 86400]:
                 del _cb[k]
         st = _cb.setdefault((session, model),
-                            {"auth": 0, "generic": 0, "open_until": 0.0, "class": "", "n": 0,
+                            {"auth": 0, "generic": 0, "cred": 0, "open_until": 0.0, "class": "", "n": 0,
                              "ts": now})
         st["ts"] = now
         if 200 <= status < 300:
-            st["auth"] = st["generic"] = 0
+            st["auth"] = st["generic"] = st["cred"] = 0
             st["open_until"] = 0.0
             return
         if status in (401, 403):
@@ -643,6 +655,43 @@ def _cb_update(session: str, model: str, status: int) -> None:
         router.record_circuit_open(session, model, tripped[0], tripped[1])
         log(f"circuit OPEN ({tripped[0]}) session={session} model={model} n_4xx={tripped[1]} — "
             f"forwarding stopped for {cfg['hold_s']}s (ADR-096 addendum 3)")
+
+
+def _cb_cred_unresolved(session: str, model: str) -> None:
+    """homelab#1020: count a cred-unresolved (ref could not be resolved) in the breaker.
+
+    A permanently unresolvable ref (deleted Secret, RBAC drift) must still fire
+    router.record_circuit_open so the FU-021 storm watchdog keeps its signal.  Cached
+    negative hits (transient blips inside NEGATIVE_CACHE_TTL_S) are handled by the caller
+    and must NOT reach this function — the transient case must not regress.
+
+    The cred axis uses the same threshold as auth (both mean "the proxy could not
+    authenticate the request"), but is counted separately because the failure is local
+    (ref unresolvable) rather than upstream (forwarded 401/403).
+    """
+    now = time.time()
+    tripped = None
+    cfg = _cb_config()
+    with _cb_lock:
+        if len(_cb) > 512:
+            for k in [k for k, v in _cb.items() if now - v["ts"] > 86400]:
+                del _cb[k]
+        st = _cb.setdefault((session, model),
+                            {"auth": 0, "generic": 0, "cred": 0, "open_until": 0.0, "class": "", "n": 0,
+                             "ts": now})
+        st["ts"] = now
+        st["cred"] += 1
+        if st["open_until"] > now:
+            return
+        if st["cred"] >= cfg["auth"]:  # same threshold as auth — both mean "can't authenticate"
+            tripped = ("cred", st["cred"])
+        if tripped:
+            st["open_until"] = now + cfg["hold_s"]
+            st["class"], st["n"] = tripped
+    if tripped:
+        router.record_circuit_open(session, model, tripped[0], tripped[1])
+        log(f"circuit OPEN ({tripped[0]}) session={session} model={model} n_cred={tripped[1]} — "
+            f"forwarding stopped for {cfg['hold_s']}s (ADR-096 addendum 3, homelab#1020)")
 
 
 # Hop-by-hop (and framing) headers never forwarded either way. accept-encoding is stripped so the
@@ -2026,7 +2075,7 @@ class Proxy(BaseHTTPRequestHandler):
     def _forward(self, body: bytes | None, note: str,
                  or_model: str | None = None, or_provider: str | None = None,
                  cb_session: str | None = None, go_leg: bool = False, zen_leg: bool = False,
-                 or_leg: bool = False, role: str = "worker") -> None:
+                 or_leg: bool = False, role: str = "worker", _cred_was_cached: bool = False) -> None:
         # homelab#22: every forwarded request is registered in-flight for its full lifetime —
         # try/finally so a handler exception can never leak a phantom entry into the gauge.
         key = threading.get_ident()
@@ -2036,7 +2085,7 @@ class Proxy(BaseHTTPRequestHandler):
         try:
             self._forward_upstream(body, note, or_model=or_model, or_provider=or_provider,
                                    cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg,
-                                   or_leg=or_leg, role=role)
+                                   or_leg=or_leg, role=role, _cred_was_cached=_cred_was_cached)
         finally:
             with _inflight_lock:
                 _inflight.pop(key, None)
@@ -2045,7 +2094,7 @@ class Proxy(BaseHTTPRequestHandler):
                           or_model: str | None = None, or_provider: str | None = None,
                           cb_session: str | None = None, go_leg: bool = False,
                           zen_leg: bool = False, or_leg: bool = False,
-                          role: str = "worker") -> None:
+                          role: str = "worker", _cred_was_cached: bool = False) -> None:
         started = time.time()
         anthropic = self.path.startswith("/anthropic/")
         # ADR-107 (homelab#421): Go leg routing is by MODEL, not path — check it FIRST.
@@ -2139,6 +2188,14 @@ class Proxy(BaseHTTPRequestHandler):
                 # homelab#1004: fail CLOSED — a ref that cannot be resolved must never be
                 # forwarded credential-less (a single upstream 401 latches the circuit-breaker).
                 if "+cred-unresolved" in _inject_suffix:
+                    # homelab#1020: count cred-unresolved in the circuit breaker on its own
+                    # axis, but only for FRESH failures (not cached negative hits from transient
+                    # blips inside the negative-TTL window). A permanently unresolvable ref must
+                    # still fire router.record_circuit_open so the FU-021 storm watchdog keeps
+                    # its signal (ADR-096 addendum 3). _cred_was_cached is set by do_POST
+                    # before _guardrail_reject calls _resolve_ref.
+                    if cb_session and or_model and not _cred_was_cached:
+                        _cb_cred_unresolved(cb_session, or_model)
                     log(f"{self.command} {self.path} → 502 [or-leg] model={or_model or '-'} - "
                         f"credential ref could not be resolved — refusing locally (homelab#1004)")
                     self._reply_json(502, {
@@ -2164,6 +2221,12 @@ class Proxy(BaseHTTPRequestHandler):
             # homelab#1004: fail CLOSED — a ref that cannot be resolved must never be forwarded
             # credential-less (a single upstream 401 latches the circuit-breaker).
             if "+cred-unresolved" in _inject_suffix:
+                # homelab#1020: count cred-unresolved in the circuit breaker on its own axis,
+                # but only for FRESH failures (not cached negative hits from transient blips
+                # inside the negative-TTL window). _cred_was_cached is set by do_POST
+                # before _guardrail_reject calls _resolve_ref.
+                if cb_session and or_model and not _cred_was_cached:
+                    _cb_cred_unresolved(cb_session, or_model)
                 log(f"{self.command} {self.path} → 502 [ref-unresolved] - "
                     f"credential ref could not be resolved — refusing locally (homelab#1004)")
                 self._reply_json(502, {
@@ -3061,6 +3124,7 @@ class Proxy(BaseHTTPRequestHandler):
         or_model = None
         or_provider = None
         cb_session = None
+        _cred_was_cached = False  # homelab#1020: set below before _guardrail_reject calls _resolve_ref
         go_leg = False  # ADR-107 (homelab#421): Go rail routing by model prefix
         zen_leg = False  # homelab#445: Zen free rail routing by model prefix
         or_leg = False  # homelab#791: OpenRouter translation leg
@@ -3073,6 +3137,16 @@ class Proxy(BaseHTTPRequestHandler):
                     # The guardrail asserts spend authority; Go is a paid window and only-free keys
                     # have no Go-window authority. The error message below names this explicitly.
                     auth_hdr = self.headers.get("Authorization", "")
+                    # homelab#1020: check cache BEFORE _guardrail_reject (which calls
+                    # _resolve_ref and creates a negative cache entry), so we can distinguish
+                    # fresh failures from cached negative hits (transient blips inside the
+                    # negative-TTL window).
+                    _cred_was_cached = False
+                    if auth_hdr.startswith("Bearer ref:"):
+                        _cred_ref = auth_hdr[len("Bearer ref:"):].strip()
+                        with _refs_lock:
+                            _hit = _refs.get(_cred_ref)
+                            _cred_was_cached = _hit is not None and _hit[1] is None and _hit[0] > time.time()
                     if auth_hdr.startswith("Bearer ref:"):
                         reject = _guardrail_reject(
                             auth_hdr[len("Bearer ref:"):].strip(), str(payload["model"]))
@@ -3193,7 +3267,7 @@ class Proxy(BaseHTTPRequestHandler):
                         cb_session = _cb_session(self.headers)
                         tripped = _cb_open(cb_session, or_model)
                         if tripped:
-                            code = 401 if tripped["class"] == "auth" else 400
+                            code = 502 if tripped["class"] == "cred" else (401 if tripped["class"] == "auth" else 400)
                             reject = json.dumps({"error": {
                                 "code": code,
                                 "message": f"circuit-open ({tripped['class']}): "
@@ -3303,7 +3377,7 @@ class Proxy(BaseHTTPRequestHandler):
                 pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
                       cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg, or_leg=or_leg,
-                      role=_role)
+                      role=_role, _cred_was_cached=_cred_was_cached)
 
 
 def main() -> int:
@@ -5181,6 +5255,218 @@ data: [DONE]
         check(False, f"do_POST with probe ref raised: {e}")
     finally:
         Proxy._forward = _saved_forward
+    # ── #1021: cred-unresolved → 502 + negative-cache TTL coverage ─────────────────────────────
+    # PR #1019 landed the cred-unresolved → 502 and negative-cache TTL fix but added no
+    # self-test assertions. The paths have zero live occurrences, so the self-test is the
+    # only regression guard. Coverage extends to sibling paths _resolve_loop_git and
+    # _resolve_git_token (same negative-cache TTL pattern).
+    print("\n=== Cred-unresolved → 502 test (homelab#1004 / #1021) ===")
+    # An unresolvable ref: must produce a local 502 and never forward credential-less.
+    seen.clear()
+    st, data = call("gpt-4o", extra_headers={
+        "Authorization": "Bearer ref:default/nonexistent",
+    })
+    check(st == 502, "cred-unresolved: unresolvable ref returns 502")
+    check("openrouter" not in seen and "anthropic" not in seen,
+          "cred-unresolved: no upstream received the request (fail-closed)")
+
+    print("\n=== Negative-cache TTL test for _resolve_ref (homelab#1004 / #1021) ===")
+    # A failed resolve must NOT poison the cache for the full REF_CACHE_TTL_S (60s).
+    # Negative entries evaporate after NEGATIVE_CACHE_TTL_S (5s), so the next request
+    # retries the K8s call naturally.
+    ref_key = "default/test-negative-cache"
+    now = time.time()
+    _refs[ref_key] = (now + NEGATIVE_CACHE_TTL_S, None)
+
+    # First request: negative cache hit → 502
+    seen.clear()
+    st, data = call("gpt-4o", extra_headers={
+        "Authorization": f"Bearer ref:{ref_key}",
+    })
+    check(st == 502, "negative-cache _resolve_ref: first request 502 (negative cache hit)")
+
+    # Record the cache entry's expiry
+    with _refs_lock:
+        cached = _refs.get(ref_key)
+    first_expiry = cached[0] if cached else 0.0
+    check(first_expiry > now, "negative-cache _resolve_ref: cache entry has future expiry")
+
+    # Wait for negative TTL to expire
+    time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
+
+    # Second request: cache expired, re-resolution attempted → 502 again (no K8s API)
+    seen.clear()
+    st, data = call("gpt-4o", extra_headers={
+        "Authorization": f"Bearer ref:{ref_key}",
+    })
+    check(st == 502, "negative-cache _resolve_ref: second request 502 (re-resolution attempted)")
+
+    # Verify cache entry was refreshed (new expiry, meaning re-resolution happened)
+    with _refs_lock:
+        cached = _refs.get(ref_key)
+    second_expiry = cached[0] if cached else 0.0
+    check(second_expiry > first_expiry + NEGATIVE_CACHE_TTL_S * 0.5,
+          f"negative-cache _resolve_ref: cache entry refreshed "
+          f"(first expiry {first_expiry:.1f} → second {second_expiry:.1f})")
+    # Clean up
+    _refs.pop(ref_key, None)
+
+    print("\n=== Negative-cache TTL test for _resolve_git_token (homelab#1004 / #1021) ===")
+    # Same negative-cache TTL pattern in the sibling path _resolve_git_token.
+    # Seed the cache with a negative entry, verify it's used, then verify re-resolution
+    # after TTL expiry via the /git-token HTTP handler.
+    git_ref = "agent-coordinator/agent-git-test-neg-cache#git"
+    now = time.time()
+    _refs[git_ref] = (now + NEGATIVE_CACHE_TTL_S, None)
+
+    # First request: negative cache hit → 404 (unresolvable)
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/git-token?ns=test-neg-cache")
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 404,
+          "negative-cache _resolve_git_token: first request 404 (negative cache hit)")
+
+    # Record the cache entry's expiry
+    with _refs_lock:
+        cached = _refs.get(git_ref)
+    first_expiry = cached[0] if cached else 0.0
+    check(first_expiry > now, "negative-cache _resolve_git_token: cache entry has future expiry")
+
+    # Wait for negative TTL to expire
+    time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
+
+    # Second request: cache expired, re-resolution attempted → 404 again (no K8s API)
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/git-token?ns=test-neg-cache")
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 404,
+          "negative-cache _resolve_git_token: second request 404 (re-resolution attempted)")
+
+    # Verify cache entry was refreshed
+    with _refs_lock:
+        cached = _refs.get(git_ref)
+    second_expiry = cached[0] if cached else 0.0
+    check(second_expiry > first_expiry + NEGATIVE_CACHE_TTL_S * 0.5,
+          f"negative-cache _resolve_git_token: cache entry refreshed "
+          f"(first expiry {first_expiry:.1f} → second {second_expiry:.1f})")
+    # Clean up
+    _refs.pop(git_ref, None)
+
+    print("\n=== Negative-cache TTL test for _resolve_loop_git (homelab#1004 / #1021) ===")
+    # Same negative-cache TTL pattern in the sibling path _resolve_loop_git.
+    # Tested via direct call since the /loop-git-token handler gates on TokenReview
+    # (which fails without a K8s API) before reaching _resolve_loop_git.
+    loop_ref = "agent-coordinator/test-loop-neg-cache#loop"
+    now = time.time()
+    _refs[loop_ref] = (now + NEGATIVE_CACHE_TTL_S, None)
+
+    # Verify the negative entry is cached
+    with _refs_lock:
+        cached = _refs.get(loop_ref)
+    check(cached is not None and cached[1] is None,
+          "negative-cache _resolve_loop_git: negative entry cached")
+    first_expiry = cached[0] if cached else 0.0
+    check(first_expiry > now, "negative-cache _resolve_loop_git: cache entry has future expiry")
+
+    # Wait for negative TTL to expire
+    time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
+
+    # Call _resolve_loop_git directly — it will try K8s API (fails), cache new negative entry
+    result = _resolve_loop_git("test-loop-neg-cache", "test-ns")
+    check(result is None,
+          "negative-cache _resolve_loop_git: re-resolution returns None (no K8s API)")
+
+    # Verify cache entry was refreshed
+    with _refs_lock:
+        cached = _refs.get(loop_ref)
+    second_expiry = cached[0] if cached else 0.0
+    check(second_expiry > first_expiry + NEGATIVE_CACHE_TTL_S * 0.5,
+          f"negative-cache _resolve_loop_git: cache entry refreshed "
+          f"(first expiry {first_expiry:.1f} → second {second_expiry:.1f})")
+    # Clean up
+    _refs.pop(loop_ref, None)
+
+    # ── #1020: cred-unresolved → circuit breaker accounting ─────────────────────────────────
+    # PR #1019 landed the cred-unresolved → 502 fix but the 502 path returns before ever
+    # reaching _cb_update, so a permanently unresolvable ref no longer fires
+    # router.record_circuit_open. This test verifies the fix: fresh cred-unresolved failures
+    # are counted in the breaker on their own cred axis, while cached negative hits (transient
+    # blips inside NEGATIVE_CACHE_TTL_S) are NOT counted.
+    print("\n=== Cred-unresolved breaker accounting (homelab#1020) ===")
+    # Clear the breaker state AND refs cache for a clean test
+    with _cb_lock:
+        _cb.clear()
+    with _refs_lock:
+        _refs.clear()
+
+    # Test 1: fresh cred-unresolved → breaker cred counter increments
+    # Use a ref that has never been resolved (no cache entry at all).
+    breaker_ref = "default/test-breaker-cred"
+    seen.clear()
+    st, data = call("gpt-4o", extra_headers={
+        "Authorization": f"Bearer ref:{breaker_ref}",
+    })
+    check(st == 502, "breaker-cred: fresh failure returns 502")
+    with _cb_lock:
+        breaker_key = next((k for k in _cb if breaker_ref in k[0]), None)
+    check(breaker_key is not None, "breaker-cred: breaker state exists for session")
+    if breaker_key:
+        st_cred = _cb[breaker_key]["cred"]
+        check(st_cred == 1, f"breaker-cred: cred counter = 1 (got {st_cred})")
+
+    # Test 2: cached negative hit → breaker cred counter does NOT increment
+    # Seed a fresh negative cache entry (simulating a transient blip within TTL).
+    cached_ref = "default/test-breaker-cached"
+    now = time.time()
+    with _refs_lock:
+        _refs[cached_ref] = (now + NEGATIVE_CACHE_TTL_S, None)
+    seen.clear()
+    st, data = call("gpt-4o", extra_headers={
+        "Authorization": f"Bearer ref:{cached_ref}",
+    })
+    check(st == 502, "breaker-cred: cached negative hit returns 502")
+    # The breaker should NOT have a new entry for this cached hit
+    with _cb_lock:
+        cached_key = next((k for k in _cb if cached_ref in k[0]), None)
+    check(cached_key is None,
+          "breaker-cred: cached negative hit did NOT create breaker state")
+    # Clean up
+    with _refs_lock:
+        _refs.pop(cached_ref, None)
+
+    # Test 3: enough fresh failures → circuit opens
+    # Make 3 more fresh failures (total 4 = auth_threshold) to trip the breaker.
+    # Clear the cache entry between each request to simulate the negative cache
+    # TTL expiring naturally (NEGATIVE_CACHE_TTL_S = 5s in the real system).
+    for i in range(3):
+        seen.clear()
+        with _refs_lock:
+            _refs.pop(breaker_ref, None)
+        st, data = call("gpt-4o", extra_headers={
+            "Authorization": f"Bearer ref:{breaker_ref}",
+        })
+        check(st == 502, f"breaker-cred: fresh failure {i+2}/4 returns 502")
+    # After 4 total failures, the circuit should be open
+    with _cb_lock:
+        breaker_key = next((k for k in _cb if breaker_ref in k[0]), None)
+    check(breaker_key is not None, "breaker-cred: breaker state exists after 4 failures")
+    if breaker_key:
+        st_open = _cb[breaker_key]["open_until"]
+        check(st_open > time.time(),
+              f"breaker-cred: circuit is open (open_until={st_open:.1f} > now={time.time():.1f})")
+        st_class = _cb[breaker_key]["class"]
+        check(st_class == "cred",
+              f"breaker-cred: tripped class is 'cred' (got '{st_class}')")
+        st_n = _cb[breaker_key]["n"]
+        check(st_n == 4,
+              f"breaker-cred: tripped at n=4 (got n={st_n})")
+    # Clean up breaker state
+    with _cb_lock:
+        _cb.clear()
 
     print()
     if not fails:

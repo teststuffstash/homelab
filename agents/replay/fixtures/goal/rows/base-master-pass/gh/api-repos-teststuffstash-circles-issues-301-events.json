@@ -1,0 +1,12 @@
+[
+  {
+    "event": "labeled",
+    "label": {
+      "name": "agent/queued"
+    },
+    "actor": {
+      "login": "RasmusSoot",
+      "type": "User"
+    }
+  }
+]

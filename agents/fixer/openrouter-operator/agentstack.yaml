@@ -30,6 +30,14 @@ spec:
   loop:
     perStack: true
     graduated: true
+  # FU-102 prober — ENABLED 2026-08-24 (goal #818 child homelab#835; the .agents/** carve-out was
+  # DECLINED, so the brief is seat-authored — ruling on the issue). Every field declared, never
+  # defaulted (the 2026-07-16 API-server-stamp/OutOfSync lesson). Schedule = the XRD default
+  # four-a-day tick at :41, offset from the :00/:30 coordinate and :15 review crons.
+  prober:
+    enabled: true
+    schedule: "41 */6 * * *"
+    model: haiku
   # Chain reset 2026-08-03 (operator, evidence-based — scout #81 + MCP evals/market/AA):
   # 0731 = the flash successor (gpqa 88.7%@$0.0033 vs 0423's 87.0%, τ-Bench 76.7 vs 75.0,
   # canary clean, already charting in devops/security tags); mimo = our own 7×-wall-clock

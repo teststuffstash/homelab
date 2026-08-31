@@ -408,8 +408,8 @@ spec:
               # label set pushgateway is holding, so an old `job=retro-session` group's stale
               # sample can never mask a fresher `job=platform-retro` one; the rename only tidies
               # the grouping key, it does not need a migration step.
-              # FU-176 / #932: retry once and surface final failure as a marker file + PR body
-              # amendment instead of a TTL'd log-only WARN — a belt whose own failure is a log
+              # FU-176 / #932: retry once and surface final failure as a PR body amendment
+              # instead of a TTL'd log-only WARN — a belt whose own failure is a log
               # line that expires is not a belt (FU-108 class).
               # >>>REPLAY:retro-push-belt>>>
               PUSH_FAILED=0
@@ -423,16 +423,7 @@ spec:
                      || PUSH_FAILED=1; }
               if [ "$PUSH_FAILED" = 1 ]; then
                 echo "WARN: pushgateway push failed after retry — the RetroReportOverdue belt goes stale"
-                # Write a marker file (FU-176 / #932). Committed to the PR branch, so it lands
-                # IN the human-gated retro PR's own diff — that reader is the belt. No automated
-                # marker reader exists yet (the PR-body ⚠ below is the immediate surface).
-                MARKER="docs/agents/retros/.pushgateway-failed-${DATE}-${STACK}-${RUN}"
-                date > "$MARKER"
-                echo "pushgateway push failed after retry — the RetroReportOverdue belt goes stale" >> "$MARKER"
-                git add "$MARKER"
-                git commit -m "retros: pushgateway push failed for ${STACK} ${RUN} (marker)" --allow-empty
-                git push "https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab" "HEAD:$BR"
-                # Also surface the failure in the PR body immediately.
+                # Surface the failure in the PR body immediately.
                 # Built with printf, not a literal multi-line string: every line of this step is
                 # INSIDE a YAML `|` block scalar, so a continuation line at column 0 (which is
                 # what the note's leading blank line wants to be) silently ENDS the scalar and

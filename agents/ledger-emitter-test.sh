@@ -156,10 +156,10 @@ retry_storms = sum(1 for v in ((r["exit_status"] or r["error_class"]) for r in m
 check(retry_storms == 1, "retry_storms counts the auth-storm strike-only round")
 
 # ── 4. is_snapshot() matrix (F5) ────────────────────────────────────────────────────────────
-check(ledger.is_snapshot("open", "agent/blocked") is True,  "snapshot: issue still OPEN")
-check(ledger.is_snapshot("open", "agent/done") is True,     "snapshot: done label, issue not closed yet")
-check(ledger.is_snapshot("closed", "agent/done") is False,  "not a snapshot: closed + done = converged")
-check(ledger.is_snapshot("closed", "agent/blocked") is False,
+check(ledger.is_snapshot("OPEN", "agent/blocked") is True,  "snapshot: issue still OPEN")
+check(ledger.is_snapshot("OPEN", "agent/done") is True,     "snapshot: done label, issue not closed yet")
+check(ledger.is_snapshot("CLOSED", "agent/done") is False,  "not a snapshot: closed + done = converged")
+check(ledger.is_snapshot("CLOSED", "agent/blocked") is False,
       "not a snapshot: closed issue (blocked label stale, but not mid-flight)")
 
 # ── 5. main() end-to-end: the assembled row carries rounds[] + derived flat + snapshot ──────
@@ -167,12 +167,12 @@ os.environ["AGENT_TS_READER_ID"] = "rid"
 os.environ["AGENT_TS_READER_SECRET"] = "rsec"
 os.environ["AGENT_TS_WRITER_ID"] = "wid"
 os.environ["AGENT_TS_WRITER_SECRET"] = "wsec"
-ledger.terminal_issues = lambda org, repos: [("proj", 7, "agent/blocked", "open", None, "sm")]
+ledger.terminal_issues = lambda org, repos: [("proj", 7, "agent/blocked", "OPEN", None, "sm")]
 ledger.repos_from_stacks = lambda: {"proj": "teststack"}
 ledger.main()
 check(len(written_ledger) == 1, "main wrote exactly one ledger line (empty prior ledger)")
 row = json.loads(written_ledger[0].strip().splitlines()[0])
-check(row["key"] == "proj#7" and row["terminal_label"] == "agent/blocked" and row["issue_state"] == "open",
+check(row["key"] == "proj#7" and row["terminal_label"] == "agent/blocked" and row["issue_state"] == "OPEN",
       "row identity fields (key/terminal_label/issue_state) intact")
 check(row.get("snapshot") is True, "row marked snapshot: true (issue open at emit time)")
 check(row["rounds"] == want_merged, "row rounds[] = merged per-round list")
@@ -184,7 +184,7 @@ check(row["ci_sequence"] == [True, None, True, True, False], "row ci_sequence al
 check(row["retry_storms"] == 1, "row retry_storms counts the strike-only auth-storm")
 check(row["total_cost_usd"] == 0.65, "row total_cost_usd = 0.10+0.05+0.20+0.30 = 0.65")
 check(row["budget_tier"] == "sm" and row["budget_cap_usd"] == 0.5, "row budget tier/cap present")
-check(row["calibration_error"] == round(0.65 / 0.5, 3), "row calibration_error = 0.65/0.5")
+check(row["calibration_error"] == round(0.65 / (0.5 * 5), 3), "row calibration_error = 0.65/(0.5*5) — per-round utilisation, not cumulative")
 
 # ── 6. _budget_from_cr() prefix-anchoring (homelab#929 r3) ──────────────────────────────
 # The prefix must be anchored with "-round-" so issue "92" does not match
@@ -222,7 +222,134 @@ check(cr929[2] == 0.50, "_budget_from_cr('proj', '929') returns estimate 0.50")
 cr1 = ledger._budget_from_cr("proj", "1")
 check(cr1 is None, "_budget_from_cr('proj', '1') returns None (no matching CR)")
 
+# ── 7. _budget_from_cr() deterministic tie-break (homelab#987) ──────────────────────────
+# When multiple CRs match the same issue prefix (multiple rounds), the function must
+# return the highest round number's tier/estimate deterministically, not the first in
+# kubectl's arbitrary item order.
+def fake_sh_tiebreak(args, env=None):
+    if args[0] == "kubectl" and args[1] == "get" and args[2] == "openrouterkeys":
+        # Items in REVERSE round order to catch non-deterministic first-match.
+        return json.dumps({
+            "items": [
+                {"metadata": {"name": "proj-issue-42-round-1",
+                              "labels": {"budget-tier": "xs", "budget-estimate-usd": "0.08"}}},
+                {"metadata": {"name": "proj-issue-42-round-3",
+                              "labels": {"budget-tier": "md", "budget-estimate-usd": "0.50"}}},
+                {"metadata": {"name": "proj-issue-42-round-2",
+                              "labels": {"budget-tier": "sm", "budget-estimate-usd": "0.25"}}},
+            ]
+        })
+    raise AssertionError("fake_sh_tiebreak unexpected: %r" % (args,))
+
+ledger.sh = fake_sh_tiebreak
+
+cr42 = ledger._budget_from_cr("proj", "42")
+check(cr42 is not None, "_budget_from_cr('proj', '42') found a CR (tie-break test)")
+check(cr42[0] == "md", "_budget_from_cr('proj', '42') returns tier md (highest round 3, not xs from round 1)")
+check(cr42[1] == 1.0, "_budget_from_cr('proj', '42') returns cap 1.0 (md tier)")
+check(cr42[2] == 0.50, "_budget_from_cr('proj', '42') returns estimate 0.50 (from round 3)")
+
+# ── 8. _budget_from_cr() malformed label handling (homelab#988) ──────────────────────────
+# A malformed budget-estimate-usd label (e.g. "abc") must not crash the function — the
+# per-item processing is wrapped in try/except so the malformed CR is skipped loudly and
+# other CRs are still considered.
+def fake_sh_malformed(args, env=None):
+    if args[0] == "kubectl" and args[1] == "get" and args[2] == "openrouterkeys":
+        return json.dumps({
+            "items": [
+                {"metadata": {"name": "proj-issue-99-round-1",
+                              "labels": {"budget-tier": "xs", "budget-estimate-usd": "abc"}}},
+                {"metadata": {"name": "proj-issue-99-round-2",
+                              "labels": {"budget-tier": "sm", "budget-estimate-usd": "0.25"}}},
+            ]
+        })
+    raise AssertionError("fake_sh_malformed unexpected: %r" % (args,))
+
+ledger.sh = fake_sh_malformed
+
+cr99 = ledger._budget_from_cr("proj", "99")
+check(cr99 is not None, "_budget_from_cr('proj', '99') found a CR despite malformed label on round 1")
+check(cr99[0] == "sm", "_budget_from_cr('proj', '99') returns tier sm (from valid round 2, not crashed by round 1)")
+check(cr99[1] == 0.5, "_budget_from_cr('proj', '99') returns cap 0.5 (sm tier)")
+check(cr99[2] == 0.25, "_budget_from_cr('proj', '99') returns estimate 0.25 (from valid round 2)")
+
+# All CRs malformed — must return None, not crash
+def fake_sh_all_malformed(args, env=None):
+    if args[0] == "kubectl" and args[1] == "get" and args[2] == "openrouterkeys":
+        return json.dumps({
+            "items": [
+                {"metadata": {"name": "proj-issue-100-round-1",
+                              "labels": {"budget-tier": "xs", "budget-estimate-usd": "abc"}}},
+                {"metadata": {"name": "proj-issue-100-round-2",
+                              "labels": {"budget-tier": "sm", "budget-estimate-usd": "xyz"}}},
+            ]
+        })
+    raise AssertionError("fake_sh_all_malformed unexpected: %r" % (args,))
+
+ledger.sh = fake_sh_all_malformed
+
+cr100 = ledger._budget_from_cr("proj", "100")
+check(cr100 is None, "_budget_from_cr('proj', '100') returns None when all CRs have malformed labels (no crash)")
+
 ledger.sh = _saved_sh  # restore
+
+# ── 9. Zero-round guard: reviewer-only task must not crash (F6 denominator guard) ──────────
+# A task with only reviewer manifests (no worker manifests) reaches line 378 with rounds==[].
+# The old expression (total_cost_usd / cap) was safe; the new one (total_cost_usd / (cap * len(rounds)))
+# would ZeroDivisionError without the `and rounds` guard. The row must be emitted with
+# calibration_error=None and no exception.
+REVIEWER_ONLY_MANIFESTS = {
+    "reviewer-r1-20260817T000000Z/manifest.json": {
+        "role": "reviewer", "round": 1, "model": "reviewer-model",
+    },
+}
+
+def fake_s5_reviewer_only(args, key_id, key_secret):
+    op = args[0]
+    if op == "cp":
+        src, dst = args[1], args[2]
+        if dst == ledger.LEDGER and not src.startswith("s3://"):
+            written_ledger.append(open(src).read())
+            return ""
+        return ""
+    if op == "ls":
+        rels = [k for k in REVIEWER_ONLY_MANIFESTS if k.endswith("manifest.json")]
+        return "".join("2026-08-17 00:00:00 123 %s\n" % k for k in sorted(rels))
+    if op == "cat":
+        rel = "/".join(args[1].split("/")[-2:])
+        return json.dumps(REVIEWER_ONLY_MANIFESTS[rel])
+    raise AssertionError("fake_s5_reviewer_only unexpected: %r" % (args,))
+
+def fake_sh_no_strikes(args, env=None):
+    if args[0] == "gh" and args[1] == "api":
+        return json.dumps([])  # no strike comments
+    raise AssertionError("fake_sh_no_strikes unexpected: %r" % (args,))
+
+# Save state, set up reviewer-only world
+_saved_s5 = ledger.s5
+_saved_sh2 = ledger.sh
+_saved_terminal = ledger.terminal_issues
+_saved_repos = ledger.repos_from_stacks
+ledger.s5 = fake_s5_reviewer_only
+ledger.sh = fake_sh_no_strikes
+ledger.terminal_issues = lambda org, repos: [("proj", 8, "agent/done", "CLOSED", "2026-08-17T040000Z", "sm")]
+ledger.repos_from_stacks = lambda: {"proj": "teststack"}
+written_ledger.clear()
+try:
+    ledger.main()
+    check(len(written_ledger) == 1, "reviewer-only main wrote exactly one ledger line (no crash)")
+    row8 = json.loads(written_ledger[0].strip().splitlines()[0])
+    check(row8["key"] == "proj#8", "reviewer-only row key is proj#8")
+    check(row8["calibration_error"] is None, "reviewer-only row calibration_error is None (no rounds to divide by)")
+    check(row8["rounds"] == [], "reviewer-only row rounds is empty list")
+    check(row8["total_cost_usd"] == 0.0, "reviewer-only row total_cost_usd is 0.0")
+except Exception as e:
+    bad("reviewer-only main crashed (zero-round guard missing)", str(e))
+finally:
+    ledger.s5 = _saved_s5
+    ledger.sh = _saved_sh2
+    ledger.terminal_issues = _saved_terminal
+    ledger.repos_from_stacks = _saved_repos
 PYEOF
 
 out="$(python3 "$TMP/emitter_test.py" 2>&1)"; rc=$?

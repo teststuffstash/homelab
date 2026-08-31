@@ -1,0 +1,21 @@
+# homelab#989 — block-style sibling of retro-key-minted. The CR reaches the parser in BLOCK style
+# (metadata:\n  name: …) rather than inline flow (metadata: { name: …, … }). The asserted contract
+# is unchanged — delete-before-apply, budgetUSD: 0.25 on STDIN, secretName carrying the -session-
+# infix read out of the CR (never rebuilt from metadata.name), the wait on .status.openrouter.hash,
+# and the hand-off carrying --openrouter-secret <that Secret>.
+#
+# ONE SEAM: `python3`, shadowed in the bridge to pin the PRICE (--price-per-mtok) AND re-render
+# the emitted CR's inline-flow metadata into block style. The real estimate_budget.py still runs,
+# so the CR asserted here is emit_cr's true rendering; what the seam adds is the block-style
+# transformation that proves the parser is shape-agnostic.
+name: retro-key-minted-block-style
+mode: actions
+source: agents/retro-session.sh
+parts:
+  - file:bridge.sh
+  - block:retro-session-key
+  - file:post.sh
+scrub:
+  # `expiresAt` is now+4h by construction. The TTL is asserted by its presence and shape, not by a
+  # wall-clock value that would red this fixture one second after it was recorded.
+  - s#^STDIN   expiresAt: ".*"$#STDIN   expiresAt: "<now+4h>"#

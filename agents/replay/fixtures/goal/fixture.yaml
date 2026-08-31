@@ -51,6 +51,9 @@ mode: table
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
+  - file:loop-wrap.sh
+  - block:goal-decompose
+  - file:loop-close.sh
   - block:goal-lane
   - file:post.sh
 scrub:

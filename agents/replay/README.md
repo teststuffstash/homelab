@@ -153,11 +153,15 @@ is stale, so it cannot drift the way the prose register did.
 | `argv-payload/over-ceiling` | actions | - | `agents/agent-session.sh` | - |
 | `argv-payload/retro-handoff` | actions | - | `agents/retro-session.sh` | - |
 | `argv-payload/warn-band` | actions | - | `agents/agent-session.sh` | - |
+| `asvs` | suite | - | `-` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-footprint-mismatch/body-footprint-mismatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
+| `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `clause-replay-pairing/clause-replay-pairing` | table | - | `agents/coordinator-scan.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
@@ -168,6 +172,7 @@ is stale, so it cannot drift the way the prose register did.
 | `depends-on-retired-format/depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
 | `dispatch-phase/scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `dispatch-phase/session` | actions | - | `agents/coordinator-session.sh` | - |
+| `done-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T28 |
 | `doorbell/collapse` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout-wiring` | table | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -204,6 +209,7 @@ is stale, so it cannot drift the way the prose register did.
 | `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `item-class/item-class` | actions | - | `agents/coordinator-scan.sh` | - |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
+| `lens-posture/lens-posture` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
@@ -236,6 +242,7 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-cause-line/issue-unreadable` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/malformed` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/valid` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-graduation/responder-graduation` | suite | - | `-` | - |
 | `responder-reopen/fix-verdict` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-reopen/report-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
@@ -248,11 +255,14 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-subject/witness-unopted` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `retro-cell-report/longlog` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/missing` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
+| `retro-cell-report/multi-block` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/present` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/skeleton` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-gh-token-env/set` | actions | - | `agents/agent-session.sh` | - |
 | `retro-gh-token-env/unset` | actions | - | `agents/agent-session.sh` | - |
 | `retro-harvest` | table | - | `agents/coordinator/retro-argo.yaml` | - |
+| `retro-key/minted-block-style` | actions | - | `agents/retro-session.sh` | - |
+| `retro-key/minted-labels-first` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/minted` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/pinned` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/subscription` | actions | - | `agents/retro-session.sh` | - |
@@ -286,6 +296,9 @@ is stale, so it cannot drift the way the prose register did.
 | `route-request/labels` | actions | - | `agents/agent-session.sh` | - |
 | `route-request/workbranch-tight` | actions | - | `agents/agent-session.sh` | - |
 | `run-phase-metric/run-phase-metric` | actions | - | `agents/agent-session.sh` | - |
+| `scan-governance/non-dot-meta` | actions | - | `agents/coordinator-scan.sh` | - |
+| `scan-governance/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
+| `scan-governance/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-guarded/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-guarded/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-phase-marker/scan-phase-marker` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -306,6 +319,7 @@ is stale, so it cannot drift the way the prose register did.
 | `session-belt/fast-path-probe-fail` | actions | - | `agents/coordinator-scan.sh` | - |
 | `session-belt/fast-path` | actions | - | `agents/coordinator-scan.sh` | - |
 | `session-belt/queued` | actions | - | `agents/coordinator-scan.sh` | - |
+| `slo-teeth/slo-teeth` | suite | - | `-` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
@@ -695,3 +709,4 @@ Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the
   placement-and-resources entries: the harness asserts a clause's `gh`/`kubectl` calls, and
   this diff emits none. Evidence rather than assertion — the full suite stays green on the
   change with every `expected/actions.txt` untouched.
+- **homelab#1035 (2026-08-30, PR #1078)** — two rationale comments restored inside the `>>>REPLAY:config-defaults>>>` block of `agents/coordinator-scan.sh` (`REPO_MAX_WIP=3` citing ADR-097/TRACKS rule 1; `ISSUE_LIST_LIMIT=200` citing the homelab#840 24-day-invisible-queued-issue finding). Comment-only — no value, predicate, or control-flow changed, so the extracted clause values are byte-identical and no action stream moves. Evidence rather than assertion — `devbox run clause-replay` 298 passed, every `expected/actions.txt` untouched.

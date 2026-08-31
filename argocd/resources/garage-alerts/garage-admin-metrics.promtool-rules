@@ -6,29 +6,29 @@
 # ⚠ THE RECIPE ABOVE DOES NOT ROUND-TRIP COMMENTS — it will delete this header. Re-add this block
 # BY HAND after every regenerate (PR #1014 lost it exactly this way).
 #
-# ⚠ NOT DRIFT-PINNED (the general harness that would extract `.spec.groups` at run time lives in
-# `scripts/**` + `.github/**`, outside the fixer lane's tier — homelab#337). A stale hand copy
-# tests the OLD expr and passes VACUOUSLY. Re-copy after every expr edit.
+# ⚠ DRIFT-PINNED since #375 — scripts/prometheus-rules-lint.sh asserts expr+for equality for
+# every alert name shared with the PrometheusRule. A stale hand copy fails the required `ci`
+# check. Re-copy after every expr edit.
 groups:
   - name: garage-admin-metrics
     rules:
       - alert: GarageDiskFillingUp
         expr: |
-          garage_local_disk_avail / garage_local_disk_total < 0.2
+          1 - garage_local_disk_avail / garage_local_disk_total > 0.8
         for: 30m
         labels:
           severity: warning
         annotations:
-          summary: Garage data disk is {{ $value | humanizePercentage }} full on {{ $labels.node }}
-          description: Garage's data disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way.
+          summary: Garage disk is {{ $value | humanizePercentage }} full on {{ $labels.volume }}
+          description: Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way.
       - alert: GarageTableEmpty
         expr: |
-          table_size == 0 and max_over_time(table_size[7d]) > 0
+          table_size{table_name!~"multipart_upload|bucket_mpu_counter"} == 0 and max_over_time(table_size[7d]) > 0
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: Garage table {{ $labels.table_name }} is empty on {{ $labels.node }}
+          summary: Garage table {{ $labels.table_name }} is empty on {{ $labels.pod }}
           description: 'A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage''s health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly.'
       - alert: GarageAdminMetricsAbsent
         expr: |

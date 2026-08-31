@@ -23,13 +23,13 @@ spec:
         # ledger's ">80% alert" input was designed to catch.
         - alert: GarageDiskFillingUp
           expr: |
-            garage_local_disk_avail / garage_local_disk_total < 0.2
+            1 - garage_local_disk_avail / garage_local_disk_total > 0.8
           for: 30m
           labels: { severity: warning }
           annotations:
-            summary: "Garage data disk is {{ $value | humanizePercentage }} full on {{ $labels.node }}"
+            summary: "Garage disk is {{ $value | humanizePercentage }} full on {{ $labels.volume }}"
             description: >-
-              Garage's data disk has less than 20% available. The ledger's >80% threshold
+              Garage's disk has less than 20% available. The ledger's >80% threshold
               (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn
               volume or the underlying pve thin pool is filling. A full disk makes Garage go
               read-only — the 2026-08-24 meta wipe started this way.
@@ -37,19 +37,28 @@ spec:
         # incident where the LMDB came back with empty tables) makes table_size drop to zero for
         # every table. This alert fires when ANY table that HELD DATA IN THE LAST 7 DAYS reports
         # zero size. The `max_over_time` clause is what keeps it off the by-design-empty tables
-        # (admin_token, k2v_index_counter_v2, k2v_item, multipart_upload, bucket_mpu_counter),
-        # which is why the plain `table_size == 0` form was replaced (#977, #1013).
+        # (admin_token, k2v_index_counter_v2, k2v_item), which is why the plain `table_size == 0`
+        # form was replaced (#977, #1013).
         # ⚠ BOUND: that clause is a ROLLING WINDOW, not "was ever populated". A wipe still
         # unrecovered 7 days after the drop stops alerting — every sample in the window is 0 by
-        # then. 7d is chosen to sit far outside any plausible detection window; the latch that
-        # would remove the bound entirely is #1015. The `for:` window avoids flapping on restarts.
+        # then. 7d is chosen to sit far outside any plausible detection window. The latch that
+        # would remove the bound entirely was considered and rejected in #1015: a latch would
+        # make any future transient table's first firing permanent instead of self-clearing in
+        # 7d, and the un-latching question (how to unlatch a table legitimately removed by a
+        # schema change) has no bounded answer. The rolling window is the right stopping point
+        # — a bounded false positive (7d) is preferable to a permanent one. The `for:` window
+        # avoids flapping on restarts.
+        # ⚠ DENY-LIST: multipart_upload and bucket_mpu_counter are transient by design — an
+        # in-flight multipart upload makes them non-zero, and completing it returns them to zero.
+        # A deny-list fails safe (every new table is watched by default) whereas an allow-list
+        # would fail open (a future table is unwatched forever). Same rot, opposite blast radius.
         - alert: GarageTableEmpty
           expr: |
-            table_size == 0 and max_over_time(table_size[7d]) > 0
+            table_size{table_name!~"multipart_upload|bucket_mpu_counter"} == 0 and max_over_time(table_size[7d]) > 0
           for: 5m
           labels: { severity: warning }
           annotations:
-            summary: "Garage table {{ $labels.table_name }} is empty on {{ $labels.node }}"
+            summary: "Garage table {{ $labels.table_name }} is empty on {{ $labels.pod }}"
             description: >-
               A Garage meta table that should hold data reports zero size. This is the pattern
               from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md):

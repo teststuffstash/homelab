@@ -1,4 +1,4 @@
 board — stack platform (1 repos) · 2026-08-18T12:00:00Z
 
-totals — review: 0 · fix: 0 · solve: 0 · triage: 0 · verdict-due: 0 · backlog: 0
-⚠ 2 repo fetch(es) failed — the totals above may be incomplete (see WARN on stderr)
+totals — review: 0 · fix: 0 · solve: 0 · triage: 0 · verdict-due: 0 · backlog: 0 · demand: 0
+⚠ 3 repo fetch(es) failed — the totals above may be incomplete (see WARN on stderr)

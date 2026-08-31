@@ -69,26 +69,21 @@ fi
 # stack:error_budget_burnt:bool (agentstack Composition). FAIL-OPEN: a dead Prometheus must
 # never freeze every merge lane (rule #6 in reverse — availability of the gate < the gate);
 # a query failure logs loud and parks nothing.
-PROM_URL="${PROM_URL:-http://192.168.40.13:9090}"
-# The egress proxy — same value subscription-latch.sh/agent-session.sh use for POST /route, GET /report/latest, etc.
-PROXY_URL="${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}"
-burnt_stacks="$(curl -fsS --max-time 10 "$PROM_URL/api/v1/query" \
-  --data-urlencode 'query=max by (stack) (stack:error_budget_burnt:bool) == 1' 2>/dev/null \
-  | jq -r '.data.result[].metric.stack' 2>/dev/null | tr '\n' ' ')" || burnt_stacks=""
-if [ -n "$burnt_stacks" ]; then
-  parked=""
-  for s in $burnt_stacks; do
-    parked="$parked $(jq -r --arg s "$s" '.stacks[]|select(.name==$s)|.repos[]' "$_HERE/stacks.json" 2>/dev/null | tr '\n' ' ')"
-  done
-  kept=""
-  for r in $REPOS; do
-    case " $parked " in
-      *" $r "*) echo "$(date -u +%H:%M:%S) ⚠ FU-104: $r parked — its stack's error budget is burnt (auto-merge lane demoted to human until it recovers)";;
-      *) kept="$kept $r";;
-    esac
-  done
-  REPOS="$kept"
+# The ONE read lives in agents/slo-teeth.sh (homelab#831) — ALL dispatch sites call the same helper.
+log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
+# >>>REPLAY:slo-teeth-filter>>>
+_teeth_err="$(mktemp)"
+REPOS="$(bash "$HERE/slo-teeth.sh" --filter $REPOS 2>"$_teeth_err" | tr '\n' ' ')" || true
+while IFS= read -r l; do [ -n "$l" ] && log "$l"; done < "$_teeth_err"
+rm -f "$_teeth_err"
+if [ -z "${REPOS// /}" ]; then
+  log "no repo is clear to review this tick (all parked by slo-teeth) — nothing to do"
+  exit 0
 fi
+# <<<REPLAY:slo-teeth-filter<<<
+# The egress proxy — same value subscription-latch.sh/agent-session.sh use for POST /route,
+# GET /report/latest (the #803 decorrelate-from lookup at L319), /report, etc.
+PROXY_URL="${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}"
 K="${REVIEW_CONCURRENCY:-2}"
 NS="${REVIEWER_NS:-${LOOP_NS_ARG:-agent-coordinator}}"
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot identity
@@ -100,8 +95,6 @@ DEFAULT_BRANCH="${DEFAULT_BRANCH:-master}"
 ROUNDS_MAX="${REVIEW_ROUNDS_MAX:-8}"                   # circuit breaker: max bot verdicts per ISSUE, ever
                                                        # (summed across every PR that references it — homelab#156)
 KUBECTL="$(command -v kubectl || echo kubectl)"
-
-log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
 # >>>REPLAY:reflex-tick-gate>>>
 # 0a. FU-088(a) reactive latch: the first 429 anywhere on the subscription latches the egress
@@ -378,7 +371,7 @@ EOF_C9
   # FAIL-OPEN on a bad read (the FU-104 posture — availability of the gate < the gate): warn loudly
   # and let the per-PR count stand rather than park a lane on a flaky list. The window is the newest
   # 100 PRs of the repo, so anything missed can only UNDER-count.
-  # ⚠ The sibling-match rule (branch `issue-<n>-`, else body `#<n>`, both boundary-anchored) is
+  # ⚠ The sibling-match rule (branch `issue-<n>-`, else body closing keyword `#<n>`, both boundary-anchored) is
   # duplicated in coordinator-scan.sh's ci-red clause, which counts run-stats rounds on the same
   # key. Two copies WILL drift — change both or neither.
   rounds_total="$v_total"; rounds_key="PR #${pick}"
@@ -387,7 +380,7 @@ EOF_C9
                 --json number,headRefName,body,reviews 2>/dev/null)"; then
       sib_sum="$(printf '%s' "$sib" | jq -r --arg bot "$REVIEWER_LOGIN" --arg n "$pick_issue" '
         def refs($n): ((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)"))
-                      or ((.body // "") | test("(^|[^0-9])#" + $n + "([^0-9]|$)"));
+                      or ((.body // "") | test("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"));
         [ .[] | select(refs($n)) ]
         | "\(length) \([ .[] | .reviews[]?
               | select((.author.login // "") | startswith($bot))

@@ -42,7 +42,7 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `agent/in-progress` | a worker pod is running this round | coordinator; the deterministic scan REMOVES it when the state is a phantom — no live pod, no open PR, no merged PR mentioning it, persisted past `C4C5_PERSIST_S` — because the stale label also holds every sibling through the ADR-097 footprint intersection (IL-T16, homelab#155) |
 | `agent/review` | PR open, awaiting review (human or agent) | coordinator; the deterministic scan REMOVES it when the state is a phantom — no open PR, no merged PR mentioning it, persisted past `C4C5_PERSIST_S` — because the stale label is a terminal sink invisible to every scan class (homelab#928) |
 | `agent/blocked` | needs a human (budget escalate / max rounds / ambiguous) — **or the scan itself**, parking an issue whose worker ruled the deliverable not implementable as written (one `AGENT_INFEASIBLE: <path/resource>` comment → IL-T26, §The infeasible terminal). Excluded from the C4/C5 predicate by the selector, not by assumption: a human gate is never re-dispatched | coordinator — **or the deterministic scan** |
-| `agent/done` | merged | coordinator |
+| `agent/done` | merged | coordinator; the deterministic scan RECONCILES it when a CLOSED issue still carries a stale `agent/blocked` or `agent/review` label — a merged PR mentions the issue, the state persisted past `C4C5_PERSIST_S`, and the merged-closeout clause (C6) was skipped (homelab#1106) |
 | `agent-budget/{xs,sm,md,lg}` | optional cap-tier override for the estimator | human |
 | `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
 | `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | coordinator |
@@ -50,8 +50,7 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2); the same ruling also opens ONE `agent-fix` + `agent/queued` issue against the platform repo naming the gate that did not fire, and links it in the comment — a fleet ruling is filed, not asked. **Dedup first, like every filing surface**: search open issues for the same gate/`error_class` and extend the existing one instead of filing a second — a recurring fleet fault must sharpen one issue, not queue N (seat quickfix at the PR#947 gate read). | any role |
 
 Invariants: **one active worker per PR**; **bounded rounds** (max 3 **logic** rounds — reviewer/CI
-verdicts; infra failures are **strikes** that swap the model instead of consuming a round, see the
-MODEL note in the runbook; a **no-op round** — stats posted, HEAD unmoved — is not a logic round
+verdicts; infra failures are **strikes** that swap the model instead of consuming a round — a second strike with the identical `(model, error_class)` pair on one issue is not a swap — it routes to the `agent/error` STRIKE-channel path (label + one `AGENT_ERROR:` comment + the one filed issue) instead of another ride; see the MODEL note in the runbook; a **no-op round** — stats posted, HEAD unmoved — is not a logic round
 either, §arbitrate play); idempotency key `(issue, base-sha, round)` so a re-list/redelivery never
 double-spawns.
 
@@ -419,9 +418,10 @@ job, in order (re-read live state first, exit clean if someone already closed it
    **GOAL-CHILD leg (FU-143): the issue arrives OPEN**, because its PR merged into the
    `goal/**` base its `Base:` line declares and the closing keyword only fires on
    default-branch merges. Verify against the GOAL BRANCH, not master: the referencing PR's
-   `baseRefName` equals the declared base, and `ci` on the goal branch head is green
-   (`gh run list --branch <goal-branch>`). The master/-iac checks below do NOT apply — this
-   code is not on master yet; the assembly PR is where that gets judged. Do not reopen
+   `baseRefName` equals the declared base, and `ci` on the PR head is green
+   (`gh pr view <PR> --json headRefOid | jq -r .headRefOid` then `gh run list --commit <sha>`).
+   The master/-iac checks below do NOT apply — this code is not on master yet; the assembly PR
+   is where that gets judged. Do not reopen
    anything here; a wrong-looking outcome is a comment on the GOAL — the next goal-checkpoint reads it.
    **-iac repos verify the CLUSTER, not GitHub (IAC-G03, 2026-08-02):** in an `*-iac` repo the
    definition of done is *reconciled-and-healthy*, so before flipping the label also check —
@@ -953,6 +953,36 @@ it unchanged reaches the same verdict** — and unlike a strike, this one is fre
 > if part of the issue is inside your reach — then the marker names only the part that is not.
 > ```
 
+## Cross-boundary filing — the platform-intake contract (ADR-119)
+
+When a judgment play of yours (arbitrate, ci-red ruling, triage) diagnoses a cause OUTSIDE this
+stack's own repos — a platform-minted credential failing on its own read, platform-rendered
+config leaking into stack CI, cluster infra wedging the lane — the terminal is not `agent/blocked`
+alone. You FILE the fault where its owner's intake runs, under this contract:
+
+1. **Target is homelab, always.** You cannot tell agent-runtime from a mint manifest from a
+   node fault, and you must not guess — component attribution is the platform intake's job.
+2. **Dedup FIRST**: search homelab's open issues by the gate/`error_class`/subject and EXTEND a
+   match with your evidence instead of filing a sibling (the fleet-fault rule's own discipline).
+3. **File INERT**: no `agent-fix`, no `agent/queued`, no lifecycle labels, no machine markers.
+   Breaker #1 is the damage ceiling — a filed issue is noise until a human acts on it.
+4. **Evidence grammar, one issue per cause**: the failing read/error lines VERBATIM (your
+   `TOOL_GAP:` marker's content), any differential (what your token read vs what another
+   identity read), the reproduction count, links to the stack issue/PR. **Asks are claims** —
+   before demanding an operator action, check the domain's declared record and cite it
+   (ground-rules; the #1038 lesson: the "missing App grant" was a mint field two files away).
+5. **Wire the un-park**: a native `blockedBy` edge from the stuck STACK issue to the filed
+   homelab issue (`gh api -X POST repos/<stack-slug>/issues/<N>/dependencies/blocked_by -F
+   issue_id=<homelab issue's numeric .id>`) — the FU-087 dependency gate then resumes the stack
+   issue when the platform closes its side; no human has to remember to strip a label.
+6. **Rate-bounded**: a storm of same-class faults is ONE issue (the fleet rule); more than ~2
+   distinct cross-boundary filings per stack per day means stop and park for a human instead.
+
+This contract is for FAULTS. Wanting a platform capability that does not exist is the
+`platform-request` lane (intent-level `Capability:` fingerprint, filed in the STACK's own repo)
+— [platform-and-stacks.md](../../docs/agents/platform-and-stacks.md) §Cross-stack demand &
+escalation owns both mechanisms.
+
 ## The `infra-enrich` clause (FU-106 — the -iac wrapper devops play, built 2026-07-27)
 
 A RED `deploy/*` bump PR in a `*-iac` repo is the typed infra delta arriving: the new chart
@@ -1136,6 +1166,13 @@ first:
 
 The **image-build CI needs no token** — it pushes to ghcr with the job's built-in `GITHUB_TOKEN`
 (`packages: write`). The only *new* credential the coordinator adds is this runtime `coordinator-git`.
+
+## Goal decompose — Base: mandatory on task/goal (homelab#1053)
+
+The scan's `goal-decompose` clause now refuses a `task/goal` whose body omits the `Base:` line
+(ADR-1053 / consumer card change 4). `Base: master` is legal and explicit — but a direct-master
+Goal is more likely a stint; confirm it earns `task/goal` before cutting children. Softens at
+v1.3 theme adoption (S8).
 
 ## See also
 

@@ -1,0 +1,77 @@
+→ platform r1 cell goose:deepseek/deepseek-v4-pro — brief /tmp/retro-brief-r1.md (21118 bytes)
+→ harvest: report goes to docs/agents/retros/2026-08-31-platform-r1-<model>.md via PR
+→ pod agent-platform-retro-r1-r1 created in ns platform
+→ streaming pod log
+BEGIN-RETRO-REPORT
+# platform retro r1 — <your model name>
+## Summary (≤5 lines)
+## Findings (ranked, ≤6)
+## Proposed process changes (table: change | artifact | expected saving | confidence)
+## Task granularity (per deep-dive task: chunked-right / should-have-been-one / fan-out — evidence)
+## Wins to codify (or "none observed")
+## Platform KPIs (bucket-A count · jail $/day · trend · proposed next gate)
+## Predecessor score (or "no merged predecessor changes")
+## Evidence confidence (what you could NOT verify and why)
+END-RETRO-REPORT
+BEGIN-RETRO-REPORT
+# platform retro r1 — <your model name>
+## Summary (≤5 lines)
+## Findings (ranked, ≤6)
+## Proposed process changes (table: change | artifact | expected saving | confidence)
+## Task granularity (per deep-dive task: chunked-right / should-have-been-one / fan-out — evidence)
+## Wins to codify (or "none observed")
+## Platform KPIs (bucket-A count · jail $/day · trend · proposed next gate)
+## Predecessor score (or "no merged predecessor changes")
+## Evidence confidence (what you could NOT verify and why)
+END-RETRO-REPORT
+BEGIN-RETRO-REPORT
+# platform retro r1 — <your model name>
+## Summary (≤5 lines)
+## Findings (ranked, ≤6)
+## Proposed process changes (table: change | artifact | expected saving | confidence)
+## Task granularity (per deep-dive task: chunked-right / should-have-been-one / fan-out — evidence)
+## Wins to codify (or "none observed")
+## Platform KPIs (bucket-A count · jail $/day · trend · proposed next gate)
+## Predecessor score (or "no merged predecessor changes")
+## Evidence confidence (what you could NOT verify and why)
+END-RETRO-REPORTNow let me check if RETRO_GH_TOKEN is available and try to access some issue trails for verification
+BEGIN-RETRO-REPORT
+# platform retro r1 — Claude Opus 5 (1M context)
+
+## Summary (≤5 lines)
+- 40 ranked tasks; the dominant waste is infra rounds, not code difficulty.
+- Three tasks needed a re-dispatch after a transient provider 429.
+- The fixer WIP slot idled for roughly a third of the window.
+
+## Findings (ranked, ≤6)
+- Finding 1: infra rounds outnumber code rounds 3:1 on the worst-ranked tasks.
+- Finding 2: two tasks re-fetched the same ledger slice from cold cache.
+- Finding 3: the argv ceiling warn band fired twice, never crossed.
+- Finding 4: one goose cell died clean on a provider retry, unnoticed by exit code.
+- Finding 5: the harvest's slug derivation collided once on a harness A/B run.
+- Finding 6: no report floor existed before this run — the direct cause of this fixture's sibling.
+
+## Proposed process changes
+- Cache the ledger slice per run, not per task: cuts the cold-cache refetch to zero.
+- Pin the goose provider retry to a bounded backoff instead of an instant clean exit.
+- Add a content floor to the marker self-check, not just a non-empty check.
+
+## Task granularity
+- Task 12 was chunked right: one round, clean report, no rework.
+- Task 19 should have been split: three rounds against one file, evidence of thrash.
+- Task 24 fan-out was correct: three independent files, three clean rounds in parallel.
+
+## Wins to codify
+- The argv guard's warn band caught a growing brief before it hit the ceiling.
+- The per-cell OpenRouter key mint kept a dead cell's spend off the fixer budget.
+
+## Platform KPIs
+- bucket-A count 4, jail $/day 1.10, trend flat, next gate unchanged.
+
+## Predecessor score
+- No merged predecessor changes this run.
+
+## Evidence confidence
+- Could not verify the pushgateway metric directly; inferred from the PR timestamps.
+END-RETRO-REPORT
+AGENT_RUN_STATS {"task":"retro-r1","exit_status":"clean","wall_time_s":1042,"rounds":1}

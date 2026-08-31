@@ -46,6 +46,12 @@ spec:
   permissions:
     contents: write          #   clone the PR branch + make the bot a repo WRITER so its approval counts
     pull_requests: write     #   submit the review (approve / request-changes) + inline comments
+    issues: read             #   resolve the ISSUE a PR claims to fix (scope-authorization reads its
+                             #   Touches:) + the depth-rule parent walk. The App grant existed since
+                             #   FU-069(b) — but the MINT never requested it, so every issue read
+                             #   403'd while PR reads worked (the breaker's PR-side writes ride
+                             #   pull_requests, which masked it) — homelab#1038, 4 false blocks on
+                             #   sleep-tracking#137 before the coordinator stopped the loop.
     checks: read             #   independently confirm CI-green on the head it reviews (App grant
     statuses: write          #   widened by the operator 2026-07-10 (read) — the PR #6 re-review had
     actions: read            #   to caveat "CI not independently confirmed"; these three closed that.

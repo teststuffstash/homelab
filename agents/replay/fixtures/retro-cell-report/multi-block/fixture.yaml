@@ -1,0 +1,27 @@
+# homelab#1096 — multi-block ride log: three empty template echoes followed by a real report,
+# with inter-block harness text glued to the third END marker. Before this fix, sed's repeating
+# address range concatenated ALL blocks and inter-block text into the committed report; the fix
+# extracts only the LAST complete block.
+#
+# CONDITION UNDER REPLAY. Modeled on the evidence from PR#1094's retro harvest: 31 lines of
+# unfilled template echoes and one leaked harness sentence landed in a committed retro report
+# (docs/agents/retros/2026-08-31-platform-r2-deepseek-v4-pro.md). The ride log carries four
+# BEGIN/END pairs — three empty skeletons, one real report — plus inter-block text.
+#
+# THE CONTRACT:
+#   1. RC 0 and `REACHED:` present — the check does not stop a cell whose log has multiple
+#      blocks but at least one real report.
+#   2. The extracted report is the LAST complete block only — the three empty skeletons and
+#      inter-block text are dropped.
+#   3. The success line names the CELL and the extracted SIZE. The size is the assertion that
+#      the check extracted only the last block (not the concatenation of all four).
+#   4. 1769 bytes is the last block's content (the real report — the pinned size in
+#      expected/actions.txt). If the extraction ever concatenates blocks again, this number
+#      grows (the three skeletons add ~400 bytes each).
+name: retro-cell-report-multi-block
+mode: actions
+source: agents/coordinator/retro-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:retro-cell-marker-selfcheck
+  - file:post.sh

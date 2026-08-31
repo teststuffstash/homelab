@@ -135,7 +135,7 @@ incident-evidenced in merge-path-fsm.yaml style — the retro role maintains it.
 |---|---|---|---|---|
 | k8s-prod | k8s production checklist class | `chart*/templates/` or manifest dirs touched, or diff adds a workload `kind:` | advisory | **LIVE 2026-07-27** (`agents/lenses/k8s-prod.md`) |
 | helm | helm-best-practices | `chart*/` touched | advisory | **LIVE 2026-07-27** (`agents/lenses/helm.md`) |
-| ASVS | OWASP ASVS (pinned major) | auth/input/session code; new public endpoint | advisory | pending (predicate needs a code-class detector, not paths) |
+| ASVS | OWASP ASVS v5.0 (May 2025, [asvs.dev](https://asvs.dev/)) | `gh pr diff` grep for auth/input/session/signature code and new route registrations (Go/Python/TS) | advisory | **LIVE 2026-08-24** (`agents/lenses/asvs.md`) — code-class predicate via diff grep, not paths; prefers quiet miss over false alarm |
 | e-ITS | RIA e-ITS baseline | stack-level, scheduled audit-pass | audit report | pending (seeded by FU-105's IdP research output) |
 
 Mechanism (built with FU-101's first two lenses): `reviewer-session.sh` computes the diff class
@@ -143,8 +143,11 @@ in-pod (deterministic — changed paths + `gh pr diff` grep), fetches matching
 `agents/lenses/<lens>.md` from the public homelab repo raw (platform-owned, no image rebuild),
 and appends them to the system prompt after the project rubric. The advisory contract lives
 INSIDE each lens file (`LENS(<name>):` findings are Follow-ups, never the verdict); fetch
-failure skips the lens loudly. The per-stack advisory→blocking knob is not yet rendered (needs
-the AgentStack claim + a launcher read — do it when the first lens earns teeth).
+failure skips the lens loudly. The per-stack advisory→blocking knob is rendered on the
+AgentStack claim as `spec.lenses.<name>: advisory|blocking` (FU-101), sourced through
+the same fail-closed claim read as the reviewer optout — zero extra cluster calls.
+A lens marked blocking appends a `POSTURE: blocking` line to its fetched text so the
+reviewer knows its findings MAY determine the verdict. Absent = every lens stays advisory.
 
 Per-stack claim knob graduates a lens advisory → blocking. Audit-lane model rules (reasoning
 tier allowed, dual-model worth it) are FU-095's.
@@ -153,14 +156,16 @@ tier allowed, dual-model worth it) are FU-095's.
 
 - **prober** (FU-102) — the **contract probe** role (glossary ruling: *canary* unqualified is
   the scout's rail probe; the early "agentic canary" name is retired). Product-contract probes (oracle UC-1 probe-e2e is
-  the proven brief); prod-read + report-only. **Scheduled leg BUILT 2026-08-07, disabled
-  everywhere**: claim knob `spec.prober {enabled, schedule, model}` renders `probe-<stack>`
+  the proven brief); prod-read + report-only. **Scheduled leg BUILT 2026-08-07; FIRST FLIP 2026-08-24
+  (platform stack, homelab#835)**: claim knob `spec.prober {enabled, schedule, model}` renders `probe-<stack>`
   (CronWorkflow, loop ns) running `<mainRepo>/.agents/probe.md` on the SUBSCRIPTION
   (claude/haiku — operator direction 2026-08-07, platform roles ride the subscription;
   latch-gated). no git/cluster writes by construction (operator ruling 2026-08-30). A feedback row filed through a stack's own MCP is a report into that stack's product sink — not a write to git or the cluster. Still
   missing: the post-deploy sync-succeeded edge, 🌱 issue filing, (endpoint, digest) keying —
-  and every brief. Detection belts stack: FU-099 blackbox (seconds, dumb) → prober (minutes,
-  contract-deep) → responder; until a claim flips `enabled`, the stack remains
+  and every stack brief but the platform's (`homelab/.agents/probe.md`, #835 — belt-gap
+  framing: report what is broken AND unalerted; content shape still awaits the ≥2-projects
+  rule). Detection belts stack: FU-099 blackbox (seconds, dumb) → prober (minutes,
+  contract-deep) → responder; until a claim flips `enabled` (platform: 2026-08-24), a stack remains
   blackbox → *nothing* → responder and the alert lane carries the prober's load.
 
   **⚖ SUGGESTED IDEAS — operator thinking in progress (2026-08-08), NOT decisions. Do not build
@@ -212,8 +217,15 @@ tier allowed, dual-model worth it) are FU-095's.
   (`fix-debounce-argo.yaml`) judges the whole pending SET before any `agent/queued` lands —
   mechanism in [`iac-lane.md`](iac-lane.md) §"one root cause, N alert issues". This replaced
   the per-issue `selfQueue` knob (cb4ae5a, which dispatched same-cause issues in parallel).
-  Graduation dial still NOT built: imperative remediation whitelist (needs a scoped Role per
-  stack ns).
+  **Graduation dial BUILT 2026-08-24 (goal#818):** a claim-gated `responder:` block on the
+  AgentStack XRD renders a scoped Role + RoleBinding per stack namespace (the loop ns + every
+  fixer-enabled repo ns), granting exactly the declared verb/resource pairs to the responder
+  identity (agentstack-loop SA). Default OFF — absent block = nothing rendered, the responder
+  keeps its report-only breakers ("no kubectl mutations", one-issue-max, inert labels).
+  Enabling the dial does not by itself make the responder mutate anything; a consumer must be
+  wired to read the grant and act on it (goal #818 §assembly — this PR ships NO consumer;
+  report-only remains the default posture). The escalation-check mirror lives in
+  `argocd/resources/agentstack/rbac.yaml` under `crossplane-agentstack-composed`.
   **Three lane gaps, all evidenced by the 27-issue corpus (2026-08-04 audit, FU-133):** the lane
   files one issue per *fingerprint* and correlates nothing (~19 of 27 issues were 5 root causes;
   one PVC produced 8 across 8 days); it has no state after "issue filed" (`send_resolved = false`
@@ -428,6 +440,7 @@ recipe). One source per concern, delivered to the roles that need it.
 
 The stack declares `slo: {endpoint, probe, availability, errorBudget}` on its AgentStack claim;
 the platform renders the FU-099 blackbox probe, burn-rate alerts, the responder's alert edge,
-and the teeth: **a stack that burnt its error budget gets its auto-merge lane demoted to
-codeowner-gated** (FU-104). Zero opinions in any brief; "harder to ship something that breaks"
-enforced by contract.
+and the teeth: **on a burnt stack, reviewer dispatch is parked at every dispatch site — no new bot
+approval is minted, so every unapproved PR is codeowner-gated in effect** (FU-104). A PR already
+approved-at-head with auto-merge armed still merges: the teeth withdraw no approval and disarm no
+PR. Zero opinions in any brief; "harder to ship something that breaks" enforced by contract.

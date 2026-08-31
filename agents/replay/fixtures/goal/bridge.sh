@@ -17,6 +17,13 @@ repo="$IN_REPO"
 openall="$(cat "$REPLAY_FIXTURE/world/openall.json")"
 orphans=""
 units=""
+punits=""
+# ── goal-decompose block variables ── set via env for the two new rows (base-required,
+# base-master-pass); empty for existing rows so the block is a no-op.
+qclass="${QCLASS:-}"
+qnum="${QNUM:-}"
+qbase_raw="${QBASE_RAW:-}"
+qpin="${QPIN:-}"
 # ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
 # so a harness running one extracted block has no flush to assert on.
 item_class_push() { :; }

@@ -109,10 +109,17 @@ cmd_verify() {
       "https://ghcr.io/v2/$ORG/$pkg/tags/list" || die "authed tags/list failed for $pkg"
     echo "  $pkg: OK"
   done
-  say "2/3 mirror pod carries the env"
-  devbox run -- kubectl "${KC[@]}" -n registry-cache get pod -l app=mirror-ghcr \
-    -o jsonpath='{.items[0].spec.containers[0].env[*].name}' | tr ' ' '\n' | grep -q REGISTRY_PROXY_USERNAME \
-    || warn "REGISTRY_PROXY_USERNAME not on the pod — bounce it (see 'check')"
+  say "2/3 mirror pod started AFTER the secret existed (optional secretKeyRef only resolves at pod start)"
+  # The env NAMES sit in the pod spec whether or not the secret resolved — a spec grep false-passes
+  # on a pod that rolled before the mint (bitten 2026-08-30, first verify run). Compare timestamps.
+  local pod_start sec_created
+  pod_start=$(devbox run -- kubectl "${KC[@]}" -n registry-cache get pod -l app=mirror-ghcr -o jsonpath='{.items[0].status.startTime}')
+  sec_created=$(devbox run -- kubectl "${KC[@]}" -n registry-cache get secret mirror-ghcr-upstream-auth -o jsonpath='{.metadata.creationTimestamp}')
+  if [ -n "$pod_start" ] && [ -n "$sec_created" ] && [ "$pod_start" \< "$sec_created" ]; then
+    warn "pod started ($pod_start) BEFORE the secret existed ($sec_created) — its env is empty; bounce it (see 'check') and re-run verify"
+  else
+    echo "  pod start $pod_start >= secret $sec_created: OK"
+  fi
   say "3/3 ANONYMOUS pull of a private manifest through the mirror ($MIRROR)"
   if [ -z "$digest" ]; then
     digest=$(grep -oE 'sha256:[0-9a-f]{64}' "$PWD/../oracle-iac/values/oracle-fleet-ingester.yaml" 2>/dev/null | head -1) || true

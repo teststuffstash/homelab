@@ -1,0 +1,28 @@
+# homelab#1106 — the agent/done phantom reconciler belt: a CLOSED issue with a merged PR
+# mentioning it, still labelled `agent/blocked` or `agent/review` past C4C5_PERSIST_S,
+# gets `agent/done`. Bookkeeping on dead state: the issue is already CLOSED, so a wrong
+# flip costs a mislabeled closed issue, not a duplicate ride.
+#
+# CONDITION UNDER REPLAY. Two closed issues with stale labels in one world:
+#   #80 — CLOSED, `agent/blocked`, merged PR mentions it, persisted past C4C5_PERSIST_S → RECONCILES to agent/done.
+#   #81 — CLOSED, `agent/review`, merged PR mentions it, persisted past C4C5_PERSIST_S → RECONCILES to agent/done.
+#
+# THE CONTRACT:
+#   1. #80 is WRITTEN in the IL-T16 order — `--add-label agent/done` FIRST, `--remove-label
+#      agent/blocked` SECOND, then a `gh issue view` RE-READ that proves the end state before
+#      a single word is commented.
+#   2. The audit comment names the phantom-reconciliation semantic.
+#   3. #81 follows the same pattern for agent/review.
+#   4. The belt runs AFTER the C4/C5 clause, as a separate clause operating on closed issues.
+pins:
+  - IL-T28
+name: done-phantom-belt
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:done-phantom-belt
+  - file:post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
+  - 's/ [0-9]\{1,\}m / Nm /g'

@@ -1146,6 +1146,8 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     # FU-042 leg (b) / #937: a Pending pod that is Unschedulable (wedged) does NOT hold a WIP
     # slot — it will never run, so it is not live work. A 30-second grace period prevents a
     # briefly-unschedulable new pod from being discounted instantly.
+    # #998: a pod whose .status.phase is absent/null is default-counted (parity with the
+    # pre-#995 field-selector which matched any non-terminal phase, including empty/missing).
     PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" -o json 2>/dev/null \
       | jq '[.items[] | select(
         .status.phase != "Succeeded" and .status.phase != "Failed" and
@@ -1157,6 +1159,8 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
             or
             (now - (.metadata.creationTimestamp | fromdateiso8601)) < 30
           ))
+          or
+          (.status.phase | not)  # #998: absent/unset phase — default-count (parity with pre-#995 field-selector)
         )
       )] | length')"
     if [ "${PF_LIVE:-0}" -ge "$PF_LIMIT" ]; then

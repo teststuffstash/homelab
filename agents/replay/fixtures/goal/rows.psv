@@ -8,7 +8,15 @@
 #                           → label goal/post-launch, comment, STAYS OPEN (no close)
 # checkpoint-due          = pre-launch goal, findings store 6/1 → ONE goal-checkpoint unit
 # nonassembly-merge-inert = pre-launch goal, a merged goal-CHILD's PR (goal/** BASE) → burn-down
-#                           written, NO per-closure unit, GACTED <none>
+#                           written + goal-checkpoint unit (trigger b: child-set complete pre-launch,
+#                           post-launch bucket excluded from gopen_n_ckpt), GACTED <none>
+#                           Still asserts: a merged goal-CHILD's PR produces NO per-closure unit
+# base-master-pass       = task/goal + agent/queued, Base: master present → decompose unit emitted,
+#                           no refusal (the choice being explicit is the point)
+# base-required           = task/goal + agent/queued, NO Base: line → fail-closed refusal, no decompose
+#                           unit; the refusal names both legal values and links the consumer card
+base-master-pass   | open-pre | openall.json @ patches/base-master-pass.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles QCLASS=goal QNUM=301 QBASE_RAW=master QPIN=- | base-master-pass
+base-required      | open-pre | openall.json @ patches/base-required.jq    | IN_SLUG=teststuffstash/circles IN_REPO=circles QCLASS=goal QNUM=300 QBASE_RAW=- QPIN=- | base-required
 abandoned          | terminal | openall.json @ patches/verdict-abandoned.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | abandoned
 assembly-complete  | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | assembly-complete
 checkpoint-due     | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | checkpoint-due

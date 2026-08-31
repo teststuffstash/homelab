@@ -239,6 +239,61 @@ independent; onboarding a repo = a workflow caller + a `protected_repos` entry).
 **Out of scope:** cross-repo coordinated changes — ordering across repos is the coordinator's
 job (provider before consumer), now typed by the FU-106 contract/fulfillment split above.
 
+## Cross-stack demand & escalation (ADR-119, 2026-08-30)
+
+Goals are stack-scoped (ADR-106) and code write never crosses stacks — so cross-stack need has
+exactly two typed channels, replacing operator memory and gitignored upload files:
+
+**The capability-request lane (demand up, approval down).** A stack files an issue in its OWN
+repo (its `-iac` for infra-shaped needs), labeled `platform-request`, carrying a
+machine-readable fingerprint line (the `Touches:`/`Budget:` body-line grammar):
+
+```
+Capability: public-edge.abuse-fairness
+```
+
+- **The fingerprint names an INTENT on a surface, never a mechanism.** A normal consumer can
+  say "public, secure, fair to anonymous clients" — it cannot name WAF rules or RUM, and a
+  grammar that requires the mechanism name systematically misses real demand (the WAF case,
+  operator 2026-08-30). When the requester happens to know the mechanism, it goes in the body
+  as a hint; the fingerprint stays at intent altitude — which is also what lets demand POOL:
+  two stacks wanting one outcome through different imagined mechanisms count as 2, not 1+1.
+- **Surface**: a homelab board slice groups open `platform-request` issues across stack repos
+  by fingerprint with a stack count — the ≥2-stacks generalization bar as a number.
+- **Approval is PULL-only** (the ADR-102 cross-goal doctrine one ring out): the request
+  transfers nothing. The platform cites the charter line making it in-scope, files its side
+  into the work map or an open platform Goal, wires the cross-repo `blockedBy` edge, and
+  leaves a **disposition comment** — rejection ("not a platform knob — solve stack-side") is
+  a disposition too, so requests never rot. The requester's issue closes on CONSUMPTION,
+  never on the platform merge (done-means-deployed, both sides).
+- **Secure-by-default bounds the lane's vocabulary**: a capability whose honest consumer
+  answer is always "yes" ships as the DEFAULT bundle of its capability profile (e.g. a
+  public-exposure `api` profile carries rate limits/origin policy unasked; a `consumer`
+  profile carries caching/RUM), tunable via claim fields — stacks request TUNING or genuinely
+  stack-specific needs, never existence. The egress dial's baseline tier is the precedent.
+
+**The escalation terminal (cross-boundary faults, machine-authored).** When a stack-lane
+judgment session (arbitrate, ci-red ruling, triage) diagnoses a cause OUTSIDE the stack's own
+repos — platform credentials/tokens, platform-rendered config, cluster infra leaking into
+stack CI — it FILES direct on homelab per the coordinator brief's filing contract
+(dedup-first, inert, evidence grammar, rate-bounded) and wires a native `blockedBy` edge from
+the stuck stack issue to the filed one. Two asymmetries are load-bearing:
+
+- **The stack names the boundary crossing; the platform names the lane.** Component
+  attribution (agent-runtime vs coordinator vs a mint manifest — or mechanical-OOM vs
+  agents-machinery) is platform context; the stack terminal does not guess. homelab is the
+  one filing target; the platform's own intake (board classes, the responder's
+  platform-machinery gate, ADR-110's small/big sort) routes onward.
+- **Un-park is machinery, not memory**: the `blockedBy` edge holds the stack issue under the
+  existing FU-087 dependency gate; the platform fix closing its issue releases the stack
+  issue on the next scan pass. (PR-shaped blocks — a review mid-flight — still need their own
+  re-entry edge; the open residue.)
+
+**Honest limit** (recorded so nobody mistakes the lane for complete demand coverage): a
+consumer also cannot name intents for problems it does not know it has. That residue is
+carried by the profile defaults above and by the FU-049 catalog making the *askable* surface
+discoverable — the lane carries the rest.
+
 ## The credential-airlock pattern (stack jails, FU-080)
 
 A stack's agent loop is driven from a **per-stack jail** on the operator's machine

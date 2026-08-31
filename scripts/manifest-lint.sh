@@ -24,7 +24,11 @@ K8S_VERSION="${K8S_VERSION:-1.36.1}"
 # YAML under these paths is INPUT to something else, never applied: helm values consumed by an
 # Application, and kustomize configMapGenerator sources. Listed explicitly rather than auto-skipping
 # every doc without a `kind:` — a real manifest that LOST its kind must still fail loudly.
-NOT_MANIFESTS='argocd/platform/values/|argocd/resources/otel-collector/otel-config\.yaml'
+# kustomization.yaml is excluded as a CLASS: kustomize input, not an applied resource — no schema
+# exists for it upstream, so it only ever rode the missing-schema skip, and when GitHub raw returns
+# a non-404 error for that guaranteed-miss fetch the whole lint reds (PR#1099, 2026-08-31; the
+# uncached-schema-fetch flake class is FU-197).
+NOT_MANIFESTS='argocd/platform/values/|argocd/resources/otel-collector/otel-config\.yaml|(^|/)kustomization\.yaml$'
 
 echo "manifest-lint: kubeconform ${K8S_VERSION} over ${DIRS}"
 files=$(find $DIRS -name '*.yaml' -o -name '*.yml' 2>/dev/null | grep -Ev "$NOT_MANIFESTS" | sort)

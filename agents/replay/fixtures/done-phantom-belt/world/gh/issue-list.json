@@ -1,0 +1,26 @@
+[
+  {
+    "number": 80,
+    "title": "scan: the janitor tick drops its exit code",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/blocked"}, {"name": "task/fix"}],
+    "updatedAt": "2026-08-25T06:00:00Z"
+  },
+  {
+    "number": 81,
+    "title": "docs: the footprint-release lifecycle",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "task/fix"}],
+    "updatedAt": "2026-08-25T06:05:00Z"
+  },
+  {
+    "number": 82,
+    "title": "a recently-closed issue (within the guard window)",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/blocked"}, {"name": "task/fix"}],
+    "updatedAt": "2026-08-31T07:59:00Z"
+  },
+  {
+    "number": 83,
+    "title": "closed issue without agent-fix (not in scope)",
+    "labels": [{"name": "agent/blocked"}],
+    "updatedAt": "2026-08-25T06:00:00Z"
+  }
+]

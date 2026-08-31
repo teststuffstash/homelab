@@ -1,5 +1,16 @@
 # github-apps.yaml — the DECLARED state of every GitHub App's permissions (FU-098).
 #
+# SYMPTOM INDEX (grep bait — you likely arrived here from an error string; homelab#1038):
+#   "Resource not accessible by integration" (REST 403) · GraphQL NOT_FOUND/null on an object
+#   that exists — under an App-minted token BOTH usually mean the TOKEN was minted without the
+#   permission, a MINT question before a grant question: the token carries only the subset the
+#   generator/broker `permissions:` block requested (agents/coordinator/*-git.yaml, the
+#   composition's loop-* gens), whatever this file declares. The 403's
+#   `x-accepted-github-permissions` header names the permission the endpoint wants (gh api -i).
+#   Declared-vs-live view: github-exporter /apps (apps.teststuff.net/apps; in-cluster
+#   github-exporter.monitoring.svc:9504/apps.md) — a quiet GithubAppPermissionDrift alert
+#   means declared == live.
+#
 # This file is the single source the four formerly-unsynchronized places converge on:
 #   1. bootstrap scripts (scripts/github-*-bootstrap.sh) template default_permissions from here
 #      at creation time (creation can no longer diverge from the declaration);

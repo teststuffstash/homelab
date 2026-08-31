@@ -26,4 +26,10 @@ circles#107 goal verdict pending (17d)
 § BACKLOG (suitable, unqueued)
 circles: 3 suitable-unqueued (oldest 17d)
 
-totals — review: 2 · fix: 2 · solve: 5 · triage: 3 · verdict-due: 1 · backlog: 3
+§ DEMAND (platform-request)
+public-edge.abuse-fairness
+  circles#116 public edge fairness (17d)
+  circles#117 circles edge fairness (8d)
+  — 1 stacks, oldest 17d
+
+totals — review: 2 · fix: 2 · solve: 5 · triage: 3 · verdict-due: 1 · backlog: 3 · demand: 1

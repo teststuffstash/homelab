@@ -1,6 +1,5 @@
 CALL curl -s --max-time 10 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/oracle
 CALL curl -s --max-time 10 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/oracle
 OUT PUSH_FAILED: 0 — push succeeded (first try or retry)
-OUT MARKER: absent
 OUT PUSH_WARN: empty — no PR body amendment
 RC 0

@@ -102,6 +102,25 @@ if ! bash "$HERE/reviewer-optout.sh" "$PROJECT"; then
 fi
 # <<<REPLAY:optout-gate<<<
 
+# ── THE SLO TEETH GATE (homelab#831, FU-104) ──────────────────────────────────────────────────
+# Honor the stack's error budget burn state HERE, at the one point ALL dispatch sites pass
+# through: the reflex tick AND the primary edge path (github-exporter → Sensor → review
+# WorkflowTemplate). The teeth shipped inside the reflex tick alone, so on a burnt stack the
+# edge path still dispatched a review, approved it, and auto-merge still fired — exactly the
+# homelab#204 shape one lane over. slo-teeth.sh is the single read and the single (FAIL-OPEN)
+# posture; it prints its own reason to stderr.
+# FIRST, deliberately: before the head-sha probe, before the latch, before the pod. A burnt
+# stack must cost neither a GitHub call nor a subscription session.
+# FAIL-OPEN: a dead Prometheus must never freeze every merge lane (rule #6 in reverse —
+# availability of the gate < the gate). An unreachable metric is NOT evidence of a burnt budget.
+# >>>REPLAY:slo-teeth-gate>>>
+if ! bash "$HERE/slo-teeth.sh" "$PROJECT"; then
+  echo "→ review of ${PROJECT}#${PR} NOT dispatched — stack error budget burnt (auto-merge lane demoted to human, FU-104)"
+  exit 0
+fi
+# <<<REPLAY:slo-teeth-gate<<<
+
+
 # ── MCP knob read (#1041) ──────────────────────────────────────────────────────────────────────
 # Read from reviewer-optout.sh's mcp_knob() — the ONE claims read for reviewer dispatch
 # (homelab#204 two-readers-one-mirror class). The MCP endpoint is stack-wide (spec.mcp), not
@@ -319,6 +338,38 @@ DEPTH RULE (this PR closes issue #$issue, which sits at follow-up depth $sprout_
 }
 # <<<REPLAY:s6-child-1-depth-rule<<<
 
+# FU-101 lens posture: read the per-stack lenses→posture map from the SAME single claim read
+# that feeds the optout gate (reviewer-optout.sh). This costs zero extra cluster calls and
+# cannot straddle a claim edit the way two reads can. Fail-closed: unreadable → empty map
+# (every lens stays advisory, consistent with the optout gate's posture).
+# >>>REPLAY:lens-posture-gate>>>
+LENS_MAP="$(bash "$HERE/reviewer-optout.sh" --lens-map "$PROJECT" 2>/dev/null || echo "{}")"
+# <<<REPLAY:lens-posture-gate<<<
+
+# ── CAPABILITY CARD (homelab#1055) ──────────────────────────────────────────
+# Generate the reviewer's capability card from the mint sources, prepended to
+# the system prompt so the LLM knows its own identity, permissions, and failure
+# signatures. Accurate by construction (FU-049 generate-from-sources rule);
+# NEVER a hand-authored index file.
+CAPABILITY_CARD=""
+if [ -f "${HERE}/coordinator/reviewer-git.yaml" ]; then
+  _PERMS=$(sed -n '/permissions:/,/^[a-z]/p' "${HERE}/coordinator/reviewer-git.yaml" | grep '^    [a-z]' | sed 's/^    //;s/  *#.*//')
+  CAPABILITY_CARD="── CAPABILITY CARD (generated from mint sources) ──
+Identity: homelab-reviewer[bot] (reviewer-git)
+Minted permissions (from agents/coordinator/reviewer-git.yaml):
+${_PERMS}
+
+Declared permissions: docs/github-apps.yaml (homelab-reviewer entry)
+Live view: github-exporter.monitoring.svc:9504/apps.md
+
+Failure signatures:
+  REST 403 \"Resource not accessible by integration\" → the response header
+    \`x-accepted-github-permissions\` NAMES the needed permission — re-run with \`gh api -i\`.
+  GraphQL NOT_FOUND/null under an App token → NOT evidence of nonexistence;
+    cross-check REST, which fails honestly and names the permission.
+────────────────────────────────────────────────────────────────────────────────"
+fi
+
 PREP=$(cat <<PREP
 set -e
 ${LOOP_FETCH}gh repo clone ${REPO_SLUG} /work/repo -- --quiet
@@ -335,13 +386,19 @@ ISSUE=\$(printf '%s' "\$_PR_META" | jq -r '.closingIssuesReferences[0].number //
 PR_BASE=\$(printf '%s' "\$_PR_META" | jq -r '.baseRefName // empty' 2>/dev/null || true)
 ISSUE_TITLE=""
 ISSUE_BODY=""
+ISSUE_UNREADABLE=0
 if [ -n "\$ISSUE" ] && [ "\$ISSUE" != "null" ]; then
   _ISSUE_JSON=\$(gh api "repos/\${REPO_SLUG}/issues/\${ISSUE}" 2>/dev/null || true)
-  ISSUE_TITLE=\$(printf '%s' "\$_ISSUE_JSON" | jq -r '.title // ""' 2>/dev/null || true)
-  ISSUE_BODY=\$(printf '%s' "\$_ISSUE_JSON" | jq -r '.body // ""' 2>/dev/null || true)
+  if [ -z "\$_ISSUE_JSON" ] || [ "\$_ISSUE_JSON" = "null" ]; then
+    ISSUE_UNREADABLE=1
+    echo "→ ISSUE_UNREADABLE: issue #\$ISSUE read failed (403/NOT_FOUND) — cannot verify Touches: footprint; no verdict will be emitted (homelab#1055)"
+  else
+    ISSUE_TITLE=\$(printf '%s' "\$_ISSUE_JSON" | jq -r '.title // ""' 2>/dev/null || true)
+    ISSUE_BODY=\$(printf '%s' "\$_ISSUE_JSON" | jq -r '.body // ""' 2>/dev/null || true)
+  fi
 fi
 if [ -n "\$ISSUE" ] && [ "\$ISSUE" != "null" ]; then TASK_KEY="issue-\$ISSUE"; else TASK_KEY="pr-${PR}"; ISSUE=""; fi
-export TASK_KEY ISSUE PR_BASE ISSUE_TITLE ISSUE_BODY
+export TASK_KEY ISSUE PR_BASE ISSUE_TITLE ISSUE_BODY ISSUE_UNREADABLE
 echo "→ transcript task key: \$TASK_KEY (fixes issue \${ISSUE:-none})"
 # ── SPROUT DEPTH (FU-090 rung 2, 2026-08-05) ───────────────────────────────────────────────────
 # How deep in the follow-up tree is the issue this PR closes? The harvest already flags depth ≥2
@@ -373,28 +430,64 @@ if printf '%s\n' "\$CHANGED" | grep -qE '^charts?/templates/|^(argocd|k8s|manife
    || gh pr diff ${PR} 2>/dev/null | grep -qE '^\+.*kind: *(Deployment|StatefulSet|DaemonSet|CronJob)\b'; then
   LENSES="\$LENSES k8s-prod"
 fi
+# >>>REPLAY:asvs-predicate>>>
+# ASVS lens: code-class predicate for auth/input/session code (issue#833).
+# Prefers quiet miss — see agents/lenses/asvs.md for false-positive analysis.
+# Signals: auth imports, auth function definitions, session management, input parsing,
+# new public endpoint route registrations across Go/Python/TypeScript.
+if gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(import|from|using|require)\s+.*(auth|jwt|oauth|saml|oidc|csrf|cors|bcrypt|argon2|passport)' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(func.*[^A-Z](Login|Logout|Auth|Authenticate|Authorize|Register|Signup|Token|Session|Refresh|Middleware|Guard)|def.*[^a-z](login|logout|auth|authenticate|authorize|register|signup|session|token|refresh|middleware|guard))' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(session\.(Save|Get|Set|Delete|Destroy|Regenerate|Start|Create)[^a-z]|csrf\.(Protect|Token|Middleware)|cors\.(New|Allow|Handle)|ParseForm|ParseMultipartForm|\.Bind\(|\.Validate\(|\.Sanitize\(|\.Escape\()' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(http\.(Handle|HandleFunc|ServeMux)|HandleFunc\(|mux\.(NewRouter|Handle|Methods|Headers)|gin\.(Default|New|Group|RouterGroup)|echo\.(New|Group|Route)|chi\.(NewRouter|Route|Group|Mux))' \
+  || gh pr diff ${PR} 2>/dev/null | grep -qE \
+  '^\+.*(router\.(get|post|put|delete|patch|GET|POST|PUT|DELETE|PATCH)\(|@(Get|Post|Put|Delete|Patch)\(|app\.(get|post|put|delete|patch|route|router)|@app\.route\(|@router\.(get|post|put|delete|patch)\(|\.add_url_rule\()'; then
+  LENSES="\$LENSES asvs"
+fi
+# <<<REPLAY:asvs-predicate<<<
 SYSFILE=/tmp/review-system.md
 if [ -f "${RUBRIC}" ]; then cp "${RUBRIC}" "\$SYSFILE"; else : > "\$SYSFILE"; fi
+# Lens posture map from the single claim read (FU-101): absent lenses → advisory
+LENS_MAP='$LENS_MAP'
+# >>>REPLAY:lens-posture-handling>>>
 for l in \$LENSES; do
+  _posture=\$(printf '%s' "\$LENS_MAP" | jq -r --arg l "\$l" '.[\$l] // "advisory"' 2>/dev/null || echo "advisory")
   if { printf '\n\n---\n\n'; curl -fsS --max-time 10 "\$LENS_BASE/\$l.md"; } >> "\$SYSFILE"; then
-    echo "→ lens attached: \$l (advisory — FU-101)"
+    if [ "\$_posture" = "blocking" ]; then
+      printf '\n**POSTURE: blocking** — findings from this lens MAY determine the verdict.\n' >> "\$SYSFILE"
+      echo "→ lens attached: \$l (BLOCKING — \$_posture)"
+    else
+      echo "→ lens attached: \$l (advisory — FU-101)"
+    fi
   else
-    echo "WARN: lens \$l fetch failed — review proceeds without it (advisory-only, never blocks)"
+    if [ "\$_posture" = "blocking" ]; then
+      echo "WARN: lens \$l fetch FAILED — lens is BLOCKING for this stack, but review proceeds without it (a blocking lens that cannot be fetched must NOT silently become advisory)"
+    else
+      echo "WARN: lens \$l fetch failed — review proceeds without it (advisory-only, never blocks)"
+    fi
   fi
 done
+# <<<REPLAY:lens-posture-handling<<<
 RUBRIC_FLAG=""
 [ -s "\$SYSFILE" ] && RUBRIC_FLAG="--append-system-prompt-file \$SYSFILE"
 echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: \${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
-PROMPT='Review pull request #${PR} on the checked-out branch.
+PROMPT='
+${CAPABILITY_CARD}
+
+Review pull request #${PR} on the checked-out branch.
 
 STEP 0 — SELF-GUARD (you are the LAST line of defense against automation loops): run  gh pr view ${PR} --json reviews,comments,commits,labels,mergeStateStatus,statusCheckRollup,headRefOid  and check the review history against your OWN bot identity, which is the literal login  ${REVIEWER_LOGIN}  — use that string, do NOT look it up at runtime (you authenticate with an App INSTALLATION token, for which  gh api user  returns 403, and note the login carries no [bot] suffix here). Your own verdicts, and your own asides below, are exactly the entries whose author.login is  ${REVIEWER_LOGIN} . The guard REFUSES in every case it refused before — what changed (homelab#122, 2026-08-08) is only WHICH terminal a refusal picks. Sort what you see into one of two classes; you submit NO review in either.
-  (a) PRECONDITION FAILURE — the dispatch premise was true when you were QUEUED and stopped being true before you EXECUTED. Under semaphore queueing that gap routinely reaches ~10 minutes, so this is ordinary contention, not a malfunction, and the machinery resolves it without a human: the review path is LEVEL-TRIGGERED (an Argo Events edge plus a */15 CronWorkflow backstop), so the state settling IS the re-dispatch. Post ONE short standing-aside comment (gh pr comment ${PR} --body ...) naming the precondition and the head sha, add NO label, submit NO review, do not re-litigate the diff, and stop. Exactly these three states are preconditions:
+  (a) PRECONDITION FAILURE — the dispatch premise was true when you were QUEUED and stopped being true before you EXECUTED. Under semaphore queueing that gap routinely reaches ~10 minutes, so this is ordinary contention, not a malfunction, and the machinery resolves it without a human: the review path is LEVEL-TRIGGERED (an Argo Events edge plus a */15 CronWorkflow backstop), so the state settling IS the re-dispatch. Post ONE short standing-aside comment (gh pr comment ${PR} --body ...) naming the precondition and the head sha, add NO label, submit NO review, do not re-litigate the diff, and stop. Exactly these states are preconditions:
     • mergeStateStatus is DIRTY or UNKNOWN. DIRTY belongs to the merge-conflict lane (the coordinator dispatches a worker to rebase); UNKNOWN means GitHub is still computing mergeability and clears in seconds. Latching agent/error here would wedge the PR out of the very lane that owns its state, because agent/error excludes it from EVERY clause.
     • the checks on the CURRENT head have not concluded — some check is QUEUED/PENDING/IN_PROGRESS, or nothing has reported yet (gh pr checks ${PR}). Your dispatch premise was green-at-head; a push or a re-run since then belongs to the next pass, not to you. (A check that concluded FAILURE is not this case and is not yours either — the coordinator ci-red clause owns it. Stand aside the same way and name what you saw.)
     • a LIVE verdict of YOUR OWN identity already exists for THIS EXACT COMMIT, i.e. submitted at or after the newest non-merge commit. Count ONLY reviews whose state field is APPROVED or CHANGES_REQUESTED in the reviews JSON — exactly the filter the reflex breaker count uses. A review shown DISMISSED is an ENDED round (someone dismissed it — a coordinator arbitration ruling or a human), NOT a verdict: never count it and never reconstruct its original state, because the dismissal is the point — the PR is reviewable again and the level-triggered path re-dispatches it. Counting a dismissed review as your own verdict refuses that re-review forever (homelab#556). A live verdict at head means another pass got there first; the work is done and its record is already on the PR.
+    • the linked issue could not be read (403/NOT_FOUND) — ISSUE_UNREADABLE. When the OWN credential of the reviewer cannot read the issue this PR claims to fix, the session must NOT emit a content verdict from that premise. The Touches: footprint, sprout depth, and issue body are all unavailable; a verdict built without them is unreliable (homelab#1038: four false CHANGES_REQUESTED on sleep-tracking#137). Post a standing-aside comment with pre=issue-unreadable, emit a TOOL_GAP line naming the issue read failure, and stop. On reproduction (a second session hitting the same unreadable issue), escalate via the platform-intake filing contract (coordinator README, "Cross-boundary filing") — do NOT keep standing aside.
   IDEMPOTENT ASIDE — the aside is keyed by (content commit, precondition), NOT by pass and NOT by the branch tip. Before posting, read the existing comments — the  comments  field of the STEP 0 call above already has them, no second call needed: if one of YOUR asides (author.login  ${REVIEWER_LOGIN} ) already carries a marker naming the newest NON-MERGE commit AND this same precondition, post NOTHING and exit silently. Several passes can hit one precondition while the queue drains, and a pile of near-identical bot comments is itself an anomaly signal — never manufacture the thing this guard watches for. The dedup key is a MACHINE MARKER (ADR-103 channel-separation precedent: match on the marker, never on prose — two asides for the same precondition whose only difference is the prose tail never match; the PR#547 asides landed at efc90c5a and at fd2efc80 for one content commit), first line exactly:
     STANDING ASIDE: <precondition> at <content-commit-sha8> — no verdict; the level-triggered review path re-dispatches when this settles. <!-- standing-aside head=<content-commit-sha8> pre=<precondition-slug> -->
-  The marker  head  field is the newest NON-MERGE commit — the content the review is about — NOT the branch tip, which moves on every  Merge branch master  no-op (an update-branch push is not new content). The  pre  slug is exactly one of  merge-state | checks-pending | own-verdict-at-head. A later pass must produce the SAME marker for the same content commit + same precondition, or the dedup never matches and the guard manufactures the pile it watches for.
+  The marker  head  field is the newest NON-MERGE commit — the content the review is about — NOT the branch tip, which moves on every  Merge branch master  no-op (an update-branch push is not new content). The  pre  slug is exactly one of  merge-state | checks-pending | own-verdict-at-head | issue-unreadable. A later pass must produce the SAME marker for the same content commit + same precondition, or the dedup never matches and the guard manufactures the pile it watches for.
   (b) GENUINE ANOMALY — a state the machinery CANNOT resolve by dispatching again later. Trip the breaker: run  gh pr edit ${PR} --add-label agent/error  (your token has issues:write since 2026-07-16 — homelab FU-069 b) and post exactly ONE comment starting with AGENT_ERROR: stating what you saw, then stop. This terminal keeps every state it already owned: MORE THAN ONE LIVE (non-DISMISSED) verdict from your identity at the current head, or a pile of near-identical bot reviews or comments (that is the dispatcher loop this breaker was built for — oracle-fleet#57 burned nine sessions before it tripped); a review history that cannot be reconciled with the commit history; contradictory labels; a PR that plainly should not have reached you. Unchanged too: an agent/error label ALREADY present means someone tripped it before you — add nothing, touch nothing, stop silently (no aside either).
   THE TEST, when you cannot tell which class you are in: will this state look different if the reflex dispatches me again in fifteen minutes? Yes → precondition: aside, no label, stop. No → anomaly: label, one AGENT_ERROR: comment, stop. A burned session that stands aside is a GOOD outcome, and so is one that files a single anomaly report; a duplicate verdict is neither.
 
@@ -502,7 +595,10 @@ PROMPT="${PROMPT:-}
 
 TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — declared \`Touches:\` footprint against the changed paths:
   TOUCHES-ESCAPES: $TOUCHES_ESCAPES
-Semantics: \`none\` = every changed path is covered by the closing issue's declared footprint; \`undeclared\` = this PR closes no issue, so there is no footprint to check; \`unavailable\` = the checker could not run — treat it as NO SIGNAL, not as clean; otherwise each listed path fell OUTSIDE the declared footprint. Files whose ENTIRE diff is REPLAY sentinel marker comments are already excluded (ADR-097 addendum 3, homelab#944 — a compelled edit, content-verified); do not re-derive an escape for them from the raw diff. When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`scripts/**\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`) — marked [GOVERNANCE] — the diff is BLOCKING per .agents/review.md §BLOCKING. This is computed fact for your rubric check, not a verdict."
+Semantics: \`none\` = every changed path is covered by the closing issue's declared footprint; \`undeclared\` = this PR closes no issue, so there is no footprint to check; \`unavailable\` = the checker could not run — treat it as NO SIGNAL, not as clean; otherwise each listed path fell OUTSIDE the declared footprint. Files whose ENTIRE diff is REPLAY sentinel marker comments are already excluded (ADR-097 addendum 3, homelab#944 — a compelled edit, content-verified); do not re-derive an escape for them from the raw diff. When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`scripts/**\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`) — marked [GOVERNANCE] — the diff is BLOCKING per .agents/review.md §BLOCKING. This is computed fact for your rubric check, not a verdict.
+
+ISSUE_UNREADABLE: ${ISSUE_UNREADABLE:-0}
+If set (1), the linked issue could not be read (403/NOT_FOUND) by the reviewer's own credential. Do NOT emit a content verdict from this premise. Instead, emit a TOOL_GAP line naming the issue read failure and post a standing-aside comment with pre=issue-unreadable. The exit-contract terminal handling applies (homelab#1055)."
 # <<<REPLAY:reviewer-touches-check<<<
 SNIP
 )

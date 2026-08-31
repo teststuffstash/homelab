@@ -1,0 +1,1 @@
+# retro brief for oracle-fleet r4 (replay fixture — labels-first inline flow)

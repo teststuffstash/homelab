@@ -1,0 +1,15 @@
+# slo-teeth (homelab#831, FU-104) — the error budget burnt state reads FU-104's enforcement
+# half: one shared read called from EVERY dispatch site.
+#
+# mode: suite — the replay harness extracts the sentinel-guarded blocks out of the shipped
+# scripts (slo-teeth-gate from reviewer-session.sh, slo-teeth-filter from review-reflex.sh)
+# and runs agents/slo-teeth.sh itself whole (it IS the shared read). `curl` is a stub on $PATH
+# serving the Prometheus query shapes (burnt/unburnt/error). `jq` and `stacks.json` are real.
+# Any `curl` call that is not the Prometheus query aborts the harness, so an escaping dispatch
+# cannot pass silently. No cluster, no network, no credentials.
+#
+# Fixtures cover the three scenarios: burnt stack → refuse; no burnt stacks → proceed;
+# Prometheus unreachable → proceed (fail-open) with loud log.
+name: slo-teeth
+mode: suite
+entrypoint: agents/slo-teeth-replay.sh

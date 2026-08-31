@@ -1,2 +1,3 @@
 CALL kubectl -n agent-runs get pods -l app=agent-session,project=test-project -o json
-RC 0
+ERR PREFLIGHT REFUSED: 3 agent pod(s) Running in ns agent-runs ≥ WIP limit 3 (FU-042; AGENT_WIP_LIMIT raises it for multi-track dispatch).
+RC 3

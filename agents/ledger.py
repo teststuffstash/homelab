@@ -157,17 +157,30 @@ def _budget_from_cr(project: str, issue: str) -> tuple[str, float, float] | None
               % (project, e), file=sys.stderr)
         return None
     prefix = "%s-issue-%s-round-" % (project, issue)
+    best = None  # (round_num, tier, cap, estimate_usd)
     for item in data.get("items", []):
-        name = item.get("metadata", {}).get("name", "")
-        if not name.startswith(prefix):
+        try:
+            name = item.get("metadata", {}).get("name", "")
+            if not name.startswith(prefix):
+                continue
+            labels = item.get("metadata", {}).get("labels", {})
+            tier = labels.get("budget-tier")
+            estimate_usd = labels.get("budget-estimate-usd")
+            if tier and estimate_usd is not None:
+                cap = TIERS.get(tier)
+                if cap is not None:
+                    suffix = name[len(prefix):]
+                    try:
+                        rnd = int(suffix)
+                    except (ValueError, TypeError):
+                        rnd = 0
+                    if best is None or rnd > best[0]:
+                        best = (rnd, tier, cap, float(estimate_usd))
+        except Exception as e:
+            print("ledger: malformed CR %s (%s) — skipped" % (name, e), file=sys.stderr)
             continue
-        labels = item.get("metadata", {}).get("labels", {})
-        tier = labels.get("budget-tier")
-        estimate_usd = labels.get("budget-estimate-usd")
-        if tier and estimate_usd is not None:
-            cap = TIERS.get(tier)
-            if cap is not None:
-                return tier, cap, float(estimate_usd)
+    if best is not None:
+        return best[1], best[2], best[3]
     return None
 
 
@@ -176,7 +189,7 @@ def is_snapshot(issue_state, terminal_label):
     is still OPEN (more rounds may land) or the terminal label is not one this reflex recognizes
     (the only terminal labels today are agent/done | agent/blocked). Historical rows predating the
     flag carry no `snapshot` field and are treated as NOT snapshot by the retro's pain-rank."""
-    return issue_state == "open" or terminal_label not in TERMINAL_LABELS
+    return str(issue_state).lower() == "open" or terminal_label not in TERMINAL_LABELS
 
 
 def strike_rounds(org, project, issue):
@@ -362,7 +375,7 @@ def main():
             "key": key, "project": project, "issue": issue, "stack": repos.get(project, ""),
             "terminal_label": label, "issue_state": state, "closed_at": closed_at,
             "budget_tier": tier, "budget_cap_usd": cap,
-            "calibration_error": round(summ["total_cost_usd"] / cap, 3) if cap else None,
+            "calibration_error": round(summ["total_cost_usd"] / (cap * len(rounds)), 3) if cap and rounds else None,
         }
         rec.update(summ)
         # r4 F5: mark mid-flight stamps — at emit time the issue is still OPEN or the terminal

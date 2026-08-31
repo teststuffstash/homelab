@@ -1,0 +1,17 @@
+CALL gh issue list --repo teststuffstash/homelab --state closed --limit 200 --json number,title,labels,updatedAt --jq [.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/blocked")) or ($L|index("agent/review"))) and (($L|index("agent/error"))|not))]
+CALL gh pr list --repo teststuffstash/homelab --state merged --limit 40 --json body --jq [.[].body // ""]
+CALL gh issue edit 80 --repo teststuffstash/homelab --add-label agent/done
+CALL gh issue edit 80 --repo teststuffstash/homelab --remove-label agent/blocked
+CALL gh issue edit 80 --repo teststuffstash/homelab --remove-label agent/review
+CALL gh issue view 80 --repo teststuffstash/homelab --json labels --jq [.labels[].name]|join(",")
+CALL gh issue comment 80 --repo teststuffstash/homelab --body 🤖 **Stale label reconciled → `agent/done`** (deterministic scan belt, homelab#1106).\n\nAudit, as of `TIMESTAMP`:\n\n- **Issue is CLOSED** and a merged PR mentions `#80`.\n- **The stale label persisted.** The issue had been untouched for Nm — past the Nm guard.\n\nThe merged-closeout clause (C6) is the primary path for this transition; this belt catches cases where C6 was skipped. The issue is already closed, so this is bookkeeping on dead state — the label now reflects the merged terminal.\n\nIf the issue is genuinely not done (e.g. the merged PR was a partial fix), reopen it and re-apply the appropriate lifecycle label. Re-applying a stale label by hand on a closed issue will simply be cleared again after the guard window.
+CALL gh issue edit 81 --repo teststuffstash/homelab --add-label agent/done
+CALL gh issue edit 81 --repo teststuffstash/homelab --remove-label agent/blocked
+CALL gh issue edit 81 --repo teststuffstash/homelab --remove-label agent/review
+CALL gh issue view 81 --repo teststuffstash/homelab --json labels --jq [.labels[].name]|join(",")
+CALL gh issue comment 81 --repo teststuffstash/homelab --body 🤖 **Stale label reconciled → `agent/done`** (deterministic scan belt, homelab#1106).\n\nAudit, as of `TIMESTAMP`:\n\n- **Issue is CLOSED** and a merged PR mentions `#81`.\n- **The stale label persisted.** The issue had been untouched for Nm — past the Nm guard.\n\nThe merged-closeout clause (C6) is the primary path for this transition; this belt catches cases where C6 was skipped. The issue is already closed, so this is bookkeeping on dead state — the label now reflects the merged terminal.\n\nIf the issue is genuinely not done (e.g. the merged PR was a partial fix), reopen it and re-apply the appropriate lifecycle label. Re-applying a stale label by hand on a closed issue will simply be cleared again after the guard window.
+OUT ORPHAN [homelab] ⚠ stale label RECONCILED → `agent/done`: issue #80 (closed, merged PR mentions it, state persisted Nm — audit commented; homelab#1106).
+OUT ORPHAN [homelab] ⚠ stale label RECONCILED → `agent/done`: issue #81 (closed, merged PR mentions it, state persisted Nm — audit commented; homelab#1106).
+OUT ORPHAN [homelab] ⏳ agent/done phantom-label belt HELD — issue #82 is NOT mentioned by any merged PR: the close may be unrelated to agent work. Holding beats guessing.
+OUT REACHED: end
+RC 0

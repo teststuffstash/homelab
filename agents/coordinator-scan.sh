@@ -42,8 +42,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # `set -u` clause never hits an unbound variable whose default lives outside the block.
 # Add new defaults here when a replayed block references them.
 ORG="${ORG:-teststuffstash}"
-REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
-ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"
+REPO_MAX_WIP="${REPO_MAX_WIP:-3}"   # ADR-097 hard ceiling: concurrent workers per repo. TRACKS rule 1 counts armed PRs per base; was binary WIP=1 until meta-8 proved two dispatchers race inside one scan window (2026-07-21 #55). 3 allows slack for a second worker without unbounded concurrency.
+ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"   # homelab#840: gh's unstated 30-result default silently hid queued #110 for 24 days (46 open issues, window floor #840). 200 is well above any repo's open-issue count; the scan prints a loud TRUNCATED warning if the fetch fills the limit.
 # <<<REPLAY:config-defaults<<<
 STACKS_FILE="${STACKS_FILE:-${HERE}/stacks.json}"
 SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
@@ -93,6 +93,32 @@ guarded_paths() {   # → one guarded PATH per line. NO output = could not read 
 # work rather than releasing it (rule #6 — never fail INTO a dispatch).
 GUARDED_PATHS="$(guarded_paths || true)"
 # <<<REPLAY:guarded-set<<<
+
+# ── GOVERNANCE PATHS — a pre-dispatch routing check (homelab#993) ────────────────────────────────
+# `scripts/governance-lint.sh` refuses any worker-authored PR diff that touches governance paths
+# (`.github/`, `.agents/`, `scripts/`, `policy/`, `devbox.json`, `devbox.lock`, `CODEOWNERS`).
+# These paths are structurally red because CI runs from the PR branch — a worker-App-authored diff
+# touching any of them goes red on a step no fix round can turn green. The scan must not dispatch
+# into that hole.
+#
+# READ THE SET, NEVER RE-DECLARE IT. Same one-greppable-line convention as the GUARDED set: the
+# lint's own `GOVERNANCE=` line is the single source of truth. A second copy here would drift.
+# >>>REPLAY:governance-set>>>
+GOVERNANCE_LINT="${GOVERNANCE_LINT:-${HERE}/../scripts/governance-lint.sh}"
+governance_paths() {   # → one governance PATH per line. NO output = could not read (never "none governed")
+  local line="" GOVERNANCE=""
+  [ -r "$GOVERNANCE_LINT" ] && line="$(grep -m1 '^GOVERNANCE=' "$GOVERNANCE_LINT" || true)"
+  [ -n "$line" ] || return 1
+  eval "$line" || return 1
+  [ -n "$GOVERNANCE" ] || return 1
+  # The lint holds its set as a regex anchored pattern (`^(path1|path2|...)$`);
+  # strip the outer anchors, split on `|`, strip trailing `$` anchors, then drop regex escapes.
+  printf '%s\n' "$GOVERNANCE" | sed 's/^\^(//; s/\$)//' | tr '|' '\n' | sed 's/\$//; s/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$'
+}
+# Read ONCE per scan; the empty-vs-unreadable distinction is made at the use site, where it holds
+# work rather than releasing it (rule #6 — never fail INTO a dispatch).
+GOVERNANCE_PATHS="$(governance_paths || true)"
+# <<<REPLAY:governance-set<<<
 
 # ── SCAN PHASE MARKER (FU-145) ──────────────────────────────────────────────────────────────────
 # `AgentCoordinateScanWedged` keyed on POD LIFETIME, and this pod's lifetime is not the thing that
@@ -1464,6 +1490,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       [ "$qtouches" = "-" ] && qtouches="*"
       [ "$qdeps" = "-" ] && qdeps=""
       [ "$qparent" = "-" ] && qparent=""
+      qbase_raw="$qbase"  # save before defaulting: "-" means absent (homelab#1053)
       [ "$qbase" = "-" ] && qbase=""
       # TRACKS rule 1 per-base (homelab#849): absent `Base:` body line → default branch.
       [ -z "$qbase" ] && qbase="$default_branch"
@@ -1546,6 +1573,54 @@ EOF_GUARDED
         fi
       fi
       # <<<REPLAY:guarded-hold<<<
+      # ── GOVERNANCE PATH (homelab#993) — report, never dispatch ──────────────────────────────
+      # Tested BEFORE the transient holds (footprint / WIP / PR budget) on purpose: this one is
+      # STRUCTURAL. A governance issue must read as "route this to the operator" on every scan,
+      # not as "come back later" whenever a sibling happens to be in flight.
+      # REPORT-ONLY, NO LABEL WRITE. Same precedent as the pin-only GUARDED check: the overlap
+      # may be only PART of the issue's scope, so the line names the file and the route, and a
+      # human re-scopes or splits it.
+      # >>>REPLAY:governance-hold>>>
+      if [ "$repo" = "$GUARDED_REPO" ]; then
+        if [ -z "$GOVERNANCE_PATHS" ]; then
+          # Rule #6: never fail INTO a dispatch. The set could not be read (file moved, or its
+          # `GOVERNANCE=` line changed shape), so "not governed" is unknown, not false. Loud and
+          # level-triggered — it clears itself on the scan after the read works again.
+          orphans="${orphans}[$repo] ⛔ GOVERNANCE-SET PROBE-FAILED — no \`GOVERNANCE=\` line readable at ${GOVERNANCE_LINT} (homelab#993). Holding rather than dispatching blind:\n  issue #${qnum} — ${qtitle}\n"
+          continue
+        fi
+        # The `*` sentinel (no `Touches:` line) conflicts with EVERYTHING by design
+        # (agents/footprint.sh), as does any entry whose glob defeats prefix reasoning. Both
+        # normalize to the empty prefix and are dropped here: reading them as governed would stop
+        # dispatching every unfootprinted issue in the repo — a far worse loop than the one round
+        # this check exists to save. Dropping them costs nothing the ADR-097 hold does not already
+        # cover, since an undeclared footprint is exclusive there anyway.
+        qdecl=""; ghit=""
+        while IFS= read -r fpe; do
+          [ -n "$fpe" ] || continue
+          if [ -n "$(fp_norm_entry "$fpe")" ]; then qdecl="${qdecl}${fpe},"; fi
+        done <<EOF_QDECL
+$(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
+EOF_QDECL
+        if [ -n "$qdecl" ]; then
+          # fp_conflict_strict, not a grep: the boundary reasoning is the whole point. THIS
+          # issue's own `agents/coordinator-scan.sh` must NOT hit `.agents/` (the dot-prefix
+          # distinguishes it). STRICT (no replay exemption) on purpose: this check's invariant
+          # is touch-a-governance-FILE, and the exempting fp_conflict would fail OPEN the day
+          # a governance path lands under agents/replay/.
+          while IFS= read -r gpath; do
+            [ -n "$gpath" ] || continue
+            if fp_conflict_strict "$qdecl" "$gpath"; then ghit="${ghit} ${gpath}"; fi
+          done <<EOF_GOVERNANCE
+$GOVERNANCE_PATHS
+EOF_GOVERNANCE
+        fi
+        if [ -n "$ghit" ]; then
+          orphans="${orphans}[$repo] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches} → governance:${ghit})\n"
+          continue
+        fi
+      fi
+      # <<<REPLAY:governance-hold<<<
       # >>>REPLAY:footprint-hold>>>
       # ADR-097 goal exemption (homelab#822): a goal's decompose/checkpoint unit writes
       # no code (it authorises child issues via `gh` and toggles labels, never a PR diff),
@@ -1608,6 +1683,7 @@ EOF_GUARDED
       # Why it exists: circles#17 was a goal handed to a builder (nothing distinguished the two),
       # and produced "analysed everything, built nothing" twice with no cap near binding.
       # Design + the forest/trees rule: docs/agents/issue-authoring.md §Leg (c).
+      # >>>REPLAY:goal-decompose>>>
       if [ "$qclass" = "goal" ]; then
         # BREAKER #1, moved UP not away (issue-authoring.md §Leg (c)): a goal's children are queued
         # by the coordinator, and the thing that authorises them is that a HUMAN queued the GOAL.
@@ -1637,6 +1713,14 @@ EOF_GUARDED
           orphans="${orphans}[$repo] ⛔ goal #${qnum}: could not read who applied agent/queued — refusing to decompose (fail-closed; an unreadable authorisation is not an authorisation)\n"
           continue
         fi
+        # ADR-1053 / homelab#1053: Base: is mandatory on task/goal containers (consumer card
+        # change 4). A task/goal with agent/queued and no Base: line never reaches a decompose
+        # sitting. The refusal comment names the two legal values and links the consumer card.
+        # Base: master PASSES (the choice being explicit is the point).
+        if [ "$qbase_raw" = "-" ]; then
+          orphans="${orphans}[$repo] ⛔ goal #${qnum} has no \`Base:\` body line — a \`task/goal\` container MUST declare a \`Base:\` line (\`Base: master\` or \`Base: goal/<branch>\`). See docs/agents/issue-authoring.md §Creating a Goal — the consumer card.\n"
+          continue
+        fi
         if [ "$qpin" = "P" ]; then
           punits="${punits}goal-decompose|${repo}|issue-${qnum}\n"
         else
@@ -1645,6 +1729,7 @@ EOF_GUARDED
         item_class_push "$repo" "issue-${qnum}" "container" "machine"
         continue
       fi
+      # <<<REPLAY:goal-decompose<<<
       # FU-090 leg (c) forest/trees: a child's unit carries its GOAL, so the item session re-reads
       # the parent before acting instead of judging the child in isolation. Free — `parent` rides
       # the issue-list call above, no extra request against the App's GraphQL pool. Empty for the
@@ -2037,7 +2122,8 @@ EOF_GUARDED
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|select(((.headRefName // "")|startswith("goal/")) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
       orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
     done
-    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (.reviewDecision=="CHANGES_REQUESTED") and (.author.login==$wa) and (((.headRefName // "")|startswith("goal/"))|not))|.number'); do
+    # >>>REPLAY:changes-requested-gate>>>
+    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("agent/blocked"))|not) and (.reviewDecision=="CHANGES_REQUESTED") and (.author.login==$wa) and (((.headRefName // "")|startswith("goal/"))|not))|.number'); do
       # ADR-094 project-WIP hold, same rationale as the queued gate above (meta-9, 2026-07-21:
       # while #60's fix round ran, every tick woke a redundant judge whose dispatch the launcher's
       # WIP=1 pre-flight would refuse — the Running worker IS this unit's in-flight work; C4/C5
@@ -2103,6 +2189,7 @@ EOF_GUARDED
       units="${units}changes-requested|${repo}|pr-${u}\n"
       item_class_push "$repo" "pr-${u}" "riding" "machine"
     done
+    # <<<REPLAY:changes-requested-gate<<<
     # merge-conflict (MP-T06, homelab#595): the updater labels a PR `merge-conflict` when its
     # update-branch API call 422s on a DIRTY head. WORKER_AUTHOR-scoped, mirroring the
     # changes-requested clause above (671a053): the fix-round play only has a mandate over
@@ -2598,6 +2685,100 @@ EOF_GUARDED
         echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
       fi
     fi
+    # ── THE BELT (homelab#1106): RECONCILE the phantom `agent/done` label ──────────────────────
+    # A closed issue with a merged PR mentioning it, still labelled `agent/blocked` or
+    # `agent/review` past C4C5_PERSIST_S, gets `agent/done`. This is bookkeeping on dead state:
+    # the issue is already CLOSED, so a wrong flip costs a mislabeled closed issue, not a
+    # duplicate ride. The merged-closeout clause (C6) is the primary path; this belt catches
+    # cases where C6 was skipped (e.g. the issue was closed by keyword before C6 ran, or the
+    # merged PR's reference was non-closing and the issue was closed by hand).
+    #
+    # Two holds before it writes, both fail-SAFE — an unreadable probe HOLDS, it never clears
+    # (rule #6: never fail INTO a write):
+    #   (c) PERSISTENCE. The issue must have been quiet (`updatedAt`) past C4C5_PERSIST_S
+    #       to avoid racing with the merged-closeout clause.
+    #   (d) A MERGED PR must mention the issue. Without a merged PR, the issue may have been
+    #       closed for reasons unrelated to agent work — holding beats guessing.
+    # Anything the belt HOLDS keeps today's behaviour exactly — reported, and the merged-closeout
+    # unit (C6) still carries it. Anything it CLEARS becomes an ordinary `agent/done` issue.
+    # >>>REPLAY:done-phantom-belt>>>
+    done_phantom_cleared=""
+    done_phantom_cands=""
+    # Query CLOSED issues that still carry stale lifecycle labels. `gh issue list --state closed`
+    # returns issues closed in the last ~30 days by default; the `--limit` bounds the window.
+    # agent/error is excluded (human-first, never auto-relabel).
+    done_closed="$(gh issue list --repo "$slug" --state closed --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,updatedAt \
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/blocked")) or ($L|index("agent/review"))) and (($L|index("agent/error"))|not))]' 2>/dev/null || echo '[]')"
+    jq -e . >/dev/null 2>&1 <<<"${done_closed:-null}" || done_closed='[]'
+    [ -n "$dispatchable" ] && done_phantom_cands="$(printf '%s' "$done_closed" \
+      | jq -r --arg done "${done_phantom_cleared:-}" \
+        '[.[] | (.labels|map(.name)) as $L
+               | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked")) or ($L|index("agent/review"))))
+               | (.number|tostring) as $n
+               | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
+               | "\($n)|\(.updatedAt // "")"] | .[]')"
+    if [ -n "$done_phantom_cands" ]; then
+      now_s="$(date -u +%s)"
+      done_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || done_merged=""
+      if ! jq -e . >/dev/null 2>&1 <<<"${done_merged:-null}"; then
+        orphans="${orphans}[$repo] ⚠ PROBE_FAILED (merged PRs) — the agent/done phantom-label belt held every candidate this tick (rule #6)\n"
+      else
+        for cand in $done_phantom_cands; do
+          dcn="${cand%%|*}"; dcupd="${cand#*|}"
+          # jq parses the timestamps — same reader the pod janitor uses. An UNPARSEABLE
+          # stamp yields -1, which is < the window, so it holds.
+          dcage="$(jq -rn --arg t "$dcupd" --argjson now "$now_s" \
+            '($t | fromdateiso8601? // null) as $s | if $s == null then -1 else ($now - $s) end' 2>/dev/null || echo -1)"
+          case "$dcage" in ''|*[!0-9-]*) dcage=-1;; esac
+          if [ "$dcage" -lt "$C4C5_PERSIST_S" ]; then
+            orphans="${orphans}[$repo] ⏳ agent/done phantom-label belt HELD — issue #${dcn} was touched $(( dcage < 0 ? 0 : dcage / 60 ))m ago (< the ${C4C5_PERSIST_S}s transition-race guard, or an unreadable timestamp); re-checked next scan\n"
+            continue
+          fi
+          # A merged PR must mention the issue — otherwise the close may be unrelated to agent work.
+          if [ "$(jq -r --argjson nn "$dcn" '[.[] | select(test("#\($nn)\\b"))] | length' <<<"$done_merged" 2>/dev/null || echo 0)" -eq 0 ]; then
+            orphans="${orphans}[$repo] ⏳ agent/done phantom-label belt HELD — issue #${dcn} is NOT mentioned by any merged PR: the close may be unrelated to agent work. Holding beats guessing.\n"
+            continue
+          fi
+          # ⚠ ORDER IS LOAD-BEARING, and `gh issue edit --add-label X --remove-label Y` is
+          # NOT atomic: if the add fails while the remove lands, the issue holds no lifecycle
+          # label at all and goes invisible to EVERY clause. Add `agent/done` FIRST,
+          # remove the stale label SECOND, then RE-READ and prove the end state.
+          # ⚠ `set -euo pipefail` is on: a bare `A && B` whose result is non-zero is NOT in a
+          # condition context and would ABORT THE WHOLE SCAN mid-write. The `if` and the
+          # `|| true` are what keep a refused write a REPORTED write.
+          # The jq filter already selected for agent/blocked or agent/review, so we know
+          # one of them is present. Try removing both; the one that doesn't exist fails
+          # harmlessly under `|| true`.
+          dok=""
+          if gh issue edit "$dcn" --repo "$slug" --add-label agent/done >/dev/null 2>&1; then
+            gh issue edit "$dcn" --repo "$slug" --remove-label agent/blocked >/dev/null 2>&1 || true
+            gh issue edit "$dcn" --repo "$slug" --remove-label agent/review >/dev/null 2>&1 || true
+          fi
+          dend="$(gh issue view "$dcn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
+          case ",${dend}," in
+            *",agent/done,"*) case ",${dend}," in *",agent/blocked,"*|*",agent/review,"*) : ;; *) dok=1;; esac;;
+          esac
+          if [ -n "$dok" ]; then
+            gh issue comment "$dcn" --repo "$slug" --body "$(printf '%s\n' \
+              "🤖 **Stale label reconciled → \`agent/done\`** (deterministic scan belt, homelab#1106)." \
+              "" \
+              "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
+              "" \
+              "- **Issue is CLOSED** and a merged PR mentions \`#${dcn}\`." \
+              "- **The stale label persisted.** The issue had been untouched for $(( dcage / 60 ))m — past the $(( C4C5_PERSIST_S / 60 ))m guard." \
+              "" \
+              "The merged-closeout clause (C6) is the primary path for this transition; this belt catches cases where C6 was skipped. The issue is already closed, so this is bookkeeping on dead state — the label now reflects the merged terminal." \
+              "" \
+              "If the issue is genuinely not done (e.g. the merged PR was a partial fix), reopen it and re-apply the appropriate lifecycle label. Re-applying a stale label by hand on a closed issue will simply be cleared again after the guard window." )" >/dev/null 2>&1 || true
+            done_phantom_cleared="${done_phantom_cleared}${dcn} "
+            orphans="${orphans}[$repo] ⚠ stale label RECONCILED → \`agent/done\`: issue #${dcn} (closed, merged PR mentions it, state persisted $(( dcage / 60 ))m — audit commented; homelab#1106).\n"
+          else
+            orphans="${orphans}[$repo] ⛔ agent/done phantom-label reconcile FAILED or landed HALF-APPLIED on issue #${dcn} — labels are now [${dend}]. Check by hand.\n"
+          fi
+        done
+      fi
+    fi
+    # <<<REPLAY:done-phantom-belt<<<
     # arbitrate (FU-086 / MP-G04, built 2026-07-27): the review reflex labels a rounds-exhausted
     # PR `agent/arbitrate` (escalation, NOT anomaly — agent/error stays for impossible states).
     # The coordinator is the designed tie-breaker: one unit per labeled PR; the item session
@@ -2734,7 +2915,7 @@ EOF_GUARDED
         # trips); the issue-keyed sum is the CEILING and can only RAISE the count, never lower it.
         # FAIL-OPEN, matching this clause's guarded-probe posture: an unreadable list warns and leaves
         # the per-PR count standing — the window is the newest 100 PRs, so a miss only UNDER-counts.
-        # ⚠ The sibling-match rule (branch `issue-<n>-`, else body `#<n>`, both boundary-anchored) is
+        # ⚠ The sibling-match rule (branch `issue-<n>-`, else body closing keyword `#<n>`, both boundary-anchored) is
         # duplicated in review-reflex.sh's issue-keyed verdict ceiling. Change both or neither.
         # The key falls back to the fix/issue-<n>- branch convention when the body carries no closing
         # keyword; `red_issue` above stays body-only on purpose (it gates the per-item holds).
@@ -2748,7 +2929,7 @@ EOF_GUARDED
                           --json number,headRefName,body,comments 2>/dev/null)"; then
             red_sum="$(printf '%s' "$red_sib" | jq -r --arg n "$red_key" "${STATS_TS_DEF}"'
               def refs($n): ((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)"))
-                            or ((.body // "") | test("(^|[^0-9])#" + $n + "([^0-9]|$)"));
+                            or ((.body // "") | test("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"));
               [ .[] | select(refs($n)) ]
               | "\(length) \([ .[] | stats_ts[] ] | length)"
             ' 2>/dev/null)" || red_sum=""

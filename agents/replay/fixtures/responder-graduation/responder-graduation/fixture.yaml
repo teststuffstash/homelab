@@ -1,0 +1,15 @@
+# responder-graduation (goal#818) — the graduated imperative-remediation dial: a claim-gated
+# default-off responder block on the AgentStack XRD renders a scoped Role+RoleBinding per
+# stack namespace (loop ns + each fixer-enabled repo ns), granting exactly the declared
+# verb/resource pairs to the responder identity (agentstack-loop SA).
+#
+# mode: suite — behavioural pin for the Composition rendering logic. The entrypoint simulates
+# the GoTemplate rendering using jq and bash, verifying three cases:
+#   1. No `responder:` block → nothing rendered (byte-identical to before)
+#   2. Block present but disabled (enabled:false) → nothing rendered
+#   3. Enabled → Role+RoleBinding rendered with exactly the declared verbs, scoped to
+#      loop ns AND each fixer-enabled repo ns, with composition-resource-name annotations.
+# The entrypoint also verifies the escalation-check mirror in rbac.yaml.
+name: responder-graduation
+mode: suite
+entrypoint: agents/responder-graduation-replay.sh

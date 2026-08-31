@@ -1,0 +1,14 @@
+# FU-101 lens posture: per-stack advisory→blocking claim knob, sourced through the same
+# fail-closed claim read as the reviewer optout (reviewer-optout.sh --lens-map).
+#
+# mode: suite — behavioural pin for the lens posture knob and handling block:
+#   1. No `lenses:` block → every lens is advisory (existing behaviour preserved)
+#   2. A lens marked blocking → the `--lens-map` output carries "blocking"
+#   3. An unreadable claim → "{}" (fail-closed, empty map = advisory)
+#   4. A blocking lens whose fetch fails → loud WARN (never silent advisory)
+#
+# The suite (agents/lens-posture-replay.sh) stubs kubectl with recorded claim shapes and
+# curl to control fetch outcomes. No cluster, no credentials, no network.
+name: lens-posture
+mode: suite
+entrypoint: agents/lens-posture-replay.sh

@@ -288,6 +288,8 @@ transitions:
       - agents/replay/fixtures/arbitrate/landing-sequence
       - agents/replay/fixtures/arbitrate/fu147-refire-blocked
       - agents/replay/fixtures/state-fp/state-fp
+      - agents/replay/fixtures/changes-requested/blocked-held
+      - agents/replay/fixtures/changes-requested/dispatched
     guards:
       - desc: "reflex splits rounds-exhausted (escalation → agent/arbitrate) from impossible-state (anomaly → agent/error)"
         anchor: { file: agents/review-reflex.sh, pattern: "ROUNDS EXHAUSTED" }
@@ -295,6 +297,8 @@ transitions:
         anchor: { file: agents/review-reflex.sh, pattern: 'index\("agent/arbitrate"\)' }
       - desc: "scan emits arbitrate units; sibling clauses exclude the label"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'arbitrate\|' }
+      - desc: "the exclusion set is the PR's OWN terminal labels, and agent/blocked is one of them — the coordinator's own arbitrate/ci-red escalate terminal writes it on the PR, and the BLOCKED-SOURCE hold at :2160 answers a different question (is the SOURCE ISSUE gated), so it cannot cover a PR with no Fixes link (homelab#1097; PR #1094 re-dispatched every tick)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'index\("agent/blocked"\)' }
       - desc: "arbitrate unit emission excludes APPROVED+armed PRs (landing-sequence exclusion — a past-arbitration state needs no escalation)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "autoMergeRequest" }
       - desc: "unchanged-state debounce: the unit is emitted only when the PR's state fingerprint (head|reviewDecision|checks|newest verdict) differs from the recorded state-fp marker — PR#234 drew 5 identical dispatches in 30m before this (homelab#198)"
@@ -310,6 +314,7 @@ transitions:
     status: guarded
     replay:
       - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-rounds-two-channels
+      - agents/replay/fixtures/ci-red-rounds-sibling-mention
     guards:
       - desc: "content-based: attempts = durable run-stats-comment count (not the old 4h updatedAt timer a no-op comment reset), dispatch cap 2/repo/scan"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red" }

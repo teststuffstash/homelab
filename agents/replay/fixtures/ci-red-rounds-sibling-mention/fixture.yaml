@@ -1,0 +1,37 @@
+# ADR-103 / homelab#1060 — the sibling-mention false-positive case, pinned.
+#
+# CONDITION UNDER REPLAY. A red PR (#43, branch `fix/issue-19-thing`) that has completed TWO fix
+# rounds (attempts=2 < RED_MAX=3). The repo also holds PR #44 (branch `fix/issue-20-other`) whose
+# body mentions `#19` as a sibling reference ("sibling #19, documented for #19 to plumb") but
+# carries NO closing keyword for #19.
+#
+# WHY THIS FIXTURE EXISTS. The old `refs($n)` body arm matched any bare `#<n>` (boundary-anchored),
+# so PR #44 would be counted as a sibling of issue #19, inflating the round count. The fix tightens
+# the body arm to only match closing keywords (Fixes/Closes/Resolves #<n>), so a mere sibling
+# mention no longer counts. This fixture is the ratchet: a regression that re-widens the match will
+# cause PR #44 to be counted and change the expected output.
+#
+# THE CONTRACT:
+#   1. attempts = 2 — two new-shape stats markers, both before the newest non-merge commit.
+#   2. noop_round = <none> — newest stats timestamp (08:30) is BEFORE the newest non-merge commit
+#      (09:00), so the last completed round pushed something.
+#   3. attempts(2) < RED_MAX(3), so the issue-keyed ceiling IS checked — `gh pr list` is called.
+#   4. The sibling PR #44 mentions `#19` in its body but NOT as a closing keyword, so `refs(19)`
+#      matches only PR #43 (via branch `issue-19-`). red_sib_prs=1, red_sib_n=2 (only PR #43's
+#      attempts). Since red_sib_n(2) <= red_rounds(2), the per-PR count stands.
+#   5. RED_ROUNDS=2, RED_ROUNDS_KEY="PR #43" — the sibling mention is NOT counted.
+#   6. Two calls: `gh pr view 43` and `gh pr list --repo ... --state all --limit 100 --json ...`.
+pins:
+  - MP-T12
+name: ci-red-rounds-sibling-mention
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:round-evidence
+  - file:bridge.sh
+  - block:ci-red-rounds
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles
+  - IN_PR=43

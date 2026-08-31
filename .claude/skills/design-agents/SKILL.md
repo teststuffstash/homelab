@@ -59,6 +59,10 @@ Fixed cost beats itemized honesty here: ~110k tokens, pre-authorized, paid ONCE 
   authority — the board, the deployment env, the ConfigMap — before being reported, or is
   explicitly marked as-of-doc-date. Corpus prose describing live config is a claim about the
   world, and the world moves between doc edits (the cap read "3" for two weeks after the
-  deployment pinned 5).
+  deployment pinned 5). **The class includes RELAYED ASKS (design-agents-G3, 2026-08-30): a
+  machine-filed issue's demanded operator action is itself a live-state claim — verify it
+  against the domain's DECLARED record (App permissions: `docs/github-apps.yaml` + the `/apps`
+  matrix, where a quiet drift alert means declared == live) before repeating it as the
+  operator's to-do.** An escalation you forward unverified is an escalation you authored.
 - Everything else is inherited: state the negative on tracker greps, "no owning doc covers X" is
   a finding, assessments until the operator says land it.

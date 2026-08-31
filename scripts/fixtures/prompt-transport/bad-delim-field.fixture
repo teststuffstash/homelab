@@ -1,0 +1,8 @@
+# DELIM-FIELD positive controls — the retro r1 F2 family (homelab#930), as FIXTURE STRINGS.
+# The real pre-fix shapes: PR#631 r1 / PR#863 r1,r3 (unanchored var-headed probe of a
+# |-delimited table) and the -F variant where anchoring is impossible.
+MODEL="deepseek"
+row=$(grep -m1 "$MODEL|" agents/model-table.psv)          # EXPECT: DELIM-FIELD@5
+row=$(grep -F "$MODEL|" agents/model-table.psv)           # EXPECT: DELIM-FIELD@6
+row=$(grep -F "^$MODEL|" agents/model-table.psv)          # EXPECT: DELIM-FIELD@7
+tier=$(grep -m1 "${MODEL}|" tiers.psv | cut -d'|' -f2)    # EXPECT: DELIM-FIELD@8

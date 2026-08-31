@@ -65,7 +65,8 @@ if [ -n "$pick" ]; then
     ${pick_oid:+-f expected_head_sha="$pick_oid"} >/dev/null; then
     # 422 = conflict OR expected_head_sha race (homelab#986). Both are safe to skip: a race
     # preserves the concurrent push's commit; a conflict is caught by the DIRTY labeler (leg 3)
-    # on the next pass. Replayed: fixtures/updater `update-fail` and `race-422` rows.
+    # on the next pass. Replayed: fixtures/updater `update-fail` row (covers both race and
+    # conflict — the script deliberately no longer distinguishes them on 422, homelab#1007).
     echo "updater[$REPO]: update of #$pick failed (422) — skipping; next pass retries"
   fi
 else

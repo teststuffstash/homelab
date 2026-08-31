@@ -29,8 +29,8 @@
 # an auto-detect that falls back to "treat as report" would commit the raw log as the report,
 # the failure class this helper exists to close.
 #   log    — <in> is a RIDE LOG: BOTH markers are REQUIRED. The block between them is extracted
-#            with the harvest's OWN extraction command, verbatim —
-#            `sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' | sed '1d;$d'` — so the
+#            with the harvest's OWN extraction: the awk last-complete-block pass below
+#            (homelab#1096 — the old repeating sed range concatenated every block) — so the
 #            self-check and the harvest can never disagree about what a "report" is
 #            (agents/coordinator/retro-argo.yaml, both callers). Missing/partial markers →
 #            reason `no-markers`, whatever else the log contains.
@@ -66,7 +66,17 @@ if [ "$MODE" = "log" ]; then
   grep -q 'END-RETRO-REPORT' "$IN" && HAS_END=1
   if [ "$HAS_BEGIN" = 1 ] && [ "$HAS_END" = 1 ]; then
     # Complete marker pair — the harvest's own extraction, verbatim.
-    sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' "$IN" | sed '1d;$d' > "$TMP"
+    # homelab#1096: sed's repeating address range (/BEGIN/,/END/) matches EVERY block and
+    # everything BETWEEN them — empty template echoes and inter-block harness text land in the
+    # committed report. awk extracts only the LAST complete block, dropping intermediate markers
+    # and inter-block text. Both callers (retro-cell self-check and harvest) share this helper,
+    # so they can never disagree.
+    awk '
+      /BEGIN-RETRO-REPORT/ { buf = ""; inside = 1; next }
+      /END-RETRO-REPORT/   { inside = 0; last_block = buf; buf = ""; next }
+      inside               { buf = buf $0 ORS }
+      END                  { printf "%s", last_block }
+    ' "$IN" > "$TMP"
     CONTENT_SRC="$TMP"
   else
     # Zero or one marker: no complete report block exists in this log. A marker-less log is

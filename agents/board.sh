@@ -185,6 +185,73 @@ for repo in $repos; do
   fi
 done
 
+# ── platform-request slice: all repos across all stacks (ADR-119) ────────────
+# Lists open platform-request issues across ALL stack repos (the stacks_json
+# universe, not just the current stack), grouped by their Capability: body-line
+# fingerprint, with a per-fingerprint stack count and oldest age. The ≥2-stacks
+# generalization bar becomes a number. Deterministic gh reads only, REST.
+all_repos=""
+if [ -n "$KUBECTL" ]; then
+  kube_all="$($KUBECTL $KUBE get agentstacks.platform.teststuff.net -o json 2>/dev/null)" || kube_all=""
+  if [ -n "$kube_all" ]; then
+    all_repos="$(printf '%s' "$kube_all" | jq -r '[.items[].spec.repos[]?.name] | unique | .[]' 2>/dev/null || true)"
+  fi
+fi
+if [ -z "$all_repos" ]; then
+  echo "WARN board: all-stacks agentstacks read PROBE-FAILED — repos from $STACKS_FILE only" >&2
+  all_repos="$(jq -r '[.stacks[].repos[]?] | unique | .[]' "$STACKS_FILE" 2>/dev/null || true)"
+fi
+
+# Build stack→repo mapping from stacks.json
+stack_index="$(jq '[.stacks[] | {key: .name, value: .repos}] | from_entries' "$STACKS_FILE" 2>/dev/null || echo "{}")"
+
+# Collect platform-request issues across all repos
+demand_json="[]"
+for repo in $all_repos; do
+  case "$repo" in */*) slug="$repo";; *) slug="$ORG/$repo";; esac
+  preqs="$(gh issue list --repo "$slug" --state open --label "platform-request" --limit 50 --json number,title,createdAt,body,labels 2>/dev/null)" || preqs=""
+  jq -e . >/dev/null 2>&1 <<<"${preqs:-null}" || preqs=""
+  if [ -z "$preqs" ]; then
+    echo "WARN board: $slug platform-request probe PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" >&2
+    preqs="[]"; nfail=$((nfail + 1))
+  fi
+  if [ "$preqs" != "[]" ]; then
+    rstacks="$(printf '%s' "$stack_index" | jq -r --arg r "$repo" 'to_entries[] | select(.value | index($r)) | .key' | tr '\n' ',' | sed 's/,$//')"
+    [ -z "$rstacks" ] && rstacks="unknown"
+    demand_json="$(printf '%s' "$demand_json" | jq --argjson new "$preqs" --arg repo "$repo" --arg stacks "$rstacks" '. + ($new | map(. + {repo: $repo, stacks: $stacks}))')"
+  fi
+done
+
+# Group by capability fingerprint and format
+demand_section=""
+demand_rows=""
+if [ "$(printf '%s' "$demand_json" | jq 'length')" -gt 0 ]; then
+  groups="$(printf '%s' "$demand_json" | jq -c "$JQ"'[
+    .[] | select(haslab("platform-request"))] | group_by((.body | capture("(?im)^Capability:[ \t]+(?<cap>[^\\n]+)") | .cap) // "unknown")
+    | map({
+        capability: ((.[0].body | capture("(?im)^Capability:[ \t]+(?<cap>[^\\n]+)") | .cap) // "unknown"),
+        items: [.[] | {ref: "\(.repo)#\(.number)", title: .title, age: age, stacks: .stacks, created: (.createdAt | fromdateiso8601)}],
+        stack_count: ([.[].stacks | split(",") | .[]] | unique | length),
+        oldest_created: ([.[].createdAt | fromdateiso8601] | min)
+    })')"
+
+  # Human format: per-capability group with items and summary
+  demand_section="$(printf '%s' "$groups" | jq -r "$JQ"'[
+    .[] | {
+      cap: .capability,
+      lines: [(.items[] | "  \(.ref) \(.title) (\(.age))")],
+      oldest_days: ((now - .oldest_created) / 86400 | floor),
+      sc: .stack_count
+    }
+    | "\(.cap)\n\(.lines | join("\n"))\n  — \(.sc) stacks, oldest \(if .oldest_days < 1 then "<1d" else "\(.oldest_days)d" end)"
+  ] | .[]')"
+
+  # Machine format: one row per capability group
+  demand_rows="$(printf '%s' "$groups" | jq -r "$JQ"'
+    .[] | "who=operator class=platform-request capability=\(.capability) stacks=\(.stack_count) oldest=\(((now - .oldest_created) / 86400 | floor) as $d | if $d < 1 then "<1d" else "\($d)d" end)"
+  ')"
+fi
+
 # ── render ────────────────────────────────────────────────────────────────────
 mrepos="$(printf '%s' "$repos" | wc -w | tr -d ' ')"
 if [ -n "${BOARD_NOW:-}" ]; then hdr="$(date -u -d "@$BOARD_NOW" +%Y-%m-%dT%H:%M:%SZ)"; else hdr="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; fi
@@ -295,6 +362,12 @@ if [ "$machine" = 1 ]; then
   done <<< "$rows"
 
   [ "$had_rows" = 0 ] && echo "# no classified items from current tick"
+
+  # Emit platform-request rows (ADR-119)
+  if [ -n "$demand_rows" ]; then
+    printf '%s\n' "$demand_rows"
+  fi
+
   exit 0
 fi
 
@@ -306,11 +379,12 @@ echo "board — stack $stack ($mrepos repos) · $hdr"
 [ -n "$sec_triage" ] && { printf '\n§ TRIAGE\n'; printf '%s' "$sec_triage"; }
 [ -n "$sec_verdict" ] && { printf '\n§ VERDICT DUE\n'; printf '%s' "$sec_verdict"; }
 [ -n "$sec_backlog" ] && { printf '\n§ BACKLOG (suitable, unqueued)\n'; printf '%s' "$sec_backlog"; }
+[ -n "$demand_section" ] && { printf '\n§ DEMAND (platform-request)\n'; printf '%s\n' "$demand_section"; }
 
 cnt() { printf '%s' "$1" | grep -c '[^[:space:]]' 2>/dev/null || true; }
-nreview="$(cnt "$sec_review")"; nfix="$(cnt "$sec_fix")"; nsolve="$(cnt "$sec_solve")"; ntriage="$(cnt "$sec_triage")"; nverdict="$(cnt "$sec_verdict")"
-printf '\ntotals — review: %s · fix: %s · solve: %s · triage: %s · verdict-due: %s · backlog: %s\n' \
-  "$nreview" "$nfix" "$nsolve" "$ntriage" "$nverdict" "$nback"
+nreview="$(cnt "$sec_review")"; nfix="$(cnt "$sec_fix")"; nsolve="$(cnt "$sec_solve")"; ntriage="$(cnt "$sec_triage")"; nverdict="$(cnt "$sec_verdict")"; ndemand="$(printf '%s' "$demand_section" | grep -c '^[^ 	]' 2>/dev/null || true)"
+printf '\ntotals — review: %s · fix: %s · solve: %s · triage: %s · verdict-due: %s · backlog: %s · demand: %s\n' \
+  "$nreview" "$nfix" "$nsolve" "$ntriage" "$nverdict" "$nback" "$ndemand"
 if [ "$nfail" -gt 0 ]; then
   echo "⚠ $nfail repo fetch(es) failed — the totals above may be incomplete (see WARN on stderr)"
 fi

@@ -37,6 +37,7 @@ diagram: |
       InProgress --> MergedIntoGoal: PR merges into goal/** — keyword INERT (IL-T08)
       MergedIntoGoal --> ClosedByMerge: FU-143 widened C6 closes it (IL-T08)
       ClosedByMerge --> Done: merged-closeout — verify, flip, harvest (IL-T09)
+      ClosedByMerge --> Done: stale label, persisted → scan reconciles it (IL-T28)
       Done --> [*]
       state GoalLane {
           [*] --> GoalQueued: human authors AND queues (breaker up, IL-T10)
@@ -326,6 +327,27 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "a human gate is never re-dispatched" }
     incidents:
       - "2026-08-09 homelab#778: PR#790 closed unmerged at the fan-out pilot's close — 18h56m stall, invisible to every scan class until a goal checkpoint hand-corrected it, holding a flip criterion"
+
+  - id: IL-T28
+    name: phantom done reconciled — closed issue + merged PR + stale label → agent/done (the belt)
+    owner: coordinator-scan, deterministically — no LLM tick in the path
+    when: "CLOSED ∧ agent-fix ∧ (agent/blocked ∨ agent/review) ∧ a MERGED PR mentions the issue ∧ the state PERSISTED past C4C5_PERSIST_S (issue quiet) → add agent/done, remove the stale label, comment the audit. Bookkeeping on dead state: the issue is already CLOSED, so a wrong flip costs a mislabeled closed issue, not a duplicate ride. The merged-closeout clause (C6) is the primary path; this belt catches cases where C6 was skipped."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/done-phantom-belt
+    guards:
+      - desc: "persistence guard — never actuate on the same instant of state the scan first saw"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_PERSIST_S" }
+      - desc: "merged-PR requirement — without a merged PR mentioning the issue, the close may be unrelated to agent work; holding beats guessing"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "NOT mentioned by any merged PR" }
+      - desc: "add agent/done FIRST, remove the stale label SECOND, then re-read and prove the end state (the edit is not atomic — IL-T16's lesson)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "ORDER IS LOAD-BEARING" }
+      - desc: "probe failure holds every candidate and writes nothing (rule #6 — never fail INTO a write)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "the phantom-label belt held every candidate" }
+      - desc: "human-gate exclusion — agent/error is never auto-relabeled by the belt"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "agent/error" }
+    incidents:
+      - "retro r2 F5: four closed issues wearing agent/blocked or agent/review — #913 (PR#915 merged, 14 reviews ending in two APPROVED), #625 (PR#631), #270 (PR#275), #148 (PR#150). The ledger derived terminal_label from the label, so #913 and #625 entered r2's deep-dive set at ranks 1 and 5 AS FAILURES while both are merged work — 2 of 8 deep-dive slots burned on label debt."
 
   - id: IL-T07
     name: close by master merge
