@@ -30,6 +30,80 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ── #518 wall-time structure (operator-direct 2026-08-31): the two heavy suites and the
+      # pin-bump mirror pre-warm run in the BACKGROUND, overlapping the serial small steps, and
+      # are collected at the end of the job — wall ≈ max(heaviest, serial chain) instead of the
+      # sum (measured serial shape: prometheus-rules-lint 112–126s + clause-replay 71–79s +
+      # smalls ~60s; pre-warm +386s on pin bumps). The heavies also SKIP when the changeset
+      # cannot affect them — via step-level `if:` on the changed-paths map below, NEVER via
+      # workflow `on.paths` (a filtered-out workflow reports no `ci` context and the strict
+      # ruleset blocks the merge forever — the header rule stands). Background processes
+      # survive step boundaries within a job; each writes <name>.rc when done and its collect
+      # step replays the log and exits with it, so failure attribution stays per-suite.
+      # Changed-paths via the API, not git — the checkout is shallow (the ADR-103 ratchet
+      # learned this on #214).
+      # The warm-up below MUST come first on every event: devbox's first run creates the venv
+      # non-atomically, and two concurrent first runs die on EEXIST — proven by this
+      # structure's own verification dispatch (run 33409776004, 2026-08-31: the ∥ starts
+      # raced validate-pins because the PR-only diff step had skipped).
+      - name: Warm the devbox closure (once, before anything runs ∥)
+        run: devbox run -- true
+
+      - name: Changed paths (skip map for the background suites)
+        id: diff
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
+            --paginate --jq '.[].filename' > /tmp/ci-changed-files
+          prom=false; clause=false
+          # prometheus-rules-lint reads every PrometheusRule under argocd/ + tofu/ AND
+          # drift-pins the hand-copy fixture files against their CRs — the honest trigger
+          # set is the whole manifest tree, not "files named prometheus".
+          grep -qE '^(argocd/|tofu/|scripts/prometheus-rules-lint\.sh|devbox\.(json|lock)$)' /tmp/ci-changed-files && prom=true
+          # clause-replay extracts its clause blocks from agents/ scripts + manifests and
+          # replays fixtures under agents/replay/ — all of it lives under agents/.
+          grep -qE '^(agents/|devbox\.(json|lock)$)' /tmp/ci-changed-files && clause=true
+          { echo "prom=$prom"; echo "clause=$clause"; } >> "$GITHUB_OUTPUT"
+          echo "skip map: prometheus-rules-lint=$prom clause-replay=$clause ($(grep -c . /tmp/ci-changed-files) changed file(s))"
+
+      # FU-158 (operator ruling 2026-08-11: promtool over more per-file self-tests): every
+      # PrometheusRule's exprs must parse — kubeconform SKIPS the kind, so this is the only
+      # form gate the ~44 alert rules have. Runs ∥; verdict at "— collect" below.
+      - name: PrometheusRule exprs parse — start ∥ (devbox run prometheus-rules-lint)
+        if: github.event_name != 'pull_request' || steps.diff.outputs.prom == 'true'
+        run: |
+          # detach fully (own fds, no step pipes) — a leaked step fd can hold the step open
+          ( devbox run prometheus-rules-lint; echo $? > /tmp/prom-lint.rc ) > /tmp/prom-lint.log 2>&1 < /dev/null &
+
+      # ADR-103 leg 1: every committed clause replay executes on every push — the generalized
+      # harness (agents/replay/, homelab#206). Runs ∥; verdict at "— collect" below.
+      - name: Clause replays — start ∥ (devbox run clause-replay)
+        if: github.event_name != 'pull_request' || steps.diff.outputs.clause == 'true'
+        run: |
+          ( devbox run clause-replay; echo $? > /tmp/clause-replay.rc ) > /tmp/clause-replay.log 2>&1 < /dev/null &
+
+      # Mirror pre-warm (#80): when THIS PR changes the runner-image pin, pull the new image's
+      # blobs through the LAN ghcr mirror once while CI gates the merge — the ≤maxRunners node
+      # herd after the ArgoCD flip then hits a warm cache (pure reads), instead of N concurrent
+      # multi-GB _uploads streams (the #80 ENOSPC storm: pin merge → disk full in 36 min).
+      # Sits INSIDE the required `ci` job so warm-before-flip ordering is structural — that is
+      # why it is backgrounded here rather than moved to a non-required job (#518): the merge
+      # must still wait for the warm, it just no longer waits for the warm AND everything else
+      # in sequence. Failure must not block a runner update (collect is continue-on-error):
+      # nodes fall back to upstream ghcr, and the mirror alerts own that failure mode.
+      - name: Pre-warm the ghcr mirror on a runner-image pin bump (#80) — start ∥
+        if: github.event_name == 'pull_request'
+        run: |
+          if grep -qx "argocd/platform/arc-runners.yaml" /tmp/ci-changed-files; then
+            IMAGE="$(grep -oE 'ghcr\.io/[^" ]*/arc-runner:[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]{12}' argocd/platform/arc-runners.yaml | head -1)"
+            ( bash scripts/warm-registry-mirror.sh "$IMAGE"; echo $? > /tmp/mirror-warm.rc ) > /tmp/mirror-warm.log 2>&1 < /dev/null &
+          else
+            echo "runner pin untouched — skipping"
+            echo 0 > /tmp/mirror-warm.rc; echo "(pin untouched — no warm ran)" > /tmp/mirror-warm.log
+          fi
+
       # No toolchain install: the runner image (docker/arc-runner/, FU-015) bakes single-user
       # Nix + devbox + the LAN nix substituter. `devbox run` fetches the project closure from
       # the in-cluster cache on first use.
@@ -93,11 +167,6 @@ jobs:
       # time, replaying the PR#234 five-rides-on-frozen-state sequence. 88 assertions, ~1s.
       - name: State-fingerprint debounce replay (devbox run state-fp-replay)
         run: devbox run state-fp-replay
-
-      # ADR-103 leg 1: every committed clause replay executes on every push — the generalized
-      # harness (agents/replay/, homelab#206). Fixtures are offline recordings; ~seconds.
-      - name: Clause replays (devbox run clause-replay)
-        run: devbox run clause-replay
 
       # The ADR-103 RATCHET: a PR that changes clause-carrying files without touching any replay
       # fixture is red. This does not prove the fixture COVERS the change — it forces the author
@@ -176,12 +245,6 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
 
-      # FU-158 (operator ruling 2026-08-11: promtool over more per-file self-tests): every
-      # PrometheusRule's exprs must parse — kubeconform SKIPS the kind, so this is the only
-      # form gate the ~44 alert rules have. Behaviour tests (promtool test rules) = the
-      # remaining FU-158 leg.
-      - name: PrometheusRule exprs parse (devbox run prometheus-rules-lint)
-        run: devbox run prometheus-rules-lint
       - name: machines/generate.py outputs current (devbox run machines-lint)
         run: devbox run machines-lint
 
@@ -243,20 +306,33 @@ jobs:
       - name: Mermaid parse lint (devbox run mermaid-lint)
         run: devbox run mermaid-lint
 
-      # Mirror pre-warm (#80): when THIS PR changes the runner-image pin, pull the new image's
-      # blobs through the LAN ghcr mirror once while CI gates the merge — the ≤maxRunners node
-      # herd after the ArgoCD flip then hits a warm cache (pure reads), instead of N concurrent
-      # multi-GB _uploads streams (the #80 ENOSPC storm: pin merge → disk full in 36 min).
-      # Sits INSIDE the required `ci` job so warm-before-flip ordering is structural.
-      # continue-on-error: a mirror outage must not block a runner update — nodes fall back to
-      # upstream ghcr, and RegistryMirrorCacheAlmostFull/mirror alerts own that failure mode.
-      - name: Pre-warm the ghcr mirror on a runner-image pin bump (#80)
+      # ── collect the ∥ suites started at the top of the job (#518). Each waits for its rc
+      # file, replays the full log, and exits with the suite's own code — a hung/killed
+      # background run fails loudly at the timeout instead of hanging the job to its 6h default.
+      - name: Clause replays — collect (started ∥ above)
+        if: github.event_name != 'pull_request' || steps.diff.outputs.clause == 'true'
+        run: |
+          for i in $(seq 1 600); do [ -f /tmp/clause-replay.rc ] && break; sleep 1; done
+          [ -f /tmp/clause-replay.rc ] || { echo "::error::clause-replay never finished (background run died?)"; cat /tmp/clause-replay.log 2>/dev/null; exit 1; }
+          cat /tmp/clause-replay.log
+          exit "$(cat /tmp/clause-replay.rc)"
+
+      # FU-158: behaviour tests (promtool test rules) ride the same script — see the start step.
+      - name: PrometheusRule exprs parse — collect (started ∥ above)
+        if: github.event_name != 'pull_request' || steps.diff.outputs.prom == 'true'
+        run: |
+          for i in $(seq 1 900); do [ -f /tmp/prom-lint.rc ] && break; sleep 1; done
+          [ -f /tmp/prom-lint.rc ] || { echo "::error::prometheus-rules-lint never finished (background run died?)"; cat /tmp/prom-lint.log 2>/dev/null; exit 1; }
+          cat /tmp/prom-lint.log
+          exit "$(cat /tmp/prom-lint.rc)"
+
+      # continue-on-error: a mirror outage must not block a runner update (#80 — see the start
+      # step for why this still gates the merge at all).
+      - name: Pre-warm the ghcr mirror — collect (started ∥ above)
         if: github.event_name == 'pull_request'
         continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr diff "${{ github.event.pull_request.number }}" --name-only \
-            | grep -qx "argocd/platform/arc-runners.yaml" || { echo "runner pin untouched — skipping"; exit 0; }
-          IMAGE="$(grep -oE 'ghcr\.io/[^" ]*/arc-runner:[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]{12}' argocd/platform/arc-runners.yaml | head -1)"
-          bash scripts/warm-registry-mirror.sh "$IMAGE"
+          for i in $(seq 1 1200); do [ -f /tmp/mirror-warm.rc ] && break; sleep 1; done
+          [ -f /tmp/mirror-warm.rc ] || { echo "::error::mirror pre-warm never finished"; cat /tmp/mirror-warm.log 2>/dev/null; exit 1; }
+          cat /tmp/mirror-warm.log
+          exit "$(cat /tmp/mirror-warm.rc)"
