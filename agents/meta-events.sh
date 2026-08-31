@@ -166,7 +166,12 @@ src_famine() {
   awk -v v="$v" 'BEGIN{exit !(v>=8)}' && level=high
   [ "$prev" = high ] && awk -v v="$v" 'BEGIN{exit !(v<=2)}' && level=ok
   echo "$level" > "$STATE/famine.level"
-  if [ "$level" = high ]; then printf 'FAMINE|convoy|pending workflows ≥8 (now %s)\n' "$v" > "$tmp"; else : > "$tmp"; fi
+  # STABLE set-line key (the meta-state watch-noise candidate, proven live 3× on 2026-08-31
+  # morning): embedding the live count re-keyed the line on every count DELTA, emitting a
+  # clear+event pair while the level never dropped — the alert-source keyed-on-identity rule
+  # applied here. The count lives in the state file for anyone who asks; the line is the edge.
+  echo "$v" > "$STATE/famine.count"
+  if [ "$level" = high ]; then printf 'FAMINE|convoy|pending workflows past the >=8 raise threshold (live count: famine.count in the state dir)\n' > "$tmp"; else : > "$tmp"; fi
   diff_source famine "$tmp"; rm -f "$tmp"
 }
 
