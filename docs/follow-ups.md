@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-198** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-199** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -597,6 +597,17 @@ the block needs pruning, not more headings.
       acceptance. Relates FU-095, FU-090(c), ADR-104.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
+
+- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: GC'd workflows leak their sync
+      locks and Pending piles up silently** (2026-08-31, operator-spotted on the dashboards:
+      claude semaphore 5/5 with 1 real runner, `coordinator-scan` mutex held by a GC-deleted
+      workflow, 56 coordinate ticks Pending ~1h; controller restart rebuilt lock state and
+      drained it in minutes). Postmortem + belt audit:
+      [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
+      **Next:** an alert on the wedge shape — Argo's Pending count high-and-not-draining while
+      `anthropic_subscription_semaphore_running` ≈ 0 (verify the controller metrics scrape
+      first) — into `argo-workflows-alerts` with promtool cover; and check upstream argo for a
+      GC-release fix (`v4.0.7` today) before any bump. Relates FU-187 (sibling belt-blindness).
 
 - [ ] **FU-187** — **Quiet-stall detection: a Running agent pod with a silent rail is invisible
       to every belt** (issue-272-r1, 2026-08-26: opencode slept ~3h on a black-holed proxy IP,
