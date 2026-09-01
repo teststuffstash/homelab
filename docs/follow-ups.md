@@ -387,26 +387,17 @@ the block needs pruning, not more headings.
       couples FU-170). Design home lands with the build: model-routing.md §effort (beside M11).
 
 - [ ] **FU-201** — **The arbitrate "re-dispatch stronger" verdict has no carrier to the router**
-      (operator, 2026-09-01: "coordinator wanted a better model; our router has a lot of
-      capabilities; they did not meet"). MP-T13 + the brief promise the play; chainless deleted
-      the chain-walk that once carried it and ADR-094 bars freelancing a model id — nothing
-      replaced the verb. #459/PR#1192: 3 flash rounds + 3 reviews + an opus arbitration + a seat
-      sitting, then a PARK — the direction-4 inverted composition — while route() already honors
-      a label-borne class (`explicit > label_map > role_defaults`; labels ride the /route body).
-      **RE-SCOPED (operator ruling, 2026-09-01 — "flesh out the existing things first"): the
-      carrier is the EXISTING size label, no new vocabulary.** The coordinator↔router contract:
-      the coordinator's routing verb is the ISSUE LABEL (labels ride /route since PR#408;
-      label_map is the one git home of meaning; size labels already steer the budget side).
-      **Next:** (a) escalation = size RE-GRADE — the arbitrate/breaker plays bump
-      `agent-budget/*` (sm→lg); label_map gains md/lg rows (lg → capability-floor raise +
-      never-free; + FU-174 effort when built); (b) a brief section naming the label vocabulary
-      per play (cites label_map, never copies); (c) the PROVIDER leg outranks model class —
-      strikes gain the served-provider column and a serving-shaped strike excludes the
-      (model, provider) pair on the same-task re-pick (the #783 banked legs; quantization/
-      tool-error quality = FU-186/ADR-115 pin-v2 + M14 pair-cooldowns, chartered there).
-      `task/build`'s strike correlation is NOTED and rejected as a routing basis (operator);
-      `model/strong`/`coding-strong` dropped. Attempt-count auto-escalation stays banked
-      pending M8 feed-4. Relates FU-174, FU-186, ADR-094/096/115. — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
+      (operator, 2026-09-01: "they did not meet") — chainless deleted the chain-walk, ADR-094
+      bars freelancing a model id, and #459/#329 both PARKED human-first while route() already
+      honors label-borne class (labels ride /route bodies; label_map is the git home).
+      **Ruled same day ("flesh out the existing things"): the carrier is the EXISTING size
+      label.** **Next:** (a) escalation = `agent-budget/*` RE-GRADE by the arbitrate/breaker
+      plays; label_map gains md/lg rows (lg → floor raise + never-free; FU-174 effort later);
+      (b) a brief section naming the label vocabulary per play (cites label_map, never copies);
+      (c) provider outranks model class — strikes gain the served-provider column, serving-shaped
+      strikes exclude the (model, provider) pair on re-pick (#783 legs; quality = FU-186/ADR-115
+      pin-v2 + M14 pair-cooldowns). Rejected: task/build as routing basis, `model/strong`,
+      attempt-count auto-escalation (banked, feed-4). Relates FU-174, FU-186, ADR-094/096/115. — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
       The #447 review ran 47 min (kimi-k3, **$6.33** — balance regime, FU-170); the dispatch-time
       installation token 401'd ~07:50Z BEFORE the verdict posted — a full CHANGES_REQUESTED lost
       (recoverable: S3 reviewer-r1 transcript + pod log); `/var/run/reviewer-git/` never refreshes
@@ -466,30 +457,16 @@ the block needs pruning, not more headings.
       ported 2026-08-07 (operator, oracle-fleet#173). **Next:** the sleep-tracking recipes —
       the donor for the next `new-stack --from` must already have it. Relates FU-114.
 
-- [ ] **FU-199** — **A round-1 strike on a goal child parks the child AND its footprint
-      neighbours until a human reads the scan** — the C4/C5 goal-child hold (`coordinator-scan.sh`
-      `ambig`, FU-143 / IL-G06 hold-not-guess) fires on any goal-based `agent/in-progress` issue no
-      PR cites, never reading the `AGENT_STRIKE` + `Resumable branch pushed:` comment finalize
-      wrote — the evidence that decides "abandoned, resume" vs "merged-unlinked". Twice in 24h:
-      oracle-fleet#329 (2026-08-31) and homelab#1149 (2026-09-01: struck 10:30Z, held ~2h at 0/2
-      WIP while #1150/#1151/#1188 waited on its footprint; seat re-queued by hand). **THIRD
-      sighting 2026-09-01 (design-agents sitting, operator report "loop frozen"):**
-      oracle-fleet#329 retry-2 struck 12:27Z WITH `Resumable branch pushed:
-      fix/issue-329-alerts-as-code` on the thread — held ~4h at 0 WIP; #337 (no `Touches:` =
-      exclusive) queued behind it; seat re-queued + rang 16:38Z. Same sighting adds the
-      INVISIBILITY half: the hold pushes item-class `held-merged-unlinked` even when NO merged
-      PR mentions the issue (scan `ambig` block — the class name asserts absent evidence), and
-      the footprint-held sibling gets no `who=operator` row at all (`queued-held-by-ghost` keys
-      on blockedBy ghosts only), so `AgentAttentionStanding` sees neither. **Next:**
-      narrow the hold — strike + resumable branch ⇒ the ordinary C4/C5 unit (`--work-branch` it);
-      no strike ⇒ hold as today; + an honest class row for the residue (strike-held, who=operator)
-      and footprint-hold-by-a-held-item joining the hold-chain propagation rule. **FOURTH face
-      (2026-09-01 homelab board freeze):** the TRACKS-rule-1 PR-cap hold is the same invisibility
-      — 3 armed master PRs all human-waiting (2 codeowner parks + 1 operator CR) capped every
-      master-lane dispatch, the ⏳ PR-budget line died in a GC'd pod log, the held issue pushed
-      NO item-class row; the propagation leg extends to cap-held-by-human-waiting-PRs ⇒
-      who=operator + one aggregate row. A Goal #1162 scan-theme (#1163) sprout (fix half =
-      #1203). Relates FU-187 (the no-strike inverse), FU-143.
+- [ ] **FU-199** — **Silent holds freeze whole lanes invisibly.** Four faces in ~48h: the C4/C5
+      goal-child hold never reads the `AGENT_STRIKE` + `Resumable branch pushed:` evidence
+      finalize wrote (oracle#329 ×2, homelab#1149 — struck children held hours, footprints
+      freezing siblings); the hold pushes class `held-merged-unlinked` with zero merged
+      mentions; footprint-held siblings get no `who=operator` row; and the TRACKS-rule-1
+      PR-cap hold (3 human-waiting master PRs, 2026-09-01 board freeze) held every dispatch
+      with its ⏳ line dying in GC'd pod logs. **Next:** hold-narrowing (strike + branch ⇒
+      ordinary C4/C5 `--work-branch` unit) = #1203/PR#1206, riding; residue = honest class rows
+      (strike-held) + hold-chain propagation extended to footprint-holds-by-held-items and
+      cap-held-by-human-waiting-PRs ⇒ who=operator + aggregate. Relates FU-187, FU-143.
 
 - [ ] **FU-200** — **The brief's fleet-strike rule has no deterministic reader.** "Same
       `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h ⇒ ONE
