@@ -1,0 +1,9 @@
+CALL gh api repos/teststuffstash/homelab/issues/330/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
+OUT RESUMABLE <empty>
+OUT UNIT c4c5-redispatch|homelab|issue-330|fix
+OUT ORPHAN [homelab] ⛔ goal child in an undecidable state — C4/C5 held rather than guessing:
+OUT ORPHAN   issue #329 — oracle: exclusive-held behind a stale agent/in-progress (FU-199) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]
+OUT V2   issue #330 — scan: the janitor tick drops its exit code [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT REACHED: end
+RC 0
