@@ -204,6 +204,20 @@ jobs:
           changed=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq '.[].filename')
           clause=$(printf '%s\n' "$changed" | grep -E '^agents/(model-scout\.sh|coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|agent-session\.sh|retro-session\.sh|argv-guard\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo)\.ya?ml)$' || true)
           replay=$(printf '%s\n' "$changed" | grep -E '^agents/replay/' || true)
+          # homelab#1028: `mode: suite` fixtures name an ENTRYPOINT outside agents/replay/
+          # (agents/asvs-replay.sh, agents/slo-teeth-replay.sh, …). Growing one IS the replay
+          # work this ratchet demands, and the tree grep alone scored it zero — PR#980 grew the
+          # asvs suite by six cases and was ruled "NO replay change", teaching the cosmetic
+          # header-edit workaround the gate exists to prevent. Union the entrypoint paths
+          # harvested from every fixture.yaml (one home: the fixtures declare them).
+          entrypoints=$(grep -rhoE '^entrypoint:[[:space:]]*[^[:space:]]+' agents/replay/fixtures --include=fixture.yaml | sed -E 's/^entrypoint:[[:space:]]*//' | sort -u || true)
+          if [ -n "$entrypoints" ]; then
+            suite_hits=$(printf '%s\n' "$changed" | grep -Fxf <(printf '%s\n' "$entrypoints") || true)
+            if [ -n "$suite_hits" ]; then
+              echo "ratchet: suite-entrypoint replay change(s) counted (homelab#1028):"; printf '  %s\n' $suite_hits
+              replay="${replay:+$replay$'\n'}$suite_hits"
+            fi
+          fi
           # Pin-bump carve-out (found on PR#236, 2026-08-11): reflexes-argo.yaml is BOTH a ratchet
           # clause file AND a pin-only-lint guarded file — a pin-only diff changes no action stream
           # (the canonical "no fixture can apply" case) and pin-only-lint is already its gate.
@@ -232,6 +246,46 @@ jobs:
             printf '%s\n' "$clause"
             echo "Add/extend a fixture under agents/replay/fixtures/ (or record why none applies IN a fixture README diff)."
             exit 1
+          fi
+          # PIN-VACUITY (homelab#1107 — the retro's twice-proposed next gate, r1 + r2): a fixture
+          # that also PASSES against the PRE-FIX source pins nothing (PR#1074 claimed the bar and
+          # shipped a pin that no longer reproduced its bug; 4 blocking verdicts in one retro
+          # window). When a clause changed AND fixtures changed, each changed fixture dir is run
+          # by the BASE tree's harness (base sources, base worlds) — it must NOT pass there.
+          # Proven on PR#1157's ci-red-rerun-wake: rc=1 against af79feac, rc=0 on HEAD.
+          # Caveat, stated: a fixture whose PR also re-records its WORLD may fail on base for the
+          # world's sake rather than the source's — the gate then reads "not vacuous" (false-OK,
+          # the safe direction); suite-entrypoint fixtures are self-asserting and not run here.
+          if [ -n "$clause" ] && [ -n "$replay" ]; then
+            fxdirs=""
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              case "$f" in agents/replay/fixtures/*) ;; *) continue ;; esac
+              d=$(dirname "$f")
+              while [ "$d" != "agents/replay/fixtures" ] && [ "$d" != "." ] && [ ! -f "$d/fixture.yaml" ]; do d=$(dirname "$d"); done
+              [ -f "$d/fixture.yaml" ] && fxdirs="${fxdirs}${d}"$'\n'
+            done <<< "$changed"
+            fxdirs=$(printf '%s' "$fxdirs" | sort -u)
+            if [ -n "$fxdirs" ]; then
+              git fetch -q --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+              rm -rf /tmp/ratchet-base; git worktree add -q /tmp/ratchet-base FETCH_HEAD
+              vacuous=""
+              while IFS= read -r d; do
+                [ -n "$d" ] || continue
+                if ( source /tmp/devbox-env.sh && bash /tmp/ratchet-base/agents/replay/run.sh "$PWD/$d" ) > /tmp/ratchet-base.log 2>&1; then
+                  vacuous="${vacuous}${d}"$'\n'
+                else
+                  echo "ratchet: pin-vacuity — $d fails against the pre-fix source (pins something)"
+                fi
+              done <<< "$fxdirs"
+              git worktree remove --force /tmp/ratchet-base
+              if [ -n "$vacuous" ]; then
+                echo "::error::ADR-103 pin-vacuity (homelab#1107): these changed fixtures PASS against the PRE-FIX source — a pin that passes without the fix pins nothing:"
+                printf '  %s\n' $vacuous
+                echo "Re-record the world or tighten expected/actions.txt so the fixture reds on the base tree and greens on this PR."
+                exit 1
+              fi
+            fi
           fi
           echo "ratchet: ok (clause files: $(printf '%s' "$clause" | grep -c . || true), replay files touched: $(printf '%s' "$replay" | grep -c . || true))"
 
@@ -262,6 +316,9 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          # homelab#1036 — the assembly-lane arm reads these (goal/** head + Assembly-for: trailer)
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
 
       - name: machines/generate.py outputs current (devbox run machines-lint)
         run: devbox run machines-lint
