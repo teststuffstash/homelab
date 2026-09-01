@@ -3,8 +3,6 @@
 # comment has appeared since the marker. The contract is that the clause reports "BLOCKED-ON"
 # instead of dispatching a unit: the blocked-on predicate (homelab#1188) suppresses re-dispatch
 # while the named blocker is still unresolved.
-pins:
-  - homelab#1188
 name: arbitrate-blocked-on-human-still-blocked
 mode: actions
 source: agents/coordinator-scan.sh

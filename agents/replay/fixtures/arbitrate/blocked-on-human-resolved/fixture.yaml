@@ -3,8 +3,6 @@
 # is resolved. The contract is that the clause dispatches the unit: the blocked-on predicate
 # (homelab#1188) clears when a human engages, and the state-fp debounce has nothing recorded yet
 # (first tick), so the unit is emitted.
-pins:
-  - homelab#1188
 name: arbitrate-blocked-on-human-resolved
 mode: actions
 source: agents/coordinator-scan.sh
