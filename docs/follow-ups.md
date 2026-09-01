@@ -458,15 +458,15 @@ the block needs pruning, not more headings.
       the donor for the next `new-stack --from` must already have it. Relates FU-114.
 
 - [ ] **FU-199** — **Silent holds freeze whole lanes invisibly.** Four faces in ~48h: the C4/C5
-      goal-child hold never reads the `AGENT_STRIKE` + `Resumable branch pushed:` evidence
-      finalize wrote (oracle#329 ×2, homelab#1149 — struck children held hours, footprints
-      freezing siblings); the hold pushes class `held-merged-unlinked` with zero merged
-      mentions; footprint-held siblings get no `who=operator` row; and the TRACKS-rule-1
-      PR-cap hold (3 human-waiting master PRs, 2026-09-01 board freeze) held every dispatch
-      with its ⏳ line dying in GC'd pod logs. **Next:** hold-narrowing (strike + branch ⇒
-      ordinary C4/C5 `--work-branch` unit) = #1203/PR#1206, riding; residue = honest class rows
-      (strike-held) + hold-chain propagation extended to footprint-holds-by-held-items and
-      cap-held-by-human-waiting-PRs ⇒ who=operator + aggregate. Relates FU-187, FU-143.
+      goal-child hold never read the strike + resumable-branch evidence (oracle#329 ×2,
+      homelab#1149 — struck children held hours, footprints freezing siblings); class
+      `held-merged-unlinked` misnamed; footprint-held siblings got no `who=operator` row; the
+      PR-cap hold (3 human-waiting PRs, the 2026-09-01 board freeze) held every dispatch.
+      **Next:** hold-narrowing = #1203/PR#1206 merged (#1210 pins it); residue = honest
+      strike-held rows + hold-chain propagation (footprint/cap-held ⇒ who=operator + aggregate)
+      + the CAP SPLIT (v1.3.1 delta 1, issue-authoring.md 2026-09-01): the dispatch cap counts
+      only machine-flowing PRs — human-waiting parks get their own bound + BLOCKPARK.
+      Relates FU-187, FU-143, homelab#887.
 
 - [ ] **FU-200** — **The brief's fleet-strike rule has no deterministic reader.** "Same
       `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h ⇒ ONE
