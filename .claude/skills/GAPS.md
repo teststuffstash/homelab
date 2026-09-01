@@ -58,7 +58,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       malformed input from a documented authoring surface is evidence about the surface, not a
       chore. Sighted 2026-09-01 (operator catch); the same session had ALREADY applied the
       lesson once (#1069's recipe paste → the launcher prefetch mechanism) and still reverted to
-      the instance fix on the next case.
+      the instance fix on the next case. **RESIGHT 2026-09-01 (operator catch, third in 24h):**
+      the seat executed PR#1192's ~10-line completion and presented it as the durable fix, while
+      the operator wanted the SURFACE — the arbitrate "re-dispatch stronger" verdict has no
+      carrier to the router ("they did not meet") → FU-201. The hand edit was sanctioned as the
+      un-wedge; presenting it as the fix was the gap.
 - [ ] design-agents-G2 — a lifecycle LABEL was reported as activity ("#833 is riding —
       in-progress") from a live `gh` read alone: the label is a CLAIM, and the state is the
       JOIN (label × live pod × PR state) — the issue's PR had merged 8h earlier with no pod

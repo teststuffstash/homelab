@@ -6030,3 +6030,130 @@ first live ADR-110 maintenance session before the ADR existed.
   behind #328's footprint. oracle-fleet#330 CLOSED `agent/done` (PR#333 merged 10:56Z, harvest
   ran). Both production-leg halves + the reviewer arm relayed to homelab#1039 (two comments).
   WIND-DOWN: monitors killed, one lint-gated push of the batched bookkeeping.
+
+## 2026-09-01 — mechanical session (no corpus): homelab goal-lane wedge — #1149 strike-hold read out, re-queued
+
+- 12:00–12:06Z: operator asked why the platform loop dispatches no homelab workers with only two
+  codeowner parks (#1179, #1191) on the board. Scan pods are GC'd; read the 11:30Z + 12:00Z
+  `coordinate-platform` logs from Loki (tenant `platform-agents`). Not capacity — 0/2 WIP live.
+  All five `agent/queued` homelab issues HELD: **#1149** (`agent/in-progress`, Base
+  `goal/1162-scan`, Touches `coordinator-scan.sh`) struck r1 10:30Z (deepseek-v4-flash;
+  clause-replay fixture `sprout-report-skips-buckets` has no `fixture.yaml`), resumable branch
+  `agent/20260901-100102`, no PR → the C4/C5 goal-child hold printed "undecidable, re-queue by
+  hand" every tick while the stale in-progress held the ADR-097 footprint on
+  `coordinator-scan.sh`; **#1150/#1151/#1188** footprint-held behind it, **#1153** blocked-by
+  #1151; **#459** `agent/blocked` (PR#1192 CHANGES_REQUESTED round 3 — human gate, by design);
+  **#1056** pin-only guarded path (`reflexes-argo.yaml`) — needs re-scope. Verified
+  `goal/1162-scan` carries only #1171/#1173 merged, neither cites #1149 ⇒ abandoned r1, not
+  merged-unlinked. Re-queued #1149 (`agent/queued`, note names the resumable branch for r2),
+  rung `platform` once 12:04Z. Second sighting of the strike-hold shape in 24h (oracle-fleet#329
+  yesterday, "FU-shaped if it resights") → **FU-199 filed** (Dispatch section): strike +
+  resumable branch ⇒ decidable, route to the ordinary C4/C5 unit. Siblings serialize on the
+  same file by design — one at a time is progress, not a wedge.
+- 12:15–12:25Z: operator asked whether a Touches validator at filing time is tracked ("these
+  keep burning coordinator rides"). Retrieval: **yes** — #309 (pin-only pre-dispatch hold, DONE;
+  it is what held #1056 at ZERO rides), #808 (body-vs-Touches, DONE), **#1151** (leg 1 of
+  #1102: `classify_touches()` one-home + scan operator-lane hold — the class that still burns
+  rides), PR#1183 `goal-lint` (Goals only). No issue-opened edge exists; the 30-min scan is the
+  de-facto edge and its verdict never reaches the filer. Commented the resight + a "consumer 3
+  = the filing doors" scope note on #1151 (extend, no parallel item). #1056 is OPERATOR-filed
+  (oracle jail, 2026-08-30 — not bot-filed as first said); its `agents/coordinator/*.yaml` glob
+  swept in guarded `reflexes-argo.yaml` → re-scoped Touches to `egress-cnp.yaml` +
+  `kustomization.yaml` + composition + the pushgateway rule files. Clears on the 12:30Z scan.
+
+## 2026-09-01 — design-agents sitting: oracle lane frozen → FU-199 third sighting, un-wedged
+
+- CONDITION: operator — "the agent loop is frozen again; oracle-fleet 0 PRs, issues queued,
+  nothing moving." Full-corpus read + live probe. NOT capacity, NOT a dead loop: every
+  coordinate-oracle/review-oracle tick Succeeded all afternoon; the scan was correctly
+  refusing to dispatch. Chain: goal #326 child #329 struck r1-retry-2 12:27Z
+  (deepseek-v4-flash, error_class=unknown, post-#1186 — a SECOND cause, not the MCP-attach
+  crash) leaving `agent/in-progress` + no PR + a resumable branch
+  (`fix/issue-329-alerts-as-code` @ 487137b6); the C4/C5 goal-child hold (`ambig`) read it
+  undecidable without reading the strike/branch evidence (FU-199, THIRD sighting in ~24h);
+  its stale in-progress footprint held #337 (no `Touches:` = exclusive) → 0 WIP, 0 PRs,
+  every tick green. Invisibility legs found with it: `ambig` pushes class
+  `held-merged-unlinked` with zero merged mentions (misnamed), and the footprint-held
+  sibling got NO who=operator item-class row — `AgentAttentionStanding` blind to both;
+  FU-199 extended with all of it (resight, no parallel item).
+- COMMAND: re-queued #329 (queued-first, in-progress-second, IL-T16 discipline), resume
+  note names the branch for `--work-branch`, rang oracle once 16:38Z — scan picked up
+  (coordinate-perstack Running, sibling ring absorbed on the mutex). Also noted for the
+  fleet-strike angle: all four #326-child r1 strikes carry the identical
+  `error_class=unknown` fingerprint (three = homelab#1186, fixed; 12:27Z one open); the
+  brief's ≥2-in-24h fleet-strike rule never fired — prose play, no deterministic reader
+  (grep negative: no FU/ADR tracks mechanizing it). Durable-fix ranking delivered in the
+  sitting; FU-filing for the fleet-strike reader held for the operator's call.
+
+## 2026-09-01 — design-agents sitting (cont.): homelab freeze read out + drained; FU-201; #1162 tree decoded
+
+- HOMELAB FREEZE MECHANISM (read while frozen, operator direction): 3 armed master PRs all
+  human-waiting — #1179/#1191 codeowner parks (bot-approved 08:46Z/10:24Z), #1183 operator CR
+  — hit REPO_PR_CAP=3, so TRACKS rule 1 held every master-lane dispatch (#1151; #1153
+  blockedBy). The ⏳ PR-budget verdict lived only in GC'd pod logs; the held issue pushed NO
+  item-class row; the parked PRs have no item-class either (CodeownerParkWaiting was the one
+  belt that fired). FU-199 gains the 4th face (PR-cap propagation leg). Goal #1162 decoded:
+  exporter theme ✅ (PR#1201 merged 14:22Z); scan theme waits on #459 (seat completed PR#1192
+  per the round-3 arbitration → bot APPROVED 17:01Z) + #1203 (FU-199 child, riding); egress
+  theme = all members done, assembly waits on grandchild #1189 (= park PR#1191) — #1190
+  pre-ruled deferral, evidence comment added (drops now ~10k/24h; the all-harness npmjs stub
+  is PR#1168 ON THE UNMERGED egress branch — master rides drop until assembly).
+- OPERATOR CORRECTION mid-sitting: the PR#1192 seat edit was the UN-WEDGE, not the durable
+  fix — "coordinator wanted a better model; the router has a lot of capabilities; they did
+  not meet." FU-201 filed: the arbitrate "re-dispatch stronger" verdict has no carrier since
+  chainless; route() already honors label-borne class (explicit > label_map > role_defaults,
+  labels ride the /route body) — the meeting is a label row + a git class with an M8 floor +
+  one brief paragraph. GAPS design-agents-G4 resight recorded (third in 24h).
+- DRAIN: #1203 authored+queued under theme #1163 (FU-199 fix; dispatched within minutes —
+  worker r1 riding); FU-200 filed (fleet-strike deterministic reader, operator-approved);
+  codeowner reads: PR#1179 APPROVED (argv ceiling verified covering the b64 prelude; noted
+  the off-argv follow-on on #1175), PR#1191 verdict = merge (queued behind #1179's refresh
+  cycle); PR#1183's blocking finding fixed on-branch (incomplete→exit 2, verified live
+  against #1162, pushed 68d3349c after a rebase onto the updater's refresh). Cascade watch
+  backgrounded; #1191 + #1183 approvals land as their refresh cycles complete.
+
+## 2026-09-01 — sitting cont.: #329 breaker cleared by the human it asked for; #326 Budget 8→12
+
+- oracle #329's re-queue (16:38Z) drew the item session into the per-issue MODEL-invariant
+  breaker (16:44Z, correct): two identical (deepseek-v4-flash, unknown) strikes, chainless =
+  no chain to swap into → agent/error, human-first — FU-201's live case #2 in one day. The
+  16:44 diagnosis also split the causes: strike 1 = the fixed #1186 MCP-attach crash; strike 2
+  = a killed goose process after a nix-env exploration loop (distinct, undiagnosed). Seat (=
+  the human) cleared the breaker, claimed, and hand-dispatched r2 as claude/sonnet resuming
+  fix/issue-329-alerts-as-code (ADR-096 explicit-model override — the sanctioned escape hatch
+  until FU-201 lands). Meanwhile #337 rode and opened PR#338 — the oracle lane flows.
+- The jail dispatch surfaced TWO degraded-path finds: (1) goal-budget's ledger read is
+  ClusterIP-only, so a jail dispatch always prices cap-sum-conservative — #326 refused at
+  5×$2=$10 > Budget 8; raised 8→12 with rationale on the goal (the refusal's named human
+  edit; real spend = deepseek-cents + subscription window-draw, the FU-180 cap-phantom class).
+  (2) WIP=1 then held r2 behind #337's live ride — correct; a bounded background waiter
+  dispatches when the slot frees. homelab cascade: PR#1179 + PR#1192 MERGED (~17:06-09Z),
+  master cap 2/3, #1151 re-dispatchable; #1191/#1183 riding their refresh/re-review cycles.
+
+## 2026-09-01 — operator ruling: router escalation = flesh out existing seams; FU-201 re-scoped
+
+- Operator, on the escalation option space: "half designed, half built, half not turned on" —
+  consolidate, don't add. Rulings: (1) task/build's strike correlation is NOT a routing basis;
+  (2) the deaths read as PROVIDER-serving failures (q4/fp4 quant, bad tool calls — the ADR-115
+  evidence class), so the provider leg outranks model class; (3) the correct carrier is what
+  exists: size labels + label_map + the coordinator editing ISSUE LABELS as its routing verb
+  (the coordinator↔router contract — labels ride /route since PR#408; label_map is the one git
+  home of meaning). FU-201 re-scoped accordingly: escalation = agent-budget re-grade (sm→lg)
+  by the arbitrate/breaker plays + label_map md/lg rows; a brief section naming the vocabulary;
+  strikes gain the served-provider column + (model, provider) pair-exclusion on serving-shaped
+  re-picks (#783 banked legs; quality legs stay FU-186/ADR-115 pin-v2 + M14 pair-cooldowns).
+  model/strong + coding-strong dropped; attempt-count auto-escalation stays banked (feed-4).
+
+## 2026-09-01 — sitting close: parks drained; PR#55 codeowner read catches a live-credential corrupter
+
+- homelab master lane FULLY drained: PR#1179 (17:09), PR#1183 (17:30, both goal-lint fail-open
+  fixes), PR#1191 (17:45 auto-merge; its Fixes closes #1189 — the egress theme's last blocking
+  grandchild). #1151 riding, PR#1206 (#1203's FU-199 hold-narrowing) in review. Oracle: PR#340
+  (the #329 sonnet resume — delivered) + PR#338 riding; #337 on its r2 fix round.
+- openrouter-operator PR#55 (operator-pointed; the 3rd CodeownerParkWaiting): the ADR-110 read
+  found a BLOCKING defect three bot rounds missed — read_key_secret returned V1Secret.data
+  base64-raw (docstring claimed decoded) into write_key_secret's string_data, so the first
+  NormalizeSecret pass would DOUBLE-ENCODE the live credential it exists to heal (#53's own
+  oracle-fleet-openrouter case, fleet-wide on deploy). Stub-invisible to the decision-table
+  tests (adapter-glue seam — the chainless chunk A–D class). Seat-fixed on-branch (819c07c,
+  140 tests/100% cov), finding commented, codeowner approval follows the bot re-verdict.

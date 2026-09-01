@@ -52,6 +52,7 @@ harvest-goal-closed	harvest
 harvest-goal-open-exhausted	harvest
 harvest-goal-open-funded	harvest
 harvest-master-inert	harvest
+issue-derivation	issue-derivation
 item-class-batch/item-class-batch	item-class-batch
 ledger-emitter-rounds	ledger-emitter-rounds
 lens-posture	lens-posture
@@ -97,6 +98,8 @@ reviewer-go-failover-limited	reviewer-go-failover
 reviewer-mcp-prep-absent	reviewer-mcp-prep
 reviewer-mcp-prep-present	reviewer-mcp-prep
 reviewer-optout	reviewer-optout
+
+
 reviewer-touches-escapes-computed	reviewer-touches
 reviewer-touches-escapes-none	reviewer-touches
 reviewer-touches-unavailable	reviewer-touches
