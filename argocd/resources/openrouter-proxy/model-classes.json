@@ -145,6 +145,13 @@
    "prefer_free": true
   },
   "agent-budget/sm": {},
+  "agent-budget/md": {
+   "tier_floor": "cheap"
+  },
+  "agent-budget/lg": {
+   "tier_floor": "large",
+   "never_free": true
+  },
   "track/iac": {
    "class": "coding"
   }
