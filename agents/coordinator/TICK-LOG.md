@@ -5905,3 +5905,17 @@ first live ADR-110 maintenance session before the ADR existed.
   SERVICES.md pointer. CORRECTION found en route: docs/sleep-iac.md said datasource uid
   `sleep-notes` — live is `sleep-data` (fixed in the PR; the filer had copied the stale doc).
   Result appended, task → done/. Doc is the durable record.
+- OPERATOR CORRECTION ("wrong fix"): I offered to hand-wire oracle-fleet#326's blockedBy edges +
+  task/build labels; the operator wants the CONSUMER SURFACE fixed — Goals are authored from
+  jails and still arrive malformed. GAPS design-agents-G4 sighted. Built: the consumer card
+  gains rules 7–9 (children carry a class + a blockedBy order; pre-authored children ⇒ the Goal
+  stays unqueued; lint before you queue) + 3 failure-signature rows + "the branch is the
+  AUTHOR's to cut" (the oracle session had told the operator the machinery creates it — false,
+  IL-G02); and `scripts/goal-lint.sh` (bash+gh+jq only — stack jails run it bare, NEVER
+  `devbox run` in their homelab clone: it materializes the whole closure) as `devbox run
+  goal-lint` here. First runs: #326 = 0 FAIL / 5 WARN (title case, no task/* on 3 children,
+  no ordering edges); #1162 = my own tree had a real miss — the lint's first cut also mis-read
+  a work item with sprouts as a container and walked CLOSED descendants (fixed: container =
+  no agent-fix ∧ (children ∨ a `post-launch:|theme:|stint:|retro-batch:` title); closed nodes
+  skipped). #326 lint answer: task/goal alone is enough (agent/blocked tolerated, agent/queued
+  forbidden on a pre-decomposed goal); the seat cut `goal/326-dashboard-as-code` @ 7b8e08e6.
