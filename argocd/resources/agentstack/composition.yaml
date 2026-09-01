@@ -907,6 +907,86 @@ spec:
             roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: sensor-submit-coordinate }
             subjects:
               - { kind: ServiceAccount, name: sensor-review, namespace: agent-coordinator }
+            ---
+            # FU-020/ADR-081 loop-ns egress (FU-080 loop-home). Selector hits Argo Workflow pods
+            # (coordinator, reviewer, prober) via the built-in workflows.argoproj.io/workflow label.
+            # MONITOR phase: rules attach (DNS visibility for the Hubble harvest) but the default
+            # deny does not. Flip to enforce after clean harvested rides (Goal #1162 acceptance 3).
+            apiVersion: cilium.io/v2
+            kind: CiliumNetworkPolicy
+            metadata:
+              name: agent-loop-egress
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-egress-cnp
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              endpointSelector:
+                matchExpressions:
+                  - { key: workflows.argoproj.io/workflow, operator: Exists }
+              enableDefaultDeny:
+                egress: false
+              egress:
+                # Kubernetes API — loop pods kubectl read (agent-read-infra/agent-read-app RBAC)
+                - toEntities:
+                    - kube-apiserver
+                  toPorts:
+                    - ports:
+                        - { port: "6443", protocol: TCP }
+                        - { port: "443", protocol: TCP }
+                # DNS
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: kube-system
+                        k8s-app: kube-dns
+                  toPorts:
+                    - ports:
+                        - { port: "53", protocol: UDP }
+                        - { port: "53", protocol: TCP }
+                      rules:
+                        dns:
+                          - matchPattern: "*"
+                # Registry mirrors — BASELINE (read-only pull-through caches, ADR-091)
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: registry-cache
+                - toCIDR:
+                    - 192.168.40.20/32 # docker.io mirror VIP
+                    - 192.168.40.21/32 # ghcr mirror VIP
+                    - 192.168.40.31/32 # mcr.microsoft.com mirror VIP
+                  toPorts:
+                    - ports:
+                        - { port: "80", protocol: TCP }
+                # Egress proxy + git-cred broker — the ONLY LLM/credential exit
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: agent-egress
+                # nix-cache — devbox installs
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: nix-cache
+                # devbox-search — devbox add resolves
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: devbox-search
+                # garage — transcript uploads (agent-finalize)
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: garage
+                # monitoring/pushgateway — run metrics (FU-057)
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: monitoring
+                # Baseline FQDNs — git over TLS + nix upstream fallback
+                - toFQDNs:
+                    - { matchName: github.com }
+                    - { matchName: api.github.com }
+                    - { matchName: codeload.github.com }
+                    - { matchPattern: "*.githubusercontent.com" }
+                    - { matchName: cache.nixos.org }
+                  toPorts:
+                    - ports:
+                        - { port: "443", protocol: TCP }
             {{- if and $xr.spec.prober (default false (get $xr.spec.prober "enabled")) }}
             {{- $pr := $xr.spec.prober }}
             ---
