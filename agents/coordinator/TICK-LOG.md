@@ -6084,3 +6084,30 @@ first live ADR-110 maintenance session before the ADR existed.
   brief's ≥2-in-24h fleet-strike rule never fired — prose play, no deterministic reader
   (grep negative: no FU/ADR tracks mechanizing it). Durable-fix ranking delivered in the
   sitting; FU-filing for the fleet-strike reader held for the operator's call.
+
+## 2026-09-01 — design-agents sitting (cont.): homelab freeze read out + drained; FU-201; #1162 tree decoded
+
+- HOMELAB FREEZE MECHANISM (read while frozen, operator direction): 3 armed master PRs all
+  human-waiting — #1179/#1191 codeowner parks (bot-approved 08:46Z/10:24Z), #1183 operator CR
+  — hit REPO_PR_CAP=3, so TRACKS rule 1 held every master-lane dispatch (#1151; #1153
+  blockedBy). The ⏳ PR-budget verdict lived only in GC'd pod logs; the held issue pushed NO
+  item-class row; the parked PRs have no item-class either (CodeownerParkWaiting was the one
+  belt that fired). FU-199 gains the 4th face (PR-cap propagation leg). Goal #1162 decoded:
+  exporter theme ✅ (PR#1201 merged 14:22Z); scan theme waits on #459 (seat completed PR#1192
+  per the round-3 arbitration → bot APPROVED 17:01Z) + #1203 (FU-199 child, riding); egress
+  theme = all members done, assembly waits on grandchild #1189 (= park PR#1191) — #1190
+  pre-ruled deferral, evidence comment added (drops now ~10k/24h; the all-harness npmjs stub
+  is PR#1168 ON THE UNMERGED egress branch — master rides drop until assembly).
+- OPERATOR CORRECTION mid-sitting: the PR#1192 seat edit was the UN-WEDGE, not the durable
+  fix — "coordinator wanted a better model; the router has a lot of capabilities; they did
+  not meet." FU-201 filed: the arbitrate "re-dispatch stronger" verdict has no carrier since
+  chainless; route() already honors label-borne class (explicit > label_map > role_defaults,
+  labels ride the /route body) — the meeting is a label row + a git class with an M8 floor +
+  one brief paragraph. GAPS design-agents-G4 resight recorded (third in 24h).
+- DRAIN: #1203 authored+queued under theme #1163 (FU-199 fix; dispatched within minutes —
+  worker r1 riding); FU-200 filed (fleet-strike deterministic reader, operator-approved);
+  codeowner reads: PR#1179 APPROVED (argv ceiling verified covering the b64 prelude; noted
+  the off-argv follow-on on #1175), PR#1191 verdict = merge (queued behind #1179's refresh
+  cycle); PR#1183's blocking finding fixed on-branch (incomplete→exit 2, verified live
+  against #1162, pushed 68d3349c after a rebase onto the updater's refresh). Cascade watch
+  backgrounded; #1191 + #1183 approvals land as their refresh cycles complete.
