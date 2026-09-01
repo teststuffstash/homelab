@@ -12,8 +12,11 @@ done
 printf '%b' "$orphans" | while IFS= read -r l; do
   if [ -n "$l" ]; then printf 'ORPHAN %s\n' "$l"; fi
 done
-printf '%s\n' "$v2" | while IFS= read -r l; do
-  if [ -n "$l" ]; then printf 'V2 %s\n' "$l"; fi
+# Combine v2 from both passes (pass 0 saved in v2_pass0 by bridge.sh, pass 1 in v2)
+for v2_src in "${v2_pass0:-}" "${v2:-}"; do
+  printf '%s\n' "$v2_src" | while IFS= read -r l; do
+    if [ -n "$l" ]; then printf 'V2 %s\n' "$l"; fi
+  done
 done
 # The clause must run to completion under `set -euo pipefail`, not merely produce the right lines.
 echo "REACHED: end"

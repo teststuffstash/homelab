@@ -29,6 +29,8 @@ case "${CROSS_REPO_PASS}" in
     ;;
   1)
     # Second pass: repo B (oracle-fleet) — issue #329 is a plain in-progress issue (NOT goal child)
+    # Save v2 from pass 0 before the second block overwrites it
+    v2_pass0="${v2:-}"
     slug="teststuffstash/oracle-fleet"
     repo="oracle-fleet"
     dispatchable=1
