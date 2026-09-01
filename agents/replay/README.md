@@ -154,6 +154,8 @@ is stale, so it cannot drift the way the prose register did.
 | `argv-payload/retro-handoff` | actions | - | `agents/retro-session.sh` | - |
 | `argv-payload/warn-band` | actions | - | `agents/agent-session.sh` | - |
 | `assembly-cr-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-cr-dispatch-marker` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-cr-dispatch-no-pr` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-emit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-no-trailer` | actions | - | `agents/coordinator-scan.sh` | - |
 | `asvs` | suite | - | `-` | - |

@@ -5,6 +5,7 @@ repo="$IN_REPO"
 prsjson="$(cat "$REPLAY_WORLD/gh/pr-list.json")"
 orphans=""
 units=""
+assembly_cr_prs=""
 # ── stubs ── the FU-146 holds and WIP gate are clear.
 WIPPODS_JSON='{"items":[]}'
 wip_busy=""

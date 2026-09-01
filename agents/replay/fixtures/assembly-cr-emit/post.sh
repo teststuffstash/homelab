@@ -7,5 +7,9 @@ done
 printf '%b' "$orphans" | while IFS= read -r l; do
   if [ -n "$l" ]; then printf 'ORPHAN %s\n' "$l"; fi
 done
+# Print the assembly-cr side map so the fixture can assert the PR number is carried forward.
+for entry in $assembly_cr_prs; do
+  printf 'SIDE_MAP %s\n' "$entry"
+done
 # The clause must run to completion under `set -euo pipefail`, not merely produce the right lines.
 echo "REACHED: end"

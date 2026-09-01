@@ -4,6 +4,7 @@ repo="$IN_REPO"
 prsjson="$(cat "$REPLAY_WORLD/gh/pr-list.json")"
 orphans=""
 units=""
+assembly_cr_prs=""
 WIPPODS_JSON='{"items":[]}'
 wip_busy=""
 sess_holds() { return 1; }

@@ -1,0 +1,17 @@
+# assembly-cr-dispatch-marker (homelab#1150) — the dispatch-marker block writes a state-fp
+# comment on the assembly PR when a goal-checkpoint unit with an assembly-cr PR is dispatched.
+#
+# THE CONTRACT:
+#   1. A state-fp comment is written on the assembly PR (#309).
+#   2. No WARN lines are emitted (fingerprint readable, write succeeds).
+name: assembly-cr-dispatch-marker
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:dispatch-marker
+env:
+  - ORG=teststuffstash
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
