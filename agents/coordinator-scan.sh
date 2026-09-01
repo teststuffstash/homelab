@@ -417,6 +417,86 @@ pr_state_fp_pair() {
 }
 # <<<REPLAY:state-fp-pair<<<
 
+# ── BLOCKED-ON PREDICATE (homelab#1188) ────────────────────────────────────────────────────────
+# A terminal ruling may record what it waits on via a `blocked-on:` marker anchored at the start
+# of a comment (like every other marker in this lane — `AGENT_STRIKE:`, `AGENT_INFEASIBLE:`,
+# `state-fp:`). The scan suppresses re-dispatch while that predicate holds.
+#
+# Grammar: `blocked-on: <kind>=<ref>` with `kind ∈ {human, issue, pr}`.
+#   - `blocked-on: human`              → waiting on a human (no new review/comment since marker)
+#   - `blocked-on: issue=<number>`     → waiting on issue #number to close
+#   - `blocked-on: pr=<number>`        → waiting on PR #number to merge/close
+#
+# The marker is read from the PR's comments (newest by createdAt). While the marker is present
+# AND its named blocker is still unresolved, the clause reports instead of dispatching — the same
+# report-vs-dispatch shape the `state-fp:` debounce already has.
+#
+# >>>REPLAY:blocked-on-jq>>>
+# Extract the newest blocked-on marker from PR comments (anchored at start of comment body).
+BLOCKED_ON_JQ='([ .comments[]? | select((.body // "") | test("^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)")) ]
+  | sort_by(.createdAt) | last // {})
+  | ((.body // "") | capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)") | .kind // "")'
+# <<<REPLAY:blocked-on-jq<<<
+
+# pr_blocked_on_check <slug> <pr> → "blocked|<reason>" or "clear".
+# ONE probe reads the marker and checks the blocker state. Fail-open throughout: an unreadable
+# probe or missing marker yields "clear" (pre-#1188 behaviour — dispatch proceeds).
+# >>>REPLAY:blocked-on-check>>>
+pr_blocked_on_check() {
+  local slug="${1:?}" pr="${2:?}" marker kind ref probe rc
+  # Read the PR's comments to find the newest blocked-on marker
+  probe="$(gh pr view "$pr" --repo "$slug" --json comments 2>/dev/null)" || probe=''
+  if ! jq -e . >/dev/null 2>&1 <<<"${probe:-null}"; then printf 'clear\n'; return 0; fi
+  marker="$(printf '%s' "$probe" | jq -r "$BLOCKED_ON_JQ" 2>/dev/null)" || marker=''
+  [ -n "$marker" ] || { printf 'clear\n'; return 0; }
+  kind="${marker%%=*}"
+  ref="${marker#*=}"
+  # If ref equals kind (no '=' separator), it's a bare kind like "human"
+  [ "$ref" = "$marker" ] && ref=""
+  case "$kind" in
+    human)
+      # Check if there's been any human review or comment since the marker was written.
+      # Read the marker's timestamp and compare against the newest review/comment.
+      local marker_ts newest_ts
+      marker_ts="$(printf '%s' "$probe" | jq -r '[.comments[]? | select((.body // "") | test("^blocked-on: human")) | .createdAt] | max // ""' 2>/dev/null)" || marker_ts=''
+      [ -n "$marker_ts" ] || { printf 'clear\n'; return 0; }
+      newest_ts="$(printf '%s' "$probe" | jq -r '[.comments[]? | select((.body // "") | test("^blocked-on: human") | not) | .createdAt] | max // ""' 2>/dev/null)" || newest_ts=''
+      # If there's a non-marker comment newer than the marker, a human has engaged
+      if [ -n "$newest_ts" ] && [[ "$newest_ts" > "$marker_ts" ]] 2>/dev/null; then
+        printf 'clear\n'
+      else
+        printf 'blocked|human\n'
+      fi
+      return 0
+      ;;
+    issue)
+      # Check if the issue is still open
+      local state
+      state="$(gh issue view "$ref" --repo "$slug" --json state --jq '.state' 2>/dev/null)" || state=''
+      case "$state" in
+        OPEN) printf 'blocked|issue=%s\n' "$ref";;
+        *)    printf 'clear\n';;
+      esac
+      return 0
+      ;;
+    pr)
+      # Check if the PR is still open
+      local pr_state
+      pr_state="$(gh pr view "$ref" --repo "$slug" --json state --jq '.state' 2>/dev/null)" || pr_state=''
+      case "$pr_state" in
+        OPEN) printf 'blocked|pr=%s\n' "$ref";;
+        *)    printf 'clear\n';;
+      esac
+      return 0
+      ;;
+    *)
+      printf 'clear\n'
+      return 0
+      ;;
+  esac
+}
+# <<<REPLAY:blocked-on-check<<<
+
 # homelab#155 belt: how long a phantom `agent/in-progress` (no pod, no PR) must PERSIST before the
 # scan reconciles the label itself. One full scan interval is the */30 per-stack coordinate-<stack> cron
 # (agents/coordinator/reflexes-argo.yaml); 15 min is that plus margin for cron jitter and the
@@ -3057,6 +3137,16 @@ EOF_GOVERNANCE
     # state is a REPORT line, which is what an escalation waiting on a human should look like.
     # >>>REPLAY:arbitrate-gate>>>
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")) and ((.autoMergeRequest==null) or (.reviewDecision!="APPROVED")))|.number'); do
+      # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
+      # still unresolved, report instead of dispatch — the same report-vs-dispatch shape the
+      # state-fp debounce already has.
+      boc="$(pr_blocked_on_check "$slug" "$u")"
+      case "$boc" in
+        blocked|blocked\|*)
+          orphans="${orphans}[$repo] ⏳ arbitrate BLOCKED-ON — PR #${u}: a terminal ruling recorded \`blocked-on: ${boc#blocked|}\` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.\n"
+          continue
+          ;;
+      esac
       afp="$(pr_state_fp_pair "$slug" "$u" arbitrate)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
         orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
@@ -3237,6 +3327,15 @@ EOF_GOVERNANCE
           # the anti-livelock), and `continue` before the cap so a debounced PR never spends one of
           # the two dispatch slots a live red PR could use.
           # >>>REPLAY:ci-red-gate>>>
+          # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
+          # still unresolved, report instead of dispatch.
+          boc="$(pr_blocked_on_check "$slug" "$u")"
+          case "$boc" in
+            blocked|blocked\|*)
+              orphans="${orphans}[$repo] ⏳ ci-red BLOCKED-ON — PR #${u}: a terminal ruling recorded \`blocked-on: ${boc#blocked|}\` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.\n"
+              continue
+              ;;
+          esac
           rfp="$(pr_state_fp_pair "$slug" "$u" ci-red)"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
           if [ -n "$rfp_cur" ] && [ "$rfp_cur" = "$rfp_prev" ]; then
             orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"

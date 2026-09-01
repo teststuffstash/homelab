@@ -83,7 +83,7 @@ extract() {   # extract <marker-name> → stdout; exit 3 if either sentinel is m
     END { if (!saw_open || !saw_close) exit 3 }
   ' "$SCAN"
 }
-for b in state-fp-jq state-fp-pair arbitrate-gate ci-red-gate dispatch-marker; do
+for b in blocked-on-jq blocked-on-check state-fp-jq state-fp-pair arbitrate-gate ci-red-gate dispatch-marker; do
   extract "$b" > "$TMP/block.$b.sh" || {
     echo "state-fp-replay: sentinel >>>REPLAY:$b>>> / <<<REPLAY:$b<<< missing from $SCAN." >&2
     echo "  The block moved or the markers were deleted. Restore them around the block — this" >&2
@@ -154,6 +154,8 @@ POST
   cat <<'PRE'
 set -euo pipefail
 PRE
+  cat "$TMP/block.blocked-on-jq.sh"
+  cat "$TMP/block.blocked-on-check.sh"
   cat "$TMP/block.state-fp-jq.sh"
   cat "$TMP/block.state-fp-pair.sh"
   cat <<'BRIDGE'
@@ -177,6 +179,8 @@ POST
   cat <<'PRE'
 set -euo pipefail
 PRE
+  cat "$TMP/block.blocked-on-jq.sh"
+  cat "$TMP/block.blocked-on-check.sh"
   cat "$TMP/block.state-fp-jq.sh"
   cat "$TMP/block.state-fp-pair.sh"
   cat <<'BRIDGE'

@@ -1,0 +1,21 @@
+# CONDITION UNDER REPLAY. oracle-fleet PR #234 carries `agent/arbitrate` and has a terminal ruling
+# that wrote `blocked-on: human`. A new human comment has appeared since the marker, so the blocker
+# is resolved. The contract is that the clause dispatches the unit: the blocked-on predicate
+# (homelab#1188) clears when a human engages, and the state-fp debounce has nothing recorded yet
+# (first tick), so the unit is emitted.
+pins:
+  - homelab#1188
+name: arbitrate-blocked-on-human-resolved
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
