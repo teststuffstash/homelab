@@ -27,7 +27,8 @@ machinery are really **one machinery family × N briefs** — see §Lenses. Rend
 per-stack means the AgentStack Composition renders the *whole* machinery set (FU-080's
 coordinate leg, FU-100's review leg — both changed zero prompts, zero images).
 
-Two platform-wide design rules bound every brief (operator, 2026-07-27):
+Three platform-wide design rules bound every brief (operator, 2026-07-27; the third
+2026-09-01):
 
 - **Elicit, don't inject.** Judgment roles get question-shaped briefs ("what breaks when this
   ships?"), not opinion checklists — keeps worker context lean and the model comparison
@@ -36,6 +37,13 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 - **Mechanism > advice > nothing.** A practice the platform can render (topology spread, probe
   scaffolds, chart defaults) becomes a Composition/chart-template default; the lens reviews
   only what can't be defaulted.
+- **Prefetch, don't fetch — "grep > tool call."** Every deterministic read a ride would make as
+  an LLM tool call (the issue + its comments, the review thread, the failing CI log, the branch
+  log) is gathered by the LAUNCHER with cheap machinery before the pod exists and materialized
+  into the ride (`/work/context/`, homelab#1175); a tool call costs prompt tokens, wall-clock,
+  and — when it fails — an error-recovery turn, and a REQUIRED read that fails is a deferral
+  before dispatch, never a ride that starts on half its directive (the #969 no-op, homelab#1069).
+  A recipe's "first read X" line names a file, not a command.
 
 ## Machinery families
 
@@ -331,7 +339,7 @@ work-map scheduling is what lifted the let-it-pile-up gate. The map, as now buil
 | Context class | One source | Delivered by | Reaches |
 |---|---|---|---|
 | **1 — environment** (dynamic per-ride facts: docker, egress, proxies, round, write scope, base, goal card) | AgentStack claim knobs + launch state | `render_env_card()` (launcher, ADR-094) | every ride, both harnesses |
-| **2 — task + service facts** | the ISSUE (author-injected — the worker clones only `/work/repo`) | issue body | every ride |
+| **2 — task + service facts** | the ISSUE (author-injected — the worker clones only `/work/repo`) | issue body — DELIVERY moving to the launcher's prefetch bundle (`/work/context/issue.md` + the round's review thread / CI log, homelab#1175; the "prefetch, don't fetch" rule above) | every ride |
 | **3 — universal ground rules** (devbox-only installs, prior-art, machine markers) | [`agents/ground-rules.md`](../../agents/ground-rules.md) — **built #763**: the env card's static sibling, injected verbatim by the launcher; a missing file degrades LOUDLY (replay `env-card-ground-rules/missing`) | `render_env_card()` prepends the file | every ride, both harnesses |
 | task rules (how to approach this class) | stack repo `.agents/<class>.yaml` | launcher `--recipe` (L2/L3, [fixer-context.md](fixer-context.md)) | the ride |
 | jail seat procedure | [`agents/jail-seat-card.md`](../../agents/jail-seat-card.md) — **built #764/PR#773**: composed by the mono jail's entrypoint (container card + seat card → `/workspace/homelab/CLAUDE.local.md`, container-start snapshot; claude-jail#1) | Claude-Code auto-load of the composed `CLAUDE.local.md` | the homelab seat ONLY — stack jails get the facts-only `CLAUDE.md` via their clone, deliberately no seat card |
