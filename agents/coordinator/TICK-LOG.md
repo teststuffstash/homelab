@@ -6204,3 +6204,30 @@ first live ADR-110 maintenance session before the ADR existed.
   on base — so master's copy was restored byte-exact via child PR#1217 into the theme (armed,
   bot-gated); its merge lands on #1213's own head → CI re-runs with the file untouched. Gate
   refinement candidate noted on the PR: a comment-only fixture diff has no pin to prove.
+
+## 2026-09-01 — design-agents sitting (cont.): #1162 touch audit → v1.3.1 banked
+
+- CONDITION: operator asked for the #1162 manual-touch audit ("supposed to be autonomous — 3
+  codeowner reads") and whether goal v1.3 earns adoption given recurring defect classes.
+- ANALYSIS (delivered in-sitting): ~13 unplanned interventions vs 3–4 sanctioned reads (4:1),
+  decomposed: pilot-manual ≈5 (build items named by the readout) / orthogonal loop defects ≈6
+  (the FU-199/200/201 class — would hit any lane) / theme-intrinsic ≈3 (top hop, membership
+  bookkeeping). The tax number held: 2 owned merge reads + verdict for 13 children vs ~9-park
+  counterfactual (exporter 0 = unowned surface, not batching). Reshuffle audit: 9 parent moves
+  in one day; 4 = the missing typed-defer act, 3 = dead-origin absorption, wave-born sprouts
+  stayed under origin 5/5 — the mint-to-container proposal WITHDRAWN (operator: cheaper =
+  mint-to-origin + `Origin:` line + typed defer/release the completion walk skips). Park
+  economics: parks stay armed AND updater-refreshed today (one CI cycle per master move — the
+  PR#473 ×16 class; no reviewer tax, non-merge-commit arm; #887's n=2 says dismissals did not
+  fire) — direction = updater SKIPS human-waiting parks + the dispatch-cap SPLIT.
+- RULING (operator): **v1.3.1 BANKED** — five deltas: park economics (#887 + FU-199 cap split),
+  membership test (fix-surface + pin allowance + live-deliverable + servable-lane; acceptance
+  lists follow the tree), `Origin:` line + typed defer, checkpoint theme-FORMATION
+  (nominate→judge→mint→branch→queue; IL-G02's revisit condition fired twice), hotfix-only
+  master routing. Adoption gate = wave 2 (dispatch-belts theme, minted at #1162's close sweep)
+  on direction-5 metrics: ≤5 interventions / 0 out-of-sitting summonses / 1 owned read.
+- COMMAND: PR#1220 opened+armed (issue-authoring.md §⚖ BANKED gains the v1.3.1 block; ROADMAP
+  S8 row updated with the build items + pointers); FU-199 extended with the cap-split leg
+  (compacted to stay ≤10 lines); #887 commented with the skip-clause build + dismissal-probe
+  acceptance; meta-state pickup written (wave-2 mint at the close sweep). Direct commits
+  batched; one lint-gated push at wind-down.

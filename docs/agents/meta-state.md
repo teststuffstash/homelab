@@ -8,6 +8,16 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-01 LATE SITTING — v1.3.1 BANKED (operator: "deserves a place when it works");
+  PR#1220 armed (banked block + S8 row).** Pickups: (1) at #1162's `goal/validated` close
+  sweep, batch-release the bucket residue and **mint WAVE 2 = the dispatch-belts theme**
+  (#1211, #1212, FU-199 residue, FU-200, FU-201 a+b, #1198, #1199; #1190 → coordinator-tier
+  probe, #1200 → operator-direct) — read it on the adoption gate: ≤5 interventions /
+  0 out-of-sitting summonses / 1 owned assembly read. (2) #887 now carries the updater
+  skip-clause build + the deliberate dismissal probe as its acceptance (commented). (3)
+  `Origin:` line + typed defer/release + checkpoint theme-FORMATION are S8 originals — do
+  not build piecemeal ahead of S8; delta 1 (park economics) may land independently.
+
 - **⚑ 2026-09-01 EVENING design-agents sitting (freeze read + drain) — the fresh-session pickups:**
   - **Goal #1162 endgame**: egress assembly **PR#1213** open+armed; it was RED on ADR-103
     pin-vacuity (comment-only fixture touch) — seat child **PR#1217** armed into
