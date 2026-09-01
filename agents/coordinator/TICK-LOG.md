@@ -6050,3 +6050,13 @@ first live ADR-110 maintenance session before the ADR existed.
   yesterday, "FU-shaped if it resights") → **FU-199 filed** (Dispatch section): strike +
   resumable branch ⇒ decidable, route to the ordinary C4/C5 unit. Siblings serialize on the
   same file by design — one at a time is progress, not a wedge.
+- 12:15–12:25Z: operator asked whether a Touches validator at filing time is tracked ("these
+  keep burning coordinator rides"). Retrieval: **yes** — #309 (pin-only pre-dispatch hold, DONE;
+  it is what held #1056 at ZERO rides), #808 (body-vs-Touches, DONE), **#1151** (leg 1 of
+  #1102: `classify_touches()` one-home + scan operator-lane hold — the class that still burns
+  rides), PR#1183 `goal-lint` (Goals only). No issue-opened edge exists; the 30-min scan is the
+  de-facto edge and its verdict never reaches the filer. Commented the resight + a "consumer 3
+  = the filing doors" scope note on #1151 (extend, no parallel item). #1056 is OPERATOR-filed
+  (oracle jail, 2026-08-30 — not bot-filed as first said); its `agents/coordinator/*.yaml` glob
+  swept in guarded `reflexes-argo.yaml` → re-scoped Touches to `egress-cnp.yaml` +
+  `kustomization.yaml` + composition + the pushgateway rule files. Clears on the 12:30Z scan.
