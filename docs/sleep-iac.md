@@ -98,7 +98,7 @@ So the dashboard ConfigMap does **not** have to live next to Grafana:
   **`sleep-tracking` namespace**, deployed by ArgoCD. The sidecar auto-discovers it. A dashboard fix
   becomes a PR ArgoCD syncs — no `tofu apply`. *(Landed in `sleep-iac/sleep-tracking/` first; since
   2026-07-28 the chart renders it — see the note above.)*
-- **Stays in homelab (platform-owned):** the frser SQLite **datasource** (`sleep-notes`), the
+- **Stays in homelab (platform-owned):** the frser SQLite **datasource** (`sleep-data`), the
   **`sleep-sqlite-sync` sidecar** (pulls `sleep-db/sleep.sqlite` from Garage), and the
   **`sleep-db-reader` ExternalSecret** are baked into the Grafana Helm release + the `monitoring`
   namespace. They're Grafana-deployment infra — rarely change, not per-fix — so they stay
@@ -258,7 +258,7 @@ it stays the safety net, not the control.
 - Coordinator step 7a flips from "flag and stop" to: worker/Renovate opens the version-bump PR in
   sleep-iac → gates → auto-merge → ArgoCD syncs (`agents/coordinator/README.md`).
 - **Dashboard body moves to GitOps** (`sleep-iac/sleep-tracking/`) while the datasource + sqlite-sync
-  sidecar + reader secret stay platform-owned (§"Grafana dashboard migration"); datasource **uid `sleep-notes`**
+  sidecar + reader secret stay platform-owned (§"Grafana dashboard migration"); datasource **uid `sleep-data`**
   is the platform contract the GitOps dashboard binds to. Namespaces are **platform-precreated**, the
   `sleep` AppProject only allowlists them (`CreateNamespace=false`, no `Namespace` in the cluster
   whitelist).
@@ -277,7 +277,7 @@ it stays the safety net, not the control.
   the root app after flipping `repoURL`.
 - The `$values` multi-source ref must move off homelab in the same step as the child app —
   otherwise sleep-ingester still reads values from homelab and the extraction is cosmetic.
-- **Dashboard datasource uid must not drift:** the GitOps dashboard binds to uid `sleep-notes`,
+- **Dashboard datasource uid must not drift:** the GitOps dashboard binds to uid `sleep-data`,
   provisioned by the Grafana Helm values in `argocd/platform/values/kube-prometheus-stack.yaml`
   (they moved off `tofu/monitoring.tf` with the release, FU-136). If that uid ever changes on the
   platform side, the dashboard's panels break — keep the two in lockstep. Add the GitOps CM before
