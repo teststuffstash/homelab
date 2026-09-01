@@ -30,6 +30,18 @@ meant to avoid.)
     ~10:20Z). Pickup: confirm r3 dispatched from post-#1186 master, read
     `s3://agent-transcripts/oracle-fleet/issue-330/worker-r*-…` for the tool list, then the G-F
     validated read. If r3 strikes on the attach again, it is a NEW defect — bring the log.
+    **10:12Z update:** the retry ride (`agent-oracle-fleet-issue-330-r1`, goose) launched from
+    the fixed launcher and its tool list shows the three MCP tools — half 1 DONE; read this
+    ride's outcome (comment on #330 / PR) for the `give_feedback` row = half 2, then relay both
+    to #1039 and take the G-F validated read.
+- **⚑ 2026-09-01 mechanical session — operator pickups:** (1) **`tofu plan` (main root) shows
+  pre-existing drift: `proxmox_virtual_environment_file.ci_runner_cloud_init[0]` +
+  `proxmox_virtual_environment_vm.ci_runner[0]` "must be replaced"** (cloud-init snippet
+  differs) — a full apply would DESTROY+recreate ci-runner-01; the seat applied PR#1193's kubelet
+  change TARGETED around it. Decide: re-adopt the live snippet into tofu, or accept the replace
+  at a quiet moment. (2) Bulk-tier image GC now 60/50 on the four kata nodes (PR#1193) — first
+  time `LonghornDiskBelowSchedulingFloor` stays clear ≥24h, this bullet can go; if it re-fires,
+  the tier is undersized, not the threshold (ADR-114 build-out).
   - #979 S5: quiet window ends **09-02 06:39Z** → close at the next sweep after.
   - #949 / #1101 retro batches: close at the post-r3 sweep (r3 fires Mon 09-07).
   - None of the three open Goals carries a `Production-leg:` line (pre-card) — evidence is
