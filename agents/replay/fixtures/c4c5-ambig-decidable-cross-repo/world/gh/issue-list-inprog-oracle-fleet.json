@@ -1,0 +1,9 @@
+[
+  {
+    "number": 329,
+    "title": "oracle-fleet: some unrelated issue",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "task/fix"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-09-01T14:00:00Z"
+  }
+]

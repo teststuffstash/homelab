@@ -90,4 +90,18 @@ echo "REACHED: janitor tick — timing rows ship, NO wake stamp (homelab#459)"
 DP_NOW=1786465150; SCAN_JANITOR=1 dispatch_phase circles
 printf 'RETURN %s\n' "$?"
 
+# ── the per-clause wake series (homelab#459): a SECOND push whose grouping key carries the
+# dimensions — clause-only is the COMMON case (3-field merge-path units carry no class); the
+# unit segment appears on queued-dispatch/c4c5 only, and the class is BARE (`fix`, :1642 —
+# `task/fix` is a value production cannot produce; the PR#1192 round-3 arbitration).
+echo "REACHED: cron dispatch with clause — second push, own group"
+DISPATCH_PHASE_WAKE=""; DISPATCH_PHASE_POD=coordinate-circles-cron-2
+DP_NOW=1786465200; dispatch_phase circles "changes-requested"
+printf 'RETURN %s\n' "$?"
+
+echo "REACHED: edge dispatch with clause and bare unit class"
+DISPATCH_PHASE_WAKE=""; DISPATCH_PHASE_POD=coordinate-circles-2
+DP_NOW=1786465210; dispatch_phase circles "queued-dispatch" "fix"
+printf 'RETURN %s\n' "$?"
+
 echo "REACHED: end"

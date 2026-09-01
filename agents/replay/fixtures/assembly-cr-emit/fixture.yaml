@@ -1,0 +1,21 @@
+# assembly-cr-emit (homelab#1150) — the changes-requested clause emits a goal-checkpoint unit
+# when an assembly PR (HEAD goal/**) with CHANGES_REQUESTED carries a line-anchored
+# Assembly-for: #<n> trailer. The PR is not agent/error or agent/blocked, and the state-fp
+# debounce is clear (no prior marker), so the unit is emitted and a state-fp comment is written.
+#
+# THE CONTRACT:
+#   1. A goal-checkpoint unit is emitted for the goal referenced by Assembly-for.
+#   2. A state-fp comment is written on the PR for debounce.
+#   3. No orphan line is produced for this PR.
+name: assembly-cr-emit
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

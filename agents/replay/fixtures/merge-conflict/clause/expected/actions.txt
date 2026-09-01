@@ -1,4 +1,4 @@
-CALL gh pr view 600 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments
+CALL gh pr view 600 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
 OUT UNIT merge-conflict|homelab|pr-600
 OUT ORPHAN [homelab] ⚠ merge-conflict PR #502 is seat-authored (operator lane) — the author's own push is the next mover; no machine fix-round mandate (homelab#595)
 OUT REACHED: end

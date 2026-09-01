@@ -386,6 +386,15 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
                     | .submittedAt ] | max // "")
   ] | join("|")'
+# arbitrate clause fingerprint (homelab#1011): narrower than STATE_FP_JQ — drops per-check
+# conclusions (PR#1003's mover — checks completing one at a time inside a rollup are not
+# arbitration-relevant) and narrows head= to the newest NON-merge commit (PR#1030's mover —
+# the updater merging master rewrites head unconditionally, reusing the NOOP_ROUND_JQ idiom).
+STATE_FP_JQ_ARBITRATE='[ "head=" + ([ .commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .oid ] | last // "")
+  , "review=" + (.reviewDecision // "NONE")
+  , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
+                    | .submittedAt ] | max // "")
+  ] | join("|")'
 # Newest recorded marker, by comment createdAt — `last` on the raw list would trust gh ordering.
 STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}")) ]
   | sort_by(.createdAt) | last // {})
@@ -396,20 +405,22 @@ STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-
 # pr_state_fp_pair <slug> <pr> [clause] → "<current>|<recorded>", either side empty when unknown.
 # ONE probe answers both halves, so the comparison can never straddle two snapshots of the PR.
 # When clause is "ci-red" uses STATE_FP_JQ_CIRED (includes check startedAt — homelab#1108) so a
-# CI rerun changes the fingerprint; other clauses use STATE_FP_JQ (homelab#1011: per-check churn
-# must NOT re-arm arbitrate). Always exits 0: under `set -e` a probe failure here must skip the
-# guard, never kill the scan.
+# CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
+# conclusions and narrows head to the newest non-merge commit — homelab#1011); other clauses use
+# STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
+# kill the scan.
 # >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
   # Declared on their own line, never `local x="$(cmd)"` — that form makes `local` the command
   # whose status is tested, so the `|| fallback` and `set -e` both read the wrong exit code.
   local fp_probe fp_raw fp_prev fp_cur fp_jq
   fp_probe="$(gh pr view "$2" --repo "$1" \
-      --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments 2>/dev/null)" || fp_probe=''
+      --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || fp_probe=''
   if ! jq -e . >/dev/null 2>&1 <<<"${fp_probe:-null}"; then printf '%s|%s\n' '' ''; return 0; fi
   case "${3:-}" in
-    ci-red) fp_jq="$STATE_FP_JQ_CIRED" ;;
-    *)      fp_jq="$STATE_FP_JQ" ;;
+    ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
+    arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
+    *)         fp_jq="$STATE_FP_JQ" ;;
   esac
   fp_raw="$(printf '%s' "$fp_probe" | jq -r "$fp_jq" 2>/dev/null)" || fp_raw=''
   fp_prev="$(printf '%s' "$fp_probe" | jq -r "$STATE_FP_LAST_JQ" 2>/dev/null)" || fp_prev=''
@@ -422,6 +433,102 @@ pr_state_fp_pair() {
   return 0
 }
 # <<<REPLAY:state-fp-pair<<<
+
+# ── BLOCKED-ON PREDICATE (homelab#1188) ────────────────────────────────────────────────────────
+# A terminal ruling may record what it waits on via a `blocked-on:` marker anchored at the start
+# of a comment (like every other marker in this lane — `AGENT_STRIKE:`, `AGENT_INFEASIBLE:`,
+# `state-fp:`). The scan suppresses re-dispatch while that predicate holds.
+#
+# Grammar: `blocked-on: <kind>=<ref>` with `kind ∈ {human, issue, pr}`.
+#   - `blocked-on: human`              → waiting on a human (no new review/comment since marker)
+#   - `blocked-on: issue=<number>`     → waiting on issue #number to close
+#   - `blocked-on: pr=<number>`        → waiting on PR #number to merge/close
+#
+# The marker is read from the PR's comments (newest by createdAt). While the marker is present
+# AND its named blocker is still unresolved, the clause reports instead of dispatching — the same
+# report-vs-dispatch shape the `state-fp:` debounce already has.
+#
+# >>>REPLAY:blocked-on-jq>>>
+# Extract the newest blocked-on marker from PR comments (anchored at start of comment body).
+BLOCKED_ON_JQ='([ .comments[]? | select((.body // "") | test("^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)")) ]
+  | sort_by(.createdAt) | last // {})
+  | ((.body // "") | capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)") | .kind // "")'
+# <<<REPLAY:blocked-on-jq<<<
+
+# pr_blocked_on_check <slug> <pr> → "blocked|<reason>" or "clear".
+# ONE probe reads the marker and checks the blocker state. Fail-open throughout: an unreadable
+# probe or missing marker yields "clear" (pre-#1188 behaviour — dispatch proceeds).
+# >>>REPLAY:blocked-on-check>>>
+pr_blocked_on_check() {
+  local slug="${1:?}" pr="${2:?}" marker kind ref probe rc
+  # Read the PR's comments to find the newest blocked-on marker
+  probe="$(gh pr view "$pr" --repo "$slug" --json comments,reviews 2>/dev/null)" || probe=''
+  if ! jq -e . >/dev/null 2>&1 <<<"${probe:-null}"; then printf 'clear\n'; return 0; fi
+  marker="$(printf '%s' "$probe" | jq -r "$BLOCKED_ON_JQ" 2>/dev/null)" || marker=''
+  [ -n "$marker" ] || { printf 'clear\n'; return 0; }
+  kind="${marker%%=*}"
+  ref="${marker#*=}"
+  # If ref equals kind (no '=' separator), it's a bare kind like "human"
+  [ "$ref" = "$marker" ] && ref=""
+  case "$kind" in
+    human)
+      # Check if there's been any human review or comment since the marker was written.
+      # Read the marker's timestamp and compare against the newest review/comment.
+      # `gh pr view --json comments,reviews` populates ONLY `.author.login` on comment/review
+      # authors — there is no `.author.is_bot` here (that exists on issue/PR-LEVEL author objects,
+      # which is what lines 1662/1672 read). And WORKER_AUTHOR's default is the `app/`-prefixed
+      # form, which never equals a comment author login. So normalize to the comment-author form
+      # and exclude the loop's own identities by login.
+      local marker_ts newest_ts wa_login rv_login
+      wa_login="${WORKER_AUTHOR:-app/homelab-agents-1234}"; wa_login="${wa_login#app/}"; wa_login="${wa_login%\[bot\]}"
+      rv_login="${REVIEWER_AUTHOR:-homelab-reviewer}"; rv_login="${rv_login%\[bot\]}"
+      marker_ts="$(printf '%s' "$probe" | jq -r '[.comments[]? | select((.body // "") | test("^blocked-on: human")) | .createdAt] | max // ""' 2>/dev/null)" || marker_ts=''
+      [ -n "$marker_ts" ] || { printf 'clear\n'; return 0; }
+      # A HUMAN review or a HUMAN non-marker comment clears the block — the README's own
+      # Resolution rule. Reviews carry `submittedAt`, comments `createdAt`; an entry with no
+      # resolvable author does not count as human engagement.
+      newest_ts="$(printf '%s' "$probe" | jq -r --arg wa "$wa_login" --arg rv "$rv_login" '
+        [ (.comments[]? | select(((.body // "") | test("^blocked-on: human")) | not)
+                        | select((.author.login // "") != "" and (.author.login != $wa) and (.author.login != $rv))
+                        | .createdAt),
+          (.reviews[]?  | select((.author.login // "") != "" and (.author.login != $wa) and (.author.login != $rv))
+                        | .submittedAt) ]
+        | map(select(. != null)) | max // ""' 2>/dev/null)" || newest_ts=''
+      # If there's a non-marker entry newer than the marker, a human has engaged
+      if [ -n "$newest_ts" ] && [[ "$newest_ts" > "$marker_ts" ]] 2>/dev/null; then
+        printf 'clear\n'
+      else
+        printf 'blocked|human\n'
+      fi
+      return 0
+      ;;
+    issue)
+      # Check if the issue is still open
+      local state
+      state="$(gh issue view "$ref" --repo "$slug" --json state --jq '.state' 2>/dev/null)" || state=''
+      case "$state" in
+        OPEN) printf 'blocked|issue=%s\n' "$ref";;
+        *)    printf 'clear\n';;
+      esac
+      return 0
+      ;;
+    pr)
+      # Check if the PR is still open
+      local pr_state
+      pr_state="$(gh pr view "$ref" --repo "$slug" --json state --jq '.state' 2>/dev/null)" || pr_state=''
+      case "$pr_state" in
+        OPEN) printf 'blocked|pr=%s\n' "$ref";;
+        *)    printf 'clear\n';;
+      esac
+      return 0
+      ;;
+    *)
+      printf 'clear\n'
+      return 0
+      ;;
+  esac
+}
+# <<<REPLAY:blocked-on-check<<<
 
 # homelab#155 belt: how long a phantom `agent/in-progress` (no pod, no PR) must PERSIST before the
 # scan reconciles the label itself. One full scan interval is the */30 per-stack coordinate-<stack> cron
@@ -584,8 +691,21 @@ dp_wake() {   # → "edge|<ring-epoch>" | "cron|" | "" (unreadable — the calle
 DISPATCH_PHASE_T0="$(( $(dp_now) - SECONDS ))"
 DISPATCH_PHASE_MARK="$DISPATCH_PHASE_T0"
 dispatch_phase() {   # $1 = the stack's MAIN repo — publish the scan-side rows, at a dispatch
-  local project="${1:-}" now ring family="" wake=""
+                     # $2 = clause (queued-dispatch / changes-requested / ci-red / …) — keys the per-clause wake series (homelab#459)
+                     # $3 = unit class, BARE (`fix` / `goal` — :1642 defaults it; never `task/fix`) — populated on queued-dispatch/c4c5 only
+  local project="${1:-}" clause="${2:-}" ukind="${3:-}" now ring family="" wake="" cseg="" useg=""
   now="$(dp_now)"
+  # The per-clause breakdown (homelab#459 — the FU-168 emitter hunt) rides a SECOND push below
+  # whose GROUPING KEY carries the dimensions. It cannot be body labels on any shared-group
+  # metric: pushgateway replacement scope is (grouping key, metric name) — a POST replaces every
+  # stored sample sharing a metric NAME within the group, irrespective of label values, so two
+  # consecutive dispatches with different clauses would evict each other (the PR#1192 round-3
+  # arbitration; the same FU-176 semantics iac-lane.md documents). Per-(clause, unit) groups make
+  # each series its own group — sticky, so `topk by (clause)` is meaningful over a window.
+  # Guard, not ceremony: production values are fixed clause slugs and the bare class, but a path
+  # segment must never be empty or carry `/`, so strip to [A-Za-z0-9._-] and drop what's left empty.
+  cseg="$(printf '%s' "$clause" | tr -cd 'A-Za-z0-9._-')"
+  [ -n "$ukind" ] && useg="$(printf '%s' "$ukind" | tr -cd 'A-Za-z0-9._-')"
   # A scan that dispatches twice (the global instance sweeping two stacks) measures the SECOND
   # dispatch from the first one's end, not from the pod's start — otherwise stack B's `scan` row
   # would carry stack A's whole streamed session. The mark moves whether or not anything is
@@ -643,6 +763,21 @@ agent_dispatch_cron_woken_timestamp ${now}
     || { [ -n "$DISPATCH_PHASE_WARNED" ] \
            || echo "dispatch_phase: pushgateway unreachable (${DISPATCH_PHASE_PGW}) — dispatch unaffected; this scan contributes no agent_dispatch_phase_seconds (a jail run lands here: the ClusterIP does not cross the BGP boundary)" >&2
          DISPATCH_PHASE_WARNED=1; }
+  # The per-clause wake series (homelab#459): own metric name, NO body labels — the dimensions
+  # live in the grouping key, so each (project, clause, unit) is its own group and pushes never
+  # evict a sibling clause's sample. Janitor-exempt exactly like the wake stamps above (report-only
+  # by design — its cron label is not a missed edge). Unit segment only where the class is known
+  # (queued-dispatch/c4c5; 3-field merge-path units carry none). Failure is already named once by
+  # the main push's warn-latch — a second warning per dispatch would be the #103 noise floor.
+  if [ -n "$cseg" ] && [ "${SCAN_JANITOR:-}" != "1" ]; then
+    local wurl="${DISPATCH_PHASE_PGW}/metrics/job/agent_dispatch_phase/project/${project}/role/coordinator-scan/clause/${cseg}"
+    [ -n "$useg" ] && wurl="${wurl}/unit/${useg}"
+    printf '%s\n%s\n%s\n' \
+      "# TYPE agent_dispatch_wake_clause_timestamp gauge" \
+      "# HELP agent_dispatch_wake_clause_timestamp Epoch of this stack's last dispatch for this clause (homelab#459 — clause/unit ride the grouping key, one sticky series per (project, clause, unit))." \
+      "agent_dispatch_wake_clause_timestamp ${now}" \
+      | curl -fsS --max-time 5 --data-binary @- "$wurl" >/dev/null 2>&1 || true
+  fi
   return 0
 }
 # <<<REPLAY:dispatch-phase<<<
@@ -954,13 +1089,24 @@ fast_unit_dispatch() {
     # Re-validate the item live (at-least-once delivery): still open, still CHANGES_REQUESTED,
     # no breaker label. Probe failure → full scan decides (conservative).
     # `body` rides this existing call for the FU-146 per-item hold below — no extra request.
-    fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels,body,author 2>/dev/null)" \
+    fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels,body,author,headRefName 2>/dev/null)" \
       || { echo "unit fast-path: PR probe FAILED"; return 1; }
   fi
   # PR-specific re-validation checks (only when fprjson is set — i.e., changes-requested clause).
   if [ -n "$fprjson" ]; then
     [ "$(jq -r .state <<<"$fprjson")" = "OPEN" ] || { echo "unit fast-path: PR not open"; return 0; }
     [ "$(jq -r .reviewDecision <<<"$fprjson")" = "CHANGES_REQUESTED" ] || { echo "unit fast-path: verdict moved on"; return 0; }
+    # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED from fix-round
+    # dispatch — a fix round pushes to the PR head, and the head IS the protected goal/**
+    # integration branch (the push would be refused). Fall through to the full scan, which
+    # emits a goal-checkpoint unit for the goal (trigger=assembly-cr) instead.
+    # Checked BEFORE the author gate: the goal-checkpoint emit is author-agnostic (bot or
+    # human CHANGES_REQUESTED both route as a NEW child on the goal).
+    fhead="$(jq -r '.headRefName // ""' <<<"$fprjson")"
+    if [[ "$fhead" == goal/* ]]; then
+      echo "unit fast-path: ASSEMBLY PR has changes-requested (FU-143) — falling through to full scan for goal-checkpoint emit"
+      return 1
+    fi
     # homelab#397 (rule #6 — the compound was WEAKER than the scan on exactly this predicate): the
     # main path scopes changes-requested to the WORKER author (671a053 — the snore#15 per-tick
     # sonnet leak), and the reviewer rings on EVERY verdict citing "the scan re-applies the full
@@ -1046,7 +1192,7 @@ fast_unit_dispatch() {
   # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
   # spin-up only, and the `coordinator-scan` mutex now spans just the deterministic pass (the
   # session pod uploads, pushes its own row, and rings the doorbell itself).
-  dispatch_phase "$fmain"   # FU-160: same boundary, the coordinator-owned rows above the launcher
+  dispatch_phase "$fmain" "$fclause"   # FU-160: same boundary, the coordinator-owned rows above the launcher
   scan_phase dispatch
   bash "${HERE}/coordinator-session.sh" --stack "$fstack" --repos "${frepos% }" --main-repo "$fmain" \
     --model "$fmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$fwip" --detach \
@@ -1063,6 +1209,12 @@ case "${SCAN_UNIT:-}" in ""|"-") ;; *)
 ;; esac
 
 any_work=""
+resumable_branches=""   # FU-199: space-separated repo#N=branch pairs for goal children with
+                        # AGENT_STRIKE: + Resumable branch pushed: — consumed in the dispatch
+                        # loop to add work-branch=<branch> to the item. REPO-QUALIFIED keys and
+                        # per-stack reset (round-1 review): issue numbers are per-repo, and a
+                        # bare-number key let repo A's #N attach its branch to repo B's #N
+                        # dispatch later in the same tick — cross-repo resume corruption.
 
 # ── Ratchet clause files (homelab#825, #853) ─────────────────────────────
 # CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
@@ -1147,7 +1299,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; wipmap=""
+  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   for repo in $repos; do
@@ -1298,6 +1450,60 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         echo "  [$repo] PROBE_FAILED reading merged/open PRs — FU-143 goal closeout skipped this tick (rule #6)" >&2
       fi
     fi
+    # Default branch: a queued issue without a `Base:` body line counts against this.
+    # Hoisted above IL-G06 detection block since it's used there.
+    default_branch="$(gh repo view "$slug" --json defaultBranch --jq .defaultBranch 2>/dev/null || echo "master")"
+    [ -n "$default_branch" ] || default_branch=master
+    # >>>REPLAY:il-g06-detect>>>
+    # IL-G06 revisit (homelab#1149): an OPEN issue on the default branch whose merged PR carries
+    # a strong link (`implements|closes|fixes|resolves #N` or the `Issue:` trailer) is finished
+    # work the closing keyword should have closed but did not — the PR used `Implements` instead
+    # of `Fixes`, or the issue has no `Base:` line and the keyword was inert. Detected HERE,
+    # before C4/C5, because the merged-closeout clause (C6) emits its unit and C4/C5 must EXCLUDE
+    # it in the same tick — the abandoned-probe reads OPEN PRs only, so merged work looks
+    # abandoned, and c4c5-redispatch OUTRANKS merged-closeout. Strong link only, never a bare
+    # mention (the circles#36 asymmetry stands). Probe failures skip LOUDLY (rule #6).
+    c6db=""; c6db_nums=""
+    # Candidate set: OPEN issues with agent-fix and (agent/in-progress or agent/review) that do
+    # NOT carry a `Base: goal/**` line (i.e., default-branch issues). Reuses $goalcand which was
+    # already fetched above for the goal-child leg.
+    dbcand="$(printf '%s' "$goalcand" | jq -r '.[]
+      | select(((.labels|map(.name))|index("agent/error"))|not)
+      | .number as $n
+      | ((((.body // "") | capture("(?m)^[ \\t]*[Bb]ase:[ \\t]*(?<b>goal/[^ \\t\\r\\n]+)") | .b)? // "")) as $b
+      | select($b == "") | "\($n)"')" || dbcand=""
+    if [ -n "$dbcand" ]; then
+      dbmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || dbmerged='X'
+      dbopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body // ""]' 2>/dev/null)" || dbopen='X'
+      if jq -e . >/dev/null 2>&1 <<<"${dbmerged:-null}" && jq -e . >/dev/null 2>&1 <<<"${dbopen:-null}"; then
+        for dn in $dbcand; do
+          # ⚠ STRONG LINK REQUIRED, not a bare mention (same reasoning as the goal-child leg above).
+          # A bare `#<n>` cannot tell "the PR that IMPLEMENTS the issue" from "a PR that NAMES it
+          # as a sibling seam". The keyword set is exactly what agent-runtime#32/#34 makes
+          # `finalize` guarantee, so this predicate meets that fix rather than racing it.
+          # ⚠ MUST match what `finalize` accepts, or PRs strand. Same grammar as the goal-child
+          # leg: verb keywords OR the line-anchored `Issue:` trailer.
+          dhit="$(jq -r --argjson n "$dn" --arg default_branch "$default_branch" \
+            '[.[] | select(.baseRefName == $default_branch)
+                  | select((((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
+                        or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))] | length' <<<"$dbmerged")" || dhit=0
+          # Reported, never silent: a merged PR MENTIONS it but no strong link ⇒ ambiguous, held.
+          dmention="$(jq -r --argjson n "$dn" --arg default_branch "$default_branch" \
+            '[.[] | select(.baseRefName == $default_branch) | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$dbmerged")" || dmention=0
+          dref="$(jq -r --argjson n "$dn" '[.[] | select(test("#\($n)\\b"))] | length' <<<"$dbopen")" || dref=0
+          # merged PR into the default branch cites the issue AND no OPEN PR still references it
+          # (an open follow-up round means live work — not closeable yet)
+          if [ "${dhit:-0}" -gt 0 ] && [ "${dref:-0}" -eq 0 ]; then
+            c6db="${c6db}${dn}\n"; c6db_nums="${c6db_nums}${dn} "
+          elif [ "${dmention:-0}" -gt 0 ] && [ "${dhit:-0}" -eq 0 ]; then
+            orphans="${orphans}[$repo] ⛔ issue #${dn} — a merged PR into ${default_branch} MENTIONS it but does not IMPLEMENT/CLOSE it (sibling-seam citation, not a closeout). Held: verify by hand, then hand-close.\n"
+          fi
+        done
+      else
+        echo "  [$repo] PROBE_FAILED reading merged/open PRs — IL-G06 default-branch closeout skipped this tick (rule #6)" >&2
+      fi
+    fi
+    # <<<REPLAY:il-g06-detect<<<
     # TRACKS rule 1 (open-PR bound) needs the count BEFORE the queued loop; the merge-path
     # clauses below reuse this same fetch (moved up 2026-08-03, ADR-097 — do not re-fetch).
     # mergeStateStatus is REQUIRED here: the FU-124 nudge below selects on it, and gh returns a
@@ -1326,9 +1532,6 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       | group_by(.baseRefName)
       | map("\(.[0].baseRefName)|\(length)")
       | .[]' <<<"$prsjson")"
-    # Default branch: a queued issue without a `Base:` body line counts against this.
-    default_branch="$(gh repo view "$slug" --json defaultBranch --jq .defaultBranch 2>/dev/null || echo "master")"
-    [ -n "$default_branch" ] || default_branch=master
     # ADR-097 project-WIP predicate (was binary WIP=1; found live meta-8: two dispatchers raced
     # #52 inside one scan window; 2026-07-21 #55: two CRON ticks raced through the phase=Running
     # filter while a kata pod sat Pending — so the probe counts everything non-terminal): the
@@ -2340,14 +2543,47 @@ EOF_GOVERNANCE
     # with CHANGES_REQUESTED stays on the report surface above — before this filter, every tick
     # dispatched a session that re-concluded "human PR, no mandate" (a per-tick sonnet leak, the
     # same absorbing-belt class as the WIP-hold jq-null bug).
-    # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED — a fix round
-    # pushes to the PR head, and the head IS the protected goal/** integration branch (the push
-    # would be refused; the mandate is a NEW child on the goal — coordinator README
-    # goal-checkpoint play). Report-only line below so it never rots silently.
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|select(((.headRefName // "")|startswith("goal/")) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
-      orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
-    done
     # >>>REPLAY:changes-requested-gate>>>
+    # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED from fix-round
+    # dispatch — a fix round pushes to the PR head, and the head IS the protected goal/**
+    # integration branch (the push would be refused). Instead, emit a goal-checkpoint unit
+    # for the goal referenced by the Assembly-for: #<n> trailer (trigger=assembly-cr).
+    # Debounced with state-fp: marker (homelab#198). Excludes agent/error and agent/blocked
+    # PRs as every clause does.
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|select(((.headRefName // "")|startswith("goal/")) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
+      # Breaker labels: agent/error (FU-069 human-first) and agent/blocked (human-waiting).
+      if printf '%s' "$prsjson" | jq -e --argjson n "$u" '[.[]|select(.number==$n)|.labels[].name] | index("agent/error") != null' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} has changes-requested but carries agent/error — human-first (FU-143)\n"
+        continue
+      fi
+      if printf '%s' "$prsjson" | jq -e --argjson n "$u" '[.[]|select(.number==$n)|.labels[].name] | index("agent/blocked") != null' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} has changes-requested but carries agent/blocked — human-waiting (FU-143)\n"
+        continue
+      fi
+      # Extract the line-anchored Assembly-for: #<n> trailer from the PR body (same strong-link
+      # shape the goal-lane post-launch transition keys on — IL-T18).
+      g="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body//"")|capture("(?mi)^[ \\t]*assembly-for:[ \\t]*#(?<g>[0-9]+)\\b")|.g' 2>/dev/null || echo "")"
+      case "$g" in ''|*[!0-9]*)
+        orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested but no line-anchored \`Assembly-for: #<n>\` trailer — cannot route to a goal; report-only (FU-143)\n"
+        continue
+      ;; esac
+      # state-fp debounce: one ride per verdict state (homelab#198).
+      afp="$(pr_state_fp_pair "$slug" "$u" assembly-cr)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
+      if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
+        orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} changes-requested DEBOUNCED — state unchanged since the last goal-checkpoint emit for goal #${g} (\`state-fp:${afp_cur}\`, homelab#198). The assembly PR still has CHANGES_REQUESTED and the goal-checkpoint unit was already emitted; a human (or new content) is the next mover.\n"
+        continue
+      fi
+      # Emit a goal-checkpoint unit for the goal (trigger=assembly-cr).
+      echo "  [$repo] ASSEMBLY PR #${u} has changes-requested (FU-143) — emitting goal-checkpoint for goal #${g} (trigger=assembly-cr)"
+      units="${units}goal-checkpoint|${repo}|issue-${g}\n"
+      item_class_push "$repo" "issue-${g}" "container" "machine"
+      # Carry the assembly PR number to the dispatch site via a side map (not the unit tuple,
+      # whose 4th field is uclass and 5th is uparent). Written at emission, consumed at the
+      # confirmed-dispatch site (>>>REPLAY:dispatch-marker>>>) where the state-fp marker is
+      # recorded — the debounce write must gate on confirmed selection, not on emission, or a
+      # higher-priority clause winning the same tick silently sinks the goal-checkpoint forever.
+      assembly_cr_prs="${assembly_cr_prs} ${repo}:issue-${g}:${u}"
+    done
     for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("agent/blocked"))|not) and (.reviewDecision=="CHANGES_REQUESTED") and (.author.login==$wa) and (((.headRefName // "")|startswith("goal/"))|not))|.number'); do
       # ADR-094 project-WIP hold, same rationale as the queued gate above (meta-9, 2026-07-21:
       # while #60's fix round ran, every tick woke a redundant judge whose dispatch the launcher's
@@ -2590,6 +2826,7 @@ EOF_GOVERNANCE
                | .number as $n
                | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
+               | select((($db | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
             # <<<REPLAY:c4c5-selector<<<
@@ -2621,7 +2858,7 @@ EOF_GOVERNANCE
             # >>>REPLAY:infeasible-terminal>>>
             infeas_done=""
             for icand in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
-                --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" "$C4C5_SEL"' | "\($n)"'); do
+                --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" "$C4C5_SEL"' | "\($n)"'); do
               icmt="$(gh api "repos/${slug}/issues/${icand}/comments?per_page=100" 2>/dev/null)" || icmt=""
               # `type == "array"`, not a bare `jq -e .`: an error OBJECT is truthy, and `.[]` over it
               # feeds `(.body // "")` a string, which is a jq ERROR — inside `imark="$(…)"` under
@@ -2715,7 +2952,7 @@ EOF_GOVERNANCE
             # gate it was just given. Excluded here, and from both derivations below, via the same
             # `$done` list the belt's own clears use.
             [ -n "$dispatchable" ] && c4c5_cands="$(printf '%s' "$inprog" \
-              | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                 --arg done "${infeas_done:-}" \
                 "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                  | "\($n)|\(.updatedAt // "")"')"
@@ -2893,19 +3130,66 @@ EOF_GOVERNANCE
             fi
             # <<<REPLAY:review-phantom-belt<<<
             # >>>REPLAY:c4c5-derivations>>>
-            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
+            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
               --arg done "${c4c5_cleared:-}${infeas_done:-}" \
               "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
             # The held goal children get their OWN report line — silence here is what let the first
             # one through. This is a REPORT, never a unit: a human/meta decides merged-vs-abandoned.
-            ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
+            # >>>REPLAY:c4c5-ambig-decidable>>>
+            # FU-199: a goal child whose newest AGENT_STRIKE: comment carries a Resumable branch
+            # pushed: <branch> line IS DECIDABLE — emit an ordinary C4/C5 unit carrying the branch
+            # so the session resumes with --work-branch <branch> (never a restart). No strike / no
+            # resumable branch ⇒ hold exactly as today. Loop guard: a resumed round that strikes
+            # again with the same (model, error_class) pair follows the existing second-strike rule
+            # (the agent/error STRIKE-channel path) — the narrowed hold must not create a
+            # strike→resume→strike loop.
+            ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
               '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
                | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))))
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                | "  issue #\($n) — \(.title) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]"')"
+            # For each ambiguous issue, check if the newest AGENT_STRIKE: comment carries a
+            # Resumable branch pushed: line — if so, the state IS DECIDABLE.
+            ambig_decidable=""
+            if [ -n "$ambig" ]; then
+              while IFS= read -r ambig_line; do
+                ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
+                [ -n "$ambig_n" ] || continue
+                icmt="$(gh api "repos/${slug}/issues/${ambig_n}/comments?per_page=100" 2>/dev/null)" || icmt=""
+                if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
+                  # Find the NEWEST AGENT_STRIKE: comment (last in the array, which is
+                  # oldest-first). Anchored at start-of-comment, never a substring — same
+                  # discipline as AGENT_INFEASIBLE: (homelab#257).
+                  strike="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:"))] | last // ""' <<<"$icmt")"
+                  if [ -n "$strike" ]; then
+                    branch="$(jq -rn --arg s "$strike" '
+                      $s | if test("Resumable branch pushed:") then
+                        (split("\n")[] | select(test("Resumable branch pushed:"))
+                         | sub(".*Resumable branch pushed:[ \t]*"; "") | .[0:200])
+                      else "" end
+                    ')"
+                    if [ -n "$branch" ]; then
+                      ambig_decidable="${ambig_decidable}${ambig_n} "
+                      # repo-qualified key: issue numbers are only unique per repo
+                      resumable_branches="${resumable_branches}${repo}#${ambig_n}=${branch} "
+                    fi
+                  fi
+                fi
+              done <<< "$ambig"
+            fi
+            # Rebuild ambig without the decidable issues
+            if [ -n "$ambig_decidable" ]; then
+              ambig_filtered=""
+              while IFS= read -r ambig_line; do
+                ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
+                case " $ambig_decidable " in *" $ambig_n "*) ;; *) ambig_filtered="${ambig_filtered}${ambig_line}\n";; esac
+              done <<< "$ambig"
+              ambig="$(printf '%b' "$ambig_filtered")"
+            fi
+            # <<<REPLAY:c4c5-ambig-decidable<<<
             if [ -n "$ambig" ]; then
               orphans="${orphans}[$repo] ⛔ goal child in an undecidable state — C4/C5 held rather than guessing:\n${ambig}\n"
               # Push the weak-link class for each ambiguous issue (#833, who=operator)
@@ -2919,12 +3203,25 @@ EOF_GOVERNANCE
               # and emitting the unit too would race the queued lane onto the same issue. An issue
               # the INFEASIBLE terminal parked is excluded for the opposite reason — it is human-
               # gated, and the whole point of the marker is that this unit must never carry it.
-              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
+              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                   --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                   "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                    | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
                 units="${units}c4c5-redispatch|${repo}|issue-${u%%|*}|${u#*|}\n"
                 item_class_push "$repo" "issue-${u%%|*}" "phantom" "machine"
+              done
+            fi
+            # Add resumable (decidable) goal children to dispatchable units — they were excluded
+            # from the C4C5_SEL above by the goal-based filter, so they need their own loop.
+            if [ -n "$ambig_decidable" ]; then
+              for ad_n in $ambig_decidable; do
+                ad_class="$(printf '%s' "$inprog" | jq -r --arg n "$ad_n" '
+                  .[] | select(.number == ($n|tonumber))
+                  | ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))
+                ')"
+                units="${units}c4c5-redispatch|${repo}|issue-${ad_n}|${ad_class}\n"
+                item_class_push "$repo" "issue-${ad_n}" "phantom" "machine"
+                orphans="${orphans}[$repo] ✓ issue #${ad_n} — AGENT_STRIKE + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
               done
             fi
             # <<<REPLAY:c4c5-derivations<<<
@@ -3042,7 +3339,17 @@ EOF_GOVERNANCE
     # state is a REPORT line, which is what an escalation waiting on a human should look like.
     # >>>REPLAY:arbitrate-gate>>>
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")) and ((.autoMergeRequest==null) or (.reviewDecision!="APPROVED")))|.number'); do
-      afp="$(pr_state_fp_pair "$slug" "$u")"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
+      # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
+      # still unresolved, report instead of dispatch — the same report-vs-dispatch shape the
+      # state-fp debounce already has.
+      boc="$(pr_blocked_on_check "$slug" "$u")"
+      case "$boc" in
+        blocked|blocked\|*)
+          orphans="${orphans}[$repo] ⏳ arbitrate BLOCKED-ON — PR #${u}: a terminal ruling recorded \`blocked-on: ${boc#blocked|}\` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.\n"
+          continue
+          ;;
+      esac
+      afp="$(pr_state_fp_pair "$slug" "$u" arbitrate)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
         orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
         continue
@@ -3133,6 +3440,16 @@ EOF_GOVERNANCE
         fi
         head8="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid[0:8]')"
         u_head="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefName // ""')"
+        # >>>REPLAY:ci-red-goal-head-exclusion>>>
+        # FU-143: an ASSEMBLY PR (head goal/**) with ci-red is EXCLUDED — a fix round
+        # pushes to the PR head, and the head IS the protected goal/** integration branch
+        # (the push would be refused; the mandate is a NEW child on the goal — coordinator
+        # README goal-checkpoint play). Report-only line below so it never rots silently.
+        if [[ "$u_head" == goal/* ]]; then
+          orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has ci-red (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
+          continue
+        fi
+        # <<<REPLAY:ci-red-goal-head-exclusion<<<
         # attempts = durable count of completed fix rounds on THIS PR — the fast path under the
         # issue-keyed ceiling below, and still what the no-op detector needs. Restart-safe: it reads
         # GitHub, never launcher memory. Bounds the loop: a no-op round costs at most
@@ -3212,6 +3529,15 @@ EOF_GOVERNANCE
           # the anti-livelock), and `continue` before the cap so a debounced PR never spends one of
           # the two dispatch slots a live red PR could use.
           # >>>REPLAY:ci-red-gate>>>
+          # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
+          # still unresolved, report instead of dispatch.
+          boc="$(pr_blocked_on_check "$slug" "$u")"
+          case "$boc" in
+            blocked|blocked\|*)
+              orphans="${orphans}[$repo] ⏳ ci-red BLOCKED-ON — PR #${u}: a terminal ruling recorded \`blocked-on: ${boc#blocked|}\` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.\n"
+              continue
+              ;;
+          esac
           rfp="$(pr_state_fp_pair "$slug" "$u" ci-red)"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
           if [ -n "$rfp_cur" ] && [ "$rfp_cur" = "$rfp_prev" ]; then
             orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
@@ -3229,7 +3555,7 @@ EOF_GOVERNANCE
             # units-only clauses were invisible to the `[ -z "$items" ]` gate (the meta-14 stall) —
             # every dispatchable unit MUST also add an items line.
             items="${items}[$repo] PR #${u} — ${rclause} (CI red, armed; attempt $((red_rounds+1))/${RED_MAX} on ${red_rounds_key} @ ${head8})\n"
-            item_class_push "$repo" "pr-${u}" "parked-infeasible" "machine"
+            item_class_push "$repo" "pr-${u}" "riding" "machine"
             red_n=$((red_n+1))
           fi
         else
@@ -3246,6 +3572,7 @@ EOF_GOVERNANCE
       echo "  [$repo] PROBE_FAILED reading check rollups — ci-red clause skipped this tick (needs checks:read; fail-loud rule #6)" >&2
     fi
 
+    # >>>REPLAY:merged-closeout>>>
     # C6 merged-closeout (FU-090a / MP-G03, built 2026-07-27): an issue CLOSED by its merged PR
     # but still carrying a non-terminal `agent/*` state is a loop nobody closed — outcome
     # unverified, label stale, and the merged PR's review `Follow-ups:` bullets die in the comment.
@@ -3280,6 +3607,20 @@ EOF_GOVERNANCE
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${gn} (goal child) waits for the next pass\n"
       fi
     done
+    # IL-G06 (homelab#1149): OPEN issues on the default branch whose merged PR carries a strong
+    # link — same unit, same play, same cap; emitted after goal children because the default-branch
+    # keyword SHOULD have closed the issue (GitHub does this for default-branch merges), but the
+    # PR used `Implements` instead of `Fixes`, or the issue has no `Base:` line.
+    for dn in $(printf '%b' "${c6db:-}"); do
+      if [ "$c6_n" -lt 3 ]; then
+        units="${units}merged-closeout|${repo}|issue-${dn}\n"
+        items="${items}[$repo] issue #${dn} — merged-closeout (IL-G06: default-branch PR merged with strong link, keyword inert)\n"
+        item_class_push "$repo" "issue-${dn}" "riding" "machine"
+        c6_n=$((c6_n+1))
+      else
+        orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${dn} (default-branch strong link) waits for the next pass\n"
+      fi
+    done
     for u in $c6_all; do
       if [ "$c6_n" -lt 3 ]; then
         units="${units}merged-closeout|${repo}|issue-${u}\n"
@@ -3292,6 +3633,7 @@ EOF_GOVERNANCE
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${u} waits for the next pass\n"
       fi
     done
+    # <<<REPLAY:merged-closeout<<<
 
     # BACKSTOP (C10 leftover class): an agent-pattern branch (fix/*, feat/*, agent/*) with NO open
     # PR is a closed-PR leftover — a same-named future round dies non-fast-forward on it (live
@@ -3503,8 +3845,35 @@ EOF_GOVERNANCE
         elif ! gh pr comment "${uitem#pr-}" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
               "🤖 \`state-fp:${dfp}\` — deterministic scan dispatching a \`${uclause}\` unit at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
               "" \
-              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
+              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. For arbitrate clauses (homelab#1011) per-check conclusions are dropped and head narrows to the newest non-merge commit, so CI churn and updater merges do not re-arm arbitration. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
           echo "  WARN: could not record state-fp on ${urepo} ${uitem} (gh write refused?) — dispatching anyway; the ${uclause} clause will re-emit on unchanged state (homelab#198)" >&2
+        fi
+        ;;
+      goal-checkpoint:issue-*)
+        # homelab#1150: an assembly-cr goal-checkpoint unit carries a PR number in the side map
+        # (assembly_cr_prs). Look up the dispatched unit's (repo, item) pair; when found, write
+        # the state-fp marker on the assembly PR (not the goal issue). No lookup hit ⇒ do nothing
+        # (an ordinary threshold-fired goal-checkpoint has no assembly PR and must not get a
+        # marker). Match the existing arm's failure semantics: empty fingerprint or refused write
+        # WARNS to stderr and dispatches anyway — a refused write only costs the debounce, and
+        # it must never block the ride it annotates.
+        apr=""
+        for entry in $assembly_cr_prs; do
+          if [[ "$entry" == "${urepo}:${uitem}:"* ]]; then
+            apr="${entry##*:}"
+            break
+          fi
+        done
+        if [ -n "$apr" ]; then
+          dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "$apr" assembly-cr)"; dfp="${dfp%%|*}"
+          if [ -z "$dfp" ]; then
+            echo "  WARN: state fingerprint unreadable for ${urepo} PR #${apr} — dispatching anyway; the assembly-cr debounce cannot arm this pass (homelab#198)" >&2
+          elif ! gh pr comment "$apr" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
+                "🤖 \`state-fp:${dfp}\` — deterministic scan dispatching a \`goal-checkpoint\` unit (trigger=assembly-cr) for goal ${uitem#issue-} at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+                "" \
+                "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the PR state — head sha, \`reviewDecision\`, and the newest verdict's timestamp. While the hash is unchanged this clause emits a report line instead of another unit, so an assembly PR waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
+            echo "  WARN: could not record state-fp on ${urepo} PR #${apr} (gh write refused?) — dispatching anyway; the assembly-cr clause will re-emit on unchanged state (homelab#198)" >&2
+          fi
         fi
         ;;
     esac
@@ -3626,17 +3995,32 @@ EOF_GOVERNANCE
       # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
       # spin-up, not the streamed ride, and the `coordinator-scan` mutex now spans only the
       # deterministic pass (the pod uploads, pushes its own session row, rings the doorbell itself).
-      dispatch_phase "$mainrepo"   # FU-160: the ring→scan and scan rows close on the same boundary
+      dispatch_phase "$mainrepo" "$uclause" "${uclass:-}"   # FU-160: the ring→scan and scan rows close on the same boundary
       scan_phase dispatch
       # ── FU-146 exit-3 dispatch gate (racing dispatcher won): report, retry next unit ─────────
       # When `coordinator-session.sh` exits with 3, the item pod exists and a racing dispatcher
       # won the (repo, item) key. The refusal is CORRECT; its rendering as a red workflow is
       # the problem — 34 red workflows in 16h bury 4 real failures. Retry the next unit (or
       # exit 0 if none); never propagate exit 3 as the scan's exit code.
+      # FU-199: if this c4c5-redispatch unit has a resumable branch from an AGENT_STRIKE: +
+      # Resumable branch pushed: comment, carry it so the coordinator session resumes with
+      # --work-branch <branch> (never a restart).
+      uworkbranch=""
+      if [ "$uclause" = "c4c5-redispatch" ] && [ -n "${resumable_branches:-}" ]; then
+        for rb_entry in $resumable_branches; do
+          rb_n="${rb_entry%%=*}"
+          rb_branch="${rb_entry#*=}"
+          # match on repo#number — the bare-number match was the cross-repo collision
+          if [ "${urepo}#${uitem#issue-}" = "$rb_n" ]; then
+            uworkbranch=" work-branch=${rb_branch}"
+            break
+          fi
+        done
+      fi
       dispatch_rc=0
       bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
         --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
-        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uharvest}" \
+        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uworkbranch}${uharvest}" \
         || dispatch_rc=$?
       if [ $dispatch_rc -eq 3 ]; then
         echo "  FU-146: exit 3 — ${name}/${urepo}/${uitem} taken by racing dispatcher; trying next unit"
