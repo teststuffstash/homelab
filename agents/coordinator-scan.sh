@@ -115,6 +115,32 @@ GUARDED_PATHS="$(guarded_paths || true)"
 # No set to read — classify_touches() in footprint.sh IS the definition.
 # <<<REPLAY:operator-lane-set<<<
 
+# ── GOVERNANCE PATHS — a pre-dispatch routing check (homelab#1070) ────────────────────────────
+# `scripts/governance-lint.sh` refuses PRs touching its GOVERNANCE set without specific
+# credentials or configurations. So a queued issue whose footprint lands on one of them cannot
+# be delivered by a worker PR: the required `ci` check is structurally red before the worker
+# writes a line, and the documented route is an operator push to master.
+#
+# READ THE SET, NEVER RE-DECLARE IT. Same one-greppable-line convention as the GUARDED set: the
+# lint's own `GOVERNANCE=` line is the single source of truth. A second copy here would drift.
+# >>>REPLAY:governance-set>>>
+GOVERNANCE_LINT="${GOVERNANCE_LINT:-${HERE}/../scripts/governance-lint.sh}"
+governance_paths() {   # → one governance PATH per line. NO output = could not read (never "none governed")
+  local line="" GOVERNANCE=""
+  [ -r "$GOVERNANCE_LINT" ] && line="$(grep -m1 '^GOVERNANCE=' "$GOVERNANCE_LINT" || true)"
+  [ -n "$line" ] || return 1
+  eval "$line" || return 1
+  [ -n "$GOVERNANCE" ] || return 1
+  # The lint holds its set as a regex alternation (`(a|b)`); split and unescape the same way
+  # guarded_paths does: the capture-group form `s/\\\(.\)/\1/g` correctly unescapes any character,
+  # not just dots.
+  printf '%s\n' "$GOVERNANCE" | sed 's/^\^(//; s/\$)//' | tr '|' '\n' | sed 's/\$//; s/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$'
+}
+# Read ONCE per scan; the empty-vs-unreadable distinction is made at the use site, where it holds
+# work rather than releasing it (rule #6 — never fail INTO a dispatch).
+GOVERNANCE_PATHS="$(governance_paths || true)"
+# <<<REPLAY:governance-set<<<
+
 # ── SCAN PHASE MARKER (FU-145) ──────────────────────────────────────────────────────────────────
 # `AgentCoordinateScanWedged` keyed on POD LIFETIME, and this pod's lifetime is not the thing that
 # alert names. When the scan dispatched it used to stream the item session synchronously, so a
@@ -1745,6 +1771,54 @@ EOF_GUARDED
         fi
       fi
       # <<<REPLAY:guarded-hold<<<
+      # ── GOVERNANCE PATH (homelab#993) — report, never dispatch ──────────────────────────────
+      # Tested BEFORE the transient holds (footprint / WIP / PR budget) on purpose: this one is
+      # STRUCTURAL. A governance issue must read as "route this to the operator" on every scan,
+      # not as "come back later" whenever a sibling happens to be in flight.
+      # REPORT-ONLY, NO LABEL WRITE. Same precedent as the pin-only GUARDED check: the overlap
+      # may be only PART of the issue's scope, so the line names the file and the route, and a
+      # human re-scopes or splits it.
+      # >>>REPLAY:governance-hold>>>
+      if [ "$repo" = "$GUARDED_REPO" ]; then
+        if [ -z "$GOVERNANCE_PATHS" ]; then
+          # Rule #6: never fail INTO a dispatch. The set could not be read (file moved, or its
+          # `GOVERNANCE=` line changed shape), so "not governed" is unknown, not false. Loud and
+          # level-triggered — it clears itself on the scan after the read works again.
+          orphans="${orphans}[$repo] ⛔ GOVERNANCE-SET PROBE-FAILED — no \`GOVERNANCE=\` line readable at ${GOVERNANCE_LINT} (homelab#993). Holding rather than dispatching blind:\n  issue #${qnum} — ${qtitle}\n"
+          continue
+        fi
+        # The `*` sentinel (no `Touches:` line) conflicts with EVERYTHING by design
+        # (agents/footprint.sh), as does any entry whose glob defeats prefix reasoning. Both
+        # normalize to the empty prefix and are dropped here: reading them as governed would stop
+        # dispatching every unfootprinted issue in the repo — a far worse loop than the one round
+        # this check exists to save. Dropping them costs nothing the ADR-097 hold does not already
+        # cover, since an undeclared footprint is exclusive there anyway.
+        qdecl=""; ghit=""
+        while IFS= read -r fpe; do
+          [ -n "$fpe" ] || continue
+          if [ -n "$(fp_norm_entry "$fpe")" ]; then qdecl="${qdecl}${fpe},"; fi
+        done <<EOF_QDECL
+$(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
+EOF_QDECL
+        if [ -n "$qdecl" ]; then
+          # fp_conflict_strict, not a grep: the boundary reasoning is the whole point. THIS
+          # issue's own `agents/coordinator-scan.sh` must NOT hit `.agents/` (the dot-prefix
+          # distinguishes it). STRICT (no replay exemption) on purpose: this check's invariant
+          # is touch-a-governance-FILE, and the exempting fp_conflict would fail OPEN the day
+          # a governance path lands under agents/replay/.
+          while IFS= read -r gpath; do
+            [ -n "$gpath" ] || continue
+            if fp_conflict_strict "$qdecl" "$gpath"; then ghit="${ghit} ${gpath}"; fi
+          done <<EOF_GOVERNANCE
+$GOVERNANCE_PATHS
+EOF_GOVERNANCE
+        fi
+        if [ -n "$ghit" ]; then
+          orphans="${orphans}[$repo] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches} → governance:${ghit})\n"
+          continue
+        fi
+      fi
+      # <<<REPLAY:governance-hold<<<
       # ── OPERATOR-LANE PATH (homelab#1151) — report, never dispatch ──────────────────────────
       # Tested BEFORE the transient holds (footprint / WIP / PR budget) on purpose: this one is
       # STRUCTURAL. An operator-lane issue must read as "route this to the operator" on every
