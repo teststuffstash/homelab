@@ -1301,6 +1301,54 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         echo "  [$repo] PROBE_FAILED reading merged/open PRs — FU-143 goal closeout skipped this tick (rule #6)" >&2
       fi
     fi
+    # IL-G06 revisit (homelab#1149): an OPEN issue on the default branch whose merged PR carries
+    # a strong link (`implements|closes|fixes|resolves #N` or the `Issue:` trailer) is finished
+    # work the closing keyword should have closed but did not — the PR used `Implements` instead
+    # of `Fixes`, or the issue has no `Base:` line and the keyword was inert. Detected HERE,
+    # before C4/C5, because the merged-closeout clause (C6) emits its unit and C4/C5 must EXCLUDE
+    # it in the same tick — the abandoned-probe reads OPEN PRs only, so merged work looks
+    # abandoned, and c4c5-redispatch OUTRANKS merged-closeout. Strong link only, never a bare
+    # mention (the circles#36 asymmetry stands). Probe failures skip LOUDLY (rule #6).
+    c6db=""; c6db_nums=""
+    # Candidate set: OPEN issues with agent-fix and (agent/in-progress or agent/review) that do
+    # NOT carry a `Base: goal/**` line (i.e., default-branch issues). Reuses $goalcand which was
+    # already fetched above for the goal-child leg.
+    dbcand="$(printf '%s' "$goalcand" | jq -r '.[]
+      | select(((.labels|map(.name))|index("agent/error"))|not)
+      | .number as $n
+      | ((((.body // "") | capture("(?m)^[ \\t]*[Bb]ase:[ \\t]*(?<b>goal/[^ \\t\\r\\n]+)") | .b)? // "")) as $b
+      | select($b == "") | "\($n)"')" || dbcand=""
+    if [ -n "$dbcand" ]; then
+      dbmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || dbmerged='X'
+      dbopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body // ""]' 2>/dev/null)" || dbopen='X'
+      if jq -e . >/dev/null 2>&1 <<<"${dbmerged:-null}" && jq -e . >/dev/null 2>&1 <<<"${dbopen:-null}"; then
+        for dn in $dbcand; do
+          # ⚠ STRONG LINK REQUIRED, not a bare mention (same reasoning as the goal-child leg above).
+          # A bare `#<n>` cannot tell "the PR that IMPLEMENTS the issue" from "a PR that NAMES it
+          # as a sibling seam". The keyword set is exactly what agent-runtime#32/#34 makes
+          # `finalize` guarantee, so this predicate meets that fix rather than racing it.
+          # ⚠ MUST match what `finalize` accepts, or PRs strand. Same grammar as the goal-child
+          # leg: verb keywords OR the line-anchored `Issue:` trailer.
+          dhit="$(jq -r --argjson n "$dn" \
+            '[.[] | select(.baseRefName == $default_branch)
+                  | select((((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
+                        or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))] | length' <<<"$dbmerged")" || dhit=0
+          # Reported, never silent: a merged PR MENTIONS it but no strong link ⇒ ambiguous, held.
+          dmention="$(jq -r --argjson n "$dn" \
+            '[.[] | select(.baseRefName == $default_branch) | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$dbmerged")" || dmention=0
+          dref="$(jq -r --argjson n "$dn" '[.[] | select(test("#\($n)\\b"))] | length' <<<"$dbopen")" || dref=0
+          # merged PR into the default branch cites the issue AND no OPEN PR still references it
+          # (an open follow-up round means live work — not closeable yet)
+          if [ "${dhit:-0}" -gt 0 ] && [ "${dref:-0}" -eq 0 ]; then
+            c6db="${c6db}${dn}\n"; c6db_nums="${c6db_nums}${dn} "
+          elif [ "${dmention:-0}" -gt 0 ] && [ "${dhit:-0}" -eq 0 ]; then
+            orphans="${orphans}[$repo] ⛔ issue #${dn} — a merged PR into ${default_branch} MENTIONS it but does not IMPLEMENT/CLOSE it (sibling-seam citation, not a closeout). Held: verify by hand, then hand-close.\n"
+          fi
+        done
+      else
+        echo "  [$repo] PROBE_FAILED reading merged/open PRs — IL-G06 default-branch closeout skipped this tick (rule #6)" >&2
+      fi
+    fi
     # TRACKS rule 1 (open-PR bound) needs the count BEFORE the queued loop; the merge-path
     # clauses below reuse this same fetch (moved up 2026-08-03, ADR-097 — do not re-fetch).
     # mergeStateStatus is REQUIRED here: the FU-124 nudge below selects on it, and gh returns a
@@ -2570,6 +2618,7 @@ EOF_GOVERNANCE
                | .number as $n
                | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
+               | select((($db | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
             # <<<REPLAY:c4c5-selector<<<
@@ -2601,7 +2650,7 @@ EOF_GOVERNANCE
             # >>>REPLAY:infeasible-terminal>>>
             infeas_done=""
             for icand in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
-                --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" "$C4C5_SEL"' | "\($n)"'); do
+                --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" "$C4C5_SEL"' | "\($n)"'); do
               icmt="$(gh api "repos/${slug}/issues/${icand}/comments?per_page=100" 2>/dev/null)" || icmt=""
               # `type == "array"`, not a bare `jq -e .`: an error OBJECT is truthy, and `.[]` over it
               # feeds `(.body // "")` a string, which is a jq ERROR — inside `imark="$(…)"` under
@@ -2695,7 +2744,7 @@ EOF_GOVERNANCE
             # gate it was just given. Excluded here, and from both derivations below, via the same
             # `$done` list the belt's own clears use.
             [ -n "$dispatchable" ] && c4c5_cands="$(printf '%s' "$inprog" \
-              | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                 --arg done "${infeas_done:-}" \
                 "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                  | "\($n)|\(.updatedAt // "")"')"
@@ -2873,13 +2922,13 @@ EOF_GOVERNANCE
             fi
             # <<<REPLAY:review-phantom-belt<<<
             # >>>REPLAY:c4c5-derivations>>>
-            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
+            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
               --arg done "${c4c5_cleared:-}${infeas_done:-}" \
               "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
             # The held goal children get their OWN report line — silence here is what let the first
             # one through. This is a REPORT, never a unit: a human/meta decides merged-vs-abandoned.
-            ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
+            ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
               '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
                | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))))
@@ -2899,7 +2948,7 @@ EOF_GOVERNANCE
               # and emitting the unit too would race the queued lane onto the same issue. An issue
               # the INFEASIBLE terminal parked is excluded for the opposite reason — it is human-
               # gated, and the whole point of the marker is that this unit must never carry it.
-              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
+              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                   --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                   "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                    | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
@@ -3236,6 +3285,7 @@ EOF_GOVERNANCE
       echo "  [$repo] PROBE_FAILED reading check rollups — ci-red clause skipped this tick (needs checks:read; fail-loud rule #6)" >&2
     fi
 
+    # >>>REPLAY:merged-closeout>>>
     # C6 merged-closeout (FU-090a / MP-G03, built 2026-07-27): an issue CLOSED by its merged PR
     # but still carrying a non-terminal `agent/*` state is a loop nobody closed — outcome
     # unverified, label stale, and the merged PR's review `Follow-ups:` bullets die in the comment.
@@ -3270,6 +3320,20 @@ EOF_GOVERNANCE
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${gn} (goal child) waits for the next pass\n"
       fi
     done
+    # IL-G06 (homelab#1149): OPEN issues on the default branch whose merged PR carries a strong
+    # link — same unit, same play, same cap; emitted after goal children because the default-branch
+    # keyword SHOULD have closed the issue (GitHub does this for default-branch merges), but the
+    # PR used `Implements` instead of `Fixes`, or the issue has no `Base:` line.
+    for dn in $(printf '%b' "${c6db:-}"); do
+      if [ "$c6_n" -lt 3 ]; then
+        units="${units}merged-closeout|${repo}|issue-${dn}\n"
+        items="${items}[$repo] issue #${dn} — merged-closeout (IL-G06: default-branch PR merged with strong link, keyword inert)\n"
+        item_class_push "$repo" "issue-${dn}" "riding" "machine"
+        c6_n=$((c6_n+1))
+      else
+        orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${dn} (default-branch strong link) waits for the next pass\n"
+      fi
+    done
     for u in $c6_all; do
       if [ "$c6_n" -lt 3 ]; then
         units="${units}merged-closeout|${repo}|issue-${u}\n"
@@ -3282,6 +3346,7 @@ EOF_GOVERNANCE
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${u} waits for the next pass\n"
       fi
     done
+    # <<<REPLAY:merged-closeout<<<
 
     # BACKSTOP (C10 leftover class): an agent-pattern branch (fix/*, feat/*, agent/*) with NO open
     # PR is a closed-PR leftover — a same-named future round dies non-fast-forward on it (live

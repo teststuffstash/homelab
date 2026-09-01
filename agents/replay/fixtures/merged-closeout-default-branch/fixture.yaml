@@ -1,0 +1,25 @@
+# homelab#1149 — IL-G06 revisit: an OPEN issue on the default branch whose merged PR carries
+# a strong link (`implements|closes|fixes|resolves #N` or the `Issue:` trailer) gets a
+# merged-closeout unit. Bare mentions keep holding (the circles#36 asymmetry stands).
+#
+# CONDITION UNDER REPLAY. Two OPEN issues on the default branch in one world:
+#   #90 — OPEN, `agent/in-progress`, merged PR #200 into master carries `Implements #90` → merged-closeout unit emitted.
+#   #91 — OPEN, `agent/review`, merged PR #201 into master carries `Fixes #91` → merged-closeout unit emitted.
+#   #92 — OPEN, `agent/in-progress`, merged PR #202 into master only MENTIONS #92 (bare `(#92)`) → held, reported.
+#
+# THE CONTRACT:
+#   1. #90 and #91 are emitted as merged-closeout units (c6db_nums populated, units emitted).
+#   2. #92 is reported as a bare mention hold (no strong link).
+#   3. The block runs to completion under `set -euo pipefail`.
+pins:
+  - IL-T09
+name: merged-closeout-default-branch
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:merged-closeout
+  - file:post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
+  - 's/ [0-9]\{1,\}m / Nm /g'

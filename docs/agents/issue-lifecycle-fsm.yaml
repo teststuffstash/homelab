@@ -379,8 +379,9 @@ transitions:
     owner: scan merged-closeout clause → coordinator item session
     when: "closed (or IL-T08 open-merged) ∧ still non-terminal agent/* — verify on the branch Base: declares, flip agent/done, harvest Follow-ups"
     status: guarded
-    unreplayed: "scan emit + LLM play — the play layer is outside the harness by design"
-    unreplayed: "scan emit + LLM play — the play layer is outside the harness by design"
+    replay:
+      - agents/replay/fixtures/merged-closeout-default-branch
+    unreplayed: "LLM play — the play layer is outside the harness by design"
     guards:
       - desc: "scan emits merged-closeout units (goal children first, shared cap 3/repo/scan)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merged-closeout\|' }
@@ -644,7 +645,10 @@ gaps:
       the belt just never guesses. Resolvable the same way the goal lane resolved it: once
       agent-runtime#34's finalize guarantees a strong `Implements #N` link, the mention test can be
       tightened into an ownership test."
-    accepted: "hold-not-guess is the asymmetry (a missed clear costs a report line, a wrong one costs a duplicate ride); revisit when finalize guarantees the link"
+    accepted: "RESOLVED by homelab#1149 (2026-09-01): the C6 merged-closeout clause now detects OPEN
+      issues on the default branch whose merged PR carries a strong link (`implements|closes|fixes|resolves #N`
+      or the `Issue:` trailer) and emits a merged-closeout unit. Bare mentions still hold (the
+      circles#36 asymmetry stands)."
 
   - id: IL-G07
     name: "the belt treats the symptom; the missing finalize is the cause"

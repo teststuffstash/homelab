@@ -1,0 +1,9 @@
+CALL gh issue list --repo teststuffstash/homelab --state closed --label agent-fix --limit 30 --json number,title,labels,updatedAt
+OUT UNIT merged-closeout|homelab|issue-90
+OUT UNIT merged-closeout|homelab|issue-91
+OUT ITEM [homelab] issue #90 — merged-closeout (IL-G06: default-branch PR merged with strong link, keyword inert)
+OUT ITEM [homelab] issue #91 — merged-closeout (IL-G06: default-branch PR merged with strong link, keyword inert)
+OUT REACHED: end
+ERR item_class_push: homelab issue-90 riding machine
+ERR item_class_push: homelab issue-91 riding machine
+RC 0
