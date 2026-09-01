@@ -16,9 +16,6 @@
 #   2. The dref exclusion blocks detection when an open PR references the issue.
 #   3. Only #91 is detected and emitted as a merged-closeout unit.
 #   4. #92 produces an orphan warning (merged PR mentions but does not implement).
-pins:
-  - IL-T09
-  - IL-G06
 name: merged-closeout-ilg06-detect
 mode: actions
 source: agents/coordinator-scan.sh
