@@ -5849,3 +5849,12 @@ first live ADR-110 maintenance session before the ADR existed.
   goals (deeper business logic + kind-e2e complexity, different dynamic) — FU-058 next-action
   reordered; recorded in chainless-redesign.md dir-4 + observability-and-retro.md §The split
   via PR (this sitting).
+- SIGHTINGS (operator, same sitting): (a) cheap-worker CHURN on stack work — unmeasured; the
+  seat has fixed defects neither worker nor reviewer caught; platform (jail-built, strong
+  argo/k8s priors) vs stacks (custom new dev, no big picture in the worker's context) —
+  seeded as the first stack-retro brief's headline (PR#1167 addendum); (b) oracle
+  riigiteataja: a Goal against an undocumented upstream ran the loop CLEANLY and still forced
+  a large delete-and-redo — recon-mission-required candidate recorded in research-and-specs.md
+  unsettled register (one sighting, the ≥2 rule holds). Both point the same way: worker
+  optimization is the wrong lever; the expensive failures sit upstream (contract unknowns)
+  and downstream (review/seat interventions) of the ride.
