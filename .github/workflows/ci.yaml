@@ -127,6 +127,15 @@ jobs:
       - name: Schema-validate the raw manifests ArgoCD applies (devbox run manifest-lint)
         run: devbox run manifest-lint
 
+      # homelab#1134: the sentinel's engines (kyverno + gitleaks) are a REQUIRED status on
+      # master and goal/**, run cluster-side FROM master — so nothing here exercised them, and a
+      # devbox.lock-only bump (#1131, kyverno 1.18.2 → 1.19.0) went green and froze 8/8 open PRs
+      # one tick after it merged. This runs the same evaluate() over this checkout (~2s): a lock
+      # bump that breaks an engine now reds its OWN PR (exit 2), a tree with a real violation
+      # reds too (exit 1 — the sentinel would anyway).
+      - name: Sentinel engines smoke (devbox run sentinel-smoke)
+        run: devbox run sentinel-smoke
+
       # The ~250-line responder script EMBEDDED in responder-argo.yaml is the one thing
       # manifest-lint skips entirely (it validates the Sensor CR, not the shell inside it) — and
       # it shipped two bugs in two rounds on homelab#124 alone. The harness extracts the script
