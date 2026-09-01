@@ -465,6 +465,18 @@ the block needs pruning, not more headings.
       and footprint-hold-by-a-held-item joining the hold-chain propagation rule. A Goal #1162
       scan-theme (#1163) sprout. Relates FU-187 (the no-strike inverse), FU-143.
 
+- [ ] **FU-200** — **The brief's fleet-strike rule has no deterministic reader.** "Same
+      `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h ⇒ ONE
+      `AGENT_ERROR` + one filed platform issue" (coordinator README, retro r4 F2) is a prose
+      play executed only if one session happens to see both issues — item sessions see one.
+      2026-09-01: FOUR goal-#326 r1 strikes with identical `error_class=unknown`
+      (oracle-fleet#328/#329×2/#330; three = homelab#1186, one open) were never correlated —
+      the operator + seat did it by hand via #330's triage. Prose-warned classes recur,
+      executable gates hold (ADR-103). **Next:** a scan-side fleet-window count (the scan
+      already greps `AGENT_STRIKE:` per issue for the chain-walk) emitting the breaker +
+      filing per the brief's contract; same surface as the #1163 scan theme. Relates FU-199,
+      agent-runtime#85 (the `unknown` classifier), model-routing §M1a (strike store).
+
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 
 - [ ] **FU-197** — **manifest-lint fetches every kubeconform schema from raw.githubusercontent.com
