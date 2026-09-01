@@ -22,6 +22,8 @@ name: arbitrate-first-tick
 mode: actions
 source: agents/coordinator-scan.sh
 parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
   - block:state-fp-jq
   - block:state-fp-pair
   - file:bridge.sh

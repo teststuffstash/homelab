@@ -145,6 +145,10 @@ is stale, so it cannot drift the way the prose register did.
 | `_selftest/unrecorded-read` | actions | - | `-` | - |
 | `_selftest/wrong-expectation` | actions | - | `-` | - |
 | `adopted-not-queued-surfaces/adopted-not-queued-surfaces` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-human-bot-comment-after` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-human-resolved` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-human-review-only` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/first-tick` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/fu147-refire-blocked` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/landing-sequence` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
