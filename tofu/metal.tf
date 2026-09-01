@@ -84,6 +84,19 @@ data "talos_machine_configuration" "metal" {
               "nodefs.available"   = "10%"
               "nodefs.inodesFree"  = "5%"
             }
+            # Image GC floor for the ride nodes (2026-09-01). On the two BULK-tier laptops
+            # /var/lib/longhorn shares the Talos EPHEMERAL partition with the image store
+            # (ADR-089 addendum), and the two floors never met: kubelet only starts GC at 85%
+            # USED (default) while Longhorn refuses new replicas under 25% FREE — so every
+            # per-build arc-runner/agent-base image accumulated (wk-metal-01: 21 arc-runner
+            # builds = 75G of a 185G image store) until both bulk disks sat at ~23% free,
+            # `Schedulable=False`, and no `longhorn-scratch` PVC — i.e. no docker:true worker
+            # pod — could place fleet-wide (oracle-fleet#328/#329/#330, 2026-09-01). GC now
+            # starts at 60% used and prunes unused images down to 50%, which keeps ≥25% free
+            # while Longhorn's actual data stays under ~40% of the disk. Cost: re-pulls of old
+            # image versions through the registry mirrors — nothing these nodes keep is unique.
+            imageGCHighThresholdPercent = 60
+            imageGCLowThresholdPercent  = 50
           }
         }
       }
