@@ -39,7 +39,7 @@ done
 # choke point every child (composed clauses, bridges, suite entrypoints, stubs) inherits from.
 # A fixture that genuinely needs one of these sets it via its own `env:` field, which applies
 # AFTER this line. Add newly-evidenced leaky vars here, not per-bridge.
-unset PROJECT AGENT_RAIL
+unset PROJECT AGENT_RAIL GH_TOKEN
 
 # ── fixture.yaml ────────────────────────────────────────────────────────────────────────────────
 # A deliberately tiny YAML subset — `key: value` and `key:` followed by `- item` lines, no nesting.
