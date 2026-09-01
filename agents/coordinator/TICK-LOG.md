@@ -5841,3 +5841,11 @@ first live ADR-110 maintenance session before the ADR existed.
   This serial-merge cycle is a live datapoint for #887 (updater dismissal cost).
 - NOTE: theme branches must be FAST-FORWARDED to post-merge master before first theme rides
   land (scan+exporter files moved under them); pending the last merge.
+- RULINGS (operator, same sitting, the rounds-caps thread): (1) worker cost is the platform's
+  cheapest line item — finer WORKER-side counting has no ROI, do not build there; (2) Goal
+  budgets optimize the wrong thing until coordination+review cost is metered (ADR-107
+  direction 4) — the count caps REMAIN the loop control until that attribution lands, and the
+  caps-become-judgment-triggers reframe is banked behind it; (3) retro priority FLIPS to STACK
+  goals (deeper business logic + kind-e2e complexity, different dynamic) — FU-058 next-action
+  reordered; recorded in chainless-redesign.md dir-4 + observability-and-retro.md §The split
+  via PR (this sitting).

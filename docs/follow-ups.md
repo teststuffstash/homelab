@@ -653,8 +653,11 @@ the block needs pruning, not more headings.
       belt defect #932 (queued; fact hand-recorded). Design + history:
       [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2.
       **Next:** the Mon 2026-08-31 05:00 UTC cron = the clean unattended acceptance (full
-      report per cell — r1 was one — no false RetroReportOverdue, #932 landed); then the
-      ledger emitter gaps, MCP transcript slices, stack retros (non-overlap).
+      report per cell — r1 was one — no false RetroReportOverdue, #932 landed); then **STACK
+      retros FIRST (priority flipped, operator 2026-09-01** — stack goals carry the deeper
+      business-logic + kind-e2e complexity and a different dynamic; §B2 The split): the first
+      `retro.enabled` graduation + non-overlap brief; ledger emitter gaps + MCP transcript
+      slices behind it.
       Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
