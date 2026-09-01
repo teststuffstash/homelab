@@ -30,10 +30,11 @@ meant to avoid.)
     ~10:20Z). Pickup: confirm r3 dispatched from post-#1186 master, read
     `s3://agent-transcripts/oracle-fleet/issue-330/worker-r*-…` for the tool list, then the G-F
     validated read. If r3 strikes on the attach again, it is a NEW defect — bring the log.
-    **10:12Z update:** the retry ride (`agent-oracle-fleet-issue-330-r1`, goose) launched from
-    the fixed launcher and its tool list shows the three MCP tools — half 1 DONE; read this
-    ride's outcome (comment on #330 / PR) for the `give_feedback` row = half 2, then relay both
-    to #1039 and take the G-F validated read.
+    **10:20Z: BOTH halves observed** — tool list in the live ride + two MCP-filed rows
+    (oracle-fleet#333, transcript `…/issue-330/worker-r1-20260901T102118Z/`), relayed to
+    #1039 (comment 5492494412). **Operator: take the G-F `goal/validated` read** (oracle
+    verifies the rows in `oracle-pg` on its side). Residual: the reviewer arm's live check =
+    the reviewer ride on oracle-fleet#333 (config shape already proven from the jail).
 - **⚑ 2026-09-01 mechanical session — operator pickups:** (1) **`tofu plan` (main root) shows
   pre-existing drift: `proxmox_virtual_environment_file.ci_runner_cloud_init[0]` +
   `proxmox_virtual_environment_vm.ci_runner[0]` "must be replaced"** (cloud-init snippet
