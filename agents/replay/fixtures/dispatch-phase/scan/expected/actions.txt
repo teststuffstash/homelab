@@ -55,6 +55,31 @@ CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monit
 STDIN # TYPE agent_dispatch_phase_seconds gauge
 STDIN # HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160).
 STDIN agent_dispatch_phase_seconds{phase="scan"} 20
+CALL kubectl -n circles-agents get workflow coordinate-circles-cron-2 -o json
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_dispatch_phase/project/circles/role/coordinator-scan
+STDIN # TYPE agent_dispatch_phase_seconds gauge
+STDIN # HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160).
+STDIN agent_dispatch_phase_seconds{phase="scan"} 50
+STDIN # TYPE agent_dispatch_cron_woken_timestamp gauge
+STDIN # HELP agent_dispatch_cron_woken_timestamp Epoch of this stack's last CRON-woken dispatch — each one is a dead doorbell edge with an id (017790c).
+STDIN agent_dispatch_cron_woken_timestamp 1786465200
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_dispatch_phase/project/circles/role/coordinator-scan/clause/changes-requested
+STDIN # TYPE agent_dispatch_wake_clause_timestamp gauge
+STDIN # HELP agent_dispatch_wake_clause_timestamp Epoch of this stack's last dispatch for this clause (homelab#459 — clause/unit ride the grouping key, one sticky series per (project, clause, unit)).
+STDIN agent_dispatch_wake_clause_timestamp 1786465200
+CALL kubectl -n circles-agents get workflow coordinate-circles-2 -o json
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_dispatch_phase/project/circles/role/coordinator-scan
+STDIN # TYPE agent_dispatch_phase_seconds gauge
+STDIN # HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160).
+STDIN agent_dispatch_phase_seconds{phase="ring-to-scan"} 0
+STDIN agent_dispatch_phase_seconds{phase="scan"} 10
+STDIN # TYPE agent_dispatch_edge_woken_timestamp gauge
+STDIN # HELP agent_dispatch_edge_woken_timestamp Epoch of this stack's last EDGE-woken dispatch (017790c: changes() over this counts them).
+STDIN agent_dispatch_edge_woken_timestamp 1786465210
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_dispatch_phase/project/circles/role/coordinator-scan/clause/queued-dispatch/unit/fix
+STDIN # TYPE agent_dispatch_wake_clause_timestamp gauge
+STDIN # HELP agent_dispatch_wake_clause_timestamp Epoch of this stack's last dispatch for this clause (homelab#459 — clause/unit ride the grouping key, one sticky series per (project, clause, unit)).
+STDIN agent_dispatch_wake_clause_timestamp 1786465210
 OUT REACHED: the Workflow is unreadable — the ring row is absent, the scan row still ships
 OUT RETURN 0
 OUT REACHED: the ring edge is readable
@@ -74,6 +99,10 @@ OUT RETURN 0
 OUT REACHED: second cron dispatch — cached, fresh stamp
 OUT RETURN 0
 OUT REACHED: janitor tick — timing rows ship, NO wake stamp (homelab#459)
+OUT RETURN 0
+OUT REACHED: cron dispatch with clause — second push, own group
+OUT RETURN 0
+OUT REACHED: edge dispatch with clause and bare unit class
 OUT RETURN 0
 OUT REACHED: end
 ERR dispatch_phase: pushgateway unreachable (http://prometheus-pushgateway.monitoring.svc.cluster.local:9091) — dispatch unaffected; this scan contributes no agent_dispatch_phase_seconds (a jail run lands here: the ClusterIP does not cross the BGP boundary)

@@ -1,0 +1,12 @@
+CALL gh api repos/teststuffstash/homelab/issues/330/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
+CALL gh api repos/teststuffstash/oracle-fleet/issues/329/comments?per_page=100
+OUT RESUMABLE homelab#329=fix/issue-329-loop 
+OUT UNIT c4c5-redispatch|homelab|issue-330|fix
+OUT UNIT c4c5-redispatch|homelab|issue-329|fix
+OUT UNIT c4c5-redispatch|oracle-fleet|issue-329|fix
+OUT ORPHAN [homelab] ✓ issue #329 — AGENT_STRIKE + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)
+OUT V2   issue #330 — scan: the janitor tick drops its exit code [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT V2   issue #329 — oracle-fleet: some unrelated issue [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT REACHED: end
+RC 0

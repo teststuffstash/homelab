@@ -1,0 +1,19 @@
+# CONDITION UNDER REPLAY. oracle-fleet PR #234 carries `agent/arbitrate` and has a terminal ruling
+# that wrote `blocked-on: human`. A bot comment (from the worker App) has appeared since the
+# marker, but no human review or comment. The contract is that the clause reports "BLOCKED-ON"
+# instead of dispatching: bot identities are excluded by login, so the loop's own writes must
+# never clear a marker the loop wrote (homelab#1188 finding 2 regression pin).
+name: arbitrate-blocked-on-human-bot-comment-after
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

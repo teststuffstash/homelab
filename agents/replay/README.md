@@ -145,6 +145,10 @@ is stale, so it cannot drift the way the prose register did.
 | `_selftest/unrecorded-read` | actions | - | `-` | - |
 | `_selftest/wrong-expectation` | actions | - | `-` | - |
 | `adopted-not-queued-surfaces/adopted-not-queued-surfaces` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-human-bot-comment-after` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-human-resolved` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-human-review-only` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/first-tick` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/fu147-refire-blocked` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/landing-sequence` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
@@ -153,15 +157,22 @@ is stale, so it cannot drift the way the prose register did.
 | `argv-payload/over-ceiling` | actions | - | `agents/agent-session.sh` | - |
 | `argv-payload/retro-handoff` | actions | - | `agents/retro-session.sh` | - |
 | `argv-payload/warn-band` | actions | - | `agents/agent-session.sh` | - |
+| `assembly-cr-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-cr-dispatch-marker` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-cr-emit` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-cr-no-trailer` | actions | - | `agents/coordinator-scan.sh` | - |
 | `asvs` | suite | - | `-` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-footprint-mismatch/body-footprint-mismatch` | actions | - | `agents/coordinator-scan.sh` | - |
+| `c4c5-ambig-decidable-cross-repo` | actions | - | `agents/coordinator-scan.sh` | - |
+| `c4c5-ambig-decidable` | table | - | `agents/coordinator-scan.sh` | IL-T29 |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rerun-wake-dispatch` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rerun-wake` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
@@ -201,6 +212,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fu042-wip-cap` | actions | - | `agents/agent-session.sh` | - |
 | `fu088-ladder` | table | - | `agents/agent-session.sh` | - |
 | `fu124-nudge` | table | board | `agents/coordinator-scan.sh` | - |
+| `fu143-fast-path-goal-head` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `go-rail-latch` | table | - | `agents/agent-session.sh` | - |
@@ -229,6 +241,7 @@ is stale, so it cannot drift the way the prose register did.
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/null-author` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
+| `merged-closeout-default-branch` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
 | `model-id-carrier` | table | - | `agents/agent-session.sh` | - |
 | `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
 | `opencode-hostaliases/default-profile` | actions | - | `agents/agent-session.sh` | - |

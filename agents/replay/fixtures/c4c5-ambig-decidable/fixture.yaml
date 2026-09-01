@@ -1,0 +1,33 @@
+# c4c5-ambig-decidable — FU-199: the narrowed C4/C5 goal-child hold.
+#
+# THE CONTRACT (homelab#1203, FU-199). A goal child whose newest AGENT_STRIKE: comment carries a
+# Resumable branch pushed: <branch> line IS DECIDABLE — emit an ordinary C4/C5 unit carrying the
+# branch so the session resumes with --work-branch <branch> (never a restart). No strike / no
+# resumable branch ⇒ hold exactly as today (the FU-143/IL-G06 asymmetry stands unchanged).
+#
+# Three properties are load-bearing:
+#   • ANCHORED at the start of a COMMENT body, never a substring. Same discipline as
+#     AGENT_INFEASIBLE: (homelab#257). ISSUE COMMENTS ONLY, never the body.
+#   • THE NEWEST AGENT_STRIKE: comment is checked (last in the array, which is oldest-first).
+#     Only the Resumable branch pushed: line matters — the strike's error_class is not re-read.
+#   • AN UNREADABLE PROBE keeps today's behaviour (rule #6, never fail INTO a write): the issue
+#     stays in the ambig set and is held as undecidable.
+#
+# WORLDS (family-local):
+#   strike-resumable  #329 has an AGENT_STRIKE: comment with Resumable branch pushed: fix/issue-329-loop
+#                     → decidable: emits C4/C5 unit with work-branch; #330 beside it (non-goal) keeps
+#                     its ordinary v2 report + unit.
+#   no-strike         #329 has NO AGENT_STRIKE: comment → held as today; #330 beside it keeps its
+#                     ordinary v2 report + unit.
+pins:
+  - IL-T29
+name: c4c5-ambig-decidable
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - block:c4c5-selector
+  - file:bridge.sh
+  - block:infeasible-terminal
+  - block:c4c5-derivations
+  - file:post.sh
+rows: rows.psv

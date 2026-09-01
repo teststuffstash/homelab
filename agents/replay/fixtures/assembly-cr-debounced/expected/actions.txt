@@ -1,0 +1,3 @@
+OUT ORPHAN [oracle-fleet] ⏳ ASSEMBLY PR #309 changes-requested DEBOUNCED — state unchanged since the last goal-checkpoint emit for goal #281 (`state-fp:abc123`, homelab#198). The assembly PR still has CHANGES_REQUESTED and the goal-checkpoint unit was already emitted; a human (or new content) is the next mover.
+OUT REACHED: end
+RC 0

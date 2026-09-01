@@ -1,0 +1,18 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Workflow",
+  "metadata": {
+    "name": "coordinate-circles-cron-2",
+    "namespace": "circles-agents",
+    "creationTimestamp": "2026-08-11T17:00:00Z",
+    "labels": {
+      "workflows.argoproj.io/creator": "system-serviceaccount-circles-agents-agentstack-loop",
+      "workflows.argoproj.io/cron-workflow": "coordinate-circles",
+      "workflows.argoproj.io/phase": "Running"
+    }
+  },
+  "status": {
+    "startedAt": "2026-08-11T17:00:04Z",
+    "phase": "Running"
+  }
+}
