@@ -6204,3 +6204,70 @@ first live ADR-110 maintenance session before the ADR existed.
   on base — so master's copy was restored byte-exact via child PR#1217 into the theme (armed,
   bot-gated); its merge lands on #1213's own head → CI re-runs with the file untouched. Gate
   refinement candidate noted on the PR: a comment-only fixture diff has no pin to prove.
+
+## 2026-09-01 — design-agents sitting (cont.): #1162 touch audit → v1.3.1 banked
+
+- CONDITION: operator asked for the #1162 manual-touch audit ("supposed to be autonomous — 3
+  codeowner reads") and whether goal v1.3 earns adoption given recurring defect classes.
+- ANALYSIS (delivered in-sitting): ~13 unplanned interventions vs 3–4 sanctioned reads (4:1),
+  decomposed: pilot-manual ≈5 (build items named by the readout) / orthogonal loop defects ≈6
+  (the FU-199/200/201 class — would hit any lane) / theme-intrinsic ≈3 (top hop, membership
+  bookkeeping). The tax number held: 2 owned merge reads + verdict for 13 children vs ~9-park
+  counterfactual (exporter 0 = unowned surface, not batching). Reshuffle audit: 9 parent moves
+  in one day; 4 = the missing typed-defer act, 3 = dead-origin absorption, wave-born sprouts
+  stayed under origin 5/5 — the mint-to-container proposal WITHDRAWN (operator: cheaper =
+  mint-to-origin + `Origin:` line + typed defer/release the completion walk skips). Park
+  economics: parks stay armed AND updater-refreshed today (one CI cycle per master move — the
+  PR#473 ×16 class; no reviewer tax, non-merge-commit arm; #887's n=2 says dismissals did not
+  fire) — direction = updater SKIPS human-waiting parks + the dispatch-cap SPLIT.
+- RULING (operator): **v1.3.1 BANKED** — five deltas: park economics (#887 + FU-199 cap split),
+  membership test (fix-surface + pin allowance + live-deliverable + servable-lane; acceptance
+  lists follow the tree), `Origin:` line + typed defer, checkpoint theme-FORMATION
+  (nominate→judge→mint→branch→queue; IL-G02's revisit condition fired twice), hotfix-only
+  master routing. Adoption gate = wave 2 (dispatch-belts theme, minted at #1162's close sweep)
+  on direction-5 metrics: ≤5 interventions / 0 out-of-sitting summonses / 1 owned read.
+- COMMAND: PR#1220 opened+armed (issue-authoring.md §⚖ BANKED gains the v1.3.1 block; ROADMAP
+  S8 row updated with the build items + pointers); FU-199 extended with the cap-split leg
+  (compacted to stay ≤10 lines); #887 commented with the skip-clause build + dismissal-probe
+  acceptance; meta-state pickup written (wave-2 mint at the close sweep). Direct commits
+  batched; one lint-gated push at wind-down.
+
+## 2026-09-01 — sitting cont.: PR#1216 economics read → router-first ruling; #1224/#1225 filed
+
+- CONDITION: operator read the PR#1216 round-3 directive as the tell — the opus-class
+  arbitration authored a four-edit recipe and the flash worker added no value beyond typing
+  (wall time, tool-call failures, €0.03); "the worker is a chmod +x opus-script.sh executor".
+  Diagnosis ratified: the platform has not solved PICKING A GOOD WORKER (bang-for-buck, not
+  cheapest-first); the process patches (verbatim directives, arbitrate-first, round caps,
+  escalate-to-human) are compensation for cheap unstable workers.
+- RULING (operator): **router follow-ups build FIRST, before further process machinery** —
+  FU-201 (escalation carrier), FU-174 (effort), FU-186/ADR-115 (provider quality), §M8
+  feed-4 per-job pricing; right model for the job, then redesign processes around capable
+  workers. Recorded via PR#1226 (chainless-redesign.md, beside the ⚖ ROI-sequencing block).
+  Corollaries recorded there: rounds-cap re-read gated behind good workers; **rung-0
+  mechanical re-dispatch BANKED** ("good idea, too risky right now to do blind") — models
+  first, and non-homelab stacks' daily spend is capped by CI RUNTIME (homelab ci ≈2 min,
+  stacks much longer), so cheap-retry economics are wall-clock-bound.
+- COMMAND (operator "yes" on the PR#1216 durable set): **#1224 filed** (parts-coverage
+  ratchet leg — changed clause lines must be REACHED by a registered fixture; operator-lane,
+  ci.yaml) + **#1225 filed** (pin-vacuity refinements — comment-only exempt, stacked-base
+  "cannot prove" warn, three faces evidenced; operator-lane); **#1212 rostered** into wave-2
+  dispatch-belts (comment on the issue names it the #1210 chain's root cause). meta-state
+  roster + sequencing updated. Direct commits batched; push after PR#1226 lands.
+
+## 2026-09-01 — night sitting close: Goal #1231 minted (router-first), remedy (b) landed, session handover
+
+- COMMAND (operator: "figure out a stint/goal for the router issues ... clear the session
+  then"): **Goal #1231 minted** — router-first, Base: master (justified: merge-is-deploy for
+  proxy/scan/brief; each child soaks live), Budget 16, human verdict. Children: #1232
+  (FU-201 a+b escalation carrier) #1233 (FU-202 key-class re-mint) #1234 (FU-201 c provider
+  strikes + pair-exclusion, blockedBy #1233) #1235 (FU-200 fleet-strike reader) #1236
+  (FU-186 step-1 provider_policy/exacto) all queued + rung; #1237 (FU-174 effort spike) +
+  #1238 (0731 matrix run) operator/seat-run, unqueued. goal-lint: first pass 7 FAIL (Base:
+  written inline, not line-anchored — the lint caught its author again), fixed via body
+  edits, 0 FAIL / 4 deliberate WARNs. Wave-2 roster: FU-200/FU-201 legs moved into #1231;
+  the rest waits at #1162's close sweep per router-first.
+- Earlier in the sitting: PR#1208 remedy (b) executed (fold `4ecff333→4ecff105`; suite
+  327/0, red-on-base proven, breakers cleared, #1151 → agent/review); #1224/#1225 filed;
+  FU-202 filed; router-first ruling recorded (PR#1226 merged); v1.3.1 banked (PR#1220
+  merged). NEXT SESSION = monitor + gate-read per the meta-state #1231 bullet.
