@@ -384,6 +384,7 @@ gh pr checkout ${PR}
 # MCP config (#1041): injected from the launcher-side MCP_PREP (built above the replay region).
 # Knob absent → MCP_PREP is empty → blank line, nothing attached.
 ${MCP_PREP}
+# >>>REPLAY:issue-derivation>>>
 # FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
 # the worker rounds + coordinator ticks for the same issue. Resolve via GitHub's closing-issue
 # reference ("Fixes #N"); fall back to parsing the PR body for a closing keyword when
@@ -402,6 +403,7 @@ if [ -z "\$ISSUE" ] || [ "\$ISSUE" = "null" ]; then
     echo "→ ISSUE derived from PR body closing keyword: #\$_BODY_ISSUE"
   fi
 fi
+# <<<REPLAY:issue-derivation<<<
 ISSUE_TITLE=""
 ISSUE_BODY=""
 ISSUE_UNREADABLE=0

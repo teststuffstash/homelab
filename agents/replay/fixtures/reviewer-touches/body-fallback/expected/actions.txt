@@ -1,4 +1,0 @@
-CALL gh api repos/teststuffstash/homelab/issues/1189 --jq .body // ""
-CALL gh pr diff 123
-OUT → TOUCHES: no escapes (all paths covered by declared footprint)
-RC 0

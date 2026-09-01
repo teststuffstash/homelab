@@ -216,6 +216,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/re-review-shadow-skip-tag` | actions | - | `agents/re-review.sh` | - |
 | `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
+| `issue-derivation` | suite | - | `-` | - |
 | `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `item-class/item-class` | actions | - | `agents/coordinator-scan.sh` | - |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
@@ -297,7 +298,6 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-absent` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-adopted` | actions | - | `agents/reviewer-session.sh` | - |
-| `reviewer-touches/body-fallback` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-computed` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-none` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/multiline-union` | actions | - | `agents/reviewer-session.sh` | - |
