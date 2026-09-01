@@ -95,7 +95,10 @@ walk() {  # walk <issue-number> <depth>
     [ "$(jq -r .state <<<"$ij")" = "open" ] || { closed=$((closed+1)); continue; }
     t="$(jq -r .title <<<"$ij")"; b="$(jq -r '.body // ""' <<<"$ij")"; l="$(jq -r '[.labels[].name] | join(" ")' <<<"$ij")"
     [ "$(count_lines "$b" Budget)" -eq 0 ] || fail "#$k carries a \`Budget:\` line — the ancestor walk stops at it and would read this child as its own goal"
-    par="$(api "repos/$slug/issues/$k/sub_issues?per_page=1" --jq 'length')"; par="${par:-0}"
+    # Same probe-failure contract as kids/ij above (round-3 finding): an unreadable sub-issue
+    # COUNT would otherwise default par=0, misclassify a container as a leaf AND skip the
+    # recursion into its subtree — a whole unwalked branch reported clean.
+    par="$(api "repos/$slug/issues/$k/sub_issues?per_page=1" --jq 'length')" || { warn "#$k: sub-issue count unreadable"; incomplete=1; par=0; }; par="${par:-0}"
     cb="$(line "$b" Base)"
     if [ -n "$cb" ]; then
       if [ "$cb" = "$gbase" ]; then :; elif printf '%s' "$cb" | grep -qE "^goal/${goal}-" && branch_exists "$cb"; then :;
