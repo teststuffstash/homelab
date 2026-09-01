@@ -369,6 +369,15 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
                     | .submittedAt ] | max // "")
   ] | join("|")'
+# arbitrate clause fingerprint (homelab#1011): narrower than STATE_FP_JQ — drops per-check
+# conclusions (PR#1003's mover — checks completing one at a time inside a rollup are not
+# arbitration-relevant) and narrows head= to the newest NON-merge commit (PR#1030's mover —
+# the updater merging master rewrites head unconditionally, reusing the NOOP_ROUND_JQ idiom).
+STATE_FP_JQ_ARBITRATE='[ "head=" + ([ .commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .oid ] | last // "")
+  , "review=" + (.reviewDecision // "NONE")
+  , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
+                    | .submittedAt ] | max // "")
+  ] | join("|")'
 # Newest recorded marker, by comment createdAt — `last` on the raw list would trust gh ordering.
 STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}")) ]
   | sort_by(.createdAt) | last // {})
@@ -379,20 +388,22 @@ STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-
 # pr_state_fp_pair <slug> <pr> [clause] → "<current>|<recorded>", either side empty when unknown.
 # ONE probe answers both halves, so the comparison can never straddle two snapshots of the PR.
 # When clause is "ci-red" uses STATE_FP_JQ_CIRED (includes check startedAt — homelab#1108) so a
-# CI rerun changes the fingerprint; other clauses use STATE_FP_JQ (homelab#1011: per-check churn
-# must NOT re-arm arbitrate). Always exits 0: under `set -e` a probe failure here must skip the
-# guard, never kill the scan.
+# CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
+# conclusions and narrows head to the newest non-merge commit — homelab#1011); other clauses use
+# STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
+# kill the scan.
 # >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
   # Declared on their own line, never `local x="$(cmd)"` — that form makes `local` the command
   # whose status is tested, so the `|| fallback` and `set -e` both read the wrong exit code.
   local fp_probe fp_raw fp_prev fp_cur fp_jq
   fp_probe="$(gh pr view "$2" --repo "$1" \
-      --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments 2>/dev/null)" || fp_probe=''
+      --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || fp_probe=''
   if ! jq -e . >/dev/null 2>&1 <<<"${fp_probe:-null}"; then printf '%s|%s\n' '' ''; return 0; fi
   case "${3:-}" in
-    ci-red) fp_jq="$STATE_FP_JQ_CIRED" ;;
-    *)      fp_jq="$STATE_FP_JQ" ;;
+    ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
+    arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
+    *)         fp_jq="$STATE_FP_JQ" ;;
   esac
   fp_raw="$(printf '%s' "$fp_probe" | jq -r "$fp_jq" 2>/dev/null)" || fp_raw=''
   fp_prev="$(printf '%s' "$fp_probe" | jq -r "$STATE_FP_LAST_JQ" 2>/dev/null)" || fp_prev=''
@@ -3002,7 +3013,7 @@ EOF_GOVERNANCE
     # state is a REPORT line, which is what an escalation waiting on a human should look like.
     # >>>REPLAY:arbitrate-gate>>>
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")) and ((.autoMergeRequest==null) or (.reviewDecision!="APPROVED")))|.number'); do
-      afp="$(pr_state_fp_pair "$slug" "$u")"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
+      afp="$(pr_state_fp_pair "$slug" "$u" arbitrate)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
         orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
         continue
@@ -3463,7 +3474,7 @@ EOF_GOVERNANCE
         elif ! gh pr comment "${uitem#pr-}" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
               "🤖 \`state-fp:${dfp}\` — deterministic scan dispatching a \`${uclause}\` unit at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
               "" \
-              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
+              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. For arbitrate clauses (homelab#1011) per-check conclusions are dropped and head narrows to the newest non-merge commit, so CI churn and updater merges do not re-arm arbitration. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
           echo "  WARN: could not record state-fp on ${urepo} ${uitem} (gh write refused?) — dispatching anyway; the ${uclause} clause will re-emit on unchanged state (homelab#198)" >&2
         fi
         ;;
