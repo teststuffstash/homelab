@@ -8,21 +8,19 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ 2026-09-01 NIGHT — #1162 WAVE 2 MINTED: theme #1239 (`loop-belts`, blockedBy #1163) +
-  the #1228 red repaired.** Members rebound under #1239 with `Base: goal/1162-belts` (branch
-  CUT at `81eaf5a8`, IL-G02): #1240 (FU-199 residue: strike-held rows + hold-chain
-  propagation + CAP SPLIT — minted this sitting) · #1198 · #1199 · #1211 · #1212 · #1223
-  (human-queue ruling satisfied by the operator's wave order) · #1229. **NOT queued yet** —
-  the queue act waits on PR#1228 (scan assembly) merging: (1) the checkpoint's merge order
-  (#1228 before #1213 — it carries #1148's goal-head ci-red exclusion); (2) member surfaces
-  (#1198/#1223 fixtures) exist only on the scan branch. **Pickup sequence**: #1228 CI green
-  (seat repaired its pin-vacuity red — the vacuous `assembly-cr-dispatch-no-pr` folded into
-  `dispatch-marker` as pass 2, `84cb3f91`; watch was armed) → bot review → ADR-110 codeowner
-  read → merge → merge master into `goal/1162-belts` (top hop) → queue the 7 members + ring
-  platform → then #1213's cycle (#1227 riding on the egress branch re-arms its review).
-  ⚠ do NOT push master while #1228 is armed (BEHIND churn); push the pending bookkeeping
-  after it merges. #1210 closed via PR#1221 (the salvage's second PR; PR#1216 closed as the
-  anomaly duplicate).
+- **⚑ 2026-09-01 LATE NIGHT — WAVE-2 QUEUE ACT EXECUTED (the unattended corpus session).**
+  PR#1228 (scan assembly, theme #1163) MERGED `846c0f76` ~22:20Z after the seat's ADR-110 read;
+  #1163 closed; PR#1208 (#1151 Touches-classifier lint) merged first (blocking-class, unparked
+  #1153 — which rode r2 same hour). Bookkeeping pushed (`c500394f`), top hop landed (master →
+  `goal/1162-belts`, `30859bde`), **all 7 wave-2 members queued** (#1240 #1198 #1199 #1211
+  #1212 #1223 #1229) + platform rung. PR#1241 (G1 #1232, FU-201 a+b carrier) codeowner-read +
+  approved — auto-merge lands it. **REMAINING**: #1213 (egress assembly — read DONE, judgment
+  merge; #1227 closed, nothing rides the branch) + #1242 (#1153 goal-grant consult — read DONE,
+  judgment merge) both re-parking behind the master moves (refresh → CI → bot re-review →
+  NEEDSMETA) — approve each at re-park. Then verify wave-2 dispatches flow (members serialize
+  on scan footprints). #1210 closed via PR#1221 (PR#1216 = anomaly duplicate). FU-171 header
+  repair + 3rd resight (reviewer token died mid-31-min review on #1228; 46-min pod-key stall)
+  recorded `c500394f`.
 - **⚑ 2026-09-01 NIGHT — GOAL #1231 LIVE (router-first, operator-launched; the NEXT session's
   role is MONITOR + GATE-READ).** Tree: G1 #1232 (label_map md/lg + re-grade plays, FU-201 a+b)
   · G2 #1233 (key-class re-mint, FU-202) · G3 #1234 (provider-attributed strikes +
@@ -36,9 +34,9 @@ meant to avoid.)
   operator at tree-empty per the Production-leg. **Wave-2 roster change: FU-200 + FU-201
   legs MOVED into #1231** — remaining wave-2 = #1211, #1212, FU-199 residue, #1198, #1199
   (+ #1224/#1225 operator-lane), still minted at #1162's close sweep, AFTER #1231
-  (router-first, PR#1226). **PR#1208 pickup**: remedy (b) pushed (`4ecff105`), breakers
-  cleared, #1151 → agent/review — CI → re-review → the codeowner read is the next session's
-  if this one is gone.
+  (router-first, PR#1226). **PR#1208 DONE** (merged 2026-09-01 ~22:19Z, seat codeowner read;
+  #1151 closed). G1's PR#1241 read+approved same sitting; G2–G5 parks land per the standing
+  NEEDSMETA watch.
 - **⚑ 2026-09-01 LATE SITTING — v1.3.1 BANKED (operator: "deserves a place when it works");
   PR#1220 armed (banked block + S8 row).** Pickups: (1) at #1162's `goal/validated` close
   sweep, batch-release the bucket residue and **mint WAVE 2 = the dispatch-belts theme**
