@@ -3133,7 +3133,7 @@ EOF_GOVERNANCE
                     ')"
                     if [ -n "$branch" ]; then
                       ambig_decidable="${ambig_decidable}${ambig_n} "
-# repo-qualified key: issue numbers are only unique per repo
+                      # repo-qualified key: issue numbers are only unique per repo
                       resumable_branches="${resumable_branches}${repo}#${ambig_n}=${branch} "
                     fi
                   fi
@@ -3970,7 +3970,7 @@ EOF_GOVERNANCE
         for rb_entry in $resumable_branches; do
           rb_n="${rb_entry%%=*}"
           rb_branch="${rb_entry#*=}"
-# match on repo#number — the bare-number match was the cross-repo collision
+          # match on repo#number — the bare-number match was the cross-repo collision
           if [ "${urepo}#${uitem#issue-}" = "$rb_n" ]; then
             uworkbranch=" work-branch=${rb_branch}"
             break
