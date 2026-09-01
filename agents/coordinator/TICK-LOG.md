@@ -5996,3 +5996,15 @@ first live ADR-110 maintenance session before the ADR existed.
   proven live; half 2 (an MCP-filed row) rides on this round's outcome. (Goose 1.47's tool set
   has no `read` — the model retried `-32002: Tool 'read' not found` thrice before using shell;
   recipe/harness quirk, oracle-side, noted not filed.)
+- OUTCOME (10:20Z): the r1-retry ride opened **oracle-fleet#333** ("probe brief + Rung B record +
+  WM-1 feedback rows") — two `give_feedback` rows accepted by the server (`stale_ranking`,
+  `wrong_error`), launcher-stamped `goose/deepseek/deepseek-v4-flash` in `comment`; transcript
+  `s3://agent-transcripts/oracle-fleet/issue-330/worker-r1-20260901T102118Z/`. Egress proven
+  three ways (CNP leg present in `oracle-fleet`/`oracle-iac` `agent-worker-egress`; Hubble
+  FORWARDED flows pod→192.168.3.22:443 for the whole ride; the session's tool list). Reviewer
+  arm: reviewer pods in `oracle-agents` sit behind NO CNP/CCNP/NetworkPolicy (reach by absence —
+  if reviewer egress is ever fenced it needs the same `$mcpHost` leg); config shape proven from
+  the jail with byte-identical JSON (`claude -p … --mcp-config --strict-mcp-config` →
+  `mcp__stack-mcp__{statute,search,give_feedback}`); live reviewer ride on #333 watched. Both
+  halves relayed to homelab#1039 (comment 5492494412) — the G-F `goal/validated` read is the
+  operator's. #333 arrived un-armed (C9 arms it) and codeowner-parks on `.agents/` — oracle's.
