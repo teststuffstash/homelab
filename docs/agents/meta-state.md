@@ -16,8 +16,10 @@ meant to avoid.)
   grant-consult leg). Park convoy DRAINED same sitting: PR#1157 05:53Z, #1161 05:57Z, #1160
   06:02Z — zero approval dismissals across two updater refreshes (datapoint commented on
   #887); theme branches fast-forwarded to post-merge master @ `0ba158b2`. NEXT-SESSION
-  VERIFY: (a) first theme ride dispatches against `goal/1162-*` (per-base cap frees them
-  from the master freeze) and its PR arms into the theme base; (b) known pilot gaps accepted: checkpoint may misfire an assembly ruling at
+  VERIFY: (a) DONE 09-01 07:40Z — 4 of 9 members merged+closed within 90 min of the mint
+  (#1011 #1138 #1137 #107), PR#1173 (#1148) armed into `goal/1162-scan`; #459 re-scoped
+  (clause-labelled wake-source metric) + moved to the scan theme; #1166 joined the exporter
+  theme (ledger rows 2–5 on #1162); (b) known pilot gaps accepted: checkpoint may misfire an assembly ruling at
   the master-based Goal (report-only, park it); theme assemblies are ordinary `Fixes`-closing
   PRs — NO `Assembly-for:` anywhere. S8 readout baseline on the Goal's mint comment
   (per-child ≈9 reads → target 3). The serial park-merge cycle is #887's live datapoint.
@@ -45,16 +47,16 @@ meant to avoid.)
     line-anchored pre-merge), #1117/#1118 close via the Base:-keyed C6 (their fixes are on the
     merged branch — PR#1128/#1130). ArgoCD syncs the MCP claim knob + composition; the oracle
     jail can then claim `spec.mcp`.
-  - **⏰ #1134 operator-lane residue HAS A DEADLINE**: kyverno pinned 1.18.2 (`cd3e5a87`) after
-    1.19.0 froze the merge path 45 min (the required sentinel check red on 8/8 PRs; tool-error
-    discrimination now ported). **Adapt to 1.19.0 + unpin BEFORE the weekly devbox-update
-    re-bumps** (`--exceptions` flag = prime suspect: the failing repos are exactly the ones
-    with exception files); the pin holds the line meanwhile, and the discrimination turns any
-    repeat into self-healing `error` statuses, not false violations.
+  - ~~#1134~~ **CLOSED 2026-09-01** (`94954f01`): root cause = kyverno ≥1.19 panics on the 2nd
+    nameless Kustomization doc (`--exceptions` refuted); unpinned at 1.19.0; `sentinel-smoke`
+    CI gate landed. Nothing left to verify.
   - **#1136 residue**: anonymous-clone throttling (47 failed workflows ~10:45–11:10Z) — all 14
-    homelab workflow clone sites now authenticate (`13e51ddc`, verified in-cluster); residue =
-    confirm the Failed-workflow inflow stayed zero + sweep the STACK loop namespaces' templates
-    for the same anonymous pattern.
+    homelab workflow clone sites now authenticate (`13e51ddc`, verified in-cluster). Residue
+    CLOSED 09-01: inflow stayed zero (the only failed run today was a genuine worker-PR red);
+    template sweep — the coordinator templates embed the token via `_cu`, the Composition
+    renders no anonymous clone; ONE site remained, `deploy-revert-argo.yaml:204` (anonymous
+    clone AND push — private oracle-iac cannot even be cloned) → filed + queued as **#1180**
+    (egress theme, wave 1).
   - **oracle-fleet#285 stays wedged on #1108** (queued; rerun-red wake gap; blockedBy edge
     wired — the BLOCKPARK watch flags its fix PR's park). Queued convoy still riding: #975
     #1011 #1006 #828 #1056 #1113 #1116 #1124 #1125 (DNS belt) #1108 + sprouts #1137/#1138
@@ -63,7 +65,7 @@ meant to avoid.)
     stable FAMINE key, container exclusion — the three noise classes are code now.
   - probe-platform verified past auth (#1085 live; the one finding = known loki OutOfSync
     papercut — don't re-derive). #946 seed: 3 cells (Zen weather). #994 operator-held.
-    #1133 (renovate arc-runner pin) was converging under rebase churn — confirm merged.
+    #1133 closed unmerged, superseded by PR#1143 (pin `g0b16ec104713` on master) — verified 09-01.
   - Retro r3 (Mon 09-07) runs under the NEW cost-model ranking (PR#1127); its
     predecessor-scoring is the r2-batch closeout read (#949 + #1101 close at the sweep after).
 - **⚑ 2026-08-31 CORPUS SESSION rulings (the drainage-economics discussion — operator-ruled,
@@ -160,7 +162,7 @@ meant to avoid.)
     TWO intent requests (`public-edge.anonymous-safe-serving` #175, `public-edge.
     client-observability` #176) — WAF moved into G-G's default-hardening; the #176 rescope +
     blockedBy edges; oracle-fleet#293's codeowner read; the prober class-1 brief (#289).
-  - PRs #1044/#1051/#1052 were auto-merging at wind-down — confirm landed.
+  - PRs #1044/#1051/#1052 landed 08-30 19:52–20:05Z (verified 09-01).
 
 - **⚑ DESIGN QUESTION (operator, 2026-08-30) — LARGELY DISCHARGED 2026-08-30 evening
   (ADR-119): stack→platform communication — how a stack routes
