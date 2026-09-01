@@ -1,0 +1,27 @@
+# assembly-cr-dispatch-marker (homelab#1150) — the dispatch-marker block writes a state-fp
+# comment on the assembly PR when a goal-checkpoint unit with an assembly-cr PR is dispatched.
+#
+# TWO PASSES, one directory (the PR#1208 remedy-(b) pattern): pass 1 = side map carries the
+# PR → exactly one comment CALL; pass 2 (bridge2.sh) = side map EMPTY (an ordinary
+# threshold-fired goal-checkpoint) → NO call, no WARN. The no-PR case used to be its own
+# directory (assembly-cr-dispatch-no-pr) and was structurally vacuous there — a pure-absence
+# contract over pre-existing sentinels passes on ANY base (#1225's negative-row face); carried
+# here it is pinned by a directory that reds on base.
+#
+# THE CONTRACT:
+#   1. A state-fp comment is written on the assembly PR (#309) — exactly ONE CALL in the
+#      stream: pass 2 adding a second one is the regression this fixture now also catches.
+#   2. No WARN lines are emitted (fingerprint readable, write succeeds; empty map = silent skip).
+name: assembly-cr-dispatch-marker
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:dispatch-marker
+  - file:bridge2.sh
+  - block:dispatch-marker
+env:
+  - ORG=teststuffstash
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

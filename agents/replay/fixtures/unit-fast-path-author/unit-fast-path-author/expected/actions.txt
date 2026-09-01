@@ -1,4 +1,4 @@
-CALL gh pr view 396 --repo teststuffstash/circles --json state,reviewDecision,labels,body,author
+CALL gh pr view 396 --repo teststuffstash/circles --json state,reviewDecision,labels,body,author,headRefName
 OUT REACHED: human-authored PR (the jail seat) — settles with no mandate, before any spend
 OUT unit fast-path: PR author 'RasmusSoot' is not the worker lane — no fix-round mandate (homelab#397); settled
 OUT RETURN 0

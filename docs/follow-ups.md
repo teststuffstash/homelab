@@ -408,7 +408,9 @@ the block needs pruning, not more headings.
       budget-403* is "neither round nor strike"; the raw-log subclass `budget-403-key` = mint
       defect. **Next:** strike consumers (coordinator brief chain-walk + launcher re-dispatch)
       treat key-class `error_class` as RE-MINT + same-model retry, never a model strike —
-      router-first set (chainless-redesign ⚖). Relates FU-201, agent-runtime#85, FU-180. — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
+      router-first set (chainless-redesign ⚖). Relates FU-201, agent-runtime#85, FU-180.
+
+- [ ] **FU-171** — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
       The #447 review ran 47 min (kimi-k3, **$6.33** — balance regime, FU-170); the dispatch-time
       installation token 401'd ~07:50Z BEFORE the verdict posted — a full CHANGES_REQUESTED lost
       (recoverable: S3 reviewer-r1 transcript + pod log); `/var/run/reviewer-git/` never refreshes
@@ -422,6 +424,12 @@ the block needs pruning, not more headings.
       misread it as "coordinator-git Secret empty" (the Secret is absent BY DESIGN in `<stack>-agents`)
       and could not even restore its item to `agent/queued`. Same fix shape: re-mint on 401 in the
       gh wrapper, both arms.
+      **RESIGHTED 2026-09-01 (3rd, REVIEWER arm, subscription-served)**: PR#1228's 31-min sonnet
+      review completed but `/var/run/reviewer-git/GH_TOKEN` was gone at submit — verdict
+      unpostable, exit contract failed closed (pod Error, correct), and the (repo, pr, head-sha8)
+      pod key then held every re-dispatch for the pod's lifetime (~46 min stall; re-dispatched
+      clean at pod death). Not Go-specific — any >~30-min review on any rail. The header damage
+      this resight repairs (FU-202's filing ate this item's header line) is unrelated.
 - [ ] **FU-172** — **#447 r1 review residues (operator merged wittingly, 2026-08-14).** The
       verdict died in posting (FU-171); the operator merged #447 direct (08:11Z). Findings are
       preserved in S3 (`reviewer-r1-20260814T075318Z`). Remaining: (1) only-free guardrail

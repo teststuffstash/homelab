@@ -6271,3 +6271,23 @@ first live ADR-110 maintenance session before the ADR existed.
   327/0, red-on-base proven, breakers cleared, #1151 → agent/review); #1224/#1225 filed;
   FU-202 filed; router-first ruling recorded (PR#1226 merged); v1.3.1 banked (PR#1220
   merged). NEXT SESSION = monitor + gate-read per the meta-state #1231 bullet.
+
+## 2026-09-01 — night sitting cont.: #1162 wave 2 minted (theme #1239), #1228's vacuity red repaired
+
+- CONDITION: operator pointed at the 20:50Z checkpoint (scan assembly PR#1228 opened+armed;
+  #1227 routed onto the egress branch; deferrals materialized) and asked for a new theme for
+  the post-goal children, queued. PR#1228's CI was RED: pin-vacuity flagged
+  `assembly-cr-dispatch-no-pr` — a pure-absence contract over pre-existing sentinels, green
+  on ANY base (#1225's negative-row face, the third gate face in one day).
+- COMMAND: seat repair per the remedy-(b) pattern — folded the no-PR case into
+  `assembly-cr-dispatch-marker` as a second empty-side-map pass (exactly-one-CALL pins both
+  arms), deleted the vacuous dir, index regenerated; suite 338/0 on the branch, deliberate
+  red proven against origin/master in a worktree; pushed `84cb3f91` (seat push to the theme
+  branch, top-hop precedent; rebased over the updater's refresh + PR#1221 — which is how
+  #1210 closed: the salvage landed as a SECOND PR, #1216 closed as the anomaly duplicate).
+- COMMAND: **theme #1239 minted** (`loop-belts`, wave 2, blockedBy #1163; Surface AND Touches
+  lines per the #1213 finding-1 lesson) + member #1240 minted (FU-199 residue incl. the CAP
+  SPLIT); #1198 #1199 #1211 #1212 #1223 #1229 rebound under it with `Base: goal/1162-belts`;
+  branch cut at `81eaf5a8` (IL-G02). Queue DEFERRED to post-#1228 (merge order + member
+  surfaces live on the scan branch); watch armed. #1225 gains face 5 (negative-row blindness)
+  at the next touch — recorded here, the issue comment rides the next batch.

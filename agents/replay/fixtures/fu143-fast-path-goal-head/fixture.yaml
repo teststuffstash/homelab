@@ -1,0 +1,20 @@
+# fu143-fast-path-goal-head (homelab#1148) — the doorbell fast-path's FU-143 goal/**-head
+# exclusion for the changes-requested clause. A worker-authored PR with CHANGES_REQUESTED and
+# a goal/** head must NOT dispatch a fix round (the head IS the protected goal/** integration
+# branch). Instead, the fast path falls through (return 1) to the full scan, which emits a
+# goal-checkpoint unit for the goal (trigger=assembly-cr, homelab#1150).
+#
+# THE CONTRACT: a CHANGES_REQUESTED unit whose PR head is goal/** falls through (return 1,
+# "falling through to full scan for goal-checkpoint emit") BEFORE any spend — no subscription-latch
+# probe, no kubectl WIP read, no session. The action stream ends at the one PR view; that absence
+# IS the assertion.
+name: fu143-fast-path-goal-head
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:unit-fast-path
+  - file:drive.sh
+env:
+  - ORG=teststuffstash
+  - SCAN_STACK=oracle-fleet

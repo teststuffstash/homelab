@@ -34,6 +34,8 @@ name: ci-red-rerun-wake-dispatch
 mode: actions
 source: agents/coordinator-scan.sh
 parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
   - block:state-fp-jq
   - block:state-fp-pair
   - block:round-evidence
