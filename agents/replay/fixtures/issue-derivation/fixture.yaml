@@ -1,0 +1,13 @@
+# #1189 — ISSUE derivation: closingIssuesReferences or PR body closing keyword fallback.
+#
+# mode: suite — behavioural pin for the ISSUE derivation logic in reviewer-session.sh's PREP
+# heredoc. Tests three acceptance cases:
+#   A. Populated closingIssuesReferences → ISSUE from that source (unchanged path)
+#   B. Empty closingIssuesReferences + body "Fixes #N" → ISSUE from body fallback
+#   C. Neither source → ISSUE empty (clean degrade to undeclared)
+#
+# The suite (agents/issue-derivation-replay.sh) stubs gh with controlled PR metadata JSON.
+# No network, no credentials.
+name: issue-derivation
+mode: suite
+entrypoint: agents/issue-derivation-replay.sh

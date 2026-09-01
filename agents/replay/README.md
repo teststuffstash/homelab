@@ -218,6 +218,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/re-review-shadow-skip-tag` | actions | - | `agents/re-review.sh` | - |
 | `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
+| `issue-derivation` | suite | - | `-` | - |
 | `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `item-class/item-class` | actions | - | `agents/coordinator-scan.sh` | - |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
