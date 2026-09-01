@@ -189,8 +189,6 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-ground-rules/missing` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-ground-rules/unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-issue-context-gate` | actions | - | `agents/agent-session.sh` | - |
-| `env-card-issue-context-gate/issue-task` | actions | - | `agents/agent-session.sh` | - |
-| `env-card-issue-context-gate/research-task` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-machine-markers/env-card-machine-markers-capture` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-mcp-present` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-mcp-present/opencode` | actions | - | `agents/agent-session.sh` | - |
