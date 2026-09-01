@@ -5865,3 +5865,23 @@ first live ADR-110 maintenance session before the ADR existed.
   intake rule 2 gained the absorption nuance (keep-origin-parent only while the origin is OPEN
   or in-tree) in the Goal body; ledger row 2 recorded. The pilot's acceptance-5 channel is
   working — the finding arrived through a ride note, cost zero extra sessions.
+- OPERATOR-LANE SWEEP (operator: "lets take those"), all operator-direct, master 94954f01 →
+  b4921eb1: **#1134 CLOSED** — root cause = kyverno ≥1.19 panics on the 2nd nameless
+  Kustomization doc (`--exceptions` hypothesis REFUTED); collector drops kustomize.config.k8s.io
+  docs, 1.19.0 reproduces 1.18.2 verdicts over 302 docs, unpinned + lock regenerated; leg 3 =
+  `scripts/iac-sentinel.sh --smoke` (same evaluate(), exit 2 engine-error / 1 violation / 0) as
+  `devbox run sentinel-smoke` in ci.yaml + diff-ci map — the gate that would have caught #1131
+  (nothing in CI executed kyverno). **#114 CLOSED** (already fixed 08-07/08-11 in the workflow).
+  **#1028 CLOSED** (ratchet unions suite entrypoints). **#1036 CLOSED** (governance-lint
+  assembly-lane arm: commit authorship on goal/**+Assembly-for heads; worktree-tested both
+  ways). **#1107 CLOSED** (pin-vacuity gate: changed fixtures must FAIL on the base tree's
+  harness — premise proven on PR#1157's fixture: rc=1 on af79feac, 0 on HEAD). **#1069**: recipe
+  paste landed (belt); operator asked for the deterministic form → **#1175 filed+queued**
+  (launcher REST pre-read → /work/issue.md, unreadable ⇒ defer before any pod); sibling pastes
+  deliberately skipped (one launcher change covers every repo). **#1150** design-ruled (assembly
+  CR → goal-checkpoint trigger, deterministic clause) and INTAKEN into scan theme #1163 under
+  a judged Surface widening (+ coordinator/README.md) — ledger row 3. **#857** left for the
+  operator: the spike's recommendation is Talos v1.13.8 on the ephemeral tier (metal talosctl
+  upgrade — an infra sitting, not a seat quickfix). Lesson banked: a PR branch cut from a
+  local master carrying unpushed direct commits SQUASHES them into master via the PR — the
+  post-merge rebase then replays duplicates; cut PR branches from origin/master.
