@@ -1,0 +1,32 @@
+# homelab#1199 — IL-G06 detection semantics pinned via state-keyed world files.
+#
+# The replay stub now keys `gh pr list` world files by --state value (homelab#1199), so
+# `--state merged` and `--state open` serve DISTINCT world files. This fixture validates the
+# **positive-path detection semantics** that were previously unreplayable:
+#
+#   - #90: merged PR #200 has `Fixes #90` (strong link) BUT open PR #300 mentions #90
+#          → dref > 0 → NOT detected (open follow-up round = live work)
+#   - #91: merged PR #201 has `Implements #91` (strong link) AND no open PR mentions #91
+#          → dref = 0 → DETECTED (c6db gets "91")
+#   - #92: merged PR #202 has `Related to #92` (bare mention, not a strong link)
+#          → dhit = 0, dmention > 0 → orphan message (sibling-seam citation)
+#
+# THE CONTRACT:
+#   1. The detection block correctly distinguishes strong-link from bare-mention.
+#   2. The dref exclusion blocks detection when an open PR references the issue.
+#   3. Only #91 is detected and emitted as a merged-closeout unit.
+#   4. #92 produces an orphan warning (merged PR mentions but does not implement).
+pins:
+  - IL-T09
+  - IL-G06
+name: merged-closeout-ilg06-detect
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:il-g06-detect
+  - block:merged-closeout
+  - file:post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
+  - 's/ [0-9]\{1,\}m / Nm /g'
