@@ -370,7 +370,7 @@ transitions:
       - desc: "the Resumable branch pushed: line is read from the anchored strike comment — the branch is extracted and carried into the dispatch unit"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("Resumable branch pushed:"\)' }
       - desc: "no strike / no resumable branch / unreadable probe keeps today's behaviour (rule #6 — never fail INTO a write)"
-        anchor: { file: agents/coordinator-scan.sh, pattern: "the infeasible-terminal check was SKIPPED" }
+        anchor: { file: agents/coordinator-scan.sh, pattern: "goal child in an undecidable state" }
       - desc: "loop guard — a resumed round that strikes again with the same (model, error_class) pair follows the existing second-strike rule"
         anchor: { file: agents/coordinator-scan.sh, pattern: "second-strike rule" }
     incidents:

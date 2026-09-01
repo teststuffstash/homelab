@@ -1,7 +1,7 @@
 CALL gh api repos/teststuffstash/homelab/issues/330/comments?per_page=100
 CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
 CALL gh api repos/teststuffstash/oracle-fleet/issues/329/comments?per_page=100
-OUT RESUMABLE homelab:329=fix/issue-329-loop 
+OUT RESUMABLE homelab#329=fix/issue-329-loop 
 OUT UNIT c4c5-redispatch|homelab|issue-330|fix
 OUT UNIT c4c5-redispatch|homelab|issue-329|fix
 OUT UNIT c4c5-redispatch|oracle-fleet|issue-329|fix

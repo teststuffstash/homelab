@@ -1192,10 +1192,12 @@ case "${SCAN_UNIT:-}" in ""|"-") ;; *)
 ;; esac
 
 any_work=""
-resumable_branches=""   # FU-199: space-separated repo:issue-N=branch pairs for goal children with
-                        # AGENT_STRIKE: + Resumable branch pushed: — accumulated per-stack,
-                        # consumed in the dispatch loop to add work-branch=<branch> to the item.
-                        # The key carries the repo to prevent cross-repo collisions (homelab#1203 r3).
+resumable_branches=""   # FU-199: space-separated repo#N=branch pairs for goal children with
+                        # AGENT_STRIKE: + Resumable branch pushed: — consumed in the dispatch
+                        # loop to add work-branch=<branch> to the item. REPO-QUALIFIED keys and
+                        # per-stack reset (round-1 review): issue numbers are per-repo, and a
+                        # bare-number key let repo A's #N attach its branch to repo B's #N
+                        # dispatch later in the same tick — cross-repo resume corruption.
 
 # ── Ratchet clause files (homelab#825, #853) ─────────────────────────────
 # CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
@@ -3131,7 +3133,8 @@ EOF_GOVERNANCE
                     ')"
                     if [ -n "$branch" ]; then
                       ambig_decidable="${ambig_decidable}${ambig_n} "
-                      resumable_branches="${resumable_branches}${repo}:${ambig_n}=${branch} "
+# repo-qualified key: issue numbers are only unique per repo
+                      resumable_branches="${resumable_branches}${repo}#${ambig_n}=${branch} "
                     fi
                   fi
                 fi
@@ -3967,7 +3970,8 @@ EOF_GOVERNANCE
         for rb_entry in $resumable_branches; do
           rb_n="${rb_entry%%=*}"
           rb_branch="${rb_entry#*=}"
-          if [ "${urepo}:${uitem#issue-}" = "$rb_n" ]; then
+# match on repo#number — the bare-number match was the cross-repo collision
+          if [ "${urepo}#${uitem#issue-}" = "$rb_n" ]; then
             uworkbranch=" work-branch=${rb_branch}"
             break
           fi
