@@ -19,6 +19,7 @@ argv-payload-warn-band	argv-payload
 asvs	asvs
 board-classification	board-classification
 body-footprint-mismatch	body-footprint-mismatch
+c4c5-ambig-decidable	c4c5-ambig-decidable
 c4c5-bodies-probe-fail	c4c5-bodies-probe-fail
 c4c5-infeasible-parks	c4c5-infeasible
 c4c5-infeasible-probe-fail	c4c5-infeasible

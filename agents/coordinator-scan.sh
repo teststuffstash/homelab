@@ -1164,6 +1164,9 @@ case "${SCAN_UNIT:-}" in ""|"-") ;; *)
 ;; esac
 
 any_work=""
+resumable_branches=""   # FU-199: space-separated issue-N=branch pairs for goal children with
+                        # AGENT_STRIKE: + Resumable branch pushed: — accumulated per-repo,
+                        # consumed in the dispatch loop to add work-branch=<branch> to the item.
 
 # ── Ratchet clause files (homelab#825, #853) ─────────────────────────────
 # CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
@@ -3062,6 +3065,14 @@ EOF_GOVERNANCE
                | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
             # The held goal children get their OWN report line — silence here is what let the first
             # one through. This is a REPORT, never a unit: a human/meta decides merged-vs-abandoned.
+            # >>>REPLAY:c4c5-ambig-decidable>>>
+            # FU-199: a goal child whose newest AGENT_STRIKE: comment carries a Resumable branch
+            # pushed: <branch> line IS DECIDABLE — emit an ordinary C4/C5 unit carrying the branch
+            # so the session resumes with --work-branch <branch> (never a restart). No strike / no
+            # resumable branch ⇒ hold exactly as today. Loop guard: a resumed round that strikes
+            # again with the same (model, error_class) pair follows the existing second-strike rule
+            # (the agent/error STRIKE-channel path) — the narrowed hold must not create a
+            # strike→resume→strike loop.
             ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
               '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
                | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
@@ -3069,6 +3080,44 @@ EOF_GOVERNANCE
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                | "  issue #\($n) — \(.title) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]"')"
+            # For each ambiguous issue, check if the newest AGENT_STRIKE: comment carries a
+            # Resumable branch pushed: line — if so, the state IS DECIDABLE.
+            ambig_decidable=""
+            if [ -n "$ambig" ]; then
+              while IFS= read -r ambig_line; do
+                ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
+                [ -n "$ambig_n" ] || continue
+                icmt="$(gh api "repos/${slug}/issues/${ambig_n}/comments?per_page=100" 2>/dev/null)" || icmt=""
+                if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
+                  # Find the NEWEST AGENT_STRIKE: comment (last in the array, which is
+                  # oldest-first). Anchored at start-of-comment, never a substring — same
+                  # discipline as AGENT_INFEASIBLE: (homelab#257).
+                  strike="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:"))] | last // ""' <<<"$icmt")"
+                  if [ -n "$strike" ]; then
+                    branch="$(jq -rn --arg s "$strike" '
+                      $s | if test("Resumable branch pushed:") then
+                        (split("\n")[] | select(test("Resumable branch pushed:"))
+                         | sub(".*Resumable branch pushed:[ \t]*"; "") | .[0:200])
+                      else "" end
+                    ')"
+                    if [ -n "$branch" ]; then
+                      ambig_decidable="${ambig_decidable}${ambig_n} "
+                      resumable_branches="${resumable_branches}${ambig_n}=${branch} "
+                    fi
+                  fi
+                fi
+              done <<< "$ambig"
+            fi
+            # Rebuild ambig without the decidable issues
+            if [ -n "$ambig_decidable" ]; then
+              ambig_filtered=""
+              while IFS= read -r ambig_line; do
+                ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
+                case " $ambig_decidable " in *" $ambig_n "*) ;; *) ambig_filtered="${ambig_filtered}${ambig_line}\n";; esac
+              done <<< "$ambig"
+              ambig="$(printf '%b' "$ambig_filtered")"
+            fi
+            # <<<REPLAY:c4c5-ambig-decidable<<<
             if [ -n "$ambig" ]; then
               orphans="${orphans}[$repo] ⛔ goal child in an undecidable state — C4/C5 held rather than guessing:\n${ambig}\n"
               # Push the weak-link class for each ambiguous issue (#833, who=operator)
@@ -3088,6 +3137,19 @@ EOF_GOVERNANCE
                    | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
                 units="${units}c4c5-redispatch|${repo}|issue-${u%%|*}|${u#*|}\n"
                 item_class_push "$repo" "issue-${u%%|*}" "phantom" "machine"
+              done
+            fi
+            # Add resumable (decidable) goal children to dispatchable units — they were excluded
+            # from the C4C5_SEL above by the goal-based filter, so they need their own loop.
+            if [ -n "$ambig_decidable" ]; then
+              for ad_n in $ambig_decidable; do
+                ad_class="$(printf '%s' "$inprog" | jq -r --arg n "$ad_n" '
+                  .[] | select(.number == ($n|tonumber))
+                  | ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))
+                ')"
+                units="${units}c4c5-redispatch|${repo}|issue-${ad_n}|${ad_class}\n"
+                item_class_push "$repo" "issue-${ad_n}" "phantom" "machine"
+                orphans="${orphans}[$repo] ✓ issue #${ad_n} — AGENT_STRIKE + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
               done
             fi
             # <<<REPLAY:c4c5-derivations<<<
@@ -3868,10 +3930,24 @@ EOF_GOVERNANCE
       # won the (repo, item) key. The refusal is CORRECT; its rendering as a red workflow is
       # the problem — 34 red workflows in 16h bury 4 real failures. Retry the next unit (or
       # exit 0 if none); never propagate exit 3 as the scan's exit code.
+      # FU-199: if this c4c5-redispatch unit has a resumable branch from an AGENT_STRIKE: +
+      # Resumable branch pushed: comment, carry it so the coordinator session resumes with
+      # --work-branch <branch> (never a restart).
+      uworkbranch=""
+      if [ "$uclause" = "c4c5-redispatch" ] && [ -n "${resumable_branches:-}" ]; then
+        for rb_entry in $resumable_branches; do
+          rb_n="${rb_entry%%=*}"
+          rb_branch="${rb_entry#*=}"
+          if [ "${uitem#issue-}" = "$rb_n" ]; then
+            uworkbranch=" work-branch=${rb_branch}"
+            break
+          fi
+        done
+      fi
       dispatch_rc=0
       bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
         --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
-        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uharvest}" \
+        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uworkbranch}${uharvest}" \
         || dispatch_rc=$?
       if [ $dispatch_rc -eq 3 ]; then
         echo "  FU-146: exit 3 — ${name}/${urepo}/${uitem} taken by racing dispatcher; trying next unit"
