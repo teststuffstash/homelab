@@ -13,9 +13,10 @@
 #   1. The detection block runs to completion under `set -euo pipefail` with empty world data.
 #   2. No jq compile errors from undefined `$default_branch` (the --arg fix).
 #   3. Detection output variables (c6db, c6db_nums) remain empty, which is correct for empty input.
-#      NOT-PINNED: the `default_branch=` assignment at coordinator-scan.sh:1308 sits above the
-#      `>>>REPLAY:il-g06-detect>>>` marker at :1310, so it is outside the extracted block and
-#      bridge.sh supplies the variable under replay. Un-hoisting it would not red this fixture.
+#      NOT-PINNED: the `default_branch=` assignment in coordinator-scan.sh sits ABOVE the
+#      `>>>REPLAY:il-g06-detect>>>` marker (grep the marker — line numbers drift), so it is
+#      outside the extracted block and bridge.sh supplies the variable under replay.
+#      Un-hoisting it would not red this fixture.
 pins:
   - IL-T09
 name: merged-closeout-default-branch
