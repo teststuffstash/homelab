@@ -686,6 +686,11 @@ Rule exactly one of:
   assembly draws a review of nothing, and a CHANGES_REQUESTED on it summons fix rounds at the
   integration branch. If the HUMAN requests changes on the assembly PR, route the work as a
   NEW child on the goal — never a fix round pushed at `goal/**` (protected base).
+  **`trigger=assembly-cr` (homelab#1150):** the scan's changes-requested clause now emits a
+  `goal-checkpoint` unit when an assembly PR (HEAD `goal/**`, body carries a line-anchored
+  `Assembly-for: #<n>` trailer) receives a `CHANGES_REQUESTED` verdict. The checkpoint session
+  reads this trigger and routes the work as a NEW child on the goal, exactly per the rule above
+  — the same decompose rules apply (`Base: goal/**`, narrowed `Touches:`, one deliverable).
   Any child still open when the acceptance is already met is a scope question, not a
   formality: say so rather than letting it run.
 - **Not yet assembly-complete, and the remaining children cover the gap** → comment what is still
