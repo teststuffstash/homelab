@@ -393,6 +393,12 @@ the block needs pruning, not more headings.
       deepseek-v4-flash (direct-to-master, operator) — cheaper/faster rounds fit the token window.
       Next: mid-review token refresh (re-mount/re-mint on 401); re-verify on the next >30-min
       review. Relates FU-170, #435 (review-state snapshots proved their worth here).
+      **RESIGHTED 2026-09-01 on the COORDINATOR arm** (oracle #328 item session, 09:20–09:49Z,
+      only 29 min): `LOOP_FETCH` mints ONCE at PREP and the per-stack ns holds no refreshable
+      mount, so a broker token already partway through its hour 401'd every write — the session
+      misread it as "coordinator-git Secret empty" (the Secret is absent BY DESIGN in `<stack>-agents`)
+      and could not even restore its item to `agent/queued`. Same fix shape: re-mint on 401 in the
+      gh wrapper, both arms.
 - [ ] **FU-172** — **#447 r1 review residues (operator merged wittingly, 2026-08-14).** The
       verdict died in posting (FU-171); the operator merged #447 direct (08:11Z). Findings are
       preserved in S3 (`reviewer-r1-20260814T075318Z`). Remaining: (1) only-free guardrail

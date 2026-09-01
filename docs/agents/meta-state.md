@@ -21,8 +21,15 @@ meant to avoid.)
     surfaces, FU sweep, built-vs-left comment), then its ≥72h quiet window, then close.
   - #775 G-A: validated once #778 (operator-held scout residue, FU-181's) is RELEASED to its
     tracker — it is residue, not a defect, so rule 4 does not bind it; bucket #787 stays.
-  - #1039 G-F: NOT consumed — oracle-iac's claim has no `mcp:` block; verdict waits on the
-    oracle jail's claim flip (done-means-deployed).
+  - #1039 G-F: claim FLIPPED (oracle-iac#455, 09-01 08:35Z) and the first rides exposed both
+    harness attach arms as invented (#1041) — fixed in PR#1186 (09-01 09:29Z, `5fe75b28`).
+    Verdict now waits on **oracle-fleet#330 round 3** = the production-leg live validation
+    (transcript lists `statute`/`search`/`give_feedback`; ≥1 MCP-filed row in the sink). The
+    seat re-armed it (`agent/queued`, circular blockedBy→#1039 removed, rung); it is HELD on
+    #328's `scripts/**` footprint until that ride opens a PR or its session ends (pod deadline
+    ~10:20Z). Pickup: confirm r3 dispatched from post-#1186 master, read
+    `s3://agent-transcripts/oracle-fleet/issue-330/worker-r*-…` for the tool list, then the G-F
+    validated read. If r3 strikes on the attach again, it is a NEW defect — bring the log.
   - #979 S5: quiet window ends **09-02 06:39Z** → close at the next sweep after.
   - #949 / #1101 retro batches: close at the post-r3 sweep (r3 fires Mon 09-07).
   - None of the three open Goals carries a `Production-leg:` line (pre-card) — evidence is

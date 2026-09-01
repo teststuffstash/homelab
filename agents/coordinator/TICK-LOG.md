@@ -5926,3 +5926,45 @@ first live ADR-110 maintenance session before the ADR existed.
   #1028 #1036 #1107 closed, #1175/#1180 filed+queued, #1150/#1166/#459 intaken); oracle
   handoff answered (observability contract PR#1178); ruling records (PR#1167/#1176/#1177);
   goal-lint + card rules 7–9 (PR#1183). One lint-gated push of the batched direct commits.
+
+## 2026-09-01 — mechanical session (no corpus): oracle-fleet#330 MCP-attach strike → launcher fix #1186 → live-validation re-arm
+
+- CONDITION: operator pointed at oracle-fleet#330's r1 `AGENT_STRIKE` (goose/deepseek, `error:
+  unexpected argument '--mcp-config'`) as a "mechanical question, no corpus". Diagnosis: #1041
+  shipped BOTH harness arms against interfaces that do not exist — goose has no `--mcp-config`
+  (claude-only flag; verified at block/goose v1.47.0 `cli.rs`, the agent-base pin) and claude has
+  no `CLAUDE_CODE_MCP_CONFIG` env var (0 hits in the 2.1.245 binary) — so goose crashed at arg
+  parse and claude wrote the file and never loaded it. The r2 claude/sonnet retry proved the
+  second half live minutes later (`AGENT_ERROR`: file present, no tools attached, refused to fake
+  the row — correct). The three MCP replay fixtures pinned the invented shapes, which is why
+  #1041's green suite proved nothing about the harnesses. First live rides after oracle-iac#455's
+  claim flip (08:35Z) → #328 struck the same way at 09:28.
+- COMMAND (operator: "fix it from this seat, no fixer — soft blocker"): PR#1186 — claude arms
+  (worker + reviewer) get `--mcp-config /tmp/mcp-config.json` in the CLI's own
+  `{"mcpServers":{"stack-mcp":{"type":"http","url"}}}` shape (identical to the jail's `.mcp.json`
+  for this server; reviewer carries it via an `MCP_FLAG` shell var set in PREP, expanded on the
+  RUNPART `claude -p` line — one `bash -lc` script); goose gets `--with-streamable-http-extension
+  <URL>` on the CLI, no file; `spec.mcp.tools` stays the env card's line (no CLI allowlist on
+  either harness; bypass/skip-permissions admit every attached tool). Fixture contracts +
+  expected streams re-pinned; docs/XRD/Composition wording corrected. Two review rounds: CI red
+  on the ADR-103 pin-vacuity ratchet (a COMMENT-ONLY edit to `env-card-mcp-present/opencode`
+  counts as a touched fixture that passes on base — reverted); reviewer CHANGES_REQUESTED on the
+  raw `'${MCP_ENDPOINT}'` interpolation (injection via an unconstrained XRD string) → `jq -Rr @sh`.
+  Merged 09:29Z as `5fe75b28`. Evidence relayed to homelab#1039 (the oracle coordinator's token
+  cannot write there — #1095's shape).
+- RE-ARM (operator: clearing `agent/error` + seeing it run is the SEAT's job — this is #1039's
+  production-leg live validation): `agent/error`→`agent/queued`, the coordinator's native
+  `blockedBy` edge #330→homelab#1039 DELETED (circular: G-F's verdict IS this ride's evidence),
+  `devbox run ring oracle`, provenance note on #330. Three scans ran green and dispatched
+  nothing — #330 is HELD on the ADR-097 footprint clause: it declares `scripts/probe/**`, sibling
+  #328 (`agent/in-progress`, `scripts/**`) holds it; #328's coordinator session (pod 09:20Z,
+  PRE-merge launcher clone, 3600 s deadline) is still deliberating its own strike. Correct
+  machine behaviour, not a defect; the next scan after #328 releases dispatches r3 from the
+  fixed master. Monitor armed on #330 comments + worker pods.
+- SIDE-READ: the :30 review ticks FAILED on circles/oracle/platform (sleep passed) 23 s after
+  the merge — pod logs GC'd before read. The reflex's `wait` cannot red a tick on a
+  reviewer-session failure and its only `exit 1` is the `gh pr list` FATAL-after-retry, so it
+  read as a GitHub-side transient; the :45 ticks (captured live) ran the post-merge master green
+  on both oracle and platform — concern closed, no FU. Seat lesson re-learned (memory had it
+  since 07-17): zsh does not word-split `$K="devbox run -- kubectl …"` — empty kubectl output
+  while gh works = the tell.
