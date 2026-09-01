@@ -19,7 +19,7 @@ set -uo pipefail
 slug="${1:-}"; goal="${2:-}"
 [ -n "$slug" ] && [ -n "$goal" ] || { echo "usage: goal-lint.sh <owner/repo> <goal-number>" >&2; exit 2; }
 
-fails=0; warns=0
+fails=0; warns=0; incomplete=0
 fail() { echo "FAIL: $*"; fails=$((fails+1)); }
 warn() { echo "WARN: $*"; warns=$((warns+1)); }
 ok()   { echo "ok:   $*"; }
@@ -83,9 +83,13 @@ leaves=0; containers=0; edges=0; closed=0
 declare -a LEAF_NUMS=()
 walk() {  # walk <issue-number> <depth>
   local n="$1" d="$2" kids ij t b l par
-  kids="$(api "repos/$slug/issues/$n/sub_issues?per_page=100" --jq '.[].number')" || { warn "#$n: sub-issues unreadable"; return; }
+  # An unreadable read here is a PROBE FAILURE, not a lint verdict: the walk continues (report
+  # everything else it CAN see) but the run may never report clean — the exit-code contract
+  # (line 16) says exit 2, and `incomplete` is what carries that to the exit block. walk() runs
+  # in the main shell (no pipe/subshell), so the flag survives the recursion.
+  kids="$(api "repos/$slug/issues/$n/sub_issues?per_page=100" --jq '.[].number')" || { warn "#$n: sub-issues unreadable"; incomplete=1; return; }
   for k in $kids; do
-    ij="$(api "repos/$slug/issues/$k")" || { warn "#$k: unreadable"; continue; }
+    ij="$(api "repos/$slug/issues/$k")" || { warn "#$k: unreadable"; incomplete=1; continue; }
     # Closed descendants are finished work (or absorbed sprouts): the burn-down counts them,
     # this lint does not judge them.
     [ "$(jq -r .state <<<"$ij")" = "open" ] || { closed=$((closed+1)); continue; }
@@ -139,4 +143,10 @@ else
 fi
 
 echo "goal-lint: $fails FAIL, $warns WARN"
+# Probe failure trumps a clean count: a partial tree walk (rate-limit/5xx mid-recursion) must
+# never report the tree as verified — say so and exit 2, per the header's exit-code contract.
+if [ "$incomplete" -ne 0 ]; then
+  echo "PROBE-FAIL: the tree walk was INCOMPLETE (unreadable sub-issue listing or child above) — a partial read is not a clean tree" >&2
+  exit 2
+fi
 [ "$fails" -eq 0 ] && exit 0 || exit 1
