@@ -674,8 +674,21 @@ dp_wake() {   # → "edge|<ring-epoch>" | "cron|" | "" (unreadable — the calle
 DISPATCH_PHASE_T0="$(( $(dp_now) - SECONDS ))"
 DISPATCH_PHASE_MARK="$DISPATCH_PHASE_T0"
 dispatch_phase() {   # $1 = the stack's MAIN repo — publish the scan-side rows, at a dispatch
-  local project="${1:-}" now ring family="" wake=""
+                     # $2 = clause (queued-dispatch / changes-requested / ci-red / …) — keys the per-clause wake series (homelab#459)
+                     # $3 = unit class, BARE (`fix` / `goal` — :1642 defaults it; never `task/fix`) — populated on queued-dispatch/c4c5 only
+  local project="${1:-}" clause="${2:-}" ukind="${3:-}" now ring family="" wake="" cseg="" useg=""
   now="$(dp_now)"
+  # The per-clause breakdown (homelab#459 — the FU-168 emitter hunt) rides a SECOND push below
+  # whose GROUPING KEY carries the dimensions. It cannot be body labels on any shared-group
+  # metric: pushgateway replacement scope is (grouping key, metric name) — a POST replaces every
+  # stored sample sharing a metric NAME within the group, irrespective of label values, so two
+  # consecutive dispatches with different clauses would evict each other (the PR#1192 round-3
+  # arbitration; the same FU-176 semantics iac-lane.md documents). Per-(clause, unit) groups make
+  # each series its own group — sticky, so `topk by (clause)` is meaningful over a window.
+  # Guard, not ceremony: production values are fixed clause slugs and the bare class, but a path
+  # segment must never be empty or carry `/`, so strip to [A-Za-z0-9._-] and drop what's left empty.
+  cseg="$(printf '%s' "$clause" | tr -cd 'A-Za-z0-9._-')"
+  [ -n "$ukind" ] && useg="$(printf '%s' "$ukind" | tr -cd 'A-Za-z0-9._-')"
   # A scan that dispatches twice (the global instance sweeping two stacks) measures the SECOND
   # dispatch from the first one's end, not from the pod's start — otherwise stack B's `scan` row
   # would carry stack A's whole streamed session. The mark moves whether or not anything is
@@ -733,6 +746,21 @@ agent_dispatch_cron_woken_timestamp ${now}
     || { [ -n "$DISPATCH_PHASE_WARNED" ] \
            || echo "dispatch_phase: pushgateway unreachable (${DISPATCH_PHASE_PGW}) — dispatch unaffected; this scan contributes no agent_dispatch_phase_seconds (a jail run lands here: the ClusterIP does not cross the BGP boundary)" >&2
          DISPATCH_PHASE_WARNED=1; }
+  # The per-clause wake series (homelab#459): own metric name, NO body labels — the dimensions
+  # live in the grouping key, so each (project, clause, unit) is its own group and pushes never
+  # evict a sibling clause's sample. Janitor-exempt exactly like the wake stamps above (report-only
+  # by design — its cron label is not a missed edge). Unit segment only where the class is known
+  # (queued-dispatch/c4c5; 3-field merge-path units carry none). Failure is already named once by
+  # the main push's warn-latch — a second warning per dispatch would be the #103 noise floor.
+  if [ -n "$cseg" ] && [ "${SCAN_JANITOR:-}" != "1" ]; then
+    local wurl="${DISPATCH_PHASE_PGW}/metrics/job/agent_dispatch_phase/project/${project}/role/coordinator-scan/clause/${cseg}"
+    [ -n "$useg" ] && wurl="${wurl}/unit/${useg}"
+    printf '%s\n%s\n%s\n' \
+      "# TYPE agent_dispatch_wake_clause_timestamp gauge" \
+      "# HELP agent_dispatch_wake_clause_timestamp Epoch of this stack's last dispatch for this clause (homelab#459 — clause/unit ride the grouping key, one sticky series per (project, clause, unit))." \
+      "agent_dispatch_wake_clause_timestamp ${now}" \
+      | curl -fsS --max-time 5 --data-binary @- "$wurl" >/dev/null 2>&1 || true
+  fi
   return 0
 }
 # <<<REPLAY:dispatch-phase<<<
@@ -1147,7 +1175,7 @@ fast_unit_dispatch() {
   # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
   # spin-up only, and the `coordinator-scan` mutex now spans just the deterministic pass (the
   # session pod uploads, pushes its own row, and rings the doorbell itself).
-  dispatch_phase "$fmain"   # FU-160: same boundary, the coordinator-owned rows above the launcher
+  dispatch_phase "$fmain" "$fclause"   # FU-160: same boundary, the coordinator-owned rows above the launcher
   scan_phase dispatch
   bash "${HERE}/coordinator-session.sh" --stack "$fstack" --repos "${frepos% }" --main-repo "$fmain" \
     --model "$fmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$fwip" --detach \
@@ -3861,7 +3889,7 @@ EOF_GOVERNANCE
       # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
       # spin-up, not the streamed ride, and the `coordinator-scan` mutex now spans only the
       # deterministic pass (the pod uploads, pushes its own session row, rings the doorbell itself).
-      dispatch_phase "$mainrepo"   # FU-160: the ring→scan and scan rows close on the same boundary
+      dispatch_phase "$mainrepo" "$uclause" "${uclass:-}"   # FU-160: the ring→scan and scan rows close on the same boundary
       scan_phase dispatch
       # ── FU-146 exit-3 dispatch gate (racing dispatcher won): report, retry next unit ─────────
       # When `coordinator-session.sh` exits with 3, the item pod exists and a racing dispatcher

@@ -1,7 +1,7 @@
 CALL gh pr view 396 --repo teststuffstash/circles --json state,reviewDecision,labels,body,author,headRefName
 CALL kubectl -n circles get pods -l app=agent-session,project=circles --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
 CALL kubectl -n circles-agents get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
-CALL dispatch_phase circles
+CALL dispatch_phase circles changes-requested
 CALL scan_phase dispatch
 CALL coordinator-session --stack circles --repos circles-iac circles --main-repo circles --model sonnet --loop-ns circles-agents --wip 1 --detach --item repo=circles item=pr-396 clause=changes-requested
 CALL scan_phase deterministic
