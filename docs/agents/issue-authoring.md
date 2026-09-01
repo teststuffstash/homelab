@@ -627,7 +627,8 @@ Base: goal/<n>-<slug> | master
 <named, so sprouts don't drift in>
 ```
 
-**The six rules you drive** (the machine handles the rest):
+**The nine rules you drive** (the machine handles the rest; rules 7–9 added 2026-09-01 from
+oracle-fleet#326 — a jail-authored Goal that tripped all three):
 
 1. The header lines are machine-parsed — exactly one `Budget:` line, ever; prose
    references money only by pointing at that line.
@@ -635,8 +636,9 @@ Base: goal/<n>-<slug> | master
    assembly branch; one codeowner read of the net swap) or an explicit `master` (children land
    piecewise; there is no assembly read). Children inherit the line **verbatim** at decompose
    (the decompose play) — a Goal that omits it sends every child to master silently
-   (oracle-fleet#281). Fill in `<n>` after filing; the branch itself is a manual operator step
-   (IL-G02). **Choosing `master` is a smell to justify**: a Goal whose children all land
+   (oracle-fleet#281). Fill in `<n>` after filing; **the branch itself is the AUTHOR's to cut
+   from master** (IL-G02) — nothing in the machinery creates it, and the first child ride
+   fails at clone without it (the #326 miss). **Choosing `master` is a smell to justify**: a Goal whose children all land
    directly on master is more likely a stint — say why it's a Goal anyway, or run it as one.
    (Softens at v1.3 theme adoption, S8: a themed Goal legitimately declares `master` while its
    level-2 themes carry their own `goal/<n>-<theme>` branches — see §⚖ BANKED below.)
@@ -650,6 +652,22 @@ Base: goal/<n>-<slug> | master
    descendant-PR reviews harvests there, drawing the same budget. Do not treat assembly as done.
 6. The Goal closes at **tree-empty + terminal verdict** (per `Verdict-authority:`), never at
    merge, never by declaring victory in a comment.
+7. **Children carry a class and an order.** Each child gets `agent-fix` plus a `task/*` class
+   — `task/build` for build-shaped work (chart code, a harness, CI wiring), `task/fix` for a
+   defect; the recipe is chosen by that label, and a build task under `fix.yaml` gets a
+   bug-hunter's brief (the sleep#48 trap). Ordering between children is a **native `blockedBy`
+   edge** (body lines gate nothing); overlapping footprints otherwise serialize in arbitrary
+   order.
+8. **Pre-authored children ⇒ the Goal stays unqueued.** `task/goal` alone makes it a goal to
+   the machinery (burn-down, checkpoint, terminals); `agent/queued` on the Goal summons the
+   decomposer against children you already wrote. Queue the *children* — breaker #1 is the
+   human's — and leave the Goal at `task/goal` (`agent/blocked` is the decompose play's own
+   tracking convention, tolerated, never required).
+9. **Lint before you queue.** `devbox run goal-lint -- <owner/repo> <n>` in the homelab jail;
+   from a stack jail `bash /workspace/homelab/scripts/goal-lint.sh <owner/repo> <n>` (bash +
+   gh + jq only — never `devbox run` in a stack jail's homelab clone, it materializes the whole
+   closure). Every rule above is a deterministic check over the Goal and its tree; a FAIL is
+   fixed on the issue, never worked around in the machinery.
 
 **Failure signatures** (each is a scar this doc already records):
 
@@ -662,6 +680,9 @@ Base: goal/<n>-<slug> | master
 | children filed without sub-issue binding | an orphan tree nothing owns (goal-174: 19 sprouts, 3 generations, still growing 34h after close) |
 | Goal closed at assembly merge | post-launch sprouts fall into master-limbo — reopen; the post-launch sub-issue is the harvest target |
 | lowercase "goal" in agents-corpus prose | retired term — say **Goal** (the type), **mission** (research), or "intent/target" |
+| `Base: goal/<n>-…` names a branch that does not exist | the author never cut it (IL-G02) — the first child ride dies at clone; `goal-lint` fails on it (oracle-fleet#326) |
+| children without a `task/*` class, or with no `blockedBy` edges between them | they ride the wrong recipe / in arbitrary order — rule 7 (oracle-fleet#326) |
+| `agent/queued` on a Goal whose children already exist | the decomposer re-decomposes — rule 8 |
 
 Supersedes the goal-half of this doc's earlier close semantics (harvest-time queueing after
 close, IL-G04's unbuilt gauge, the retarget-to-master drift). Validated retroactively against
