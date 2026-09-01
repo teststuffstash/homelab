@@ -57,6 +57,42 @@ if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
 fi
 
 hits="$(git diff --name-only "$BASE" HEAD | grep -E "$GOVERNANCE" || true)"
+
+# ASSEMBLY-LANE ARM (homelab#1036, 2026-09-01). ADR-102's assembly PR is opened by the
+# COORDINATOR, whose token is minted from the same App as the worker's — so a `goal/**` head
+# aggregating a SEAT-authored governance file (the `.agents/probe.md` of #1030: fixer carve-out
+# declined precisely so the seat would write it) reads as a worker diff and goes red on a step
+# no lane in the loop can turn green (4 ci-red rides in ~2h, then agent/error; steps 18–32 never
+# ran). The property that matters is "no WORKER-WRITTEN governance line lands before a human
+# approves" — so on the assembly lane judge each hit by COMMIT authorship, not PR authorship.
+# Lane test = the same strong link the scan's post-launch transition trusts: a goal/** head AND
+# a line-anchored `Assembly-for: #<n>` trailer. Fails CLOSED on unreadable history.
+if [ -n "$hits" ] && printf '%s' "${PR_HEAD_REF:-}" | grep -qE '^goal/' \
+   && printf '%s\n' "${PR_BODY:-}" | grep -qE '^[[:space:]]*Assembly-for:[[:space:]]*#[0-9]+'; then
+  base_sha="$(git rev-parse "$BASE")"
+  # The CI checkout is depth 1 (the merge ref only) — fetch the goal branch's own history into a
+  # private ref so `base..head -- <hit>` can name the committer of every governance line.
+  # GOVLINT_REMOTE is a TEST seam (`.` = fetch a local branch); CI never sets it.
+  if ! git fetch -q --no-tags --depth=500 "${GOVLINT_REMOTE:-origin}" "+refs/heads/${PR_HEAD_REF}:refs/govlint/head" 2>/dev/null; then
+    echo "governance-lint: FAIL — assembly lane: could not fetch '${PR_HEAD_REF}' to read commit authorship; refusing to report success." >&2
+    exit 2
+  fi
+  worker_hits=""
+  for h in $hits; do
+    authors="$(git log --format='%an' "${base_sha}..refs/govlint/head" -- "$h" 2>/dev/null)" || {
+      echo "governance-lint: FAIL — assembly lane: git log unreadable for '$h'; refusing to report success." >&2
+      exit 2; }
+    if printf '%s\n' "$authors" | grep -qE "$WORKER_PATTERN"; then worker_hits="${worker_hits}${h}"$'\n'; fi
+  done
+  if [ -n "$worker_hits" ]; then
+    echo "governance-lint: FAIL — assembly PR carries WORKER-authored commits on governance paths (ADR-106 (4)):" >&2
+    printf '  %s\n' $worker_hits >&2
+    exit 1
+  fi
+  echo "governance-lint: ok — assembly lane (goal/** head + Assembly-for: trailer): $(printf '%s\n' "$hits" | grep -c .) governance path(s) touched, every commit human/non-worker authored (homelab#1036)."
+  exit 0
+fi
+
 if [ -n "$hits" ]; then
   echo "governance-lint: FAIL — worker-authored diff touches governance paths (ADR-106 (4);" >&2
   echo "  the .agents/fix.yaml NEVER-TOUCH tier — these take effect before a human approves):" >&2

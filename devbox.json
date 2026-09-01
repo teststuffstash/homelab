@@ -71,7 +71,7 @@
       "version": "latest"
     },
     "kyverno": {
-      "version": "1.18.2"
+      "version": "latest"
     },
     "gitleaks": {
       "version": "latest"
@@ -162,6 +162,9 @@
       ],
       "manifest-lint": [
         "bash scripts/manifest-lint.sh \"$@\""
+      ],
+      "sentinel-smoke": [
+        "bash scripts/iac-sentinel.sh --smoke"
       ],
       "machines-lint": [
         "bash scripts/machines-lint.sh"
@@ -261,6 +264,9 @@
       ],
       "follow-ups-lint": [
         "sh scripts/follow-ups-lint.sh"
+      ],
+      "goal-lint": [
+        "bash scripts/goal-lint.sh \"$@\""
       ],
       "skill-retro-scan": [
         "sh scripts/skill-retro-scan.sh"

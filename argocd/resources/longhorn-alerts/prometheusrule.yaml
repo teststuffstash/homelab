@@ -41,6 +41,26 @@ spec:
               read-only mid-write rather than as a scheduling failure. Check
               `kubectl -n longhorn-system get nodes.longhorn.io -o json` for usage vs capacity, and
               docs/storage-ledger.md for which tier owns the sum.
+        # SCHEDULING FLOOR. Longhorn refuses NEW replicas on a disk under
+        # storage-minimal-available-percentage (25%) FREE — i.e. at 75% used, ten points BELOW
+        # the 85% row above, so the fleet's 2026-09-01 wedge (both bulk disks ~23% free →
+        # Schedulable=False → no longhorn-scratch PVC → no docker:true worker pod anywhere) was
+        # alert-silent by construction. Fires on the disk Longhorn itself has stopped using.
+        - alert: LonghornDiskBelowSchedulingFloor
+          expr: |
+            longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes > 0.75
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Longhorn disk {{ $labels.node }}/{{ $labels.disk }} is {{ $value | humanizePercentage }} used — under the 25% free floor, Longhorn will not place new replicas on it"
+            description: >-
+              New volumes whose diskSelector needs this disk (bulk/scratch on the two laptops)
+              fault with ReplicaSchedulingFailure while existing ones keep working. On the
+              bulk-tier nodes the usual eater is the container image store sharing the partition
+              (per-build arc-runner/agent-base images) — kubelet image GC is pinned to 60/50 on
+              kata nodes (tofu/metal.tf) for exactly this; if it fires anyway, check
+              `kubectl get --raw /api/v1/nodes/<n>/proxy/stats/summary | jq .node.runtime.imageFs`
+              first, then docs/storage-ledger.md.
         - alert: LonghornDiskAlmostFull
           expr: |
             longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes > 0.93

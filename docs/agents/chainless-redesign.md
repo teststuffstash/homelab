@@ -267,6 +267,19 @@ dollars. Three directions replace it (they refine the ledger's per-rail `budgets
    `p(operator_touch) × (E/B + item)` term. The `Budget:` line's currency stays USD; a goal
    whose real spend is operator sittings is priced honestly only under this direction.
 
+   **⚖ ROI sequencing (operator, 2026-09-01 — measured on the `agent-cost` Grafana board,
+   trailing 7d):** worker $ = **$9.18** fleet-wide (platform included, riding OpenRouter
+   deepseek) against **$3.13K** coordinator+reviewer subscription-equivalent over the range
+   (jail seat included) — a ~340× ratio. Worker cost is the platform's CHEAPEST line item,
+   so tokens spent on finer worker-side counting have no ROI — do not build there. Until Goals meter coordination + review cost (this
+   direction's build), the `Budget:` line optimizes the wrong thing; the count caps
+   (ROUNDS_MAX and siblings) therefore REMAIN the loop control, and the banked
+   caps-become-judgment-triggers / budget-becomes-the-hard-bound reframe (TICK-LOG
+   2026-09-01) is gated behind this attribution landing — never relaxed ahead of it. The
+   retro follows the same arithmetic: reviews cost more than worker rounds, so its
+   cost-model ranking (PR#1127) points it at the expensive half, and its priority target is
+   STACK goals (the FU-058 flip, same ruling).
+
 Build home: a later wave of #420 (after the reviewer failover ships); the accounting half
 rides #278/FU-131. Nothing here changes chunk A–F scope — the only-free interaction stays the
 explicit conservative deny until budget-typing lands.

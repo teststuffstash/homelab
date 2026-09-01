@@ -580,7 +580,7 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
     EGRESS_PROFILE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.profile]|map(select(.!=null))|first // empty' 2>/dev/null)"
     # MCP knob from the SAME claim read (stack-wide spec.mcp, #1041). The knob is at the
     # AgentStack level, not per-repo — find the stack whose repos include this project.
-    # Absent = no MCP attached; the env card and --mcp-config are gated on this being non-empty.
+    # Absent = no MCP attached; the env card and the harness attach flag are gated on this being non-empty.
     MCP_ENDPOINT="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.endpoint] | first // empty' 2>/dev/null)"
     MCP_TOOLS="$(printf '%s' "$claims_json" | jq -rc --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.tools] | first // empty' 2>/dev/null)"
   else
@@ -717,6 +717,21 @@ render_env_card() {
     printf '%s\n' "- **This issue is one child of a GOAL.** It was split out so a single ride could finish it — deliver YOUR issue, not the goal. But the goal is what your work is finally judged against, so if finishing your slice would leave the goal's acceptance unreachable, say so in the PR body rather than quietly widening scope (a scope change belongs in a new issue for the owning concern — TRACKS rule 2). The parent, Goal + Acceptance only:"
     printf '%s\n' "$GOAL_CARD" | sed 's/^/  > /'
   fi
+  # WHY: homelab#1175 — the launcher pre-fetches the issue + comments via REST and materializes
+  # them as /work/issue.md before the harness starts. The env card tells the worker to read the
+  # file first instead of making a live `gh issue view` call (which costs tokens and can 403 on
+  # the App installation's GraphQL pool). Only emitted for recipe-based runs with an issue task.
+  # Gate on TASK matching issue-[0-9]* (same predicate the prefetch block uses), NOT on ISSUE_N
+  # alone — ISSUE_N is also set for research-* tasks, which never get /work/issue.md written.
+  # Also gate on AGENT_PREFLIGHT: if pre-flight is skipped (AGENT_PREFLIGHT=0), the file is never
+  # written while the card would still promise it.
+  case "${TASK:-}" in
+    issue-[0-9]*)
+      if [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
+        printf '%s\n' "- **Issue context:** Your issue + comments were pre-fetched at dispatch: read \`/work/issue.md\` FIRST; a live \`gh issue view\` is optional."
+      fi
+      ;;
+  esac
   # WHY: Rung A evidence (oracle-fleet docs/feedback-rung-a.md, PR #295): organic feedback filing
   # 0/3; with a directed-act line 10/12; instructive voice executes 10/10; harness/model elicitation
   # from tool-description meta 0/10. The session cannot reliably report its own harness and model —
@@ -724,7 +739,7 @@ render_env_card() {
   # WHY: version skew — production serves the pinned release over the released corpus; a worktree
   # runs HEAD. Name the pin so a prod/worktree behavioral diff is interpretable rather than mysterious.
   # Both lines are gated on the MCP knob being present AND the harness actually attaching the
-  # config (no MCP = no feedback tool to direct). The opencode arm never attaches --mcp-config
+  # config (no MCP = no feedback tool to direct). The opencode arm never attaches an MCP server
   # (#1039 non-goal), so the card must not claim the tool is available on that harness.
   if [ -n "${MCP_ENDPOINT:-}" ] && [ "$HARNESS" != "opencode" ]; then
     printf '%s\n' "- **Feedback tool: available** (harness: ${HARNESS}, model: ${MODEL}). File structured feedback using the MCP tool — the harness and model above are stamped by the launcher, not self-reported."
@@ -1028,21 +1043,34 @@ if [ -n "${RECIPE:-}" ]; then
   # floor cannot stand in for it: that rewrites the UPSTREAM request and cannot govern goose's own
   # client-side emit ceiling. The claude arm stays untouched — the var is goose's.
   # >>>REPLAY:harness-run-cmd>>>
-  # ── MCP config (#1041): build the --mcp-config JSON from the claim knob ──────────────────────
-  # Rendered only when the stack declares spec.mcp.endpoint. The config is base64-carried into the
-  # pod command so the harness can write it to a temp file and pass it as --mcp-config.
-  # For goose: --mcp-config /tmp/mcp-config.json; for claude: injected via the claude.json config.
+  # ── MCP attach (#1041): render the claim knob into each harness's REAL attach interface ─────
+  # Rendered only when the stack declares spec.mcp.endpoint. The two harnesses take an MCP server
+  # differently, and neither takes the shape #1041 first shipped (oracle-fleet#330 r1+r2, 2026-09-01:
+  # goose rejected `--mcp-config` outright; claude ignored the `CLAUDE_CODE_MCP_CONFIG` env var —
+  # it does not exist — so the file was written and never loaded; both verified against the
+  # agent-base pins goose-cli 1.47.0 / claude-code 2.1.245):
+  #   claude: `--mcp-config <file>` with the CLI's own JSON shape, {"mcpServers":{<name>:{type:
+  #           "http",url}}} — the file is base64-carried into the pod command and decoded to
+  #           /tmp/mcp-config.json (MCP_PRELUDE); tools need no allowlist under
+  #           --dangerously-skip-permissions.
+  #   goose:  `--with-streamable-http-extension <URL>` — the URL rides the CLI directly, no file.
+  # spec.mcp.tools is the ENV CARD's line (what the ride is told it has), not a harness input —
+  # it is still parsed here so an unparseable knob degrades loudly to no attach on both arms
+  # (same guard as the reviewer arm); an aborted launcher here is fleet-wide, so this sibling
+  # must never be the one that keeps set -e alive.
   # ⚠ This block sits INSIDE the replay region because replay clauses run self-contained — a shared
-  # helper defined at the script top is invisible to them (proven by RC-127). The MCP_PRELUDE and
-  # MCP_CONFIG_B64 variables are consumed by the goose case below, inside the same region.
-  # Unparseable tools → loud degrade, no attach — same guard as the reviewer arm; an aborted
-  # launcher here is fleet-wide, so this sibling must never be the one that keeps set -e alive.
-  MCP_PRELUDE=""
+  # helper defined at the script top is invisible to them (proven by RC-127). MCP_PRELUDE,
+  # MCP_CONFIG_B64 and MCP_GOOSE_FLAG are consumed by the case arms below, inside the same region.
+  MCP_PRELUDE=""; MCP_GOOSE_FLAG=""
   if [ -n "${MCP_ENDPOINT:-}" ]; then
-    MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}' 2>/dev/null)" || MCP_CONFIG_JSON=""
+    MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" '{mcpServers: {"stack-mcp": {type: "http", url: $url}}}' 2>/dev/null)" || MCP_CONFIG_JSON=""
     if [ -n "$MCP_CONFIG_JSON" ]; then
       MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
       MCP_PRELUDE="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json; "
+      # @sh-quoted: the endpoint is an unconstrained XRD string and RUN_CMD runs under bash -lc in
+      # the pod — a raw '${MCP_ENDPOINT}' inside single quotes would let a literal ' break out
+      # (reviewer catch, PR#1186). The claude arm never touches the shell with it (jq --arg).
+      MCP_GOOSE_FLAG=" --with-streamable-http-extension $(printf '%s' "$MCP_ENDPOINT" | jq -Rr @sh)"
     else
       echo "agent-session: MCP tools knob unparseable — dispatching WITHOUT MCP attach" >&2
     fi
@@ -1074,8 +1102,8 @@ if [ -n "${RECIPE:-}" ]; then
   # the script top is invisible to them (proven by RC-127 in the first fixture run).
   case "$_claude_model" in opencode-go/deepseek-v4-flash) _go_ctx="CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 ";; *) _go_ctx="";; esac
   case "$HARNESS" in
-    claude) RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}${MCP_CONFIG_B64:+CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json }claude -p --model ${_claude_model} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
-    goose)  RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}${MCP_CONFIG_B64:+ --mcp-config /tmp/mcp-config.json}";;
+    claude) RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}claude -p --model ${_claude_model}${MCP_CONFIG_B64:+ --mcp-config /tmp/mcp-config.json} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
+    goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}${MCP_GOOSE_FLAG}";;
     opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP not wired: explicit non-goal of #1039 — opencode's MCP config mechanism is unknown for this pinned image, and enforced-egress rides never default to opencode per homelab#990
   esac
   # <<<REPLAY:harness-run-cmd<<<
@@ -1184,6 +1212,56 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
       echo "PREFLIGHT REFUSED: devbox.lock on ${PF_SLUG}@${WORK_BRANCH:-$BASE_REF} carries a placeholder store path — a \`devbox add\` wrote it while the FU-118(b) search proxy (\$DEVBOX_SEARCH_HOST, .40.27) was unreachable, so the bootstrap \`devbox install\` will boot-crash this round (FU-118). Fix: re-run the add with the proxy up (it resolves in-band → a REAL store path), or resolve on master; never hand-edit the lock." >&2
       exit 3
     fi
+    # >>>REPLAY:context-prefetch>>>
+    # ── Context pre-fetch: pre-read the directive channel via REST (homelab#1175) ──────────────
+    # Pre-read the issue + comments via REST API (never GraphQL — the pool that failed on #969
+    # is the App installation's GraphQL pool; REST has its own). Materialize into /work/issue.md
+    # as a prelude to the pod command. Unreadable ⇒ DEFER (exit 0), not strike, not start.
+    if command -v gh >/dev/null 2>&1; then
+      PF_ISSUE_DATA=""
+      PF_ISSUE_DATA="$(gh api "repos/${PF_SLUG}/issues/${PF_ISSUE}" --jq '{title, body, labels: [.labels[].name]}' 2>/dev/null)" || PF_ISSUE_DATA=""
+      if [ -z "$PF_ISSUE_DATA" ]; then
+        echo "→ dispatch deferred — directive unreadable (repos/${PF_SLUG}/issues/${PF_ISSUE}; resets N/A) — the next pass retries (homelab#1175)" >&2
+        exit 0
+      fi
+      # Fetch comments as raw JSON array, then process with jq in the script
+      PF_COMMENTS_RAW=""
+      PF_COMMENTS_RAW="$(gh api "repos/${PF_SLUG}/issues/${PF_ISSUE}/comments" --paginate 2>/dev/null)" || PF_COMMENTS_RAW=""
+      if [ -z "$PF_COMMENTS_RAW" ]; then
+        echo "→ dispatch deferred — directive unreadable (repos/${PF_SLUG}/issues/${PF_ISSUE}/comments; resets N/A) — the next pass retries (homelab#1175)" >&2
+        exit 0
+      fi
+      # Materialize the issue + comments into /work/issue.md as a prelude to the pod command.
+      # Build the markdown: title, body, then comments in order with author + timestamp.
+      PF_ISSUE_TITLE="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.title')"
+      PF_ISSUE_BODY="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.body // ""')"
+      PF_ISSUE_MD="# Issue #${PF_ISSUE}
+## ${PF_ISSUE_TITLE}
+
+${PF_ISSUE_BODY}
+
+## Comments"
+      # Process each comment from the raw JSON array
+      while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        PF_AUTHOR="$(printf '%s' "$line" | jq -r '.user.login // ""')"
+        PF_CREATED="$(printf '%s' "$line" | jq -r '.created_at // ""')"
+        PF_COMMENT_BODY="$(printf '%s' "$line" | jq -r '.body // ""')"
+        PF_ISSUE_MD="${PF_ISSUE_MD}
+
+### ${PF_AUTHOR} (${PF_CREATED})
+
+${PF_COMMENT_BODY}"
+      done <<< "$(printf '%s' "$PF_COMMENTS_RAW" | jq -c '.[]')"
+      PF_ISSUE_B64="$(printf '%s' "$PF_ISSUE_MD" | base64 -w0)"
+      PF_ISSUE_PRELUDE="printf '%s' '${PF_ISSUE_B64}' | base64 -d > /work/issue.md; "
+      # Prepend the prelude to RUN_CMD so the pod writes /work/issue.md before the harness starts
+      if [ -n "${RUN_CMD:-}" ]; then
+        RUN_CMD="${PF_ISSUE_PRELUDE}${RUN_CMD}"
+      fi
+      echo "→ context pre-fetch: issue #${PF_ISSUE} + comments materialized as /work/issue.md (prepended to pod command)"
+    fi
+    # <<<REPLAY:context-prefetch<<<
   ;; esac
   # (c) session-key freshness: post openrouter-operator#6 the CR surfaces the LIVE key expiry in
   # .status.openrouter.expires_at (the PATCH re-mint bug killed a healthy run at its STALE deadline —

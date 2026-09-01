@@ -510,6 +510,23 @@ PLATFORM retro and per-stack retros — built in that order.**
    owns. Graduation stays the AgentStack claim knob (`retro.enabled` + cadence + slice) as
    ruled 2026-07-25; the non-overlap contract is authored INTO the stack brief template when
    the first stack graduates, with the platform reports in hand.
+   **⚖ PRIORITY FLIPPED (operator, 2026-09-01): stack retros are wanted MORE than further
+   platform rounds** — stack goals carry the deeper business logic and kind-e2e testing
+   complexity, and their dynamic differs from the platform's machinery-defect stream. The
+   platform series continues on its cron as the baseline; build effort goes to the first
+   stack graduation. Same-ruling cost note: reviews cost more than worker rounds
+   (chainless-redesign.md cost-rethink direction 4's ROI sequencing), so retro attention
+   ranks by the cost model (PR#1127), not by worker-round counts.
+   **Seeded headline for the first stack brief (same sitting):** does the cheap-worker tier
+   create more CHURN on stack work than on platform work — review rounds + seat-fix
+   interventions per merged issue, total-cost ranked? The hypothesis's shape, stated for the
+   brief to test rather than assume: platform work is mostly jail-built on strong
+   pre-existing context (argo/k8s — mainstream, well-documented); stack workers do custom
+   NEW development, wiring components without the big picture in their build context — and
+   the seat has already fixed defects neither worker nor reviewer caught (unmeasured;
+   teething-era instructions). Second seeded question, from the riigiteataja sighting
+   (research-and-specs.md §Research precedes the Goal): how much of the ranked pain is
+   UPSTREAM of the workers entirely — contract-unknowns a recon mission would have removed?
 
 The two r4 lane defects shipped with the same wave (PR#620): the cell report-marker self-check
 now runs a ≥20-content-line floor via `agents/retro-report-floor.sh` (ONE helper, three callers

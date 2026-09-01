@@ -23,6 +23,16 @@ operator-manual by issue number). A mission issue therefore carries **no label t
 FU-090(c) graduates research dispatch, the label minted via the claim taxonomy is **`mission`**
 (name reserved in [`../glossary.md`](../glossary.md)).
 
+**Evidence sighting (operator, 2026-09-01 — the oracle riigiteataja miss):** a Goal built
+against an UNDOCUMENTED upstream (what Riigi Teataja actually publishes is trial-and-error
+knowledge, documented nowhere) ran the loop cleanly and still required deleting and redoing a
+large part of the work — the miss sat upstream of every worker: nothing answered "what does the
+source actually publish" before the build committed. Worker-cost optimization is the wrong
+lever on this class; a recon mission (cheapest form: ONE instrument arm probing the live
+source, never a full fan-out) would have saved more than any routing or counting refinement.
+⚖ One sighting — NOT codified per the ≥2-pattern rule; the candidate rule sits in the
+unsettled register below.
+
 ## The process
 
 As run on circles (the worked example — PR numbers are circles'):
@@ -143,3 +153,7 @@ weekly refresh (§M7 leg 5) deepens it.
 - **The mission log** (step 0): first kept log is the idp run — does TICK-LOG-shape fit a
   mission that spans repos, and does "lands with the harvest PR" survive a mission that never
   reaches harvest?
+- **When is a mission REQUIRED, not optional** (2026-09-01 sighting, one instance — codify at
+  the second): a Goal whose contract depends on an UNVERIFIED external source (undocumented
+  API/data publisher) may need a mandatory recon spike/probe arm first — the riigiteataja
+  build-first cost was a large delete-and-redo the loop itself executed flawlessly.

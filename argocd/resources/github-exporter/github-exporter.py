@@ -1080,7 +1080,13 @@ def collect_open_prs(lines):
                 rollup = (commit or {}).get("statusCheckRollup")
                 if rollup:
                     ci_state = rollup["state"].lower()
-                    ci_run_attempt = 0  # rollup has no attempt info; rerun dedup falls back to head_sha only
+                    if ci_state == "failure":
+                        # Red on the rollup path: fetch the real run_attempt so a same-head
+                        # rerun re-rings the doorbell (homelab#1166). One REST call per red PR
+                        # per poll — the edge that matters.
+                        _, ci_run_attempt = ci_state_from_runs(repo["name"], pr.get("headRefOid") or "")
+                    else:
+                        ci_run_attempt = 0  # non-red: no rerun expected, skip the REST call
                 else:
                     # Private repo (rollup FORBIDDEN-nulls for every PAT) or genuinely no checks:
                     # join workflow runs by head SHA under Actions:read (FU-063a). One REST call
@@ -1195,12 +1201,10 @@ def collect_open_prs(lines):
                             pr_detail = gh(f"/repos/{repo['name']}/pulls/{pr['number']}")
                             body = pr_detail.get("body") or ""
                             # Parse "Fixes #N" or "Closes #N" (GitHub's closing keywords)
-                            closing_match = re.search(
-                                r"(?i)(?:clos|fix|resolv)(?:e[ds]?|ing)?\s+#(\d+)", body)
-                            if closing_match:
-                                closing_issue = int(closing_match.group(1))
+                            closing_issue = _parse_closing_issue(body)
+                            if closing_issue is not None:
                                 blocking = gh(
-                                    f"/repos/{repo['name']}/issues/{closing_issue}/dependencies/blocking")
+                                    f"/repos/{repo['name']}/issues/{closing_issue}/dependencies/blocking?per_page=100")
                                 blocking_count = len(blocking) if isinstance(blocking, list) else 0
                                 block_labels = {"owner": ORG, "repo": repo["name"],
                                                 "pr": str(pr["number"]),
@@ -2136,6 +2140,20 @@ def _test_poll_forever_incremental_cycles():
         _carryover = saved_carryover
 
 
+def _parse_closing_issue(body):
+    """Extract a closing-issue number from a PR body using GitHub's closing-keyword convention.
+
+    Returns the issue number as int, or None if no closing keyword is found.
+    The leading-edge anchor ((?:^|[^a-z])) prevents false matches on words like
+    'prefixes', 'unresolved', or 'disclosed' that contain the keyword as a substring.
+    """
+    if not body:
+        return None
+    m = re.search(
+        r"(?i)(?:^|[^a-z])(?:clos|fix|resolv)(?:e[ds]?|ing)?\s+#(\d+)", body)
+    return int(m.group(1)) if m else None
+
+
 def self_test():
     """`python3 github-exporter.py --self-test` — the descendant walk against a recorded tree."""
     assert parse_budget_usd("Budget: $12.50\n") == 12.5
@@ -2143,6 +2161,36 @@ def self_test():
     assert parse_budget_usd("Budget: 16\nBudget: 99\n") == 16.0, "FIRST line wins (ADR-102)"
     assert parse_budget_usd("Budget: to be decided\n") is None, "unreadable ⇒ absent, never 0"
     assert parse_budget_usd(None) is None and parse_budget_usd("") is None
+
+    # ── #1137: closing-keyword regex coverage ────────────────────────────────────────────────────
+    # All 12 closing-keyword forms (3 roots × 4 inflections) must parse.
+    _closing_forms = [
+        "close", "closes", "closed", "closing",
+        "fix", "fixes", "fixed", "fixing",
+        "resolve", "resolves", "resolved", "resolving",
+    ]
+    for kw in _closing_forms:
+        assert _parse_closing_issue(f"This PR {kw} #456") == 456, \
+            f"'{kw}' must parse as closing keyword"
+    # Also test at line start (no leading space)
+    assert _parse_closing_issue("Fixes #789") == 789, "line-start keyword must parse"
+    assert _parse_closing_issue("Closes #789") == 789, "line-start keyword must parse"
+    assert _parse_closing_issue("Resolves #789") == 789, "line-start keyword must parse"
+    # Negative controls: no keyword, non-closing refs, and false-positive substrings
+    assert _parse_closing_issue("Just a reference to #456") is None, \
+        "bare #N with no keyword must NOT parse"
+    assert _parse_closing_issue("Refs #456") is None, \
+        "'Refs #N' must NOT parse as closing"
+    assert _parse_closing_issue("prefixes #456") is None, \
+        "'prefixes #N' must NOT parse (false positive from unanchored regex)"
+    assert _parse_closing_issue("unresolved #456") is None, \
+        "'unresolved #N' must NOT parse (false positive from unanchored regex)"
+    assert _parse_closing_issue("disclosed #456") is None, \
+        "'disclosed #N' must NOT parse (false positive from unanchored regex)"
+    assert _parse_closing_issue(None) is None, "None body must return None"
+    assert _parse_closing_issue("") is None, "empty body must return None"
+    assert _parse_closing_issue("No numbers here") is None, \
+        "body with no #N must return None"
 
     # Cycle safety: the seen-set must terminate a parent graph that points back at itself.
     assert descendants_by_depth({1: 2, 2: 1}, 1) == {2: 1}, "cycle must terminate"
@@ -2913,7 +2961,432 @@ def self_test():
         _job_timings.clear()
         _jobs_fetched.clear()
 
-    # ── poll_forever() incremental-cycle behavior (#676) ───────────────────────────────────────────
+    # ── #1138: park-blocking count pagination (per_page=100 on dependencies/blocking) ──────────────
+    # The blocking-edge read for codeowner-parked PRs must request 100 items per page so the count
+    # does not saturate at GitHub's default page size (30). This test exercises the full code path
+    # through collect_open_prs with a mocked GraphQL response and mocked gh() calls.
+    saved_graphql = globals().get('graphql')
+    saved_gh_for_park = globals()['gh']
+    saved_open_prs_prev = dict(_open_prs_prev)
+    _open_prs_prev.clear()
+    _AGENT_ISSUE_NUMBERS.clear()
+    _GOAL_TREES.clear()
+    gh_calls = []
+
+    def _mock_graphql_park_blocking(query, variables):
+        """Return a fixture with one repo and one PR that triggers the park blocking code path."""
+        return {
+            "organization": {
+                "repositories": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    "nodes": [
+                        {
+                            "name": "test-repo",
+                            "agentIssues": {"nodes": []},
+                            "pullRequests": {
+                                "nodes": [
+                                    {
+                                        "number": 123,
+                                        "isDraft": False,
+                                        "updatedAt": "2026-09-01T00:00:00Z",
+                                        "reviewDecision": "REVIEW_REQUIRED",
+                                        "baseRefName": "main",
+                                        "headRefName": "fix/foo",
+                                        "mergeStateStatus": "CLEAN",
+                                        "labels": {"nodes": []},
+                                        "reviews": {
+                                            "nodes": [
+                                                {
+                                                    "author": {"login": "homelab-reviewer[bot]"},
+                                                    "state": "APPROVED",
+                                                    "submittedAt": "2026-09-01T00:05:00Z",
+                                                }
+                                            ]
+                                        },
+                                        "headRefOid": "abc123def",
+                                        "autoMergeRequest": None,
+                                        "commits": {
+                                            "nodes": [
+                                                {
+                                                    "commit": {
+                                                        "committedDate": "2026-09-01T00:00:00Z",
+                                                        "messageHeadline": "fix: something",
+                                                        "statusCheckRollup": {"state": "SUCCESS"},
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+            }
+        }
+
+    def _mock_gh_park_blocking(path, token=None):
+        """Mock gh() for park blocking test: record calls and return appropriate responses."""
+        gh_calls.append(path)
+        if "/pulls/" in path and "/dependencies" not in path and "/issues/" not in path:
+            return {"body": "This PR fixes #456"}
+        if "/dependencies/blocking" in path:
+            # Return 35 items to verify pagination doesn't saturate at default 30
+            return [{"id": i} for i in range(35)]
+        if "/issues/" in path and "/dependencies" not in path:
+            return {"title": "Some issue"}
+        return {}
+
+    globals()['graphql'] = _mock_graphql_park_blocking
+    globals()['gh'] = _mock_gh_park_blocking
+    try:
+        park_lines = []
+        collect_open_prs(park_lines)
+        park_body = "\n".join(dedupe_exposition(park_lines))
+
+        # Verify the park blocking count metric is emitted with the correct count (35)
+        assert 'github_pull_request_park_blocking_count{' in park_body, \
+            f"park blocking count metric must be emitted; got:\n{park_body}"
+        assert 'issue="456"' in park_body, \
+            f"park blocking count must reference closing issue 456; got:\n{park_body}"
+        # The count should be 35 (all items returned, not capped at 30)
+        assert ' 35' in park_body.split("github_pull_request_park_blocking_count")[-1].split("\n")[0], \
+            f"park blocking count must be 35 (not capped at 30); got:\n{park_body}"
+
+        # Verify the blocking dependencies URL includes per_page=100
+        blocking_calls = [c for c in gh_calls if "/dependencies/blocking" in c]
+        assert len(blocking_calls) == 1, f"expected 1 blocking call, got {len(blocking_calls)}"
+        assert "per_page=100" in blocking_calls[0], \
+            f"blocking dependencies URL must include per_page=100; got: {blocking_calls[0]}"
+
+        # Verify the codeowner_park metric is also emitted (the PR is parked)
+        assert 'github_pull_request_codeowner_park{' in park_body, \
+            f"codeowner park metric must be emitted for a bot-approved REVIEW_REQUIRED PR; got:\n{park_body}"
+    finally:
+        if saved_graphql:
+            globals()['graphql'] = saved_graphql
+        else:
+            globals().pop('graphql', None)
+        globals()['gh'] = saved_gh_for_park
+        _open_prs_prev.clear()
+        _open_prs_prev.update(saved_open_prs_prev)
+        _AGENT_ISSUE_NUMBERS.clear()
+        _GOAL_TREES.clear()
+    # ── #1187: cired edge-trigger coverage — real run_attempt on rollup + REST-fallback paths ──
+    # The rollup path (statusCheckRollup readable, ci_state == "failure") calls ci_state_from_runs
+    # to fetch the real run_attempt so a same-head rerun re-rings the doorbell (homelab#1166).
+    # The REST-fallback path (rollup FORBIDDEN-null) also returns the real run_attempt from
+    # ci_state_from_runs. Both paths must propagate it to maybe_dispatch_cired.
+    #
+    # Test 1: maybe_dispatch_cired directly — the dedup key includes run_attempt.
+    _cired_dispatched.clear()
+    _stacks_cache.update({
+        "at": time.monotonic(),
+        "map": {"circles": {"stack": "circles", "loop_ns": "circles-agents"}},
+        "stack_of": {"oracle-fleet": "oracle", "circles": "circles"},
+    })
+    cired_posted = []
+
+    class _CiredResp:
+        def read(self):
+            return b""
+        def __enter__(self):
+            return self
+        def __exit__(self, *_):
+            return False
+
+    def _record_cired(req, timeout=None):
+        cired_posted.append((req.full_url, json.loads((req.data or b"{}").decode())))
+        return _CiredResp()
+
+    saved_urlopen_cired, saved_url_cired = urllib.request.urlopen, COORDINATE_WEBHOOK_URL
+    urllib.request.urlopen = _record_cired
+    COORDINATE_WEBHOOK_URL = "http://agent-loop.invalid/coordinate"
+    try:
+        def cired(repo, number, head_sha, run_attempt=0):
+            del cired_posted[:]
+            maybe_dispatch_cired(
+                repo, number, head_sha,
+                ci_state="failure", armed=True, draft=False,
+                labels=set(),
+                run_attempt=run_attempt,
+            )
+            return list(cired_posted)
+
+        # Fires with real run_attempt=2 — the dedup key includes it.
+        fired = cired("test-repo", 1187, "deadbeefcafe", run_attempt=2)
+        assert len(fired) == 1, fired
+        assert fired[0][0] == COORDINATE_WEBHOOK_URL
+        assert fired[0][1] == {"repo": "test-repo", "number": "1187",
+                               "head_sha": "deadbeefcafe"}, fired[0][1]
+        # Same (repo, number, head_sha, run_attempt) must NOT re-ring.
+        assert cired("test-repo", 1187, "deadbeefcafe", run_attempt=2) == [], \
+            "same (repo, number, head_sha, run_attempt) must dedup"
+        # Same head_sha but NEW run_attempt (rerun) MUST re-ring (homelab#1108).
+        fired_rerun = cired("test-repo", 1187, "deadbeefcafe", run_attempt=3)
+        assert len(fired_rerun) == 1, f"rerun with new attempt must re-ring: {fired_rerun}"
+        assert fired_rerun[0][1] == {"repo": "test-repo", "number": "1187",
+                                     "head_sha": "deadbeefcafe"}, fired_rerun[0][1]
+        # run_attempt=0 (no rerun expected) must NOT re-ring if already dispatched with 0.
+        _cired_dispatched.clear()
+        fired_zero = cired("test-repo", 1188, "f00df00d", run_attempt=0)
+        assert len(fired_zero) == 1, "run_attempt=0 must fire"
+        assert cired("test-repo", 1188, "f00df00d", run_attempt=0) == [], \
+            "run_attempt=0 must dedup on repeat"
+        # Non-red conditions must NOT fire.
+        del cired_posted[:]
+        maybe_dispatch_cired(
+            "test-repo", 1189, "deadbeef",
+            ci_state="success", armed=True, draft=False,
+            labels=set(), run_attempt=0,
+        )
+        assert cired_posted == [], "green PR must not ring cired"
+        del cired_posted[:]
+        maybe_dispatch_cired(
+            "test-repo", 1190, "deadbeef",
+            ci_state="failure", armed=False, draft=False,
+            labels=set(), run_attempt=0,
+        )
+        assert cired_posted == [], "unarmed PR must not ring cired"
+        del cired_posted[:]
+        maybe_dispatch_cired(
+            "test-repo", 1191, "deadbeef",
+            ci_state="failure", armed=True, draft=True,
+            labels=set(), run_attempt=0,
+        )
+        assert cired_posted == [], "draft PR must not ring cired"
+        # Exclusion labels must block.
+        for excl in ("agent/error", "agent/arbitrate", "major", "major/awaiting-human", "automerge"):
+            del cired_posted[:]
+            maybe_dispatch_cired(
+                "test-repo", 1192, "deadbeef",
+                ci_state="failure", armed=True, draft=False,
+                labels={excl}, run_attempt=0,
+            )
+            assert cired_posted == [], f"PR with label {excl!r} must not ring cired"
+        # Empty webhook URL disables the edge.
+        COORDINATE_WEBHOOK_URL = ""
+        del cired_posted[:]
+        maybe_dispatch_cired(
+            "test-repo", 1193, "deadbeef",
+            ci_state="failure", armed=True, draft=False,
+            labels=set(), run_attempt=2,
+        )
+        assert cired_posted == [], "empty webhook URL must disable cired edge"
+    finally:
+        urllib.request.urlopen, COORDINATE_WEBHOOK_URL = saved_urlopen_cired, saved_url_cired
+        _cired_dispatched.clear()
+
+    # Test 2: rollup path in collect_open_prs — statusCheckRollup state="FAILURE" triggers
+    # ci_state_from_runs to fetch the real run_attempt, which propagates to maybe_dispatch_cired.
+    saved_graphql_cired = globals().get('graphql')
+    saved_gh_cired = globals()['gh']
+    saved_open_prs_prev_cired = dict(_open_prs_prev)
+    _open_prs_prev.clear()
+    _cired_dispatched.clear()
+    _AGENT_ISSUE_NUMBERS.clear()
+    _GOAL_TREES.clear()
+    cired_collect_posted = []
+
+    def _record_cired_collect(req, timeout=None):
+        cired_collect_posted.append((req.full_url, json.loads((req.data or b"{}").decode())))
+        return _CiredResp()
+
+    def _mock_graphql_rollup_red(query, variables):
+        """Return a fixture with one repo and one PR that is red on the rollup path."""
+        return {
+            "organization": {
+                "repositories": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    "nodes": [
+                        {
+                            "name": "test-repo",
+                            "agentIssues": {"nodes": []},
+                            "pullRequests": {
+                                "nodes": [
+                                    {
+                                        "number": 1187,
+                                        "isDraft": False,
+                                        "updatedAt": "2026-09-01T00:00:00Z",
+                                        "reviewDecision": "CHANGES_REQUESTED",
+                                        "baseRefName": "goal/1162-exporter",
+                                        "headRefName": "fix/test",
+                                        "mergeStateStatus": "CLEAN",
+                                        "labels": {"nodes": []},
+                                        "reviews": {"nodes": []},
+                                        "headRefOid": "abc123def",
+                                        "autoMergeRequest": {"enabledAt": "2026-09-01T00:00:00Z"},
+                                        "commits": {
+                                            "nodes": [
+                                                {
+                                                    "commit": {
+                                                        "committedDate": "2026-09-01T00:00:00Z",
+                                                        "messageHeadline": "fix: test",
+                                                        "statusCheckRollup": {"state": "FAILURE"},
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+            }
+        }
+
+    def _mock_gh_cired_rollup(path, token=None):
+        """Mock gh() for cired rollup test: return a workflow run with run_attempt=2."""
+        if "/actions/runs?" in path:
+            return {
+                "workflow_runs": [
+                    {
+                        "id": 1001,
+                        "name": "CI",
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "run_number": 42,
+                        "run_attempt": 2,
+                        "workflow_id": 1,
+                        "event": "pull_request",
+                    }
+                ]
+            }
+        return {}
+
+    urllib.request.urlopen = _record_cired_collect
+    COORDINATE_WEBHOOK_URL = "http://agent-loop.invalid/coordinate"
+    globals()['graphql'] = _mock_graphql_rollup_red
+    globals()['gh'] = _mock_gh_cired_rollup
+    try:
+        rollup_lines = []
+        collect_open_prs(rollup_lines)
+        # The cired dispatch must have fired with the real run_attempt=2 (not 0).
+        cired_calls = [p for p in cired_collect_posted
+                       if p[0] == "http://agent-loop.invalid/coordinate"]
+        assert len(cired_calls) >= 1, \
+            f"cired dispatch must fire for red rollup PR; got {cired_collect_posted}"
+        # The dedup key includes run_attempt=2, so the same call again would dedup.
+        # Verify the dispatch happened by checking _cired_dispatched.
+        assert ("test-repo", "1187", "abc123def", 2) in _cired_dispatched, \
+            f"cired dedup key must include run_attempt=2; got {_cired_dispatched}"
+        # Regression: run_attempt=0 must NOT be in the dedup set (the real value is 2).
+        assert ("test-repo", "1187", "abc123def", 0) not in _cired_dispatched, \
+            "run_attempt=0 must NOT be used when the real value is 2"
+    finally:
+        globals()['graphql'] = saved_graphql_cired if saved_graphql_cired else (globals().pop('graphql', None) or None)
+        globals()['gh'] = saved_gh_cired
+        _open_prs_prev.clear()
+        _open_prs_prev.update(saved_open_prs_prev_cired)
+        _AGENT_ISSUE_NUMBERS.clear()
+        _GOAL_TREES.clear()
+        _cired_dispatched.clear()
+
+    # Test 3: REST-fallback path in collect_open_prs — null statusCheckRollup (private repo)
+    # triggers ci_state_from_runs which returns the real run_attempt.
+    saved_graphql_cired_fb = globals().get('graphql')
+    saved_gh_cired_fb = globals()['gh']
+    saved_open_prs_prev_cired_fb = dict(_open_prs_prev)
+    _open_prs_prev.clear()
+    _cired_dispatched.clear()
+    _AGENT_ISSUE_NUMBERS.clear()
+    _GOAL_TREES.clear()
+    cired_fb_posted = []
+
+    def _record_cired_fb(req, timeout=None):
+        cired_fb_posted.append((req.full_url, json.loads((req.data or b"{}").decode())))
+        return _CiredResp()
+
+    def _mock_graphql_no_rollup(query, variables):
+        """Return a fixture with one repo and one PR with null statusCheckRollup (private repo)."""
+        return {
+            "organization": {
+                "repositories": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    "nodes": [
+                        {
+                            "name": "private-repo",
+                            "agentIssues": {"nodes": []},
+                            "pullRequests": {
+                                "nodes": [
+                                    {
+                                        "number": 42,
+                                        "isDraft": False,
+                                        "updatedAt": "2026-09-01T00:00:00Z",
+                                        "reviewDecision": "APPROVED",
+                                        "baseRefName": "main",
+                                        "headRefName": "fix/private",
+                                        "mergeStateStatus": "CLEAN",
+                                        "labels": {"nodes": []},
+                                        "reviews": {"nodes": []},
+                                        "headRefOid": "f00df00d",
+                                        "autoMergeRequest": {"enabledAt": "2026-09-01T00:00:00Z"},
+                                        "commits": {
+                                            "nodes": [
+                                                {
+                                                    "commit": {
+                                                        "committedDate": "2026-09-01T00:00:00Z",
+                                                        "messageHeadline": "fix: private",
+                                                        "statusCheckRollup": None,
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+            }
+        }
+
+    def _mock_gh_cired_fallback(path, token=None):
+        """Mock gh() for cired REST-fallback test: return a workflow run with run_attempt=3."""
+        if "/actions/runs?" in path:
+            return {
+                "workflow_runs": [
+                    {
+                        "id": 2001,
+                        "name": "CI",
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "run_number": 7,
+                        "run_attempt": 3,
+                        "workflow_id": 1,
+                        "event": "pull_request",
+                    }
+                ]
+            }
+        return {}
+
+    urllib.request.urlopen = _record_cired_fb
+    COORDINATE_WEBHOOK_URL = "http://agent-loop.invalid/coordinate"
+    globals()['graphql'] = _mock_graphql_no_rollup
+    globals()['gh'] = _mock_gh_cired_fallback
+    try:
+        fb_lines = []
+        collect_open_prs(fb_lines)
+        # The cired dispatch must have fired with the real run_attempt=3 (from REST fallback).
+        assert ("private-repo", "42", "f00df00d", 3) in _cired_dispatched, \
+            f"cired dedup key must include run_attempt=3 from REST fallback; got {_cired_dispatched}"
+        # Regression: run_attempt=0 must NOT be in the dedup set.
+        assert ("private-repo", "42", "f00df00d", 0) not in _cired_dispatched, \
+            "run_attempt=0 must NOT be used when REST fallback returns 3"
+    finally:
+        if saved_graphql_cired_fb:
+            globals()['graphql'] = saved_graphql_cired_fb
+        else:
+            globals().pop('graphql', None)
+        globals()['gh'] = saved_gh_cired_fb
+        _open_prs_prev.clear()
+        _open_prs_prev.update(saved_open_prs_prev_cired_fb)
+        _AGENT_ISSUE_NUMBERS.clear()
+        _GOAL_TREES.clear()
+        _cired_dispatched.clear()
+        urllib.request.urlopen = saved_urlopen_cired
+
     # The poll loop accumulates and deduplicates across multiple collectors within each cycle.
     # A fixture-driven seam tests that (a) _body grows monotonically across collectors, (b) _dupes
     # counts each real duplicate exactly once per cycle (the #669 round-2 regression), and
@@ -2921,13 +3394,16 @@ def self_test():
     # to drive the three properties without network or threading.
     _test_poll_forever_incremental_cycles()
 
-    print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
+    print("github-exporter self-test: OK (closing-keyword regex coverage, goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
           "scale, job-level queue/duration metrics + caching + retry on API failure, issue "
           "lifecycle series with re-queue first-epoch rule, first-poll job-timings skip when "
           "_first_successful_poll flag is set, sentinel head-changed edge-trigger, "
           "updater behind edge-trigger (ADR-111 #743), "
+          "cired edge-trigger direct coverage with real run_attempt dedup (homelab#1187), "
+          "rollup-path run_attempt propagation through collect_open_prs, "
+          "REST-fallback-path run_attempt propagation through collect_open_prs, "
           "poll_forever incremental-cycle behavior with monotonic _body growth, dedup counter "
           "per cycle, and _last_success-only-on-full-success)")
     return 0
