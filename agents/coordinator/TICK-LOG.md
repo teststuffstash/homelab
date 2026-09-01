@@ -6020,3 +6020,13 @@ first live ADR-110 maintenance session before the ADR existed.
   parks the item AND its footprint neighbours until a human reads the scan — FU-shaped if it
   resights (the breaker doctrine says human-first, but a launcher-level arg crash on round 1 with
   nothing committed is not an anomaly of the item).
+- 11:12Z REVIEWER ARM LIVE: `reviewer-oracle-fleet-334-640c8fc7` (sonnet, the operator's own
+  oracle-fleet#334) — pod script carries `MCP_FLAG='--mcp-config /tmp/mcp-config.json'`; Claude
+  Code's own MCP log inside the pod: "Successfully connected (transport: http) in 216ms …
+  hasTools:true, serverVersion riigiteataja-statute 0.1.0". Hubble had shown NO flow from that
+  pod to the VIP — filter/window artefact (a probe curl from the pod showed fine); the app log is
+  the authority, the one to read next time: `~/.cache/claude-cli-nodejs/<cwd-slug>/mcp-logs-<server>/`.
+  #328 r1 → PR#335 (second clean goose ride, scratch PVC placed first try post-GC); #329 next
+  behind #328's footprint. oracle-fleet#330 CLOSED `agent/done` (PR#333 merged 10:56Z, harvest
+  ran). Both production-leg halves + the reviewer arm relayed to homelab#1039 (two comments).
+  WIND-DOWN: monitors killed, one lint-gated push of the batched bookkeeping.
