@@ -1,0 +1,19 @@
+# assembly-cr-no-trailer (homelab#1150) — a goal/** head PR with CHANGES_REQUESTED but NO
+# line-anchored Assembly-for: #<n> trailer cannot be routed to a goal. The clause produces
+# a report-only orphan line.
+#
+# THE CONTRACT:
+#   1. No goal-checkpoint unit is emitted.
+#   2. An orphan line is produced reporting the missing trailer.
+name: assembly-cr-no-trailer
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
