@@ -6254,3 +6254,20 @@ first live ADR-110 maintenance session before the ADR existed.
   "cannot prove" warn, three faces evidenced; operator-lane); **#1212 rostered** into wave-2
   dispatch-belts (comment on the issue names it the #1210 chain's root cause). meta-state
   roster + sequencing updated. Direct commits batched; push after PR#1226 lands.
+
+## 2026-09-01 — night sitting close: Goal #1231 minted (router-first), remedy (b) landed, session handover
+
+- COMMAND (operator: "figure out a stint/goal for the router issues ... clear the session
+  then"): **Goal #1231 minted** — router-first, Base: master (justified: merge-is-deploy for
+  proxy/scan/brief; each child soaks live), Budget 16, human verdict. Children: #1232
+  (FU-201 a+b escalation carrier) #1233 (FU-202 key-class re-mint) #1234 (FU-201 c provider
+  strikes + pair-exclusion, blockedBy #1233) #1235 (FU-200 fleet-strike reader) #1236
+  (FU-186 step-1 provider_policy/exacto) all queued + rung; #1237 (FU-174 effort spike) +
+  #1238 (0731 matrix run) operator/seat-run, unqueued. goal-lint: first pass 7 FAIL (Base:
+  written inline, not line-anchored — the lint caught its author again), fixed via body
+  edits, 0 FAIL / 4 deliberate WARNs. Wave-2 roster: FU-200/FU-201 legs moved into #1231;
+  the rest waits at #1162's close sweep per router-first.
+- Earlier in the sitting: PR#1208 remedy (b) executed (fold `4ecff333→4ecff105`; suite
+  327/0, red-on-base proven, breakers cleared, #1151 → agent/review); #1224/#1225 filed;
+  FU-202 filed; router-first ruling recorded (PR#1226 merged); v1.3.1 banked (PR#1220
+  merged). NEXT SESSION = monitor + gate-read per the meta-state #1231 bullet.
