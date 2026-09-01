@@ -686,6 +686,11 @@ Rule exactly one of:
   assembly draws a review of nothing, and a CHANGES_REQUESTED on it summons fix rounds at the
   integration branch. If the HUMAN requests changes on the assembly PR, route the work as a
   NEW child on the goal — never a fix round pushed at `goal/**` (protected base).
+  **`trigger=assembly-cr` (homelab#1150):** the scan's changes-requested clause now emits a
+  `goal-checkpoint` unit when an assembly PR (HEAD `goal/**`, body carries a line-anchored
+  `Assembly-for: #<n>` trailer) receives a `CHANGES_REQUESTED` verdict. The checkpoint session
+  reads this trigger and routes the work as a NEW child on the goal, exactly per the rule above
+  — the same decompose rules apply (`Base: goal/**`, narrowed `Touches:`, one deliverable).
   Any child still open when the acceptance is already met is a scope question, not a
   formality: say so rather than letting it run.
 - **Not yet assembly-complete, and the remaining children cover the gap** → comment what is still
@@ -1205,6 +1210,66 @@ first:
 
 The **image-build CI needs no token** — it pushes to ghcr with the job's built-in `GITHUB_TOKEN`
 (`packages: write`). The only *new* credential the coordinator adds is this runtime `coordinator-git`.
+
+## Blocked-on marker — terminal rulings record what they wait on (homelab#1188)
+
+A coordinator terminal ruling may record what it waits on via a `blocked-on:` marker anchored at
+the **start** of a comment (like every other marker in this lane — `AGENT_STRIKE:`,
+`AGENT_INFEASIBLE:`, `state-fp:`). The scan suppresses re-dispatch while that predicate holds.
+
+### Grammar
+
+```
+blocked-on: <kind>=<ref>
+```
+
+Where `kind ∈ {human, issue, pr}`:
+
+| Kind | Ref | Meaning |
+|------|-----|---------|
+| `human` | *(none)* | Waiting on a human — no new review or comment since the marker was written |
+| `issue` | Issue number | Waiting on the referenced issue to close |
+| `pr` | PR number | Waiting on the referenced PR to merge or close |
+
+### §arbitrate — when to write it
+
+An arbitrate ruling that concludes "waiting on X" should write a `blocked-on:` marker in its
+ruling comment. The scan's arbitrate clause checks for this marker before dispatching: if the
+marker is present and the named blocker is still unresolved, the clause emits a report line
+instead of a unit — no ride is spent to re-derive the same answer.
+
+Examples:
+- `blocked-on: human` — the ruling determined a human must act (e.g., re-scope an issue, resolve
+  a design question). The scan checks whether any new human review or comment has appeared since
+  the marker; if not, re-dispatch is suppressed.
+- `blocked-on: issue=1031` — the ruling determined the PR is blocked on issue #1031. The scan
+  checks whether that issue is still open; if so, re-dispatch is suppressed.
+
+### §ci-red — when to write it
+
+A ci-red terminal ruling (rounds exhausted, escalated to arbitrate) that identifies an external
+blocker should write a `blocked-on:` marker. The scan's ci-red clause checks for this marker
+before dispatching a fix round: if the marker is present and the blocker is still unresolved,
+the clause emits a report line instead of a unit.
+
+### Resolution
+
+The blocker is considered resolved when:
+- `human`: a new **human-authored** review or non-marker comment appears on the PR thread. Bot
+  identities (the worker App and the reviewer bot) are excluded by login: the loop's own writes
+  must never clear a marker the loop wrote.
+- `issue`: the referenced issue is closed
+- `pr`: the referenced PR is merged or closed
+
+Once resolved, the next scan tick re-arms the clause and dispatch proceeds normally. The marker
+itself is NOT removed — it becomes stale and is ignored by the scan (the predicate checks the
+live state of the blocker, not the marker's presence alone).
+
+### Fallback
+
+If resolving `kind=human` cannot be made deterministic from the API the scan can read, the
+documented fallback stays "explicitly human" — the marker is advisory only and does not suppress
+re-dispatch. This is the same posture as #1011's own follow-up allowed.
 
 ## Goal decompose — Base: mandatory on task/goal (homelab#1053)
 

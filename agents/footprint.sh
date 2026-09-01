@@ -67,6 +67,95 @@ fp_goal_exempt() {
   return 1
 }
 
+# classify_touches <footprint> → prints "machine-merge" | "codeowner-merge" | "codeowner-author"
+# ONE machine-readable home for the platform lane path tables (docs/agents/iac-lane.md §The
+# platform lane). Sources: the ❌ operator-author set (iac-lane.md, collapsed from the second
+# copy that was inlined in fix-debounce-argo.yaml) and the repo-root CODEOWNERS (parsed at
+# runtime, never restated). Returns the HIGHEST classification across all paths in the footprint:
+#   machine-merge    — CI gate only (tier 1: argocd/resources/** and unowned paths)
+#   codeowner-merge  — agent may author, human merges (tier 2 + tier 3 CODEOWNERS-owned paths)
+#   codeowner-author — only codeowner may author (❌ set: .github/, .agents/, devbox.json|lock,
+#                      scripts/ — paths that take effect BEFORE a human approves)
+# Callers: coordinator-scan.sh (queued-dispatch operator-lane hold), fix-debounce-argo.yaml
+# (queue-time deny), and any future reader — one definition, N readers.
+classify_touches() (
+  set -f
+  local footprint="$1" path tier="machine-merge"
+  local _co_file="${CLASSIFY_CODEOWNERS:-CODEOWNERS}"
+  local _entries _co_line _co_pat _co_owned _co_has_owner _co_rest _new_tier
+
+  # Tier rank: machine-merge=1, codeowner-merge=2, codeowner-author=3
+  _tier_rank() {
+    case "$1" in
+      machine-merge) echo 1 ;;
+      codeowner-merge) echo 2 ;;
+      codeowner-author) echo 3 ;;
+      *) echo 0 ;;
+    esac
+  }
+
+  _entries="$(printf '%s' "$footprint" | tr ',' '\n' | tr -d ' \t')"
+
+  for path in $_entries; do
+    [ -n "$path" ] || continue
+    _new_tier="machine-merge"
+
+    # ── ❌ operator-author set — NEVER agent-authored ──────────────────────────────────────
+    # These paths take effect BEFORE a human approves (iac-lane.md §The platform lane):
+    #   .github/**       — PR runs its own workflow (arbitrary code on the runner)
+    #   .agents/**       — next round reads its recipe from the branch
+    #   devbox.json|lock — CI executes from the branch
+    #   scripts/**       — CI executes from the branch (in homelab the scripts ARE the checks)
+    case "$path" in
+      .github/*|.github) _new_tier="codeowner-author" ;;
+      .agents/*|.agents) _new_tier="codeowner-author" ;;
+      devbox.json|devbox.lock) _new_tier="codeowner-author" ;;
+      scripts/*|scripts) _new_tier="codeowner-author" ;;
+      *)
+        # ── CODEOWNERS-based classification ──────────────────────────────────────────────────
+        # Parse CODEOWNERS at runtime: last-matching-pattern wins. A pattern with an owner makes
+        # the path codeowner-merge; a carve-out (no owner) makes it machine-merge. Patterns are
+        # repo-relative (leading / stripped for matching). Directory patterns (trailing /) match
+        # the dir and everything under it; file patterns match exactly.
+        _co_owned=-1  # -1 = no match, 0 = carve-out, 1 = owned
+        while IFS= read -r _co_line; do
+          case "$_co_line" in
+            ''|'#'*) continue ;;
+          esac
+          _co_pat="${_co_line%%[[:space:]]*}"
+          # Check if this line has an owner (whitespace after pattern)
+          _co_has_owner=0
+          _co_rest="${_co_line#$_co_pat}"
+          [ -n "$_co_rest" ] && _co_has_owner=1
+          _co_pat="${_co_pat#/}"  # strip leading /
+          # Match: for directory patterns (trailing /), check if path starts with the pattern
+          # (agents/ matches agents/coordinator-scan.sh). For file patterns (no trailing /),
+          # check exact equality (agents/images.env matches only that file).
+          if [ "$path" = "$_co_pat" ]; then
+            _co_owned="$_co_has_owner"
+          elif [ "${_co_pat%/}" != "$_co_pat" ] && [ "${path#"$_co_pat"}" != "$path" ]; then
+            # Directory pattern match (trailing /)
+            _co_owned="$_co_has_owner"
+          fi
+        done 2>/dev/null < "$_co_file" || true
+
+        if [ "$_co_owned" -eq 1 ]; then
+          # Last matching pattern has an owner — codeowner-merge
+          _new_tier="codeowner-merge"
+        fi
+        # Carve-out (last match has no owner) or no match → stays as machine-merge
+        ;;
+    esac
+
+    # Only escalate tier (never downgrade)
+    if [ "$(_tier_rank "$_new_tier")" -gt "$(_tier_rank "$tier")" ]; then
+      tier="$_new_tier"
+    fi
+  done
+
+  printf '%s' "$tier"
+)
+
 # fp_pair_conflict <entryA> <entryB> → 0 iff the two entries overlap (path-boundary aware:
 # chassis ∩ chassis/api.py = yes; chassis ∩ chassis-x = no)
 fp_pair_conflict() {

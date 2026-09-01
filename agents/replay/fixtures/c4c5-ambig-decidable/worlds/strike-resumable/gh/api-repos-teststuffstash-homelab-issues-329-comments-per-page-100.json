@@ -1,0 +1,12 @@
+[
+  {
+    "id": 100,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — picking this up (round 1)."
+  },
+  {
+    "id": 101,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "AGENT_STRIKE: error_class=unknown\n\nThe worker went terminal without pushing. The issue is still actionable — the deliverable is unchanged.\n\nResumable branch pushed: fix/issue-329-loop\n\nThis is a resumable strike: the worker pushed a branch before going down, so the next ride can resume from it with --work-branch fix/issue-329-loop instead of starting over."
+  }
+]

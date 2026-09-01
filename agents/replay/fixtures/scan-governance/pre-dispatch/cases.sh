@@ -1,7 +1,7 @@
 # ── the queued units ── `repo|number|Touches|title`, one per line: the four loop variables the
-# governance block reads. `qtouches` carries the value the scan has ALREADY normalized (a missing
+# operator-lane block reads. `qtouches` carries the value the scan has ALREADY normalized (a missing
 # `Touches:` line has become the `*` sentinel by this point, ADR-097), so #1003 is written as `*`.
-CASES="homelab|993|agents/coordinator-scan.sh, agents/replay/|coordinator-scan: no GOVERNANCE-set footprint check
+CASES="homelab|993|agents/coordinator-scan.sh, agents/replay/|coordinator-scan: no operator-lane footprint check
 homelab|1000|.github/workflows/ci.yaml|bump the checkout action version
 homelab|1001|scripts/governance-lint.sh|widen the governance set
 homelab|1002|argocd/resources/loki/|loki: raise the retention window

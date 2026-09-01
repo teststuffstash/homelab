@@ -1,4 +1,4 @@
-CALL gh pr view 600 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments
+CALL gh pr view 600 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
 OUT ORPHAN [homelab] ⏳ merge-conflict DEBOUNCED — PR #600: head, checks, reviewDecision and newest verdict are all unchanged since the last merge-conflict dispatch (`state-fp:a10d92af08ec`, homelab#198). The conflict stands and a round was already dispatched at this exact input — a human (or new content) is the next mover, so no ride is spent to re-derive it.
 OUT REACHED: end
 RC 0

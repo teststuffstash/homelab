@@ -1,0 +1,7 @@
+# c4c5-ambig-decidable — the decision table (family contract in fixture.yaml; per-row intent below).
+# id               | world           | patch | env | expect
+# strike-resumable  = #329 has AGENT_STRIKE: + Resumable branch pushed: → decidable: emits C4/C5
+#                     unit with work-branch; #330 beside it keeps its ordinary v2 + unit
+# no-strike         = #329 has NO AGENT_STRIKE: comment → held as today; #330 keeps its v2 + unit
+strike-resumable | strike-resumable |       |      | strike-resumable
+no-strike        | no-strike        |       |      | no-strike

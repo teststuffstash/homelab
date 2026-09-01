@@ -1,0 +1,7 @@
+[
+  {
+    "id": 300,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — picking this up (round 1)."
+  }
+]
