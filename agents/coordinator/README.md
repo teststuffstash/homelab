@@ -147,7 +147,11 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 >   IS the strike store (state lives in GitHub, not your head). To pick the model for any
 >   (re-)dispatch, grep the issue's comments for `AGENT_STRIKE:` and take the first chain entry not
 >   yet struck **for this task**, then **re-dispatch the same round immediately** with a fresh
->   session key. Never label `agent/blocked` for a pure infra failure while chain entries remain;
+>   session key. **Re-grade the budget label as escalation carrier**: when strikes suggest the
+>   chain's model tier is inadequate, edit the issue's `agent-budget/*` label to one tier higher
+>   before re-dispatch — the label is the routing verb (labels ride /route since PR#408), and
+>   `label_map` in `model-classes.json` is the vocabulary home (§Escalation vocabulary). Never label
+>   `agent/blocked` for a pure infra failure while chain entries remain;
 >   only a fully-struck chain escalates (comment the strike list — that IS a human's problem).
 > - **Pricing:** the estimator prices ANY model live (the OpenRouter registry, cache-aware effective
 >   $/M — FU-062 §M3); `python3 agents/estimate_budget.py --model <m> --lookup` shows the verdict +
@@ -736,7 +740,10 @@ Read the diff + the whole review thread, then rule — exactly one of:
 - **Re-dispatch with clarified instructions**: the loop is stuck on a misunderstanding you can
   name. Remove `agent/arbitrate`, comment your ruling + the clarification, dispatch the fix
   round yourself (agent-session `--work-branch` on the PR's branch) with the clarification fed
-  into the worker's context. This RESETS nothing — if it comes back a third time, escalate.
+  into the worker's context. **Re-grade the budget label if needed**: if stronger models are
+  warranted, edit the issue's `agent-budget/*` label to one tier higher (the escalation carrier —
+  labels ride /route bodies since PR#408; `label_map` in `model-classes.json` is the vocabulary
+  home). This RESETS nothing — if it comes back a third time, escalate.
   **The directive carries the reviewer's suggested fix VERBATIM** (retro r3 win-2): the literal
   file, the literal current line, the literal replacement, quoted out of the review — not your
   summary of the verdict, and not "address the reviewer's finding". circles#57 round 4 flipped
@@ -856,6 +863,16 @@ A dismissed review's state is `DISMISSED`, so it also drops out of the reflex's 
 breaker count (which filters on APPROVED/CHANGES_REQUESTED) — the re-entered PR gets that round
 back instead of instantly re-tripping ROUNDS_MAX. That is intended: the ruling ended the disputed
 round, it did not spend a fresh one.
+
+## Escalation vocabulary — the budget label is the carrier (FU-201)
+
+The escalation carrier is the issue's `agent-budget/*` label — the coordinator RE-GRADES it
+(e.g. `sm`→`lg`) to instruct the router to up-select model tier. Labels ride /route bodies
+since PR#408, and route() resolves the label to a route class via `label_map` in
+`model-classes.json` (explicit label > `label_map` > `role_defaults`). The `label_map`
+table is the **vocabulary home**: it declares which labels exist and what constraints they
+carry — cite it in rulings rather than copying values. ADR-094 holds: the play never names
+a model; the label indirection is the contract.
 
 ## The `ci-red` clause (FU-115 / merge-path MP-T12, content-based rewrite 2026-07-28)
 
