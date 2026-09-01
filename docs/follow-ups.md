@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-199** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-200** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -385,7 +385,19 @@ the block needs pruning, not more headings.
       **Next:** matrix-spike rows (which opencode surfaces accept which knob), then a two-arm
       flash default-vs-max experiment (pass-rate/rounds/window-draw — effort multiplies draw;
       couples FU-170). Design home lands with the build: model-routing.md §effort (beside M11).
-- [ ] **FU-171** — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
+
+- [ ] **FU-201** — **The arbitrate "re-dispatch stronger" verdict has no carrier to the router**
+      (operator, 2026-09-01: "they did not meet") — chainless deleted the chain-walk, ADR-094
+      bars freelancing a model id, and #459/#329 both PARKED human-first while route() already
+      honors label-borne class (labels ride /route bodies; label_map is the git home).
+      **Ruled same day ("flesh out the existing things"): the carrier is the EXISTING size
+      label.** **Next:** (a) escalation = `agent-budget/*` RE-GRADE by the arbitrate/breaker
+      plays; label_map gains md/lg rows (lg → floor raise + never-free; FU-174 effort later);
+      (b) a brief section naming the label vocabulary per play (cites label_map, never copies);
+      (c) provider outranks model class — strikes gain the served-provider column, serving-shaped
+      strikes exclude the (model, provider) pair on re-pick (#783 legs; quality = FU-186/ADR-115
+      pin-v2 + M14 pair-cooldowns). Rejected: task/build as routing basis, `model/strong`,
+      attempt-count auto-escalation (banked, feed-4). Relates FU-174, FU-186, ADR-094/096/115. — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
       The #447 review ran 47 min (kimi-k3, **$6.33** — balance regime, FU-170); the dispatch-time
       installation token 401'd ~07:50Z BEFORE the verdict posted — a full CHANGES_REQUESTED lost
       (recoverable: S3 reviewer-r1 transcript + pod log); `/var/run/reviewer-git/` never refreshes
@@ -393,6 +405,12 @@ the block needs pruning, not more headings.
       deepseek-v4-flash (direct-to-master, operator) — cheaper/faster rounds fit the token window.
       Next: mid-review token refresh (re-mount/re-mint on 401); re-verify on the next >30-min
       review. Relates FU-170, #435 (review-state snapshots proved their worth here).
+      **RESIGHTED 2026-09-01 on the COORDINATOR arm** (oracle #328 item session, 09:20–09:49Z,
+      only 29 min): `LOOP_FETCH` mints ONCE at PREP and the per-stack ns holds no refreshable
+      mount, so a broker token already partway through its hour 401'd every write — the session
+      misread it as "coordinator-git Secret empty" (the Secret is absent BY DESIGN in `<stack>-agents`)
+      and could not even restore its item to `agent/queued`. Same fix shape: re-mint on 401 in the
+      gh wrapper, both arms.
 - [ ] **FU-172** — **#447 r1 review residues (operator merged wittingly, 2026-08-14).** The
       verdict died in posting (FU-171); the operator merged #447 direct (08:11Z). Findings are
       preserved in S3 (`reviewer-r1-20260814T075318Z`). Remaining: (1) only-free guardrail
@@ -438,6 +456,29 @@ the block needs pruning, not more headings.
       `--json title,body,comments` (96fe003); homelab itself never uses the flag. oracle-fleet
       ported 2026-08-07 (operator, oracle-fleet#173). **Next:** the sleep-tracking recipes —
       the donor for the next `new-stack --from` must already have it. Relates FU-114.
+
+- [ ] **FU-199** — **Silent holds freeze whole lanes invisibly.** Four faces in ~48h: the C4/C5
+      goal-child hold never reads the `AGENT_STRIKE` + `Resumable branch pushed:` evidence
+      finalize wrote (oracle#329 ×2, homelab#1149 — struck children held hours, footprints
+      freezing siblings); the hold pushes class `held-merged-unlinked` with zero merged
+      mentions; footprint-held siblings get no `who=operator` row; and the TRACKS-rule-1
+      PR-cap hold (3 human-waiting master PRs, 2026-09-01 board freeze) held every dispatch
+      with its ⏳ line dying in GC'd pod logs. **Next:** hold-narrowing (strike + branch ⇒
+      ordinary C4/C5 `--work-branch` unit) = #1203/PR#1206, riding; residue = honest class rows
+      (strike-held) + hold-chain propagation extended to footprint-holds-by-held-items and
+      cap-held-by-human-waiting-PRs ⇒ who=operator + aggregate. Relates FU-187, FU-143.
+
+- [ ] **FU-200** — **The brief's fleet-strike rule has no deterministic reader.** "Same
+      `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h ⇒ ONE
+      `AGENT_ERROR` + one filed platform issue" (coordinator README, retro r4 F2) is a prose
+      play executed only if one session happens to see both issues — item sessions see one.
+      2026-09-01: FOUR goal-#326 r1 strikes with identical `error_class=unknown`
+      (oracle-fleet#328/#329×2/#330; three = homelab#1186, one open) were never correlated —
+      the operator + seat did it by hand via #330's triage. Prose-warned classes recur,
+      executable gates hold (ADR-103). **Next:** a scan-side fleet-window count (the scan
+      already greps `AGENT_STRIKE:` per issue for the chain-walk) emitting the breaker +
+      filing per the brief's contract; same surface as the #1163 scan theme. Relates FU-199,
+      agent-runtime#85 (the `unknown` classifier), model-routing §M1a (strike store).
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 
@@ -653,8 +694,11 @@ the block needs pruning, not more headings.
       belt defect #932 (queued; fact hand-recorded). Design + history:
       [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2.
       **Next:** the Mon 2026-08-31 05:00 UTC cron = the clean unattended acceptance (full
-      report per cell — r1 was one — no false RetroReportOverdue, #932 landed); then the
-      ledger emitter gaps, MCP transcript slices, stack retros (non-overlap).
+      report per cell — r1 was one — no false RetroReportOverdue, #932 landed); then **STACK
+      retros FIRST (priority flipped, operator 2026-09-01** — stack goals carry the deeper
+      business-logic + kind-e2e complexity and a different dynamic; §B2 The split): the first
+      `retro.enabled` graduation + non-overlap brief; ledger emitter gaps + MCP transcript
+      slices behind it.
       Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if

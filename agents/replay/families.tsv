@@ -27,11 +27,13 @@ c4c5-infeasible-quoted-inert	c4c5-infeasible
 ci-red-rerun-wake	ci-red-rounds-two-channels
 ci-red-rerun-wake-dispatch	ci-red-rounds-two-channels
 ci-red-rounds-two-channels	ci-red-rounds-two-channels
+context-prefetch	context-prefetch
 depends-on-retired-format	depends-on-retired-format
 dispatch-phase-scan	dispatch-phase
 dispatch-phase-session	dispatch-phase
 doorbell-collapse	doorbell
 doorbell-fanout	doorbell
+env-card-issue-context-gate	env-card-issue-context-gate
 env-card-machine-markers-capture	env-card-machine-markers
 env-card-mcp-present	env-card-mcp-present
 env-card-mcp-present/opencode	env-card-mcp-present
@@ -55,6 +57,7 @@ harvest-goal-closed	harvest
 harvest-goal-open-exhausted	harvest
 harvest-goal-open-funded	harvest
 harvest-master-inert	harvest
+issue-derivation	issue-derivation
 item-class-batch/item-class-batch	item-class-batch
 ledger-emitter-rounds	ledger-emitter-rounds
 lens-posture	lens-posture
@@ -100,6 +103,8 @@ reviewer-go-failover-limited	reviewer-go-failover
 reviewer-mcp-prep-absent	reviewer-mcp-prep
 reviewer-mcp-prep-present	reviewer-mcp-prep
 reviewer-optout	reviewer-optout
+
+
 reviewer-touches-escapes-computed	reviewer-touches
 reviewer-touches-escapes-none	reviewer-touches
 reviewer-touches-unavailable	reviewer-touches

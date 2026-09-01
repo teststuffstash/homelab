@@ -25,6 +25,16 @@ instructions: |
   bucket or node name. `SERVICES.md` is the catalog of what exists; `docs/ip-plan.md` says which
   range a NEW address comes from.
 
+  DIRECTIVE READ FAILED = STOP (homelab#1069 / agent-runtime#99): if that `gh issue view` — or a
+  PR-comments read on a fix round — errors (`API rate limit already exceeded`, a 403, an empty
+  body under the --json form), you have NOT read your instructions. Never proceed on a partial
+  read: round 2 of #969 got the body without the comments that carried the arbitration
+  directive, found the branch already matching the body, and exited `clean` having pushed
+  nothing — counted as a completed round, never retried. Instead: print the failing command and
+  its error line verbatim as your final output and END the run without pushing. The finalize
+  seam classifies that log line as `input-unreadable` (not `clean`) and the strike channel
+  re-dispatches you when the pool resets — a wasted minute, not a wasted round.
+
   # ── SCOPE IS DECIDED BY PATH ─────────────────────────────────────────────────────────────────
   # The issue's `Touches:` line is your declared surface. These tiers are the CEILING over it:
   # a `Touches:` line may narrow them, never widen them.

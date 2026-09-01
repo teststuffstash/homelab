@@ -8,6 +8,72 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ SOAK — which goals/stints are past it (read 2026-09-01 ~08:10Z, the corpus session's
+  wind-down; verdicts are the OPERATOR's, the seat only recommends):**
+  - **#818 G-B — `goal/validated` looks DUE.** Post-launch since 08-30 20:39Z; tree = the
+    bucket #840 only; Production-leg evidence live: `probe-platform` 3 consecutive Succeeded
+    ticks (08-31 18:41Z, 09-01 00:41Z, 06:41Z), SLO teeth + lens knob + responder dial
+    shipped. Apply the label from the jail (User type passes IL-T22); the scan's terminal
+    leg runs the close sweep.
+  - **#741 S7 (updater-in-cluster) — closeout-1 OVERDUE by a week.** 5/5 originals done, cutover
+    executed 08-26, container untouched since 08-21 and NO closeout comment ever posted. Needs
+    the closeout-1 sitting (docs-cleanup over merge-path.md/FSM + `agents/update-pr-branch.sh`
+    surfaces, FU sweep, built-vs-left comment), then its ≥72h quiet window, then close.
+  - #775 G-A: validated once #778 (operator-held scout residue, FU-181's) is RELEASED to its
+    tracker — it is residue, not a defect, so rule 4 does not bind it; bucket #787 stays.
+  - #1039 G-F: claim FLIPPED (oracle-iac#455, 09-01 08:35Z) and the first rides exposed both
+    harness attach arms as invented (#1041) — fixed in PR#1186 (09-01 09:29Z, `5fe75b28`).
+    Verdict now waits on **oracle-fleet#330 round 3** = the production-leg live validation
+    (transcript lists `statute`/`search`/`give_feedback`; ≥1 MCP-filed row in the sink). The
+    seat re-armed it (`agent/queued`, circular blockedBy→#1039 removed, rung); it is HELD on
+    #328's `scripts/**` footprint until that ride opens a PR or its session ends (pod deadline
+    ~10:20Z). Pickup: confirm r3 dispatched from post-#1186 master, read
+    `s3://agent-transcripts/oracle-fleet/issue-330/worker-r*-…` for the tool list, then the G-F
+    validated read. If r3 strikes on the attach again, it is a NEW defect — bring the log.
+    **10:20Z: BOTH halves observed** — tool list in the live ride + two MCP-filed rows
+    (oracle-fleet#333, transcript `…/issue-330/worker-r1-20260901T102118Z/`), relayed to
+    #1039 (comment 5492494412). **Operator: take the G-F `goal/validated` read** (oracle
+    verifies the rows in `oracle-pg` on its side). Reviewer arm ALSO proven live 11:12Z
+    (Claude Code's MCP log in `reviewer-oracle-fleet-334-…`: connected, hasTools) — nothing
+    platform-side remains open on G-F; #330 closed `agent/done` (PR#333 merged).
+- **⚑ 2026-09-01 mechanical session — operator pickups:** (1) **`tofu plan` (main root) shows
+  pre-existing drift: `proxmox_virtual_environment_file.ci_runner_cloud_init[0]` +
+  `proxmox_virtual_environment_vm.ci_runner[0]` "must be replaced"** (cloud-init snippet
+  differs) — a full apply would DESTROY+recreate ci-runner-01; the seat applied PR#1193's kubelet
+  change TARGETED around it. Decide: re-adopt the live snippet into tofu, or accept the replace
+  at a quiet moment. (2) Bulk-tier image GC now 60/50 on the four kata nodes (PR#1193) — first
+  time `LonghornDiskBelowSchedulingFloor` stays clear ≥24h, this bullet can go; if it re-fires,
+  the tier is undersized, not the threshold (ADR-114 build-out).
+  - #979 S5: quiet window ends **09-02 06:39Z** → close at the next sweep after.
+  - #949 / #1101 retro batches: close at the post-r3 sweep (r3 fires Mon 09-07).
+  - None of the three open Goals carries a `Production-leg:` line (pre-card) — evidence is
+    read live, as above; `devbox run goal-lint -- teststuffstash/homelab <n>` now names it.
+- **⚑ 2026-09-01 CORPUS SESSION — other pickups:** PR#1183 (goal-lint + card rules 7–9) was
+  auto-merging at wind-down — confirm landed. **#1175 r1 in flight** (launcher pre-read → its
+  PR will codeowner-park on `agents/**`; acceptance = row 1 only, the widened prefetch table is
+  the follow-on child at closeout). **#1095** (oracle coordinator token creates but cannot
+  mutate homelab issues) = a broker-mint scope widening — ADR-110 "big", operator's call.
+  Garage: the `backups/garage-meta-20260825-prerebuild/` (20 GB) + forensics deletion came due
+  ~09-01 — operator-owned. FU-137's ~08-31 build-out deadline is PAST (meta volume rf=1 on
+  wk-02) — an infra sitting. Two PR watchers may still be alive by process (`pgrep -f 'gh pr
+  view 118'`) — kill before re-arming.
+
+- **⚑ 2026-09-01 — v1.3 THEMED-GOAL MANUAL PILOT LIVE: Goal #1162 (wave 1) — the S8 dogfood
+  datapoint.** Themes: #1163 `goal/1162-scan` (#1148 #1149 #1011) · #1164 `goal/1162-exporter`
+  (#459 #1138 #1137; #1137 blockedBy #1138; both keep parent #1115 — absorbed by reference) ·
+  #1165 `goal/1162-egress` (#1056 #107). All members queued with `Base:` theme lines; intake
+  rules for mid-drain arrivals are in the Goal body (manual waves 1–2 → then #1153's
+  grant-consult leg). Park convoy DRAINED same sitting: PR#1157 05:53Z, #1161 05:57Z, #1160
+  06:02Z — zero approval dismissals across two updater refreshes (datapoint commented on
+  #887); theme branches fast-forwarded to post-merge master @ `0ba158b2`. NEXT-SESSION
+  VERIFY: (a) DONE 09-01 07:40Z — 4 of 9 members merged+closed within 90 min of the mint
+  (#1011 #1138 #1137 #107), PR#1173 (#1148) armed into `goal/1162-scan`; #459 re-scoped
+  (clause-labelled wake-source metric) + moved to the scan theme; #1166 joined the exporter
+  theme (ledger rows 2–5 on #1162); (b) known pilot gaps accepted: checkpoint may misfire an assembly ruling at
+  the master-based Goal (report-only, park it); theme assemblies are ordinary `Fixes`-closing
+  PRs — NO `Assembly-for:` anywhere. S8 readout baseline on the Goal's mint comment
+  (per-child ≈9 reads → target 3). The serial park-merge cycle is #887's live datapoint.
+
 - **⚑ 2026-08-31 EVENING CORPUS SESSION WIND-DOWN — the fresh-session pickup set (TICK-LOG has
   the arc):**
   - **[Switchboard](../glossary.md) cutover VERIFIED LIVE at wind-down** (ADR-120; PR#1158 + eae8c51f, #994
@@ -31,16 +97,16 @@ meant to avoid.)
     line-anchored pre-merge), #1117/#1118 close via the Base:-keyed C6 (their fixes are on the
     merged branch — PR#1128/#1130). ArgoCD syncs the MCP claim knob + composition; the oracle
     jail can then claim `spec.mcp`.
-  - **⏰ #1134 operator-lane residue HAS A DEADLINE**: kyverno pinned 1.18.2 (`cd3e5a87`) after
-    1.19.0 froze the merge path 45 min (the required sentinel check red on 8/8 PRs; tool-error
-    discrimination now ported). **Adapt to 1.19.0 + unpin BEFORE the weekly devbox-update
-    re-bumps** (`--exceptions` flag = prime suspect: the failing repos are exactly the ones
-    with exception files); the pin holds the line meanwhile, and the discrimination turns any
-    repeat into self-healing `error` statuses, not false violations.
+  - ~~#1134~~ **CLOSED 2026-09-01** (`94954f01`): root cause = kyverno ≥1.19 panics on the 2nd
+    nameless Kustomization doc (`--exceptions` refuted); unpinned at 1.19.0; `sentinel-smoke`
+    CI gate landed. Nothing left to verify.
   - **#1136 residue**: anonymous-clone throttling (47 failed workflows ~10:45–11:10Z) — all 14
-    homelab workflow clone sites now authenticate (`13e51ddc`, verified in-cluster); residue =
-    confirm the Failed-workflow inflow stayed zero + sweep the STACK loop namespaces' templates
-    for the same anonymous pattern.
+    homelab workflow clone sites now authenticate (`13e51ddc`, verified in-cluster). Residue
+    CLOSED 09-01: inflow stayed zero (the only failed run today was a genuine worker-PR red);
+    template sweep — the coordinator templates embed the token via `_cu`, the Composition
+    renders no anonymous clone; ONE site remained, `deploy-revert-argo.yaml:204` (anonymous
+    clone AND push — private oracle-iac cannot even be cloned) → filed + queued as **#1180**
+    (egress theme, wave 1).
   - **oracle-fleet#285 stays wedged on #1108** (queued; rerun-red wake gap; blockedBy edge
     wired — the BLOCKPARK watch flags its fix PR's park). Queued convoy still riding: #975
     #1011 #1006 #828 #1056 #1113 #1116 #1124 #1125 (DNS belt) #1108 + sprouts #1137/#1138
@@ -49,7 +115,7 @@ meant to avoid.)
     stable FAMINE key, container exclusion — the three noise classes are code now.
   - probe-platform verified past auth (#1085 live; the one finding = known loki OutOfSync
     papercut — don't re-derive). #946 seed: 3 cells (Zen weather). #994 operator-held.
-    #1133 (renovate arc-runner pin) was converging under rebase churn — confirm merged.
+    #1133 closed unmerged, superseded by PR#1143 (pin `g0b16ec104713` on master) — verified 09-01.
   - Retro r3 (Mon 09-07) runs under the NEW cost-model ranking (PR#1127); its
     predecessor-scoring is the r2-batch closeout read (#949 + #1101 close at the sweep after).
 - **⚑ 2026-08-31 CORPUS SESSION rulings (the drainage-economics discussion — operator-ruled,
@@ -146,7 +212,7 @@ meant to avoid.)
     TWO intent requests (`public-edge.anonymous-safe-serving` #175, `public-edge.
     client-observability` #176) — WAF moved into G-G's default-hardening; the #176 rescope +
     blockedBy edges; oracle-fleet#293's codeowner read; the prober class-1 brief (#289).
-  - PRs #1044/#1051/#1052 were auto-merging at wind-down — confirm landed.
+  - PRs #1044/#1051/#1052 landed 08-30 19:52–20:05Z (verified 09-01).
 
 - **⚑ DESIGN QUESTION (operator, 2026-08-30) — LARGELY DISCHARGED 2026-08-30 evening
   (ADR-119): stack→platform communication — how a stack routes

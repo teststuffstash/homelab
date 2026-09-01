@@ -1041,41 +1041,41 @@
         }
       }
     },
-    "kyverno@1.18.2": {
-      "last_modified": "2026-08-12T11:28:58Z",
-      "resolved": "github:NixOS/nixpkgs/044bfe75bfe4c7bbe043dc17b5e42ea823b84a09#kyverno",
+    "kyverno@latest": {
+      "last_modified": "2026-08-27T07:16:00Z",
+      "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#kyverno",
       "source": "devbox-search",
-      "version": "1.18.2",
+      "version": "1.19.0",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/bl6f7dgqmcsjvwllkdn78ikkl8k0k9bl-kyverno-1.18.2",
+              "path": "/nix/store/ibfqbs9w06d55gbxpz7qmcbza47jklz9-kyverno-1.19.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/bl6f7dgqmcsjvwllkdn78ikkl8k0k9bl-kyverno-1.18.2"
+          "store_path": "/nix/store/ibfqbs9w06d55gbxpz7qmcbza47jklz9-kyverno-1.19.0"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/snwd56r8fm0pn64qxpncqzpqxq4gv34s-kyverno-1.18.2",
+              "path": "/nix/store/n37k777yjwdr90qpyhy5r2l86fhz3029-kyverno-1.19.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/snwd56r8fm0pn64qxpncqzpqxq4gv34s-kyverno-1.18.2"
+          "store_path": "/nix/store/n37k777yjwdr90qpyhy5r2l86fhz3029-kyverno-1.19.0"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/s7kgazmarp2xam4ywp8sxmhswz9n4kdg-kyverno-1.18.2",
+              "path": "/nix/store/2qwd10xa3xfvx87ywddawyb2yrdx0gv6-kyverno-1.19.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/s7kgazmarp2xam4ywp8sxmhswz9n4kdg-kyverno-1.18.2"
+          "store_path": "/nix/store/2qwd10xa3xfvx87ywddawyb2yrdx0gv6-kyverno-1.19.0"
         }
       }
     },
