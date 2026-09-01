@@ -1538,8 +1538,6 @@ fi
 # homelab#990: opencode's SDK-init fetches to models.dev + models.opencode.ai carry NO timeout
 # under enforced egress (CNP deny is a silent SYN black-hole). Stub them to 127.0.0.1 so the
 # init fails fast (instant RST) instead of wedging to the 4h deadline.
-# registry.npmjs.org is stubbed only when the egress profile does not include node (where the
-# CNP denies it anyway — this converts silent-drop → fast-fail).
 #
 # Why kill-at-the-tool (homelab#456) doesn't cover this: the SDK-init fetches are NOT
 # suppressible on the pinned opencode build (tested 2026-08-26: no knob found), so the
@@ -1547,8 +1545,18 @@ fi
 HOST_ALIASES=""
 if [ "$HARNESS" = "opencode" ] && [ "${EGRESS_ENFORCE:-}" = "true" ]; then
   HOST_ALIASES=$'  hostAliases:\n    - ip: "127.0.0.1"\n      hostnames:\n        - "models.dev"\n        - "models.opencode.ai"'
-  if [ "${EGRESS_PROFILE:-}" != "node" ]; then
+fi
+# homelab#107: registry.npmjs.org drops from ALL homelab rides (goose/claude, not just opencode)
+# under enforced egress with no node profile. The CNP deny is a silent SYN black-hole → ride
+# hang. Stub to 127.0.0.1 so the connection fails fast (instant RST) instead of wedging.
+# This applies to every harness — the source of the npm traffic is not yet identified (no
+# cluster access to trace the call site), but the resolver stub is harmless and converts
+# silent-drop → fast-fail for any ride under enforced egress without a node profile.
+if [ "${EGRESS_ENFORCE:-}" = "true" ] && [ "${EGRESS_PROFILE:-}" != "node" ]; then
+  if [ -n "$HOST_ALIASES" ]; then
     HOST_ALIASES="${HOST_ALIASES}"$'\n    - ip: "127.0.0.1"\n      hostnames:\n        - "registry.npmjs.org"'
+  else
+    HOST_ALIASES=$'  hostAliases:\n    - ip: "127.0.0.1"\n      hostnames:\n        - "registry.npmjs.org"'
   fi
 fi
 # <<<REPLAY:opencode-hostaliases<<<

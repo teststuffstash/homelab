@@ -227,6 +227,7 @@ is stale, so it cannot drift the way the prose register did.
 | `model-id-carrier` | table | - | `agents/agent-session.sh` | - |
 | `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
 | `opencode-hostaliases/default-profile` | actions | - | `agents/agent-session.sh` | - |
+| `opencode-hostaliases/enforced-non-opencode` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-hostaliases/monitor-mode` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-hostaliases/node-profile` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-hostaliases/non-opencode` | actions | - | `agents/agent-session.sh` | - |
