@@ -263,7 +263,17 @@ jobs:
               case "$f" in agents/replay/fixtures/*) ;; *) continue ;; esac
               d=$(dirname "$f")
               while [ "$d" != "agents/replay/fixtures" ] && [ "$d" != "." ] && [ ! -f "$d/fixture.yaml" ]; do d=$(dirname "$d"); done
-              [ -f "$d/fixture.yaml" ] && fxdirs="${fxdirs}${d}"$'\n'
+              [ -f "$d/fixture.yaml" ] || continue
+              # The caveat above, ENFORCED (was prose-only until 2026-09-01, PR#1248's false
+              # vacuous): a mode:suite fixture is self-asserting — run.sh executes its entrypoint
+              # from the PR CHECKOUT path ($PWD/$d), so it resolves the PR's own sources and
+              # trivially passes "against base", flagging every suite extension as pinning
+              # nothing. Suite fixtures are excluded from the vacuity run exactly as documented.
+              if grep -qE '^mode:[[:space:]]*suite[[:space:]]*$' "$d/fixture.yaml"; then
+                echo "ratchet: pin-vacuity — $d is mode:suite (self-asserting, not run against base per the stated caveat)"
+                continue
+              fi
+              fxdirs="${fxdirs}${d}"$'\n'
             done <<< "$changed"
             fxdirs=$(printf '%s' "$fxdirs" | sort -u)
             if [ -n "$fxdirs" ]; then
