@@ -6143,3 +6143,17 @@ first live ADR-110 maintenance session before the ADR existed.
   strikes gain the served-provider column + (model, provider) pair-exclusion on serving-shaped
   re-picks (#783 banked legs; quality legs stay FU-186/ADR-115 pin-v2 + M14 pair-cooldowns).
   model/strong + coding-strong dropped; attempt-count auto-escalation stays banked (feed-4).
+
+## 2026-09-01 — sitting close: parks drained; PR#55 codeowner read catches a live-credential corrupter
+
+- homelab master lane FULLY drained: PR#1179 (17:09), PR#1183 (17:30, both goal-lint fail-open
+  fixes), PR#1191 (17:45 auto-merge; its Fixes closes #1189 — the egress theme's last blocking
+  grandchild). #1151 riding, PR#1206 (#1203's FU-199 hold-narrowing) in review. Oracle: PR#340
+  (the #329 sonnet resume — delivered) + PR#338 riding; #337 on its r2 fix round.
+- openrouter-operator PR#55 (operator-pointed; the 3rd CodeownerParkWaiting): the ADR-110 read
+  found a BLOCKING defect three bot rounds missed — read_key_secret returned V1Secret.data
+  base64-raw (docstring claimed decoded) into write_key_secret's string_data, so the first
+  NormalizeSecret pass would DOUBLE-ENCODE the live credential it exists to heal (#53's own
+  oracle-fleet-openrouter case, fleet-wide on deploy). Stub-invisible to the decision-table
+  tests (adapter-glue seam — the chainless chunk A–D class). Seat-fixed on-branch (819c07c,
+  140 tests/100% cov), finding commented, codeowner approval follows the bot re-verdict.
