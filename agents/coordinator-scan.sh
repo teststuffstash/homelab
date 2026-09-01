@@ -578,18 +578,28 @@ dp_wake() {   # → "edge|<ring-epoch>" | "cron|" | "" (unreadable — the calle
 DISPATCH_PHASE_T0="$(( $(dp_now) - SECONDS ))"
 DISPATCH_PHASE_MARK="$DISPATCH_PHASE_T0"
 dispatch_phase() {   # $1 = the stack's MAIN repo — publish the scan-side rows, at a dispatch
-                     # $2 = clause (queued-dispatch / changes-requested / ci-red / …) — labels the wake-source metric (homelab#459)
+                     # $2 = clause (queued-dispatch / changes-requested / ci-red / …) — labels the wake-source info metric (homelab#459)
                      # $3 = unit kind (task/fix / task/goal / …) — where known, adds a unit label
-  local project="${1:-}" clause="${2:-}" ukind="${3:-}" now ring family="" wake="" labels=""
+  local project="${1:-}" clause="${2:-}" ukind="${3:-}" now ring family="" wake="" info=""
   now="$(dp_now)"
-  # Build the label set for the wake-source metric. clause is always set when known; unit kind
-  # is added where the scan knows it (homelab#459 — the FU-168 hunt needs both dimensions).
-  # NOTE: built as a separate variable to avoid bash's nested-${} parsing issue inside :+ modifier.
+  # Build the label set for the wake-source INFO metric (homelab#459 — the FU-168 hunt needs
+  # both dimensions). This is a SEPARATE metric from the unlabeled wake-source timestamp so
+  # that pushgateway POST semantics (replace by metric name within a group) do not cause
+  # consecutive dispatches with different clauses to evict each other's samples — the
+  # unlabeled series stays sticky for the `changes()` alert, and the info metric carries the
+  # breakdown. NOTE: built as a separate variable to avoid bash's nested-${} parsing issue
+  # inside :+ modifier.
   if [ -n "$clause" ]; then
     if [ -n "$ukind" ]; then
-      labels="{clause=\"${clause}\",unit=\"${ukind}\"}"
+      info="# TYPE agent_dispatch_wake_source_info gauge
+# HELP agent_dispatch_wake_source_info Wake-source clause and unit kind for the last dispatch (homelab#459 — labeled breakdown, separate from the unlabeled timestamp series).
+agent_dispatch_wake_source_info{clause=\"${clause}\",unit=\"${ukind}\"} 1
+"
     else
-      labels="{clause=\"${clause}\"}"
+      info="# TYPE agent_dispatch_wake_source_info gauge
+# HELP agent_dispatch_wake_source_info Wake-source clause for the last dispatch (homelab#459 — labeled breakdown, separate from the unlabeled timestamp series).
+agent_dispatch_wake_source_info{clause=\"${clause}\"} 1
+"
     fi
   fi
   # A scan that dispatches twice (the global instance sweeping two stacks) measures the SECOND
@@ -631,19 +641,20 @@ dispatch_phase() {   # $1 = the stack's MAIN repo — publish the scan-side rows
   case "${DISPATCH_PHASE_WAKE%%|*}" in
     edge) wake="# TYPE agent_dispatch_edge_woken_timestamp gauge
 # HELP agent_dispatch_edge_woken_timestamp Epoch of this stack's last EDGE-woken dispatch (017790c: changes() over this counts them).
-agent_dispatch_edge_woken_timestamp${labels} ${now}
+agent_dispatch_edge_woken_timestamp ${now}
 " ;;
     cron) wake="# TYPE agent_dispatch_cron_woken_timestamp gauge
 # HELP agent_dispatch_cron_woken_timestamp Epoch of this stack's last CRON-woken dispatch — each one is a dead doorbell edge with an id (017790c).
-agent_dispatch_cron_woken_timestamp${labels} ${now}
+agent_dispatch_cron_woken_timestamp ${now}
 " ;;
   esac
   fi
-  printf '%s\n%s\n%s%s' \
+  printf '%s\n%s\n%s%s%s' \
     "# TYPE agent_dispatch_phase_seconds gauge" \
     "# HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160)." \
     "$family" \
     "$wake" \
+    "$info" \
     | curl -fsS --max-time 5 --data-binary @- \
         "${DISPATCH_PHASE_PGW}/metrics/job/agent_dispatch_phase/project/${project}/role/coordinator-scan" >/dev/null 2>&1 \
     || { [ -n "$DISPATCH_PHASE_WARNED" ] \
