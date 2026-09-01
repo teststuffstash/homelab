@@ -1,31 +1,93 @@
 [
-  {
-    "number": 43,
-    "headRefName": "fix/issue-19-thing",
-    "body": "",
-    "comments": [
-      {
-        "author": { "login": "homelab-agents-1234" },
-        "createdAt": "2026-08-09T07:30:00Z",
-        "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T07:30:00Z` · **run stats** — `claude/haiku` · $0 · 411s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T07:30:00Z -->"
-      },
-      {
-        "author": { "login": "homelab-agents-1234" },
-        "createdAt": "2026-08-09T08:30:00Z",
-        "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T08:30:00Z` · **run stats** — `claude/haiku` · $0 · 402s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T08:30:00Z -->"
-      }
-    ]
-  },
-  {
-    "number": 44,
-    "headRefName": "fix/issue-20-other",
-    "body": "sibling #19, documented for #19 to plumb",
-    "comments": [
-      {
-        "author": { "login": "homelab-agents-1234" },
-        "createdAt": "2026-08-09T10:00:00Z",
-        "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T10:00:00Z` · **run stats** — `claude/haiku` · $0 · 388s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T10:00:00Z -->"
-      }
-    ]
-  }
+    {
+        "number": 43,
+        "headRefName": "fix/issue-19-thing",
+        "body": "",
+        "comments": [
+            {
+                "author": {
+                    "login": "homelab-agents-1234"
+                },
+                "createdAt": "2026-08-09T07:30:00Z",
+                "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T07:30:00Z` · **run stats** — `claude/haiku` · $0 · 411s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T07:30:00Z -->"
+            },
+            {
+                "author": {
+                    "login": "homelab-agents-1234"
+                },
+                "createdAt": "2026-08-09T08:30:00Z",
+                "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T08:30:00Z` · **run stats** — `claude/haiku` · $0 · 402s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T08:30:00Z -->"
+            }
+        ]
+    },
+    {
+        "number": 44,
+        "headRefName": "fix/issue-20-other",
+        "body": "sibling #19, documented for #19 to plumb",
+        "comments": [
+            {
+                "author": {
+                    "login": "homelab-agents-1234"
+                },
+                "createdAt": "2026-08-09T10:00:00Z",
+                "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T10:00:00Z` · **run stats** — `claude/haiku` · $0 · 388s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T10:00:00Z -->"
+            }
+        ]
+    },
+    {
+        "number": 45,
+        "headRefName": "fix/issue-21-other",
+        "body": "this remains unresolved #19",
+        "comments": [
+            {
+                "author": {
+                    "login": "homelab-agents-1234"
+                },
+                "createdAt": "2026-08-09T11:00:00Z",
+                "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T11:00:00Z` · **run stats** — `claude/haiku` · $0 · 395s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T11:00:00Z -->"
+            }
+        ]
+    },
+    {
+        "number": 46,
+        "headRefName": "fix/issue-22-other",
+        "body": "prefixes #19 the issue",
+        "comments": [
+            {
+                "author": {
+                    "login": "homelab-agents-1234"
+                },
+                "createdAt": "2026-08-09T11:30:00Z",
+                "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T11:30:00Z` · **run stats** — `claude/haiku` · $0 · 390s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T11:30:00Z -->"
+            }
+        ]
+    },
+    {
+        "number": 47,
+        "headRefName": "fix/issue-23-other",
+        "body": "this resolves #19 the issue",
+        "comments": [
+            {
+                "author": {
+                    "login": "homelab-agents-1234"
+                },
+                "createdAt": "2026-08-09T12:00:00Z",
+                "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T12:00:00Z` · **run stats** — `claude/haiku` · $0 · 405s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T12:00:00Z -->"
+            }
+        ]
+    },
+    {
+        "number": 48,
+        "headRefName": "fix/issue-24-other",
+        "body": "resolves #19 the issue",
+        "comments": [
+            {
+                "author": {
+                    "login": "homelab-agents-1234"
+                },
+                "createdAt": "2026-08-09T12:30:00Z",
+                "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T12:30:00Z` · **run stats** — `claude/haiku` · $0 · 398s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T12:30:00Z -->"
+            }
+        ]
+    }
 ]
