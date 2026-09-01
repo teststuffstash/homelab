@@ -1052,7 +1052,10 @@ if [ -n "${RECIPE:-}" ]; then
     if [ -n "$MCP_CONFIG_JSON" ]; then
       MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
       MCP_PRELUDE="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json; "
-      MCP_GOOSE_FLAG=" --with-streamable-http-extension '${MCP_ENDPOINT}'"
+      # @sh-quoted: the endpoint is an unconstrained XRD string and RUN_CMD runs under bash -lc in
+      # the pod — a raw '${MCP_ENDPOINT}' inside single quotes would let a literal ' break out
+      # (reviewer catch, PR#1186). The claude arm never touches the shell with it (jq --arg).
+      MCP_GOOSE_FLAG=" --with-streamable-http-extension $(printf '%s' "$MCP_ENDPOINT" | jq -Rr @sh)"
     else
       echo "agent-session: MCP tools knob unparseable — dispatching WITHOUT MCP attach" >&2
     fi
