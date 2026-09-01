@@ -743,7 +743,8 @@ Read the diff + the whole review thread, then rule — exactly one of:
   into the worker's context. **Re-grade the budget label if needed**: if stronger models are
   warranted, edit the issue's `agent-budget/*` label to one tier higher (the escalation carrier —
   labels ride /route bodies since PR#408; `label_map` in `model-classes.json` is the vocabulary
-  home). This RESETS nothing — if it comes back a third time, escalate.
+  home — §Escalation vocabulary, whose `tier_floor`/`never_free` keys are not yet router-enforced).
+  This RESETS nothing — if it comes back a third time, escalate.
   **The directive carries the reviewer's suggested fix VERBATIM** (retro r3 win-2): the literal
   file, the literal current line, the literal replacement, quoted out of the review — not your
   summary of the verdict, and not "address the reviewer's finding". circles#57 round 4 flipped
@@ -867,12 +868,19 @@ round, it did not spend a fresh one.
 ## Escalation vocabulary — the budget label is the carrier (FU-201)
 
 The escalation carrier is the issue's `agent-budget/*` label — the coordinator RE-GRADES it
-(e.g. `sm`→`lg`) to instruct the router to up-select model tier. Labels ride /route bodies
-since PR#408, and route() resolves the label to a route class via `label_map` in
-`model-classes.json` (explicit label > `label_map` > `role_defaults`). The `label_map`
-table is the **vocabulary home**: it declares which labels exist and what constraints they
-carry — cite it in rulings rather than copying values. ADR-094 holds: the play never names
-a model; the label indirection is the contract.
+(e.g. `sm`→`lg`) as the escalation verb. Labels ride /route bodies since PR#408, and route()
+resolves a label to a route class via `label_map` in `model-classes.json` (explicit label >
+`label_map` > `role_defaults`). The `label_map` table is the **vocabulary home**: it declares
+which labels exist and what constraints they are DECLARED to carry — cite it in rulings rather
+than copying values.
+
+⚠ **The `md`/`lg` rows are declared vocabulary, not yet enforced.** `route()` reads only a row's
+`class` key, and neither row sets one, so `tier_floor`/`never_free` have no reader in the request
+path — a re-grade today records the escalation without changing which model is picked. The router
+wiring that makes them bind is FU-201's remaining (a) leg. Until it lands: re-grade for the
+record, and never report the escalation as SERVED.
+
+ADR-094 holds: the play never names a model; the label indirection is the contract.
 
 ## The `ci-red` clause (FU-115 / merge-path MP-T12, content-based rewrite 2026-07-28)
 
