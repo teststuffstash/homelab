@@ -385,7 +385,19 @@ the block needs pruning, not more headings.
       **Next:** matrix-spike rows (which opencode surfaces accept which knob), then a two-arm
       flash default-vs-max experiment (pass-rate/rounds/window-draw — effort multiplies draw;
       couples FU-170). Design home lands with the build: model-routing.md §effort (beside M11).
-- [ ] **FU-171** — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
+
+- [ ] **FU-201** — **The arbitrate "re-dispatch stronger" verdict has no carrier to the router**
+      (operator, 2026-09-01: "coordinator wanted a better model; our router has a lot of
+      capabilities; they did not meet"). MP-T13 + the brief promise the play; chainless deleted
+      the chain-walk that once carried it and ADR-094 bars freelancing a model id — nothing
+      replaced the verb. #459/PR#1192: 3 flash rounds + 3 reviews + an opus arbitration + a seat
+      sitting, then a PARK — the direction-4 inverted composition — while route() already honors
+      a label-borne class (`explicit > label_map > role_defaults`; labels ride the /route body).
+      **Next:** an issue label as the carrier (M9's reserved escape hatch at CLASS altitude, e.g.
+      `model/strong` → label_map `{class: coding-strong}`, a git class with a high M8 capability
+      floor — zero new router code) + the arbitrate/ci-red plays apply it + claim-taxonomy row.
+      Ladder order: verbatim directive (circles#57) → effort (FU-174) → this label → park;
+      attempt-count auto-escalation stays banked pending M8 feed-4. Relates FU-174, ADR-094/096. — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
       The #447 review ran 47 min (kimi-k3, **$6.33** — balance regime, FU-170); the dispatch-time
       installation token 401'd ~07:50Z BEFORE the verdict posted — a full CHANGES_REQUESTED lost
       (recoverable: S3 reviewer-r1 transcript + pod log); `/var/run/reviewer-git/` never refreshes
@@ -462,8 +474,13 @@ the block needs pruning, not more headings.
       on blockedBy ghosts only), so `AgentAttentionStanding` sees neither. **Next:**
       narrow the hold — strike + resumable branch ⇒ the ordinary C4/C5 unit (`--work-branch` it);
       no strike ⇒ hold as today; + an honest class row for the residue (strike-held, who=operator)
-      and footprint-hold-by-a-held-item joining the hold-chain propagation rule. A Goal #1162
-      scan-theme (#1163) sprout. Relates FU-187 (the no-strike inverse), FU-143.
+      and footprint-hold-by-a-held-item joining the hold-chain propagation rule. **FOURTH face
+      (2026-09-01 homelab board freeze):** the TRACKS-rule-1 PR-cap hold is the same invisibility
+      — 3 armed master PRs all human-waiting (2 codeowner parks + 1 operator CR) capped every
+      master-lane dispatch, the ⏳ PR-budget line died in a GC'd pod log, the held issue pushed
+      NO item-class row; the propagation leg extends to cap-held-by-human-waiting-PRs ⇒
+      who=operator + one aggregate row. A Goal #1162 scan-theme (#1163) sprout (fix half =
+      #1203). Relates FU-187 (the no-strike inverse), FU-143.
 
 - [ ] **FU-200** — **The brief's fleet-strike rule has no deterministic reader.** "Same
       `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h ⇒ ONE
