@@ -1,0 +1,18 @@
+# homelab#1175 — context pre-fetch: pre-read the directive channel via REST and materialize
+# as /work/issue.md before the harness starts. Unreadable ⇒ DEFER (exit 0), not strike.
+#
+# CONDITION UNDER REPLAY. The launcher pre-flight fetches the issue + comments via REST API
+# (never GraphQL) and prepends a prelude to RUN_CMD that writes /work/issue.md in the pod.
+# If either read fails (errors, 403s, empty body), the dispatch defers with exit 0.
+#
+# THE CONTRACT (one world, one arm):
+#   World: one issue with title/body/labels + two comments with author/timestamp/body.
+#   The bridge sets RUN_CMD so the prelude prepend is observable.
+#   The fixture asserts the gh API calls, the prelude prepend, and the log line.
+name: context-prefetch
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
