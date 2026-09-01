@@ -1,18 +1,16 @@
 OUT DISPATCH #993 (homelab, declared: agents/coordinator-scan.sh, agents/replay/)
 OUT DISPATCH #1002 (homelab, declared: argocd/resources/loki/)
 OUT DISPATCH #1003 (homelab, declared: *)
+OUT DISPATCH #1004 (homelab, declared: policy/)
+OUT DISPATCH #1006 (homelab, declared: CODEOWNERS)
 OUT DISPATCH #1008 (oracle-fleet, declared: scripts/)
-OUT ORPHAN [homelab] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:
-OUT ORPHAN   issue #1000 — bump the checkout action version (declared: .github/workflows/ci.yaml → governance: .github/)
-OUT ORPHAN [homelab] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:
-OUT ORPHAN   issue #1001 — widen the governance set (declared: scripts/governance-lint.sh → governance: scripts/)
-OUT ORPHAN [homelab] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:
-OUT ORPHAN   issue #1004 — update the access policy (declared: policy/ → governance: policy/)
-OUT ORPHAN [homelab] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:
-OUT ORPHAN   issue #1005 — add a new devbox tool (declared: devbox.json → governance: devbox.json)
-OUT ORPHAN [homelab] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:
-OUT ORPHAN   issue #1006 — reassign ownership (declared: CODEOWNERS → governance: CODEOWNERS)
-OUT ORPHAN [homelab] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:
-OUT ORPHAN   issue #1007 — update the fix recipe (declared: .agents/fix.yaml → governance: .agents/)
+OUT ORPHAN [homelab] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:
+OUT ORPHAN   issue #1000 — bump the checkout action version (declared: .github/workflows/ci.yaml)
+OUT ORPHAN [homelab] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:
+OUT ORPHAN   issue #1001 — widen the governance set (declared: scripts/governance-lint.sh)
+OUT ORPHAN [homelab] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:
+OUT ORPHAN   issue #1005 — add a new devbox tool (declared: devbox.json)
+OUT ORPHAN [homelab] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:
+OUT ORPHAN   issue #1007 — update the fix recipe (declared: .agents/fix.yaml)
 OUT REACHED: end
 RC 0

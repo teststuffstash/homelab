@@ -1,5 +1,5 @@
-OUT DISPATCH #1008 (oracle-fleet, declared: argocd/resources/loki/)
-OUT ORPHAN [homelab] ⛔ GOVERNANCE-SET PROBE-FAILED — no `GOVERNANCE=` line readable at /no/such/scripts/governance-lint.sh (homelab#993). Holding rather than dispatching blind:
-OUT ORPHAN   issue #1002 — loki: raise the retention window
+OUT DISPATCH #1002 (homelab, declared: argocd/resources/loki/)
+OUT ORPHAN [homelab] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:
+OUT ORPHAN   issue #1005 — add a new devbox tool (declared: devbox.json)
 OUT REACHED: end
 RC 0

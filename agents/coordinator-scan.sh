@@ -98,31 +98,22 @@ guarded_paths() {   # → one guarded PATH per line. NO output = could not read 
 GUARDED_PATHS="$(guarded_paths || true)"
 # <<<REPLAY:guarded-set<<<
 
-# ── GOVERNANCE PATHS — a pre-dispatch routing check (homelab#993) ────────────────────────────────
-# `scripts/governance-lint.sh` refuses any worker-authored PR diff that touches governance paths
-# (`.github/`, `.agents/`, `scripts/`, `policy/`, `devbox.json`, `devbox.lock`, `CODEOWNERS`).
-# These paths are structurally red because CI runs from the PR branch — a worker-App-authored diff
-# touching any of them goes red on a step no fix round can turn green. The scan must not dispatch
-# into that hole.
+# ── OPERATOR-LANE PATHS — a pre-dispatch routing check (homelab#1151) ────────────────────────────
+# `classify_touches()` in agents/footprint.sh is the ONE machine-readable home for the platform
+# lane path tables (docs/agents/iac-lane.md §The platform lane). It returns `codeowner-author`
+# for the ❌ operator-author set — paths where authoring takes effect BEFORE a human approves
+# (`.github/`, `.agents/`, `devbox.json|lock`, `scripts/`). A queued issue whose declared
+# `Touches:` footprint lands on any of these paths is undeliverable by any worker PR — the
+# required `ci` check is structurally red before the worker writes a line, and the documented
+# route is an operator push to master. The scan must not dispatch into that hole.
 #
-# READ THE SET, NEVER RE-DECLARE IT. Same one-greppable-line convention as the GUARDED set: the
-# lint's own `GOVERNANCE=` line is the single source of truth. A second copy here would drift.
-# >>>REPLAY:governance-set>>>
-GOVERNANCE_LINT="${GOVERNANCE_LINT:-${HERE}/../scripts/governance-lint.sh}"
-governance_paths() {   # → one governance PATH per line. NO output = could not read (never "none governed")
-  local line="" GOVERNANCE=""
-  [ -r "$GOVERNANCE_LINT" ] && line="$(grep -m1 '^GOVERNANCE=' "$GOVERNANCE_LINT" || true)"
-  [ -n "$line" ] || return 1
-  eval "$line" || return 1
-  [ -n "$GOVERNANCE" ] || return 1
-  # The lint holds its set as a regex anchored pattern (`^(path1|path2|...)$`);
-  # strip the outer anchors, split on `|`, strip trailing `$` anchors, then drop regex escapes.
-  printf '%s\n' "$GOVERNANCE" | sed 's/^\^(//; s/\$)//' | tr '|' '\n' | sed 's/\$//; s/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$'
-}
-# Read ONCE per scan; the empty-vs-unreadable distinction is made at the use site, where it holds
-# work rather than releasing it (rule #6 — never fail INTO a dispatch).
-GOVERNANCE_PATHS="$(governance_paths || true)"
-# <<<REPLAY:governance-set<<<
+# ONE DEFINITION, N READERS. The same predicate is used by fix-debounce-argo.yaml's queue-time
+# deny (Consumer 2) — the second inline copy that used to live there is collapsed onto this call.
+# The governance-lint.sh CI check (`scripts/governance-lint.sh`) remains a separate reader of
+# its own GOVERNANCE set for CI-time enforcement; the dispatch-time hold uses classify_touches().
+# >>>REPLAY:operator-lane-set>>>
+# No set to read — classify_touches() in footprint.sh IS the definition.
+# <<<REPLAY:operator-lane-set<<<
 
 # ── SCAN PHASE MARKER (FU-145) ──────────────────────────────────────────────────────────────────
 # `AgentCoordinateScanWedged` keyed on POD LIFETIME, and this pod's lifetime is not the thing that
@@ -1754,54 +1745,29 @@ EOF_GUARDED
         fi
       fi
       # <<<REPLAY:guarded-hold<<<
-      # ── GOVERNANCE PATH (homelab#993) — report, never dispatch ──────────────────────────────
+      # ── OPERATOR-LANE PATH (homelab#1151) — report, never dispatch ──────────────────────────
       # Tested BEFORE the transient holds (footprint / WIP / PR budget) on purpose: this one is
-      # STRUCTURAL. A governance issue must read as "route this to the operator" on every scan,
-      # not as "come back later" whenever a sibling happens to be in flight.
+      # STRUCTURAL. An operator-lane issue must read as "route this to the operator" on every
+      # scan, not as "come back later" whenever a sibling happens to be in flight.
       # REPORT-ONLY, NO LABEL WRITE. Same precedent as the pin-only GUARDED check: the overlap
-      # may be only PART of the issue's scope, so the line names the file and the route, and a
+      # may be only PART of the issue's scope, so the line names the path and the route, and a
       # human re-scopes or splits it.
-      # >>>REPLAY:governance-hold>>>
+      # >>>REPLAY:operator-lane-hold>>>
       if [ "$repo" = "$GUARDED_REPO" ]; then
-        if [ -z "$GOVERNANCE_PATHS" ]; then
-          # Rule #6: never fail INTO a dispatch. The set could not be read (file moved, or its
-          # `GOVERNANCE=` line changed shape), so "not governed" is unknown, not false. Loud and
-          # level-triggered — it clears itself on the scan after the read works again.
-          orphans="${orphans}[$repo] ⛔ GOVERNANCE-SET PROBE-FAILED — no \`GOVERNANCE=\` line readable at ${GOVERNANCE_LINT} (homelab#993). Holding rather than dispatching blind:\n  issue #${qnum} — ${qtitle}\n"
-          continue
-        fi
-        # The `*` sentinel (no `Touches:` line) conflicts with EVERYTHING by design
-        # (agents/footprint.sh), as does any entry whose glob defeats prefix reasoning. Both
-        # normalize to the empty prefix and are dropped here: reading them as governed would stop
-        # dispatching every unfootprinted issue in the repo — a far worse loop than the one round
-        # this check exists to save. Dropping them costs nothing the ADR-097 hold does not already
-        # cover, since an undeclared footprint is exclusive there anyway.
-        qdecl=""; ghit=""
-        while IFS= read -r fpe; do
-          [ -n "$fpe" ] || continue
-          if [ -n "$(fp_norm_entry "$fpe")" ]; then qdecl="${qdecl}${fpe},"; fi
-        done <<EOF_QDECL
-$(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
-EOF_QDECL
-        if [ -n "$qdecl" ]; then
-          # fp_conflict_strict, not a grep: the boundary reasoning is the whole point. THIS
-          # issue's own `agents/coordinator-scan.sh` must NOT hit `.agents/` (the dot-prefix
-          # distinguishes it). STRICT (no replay exemption) on purpose: this check's invariant
-          # is touch-a-governance-FILE, and the exempting fp_conflict would fail OPEN the day
-          # a governance path lands under agents/replay/.
-          while IFS= read -r gpath; do
-            [ -n "$gpath" ] || continue
-            if fp_conflict_strict "$qdecl" "$gpath"; then ghit="${ghit} ${gpath}"; fi
-          done <<EOF_GOVERNANCE
-$GOVERNANCE_PATHS
-EOF_GOVERNANCE
-        fi
-        if [ -n "$ghit" ]; then
-          orphans="${orphans}[$repo] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches} → governance:${ghit})\n"
-          continue
-        fi
+        # classify_touches() returns "codeowner-author" for the ❌ operator-author set
+        # (paths that take effect BEFORE a human approves). The `*` sentinel (no Touches: line)
+        # normalizes to the empty prefix and is dropped by classify_touches() — reading it as
+        # operator-lane would stop dispatching every unfootprinted issue in the repo.
+        # Dropping it costs nothing the ADR-097 hold does not already cover, since an undeclared
+        # footprint is exclusive there anyway.
+        case "$(classify_touches "$qtouches")" in
+          codeowner-author)
+            orphans="${orphans}[$repo] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
+            continue
+            ;;
+        esac
       fi
-      # <<<REPLAY:governance-hold<<<
+      # <<<REPLAY:operator-lane-hold<<<
       # >>>REPLAY:footprint-hold>>>
       # ADR-097 goal exemption (homelab#822): a goal's decompose/checkpoint unit writes
       # no code (it authorises child issues via `gh` and toggles labels, never a PR diff),
