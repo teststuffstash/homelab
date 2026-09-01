@@ -648,13 +648,23 @@ arithmetic above) — the edge adds the un-park, not a lane change.
 
 **THEN, when trigger (b) or the burn-down says the tree is done**, re-read the goal's acceptance
 criteria in full and look at what actually shipped in the closed children — the merged diffs, not
-the issue titles. Rule exactly one of:
+the issue titles. **The completion predicate walks the OPEN DESCENDANT set** (the IL-T12 fixpoint
+walk the burn-down already uses — the scan's goal lane walks the full descendant tree via `kidsall`,
+not only direct children), excluding the post-launch bucket subtree (#933's exclusion, kept). An
+open descendant at any depth either blocks the assembly ruling or is ruled EXPLICITLY in the
+coverage map (fold-to-branch / defer-to-named-issue with a stated reason) — the play's own "any
+child still open is a scope question, not a formality" line, made mechanical for depth ≥2.
+Rule exactly one of:
 
 - **Assembly-complete** (ADR-102, homelab#208 — this ruling was called "goal met" until
   2026-08-09, and the rename is the whole point: it measures **built as specified**, never *idea
   validated*. circles#17 was ruled met 100 minutes before the operator refuted it, and no reading
   of a diff could have known better — only production knows). → open the ASSEMBLY PR and hand the
   merge to the human (2026-08-06, the #29 shape — replaces the #17-era draft dance). Concretely:
+  **Re-read the tree at PR-open time** — the checkpoint session's tree read and its assembly-PR
+  open are minutes apart (the compare-then-write label discipline, applied to the tree): re-list
+  open descendants immediately before `gh pr create`; a new arrival aborts the open with a loud
+  comment instead of racing it. Then:
   `gh pr create --base master --head goal/<n>-<slug>` **non-draft**, body = the coverage-map
   outcome (every id owned / deferred-to-named-issue / evidenced) + a line-anchored
   `Assembly-for: #<goal>` trailer, then ARM it (`gh pr merge --auto --squash`).
