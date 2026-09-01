@@ -142,7 +142,7 @@ PRE
   cat "$TMP/block.state-fp-pair.sh"
   cat <<'POST'
 # Observation point, not scan code.
-pair="$(pr_state_fp_pair "$IN_SLUG" "$IN_PR")"
+pair="$(pr_state_fp_pair "$IN_SLUG" "$IN_PR" "${IN_UCLAUSE:-}")"
 printf 'PAIR %s\n' "$pair"
 printf 'CUR %s\n'  "${pair%%|*}"
 printf 'PREV %s\n' "${pair#*|}"
@@ -231,9 +231,9 @@ fx_base() {
   "headRefOid": "aaaaaaaa11111111111111111111111111111111",
   "reviewDecision": "CHANGES_REQUESTED",
   "statusCheckRollup": [
-    {"__typename":"CheckRun","name":"e2e","status":"COMPLETED","conclusion":"FAILURE"},
-    {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"},
-    {"__typename":"CheckRun","name":"manifest-lint","status":"COMPLETED","conclusion":"SUCCESS"}
+    {"__typename":"CheckRun","name":"e2e","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2026-08-09T01:00:00Z"},
+    {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS","startedAt":"2026-08-09T01:00:00Z"},
+    {"__typename":"CheckRun","name":"manifest-lint","status":"COMPLETED","conclusion":"SUCCESS","startedAt":"2026-08-09T01:00:00Z"}
   ],
   "reviews": [
     {"state":"CHANGES_REQUESTED","submittedAt":"2026-08-08T22:10:00Z"},
@@ -425,7 +425,14 @@ wantnot  "T6: and is not debounce-reported either (breaker owns it)" "DEBOUNCED"
 
 # ── 6 ── THE CI-RED LEG. Same fingerprint, different clause: it sits INSIDE the dispatch branch,
 # and it must `continue` before the cap so a debounced PR never spends a live PR's slot.
+# The ci-red clause uses STATE_FP_JQ_CIRED which folds each check's startedAt into the hash
+# (homelab#1108), so a CI rerun changes the fingerprint. Compute a separate BASE_CIRED from the
+# same fixture to assert the ci-red-specific hash.
 section "6 — ci-red dispatch currency"
+fx_base
+UCLAUSE=ci-red _go probe; BASE_CIRED="$(field CUR)"
+nonempty "R0: ci-red fingerprints with startedAt folded in"          "$BASE_CIRED"
+differs  "R0: ci-red hash differs from the arbitrate hash"           "$BASE" "$BASE_CIRED"
 fx_base
 _go cired
 want     "R1: first red tick DISPATCHES a fix round"                 "DISPATCH ci-red|${REPO}|pr-${PR}"
@@ -436,7 +443,7 @@ eq       "R1: a ci-red dispatch records the marker too"              "$(markers)
 _go cired
 want     "R2: an identical red state DEBOUNCES"                      "ci-red DEBOUNCED"
 want     "R2: the line names the head it is still red at"            "still red at ${HEAD8}"
-want     "R2: and the hash"                                          "state-fp:${BASE}"
+want     "R2: and the hash"                                          "state-fp:${BASE_CIRED}"
 wantnot  "R2: the dispatch is skipped entirely (continue)"           "DISPATCH ci-red|"
 want     "R2: it names the terminal-ride finding, not more rounds"   "the ride went terminal"
 survives "R2"

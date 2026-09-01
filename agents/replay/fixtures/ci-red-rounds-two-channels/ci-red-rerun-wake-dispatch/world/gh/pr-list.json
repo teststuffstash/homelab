@@ -1,0 +1,8 @@
+[
+  {"number":43,"headRefName":"fix/issue-1108-ci-red-rerun-wake","body":"Fixes #1108","comments":[
+    {"body":"<!-- agent-summary -->\n🤖 **Agent activity**\n\n- `2026-08-31T06:00:00Z` · **round 1 dispatched** <!-- agent-event kind=dispatch ts=2026-08-31T06:00:00Z -->\n- `2026-08-31T06:30:00Z` · **run stats** <!-- agent-event kind=stats ts=2026-08-31T06:30:00Z -->\n","createdAt":"2026-08-31T06:30:00Z"}
+  ]},
+  {"number":44,"headRefName":"fix/issue-19-other","body":"Fixes #19","comments":[
+    {"body":"<!-- agent-summary -->\n🤖 **Agent activity**\n\n- `2026-08-31T06:00:00Z` · **round 1 dispatched** <!-- agent-event kind=dispatch ts=2026-08-31T06:00:00Z -->\n- `2026-08-31T06:30:00Z` · **run stats** <!-- agent-event kind=stats ts=2026-08-31T06:30:00Z -->\n","createdAt":"2026-08-31T06:30:00Z"}
+  ]}
+]

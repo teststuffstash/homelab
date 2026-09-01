@@ -1,0 +1,45 @@
+# ADR-103 / homelab#1108 — the ci-red rerun wake path: DEBOUNCE case, pinned.
+#
+# CONDITION UNDER REPLAY. A red PR (#43, branch `fix/issue-1108-ci-red-rerun-wake`) that has
+# completed ONE fix round (attempts=1 < RED_MAX=3). The thread carries a state-fp marker from an
+# earlier ci-red dispatch (`state-fp:b123683ec476`). NO CI rerun has happened since: the checks
+# still carry the same startedAt values (2026-08-31T07:00:00Z) that produced the recorded marker,
+# and head, conclusions, reviewDecision and the newest verdict are unchanged too. The ci-red clause
+# uses STATE_FP_JQ_CIRED (each check's startedAt folded into the fingerprint), so the current hash
+# EQUALS the recorded one — the debounce HOLDS: a report line is emitted, no unit.
+#
+# WHY THIS FIXTURE EXISTS. It is the complement of `ci-red-rerun-wake-dispatch`, and it is the half
+# that guards against over-correcting homelab#1108. Folding startedAt into the ci-red fingerprint
+# re-arms the gate on a rerun (that sibling pins it); this fixture pins that it does NOT re-arm on
+# anything else — an unchanged red PR still costs one report line per tick, not one ride per tick
+# (homelab#198). Losing that would trade oracle-fleet#285's wedge for a dispatch loop.
+#
+# THE CONTRACT:
+#   1. attempts = 1 — one new-shape stats marker.
+#   2. noop_round = <none> — newest stats timestamp (06:30) is BEFORE the newest non-merge commit
+#      (07:30), so the last completed round pushed something.
+#   3. attempts(1) < RED_MAX(3), so the issue-keyed ceiling IS checked — `gh pr list` is called.
+#      Only PR #43 references issue #1108 (via branch), so red_sib_n=1, not > red_rounds(1).
+#   4. The ci-red-gate block calls pr_state_fp_pair with "ci-red". The current fingerprint
+#      (b123683ec476, computed with startedAt=2026-08-31T07:00:00Z) MATCHES the recorded marker
+#      (`state-fp:b123683ec476`), so the gate DEBOUNCES: the clause appends the
+#      `⏳ ci-red DEBOUNCED — PR #43 …` orphans line and continues without emitting a unit.
+#   5. Three calls: `gh pr view 43` (round evidence), `gh pr list` (issue-keyed ceiling),
+#      `gh pr view 43` (state-fp pair).
+pins:
+  - MP-T12
+name: ci-red-rerun-wake
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - file:bridge.sh
+  - block:ci-red-rounds
+  - block:ci-red-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles
+  - IN_PR=43
