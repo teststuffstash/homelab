@@ -5885,3 +5885,13 @@ first live ADR-110 maintenance session before the ADR existed.
   upgrade — an infra sitting, not a seat quickfix). Lesson banked: a PR branch cut from a
   local master carrying unpushed direct commits SQUASHES them into master via the PR — the
   post-merge rebase then replays duplicates; cut PR branches from origin/master.
+- RULING (operator, same sitting): "grep > tool call" — ALL mechanical context gathering runs
+  in the LAUNCHER before the pod exists (tool-call tokens + error turns cost time and money).
+  Recorded as the THIRD platform-wide design rule in roles.md ("Prefetch, don't fetch",
+  PR#1177) + the context map's row-2 delivery note. #1175 WIDENED from "pre-read issue.md" to
+  the per-round-class prefetch table (issue+comments / review thread / ci-failure log / branch
+  log → /work/context/; required-unreadable ⇒ defer) — ⚠ r1 had ALREADY dispatched on the
+  narrow scope minutes earlier (an issue edit after dispatch is exactly the #1069 read gap,
+  one lane over): r1's acceptance pinned to row 1 in the body + a comment so the reviewer
+  does not block it; residue = a child at closeout. #857 parked on G-D (Talos 1.13.8 = G-D's
+  first class-6 human-applied ride; #502 draft addendum; work-map row PR#1176).
