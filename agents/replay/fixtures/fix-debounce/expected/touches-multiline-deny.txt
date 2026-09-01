@@ -4,5 +4,5 @@ OUT self-referential, left for a human to queue:
 OUT   teststuffstash/homelab#226 ResponderSelfReferential: the alert lane's own namespace is degraded
 OUT pending set: 1 issue(s)
 OUT single pending issue — deterministic fast path
-OUT inert teststuffstash/homelab#{{issue}} — footprint takes effect pre-merge: scripts/reflex-now.sh (iac-lane ❌ table)
+OUT inert teststuffstash/homelab#{{issue}} — footprint takes effect pre-merge: agents/coordinator/retro-argo.yaml,scripts/reflex-now.sh (iac-lane ❌ table — classify_touches)
 RC 0

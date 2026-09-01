@@ -45,4 +45,10 @@ fc_now() { printf '%s\n' "${FC_NOW:?this fixture reaches the currency gate and m
 # checkout and shadows only its wall clock, so mc_event's find-or-create arithmetic (the POST-vs-
 # PATCH decision) is what lands in the action stream — the summary-comment-* pattern verbatim.
 . "$REPLAY_ROOT/agents/machine-comment.sh"
+# classify_touches() in agents/footprint.sh — the ONE machine-readable home for the platform lane
+# path tables (homelab#1151). Sourced here (outside the replay block) so the fixture shadows the
+# path via $REPLAY_ROOT, same as machine-comment.sh.
+. "$REPLAY_ROOT/agents/footprint.sh"
+# classify_touches() reads CODEOWNERS at runtime. Point it at the real file in the checkout.
+CLASSIFY_CODEOWNERS="$REPLAY_ROOT/CODEOWNERS"
 mc_now() { printf '%s\n' "${MC_NOW:-2026-08-11T14:00:00Z}"; }

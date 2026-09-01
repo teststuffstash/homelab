@@ -305,23 +305,31 @@ spec:
             # ADR-103 rule 2: a skip note is machine residue, so it appends to the ONE
             # `<!-- agent-summary -->` comment instead of starting a thread of its own.
             . /work/homelab/agents/machine-comment.sh
+            # ONE definition, N readers: classify_touches() in agents/footprint.sh is the single
+            # machine-readable home for the platform lane path tables (homelab#1151). Sourced
+            # OUTSIDE the replay block so the bridge can shadow the path via $REPLAY_ROOT.
+            . /work/homelab/agents/footprint.sh
 
             # >>>REPLAY:fix-debounce-gates>>>
             # ── deterministic gates (fail-closed; the ❌ table, NOT the old governance list) ──
-            SQ_DENY='^(\.github/|\.agents/|devbox\.json|devbox\.lock|scripts/)'
             sq_decide() { # <repo> <number> — 0 = may queue, 1 = inert (log only), 2 = inert + a currency note
-              local body touches p fp alerts cleared verdict v since
+              local body touches fp alerts cleared verdict v since
               body="$(gh api "repos/$1/issues/$2" --jq '.body // ""' 2>/dev/null || true)"
               # UNION of every Touches: line (S6 sprout, #716 — the reviewer-side twin): head -1
               # read only the FIRST line, so a deny-listed path on a later superseding line slipped
               # the queue-time gate (fail-open). The scan's footprint read is a join over all lines.
               touches="$(printf '%s' "$body" | sed -n 's/^[Tt]ouches:[[:space:]]*//p' | paste -sd, -)"
               [ -n "$touches" ] || { echo "no Touches: line (undeclared = exclusive, waits for a human)"; return 1; }
-              for p in $(printf '%s' "$touches" | tr ',' ' '); do
-                case "$p" in ''|' ') continue;; esac
-                printf '%s' "$p" | grep -qE "$SQ_DENY" \
-                  && { echo "footprint takes effect pre-merge: $p (iac-lane ❌ table)"; return 1; }
-              done
+              # classify_touches() returns "codeowner-author" for the ❌ operator-author set
+              # (paths that take effect BEFORE a human approves). The `*` sentinel (no Touches:
+              # line) normalizes to the empty prefix and is dropped — reading it as operator-lane
+              # would stop queueing every unfootprinted issue.
+              case "$(classify_touches "$touches")" in
+                codeowner-author)
+                  echo "footprint takes effect pre-merge: $touches (iac-lane ❌ table — classify_touches)"
+                  return 1
+                  ;;
+              esac
               # ── CURRENCY (FU-133 leg c) ────────────────────────────────────────────────────
               # Cheapest-first: the footprint tests above cost nothing beyond the body read this
               # gate needs anyway, so an issue that can never be worked never costs a probe.
