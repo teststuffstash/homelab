@@ -4,6 +4,10 @@ _selftest-missing-sentinel	_selftest
 _selftest-unrecorded-read	_selftest
 _selftest-wrong-expectation	_selftest
 adopted-not-queued-surfaces	adopted-not-queued-surfaces
+arbitrate-blocked-on-human-bot-comment-after	arbitrate
+arbitrate-blocked-on-human-resolved	arbitrate
+arbitrate-blocked-on-human-review-only	arbitrate
+arbitrate-blocked-on-human-still-blocked	arbitrate
 arbitrate-first-tick	arbitrate
 arbitrate-fu147-refire-blocked	arbitrate
 arbitrate-landing-sequence	arbitrate

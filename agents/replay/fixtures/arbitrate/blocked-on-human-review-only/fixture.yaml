@@ -1,0 +1,19 @@
+# CONDITION UNDER REPLAY. oracle-fleet PR #234 carries `agent/arbitrate` and has a terminal ruling
+# that wrote `blocked-on: human`. No comment has appeared since the marker, but a human review
+# (COMMENTED by RasmusSoot) has appeared after it. The contract is that the clause dispatches the
+# unit: the blocked-on predicate (homelab#1188) clears when a human review appears, even without
+# a comment (homelab#1188 finding 1 regression pin).
+name: arbitrate-blocked-on-human-review-only
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

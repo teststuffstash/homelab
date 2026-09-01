@@ -1,5 +1,6 @@
 CALL gh pr view 43 --repo teststuffstash/circles --json comments,commits
 CALL gh pr list --repo teststuffstash/circles --state all --limit 100 --json number,headRefName,body,comments
+CALL gh pr view 43 --repo teststuffstash/circles --json comments,reviews
 CALL gh pr view 43 --repo teststuffstash/circles --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
 OUT ATTEMPTS 1
 OUT NOOP <none>
