@@ -978,6 +978,17 @@ fast_unit_dispatch() {
   if [ -n "$fprjson" ]; then
     [ "$(jq -r .state <<<"$fprjson")" = "OPEN" ] || { echo "unit fast-path: PR not open"; return 0; }
     [ "$(jq -r .reviewDecision <<<"$fprjson")" = "CHANGES_REQUESTED" ] || { echo "unit fast-path: verdict moved on"; return 0; }
+    # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED from fix-round
+    # dispatch — a fix round pushes to the PR head, and the head IS the protected goal/**
+    # integration branch (the push would be refused). Fall through to the full scan, which
+    # emits a goal-checkpoint unit for the goal (trigger=assembly-cr) instead.
+    # Checked BEFORE the author gate: the goal-checkpoint emit is author-agnostic (bot or
+    # human CHANGES_REQUESTED both route as a NEW child on the goal).
+    fhead="$(jq -r '.headRefName // ""' <<<"$fprjson")"
+    if [[ "$fhead" == goal/* ]]; then
+      echo "unit fast-path: ASSEMBLY PR has changes-requested (FU-143) — falling through to full scan for goal-checkpoint emit"
+      return 1
+    fi
     # homelab#397 (rule #6 — the compound was WEAKER than the scan on exactly this predicate): the
     # main path scopes changes-requested to the WORKER author (671a053 — the snore#15 per-tick
     # sonnet leak), and the reviewer rings on EVERY verdict citing "the scan re-applies the full
@@ -987,15 +998,6 @@ fast_unit_dispatch() {
     fauthor="$(jq -r '.author.login // ""' <<<"$fprjson")"
     if [ "$fauthor" != "${WORKER_AUTHOR:-app/homelab-agents-1234}" ]; then
       echo "unit fast-path: PR author '${fauthor}' is not the worker lane — no fix-round mandate (homelab#397); settled"
-      return 0
-    fi
-    # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED — a fix round
-    # pushes to the PR head, and the head IS the protected goal/** integration branch (the push
-    # would be refused; the mandate is a NEW child on the goal — coordinator README
-    # goal-checkpoint play). Settle with the FU-143 report line so it never rots silently.
-    fhead="$(jq -r '.headRefName // ""' <<<"$fprjson")"
-    if [[ "$fhead" == goal/* ]]; then
-      echo "unit fast-path: ASSEMBLY PR has changes-requested (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head; settled"
       return 0
     fi
     jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"${fprjson:-null}" \
@@ -1173,7 +1175,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; wipmap=""
+  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   for repo in $repos; do
@@ -2343,14 +2345,47 @@ EOF_GOVERNANCE
     # with CHANGES_REQUESTED stays on the report surface above — before this filter, every tick
     # dispatched a session that re-concluded "human PR, no mandate" (a per-tick sonnet leak, the
     # same absorbing-belt class as the WIP-hold jq-null bug).
-    # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED — a fix round
-    # pushes to the PR head, and the head IS the protected goal/** integration branch (the push
-    # would be refused; the mandate is a NEW child on the goal — coordinator README
-    # goal-checkpoint play). Report-only line below so it never rots silently.
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|select(((.headRefName // "")|startswith("goal/")) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
-      orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
-    done
     # >>>REPLAY:changes-requested-gate>>>
+    # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED from fix-round
+    # dispatch — a fix round pushes to the PR head, and the head IS the protected goal/**
+    # integration branch (the push would be refused). Instead, emit a goal-checkpoint unit
+    # for the goal referenced by the Assembly-for: #<n> trailer (trigger=assembly-cr).
+    # Debounced with state-fp: marker (homelab#198). Excludes agent/error and agent/blocked
+    # PRs as every clause does.
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|select(((.headRefName // "")|startswith("goal/")) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
+      # Breaker labels: agent/error (FU-069 human-first) and agent/blocked (human-waiting).
+      if printf '%s' "$prsjson" | jq -e --argjson n "$u" '[.[]|select(.number==$n)|.labels[].name] | index("agent/error") != null' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} has changes-requested but carries agent/error — human-first (FU-143)\n"
+        continue
+      fi
+      if printf '%s' "$prsjson" | jq -e --argjson n "$u" '[.[]|select(.number==$n)|.labels[].name] | index("agent/blocked") != null' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} has changes-requested but carries agent/blocked — human-waiting (FU-143)\n"
+        continue
+      fi
+      # Extract the line-anchored Assembly-for: #<n> trailer from the PR body (same strong-link
+      # shape the goal-lane post-launch transition keys on — IL-T18).
+      g="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body//"")|capture("(?mi)^[ \\t]*assembly-for:[ \\t]*#(?<g>[0-9]+)\\b")|.g' 2>/dev/null || echo "")"
+      case "$g" in ''|*[!0-9]*)
+        orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested but no line-anchored \`Assembly-for: #<n>\` trailer — cannot route to a goal; report-only (FU-143)\n"
+        continue
+      ;; esac
+      # state-fp debounce: one ride per verdict state (homelab#198).
+      afp="$(pr_state_fp_pair "$slug" "$u" assembly-cr)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
+      if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
+        orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} changes-requested DEBOUNCED — state unchanged since the last goal-checkpoint emit for goal #${g} (\`state-fp:${afp_cur}\`, homelab#198). The assembly PR still has CHANGES_REQUESTED and the goal-checkpoint unit was already emitted; a human (or new content) is the next mover.\n"
+        continue
+      fi
+      # Emit a goal-checkpoint unit for the goal (trigger=assembly-cr).
+      echo "  [$repo] ASSEMBLY PR #${u} has changes-requested (FU-143) — emitting goal-checkpoint for goal #${g} (trigger=assembly-cr)"
+      units="${units}goal-checkpoint|${repo}|issue-${g}\n"
+      item_class_push "$repo" "issue-${g}" "container" "machine"
+      # Carry the assembly PR number to the dispatch site via a side map (not the unit tuple,
+      # whose 4th field is uclass and 5th is uparent). Written at emission, consumed at the
+      # confirmed-dispatch site (>>>REPLAY:dispatch-marker>>>) where the state-fp marker is
+      # recorded — the debounce write must gate on confirmed selection, not on emission, or a
+      # higher-priority clause winning the same tick silently sinks the goal-checkpoint forever.
+      assembly_cr_prs="${assembly_cr_prs} ${repo}:issue-${g}:${u}"
+    done
     for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("agent/blocked"))|not) and (.reviewDecision=="CHANGES_REQUESTED") and (.author.login==$wa) and (((.headRefName // "")|startswith("goal/"))|not))|.number'); do
       # ADR-094 project-WIP hold, same rationale as the queued gate above (meta-9, 2026-07-21:
       # while #60's fix round ran, every tick woke a redundant judge whose dispatch the launcher's
@@ -3518,6 +3553,33 @@ EOF_GOVERNANCE
               "" \
               "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. For arbitrate clauses (homelab#1011) per-check conclusions are dropped and head narrows to the newest non-merge commit, so CI churn and updater merges do not re-arm arbitration. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
           echo "  WARN: could not record state-fp on ${urepo} ${uitem} (gh write refused?) — dispatching anyway; the ${uclause} clause will re-emit on unchanged state (homelab#198)" >&2
+        fi
+        ;;
+      goal-checkpoint:issue-*)
+        # homelab#1150: an assembly-cr goal-checkpoint unit carries a PR number in the side map
+        # (assembly_cr_prs). Look up the dispatched unit's (repo, item) pair; when found, write
+        # the state-fp marker on the assembly PR (not the goal issue). No lookup hit ⇒ do nothing
+        # (an ordinary threshold-fired goal-checkpoint has no assembly PR and must not get a
+        # marker). Match the existing arm's failure semantics: empty fingerprint or refused write
+        # WARNS to stderr and dispatches anyway — a refused write only costs the debounce, and
+        # it must never block the ride it annotates.
+        apr=""
+        for entry in $assembly_cr_prs; do
+          if [[ "$entry" == "${urepo}:${uitem}:"* ]]; then
+            apr="${entry##*:}"
+            break
+          fi
+        done
+        if [ -n "$apr" ]; then
+          dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "$apr" assembly-cr)"; dfp="${dfp%%|*}"
+          if [ -z "$dfp" ]; then
+            echo "  WARN: state fingerprint unreadable for ${urepo} PR #${apr} — dispatching anyway; the assembly-cr debounce cannot arm this pass (homelab#198)" >&2
+          elif ! gh pr comment "$apr" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
+                "🤖 \`state-fp:${dfp}\` — deterministic scan dispatching a \`goal-checkpoint\` unit (trigger=assembly-cr) for goal ${uitem#issue-} at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+                "" \
+                "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the PR state — head sha, \`reviewDecision\`, and the newest verdict's timestamp. While the hash is unchanged this clause emits a report line instead of another unit, so an assembly PR waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
+            echo "  WARN: could not record state-fp on ${urepo} PR #${apr} (gh write refused?) — dispatching anyway; the assembly-cr clause will re-emit on unchanged state (homelab#198)" >&2
+          fi
         fi
         ;;
     esac

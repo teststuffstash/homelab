@@ -1,0 +1,18 @@
+# assembly-cr-debounced (homelab#1150) — the changes-requested clause debounces the goal-checkpoint
+# emit when the PR state is unchanged since the last emit (state-fp marker matches).
+#
+# THE CONTRACT:
+#   1. No goal-checkpoint unit is emitted (debounced).
+#   2. An orphan line is produced reporting the debounce.
+name: assembly-cr-debounced
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

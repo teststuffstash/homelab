@@ -1,0 +1,19 @@
+# assembly-cr-dispatch-no-pr (homelab#1150) — the dispatch-marker block does NOT write a
+# state-fp comment when a goal-checkpoint unit has NO assembly PR in the side map (an ordinary
+# threshold-fired goal-checkpoint, not an assembly-cr trigger).
+#
+# THE CONTRACT:
+#   1. No gh pr comment call is made.
+#   2. No WARN lines are emitted.
+#   3. Exit 0.
+name: assembly-cr-dispatch-no-pr
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:dispatch-marker
+env:
+  - ORG=teststuffstash
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
