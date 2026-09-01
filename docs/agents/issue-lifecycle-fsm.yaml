@@ -381,7 +381,7 @@ transitions:
     status: guarded
     replay:
       - agents/replay/fixtures/merged-closeout-default-branch
-    unreplayed: "LLM play — the play layer is outside the harness by design"
+    unreplayed: "LLM play — the play layer is outside the harness by design. IL-G06 detection semantics (regex, strong-link vs bare-mention split, dref exclusion) are guarded but unreplayed due to replay stub limitations (cannot differentiate `--state merged` vs `--state open`)."
     guards:
       - desc: "scan emits merged-closeout units (goal children first, shared cap 3/repo/scan)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merged-closeout\|' }
@@ -645,10 +645,13 @@ gaps:
       the belt just never guesses. Resolvable the same way the goal lane resolved it: once
       agent-runtime#34's finalize guarantees a strong `Implements #N` link, the mention test can be
       tightened into an ownership test."
-    accepted: "RESOLVED by homelab#1149 (2026-09-01): the C6 merged-closeout clause now detects OPEN
-      issues on the default branch whose merged PR carries a strong link (`implements|closes|fixes|resolves #N`
-      or the `Issue:` trailer) and emits a merged-closeout unit. Bare mentions still hold (the
-      circles#36 asymmetry stands)."
+    accepted: "GUARDED by homelab#1149 (2026-09-01): the C6 merged-closeout clause structure for detecting
+      OPEN issues on the default branch whose merged PR carries a strong link (`implements|closes|fixes|resolves #N`
+      or the `Issue:` trailer) is in place, and the `--arg default_branch` and variable-hoist fixes ensure
+      the detection code parses and runs without error. Bare mentions still hold (the circles#36 asymmetry
+      stands). The positive-path detection semantics (regex match, strong-link vs bare-mention split,
+      dref exclusion) are guarded but unreplayed due to stub limitations in differentiating `--state merged`
+      vs `--state open` — see IL-T09."
 
   - id: IL-G07
     name: "the belt treats the symptom; the missing finalize is the cause"

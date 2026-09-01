@@ -1,16 +1,18 @@
-# homelab#1149 — IL-G06 revisit: an OPEN issue on the default branch whose merged PR carries
-# a strong link (`implements|closes|fixes|resolves #N` or the `Issue:` trailer) gets a
-# merged-closeout unit. Bare mentions keep holding (the circles#36 asymmetry stands).
+# homelab#1149 — IL-G06 revisit: the IL-G06 merged-closeout detection block's `--arg default_branch`
+# and variable hoist fixes. This fixture validates the **structural fix** (the block parses, runs clean,
+# and produces empty output under stub-provided empty world data), but NOT the **positive-path detection
+# semantics** (the detection regex, strong-link vs bare-mention split, or dref exclusion logic).
 #
-# CONDITION UNDER REPLAY. Two OPEN issues on the default branch in one world:
-#   #90 — OPEN, `agent/in-progress`, merged PR #200 into master carries `Implements #90` → merged-closeout unit emitted.
-#   #91 — OPEN, `agent/review`, merged PR #201 into master carries `Fixes #91` → merged-closeout unit emitted.
-#   #92 — OPEN, `agent/in-progress`, merged PR #202 into master only MENTIONS #92 (bare `(#92)`) → held, reported.
+# Why: the replay stub cannot differentiate `gh pr list --state merged` from `--state open` (both
+# key to `pr-list`), so reproduction of the documented scenario (PR #200 `Implements #90`, #201 `Fixes #91`,
+# #202 bare-mentions #92) produces unexpected results (the dref exclusion blocks all emissions).
+# This is a stub limitation, not a scan-logic bug — production `gh` differentiates state correctly —
+# but it prevents a genuine positive-path fixture without a state-aware stub or alternate test strategy.
 #
-# THE CONTRACT:
-#   1. #90 and #91 are emitted as merged-closeout units (c6db_nums populated, units emitted).
-#   2. #92 is reported as a bare mention hold (no strong link).
-#   3. The block runs to completion under `set -euo pipefail`.
+# THE CONTRACT (structural only):
+#   1. The detection block runs to completion under `set -euo pipefail` with empty world data.
+#   2. No jq compile errors from undefined `$default_branch` (the --arg/hoist fix).
+#   3. Detection output variables (c6db, c6db_nums) remain empty, which is correct for empty input.
 pins:
   - IL-T09
 name: merged-closeout-default-branch
