@@ -6111,3 +6111,21 @@ first live ADR-110 maintenance session before the ADR existed.
   cycle); PR#1183's blocking finding fixed on-branch (incomplete→exit 2, verified live
   against #1162, pushed 68d3349c after a rebase onto the updater's refresh). Cascade watch
   backgrounded; #1191 + #1183 approvals land as their refresh cycles complete.
+
+## 2026-09-01 — sitting cont.: #329 breaker cleared by the human it asked for; #326 Budget 8→12
+
+- oracle #329's re-queue (16:38Z) drew the item session into the per-issue MODEL-invariant
+  breaker (16:44Z, correct): two identical (deepseek-v4-flash, unknown) strikes, chainless =
+  no chain to swap into → agent/error, human-first — FU-201's live case #2 in one day. The
+  16:44 diagnosis also split the causes: strike 1 = the fixed #1186 MCP-attach crash; strike 2
+  = a killed goose process after a nix-env exploration loop (distinct, undiagnosed). Seat (=
+  the human) cleared the breaker, claimed, and hand-dispatched r2 as claude/sonnet resuming
+  fix/issue-329-alerts-as-code (ADR-096 explicit-model override — the sanctioned escape hatch
+  until FU-201 lands). Meanwhile #337 rode and opened PR#338 — the oracle lane flows.
+- The jail dispatch surfaced TWO degraded-path finds: (1) goal-budget's ledger read is
+  ClusterIP-only, so a jail dispatch always prices cap-sum-conservative — #326 refused at
+  5×$2=$10 > Budget 8; raised 8→12 with rationale on the goal (the refusal's named human
+  edit; real spend = deepseek-cents + subscription window-draw, the FU-180 cap-phantom class).
+  (2) WIP=1 then held r2 behind #337's live ride — correct; a bounded background waiter
+  dispatches when the slot frees. homelab cascade: PR#1179 + PR#1192 MERGED (~17:06-09Z),
+  master cap 2/3, #1151 re-dispatchable; #1191/#1183 riding their refresh/re-review cycles.
