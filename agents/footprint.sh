@@ -82,7 +82,7 @@ classify_touches() (
   set -f
   local footprint="$1" path tier="machine-merge"
   local _co_file="${CLASSIFY_CODEOWNERS:-CODEOWNERS}"
-  local _entries _co_line _co_pat _co_own _co_match _co_owner _new_tier
+  local _entries _co_line _co_pat _co_owned _co_has_owner _co_rest _new_tier
 
   # Tier rank: machine-merge=1, codeowner-merge=2, codeowner-author=3
   _tier_rank() {
@@ -91,13 +91,6 @@ classify_touches() (
       codeowner-merge) echo 2 ;;
       codeowner-author) echo 3 ;;
       *) echo 0 ;;
-    esac
-  }
-  _rank_to_tier() {
-    case "$1" in
-      1) echo machine-merge ;;
-      2) echo codeowner-merge ;;
-      3) echo codeowner-author ;;
     esac
   }
 

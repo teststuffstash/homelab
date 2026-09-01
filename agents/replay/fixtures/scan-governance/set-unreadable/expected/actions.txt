@@ -2,5 +2,5 @@ OUT DISPATCH #1002 (homelab, declared: argocd/resources/loki/)
 OUT ORPHAN [homelab] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:
 OUT ORPHAN   issue #1005 — add a new devbox tool (declared: devbox.json)
 OUT REACHED: end
-ERR $ROOT/agents/footprint.sh: line 116: /no/such/CODEOWNERS: No such file or directory
+ERR $ROOT/agents/footprint.sh: line 109: /no/such/CODEOWNERS: No such file or directory
 RC 0

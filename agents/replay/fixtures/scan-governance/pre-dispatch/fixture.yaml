@@ -15,11 +15,11 @@
 #   #1001 `scripts/governance-lint.sh` → HELD. scripts/ is in the ❌ set.
 #   #1002 `argocd/resources/loki/` → DISPATCHED. The main lane is untouched by this check.
 #   #1003 `*` → DISPATCHED. The no-`Touches:` sentinel normalizes to empty and is dropped.
-#   #1004 `policy/` → DISPATCHED. policy/ is codeowner-merge (agent may author), NOT in the ❌ set.
-#         The old governance check (homelab#993) held this; classify_touches() correctly allows it.
+#   #1004 `policy/` → HELD by governance. policy/ is in GOVERNANCE but NOT the ❌ set;
+#         operator-lane-hold allows it, governance-hold holds it.
 #   #1005 `devbox.json` → HELD. devbox.json is in the ❌ set.
-#   #1006 `CODEOWNERS` → DISPATCHED. CODEOWNERS is codeowner-merge (agent may author), NOT in the
-#         ❌ set. The old governance check held this; classify_touches() correctly allows it.
+#   #1006 `CODEOWNERS` → HELD by governance. CODEOWNERS is in GOVERNANCE but NOT the ❌ set;
+#         operator-lane-hold allows it, governance-hold holds it.
 #   #1007 `.agents/fix.yaml` → HELD. `.agents/` is in the ❌ set.
 #   #1008 oracle-fleet, `scripts/` → DISPATCHED. The ❌ set is THIS repo's CI's. A stack repo
 #         that happens to own a same-named path is not touching this repo's file.
@@ -37,6 +37,8 @@ source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
   - block:operator-lane-set
+  - block:governance-set
   - file:cases.sh
   - block:operator-lane-hold
+  - block:governance-hold
   - file:post.sh

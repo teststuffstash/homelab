@@ -1771,6 +1771,29 @@ EOF_GUARDED
         fi
       fi
       # <<<REPLAY:guarded-hold<<<
+      # ── OPERATOR-LANE PATH (homelab#1151) — report, never dispatch ──────────────────────────
+      # Tested BEFORE the transient holds (footprint / WIP / PR budget) on purpose: this one is
+      # STRUCTURAL. An operator-lane issue must read as "route this to the operator" on every
+      # scan, not as "come back later" whenever a sibling happens to be in flight.
+      # REPORT-ONLY, NO LABEL WRITE. Same precedent as the pin-only GUARDED check: the overlap
+      # may be only PART of the issue's scope, so the line names the path and the route, and a
+      # human re-scopes or splits it.
+      # >>>REPLAY:operator-lane-hold>>>
+      if [ "$repo" = "$GUARDED_REPO" ]; then
+        # classify_touches() returns "codeowner-author" for the ❌ operator-author set
+        # (paths that take effect BEFORE a human approves). The `*` sentinel (no Touches: line)
+        # normalizes to the empty prefix and is dropped by classify_touches() — reading it as
+        # operator-lane would stop dispatching every unfootprinted issue in the repo.
+        # Dropping it costs nothing the ADR-097 hold does not already cover, since an undeclared
+        # footprint is exclusive there anyway.
+        case "$(classify_touches "$qtouches")" in
+          codeowner-author)
+            orphans="${orphans}[$repo] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
+            continue
+            ;;
+        esac
+      fi
+      # <<<REPLAY:operator-lane-hold<<<
       # ── GOVERNANCE PATH (homelab#993) — report, never dispatch ──────────────────────────────
       # Tested BEFORE the transient holds (footprint / WIP / PR budget) on purpose: this one is
       # STRUCTURAL. A governance issue must read as "route this to the operator" on every scan,
@@ -1819,29 +1842,6 @@ EOF_GOVERNANCE
         fi
       fi
       # <<<REPLAY:governance-hold<<<
-      # ── OPERATOR-LANE PATH (homelab#1151) — report, never dispatch ──────────────────────────
-      # Tested BEFORE the transient holds (footprint / WIP / PR budget) on purpose: this one is
-      # STRUCTURAL. An operator-lane issue must read as "route this to the operator" on every
-      # scan, not as "come back later" whenever a sibling happens to be in flight.
-      # REPORT-ONLY, NO LABEL WRITE. Same precedent as the pin-only GUARDED check: the overlap
-      # may be only PART of the issue's scope, so the line names the path and the route, and a
-      # human re-scopes or splits it.
-      # >>>REPLAY:operator-lane-hold>>>
-      if [ "$repo" = "$GUARDED_REPO" ]; then
-        # classify_touches() returns "codeowner-author" for the ❌ operator-author set
-        # (paths that take effect BEFORE a human approves). The `*` sentinel (no Touches: line)
-        # normalizes to the empty prefix and is dropped by classify_touches() — reading it as
-        # operator-lane would stop dispatching every unfootprinted issue in the repo.
-        # Dropping it costs nothing the ADR-097 hold does not already cover, since an undeclared
-        # footprint is exclusive there anyway.
-        case "$(classify_touches "$qtouches")" in
-          codeowner-author)
-            orphans="${orphans}[$repo] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
-            continue
-            ;;
-        esac
-      fi
-      # <<<REPLAY:operator-lane-hold<<<
       # >>>REPLAY:footprint-hold>>>
       # ADR-097 goal exemption (homelab#822): a goal's decompose/checkpoint unit writes
       # no code (it authorises child issues via `gh` and toggles labels, never a PR diff),
