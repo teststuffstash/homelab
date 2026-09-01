@@ -14,13 +14,15 @@ meant to avoid.)
   #1153 — which rode r2 same hour). Bookkeeping pushed (`c500394f`), top hop landed (master →
   `goal/1162-belts`, `30859bde`), **all 7 wave-2 members queued** (#1240 #1198 #1199 #1211
   #1212 #1223 #1229) + platform rung. PR#1241 (G1 #1232, FU-201 a+b carrier) codeowner-read +
-  approved — auto-merge lands it. **REMAINING**: #1213 (egress assembly — read DONE, judgment
-  merge; #1227 closed, nothing rides the branch) + #1242 (#1153 goal-grant consult — read DONE,
-  judgment merge) both re-parking behind the master moves (refresh → CI → bot re-review →
-  NEEDSMETA) — approve each at re-park. Then verify wave-2 dispatches flow (members serialize
-  on scan footprints). #1210 closed via PR#1221 (PR#1216 = anomaly duplicate). FU-171 header
-  repair + 3rd resight (reviewer token died mid-31-min review on #1228; 46-min pod-key stall)
-  recorded `c500394f`.
+  approved + merged (#1232 closed; post-launch bucket #1243 auto-minted). **#1213 + #1242 both
+  MERGED ~22:35–22:42Z after serial re-park approvals — the park pile is DRAINED**
+  (CodeownerParkWaiting cleared): themes #1163/#1164/#1165 all closed, #1153 closed. Goal
+  #1162 stays OPEN on wave-2 theme #1239 (members riding: #1198 done r1, #1211/#1199 riding,
+  rest queued+serializing); the operator's `goal/validated` read comes at tree-empty. #1210
+  closed via PR#1221 (PR#1216 = anomaly duplicate). FU-171 header repair + 3rd resight
+  (reviewer token died mid-31-min review on #1228; 46-min pod-key stall) recorded `c500394f`.
+  Egress-dial monitor CNPs now LIVE in agent-coordinator + loop namespaces (via #1213) —
+  acceptance-3's enforce flip comes AFTER clean harvested rides, a later sitting.
 - **⚑ 2026-09-01 NIGHT — GOAL #1231 LIVE (router-first, operator-launched; the NEXT session's
   role is MONITOR + GATE-READ).** Tree: G1 #1232 (label_map md/lg + re-grade plays, FU-201 a+b)
   · G2 #1233 (key-class re-mint, FU-202) · G3 #1234 (provider-attributed strikes +
