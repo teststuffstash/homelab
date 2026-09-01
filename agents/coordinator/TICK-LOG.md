@@ -6008,3 +6008,15 @@ first live ADR-110 maintenance session before the ADR existed.
   `mcp__stack-mcp__{statute,search,give_feedback}`); live reviewer ride on #333 watched. Both
   halves relayed to homelab#1039 (comment 5492494412) — the G-F `goal/validated` read is the
   operator's. #333 arrived un-armed (C9 arms it) and codeowner-parks on `.agents/` — oracle's.
+- 10:34–10:53Z: operator APPROVED oracle-fleet#333 (codeowner read) → `reviewDecision=APPROVED`
+  → the reflex's already-merging clause excludes it, so #333 lands on CI-green auto-merge with
+  NO bot pass — the reviewer arm's live check moves to the next oracle worker PR (watch armed on
+  `reviewer-oracle-*` pods for `MCP_FLAG`). #328 stayed `agent/queued` through three scans; the
+  captured scan log named the cause: ADR-097 footprint held by **#329** (`agent/in-progress`,
+  `scripts/ci.sh` + `specs/server/observability.md`) — the THIRD ride the goose crash struck
+  (09:28Z), left in-progress with no PR, scan-held as C4/C5-undecidable. Restored #329 →
+  `agent/queued` (note posted), rung 10:53Z; #328/#329 overlap on observability.md so they run
+  one at a time. Lesson for the strike path: a strike that leaves `agent/in-progress` + no PR
+  parks the item AND its footprint neighbours until a human reads the scan — FU-shaped if it
+  resights (the breaker doctrine says human-first, but a launcher-level arg crash on round 1 with
+  nothing committed is not an anomaly of the item).
