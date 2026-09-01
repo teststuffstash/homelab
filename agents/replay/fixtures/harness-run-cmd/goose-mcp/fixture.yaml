@@ -1,13 +1,15 @@
-# homelab#1041 — the WORKER's goose arm with the MCP knob present. Pins that the MCP prelude
-# (base64 decode to /tmp/mcp-config.json) and --mcp-config flag are emitted when the stack
-# declares spec.mcp.{endpoint,tools}.
+# homelab#1041 — the WORKER's goose arm with the MCP knob present. Pins that goose gets the MCP
+# server through its REAL attach interface — `--with-streamable-http-extension <URL>` on the
+# CLI, no config file — when the stack declares spec.mcp.{endpoint,tools}. The first cut emitted
+# `--mcp-config`, a claude-only flag goose rejects at arg parse (oracle-fleet#330 r1, 2026-09-01;
+# the fixture pinned the wrong shape and proved nothing about the harness).
 #
 # CONDITION UNDER REPLAY. Same as harness-run-cmd-goose, but with MCP_ENDPOINT and MCP_TOOLS
-# set so the MCP prelude block inside the replay region fires.
+# set so the MCP attach block inside the replay region fires.
 #
 # THE CONTRACT:
-#   1. MCP_PRELUDE contains the base64 decode command for the MCP config.
-#   2. The goose case appends `--mcp-config /tmp/mcp-config.json` to the RUN_CMD.
+#   1. The goose case appends `--with-streamable-http-extension '<endpoint>'` to the RUN_CMD.
+#   2. NO /tmp/mcp-config.json prelude on this arm — goose takes the URL directly.
 #   3. The rest of the pod command is unmoved: context prelude, recipe decode, GOOSE_MAX_TOKENS.
 name: harness-run-cmd-goose-mcp
 mode: actions
