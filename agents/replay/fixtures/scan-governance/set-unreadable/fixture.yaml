@@ -1,26 +1,44 @@
-# homelab#1151 — CODEOWNERS unreadable: the ❌ set is hardcoded in classify_touches(), so it still
-# works. Non-❌ paths default to machine-merge (no CODEOWNERS patterns to match).
+# homelab#1151 — BOTH pre-dispatch probe-fail branches, one fixture: CODEOWNERS unreadable
+# (operator-lane) AND governance-lint unreadable (governance-set).
 #
-# WHY THIS BRANCH GETS ITS OWN FIXTURE. classify_touches() reads CODEOWNERS at runtime. If
-# CODEOWNERS is unreadable, the function cannot determine ownership for non-❌ paths — they
-# default to machine-merge. The ❌ set (`.github/`, `.agents/`, `devbox.json|lock`, `scripts/`)
-# is hardcoded in classify_touches() and works regardless of CODEOWNERS readability.
+# WHY ONE FIXTURE CARRIES BOTH (remedy (b), PR#1208 arbitration 2026-09-01). The governance
+# probe-fail branch is UNMODIFIED by #1151, so a restored-coverage fixture in its own directory
+# passes against the base tree by definition and reds the ADR-103 pin-vacuity gate — structurally
+# unlandable. This directory already fails on base (the operator-lane sentinels do not exist
+# there), so the governance probe-fail assertion carried HERE is not vacuous, and the review
+# rubric's coverage requirement (the ⛔ GOVERNANCE-SET PROBE-FAILED branch) is met with no loss.
+# The governance cases reproduce origin/master's scan-governance/set-unreadable expectations
+# byte-exact — pinning that #1151 left the branch's behaviour unchanged.
 #
-# THE TWO CASES:
-#   #1002 homelab, `argocd/resources/loki/` — a plainly UNGOVERNED footprint, DISPATCHED.
-#        With CODEOWNERS unreadable, non-❌ paths default to machine-merge. This is correct:
-#        the ❌ set is the only dispatch-time gate; CODEOWNERS is merge-time enforcement.
-#   #1005 homelab, `devbox.json` — a ❌ path, HELD. The ❌ set is hardcoded and works regardless.
+# The operator-lane half: classify_touches() reads CODEOWNERS at runtime. If CODEOWNERS is
+# unreadable, non-❌ paths default to machine-merge; the ❌ set (`.github/`, `.agents/`,
+# `devbox.json|lock`, `scripts/`) is hardcoded in classify_touches() and works regardless.
 #
-# `CLASSIFY_CODEOWNERS` is pointed at a path that does not exist, via the env override.
+# THE THREE CASES (hold order: operator-lane-hold runs first, governance-hold second; a hold
+# `continue`s, so each case reaches at most one message):
+#   #1002 homelab, `argocd/resources/loki/` — non-❌ (CODEOWNERS unreadable → machine-merge, the
+#        operator-lane hold passes it) and plainly UNGOVERNED — and it is HELD anyway by the
+#        governance probe-fail: with GOVERNANCE_PATHS unreadable the scan cannot tell, so it
+#        defers (rule #6 — never fail INTO a dispatch). Master's strongest-statement case.
+#   #1005 homelab, `devbox.json` — a ❌ path, HELD by the operator-lane hold. The ❌ set is
+#        hardcoded and works with CODEOWNERS unreadable; `continue` means the governance
+#        probe-fail never double-reports it.
+#   #1008 oracle-fleet, `argocd/resources/loki/` — DISPATCHED. Both holds are $GUARDED_REPO-
+#        gated: a broken read in this checkout must not wedge every stack's fixer lane.
+#
+# Both probes are broken via the env overrides the shipped script already declares — the fixture
+# changes the WORLD, never the clause.
 name: scan-governance-set-unreadable
 mode: actions
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
   - block:operator-lane-set
+  - block:governance-set
   - file:cases.sh
   - block:operator-lane-hold
+  - block:governance-hold
   - file:post.sh
 env:
   - CLASSIFY_CODEOWNERS=/no/such/CODEOWNERS
+  - GOVERNANCE_LINT=/no/such/scripts/governance-lint.sh

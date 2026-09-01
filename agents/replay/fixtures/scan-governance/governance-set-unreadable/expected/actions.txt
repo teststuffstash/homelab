@@ -1,4 +1,0 @@
-OUT ORPHAN [homelab] ⛔ GOVERNANCE-SET PROBE-FAILED — no `GOVERNANCE=` line readable at /no/such/governance-lint.sh (homelab#993). Holding rather than dispatching blind:
-OUT ORPHAN   issue #1009 — update the access policy
-OUT REACHED: end
-RC 0
