@@ -1,8 +1,9 @@
 # The harness's first fixture, and the reason the harness exists (homelab#201 → #206).
 #
-# mode: suite — this replay was written before the harness and carries its own 88-row assertion
-# table (stability/movement of the fingerprint, the PR#234 five-rides sequence, the fail-open
-# edges). It is registered here, NOT rewritten: `devbox run state-fp-replay` keeps its name and its
+# mode: suite — this replay was written before the harness and carries its own assertion table
+# (stability/movement of the fingerprint, the PR#234 five-rides sequence, the fail-open edges,
+# and since homelab#1108 the ci-red-specific fingerprint with startedAt folded in — section 6).
+# It is registered here, NOT rewritten: `devbox run state-fp-replay` keeps its name and its
 # required status in .github/workflows/ci.yaml, and converting a load-bearing pin into a different
 # vocabulary in the same PR that introduces the vocabulary is how you lose the pin.
 #
