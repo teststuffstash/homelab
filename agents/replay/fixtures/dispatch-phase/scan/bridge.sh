@@ -90,4 +90,15 @@ echo "REACHED: janitor tick — timing rows ship, NO wake stamp (homelab#459)"
 DP_NOW=1786465150; SCAN_JANITOR=1 dispatch_phase circles
 printf 'RETURN %s\n' "$?"
 
+# ── the CLAUSE label (homelab#459): the wake-source metric now carries clause and optionally unit ──
+echo "REACHED: cron dispatch with clause label"
+DISPATCH_PHASE_WAKE=""; DISPATCH_PHASE_POD=coordinate-circles-cron-2
+DP_NOW=1786465200; dispatch_phase circles "queued-dispatch"
+printf 'RETURN %s\n' "$?"
+
+echo "REACHED: edge dispatch with clause and unit labels"
+DISPATCH_PHASE_WAKE=""; DISPATCH_PHASE_POD=coordinate-circles-2
+DP_NOW=1786465210; dispatch_phase circles "changes-requested" "task/fix"
+printf 'RETURN %s\n' "$?"
+
 echo "REACHED: end"

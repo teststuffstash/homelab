@@ -578,8 +578,20 @@ dp_wake() {   # → "edge|<ring-epoch>" | "cron|" | "" (unreadable — the calle
 DISPATCH_PHASE_T0="$(( $(dp_now) - SECONDS ))"
 DISPATCH_PHASE_MARK="$DISPATCH_PHASE_T0"
 dispatch_phase() {   # $1 = the stack's MAIN repo — publish the scan-side rows, at a dispatch
-  local project="${1:-}" now ring family="" wake=""
+                     # $2 = clause (queued-dispatch / changes-requested / ci-red / …) — labels the wake-source metric (homelab#459)
+                     # $3 = unit kind (task/fix / task/goal / …) — where known, adds a unit label
+  local project="${1:-}" clause="${2:-}" ukind="${3:-}" now ring family="" wake="" labels=""
   now="$(dp_now)"
+  # Build the label set for the wake-source metric. clause is always set when known; unit kind
+  # is added where the scan knows it (homelab#459 — the FU-168 hunt needs both dimensions).
+  # NOTE: built as a separate variable to avoid bash's nested-${} parsing issue inside :+ modifier.
+  if [ -n "$clause" ]; then
+    if [ -n "$ukind" ]; then
+      labels="{clause=\"${clause}\",unit=\"${ukind}\"}"
+    else
+      labels="{clause=\"${clause}\"}"
+    fi
+  fi
   # A scan that dispatches twice (the global instance sweeping two stacks) measures the SECOND
   # dispatch from the first one's end, not from the pod's start — otherwise stack B's `scan` row
   # would carry stack A's whole streamed session. The mark moves whether or not anything is
@@ -619,11 +631,11 @@ dispatch_phase() {   # $1 = the stack's MAIN repo — publish the scan-side rows
   case "${DISPATCH_PHASE_WAKE%%|*}" in
     edge) wake="# TYPE agent_dispatch_edge_woken_timestamp gauge
 # HELP agent_dispatch_edge_woken_timestamp Epoch of this stack's last EDGE-woken dispatch (017790c: changes() over this counts them).
-agent_dispatch_edge_woken_timestamp ${now}
+agent_dispatch_edge_woken_timestamp${labels} ${now}
 " ;;
     cron) wake="# TYPE agent_dispatch_cron_woken_timestamp gauge
 # HELP agent_dispatch_cron_woken_timestamp Epoch of this stack's last CRON-woken dispatch — each one is a dead doorbell edge with an id (017790c).
-agent_dispatch_cron_woken_timestamp ${now}
+agent_dispatch_cron_woken_timestamp${labels} ${now}
 " ;;
   esac
   fi
@@ -1049,7 +1061,7 @@ fast_unit_dispatch() {
   # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
   # spin-up only, and the `coordinator-scan` mutex now spans just the deterministic pass (the
   # session pod uploads, pushes its own row, and rings the doorbell itself).
-  dispatch_phase "$fmain"   # FU-160: same boundary, the coordinator-owned rows above the launcher
+  dispatch_phase "$fmain" "$fclause"   # FU-160: same boundary, the coordinator-owned rows above the launcher
   scan_phase dispatch
   bash "${HERE}/coordinator-session.sh" --stack "$fstack" --repos "${frepos% }" --main-repo "$fmain" \
     --model "$fmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$fwip" --detach \
@@ -3616,7 +3628,7 @@ EOF_GOVERNANCE
       # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
       # spin-up, not the streamed ride, and the `coordinator-scan` mutex now spans only the
       # deterministic pass (the pod uploads, pushes its own session row, rings the doorbell itself).
-      dispatch_phase "$mainrepo"   # FU-160: the ring→scan and scan rows close on the same boundary
+      dispatch_phase "$mainrepo" "$uclause" "${uclass:-}"   # FU-160: the ring→scan and scan rows close on the same boundary
       scan_phase dispatch
       # ── FU-146 exit-3 dispatch gate (racing dispatcher won): report, retry next unit ─────────
       # When `coordinator-session.sh` exits with 3, the item pod exists and a racing dispatcher
