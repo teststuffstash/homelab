@@ -1192,9 +1192,12 @@ case "${SCAN_UNIT:-}" in ""|"-") ;; *)
 ;; esac
 
 any_work=""
-resumable_branches=""   # FU-199: space-separated issue-N=branch pairs for goal children with
-                        # AGENT_STRIKE: + Resumable branch pushed: — accumulated per-repo,
-                        # consumed in the dispatch loop to add work-branch=<branch> to the item.
+resumable_branches=""   # FU-199: space-separated repo#N=branch pairs for goal children with
+                        # AGENT_STRIKE: + Resumable branch pushed: — consumed in the dispatch
+                        # loop to add work-branch=<branch> to the item. REPO-QUALIFIED keys and
+                        # per-stack reset (round-1 review): issue numbers are per-repo, and a
+                        # bare-number key let repo A's #N attach its branch to repo B's #N
+                        # dispatch later in the same tick — cross-repo resume corruption.
 
 # ── Ratchet clause files (homelab#825, #853) ─────────────────────────────
 # CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
@@ -1279,7 +1282,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""
+  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   for repo in $repos; do
@@ -3130,7 +3133,8 @@ EOF_GOVERNANCE
                     ')"
                     if [ -n "$branch" ]; then
                       ambig_decidable="${ambig_decidable}${ambig_n} "
-                      resumable_branches="${resumable_branches}${ambig_n}=${branch} "
+                      # repo-qualified key: issue numbers are only unique per repo
+                      resumable_branches="${resumable_branches}${repo}#${ambig_n}=${branch} "
                     fi
                   fi
                 fi
@@ -3966,7 +3970,8 @@ EOF_GOVERNANCE
         for rb_entry in $resumable_branches; do
           rb_n="${rb_entry%%=*}"
           rb_branch="${rb_entry#*=}"
-          if [ "${uitem#issue-}" = "$rb_n" ]; then
+          # match on repo#number — the bare-number match was the cross-repo collision
+          if [ "${urepo}#${uitem#issue-}" = "$rb_n" ]; then
             uworkbranch=" work-branch=${rb_branch}"
             break
           fi
