@@ -6157,3 +6157,34 @@ first live ADR-110 maintenance session before the ADR existed.
   oracle-fleet-openrouter case, fleet-wide on deploy). Stub-invisible to the decision-table
   tests (adapter-glue seam — the chainless chunk A–D class). Seat-fixed on-branch (819c07c,
   140 tests/100% cov), finding commented, codeowner approval follows the bot re-verdict.
+
+## 2026-09-01 — finishing #1162's two open themes: defers materialized, theme branch refreshed
+
+- Operator asked how the two open themes finish. Root: the checkpoint's completion trigger is a
+  deterministic OPEN-descendant walk (bucket excluded) and the four pre-ruled deferral sprouts
+  (#1190 #1198 #1199 #1200) existed only as comment-prose rulings — open issues the walk counts
+  forever. MATERIALIZED: all four re-parented under post-launch bucket #1170 (lineage + budget
+  intact, walk unblocked); record + v1.3 pilot readout on #1162 ("defer needs a machine-shaped
+  disposition — prose + an open issue is not one"). #459 confirmed C6-closed.
+- PR#1206 (#1203's fix) was ci-RED on DANGLING FU-199: the goal/1162-scan base was
+  fast-forwarded at ~05:53Z, before FU-199 entered the tracker — the branch tree lacked the id
+  its own code cites. Executed the documented manual top hop: master merged into goal/1162-scan
+  (f6da3d35, OrgAdmin push, deliberate); the updater refreshes #1206 → green → review → C6
+  closes #1203 → checkpoint (b) fires with both child sets complete → theme assemblies
+  goal/1162-{scan,egress} → master (Fixes #1163/#1165) → codeowner merges → tree-empty →
+  the operator's Verdict-authority: human read. PR#55: bot re-approved the decode fix at
+  819c07c1; codeowner approval placed.
+
+## 2026-09-01 — PR#1206 round 1: reviewer catches a cross-repo key collision; seat fix round
+
+- The FU-199 fix drew a real round-1 CHANGES_REQUESTED: `resumable_branches` was tick-global,
+  bare-number keyed, bare-number matched — repo A's #N could attach its resumable branch to
+  repo B's unrelated #N c4c5 dispatch in the same tick (checkout failure or silent cross-repo
+  resume corruption). Seat-fixed on the branch per the verbatim finding: repo#N keys at record,
+  urepo#N match at consume, accumulator joins the per-stack reset (c94b6642); the
+  strike-resumable fixture row re-pinned to the qualified key in the same push (c1ebdb72 —
+  the ratchet redded exactly as designed). Note for the record: the first push went out on a
+  mis-targeted replay invocation (family-dir call + for-loop not gating &&) — caught and
+  corrected in the same sitting; the fixture red was the deliberate-change case.
+- Earlier in the same arc: PR#1206's first red was DANGLING FU-199 (base predated the tracker
+  entry) → manual top hop + branch update; PR#55 merged 18:02 with the decode fix.
