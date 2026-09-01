@@ -166,7 +166,7 @@ is stale, so it cannot drift the way the prose register did.
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-footprint-mismatch/body-footprint-mismatch` | actions | - | `agents/coordinator-scan.sh` | - |
-| `c4c5-ambig-decidable` | table | - | `agents/coordinator-scan.sh` | - |
+| `c4c5-ambig-decidable` | table | - | `agents/coordinator-scan.sh` | IL-T29 |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |

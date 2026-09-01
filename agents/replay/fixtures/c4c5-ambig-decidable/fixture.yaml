@@ -20,7 +20,7 @@
 #   no-strike         #329 has NO AGENT_STRIKE: comment → held as today; #330 beside it keeps its
 #                     ordinary v2 report + unit.
 pins:
-  - FU-199
+  - IL-T29
 name: c4c5-ambig-decidable
 mode: table
 source: agents/coordinator-scan.sh
