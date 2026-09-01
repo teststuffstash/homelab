@@ -29,6 +29,7 @@ diagram: |
       Queued --> Queued: held — deps / footprint / WIP / PR-cap (IL-T04)
       Queued --> InProgress: queued-dispatch → ride opens PR (IL-T05)
       InProgress --> InProgress: worker died → c4c5-redispatch (IL-T06)
+      InProgress --> InProgress: goal child + AGENT_STRIKE + resumable branch → decidable, emit --work-branch (IL-T29)
       InProgress --> Queued: phantom label, persisted → scan reconciles it (IL-T16)
       Review --> Queued: phantom label, persisted → scan reconciles it (IL-T27)
       InProgress --> Blocked: worker ruled it NOT IMPLEMENTABLE → AGENT_INFEASIBLE parks it (IL-T26)
@@ -349,6 +350,32 @@ transitions:
     incidents:
       - "retro r2 F5: four closed issues wearing agent/blocked or agent/review — #913 (PR#915 merged, 14 reviews ending in two APPROVED), #625 (PR#631), #270 (PR#275), #148 (PR#150). The ledger derived terminal_label from the label, so #913 and #625 entered r2's deep-dive set at ranks 1 and 5 AS FAILURES while both are merged work — 2 of 8 deep-dive slots burned on label debt."
 
+  - id: IL-T29
+    name: goal child + AGENT_STRIKE + resumable branch → decidable, emit --work-branch (the narrowed hold)
+    owner: coordinator-scan, deterministically — no LLM tick in the path
+    when: "goal child ∧ agent/in-progress ∧ no OPEN PR referencing ∧ the issue's newest anchored
+      `AGENT_STRIKE:` comment carries a `Resumable branch pushed: <branch>` line ⇒ DECIDABLE —
+      emit the ordinary C4/C5 unit carrying the branch so the session resumes with `--work-branch
+      <branch>` (never a restart). No strike / no resumable branch / unreadable probe ⇒ held
+      exactly as today (the FU-143/IL-G06 asymmetry stands unchanged). Loop guard: a resumed
+      round that strikes again with the same (model, error_class) pair follows the existing
+      second-strike rule (the agent/error STRIKE-channel path) — the narrowed hold must not
+      create a strike→resume→strike loop."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/c4c5-ambig-decidable
+    guards:
+      - desc: "the AGENT_STRIKE: marker is ANCHORED at the start of a COMMENT — same discipline as AGENT_INFEASIBLE: (homelab#257)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("\^AGENT_STRIKE:"\)' }
+      - desc: "the Resumable branch pushed: line is read from the anchored strike comment — the branch is extracted and carried into the dispatch unit"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("Resumable branch pushed:"\)' }
+      - desc: "no strike / no resumable branch / unreadable probe keeps today's behaviour (rule #6 — never fail INTO a write)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "goal child in an undecidable state" }
+      - desc: "loop guard — a resumed round that strikes again with the same (model, error_class) pair follows the existing second-strike rule"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "second-strike rule" }
+    incidents:
+      - "2026-09-01 oracle-fleet#329: the third C4/C5 ambig sighting in ~24h froze the whole oracle lane ~4h — 0 WIP, 0 PRs, every scan tick green, homelab#1149 was the identical shape the day before. The AGENT_STRIKE: + Resumable branch pushed: evidence was machine-anchored one comment up; the hold just didn't look."
+
   - id: IL-T07
     name: close by master merge
     owner: GitHub (closing keyword)
@@ -379,8 +406,9 @@ transitions:
     owner: scan merged-closeout clause → coordinator item session
     when: "closed (or IL-T08 open-merged) ∧ still non-terminal agent/* — verify on the branch Base: declares, flip agent/done, harvest Follow-ups"
     status: guarded
-    unreplayed: "scan emit + LLM play — the play layer is outside the harness by design"
-    unreplayed: "scan emit + LLM play — the play layer is outside the harness by design"
+    replay:
+      - agents/replay/fixtures/merged-closeout-default-branch
+    unreplayed: "LLM play — the play layer is outside the harness by design. IL-G06 detection semantics (regex, strong-link vs bare-mention split, dref exclusion) are guarded but unreplayed due to replay stub limitations (cannot differentiate `--state merged` vs `--state open`)."
     guards:
       - desc: "scan emits merged-closeout units (goal children first, shared cap 3/repo/scan)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merged-closeout\|' }
@@ -644,7 +672,13 @@ gaps:
       the belt just never guesses. Resolvable the same way the goal lane resolved it: once
       agent-runtime#34's finalize guarantees a strong `Implements #N` link, the mention test can be
       tightened into an ownership test."
-    accepted: "hold-not-guess is the asymmetry (a missed clear costs a report line, a wrong one costs a duplicate ride); revisit when finalize guarantees the link"
+    accepted: "GUARDED by homelab#1149 (2026-09-01): the C6 merged-closeout clause structure for detecting
+      OPEN issues on the default branch whose merged PR carries a strong link (`implements|closes|fixes|resolves #N`
+      or the `Issue:` trailer) is in place, and the `--arg default_branch` and variable-hoist fixes ensure
+      the detection code parses and runs without error. Bare mentions still hold (the circles#36 asymmetry
+      stands). The positive-path detection semantics (regex match, strong-link vs bare-mention split,
+      dref exclusion) are guarded but unreplayed due to stub limitations in differentiating `--state merged`
+      vs `--state open` — see IL-T09."
 
   - id: IL-G07
     name: "the belt treats the symptom; the missing finalize is the cause"

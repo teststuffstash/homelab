@@ -83,7 +83,7 @@ extract() {   # extract <marker-name> → stdout; exit 3 if either sentinel is m
     END { if (!saw_open || !saw_close) exit 3 }
   ' "$SCAN"
 }
-for b in state-fp-jq state-fp-pair arbitrate-gate ci-red-gate dispatch-marker; do
+for b in blocked-on-jq blocked-on-check state-fp-jq state-fp-pair arbitrate-gate ci-red-gate dispatch-marker; do
   extract "$b" > "$TMP/block.$b.sh" || {
     echo "state-fp-replay: sentinel >>>REPLAY:$b>>> / <<<REPLAY:$b<<< missing from $SCAN." >&2
     echo "  The block moved or the markers were deleted. Restore them around the block — this" >&2
@@ -154,6 +154,8 @@ POST
   cat <<'PRE'
 set -euo pipefail
 PRE
+  cat "$TMP/block.blocked-on-jq.sh"
+  cat "$TMP/block.blocked-on-check.sh"
   cat "$TMP/block.state-fp-jq.sh"
   cat "$TMP/block.state-fp-pair.sh"
   cat <<'BRIDGE'
@@ -177,6 +179,8 @@ POST
   cat <<'PRE'
 set -euo pipefail
 PRE
+  cat "$TMP/block.blocked-on-jq.sh"
+  cat "$TMP/block.blocked-on-check.sh"
   cat "$TMP/block.state-fp-jq.sh"
   cat "$TMP/block.state-fp-pair.sh"
   cat <<'BRIDGE'
@@ -241,6 +245,10 @@ fx_base() {
   ],
   "comments": [
     {"body":"the escalation stands — a human is the next mover","createdAt":"2026-08-09T02:00:00Z"}
+  ],
+  "commits": [
+    {"oid":"bbbbbbbb22222222222222222222222222222222","messageHeadline":"Merge branch 'master' into fix/something"},
+    {"oid":"aaaaaaaa11111111111111111111111111111111","messageHeadline":"fix: resolve the actual issue"}
   ]
 }
 JSON
@@ -251,12 +259,12 @@ fx() {  # fx '<jq program>' — edit the fixture in place
 }
 
 # ── the runners ─────────────────────────────────────────────────────────────────────────────────
-STUB_GH="ok"; STUB_GH_COMMENT="ok"; STUB_HASH="ok"; UITEM="pr-${PR}"
+STUB_GH="ok"; STUB_GH_COMMENT="ok"; STUB_HASH="ok"; UITEM="pr-${PR}"; UCLAUSE=""
 _go() {
   FIXTURE="$FIX" CALLS="$CALLS" STUB_GH="$STUB_GH" STUB_GH_COMMENT="$STUB_GH_COMMENT" \
   STUB_NOW="$(_now)" STUB_HASH="$STUB_HASH" \
   IN_SLUG="$SLUG" IN_ORG="$ORGN" IN_REPO="$REPO" IN_PR="$PR" IN_HEAD8="$HEAD8" \
-  IN_PRSJSON="$PRSJSON" IN_UCLAUSE="${UCLAUSE:-arbitrate}" IN_UITEM="$UITEM" \
+  IN_PRSJSON="$PRSJSON" IN_UCLAUSE="$UCLAUSE" IN_UITEM="$UITEM" \
   PATH="$BIN:$PATH" \
     bash "$TMP/$1.sh" > "$TMP/out.txt" 2> "$TMP/err.txt"
   RC=$?; OUT="$(cat "$TMP/out.txt")"; ERR="$(cat "$TMP/err.txt")"
@@ -306,9 +314,10 @@ same     "S2: stable when the coordinator adds its own ruling prose" "$BASE" "$(
 
 # THE self-disarm test, with the SHIPPED writer: the marker is a comment, and a comment that moved
 # the hash would re-open the gate on the very tick it just closed.
+BASE_ARB="$(UCLAUSE=arbitrate fp)"
 UCLAUSE=arbitrate _go mark
-same     "S3: stable after the real marker comment is written"       "$BASE" "$(fp)"
-eq       "S3: and the recorded hash round-trips to the current one"  "$(prev)" "$BASE"
+same     "S3: stable after the real marker comment is written"       "$BASE_ARB" "$(UCLAUSE=arbitrate fp)"
+eq       "S3: and the recorded hash round-trips to the current one"  "$(prev)" "$BASE_ARB"
 
 fx '.reviews += [{"state":"COMMENTED","submittedAt":"2026-08-09T09:00:00Z"}]'
 same     "S4: a COMMENTED review is not a verdict — hash unmoved"    "$BASE" "$(fp)"
@@ -369,11 +378,11 @@ fx '.comments = [
     ]'
 eq       "K2: newest by createdAt wins, not array order"             "$(prev)" "ffffffffffff"
 fx_base; UCLAUSE=arbitrate _go mark
-eq       "K3: the shipped writer's full comment body reads back"      "$(prev)" "$BASE"
+eq       "K3: the shipped writer's full comment body reads back"      "$(prev)" "$BASE_ARB"
 wantnew  "K3: and it explains itself to the human reading the thread" "Machine-readable debounce marker"
 wantnew  "K3: naming the clause that is about to ride"               "dispatching a \`arbitrate\` unit"
 fx '.comments += [{"body":"no hash here at all","createdAt":"2026-08-09T23:00:00Z"}]'
-eq       "K4: later prose does not shadow the newest MARKER"         "$(prev)" "$BASE"
+eq       "K4: later prose does not shadow the newest MARKER"         "$(prev)" "$BASE_ARB"
 
 # ── 5 ── THE PR#234 GATE SEQUENCE, end to end, through the shipped arbitrate clause ─────────────
 section "5 — the PR#234 sequence: five rides become one"
@@ -391,7 +400,7 @@ eq       "T1: dispatch records exactly one marker"                   "$(markers)
 fx '.comments += [{"body":"ARBITRATE ruling: state unchanged, the escalation stands.","createdAt":"2026-08-09T05:00:00Z"}]'
 _go arbitrate
 want     "T2: tick 2 DEBOUNCES on unchanged state"                   "arbitrate DEBOUNCED"
-want     "T2: the report line quotes the hash"                       "state-fp:${BASE}"
+want     "T2: the report line quotes the hash"                       "state-fp:${BASE_ARB}"
 want     "T2: and says a human is the next mover"                    "a human (or new content) is the next mover"
 wantnot  "T2: NO unit is emitted"                                    "UNITS arbitrate|"
 survives "T2"
@@ -405,8 +414,10 @@ done
 eq       "T3: four further ticks on frozen state emit ZERO units"    "$T_EMITS" "0"
 eq       "T3: and write no further markers"                          "$(markers)" "1"
 
-# real movement re-arms the gate by itself — no human, no label churn
-fx '.headRefOid = "cccccccc3333333333333333333333333333333"'
+# real movement re-arms the gate by itself — no human, no label churn.
+# For the arbitrate clause, head= narrows to the newest non-merge commit (homelab#1011),
+# so a pushed non-merge commit is what moves the fingerprint, not a headRefOid change alone.
+fx '.commits += [{"oid":"cccccccc33333333333333333333333333333333","messageHeadline":"fix: a real pushed change"}] | .headRefOid = "cccccccc33333333333333333333333333333333"'
 _go arbitrate
 want     "T4: a pushed head RE-ARMS the clause"                      "UNITS arbitrate|${REPO}|pr-${PR}"
 wantnot  "T4: no debounce line"                                      "DEBOUNCED"
@@ -451,6 +462,45 @@ fx '(.statusCheckRollup[] | select(.name=="e2e")) |= (.status="IN_PROGRESS" | .c
 _go cired
 want     "R3: a re-run (check → PENDING) re-arms the dispatch"       "DISPATCH ci-red|${REPO}|pr-${PR}"
 wantnot  "R3: no debounce"                                           "ci-red DEBOUNCED"
+
+# ── 6b ── ARBITRATE-SPECIFIC FINGERPRINT (homelab#1011). The arbitrate clause uses
+# STATE_FP_JQ_ARBITRATE which drops per-check conclusions (PR#1003's mover) and narrows head= to
+# the newest non-merge commit (PR#1030's mover). Check churn must NOT re-arm arbitration, and
+# updater merges must NOT re-arm it either.
+section "6b — arbitrate-specific fingerprint: checks churn and merge commits are inert"
+fx_base
+UCLAUSE=arbitrate _go probe; BASE_ARB="$(field CUR)"
+nonempty "A0: arbitrate fingerprint is non-empty"                    "$BASE_ARB"
+differs  "A0: arbitrate hash differs from the ci-red hash"          "$BASE_ARB" "$BASE_CIRED"
+# Check conclusion change (e2e FAILURE → SUCCESS) must NOT move the arbitrate fingerprint
+fx '(.statusCheckRollup[] | select(.name=="e2e")) |= (.conclusion="SUCCESS" | .status="COMPLETED")'
+UCLAUSE=arbitrate _go probe; ARB_AFTER_CHECK="$(field CUR)"
+same     "A1: check conclusion change does NOT move arbitrate hash"  "$BASE_ARB" "$ARB_AFTER_CHECK"
+# Check arrival (new check added) must NOT move the arbitrate fingerprint
+fx '.statusCheckRollup += [{"__typename":"CheckRun","name":"new-check","status":"COMPLETED","conclusion":"SUCCESS","startedAt":"2026-08-09T02:00:00Z"}]'
+UCLAUSE=arbitrate _go probe; ARB_AFTER_NEWCHECK="$(field CUR)"
+same     "A2: new check arrival does NOT move arbitrate hash"       "$BASE_ARB" "$ARB_AFTER_NEWCHECK"
+# Merge commit arrival (updater merges master) must NOT move the arbitrate fingerprint
+fx ".commits += [{\"oid\":\"cccccccc33333333333333333333333333333333\",\"messageHeadline\":\"Merge branch 'master' into fix/something\"}]"
+UCLAUSE=arbitrate _go probe; ARB_AFTER_MERGE="$(field CUR)"
+same     "A3: merge commit arrival does NOT move arbitrate hash"    "$BASE_ARB" "$ARB_AFTER_MERGE"
+# A real non-merge commit (new PR commit) MUST move the arbitrate fingerprint
+fx ".commits += [{\"oid\":\"dddddddd44444444444444444444444444444444\",\"messageHeadline\":\"fix: another actual change\"}]"
+UCLAUSE=arbitrate _go probe; ARB_AFTER_REAL="$(field CUR)"
+differs  "A4: a real non-merge commit MOVES the arbitrate hash"     "$BASE_ARB" "$ARB_AFTER_REAL"
+# Review decision change must still move the arbitrate fingerprint
+fx_base
+fx '.reviewDecision = "APPROVED"'
+UCLAUSE=arbitrate _go probe; ARB_AFTER_REVIEW="$(field CUR)"
+differs  "A5: review decision change MOVES the arbitrate hash"      "$BASE_ARB" "$ARB_AFTER_REVIEW"
+# End-to-end: arbitrate debounce with the new fingerprint
+fx_base
+UCLAUSE=arbitrate _go mark
+eq       "A6: an arbitrate dispatch records the marker"             "$(markers)" "1"
+_go arbitrate
+want     "A6: identical arbitrate state DEBOUNCES"                  "arbitrate DEBOUNCED"
+wantnot  "A6: no unit emitted"                                      "UNITS arbitrate|"
+survives "A6"
 
 # ── 7 ── FAIL-OPEN. An unreadable probe must behave exactly as the pre-#198 clause did: EMIT. The
 # guard is worth less than the loop it guards (FU-104), so every unknown resolves to "ride".

@@ -1,0 +1,21 @@
+{
+  "headRefOid": "aaaaaaaa11111111111111111111111111111111",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "statusCheckRollup": [
+    {"__typename":"CheckRun","name":"e2e","status":"COMPLETED","conclusion":"FAILURE"},
+    {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"},
+    {"__typename":"CheckRun","name":"manifest-lint","status":"COMPLETED","conclusion":"SUCCESS"}
+  ],
+  "reviews": [
+    {"author":{"login":"homelab-reviewer"},"state":"CHANGES_REQUESTED","submittedAt":"2026-08-08T22:10:00Z"},
+    {"author":{"login":"homelab-reviewer"},"state":"COMMENTED","submittedAt":"2026-08-09T01:00:00Z"},
+    {"author":{"login":"RasmusSoot"},"state":"COMMENTED","submittedAt":"2026-08-09T04:00:00Z"}
+  ],
+  "comments": [
+    {"author":{"login":"homelab-agents-1234"},"body":"the escalation stands — a human is the next mover","createdAt":"2026-08-09T02:00:00Z"},
+    {"author":{"login":"homelab-agents-1234"},"body":"blocked-on: human","createdAt":"2026-08-09T03:00:00Z"}
+  ],
+  "commits": [
+    {"oid":"aaaaaaaa11111111111111111111111111111111","messageHeadline":"fix: resolve the actual issue"}
+  ]
+}

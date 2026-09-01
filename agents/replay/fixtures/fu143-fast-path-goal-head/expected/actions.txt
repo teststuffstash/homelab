@@ -1,0 +1,6 @@
+CALL gh pr view 309 --repo teststuffstash/oracle-fleet --json state,reviewDecision,labels,body,author,headRefName
+OUT REACHED: assembly PR with goal/** head — falls through to full scan for goal-checkpoint emit
+OUT unit fast-path: ASSEMBLY PR has changes-requested (FU-143) — falling through to full scan for goal-checkpoint emit
+OUT RETURN 1
+OUT REACHED: end
+RC 0

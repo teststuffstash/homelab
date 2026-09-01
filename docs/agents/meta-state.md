@@ -8,6 +8,21 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-01 NIGHT — #1162 WAVE 2 MINTED: theme #1239 (`loop-belts`, blockedBy #1163) +
+  the #1228 red repaired.** Members rebound under #1239 with `Base: goal/1162-belts` (branch
+  CUT at `81eaf5a8`, IL-G02): #1240 (FU-199 residue: strike-held rows + hold-chain
+  propagation + CAP SPLIT — minted this sitting) · #1198 · #1199 · #1211 · #1212 · #1223
+  (human-queue ruling satisfied by the operator's wave order) · #1229. **NOT queued yet** —
+  the queue act waits on PR#1228 (scan assembly) merging: (1) the checkpoint's merge order
+  (#1228 before #1213 — it carries #1148's goal-head ci-red exclusion); (2) member surfaces
+  (#1198/#1223 fixtures) exist only on the scan branch. **Pickup sequence**: #1228 CI green
+  (seat repaired its pin-vacuity red — the vacuous `assembly-cr-dispatch-no-pr` folded into
+  `dispatch-marker` as pass 2, `84cb3f91`; watch was armed) → bot review → ADR-110 codeowner
+  read → merge → merge master into `goal/1162-belts` (top hop) → queue the 7 members + ring
+  platform → then #1213's cycle (#1227 riding on the egress branch re-arms its review).
+  ⚠ do NOT push master while #1228 is armed (BEHIND churn); push the pending bookkeeping
+  after it merges. #1210 closed via PR#1221 (the salvage's second PR; PR#1216 closed as the
+  anomaly duplicate).
 - **⚑ 2026-09-01 NIGHT — GOAL #1231 LIVE (router-first, operator-launched; the NEXT session's
   role is MONITOR + GATE-READ).** Tree: G1 #1232 (label_map md/lg + re-grade plays, FU-201 a+b)
   · G2 #1233 (key-class re-mint, FU-202) · G3 #1234 (provider-attributed strikes +
