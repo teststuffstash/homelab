@@ -24,6 +24,7 @@ parts:
   - block:state-fp-pair
   - block:round-evidence
   - file:bridge.sh
+  - block:ci-red-goal-head-exclusion
   - block:ci-red-rounds
   - block:ci-red-gate
   - file:post.sh

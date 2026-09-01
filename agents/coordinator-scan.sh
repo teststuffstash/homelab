@@ -3113,6 +3113,7 @@ EOF_GOVERNANCE
         fi
         head8="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid[0:8]')"
         u_head="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefName // ""')"
+        # >>>REPLAY:ci-red-goal-head-exclusion>>>
         # FU-143: an ASSEMBLY PR (head goal/**) with ci-red is EXCLUDED — a fix round
         # pushes to the PR head, and the head IS the protected goal/** integration branch
         # (the push would be refused; the mandate is a NEW child on the goal — coordinator
@@ -3121,6 +3122,7 @@ EOF_GOVERNANCE
           orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has ci-red (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
           continue
         fi
+        # <<<REPLAY:ci-red-goal-head-exclusion<<<
         # attempts = durable count of completed fix rounds on THIS PR — the fast path under the
         # issue-keyed ceiling below, and still what the no-op detector needs. Restart-safe: it reads
         # GitHub, never launcher memory. Bounds the loop: a no-op round costs at most

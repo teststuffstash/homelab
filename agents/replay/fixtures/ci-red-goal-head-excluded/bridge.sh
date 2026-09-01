@@ -24,10 +24,3 @@ items=""
 item_class_push() { :; }
 # The ci-red clause's per-PR loop. Wrap in a single-PR for loop matching the scan's structure.
 for u in "$IN_PR"; do
-  # ── FU-143 goal/**-head exclusion (homelab#1148) ──
-  # This is the code added to the ci-red dispatch leg. It fires before round counting.
-  # The `continue` skips the blocks below (ci-red-rounds, ci-red-gate, dispatch).
-  if [[ "$u_head" == goal/* ]]; then
-    orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has ci-red (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
-    continue
-  fi
