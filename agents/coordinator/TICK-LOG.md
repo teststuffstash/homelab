@@ -5819,3 +5819,33 @@ first live ADR-110 maintenance session before the ADR existed.
   dead key across CR→CR re-verdicts (both watches rebuilt).
 - Wind-down trigger (operator): #1154 + #1155 + #1158 landed. #1154's momentary sentinel red =
   the fail-closed probe-error state, self-healed next tick (the #1134 discrimination working).
+
+## 2026-09-01 — corpus session: v1.3 themed-Goal manual pilot minted (#1162, wave 1), park convoy read out
+
+- CONDITION: 3 codeowner parks froze the master lane (per-base PR cap, TRACKS rule 1) with 6
+  queued issues held; operator ruled: trial the banked v1.3 theme mechanics MANUALLY (the S8
+  dogfood datapoint), parked trio stays master-lane.
+- COMMAND: minted **Goal #1162** (`task/goal`+`agent-fix`, NOT queued — decompose skipped by
+  design, children pre-exist; `Base: master` themed, Budget: 25, human verdict). Themes #1163
+  (`goal/1162-scan`: #1148 #1149 #1011) · #1164 (`goal/1162-exporter`: #459 #1138 #1137,
+  ordering edge #1137←#1138; #1138/#1137 stay parented to #1115, absorbed by reference) ·
+  #1165 (`goal/1162-egress`: #1056 #107). Branches cut @ af79feac; all 8 members carry
+  `Base:` lines + queued (4 newly seat-queued). Mid-drain INTAKE RULES recorded in the Goal
+  body (surface∩class∩pre-assembly∩¬hotfix; join = full membership; intake closes at
+  assembly-open) — manual for waves 1–2, then folds into #1153's grant-consult leg.
+- COMMAND: ADR-110 gate reads on the parked trio — **PR#1157 MERGED 05:53Z** (ci-red rerun
+  wake: clause-split fingerprint, exporter run_attempt dedup; #1011's arbitrate direction
+  explicitly preserved), PR#1160 + PR#1161 approved (regex anchor ×7+; checkpoint
+  descendant-walk brief refinement); both cycling through the updater behind #1157's merge —
+  guarded background re-approver holds them (re-approves ONLY on unchanged content commit).
+  This serial-merge cycle is a live datapoint for #887 (updater dismissal cost).
+- NOTE: theme branches must be FAST-FORWARDED to post-merge master before first theme rides
+  land (scan+exporter files moved under them); pending the last merge.
+- RULINGS (operator, same sitting, the rounds-caps thread): (1) worker cost is the platform's
+  cheapest line item — finer WORKER-side counting has no ROI, do not build there; (2) Goal
+  budgets optimize the wrong thing until coordination+review cost is metered (ADR-107
+  direction 4) — the count caps REMAIN the loop control until that attribution lands, and the
+  caps-become-judgment-triggers reframe is banked behind it; (3) retro priority FLIPS to STACK
+  goals (deeper business logic + kind-e2e complexity, different dynamic) — FU-058 next-action
+  reordered; recorded in chainless-redesign.md dir-4 + observability-and-retro.md §The split
+  via PR (this sitting).
