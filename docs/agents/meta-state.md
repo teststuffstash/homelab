@@ -8,6 +8,21 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-01 — v1.3 THEMED-GOAL MANUAL PILOT LIVE: Goal #1162 (wave 1) — the S8 dogfood
+  datapoint.** Themes: #1163 `goal/1162-scan` (#1148 #1149 #1011) · #1164 `goal/1162-exporter`
+  (#459 #1138 #1137; #1137 blockedBy #1138; both keep parent #1115 — absorbed by reference) ·
+  #1165 `goal/1162-egress` (#1056 #107). All members queued with `Base:` theme lines; intake
+  rules for mid-drain arrivals are in the Goal body (manual waves 1–2 → then #1153's
+  grant-consult leg). NEXT-SESSION VERIFY: (a) parked trio landed — PR#1157 MERGED 05:53Z,
+  PR#1160/#1161 were cycling behind it under a guarded re-approver (re-approves only on
+  unchanged content commit; content moved ⇒ re-read); (b) **FAST-FORWARD the three theme
+  branches to post-merge master BEFORE first theme rides land** (scan+exporter files moved);
+  (c) first theme ride dispatches against `goal/1162-*` (per-base cap frees them from the
+  master freeze); (d) known pilot gaps accepted: checkpoint may misfire an assembly ruling at
+  the master-based Goal (report-only, park it); theme assemblies are ordinary `Fixes`-closing
+  PRs — NO `Assembly-for:` anywhere. S8 readout baseline on the Goal's mint comment
+  (per-child ≈9 reads → target 3). The serial park-merge cycle is #887's live datapoint.
+
 - **⚑ 2026-08-31 EVENING CORPUS SESSION WIND-DOWN — the fresh-session pickup set (TICK-LOG has
   the arc):**
   - **[Switchboard](../glossary.md) cutover VERIFIED LIVE at wind-down** (ADR-120; PR#1158 + eae8c51f, #994
