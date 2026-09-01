@@ -5858,3 +5858,10 @@ first live ADR-110 maintenance session before the ADR existed.
   unsettled register (one sighting, the ≥2 rule holds). Both point the same way: worker
   optimization is the wrong lever; the expensive failures sit upstream (contract unknowns)
   and downstream (review/seat interventions) of the ride.
+- WAVE-1 first ride note: exporter coordinator (#1138 r1 dispatched against goal/1162-exporter,
+  scope held) FOUND a mint defect — #1137/#1138 were theme members by Base:+queue only (parent
+  still the CLOSED #1115), so the tree reads were blind to 2 of 3 exporter items (early
+  child-set-complete hazard). Seat corrected: rebound both under #1164 via replace_parent;
+  intake rule 2 gained the absorption nuance (keep-origin-parent only while the origin is OPEN
+  or in-tree) in the Goal body; ledger row 2 recorded. The pilot's acceptance-5 channel is
+  working — the finding arrived through a ride note, cost zero extra sessions.
