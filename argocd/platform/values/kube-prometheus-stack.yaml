@@ -339,6 +339,12 @@ grafana:
       enabled: true
       label: grafana_dashboard
       searchNamespace: ALL
+      # Per-stack Grafana folders (docs/patterns/observability.md, oracle handoff 2026-09-01):
+      # a dashboard ConfigMap annotated `grafana_folder: <stack>` lands in that folder; an
+      # un-annotated one keeps landing in General, so every existing CM is unaffected.
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
     resources:
       requests:
         cpu: 20m

@@ -5819,3 +5819,214 @@ first live ADR-110 maintenance session before the ADR existed.
   dead key across CR→CR re-verdicts (both watches rebuilt).
 - Wind-down trigger (operator): #1154 + #1155 + #1158 landed. #1154's momentary sentinel red =
   the fail-closed probe-error state, self-healed next tick (the #1134 discrimination working).
+
+## 2026-09-01 — corpus session: v1.3 themed-Goal manual pilot minted (#1162, wave 1), park convoy read out
+
+- CONDITION: 3 codeowner parks froze the master lane (per-base PR cap, TRACKS rule 1) with 6
+  queued issues held; operator ruled: trial the banked v1.3 theme mechanics MANUALLY (the S8
+  dogfood datapoint), parked trio stays master-lane.
+- COMMAND: minted **Goal #1162** (`task/goal`+`agent-fix`, NOT queued — decompose skipped by
+  design, children pre-exist; `Base: master` themed, Budget: 25, human verdict). Themes #1163
+  (`goal/1162-scan`: #1148 #1149 #1011) · #1164 (`goal/1162-exporter`: #459 #1138 #1137,
+  ordering edge #1137←#1138; #1138/#1137 stay parented to #1115, absorbed by reference) ·
+  #1165 (`goal/1162-egress`: #1056 #107). Branches cut @ af79feac; all 8 members carry
+  `Base:` lines + queued (4 newly seat-queued). Mid-drain INTAKE RULES recorded in the Goal
+  body (surface∩class∩pre-assembly∩¬hotfix; join = full membership; intake closes at
+  assembly-open) — manual for waves 1–2, then folds into #1153's grant-consult leg.
+- COMMAND: ADR-110 gate reads on the parked trio — **PR#1157 MERGED 05:53Z** (ci-red rerun
+  wake: clause-split fingerprint, exporter run_attempt dedup; #1011's arbitrate direction
+  explicitly preserved), PR#1160 + PR#1161 approved (regex anchor ×7+; checkpoint
+  descendant-walk brief refinement); both cycling through the updater behind #1157's merge —
+  guarded background re-approver holds them (re-approves ONLY on unchanged content commit).
+  This serial-merge cycle is a live datapoint for #887 (updater dismissal cost).
+- NOTE: theme branches must be FAST-FORWARDED to post-merge master before first theme rides
+  land (scan+exporter files moved under them); pending the last merge.
+- RULINGS (operator, same sitting, the rounds-caps thread): (1) worker cost is the platform's
+  cheapest line item — finer WORKER-side counting has no ROI, do not build there; (2) Goal
+  budgets optimize the wrong thing until coordination+review cost is metered (ADR-107
+  direction 4) — the count caps REMAIN the loop control until that attribution lands, and the
+  caps-become-judgment-triggers reframe is banked behind it; (3) retro priority FLIPS to STACK
+  goals (deeper business logic + kind-e2e complexity, different dynamic) — FU-058 next-action
+  reordered; recorded in chainless-redesign.md dir-4 + observability-and-retro.md §The split
+  via PR (this sitting).
+- SIGHTINGS (operator, same sitting): (a) cheap-worker CHURN on stack work — unmeasured; the
+  seat has fixed defects neither worker nor reviewer caught; platform (jail-built, strong
+  argo/k8s priors) vs stacks (custom new dev, no big picture in the worker's context) —
+  seeded as the first stack-retro brief's headline (PR#1167 addendum); (b) oracle
+  riigiteataja: a Goal against an undocumented upstream ran the loop CLEANLY and still forced
+  a large delete-and-redo — recon-mission-required candidate recorded in research-and-specs.md
+  unsettled register (one sighting, the ≥2 rule holds). Both point the same way: worker
+  optimization is the wrong lever; the expensive failures sit upstream (contract unknowns)
+  and downstream (review/seat interventions) of the ride.
+- WAVE-1 first ride note: exporter coordinator (#1138 r1 dispatched against goal/1162-exporter,
+  scope held) FOUND a mint defect — #1137/#1138 were theme members by Base:+queue only (parent
+  still the CLOSED #1115), so the tree reads were blind to 2 of 3 exporter items (early
+  child-set-complete hazard). Seat corrected: rebound both under #1164 via replace_parent;
+  intake rule 2 gained the absorption nuance (keep-origin-parent only while the origin is OPEN
+  or in-tree) in the Goal body; ledger row 2 recorded. The pilot's acceptance-5 channel is
+  working — the finding arrived through a ride note, cost zero extra sessions.
+- OPERATOR-LANE SWEEP (operator: "lets take those"), all operator-direct, master 94954f01 →
+  b4921eb1: **#1134 CLOSED** — root cause = kyverno ≥1.19 panics on the 2nd nameless
+  Kustomization doc (`--exceptions` hypothesis REFUTED); collector drops kustomize.config.k8s.io
+  docs, 1.19.0 reproduces 1.18.2 verdicts over 302 docs, unpinned + lock regenerated; leg 3 =
+  `scripts/iac-sentinel.sh --smoke` (same evaluate(), exit 2 engine-error / 1 violation / 0) as
+  `devbox run sentinel-smoke` in ci.yaml + diff-ci map — the gate that would have caught #1131
+  (nothing in CI executed kyverno). **#114 CLOSED** (already fixed 08-07/08-11 in the workflow).
+  **#1028 CLOSED** (ratchet unions suite entrypoints). **#1036 CLOSED** (governance-lint
+  assembly-lane arm: commit authorship on goal/**+Assembly-for heads; worktree-tested both
+  ways). **#1107 CLOSED** (pin-vacuity gate: changed fixtures must FAIL on the base tree's
+  harness — premise proven on PR#1157's fixture: rc=1 on af79feac, 0 on HEAD). **#1069**: recipe
+  paste landed (belt); operator asked for the deterministic form → **#1175 filed+queued**
+  (launcher REST pre-read → /work/issue.md, unreadable ⇒ defer before any pod); sibling pastes
+  deliberately skipped (one launcher change covers every repo). **#1150** design-ruled (assembly
+  CR → goal-checkpoint trigger, deterministic clause) and INTAKEN into scan theme #1163 under
+  a judged Surface widening (+ coordinator/README.md) — ledger row 3. **#857** left for the
+  operator: the spike's recommendation is Talos v1.13.8 on the ephemeral tier (metal talosctl
+  upgrade — an infra sitting, not a seat quickfix). Lesson banked: a PR branch cut from a
+  local master carrying unpushed direct commits SQUASHES them into master via the PR — the
+  post-merge rebase then replays duplicates; cut PR branches from origin/master.
+- RULING (operator, same sitting): "grep > tool call" — ALL mechanical context gathering runs
+  in the LAUNCHER before the pod exists (tool-call tokens + error turns cost time and money).
+  Recorded as the THIRD platform-wide design rule in roles.md ("Prefetch, don't fetch",
+  PR#1177) + the context map's row-2 delivery note. #1175 WIDENED from "pre-read issue.md" to
+  the per-round-class prefetch table (issue+comments / review thread / ci-failure log / branch
+  log → /work/context/; required-unreadable ⇒ defer) — ⚠ r1 had ALREADY dispatched on the
+  narrow scope minutes earlier (an issue edit after dispatch is exactly the #1069 read gap,
+  one lane over): r1's acceptance pinned to row 1 in the body + a comment so the reviewer
+  does not block it; residue = a child at closeout. #857 parked on G-D (Talos 1.13.8 = G-D's
+  first class-6 human-applied ride; #502 draft addendum; work-map row PR#1176).
+- /handoff (oracle, filed 07:06Z: "how is a stack supposed to use Prometheus/Grafana/
+  Alertmanager? — the consumption contract is undocumented"): prior-art confirmed absent
+  (catalog rows + sleep-iac.md precedent only). SHIPPED `docs/patterns/observability.md` (the
+  app-owned-resources.md sibling) via PR#1178 — every constant read from the live values
+  (cluster-wide selectors, sidecar ALL, routing tree root→ha-webhook + continue→responder
+  grouped by alertname, info inhibited, uids prometheus/loki/sleep-data) + the sidecar
+  `folderAnnotation: grafana_folder` knob (per-stack folders; un-annotated CMs unaffected) +
+  SERVICES.md pointer. CORRECTION found en route: docs/sleep-iac.md said datasource uid
+  `sleep-notes` — live is `sleep-data` (fixed in the PR; the filer had copied the stale doc).
+  Result appended, task → done/. Doc is the durable record.
+- OPERATOR CORRECTION ("wrong fix"): I offered to hand-wire oracle-fleet#326's blockedBy edges +
+  task/build labels; the operator wants the CONSUMER SURFACE fixed — Goals are authored from
+  jails and still arrive malformed. GAPS design-agents-G4 sighted. Built: the consumer card
+  gains rules 7–9 (children carry a class + a blockedBy order; pre-authored children ⇒ the Goal
+  stays unqueued; lint before you queue) + 3 failure-signature rows + "the branch is the
+  AUTHOR's to cut" (the oracle session had told the operator the machinery creates it — false,
+  IL-G02); and `scripts/goal-lint.sh` (bash+gh+jq only — stack jails run it bare, NEVER
+  `devbox run` in their homelab clone: it materializes the whole closure) as `devbox run
+  goal-lint` here. First runs: #326 = 0 FAIL / 5 WARN (title case, no task/* on 3 children,
+  no ordering edges); #1162 = my own tree had a real miss — the lint's first cut also mis-read
+  a work item with sprouts as a container and walked CLOSED descendants (fixed: container =
+  no agent-fix ∧ (children ∨ a `post-launch:|theme:|stint:|retro-batch:` title); closed nodes
+  skipped). #326 lint answer: task/goal alone is enough (agent/blocked tolerated, agent/queued
+  forbidden on a pre-decomposed goal); the seat cut `goal/326-dashboard-as-code` @ 7b8e08e6.
+- WIND-DOWN (operator, ~08:10Z): soak read written to meta-state (#818 validated looks due;
+  #741 S7 closeout-1 overdue a week; #775 waits #778's release; #1039 waits oracle's claim
+  flip; #979 quiet window ends 09-02 06:39Z; retro batches post-r3). Session totals: wave-1
+  pilot minted + 6 ledger rows; park convoy drained (3 reads); operator-lane sweep (#1134 #114
+  #1028 #1036 #1107 closed, #1175/#1180 filed+queued, #1150/#1166/#459 intaken); oracle
+  handoff answered (observability contract PR#1178); ruling records (PR#1167/#1176/#1177);
+  goal-lint + card rules 7–9 (PR#1183). One lint-gated push of the batched direct commits.
+
+## 2026-09-01 — mechanical session (no corpus): oracle-fleet#330 MCP-attach strike → launcher fix #1186 → live-validation re-arm
+
+- CONDITION: operator pointed at oracle-fleet#330's r1 `AGENT_STRIKE` (goose/deepseek, `error:
+  unexpected argument '--mcp-config'`) as a "mechanical question, no corpus". Diagnosis: #1041
+  shipped BOTH harness arms against interfaces that do not exist — goose has no `--mcp-config`
+  (claude-only flag; verified at block/goose v1.47.0 `cli.rs`, the agent-base pin) and claude has
+  no `CLAUDE_CODE_MCP_CONFIG` env var (0 hits in the 2.1.245 binary) — so goose crashed at arg
+  parse and claude wrote the file and never loaded it. The r2 claude/sonnet retry proved the
+  second half live minutes later (`AGENT_ERROR`: file present, no tools attached, refused to fake
+  the row — correct). The three MCP replay fixtures pinned the invented shapes, which is why
+  #1041's green suite proved nothing about the harnesses. First live rides after oracle-iac#455's
+  claim flip (08:35Z) → #328 struck the same way at 09:28.
+- COMMAND (operator: "fix it from this seat, no fixer — soft blocker"): PR#1186 — claude arms
+  (worker + reviewer) get `--mcp-config /tmp/mcp-config.json` in the CLI's own
+  `{"mcpServers":{"stack-mcp":{"type":"http","url"}}}` shape (identical to the jail's `.mcp.json`
+  for this server; reviewer carries it via an `MCP_FLAG` shell var set in PREP, expanded on the
+  RUNPART `claude -p` line — one `bash -lc` script); goose gets `--with-streamable-http-extension
+  <URL>` on the CLI, no file; `spec.mcp.tools` stays the env card's line (no CLI allowlist on
+  either harness; bypass/skip-permissions admit every attached tool). Fixture contracts +
+  expected streams re-pinned; docs/XRD/Composition wording corrected. Two review rounds: CI red
+  on the ADR-103 pin-vacuity ratchet (a COMMENT-ONLY edit to `env-card-mcp-present/opencode`
+  counts as a touched fixture that passes on base — reverted); reviewer CHANGES_REQUESTED on the
+  raw `'${MCP_ENDPOINT}'` interpolation (injection via an unconstrained XRD string) → `jq -Rr @sh`.
+  Merged 09:29Z as `5fe75b28`. Evidence relayed to homelab#1039 (the oracle coordinator's token
+  cannot write there — #1095's shape).
+- RE-ARM (operator: clearing `agent/error` + seeing it run is the SEAT's job — this is #1039's
+  production-leg live validation): `agent/error`→`agent/queued`, the coordinator's native
+  `blockedBy` edge #330→homelab#1039 DELETED (circular: G-F's verdict IS this ride's evidence),
+  `devbox run ring oracle`, provenance note on #330. Three scans ran green and dispatched
+  nothing — #330 is HELD on the ADR-097 footprint clause: it declares `scripts/probe/**`, sibling
+  #328 (`agent/in-progress`, `scripts/**`) holds it; #328's coordinator session (pod 09:20Z,
+  PRE-merge launcher clone, 3600 s deadline) is still deliberating its own strike. Correct
+  machine behaviour, not a defect; the next scan after #328 releases dispatches r3 from the
+  fixed master. Monitor armed on #330 comments + worker pods.
+- SIDE-READ: the :30 review ticks FAILED on circles/oracle/platform (sleep passed) 23 s after
+  the merge — pod logs GC'd before read. The reflex's `wait` cannot red a tick on a
+  reviewer-session failure and its only `exit 1` is the `gh pr list` FATAL-after-retry, so it
+  read as a GitHub-side transient; the :45 ticks (captured live) ran the post-merge master green
+  on both oracle and platform — concern closed, no FU. Seat lesson re-learned (memory had it
+  since 07-17): zsh does not word-split `$K="devbox run -- kubectl …"` — empty kubectl output
+  while gh works = the tell.
+- SECOND BLOCKER (found by #328's coordinator session, 09:49Z; verified live): every `docker:true`
+  worker pod fleet-wide was wedging at `Init:0/1` because both BULK disks (wk-metal-01/mx500,
+  wk-metal-04/sata500) sat at ~76% used → under Longhorn's 25%-FREE scheduling floor →
+  `Schedulable=False` → no `longhorn-scratch` PVC could place. NOT Longhorn data: the replicas
+  sum to ~176G/disk; the rest is the CONTAINER IMAGE STORE sharing the Talos EPHEMERAL partition
+  (ADR-089 addendum) — 21 per-build `arc-runner` images = 75G of a 185G store on wk-metal-01.
+  kubelet image GC starts at 85% USED (default), Longhorn refuses at 75% — the floors never met.
+  ("trim is done?" — yes, the fstrim CronJobs ran 03:17–03:35Z, but that is the pve thin pool for
+  the VMs; these are bare-metal SSDs with real files.) FIX: `imageGCHighThresholdPercent=60 /
+  Low=50` in the kata-node kubelet.extraConfig (tofu/metal.tf), APPLIED ~10:00Z targeted to the
+  four `talos_machine_configuration_apply.metal[…]` (`Plan: 0 to add, 4 to change, 0 to
+  destroy`; configz verified 60/50 on all four; nodes Ready) — the FULL plan also carries
+  pre-existing **ci-runner-01 cloud-init drift that would REPLACE the CI VM** — not applied,
+  operator's call. Both disks `Schedulable=True` again by 10:07Z (132G/127G avail, GC still
+  trimming). Plus `LonghornDiskBelowSchedulingFloor` (>75%/30m) — the 85% FillingUp row is above
+  Longhorn's own refusal point, so the wedge was alert-silent by construction. PR#1193.
+  Third finding from that session — "coordinator-git Secret empty" — is a MISREAD: per-stack
+  coordinators mint once at PREP (`LOOP_FETCH`, no Secret by design); the real defect is no
+  mid-session re-mint = FU-171's class, resighted there (tracker extended).
+- RE-ARM 2: #328 restored `agent/in-progress`→`agent/queued` (its blocker #327 is closed; the
+  seat took the human step its session asked for), rung 10:07Z → scan dispatched the #330 item
+  session (post-#1186 clone) → **`agent-oracle-fleet-issue-330-r1` (goose) launched 10:12Z with
+  `--with-streamable-http-extension 'https://mcp.oracle.teststuff.net/mcp'`, scratch PVC Bound
+  + attached healthy, pod Running on wk-metal-03, and the session's own tool list shows
+  `mcp_oracle_teststuff_net_mcp__{statute,search,give_feedback}`** — #1039 production-leg half 1
+  proven live; half 2 (an MCP-filed row) rides on this round's outcome. (Goose 1.47's tool set
+  has no `read` — the model retried `-32002: Tool 'read' not found` thrice before using shell;
+  recipe/harness quirk, oracle-side, noted not filed.)
+- OUTCOME (10:20Z): the r1-retry ride opened **oracle-fleet#333** ("probe brief + Rung B record +
+  WM-1 feedback rows") — two `give_feedback` rows accepted by the server (`stale_ranking`,
+  `wrong_error`), launcher-stamped `goose/deepseek/deepseek-v4-flash` in `comment`; transcript
+  `s3://agent-transcripts/oracle-fleet/issue-330/worker-r1-20260901T102118Z/`. Egress proven
+  three ways (CNP leg present in `oracle-fleet`/`oracle-iac` `agent-worker-egress`; Hubble
+  FORWARDED flows pod→192.168.3.22:443 for the whole ride; the session's tool list). Reviewer
+  arm: reviewer pods in `oracle-agents` sit behind NO CNP/CCNP/NetworkPolicy (reach by absence —
+  if reviewer egress is ever fenced it needs the same `$mcpHost` leg); config shape proven from
+  the jail with byte-identical JSON (`claude -p … --mcp-config --strict-mcp-config` →
+  `mcp__stack-mcp__{statute,search,give_feedback}`); live reviewer ride on #333 watched. Both
+  halves relayed to homelab#1039 (comment 5492494412) — the G-F `goal/validated` read is the
+  operator's. #333 arrived un-armed (C9 arms it) and codeowner-parks on `.agents/` — oracle's.
+- 10:34–10:53Z: operator APPROVED oracle-fleet#333 (codeowner read) → `reviewDecision=APPROVED`
+  → the reflex's already-merging clause excludes it, so #333 lands on CI-green auto-merge with
+  NO bot pass — the reviewer arm's live check moves to the next oracle worker PR (watch armed on
+  `reviewer-oracle-*` pods for `MCP_FLAG`). #328 stayed `agent/queued` through three scans; the
+  captured scan log named the cause: ADR-097 footprint held by **#329** (`agent/in-progress`,
+  `scripts/ci.sh` + `specs/server/observability.md`) — the THIRD ride the goose crash struck
+  (09:28Z), left in-progress with no PR, scan-held as C4/C5-undecidable. Restored #329 →
+  `agent/queued` (note posted), rung 10:53Z; #328/#329 overlap on observability.md so they run
+  one at a time. Lesson for the strike path: a strike that leaves `agent/in-progress` + no PR
+  parks the item AND its footprint neighbours until a human reads the scan — FU-shaped if it
+  resights (the breaker doctrine says human-first, but a launcher-level arg crash on round 1 with
+  nothing committed is not an anomaly of the item).
+- 11:12Z REVIEWER ARM LIVE: `reviewer-oracle-fleet-334-640c8fc7` (sonnet, the operator's own
+  oracle-fleet#334) — pod script carries `MCP_FLAG='--mcp-config /tmp/mcp-config.json'`; Claude
+  Code's own MCP log inside the pod: "Successfully connected (transport: http) in 216ms …
+  hasTools:true, serverVersion riigiteataja-statute 0.1.0". Hubble had shown NO flow from that
+  pod to the VIP — filter/window artefact (a probe curl from the pod showed fine); the app log is
+  the authority, the one to read next time: `~/.cache/claude-cli-nodejs/<cwd-slug>/mcp-logs-<server>/`.
+  #328 r1 → PR#335 (second clean goose ride, scratch PVC placed first try post-GC); #329 next
+  behind #328's footprint. oracle-fleet#330 CLOSED `agent/done` (PR#333 merged 10:56Z, harvest
+  ran). Both production-leg halves + the reviewer arm relayed to homelab#1039 (two comments).
+  WIND-DOWN: monitors killed, one lint-gated push of the batched bookkeeping.

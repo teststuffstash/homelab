@@ -5,6 +5,9 @@
 > Decisions: **ADR-074** (apps own their buckets/keys/DBs) · **ADR-076** (mechanism: Crossplane
 > `provider-terraform`, live).
 
+> Observability (monitors, rules, dashboards, the read paths) has its own consumption contract:
+> [`observability.md`](observability.md).
+
 **Treat homelab like AWS or Civo.** The platform provides **capabilities** (an S3 store, a Postgres
 operator, a secrets platform, an LLM-key minter) behind declarative seams; each app declares the
 **instances** it needs — buckets, keys, grants, databases — **from its own repo**, as CRs reconciled
