@@ -1,0 +1,13 @@
+# homelab#107 — registry.npmjs.org stub for non-opencode (goose/claude) rides under enforced
+# egress with a non-node profile. The opencode block produces no stubs (HARNESS != opencode),
+# but the registry.npmjs.org block fires because EGRESS_ENFORCE=true and EGRESS_PROFILE != node.
+#
+# CONDITION UNDER REPLAY: HARNESS=goose, EGRESS_ENFORCE=true, EGRESS_PROFILE unset.
+# THE CONTRACT: HOST_ALIASES is non-empty and carries only registry.npmjs.org.
+name: opencode-hostaliases-enforced-non-opencode
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:opencode-hostaliases
+  - file:post.sh
