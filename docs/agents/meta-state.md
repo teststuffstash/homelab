@@ -71,9 +71,11 @@ meant to avoid.)
     brief vocabulary section + served-provider column on strikes / (model, provider)
     pair-exclusion on serving-shaped re-picks — folds with FU-186. FU-200 = the fleet-strike
     deterministic reader. FU-199 fix merged (PR#1206) + the #1210 pin; residue legs in the FU.
-  - openrouter-operator **PR#55 merged** incl. the seat's base64-decode catch (deploy pin #1209
-    flowing) — when it deploys, verify the first NormalizeSecret pass on a legacy Secret
-    normalizes rather than corrupts (read the Secret value shape after).
+  - openrouter-operator **PR#55 deploy VERIFIED LIVE 2026-09-01 ~22:27Z** (image `2026.9.1`):
+    the legacy `oracle-fleet-openrouter` Secret normalized correctly — GUARDRAIL + KEY_HASH +
+    non-empty OPENROUTER_API_KEY, session-key label intact. Residue = or-op#57/#58 (harvested,
+    inert; #58 = empty-write on the value-key-missing drift case, explicitly not a live
+    regression) — ordinary board flow.
 - **⚑ SOAK — which goals/stints are past it (read 2026-09-01 ~08:10Z, the corpus session's
   wind-down; verdicts are the OPERATOR's, the seat only recommends):**
   - **#818 G-B — `goal/validated` looks DUE.** Post-launch since 08-30 20:39Z; tree = the
