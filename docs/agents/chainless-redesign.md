@@ -280,6 +280,25 @@ dollars. Three directions replace it (they refine the ledger's per-rail `budgets
    cost-model ranking (PR#1127) points it at the expensive half, and its priority target is
    STACK goals (the FU-058 flip, same ruling).
 
+   **⚖ Router-first sequencing (operator, 2026-09-01 evening — the PR#1216 arbitration
+   read):** the platform has not yet solved **picking a GOOD worker** — best bang-for-buck,
+   never cheapest-first — and every process patch of the last two months (verbatim
+   directives, arbitrate-first, round caps, escalate-to-human) is compensation built to make
+   the cheapest workers usable; the endpoint is the PR#1216 shape, where an opus-class
+   arbitration authored a four-edit recipe and the flash worker added *no value beyond
+   typing* — wall time, tool-call failures, and a €0.03 bill ("the worker is a
+   `chmod +x opus-script.sh` executor"). RULING: **the router follow-up set builds BEFORE
+   further process machinery** — FU-201 (escalation carrier: size-label re-grade), FU-174
+   (the effort knob), FU-186/ADR-115 (provider-quality legs), and the §M8 feed-4 per-JOB
+   pricing ($/successful-job with the failure-overhead term) — right model for the job
+   first, then redesign the processes around capable workers. Corollaries: (a)
+   ROUNDS_MAX=3 + escalate-to-human is scar tissue from unstable-worker history — re-read
+   it once good workers exist (beside the banked caps-reframe above, same gate); (b)
+   rung-0 mechanical re-dispatch (no coordination session on a first fix round) is BANKED
+   future work — too risky blind before the model work, and on non-homelab stacks daily
+   spend is capped by **CI runtime**, not tokens (homelab `ci` ≈2 min; stack gates far
+   longer), so cheap-retry economics stay wall-clock-bound until stack CI times improve.
+
 Build home: a later wave of #420 (after the reviewer failover ships); the accounting half
 rides #278/FU-131. Nothing here changes chunk A–F scope — the only-free interaction stays the
 explicit conservative deny until budget-typing lands.
