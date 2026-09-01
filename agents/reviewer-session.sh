@@ -386,10 +386,22 @@ gh pr checkout ${PR}
 ${MCP_PREP}
 # FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
 # the worker rounds + coordinator ticks for the same issue. Resolve via GitHub's closing-issue
-# reference ("Fixes #N"); fall back to pr-<N> when the PR closes no issue.
-_PR_META=\$(gh pr view ${PR} --json closingIssuesReferences,baseRefName 2>/dev/null || true)
+# reference ("Fixes #N"); fall back to parsing the PR body for a closing keyword when
+# closingIssuesReferences is empty (e.g. PR base != default branch — #1189); then pr-<N>.
+_PR_META=\$(gh pr view ${PR} --json closingIssuesReferences,baseRefName,body 2>/dev/null || true)
 ISSUE=\$(printf '%s' "\$_PR_META" | jq -r '.closingIssuesReferences[0].number // empty' 2>/dev/null || true)
 PR_BASE=\$(printf '%s' "\$_PR_META" | jq -r '.baseRefName // empty' 2>/dev/null || true)
+# Fallback (#1189): when closingIssuesReferences is empty (GitHub omits it for non-default-base
+# PRs), parse the PR body for a closing keyword (close|closes|closed|fix|fixes|fixed|
+# resolve|resolves|resolved) followed by #<n>, case-insensitive.
+if [ -z "\$ISSUE" ] || [ "\$ISSUE" = "null" ]; then
+  _PR_BODY=\$(printf '%s' "\$_PR_META" | jq -r '.body // ""' 2>/dev/null || true)
+  _BODY_ISSUE=\$(printf '%s' "\$_PR_BODY" | grep -ioE '\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+#([0-9]+)\b' | head -1 | grep -oE '[0-9]+' || true)
+  if [ -n "\$_BODY_ISSUE" ]; then
+    ISSUE="\$_BODY_ISSUE"
+    echo "→ ISSUE derived from PR body closing keyword: #\$_BODY_ISSUE"
+  fi
+fi
 ISSUE_TITLE=""
 ISSUE_BODY=""
 ISSUE_UNREADABLE=0
