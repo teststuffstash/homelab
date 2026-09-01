@@ -106,6 +106,54 @@ expect_goal_exempt 1 "arbitrary string is not exempt"         "anything-else"
 # predicate for a different reader).
 expect 0 "goal's star STILL conflicts under fp_conflict"       "*"                     "*"
 
+# ── classify_touches — the platform lane tier table (homelab#1151) ──────────────────────────
+# classify_touches <footprint> → "machine-merge" | "codeowner-merge" | "codeowner-author"
+expect_classify() { # expect_classify <expected> <desc> <footprint>
+  local result
+  result="$(CLASSIFY_CODEOWNERS="$HERE/../CODEOWNERS" classify_touches "$3" 2>/dev/null || true)"
+  if [ "$result" != "$1" ]; then
+    echo "FAIL: classify_touches $2 (footprint='$3' want=$1 got=$result)"; fails=$((fails + 1))
+  fi
+}
+
+# ❌ operator-author set — NEVER agent-authored
+expect_classify "codeowner-author" "dot-github"              ".github/workflows/ci.yaml"
+expect_classify "codeowner-author" "dot-agents"              ".agents/fix.yaml"
+expect_classify "codeowner-author" "devbox.json"             "devbox.json"
+expect_classify "codeowner-author" "devbox.lock"             "devbox.lock"
+expect_classify "codeowner-author" "scripts"                 "scripts/governance-lint.sh"
+expect_classify "codeowner-author" "scripts-dir"             "scripts/"
+
+# Tier 1 — machine-merge (CI gate, unowned)
+expect_classify "machine-merge"    "argocd-resources"        "argocd/resources/loki/"
+expect_classify "machine-merge"    "argocd-resources-file"   "argocd/resources/loki/values.yaml"
+
+# Tier 2 — codeowner-merge (applied out-of-band)
+expect_classify "codeowner-merge"  "docs"                    "docs/agents/iac-lane.md"
+expect_classify "machine-merge"    "argocd-platform"         "argocd/platform/arc-runners.yaml"
+expect_classify "codeowner-merge"  "tofu-root"               "tofu/main.tf"
+expect_classify "codeowner-merge"  "ansible"                 "ansible/playbook.yaml"
+expect_classify "codeowner-merge"  "opnsense"                "opnsense/config.xml"
+expect_classify "codeowner-merge"  "machines"                "machines/wk-01.yaml"
+
+# Tier 3 — codeowner-merge (loop's own machinery)
+expect_classify "codeowner-merge"  "agents"                  "agents/coordinator-scan.sh"
+expect_classify "codeowner-merge"  "policy"                  "policy/iac/rule.yaml"
+expect_classify "codeowner-merge"  "tofu-github"             "tofu/github/main.tf"
+expect_classify "codeowner-merge"  "tofu-cloudflare"         "tofu/cloudflare/dns.tf"
+
+# Carve-outs (unowned in CODEOWNERS — machine-merge)
+expect_classify "machine-merge"    "images-env"              "agents/images.env"
+expect_classify "machine-merge"    "kustomization"           "agents/coordinator/kustomization.yaml"
+
+# Mixed footprint — highest tier wins
+expect_classify "codeowner-author" "mixed-author-wins"       "docs/agents/, .github/workflows/"
+expect_classify "codeowner-merge"  "mixed-merge-wins"        "argocd/resources/, agents/coordinator-scan.sh"
+
+# Undeclared / sentinel — empty footprint returns machine-merge (no paths to classify)
+expect_classify "machine-merge"    "empty-footprint"         ""
+expect_classify "machine-merge"    "star-sentinel"           "*"
+
 if [ "$fails" -gt 0 ]; then
   echo "footprint-test: ${fails} FAILED"
   exit 1
