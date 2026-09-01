@@ -721,9 +721,17 @@ render_env_card() {
   # them as /work/issue.md before the harness starts. The env card tells the worker to read the
   # file first instead of making a live `gh issue view` call (which costs tokens and can 403 on
   # the App installation's GraphQL pool). Only emitted for recipe-based runs with an issue task.
-  if [ -n "${ISSUE_N:-}" ]; then
-    printf '%s\n' "- **Issue context:** Your issue + comments were pre-fetched at dispatch: read \`/work/issue.md\` FIRST; a live \`gh issue view\` is optional."
-  fi
+  # Gate on TASK matching issue-[0-9]* (same predicate the prefetch block uses), NOT on ISSUE_N
+  # alone — ISSUE_N is also set for research-* tasks, which never get /work/issue.md written.
+  # Also gate on AGENT_PREFLIGHT: if pre-flight is skipped (AGENT_PREFLIGHT=0), the file is never
+  # written while the card would still promise it.
+  case "${TASK:-}" in
+    issue-[0-9]*)
+      if [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
+        printf '%s\n' "- **Issue context:** Your issue + comments were pre-fetched at dispatch: read \`/work/issue.md\` FIRST; a live \`gh issue view\` is optional."
+      fi
+      ;;
+  esac
   # WHY: Rung A evidence (oracle-fleet docs/feedback-rung-a.md, PR #295): organic feedback filing
   # 0/3; with a directed-act line 10/12; instructive voice executes 10/10; harness/model elicitation
   # from tool-description meta 0/10. The session cannot reliably report its own harness and model —
