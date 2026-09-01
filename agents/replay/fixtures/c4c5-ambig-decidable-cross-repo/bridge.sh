@@ -11,7 +11,8 @@
 # loop fetches both far above the block under replay.
 #
 # `goalbased_nums` includes #329 for repo A (a goal child) but not for repo B (plain in-progress).
-case "${CROSS_REPO_PASS:-0}" in
+CROSS_REPO_PASS="${CROSS_REPO_PASS:-0}"
+case "${CROSS_REPO_PASS}" in
   0)
     # First pass: repo A (homelab) — issue #329 is a goal child with strike+resumable
     slug="teststuffstash/homelab"
