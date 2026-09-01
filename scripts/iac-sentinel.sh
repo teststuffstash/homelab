@@ -106,8 +106,19 @@ evaluate() {
   tree="$WORK/${repo}-${ref}"
   t0=$(now_ms)
   mkdir -p "$tree"
+  if [ -n "${SMOKE_SRC:-}" ]; then
+    # --smoke (homelab#1134 leg 3): the SAME engines over the LOCAL checkout — tracked files +
+    # worktree state, never .git/.devbox (`ls-files`, not a directory walk), no GitHub. This is
+    # what `ci` runs so a toolchain-lock bump that breaks an engine reds ITS OWN PR instead of
+    # the whole merge path one sentinel tick after it lands (#1131: kyverno 1.19.0, 8/8 PRs).
+    if ! git -C "$SMOKE_SRC" ls-files -z --cached --others --exclude-standard \
+           | tar -C "$SMOKE_SRC" --null -T - -czf "$tree.tgz" 2>/dev/null \
+       || ! tar -xzf "$tree.tgz" -C "$tree" 2>/dev/null; then
+      log "[$repo@$ref] SMOKE TREE BUILD FAILED"
+      return 1
+    fi
   # Tarball fetch, never a clone: no hooks, no submodules — hostile PR content is data here.
-  if ! gh api "repos/${ORG}/${repo}/tarball/${ref}" > "$tree.tgz" 2>/dev/null \
+  elif ! gh api "repos/${ORG}/${repo}/tarball/${ref}" > "$tree.tgz" 2>/dev/null \
      || ! tar -xzf "$tree.tgz" -C "$tree" --strip-components=1 2>/dev/null; then
     log "[$repo#$pr@$ref] FETCH FAILED — skipping (rule #6: loud, not silently green)"
     metric "iac_sentinel_probe_failed{repo=\"$repo\",pr=\"$pr\"} 1"
@@ -138,7 +149,13 @@ evaluate() {
     # comments are STRIPPED: yq keeps a file's head comment attached to its first doc, and the
     # `---` it then emits can strand that comment as a document of its own — which kyverno
     # refuses to load ("Object 'Kind' is missing"), failing the whole resource file.
-    docs="$(yq eval-all '(select(tag == "!!map" and .apiVersion != null and .kind != null)) | ... comments=""' "$f" 2>/dev/null || true)"
+    # `kustomize.config.k8s.io/*` docs are EXCLUDED (homelab#1134): a `Kustomization` is
+    # kustomize build config, not a cluster object — no policy targets the kind — and it carries
+    # no metadata.name, so kyverno ≥1.19 (which indexes loaded resources by kind/ns/name)
+    # PANICS on the second one (`kustomizations.kustomize.config.k8s.io "" already exists`),
+    # rc=2 with no fail-summary. Verified 2026-09-01: with them dropped, 1.19.0 reproduces
+    # 1.18.2's verdicts exactly over this repo's 302 remaining docs.
+    docs="$(yq eval-all '(select(tag == "!!map" and .apiVersion != null and .kind != null and (.apiVersion | test("^kustomize\\.config\\.k8s\\.io/") | not))) | ... comments=""' "$f" 2>/dev/null || true)"
     [ -n "$docs" ] && [ "$docs" != "null" ] \
       && printf -- '---\n%s\n' "$docs" >> "$tree/.sentinel-resources.yaml"
   done < <(find "$tree" \( -name '*.yaml' -o -name '*.yml' \) -not -path '*/.github/*' -not -name '.sentinel-resources.yaml')
@@ -221,6 +238,28 @@ if [ "${1:-}" = "--tree" ]; then
   evaluate "$2" "$3" "-" "-"
   push_metrics
   exit 0
+fi
+
+# --smoke [repo-root]: run every engine over the local checkout and exit by the SAME
+# discrimination the tick posts as a status — the CI gate homelab#1134 found missing. No
+# metrics push (never reset IacSentinelSilent's clock from a bench run — the --tree rule).
+#   2 = an ENGINE could not run (the #1131 class: a lock bump broke a required check's tool)
+#   1 = a real policy/secret violation in the tree (the sentinel would red this head anyway)
+#   0 = clean
+if [ "${1:-}" = "--smoke" ]; then
+  SMOKE_SRC="$(cd "${2:-$HERE/..}" && pwd)"
+  export SMOKE_SRC
+  smoke_repo="$(basename "$(git -C "$SMOKE_SRC" rev-parse --show-toplevel 2>/dev/null || echo "$SMOKE_SRC")")"
+  if ! evaluate "$smoke_repo" "local" "-" "-"; then
+    log "SMOKE: tree build failed"; exit 2
+  fi
+  if [ "${KYVERNO_TOOL_ERROR:-0}" -ne 0 ] || [ "${GITLEAKS_TOOL_ERROR:-0}" -ne 0 ]; then
+    log "SMOKE FAIL: an engine could not run — this lock/toolchain would freeze the merge path at the next sentinel tick (homelab#1134)"; exit 2
+  fi
+  if [ "$VIOLATIONS" -ne 0 ]; then
+    log "SMOKE FAIL: $VIOLATIONS violation(s) in the local tree (exceptions: $POLICY_DIR/exceptions/${smoke_repo}.yaml)"; exit 1
+  fi
+  log "SMOKE OK: engines ran, 0 violations (docs=$n_docs)"; exit 0
 fi
 
 for repo in $SENTINEL_REPOS; do

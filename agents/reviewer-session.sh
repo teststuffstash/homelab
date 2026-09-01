@@ -135,14 +135,20 @@ fi
 # Build the MCP config at launcher level (not inside the PREP heredoc) so the pod's env does not
 # need MCP_ENDPOINT/MCP_TOOLS. The base64 encoding is shell-safe for the unquoted <<PREP heredoc.
 # Knob absent → MCP_PREP is empty → nothing rendered. Unparseable tools → loud degrade, no attach.
+# The file is claude's OWN --mcp-config shape ({"mcpServers":{<name>:{type:"http",url}}}) and
+# reaches the CLI through the MCP_FLAG shell var the RUNPART's `claude -p` line expands — PREP
+# and RUNPART are one `bash -lc` script in the pod. The first cut exported a
+# CLAUDE_CODE_MCP_CONFIG env var instead; no such var exists, so the file was written and never
+# loaded (oracle-fleet#330 r2, 2026-09-01 — the worker arm's sibling defect). spec.mcp.tools is
+# the env card's line, not a CLI input: bypassPermissions admits every attached tool.
 MCP_PREP=""
 if [ -n "${MCP_ENDPOINT:-}" ]; then
   MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" \
-    '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}' 2>/dev/null)" || MCP_CONFIG_JSON=""
+    '{mcpServers: {"stack-mcp": {type: "http", url: $url}}}' 2>/dev/null)" || MCP_CONFIG_JSON=""
   if [ -n "$MCP_CONFIG_JSON" ]; then
     MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
     MCP_PREP="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json
-export CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json
+MCP_FLAG='--mcp-config /tmp/mcp-config.json'
 echo '→ MCP config written'"
   else
     echo "→ MCP knob unreadable for ${PROJECT} — no MCP attached (fail-closed, #1041)" >&2
@@ -378,12 +384,26 @@ gh pr checkout ${PR}
 # MCP config (#1041): injected from the launcher-side MCP_PREP (built above the replay region).
 # Knob absent → MCP_PREP is empty → blank line, nothing attached.
 ${MCP_PREP}
+# >>>REPLAY:issue-derivation>>>
 # FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
 # the worker rounds + coordinator ticks for the same issue. Resolve via GitHub's closing-issue
-# reference ("Fixes #N"); fall back to pr-<N> when the PR closes no issue.
-_PR_META=\$(gh pr view ${PR} --json closingIssuesReferences,baseRefName 2>/dev/null || true)
+# reference ("Fixes #N"); fall back to parsing the PR body for a closing keyword when
+# closingIssuesReferences is empty (e.g. PR base != default branch — #1189); then pr-<N>.
+_PR_META=\$(gh pr view ${PR} --json closingIssuesReferences,baseRefName,body 2>/dev/null || true)
 ISSUE=\$(printf '%s' "\$_PR_META" | jq -r '.closingIssuesReferences[0].number // empty' 2>/dev/null || true)
 PR_BASE=\$(printf '%s' "\$_PR_META" | jq -r '.baseRefName // empty' 2>/dev/null || true)
+# Fallback (#1189): when closingIssuesReferences is empty (GitHub omits it for non-default-base
+# PRs), parse the PR body for a closing keyword (close|closes|closed|fix|fixes|fixed|
+# resolve|resolves|resolved) followed by #<n>, case-insensitive.
+if [ -z "\$ISSUE" ] || [ "\$ISSUE" = "null" ]; then
+  _PR_BODY=\$(printf '%s' "\$_PR_META" | jq -r '.body // ""' 2>/dev/null || true)
+  _BODY_ISSUE=\$(printf '%s' "\$_PR_BODY" | grep -ioE '\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+#([0-9]+)\b' | head -1 | grep -oE '[0-9]+' || true)
+  if [ -n "\$_BODY_ISSUE" ]; then
+    ISSUE="\$_BODY_ISSUE"
+    echo "→ ISSUE derived from PR body closing keyword: #\$_BODY_ISSUE"
+  fi
+fi
+# <<<REPLAY:issue-derivation<<<
 ISSUE_TITLE=""
 ISSUE_BODY=""
 ISSUE_UNREADABLE=0
@@ -708,7 +728,7 @@ RUNPART=$(cat <<'SNIP'
 set +e
 # Go-served review: capture the input state snapshot BEFORE the review runs (homelab#424).
 [ "${GO_SERVED:-0}" = "1" ] && record_review_state
-claude -p "$PROMPT" --model "$MODEL" $RUBRIC_FLAG --permission-mode "$PERM_MODE" --output-format json > /tmp/result.json
+claude -p "$PROMPT" --model "$MODEL" $RUBRIC_FLAG ${MCP_FLAG:-} --permission-mode "$PERM_MODE" --output-format json > /tmp/result.json
 RC=$?
 # >>>REPLAY:reviewer-exit-contract>>>
 # EXIT CONTRACT (homelab#560): a session that ends with NO verdict, NO standing-aside comment, and
