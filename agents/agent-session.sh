@@ -2000,6 +2000,15 @@ ${DIND_CONTAINER}
         # These are expected drops per PR #503 doctrine (kill at tool, not extraFQDNs).
         - name: OPENCODE_DISABLE_AUTOUPDATE
           value: "1"
+        # homelab#1247 (the #1190 caller hunt): scripts/mermaid-lint.sh's \`npm ci\` ran a full
+        # registry install on every md-touching homelab ride (~12k POLICY_DENIED/24h — the CNP
+        # denies npmjs correctly; the hostAliases fast-fail stub did not stop the retry storm).
+        # Kill at the tool per PR #503 doctrine: the script skips the install (and the lint,
+        # loudly) under this var when node_modules is not already populated — GitHub CI, which
+        # never sets it, stays the real gate. Unconditional like its siblings: only homelab's
+        # diff-ci reaches the script today, but the emitter rides along whichever repo runs it.
+        - name: MERMAID_LINT_NO_INSTALL
+          value: "1"
         # 2026-08-08 (operator + the homelab#107 21:35Z triage, same conclusion): uv with an
         # unpinned python-preference FETCHES A MANAGED CPython from releases.astral.sh even when
         # devbox already provisions an interpreter satisfying the project's constraint — ~272
