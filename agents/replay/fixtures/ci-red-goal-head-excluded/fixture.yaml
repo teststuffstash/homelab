@@ -1,0 +1,33 @@
+# ADR-103 / homelab#1148 — the ci-red goal/**-head exclusion (FU-143), pinned.
+#
+# CONDITION UNDER REPLAY. A red armed PR (#309, branch `goal/281-delta-redesign`) that is
+# worker-authored and has CI failures. The head is `goal/**`, which is the protected integration
+# branch — a fix round cannot push to it. The new FU-143 exclusion detects this and emits a
+# report-only orphans line, then continues without emitting a unit.
+#
+# WHY THIS FIXTURE EXISTS. Before homelab#1148, the ci-red dispatch leg had no goal/**-head
+# exclusion, so an assembly PR with red CI would dispatch a fix round that could never push
+# (the push would be refused by branch protection). This fixture pins that the exclusion fires
+# correctly: report line, no unit, no dispatch.
+#
+# THE CONTRACT:
+#   1. u_head = "goal/281-delta-redesign" — the goal/** head that triggers the exclusion.
+#   2. The FU-143 exclusion fires: an ORPHAN line is emitted, no UNIT is emitted.
+#   3. No gh pr view or gh pr list calls are made (the exclusion fires before round counting).
+pins:
+  - MP-T12
+name: ci-red-goal-head-excluded
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - file:bridge.sh
+  - block:ci-red-rounds
+  - block:ci-red-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+  - IN_PR=309

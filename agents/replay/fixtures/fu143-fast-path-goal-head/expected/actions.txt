@@ -1,0 +1,6 @@
+CALL gh pr view 309 --repo teststuffstash/oracle-fleet --json state,reviewDecision,labels,body,author,headRefName
+OUT REACHED: assembly PR with goal/** head — settles with FU-143 exclusion, before any spend
+OUT unit fast-path: ASSEMBLY PR has changes-requested (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head; settled
+OUT RETURN 0
+OUT REACHED: end
+RC 0
