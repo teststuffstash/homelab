@@ -1,0 +1,15 @@
+# homelab#1180: the deploy-revert clone URL carries the broker token when GH_TOKEN is set.
+#
+# The sibling templates (coordinate-argo.yaml, reflexes-argo.yaml, fix-debounce-argo.yaml) embed
+# the broker token in the git URL via `_cu="https://x-access-token:${GH_TOKEN}@github.com/…"`.
+# deploy-revert-argo.yaml was missing this — the clone and push were anonymous. This fixture
+# asserts that when GH_TOKEN is set, the `_cu` variable carries the tokenised URL.
+name: deploy-revert-token-clone-set
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - SLUG=teststuffstash/oracle-iac
+  - GH_TOKEN=ghp_fake1234567890abcdef
+parts:
+  - block:deploy-revert-token-clone
+  - file:post.sh

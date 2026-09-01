@@ -185,6 +185,8 @@ is stale, so it cannot drift the way the prose register did.
 | `decorrelate-resolution/no-model` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/served-model` | actions | - | `agents/review-reflex.sh` | - |
 | `depends-on-retired-format/depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
+| `deploy-revert-token-clone/set` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `deploy-revert-token-clone/unset` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `dispatch-phase/scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `dispatch-phase/session` | actions | - | `agents/coordinator-session.sh` | - |
 | `done-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T28 |
@@ -243,6 +245,7 @@ is stale, so it cannot drift the way the prose register did.
 | `model-id-carrier` | table | - | `agents/agent-session.sh` | - |
 | `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
 | `opencode-hostaliases/default-profile` | actions | - | `agents/agent-session.sh` | - |
+| `opencode-hostaliases/enforced-non-opencode` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-hostaliases/monitor-mode` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-hostaliases/node-profile` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-hostaliases/non-opencode` | actions | - | `agents/agent-session.sh` | - |

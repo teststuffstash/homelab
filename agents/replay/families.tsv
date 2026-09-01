@@ -30,6 +30,8 @@ ci-red-rerun-wake-dispatch	ci-red-rounds-two-channels
 ci-red-rounds-two-channels	ci-red-rounds-two-channels
 context-prefetch	context-prefetch
 depends-on-retired-format	depends-on-retired-format
+deploy-revert-token-clone/set	deploy-revert-token-clone
+deploy-revert-token-clone/unset	deploy-revert-token-clone
 dispatch-phase-scan	dispatch-phase
 dispatch-phase-session	dispatch-phase
 doorbell-collapse	doorbell
