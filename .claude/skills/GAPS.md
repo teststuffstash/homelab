@@ -51,6 +51,14 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       2026-08-30 (operator catch: "still multiple rounds escalate to me doing a manual click
       instead of a simple grep/curl"). **promoted→** the skill's output contract gains
       asks-are-claims, same commit; the fleet half is the ground-rules bullet (PR#1044).
+- [ ] design-agents-G4 — the seat proposed a PER-INSTANCE hand fix ("I can wire #326's two
+      blockedBy edges and the task/build labels") where the operator wanted the CONSUMER
+      SURFACE fixed: the consumer card gains the rules the instance tripped, and a deterministic
+      `goal-lint` runnable from every jail catches them before queueing. "Wrong fix" — a
+      malformed input from a documented authoring surface is evidence about the surface, not a
+      chore. Sighted 2026-09-01 (operator catch); the same session had ALREADY applied the
+      lesson once (#1069's recipe paste → the launcher prefetch mechanism) and still reverted to
+      the instance fix on the next case.
 - [ ] design-agents-G2 — a lifecycle LABEL was reported as activity ("#833 is riding —
       in-progress") from a live `gh` read alone: the label is a CLAIM, and the state is the
       JOIN (label × live pod × PR state) — the issue's PR had merged 8h earlier with no pod

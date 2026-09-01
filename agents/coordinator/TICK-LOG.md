@@ -5865,3 +5865,64 @@ first live ADR-110 maintenance session before the ADR existed.
   intake rule 2 gained the absorption nuance (keep-origin-parent only while the origin is OPEN
   or in-tree) in the Goal body; ledger row 2 recorded. The pilot's acceptance-5 channel is
   working — the finding arrived through a ride note, cost zero extra sessions.
+- OPERATOR-LANE SWEEP (operator: "lets take those"), all operator-direct, master 94954f01 →
+  b4921eb1: **#1134 CLOSED** — root cause = kyverno ≥1.19 panics on the 2nd nameless
+  Kustomization doc (`--exceptions` hypothesis REFUTED); collector drops kustomize.config.k8s.io
+  docs, 1.19.0 reproduces 1.18.2 verdicts over 302 docs, unpinned + lock regenerated; leg 3 =
+  `scripts/iac-sentinel.sh --smoke` (same evaluate(), exit 2 engine-error / 1 violation / 0) as
+  `devbox run sentinel-smoke` in ci.yaml + diff-ci map — the gate that would have caught #1131
+  (nothing in CI executed kyverno). **#114 CLOSED** (already fixed 08-07/08-11 in the workflow).
+  **#1028 CLOSED** (ratchet unions suite entrypoints). **#1036 CLOSED** (governance-lint
+  assembly-lane arm: commit authorship on goal/**+Assembly-for heads; worktree-tested both
+  ways). **#1107 CLOSED** (pin-vacuity gate: changed fixtures must FAIL on the base tree's
+  harness — premise proven on PR#1157's fixture: rc=1 on af79feac, 0 on HEAD). **#1069**: recipe
+  paste landed (belt); operator asked for the deterministic form → **#1175 filed+queued**
+  (launcher REST pre-read → /work/issue.md, unreadable ⇒ defer before any pod); sibling pastes
+  deliberately skipped (one launcher change covers every repo). **#1150** design-ruled (assembly
+  CR → goal-checkpoint trigger, deterministic clause) and INTAKEN into scan theme #1163 under
+  a judged Surface widening (+ coordinator/README.md) — ledger row 3. **#857** left for the
+  operator: the spike's recommendation is Talos v1.13.8 on the ephemeral tier (metal talosctl
+  upgrade — an infra sitting, not a seat quickfix). Lesson banked: a PR branch cut from a
+  local master carrying unpushed direct commits SQUASHES them into master via the PR — the
+  post-merge rebase then replays duplicates; cut PR branches from origin/master.
+- RULING (operator, same sitting): "grep > tool call" — ALL mechanical context gathering runs
+  in the LAUNCHER before the pod exists (tool-call tokens + error turns cost time and money).
+  Recorded as the THIRD platform-wide design rule in roles.md ("Prefetch, don't fetch",
+  PR#1177) + the context map's row-2 delivery note. #1175 WIDENED from "pre-read issue.md" to
+  the per-round-class prefetch table (issue+comments / review thread / ci-failure log / branch
+  log → /work/context/; required-unreadable ⇒ defer) — ⚠ r1 had ALREADY dispatched on the
+  narrow scope minutes earlier (an issue edit after dispatch is exactly the #1069 read gap,
+  one lane over): r1's acceptance pinned to row 1 in the body + a comment so the reviewer
+  does not block it; residue = a child at closeout. #857 parked on G-D (Talos 1.13.8 = G-D's
+  first class-6 human-applied ride; #502 draft addendum; work-map row PR#1176).
+- /handoff (oracle, filed 07:06Z: "how is a stack supposed to use Prometheus/Grafana/
+  Alertmanager? — the consumption contract is undocumented"): prior-art confirmed absent
+  (catalog rows + sleep-iac.md precedent only). SHIPPED `docs/patterns/observability.md` (the
+  app-owned-resources.md sibling) via PR#1178 — every constant read from the live values
+  (cluster-wide selectors, sidecar ALL, routing tree root→ha-webhook + continue→responder
+  grouped by alertname, info inhibited, uids prometheus/loki/sleep-data) + the sidecar
+  `folderAnnotation: grafana_folder` knob (per-stack folders; un-annotated CMs unaffected) +
+  SERVICES.md pointer. CORRECTION found en route: docs/sleep-iac.md said datasource uid
+  `sleep-notes` — live is `sleep-data` (fixed in the PR; the filer had copied the stale doc).
+  Result appended, task → done/. Doc is the durable record.
+- OPERATOR CORRECTION ("wrong fix"): I offered to hand-wire oracle-fleet#326's blockedBy edges +
+  task/build labels; the operator wants the CONSUMER SURFACE fixed — Goals are authored from
+  jails and still arrive malformed. GAPS design-agents-G4 sighted. Built: the consumer card
+  gains rules 7–9 (children carry a class + a blockedBy order; pre-authored children ⇒ the Goal
+  stays unqueued; lint before you queue) + 3 failure-signature rows + "the branch is the
+  AUTHOR's to cut" (the oracle session had told the operator the machinery creates it — false,
+  IL-G02); and `scripts/goal-lint.sh` (bash+gh+jq only — stack jails run it bare, NEVER
+  `devbox run` in their homelab clone: it materializes the whole closure) as `devbox run
+  goal-lint` here. First runs: #326 = 0 FAIL / 5 WARN (title case, no task/* on 3 children,
+  no ordering edges); #1162 = my own tree had a real miss — the lint's first cut also mis-read
+  a work item with sprouts as a container and walked CLOSED descendants (fixed: container =
+  no agent-fix ∧ (children ∨ a `post-launch:|theme:|stint:|retro-batch:` title); closed nodes
+  skipped). #326 lint answer: task/goal alone is enough (agent/blocked tolerated, agent/queued
+  forbidden on a pre-decomposed goal); the seat cut `goal/326-dashboard-as-code` @ 7b8e08e6.
+- WIND-DOWN (operator, ~08:10Z): soak read written to meta-state (#818 validated looks due;
+  #741 S7 closeout-1 overdue a week; #775 waits #778's release; #1039 waits oracle's claim
+  flip; #979 quiet window ends 09-02 06:39Z; retro batches post-r3). Session totals: wave-1
+  pilot minted + 6 ledger rows; park convoy drained (3 reads); operator-lane sweep (#1134 #114
+  #1028 #1036 #1107 closed, #1175/#1180 filed+queued, #1150/#1166/#459 intaken); oracle
+  handoff answered (observability contract PR#1178); ruling records (PR#1167/#1176/#1177);
+  goal-lint + card rules 7–9 (PR#1183). One lint-gated push of the batched direct commits.
