@@ -1,0 +1,28 @@
+# homelab#1149 — IL-G06 revisit: the IL-G06 merged-closeout detection block's `--arg default_branch`
+# and variable hoist fixes. This fixture validates the **structural fix** (the block parses, runs clean,
+# and produces empty output under stub-provided empty world data), but NOT the **positive-path detection
+# semantics** (the detection regex, strong-link vs bare-mention split, or dref exclusion logic).
+#
+# Why: the replay stub cannot differentiate `gh pr list --state merged` from `--state open` (both
+# key to `pr-list`), so reproduction of the documented scenario (PR #200 `Implements #90`, #201 `Fixes #91`,
+# #202 bare-mentions #92) produces unexpected results (the dref exclusion blocks all emissions).
+# This is a stub limitation, not a scan-logic bug — production `gh` differentiates state correctly —
+# but it prevents a genuine positive-path fixture without a state-aware stub or alternate test strategy.
+#
+# THE CONTRACT (structural only):
+#   1. The detection block runs to completion under `set -euo pipefail` with empty world data.
+#   2. No jq compile errors from undefined `$default_branch` (the --arg/hoist fix).
+#   3. Detection output variables (c6db, c6db_nums) remain empty, which is correct for empty input.
+pins:
+  - IL-T09
+name: merged-closeout-default-branch
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:il-g06-detect
+  - block:merged-closeout
+  - file:post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
+  - 's/ [0-9]\{1,\}m / Nm /g'
