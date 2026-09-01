@@ -393,11 +393,20 @@ the block needs pruning, not more headings.
       replaced the verb. #459/PR#1192: 3 flash rounds + 3 reviews + an opus arbitration + a seat
       sitting, then a PARK — the direction-4 inverted composition — while route() already honors
       a label-borne class (`explicit > label_map > role_defaults`; labels ride the /route body).
-      **Next:** an issue label as the carrier (M9's reserved escape hatch at CLASS altitude, e.g.
-      `model/strong` → label_map `{class: coding-strong}`, a git class with a high M8 capability
-      floor — zero new router code) + the arbitrate/ci-red plays apply it + claim-taxonomy row.
-      Ladder order: verbatim directive (circles#57) → effort (FU-174) → this label → park;
-      attempt-count auto-escalation stays banked pending M8 feed-4. Relates FU-174, ADR-094/096. — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
+      **RE-SCOPED (operator ruling, 2026-09-01 — "flesh out the existing things first"): the
+      carrier is the EXISTING size label, no new vocabulary.** The coordinator↔router contract:
+      the coordinator's routing verb is the ISSUE LABEL (labels ride /route since PR#408;
+      label_map is the one git home of meaning; size labels already steer the budget side).
+      **Next:** (a) escalation = size RE-GRADE — the arbitrate/breaker plays bump
+      `agent-budget/*` (sm→lg); label_map gains md/lg rows (lg → capability-floor raise +
+      never-free; + FU-174 effort when built); (b) a brief section naming the label vocabulary
+      per play (cites label_map, never copies); (c) the PROVIDER leg outranks model class —
+      strikes gain the served-provider column and a serving-shaped strike excludes the
+      (model, provider) pair on the same-task re-pick (the #783 banked legs; quantization/
+      tool-error quality = FU-186/ADR-115 pin-v2 + M14 pair-cooldowns, chartered there).
+      `task/build`'s strike correlation is NOTED and rejected as a routing basis (operator);
+      `model/strong`/`coding-strong` dropped. Attempt-count auto-escalation stays banked
+      pending M8 feed-4. Relates FU-174, FU-186, ADR-094/096/115. — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
       The #447 review ran 47 min (kimi-k3, **$6.33** — balance regime, FU-170); the dispatch-time
       installation token 401'd ~07:50Z BEFORE the verdict posted — a full CHANGES_REQUESTED lost
       (recoverable: S3 reviewer-r1 transcript + pod log); `/var/run/reviewer-git/` never refreshes

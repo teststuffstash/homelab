@@ -6129,3 +6129,17 @@ first live ADR-110 maintenance session before the ADR existed.
   (2) WIP=1 then held r2 behind #337's live ride — correct; a bounded background waiter
   dispatches when the slot frees. homelab cascade: PR#1179 + PR#1192 MERGED (~17:06-09Z),
   master cap 2/3, #1151 re-dispatchable; #1191/#1183 riding their refresh/re-review cycles.
+
+## 2026-09-01 — operator ruling: router escalation = flesh out existing seams; FU-201 re-scoped
+
+- Operator, on the escalation option space: "half designed, half built, half not turned on" —
+  consolidate, don't add. Rulings: (1) task/build's strike correlation is NOT a routing basis;
+  (2) the deaths read as PROVIDER-serving failures (q4/fp4 quant, bad tool calls — the ADR-115
+  evidence class), so the provider leg outranks model class; (3) the correct carrier is what
+  exists: size labels + label_map + the coordinator editing ISSUE LABELS as its routing verb
+  (the coordinator↔router contract — labels ride /route since PR#408; label_map is the one git
+  home of meaning). FU-201 re-scoped accordingly: escalation = agent-budget re-grade (sm→lg)
+  by the arbitrate/breaker plays + label_map md/lg rows; a brief section naming the vocabulary;
+  strikes gain the served-provider column + (model, provider) pair-exclusion on serving-shaped
+  re-picks (#783 banked legs; quality legs stay FU-186/ADR-115 pin-v2 + M14 pair-cooldowns).
+  model/strong + coding-strong dropped; attempt-count auto-escalation stays banked (feed-4).
