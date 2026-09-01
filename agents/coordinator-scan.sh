@@ -1301,6 +1301,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         echo "  [$repo] PROBE_FAILED reading merged/open PRs — FU-143 goal closeout skipped this tick (rule #6)" >&2
       fi
     fi
+    # Default branch: a queued issue without a `Base:` body line counts against this.
+    # Hoisted above IL-G06 detection block since it's used there.
+    default_branch="$(gh repo view "$slug" --json defaultBranch --jq .defaultBranch 2>/dev/null || echo "master")"
+    [ -n "$default_branch" ] || default_branch=master
+    # >>>REPLAY:il-g06-detect>>>
     # IL-G06 revisit (homelab#1149): an OPEN issue on the default branch whose merged PR carries
     # a strong link (`implements|closes|fixes|resolves #N` or the `Issue:` trailer) is finished
     # work the closing keyword should have closed but did not — the PR used `Implements` instead
@@ -1329,12 +1334,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           # `finalize` guarantee, so this predicate meets that fix rather than racing it.
           # ⚠ MUST match what `finalize` accepts, or PRs strand. Same grammar as the goal-child
           # leg: verb keywords OR the line-anchored `Issue:` trailer.
-          dhit="$(jq -r --argjson n "$dn" \
+          dhit="$(jq -r --argjson n "$dn" --arg default_branch "$default_branch" \
             '[.[] | select(.baseRefName == $default_branch)
                   | select((((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
                         or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))] | length' <<<"$dbmerged")" || dhit=0
           # Reported, never silent: a merged PR MENTIONS it but no strong link ⇒ ambiguous, held.
-          dmention="$(jq -r --argjson n "$dn" \
+          dmention="$(jq -r --argjson n "$dn" --arg default_branch "$default_branch" \
             '[.[] | select(.baseRefName == $default_branch) | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$dbmerged")" || dmention=0
           dref="$(jq -r --argjson n "$dn" '[.[] | select(test("#\($n)\\b"))] | length' <<<"$dbopen")" || dref=0
           # merged PR into the default branch cites the issue AND no OPEN PR still references it
@@ -1349,6 +1354,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         echo "  [$repo] PROBE_FAILED reading merged/open PRs — IL-G06 default-branch closeout skipped this tick (rule #6)" >&2
       fi
     fi
+    # <<<REPLAY:il-g06-detect<<<
     # TRACKS rule 1 (open-PR bound) needs the count BEFORE the queued loop; the merge-path
     # clauses below reuse this same fetch (moved up 2026-08-03, ADR-097 — do not re-fetch).
     # mergeStateStatus is REQUIRED here: the FU-124 nudge below selects on it, and gh returns a
@@ -1377,9 +1383,6 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       | group_by(.baseRefName)
       | map("\(.[0].baseRefName)|\(length)")
       | .[]' <<<"$prsjson")"
-    # Default branch: a queued issue without a `Base:` body line counts against this.
-    default_branch="$(gh repo view "$slug" --json defaultBranch --jq .defaultBranch 2>/dev/null || echo "master")"
-    [ -n "$default_branch" ] || default_branch=master
     # ADR-097 project-WIP predicate (was binary WIP=1; found live meta-8: two dispatchers raced
     # #52 inside one scan window; 2026-07-21 #55: two CRON ticks raced through the phase=Running
     # filter while a kata pod sat Pending — so the probe counts everything non-terminal): the

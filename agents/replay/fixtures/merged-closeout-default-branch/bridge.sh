@@ -20,11 +20,19 @@ orphans=""
 # c6g is empty — no goal children in this fixture
 c6g=""
 c6g_nums=""
-# c6db is pre-populated with the issues that have strong-link merged PRs
-# #90 has Implements #90 in merged PR #200 into master
-# #91 has Fixes #91 in merged PR #201 into master
-c6db="90\n91\n"
-c6db_nums="90 91 "
+# goalcand is the OPEN issues with agent/in-progress or agent/review labels. The code
+# derives dbcand from this by filtering out those with agent/error and with a Base: line.
+# The three test issues (#90, #91, #92) all have agent/fix + (agent/in-progress|agent/review),
+# no agent/error, and no Base: line, so they'll be candidates for the IL-G06 detection.
+goalcand='[
+  {"number": 90, "title": "test issue 90", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/in-progress"}]},
+  {"number": 91, "title": "test issue 91", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/review"}]},
+  {"number": 92, "title": "test issue 92", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/in-progress"}]}
+]'
+# dbmerged and dbopen are fetched by the IL-G06 detection block from the replay world.
+# world/gh/pr-list.json has the merged PRs that the detection block will analyze.
+# The detection block will derive c6db and c6db_nums from the fetched data.
+# (Do NOT pre-populate them here — let the detection block do the work.)
 ISSUE_LIST_LIMIT=200
 
 # Stub for item_class_push — the real function is defined in the scan's outer scope and not

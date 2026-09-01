@@ -18,6 +18,7 @@ mode: actions
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
+  - block:il-g06-detect
   - block:merged-closeout
   - file:post.sh
 scrub:
