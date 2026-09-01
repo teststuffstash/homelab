@@ -13,12 +13,11 @@ meant to avoid.)
   (#459 #1138 #1137; #1137 blockedBy #1138; both keep parent #1115 — absorbed by reference) ·
   #1165 `goal/1162-egress` (#1056 #107). All members queued with `Base:` theme lines; intake
   rules for mid-drain arrivals are in the Goal body (manual waves 1–2 → then #1153's
-  grant-consult leg). NEXT-SESSION VERIFY: (a) parked trio landed — PR#1157 MERGED 05:53Z,
-  PR#1160/#1161 were cycling behind it under a guarded re-approver (re-approves only on
-  unchanged content commit; content moved ⇒ re-read); (b) **FAST-FORWARD the three theme
-  branches to post-merge master BEFORE first theme rides land** (scan+exporter files moved);
-  (c) first theme ride dispatches against `goal/1162-*` (per-base cap frees them from the
-  master freeze); (d) known pilot gaps accepted: checkpoint may misfire an assembly ruling at
+  grant-consult leg). Park convoy DRAINED same sitting: PR#1157 05:53Z, #1161 05:57Z, #1160
+  06:02Z — zero approval dismissals across two updater refreshes (datapoint commented on
+  #887); theme branches fast-forwarded to post-merge master @ `0ba158b2`. NEXT-SESSION
+  VERIFY: (a) first theme ride dispatches against `goal/1162-*` (per-base cap frees them
+  from the master freeze) and its PR arms into the theme base; (b) known pilot gaps accepted: checkpoint may misfire an assembly ruling at
   the master-based Goal (report-only, park it); theme assemblies are ordinary `Fixes`-closing
   PRs — NO `Assembly-for:` anywhere. S8 readout baseline on the Goal's mint comment
   (per-child ≈9 reads → target 3). The serial park-merge cycle is #887's live datapoint.
