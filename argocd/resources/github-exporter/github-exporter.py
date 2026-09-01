@@ -1080,7 +1080,13 @@ def collect_open_prs(lines):
                 rollup = (commit or {}).get("statusCheckRollup")
                 if rollup:
                     ci_state = rollup["state"].lower()
-                    ci_run_attempt = 0  # rollup has no attempt info; rerun dedup falls back to head_sha only
+                    if ci_state == "failure":
+                        # Red on the rollup path: fetch the real run_attempt so a same-head
+                        # rerun re-rings the doorbell (homelab#1166). One REST call per red PR
+                        # per poll — the edge that matters.
+                        _, ci_run_attempt = ci_state_from_runs(repo["name"], pr.get("headRefOid") or "")
+                    else:
+                        ci_run_attempt = 0  # non-red: no rerun expected, skip the REST call
                 else:
                     # Private repo (rollup FORBIDDEN-nulls for every PAT) or genuinely no checks:
                     # join workflow runs by head SHA under Actions:read (FU-063a). One REST call
