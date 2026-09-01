@@ -33,8 +33,9 @@ meant to avoid.)
     **10:20Z: BOTH halves observed** — tool list in the live ride + two MCP-filed rows
     (oracle-fleet#333, transcript `…/issue-330/worker-r1-20260901T102118Z/`), relayed to
     #1039 (comment 5492494412). **Operator: take the G-F `goal/validated` read** (oracle
-    verifies the rows in `oracle-pg` on its side). Residual: the reviewer arm's live check =
-    the reviewer ride on oracle-fleet#333 (config shape already proven from the jail).
+    verifies the rows in `oracle-pg` on its side). Reviewer arm ALSO proven live 11:12Z
+    (Claude Code's MCP log in `reviewer-oracle-fleet-334-…`: connected, hasTools) — nothing
+    platform-side remains open on G-F; #330 closed `agent/done` (PR#333 merged).
 - **⚑ 2026-09-01 mechanical session — operator pickups:** (1) **`tofu plan` (main root) shows
   pre-existing drift: `proxmox_virtual_environment_file.ci_runner_cloud_init[0]` +
   `proxmox_virtual_environment_vm.ci_runner[0]` "must be replaced"** (cloud-init snippet
