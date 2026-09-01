@@ -1,0 +1,29 @@
+# c4c5-ambig-decidable-cross-repo — FU-199 cross-repo state leak regression test.
+#
+# THE CONTRACT (homelab#1203 r3). The resumable_branches key carries the repo to prevent
+# cross-repo collisions: repo A's issue #N with a resumable branch must not leak its branch
+# onto repo B's unrelated issue #N.
+#
+# WORLDS:
+#   Repo A (homelab): issue #329 is a goal child with AGENT_STRIKE: + Resumable branch pushed:
+#                      → decidable: writes homelab:329=fix/issue-329-loop to resumable_branches
+#   Repo B (oracle-fleet): issue #329 is a plain in-progress issue (NOT a goal child)
+#                      → does NOT write to resumable_branches
+#
+# The fixture runs the c4c5-derivations block twice (once per repo) with the resumable_branches
+# variable persisting between runs, simulating a multi-repo stack tick.
+#
+# Pre-fix (bare keys): repo B's dispatch wrongly inherits repo A's branch for issue #329.
+# Post-fix (qualified keys): repo B's dispatch finds no match — no work-branch leakage.
+name: c4c5-ambig-decidable-cross-repo
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:c4c5-selector
+  - file:bridge.sh
+  - block:infeasible-terminal
+  - block:c4c5-derivations
+  - file:bridge.sh
+  - block:infeasible-terminal
+  - block:c4c5-derivations
+  - file:post.sh
