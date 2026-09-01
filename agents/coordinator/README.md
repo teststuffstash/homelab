@@ -1255,7 +1255,9 @@ the clause emits a report line instead of a unit.
 ### Resolution
 
 The blocker is considered resolved when:
-- `human`: a new human review or non-marker comment appears on the PR thread
+- `human`: a new **human-authored** review or non-marker comment appears on the PR thread. Bot
+  identities (the worker App and the reviewer bot) are excluded by login: the loop's own writes
+  must never clear a marker the loop wrote.
 - `issue`: the referenced issue is closed
 - `pr`: the referenced PR is merged or closed
 

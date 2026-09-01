@@ -1,4 +1,4 @@
-CALL gh pr view 234 --repo teststuffstash/oracle-fleet --json comments
+CALL gh pr view 234 --repo teststuffstash/oracle-fleet --json comments,reviews
 CALL gh pr view 234 --repo teststuffstash/oracle-fleet --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
 OUT UNIT arbitrate|oracle-fleet|pr-234
 OUT REACHED: end

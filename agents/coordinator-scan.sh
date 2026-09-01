@@ -445,7 +445,7 @@ BLOCKED_ON_JQ='([ .comments[]? | select((.body // "") | test("^blocked-on: (huma
 pr_blocked_on_check() {
   local slug="${1:?}" pr="${2:?}" marker kind ref probe rc
   # Read the PR's comments to find the newest blocked-on marker
-  probe="$(gh pr view "$pr" --repo "$slug" --json comments 2>/dev/null)" || probe=''
+  probe="$(gh pr view "$pr" --repo "$slug" --json comments,reviews 2>/dev/null)" || probe=''
   if ! jq -e . >/dev/null 2>&1 <<<"${probe:-null}"; then printf 'clear\n'; return 0; fi
   marker="$(printf '%s' "$probe" | jq -r "$BLOCKED_ON_JQ" 2>/dev/null)" || marker=''
   [ -n "$marker" ] || { printf 'clear\n'; return 0; }
@@ -457,11 +457,27 @@ pr_blocked_on_check() {
     human)
       # Check if there's been any human review or comment since the marker was written.
       # Read the marker's timestamp and compare against the newest review/comment.
-      local marker_ts newest_ts
+      # `gh pr view --json comments,reviews` populates ONLY `.author.login` on comment/review
+      # authors — there is no `.author.is_bot` here (that exists on issue/PR-LEVEL author objects,
+      # which is what lines 1662/1672 read). And WORKER_AUTHOR's default is the `app/`-prefixed
+      # form, which never equals a comment author login. So normalize to the comment-author form
+      # and exclude the loop's own identities by login.
+      local marker_ts newest_ts wa_login rv_login
+      wa_login="${WORKER_AUTHOR:-app/homelab-agents-1234}"; wa_login="${wa_login#app/}"; wa_login="${wa_login%\[bot\]}"
+      rv_login="${REVIEWER_AUTHOR:-homelab-reviewer}"; rv_login="${rv_login%\[bot\]}"
       marker_ts="$(printf '%s' "$probe" | jq -r '[.comments[]? | select((.body // "") | test("^blocked-on: human")) | .createdAt] | max // ""' 2>/dev/null)" || marker_ts=''
       [ -n "$marker_ts" ] || { printf 'clear\n'; return 0; }
-      newest_ts="$(printf '%s' "$probe" | jq -r '[.comments[]? | select((.body // "") | test("^blocked-on: human") | not) | .createdAt] | max // ""' 2>/dev/null)" || newest_ts=''
-      # If there's a non-marker comment newer than the marker, a human has engaged
+      # A HUMAN review or a HUMAN non-marker comment clears the block — the README's own
+      # Resolution rule. Reviews carry `submittedAt`, comments `createdAt`; an entry with no
+      # resolvable author does not count as human engagement.
+      newest_ts="$(printf '%s' "$probe" | jq -r --arg wa "$wa_login" --arg rv "$rv_login" '
+        [ (.comments[]? | select(((.body // "") | test("^blocked-on: human")) | not)
+                        | select((.author.login // "") != "" and (.author.login != $wa) and (.author.login != $rv))
+                        | .createdAt),
+          (.reviews[]?  | select((.author.login // "") != "" and (.author.login != $wa) and (.author.login != $rv))
+                        | .submittedAt) ]
+        | map(select(. != null)) | max // ""' 2>/dev/null)" || newest_ts=''
+      # If there's a non-marker entry newer than the marker, a human has engaged
       if [ -n "$newest_ts" ] && [[ "$newest_ts" > "$marker_ts" ]] 2>/dev/null; then
         printf 'clear\n'
       else
