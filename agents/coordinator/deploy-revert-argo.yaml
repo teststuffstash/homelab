@@ -201,7 +201,15 @@ spec:
             echo "→ REVERTING $SLUG#$PRNUM ($TITLE) — $APP Degraded on revision ${REVISION:0:8} within ${REVERT_WINDOW_MIN}m of the merge"
             BR="revert-${APP}-$(printf '%s' "$SHA" | cut -c1-8)"
             rm -rf /work/iac
-            git clone --depth 30 "https://github.com/${SLUG}.git" /work/iac
+            # >>>REPLAY:deploy-revert-token-clone>>>
+            # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
+            # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
+            # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
+            # old anonymous behavior (degrade, never a new hard dependency).
+            _cu="https://github.com/${SLUG}.git"
+            [ -n "${GH_TOKEN:-}" ] && _cu="https://x-access-token:${GH_TOKEN}@github.com/${SLUG}.git"
+            # <<<REPLAY:deploy-revert-token-clone<<<
+            git clone --depth 30 "$_cu" /work/iac
             cd /work/iac
             git config user.name "deploy-revert (FU-044)"
             git config user.email "noreply@teststuff.net"
@@ -210,6 +218,7 @@ spec:
             fi
             git checkout -b "$BR"
             git revert --no-edit "$SHA" || { echo "FATAL: git revert conflicted — human/coordinator lane (no blind force)"; exit 1; }
+            git remote set-url origin "$_cu"
             git push origin "$BR"
             PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
               --title "revert: ${TITLE} (auto-rollback — ${APP} Degraded post-deploy)" \
