@@ -80,8 +80,10 @@ an ephemeral in-cluster runner** — same policy question, same per-project answ
 endpoint. When present, the Composition renders the endpoint's HOST (derived from the URL) into
 every fixer repo's worker egress CNP (`toFQDNs` leg) — the agent session connects to this server
 for tool calls (statute, search, give_feedback, etc.). The knob holds a URL (scheme + host + path,
-e.g. `https://mcp.oracle.teststuff.net/mcp`); the launcher passes it to `--mcp-config` verbatim
-(#1041), while the Composition derives the bare HOST from it for the CNP `toFQDNs` leg. That host
+e.g. `https://mcp.oracle.teststuff.net/mcp`); the launcher passes it verbatim to each harness's
+own attach interface (#1041 — claude: a `--mcp-config` JSON file in the CLI's `mcpServers` shape;
+goose: `--with-streamable-http-extension <URL>`; the server is streamable HTTP), while the
+Composition derives the bare HOST from it for the CNP `toFQDNs` leg. That host
 must be an FQDN, never a service VIP (kata guests cannot reach service VIPs, FU-072); the pod
 receives it as a reachable variable.
 
@@ -96,8 +98,8 @@ probe target for availability monitoring, the MCP endpoint is a tool server for 
 Keeping them separate means a stack can have one without the other, and the schema for each
 carries only its own concerns (`slo` has `module`/`availability`; `mcp` has `tools`).
 
-The launcher `--mcp-config` rendering and env-card lines are a sibling child (#1041); this issue
-delivers the claim knob + egress leg, born together.
+The launcher's harness-attach rendering and env-card lines are a sibling child (#1041); this
+issue delivers the claim knob + egress leg, born together.
 
 ## The egress dial (the FU-020 rollout, encoded)
 
@@ -115,7 +117,7 @@ leg-by-leg.
 | **capability-gated** (`fixer.docker: true`) | kata LAN-resolver DNS leg (`192.168.2.1` — `dnsPolicy: None` mechanics, genuinely docker-only) · kata LAN-VIP belt (nix-cache `.40.23` / devbox-search `.40.27` — kata rides install via them) · upstream registry FQDN `ghcr.io` (dockerd's `registry-mirrors` is Hub-only, so the dind's own ghcr pulls go direct until the gate configs route ghcr through the mirror per-tool; then this leg is deleted — the recorded plan) | gated ONLY for risk, cost, or genuine capability-specificity — the gate's reason is written at the leg |
 | **ecosystem profile** | `python` → pypi.org / files.pythonhosted.org · `node` → registry.npmjs.org | claim-selected |
 | **harvest-earned** | `extraFQDNs` | per-stack, monitor-phase evidence, never speculation (unchanged) |
-| **stack-declared MCP** (`spec.mcp`) | MCP endpoint HOST, derived from `spec.mcp.endpoint` (a URL — the launcher passes it verbatim to `--mcp-config`, #1041) — the agent session's tool server; the derived host must be an FQDN, never a service VIP (FU-072/kata) | present when the stack declares `spec.mcp`; the endpoint is rendered into EVERY fixer repo's CNP (stack-wide knob, per-repo leg) |
+| **stack-declared MCP** (`spec.mcp`) | MCP endpoint HOST, derived from `spec.mcp.endpoint` (a URL — the launcher passes it verbatim to the harness's attach flag, #1041) — the agent session's tool server; the derived host must be an FQDN, never a service VIP (FU-072/kata) | present when the stack declares `spec.mcp`; the endpoint is rendered into EVERY fixer repo's CNP (stack-wide knob, per-repo leg) |
 
 **Why the mirrors are baseline** (homelab#520): read-only in-cluster pull-through caches — no
 exfil surface (nothing writable), content-in parity with baseline's existing github/pypi reach.

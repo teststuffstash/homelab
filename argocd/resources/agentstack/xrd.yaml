@@ -171,7 +171,7 @@ spec:
                   properties:
                     endpoint:
                       type: string
-                      description: "The MCP server URL — scheme + host + path (e.g. https://mcp.oracle.teststuff.net/mcp). The launcher passes it to --mcp-config verbatim; the Composition derives the bare HOST from it for the worker CNP toFQDNs leg. That host must be an FQDN, never a service VIP (kata guests cannot reach service VIPs, FU-072)."
+                      description: "The MCP server URL — scheme + host + path (e.g. https://mcp.oracle.teststuff.net/mcp). The launcher passes it verbatim to the harness's attach flag (claude --mcp-config file / goose --with-streamable-http-extension); the Composition derives the bare HOST from it for the worker CNP toFQDNs leg. That host must be an FQDN, never a service VIP (kata guests cannot reach service VIPs, FU-072)."
                     tools:
                       type: array
                       items:

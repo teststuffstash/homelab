@@ -135,14 +135,20 @@ fi
 # Build the MCP config at launcher level (not inside the PREP heredoc) so the pod's env does not
 # need MCP_ENDPOINT/MCP_TOOLS. The base64 encoding is shell-safe for the unquoted <<PREP heredoc.
 # Knob absent → MCP_PREP is empty → nothing rendered. Unparseable tools → loud degrade, no attach.
+# The file is claude's OWN --mcp-config shape ({"mcpServers":{<name>:{type:"http",url}}}) and
+# reaches the CLI through the MCP_FLAG shell var the RUNPART's `claude -p` line expands — PREP
+# and RUNPART are one `bash -lc` script in the pod. The first cut exported a
+# CLAUDE_CODE_MCP_CONFIG env var instead; no such var exists, so the file was written and never
+# loaded (oracle-fleet#330 r2, 2026-09-01 — the worker arm's sibling defect). spec.mcp.tools is
+# the env card's line, not a CLI input: bypassPermissions admits every attached tool.
 MCP_PREP=""
 if [ -n "${MCP_ENDPOINT:-}" ]; then
   MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" \
-    '{mcp_servers: [{name: "stack-mcp", url: $url, tools: $tools}]}' 2>/dev/null)" || MCP_CONFIG_JSON=""
+    '{mcpServers: {"stack-mcp": {type: "http", url: $url}}}' 2>/dev/null)" || MCP_CONFIG_JSON=""
   if [ -n "$MCP_CONFIG_JSON" ]; then
     MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
     MCP_PREP="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json
-export CLAUDE_CODE_MCP_CONFIG=/tmp/mcp-config.json
+MCP_FLAG='--mcp-config /tmp/mcp-config.json'
 echo '→ MCP config written'"
   else
     echo "→ MCP knob unreadable for ${PROJECT} — no MCP attached (fail-closed, #1041)" >&2
@@ -708,7 +714,7 @@ RUNPART=$(cat <<'SNIP'
 set +e
 # Go-served review: capture the input state snapshot BEFORE the review runs (homelab#424).
 [ "${GO_SERVED:-0}" = "1" ] && record_review_state
-claude -p "$PROMPT" --model "$MODEL" $RUBRIC_FLAG --permission-mode "$PERM_MODE" --output-format json > /tmp/result.json
+claude -p "$PROMPT" --model "$MODEL" $RUBRIC_FLAG ${MCP_FLAG:-} --permission-mode "$PERM_MODE" --output-format json > /tmp/result.json
 RC=$?
 # >>>REPLAY:reviewer-exit-contract>>>
 # EXIT CONTRACT (homelab#560): a session that ends with NO verdict, NO standing-aside comment, and
