@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-199** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-200** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -444,6 +444,17 @@ the block needs pruning, not more headings.
       `--json title,body,comments` (96fe003); homelab itself never uses the flag. oracle-fleet
       ported 2026-08-07 (operator, oracle-fleet#173). **Next:** the sleep-tracking recipes —
       the donor for the next `new-stack --from` must already have it. Relates FU-114.
+
+- [ ] **FU-199** — **A round-1 strike on a goal child parks the child AND its footprint
+      neighbours until a human reads the scan** — the C4/C5 goal-child hold (`coordinator-scan.sh`
+      `ambig`, FU-143 / IL-G06 hold-not-guess) fires on any goal-based `agent/in-progress` issue no
+      PR cites, never reading the `AGENT_STRIKE` + `Resumable branch pushed:` comment finalize
+      wrote — the evidence that decides "abandoned, resume" vs "merged-unlinked". Twice in 24h:
+      oracle-fleet#329 (2026-08-31) and homelab#1149 (2026-09-01: struck 10:30Z, held ~2h at 0/2
+      WIP while #1150/#1151/#1188 waited on its footprint; seat re-queued by hand). **Next:**
+      narrow the hold — strike + resumable branch ⇒ the ordinary C4/C5 unit (`--work-branch` it);
+      no strike ⇒ hold as today. A Goal #1162 scan-theme (#1163) sprout. Relates FU-187 (the
+      no-strike inverse), FU-143.
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 

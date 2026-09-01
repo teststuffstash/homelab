@@ -6030,3 +6030,23 @@ first live ADR-110 maintenance session before the ADR existed.
   behind #328's footprint. oracle-fleet#330 CLOSED `agent/done` (PR#333 merged 10:56Z, harvest
   ran). Both production-leg halves + the reviewer arm relayed to homelab#1039 (two comments).
   WIND-DOWN: monitors killed, one lint-gated push of the batched bookkeeping.
+
+## 2026-09-01 — mechanical session (no corpus): homelab goal-lane wedge — #1149 strike-hold read out, re-queued
+
+- 12:00–12:06Z: operator asked why the platform loop dispatches no homelab workers with only two
+  codeowner parks (#1179, #1191) on the board. Scan pods are GC'd; read the 11:30Z + 12:00Z
+  `coordinate-platform` logs from Loki (tenant `platform-agents`). Not capacity — 0/2 WIP live.
+  All five `agent/queued` homelab issues HELD: **#1149** (`agent/in-progress`, Base
+  `goal/1162-scan`, Touches `coordinator-scan.sh`) struck r1 10:30Z (deepseek-v4-flash;
+  clause-replay fixture `sprout-report-skips-buckets` has no `fixture.yaml`), resumable branch
+  `agent/20260901-100102`, no PR → the C4/C5 goal-child hold printed "undecidable, re-queue by
+  hand" every tick while the stale in-progress held the ADR-097 footprint on
+  `coordinator-scan.sh`; **#1150/#1151/#1188** footprint-held behind it, **#1153** blocked-by
+  #1151; **#459** `agent/blocked` (PR#1192 CHANGES_REQUESTED round 3 — human gate, by design);
+  **#1056** pin-only guarded path (`reflexes-argo.yaml`) — needs re-scope. Verified
+  `goal/1162-scan` carries only #1171/#1173 merged, neither cites #1149 ⇒ abandoned r1, not
+  merged-unlinked. Re-queued #1149 (`agent/queued`, note names the resumable branch for r2),
+  rung `platform` once 12:04Z. Second sighting of the strike-hold shape in 24h (oracle-fleet#329
+  yesterday, "FU-shaped if it resights") → **FU-199 filed** (Dispatch section): strike +
+  resumable branch ⇒ decidable, route to the ordinary C4/C5 unit. Siblings serialize on the
+  same file by design — one at a time is progress, not a wedge.
