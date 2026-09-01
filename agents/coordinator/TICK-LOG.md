@@ -6231,3 +6231,26 @@ first live ADR-110 maintenance session before the ADR existed.
   (compacted to stay ≤10 lines); #887 commented with the skip-clause build + dismissal-probe
   acceptance; meta-state pickup written (wave-2 mint at the close sweep). Direct commits
   batched; one lint-gated push at wind-down.
+
+## 2026-09-01 — sitting cont.: PR#1216 economics read → router-first ruling; #1224/#1225 filed
+
+- CONDITION: operator read the PR#1216 round-3 directive as the tell — the opus-class
+  arbitration authored a four-edit recipe and the flash worker added no value beyond typing
+  (wall time, tool-call failures, €0.03); "the worker is a chmod +x opus-script.sh executor".
+  Diagnosis ratified: the platform has not solved PICKING A GOOD WORKER (bang-for-buck, not
+  cheapest-first); the process patches (verbatim directives, arbitrate-first, round caps,
+  escalate-to-human) are compensation for cheap unstable workers.
+- RULING (operator): **router follow-ups build FIRST, before further process machinery** —
+  FU-201 (escalation carrier), FU-174 (effort), FU-186/ADR-115 (provider quality), §M8
+  feed-4 per-job pricing; right model for the job, then redesign processes around capable
+  workers. Recorded via PR#1226 (chainless-redesign.md, beside the ⚖ ROI-sequencing block).
+  Corollaries recorded there: rounds-cap re-read gated behind good workers; **rung-0
+  mechanical re-dispatch BANKED** ("good idea, too risky right now to do blind") — models
+  first, and non-homelab stacks' daily spend is capped by CI RUNTIME (homelab ci ≈2 min,
+  stacks much longer), so cheap-retry economics are wall-clock-bound.
+- COMMAND (operator "yes" on the PR#1216 durable set): **#1224 filed** (parts-coverage
+  ratchet leg — changed clause lines must be REACHED by a registered fixture; operator-lane,
+  ci.yaml) + **#1225 filed** (pin-vacuity refinements — comment-only exempt, stacked-base
+  "cannot prove" warn, three faces evidenced; operator-lane); **#1212 rostered** into wave-2
+  dispatch-belts (comment on the issue names it the #1210 chain's root cause). meta-state
+  roster + sequencing updated. Direct commits batched; push after PR#1226 lands.
