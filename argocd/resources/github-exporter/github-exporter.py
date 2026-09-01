@@ -1195,10 +1195,8 @@ def collect_open_prs(lines):
                             pr_detail = gh(f"/repos/{repo['name']}/pulls/{pr['number']}")
                             body = pr_detail.get("body") or ""
                             # Parse "Fixes #N" or "Closes #N" (GitHub's closing keywords)
-                            closing_match = re.search(
-                                r"(?i)(?:clos|fix|resolv)(?:e[ds]?|ing)?\s+#(\d+)", body)
-                            if closing_match:
-                                closing_issue = int(closing_match.group(1))
+                            closing_issue = _parse_closing_issue(body)
+                            if closing_issue is not None:
                                 blocking = gh(
                                     f"/repos/{repo['name']}/issues/{closing_issue}/dependencies/blocking?per_page=100")
                                 blocking_count = len(blocking) if isinstance(blocking, list) else 0
@@ -2136,6 +2134,20 @@ def _test_poll_forever_incremental_cycles():
         _carryover = saved_carryover
 
 
+def _parse_closing_issue(body):
+    """Extract a closing-issue number from a PR body using GitHub's closing-keyword convention.
+
+    Returns the issue number as int, or None if no closing keyword is found.
+    The leading-edge anchor ((?:^|[^a-z])) prevents false matches on words like
+    'prefixes', 'unresolved', or 'disclosed' that contain the keyword as a substring.
+    """
+    if not body:
+        return None
+    m = re.search(
+        r"(?i)(?:^|[^a-z])(?:clos|fix|resolv)(?:e[ds]?|ing)?\s+#(\d+)", body)
+    return int(m.group(1)) if m else None
+
+
 def self_test():
     """`python3 github-exporter.py --self-test` — the descendant walk against a recorded tree."""
     assert parse_budget_usd("Budget: $12.50\n") == 12.5
@@ -2143,6 +2155,36 @@ def self_test():
     assert parse_budget_usd("Budget: 16\nBudget: 99\n") == 16.0, "FIRST line wins (ADR-102)"
     assert parse_budget_usd("Budget: to be decided\n") is None, "unreadable ⇒ absent, never 0"
     assert parse_budget_usd(None) is None and parse_budget_usd("") is None
+
+    # ── #1137: closing-keyword regex coverage ────────────────────────────────────────────────────
+    # All 12 closing-keyword forms (3 roots × 4 inflections) must parse.
+    _closing_forms = [
+        "close", "closes", "closed", "closing",
+        "fix", "fixes", "fixed", "fixing",
+        "resolve", "resolves", "resolved", "resolving",
+    ]
+    for kw in _closing_forms:
+        assert _parse_closing_issue(f"This PR {kw} #456") == 456, \
+            f"'{kw}' must parse as closing keyword"
+    # Also test at line start (no leading space)
+    assert _parse_closing_issue("Fixes #789") == 789, "line-start keyword must parse"
+    assert _parse_closing_issue("Closes #789") == 789, "line-start keyword must parse"
+    assert _parse_closing_issue("Resolves #789") == 789, "line-start keyword must parse"
+    # Negative controls: no keyword, non-closing refs, and false-positive substrings
+    assert _parse_closing_issue("Just a reference to #456") is None, \
+        "bare #N with no keyword must NOT parse"
+    assert _parse_closing_issue("Refs #456") is None, \
+        "'Refs #N' must NOT parse as closing"
+    assert _parse_closing_issue("prefixes #456") is None, \
+        "'prefixes #N' must NOT parse (false positive from unanchored regex)"
+    assert _parse_closing_issue("unresolved #456") is None, \
+        "'unresolved #N' must NOT parse (false positive from unanchored regex)"
+    assert _parse_closing_issue("disclosed #456") is None, \
+        "'disclosed #N' must NOT parse (false positive from unanchored regex)"
+    assert _parse_closing_issue(None) is None, "None body must return None"
+    assert _parse_closing_issue("") is None, "empty body must return None"
+    assert _parse_closing_issue("No numbers here") is None, \
+        "body with no #N must return None"
 
     # Cycle safety: the seen-set must terminate a parent graph that points back at itself.
     assert descendants_by_depth({1: 2, 2: 1}, 1) == {2: 1}, "cycle must terminate"
@@ -3031,7 +3073,7 @@ def self_test():
     # to drive the three properties without network or threading.
     _test_poll_forever_incremental_cycles()
 
-    print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
+    print("github-exporter self-test: OK (closing-keyword regex coverage, goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
           "scale, job-level queue/duration metrics + caching + retry on API failure, issue "
