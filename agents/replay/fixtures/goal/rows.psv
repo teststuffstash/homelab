@@ -17,6 +17,14 @@
 #                           unit; the refusal names both legal values and links the consumer card
 bare-member-machine | open-pre | openall.json @ patches/add-bare-member-machine.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-machine
 bare-member-operator | open-pre | openall.json @ patches/add-bare-member-operator.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-operator
+# two-goal-bare-member  = two open goals (29, 123), bare member #303 resolves to #123 → queued
+#                         under #123. Pins fix 1: the old `case " $goals " in` pattern match
+#                         fails with newline-separated goals (≥2 goals → NOMATCH).
+# bare-member-no-touches = bare member #304 has NO Touches: line → btouches="*" → surfaced as
+#                          orphan, never auto-queued. Pins fix 2: the old code classified "*" as
+#                          machine-merge and queued it unscoped.
+two-goal-bare-member     | open-pre | openall.json @ patches/add-second-goal.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | two-goal-bare-member
+bare-member-no-touches   | open-pre | openall.json @ patches/add-bare-member-no-touches.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-no-touches
 base-master-pass   | open-pre | openall.json @ patches/base-master-pass.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles QCLASS=goal QNUM=301 QBASE_RAW=master QPIN=- | base-master-pass
 base-required      | open-pre | openall.json @ patches/base-required.jq    | IN_SLUG=teststuffstash/circles IN_REPO=circles QCLASS=goal QNUM=300 QBASE_RAW=- QPIN=- | base-required
 abandoned          | terminal | openall.json @ patches/verdict-abandoned.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | abandoned

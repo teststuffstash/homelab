@@ -2319,7 +2319,17 @@ EOF_GOVERNANCE
         goal_resolve_ancestor "$slug" "$bn"
         [ -n "$GB_GOAL" ] || continue
         # Only care about goals in THIS repo's open goals set
-        case " $goals " in *" $GB_GOAL "*) ;; *) continue ;; esac
+        # goals is newline-separated (jq -r), so a quoted substring match fails with ≥2 goals.
+        _bm_match=0
+        for _bm_g in $goals; do [ "$_bm_g" = "$GB_GOAL" ] && { _bm_match=1; break; }; done
+        [ "$_bm_match" = 1 ] || continue
+        # Undeclared footprint (*) — surface for human triage (FU-090 / ADR-097), never
+        # auto-queued as machine-doable with no scope.
+        if [ "$btouches" = "*" ]; then
+          bare_highlights="${bare_highlights}  issue #${bn} — resolves to goal #${GB_GOAL} but undeclared footprint — route to operator\n"
+          bare_tally="${bare_tally} ${bn}"
+          continue
+        fi
         case "$(classify_touches "$btouches")" in
           machine-merge|codeowner-merge)
             if gh issue edit "$bn" --repo "$slug" --add-label "agent-fix,agent/queued" >/dev/null 2>&1; then
