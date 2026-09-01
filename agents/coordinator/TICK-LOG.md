@@ -6188,3 +6188,19 @@ first live ADR-110 maintenance session before the ADR existed.
   corrected in the same sitting; the fixture red was the deliberate-change case.
 - Earlier in the same arc: PR#1206's first red was DANGLING FU-199 (base predated the tracker
   entry) → manual top hop + branch update; PR#55 merged 18:02 with the decode fix.
+
+## 2026-09-01 — #1162 endgame: checkpoint ruled cleanly; assembly red = pin-vacuity; seat child PR
+
+- The 18:53Z goal-checkpoint fired on BOTH triggers and ruled exactly right: egress
+  assembly-complete → PR#1213 opened+armed; scan HELD on #1210 (its own mint — the
+  c4c5-ambig-decidable cross-repo regression row for PR#1206's key fix, intake rule 3, queued);
+  plus a ⚠ live-exposure warning that #1148's goal/**-head ci-red exclusion is only on the scan
+  branch — an armed red #1213 is a ci-red candidate on master's selector.
+- That exposure went LIVE minutes later: #1213 redded on the ADR-103 pin-vacuity gate
+  (`opencode-hostaliases/non-opencode` touched by the theme but base-green) and a
+  coordinator-homelab-pr-1213 ci-red session dispatched. Seat defused per the checkpoint's own
+  instruction (PR comment: rule the misfire, no fix round at the protected goal/** head), then
+  fixed the cause: the fixture's theme delta was COMMENT-PROSE only — structurally un-reddable
+  on base — so master's copy was restored byte-exact via child PR#1217 into the theme (armed,
+  bot-gated); its merge lands on #1213's own head → CI re-runs with the file untouched. Gate
+  refinement candidate noted on the PR: a comment-only fixture diff has no pin to prove.
