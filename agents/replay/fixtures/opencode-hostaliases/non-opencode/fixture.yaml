@@ -1,9 +1,7 @@
-# homelab#990 — opencode hostAliases fail-fast: non-opencode harnesses (goose, claude) with
-# EGRESS_ENFORCE unset get no hostAliases stubs — they don't have the un-suppressible SDK-init
-# fetches, and without enforcement the registry.npmjs.org block doesn't fire either.
-# See enforced-non-opencode/ for the enforced case (homelab#107).
+# homelab#990 — opencode hostAliases fail-fast: non-opencode harnesses (goose, claude) get no
+# hostAliases stubs — they don't have the un-suppressible SDK-init fetches.
 #
-# CONDITION UNDER REPLAY: HARNESS=goose, EGRESS_ENFORCE unset, EGRESS_PROFILE unset.
+# CONDITION UNDER REPLAY: HARNESS=goose, EGRESS_PROFILE unset.
 # THE CONTRACT: HOST_ALIASES is empty.
 name: opencode-hostaliases-non-opencode
 mode: actions
