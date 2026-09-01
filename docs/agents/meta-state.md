@@ -12,11 +12,17 @@ meant to avoid.)
   PR#1220 armed (banked block + S8 row).** Pickups: (1) at #1162's `goal/validated` close
   sweep, batch-release the bucket residue and **mint WAVE 2 = the dispatch-belts theme**
   (#1211, #1212, FU-199 residue, FU-200, FU-201 a+b, #1198, #1199; #1190 → coordinator-tier
-  probe, #1200 → operator-direct) — read it on the adoption gate: ≤5 interventions /
-  0 out-of-sitting summonses / 1 owned assembly read. (2) #887 now carries the updater
-  skip-clause build + the deliberate dismissal probe as its acceptance (commented). (3)
-  `Origin:` line + typed defer/release + checkpoint theme-FORMATION are S8 originals — do
-  not build piecemeal ahead of S8; delta 1 (park economics) may land independently.
+  probe, #1200 + #1224 (parts-coverage ratchet) + #1225 (pin-vacuity refinements) →
+  operator-direct) — read it on the adoption gate: ≤5 interventions / 0 out-of-sitting
+  summonses / 1 owned assembly read. (2) #887 now carries the updater skip-clause build +
+  the deliberate dismissal probe as its acceptance (commented). (3) `Origin:` line + typed
+  defer/release + checkpoint theme-FORMATION are S8 originals — do not build piecemeal
+  ahead of S8; delta 1 (park economics) may land independently. (4) **ROUTER-FIRST
+  (operator ruling, 2026-09-01 evening — PR#1226, chainless-redesign.md ⚖):** the router
+  follow-up set (FU-201, FU-174, FU-186/ADR-115, §M8 feed-4 per-job pricing) builds BEFORE
+  further process machinery — within wave 2, FU-201 a+b lead; rung-0 mechanical
+  re-dispatch BANKED (stack CI runtime caps retry economics); the ROUNDS_MAX=3 +
+  escalate-to-human shape re-reads once good workers exist.
 
 - **⚑ 2026-09-01 EVENING design-agents sitting (freeze read + drain) — the fresh-session pickups:**
   - **Goal #1162 endgame**: egress assembly **PR#1213** open+armed; it was RED on ADR-103
