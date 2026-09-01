@@ -180,7 +180,7 @@ transitions:
       - agents/replay/fixtures/fix-debounce   # table row — see rows.psv
     guards:
       - desc: "queue-time deny is the ❌ table ONLY — authoring is not effect, CODEOWNERS gates the merge (operator correction 2026-08-07)"
-        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "SQ_DENY=" }
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "classify_touches" }
       - desc: "an UNDECLARED footprint is exclusive and waits for a human — never queued wide on a guess"
         anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "undeclared = exclusive" }
       - desc: "the doorbell carries {stack, loop_ns} for a GRADUATED stack — a bare {repo} POST fires only the global trigger, whose scan skips graduated stacks (FU-144)"

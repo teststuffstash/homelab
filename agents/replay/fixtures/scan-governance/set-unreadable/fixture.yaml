@@ -1,31 +1,44 @@
-# homelab#993 — the GOVERNANCE set could not be read. Rule #6: never fail INTO a dispatch.
+# homelab#1151 — BOTH pre-dispatch probe-fail branches, one fixture: CODEOWNERS unreadable
+# (operator-lane) AND governance-lint unreadable (governance-set).
 #
-# WHY THIS BRANCH GETS ITS OWN FIXTURE. The check reads its set out of `scripts/governance-lint.sh`
-# instead of re-declaring it, so it inherits a failure mode the re-declared copy would not have:
-# the file moves, or its `GOVERNANCE=` line changes shape, and the reader comes back EMPTY. Empty
-# must mean "unknown", never "nothing is governed" — the second reading turns a routing check into
-# a silent re-opening of the exact hole it was built to close, and it would go unnoticed because
-# everything keeps dispatching. That is the failure class this repo keeps paying for (the same one
-# `governance-lint` itself refuses to green-light through), so it is pinned as behaviour.
+# WHY ONE FIXTURE CARRIES BOTH (remedy (b), PR#1208 arbitration 2026-09-01). The governance
+# probe-fail branch is UNMODIFIED by #1151, so a restored-coverage fixture in its own directory
+# passes against the base tree by definition and reds the ADR-103 pin-vacuity gate — structurally
+# unlandable. This directory already fails on base (the operator-lane sentinels do not exist
+# there), so the governance probe-fail assertion carried HERE is not vacuous, and the review
+# rubric's coverage requirement (the ⛔ GOVERNANCE-SET PROBE-FAILED branch) is met with no loss.
+# The governance cases reproduce origin/master's scan-governance/set-unreadable expectations
+# byte-exact — pinning that #1151 left the branch's behaviour unchanged.
 #
-# THE TWO CASES:
-#   #1002 homelab, `argocd/resources/loki/` — a plainly UNGOVERNED footprint, and it is HELD anyway.
-#        The strongest statement of the branch: with the set unreadable the scan cannot tell, so it
-#        defers (a deferral is absorbed by the next scan; a wrong dispatch burns a round). The
-#        report line names the unreadable path so the one-line fix is in the report itself.
-#   #1008 oracle-fleet, same footprint — DISPATCHED. The blast radius is bounded to the repo the
-#        set belongs to: a broken read in this checkout must not wedge every stack's fixer lane.
+# The operator-lane half: classify_touches() reads CODEOWNERS at runtime. If CODEOWNERS is
+# unreadable, non-❌ paths default to machine-merge; the ❌ set (`.github/`, `.agents/`,
+# `devbox.json|lock`, `scripts/`) is hardcoded in classify_touches() and works regardless.
 #
-# `GOVERNANCE_LINT` is pointed at a path that does not exist, via the same env override the scan
-# already offers. No `world/` and no `gh` call: an unreadable file needs no recording.
+# THE THREE CASES (hold order: operator-lane-hold runs first, governance-hold second; a hold
+# `continue`s, so each case reaches at most one message):
+#   #1002 homelab, `argocd/resources/loki/` — non-❌ (CODEOWNERS unreadable → machine-merge, the
+#        operator-lane hold passes it) and plainly UNGOVERNED — and it is HELD anyway by the
+#        governance probe-fail: with GOVERNANCE_PATHS unreadable the scan cannot tell, so it
+#        defers (rule #6 — never fail INTO a dispatch). Master's strongest-statement case.
+#   #1005 homelab, `devbox.json` — a ❌ path, HELD by the operator-lane hold. The ❌ set is
+#        hardcoded and works with CODEOWNERS unreadable; `continue` means the governance
+#        probe-fail never double-reports it.
+#   #1008 oracle-fleet, `argocd/resources/loki/` — DISPATCHED. Both holds are $GUARDED_REPO-
+#        gated: a broken read in this checkout must not wedge every stack's fixer lane.
+#
+# Both probes are broken via the env overrides the shipped script already declares — the fixture
+# changes the WORLD, never the clause.
 name: scan-governance-set-unreadable
 mode: actions
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
+  - block:operator-lane-set
   - block:governance-set
   - file:cases.sh
+  - block:operator-lane-hold
   - block:governance-hold
   - file:post.sh
 env:
+  - CLASSIFY_CODEOWNERS=/no/such/CODEOWNERS
   - GOVERNANCE_LINT=/no/such/scripts/governance-lint.sh
