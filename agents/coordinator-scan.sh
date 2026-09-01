@@ -948,7 +948,7 @@ fast_unit_dispatch() {
     # Re-validate the item live (at-least-once delivery): still open, still CHANGES_REQUESTED,
     # no breaker label. Probe failure → full scan decides (conservative).
     # `body` rides this existing call for the FU-146 per-item hold below — no extra request.
-    fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels,body,author 2>/dev/null)" \
+    fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels,body,author,headRefName 2>/dev/null)" \
       || { echo "unit fast-path: PR probe FAILED"; return 1; }
   fi
   # PR-specific re-validation checks (only when fprjson is set — i.e., changes-requested clause).
@@ -964,6 +964,15 @@ fast_unit_dispatch() {
     fauthor="$(jq -r '.author.login // ""' <<<"$fprjson")"
     if [ "$fauthor" != "${WORKER_AUTHOR:-app/homelab-agents-1234}" ]; then
       echo "unit fast-path: PR author '${fauthor}' is not the worker lane — no fix-round mandate (homelab#397); settled"
+      return 0
+    fi
+    # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED — a fix round
+    # pushes to the PR head, and the head IS the protected goal/** integration branch (the push
+    # would be refused; the mandate is a NEW child on the goal — coordinator README
+    # goal-checkpoint play). Settle with the FU-143 report line so it never rots silently.
+    fhead="$(jq -r '.headRefName // ""' <<<"$fprjson")"
+    if [[ "$fhead" == goal/* ]]; then
+      echo "unit fast-path: ASSEMBLY PR has changes-requested (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head; settled"
       return 0
     fi
     jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"${fprjson:-null}" \
@@ -3104,6 +3113,16 @@ EOF_GOVERNANCE
         fi
         head8="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid[0:8]')"
         u_head="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefName // ""')"
+        # >>>REPLAY:ci-red-goal-head-exclusion>>>
+        # FU-143: an ASSEMBLY PR (head goal/**) with ci-red is EXCLUDED — a fix round
+        # pushes to the PR head, and the head IS the protected goal/** integration branch
+        # (the push would be refused; the mandate is a NEW child on the goal — coordinator
+        # README goal-checkpoint play). Report-only line below so it never rots silently.
+        if [[ "$u_head" == goal/* ]]; then
+          orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has ci-red (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
+          continue
+        fi
+        # <<<REPLAY:ci-red-goal-head-exclusion<<<
         # attempts = durable count of completed fix rounds on THIS PR — the fast path under the
         # issue-keyed ceiling below, and still what the no-op detector needs. Restart-safe: it reads
         # GitHub, never launcher memory. Bounds the loop: a no-op round costs at most
@@ -3200,7 +3219,7 @@ EOF_GOVERNANCE
             # units-only clauses were invisible to the `[ -z "$items" ]` gate (the meta-14 stall) —
             # every dispatchable unit MUST also add an items line.
             items="${items}[$repo] PR #${u} — ${rclause} (CI red, armed; attempt $((red_rounds+1))/${RED_MAX} on ${red_rounds_key} @ ${head8})\n"
-            item_class_push "$repo" "pr-${u}" "parked-infeasible" "machine"
+            item_class_push "$repo" "pr-${u}" "riding" "machine"
             red_n=$((red_n+1))
           fi
         else

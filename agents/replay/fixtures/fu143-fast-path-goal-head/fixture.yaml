@@ -1,0 +1,19 @@
+# fu143-fast-path-goal-head (homelab#1148) — the doorbell fast-path's FU-143 goal/**-head
+# exclusion for the changes-requested clause. A worker-authored PR with CHANGES_REQUESTED and
+# a goal/** head must settle (no dispatch) because a fix round cannot push to the protected
+# goal/** integration branch.
+#
+# THE CONTRACT: a CHANGES_REQUESTED unit whose PR head is goal/** settles (exit 0,
+# "ASSEMBLY PR has changes-requested (FU-143)") BEFORE any spend — no subscription-latch probe,
+# no kubectl WIP read, no session. The action stream ends at the one PR view; that absence IS
+# the assertion.
+name: fu143-fast-path-goal-head
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:unit-fast-path
+  - file:drive.sh
+env:
+  - ORG=teststuffstash
+  - SCAN_STACK=oracle-fleet
