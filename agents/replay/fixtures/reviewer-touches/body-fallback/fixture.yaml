@@ -1,0 +1,20 @@
+# #1189 — reviewer Touches-escape detection: ISSUE derived from PR body closing keyword.
+#
+# CONDITION UNDER REPLAY. PR base is NOT the default branch, so GitHub leaves
+# closingIssuesReferences empty. The PREP heredoc falls back to parsing the PR body for a
+# closing keyword (Fixes #N) and sets ISSUE from it. This fixture tests the downstream
+# reviewer-touches-check block with ISSUE set from that fallback path.
+#
+# THE CONTRACT:
+#   1. ISSUE is set (simulating body-fallback derivation)
+#   2. Touches-check helper is sourced and computes the escape set
+#   3. All paths in the PR diff are covered by the declared footprint
+#   4. TOUCHES_ESCAPES is set to "none"
+#
+# Parts: bridge.sh (seams: ISSUE, CHANGED) + block:reviewer-touches-check
+name: reviewer-touches-body-fallback
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-touches-check
