@@ -451,10 +451,19 @@ the block needs pruning, not more headings.
       PR cites, never reading the `AGENT_STRIKE` + `Resumable branch pushed:` comment finalize
       wrote — the evidence that decides "abandoned, resume" vs "merged-unlinked". Twice in 24h:
       oracle-fleet#329 (2026-08-31) and homelab#1149 (2026-09-01: struck 10:30Z, held ~2h at 0/2
-      WIP while #1150/#1151/#1188 waited on its footprint; seat re-queued by hand). **Next:**
+      WIP while #1150/#1151/#1188 waited on its footprint; seat re-queued by hand). **THIRD
+      sighting 2026-09-01 (design-agents sitting, operator report "loop frozen"):**
+      oracle-fleet#329 retry-2 struck 12:27Z WITH `Resumable branch pushed:
+      fix/issue-329-alerts-as-code` on the thread — held ~4h at 0 WIP; #337 (no `Touches:` =
+      exclusive) queued behind it; seat re-queued + rang 16:38Z. Same sighting adds the
+      INVISIBILITY half: the hold pushes item-class `held-merged-unlinked` even when NO merged
+      PR mentions the issue (scan `ambig` block — the class name asserts absent evidence), and
+      the footprint-held sibling gets no `who=operator` row at all (`queued-held-by-ghost` keys
+      on blockedBy ghosts only), so `AgentAttentionStanding` sees neither. **Next:**
       narrow the hold — strike + resumable branch ⇒ the ordinary C4/C5 unit (`--work-branch` it);
-      no strike ⇒ hold as today. A Goal #1162 scan-theme (#1163) sprout. Relates FU-187 (the
-      no-strike inverse), FU-143.
+      no strike ⇒ hold as today; + an honest class row for the residue (strike-held, who=operator)
+      and footprint-hold-by-a-held-item joining the hold-chain propagation rule. A Goal #1162
+      scan-theme (#1163) sprout. Relates FU-187 (the no-strike inverse), FU-143.
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 

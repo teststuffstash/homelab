@@ -6060,3 +6060,27 @@ first live ADR-110 maintenance session before the ADR existed.
   (oracle jail, 2026-08-30 — not bot-filed as first said); its `agents/coordinator/*.yaml` glob
   swept in guarded `reflexes-argo.yaml` → re-scoped Touches to `egress-cnp.yaml` +
   `kustomization.yaml` + composition + the pushgateway rule files. Clears on the 12:30Z scan.
+
+## 2026-09-01 — design-agents sitting: oracle lane frozen → FU-199 third sighting, un-wedged
+
+- CONDITION: operator — "the agent loop is frozen again; oracle-fleet 0 PRs, issues queued,
+  nothing moving." Full-corpus read + live probe. NOT capacity, NOT a dead loop: every
+  coordinate-oracle/review-oracle tick Succeeded all afternoon; the scan was correctly
+  refusing to dispatch. Chain: goal #326 child #329 struck r1-retry-2 12:27Z
+  (deepseek-v4-flash, error_class=unknown, post-#1186 — a SECOND cause, not the MCP-attach
+  crash) leaving `agent/in-progress` + no PR + a resumable branch
+  (`fix/issue-329-alerts-as-code` @ 487137b6); the C4/C5 goal-child hold (`ambig`) read it
+  undecidable without reading the strike/branch evidence (FU-199, THIRD sighting in ~24h);
+  its stale in-progress footprint held #337 (no `Touches:` = exclusive) → 0 WIP, 0 PRs,
+  every tick green. Invisibility legs found with it: `ambig` pushes class
+  `held-merged-unlinked` with zero merged mentions (misnamed), and the footprint-held
+  sibling got NO who=operator item-class row — `AgentAttentionStanding` blind to both;
+  FU-199 extended with all of it (resight, no parallel item).
+- COMMAND: re-queued #329 (queued-first, in-progress-second, IL-T16 discipline), resume
+  note names the branch for `--work-branch`, rang oracle once 16:38Z — scan picked up
+  (coordinate-perstack Running, sibling ring absorbed on the mutex). Also noted for the
+  fleet-strike angle: all four #326-child r1 strikes carry the identical
+  `error_class=unknown` fingerprint (three = homelab#1186, fixed; 12:27Z one open); the
+  brief's ≥2-in-24h fleet-strike rule never fired — prose play, no deterministic reader
+  (grep negative: no FU/ADR tracks mechanizing it). Durable-fix ranking delivered in the
+  sitting; FU-filing for the fleet-strike reader held for the operator's call.
