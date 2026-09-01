@@ -5968,3 +5968,31 @@ first live ADR-110 maintenance session before the ADR existed.
   on both oracle and platform — concern closed, no FU. Seat lesson re-learned (memory had it
   since 07-17): zsh does not word-split `$K="devbox run -- kubectl …"` — empty kubectl output
   while gh works = the tell.
+- SECOND BLOCKER (found by #328's coordinator session, 09:49Z; verified live): every `docker:true`
+  worker pod fleet-wide was wedging at `Init:0/1` because both BULK disks (wk-metal-01/mx500,
+  wk-metal-04/sata500) sat at ~76% used → under Longhorn's 25%-FREE scheduling floor →
+  `Schedulable=False` → no `longhorn-scratch` PVC could place. NOT Longhorn data: the replicas
+  sum to ~176G/disk; the rest is the CONTAINER IMAGE STORE sharing the Talos EPHEMERAL partition
+  (ADR-089 addendum) — 21 per-build `arc-runner` images = 75G of a 185G store on wk-metal-01.
+  kubelet image GC starts at 85% USED (default), Longhorn refuses at 75% — the floors never met.
+  ("trim is done?" — yes, the fstrim CronJobs ran 03:17–03:35Z, but that is the pve thin pool for
+  the VMs; these are bare-metal SSDs with real files.) FIX: `imageGCHighThresholdPercent=60 /
+  Low=50` in the kata-node kubelet.extraConfig (tofu/metal.tf), APPLIED ~10:00Z targeted to the
+  four `talos_machine_configuration_apply.metal[…]` (`Plan: 0 to add, 4 to change, 0 to
+  destroy`; configz verified 60/50 on all four; nodes Ready) — the FULL plan also carries
+  pre-existing **ci-runner-01 cloud-init drift that would REPLACE the CI VM** — not applied,
+  operator's call. Both disks `Schedulable=True` again by 10:07Z (132G/127G avail, GC still
+  trimming). Plus `LonghornDiskBelowSchedulingFloor` (>75%/30m) — the 85% FillingUp row is above
+  Longhorn's own refusal point, so the wedge was alert-silent by construction. PR#1193.
+  Third finding from that session — "coordinator-git Secret empty" — is a MISREAD: per-stack
+  coordinators mint once at PREP (`LOOP_FETCH`, no Secret by design); the real defect is no
+  mid-session re-mint = FU-171's class, resighted there (tracker extended).
+- RE-ARM 2: #328 restored `agent/in-progress`→`agent/queued` (its blocker #327 is closed; the
+  seat took the human step its session asked for), rung 10:07Z → scan dispatched the #330 item
+  session (post-#1186 clone) → **`agent-oracle-fleet-issue-330-r1` (goose) launched 10:12Z with
+  `--with-streamable-http-extension 'https://mcp.oracle.teststuff.net/mcp'`, scratch PVC Bound
+  + attached healthy, pod Running on wk-metal-03, and the session's own tool list shows
+  `mcp_oracle_teststuff_net_mcp__{statute,search,give_feedback}`** — #1039 production-leg half 1
+  proven live; half 2 (an MCP-filed row) rides on this round's outcome. (Goose 1.47's tool set
+  has no `read` — the model retried `-32002: Tool 'read' not found` thrice before using shell;
+  recipe/harness quirk, oracle-side, noted not filed.)
