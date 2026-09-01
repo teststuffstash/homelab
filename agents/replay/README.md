@@ -163,6 +163,8 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
+| `ci-red-rounds-two-channels/ci-red-rerun-wake-dispatch` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
+| `ci-red-rounds-two-channels/ci-red-rerun-wake` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `clause-replay-pairing/clause-replay-pairing` | table | - | `agents/coordinator-scan.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |

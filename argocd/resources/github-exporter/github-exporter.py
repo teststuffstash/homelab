@@ -155,7 +155,7 @@ _carryover = {}  # collector.__name__ → its last successful lines, republished
                  # failure so a failed walk still publishes NOTHING for its families (absent ≠ zero)
 _first_successful_poll = True  # homelab#648: skip job timings backfill on first poll to avoid ~25m startup delay
 _review_dispatched = set()  # (repo, number, head_sha) already POSTed this process lifetime
-_cired_dispatched = set()   # (repo, number, head_sha) already red-doorbelled this lifetime (FU-115)
+_cired_dispatched = set()   # (repo, number, head_sha, run_attempt) already red-doorbelled this lifetime (FU-115, homelab#1108)
 _conflict_dispatched = set()  # (repo, number, head_sha) already conflict-doorbelled this lifetime (FU-144)
 _sentinel_dispatched = set()  # (repo, number, head_sha) already sentinel-doorbelled this lifetime (homelab#650)
 _behind_dispatched = set()    # (repo, number, head_sha) already updater-doorbelled this lifetime (ADR-111 #743)
@@ -444,6 +444,10 @@ def collect_job_timings(repo, run):
 def ci_state_from_runs(repo, sha):
     """CI state for a head SHA from workflow-run conclusions — the PRIVATE-repo path (FU-063a).
 
+    Returns (state, max_run_attempt) — the second element is the highest run_attempt across
+    all latest-per-(workflow,event) runs, used by the ci-red edge dedup (homelab#1108) so a
+    rerun (same head_sha, new attempt) re-rings the doorbell.
+
     statusCheckRollup aggregates CHECK RUNS, and no fine-grained-PAT scope can read those on a
     private repo (`checks:read` is App-only; GitHub Actions reports check runs, never commit
     statuses — verified 2026-07-16). `/actions/runs?head_sha=` rides the PAT's existing
@@ -451,26 +455,28 @@ def ci_state_from_runs(repo, sha):
     anything unfinished → pending, any failure-ish conclusion → failure, all green-ish (≥1) →
     success, no runs → none (also the value for non-Actions CI, same degradation as before)."""
     if not sha:
-        return "none"  # empty head_sha= would return ALL runs, not none
+        return ("none", 0)  # empty head_sha= would return ALL runs, not none
     runs = gh(f"/repos/{ORG}/{repo}/actions/runs?head_sha={sha}&per_page=100").get("workflow_runs") or []
     latest = {}
+    max_attempt = 0
     for run in runs:
         key = (run.get("workflow_id"), run.get("event"))
         rank = (run.get("run_number") or 0, run.get("run_attempt") or 0)
         if key not in latest or rank > latest[key][0]:
             latest[key] = (rank, run)
+        max_attempt = max(max_attempt, run.get("run_attempt") or 0)
     if not latest:
-        return "none"
+        return ("none", max_attempt)
     conclusions = []
     for _, run in latest.values():
         if run.get("status") != "completed":
-            return "pending"
+            return ("pending", max_attempt)
         conclusions.append(run.get("conclusion") or "")
     if any(c in ("failure", "timed_out", "startup_failure", "cancelled", "action_required") for c in conclusions):
-        return "failure"
+        return ("failure", max_attempt)
     if all(c in ("success", "neutral", "skipped") for c in conclusions):
-        return "success"
-    return "error"  # stale / unknown mixtures — visible rather than falsely green
+        return ("success", max_attempt)
+    return ("error", max_attempt)  # stale / unknown mixtures — visible rather than falsely green
 
 
 def newest_nonmerge_commit_at_rest(repo, number):
@@ -534,15 +540,17 @@ def stack_of(repo):
     return _stacks_cache["stack_of"].get(repo, "unknown")
 
 
-def maybe_dispatch_cired(repo, number, head_sha, *, ci_state, armed, draft, labels):
+def maybe_dispatch_cired(repo, number, head_sha, *, ci_state, armed, draft, labels, run_attempt=0):
     """FU-115 red edge-trigger (MP-T12): POST a /coordinate doorbell when an ARMED agent PR is
     CI-RED, so the coordinate scan's ci-red clause dispatches a fix round near-instant instead of
     only on the */10 poll — the symmetric twin of the green review edge. Deduped per
-    (repo, number, head_sha): ONE wake per red commit. A no-op fix round pushes NO commit → same
-    head_sha → no re-wake (the content-basis the old 4h `updatedAt` timer lacked, which reset on the
-    no-op's own comment). The scan owns the attempt cap → agent/arbitrate; this only decides WHEN to
-    look. Label exclusions mirror the ci-red scan predicate. Best-effort — the */10 cron is the
-    backstop; a restart re-POSTs a still-red head, which the scan's attempt-count dedups anyway."""
+    (repo, number, head_sha, run_attempt): ONE wake per red (commit, attempt). A rerun (same
+    head_sha, new run_attempt) re-rings the doorbell (homelab#1108). A no-op fix round pushes NO
+    commit → same head_sha → no re-wake unless CI is re-run (the content-basis the old 4h
+    `updatedAt` timer lacked, which reset on the no-op's own comment). The scan owns the attempt
+    cap → agent/arbitrate; this only decides WHEN to look. Label exclusions mirror the ci-red scan
+    predicate. Best-effort — the */10 cron is the backstop; a restart re-POSTs a still-red head,
+    which the scan's attempt-count dedups anyway."""
     if not COORDINATE_WEBHOOK_URL:
         return
     red = (
@@ -554,7 +562,7 @@ def maybe_dispatch_cired(repo, number, head_sha, *, ci_state, armed, draft, labe
     )
     if not red or not head_sha:
         return
-    key = (repo, str(number), head_sha)
+    key = (repo, str(number), head_sha, run_attempt)
     if key in _cired_dispatched:
         return
     payload = {"repo": repo, "number": str(number), "head_sha": head_sha}
@@ -570,7 +578,7 @@ def maybe_dispatch_cired(repo, number, head_sha, *, ci_state, armed, draft, labe
         with urllib.request.urlopen(req, timeout=30) as resp:
             resp.read()
         _cired_dispatched.add(key)
-        print(f"cired-edge: POST /coordinate for {repo}#{number} @ {head_sha[:8]} (CI red)", flush=True)
+        print(f"cired-edge: POST /coordinate for {repo}#{number} @ {head_sha[:8]} (CI red, attempt {run_attempt})", flush=True)
     except Exception as e:
         print(f"cired-edge: POST failed for {repo}#{number}: {e}", flush=True)
 
@@ -1072,11 +1080,12 @@ def collect_open_prs(lines):
                 rollup = (commit or {}).get("statusCheckRollup")
                 if rollup:
                     ci_state = rollup["state"].lower()
+                    ci_run_attempt = 0  # rollup has no attempt info; rerun dedup falls back to head_sha only
                 else:
                     # Private repo (rollup FORBIDDEN-nulls for every PAT) or genuinely no checks:
                     # join workflow runs by head SHA under Actions:read (FU-063a). One REST call
                     # per rollup-less PR per poll — a handful against the 5000/h limit.
-                    ci_state = ci_state_from_runs(repo["name"], pr.get("headRefOid") or "")
+                    ci_state, ci_run_attempt = ci_state_from_runs(repo["name"], pr.get("headRefOid") or "")
                 labels = {
                     "owner": ORG,
                     "repo": repo["name"],
@@ -1143,6 +1152,7 @@ def collect_open_prs(lines):
                     armed=pr.get("autoMergeRequest") is not None,
                     draft=bool(pr["isDraft"]),
                     labels=label_names,
+                    run_attempt=ci_run_attempt,
                 )
                 # FU-144 conflict edge-trigger: the third /coordinate edge — POST when this PR
                 # carries `merge-conflict`, the transition whose workflow.md row promised this
