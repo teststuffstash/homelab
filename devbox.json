@@ -265,6 +265,9 @@
       "follow-ups-lint": [
         "sh scripts/follow-ups-lint.sh"
       ],
+      "goal-lint": [
+        "bash scripts/goal-lint.sh \"$@\""
+      ],
       "skill-retro-scan": [
         "sh scripts/skill-retro-scan.sh"
       ],
