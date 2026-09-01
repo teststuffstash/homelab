@@ -831,3 +831,47 @@ lose their `Follow-ups:` channel — it was calibrated for sprout tails, not del
 document the per-branch master-refresh hop. **G-A itself continues per-child-to-master
 (operator, 2026-08-23: no process change mid-goal); first user = the next platform Goal launch,
 authored from the work map.**
+
+### ⚖ v1.3.1 (BANKED 2026-09-01, operator — the #1162 wave-1 pilot readout; adoption gated on wave 2)
+
+The manual pilot (Goal #1162, 2026-09-01) delivered the tax number the shape was banked for —
+**2 owned merge reads + 1 verdict for 13 landed children vs a ~9-park counterfactual** (store
+entries 18–20 on the Goal; the exporter theme's 0 is an unowned surface, not batching) — at a
+~4:1 intervention overrun that decomposes into one-time pilot costs, orthogonal loop defects
+(FU-199/FU-200/FU-201), and a small intrinsic tail. v1.3.1 = v1.3 + five deltas, each named by
+the pilot's own readout; the target: **the codeowner stops being load-bearing for loop
+throughput** — the human's whole contact with a Goal is N assembly reads + one verdict.
+
+1. **Park economics** — the updater SKIPS human-waiting PRs (bot-approved-at-head ∧
+   `REVIEW_REQUIRED`: stays armed, left BEHIND, one refresh+CI cycle at approval time —
+   homelab#887 owns the skip clause + the deliberate dismissal probe as its acceptance), and
+   the dispatch PR-cap counts only machine-flowing PRs; human-waiting parks get their own
+   larger bound + the BLOCKPARK surfaces (FU-199's cap-split leg — 3 parked nits froze the
+   whole master lane, the 2026-09-01 board freeze). Parks accumulate free between sittings.
+2. **Membership test** — intake = `Touches:` ⊆ fix-surface with an implicit PIN-surface
+   allowance (`agents/replay/**`, FSM files) + a live-deliverable clause + a servable-lane
+   clause (store rows 5/10, entry 19: the file-glob `Surface:` over-admits and
+   under-describes at once); acceptance member lists follow the TREE, never a hand-written
+   topic list (the #459 drift consumed ~half the store's bookkeeping).
+3. **Lineage** — mint-to-origin STANDS (wave-born sprouts stayed under origin 5/5); every
+   filing carries an `Origin: #N` body line so a later container move is lossless; a TYPED
+   defer/release disposition the completion walk skips (4 of wave 1's 7 parent moves were
+   this missing act — the bucket move was the workaround, per the readout comment).
+4. **Theme formation by the goal-checkpoint** — deterministic nomination (footprint
+   prefix-intersection over open sprouts, ≥2 sharing a surface — the existing
+   `agents/footprint.sh` predicate, new consumer), the checkpoint judges membership
+   (topic / live deliverable / servable lane / ¬hotfix), mints the level-2, creates
+   `goal/<n>-<theme>` from master (one API call; the `goal/**` ruleset pattern protects it
+   automatically — IL-G02's revisit condition has now fired twice: oracle-fleet#326 and this
+   pilot), reparents + stamps `Base:` + queues under the goal's existing authorization
+   (breaker #1 moved up, IL-T15). **Opt-in per Goal**; intake still closes at assembly-open.
+5. **Routing default** — minor sprouts theme by default; the master lane is hotfix-class only
+   (🚨 / live blocking edge — the 2026-08-31 drainage ruling's clause 1).
+
+**Adoption gate (direction-5 metrics, never read counts):** wave 2 — the dispatch-belts theme,
+minted at #1162's close sweep (batch re-homing at the accountable moment) — reads
+**≤5 interventions, 0 out-of-sitting summonses, 1 owned assembly read**. A comparable overrun
+from NEW defect classes re-opens the 2026-08-31 banked alternative (batch-queue + serial parks)
+instead. Build home: **S8** owns deltas 2–4; delta 1 rides #887 + FU-199 independently of any
+theme adoption. Also carried from the pilot: acceptance-4's soak gates the GOAL verdict, never
+the level-2 close (the soak structurally follows the assembly merge).

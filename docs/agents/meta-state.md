@@ -8,6 +8,59 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-01 NIGHT — GOAL #1231 LIVE (router-first, operator-launched; the NEXT session's
+  role is MONITOR + GATE-READ).** Tree: G1 #1232 (label_map md/lg + re-grade plays, FU-201 a+b)
+  · G2 #1233 (key-class re-mint, FU-202) · G3 #1234 (provider-attributed strikes +
+  pair-exclusion, blockedBy #1233) · G4 #1235 (fleet-strike reader, FU-200) · G5 #1236
+  (provider_policy/exacto, FU-186 step 1) — all queued, platform rung; E1 #1237 (FU-174
+  effort spike) + E2 #1238 (0731 matrix run + model_tiers verdict PR) = OPERATOR/SEAT legs,
+  deliberately unqueued (goal-lint's 4 WARNs are these two). Monitor duties: standing watch
+  set + board; ADR-110 gate reads on the parks (G1–G4 touch `agents/**` → codeowner-park at
+  bot approval; G5 bot-merges — unowned proxy surface); hold G4↔G2 coherent at review
+  (key-class rows are NOT strikes once G2 lands); run E1/E2 in a seat sitting; verdict =
+  operator at tree-empty per the Production-leg. **Wave-2 roster change: FU-200 + FU-201
+  legs MOVED into #1231** — remaining wave-2 = #1211, #1212, FU-199 residue, #1198, #1199
+  (+ #1224/#1225 operator-lane), still minted at #1162's close sweep, AFTER #1231
+  (router-first, PR#1226). **PR#1208 pickup**: remedy (b) pushed (`4ecff105`), breakers
+  cleared, #1151 → agent/review — CI → re-review → the codeowner read is the next session's
+  if this one is gone.
+- **⚑ 2026-09-01 LATE SITTING — v1.3.1 BANKED (operator: "deserves a place when it works");
+  PR#1220 armed (banked block + S8 row).** Pickups: (1) at #1162's `goal/validated` close
+  sweep, batch-release the bucket residue and **mint WAVE 2 = the dispatch-belts theme**
+  (#1211, #1212, FU-199 residue, FU-200, FU-201 a+b, #1198, #1199; #1190 → coordinator-tier
+  probe, #1200 + #1224 (parts-coverage ratchet) + #1225 (pin-vacuity refinements) →
+  operator-direct) — read it on the adoption gate: ≤5 interventions / 0 out-of-sitting
+  summonses / 1 owned assembly read. (2) #887 now carries the updater skip-clause build +
+  the deliberate dismissal probe as its acceptance (commented). (3) `Origin:` line + typed
+  defer/release + checkpoint theme-FORMATION are S8 originals — do not build piecemeal
+  ahead of S8; delta 1 (park economics) may land independently. (4) **ROUTER-FIRST
+  (operator ruling, 2026-09-01 evening — PR#1226, chainless-redesign.md ⚖):** the router
+  follow-up set (FU-201, FU-174, FU-186/ADR-115, §M8 feed-4 per-job pricing) builds BEFORE
+  further process machinery — within wave 2, FU-201 a+b lead; rung-0 mechanical
+  re-dispatch BANKED (stack CI runtime caps retry economics); the ROUNDS_MAX=3 +
+  escalate-to-human shape re-reads once good workers exist.
+
+- **⚑ 2026-09-01 EVENING design-agents sitting (freeze read + drain) — the fresh-session pickups:**
+  - **Goal #1162 endgame**: egress assembly **PR#1213** open+armed; it was RED on ADR-103
+    pin-vacuity (comment-only fixture touch) — seat child **PR#1217** armed into
+    `goal/1162-egress` restores master's `non-opencode` fixture byte-exact; its merge lands on
+    #1213's own head → CI re-runs → bot verdict → **the codeowner read is the pickup** (coverage
+    map verified sound this sitting). Scan theme held on **#1210** (queued: pin PR#1206's
+    repo-qualified key, salvage `agent/20260901-165514`); when it lands the checkpoint re-rules
+    → scan assembly (`Fixes #1163`) → second codeowner read → tree-empty → **operator's
+    `goal/validated` read**. ⚠ the 18:53Z checkpoint's live exposure STANDS until the scan theme
+    lands: master's ci-red selector lacks the goal/**-head exclusion (#1148's fix rides the scan
+    branch) — if #1213 reds again, rule the misfire (precedent comment on the PR).
+  - **PR#1208** (#1151 Touches-classifier lint) round-1 CHANGES_REQUESTED — machine round 2.
+  - Oracle: **PR#340** (#329's sonnet resume — the FU-199 strike-hold arc's delivery) + **PR#338**
+    (#337 r2) riding review; #326 `Budget:` 8→12 (jail cap-sum artifact; rationale on the goal).
+  - **FU-201 build wave** (operator-ruled): size-label re-grade carrier + label_map md/lg rows +
+    brief vocabulary section + served-provider column on strikes / (model, provider)
+    pair-exclusion on serving-shaped re-picks — folds with FU-186. FU-200 = the fleet-strike
+    deterministic reader. FU-199 fix merged (PR#1206) + the #1210 pin; residue legs in the FU.
+  - openrouter-operator **PR#55 merged** incl. the seat's base64-decode catch (deploy pin #1209
+    flowing) — when it deploys, verify the first NormalizeSecret pass on a legacy Secret
+    normalizes rather than corrupts (read the Secret value shape after).
 - **⚑ SOAK — which goals/stints are past it (read 2026-09-01 ~08:10Z, the corpus session's
   wind-down; verdicts are the OPERATOR's, the seat only recommends):**
   - **#818 G-B — `goal/validated` looks DUE.** Post-launch since 08-30 20:39Z; tree = the

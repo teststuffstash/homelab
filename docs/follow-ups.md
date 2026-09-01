@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-200** (the counter lagged a third time — FU-190..194 minted 2026-08-27 while it read 189; before that, FU-183/FU-185 were minted out of order the same way). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-203** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -397,7 +397,18 @@ the block needs pruning, not more headings.
       (c) provider outranks model class — strikes gain the served-provider column, serving-shaped
       strikes exclude the (model, provider) pair on re-pick (#783 legs; quality = FU-186/ADR-115
       pin-v2 + M14 pair-cooldowns). Rejected: task/build as routing basis, `model/strong`,
-      attempt-count auto-escalation (banked, feed-4). Relates FU-174, FU-186, ADR-094/096/115. — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
+      attempt-count auto-escalation (banked, feed-4). Relates FU-174, FU-186, ADR-094/096/115.
+
+- [ ] **FU-202** — **A key-class failure strikes the MODEL, losing the primary rail for the
+      whole task** (#1151, 2026-09-01): r1's xs session key died mid-ride
+      (`budget-exhausted-key`, proxy auth circuit-open 08:02Z) and was treated as a
+      (task, model) STRIKE — deepseek blacklisted for #1151, so rounds 1–6 rode subscription
+      haiku ×5 + Go flash ×1 (both rails ruled WRONG for cheap coding: Go = janitorial
+      posture, haiku = the shared pool) for want of a $0.25 re-mint. M1's own table says
+      budget-403* is "neither round nor strike"; the raw-log subclass `budget-403-key` = mint
+      defect. **Next:** strike consumers (coordinator brief chain-walk + launcher re-dispatch)
+      treat key-class `error_class` as RE-MINT + same-model retry, never a model strike —
+      router-first set (chainless-redesign ⚖). Relates FU-201, agent-runtime#85, FU-180. — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
       The #447 review ran 47 min (kimi-k3, **$6.33** — balance regime, FU-170); the dispatch-time
       installation token 401'd ~07:50Z BEFORE the verdict posted — a full CHANGES_REQUESTED lost
       (recoverable: S3 reviewer-r1 transcript + pod log); `/var/run/reviewer-git/` never refreshes
@@ -458,15 +469,15 @@ the block needs pruning, not more headings.
       the donor for the next `new-stack --from` must already have it. Relates FU-114.
 
 - [ ] **FU-199** — **Silent holds freeze whole lanes invisibly.** Four faces in ~48h: the C4/C5
-      goal-child hold never reads the `AGENT_STRIKE` + `Resumable branch pushed:` evidence
-      finalize wrote (oracle#329 ×2, homelab#1149 — struck children held hours, footprints
-      freezing siblings); the hold pushes class `held-merged-unlinked` with zero merged
-      mentions; footprint-held siblings get no `who=operator` row; and the TRACKS-rule-1
-      PR-cap hold (3 human-waiting master PRs, 2026-09-01 board freeze) held every dispatch
-      with its ⏳ line dying in GC'd pod logs. **Next:** hold-narrowing (strike + branch ⇒
-      ordinary C4/C5 `--work-branch` unit) = #1203/PR#1206, riding; residue = honest class rows
-      (strike-held) + hold-chain propagation extended to footprint-holds-by-held-items and
-      cap-held-by-human-waiting-PRs ⇒ who=operator + aggregate. Relates FU-187, FU-143.
+      goal-child hold never read the strike + resumable-branch evidence (oracle#329 ×2,
+      homelab#1149 — struck children held hours, footprints freezing siblings); class
+      `held-merged-unlinked` misnamed; footprint-held siblings got no `who=operator` row; the
+      PR-cap hold (3 human-waiting PRs, the 2026-09-01 board freeze) held every dispatch.
+      **Next:** hold-narrowing = #1203/PR#1206 merged (#1210 pins it); residue = honest
+      strike-held rows + hold-chain propagation (footprint/cap-held ⇒ who=operator + aggregate)
+      + the CAP SPLIT (v1.3.1 delta 1, issue-authoring.md 2026-09-01): the dispatch cap counts
+      only machine-flowing PRs — human-waiting parks get their own bound + BLOCKPARK.
+      Relates FU-187, FU-143, homelab#887.
 
 - [ ] **FU-200** — **The brief's fleet-strike rule has no deterministic reader.** "Same
       `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h ⇒ ONE
