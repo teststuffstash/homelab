@@ -5895,3 +5895,13 @@ first live ADR-110 maintenance session before the ADR existed.
   one lane over): r1's acceptance pinned to row 1 in the body + a comment so the reviewer
   does not block it; residue = a child at closeout. #857 parked on G-D (Talos 1.13.8 = G-D's
   first class-6 human-applied ride; #502 draft addendum; work-map row PR#1176).
+- /handoff (oracle, filed 07:06Z: "how is a stack supposed to use Prometheus/Grafana/
+  Alertmanager? — the consumption contract is undocumented"): prior-art confirmed absent
+  (catalog rows + sleep-iac.md precedent only). SHIPPED `docs/patterns/observability.md` (the
+  app-owned-resources.md sibling) via PR#1178 — every constant read from the live values
+  (cluster-wide selectors, sidecar ALL, routing tree root→ha-webhook + continue→responder
+  grouped by alertname, info inhibited, uids prometheus/loki/sleep-data) + the sidecar
+  `folderAnnotation: grafana_folder` knob (per-stack folders; un-annotated CMs unaffected) +
+  SERVICES.md pointer. CORRECTION found en route: docs/sleep-iac.md said datasource uid
+  `sleep-notes` — live is `sleep-data` (fixed in the PR; the filer had copied the stale doc).
+  Result appended, task → done/. Doc is the durable record.
