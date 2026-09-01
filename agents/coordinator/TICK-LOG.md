@@ -5968,3 +5968,65 @@ first live ADR-110 maintenance session before the ADR existed.
   on both oracle and platform — concern closed, no FU. Seat lesson re-learned (memory had it
   since 07-17): zsh does not word-split `$K="devbox run -- kubectl …"` — empty kubectl output
   while gh works = the tell.
+- SECOND BLOCKER (found by #328's coordinator session, 09:49Z; verified live): every `docker:true`
+  worker pod fleet-wide was wedging at `Init:0/1` because both BULK disks (wk-metal-01/mx500,
+  wk-metal-04/sata500) sat at ~76% used → under Longhorn's 25%-FREE scheduling floor →
+  `Schedulable=False` → no `longhorn-scratch` PVC could place. NOT Longhorn data: the replicas
+  sum to ~176G/disk; the rest is the CONTAINER IMAGE STORE sharing the Talos EPHEMERAL partition
+  (ADR-089 addendum) — 21 per-build `arc-runner` images = 75G of a 185G store on wk-metal-01.
+  kubelet image GC starts at 85% USED (default), Longhorn refuses at 75% — the floors never met.
+  ("trim is done?" — yes, the fstrim CronJobs ran 03:17–03:35Z, but that is the pve thin pool for
+  the VMs; these are bare-metal SSDs with real files.) FIX: `imageGCHighThresholdPercent=60 /
+  Low=50` in the kata-node kubelet.extraConfig (tofu/metal.tf), APPLIED ~10:00Z targeted to the
+  four `talos_machine_configuration_apply.metal[…]` (`Plan: 0 to add, 4 to change, 0 to
+  destroy`; configz verified 60/50 on all four; nodes Ready) — the FULL plan also carries
+  pre-existing **ci-runner-01 cloud-init drift that would REPLACE the CI VM** — not applied,
+  operator's call. Both disks `Schedulable=True` again by 10:07Z (132G/127G avail, GC still
+  trimming). Plus `LonghornDiskBelowSchedulingFloor` (>75%/30m) — the 85% FillingUp row is above
+  Longhorn's own refusal point, so the wedge was alert-silent by construction. PR#1193.
+  Third finding from that session — "coordinator-git Secret empty" — is a MISREAD: per-stack
+  coordinators mint once at PREP (`LOOP_FETCH`, no Secret by design); the real defect is no
+  mid-session re-mint = FU-171's class, resighted there (tracker extended).
+- RE-ARM 2: #328 restored `agent/in-progress`→`agent/queued` (its blocker #327 is closed; the
+  seat took the human step its session asked for), rung 10:07Z → scan dispatched the #330 item
+  session (post-#1186 clone) → **`agent-oracle-fleet-issue-330-r1` (goose) launched 10:12Z with
+  `--with-streamable-http-extension 'https://mcp.oracle.teststuff.net/mcp'`, scratch PVC Bound
+  + attached healthy, pod Running on wk-metal-03, and the session's own tool list shows
+  `mcp_oracle_teststuff_net_mcp__{statute,search,give_feedback}`** — #1039 production-leg half 1
+  proven live; half 2 (an MCP-filed row) rides on this round's outcome. (Goose 1.47's tool set
+  has no `read` — the model retried `-32002: Tool 'read' not found` thrice before using shell;
+  recipe/harness quirk, oracle-side, noted not filed.)
+- OUTCOME (10:20Z): the r1-retry ride opened **oracle-fleet#333** ("probe brief + Rung B record +
+  WM-1 feedback rows") — two `give_feedback` rows accepted by the server (`stale_ranking`,
+  `wrong_error`), launcher-stamped `goose/deepseek/deepseek-v4-flash` in `comment`; transcript
+  `s3://agent-transcripts/oracle-fleet/issue-330/worker-r1-20260901T102118Z/`. Egress proven
+  three ways (CNP leg present in `oracle-fleet`/`oracle-iac` `agent-worker-egress`; Hubble
+  FORWARDED flows pod→192.168.3.22:443 for the whole ride; the session's tool list). Reviewer
+  arm: reviewer pods in `oracle-agents` sit behind NO CNP/CCNP/NetworkPolicy (reach by absence —
+  if reviewer egress is ever fenced it needs the same `$mcpHost` leg); config shape proven from
+  the jail with byte-identical JSON (`claude -p … --mcp-config --strict-mcp-config` →
+  `mcp__stack-mcp__{statute,search,give_feedback}`); live reviewer ride on #333 watched. Both
+  halves relayed to homelab#1039 (comment 5492494412) — the G-F `goal/validated` read is the
+  operator's. #333 arrived un-armed (C9 arms it) and codeowner-parks on `.agents/` — oracle's.
+- 10:34–10:53Z: operator APPROVED oracle-fleet#333 (codeowner read) → `reviewDecision=APPROVED`
+  → the reflex's already-merging clause excludes it, so #333 lands on CI-green auto-merge with
+  NO bot pass — the reviewer arm's live check moves to the next oracle worker PR (watch armed on
+  `reviewer-oracle-*` pods for `MCP_FLAG`). #328 stayed `agent/queued` through three scans; the
+  captured scan log named the cause: ADR-097 footprint held by **#329** (`agent/in-progress`,
+  `scripts/ci.sh` + `specs/server/observability.md`) — the THIRD ride the goose crash struck
+  (09:28Z), left in-progress with no PR, scan-held as C4/C5-undecidable. Restored #329 →
+  `agent/queued` (note posted), rung 10:53Z; #328/#329 overlap on observability.md so they run
+  one at a time. Lesson for the strike path: a strike that leaves `agent/in-progress` + no PR
+  parks the item AND its footprint neighbours until a human reads the scan — FU-shaped if it
+  resights (the breaker doctrine says human-first, but a launcher-level arg crash on round 1 with
+  nothing committed is not an anomaly of the item).
+- 11:12Z REVIEWER ARM LIVE: `reviewer-oracle-fleet-334-640c8fc7` (sonnet, the operator's own
+  oracle-fleet#334) — pod script carries `MCP_FLAG='--mcp-config /tmp/mcp-config.json'`; Claude
+  Code's own MCP log inside the pod: "Successfully connected (transport: http) in 216ms …
+  hasTools:true, serverVersion riigiteataja-statute 0.1.0". Hubble had shown NO flow from that
+  pod to the VIP — filter/window artefact (a probe curl from the pod showed fine); the app log is
+  the authority, the one to read next time: `~/.cache/claude-cli-nodejs/<cwd-slug>/mcp-logs-<server>/`.
+  #328 r1 → PR#335 (second clean goose ride, scratch PVC placed first try post-GC); #329 next
+  behind #328's footprint. oracle-fleet#330 CLOSED `agent/done` (PR#333 merged 10:56Z, harvest
+  ran). Both production-leg halves + the reviewer arm relayed to homelab#1039 (two comments).
+  WIND-DOWN: monitors killed, one lint-gated push of the batched bookkeeping.
