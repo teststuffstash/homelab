@@ -1,0 +1,24 @@
+# homelab#1151 — GOVERNANCE_LINT unreadable: governance-hold probe-fail branch.
+#
+# WHAT IT PINS. governance-hold has a probe-fail case: if GOVERNANCE_PATHS (derived from
+# GOVERNANCE_LINT) is empty, the issue is held with a loud, level-triggered message rather
+# than dispatched blind. This fixture verifies that path works when GOVERNANCE_LINT points
+# to a non-existent file.
+#
+# THE CASE:
+#   #1009 homelab, `policy/` — HELD with ⛔ GOVERNANCE-SET PROBE-FAILED. GOVERNANCE_LINT
+#         is unreadable (points to a path that does not exist), so GOVERNANCE_PATHS is empty.
+#         The probe-fail branch fires and holds the issue with a clear message.
+#
+# `GOVERNANCE_LINT` is pointed at a path that does not exist.
+name: scan-governance-governance-set-unreadable
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:governance-set
+  - file:cases.sh
+  - block:governance-hold
+  - file:post.sh
+env:
+  - GOVERNANCE_LINT=/no/such/governance-lint.sh

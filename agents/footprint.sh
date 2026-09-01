@@ -137,7 +137,7 @@ classify_touches() (
             # Directory pattern match (trailing /)
             _co_owned="$_co_has_owner"
           fi
-        done < "$_co_file" 2>/dev/null || true
+        done 2>/dev/null < "$_co_file" || true
 
         if [ "$_co_owned" -eq 1 ]; then
           # Last matching pattern has an owner — codeowner-merge

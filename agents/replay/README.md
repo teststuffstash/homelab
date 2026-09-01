@@ -309,6 +309,7 @@ is stale, so it cannot drift the way the prose register did.
 | `route-request/labels` | actions | - | `agents/agent-session.sh` | - |
 | `route-request/workbranch-tight` | actions | - | `agents/agent-session.sh` | - |
 | `run-phase-metric/run-phase-metric` | actions | - | `agents/agent-session.sh` | - |
+| `scan-governance/governance-set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-governance/non-dot-meta` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-governance/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-governance/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
