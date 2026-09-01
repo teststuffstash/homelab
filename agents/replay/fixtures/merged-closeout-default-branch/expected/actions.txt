@@ -1,0 +1,5 @@
+CALL gh pr list --repo teststuffstash/homelab --state merged --limit 40 --json number,body,baseRefName
+CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json body --jq [.[].body // ""]
+CALL gh issue list --repo teststuffstash/homelab --state closed --label agent-fix --limit 30 --json number,title,labels,updatedAt
+OUT REACHED: end
+RC 0
