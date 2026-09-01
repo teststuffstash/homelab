@@ -1200,7 +1200,7 @@ def collect_open_prs(lines):
                             if closing_match:
                                 closing_issue = int(closing_match.group(1))
                                 blocking = gh(
-                                    f"/repos/{repo['name']}/issues/{closing_issue}/dependencies/blocking")
+                                    f"/repos/{repo['name']}/issues/{closing_issue}/dependencies/blocking?per_page=100")
                                 blocking_count = len(blocking) if isinstance(blocking, list) else 0
                                 block_labels = {"owner": ORG, "repo": repo["name"],
                                                 "pr": str(pr["number"]),
@@ -2913,7 +2913,117 @@ def self_test():
         _job_timings.clear()
         _jobs_fetched.clear()
 
-    # ── poll_forever() incremental-cycle behavior (#676) ───────────────────────────────────────────
+    # ── #1138: park-blocking count pagination (per_page=100 on dependencies/blocking) ──────────────
+    # The blocking-edge read for codeowner-parked PRs must request 100 items per page so the count
+    # does not saturate at GitHub's default page size (30). This test exercises the full code path
+    # through collect_open_prs with a mocked GraphQL response and mocked gh() calls.
+    saved_graphql = globals().get('graphql')
+    saved_gh_for_park = globals()['gh']
+    saved_open_prs_prev = dict(_open_prs_prev)
+    _open_prs_prev.clear()
+    _AGENT_ISSUE_NUMBERS.clear()
+    _GOAL_TREES.clear()
+    gh_calls = []
+
+    def _mock_graphql_park_blocking(query, variables):
+        """Return a fixture with one repo and one PR that triggers the park blocking code path."""
+        return {
+            "organization": {
+                "repositories": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    "nodes": [
+                        {
+                            "name": "test-repo",
+                            "agentIssues": {"nodes": []},
+                            "pullRequests": {
+                                "nodes": [
+                                    {
+                                        "number": 123,
+                                        "isDraft": False,
+                                        "updatedAt": "2026-09-01T00:00:00Z",
+                                        "reviewDecision": "REVIEW_REQUIRED",
+                                        "baseRefName": "main",
+                                        "headRefName": "fix/foo",
+                                        "mergeStateStatus": "CLEAN",
+                                        "labels": {"nodes": []},
+                                        "reviews": {
+                                            "nodes": [
+                                                {
+                                                    "author": {"login": "homelab-reviewer[bot]"},
+                                                    "state": "APPROVED",
+                                                    "submittedAt": "2026-09-01T00:05:00Z",
+                                                }
+                                            ]
+                                        },
+                                        "headRefOid": "abc123def",
+                                        "autoMergeRequest": None,
+                                        "commits": {
+                                            "nodes": [
+                                                {
+                                                    "commit": {
+                                                        "committedDate": "2026-09-01T00:00:00Z",
+                                                        "messageHeadline": "fix: something",
+                                                        "statusCheckRollup": {"state": "SUCCESS"},
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+            }
+        }
+
+    def _mock_gh_park_blocking(path, token=None):
+        """Mock gh() for park blocking test: record calls and return appropriate responses."""
+        gh_calls.append(path)
+        if "/pulls/" in path and "/dependencies" not in path and "/issues/" not in path:
+            return {"body": "This PR fixes #456"}
+        if "/dependencies/blocking" in path:
+            # Return 35 items to verify pagination doesn't saturate at default 30
+            return [{"id": i} for i in range(35)]
+        if "/issues/" in path and "/dependencies" not in path:
+            return {"title": "Some issue"}
+        return {}
+
+    globals()['graphql'] = _mock_graphql_park_blocking
+    globals()['gh'] = _mock_gh_park_blocking
+    try:
+        park_lines = []
+        collect_open_prs(park_lines)
+        park_body = "\n".join(dedupe_exposition(park_lines))
+
+        # Verify the park blocking count metric is emitted with the correct count (35)
+        assert 'github_pull_request_park_blocking_count{' in park_body, \
+            f"park blocking count metric must be emitted; got:\n{park_body}"
+        assert 'issue="456"' in park_body, \
+            f"park blocking count must reference closing issue 456; got:\n{park_body}"
+        # The count should be 35 (all items returned, not capped at 30)
+        assert ' 35' in park_body.split("github_pull_request_park_blocking_count")[-1].split("\n")[0], \
+            f"park blocking count must be 35 (not capped at 30); got:\n{park_body}"
+
+        # Verify the blocking dependencies URL includes per_page=100
+        blocking_calls = [c for c in gh_calls if "/dependencies/blocking" in c]
+        assert len(blocking_calls) == 1, f"expected 1 blocking call, got {len(blocking_calls)}"
+        assert "per_page=100" in blocking_calls[0], \
+            f"blocking dependencies URL must include per_page=100; got: {blocking_calls[0]}"
+
+        # Verify the codeowner_park metric is also emitted (the PR is parked)
+        assert 'github_pull_request_codeowner_park{' in park_body, \
+            f"codeowner park metric must be emitted for a bot-approved REVIEW_REQUIRED PR; got:\n{park_body}"
+    finally:
+        if saved_graphql:
+            globals()['graphql'] = saved_graphql
+        else:
+            globals().pop('graphql', None)
+        globals()['gh'] = saved_gh_for_park
+        _open_prs_prev.clear()
+        _open_prs_prev.update(saved_open_prs_prev)
+        _AGENT_ISSUE_NUMBERS.clear()
+        _GOAL_TREES.clear()
     # The poll loop accumulates and deduplicates across multiple collectors within each cycle.
     # A fixture-driven seam tests that (a) _body grows monotonically across collectors, (b) _dupes
     # counts each real duplicate exactly once per cycle (the #669 round-2 regression), and
