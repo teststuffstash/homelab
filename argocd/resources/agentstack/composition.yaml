@@ -1367,7 +1367,7 @@ spec:
                     {{- if $mcp }}
                     {{- $mcpHost := $mcp.endpoint | trimPrefix "https://" | trimPrefix "http://" | splitList "/" | first | splitList ":" | first }}
                     # MCP endpoint HOST, derived from spec.mcp.endpoint. The knob holds a URL —
-                    # the launcher's --mcp-config needs the whole thing (#1041) — but toFQDNs
+                    # the launcher's harness attach flag needs the whole thing (#1041) — but toFQDNs
                     # matches a DNS query name, so the leg takes the bare host. That host must be
                     # an FQDN, never a service VIP (FU-072/kata).
                     - { matchName: {{ $mcpHost }} }
