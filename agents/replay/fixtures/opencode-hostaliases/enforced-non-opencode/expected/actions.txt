@@ -1,0 +1,6 @@
+OUT HOST_ALIASES (non-empty):
+OUT   hostAliases:
+OUT     - ip: "127.0.0.1"
+OUT       hostnames:
+OUT         - "registry.npmjs.org"
+RC 0

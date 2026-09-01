@@ -286,7 +286,9 @@ spec:
           # homelab added 2026-08-05: its fixer block (FU-068) enforces egress, and the regex had
           # not followed — exactly the drift the line above warns about. circles stays OUT until
           # its `enforce: false` flips; in monitor mode Cilium never emits a DROPPED verdict.
-          expr: sum by (source) (rate(hubble_drop_total{reason="POLICY_DENIED", source=~"oracle-fleet|sleep-tracking|openrouter-operator|homelab|agent-runtime"}[5m])) > 0
+          # WIDENED 2026-09-01 (homelab#1056): loop namespaces (<stack>-agents) and agent-coordinator
+          # now carry monitor-mode CNPs — the regex must cover them before any enforce flip.
+          expr: sum by (source) (rate(hubble_drop_total{reason="POLICY_DENIED", source=~"oracle-fleet|sleep-tracking|openrouter-operator|homelab|agent-runtime|agent-coordinator|.*-agents"}[5m])) > 0
           for: 2m
           labels:
             severity: warning
