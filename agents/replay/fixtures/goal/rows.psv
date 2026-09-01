@@ -15,6 +15,8 @@
 #                           no refusal (the choice being explicit is the point)
 # base-required           = task/goal + agent/queued, NO Base: line → fail-closed refusal, no decompose
 #                           unit; the refusal names both legal values and links the consumer card
+bare-member-machine | open-pre | openall.json @ patches/add-bare-member-machine.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-machine
+bare-member-operator | open-pre | openall.json @ patches/add-bare-member-operator.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-operator
 base-master-pass   | open-pre | openall.json @ patches/base-master-pass.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles QCLASS=goal QNUM=301 QBASE_RAW=master QPIN=- | base-master-pass
 base-required      | open-pre | openall.json @ patches/base-required.jq    | IN_SLUG=teststuffstash/circles IN_REPO=circles QCLASS=goal QNUM=300 QBASE_RAW=- QPIN=- | base-required
 abandoned          | terminal | openall.json @ patches/verdict-abandoned.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | abandoned

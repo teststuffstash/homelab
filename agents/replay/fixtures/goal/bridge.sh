@@ -11,7 +11,10 @@
 # them at top; the extracted block gets them here. Only the checkpoint-due and nonassembly rows
 # reach the store fns, but sourcing a helper with a source-guard is harmless on the terminal rows.
 # Every read/write they make rides the PATH-shim gh.
+. "$REPLAY_ROOT/agents/goal-budget.sh"
+. "$REPLAY_ROOT/agents/footprint.sh"
 . "$REPLAY_ROOT/agents/goal-findings.sh"
+HERE="$REPLAY_ROOT/agents"
 slug="$IN_SLUG"
 repo="$IN_REPO"
 openall="$(cat "$REPLAY_FIXTURE/world/openall.json")"
