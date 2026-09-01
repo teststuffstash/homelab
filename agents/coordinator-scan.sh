@@ -413,9 +413,21 @@ STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-
 pr_state_fp_pair() {
   # Declared on their own line, never `local x="$(cmd)"` — that form makes `local` the command
   # whose status is tested, so the `|| fallback` and `set -e` both read the wrong exit code.
-  local fp_probe fp_raw fp_prev fp_cur fp_jq
-  fp_probe="$(gh pr view "$2" --repo "$1" \
-      --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || fp_probe=''
+  local fp_probe fp_raw fp_prev fp_cur fp_jq pr_json
+  # Use pre-fetched JSON if provided and valid. When the 4th argument IS provided (even if
+  # empty — the hoisted fetch failed), treat it as the probe result rather than falling back
+  # to a second fetch (homelab#1211). When it is NOT provided, fetch independently.
+  if [ "${4+set}" = "set" ]; then
+    pr_json="$4"
+    if [ -n "$pr_json" ] && jq -e . >/dev/null 2>&1 <<<"${pr_json:-null}"; then
+      fp_probe="$pr_json"
+    else
+      fp_probe=''
+    fi
+  else
+    fp_probe="$(gh pr view "$2" --repo "$1" \
+        --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || fp_probe=''
+  fi
   if ! jq -e . >/dev/null 2>&1 <<<"${fp_probe:-null}"; then printf '%s|%s\n' '' ''; return 0; fi
   case "${3:-}" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
@@ -455,14 +467,27 @@ BLOCKED_ON_JQ='([ .comments[]? | select((.body // "") | test("^blocked-on: (huma
   | ((.body // "") | capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)") | .kind // "")'
 # <<<REPLAY:blocked-on-jq<<<
 
-# pr_blocked_on_check <slug> <pr> → "blocked|<reason>" or "clear".
+# pr_blocked_on_check <slug> <pr> [pr_json] → "blocked|<reason>" or "clear".
 # ONE probe reads the marker and checks the blocker state. Fail-open throughout: an unreadable
 # probe or missing marker yields "clear" (pre-#1188 behaviour — dispatch proceeds).
+# When a 3rd argument (pre-fetched PR JSON) is provided, it is used instead of fetching — the
+# caller has already fetched the superset for pr_state_fp_pair (homelab#1211).
 # >>>REPLAY:blocked-on-check>>>
 pr_blocked_on_check() {
-  local slug="${1:?}" pr="${2:?}" marker kind ref probe rc
-  # Read the PR's comments to find the newest blocked-on marker
-  probe="$(gh pr view "$pr" --repo "$slug" --json comments,reviews 2>/dev/null)" || probe=''
+  local slug="${1:?}" pr="${2:?}" pr_json marker kind ref probe rc
+  # Use pre-fetched JSON if provided and valid. When the 3rd argument IS provided (even if
+  # empty — the hoisted fetch failed), treat it as the probe result rather than falling back
+  # to a second fetch (homelab#1211). When it is NOT provided, fetch independently.
+  if [ "${3+set}" = "set" ]; then
+    pr_json="$3"
+    if [ -n "$pr_json" ] && jq -e . >/dev/null 2>&1 <<<"${pr_json:-null}"; then
+      probe="$pr_json"
+    else
+      probe=''
+    fi
+  else
+    probe="$(gh pr view "$pr" --repo "$slug" --json comments,reviews 2>/dev/null)" || probe=''
+  fi
   if ! jq -e . >/dev/null 2>&1 <<<"${probe:-null}"; then printf 'clear\n'; return 0; fi
   marker="$(printf '%s' "$probe" | jq -r "$BLOCKED_ON_JQ" 2>/dev/null)" || marker=''
   [ -n "$marker" ] || { printf 'clear\n'; return 0; }
@@ -3342,14 +3367,17 @@ EOF_GOVERNANCE
       # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
       # still unresolved, report instead of dispatch — the same report-vs-dispatch shape the
       # state-fp debounce already has.
-      boc="$(pr_blocked_on_check "$slug" "$u")"
+      # Fetch ONCE and share between pr_blocked_on_check and pr_state_fp_pair (homelab#1211).
+      pr_json_ab="$(gh pr view "$u" --repo "$slug" \
+          --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_ab=''
+      boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_ab")"
       case "$boc" in
         blocked|blocked\|*)
           orphans="${orphans}[$repo] ⏳ arbitrate BLOCKED-ON — PR #${u}: a terminal ruling recorded \`blocked-on: ${boc#blocked|}\` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.\n"
           continue
           ;;
       esac
-      afp="$(pr_state_fp_pair "$slug" "$u" arbitrate)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
+      afp="$(pr_state_fp_pair "$slug" "$u" arbitrate "$pr_json_ab")"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
         orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
         continue
@@ -3531,14 +3559,17 @@ EOF_GOVERNANCE
           # >>>REPLAY:ci-red-gate>>>
           # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
           # still unresolved, report instead of dispatch.
-          boc="$(pr_blocked_on_check "$slug" "$u")"
+          # Fetch ONCE and share between pr_blocked_on_check and pr_state_fp_pair (homelab#1211).
+          pr_json_cr="$(gh pr view "$u" --repo "$slug" \
+              --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_cr=''
+          boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_cr")"
           case "$boc" in
             blocked|blocked\|*)
               orphans="${orphans}[$repo] ⏳ ci-red BLOCKED-ON — PR #${u}: a terminal ruling recorded \`blocked-on: ${boc#blocked|}\` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.\n"
               continue
               ;;
           esac
-          rfp="$(pr_state_fp_pair "$slug" "$u" ci-red)"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
+          rfp="$(pr_state_fp_pair "$slug" "$u" ci-red "$pr_json_cr")"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
           if [ -n "$rfp_cur" ] && [ "$rfp_cur" = "$rfp_prev" ]; then
             orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
             continue
