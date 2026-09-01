@@ -22,6 +22,7 @@ c4c5-infeasible-quoted-inert	c4c5-infeasible
 ci-red-rerun-wake	ci-red-rounds-two-channels
 ci-red-rerun-wake-dispatch	ci-red-rounds-two-channels
 ci-red-rounds-two-channels	ci-red-rounds-two-channels
+context-prefetch	context-prefetch
 depends-on-retired-format	depends-on-retired-format
 dispatch-phase-scan	dispatch-phase
 dispatch-phase-session	dispatch-phase

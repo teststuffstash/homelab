@@ -717,6 +717,13 @@ render_env_card() {
     printf '%s\n' "- **This issue is one child of a GOAL.** It was split out so a single ride could finish it — deliver YOUR issue, not the goal. But the goal is what your work is finally judged against, so if finishing your slice would leave the goal's acceptance unreachable, say so in the PR body rather than quietly widening scope (a scope change belongs in a new issue for the owning concern — TRACKS rule 2). The parent, Goal + Acceptance only:"
     printf '%s\n' "$GOAL_CARD" | sed 's/^/  > /'
   fi
+  # WHY: homelab#1175 — the launcher pre-fetches the issue + comments via REST and materializes
+  # them as /work/issue.md before the harness starts. The env card tells the worker to read the
+  # file first instead of making a live `gh issue view` call (which costs tokens and can 403 on
+  # the App installation's GraphQL pool). Only emitted for recipe-based runs with an issue task.
+  if [ -n "${ISSUE_N:-}" ]; then
+    printf '%s\n' "- **Issue context:** Your issue + comments were pre-fetched at dispatch: read \`/work/issue.md\` FIRST; a live \`gh issue view\` is optional."
+  fi
   # WHY: Rung A evidence (oracle-fleet docs/feedback-rung-a.md, PR #295): organic feedback filing
   # 0/3; with a directed-act line 10/12; instructive voice executes 10/10; harness/model elicitation
   # from tool-description meta 0/10. The session cannot reliably report its own harness and model —
@@ -1184,6 +1191,56 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
       echo "PREFLIGHT REFUSED: devbox.lock on ${PF_SLUG}@${WORK_BRANCH:-$BASE_REF} carries a placeholder store path — a \`devbox add\` wrote it while the FU-118(b) search proxy (\$DEVBOX_SEARCH_HOST, .40.27) was unreachable, so the bootstrap \`devbox install\` will boot-crash this round (FU-118). Fix: re-run the add with the proxy up (it resolves in-band → a REAL store path), or resolve on master; never hand-edit the lock." >&2
       exit 3
     fi
+    # >>>REPLAY:context-prefetch>>>
+    # ── Context pre-fetch: pre-read the directive channel via REST (homelab#1175) ──────────────
+    # Pre-read the issue + comments via REST API (never GraphQL — the pool that failed on #969
+    # is the App installation's GraphQL pool; REST has its own). Materialize into /work/issue.md
+    # as a prelude to the pod command. Unreadable ⇒ DEFER (exit 0), not strike, not start.
+    if command -v gh >/dev/null 2>&1; then
+      PF_ISSUE_DATA=""
+      PF_ISSUE_DATA="$(gh api "repos/${PF_SLUG}/issues/${PF_ISSUE}" --jq '{title, body, labels: [.labels[].name]}' 2>/dev/null)" || PF_ISSUE_DATA=""
+      if [ -z "$PF_ISSUE_DATA" ]; then
+        echo "→ dispatch deferred — directive unreadable (repos/${PF_SLUG}/issues/${PF_ISSUE}; resets N/A) — the next pass retries (homelab#1175)" >&2
+        exit 0
+      fi
+      # Fetch comments as raw JSON array, then process with jq in the script
+      PF_COMMENTS_RAW=""
+      PF_COMMENTS_RAW="$(gh api "repos/${PF_SLUG}/issues/${PF_ISSUE}/comments" --paginate 2>/dev/null)" || PF_COMMENTS_RAW=""
+      if [ -z "$PF_COMMENTS_RAW" ]; then
+        echo "→ dispatch deferred — directive unreadable (repos/${PF_SLUG}/issues/${PF_ISSUE}/comments; resets N/A) — the next pass retries (homelab#1175)" >&2
+        exit 0
+      fi
+      # Materialize the issue + comments into /work/issue.md as a prelude to the pod command.
+      # Build the markdown: title, body, then comments in order with author + timestamp.
+      PF_ISSUE_TITLE="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.title')"
+      PF_ISSUE_BODY="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.body // ""')"
+      PF_ISSUE_MD="# Issue #${PF_ISSUE}
+## ${PF_ISSUE_TITLE}
+
+${PF_ISSUE_BODY}
+
+## Comments"
+      # Process each comment from the raw JSON array
+      while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        PF_AUTHOR="$(printf '%s' "$line" | jq -r '.user.login // ""')"
+        PF_CREATED="$(printf '%s' "$line" | jq -r '.created_at // ""')"
+        PF_COMMENT_BODY="$(printf '%s' "$line" | jq -r '.body // ""')"
+        PF_ISSUE_MD="${PF_ISSUE_MD}
+
+### ${PF_AUTHOR} (${PF_CREATED})
+
+${PF_COMMENT_BODY}"
+      done <<< "$(printf '%s' "$PF_COMMENTS_RAW" | jq -c '.[]')"
+      PF_ISSUE_B64="$(printf '%s' "$PF_ISSUE_MD" | base64 -w0)"
+      PF_ISSUE_PRELUDE="printf '%s' '${PF_ISSUE_B64}' | base64 -d > /work/issue.md; "
+      # Prepend the prelude to RUN_CMD so the pod writes /work/issue.md before the harness starts
+      if [ -n "${RUN_CMD:-}" ]; then
+        RUN_CMD="${PF_ISSUE_PRELUDE}${RUN_CMD}"
+      fi
+      echo "→ context pre-fetch: issue #${PF_ISSUE} + comments materialized as /work/issue.md (prepended to pod command)"
+    fi
+    # <<<REPLAY:context-prefetch<<<
   ;; esac
   # (c) session-key freshness: post openrouter-operator#6 the CR surfaces the LIVE key expiry in
   # .status.openrouter.expires_at (the PATCH re-mint bug killed a healthy run at its STALE deadline —
