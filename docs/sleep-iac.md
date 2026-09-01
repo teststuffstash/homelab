@@ -107,7 +107,8 @@ So the dashboard ConfigMap does **not** have to live next to Grafana:
 
 Only the **dashboard body** (the part that actually gets edited) leaves tofu; the plumbing stays.
 **Contract between the two layers:** the dashboard's panels must keep targeting datasource **uid
-`sleep-notes`** — that uid is the stable platform interface the GitOps dashboard depends on.
+`sleep-data`** (the live uid in `values/kube-prometheus-stack.yaml`; this page said `sleep-notes`
+until 2026-09-01) — that uid is the stable platform interface the GitOps dashboard depends on.
 
 This slice is prune-safe and **standalone** (doesn't need sleep-iac to exist yet — it can land via
 today's `sleep-tracking/infra/` app-repo path, then move into `sleep-iac/sleep-tracking/` later):
@@ -161,7 +162,7 @@ the data buckets).
 4. **Apply + verify** — `tofu apply` (targeted: `helm_release.argocd_apps`);
    all three child apps Synced/Healthy, **no prune events**, Workspaces still `Synced/Ready`
    (adopted, not recreated), a manual ingester CronJob run green, and **Grafana renders Sleep
-   Overview from the GitOps CM** (still bound to datasource uid `sleep-notes`).
+   Overview from the GitOps CM** (still bound to datasource uid `sleep-data`).
 5. **Clean up** — delete homelab `argocd/sleep/`; **delete the tofu `sleep_dashboard` CM +
    `tofu/dashboards/sleep-overview.json` and `tofu apply`** (leave the datasource + sqlite-sync
    sidecar + `sleep-db-reader` — platform-owned); empty both app repos' `infra/` to a README pointer
