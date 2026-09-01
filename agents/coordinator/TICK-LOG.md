@@ -6174,3 +6174,17 @@ first live ADR-110 maintenance session before the ADR existed.
   goal/1162-{scan,egress} → master (Fixes #1163/#1165) → codeowner merges → tree-empty →
   the operator's Verdict-authority: human read. PR#55: bot re-approved the decode fix at
   819c07c1; codeowner approval placed.
+
+## 2026-09-01 — PR#1206 round 1: reviewer catches a cross-repo key collision; seat fix round
+
+- The FU-199 fix drew a real round-1 CHANGES_REQUESTED: `resumable_branches` was tick-global,
+  bare-number keyed, bare-number matched — repo A's #N could attach its resumable branch to
+  repo B's unrelated #N c4c5 dispatch in the same tick (checkout failure or silent cross-repo
+  resume corruption). Seat-fixed on the branch per the verbatim finding: repo#N keys at record,
+  urepo#N match at consume, accumulator joins the per-stack reset (c94b6642); the
+  strike-resumable fixture row re-pinned to the qualified key in the same push (c1ebdb72 —
+  the ratchet redded exactly as designed). Note for the record: the first push went out on a
+  mis-targeted replay invocation (family-dir call + for-loop not gating &&) — caught and
+  corrected in the same sitting; the fixture red was the deliberate-change case.
+- Earlier in the same arc: PR#1206's first red was DANGLING FU-199 (base predated the tracker
+  entry) → manual top hop + branch update; PR#55 merged 18:02 with the decode fix.
