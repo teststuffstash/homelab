@@ -5919,3 +5919,10 @@ first live ADR-110 maintenance session before the ADR existed.
   no agent-fix ∧ (children ∨ a `post-launch:|theme:|stint:|retro-batch:` title); closed nodes
   skipped). #326 lint answer: task/goal alone is enough (agent/blocked tolerated, agent/queued
   forbidden on a pre-decomposed goal); the seat cut `goal/326-dashboard-as-code` @ 7b8e08e6.
+- WIND-DOWN (operator, ~08:10Z): soak read written to meta-state (#818 validated looks due;
+  #741 S7 closeout-1 overdue a week; #775 waits #778's release; #1039 waits oracle's claim
+  flip; #979 quiet window ends 09-02 06:39Z; retro batches post-r3). Session totals: wave-1
+  pilot minted + 6 ledger rows; park convoy drained (3 reads); operator-lane sweep (#1134 #114
+  #1028 #1036 #1107 closed, #1175/#1180 filed+queued, #1150/#1166/#459 intaken); oracle
+  handoff answered (observability contract PR#1178); ruling records (PR#1167/#1176/#1177);
+  goal-lint + card rules 7–9 (PR#1183). One lint-gated push of the batched direct commits.

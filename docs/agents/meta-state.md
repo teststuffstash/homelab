@@ -8,6 +8,35 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ SOAK — which goals/stints are past it (read 2026-09-01 ~08:10Z, the corpus session's
+  wind-down; verdicts are the OPERATOR's, the seat only recommends):**
+  - **#818 G-B — `goal/validated` looks DUE.** Post-launch since 08-30 20:39Z; tree = the
+    bucket #840 only; Production-leg evidence live: `probe-platform` 3 consecutive Succeeded
+    ticks (08-31 18:41Z, 09-01 00:41Z, 06:41Z), SLO teeth + lens knob + responder dial
+    shipped. Apply the label from the jail (User type passes IL-T22); the scan's terminal
+    leg runs the close sweep.
+  - **#741 S7 (updater-in-cluster) — closeout-1 OVERDUE by a week.** 5/5 originals done, cutover
+    executed 08-26, container untouched since 08-21 and NO closeout comment ever posted. Needs
+    the closeout-1 sitting (docs-cleanup over merge-path.md/FSM + `agents/update-pr-branch.sh`
+    surfaces, FU sweep, built-vs-left comment), then its ≥72h quiet window, then close.
+  - #775 G-A: validated once #778 (operator-held scout residue, FU-181's) is RELEASED to its
+    tracker — it is residue, not a defect, so rule 4 does not bind it; bucket #787 stays.
+  - #1039 G-F: NOT consumed — oracle-iac's claim has no `mcp:` block; verdict waits on the
+    oracle jail's claim flip (done-means-deployed).
+  - #979 S5: quiet window ends **09-02 06:39Z** → close at the next sweep after.
+  - #949 / #1101 retro batches: close at the post-r3 sweep (r3 fires Mon 09-07).
+  - None of the three open Goals carries a `Production-leg:` line (pre-card) — evidence is
+    read live, as above; `devbox run goal-lint -- teststuffstash/homelab <n>` now names it.
+- **⚑ 2026-09-01 CORPUS SESSION — other pickups:** PR#1183 (goal-lint + card rules 7–9) was
+  auto-merging at wind-down — confirm landed. **#1175 r1 in flight** (launcher pre-read → its
+  PR will codeowner-park on `agents/**`; acceptance = row 1 only, the widened prefetch table is
+  the follow-on child at closeout). **#1095** (oracle coordinator token creates but cannot
+  mutate homelab issues) = a broker-mint scope widening — ADR-110 "big", operator's call.
+  Garage: the `backups/garage-meta-20260825-prerebuild/` (20 GB) + forensics deletion came due
+  ~09-01 — operator-owned. FU-137's ~08-31 build-out deadline is PAST (meta volume rf=1 on
+  wk-02) — an infra sitting. Two PR watchers may still be alive by process (`pgrep -f 'gh pr
+  view 118'`) — kill before re-arming.
+
 - **⚑ 2026-09-01 — v1.3 THEMED-GOAL MANUAL PILOT LIVE: Goal #1162 (wave 1) — the S8 dogfood
   datapoint.** Themes: #1163 `goal/1162-scan` (#1148 #1149 #1011) · #1164 `goal/1162-exporter`
   (#459 #1138 #1137; #1137 blockedBy #1138; both keep parent #1115 — absorbed by reference) ·
