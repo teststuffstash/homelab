@@ -6434,3 +6434,12 @@ first live ADR-110 maintenance session before the ADR existed.
   constraints recorded). **VERIFIED HEALED 13:04Z** (trapped the live tick): authenticated
   clone → full scan → FU-146 double-dispatch refusal working → dispatched #363 → clean exit.
   Loop draining its queue (#345 judged, #363 dispatched, G-G children waiting).
+- **INCIDENT 3 (~14:4x–15:1xZ): every oracle e2e failed at kind boot** ("Multi-User System"
+  timeout) — **inotify-instance exhaustion on ci-runner-01**: 515/512 held by SIX+ leaked
+  `oracle-e2e-*` kind clusters (cancelled runs never run teardown; the 2026-08-09 #228 class
+  recurring at the raised limit — leaks accumulate to ANY limit). Un-wedged via qm guest exec
+  (jail SSH key ≠ the VM's authorized key — Proxmox-hop is the access path): swept 9+2
+  containers (inotify 515→65), sysctl'd 1024/524288 live. Cloud-init template updated (limits +
+  an hourly kind-janitor cron); ⚠ the LIVE janitor install is pending — the guest agent went
+  unresponsive under the released CI burst (5 runs in flight) — retry armed; template covers
+  recreates. Cause-side fix (pre-create sweep) briefed onto the in-flight #363 CI-shape ride.
