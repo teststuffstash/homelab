@@ -6443,3 +6443,9 @@ first live ADR-110 maintenance session before the ADR existed.
   an hourly kind-janitor cron); ⚠ the LIVE janitor install is pending — the guest agent went
   unresponsive under the released CI burst (5 runs in flight) — retry armed; template covers
   recreates. Cause-side fix (pre-create sweep) briefed onto the in-flight #363 CI-shape ride.
+  **CLOSED ~15:4xZ**: post-fix e2e PROVEN green (the #345 ride's full run succeeded); the dead
+  guest agent was restarted via DIRECT SSH once the key mapping surfaced — ⚠ ci-runner-01's
+  `debian@` authorized key is the **FORGEJO keypair** (`~/.claude/homelab-forgejo/id_ed25519`;
+  declared in `tofu/ci-runner.tf` var default), NOT homelab-pve-ssh — janitor+cron installed
+  live, last debris removed, only a live run's cluster + the buildx builder remain. Pattern doc
+  `docs/patterns/kind-ci.md` shipped (PR#1313, three consumers: oracle/sleep/circles).
