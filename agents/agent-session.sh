@@ -2370,19 +2370,27 @@ if [ -n "$RUN_CMD" ]; then
     fi
     # <<<REPLAY:strike-classifier<<<
     # >>>REPLAY:strike-line-format>>>
+    # FU-202 (homelab#1233): key-class error_class (budget-403-key, budget-exhausted-key) is a
+    # mint defect, not a model strike — post a KEY-RETRY marker instead, so the coordinator's
+    # chain-walk skips it and re-dispatches on the SAME model with a fresh session key.
     # homelab#866: the EMIT decision. A PR-less ride keeps FU-062 semantics unchanged — ANY
     # classified error strikes, `unknown` included (that is the chain-walk signal). A ride WITH
     # an open PR strikes only on a harness-death-class signature, because a clean round with a
     # PR classifies as `unknown` and must never strike.
     EMIT_STRIKE=""
+    EMIT_KEY_RETRY=""
     case "$ERR_CLASS" in
-      harness-death|auth-storm|timeout|quota|budget-*|http-403-other) EMIT_STRIKE=1;;
+      harness-death|auth-storm|timeout|quota|budget-403-account|budget-403|http-403-other) EMIT_STRIKE=1;;
+      budget-403-key|budget-exhausted-key) EMIT_KEY_RETRY=1;;
     esac
-    [ -n "${PR_URL:-}" ] || EMIT_STRIKE=1
+    # PR-less ride: strike on any classified error (FU-062 semantics), EXCEPT key-class which
+    # gets a KEY-RETRY marker instead (FU-202).
+    [ -n "${PR_URL:-}" ] || [ -n "$EMIT_KEY_RETRY" ] || EMIT_STRIKE=1
     # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
     # no specific signature must not be recorded as having an error. Inside the block on purpose:
     # this reset is behaviour replay has to pin, not control flow it may drop (PR #942 review).
-    [ -n "$EMIT_STRIKE" ] || ERR_CLASS=""
+    # FU-202: key-class errors keep their error_class for the KEY-RETRY marker.
+    [ -n "$EMIT_STRIKE" ] || [ -n "$EMIT_KEY_RETRY" ] || ERR_CLASS=""
     # STRIKE_LINE is empty exactly when EMIT_STRIKE is unset, so the gate itself is extracted and
     # the composed replay script branches on it the way the shipped script does.
     STRIKE_LINE=""
@@ -2390,6 +2398,14 @@ if [ -n "$RUN_CMD" ]; then
       STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
       if [ -n "${BUDGET_MATCH:-}" ]; then
         STRIKE_LINE="${STRIKE_LINE} match=${BUDGET_MATCH}"
+      fi
+    fi
+    # KEY_RETRY_LINE is the key-class equivalent — a marker, not a strike.
+    KEY_RETRY_LINE=""
+    if [ -n "$EMIT_KEY_RETRY" ]; then
+      KEY_RETRY_LINE="KEY-RETRY: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+      if [ -n "${BUDGET_MATCH:-}" ]; then
+        KEY_RETRY_LINE="${KEY_RETRY_LINE} match=${BUDGET_MATCH}"
       fi
     fi
     # <<<REPLAY:strike-line-format<<<
@@ -2412,6 +2428,22 @@ if [ -n "$RUN_CMD" ]; then
           || echo "  (strike comment failed — non-fatal; the strike still shows in these logs)"
       else
         echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
+      fi
+    fi
+    if [ -n "$KEY_RETRY_LINE" ]; then
+      echo "→ key-class failure — ${KEY_RETRY_LINE}"
+      ISSUE_N=""
+      case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
+      SLUG=""
+      case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
+      if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+        KEY_RETRY_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
+          "$KEY_RETRY_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
+        echo "→ posting key-retry marker to ${SLUG}#${ISSUE_N}"
+        gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$KEY_RETRY_BODY" 2>&1 | tail -1 \
+          || echo "  (key-retry marker failed — non-fatal; the marker still shows in these logs)"
+      else
+        echo "  (no issue task / non-GitHub repo / no GH_TOKEN — key-retry not posted, logged above only)"
       fi
     fi
   fi
