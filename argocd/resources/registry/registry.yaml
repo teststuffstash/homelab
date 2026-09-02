@@ -1,0 +1,154 @@
+# First-party push-mode OCI registry (ADR-121, FU-196 v1) — registry.teststuff.net.
+# NOT a mirror: the pull-through caches (ADR-091, registry-cache ns) proxy upstreams; THIS one
+# is where first-party artifacts too big / too hot for ghcr get PUSHED (the oracle ert-corpus
+# class — 6.4GB/release, whose every cold ghcr pull was a WAN roll of the dice: 429 storms
+# (oracle-fleet#274), mid-stream PROTOCOL_ERROR kills + a poisoned mirror commit (#1282),
+# and a NodeSystemSaturation page per pull).
+#
+# Shape:
+#   nginx (:5001, the Service/LB target) → registry:3 (:5000, localhost only)
+#   - nginx exists ONLY for per-method auth, which distribution cannot express: GET/HEAD are
+#     anonymous (LAN pull — same accepted consequence as the ADR-091 FU-196 v0 update),
+#     everything else (push, delete) requires basic auth (htpasswd, Infisical→ESO).
+#   - Storage is the Garage bucket `registry` (garage-workspace.yaml) via the s3 driver —
+#     stateless pod, no Longhorn claim, corpus bytes live where data lives (CONTEXT.md #1).
+#   - TLS/hostname is OPNsense HAProxy + ACME (registry.teststuff.net → 3.33 → 40.33), so
+#     containerd trusts it with ZERO node config — no insecure-registries anywhere.
+#
+# Carried lessons from the mirror fleet:
+#   - blob-descriptor cache OFF (#240): deletes exist here too (DELETE_ENABLED for future GC);
+#     a stale in-memory descriptor turns one delete into a served lie. Same kill switch.
+#   - upload purging at 1h (#80): abandoned multipart uploads are debris here exactly as there.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: registry-nginx
+  namespace: registry
+data:
+  default.conf: |
+    server {
+      listen 5001;
+      # 6GB blob pushes: never buffer or cap the body.
+      client_max_body_size 0;
+      location /v2/ {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout 900s;
+        proxy_send_timeout 900s;
+        # Anonymous pull, authenticated push: auth on every method EXCEPT GET/HEAD.
+        limit_except GET HEAD {
+          auth_basic "registry push";
+          auth_basic_user_file /etc/nginx/htpasswd/htpasswd;
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: registry
+  labels: { app: registry }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: registry }
+  template:
+    metadata:
+      labels: { app: registry }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: registry
+          image: registry:3.0.0
+          env:
+            - { name: REGISTRY_STORAGE, value: "s3" }
+            - { name: REGISTRY_STORAGE_S3_REGIONENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+            - { name: REGISTRY_STORAGE_S3_REGION, value: "garage" }
+            - { name: REGISTRY_STORAGE_S3_BUCKET, value: "registry" }
+            - { name: REGISTRY_STORAGE_S3_FORCEPATHSTYLE, value: "true" }
+            - { name: REGISTRY_STORAGE_S3_ENCRYPT, value: "false" }
+            - name: REGISTRY_STORAGE_S3_ACCESSKEY
+              valueFrom:
+                secretKeyRef: { name: registry-garage-s3, key: access_key_id }
+            - name: REGISTRY_STORAGE_S3_SECRETKEY
+              valueFrom:
+                secretKeyRef: { name: registry-garage-s3, key: secret_access_key }
+            # Future GC needs deletes; the descriptor-cache kill switch makes them safe (#240).
+            - { name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true" }
+            - { name: REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR, value: "" }
+            # One env var holding the whole map — per-key vars panic the registry (mirror note).
+            - name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING
+              value: "{enabled: true, age: 1h, interval: 15m, dryrun: false}"
+            - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
+          ports:
+            - { name: http, containerPort: 5000 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          readinessProbe:
+            httpGet: { path: /v2/, port: 5000 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /v2/, port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "2",    memory: "1Gi" }
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - { name: front, containerPort: 5001 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          readinessProbe:
+            httpGet: { path: /v2/, port: 5001 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          volumeMounts:
+            - { name: nginx-conf, mountPath: /etc/nginx/conf.d, readOnly: true }
+            - { name: htpasswd, mountPath: /etc/nginx/htpasswd, readOnly: true }
+            - { name: nginx-tmp, mountPath: /tmp }
+            - { name: nginx-cache, mountPath: /var/cache/nginx }
+            - { name: nginx-run, mountPath: /var/run }
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { cpu: "1",   memory: "256Mi" }
+      volumes:
+        - name: nginx-conf
+          configMap: { name: registry-nginx }
+        - name: htpasswd
+          secret: { secretName: registry-htpasswd }
+        - name: nginx-tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: registry
+  labels:
+    app: registry
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.33"
+spec:
+  type: LoadBalancer
+  selector: { app: registry }
+  ports:
+    - { name: http, port: 80, targetPort: 5001 }

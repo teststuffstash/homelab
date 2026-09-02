@@ -51,6 +51,7 @@ acme_cert_specs:                             # name + the service to reload post
   - { name: argocd.teststuff.net, restart_action: "reload haproxy" }
   - { name: infisical.teststuff.net, restart_action: "reload haproxy" }
   - { name: transcripts.local.teststuff.net, restart_action: "reload haproxy" }
+  - { name: registry.teststuff.net, restart_action: "reload haproxy" }
   # Per-stack WILDCARD certs (ADR-092): one cert covers every name a stack exposes under its
   # subdomain, so the stack adds hostnames in its own -iac repo (HTTPRoutes) with NO homelab
   # change. `name` MUST be a real domain — OPNsense passes it as acme.sh's FIRST `--domain`
@@ -90,6 +91,7 @@ haproxy_proxied_services:
   - { name: garage-s3, cert_domain: s3.teststuff.net, vip: 192.168.3.16, backend_ip: 192.168.40.16, backend_port: 3900 }  # Garage S3 (path-style)
   - { name: argo, cert_domain: argo.teststuff.net, vip: 192.168.3.24, backend_ip: 192.168.40.24, backend_port: 2746 }  # Argo Workflows UI (agent-loop DAG drill-down; server-auth, LAN-trust)
   - { name: apps, cert_domain: apps.teststuff.net, vip: 192.168.3.25, backend_ip: 192.168.40.25, backend_port: 9504 }  # github-exporter /apps — the served GitHub-Apps declared-vs-live page (FU-098; also /metrics)
+  - { name: registry, cert_domain: registry.teststuff.net, vip: 192.168.3.33, backend_ip: 192.168.40.33, backend_port: 80 }  # first-party push-mode OCI registry (ADR-121) — 6GB blob pushes/pulls: body streaming, no small caps (garage-s3 precedent)
   # Garage static-website endpoint (3902) — browser-served buckets (oracle-fleet#16 spec site).
   # KEPT LIVE (ADR-092): the spec site stays on this direct 3.20 path as oracle-specs.teststuff.net
   # until the oracle stack migrates it to specs.oracle.teststuff.net via its gateway (oracle-iac,
