@@ -1,12 +1,16 @@
 # NOT synced (extension .example): the shape a stack's -iac ships. First live test: a claim in
 # a scratch ns against a harmless echo backend; the capability stays inert until the operator
 # arms CLOUDFLARE_INGRESS_WRITE in Infisical.
-apiVersion: platform.teststuff.net/v1alpha1
+#
+# v1alpha2: profile field is REQUIRED (no default on the object). consumer = edge caching on,
+# challenges legal. api = per-IP rate limiting, no challenge-shaped mitigations.
+apiVersion: platform.teststuff.net/v1alpha2
 kind: PublicRoute
 metadata:
   name: probe
   namespace: default
 spec:
+  profile: consumer
   hostname: cf-probe.default.teststuff.net
   backend:
     service: podinfo.default.svc.cluster.local.
