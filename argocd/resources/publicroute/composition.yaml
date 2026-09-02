@@ -174,20 +174,22 @@ spec:
                   # --- api profile: no-challenge Skip rule ---
                   # Ensures NO challenge-shaped mitigation (captcha/managed challenge) reaches
                   # this route. Zone-phase rulesets are per-phase-per-zone (ONE entrypoint per
-                  # phase), so this Skip goes on the zone's http_response phase ruleset.
+                  # phase), so this Skip goes on the zone's http_request_firewall_managed phase
+                  # ruleset, skipping challenge products (bic, securityLevel, uaBlock) and
+                  # challenge phases (http_request_sbfm, http_request_firewall_managed).
                   # The never-challenge invariant is part of #1304 (api profile deliverable).
                   resource "cloudflare_ruleset" "skip_challenge" {
                     zone_id  = local.zone_id
                     name     = "PublicRoute {{ $host }} skip challenge"
                     kind     = "zone"
-                    phase    = "http_response"
+                    phase    = "http_request_firewall_managed"
                     rules {
                       action      = "skip"
                       description = "api profile: skip all challenge-shaped mitigations"
                       expression  = "(http.host eq \"{{ $host }}\")"
                       action_parameters {
-                        rulesets = ["current_zone"]
-                        ruleset_action = "skip"
+                        products = ["bic", "securityLevel", "uaBlock"]
+                        phases  = ["http_request_sbfm", "http_request_firewall_managed"]
                       }
                       enabled = true
                     }
@@ -202,11 +204,11 @@ spec:
                     zone_id  = local.zone_id
                     name     = "PublicRoute {{ $host }} CORS preflight"
                     kind     = "zone"
-                    phase    = "http_request_origin"
+                    phase    = "http_request_firewall_custom"
                     {{- range $i, $origin := $xr.spec.origins }}
                     rules {
                       ref        = "preflight_{{ $i }}"
-                      action     = "respond"
+                      action     = "block"
                       expression = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and http.request.headers.origin eq \"{{ $origin }}\")"
                       action_parameters {
                         response {
@@ -228,7 +230,7 @@ spec:
                     {{- range $i, $origin := $xr.spec.origins }}
                     rules {
                       ref        = "cors_headers_{{ $i }}"
-                      action     = "set"
+                      action     = "rewrite"
                       expression = "(http.host eq \"{{ $host }}\" and http.request.headers.origin eq \"{{ $origin }}\")"
                       action_parameters {
                         headers {
