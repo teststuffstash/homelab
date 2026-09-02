@@ -3230,6 +3230,19 @@ class Proxy(BaseHTTPRequestHandler):
                         payload["provider"] = {"order": [at_provider_pin],
                                                "allow_fallbacks": False}
                     exacto_no_pin = str(payload["model"]).endswith(":exacto")
+                    # FU-186 step 1: class-level provider_policy extends the exacto seam.
+                    # The completion path is model-keyed; resolve the class by checking
+                    # model_tiers membership + the coding class's provider_policy. This is
+                    # the natural seam because the coding class is the default for
+                    # worker/fixer/scout roles that use cheap models — priced classes
+                    # (review, audit, research, dispatch, etc.) are untouched.
+                    if not exacto_no_pin and router._classes:
+                        _coding = (router._classes.get("classes") or {}).get("coding") or {}
+                        if _coding.get("provider_policy") == "exacto":
+                            _tiers = router._classes.get("model_tiers") or {}
+                            if normalize_model(str(payload["model"])) in _tiers:
+                                exacto_no_pin = True
+                                notes.append("exacto:class-policy")
                     if exacto_no_pin:
                         notes.append("exacto:no-pin")
                     or_model = normalize_model(str(payload["model"]))

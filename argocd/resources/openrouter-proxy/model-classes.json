@@ -5,6 +5,7 @@
    "chain_source": "stack",
    "reasoning": false,
    "dual_model": false,
+   "provider_policy": "exacto",
    "rails": [
     "openrouter",
     "subscription"
