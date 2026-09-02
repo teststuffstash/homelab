@@ -1,0 +1,47 @@
+# Garage bucket + key for the first-party push-mode registry (ADR-121, FU-196 v1) — the loki
+# shape: platform-owned Workspace, CREATE-pattern, connection secret written straight into the
+# registry namespace (no Infisical round-trip; the htpasswd push credential is the one that
+# rides Infisical, see htpasswd-externalsecret.yaml).
+#
+# Sizing (ADR-089: every bucket claim states max_size): 20Gi ≈ 3 co-resident corpus releases
+# (the 6.4GB layer dominates; successive releases share almost nothing — the delta REBUILDS the
+# corpus). The ert delta cron is suspended (releases are manual, oracle-iac
+# cronworkflow-ert-delta.yaml), so manual pruning covers the gap until tag-aware retention
+# lands (FU-203 — "keep 2 latest prod + latest built", the policy a pull-through cache could
+# never express and the reason this registry exists).
+apiVersion: tf.upbound.io/v1beta1
+kind: Workspace
+metadata:
+  name: registry-garage
+  namespace: registry
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    source: Inline
+    module: |
+      resource "garage_bucket" "registry" {
+        global_alias = "registry"
+        max_size     = 21474836480 # 20Gi — sizing note above (ADR-089 cap)
+      }
+      resource "garage_key" "registry" { name = "registry" }
+      resource "garage_bucket_permission" "registry_rw" {
+        bucket_id     = garage_bucket.registry.id
+        access_key_id = garage_key.registry.id
+        read  = true
+        write = true
+        owner = false
+      }
+      output "bucket" {
+        value = garage_bucket.registry.global_alias
+      }
+      output "access_key_id" {
+        value = garage_key.registry.id
+      }
+      output "secret_access_key" {
+        value     = garage_key.registry.secret_access_key
+        sensitive = true
+      }
+  writeConnectionSecretToRef:
+    namespace: registry
+    name: registry-garage-s3

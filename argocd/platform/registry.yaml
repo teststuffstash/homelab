@@ -1,0 +1,27 @@
+# First-party push-mode OCI registry (ADR-121, FU-196 v1) — registry.teststuff.net, the home
+# for first-party artifacts too big/hot for ghcr (the oracle ert-corpus class). NOT the
+# pull-through mirrors (that's registry-cache, ADR-091). Manifests in argocd/resources/registry/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: registry
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/registry
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: registry
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
