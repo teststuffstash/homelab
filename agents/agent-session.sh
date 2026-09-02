@@ -2417,17 +2417,19 @@ if [ -n "$RUN_CMD" ]; then
     EMIT_STRIKE=""
     EMIT_KEY_RETRY=""
     case "$ERR_CLASS" in
-      harness-death|auth-storm|timeout|quota|budget-403-account|budget-403|http-403-other) EMIT_STRIKE=1;;
+      harness-death|auth-storm|timeout|quota|budget-403-account|http-403-other) EMIT_STRIKE=1;;
       budget-403-key|budget-exhausted-key) EMIT_KEY_RETRY=1;;
+      budget-403) ;;  # residual — estimator/cap problem → escalate (neither strike nor key-retry)
     esac
     # PR-less ride: strike on any classified error (FU-062 semantics), EXCEPT key-class which
-    # gets a KEY-RETRY marker instead (FU-202).
-    [ -n "${PR_URL:-}" ] || [ -n "$EMIT_KEY_RETRY" ] || EMIT_STRIKE=1
+    # gets a KEY-RETRY marker instead (FU-202), and residual budget-403 which escalates.
+    [ -n "${PR_URL:-}" ] || [ -n "$EMIT_KEY_RETRY" ] || [ "$ERR_CLASS" = "budget-403" ] || EMIT_STRIKE=1
     # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
     # no specific signature must not be recorded as having an error. Inside the block on purpose:
     # this reset is behaviour replay has to pin, not control flow it may drop (PR #942 review).
     # FU-202: key-class errors keep their error_class for the KEY-RETRY marker.
-    [ -n "$EMIT_STRIKE" ] || [ -n "$EMIT_KEY_RETRY" ] || ERR_CLASS=""
+    # Residual budget-403 keeps its error_class for the escalate path.
+    [ -n "$EMIT_STRIKE" ] || [ -n "$EMIT_KEY_RETRY" ] || [ "$ERR_CLASS" = "budget-403" ] || ERR_CLASS=""
     # STRIKE_LINE is empty exactly when EMIT_STRIKE is unset, so the gate itself is extracted and
     # the composed replay script branches on it the way the shipped script does.
     STRIKE_LINE=""
