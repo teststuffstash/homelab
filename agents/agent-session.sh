@@ -2396,7 +2396,8 @@ if [ -n "$RUN_CMD" ]; then
     STRIKE_LINE=""
     # FU-201 c: provider is sourced from STATS when available (the harness records the served
     # provider). Absent a provider field, the strike still records — the router sources it
-    # proxy-side from generations. Declared here so both STRIKE and KEY-RETRY blocks can use it.
+    # proxy-side from provider_events (not generations — _generation_lookup skips session
+    # keys). Declared here so both STRIKE and KEY-RETRY blocks can use it.
     _strike_provider="$(printf '%s' "${STATS:-}" | jq -r '.provider // ""' 2>/dev/null || true)"
     if [ -n "$EMIT_STRIKE" ]; then
       STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"

@@ -2277,7 +2277,7 @@ class Proxy(BaseHTTPRequestHandler):
             # NOT pollute OpenRouter state (cooldowns, capacity latches, provider_events) — an
             # opencode 429 is not an OpenRouter problem, and cross-contamination would wedge
             # unrelated traffic.
-            router.record_provider_event(or_model, or_provider or "", status)
+            router.record_provider_event(or_model, or_provider or "", status, session=cb_session)
             if cb_session:  # addendum 3: the same observation feeds the in-flight breaker
                 _cb_update(cb_session, or_model, status)
             # homelab#158: and the ACCOUNT-scope capacity latch. Strictly a different question from
@@ -2917,7 +2917,14 @@ class Proxy(BaseHTTPRequestHandler):
             except (ValueError, AssertionError):
                 self._reply_json(400, {"error": "body must be JSON with a session field"})
                 return
-            stored, striked = router.record_report(report)
+            # FU-201 c: extract the session key ref from the Authorization header for
+            # proxy-side provider lookup. The launcher sends the pod name as session in the
+            # body — that is stored in strikes.session for dedup, while the provider is
+            # sourced from provider_events via the correlated key ref.
+            _session_ref = ""
+            if _auth_hdr.startswith("Bearer ref:"):
+                _session_ref = _auth_hdr[len("Bearer ref:"):].strip()
+            stored, striked = router.record_report(report, session_ref=_session_ref)
             log(f"POST /report session={report.get('session')} "
                 f"error_class={report.get('error_class') or 'clean'} → "
                 f"stored={stored} strike={striked}")

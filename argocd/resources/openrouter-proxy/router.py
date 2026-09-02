@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS strikes(
   provider TEXT);
 CREATE INDEX IF NOT EXISTS ix_strikes ON strikes(stack, task, model);
 CREATE TABLE IF NOT EXISTS provider_events(
-  ts REAL, model TEXT, provider TEXT, status INTEGER, class TEXT);
+  ts REAL, model TEXT, provider TEXT, status INTEGER, class TEXT, session TEXT);
 CREATE TABLE IF NOT EXISTS rotation(
   class TEXT, model TEXT, source TEXT, rank INTEGER, canary_verdict TEXT, updated_ts REAL,
   PRIMARY KEY(model, source));
@@ -186,11 +186,20 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                     except sqlite3.OperationalError:
                         pass  # duplicate column — schema already current
                 # FU-201 c: strikes grew provider column — the served provider slug, sourced
-                # proxy-side from generations in record_report(). Same LAST-column discipline.
+                # proxy-side from provider_events in record_report(). Same LAST-column discipline.
                 try:
                     conn.execute("ALTER TABLE strikes ADD COLUMN provider TEXT")
                 except sqlite3.OperationalError:
                     pass  # duplicate column — schema already current
+                # FU-201 c: provider_events grew session column — the proxy-side session key ref,
+                # so record_report() can look up the served provider for a session-keyed request
+                # (generations is not harvested for session keys — _generation_lookup skips
+                # Bearer ref: auth). Same LAST-column discipline.
+                try:
+                    conn.execute("ALTER TABLE provider_events ADD COLUMN session TEXT")
+                except sqlite3.OperationalError:
+                    pass  # duplicate column — schema already current
+                
                 # homelab#1042: model_cooldowns grew role-scoped PRIMARY KEY(model, role). SQLite
                 # cannot change a PK by ALTER, so this rebuilds — which means it MUST NOT re-run
                 # after a successful migration (the INSERT ... SELECT would force role='worker'
@@ -291,11 +300,19 @@ def _read(sql: str, params: tuple = ()) -> list[tuple]:
         return []
 
 
-def record_report(d: dict) -> tuple[bool, bool]:
+def record_report(d: dict, session_ref: str = "") -> tuple[bool, bool]:
     """One POST /report body → run_reports (+ a strikes row when it IS a strike: strike-class
     error and no PR came out — mirrors the launcher's AGENT_STRIKE condition; the GitHub comment
     stays the human/audit twin). Returns (stored, striked). Idempotent per session (the launcher
-    may retry): INSERT OR REPLACE on the session key."""
+    may retry): INSERT OR REPLACE on the session key.
+
+    FU-201 c: `session_ref` is the proxy-side session key ref (from the /report request's
+    Authorization header), used to look up the served provider from provider_events.session.
+    The launcher sends the pod name as `d["session"]` — that is stored in strikes.session
+    for dedup, while the provider is sourced proxy-side via the correlated key ref.
+    provider_events is used instead of generations because _generation_lookup skips
+    session-keyed requests (Bearer ref: auth), so generations has no rows for the common
+    case. provider_events is recorded for every forwarded response regardless of auth type."""
     now = time.time()
     stored = _write(
         "INSERT OR REPLACE INTO run_reports VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -315,16 +332,17 @@ def record_report(d: dict) -> tuple[bool, bool]:
     # vocabulary, so it was never coherent with the single field it was compared against.
     # model-routing.md §M1 settles that this is a bug, not a policy: its taxonomy table names
     # "harness-death (goose -32602)" as ONE thing.
-    # FU-201 c: the served provider is sourced proxy-side from the generations table (the
-    # launcher's /report body does not carry it). The generation harvest runs alongside the
-    # data plane, so by the time record_report() is called the generation row for this session
-    # already exists. Absent a generation row, provider defaults to empty string — the strike
-    # still records, just without provider attribution.
+    # FU-201 c: the served provider is sourced proxy-side from provider_events via the session
+    # key ref (not the pod name — those two id-spaces never intersect). provider_events is
+    # recorded for every forwarded response regardless of auth type (unlike generations, which
+    # is skipped for session-keyed requests). The most recent provider_event for this session
+    # gives us the provider that served the request. Absent a matching row, provider defaults
+    # to empty string — the strike still records, just without provider attribution.
     session = str(d.get("session") or "")
     provider = str(d.get("served_provider") or "")
-    if not provider:
-        _prov = _read("SELECT provider FROM generations WHERE id=?",
-                       (session,))
+    if not provider and session_ref:
+        _prov = _read("SELECT provider FROM provider_events WHERE session=? ORDER BY ts DESC LIMIT 1",
+                       (session_ref,))
         provider = str(_prov[0][0]) if _prov else ""
     striked = False
     if stored and (err in STRIKE_CLASSES or outcome in STRIKE_CLASSES) \
@@ -470,18 +488,23 @@ def record_generation(gen_id: str, requested_model: str, data: dict) -> bool:
          int(data.get("generation_time") or 0)))
 
 
-def record_provider_event(model: str, provider: str, status: int) -> None:
+def record_provider_event(model: str, provider: str, status: int,
+                          session: str = "") -> None:
     """Passive data-plane observation: one row per forwarded OpenRouter chat/completions
     response. `class` buckets the status for cheap aggregation.
     FU-186 step 1: strip :exacto suffix so cooldown/breaker bookkeeping is keyed under the
-    bare model id — the same id the /route eligibility loop filters candidates against."""
+    bare model id — the same id the /route eligibility loop filters candidates against.
+
+    FU-201 c: `session` is the proxy-side session key ref (from _cb_session()), stored so
+    record_report() can look up the served provider for session-keyed requests (generations
+    is not harvested for session keys). Defaults to empty string for legacy callers."""
     model = model.removesuffix(":exacto")
     klass = ("2xx" if 200 <= status < 300 else
              "429" if status == 429 else
              "4xx" if 400 <= status < 500 else
              "5xx" if status >= 500 else "other")
-    _write("INSERT INTO provider_events VALUES(?,?,?,?,?)",
-           (time.time(), model, provider or "", status, klass))
+    _write("INSERT INTO provider_events VALUES(?,?,?,?,?,?)",
+           (time.time(), model, provider or "", status, klass, session))
 
 
 # ── ADR-107 flip-acceptance 1: the requested≠served model drift belt (homelab#515) ─────────────
@@ -1752,6 +1775,21 @@ def self_test() -> int:
     assert _read("SELECT rail FROM run_reports WHERE session='t-3'") == [("subscription-fallback",)]
     assert _read("SELECT outcome, rail FROM run_reports WHERE session='t-2'") == [("pr", "")], \
         "a report with no rail lands as empty string, not NULL — and does not shift its neighbours"
+    # FU-201 c: provider lookup via provider_events.session — the proxy-side seam for
+    # session-keyed requests (generations is not harvested for Bearer ref: auth). Record a
+    # provider_event with a session key ref, then call record_report with session_ref set,
+    # and assert the strike row carries the provider.
+    record_provider_event("deepseek/deepseek-v4-flash", "Fireworks", 200,
+                          session="test-ns/test-session-secret")
+    stored5, striked5 = record_report({
+        "session": "t-provider-1", "task": "issue-42", "stack": "sleep", "role": "worker",
+        "round": 1, "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.05,
+        "error_class": "provider-5xx", "outcome": "no-pr"},
+        session_ref="test-ns/test-session-secret")
+    assert stored5 and striked5, "strike with provider must store + strike"
+    _p_row = _read("SELECT provider FROM strikes WHERE session='t-provider-1'")
+    assert _p_row and _p_row[0][0] == "Fireworks", \
+        f"strike provider must be 'Fireworks' from provider_events lookup, got {_p_row}"
     # THE MIGRATED STORE, on a side connection. Everything above runs against a FRESH database, so
     # it only ever proves the CREATE TABLE path — but the live store is a PVC sqlite that will take
     # this column by ALTER, and the two layouts have to agree for a positional INSERT to be valid.
@@ -2694,7 +2732,7 @@ def self_test() -> int:
     # + the 5 M11 ladder-cell fixtures, + the 2 homelab#577 deployed-pod pod-name shapes,
     # + null-rail-1) and 3 strikes (issue-9/sleep from the vocabulary fixture,
     # issue-19/circles from the real one, issue-42/sleep from the ladder's degradation step).
-    assert summary["rows"]["run_reports"] == 17 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1
+    assert summary["rows"]["run_reports"] == 18 and summary["rows"]["strikes"] == 4  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
