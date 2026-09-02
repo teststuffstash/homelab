@@ -31,31 +31,27 @@ Files: `argocd/resources/publicroute/{xrd,composition}.yaml` (+ `example-claim.y
 the shape), app `argocd/platform/publicroute.yaml`, provider secret
 `argocd/resources/crossplane/cloudflare-ingress-externalsecret.yaml`.
 
-**Predicted shape — per-route API-vs-website classes (operator direction, 2026-08-12; not built,
-recorded so the build lands here and not ad hoc):** every shipped public hostname is one of two
-kinds, and the claim should say which — an **API** route (e.g. `mcp.minutark.ee`) or a
-**website** route (e.g. `www.minutark.ee`) — with the composition fanning out class-appropriate
-edge defaults the way ADR-101's zone classes fan out zone defaults. API class: an OpenAPI schema
-URL wired into Schema validation 2.0 (**all plans since ~2026-08**, live-verified on the free
-zone; ⚠ free validates bodies ≤1 KB only — oversize bypasses the action, so app-side validation
-stays the gate; OAS v3.0 only), and NEVER challenge-shaped mitigations (captchas/managed
-challenges are browser interstitials a machine client structurally cannot solve — the reason
-Bot Fight Mode was declined, generalized to a class invariant). Website class: cache/speed posture (edge caching rules,
-maybe RUM per the pages-exist ruling) and challenge-shaped mitigations become legal. The
-quick-start wizard's zone-wide knobs (Bot Fight Mode, client-side security, leaked-credentials,
-speed optimizations) were DECLINED 2026-08-12 precisely because they cannot see this split —
-zone-wide toggles are the wrong altitude; the class default is per-route, in the claim.
-Naming + XRD field shape land with the build (glossary row in the coining commit, FU-163).
+**Built mechanism — per-route profile classes (built #1303–#1307, merged into goal/1302-public-edge 2026-09-02):** every shipped public hostname is one of two kinds, and the claim says which via the REQUIRED `.spec.profile` field (`consumer` | `api` — no default on the object, the 2026-07-16 API-server-stamp lesson). The composition fans out class-appropriate edge defaults the way ADR-101's zone classes fan out zone defaults. Glossary rows for the profile names: [`docs/glossary.md`](glossary.md) (FU-163, coining commit).
 
-**Completion state (2026-08-08):**
+**Consumer profile** (`consumer`): browser-facing routes. Edge caching defaults on (respect-origin, 1h default TTL via `http_cache_settings` phase ruleset); RUM/client telemetry (Web Analytics) auto-installs the JS beacon for the route; challenge-shaped mitigations (captchas, managed challenges) are legal — the zone's `http_request_firewall_managed` phase runs normally for these routes. Rendered by the composition when `.spec.profile = "consumer"` (or absent on v1alpha1 claims, which default to consumer-class rendering for backwards compatibility).
+
+**API profile** (`api`): machine-facing routes. Per-IP rate limiting ON (`http_ratelimit` phase ruleset, `characteristics = ["ip.src"]`, period 60s, `mitigation_timeout` 60s; threshold from `.spec.rateLimit.threshold`, platform default 1200/min, bounds 60–6000); a limited/rejected request answers a structured 429 JSON body (`{"success":false,"errors":[{"code":10429,"message":"rate limit exceeded"}],"messages":[],"result":null}`) a machine client can parse. NO challenge-shaped mitigation can reach an api route: a Skip rule on the zone's `http_request_firewall_managed` phase skips products `["bic", "securityLevel", "uaBlock"]` and phases `["http_request_sbfm", "http_request_firewall_managed"]` for the route. CORS/preflight edge-owned via claim fields (`.spec.origins`): the edge enforces the allow-list (a preflight from an origin outside it is rejected at `http_request_firewall_custom` with a structured 403) and sets `Access-Control-*` response headers (`http_response_headers_transform`, `action = "rewrite"`). An **allowed** `OPTIONS` reaches the origin, which answers the preflight — the Ruleset Engine cannot synthesize a 2xx, so an edge-terminated 204 would need a Worker/Snippet plus a cf-api-proxy allowlist entry (deliberately not in scope for Goal #1302). ⚠ `cors_headers` reflects `.spec.origins` into `Access-Control-Allow-Origin` with **no `Vary: Origin`** — inert today because the api profile renders no cache rule, but a constraint on whoever ever adds one to the api branch.
+
+The quick-start wizard's zone-wide knobs (Bot Fight Mode, client-side security, leaked-credentials, speed optimizations) were DECLINED 2026-08-12 precisely because they cannot see this split — zone-wide toggles are the wrong altitude; the class default is per-route, in the claim. The OpenAPI schema validation 2.0 path (originally part of the predicted shape) was **not built** — app-side validation stays the real gate, and the free-plan 1 KB body limit makes schema validation a non-starter for the api profile's first consumer (oracle-gateway, streamable-HTTP/SSE).
+
+**Completion state (2026-09-02):**
 
 | Piece | State |
 |---|---|
 | XRD + Composition deployed (Established/Offered) | ✅ |
 | Armed — `CLOUDFLARE_INGRESS_WRITE` minted+stored, ESO synced, provider pod carries it in-process | ✅ (verified by exec) |
+| Profile field (`consumer` \| `api`) on XRD v1alpha2 — REQUIRED, no default | ✅ (#1303, merged) |
+| Api profile: per-IP rate limit + structured 429 + edge CORS + never-challenge Skip | ✅ (#1304, merged) |
+| Consumer profile: edge caching + RUM/client telemetry | ✅ (#1305, merged) |
+| Edge observability export: DIY GraphQL poller (per-route series) | ✅ (#1306, merged) |
+| cf-api-proxy allowlist extended for RUM account-scoped paths | ✅ (#1322/#1324, merged) |
 | First consumer — the minutark placeholder claim (oracle-iac) landed 2026-08-12 (§Zone classes); the operator-witnessed echo/test claim is still the FU-039 next act | 🟡 |
 | `ha.teststuff.net` retrofit = consumer #2 (retires `tofu/cloudflare/` + the write-key) | ☐ operator-witnessed, after the test claim |
-| Zone-phase ruleset aggregation (cache rules / api-no-challenge Skip) | ☐ deliberately deferred until ≥ consumer #2 (the ≥2-projects rule) |
 | Product zones (a claim owning a whole zone, e.g. the IdP/oracle-sales domains) | ☐ future — §Zone classes |
 
 Until a claim exists, the capability is machinery with the switch on: rendering, credential
@@ -67,9 +63,10 @@ are operator-witnessed.
 
 Mechanism/policy split as every platform capability (ADR-076 provider-terraform, ADR-085 XRD
 doctrine, ADR-092's LAN precedent). Claim = safe knobs only: hostnames/routes under the
-delegated subtree → in-cluster backend; later per-path cache behavior and `api: true`
-never-challenge paths (Rulesets API Skip rules — the deferred zone-phase leg). Composition =
-sane defaults, tunnel+DNS+zone wiring, the scoped token, and the deprecation lifecycle (when
+delegated subtree → in-cluster backend; `.spec.profile` selects the class defaults (consumer
+or api); `.spec.rateLimit.threshold` and `.spec.origins` are the api profile's claim-field
+knobs. Composition = sane defaults, tunnel+DNS+zone wiring, the scoped token, profile-specific
+rulesets (rate-limit, cache, skip-challenge, CORS, RUM), and the deprecation lifecycle (when
 Cloudflare retires a primitive, the composition absorbs it once; no stack migrates a Cloudflare
 feature). Requirements came from four live artifacts, not design sessions: (1) diff-the-existing
 `tofu/cloudflare/` — the claim schema must express everything the ha one-off does; (2) the first
@@ -137,8 +134,11 @@ NOT route through it: jail applies are operator-plan-gated, and the bootstrap ne
 
 - **The nginx location table IS the permission model** — method+path in git, reviewed like any
   manifest: `dns_records` CRUD on the two product zones, `cfd_tunnel` under the account,
-  read-only zone lookups + token verify. Everything else 403s in Cloudflare's own error shape,
-  naming the configmap.
+  `rulesets` CRUD on the two product zones (rate-limit rules, cache rules, skip rules),
+  `web_analytics/rules` CRUD on the two product zones (RUM), `rum/site_info` CRUD under the
+  account (`cloudflare_web_analytics_site`), `rum/v2/{ruleset_id}/rule` CRUD under the account
+  (`cloudflare_web_analytics_rule`), read-only zone lookups + token verify. Everything else
+  403s in Cloudflare's own error shape, naming the configmap.
 - **Two independent layers**: a request must pass the allowlist AND the token's permission
   groups (live-verified 2026-08-09: an Argo enable dies at the proxy; a settings READ passes
   the allowlist and is then 403'd by the token). Cloudflare's undocumented group semantics stop
@@ -147,6 +147,13 @@ NOT route through it: jail applies are operator-plan-gated, and the bootstrap ne
   token the pod doesn't have. A Cilium egress lockdown on provider-terraform is the deliberate
   residual (needs the full egress inventory: garage, infisical, k8s API — do it with care, it
   can brick Garage bucket reconciles fleet-wide).
+- **Extended for consumer-profile RUM** (#1322/#1324): the consumer profile renders
+  `cloudflare_web_analytics_site` and `cloudflare_web_analytics_rule`, which use account-scoped
+  API paths (`/client/v4/accounts/{account_id}/rum/site_info` and
+  `/client/v4/accounts/{account_id}/rum/v2/{ruleset_id}/rule`). These were added to the location
+  table alongside the zone-scoped `web_analytics/rules` path. The zone-scoped
+  `web_analytics/rules` entry does NOT cover the account-scoped RUM paths — both layers are
+  needed for the consumer profile's RUM resources.
 - Re-resolution: `resolver <kube-dns> valid=30s` + variable `proxy_pass` (the ert-egress-proxy
   pin-forever lesson).
 
@@ -196,13 +203,35 @@ otherwise; a group can also gate NOTHING, because the gate may not be a permissi
 per-tunnel request totals + connection health; ⚠ this build exports **no response-code dimension
 and no hostname label** on `cloudflared_tunnel_total_requests` (labels: container/instance/job/
 namespace/pod — verified live, homelab#362), so the tunnel metrics are a liveness signal, NOT a
-substitute for zone analytics; edge status codes arrive only with the FU-039 GraphQL poller);
-the `homelab-observability-read` token for on-demand GraphQL + audit-log reads from the
-jail; the lablabs exporter (`argocd/resources/cloudflare-exporter/`) — correctly configured and
-**correctly idle**: neither zone can currently produce zone series (below), so its alert is
-keyed to scrape-target health (`CloudflareExporterDown`), not data presence. End-to-end
-edge-data absence becomes the DIY poller's belt when built (FU-039 open leg: a ConfigMap-python
-GraphQL poller, github-exporter pattern, targeting the four ✅ rows below).
+substitute for zone analytics); the `homelab-observability-read` token for on-demand GraphQL +
+audit-log reads from the jail; the lablabs exporter (`argocd/resources/cloudflare-exporter/`) —
+correctly configured and **correctly idle**: neither zone can currently produce zone series
+(below), so its alert is keyed to scrape-target health (`CloudflareExporterDown`), not data
+presence; the **DIY GraphQL poller** (`argocd/resources/cloudflare-exporter/edge-probe.py`,
+built #1306) — a ConfigMap-python poller beside the exporter in the same app/namespace, on the
+same ESO-delivered `CLOUDFLARE_OBSERVABILITY_READ` token, polling `httpRequestsAdaptiveGroups`
+and `firewallEventsAdaptive` (both ✅ on free zones per the validated matrix below) to produce
+per-route edge series. ⚠ NOT routed through `cf-api-proxy`: that allowlist injects the
+ingress-write token and deliberately 403s settings paths; this is a direct read against
+`api.cloudflare.com/client/v4/graphql`, same as the spend probe's direct REST reads.
+
+**Edge series contract** (the ORACLE stack's Grafana folder consumes these — cross-repo consumers
+grep this doc, so the strings must match the emitter exactly):
+
+| series | labels |
+|---|---|
+| `cloudflare_edge_requests_total` | `zone`, `host`, `status` |
+| `cloudflare_edge_cache_hit_ratio` | `zone`, `host` |
+| `cloudflare_edge_rate_limit_events_total` | `zone`, `host`, `action` |
+| `cloudflare_edge_probe_ok` | `zone` |
+
+The poller queries one zone at a time (never batched — a free zone riding into a batched query
+would make Cloudflare reject the whole batch, homelab#132 round 3). Self-test replays recorded
+API shapes through the real collector AND through the alert expressions scraped out of the
+committed `prometheusrule.yaml` (`python3 edge-probe.py --self-test`). The alert
+`CloudflareEdgeProbeBlind` (severity: warning, `platform_machinery: "true"`) fires when the
+probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and
+edge data absence would go unnoticed.
 
 **Spend drift belt** (homelab#217, 2026-08-09; argo leg retired 2026-08-12 — §Spend surface):
 `cloudflare-spend-probe` — a ConfigMap-python poller beside the exporter in the same
@@ -244,11 +273,15 @@ on public endpoints, not analytics. Per-request logs (Logpush/Logpull) are Enter
 queryable on free, and at our traffic volumes sampling ≈ 100%: that's the incident-forensics
 "log", fetched on demand from the jail.
 
-**Web Analytics (RUM), free, deferred until real pages exist** (operator, 2026-08-08): the
-upcoming browser-facing surfaces — the IdP OIDC login flow and oracle's public "sales" page —
-are what RUM measures (page-load timing per URL, per-browser). Enable per-site when those pages
-ship; a JS beacon per page, no plan requirement. Not relevant for `ha.teststuff.net` (an app
-behind mTLS, not a page we optimize).
+**Web Analytics (RUM), free, built for consumer-profile routes** (built #1305, merged 2026-09-02):
+the consumer profile renders `cloudflare_web_analytics_site` (auto_install = true, enabled = true)
+and `cloudflare_web_analytics_rule` (host = the route, paths = ["*"]) for each consumer-profile
+claim. The JS beacon auto-installs on orange-clouded pages under the route hostname. Requires
+account-scoped API paths in the cf-api-proxy allowlist (added by #1322/#1324). Not relevant for
+`ha.teststuff.net` (an app behind mTLS, not a page we optimize) — that leg becomes a PublicRoute
+claim at the consumer-#2 retrofit and will carry RUM then if desired. The IdP OIDC login flow
+and oracle's public "sales" page are the first real browser-facing surfaces that will exercise
+this.
 
 ## Remote access to Home Assistant (the original leg, LIVE 2026-06-06)
 
