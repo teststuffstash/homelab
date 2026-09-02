@@ -83,7 +83,11 @@ for tool calls (statute, search, give_feedback, etc.). The knob holds a URL (sch
 e.g. `https://mcp.oracle.teststuff.net/mcp`); the launcher passes it verbatim to each harness's
 own attach interface (#1041 — claude: a `--mcp-config` JSON file in the CLI's `mcpServers` shape;
 goose: `--with-streamable-http-extension <URL>`; the server is streamable HTTP), while the
-Composition derives the bare HOST from it for the CNP `toFQDNs` leg. That host
+Composition derives the bare HOST from it for the CNP `toFQDNs` leg. **The opencode arm attaches
+NO MCP server — a deliberate #1039 non-goal** (the pinned build's MCP config surface is
+unverified, and enforced-egress rides never default to opencode per homelab#990); the env card
+suppresses the feedback-tool line on opencode rides so the card never claims a tool the harness
+lacks (homelab#1118). That host
 must be an FQDN, never a service VIP (kata guests cannot reach service VIPs, FU-072); the pod
 receives it as a reachable variable.
 
