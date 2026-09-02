@@ -147,7 +147,10 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 >   IS the strike store (state lives in GitHub, not your head). To pick the model for any
 >   (re-)dispatch, grep the issue's comments for `AGENT_STRIKE:` and take the first chain entry not
 >   yet struck **for this task**, then **re-dispatch the same round immediately** with a fresh
->   session key. **Re-grade the budget label as escalation carrier**: when strikes suggest the
+>   session key. **Key-class errors** (`budget-403-key`, `budget-exhausted-key`) post a `KEY-RETRY:`
+>   marker instead of an `AGENT_STRIKE:` — skip these when walking struck entries; they are mint
+>   defects, not model strikes, and the re-dispatch uses the **same model** with a fresh key.
+>   **Re-grade the budget label as escalation carrier**: when strikes suggest the
 >   chain's model tier is inadequate, edit the issue's `agent-budget/*` label to one tier higher
 >   before re-dispatch — the label is the routing verb (labels ride /route since PR#408), and
 >   `label_map` in `model-classes.json` is the vocabulary home (§Escalation vocabulary). Never label
