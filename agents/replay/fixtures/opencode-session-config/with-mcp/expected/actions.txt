@@ -1,0 +1,5 @@
+OUT → opencode session pin unavailable (registry lookup failed / no eligible provider) — running unpinned
+OUT → opencode MCP server attached: stack-mcp (remote, https://mcp.oracle.teststuff.net/mcp)
+OUT OC_SETUP: SET
+OUT CONFIG_JSON: {"$schema":"https://opencode.ai/config.json","mode":{"autoApprove":{"permission":{},"options":{}}},"mcp":{"stack-mcp":{"type":"remote","url":"https://mcp.oracle.teststuff.net/mcp"}}}
+RC 0
