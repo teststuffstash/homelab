@@ -6,9 +6,11 @@
 #
 # WORLDS:
 #   Repo A (homelab): issue #329 is a goal child with AGENT_STRIKE: + Resumable branch pushed:
-#                      → decidable: writes homelab:329=fix/issue-329-loop to resumable_branches
-#   Repo B (oracle-fleet): issue #329 is a plain in-progress issue (NOT a goal child)
-#                      → does NOT write to resumable_branches
+#                      → decidable: writes homelab#329=fix/issue-329-loop to resumable_branches
+#   Repo B (oracle-fleet): issue #329 is ALSO a goal child with AGENT_STRIKE: + Resumable branch pushed:
+#                      → decidable: writes oracle-fleet#329=fix/issue-329-oracle to resumable_branches
+# Both repos write key …#329=…, colliding on the bare number and distinct under the qualified key.
+# The fu146-resumable-match block asserts each repo's dispatch resolves to its own branch.
 #
 # The fixture runs the c4c5-derivations block twice (once per repo) with the resumable_branches
 # variable persisting between runs, simulating a multi-repo stack tick.
@@ -26,4 +28,10 @@ parts:
   - file:bridge.sh
   - block:infeasible-terminal
   - block:c4c5-derivations
+  - file:bridge.sh
+  - block:fu146-resumable-match
+  - file:observe-resumable-match.sh
+  - file:bridge.sh
+  - block:fu146-resumable-match
+  - file:observe-resumable-match.sh
   - file:post.sh

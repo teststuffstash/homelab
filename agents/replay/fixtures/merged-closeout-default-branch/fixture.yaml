@@ -3,16 +3,18 @@
 # and produces empty output under stub-provided empty world data), but NOT the **positive-path detection
 # semantics** (the detection regex, strong-link vs bare-mention split, or dref exclusion logic).
 #
-# Why: the replay stub cannot differentiate `gh pr list --state merged` from `--state open` (both
-# key to `pr-list`), so reproduction of the documented scenario (PR #200 `Implements #90`, #201 `Fixes #91`,
-# #202 bare-mentions #92) produces unexpected results (the dref exclusion blocks all emissions).
-# This is a stub limitation, not a scan-logic bug — production `gh` differentiates state correctly —
-# but it prevents a genuine positive-path fixture without a state-aware stub or alternate test strategy.
+# NOTE (homelab#1199): the replay stub now keys `gh pr list` world files by --state value, so
+# `--state merged` and `--state open` serve DISTINCT world files. The positive-path detection
+# semantics are now pinned in the sibling fixture `merged-closeout-ilg06-detect`.
 #
 # THE CONTRACT (structural only):
 #   1. The detection block runs to completion under `set -euo pipefail` with empty world data.
-#   2. No jq compile errors from undefined `$default_branch` (the --arg/hoist fix).
+#   2. No jq compile errors from undefined `$default_branch` (the --arg fix).
 #   3. Detection output variables (c6db, c6db_nums) remain empty, which is correct for empty input.
+#      NOT-PINNED: the `default_branch=` assignment in coordinator-scan.sh sits ABOVE the
+#      `>>>REPLAY:il-g06-detect>>>` marker (grep the marker — line numbers drift), so it is
+#      outside the extracted block and bridge.sh supplies the variable under replay.
+#      Un-hoisting it would not red this fixture.
 pins:
   - IL-T09
 name: merged-closeout-default-branch

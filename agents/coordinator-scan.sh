@@ -209,9 +209,10 @@ scan_phase() {   # $1 = dispatch | deterministic — record a phase transition f
 # tick that empties the group is not a health signal.
 #
 # Classes (low-cardinality enum, v1):
-#   riding, phantom, held-merged-unlinked, parked-blocked, parked-infeasible,
+#   riding, phantom, strike-held, parked-blocked, parked-infeasible,
 #   arbitrate-standing, queued-held, queued-held-by-ghost, queued-ready,
-#   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate
+#   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate,
+#   footprint-held, cap-held, blockpark
 # who ∈ operator | machine | none
 # >>>REPLAY:item-class>>>
 # Per-pass accumulator: newline-joined lines "repo|item|class|who|first_timestamp"
@@ -333,6 +334,9 @@ NOOP_ROUND_JQ="${STATS_TS_DEF}"'
   | if $after >= 2 and ($arb_ts == "" or $newest_noop_ts > $arb_ts) then "1" else "" end'
 # <<<REPLAY:round-evidence<<<
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
+# FU-199 / #1240 CAP SPLIT: codeowner-parked PRs (bot-approved ∧ REVIEW_REQUIRED) count
+# against their own larger bound so parked nits never freeze the dispatch lane.
+REPO_BLOCKPARK_CAP="${REPO_BLOCKPARK_CAP:-10}"
 
 # ── PR STATE FINGERPRINT (homelab#198) ────────────────────────────────────────────────────────
 # The arbitrate, ci-red and merge-conflict (homelab#595) DISPATCH legs are level-triggered off a
@@ -413,9 +417,21 @@ STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-
 pr_state_fp_pair() {
   # Declared on their own line, never `local x="$(cmd)"` — that form makes `local` the command
   # whose status is tested, so the `|| fallback` and `set -e` both read the wrong exit code.
-  local fp_probe fp_raw fp_prev fp_cur fp_jq
-  fp_probe="$(gh pr view "$2" --repo "$1" \
-      --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || fp_probe=''
+  local fp_probe fp_raw fp_prev fp_cur fp_jq pr_json
+  # Use pre-fetched JSON if provided and valid. When the 4th argument IS provided (even if
+  # empty — the hoisted fetch failed), treat it as the probe result rather than falling back
+  # to a second fetch (homelab#1211). When it is NOT provided, fetch independently.
+  if [ "${4+set}" = "set" ]; then
+    pr_json="$4"
+    if [ -n "$pr_json" ] && jq -e . >/dev/null 2>&1 <<<"${pr_json:-null}"; then
+      fp_probe="$pr_json"
+    else
+      fp_probe=''
+    fi
+  else
+    fp_probe="$(gh pr view "$2" --repo "$1" \
+        --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || fp_probe=''
+  fi
   if ! jq -e . >/dev/null 2>&1 <<<"${fp_probe:-null}"; then printf '%s|%s\n' '' ''; return 0; fi
   case "${3:-}" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
@@ -455,14 +471,27 @@ BLOCKED_ON_JQ='([ .comments[]? | select((.body // "") | test("^blocked-on: (huma
   | ((.body // "") | capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)") | .kind // "")'
 # <<<REPLAY:blocked-on-jq<<<
 
-# pr_blocked_on_check <slug> <pr> → "blocked|<reason>" or "clear".
+# pr_blocked_on_check <slug> <pr> [pr_json] → "blocked|<reason>" or "clear".
 # ONE probe reads the marker and checks the blocker state. Fail-open throughout: an unreadable
 # probe or missing marker yields "clear" (pre-#1188 behaviour — dispatch proceeds).
+# When a 3rd argument (pre-fetched PR JSON) is provided, it is used instead of fetching — the
+# caller has already fetched the superset for pr_state_fp_pair (homelab#1211).
 # >>>REPLAY:blocked-on-check>>>
 pr_blocked_on_check() {
-  local slug="${1:?}" pr="${2:?}" marker kind ref probe rc
-  # Read the PR's comments to find the newest blocked-on marker
-  probe="$(gh pr view "$pr" --repo "$slug" --json comments,reviews 2>/dev/null)" || probe=''
+  local slug="${1:?}" pr="${2:?}" pr_json marker kind ref probe rc
+  # Use pre-fetched JSON if provided and valid. When the 3rd argument IS provided (even if
+  # empty — the hoisted fetch failed), treat it as the probe result rather than falling back
+  # to a second fetch (homelab#1211). When it is NOT provided, fetch independently.
+  if [ "${3+set}" = "set" ]; then
+    pr_json="$3"
+    if [ -n "$pr_json" ] && jq -e . >/dev/null 2>&1 <<<"${pr_json:-null}"; then
+      probe="$pr_json"
+    else
+      probe=''
+    fi
+  else
+    probe="$(gh pr view "$pr" --repo "$slug" --json comments,reviews 2>/dev/null)" || probe=''
+  fi
   if ! jq -e . >/dev/null 2>&1 <<<"${probe:-null}"; then printf 'clear\n'; return 0; fi
   marker="$(printf '%s' "$probe" | jq -r "$BLOCKED_ON_JQ" 2>/dev/null)" || marker=''
   [ -n "$marker" ] || { printf 'clear\n'; return 0; }
@@ -1528,7 +1557,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # homelab#849: per-base count. Armed PRs against one base do not churn against another base's
     # issues — master merges never re-base a goal/** child, and goal/** merges never re-base a
     # master PR. Map baseRefName → count of armed PRs, as newline-separated "base|count" lines.
-    per_base_armed="$(jq -r '[.[] | select(.autoMergeRequest != null)]
+    # FU-199 / #1240 CAP SPLIT: only machine-flowing PRs (reviewDecision == "APPROVED") count
+    # toward REPO_PR_CAP. Codeowner-parked PRs (reviewDecision == "REVIEW_REQUIRED" AND
+    # mergeStateStatus == "BLOCKED") count toward REPO_BLOCKPARK_CAP instead.
+    per_base_armed="$(jq -r '[.[] | select(.autoMergeRequest != null) | select(.reviewDecision == "APPROVED")]
+      | group_by(.baseRefName)
+      | map("\(.[0].baseRefName)|\(length)")
+      | .[]' <<<"$prsjson")"
+    per_base_blockpark="$(jq -r '[.[] | select(.autoMergeRequest != null) | select(.reviewDecision == "REVIEW_REQUIRED") | select(.mergeStateStatus == "BLOCKED")]
       | group_by(.baseRefName)
       | map("\(.[0].baseRefName)|\(length)")
       | .[]' <<<"$prsjson")"
@@ -2060,6 +2096,7 @@ EOF_GOVERNANCE
       # issues; disjoint declared footprints dispatch in parallel (launcher limit rides wipmap).
       elif fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
         orphans="${orphans}[$repo] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
+        item_class_push "$repo" "issue-${qnum}" "footprint-held" "operator"
         continue
       fi
       # <<<REPLAY:footprint-hold<<<
@@ -2083,9 +2120,19 @@ EOF_GOVERNANCE
       # the SAME base branch as the queued issue (homelab#849). Count per-base: master-based PRs
       # do not hold a goal/**-based issue and vice versa. In-flight recovery clauses (c4c5,
       # merge-conflict, …) are exempt: they REDUCE the count.
+      # FU-199 / #1240 CAP SPLIT: per_base_armed counts only machine-flowing PRs
+      # (reviewDecision == "APPROVED"). Codeowner-parked PRs count toward REPO_BLOCKPARK_CAP.
       qbase_armed="$(printf '%s' "$per_base_armed" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
       if [ "${qbase_armed:-0}" -ge "$REPO_PR_CAP" ]; then
-        orphans="${orphans}[$repo] ⏳ PR budget (${qbase_armed} armed PRs against ${qbase} ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
+        orphans="${orphans}[$repo] ⏳ PR budget (${qbase_armed} machine-flowing PRs against ${qbase} ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
+        item_class_push "$repo" "issue-${qnum}" "cap-held" "operator"
+        continue
+      fi
+      # FU-199 / #1240 CAP SPLIT: codeowner-parked PRs have their own larger bound.
+      qbase_blockpark="$(printf '%s' "$per_base_blockpark" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
+      if [ "${qbase_blockpark:-0}" -ge "$REPO_BLOCKPARK_CAP" ]; then
+        orphans="${orphans}[$repo] ⏳ BLOCKPARK budget (${qbase_blockpark} codeowner-parked PRs against ${qbase} ≥ cap ${REPO_BLOCKPARK_CAP} — FU-199):\n  issue #${qnum} — ${qtitle}\n"
+        item_class_push "$repo" "issue-${qnum}" "blockpark" "operator"
         continue
       fi
       # <<<REPLAY:pr-cap-per-base<<<
@@ -2621,8 +2668,25 @@ EOF_GOVERNANCE
       # shape the goal-lane post-launch transition keys on — IL-T18).
       g="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body//"")|capture("(?mi)^[ \\t]*assembly-for:[ \\t]*#(?<g>[0-9]+)\\b")|.g' 2>/dev/null || echo "")"
       case "$g" in ''|*[!0-9]*)
-        orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested but no line-anchored \`Assembly-for: #<n>\` trailer — cannot route to a goal; report-only (FU-143)\n"
-        continue
+        # v1.3 themed assembly discriminator (homelab#1229): a goal/** HEAD whose body carries
+        # `Fixes #<level-2>` where the level-2 is a task/goal descendant routes to the goal
+        # ancestor via goal_resolve_ancestor. The themed shape (Goal #1162) deliberately has
+        # NO Assembly-for: trailer — the Fixes keyword closes the theme container on merge.
+        g="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body//"")|capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)")|.i' 2>/dev/null || echo "")"
+        case "$g" in ''|*[!0-9]*)
+          orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested but no line-anchored \`Assembly-for: #<n>\` trailer — cannot route to a goal; report-only (FU-143)\n"
+          continue
+        ;; esac
+        # Resolve the goal ancestor from the Fixes-referenced issue.
+        command -v goal_resolve_ancestor >/dev/null 2>&1 || . "${HERE}/goal-budget.sh"
+        goal_resolve_ancestor "$slug" "$g"
+        if [ -z "$GB_GOAL" ]; then
+          orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested and \`Fixes #${g}\` but #${g} is not a task/goal descendant — cannot route to a goal; report-only (FU-143)\n"
+          continue
+        fi
+        g_fixes="$g"
+        g="$GB_GOAL"
+        echo "  [$repo] ASSEMBLY PR #${u} has changes-requested — resolved goal #${g} from v1.3 themed shape (\`Fixes #${g_fixes}\` → goal_resolve_ancestor, homelab#1229)"
       ;; esac
       # state-fp debounce: one ride per verdict state (homelab#198).
       afp="$(pr_state_fp_pair "$slug" "$u" assembly-cr)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
@@ -3252,7 +3316,7 @@ EOF_GOVERNANCE
               # Push the weak-link class for each ambiguous issue (#833, who=operator)
               while IFS= read -r ambig_line; do
                 ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
-                [ -n "$ambig_n" ] && item_class_push "$repo" "issue-${ambig_n}" "held-merged-unlinked" "operator"
+                [ -n "$ambig_n" ] && item_class_push "$repo" "issue-${ambig_n}" "strike-held" "operator"
               done <<< "$ambig"
             fi
             if [ -n "$dispatchable" ]; then
@@ -3620,14 +3684,17 @@ EOF_GOVERNANCE
       # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
       # still unresolved, report instead of dispatch — the same report-vs-dispatch shape the
       # state-fp debounce already has.
-      boc="$(pr_blocked_on_check "$slug" "$u")"
+      # Fetch ONCE and share between pr_blocked_on_check and pr_state_fp_pair (homelab#1211).
+      pr_json_ab="$(gh pr view "$u" --repo "$slug" \
+          --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_ab=''
+      boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_ab")"
       case "$boc" in
         blocked|blocked\|*)
           orphans="${orphans}[$repo] ⏳ arbitrate BLOCKED-ON — PR #${u}: a terminal ruling recorded \`blocked-on: ${boc#blocked|}\` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.\n"
           continue
           ;;
       esac
-      afp="$(pr_state_fp_pair "$slug" "$u" arbitrate)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
+      afp="$(pr_state_fp_pair "$slug" "$u" arbitrate "$pr_json_ab")"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
         orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
         continue
@@ -3809,14 +3876,17 @@ EOF_GOVERNANCE
           # >>>REPLAY:ci-red-gate>>>
           # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
           # still unresolved, report instead of dispatch.
-          boc="$(pr_blocked_on_check "$slug" "$u")"
+          # Fetch ONCE and share between pr_blocked_on_check and pr_state_fp_pair (homelab#1211).
+          pr_json_cr="$(gh pr view "$u" --repo "$slug" \
+              --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_cr=''
+          boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_cr")"
           case "$boc" in
             blocked|blocked\|*)
               orphans="${orphans}[$repo] ⏳ ci-red BLOCKED-ON — PR #${u}: a terminal ruling recorded \`blocked-on: ${boc#blocked|}\` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.\n"
               continue
               ;;
           esac
-          rfp="$(pr_state_fp_pair "$slug" "$u" ci-red)"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
+          rfp="$(pr_state_fp_pair "$slug" "$u" ci-red "$pr_json_cr")"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
           if [ -n "$rfp_cur" ] && [ "$rfp_cur" = "$rfp_prev" ]; then
             orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
             continue
@@ -4283,6 +4353,7 @@ EOF_GOVERNANCE
       # FU-199: if this c4c5-redispatch unit has a resumable branch from an AGENT_STRIKE: +
       # Resumable branch pushed: comment, carry it so the coordinator session resumes with
       # --work-branch <branch> (never a restart).
+      # >>>REPLAY:fu146-resumable-match>>>
       uworkbranch=""
       if [ "$uclause" = "c4c5-redispatch" ] && [ -n "${resumable_branches:-}" ]; then
         for rb_entry in $resumable_branches; do
@@ -4295,6 +4366,7 @@ EOF_GOVERNANCE
           fi
         done
       fi
+      # <<<REPLAY:fu146-resumable-match<<<
       dispatch_rc=0
       bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
         --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
