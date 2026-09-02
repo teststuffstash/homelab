@@ -2274,6 +2274,7 @@ if [ -n "$RUN_CMD" ]; then
     fi
   fi
 
+  # >>>REPLAY:post-merge-push>>>
   # POST-MERGE-PUSH DETECTOR (homelab#1212): if this ride's PR merged during the run and its head
   # branch received commits after mergedAt, emit ONE loud marker naming the branch so the stranded
   # work is salvageable by --work-branch (acceptance 1+2). The finalize-side refusal leg (refuse a
@@ -2285,18 +2286,19 @@ if [ -n "$RUN_CMD" ]; then
       _merged_at="$(printf '%s' "$PR_STATE" | jq -r '.mergedAt // empty' 2>/dev/null)"
       _head_ref="$(printf '%s' "$PR_STATE" | jq -r '.headRefName // empty' 2>/dev/null)"
       if [ "$_state" = "MERGED" ] && [ -n "$_merged_at" ] && [ -n "$_head_ref" ]; then
+        # Derive the repo slug (owner/repo) from REPO_URL before the branch probe.
+        _slug="${REPO_URL#https://github.com/}"; _slug="${_slug%.git}"
         # Check if the head branch still exists (it may have been auto-deleted on merge).
         # If it exists, check whether its latest commit post-dates the merge.
-        _branch_info="$(gh api "repos/${PROJECT}/branches/${_head_ref}" --jq '.commit.commit.author.date // empty' 2>/dev/null || echo '')"
+        _branch_info="$(gh api "repos/${_slug}/branches/${_head_ref}" --jq '.commit.commit.author.date // empty' 2>/dev/null || echo '')"
         if [ -n "$_branch_info" ]; then
           _merged_ts="$(date -d "$_merged_at" +%s 2>/dev/null || echo 0)"
           _branch_ts="$(date -d "$_branch_info" +%s 2>/dev/null || echo 0)"
           if [ "$_branch_ts" -gt "$_merged_ts" ] 2>/dev/null; then
             echo "⚠️  POST-MERGE PUSH DETECTED: PR ${PR_URL} merged at ${_merged_at} but branch ${_head_ref} received commits after merge — stranded work is salvageable via --work-branch ${_head_ref}"
             # Emit ONE loud marker on the issue so the coordinator / human sees it.
-            _issue_n=""; _slug=""
+            _issue_n=""
             case "$TASK" in issue-[0-9]*) _issue_n="${TASK#issue-}";; esac
-            _slug="${REPO_URL#https://github.com/}"; _slug="${_slug%.git}"
             if [ -n "$_issue_n" ] && [ -n "$_slug" ]; then
               gh issue comment "$_issue_n" --repo "$_slug" \
                 --body "⚠️ **POST-MERGE PUSH DETECTED** — PR ${PR_URL} merged at \`${_merged_at}\` but branch \`${_head_ref}\` received commits after merge. Stranded work is salvageable via \`--work-branch ${_head_ref}\`." \
@@ -2307,6 +2309,7 @@ if [ -n "$RUN_CMD" ]; then
       fi
     fi
   fi
+  # <<<REPLAY:post-merge-push<<<
 
   # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates with a
   # harness death is an infra strike candidate — classify it and post ONE structured comment to the ISSUE.

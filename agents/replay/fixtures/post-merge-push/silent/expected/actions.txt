@@ -1,0 +1,3 @@
+CALL gh pr view https://github.com/teststuffstash/homelab/pull/1250 --json state,mergedAt,headRefName -q {state,mergedAt,headRefName}
+CALL gh api repos/teststuffstash/homelab/branches/fix-issue-1212-post-merge-guard --jq .commit.commit.author.date // empty
+RC 0
