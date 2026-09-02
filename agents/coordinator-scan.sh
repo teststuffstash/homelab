@@ -4053,6 +4053,7 @@ EOF_GOVERNANCE
       # FU-199: if this c4c5-redispatch unit has a resumable branch from an AGENT_STRIKE: +
       # Resumable branch pushed: comment, carry it so the coordinator session resumes with
       # --work-branch <branch> (never a restart).
+      # >>>REPLAY:fu146-resumable-match>>>
       uworkbranch=""
       if [ "$uclause" = "c4c5-redispatch" ] && [ -n "${resumable_branches:-}" ]; then
         for rb_entry in $resumable_branches; do
@@ -4065,6 +4066,7 @@ EOF_GOVERNANCE
           fi
         done
       fi
+      # <<<REPLAY:fu146-resumable-match<<<
       dispatch_rc=0
       bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
         --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
