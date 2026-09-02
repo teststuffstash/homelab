@@ -23,7 +23,7 @@ metadata:
   name: publicroute
 spec:
   compositeTypeRef:
-    apiVersion: platform.teststuff.net/v1alpha1
+    apiVersion: platform.teststuff.net/v1alpha2
     kind: XPublicRoute
   mode: Pipeline
   pipeline:

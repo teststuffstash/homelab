@@ -8,6 +8,8 @@
 #
 # v1alpha2: profile field (consumer|api) added — the route class fans out edge defaults the
 # way ADR-101's zone classes fan out zone defaults (docs/cloudflare.md §Predicted shape).
+# v1alpha2 is the referenceable (storage) version; v1alpha1 remains served for legacy claims
+# (no profile field — defaults to consumer-class rendering via the composition's fallback).
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
@@ -23,7 +25,7 @@ spec:
   versions:
     - name: v1alpha1
       served: true
-      referenceable: true
+      referenceable: false
       schema:
         openAPIV3Schema:
           type: object
