@@ -1,9 +1,9 @@
 OUT JQ_EXTRACTION: OK (all 3 rows emit, bases correct)
 OUT JQ_TRUNCATION: OK (broken jq command correctly errors)
 OUT DISPATCH #8491 (base=goal/29-p0-complete)
-OUT ORPHAN [homelab] ⏳ PR budget (3 armed PRs against master ≥ cap 3 — TRACKS rule 1, updater churn):
+OUT ORPHAN [homelab] ⏳ PR budget (3 machine-flowing PRs against master ≥ cap 3 — TRACKS rule 1, updater churn):
 OUT ORPHAN   issue #8492 — no-base issue after Base row
-OUT ORPHAN [homelab] ⏳ PR budget (3 armed PRs against master ≥ cap 3 — TRACKS rule 1, updater churn):
+OUT ORPHAN [homelab] ⏳ PR budget (3 machine-flowing PRs against master ≥ cap 3 — TRACKS rule 1, updater churn):
 OUT ORPHAN   issue #8493 — explicit master-base issue
 OUT REACHED: end
 RC 0
