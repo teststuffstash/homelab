@@ -20,7 +20,7 @@
         },
         "issues": {
           "level": "write",
-          "why": "queue labels, strike/report comments, coordinator C6 (composition worker gens + git-token.yaml)"
+          "why": "queue labels, strike/report comments, coordinator C6 (composition worker gens + git-token.yaml); ALSO the sole permission of the per-stack loop-intake gens (issues-only on homelab — ADR-119 dedup-and-extend, homelab#1095)"
         },
         "checks": {
           "level": "read",
