@@ -54,6 +54,9 @@ data:
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
+        # NB deliberately NO X-Forwarded-Proto here: HAProxy terminates TLS upstream and
+        # sends none, so nginx cannot know the original scheme — RELATIVEURLS on the
+        # registry (see Deployment env) is the actual fix for Location headers.
         proxy_request_buffering off;
         proxy_buffering off;
         proxy_read_timeout 900s;
@@ -109,6 +112,12 @@ spec:
             - name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING
               value: "{enabled: true, age: 1h, interval: 15m, dryrun: false}"
             - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
+            # Behind nginx+HAProxy the registry sees plain HTTP and was emitting ABSOLUTE
+            # http:// upload-session Locations — an https client's next PATCH then went to
+            # port 80 on the HAProxy VIP, which is the OPNsense GUI's redirect listener, whose
+            # lighttpd answered the 6GB chunk with an HTML 413 (found live, first seed push).
+            # Relative Locations keep the client on whatever scheme/host it arrived by.
+            - { name: REGISTRY_HTTP_RELATIVEURLS, value: "true" }
             # The image's default config runs a DEBUG server on :5001 — the nginx front's port,
             # same pod netns → bind collision, registry fatal-exits (found live, first deploy).
             # Pin it to localhost:5002; it also serves /metrics there if scraping is ever wanted.
