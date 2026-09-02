@@ -200,3 +200,40 @@ spec:
           annotations:
             summary: "gc-mirrors CronJob in registry-cache is suspended"
             description: "The gc-mirrors CronJob (namespace registry-cache) is currently suspended. Mirror PVC garbage collection will not run. Check who suspended it and why: kubectl -n registry-cache get cronjob gc-mirrors -o yaml | grep suspend."
+        # Mirror 5xx detection via blackbox probe (homelab#1282). The mirrors expose NO Prometheus
+        # metrics (no REGISTRY_HTTP_DEBUG_ADDR set), so the operator-narrowed fallback is a
+        # blackbox probe against /v2/ on each mirror's LAN endpoint. The Probe CRDs live in
+        # mirror-probes.yaml; this alert fires when probe_success == 0 for 10m.
+        #
+        # ── THE RESTART-GAP TEST, APPLIED TO THE BLACKBOX PROBER (homelab#332/#333) ──────────────
+        # The full statement lives in argocd/resources/openrouter-proxy/prometheusrule.yaml; this
+        # block records only what applying it to this alert needed beyond substitution.
+        #
+        # (i)   ONLY THE HOLE HALF. The identity half (`max by (<a label that does not churn>)`)
+        #       repairs nothing here. `probe_success` carries NO `pod`: the Probe's scrape goes to
+        #       the prober SERVICE and `instance` is the TARGET URL, so the live label set is
+        #       exactly {instance, job, namespace} (same reasoning as EndpointProbeFailing in
+        #       argocd/resources/blackbox/blackbox.yaml). Nothing on this alert churns when
+        #       blackbox-exporter moves, so there is no split `for:` clock to repair.
+        # (ii)  THE HOLE IS REAL. `replicas: 1` (blackbox-exporter Deployment), and every probe
+        #       in this file is scraped through that one pod — so a roll does not gap one series,
+        #       it empties every probe at once, staleness-marked instantly.
+        # (iii) THE DIRECTION IS `min_over_time`, NOT `max_over_time`. LOW is the bad reading
+        #       here (`probe_success == 0`), so `max` would hold the healthiest sample of the
+        #       window and delay every page by the whole range — class rule (ii), the same trap
+        #       GithubRateLimitLow names.
+        # (iv)  [5m], sized by #349's bound on EndpointProbeFailing's own data (see the class
+        #       block in argocd/resources/blackbox/blackbox.yaml for the full measurement). The
+        #       same single prober serves both probe sets, so the same bound applies.
+        # CEILING, asserted rather than assumed: a hole wider than [5m] (crash-loop, cold image
+        # pull, node drain) still empties the range and restarts `for: 10m`. Accepted, as in #313.
+        # NOT the #313 masking trade-off: there is no aggregation here, so nothing can mask
+        # anything — each target keeps its own series and its own alert.
+        - alert: RegistryMirrorProbeFailing
+          expr: min_over_time(probe_success{job="blackbox-mirrors"}[5m]) == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Registry mirror probe failing: {{ $labels.instance }}"
+            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). The mirror is returning 5xx or not answering at all. ⚠ Since homelab#1282 the expr reads a 5m range, so this means at least one failed probe in every 5m window across those ten minutes, and up to 5m may have passed since the last one — check probe_success{instance=\"{{ $labels.instance }}\"} before concluding it is still down. Remedy: bounce the mirror Deployment — kubectl -n registry-cache rollout restart deploy/mirror-<name> (see docs/runbook.md §Registry cache)."

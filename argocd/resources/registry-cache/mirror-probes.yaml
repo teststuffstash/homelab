@@ -1,0 +1,59 @@
+# Blackbox Probe CRDs for registry mirrors (homelab#1282). Each mirror is a distribution/registry
+# v3 pull-through proxy serving HTTP on port 80 (LoadBalancer) → containerPort 5000. The
+# http_2xx_lan module (argocd/resources/blackbox/blackbox.yaml) checks for HTTP 2xx; a 5xx from
+# the mirror makes probe_success == 0, which feeds RegistryMirrorProbeFailing in
+# prometheusrule.yaml.
+#
+# The /v2/ path is the registry API base endpoint — a healthy anonymous mirror returns 200 OK.
+# This is the same path a consumer would hit first, so a 5xx here means the mirror is not serving
+# blobs either.
+#
+# Mirror Services and their LAN endpoints (from mirror-*.yaml headers):
+#   registry-docker-io → 192.168.40.20
+#   registry-ghcr       → 192.168.40.21
+#   registry-mcr        → 192.168.40.31
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: mirror-docker-io
+  namespace: monitoring
+spec:
+  jobName: blackbox-mirrors
+  interval: 60s
+  module: http_2xx_lan
+  prober: { url: blackbox-exporter.monitoring.svc:9115 }
+  targets:
+    staticConfig:
+      static:
+        - http://192.168.40.20/v2/
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: mirror-ghcr
+  namespace: monitoring
+spec:
+  jobName: blackbox-mirrors
+  interval: 60s
+  module: http_2xx_lan
+  prober: { url: blackbox-exporter.monitoring.svc:9115 }
+  targets:
+    staticConfig:
+      static:
+        - http://192.168.40.21/v2/
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: mirror-mcr
+  namespace: monitoring
+spec:
+  jobName: blackbox-mirrors
+  interval: 60s
+  module: http_2xx_lan
+  prober: { url: blackbox-exporter.monitoring.svc:9115 }
+  targets:
+    staticConfig:
+      static:
+        - http://192.168.40.31/v2/
