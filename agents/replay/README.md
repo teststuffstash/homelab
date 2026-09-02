@@ -253,6 +253,8 @@ is stale, so it cannot drift the way the prose register did.
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/clear` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/go` | actions | - | `agents/subscription-latch.sh` | - |
+| `post-merge-push/detected` | actions | - | `agents/agent-session.sh` | - |
+| `post-merge-push/silent` | actions | - | `agents/agent-session.sh` | - |
 | `pr-cap-per-base` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/collision` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |

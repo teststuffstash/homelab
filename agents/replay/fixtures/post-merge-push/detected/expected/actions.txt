@@ -1,0 +1,5 @@
+CALL gh pr view https://github.com/teststuffstash/homelab/pull/1250 --json state,mergedAt,headRefName -q {state,mergedAt,headRefName}
+CALL gh api repos/teststuffstash/homelab/branches/fix-issue-1212-post-merge-guard --jq .commit.commit.author.date // empty
+CALL gh issue comment 1212 --repo teststuffstash/homelab --body ⚠️ **POST-MERGE PUSH DETECTED** — PR https://github.com/teststuffstash/homelab/pull/1250 merged at `2026-09-01T18:33:52Z` but branch `fix-issue-1212-post-merge-guard` received commits after merge. Stranded work is salvageable via `--work-branch fix-issue-1212-post-merge-guard`.
+OUT ⚠️  POST-MERGE PUSH DETECTED: PR https://github.com/teststuffstash/homelab/pull/1250 merged at 2026-09-01T18:33:52Z but branch fix-issue-1212-post-merge-guard received commits after merge — stranded work is salvageable via --work-branch fix-issue-1212-post-merge-guard
+RC 0
