@@ -747,6 +747,143 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "CI job queue time by runner pool (window quantiles)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1007
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "quantile by (runner_pool) (0.9, github_ci_job_queue_seconds)",
+          "legendFormat": "{{runner_pool}} p90"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "quantile by (runner_pool) (0.5, github_ci_job_queue_seconds)",
+          "legendFormat": "{{runner_pool}} p50"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "description": "Pickup latency (created_at\u2192started_at) per completed job across the run window, split by runs-on pool \u2014 the ask-D instrument (python golden-path proposal 2026-09-02). ADR-082's revisit trigger made readable: sustained proxmox-vm p90 \u2273 60s over a week says the e2e pool outgrew the single VM (2 slots) \u2192 ci-runner-02."
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Self-hosted runner slots busy",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1007
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (runner_pool) (github_ci_runner_busy_jobs)",
+          "legendFormat": "{{runner_pool}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "min": 0,
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "description": "In-progress jobs per pool, sampled each 120s poll (rides _runner_class's existing in-flight /jobs fetch \u2014 no extra API). Capacity: proxmox-vm = 2 slots (tofu/ci-runner.tf, operator 2026-08-08), arc = maxRunners 4 (argocd/platform/arc-runners.yaml). Flat at capacity while the queue panel climbs = saturation, not breakage."
     }
   ],
   "refresh": "5m",
