@@ -6431,4 +6431,6 @@ first live ADR-110 maintenance session before the ADR existed.
   postmortem residual marked executed). Also same hour: allure-reports bucket hit its 5Gi cap
   exactly (Garage answers quota as 403 "insufficient permissions") → oracle-iac PR#491 5→10Gi;
   FU-205 filed for WAN-upstream accounting (family-privacy boundary + CI-VM legs, operator
-  constraints recorded).
+  constraints recorded). **VERIFIED HEALED 13:04Z** (trapped the live tick): authenticated
+  clone → full scan → FU-146 double-dispatch refusal working → dispatched #363 → clean exit.
+  Loop draining its queue (#345 judged, #363 dispatched, G-G children waiting).
