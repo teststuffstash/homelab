@@ -160,6 +160,14 @@ reviewer knows its findings MAY determine the verdict. Absent = every lens stays
 Per-stack claim knob graduates a lens advisory → blocking. Audit-lane model rules (reasoning
 tier allowed, dual-model worth it) are FU-095's.
 
+**Posture ruling (operator, 2026-09-02 — the #818 verdict sitting): advisory is the designed
+steady state for practice lenses.** Critical findings block regardless of lens posture — through
+the rubric's blocking classes (lens-independent) and the deterministic belts (Gate-A
+scan-secrets, the enforcing IAC-G04 sentinel) that own the security-critical classes outright.
+`blocking` is reserved for lens classes the belts cannot reach (ASVS-shaped app-code findings),
+graduated only after advisory signal exists. Growth direction: MORE lenses that trigger often,
+never harder posture on quiet ones.
+
 ## Role machinery checklists (built + planned)
 
 - **prober** (FU-102) — the **contract probe** role (glossary ruling: *canary* unqualified is
