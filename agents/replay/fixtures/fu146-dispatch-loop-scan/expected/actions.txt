@@ -1,8 +1,10 @@
 OUT   FU-121: homelab issue-77 closed since the list snapshot — redispatch skipped; trying next unit
 OUT → dispatching item unit for test-stack: homelab issue-100 (queued-dispatch, model sonnet, wip 1)…
+OUT   RESOLVED: homelab#100 →
 OUT   [MOCK] coordinator-session.sh called for issue-100, returning exit 3 (FU-146 racing)
 OUT   FU-146: exit 3 — test-stack/homelab/issue-100 taken by racing dispatcher; trying next unit
 OUT → dispatching item unit for test-stack: circles issue-50 (queued-dispatch, model sonnet, wip 1)…
+OUT   RESOLVED: circles#50 →
 OUT   [MOCK] coordinator-session.sh called for issue-50, returning exit 0 (success)
 OUT TEST: exit 3 — racing dispatcher won, should retry next unit
 OUT TEST RESULT: dispatch_succeeded=1, tried_units=' c4c5-redispatch|homelab|issue-77 queued-dispatch|homelab|issue-100'
