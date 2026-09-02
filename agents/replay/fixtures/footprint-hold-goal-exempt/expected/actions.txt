@@ -1,6 +1,7 @@
 OUT DISPATCH #822a (homelab, class=goal, declared: *)
 OUT DISPATCH #822c (homelab, class=goal, declared: agents/**)
 OUT DISPATCH #822d (homelab, class=goal, declared: chassis/**)
+OUT CLASS homelab|issue-822b|footprint-held|operator|...
 OUT ORPHAN [homelab] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):
 OUT ORPHAN   issue #822b — a fix with no Touches line (declared: *)
 OUT REACHED: end

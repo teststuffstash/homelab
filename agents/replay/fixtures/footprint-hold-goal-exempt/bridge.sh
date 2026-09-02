@@ -14,3 +14,11 @@ inprog='[
 wip_busy=""
 # orphans accumulator — the footprint-hold block appends to it
 orphans=""
+# ITEM_CLASS_ROWS accumulator — initialized here so the extracted clause block can append to it.
+ITEM_CLASS_ROWS=""
+# item_class_push — the scan's per-pass accumulator. Defined here because the extracted
+# footprint-hold block now calls it for held items (FU-199 / #1240).
+item_class_push() {
+  local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}"
+  ITEM_CLASS_ROWS="${ITEM_CLASS_ROWS}${repo}|${item}|${class}|${who}|...\n"
+}

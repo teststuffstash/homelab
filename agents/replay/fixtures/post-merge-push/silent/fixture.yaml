@@ -1,0 +1,18 @@
+# homelab#1212 — post-merge-push detector, silent case: a merged PR whose head branch did NOT move
+# after mergedAt emits nothing (no marker, no comment). This is the negative assertion — the
+# detector must not false-positive on a clean merge.
+#
+# CONDITION UNDER REPLAY. After the harness exits, agent-session.sh checks whether this ride's PR
+# merged during the run. If so, it probes the head branch for commits after mergedAt. If the
+# branch's latest commit is at or before mergedAt, the detector stays silent.
+#
+# THE CONTRACT (one world, one arm):
+#   World: PR #1250 is MERGED at 2026-09-01T18:33:52Z, head branch fix-issue-1212-post-merge-guard
+#          still exists with a commit dated 2026-09-01T18:33:52Z (same as merge — no movement).
+#   The detector emits nothing — no marker, no comment.
+name: post-merge-push-silent
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:post-merge-push
