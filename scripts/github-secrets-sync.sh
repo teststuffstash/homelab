@@ -67,4 +67,37 @@ printf '%s\n' "$MAPPING" | while IFS='|' read -r repo ns conn pair prefix; do
     exit 41
   fi
 done
+
+# ── SINGLE-VALUE MAPPINGS ───────────────────────────────────────────────────────────────────
+# Same contract as the pair table above, for credentials that are ONE value, not an S3 pair:
+# repo | namespace | Secret | key in Secret | GitHub secret name
+# Source of truth for these is Infisical (ESO materializes the cluster Secret this reads) —
+# same write-only-copy rationale, same host-side requirement, same rule #6 on empty sources.
+SINGLES="
+teststuffstash/oracle-fleet | registry | registry-push-token | token | REGISTRY_PUSH_TOKEN
+"
+# ^ REGISTRY_PUSH_TOKEN: the ADR-121 first-party registry push credential (user `releaser`) —
+#   consumed by oracle-fleet release-corpus.yaml's dual-publish (PR#352).
+
+printf '%s\n' "$SINGLES" | while IFS='|' read -r repo ns sec key ghname; do
+  repo=$(echo "$repo" | tr -d ' '); ns=$(echo "$ns" | tr -d ' ')
+  sec=$(echo "$sec" | tr -d ' '); key=$(echo "$key" | tr -d ' '); ghname=$(echo "$ghname" | tr -d ' ')
+  [ -n "$repo" ] || continue; case "$repo" in \#*) continue;; esac
+
+  val=$("${KUBE[@]}" get secret "$sec" -n "$ns" -o "jsonpath={.data.${key}}" 2>/dev/null | base64 -d) || val=""
+  if [ -z "$val" ]; then
+    echo "✗ $repo ← $ns/$sec (${key}): SOURCE UNREADABLE/EMPTY — not touching the GitHub side (rule #6)" >&2
+    exit 40
+  fi
+  if [ "$CHECK" = "1" ]; then
+    echo "· $repo  $ghname  ←  $ns/$sec .$key (source OK, ${val:0:4}…)"
+    continue
+  fi
+  if printf '%s' "$val" | gh secret set "$ghname" -R "$repo"; then
+    echo "✓ $repo  $ghname ← $ns/$sec .$key (${val:0:4}…)"
+  else
+    echo "✗ $repo  $ghname — gh secret set FAILED (403 = this gh auth lacks Secrets write; run on the HOST — docs/github-setup.md)" >&2
+    exit 41
+  fi
+done
 echo "github-secrets-sync: done ($( [ "$CHECK" = "1" ] && echo check || echo sync ))"
