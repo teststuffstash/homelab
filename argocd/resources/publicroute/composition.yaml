@@ -2,10 +2,21 @@
 #   1. a provider-terraform Workspace (claim ns): Cloudflare Tunnel + remote config + proxied
 #      CNAME on the platform zone; tunnel token → connection secret (claim ns, never git)
 #   2. a cloudflared Deployment (claim ns) consuming that token
+#   3. profile-specific Cloudflare resources (v1alpha2+):
+#      - consumer: edge caching rule (respect-origin, 1h default)
+#      - api: per-IP rate-limit rule + no-challenge Skip rule
 # SUBTREE ENFORCEMENT lives here (fail-loud template): hostname must be under
 # <ns>.teststuff.net. The zone/account ids are platform constants (docs/cloudflare.md).
 # v5 provider idioms mirror tofu/cloudflare (the proven ha.teststuff.net one-off, which this
 # XRD exists to eventually absorb as consumer #2).
+#
+# Profile fan-out (v1alpha2+): the profile field (required, no default on the object) selects
+# which class defaults the composition renders — the way ADR-101's zone classes fan out zone
+# defaults (docs/cloudflare.md §Predicted shape). For v1alpha1 claims (legacy, no profile), the
+# composition defaults to consumer-class rendering for backwards compatibility.
+# ⚠ Rendering of profile-specific resources is skeletal — the full resource shapes land with
+# later children (#1304-#1307). The FIELD contract and the fan-out seam are what this change
+# delivers.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
@@ -55,6 +66,12 @@ spec:
             {{- end }}
             {{- $res := printf "pr-%s-%s" $ns $claim }}
             {{- $origin := printf "%s://%s:%d" (default "http" $b.protocol) $b.service (int $b.port) }}
+            {{- /* Profile fan-out: v1alpha2+ claims carry .spec.profile (required, no default).
+                 v1alpha1 claims (legacy, no profile field) default to consumer-class rendering
+                 for backwards compatibility. */}}
+            {{- $profile := or $xr.spec.profile "consumer" }}
+            {{- $rateLimit := 1200 }}
+            {{- if $xr.spec.rateLimit }}{{ $rateLimit = $xr.spec.rateLimit.threshold }}{{ end }}
             ---
             apiVersion: tf.upbound.io/v1beta1
             kind: Workspace
@@ -117,6 +134,87 @@ spec:
                     proxied = true
                     ttl     = 1
                   }
+                  {{- /* Profile-specific resources — skeletal; full shapes land with #1304-#1307 */}}
+                  {{- if eq $profile "api" }}
+                  # --- api profile: per-IP rate limiting ---
+                  # Renders a cloudflare_ruleset rate-limit rule on the zone for this hostname.
+                  # Threshold from claim field .spec.rateLimit.threshold (default 1200/min).
+                  # Structured 429 response body a machine client can parse.
+                  # Full shape: #1304 (rate-limit rule resource).
+                  resource "cloudflare_ruleset" "rate_limit" {
+                    zone_id  = local.zone_id
+                    name     = "PublicRoute {{ $host }} rate limit"
+                    kind     = "zone"
+                    phase    = "http_ratelimit"
+                    rules {
+                      action      = "block"
+                      description = "per-IP rate limit ({{ $rateLimit }}/min)"
+                      expression  = "(http.host eq \"{{ $host }}\")"
+                      ratelimit {
+                        characteristics = ["ip.src"]
+                        period          = 60
+                        requests_per_period = {{ $rateLimit }}
+                        mitigation_timeout  = 60
+                      }
+                      action_parameters {
+                        response {
+                          status_code = 429
+                          content_type = "application/json"
+                          content = jsonencode({
+                            success = false
+                            errors = [{ code = 10429, message = "rate limit exceeded" }]
+                            messages = []
+                            result = null
+                          })
+                        }
+                      }
+                      enabled = true
+                    }
+                  }
+                  # --- api profile: no-challenge Skip rule ---
+                  # Ensures NO challenge-shaped mitigation (captcha/managed challenge) reaches
+                  # this route. Zone-phase rulesets are per-phase-per-zone (ONE entrypoint per
+                  # phase), so this Skip goes on the zone's http_response phase ruleset.
+                  # Full shape: #1305 (Skip rule resource).
+                  resource "cloudflare_ruleset" "skip_challenge" {
+                    zone_id  = local.zone_id
+                    name     = "PublicRoute {{ $host }} skip challenge"
+                    kind     = "zone"
+                    phase    = "http_response"
+                    rules {
+                      action      = "skip"
+                      description = "api profile: skip all challenge-shaped mitigations"
+                      expression  = "(http.host eq \"{{ $host }}\")"
+                      action_parameters {
+                        rulesets = ["current_zone"]
+                        ruleset_action = "skip"
+                      }
+                      enabled = true
+                    }
+                  }
+                  {{- else }}
+                  # --- consumer profile: edge caching on ---
+                  # Respect-origin cache headers with a 1h default TTL.
+                  # Full shape: #1306 (cache rule resource).
+                  resource "cloudflare_ruleset" "cache_rule" {
+                    zone_id  = local.zone_id
+                    name     = "PublicRoute {{ $host }} cache"
+                    kind     = "zone"
+                    phase    = "http_cache_settings"
+                    rules {
+                      action      = "set_cache_settings"
+                      description = "consumer profile: edge caching default on"
+                      expression  = "(http.host eq \"{{ $host }}\")"
+                      action_parameters {
+                        edge_cache_ttl {
+                          mode    = "respect_origin"
+                          default = 3600
+                        }
+                      }
+                      enabled = true
+                    }
+                  }
+                  {{- end }}
                   output "tunnel_token" {
                     value     = data.cloudflare_zero_trust_tunnel_cloudflared_token.this.token
                     sensitive = true

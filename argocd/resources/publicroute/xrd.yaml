@@ -5,6 +5,9 @@
 # api-no-challenge Skip rules) are the known-open aggregation leg: Cloudflare allows ONE
 # entrypoint ruleset per phase per zone, so per-claim Workspaces cannot own them — that design
 # lands with the second consumer (docs/cloudflare.md §Public ingress).
+#
+# v1alpha2: profile field (consumer|api) added — the route class fans out edge defaults the
+# way ADR-101's zone classes fan out zone defaults (docs/cloudflare.md §Predicted shape).
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
@@ -64,6 +67,90 @@ spec:
                     noTLSVerify:
                       type: boolean
                       default: false
+                replicas:
+                  type: integer
+                  default: 1
+                  description: cloudflared connector replicas in the claiming namespace.
+    - name: v1alpha2
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [hostname, backend, profile]
+              properties:
+                zone:
+                  type: string
+                  default: teststuff.net
+                  description: >-
+                    Which zone the route lives in (ADR-101 zone classes). Platform zone
+                    (teststuff.net, the default): any namespace may claim inside its delegated
+                    subtree. Product zone (e.g. minutark.ee): ONLY the owning namespace may
+                    claim, anywhere in the zone incl. the apex — the owner map is a platform
+                    constant in the composition.
+                hostname:
+                  type: string
+                  description: >-
+                    Public FQDN. Platform zone: must lie in the claiming namespace's delegated
+                    subtree (<anything>.<namespace>.teststuff.net). Product zone: must be the
+                    zone apex or inside it. Enforced by the composition (the XRD is the
+                    privilege boundary; Cloudflare has no sub-zone grain).
+                profile:
+                  type: string
+                  enum: [consumer, api]
+                  description: >-
+                    The route class (docs/cloudflare.md §Predicted shape). consumer: edge
+                    caching defaults on, RUM/client telemetry available, challenges legal.
+                    api: per-IP rate limiting ON, NO challenge-shaped mitigations reach the
+                    route, structured 429 on limit. REQUIRED — no default on the object
+                    (the 2026-07-16 API-server-stamp/OutOfSync lesson).
+                backend:
+                  type: object
+                  required: [service, port]
+                  properties:
+                    service:
+                      type: string
+                      description: In-cluster origin host (Service FQDN — use a trailing dot to defeat ndots search expansion, see docs/cloudflare.md gotcha #1).
+                    port:
+                      type: integer
+                    protocol:
+                      type: string
+                      enum: [http, https]
+                      default: http
+                    originServerName:
+                      type: string
+                      description: TLS SNI/verify name when protocol=https.
+                    noTLSVerify:
+                      type: boolean
+                      default: false
+                rateLimit:
+                  type: object
+                  description: >-
+                    Per-IP rate limiting configuration (api profile only; ignored for
+                    consumer). Platform default-when-silent: 1200 req/min (≈ 20 req/s fleet
+                    capacity). Bounds: 60-6000.
+                  properties:
+                    threshold:
+                      type: integer
+                      description: >-
+                        Requests per minute per source IP. Platform default-when-silent: 1200.
+                        Bounds: 60-6000.
+                      minimum: 60
+                      maximum: 6000
+                      default: 1200
+                origins:
+                  type: array
+                  description: >-
+                    Allowed CORS origins (api profile only; ignored for consumer). Each entry
+                    is a scheme + hostname (e.g. https://app.minutark.ee). Empty or absent
+                    means no CORS restriction at the edge — the origin controls its own CORS
+                    policy.
+                  items:
+                    type: string
+                    pattern: ^https?://[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*(:[0-9]+)?$
                 replicas:
                   type: integer
                   default: 1
