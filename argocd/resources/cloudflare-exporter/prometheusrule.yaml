@@ -127,3 +127,26 @@ spec:
           annotations:
             summary: "Cloudflare spend belt is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}"
             description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
+        # ── edge observability belt (#1306) — the FU-039 DIY GraphQL poller ─────────────────────
+        # The lablabs exporter's dataset (`httpRequests1mGroups`) 403s on free zones, so the
+        # edge-probe uses `httpRequestsAdaptiveGroups` and `firewallEventsAdaptive` — both ✅ on
+        # free zones per the validated matrix in docs/cloudflare.md §Free-zone GraphQL matrix.
+        # Series come from cloudflare-edge-probe (edge-probe.py beside this file), whose --self-test
+        # replays THESE exprs against a flipped fixture — rename an alert or a metric on one side
+        # only and that test fails (it also asserts the retired CloudflareEdge5xx STAYS retired).
+        # severity: warning because info is inhibited here.
+        # ⚠ Carries the #288/#313 restart-gap shape (homelab#334): `min by (zone)` to drop the
+        # churning `pod`/`instance` identity, plus `min_over_time` `[10m]` bridge over the hole a
+        # `replicas: 1` roll leaves. LOW-is-bad (`probe_ok == 0`), so `min_over_time` is the
+        # alert-preserving direction. The `absent()` arm is bridged too, for the same reason as
+        # CloudflareSpendProbeBlind: an unbridged roll swaps `{zone=…}` for `{}` and back, which
+        # is a window restart with no change in the underlying condition.
+        - alert: CloudflareEdgeProbeBlind
+          expr: min by (zone) (min_over_time(cloudflare_edge_probe_ok[10m])) == 0 or absent(min_over_time(cloudflare_edge_probe_ok[10m]))
+          for: 30m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "Cloudflare edge probe is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}"
+            description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."

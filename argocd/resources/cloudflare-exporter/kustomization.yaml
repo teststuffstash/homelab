@@ -28,9 +28,16 @@ resources:
   - spend-probe-deployment.yaml
   - spend-probe-service.yaml
   - spend-probe-servicemonitor.yaml
+  - edge-probe-deployment.yaml
+  - edge-probe-service.yaml
+  - edge-probe-servicemonitor.yaml
 
 configMapGenerator:
   # Hash-named, so an edit to the probe script rolls its pod (the github-exporter pattern).
   - name: cloudflare-spend-probe-script
     files:
       - spend-probe.py
+  # Hash-named, same pattern — an edit to edge-probe.py rolls its pod.
+  - name: cloudflare-edge-probe-script
+    files:
+      - edge-probe.py
