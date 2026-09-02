@@ -230,7 +230,7 @@ elif [[ "$*" == *"/api/v1/query"* ]]; then
     # Scoped class series — only items in scope (833, 834)
     cat <<'JSON'
 {"status":"success","data":{"resultType":"vector","result":[
-  {"metric":{"repo":"homelab","item":"833","class":"held-merged-unlinked","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"833","class":"strike-held","who":"operator"},"value":[1787054400,"1"]},
   {"metric":{"repo":"homelab","item":"834","class":"queued-held-by-ghost","who":"operator"},"value":[1787054400,"1"]}
 ]}}
 JSON
@@ -238,7 +238,7 @@ JSON
     # Full class series (includes one item absent from timestamp series to test unknown case)
     cat <<'JSON'
 {"status":"success","data":{"resultType":"vector","result":[
-  {"metric":{"repo":"homelab","item":"833","class":"held-merged-unlinked","who":"operator"},"value":[1787054400,"1"]},
+  {"metric":{"repo":"homelab","item":"833","class":"strike-held","who":"operator"},"value":[1787054400,"1"]},
   {"metric":{"repo":"homelab","item":"834","class":"queued-held-by-ghost","who":"operator"},"value":[1787054400,"1"]},
   {"metric":{"repo":"homelab","item":"889","class":"riding","who":"machine"},"value":[1787054400,"1"]},
   {"metric":{"repo":"homelab","item":"840","class":"container","who":"none"},"value":[1787054400,"1"]},
@@ -257,7 +257,7 @@ if [ "$BOARD_RC" = 0 ]; then ok "machine: board.sh --machine exits 0"; else bad 
 present "machine: header has board v1 prefix" "board v1" "$BOARD_OUT"
 present "machine: header has scope=stack:platform" "scope=stack:platform" "$BOARD_OUT"
 present "machine: header has sources=labels:live pods:live derived:tick@" "sources=labels:live pods:live derived:tick@" "$BOARD_OUT"
-present "machine: held-merged-unlinked row (who=operator)" "who=operator class=held-merged-unlinked id=homelab#833" "$BOARD_OUT"
+present "machine: strike-held row (who=operator)" "who=operator class=strike-held id=homelab#833" "$BOARD_OUT"
 present "machine: queued-held-by-ghost row (who=operator)" "who=operator class=queued-held-by-ghost id=homelab#834" "$BOARD_OUT"
 present "machine: computed elapsed times (7h30m for items 833 and 834)" "since=7h30m" "$BOARD_OUT"
 present "machine: backlog-aggregate row (who=operator)" "who=operator class=backlog-aggregate id=homelab/aggregate" "$BOARD_OUT"

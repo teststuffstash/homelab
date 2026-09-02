@@ -209,9 +209,10 @@ scan_phase() {   # $1 = dispatch | deterministic — record a phase transition f
 # tick that empties the group is not a health signal.
 #
 # Classes (low-cardinality enum, v1):
-#   riding, phantom, held-merged-unlinked, parked-blocked, parked-infeasible,
+#   riding, phantom, strike-held, parked-blocked, parked-infeasible,
 #   arbitrate-standing, queued-held, queued-held-by-ghost, queued-ready,
-#   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate
+#   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate,
+#   footprint-held, cap-held, blockpark
 # who ∈ operator | machine | none
 # >>>REPLAY:item-class>>>
 # Per-pass accumulator: newline-joined lines "repo|item|class|who|first_timestamp"
@@ -333,6 +334,9 @@ NOOP_ROUND_JQ="${STATS_TS_DEF}"'
   | if $after >= 2 and ($arb_ts == "" or $newest_noop_ts > $arb_ts) then "1" else "" end'
 # <<<REPLAY:round-evidence<<<
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
+# FU-199 / #1240 CAP SPLIT: codeowner-parked PRs (bot-approved ∧ REVIEW_REQUIRED) count
+# against their own larger bound so parked nits never freeze the dispatch lane.
+REPO_BLOCKPARK_CAP="${REPO_BLOCKPARK_CAP:-10}"
 
 # ── PR STATE FINGERPRINT (homelab#198) ────────────────────────────────────────────────────────
 # The arbitrate, ci-red and merge-conflict (homelab#595) DISPATCH legs are level-triggered off a
@@ -1553,7 +1557,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # homelab#849: per-base count. Armed PRs against one base do not churn against another base's
     # issues — master merges never re-base a goal/** child, and goal/** merges never re-base a
     # master PR. Map baseRefName → count of armed PRs, as newline-separated "base|count" lines.
-    per_base_armed="$(jq -r '[.[] | select(.autoMergeRequest != null)]
+    # FU-199 / #1240 CAP SPLIT: only machine-flowing PRs (reviewDecision == "APPROVED") count
+    # toward REPO_PR_CAP. Codeowner-parked PRs (reviewDecision == "REVIEW_REQUIRED" AND
+    # mergeStateStatus == "BLOCKED") count toward REPO_BLOCKPARK_CAP instead.
+    per_base_armed="$(jq -r '[.[] | select(.autoMergeRequest != null) | select(.reviewDecision == "APPROVED")]
+      | group_by(.baseRefName)
+      | map("\(.[0].baseRefName)|\(length)")
+      | .[]' <<<"$prsjson")"
+    per_base_blockpark="$(jq -r '[.[] | select(.autoMergeRequest != null) | select(.reviewDecision == "REVIEW_REQUIRED") | select(.mergeStateStatus == "BLOCKED")]
       | group_by(.baseRefName)
       | map("\(.[0].baseRefName)|\(length)")
       | .[]' <<<"$prsjson")"
@@ -2085,6 +2096,7 @@ EOF_GOVERNANCE
       # issues; disjoint declared footprints dispatch in parallel (launcher limit rides wipmap).
       elif fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
         orphans="${orphans}[$repo] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
+        item_class_push "$repo" "issue-${qnum}" "footprint-held" "operator"
         continue
       fi
       # <<<REPLAY:footprint-hold<<<
@@ -2108,9 +2120,19 @@ EOF_GOVERNANCE
       # the SAME base branch as the queued issue (homelab#849). Count per-base: master-based PRs
       # do not hold a goal/**-based issue and vice versa. In-flight recovery clauses (c4c5,
       # merge-conflict, …) are exempt: they REDUCE the count.
+      # FU-199 / #1240 CAP SPLIT: per_base_armed counts only machine-flowing PRs
+      # (reviewDecision == "APPROVED"). Codeowner-parked PRs count toward REPO_BLOCKPARK_CAP.
       qbase_armed="$(printf '%s' "$per_base_armed" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
       if [ "${qbase_armed:-0}" -ge "$REPO_PR_CAP" ]; then
-        orphans="${orphans}[$repo] ⏳ PR budget (${qbase_armed} armed PRs against ${qbase} ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
+        orphans="${orphans}[$repo] ⏳ PR budget (${qbase_armed} machine-flowing PRs against ${qbase} ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
+        item_class_push "$repo" "issue-${qnum}" "cap-held" "operator"
+        continue
+      fi
+      # FU-199 / #1240 CAP SPLIT: codeowner-parked PRs have their own larger bound.
+      qbase_blockpark="$(printf '%s' "$per_base_blockpark" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
+      if [ "${qbase_blockpark:-0}" -ge "$REPO_BLOCKPARK_CAP" ]; then
+        orphans="${orphans}[$repo] ⏳ BLOCKPARK budget (${qbase_blockpark} codeowner-parked PRs against ${qbase} ≥ cap ${REPO_BLOCKPARK_CAP} — FU-199):\n  issue #${qnum} — ${qtitle}\n"
+        item_class_push "$repo" "issue-${qnum}" "blockpark" "operator"
         continue
       fi
       # <<<REPLAY:pr-cap-per-base<<<
@@ -3237,7 +3259,7 @@ EOF_GOVERNANCE
               # Push the weak-link class for each ambiguous issue (#833, who=operator)
               while IFS= read -r ambig_line; do
                 ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
-                [ -n "$ambig_n" ] && item_class_push "$repo" "issue-${ambig_n}" "held-merged-unlinked" "operator"
+                [ -n "$ambig_n" ] && item_class_push "$repo" "issue-${ambig_n}" "strike-held" "operator"
               done <<< "$ambig"
             fi
             if [ -n "$dispatchable" ]; then
