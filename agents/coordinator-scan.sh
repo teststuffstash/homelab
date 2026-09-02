@@ -3421,6 +3421,15 @@ EOF_GOVERNANCE
             if [ -n "$classes" ]; then
               while IFS= read -r ec; do
                 [ -n "$ec" ] || continue
+                # FU-202 belt: key-class error_class values (budget-exhausted-key, budget-403-key)
+                # are MINT defects, not worker strikes. New rides post KEY-RETRY: (not AGENT_STRIKE:)
+                # so the ^AGENT_STRIKE: anchor already excludes them going forward. But the 24h
+                # window can span the #1233 merge, and historical corpus records key-class as
+                # AGENT_STRIKE:. Explicitly exclude them here so the fleet-strike reader never
+                # counts a mint defect as a fleet strike.
+                case "$ec" in
+                  budget-exhausted-key|budget-403-key) continue;;
+                esac
                 pairs="${pairs}${ec}:${fn}\n"
               done <<< "$classes"
             fi

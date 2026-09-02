@@ -396,6 +396,8 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: 'error_class=' }
       - desc: "dedup — before filing, check for an existing OPEN issue titled fleet-strike: error_class=<ec>; extend it instead of creating a new one"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'fleet-strike: error_class' }
+      - desc: "key-class exclusion (FU-202 belt) — budget-exhausted-key and budget-403-key are MINT defects, not worker strikes; explicitly excluded even when they appear as AGENT_STRIKE: (historical rows pre-#1233 merge)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'budget-exhausted-key\|budget-403-key' }
       - desc: "probe failure holds every candidate and writes nothing (rule #6 — never fail INTO a write)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FLEET STRIKE" }
     incidents:

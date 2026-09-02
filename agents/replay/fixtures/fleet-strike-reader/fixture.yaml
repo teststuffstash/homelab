@@ -18,6 +18,10 @@
 #   • MATCH on the structured `error_class=` field only, never log excerpts.
 #   • FORWARD-COMPATIBLE with the G2 key-class split: counts strike-class rows only
 #     (AGENT_STRIKE: comments), never key-class rows.
+#   • KEY-CLASS EXCLUSION (FU-202 belt): explicitly excludes budget-exhausted-key and
+#     budget-403-key even when they appear as AGENT_STRIKE: (historical rows pre-#1233
+#     merge). These are MINT defects, not worker strikes — counting them as fleet strikes
+#     would be wrong.
 pins:
   - IL-T30
 name: fleet-strike-reader

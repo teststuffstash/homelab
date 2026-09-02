@@ -206,6 +206,7 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-mcp-present` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-mcp-present/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
+| `fleet-strike-reader` | actions | - | `agents/coordinator-scan.sh` | IL-T30 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
 | `footprint-hold-goal-exempt` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
