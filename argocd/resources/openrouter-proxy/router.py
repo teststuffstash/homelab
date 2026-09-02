@@ -41,6 +41,12 @@ import model_id
 # classifier and agent-finalize (the authoritative signature copy).
 STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown"}
 
+# FU-201 c: serving-shaped strike classes — provider-side failures that exclude the (model,
+# provider) PAIR rather than the model entirely. A model-level blacklist needs ≥2-provider
+# evidence (the #783 rule). These classes are the ADR-115 evidence set: provider 4xx/5xx
+# responses and tool-call malformation that the serving provider caused.
+SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm"}
+
 # ⚑ ENFORCEMENT IS OFF BY DEFAULT — operator ruling 2026-08-07, and it makes an ACCIDENT explicit.
 # Strikes were never being recorded (the drift below), so `route()` has always filtered against an
 # empty table. That accident turned out to be *better* than the design: circles#19 died on
@@ -58,7 +64,8 @@ RETAIN_REPORTS_D = 90  # run_reports, strikes
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS strikes(
-  ts REAL, task TEXT, stack TEXT, model TEXT, error_class TEXT, round INTEGER, session TEXT);
+  ts REAL, task TEXT, stack TEXT, model TEXT, error_class TEXT, round INTEGER, session TEXT,
+  provider TEXT);
 CREATE INDEX IF NOT EXISTS ix_strikes ON strikes(stack, task, model);
 CREATE TABLE IF NOT EXISTS provider_events(
   ts REAL, model TEXT, provider TEXT, status INTEGER, class TEXT);
@@ -177,6 +184,12 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                         conn.execute(f"ALTER TABLE go_usage ADD COLUMN {_gocol}")
                     except sqlite3.OperationalError:
                         pass  # duplicate column — schema already current
+                # FU-201 c: strikes grew provider column — the served provider slug, sourced
+                # proxy-side from generations in record_report(). Same LAST-column discipline.
+                try:
+                    conn.execute("ALTER TABLE strikes ADD COLUMN provider TEXT")
+                except sqlite3.OperationalError:
+                    pass  # duplicate column — schema already current
                 # homelab#1042: model_cooldowns grew role-scoped PRIMARY KEY(model, role). SQLite
                 # cannot change a PK by ALTER, so this rebuilds — which means it MUST NOT re-run
                 # after a successful migration (the INSERT ... SELECT would force role='worker'
@@ -301,16 +314,27 @@ def record_report(d: dict) -> tuple[bool, bool]:
     # vocabulary, so it was never coherent with the single field it was compared against.
     # model-routing.md §M1 settles that this is a bug, not a policy: its taxonomy table names
     # "harness-death (goose -32602)" as ONE thing.
+    # FU-201 c: the served provider is sourced proxy-side from the generations table (the
+    # launcher's /report body does not carry it). The generation harvest runs alongside the
+    # data plane, so by the time record_report() is called the generation row for this session
+    # already exists. Absent a generation row, provider defaults to empty string — the strike
+    # still records, just without provider attribution.
+    session = str(d.get("session") or "")
+    provider = str(d.get("served_provider") or "")
+    if not provider:
+        _prov = _read("SELECT provider FROM generations WHERE id=?",
+                       (session,))
+        provider = str(_prov[0][0]) if _prov else ""
     striked = False
     if stored and (err in STRIKE_CLASSES or outcome in STRIKE_CLASSES) \
             and not outcome.startswith("pr"):
         # Dedup per (task, model, session): a re-POST must not double-strike.
         _write("DELETE FROM strikes WHERE task=? AND model=? AND session=?",
-               (str(d.get("task") or ""), str(d.get("model") or ""), str(d.get("session") or "")))
+               (str(d.get("task") or ""), str(d.get("model") or ""), session))
         striked = _write(
-            "INSERT INTO strikes VALUES(?,?,?,?,?,?,?)",
+            "INSERT INTO strikes VALUES(?,?,?,?,?,?,?,?)",
             (now, str(d.get("task") or ""), str(d.get("stack") or ""), str(d.get("model") or ""),
-             err, int(d.get("round") or 1), str(d.get("session") or "")))
+             err, int(d.get("round") or 1), session, provider))
     if stored:  # M11 leg 3 (shadow): the same feed, folded into the (class, urgency) start tier
         fold = fold_outcome_into_cell(d, striked)
         if fold:
@@ -950,11 +974,13 @@ def derive_canary_verdicts(days: int = 7, min_n: int = 20) -> int:
     return record_rotation("provider-events", entries) if entries else 0
 
 
-def strikes_for(task: str, stack: str) -> list[str]:
-    """Models struck for THIS task (M1: blacklists are task-scoped) — the /route filter in P3;
-    /router-status shows it today."""
-    return [r[0] for r in _read(
-        "SELECT DISTINCT model FROM strikes WHERE task=? AND stack=?", (task, stack))]
+def strikes_for(task: str, stack: str) -> list[tuple[str, str, str]]:
+    """(model, provider, error_class) tuples struck for THIS task (FU-201 c: strikes now carry
+    the served provider). The /route filter uses this for pair-exclusion on serving-shaped
+    strikes and model-level exclusion on infra-shaped ones. /router-status shows it today."""
+    return [tuple(r) for r in _read(
+        "SELECT DISTINCT model, provider, error_class FROM strikes WHERE task=? AND stack=?",
+        (task, stack))]
 
 
 # ── ADR-096 addendum 4: model cooldowns (the temporary-blacklist / recovery loop) ──────────────
@@ -1096,7 +1122,7 @@ def draw_slot(cls: str, cinfo: dict, slot) -> dict:
     return out
 
 
-def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: set, struck: set,
+def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: set, struck_models: set,
                    cool: dict, ctx: dict, sub_gate, or_gate, jitter: float, pick) -> dict:
     """M11 legs 1+2+3, computed ALONGSIDE the served decision and never feeding it.
 
@@ -1149,7 +1175,7 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
     cands = [_rung(m, rail) for m, rail in eligible]
     sub_model = cfg["subscription_model"]
     if (not any(c["rail"] == "subscription" for c in cands) and "subscription" in rails
-            and sub_model not in deny and sub_model not in struck and sub_model not in cool
+            and sub_model not in deny and sub_model not in struck_models and sub_model not in cool
             and capability_floor_block(cls, sub_model) is None):
         # The rail enters the ordering as a CANDIDATE even when no chain names it — that is leg 1.
         cands.append({**_rung(sub_model, "subscription"), "synthetic": True})
@@ -1283,10 +1309,26 @@ def route(payload: dict, ctx: dict) -> dict:
     decorrelate_family = None
     if decorrelate_from:
         decorrelate_family = vendor_family(decorrelate_from)
+    # FU-201 c: strike rows carry provider + error_class. Serving-shaped strikes (provider-5xx,
+    # timeout, auth-storm) exclude the (model, provider) PAIR — the model stays eligible for
+    # re-pick with a different provider. Infra-shaped strikes (harness-death, no-pr, unknown)
+    # exclude the model entirely. A model with serving-shaped strikes from ≥2 providers is
+    # excluded at model level (the #783 rule: model-level verdicts need multi-provider evidence).
     # Recorded always, ACTED ON only when STRIKE_ENFORCE (see the constant's note): today this is
     # an empty set, which is exactly the behaviour the loop has had all along — now on purpose.
-    struck = set(strikes_for(str(payload.get("task") or ""), str(payload.get("stack") or ""))) \
-        if STRIKE_ENFORCE else set()
+    _strike_rows = strikes_for(str(payload.get("task") or ""),
+                               str(payload.get("stack") or "")) if STRIKE_ENFORCE else []
+    struck_models: set[str] = set()
+    _serving_providers: dict[str, set[str]] = {}
+    for _m, _p, _ec in _strike_rows:
+        if _ec in SERVING_CLASSES:
+            if _p:
+                _serving_providers.setdefault(_m, set()).add(_p)
+        else:
+            struck_models.add(_m)
+    for _m, _providers in _serving_providers.items():
+        if len(_providers) >= 2:
+            struck_models.add(_m)
     cool = active_cooldowns(now, role=role)
     skipped: list[dict] = list(pre_skipped)
     eligible: list[tuple[str, str]] = []
@@ -1294,7 +1336,7 @@ def route(payload: dict, ctx: dict) -> dict:
         rail = "subscription" if m.startswith("claude/") else "openrouter"
         if m in deny:
             skipped.append({"model": m, "reason": "claim-deny"})
-        elif m in struck:
+        elif m in struck_models:
             skipped.append({"model": m, "reason": "strike"})
         elif m in cool:
             skipped.append({"model": m, "reason": f"cooldown:{cool[m]['reason']}",
@@ -1393,7 +1435,7 @@ def route(payload: dict, ctx: dict) -> dict:
     if result:
         decision["resolved"] = model_id.parse(result["model"])
     # ── M11 SHADOW (homelab#159) — computed after the served decision, consumed by nobody ──
-    shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck, cool, ctx,
+    shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck_models, cool, ctx,
                             sub_gate, or_gate, jitter, pick_fn)
     # FU-127: the shadow pick carries its own resolved object so the M11 shadow log line
     # describes the SHADOW pick, not the served pick (which may differ — that's the entire
@@ -1768,10 +1810,10 @@ def self_test() -> int:
         if os.path.exists(_mig_cool_db):
             os.unlink(_mig_cool_db)
         _conn, _persistent = _saved_conn, _saved_persistent
-    assert strikes_for("issue-19", "circles") == ["deepseek/deepseek-v4-flash"]
+    assert strikes_for("issue-19", "circles") == [("deepseek/deepseek-v4-flash", "", "goose-32602-truncation")]
     # Recording is not acting: enforcement stays OFF until a policy decision (see STRIKE_ENFORCE).
     assert STRIKE_ENFORCE is False, "strike enforcement must default OFF — routing is unchanged by design"
-    assert strikes_for("issue-9", "sleep") == ["deepseek/deepseek-v4-flash"]
+    assert strikes_for("issue-9", "sleep") == [("deepseek/deepseek-v4-flash", "", "harness-death")]
     record_provider_event("qwen/qwen3-coder", "deepinfra", 500)
     record_provider_event("qwen/qwen3-coder", "deepinfra", 200)
     assert record_generation("gen-test-1", "deepseek/deepseek-v4-flash", {
