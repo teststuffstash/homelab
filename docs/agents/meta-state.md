@@ -8,6 +8,23 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-02 ~12:00Z ADR-121 REGISTRY SESSION (operator-attended) — first-party registry
+  LIVE, corpus seed IN FLIGHT. Pickup set:**
+  - **Seed retry gate**: garage resync drain monitor was running at session end (jail task
+    `bvwh4d6wa`, retry when queue <300). Retry = skopeo push of `oci-layout` in the session
+    scratchpad → `registry.teststuff.net/oracle-fleet/ert-corpus:2026-09-01` (creds: Infisical
+    `REGISTRY_PUSH_TOKEN`, user `releaser`); expect digest `cb735ff…`. Failure mode seen twice:
+    Garage `Missing block` on the commit-time multipart copy (dedup'd blocks raced deletions
+    from killed attempts — debris since cleared, worker tuning resync-worker-count=4/tranq=1
+    set EPHEMERALLY on garage-0, resets on pod restart).
+  - **Pin flip READY, unpushed**: oracle-iac branch `fix/corpus-pin-local-registry` (local
+    commit) — push + PR ONLY after the seed verifies (else the rollout pulls a 404).
+  - **OPERATOR console step owed**: `REGISTRY_PUSH_TOKEN` repo Actions secret on oracle-fleet
+    (value in Infisical) — until set, release-corpus dual-push loud-skips (PR#352 merged).
+  - **Cleanup queue**: OTLP trace-export spam (`localhost:4318 refused` every 5s) in registry
+    AND all three mirrors — add `OTEL_SDK_DISABLED`-class env; the ingester rollout resolved
+    itself via mirror (~11:0xZ) so no urgency; FU-203 (registry retention) + #1297 (per-blob
+    detection gap, filed at the PR#1292 gate read) queued.
 - **⚑ 2026-09-02 OPERATOR SITTING WIND-DOWN (~09:30Z) — batch-1 verdicts + G-B rulings + two
   grants landed (TICK-LOG entry has the arc). The fresh-session pickup set:**
   - **Verdicts applied**: #1039 + #775 `goal/validated` (operator via seat; #778 released to
