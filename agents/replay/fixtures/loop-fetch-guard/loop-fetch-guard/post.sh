@@ -44,3 +44,22 @@ set -e
 
 echo "EXIT: $RC4"
 [ $RC4 -eq 0 ] && echo "REAL_CONCAT_OK" || echo "REAL_CONCAT_FAILED"
+
+echo ">>> Case 5: intake fetch degrades non-fatally (homelab#1095)"
+# The coordinator fetch succeeds; the INTAKE fetch (role=intake) fails. Contract: WARN line,
+# GH_TOKEN_INTAKE exported EMPTY, session continues — never a fatal (the #1136 degrade shape).
+curl() {
+  case "$*" in
+    *role=intake*)                  return 7 ;;
+    *loop-git-token*ns=test-ns*)    printf 'mock-token-for-test'; return 0 ;;
+    *)                              printf 'UNEXPECTED_CURL: %s\n' "$*" >&2; return 1 ;;
+  esac
+}
+export -f curl
+
+PREP5="set -e; ${LOOP_FETCH}[ -z \"\$GH_TOKEN_INTAKE\" ] && echo INTAKE_EMPTY; echo REACHED5"
+set +e
+bash -c "$PREP5" 2>&1
+RC5=$?
+set -e
+echo "EXIT: $RC5"

@@ -1,0 +1,21 @@
+# homelab#1276 — opencode session config with the MCP knob present (unpinned + no-injection path).
+# Pins that the MCP server config is deep-merged into the opencode session config when
+# MCP_ENDPOINT is set.
+#
+# CONDITION UNDER REPLAY. A recipe dispatch on the opencode harness where the provider pin
+# lookup returns nothing (registry unreachable / no eligible provider), cred injection is not
+# active, AND MCP_ENDPOINT is set. The MCP config should be merged into OC_CONFIG alongside
+# the autoApprove mode.
+#
+# THE CONTRACT:
+#   1. `OC_SETUP` is non-empty — the base64 config write is always produced.
+#   2. The decoded config JSON carries `mode.autoApprove` (with empty permission+options).
+#   3. The decoded config JSON carries `mcp.stack-mcp` with type "remote" and the endpoint URL.
+#   4. The config JSON carries the `$schema` key.
+name: opencode-session-config-with-mcp
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:opencode-session-config
+  - file:post.sh

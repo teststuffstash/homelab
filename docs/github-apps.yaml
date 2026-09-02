@@ -43,7 +43,7 @@ apps:
       metadata: { level: read, why: "baseline — every App needs it" }
       contents: { level: write, why: "worker/coordinator clone+push (agent-git-<repo> gens, composition.yaml; agents/coordinator/git-token.yaml)" }
       pull_requests: { level: write, why: "workers open PRs; coordinator merges (git-token.yaml)" }
-      issues: { level: write, why: "queue labels, strike/report comments, coordinator C6 (composition worker gens + git-token.yaml)" }
+      issues: { level: write, why: "queue labels, strike/report comments, coordinator C6 (composition worker gens + git-token.yaml); ALSO the sole permission of the per-stack loop-intake gens (issues-only on homelab — ADR-119 dedup-and-extend, homelab#1095)" }
       checks: { level: read, why: "coordinator `gh pr checks` (git-token.yaml + composition loop-git gens; fine-grained PATs cannot read Checks — App-only)" }
       statuses: { level: read, why: "merge-path require_passed_checks reads (loop-git gens)" }
       actions: { level: write, why: "coordinator `gh run watch`/rerun on agent repos (loop-git gens); WRITE since FU-148 (2026-08-08) — the ci-red play's retry terminal is `gh run rerun`" }
