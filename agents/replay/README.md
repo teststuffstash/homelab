@@ -362,6 +362,7 @@ is stale, so it cannot drift the way the prose register did.
 | `strike-quota-classifier/strike-quota-classifier` | table | - | `agents/agent-session.sh` | - |
 | `summary-comment` | table | - | `-` | - |
 | `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
+| `touches-malformed/touches-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unblocked-unlabeled/blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unblocked-unlabeled/surfaces` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unit-fast-path-author/unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |
