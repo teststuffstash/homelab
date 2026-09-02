@@ -3073,7 +3073,21 @@ class Proxy(BaseHTTPRequestHandler):
                     if d and isinstance(d.get("limit"), (int, float)) \
                             and isinstance(d.get("limit_remaining"), (int, float)) \
                             and d["limit_remaining"] <= max(0.05, 0.02 * d["limit"]):
-                        return False, "openrouter-budget-exhausted"
+                        # issue #1266: the hash comparison above reads through _resolve_ref's 60s
+                        # _refs cache, so a re-minted key (new hash) inside the sub-60s window
+                        # would still match the stale headroom hash. Punch the ref cache and
+                        # re-read to get the authoritative hash. Bounded: this path is reached
+                        # only when a cached headroom entry would otherwise say "exhausted",
+                        # not on every request — no new API call on the ordinary path.
+                        with _refs_lock:
+                            _refs.pop(key_ref, None)
+                        resolved = _resolve_ref(key_ref)
+                        current_hash = resolved.get("hash") if resolved else None
+                        if current_hash is not None and d.get("hash") is not None \
+                                and d["hash"] != current_hash:
+                            d = None  # hash mismatch after fresh read = re-minted key
+                        else:
+                            return False, "openrouter-budget-exhausted"
                 return True, None  # unknown ref = fail-open (the key's hard limit is the belt)
 
             def _price(model):
@@ -5601,6 +5615,72 @@ data: [DONE]
           f"headroom-remint: no headroom entry → dispatch (got {d.get('decision')}: {d.get('reason', '')})")
     with _refs_lock:
         _refs.pop(unknown_ref, None)
+
+    # Test 4: stale ref cache (sub-60s window) → punch + re-read catches re-mint (issue #1266)
+    # Non-vacuous: without the cache-punch, the _refs cache still returns H1 (matching the
+    # headroom hash), the hash comparison finds no mismatch, and the exhausted entry produces
+    # a budget defer — exactly FU-202's re-mint→redispatch timing. With the fix, the budget
+    # check triggers a cache punch + fresh resolve, which returns H2, the mismatch fires,
+    # and the entry is treated as a cache miss (fail-open → dispatch).
+    # We monkeypatch _resolve_ref to simulate the re-mint (H2) because the test environment
+    # has no k8s API — the fresh resolve after the cache punch would otherwise fail.
+    stale_ref = "default/test-headroom-stale-cache"
+    _resolve_ref_saved = _resolve_ref
+    def _mock_resolve_ref(ref):
+        return {"key": "test-key", "hash": "H2", "kind": "openrouter", "guardrail": "", "has_cr": True}
+    try:
+        globals()['_resolve_ref'] = _mock_resolve_ref
+        with _headroom_lock:
+            _headroom[stale_ref] = {
+                "limit": 10.0,
+                "limit_remaining": 0.0,
+                "hash": "H1",
+                "fetched_at": time.time(),
+            }
+        with _refs_lock:
+            _refs[stale_ref] = (time.time() + 3600, {
+                "key": "test-key",
+                "hash": "H1",  # stale cache — still has the OLD hash after re-mint to H2
+                "kind": "openrouter",
+                "guardrail": "",
+                "has_cr": True,
+            })
+        d = route_call(dict(route_base, key_ref=stale_ref))
+        check(d["decision"] == "dispatch",
+              f"headroom-remint: stale ref cache → dispatch after punch (got {d.get('decision')}: {d.get('reason', '')})")
+    finally:
+        globals()['_resolve_ref'] = _resolve_ref_saved
+        with _headroom_lock:
+            _headroom.pop(stale_ref, None)
+        with _refs_lock:
+            _refs.pop(stale_ref, None)
+
+    # Test 5: stale ref cache + genuine exhaustion → still defers (cache punch confirms match)
+    # Verifies that a genuinely exhausted key (no re-mint) is still correctly deferred after
+    # the cache punch — the punch is not a free pass.
+    genuine_ref = "default/test-headroom-genuine-exhausted"
+    with _headroom_lock:
+        _headroom[genuine_ref] = {
+            "limit": 10.0,
+            "limit_remaining": 0.0,
+            "hash": "H1",
+            "fetched_at": time.time(),
+        }
+    with _refs_lock:
+        _refs[genuine_ref] = (time.time() + 3600, {
+            "key": "test-key",
+            "hash": "H1",  # same hash — no re-mint, genuine exhaustion
+            "kind": "openrouter",
+            "guardrail": "",
+            "has_cr": True,
+        })
+    d = route_call(dict(route_base, key_ref=genuine_ref))
+    check(d["decision"] == "defer" and "budget-exhausted" in d.get("reason", ""),
+          f"headroom-remint: genuine exhaustion still defers after punch (got {d.get('decision')}: {d.get('reason', '')})")
+    with _headroom_lock:
+        _headroom.pop(genuine_ref, None)
+    with _refs_lock:
+        _refs.pop(genuine_ref, None)
 
     # ── #1262: :exacto strip self-test ──────────────────────────────────────────────────────────
     print("\n=== :exacto strip self-test (issue #1262) ===")
