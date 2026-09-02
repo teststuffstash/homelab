@@ -24,6 +24,7 @@ resources:
   - claude-token.yaml
   - coordinate-argo.yaml
   - deploy-revert-argo.yaml
+  - egress-cnp.yaml
   - fix-debounce-argo.yaml
   - garage-workspace.yaml
   - git-token.yaml

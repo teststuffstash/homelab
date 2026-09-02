@@ -8,21 +8,21 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ 2026-09-01 NIGHT — #1162 WAVE 2 MINTED: theme #1239 (`loop-belts`, blockedBy #1163) +
-  the #1228 red repaired.** Members rebound under #1239 with `Base: goal/1162-belts` (branch
-  CUT at `81eaf5a8`, IL-G02): #1240 (FU-199 residue: strike-held rows + hold-chain
-  propagation + CAP SPLIT — minted this sitting) · #1198 · #1199 · #1211 · #1212 · #1223
-  (human-queue ruling satisfied by the operator's wave order) · #1229. **NOT queued yet** —
-  the queue act waits on PR#1228 (scan assembly) merging: (1) the checkpoint's merge order
-  (#1228 before #1213 — it carries #1148's goal-head ci-red exclusion); (2) member surfaces
-  (#1198/#1223 fixtures) exist only on the scan branch. **Pickup sequence**: #1228 CI green
-  (seat repaired its pin-vacuity red — the vacuous `assembly-cr-dispatch-no-pr` folded into
-  `dispatch-marker` as pass 2, `84cb3f91`; watch was armed) → bot review → ADR-110 codeowner
-  read → merge → merge master into `goal/1162-belts` (top hop) → queue the 7 members + ring
-  platform → then #1213's cycle (#1227 riding on the egress branch re-arms its review).
-  ⚠ do NOT push master while #1228 is armed (BEHIND churn); push the pending bookkeeping
-  after it merges. #1210 closed via PR#1221 (the salvage's second PR; PR#1216 closed as the
-  anomaly duplicate).
+- **⚑ 2026-09-01 LATE NIGHT — WAVE-2 QUEUE ACT EXECUTED (the unattended corpus session).**
+  PR#1228 (scan assembly, theme #1163) MERGED `846c0f76` ~22:20Z after the seat's ADR-110 read;
+  #1163 closed; PR#1208 (#1151 Touches-classifier lint) merged first (blocking-class, unparked
+  #1153 — which rode r2 same hour). Bookkeeping pushed (`c500394f`), top hop landed (master →
+  `goal/1162-belts`, `30859bde`), **all 7 wave-2 members queued** (#1240 #1198 #1199 #1211
+  #1212 #1223 #1229) + platform rung. PR#1241 (G1 #1232, FU-201 a+b carrier) codeowner-read +
+  approved + merged (#1232 closed; post-launch bucket #1243 auto-minted). **#1213 + #1242 both
+  MERGED ~22:35–22:42Z after serial re-park approvals — the park pile is DRAINED**
+  (CodeownerParkWaiting cleared): themes #1163/#1164/#1165 all closed, #1153 closed. Goal
+  #1162 stays OPEN on wave-2 theme #1239 (members riding: #1198 done r1, #1211/#1199 riding,
+  rest queued+serializing); the operator's `goal/validated` read comes at tree-empty. #1210
+  closed via PR#1221 (PR#1216 = anomaly duplicate). FU-171 header repair + 3rd resight
+  (reviewer token died mid-31-min review on #1228; 46-min pod-key stall) recorded `c500394f`.
+  Egress-dial monitor CNPs now LIVE in agent-coordinator + loop namespaces (via #1213) —
+  acceptance-3's enforce flip comes AFTER clean harvested rides, a later sitting.
 - **⚑ 2026-09-01 NIGHT — GOAL #1231 LIVE (router-first, operator-launched; the NEXT session's
   role is MONITOR + GATE-READ).** Tree: G1 #1232 (label_map md/lg + re-grade plays, FU-201 a+b)
   · G2 #1233 (key-class re-mint, FU-202) · G3 #1234 (provider-attributed strikes +
@@ -36,9 +36,19 @@ meant to avoid.)
   operator at tree-empty per the Production-leg. **Wave-2 roster change: FU-200 + FU-201
   legs MOVED into #1231** — remaining wave-2 = #1211, #1212, FU-199 residue, #1198, #1199
   (+ #1224/#1225 operator-lane), still minted at #1162's close sweep, AFTER #1231
-  (router-first, PR#1226). **PR#1208 pickup**: remedy (b) pushed (`4ecff105`), breakers
-  cleared, #1151 → agent/review — CI → re-review → the codeowner read is the next session's
-  if this one is gone.
+  (router-first, PR#1226). **MACHINE SET G1–G5 ALL LANDED by 2026-09-02 ~04:00Z**
+  (seat codeowner reads on G1 PR#1241, G2 PR#1253, G3 PR#1257, G4 PR#1258; G5 bot-merged via
+  PR#1254's fix round): escalation carrier + KEY-RETRY split + provider-attributed strikes w/
+  pair-exclusion (STRIKE_ENFORCE stays OFF — recording precedes policy) + fleet-strike reader
+  (key-class excluded both structurally and historically) + provider_policy/exacto. Sprout tail
+  (#1259 tier-floor enforcement — FU-201's remaining leg, #1261 taxonomy coherence) queued/riding
+  under the goal grant; bucket #1243 auto-minted. **Remaining before verdict: E1 #1237 + E2
+  #1238 (operator/seat sittings — damped agent-fix-only pending #1249) + tree-empty → operator's
+  goal/validated read.** ⚠ #1249 (bare-member walk queues containers/operator legs — #1242's
+  walk misfire, damper = agent-fix-without-queued on #1237/#1238/#1239, verified holding): fix
+  the walk's exclusions before stripping the damper. FU-202 core delivered (archive candidate
+  at next fu-sweep). #1255 (homelab lacks .agents/build.yaml — build rides degrade loudly to
+  fix.yaml) = operator recipe-paste sitting.
 - **⚑ 2026-09-01 LATE SITTING — v1.3.1 BANKED (operator: "deserves a place when it works");
   PR#1220 armed (banked block + S8 row).** Pickups: (1) at #1162's `goal/validated` close
   sweep, batch-release the bucket residue and **mint WAVE 2 = the dispatch-belts theme**
@@ -73,9 +83,11 @@ meant to avoid.)
     brief vocabulary section + served-provider column on strikes / (model, provider)
     pair-exclusion on serving-shaped re-picks — folds with FU-186. FU-200 = the fleet-strike
     deterministic reader. FU-199 fix merged (PR#1206) + the #1210 pin; residue legs in the FU.
-  - openrouter-operator **PR#55 merged** incl. the seat's base64-decode catch (deploy pin #1209
-    flowing) — when it deploys, verify the first NormalizeSecret pass on a legacy Secret
-    normalizes rather than corrupts (read the Secret value shape after).
+  - openrouter-operator **PR#55 deploy VERIFIED LIVE 2026-09-01 ~22:27Z** (image `2026.9.1`):
+    the legacy `oracle-fleet-openrouter` Secret normalized correctly — GUARDRAIL + KEY_HASH +
+    non-empty OPENROUTER_API_KEY, session-key label intact. Residue = or-op#57/#58 (harvested,
+    inert; #58 = empty-write on the value-key-missing drift case, explicitly not a live
+    regression) — ordinary board flow.
 - **⚑ SOAK — which goals/stints are past it (read 2026-09-01 ~08:10Z, the corpus session's
   wind-down; verdicts are the OPERATOR's, the seat only recommends):**
   - **#818 G-B — `goal/validated` looks DUE.** Post-launch since 08-30 20:39Z; tree = the

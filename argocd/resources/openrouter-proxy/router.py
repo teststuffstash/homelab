@@ -21,6 +21,7 @@ import needs no packaging). `--self-test` runs the in-memory round-trip; CI runs
 `devbox run router-self-test`.
 """
 
+import copy
 import json
 import math
 import os
@@ -41,6 +42,12 @@ import model_id
 # classifier and agent-finalize (the authoritative signature copy).
 STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown"}
 
+# FU-201 c: serving-shaped strike classes — provider-side failures that exclude the (model,
+# provider) PAIR rather than the model entirely. A model-level blacklist needs ≥2-provider
+# evidence (the #783 rule). These classes are the ADR-115 evidence set: provider 4xx/5xx
+# responses and tool-call malformation that the serving provider caused.
+SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm"}
+
 # ⚑ ENFORCEMENT IS OFF BY DEFAULT — operator ruling 2026-08-07, and it makes an ACCIDENT explicit.
 # Strikes were never being recorded (the drift below), so `route()` has always filtered against an
 # empty table. That accident turned out to be *better* than the design: circles#19 died on
@@ -58,10 +65,11 @@ RETAIN_REPORTS_D = 90  # run_reports, strikes
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS strikes(
-  ts REAL, task TEXT, stack TEXT, model TEXT, error_class TEXT, round INTEGER, session TEXT);
+  ts REAL, task TEXT, stack TEXT, model TEXT, error_class TEXT, round INTEGER, session TEXT,
+  provider TEXT);
 CREATE INDEX IF NOT EXISTS ix_strikes ON strikes(stack, task, model);
 CREATE TABLE IF NOT EXISTS provider_events(
-  ts REAL, model TEXT, provider TEXT, status INTEGER, class TEXT);
+  ts REAL, model TEXT, provider TEXT, status INTEGER, class TEXT, session TEXT);
 CREATE TABLE IF NOT EXISTS rotation(
   class TEXT, model TEXT, source TEXT, rank INTEGER, canary_verdict TEXT, updated_ts REAL,
   PRIMARY KEY(model, source));
@@ -177,6 +185,21 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                         conn.execute(f"ALTER TABLE go_usage ADD COLUMN {_gocol}")
                     except sqlite3.OperationalError:
                         pass  # duplicate column — schema already current
+                # FU-201 c: strikes grew provider column — the served provider slug, sourced
+                # proxy-side from provider_events in record_report(). Same LAST-column discipline.
+                try:
+                    conn.execute("ALTER TABLE strikes ADD COLUMN provider TEXT")
+                except sqlite3.OperationalError:
+                    pass  # duplicate column — schema already current
+                # FU-201 c: provider_events grew session column — the proxy-side session key ref,
+                # so record_report() can look up the served provider for a session-keyed request
+                # (generations is not harvested for session keys — _generation_lookup skips
+                # Bearer ref: auth). Same LAST-column discipline.
+                try:
+                    conn.execute("ALTER TABLE provider_events ADD COLUMN session TEXT")
+                except sqlite3.OperationalError:
+                    pass  # duplicate column — schema already current
+                
                 # homelab#1042: model_cooldowns grew role-scoped PRIMARY KEY(model, role). SQLite
                 # cannot change a PK by ALTER, so this rebuilds — which means it MUST NOT re-run
                 # after a successful migration (the INSERT ... SELECT would force role='worker'
@@ -277,11 +300,19 @@ def _read(sql: str, params: tuple = ()) -> list[tuple]:
         return []
 
 
-def record_report(d: dict) -> tuple[bool, bool]:
+def record_report(d: dict, session_ref: str = "") -> tuple[bool, bool]:
     """One POST /report body → run_reports (+ a strikes row when it IS a strike: strike-class
     error and no PR came out — mirrors the launcher's AGENT_STRIKE condition; the GitHub comment
     stays the human/audit twin). Returns (stored, striked). Idempotent per session (the launcher
-    may retry): INSERT OR REPLACE on the session key."""
+    may retry): INSERT OR REPLACE on the session key.
+
+    FU-201 c: `session_ref` is the proxy-side session key ref (from the /report request's
+    Authorization header), used to look up the served provider from provider_events.session.
+    The launcher sends the pod name as `d["session"]` — that is stored in strikes.session
+    for dedup, while the provider is sourced proxy-side via the correlated key ref.
+    provider_events is used instead of generations because _generation_lookup skips
+    session-keyed requests (Bearer ref: auth), so generations has no rows for the common
+    case. provider_events is recorded for every forwarded response regardless of auth type."""
     now = time.time()
     stored = _write(
         "INSERT OR REPLACE INTO run_reports VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -301,16 +332,28 @@ def record_report(d: dict) -> tuple[bool, bool]:
     # vocabulary, so it was never coherent with the single field it was compared against.
     # model-routing.md §M1 settles that this is a bug, not a policy: its taxonomy table names
     # "harness-death (goose -32602)" as ONE thing.
+    # FU-201 c: the served provider is sourced proxy-side from provider_events via the session
+    # key ref (not the pod name — those two id-spaces never intersect). provider_events is
+    # recorded for every forwarded response regardless of auth type (unlike generations, which
+    # is skipped for session-keyed requests). The most recent provider_event for this session
+    # gives us the provider that served the request. Absent a matching row, provider defaults
+    # to empty string — the strike still records, just without provider attribution.
+    session = str(d.get("session") or "")
+    provider = str(d.get("served_provider") or "")
+    if not provider and session_ref:
+        _prov = _read("SELECT provider FROM provider_events WHERE session=? ORDER BY ts DESC LIMIT 1",
+                       (session_ref,))
+        provider = str(_prov[0][0]) if _prov else ""
     striked = False
     if stored and (err in STRIKE_CLASSES or outcome in STRIKE_CLASSES) \
             and not outcome.startswith("pr"):
         # Dedup per (task, model, session): a re-POST must not double-strike.
         _write("DELETE FROM strikes WHERE task=? AND model=? AND session=?",
-               (str(d.get("task") or ""), str(d.get("model") or ""), str(d.get("session") or "")))
+               (str(d.get("task") or ""), str(d.get("model") or ""), session))
         striked = _write(
-            "INSERT INTO strikes VALUES(?,?,?,?,?,?,?)",
+            "INSERT INTO strikes VALUES(?,?,?,?,?,?,?,?)",
             (now, str(d.get("task") or ""), str(d.get("stack") or ""), str(d.get("model") or ""),
-             err, int(d.get("round") or 1), str(d.get("session") or "")))
+             err, int(d.get("round") or 1), session, provider))
     if stored:  # M11 leg 3 (shadow): the same feed, folded into the (class, urgency) start tier
         fold = fold_outcome_into_cell(d, striked)
         if fold:
@@ -445,15 +488,23 @@ def record_generation(gen_id: str, requested_model: str, data: dict) -> bool:
          int(data.get("generation_time") or 0)))
 
 
-def record_provider_event(model: str, provider: str, status: int) -> None:
+def record_provider_event(model: str, provider: str, status: int,
+                          session: str = "") -> None:
     """Passive data-plane observation: one row per forwarded OpenRouter chat/completions
-    response. `class` buckets the status for cheap aggregation."""
+    response. `class` buckets the status for cheap aggregation.
+    FU-186 step 1: strip :exacto suffix so cooldown/breaker bookkeeping is keyed under the
+    bare model id — the same id the /route eligibility loop filters candidates against.
+
+    FU-201 c: `session` is the proxy-side session key ref (from _cb_session()), stored so
+    record_report() can look up the served provider for session-keyed requests (generations
+    is not harvested for session keys). Defaults to empty string for legacy callers."""
+    model = model.removesuffix(":exacto")
     klass = ("2xx" if 200 <= status < 300 else
              "429" if status == 429 else
              "4xx" if 400 <= status < 500 else
              "5xx" if status >= 500 else "other")
-    _write("INSERT INTO provider_events VALUES(?,?,?,?,?)",
-           (time.time(), model, provider or "", status, klass))
+    _write("INSERT INTO provider_events VALUES(?,?,?,?,?,?)",
+           (time.time(), model, provider or "", status, klass, session))
 
 
 # ── ADR-107 flip-acceptance 1: the requested≠served model drift belt (homelab#515) ─────────────
@@ -950,11 +1001,13 @@ def derive_canary_verdicts(days: int = 7, min_n: int = 20) -> int:
     return record_rotation("provider-events", entries) if entries else 0
 
 
-def strikes_for(task: str, stack: str) -> list[str]:
-    """Models struck for THIS task (M1: blacklists are task-scoped) — the /route filter in P3;
-    /router-status shows it today."""
-    return [r[0] for r in _read(
-        "SELECT DISTINCT model FROM strikes WHERE task=? AND stack=?", (task, stack))]
+def strikes_for(task: str, stack: str) -> list[tuple[str, str, str]]:
+    """(model, provider, error_class) tuples struck for THIS task (FU-201 c: strikes now carry
+    the served provider). The /route filter uses this for pair-exclusion on serving-shaped
+    strikes and model-level exclusion on infra-shaped ones. /router-status shows it today."""
+    return [tuple(r) for r in _read(
+        "SELECT DISTINCT model, provider, error_class FROM strikes WHERE task=? AND stack=?",
+        (task, stack))]
 
 
 # ── ADR-096 addendum 4: model cooldowns (the temporary-blacklist / recovery loop) ──────────────
@@ -1096,7 +1149,7 @@ def draw_slot(cls: str, cinfo: dict, slot) -> dict:
     return out
 
 
-def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: set, struck: set,
+def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: set, struck_models: set,
                    cool: dict, ctx: dict, sub_gate, or_gate, jitter: float, pick) -> dict:
     """M11 legs 1+2+3, computed ALONGSIDE the served decision and never feeding it.
 
@@ -1149,7 +1202,7 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
     cands = [_rung(m, rail) for m, rail in eligible]
     sub_model = cfg["subscription_model"]
     if (not any(c["rail"] == "subscription" for c in cands) and "subscription" in rails
-            and sub_model not in deny and sub_model not in struck and sub_model not in cool
+            and sub_model not in deny and sub_model not in struck_models and sub_model not in cool
             and capability_floor_block(cls, sub_model) is None):
         # The rail enters the ordering as a CANDIDATE even when no chain names it — that is leg 1.
         cands.append({**_rung(sub_model, "subscription"), "synthetic": True})
@@ -1283,10 +1336,26 @@ def route(payload: dict, ctx: dict) -> dict:
     decorrelate_family = None
     if decorrelate_from:
         decorrelate_family = vendor_family(decorrelate_from)
+    # FU-201 c: strike rows carry provider + error_class. Serving-shaped strikes (provider-5xx,
+    # timeout, auth-storm) exclude the (model, provider) PAIR — the model stays eligible for
+    # re-pick with a different provider. Infra-shaped strikes (harness-death, no-pr, unknown)
+    # exclude the model entirely. A model with serving-shaped strikes from ≥2 providers is
+    # excluded at model level (the #783 rule: model-level verdicts need multi-provider evidence).
     # Recorded always, ACTED ON only when STRIKE_ENFORCE (see the constant's note): today this is
     # an empty set, which is exactly the behaviour the loop has had all along — now on purpose.
-    struck = set(strikes_for(str(payload.get("task") or ""), str(payload.get("stack") or ""))) \
-        if STRIKE_ENFORCE else set()
+    _strike_rows = strikes_for(str(payload.get("task") or ""),
+                               str(payload.get("stack") or "")) if STRIKE_ENFORCE else []
+    struck_models: set[str] = set()
+    _serving_providers: dict[str, set[str]] = {}
+    for _m, _p, _ec in _strike_rows:
+        if _ec in SERVING_CLASSES:
+            if _p:
+                _serving_providers.setdefault(_m, set()).add(_p)
+        else:
+            struck_models.add(_m)
+    for _m, _providers in _serving_providers.items():
+        if len(_providers) >= 2:
+            struck_models.add(_m)
     cool = active_cooldowns(now, role=role)
     skipped: list[dict] = list(pre_skipped)
     eligible: list[tuple[str, str]] = []
@@ -1294,7 +1363,7 @@ def route(payload: dict, ctx: dict) -> dict:
         rail = "subscription" if m.startswith("claude/") else "openrouter"
         if m in deny:
             skipped.append({"model": m, "reason": "claim-deny"})
-        elif m in struck:
+        elif m in struck_models:
             skipped.append({"model": m, "reason": "strike"})
         elif m in cool:
             skipped.append({"model": m, "reason": f"cooldown:{cool[m]['reason']}",
@@ -1359,12 +1428,18 @@ def route(payload: dict, ctx: dict) -> dict:
             result = {"model": pick[0], "rail": rail, "price_per_mtok": pick[1],
                       "basis": pick[2], "jitter_pool": [p[0] for p in band]}
         break
+    # FU-186 step 1: class-level provider_policy — append :exacto suffix when the resolved
+    # class carries provider_policy: "exacto", so the completion path skips pin injection
+    # (the :exacto suffix is already handled at openrouter-proxy.py L3232/L3302).
+    if result and cinfo.get("provider_policy") == "exacto":
+        result["model"] += ":exacto"
     if result:
         half_open = bool(_read(
             "SELECT 1 FROM model_cooldowns WHERE model=? AND role=? AND until <= ?",
             (result["model"], role, now)))
         decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
-                    "half_open": half_open, "skipped": skipped, "jitter": jitter_on, **result}
+                    "half_open": half_open, "skipped": skipped, "jitter": jitter_on,
+                    "provider_policy": cinfo.get("provider_policy"), **result}
     else:
         if decorrelate_family and not eligible and skipped and \
                 all(s["reason"] == f"decorrelate:{decorrelate_family}" for s in skipped):
@@ -1393,7 +1468,7 @@ def route(payload: dict, ctx: dict) -> dict:
     if result:
         decision["resolved"] = model_id.parse(result["model"])
     # ── M11 SHADOW (homelab#159) — computed after the served decision, consumed by nobody ──
-    shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck, cool, ctx,
+    shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck_models, cool, ctx,
                             sub_gate, or_gate, jitter, pick_fn)
     # FU-127: the shadow pick carries its own resolved object so the M11 shadow log line
     # describes the SHADOW pick, not the served pick (which may differ — that's the entire
@@ -1700,6 +1775,21 @@ def self_test() -> int:
     assert _read("SELECT rail FROM run_reports WHERE session='t-3'") == [("subscription-fallback",)]
     assert _read("SELECT outcome, rail FROM run_reports WHERE session='t-2'") == [("pr", "")], \
         "a report with no rail lands as empty string, not NULL — and does not shift its neighbours"
+    # FU-201 c: provider lookup via provider_events.session — the proxy-side seam for
+    # session-keyed requests (generations is not harvested for Bearer ref: auth). Record a
+    # provider_event with a session key ref, then call record_report with session_ref set,
+    # and assert the strike row carries the provider.
+    record_provider_event("deepseek/deepseek-v4-flash", "Fireworks", 200,
+                          session="test-ns/test-session-secret")
+    stored5, striked5 = record_report({
+        "session": "t-provider-1", "task": "issue-42", "stack": "sleep", "role": "worker",
+        "round": 1, "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.05,
+        "error_class": "provider-5xx", "outcome": "no-pr"},
+        session_ref="test-ns/test-session-secret")
+    assert stored5 and striked5, "strike with provider must store + strike"
+    _p_row = _read("SELECT provider FROM strikes WHERE session='t-provider-1'")
+    assert _p_row and _p_row[0][0] == "Fireworks", \
+        f"strike provider must be 'Fireworks' from provider_events lookup, got {_p_row}"
     # THE MIGRATED STORE, on a side connection. Everything above runs against a FRESH database, so
     # it only ever proves the CREATE TABLE path — but the live store is a PVC sqlite that will take
     # this column by ALTER, and the two layouts have to agree for a positional INSERT to be valid.
@@ -1768,10 +1858,10 @@ def self_test() -> int:
         if os.path.exists(_mig_cool_db):
             os.unlink(_mig_cool_db)
         _conn, _persistent = _saved_conn, _saved_persistent
-    assert strikes_for("issue-19", "circles") == ["deepseek/deepseek-v4-flash"]
+    assert strikes_for("issue-19", "circles") == [("deepseek/deepseek-v4-flash", "", "goose-32602-truncation")]
     # Recording is not acting: enforcement stays OFF until a policy decision (see STRIKE_ENFORCE).
     assert STRIKE_ENFORCE is False, "strike enforcement must default OFF — routing is unchanged by design"
-    assert strikes_for("issue-9", "sleep") == ["deepseek/deepseek-v4-flash"]
+    assert strikes_for("issue-9", "sleep") == [("deepseek/deepseek-v4-flash", "", "harness-death")]
     record_provider_event("qwen/qwen3-coder", "deepinfra", 500)
     record_provider_event("qwen/qwen3-coder", "deepinfra", 200)
     assert record_generation("gen-test-1", "deepseek/deepseek-v4-flash", {
@@ -2190,6 +2280,49 @@ def self_test() -> int:
                       deny=["deepseek/deepseek-v4-flash"]), CTX)
     assert _def["decision"] == "defer" and _def.get("resolved") is None, \
         f"defer must not carry resolved: {_def.get('resolved')}"
+    # ── FU-186 step 1: provider_policy knob — exacto skips pin injection ──
+    # (a) With no class carrying provider_policy, an audit/research route serving
+    #     openrouter/fusion is pin-preserving (no :exacto suffix, no provider_policy key).
+    _audit = route(dict(base, role="audit", chain=["openrouter/fusion"]), CTX)
+    assert _audit["decision"] == "dispatch" and _audit["model"] == "openrouter/fusion", \
+        f"audit route must serve openrouter/fusion without :exacto: {_audit}"
+    assert _audit.get("provider_policy") is None, \
+        f"audit class has no provider_policy: {_audit}"
+    # (b) A class that DOES carry provider_policy: "exacto" appends :exacto and echoes the policy.
+    _saved_classes = copy.deepcopy(_classes)
+    _classes["classes"]["coding"]["provider_policy"] = "exacto"
+    _exacto = route(dict(base), CTX)  # role=worker → class coding
+    assert _exacto["decision"] == "dispatch" and _exacto["model"] == "inclusionai/ling-3.0-flash:free:exacto", \
+        f"coding with provider_policy=exacto must append :exacto: {_exacto}"
+    assert _exacto.get("provider_policy") == "exacto", \
+        f"decision must echo provider_policy: {_exacto}"
+    _classes.clear()
+    _classes.update(copy.deepcopy(_saved_classes))
+    # (c) NON-VACUOUS: cooldown/breaker bookkeeping under the BARE id, not the :exacto-suffixed id.
+    #     This assertion goes RED against the pre-fix source (where or_model kept the suffix) and
+    #     GREEN after the fix (openrouter-proxy.py strips :exacto from the bookkeeping key).
+    _classes["classes"]["coding"]["provider_policy"] = "exacto"
+    _exacto2 = route(dict(base), CTX)
+    _exacto_model = _exacto2["model"]  # e.g. "inclusionai/ling-3.0-flash:free:exacto"
+    _bare_model = _exacto_model.removesuffix(":exacto")  # e.g. "inclusionai/ling-3.0-flash:free"
+    # Trip a cooldown using the model as it arrives on the completion path (suffixed).
+    for _ in range(8):
+        record_provider_event(_exacto_model, "novita", 429)
+    # The cooldown must be keyed under the BARE id — the same id the /route eligibility loop
+    # filters candidates against. The suffixed id must NOT appear in active_cooldowns.
+    assert cooldown_note(_bare_model, 429, role="worker") == "tripped", \
+        f"cooldown must be keyed under bare id {_bare_model}, not suffixed {_exacto_model}"
+    assert _bare_model in active_cooldowns(role="worker"), \
+        f"bare model {_bare_model} must be in active_cooldowns"
+    assert _exacto_model not in active_cooldowns(role="worker"), \
+        f"suffixed model {_exacto_model} must NOT be in active_cooldowns"
+    # Clear the cooldown so it doesn't pollute subsequent tests.
+    for _ in range(8):
+        record_provider_event(_bare_model, "novita", 200)
+    assert cooldown_note(_bare_model, 200, role="worker") == "cleared", \
+        f"cooldown must clear for {_bare_model}"
+    _classes.clear()
+    _classes.update(copy.deepcopy(_saved_classes))
     # free model starts 429ing: burst past min_events/bad_share trips a cooldown
     for _ in range(8):
         record_provider_event("inclusionai/ling-3.0-flash:free", "novita", 429)
@@ -2599,7 +2732,7 @@ def self_test() -> int:
     # + the 5 M11 ladder-cell fixtures, + the 2 homelab#577 deployed-pod pod-name shapes,
     # + null-rail-1) and 3 strikes (issue-9/sleep from the vocabulary fixture,
     # issue-19/circles from the real one, issue-42/sleep from the ladder's degradation step).
-    assert summary["rows"]["run_reports"] == 17 and summary["rows"]["strikes"] == 3  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1
+    assert summary["rows"]["run_reports"] == 18 and summary["rows"]["strikes"] == 4  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():

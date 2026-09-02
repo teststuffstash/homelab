@@ -306,17 +306,22 @@ _refs: dict[str, tuple[float, dict | None]] = {}  # "ns/name" -> (expires_epoch,
 _refs_lock = threading.Lock()
 
 
-def _cr_guardrail(ns: str, secret_name: str) -> tuple[str | None, bool | None]:
+def _cr_guardrail(ns: str, secret_name: str) -> tuple[str | None, bool | None, str | None]:
     """FU-138: the AUTHORITATIVE guardrail is the OpenRouterKey CR, not the Secret.
 
     The Secret's GUARDRAIL is written by the operator only when it MINTS (create/rotate), so a
     guardrail change on an already-minted standing key never reaches it — enforcement went dead
     silently, and every claim change needed a hand patch (circles-iac#1, 2026-08-04). The CR is
     rendered from the AgentStack claim in git, so reading it here makes claim → composition → CR →
-    proxy the one path. Returns (guardrail, has_cr):
-      - (str, True): CR found with guardrail value ("" = open)
-      - (None, False): no CR owns this Secret (pre-CR key, list succeeded)
-      - (None, None): list failed (fail-open: keep the Secret's guardrail, not a blocked state)"""
+    proxy the one path. Returns (guardrail, has_cr, hash):
+      - (str, True, str|None): CR found with guardrail value ("" = open) and optional status hash
+      - (None, False, None): no CR owns this Secret (pre-CR key, list succeeded)
+      - (None, None, None): list failed (fail-open: keep the Secret's guardrail, not a blocked state)
+
+    The hash is the openrouter-operator's `status.openrouter.hash` — a content fingerprint that
+    changes on every re-mint. The proxy uses it to detect stale headroom cache entries (issue
+    #1260): a hash mismatch between the resolved ref and the headroom entry means the key was
+    re-minted and the cached limit_remaining belongs to the dead key."""
     try:
         token = open(f"{_SA_DIR}/token").read().strip()
         ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
@@ -329,20 +334,23 @@ def _cr_guardrail(ns: str, secret_name: str) -> tuple[str | None, bool | None]:
             items = (json.load(resp).get("items") or [])
     except Exception as e:  # noqa: BLE001 — unreadable CRs must not disarm the Secret's guardrail
         log(f"ref: openrouterkeys list failed in {ns}: {e} — falling back to the Secret's GUARDRAIL")
-        return None, None
+        return None, None, None
     for cr in items:
         spec = cr.get("spec") or {}
         # Mirror the CRD default: secretName, else <project>-openrouter (models.py target_secret_name).
         target = spec.get("secretName") or f"{spec.get('project', '')}-openrouter"
         if target == secret_name:
-            return spec.get("guardrail") or "", True
-    return None, False
+            status_hash = cr.get("status", {}).get("openrouter", {}).get("hash")
+            return spec.get("guardrail") or "", True, status_hash
+    return None, False, None
 
 
 def _resolve_ref(ref: str) -> dict | None:
-    """`ns/name` -> {"key": OPENROUTER_API_KEY, "guardrail": ..., "has_cr": bool|None}, or None
-    (missing/unlabeled/unreadable). guardrail feeds the FU-024 only-free enforcement; has_cr
-    (True/False/None) distinguishes "CR exists" / "no CR, pre-CR key" / "CR list failed"."""
+    """`ns/name` -> {"key": OPENROUTER_API_KEY, "guardrail": ..., "has_cr": bool|None, "hash": str|None},
+    or None (missing/unlabeled/unreadable). guardrail feeds the FU-024 only-free enforcement; has_cr
+    (True/False/None) distinguishes "CR exists" / "no CR, pre-CR key" / "CR list failed". hash is
+    the openrouter-operator's `status.openrouter.hash` from the owning CR — used by the headroom
+    cache to detect re-minted keys (issue #1260)."""
     now = time.time()
     with _refs_lock:
         hit = _refs.get(ref)
@@ -366,7 +374,7 @@ def _resolve_ref(ref: str) -> dict | None:
             b64 = data.get("OPENROUTER_API_KEY") or data.get("AUTH_TOKEN") or ""
             if b64:
                 secret_guardrail = base64.b64decode(data.get("GUARDRAIL", "")).decode()
-                cr_guardrail, has_cr = _cr_guardrail(ns, name)  # FU-138: CR wins when one owns the Secret
+                cr_guardrail, has_cr, cr_hash = _cr_guardrail(ns, name)  # FU-138: CR wins when one owns the Secret
                 if cr_guardrail is not None and cr_guardrail != secret_guardrail:
                     log(f"ref: {ref} guardrail from CR: '{cr_guardrail or 'none'}' "
                         f"(Secret says '{secret_guardrail or 'none'}' — stale, FU-138)")
@@ -374,6 +382,7 @@ def _resolve_ref(ref: str) -> dict | None:
                     "key": base64.b64decode(b64).decode(),
                     "guardrail": secret_guardrail if cr_guardrail is None else cr_guardrail,
                     "has_cr": has_cr,  # exposed for _headroom_tick to avoid a second CR list call
+                    "hash": cr_hash,  # issue #1260: status.openrouter.hash — changes on re-mint
                     # ADR-096 P2: which rail this ref belongs to — OpenRouter keys enroll for
                     # the headroom poll; anthropic oauth refs must never hit /api/v1/auth/key.
                     "kind": "openrouter" if data.get("OPENROUTER_API_KEY") else "anthropic",
@@ -1602,6 +1611,7 @@ def _headroom_tick() -> int:
                 "usage": data.get("usage"),
                 "usage_weekly": data.get("usage_weekly"),
                 "is_free_tier": data.get("is_free_tier"),
+                "hash": resolved.get("hash"),  # issue #1260: status.openrouter.hash — changes on re-mint
                 "fetched_at": time.time(),
             }
         n += 1
@@ -2270,14 +2280,14 @@ class Proxy(BaseHTTPRequestHandler):
         # polluting each other).
         if go_leg:
             note += _go_capacity_update(status, resp.headers)
-        elif anthropic and not go_leg and not zen_leg:
+        elif anthropic and not go_leg and not zen_leg and not or_leg:
             note += _anthropic_latch_update(status, resp.headers)
         elif or_model and not go_leg and not zen_leg:  # OpenRouter accounting — opencode is a DIFFERENT provider
             # ADR-096: passive provider health for OpenRouter only. opencode-rail outcomes must
             # NOT pollute OpenRouter state (cooldowns, capacity latches, provider_events) — an
             # opencode 429 is not an OpenRouter problem, and cross-contamination would wedge
             # unrelated traffic.
-            router.record_provider_event(or_model, or_provider or "", status)
+            router.record_provider_event(or_model, or_provider or "", status, session=cb_session)
             if cb_session:  # addendum 3: the same observation feeds the in-flight breaker
                 _cb_update(cb_session, or_model, status)
             # homelab#158: and the ACCOUNT-scope capacity latch. Strictly a different question from
@@ -2917,7 +2927,14 @@ class Proxy(BaseHTTPRequestHandler):
             except (ValueError, AssertionError):
                 self._reply_json(400, {"error": "body must be JSON with a session field"})
                 return
-            stored, striked = router.record_report(report)
+            # FU-201 c: extract the session key ref from the Authorization header for
+            # proxy-side provider lookup. The launcher sends the pod name as session in the
+            # body — that is stored in strikes.session for dedup, while the provider is
+            # sourced from provider_events via the correlated key ref.
+            _session_ref = ""
+            if _auth_hdr.startswith("Bearer ref:"):
+                _session_ref = _auth_hdr[len("Bearer ref:"):].strip()
+            stored, striked = router.record_report(report, session_ref=_session_ref)
             log(f"POST /report session={report.get('session')} "
                 f"error_class={report.get('error_class') or 'clean'} → "
                 f"stored={stored} strike={striked}")
@@ -3038,8 +3055,21 @@ class Proxy(BaseHTTPRequestHandler):
                 if down:
                     return False, f"or-capacity-down:{down}"
                 if key_ref:
+                    # issue #1260: detect re-minted keys via hash mismatch. The openrouter-operator
+                    # writes `status.openrouter.hash` on every mint; a re-mint produces a new hash.
+                    # If the headroom entry's hash differs from the current ref's hash, the cached
+                    # limit_remaining belongs to the dead key — treat as cache miss (fail open).
+                    # Option 1 chosen over Option 2 (timestamp staleness) because the hash is a
+                    # content-based identifier that directly ties the entry to the key instance,
+                    # with no clock-skew sensitivity. The ref cache (60s TTL) bounds the stale
+                    # window; the 900s poller is unchanged — no new hot-path API call per request.
+                    resolved = _resolve_ref(key_ref)
+                    current_hash = resolved.get("hash") if resolved else None
                     with _headroom_lock:
                         d = _headroom.get(str(key_ref))
+                    if d and current_hash is not None and d.get("hash") is not None \
+                            and d["hash"] != current_hash:
+                        d = None  # hash mismatch = stale entry, treat as cache miss
                     if d and isinstance(d.get("limit"), (int, float)) \
                             and isinstance(d.get("limit_remaining"), (int, float)) \
                             and d["limit_remaining"] <= max(0.05, 0.02 * d["limit"]):
@@ -3233,6 +3263,12 @@ class Proxy(BaseHTTPRequestHandler):
                     if exacto_no_pin:
                         notes.append("exacto:no-pin")
                     or_model = normalize_model(str(payload["model"]))
+                    # FU-186 step 1: strip :exacto from the bookkeeping key so cooldown/breaker
+                    # state is keyed under the bare model id — the same id the /route eligibility
+                    # loop filters candidates against (router.py L1291/L1300). The raw payload
+                    # model keeps the suffix so Auto Exacto still owns provider ordering upstream.
+                    if exacto_no_pin:
+                        or_model = or_model.removesuffix(":exacto")
                     # ADR-107 / homelab#445: the opencode legs — a model id starting with
                     # `opencode-go/` (Go rail) or `opencode/` (Zen free rail) routes to the
                     # opencode.ai host with the prefix stripped and auth replaced by the rail key.
@@ -3373,6 +3409,7 @@ class Proxy(BaseHTTPRequestHandler):
                         body = json.dumps(translated).encode()
                         note = "or-translate-leg"
                         or_model = bare  # For logging, use the bare model id
+                        cb_session = _cb_session(self.headers)
             except ValueError:
                 pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
@@ -4662,6 +4699,18 @@ data: [DONE]
     except (ValueError, TypeError) as e:
         check(False, f"or-translate: response is valid JSON (err={e}, data={data[:200]!r})")
 
+    # FU-201 c: or_leg must record a provider_events row with the session key ref
+    # (the cb_session identity from _cb_session(), not None). This pin FAILS against
+    # the branch before the fix — cb_session was unset in the OR_PREFIX arm.
+    _pe_rows = router._read(
+        "SELECT session FROM provider_events WHERE model=? ORDER BY ts DESC LIMIT 1",
+        ("openai/gpt-5",))
+    _pe_session = _pe_rows[0][0] if _pe_rows else ""
+    check(_pe_session != "",
+          f"or-translate: provider_events.session is non-empty (got {_pe_session!r})")
+    check(_pe_session.startswith("direct:"),
+          f"or-translate: provider_events.session starts with 'direct:' (got {_pe_session!r})")
+
     # Test 2: tool call round-trip through the translation
     _or_response = {
         "choices": [{
@@ -5467,6 +5516,142 @@ data: [DONE]
     # Clean up breaker state
     with _cb_lock:
         _cb.clear()
+
+    print("\n=== Headroom re-mint detection (issue #1260) ===")
+    # Acceptance: a re-minted key (new hash) is NOT served the previous key's exhausted snapshot.
+    # Test via the /route endpoint (the only path that calls _openrouter_ok).
+    # Non-vacuous: without the hash check, the exhausted entry would produce a budget defer.
+    def route_call(payload):
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("POST", "/route",
+                  body=json.dumps(payload),
+                  headers={"Content-Type": "application/json"})
+        r = c.getresponse()
+        data = json.loads(r.read())
+        c.close()
+        return data
+
+    route_base = {
+        "stack": "sleep", "task": "issue-1260", "role": "worker",
+        "session": "t-headroom", "chain": ["inclusionai/ling-3.0-flash:free"],
+    }
+
+    # Test 1: hash mismatch → fail-open (re-minted key not served stale exhaustion)
+    headroom_ref = "default/test-headroom-remint"
+    with _headroom_lock:
+        _headroom[headroom_ref] = {
+            "limit": 10.0,
+            "limit_remaining": 0.0,
+            "hash": "old-hash-value",
+            "fetched_at": time.time(),
+        }
+    with _refs_lock:
+        _refs[headroom_ref] = (time.time() + 3600, {
+            "key": "test-key",
+            "hash": "new-hash-value",
+            "kind": "openrouter",
+            "guardrail": "",
+            "has_cr": True,
+        })
+    d = route_call(dict(route_base, key_ref=headroom_ref))
+    check(d["decision"] == "dispatch",
+          f"headroom-remint: hash mismatch → dispatch (got {d.get('decision')}: {d.get('reason', '')})")
+    with _headroom_lock:
+        _headroom.pop(headroom_ref, None)
+    with _refs_lock:
+        _refs.pop(headroom_ref, None)
+
+    # Test 2: matching hash + exhausted → budget defer (normal path preserved)
+    matching_ref = "default/test-headroom-exhausted"
+    with _headroom_lock:
+        _headroom[matching_ref] = {
+            "limit": 10.0,
+            "limit_remaining": 0.0,
+            "hash": "same-hash",
+            "fetched_at": time.time(),
+        }
+    with _refs_lock:
+        _refs[matching_ref] = (time.time() + 3600, {
+            "key": "test-key",
+            "hash": "same-hash",
+            "kind": "openrouter",
+            "guardrail": "",
+            "has_cr": True,
+        })
+    d = route_call(dict(route_base, key_ref=matching_ref))
+    check(d["decision"] == "defer" and "budget-exhausted" in d.get("reason", ""),
+          f"headroom-remint: matching hash + exhausted → defer (got {d.get('decision')}: {d.get('reason', '')})")
+    with _headroom_lock:
+        _headroom.pop(matching_ref, None)
+    with _refs_lock:
+        _refs.pop(matching_ref, None)
+
+    # Test 3: no headroom entry → fail-open (unknown ref is not budget-exhausted)
+    unknown_ref = "default/test-headroom-unknown"
+    with _refs_lock:
+        _refs[unknown_ref] = (time.time() + 3600, {
+            "key": "test-key",
+            "hash": "some-hash",
+            "kind": "openrouter",
+            "guardrail": "",
+            "has_cr": True,
+        })
+    d = route_call(dict(route_base, key_ref=unknown_ref))
+    check(d["decision"] == "dispatch",
+          f"headroom-remint: no headroom entry → dispatch (got {d.get('decision')}: {d.get('reason', '')})")
+    with _refs_lock:
+        _refs.pop(unknown_ref, None)
+
+    # ── #1262: :exacto strip self-test ──────────────────────────────────────────────────────────
+    print("\n=== :exacto strip self-test (issue #1262) ===")
+    # The production :exacto strip (L3255-3264) must key cooldown/breaker state under the
+    # BARE model id, skip the M4 pin, and preserve the :exacto suffix in the forwarded payload
+    # so Auto Exacto still owns provider ordering upstream.
+
+    # Test 1: breaker keyed under bare model — seed a breaker for "gpt-4o", then send
+    # "gpt-4o:exacto" and verify the breaker trips (502). Non-vacuous: if the removesuffix
+    # is reverted, the breaker would be keyed under "gpt-4o:exacto" and would NOT match.
+    _exacto_session = "direct:c2fd34dd"  # sha256("Bearer OAUTH-SECRET")[:8]
+    with _cb_lock:
+        _cb[(_exacto_session, "gpt-4o")] = {
+            "auth": 4, "generic": 0, "cred": 0,
+            "open_until": time.time() + 3600,
+            "class": "auth", "n": 4, "ts": time.time(),
+        }
+    seen.clear()
+    st, data = call("gpt-4o:exacto")
+    check(st == 401, "exacto strip: breaker keyed under bare model — 401 on gpt-4o:exacto (auth-class)")
+    check(b"circuit-open" in data,
+          "exacto strip: response body says circuit-open (breaker tripped)")
+    # Clean up breaker state
+    with _cb_lock:
+        _cb.pop((_exacto_session, "gpt-4o"), None)
+
+    # Test 2: pin skipped — exacto model must NOT get a provider pin injected.
+    # The OpenRouter stub should receive the model with :exacto suffix intact.
+    seen.clear()
+    st, data = call("gpt-4o:exacto")
+    check(st == 200, "exacto strip: 200 forwarded (no breaker)")
+    o = seen.get("openrouter") or {}
+    check(o.get("model") == "gpt-4o:exacto",
+          "exacto strip: :exacto suffix preserved in forwarded payload")
+    # Verify no provider pin was injected (the forwarded body should not have a `provider` key
+    # unless the original request had one — our test request doesn't).
+    try:
+        body = json.loads(o.get("body_raw") or b"{}")
+        check("provider" not in body,
+              "exacto strip: no provider pin injected (pin=None, max_price preserved)")
+    except (ValueError, TypeError):
+        check(False, "exacto strip: forwarded body is valid JSON")
+
+    # Test 3: non-exacto model still gets normal processing (pin injected, no suffix strip).
+    # This verifies the exacto path is opt-in and doesn't affect normal models.
+    seen.clear()
+    st, data = call("gpt-4o")
+    check(st == 200, "exacto strip: non-exacto model 200")
+    o = seen.get("openrouter") or {}
+    check(o.get("model") == "gpt-4o",
+          "exacto strip: non-exacto model forwarded without suffix modification")
 
     print()
     if not fails:

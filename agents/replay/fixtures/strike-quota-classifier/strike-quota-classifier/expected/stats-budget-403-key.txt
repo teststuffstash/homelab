@@ -1,2 +1,2 @@
-OUT → no PR opened — AGENT_STRIKE: model=claude/opus-5 error_class=budget-403-key round=1 session=test-pod-xyz
+OUT → key-class failure — KEY-RETRY: model=claude/opus-5 error_class=budget-403-key round=1 session=test-pod-xyz
 RC 0

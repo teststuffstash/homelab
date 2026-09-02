@@ -15,3 +15,4 @@ rawlog-provider-5xx           |       |       |     | rawlog-provider-5xx     |
 stats-unknown-with-pr         |       |       |     | stats-unknown-with-pr   |
 stats-harness-death-with-pr   |       |       |     | stats-harness-death-with-pr |
 stats-http-403-other-with-pr  |       |       |     | stats-http-403-other-with-pr |
+stats-provider-5xx-with-provider |       |       |     | stats-provider-5xx-with-provider |

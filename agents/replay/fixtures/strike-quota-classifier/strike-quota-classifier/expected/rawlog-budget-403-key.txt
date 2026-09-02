@@ -1,3 +1,3 @@
 CALL kubectl -n test-namespace get pod test-pod-xyz -o jsonpath={.status.reason}
-OUT → no PR opened — AGENT_STRIKE: model=claude/opus-5 error_class=budget-403-key round=1 session=test-pod-xyz match=[2026-08-24T05:04:00Z] Error: API key limit exceeded for this session
+OUT → key-class failure — KEY-RETRY: model=claude/opus-5 error_class=budget-403-key round=1 session=test-pod-xyz match=[2026-08-24T05:04:00Z] Error: API key limit exceeded for this session
 RC 0

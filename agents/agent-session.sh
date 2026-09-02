@@ -1616,8 +1616,6 @@ fi
 # homelab#990: opencode's SDK-init fetches to models.dev + models.opencode.ai carry NO timeout
 # under enforced egress (CNP deny is a silent SYN black-hole). Stub them to 127.0.0.1 so the
 # init fails fast (instant RST) instead of wedging to the 4h deadline.
-# registry.npmjs.org is stubbed only when the egress profile does not include node (where the
-# CNP denies it anyway — this converts silent-drop → fast-fail).
 #
 # Why kill-at-the-tool (homelab#456) doesn't cover this: the SDK-init fetches are NOT
 # suppressible on the pinned opencode build (tested 2026-08-26: no knob found), so the
@@ -1625,8 +1623,18 @@ fi
 HOST_ALIASES=""
 if [ "$HARNESS" = "opencode" ] && [ "${EGRESS_ENFORCE:-}" = "true" ]; then
   HOST_ALIASES=$'  hostAliases:\n    - ip: "127.0.0.1"\n      hostnames:\n        - "models.dev"\n        - "models.opencode.ai"'
-  if [ "${EGRESS_PROFILE:-}" != "node" ]; then
+fi
+# homelab#107: registry.npmjs.org drops from ALL homelab rides (goose/claude, not just opencode)
+# under enforced egress with no node profile. The CNP deny is a silent SYN black-hole → ride
+# hang. Stub to 127.0.0.1 so the connection fails fast (instant RST) instead of wedging.
+# This applies to every harness — the source of the npm traffic is not yet identified (no
+# cluster access to trace the call site), but the resolver stub is harmless and converts
+# silent-drop → fast-fail for any ride under enforced egress without a node profile.
+if [ "${EGRESS_ENFORCE:-}" = "true" ] && [ "${EGRESS_PROFILE:-}" != "node" ]; then
+  if [ -n "$HOST_ALIASES" ]; then
     HOST_ALIASES="${HOST_ALIASES}"$'\n    - ip: "127.0.0.1"\n      hostnames:\n        - "registry.npmjs.org"'
+  else
+    HOST_ALIASES=$'  hostAliases:\n    - ip: "127.0.0.1"\n      hostnames:\n        - "registry.npmjs.org"'
   fi
 fi
 # <<<REPLAY:opencode-hostaliases<<<
@@ -1991,6 +1999,15 @@ ${DIND_CONTAINER}
         # to models.opencode.ai + registry.npmjs.org is the intended backstop (homelab#792, #456 r2).
         # These are expected drops per PR #503 doctrine (kill at tool, not extraFQDNs).
         - name: OPENCODE_DISABLE_AUTOUPDATE
+          value: "1"
+        # homelab#1247 (the #1190 caller hunt): scripts/mermaid-lint.sh's \`npm ci\` ran a full
+        # registry install on every md-touching homelab ride (~12k POLICY_DENIED/24h — the CNP
+        # denies npmjs correctly; the hostAliases fast-fail stub did not stop the retry storm).
+        # Kill at the tool per PR #503 doctrine: the script skips the install (and the lint,
+        # loudly) under this var when node_modules is not already populated — GitHub CI, which
+        # never sets it, stays the real gate. Unconditional like its siblings: only homelab's
+        # diff-ci reaches the script today, but the emitter rides along whichever repo runs it.
+        - name: MERMAID_LINT_NO_INSTALL
           value: "1"
         # 2026-08-08 (operator + the homelab#107 21:35Z triage, same conclusion): uv with an
         # unpinned python-preference FETCHES A MANAGED CPython from releases.astral.sh even when
@@ -2390,26 +2407,53 @@ if [ -n "$RUN_CMD" ]; then
     fi
     # <<<REPLAY:strike-classifier<<<
     # >>>REPLAY:strike-line-format>>>
+    # FU-202 (homelab#1233): key-class error_class (budget-403-key, budget-exhausted-key) is a
+    # mint defect, not a model strike — post a KEY-RETRY marker instead, so the coordinator's
+    # chain-walk skips it and re-dispatches on the SAME model with a fresh session key.
     # homelab#866: the EMIT decision. A PR-less ride keeps FU-062 semantics unchanged — ANY
     # classified error strikes, `unknown` included (that is the chain-walk signal). A ride WITH
     # an open PR strikes only on a harness-death-class signature, because a clean round with a
     # PR classifies as `unknown` and must never strike.
     EMIT_STRIKE=""
+    EMIT_KEY_RETRY=""
     case "$ERR_CLASS" in
-      harness-death|auth-storm|timeout|quota|budget-*|http-403-other) EMIT_STRIKE=1;;
+      harness-death|auth-storm|timeout|quota|budget-403-account|budget-403|http-403-other) EMIT_STRIKE=1;;
+      budget-403-key|budget-exhausted-key) EMIT_KEY_RETRY=1;;
     esac
-    [ -n "${PR_URL:-}" ] || EMIT_STRIKE=1
+    # PR-less ride: strike on any classified error (FU-062 semantics), EXCEPT key-class which
+    # gets a KEY-RETRY marker instead (FU-202).
+    [ -n "${PR_URL:-}" ] || [ -n "$EMIT_KEY_RETRY" ] || EMIT_STRIKE=1
     # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
     # no specific signature must not be recorded as having an error. Inside the block on purpose:
     # this reset is behaviour replay has to pin, not control flow it may drop (PR #942 review).
-    [ -n "$EMIT_STRIKE" ] || ERR_CLASS=""
+    # FU-202: key-class errors keep their error_class for the KEY-RETRY marker.
+    [ -n "$EMIT_STRIKE" ] || [ -n "$EMIT_KEY_RETRY" ] || ERR_CLASS=""
     # STRIKE_LINE is empty exactly when EMIT_STRIKE is unset, so the gate itself is extracted and
     # the composed replay script branches on it the way the shipped script does.
     STRIKE_LINE=""
+    # FU-201 c: provider is sourced from STATS when available (the harness records the served
+    # provider). Absent a provider field, the strike still records — the router sources it
+    # proxy-side from provider_events (not generations — _generation_lookup skips session
+    # keys). Declared here so both STRIKE and KEY-RETRY blocks can use it.
+    _strike_provider="$(printf '%s' "${STATS:-}" | jq -r '.provider // ""' 2>/dev/null || true)"
     if [ -n "$EMIT_STRIKE" ]; then
       STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+      if [ -n "$_strike_provider" ]; then
+        STRIKE_LINE="${STRIKE_LINE} provider=${_strike_provider}"
+      fi
       if [ -n "${BUDGET_MATCH:-}" ]; then
         STRIKE_LINE="${STRIKE_LINE} match=${BUDGET_MATCH}"
+      fi
+    fi
+    # KEY_RETRY_LINE is the key-class equivalent — a marker, not a strike.
+    KEY_RETRY_LINE=""
+    if [ -n "$EMIT_KEY_RETRY" ]; then
+      KEY_RETRY_LINE="KEY-RETRY: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+      if [ -n "$_strike_provider" ]; then
+        KEY_RETRY_LINE="${KEY_RETRY_LINE} provider=${_strike_provider}"
+      fi
+      if [ -n "${BUDGET_MATCH:-}" ]; then
+        KEY_RETRY_LINE="${KEY_RETRY_LINE} match=${BUDGET_MATCH}"
       fi
     fi
     # <<<REPLAY:strike-line-format<<<
@@ -2432,6 +2476,22 @@ if [ -n "$RUN_CMD" ]; then
           || echo "  (strike comment failed — non-fatal; the strike still shows in these logs)"
       else
         echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
+      fi
+    fi
+    if [ -n "$KEY_RETRY_LINE" ]; then
+      echo "→ key-class failure — ${KEY_RETRY_LINE}"
+      ISSUE_N=""
+      case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
+      SLUG=""
+      case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
+      if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+        KEY_RETRY_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
+          "$KEY_RETRY_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
+        echo "→ posting key-retry marker to ${SLUG}#${ISSUE_N}"
+        gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$KEY_RETRY_BODY" 2>&1 | tail -1 \
+          || echo "  (key-retry marker failed — non-fatal; the marker still shows in these logs)"
+      else
+        echo "  (no issue task / non-GitHub repo / no GH_TOKEN — key-retry not posted, logged above only)"
       fi
     fi
   fi

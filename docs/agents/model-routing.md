@@ -99,25 +99,15 @@ Maps 1:1 onto the `error_class` shipped with FU-057 (live in `agent-session.sh` 
 |---|---|---|
 | `changes-requested`, `ci-failed` | **round** (max 3) | next round, same chain position |
 | `harness-death` (goose `-32602`), `auth-storm` (401/403), `timeout`, provider 404/5xx | **strike** per (task, model) | same round, next chain model, re-dispatch NOW |
-| `budget-403` | neither | estimator/cap problem → escalate (the existing ⚠ path) |
+| `budget-403-account` | **strike** per (task, model) | same round, next chain model, re-dispatch NOW — operator top-up needed, not an estimator fix |
+| `budget-403-key`, `budget-exhausted-key` | **key-retry** (not a strike) | same round, **same model**, fresh session key — mint defect (FU-202) |
+| `budget-403` (residual) | neither | estimator/cap problem → escalate (the existing ⚠ path) |
 
-> **Note — raw-log fallback path (homelab#871 / PR #879) split `budget-403` into subclasses.**
-> This table describes the **in-pod finalize vocabulary** (`agent-session.sh` finalize, the
-> `error_class` that lands in the ledger). A separate code path — the `agent-session.sh`
-> raw-log fallback, which greps the harness run log when the structured report
-> was never written — emits the finer-grained `budget-403-key` / `budget-403-account` plus a
-> residual `budget-403` (the subclass that the in-pod finalize would have emitted). The
-> reaction differs by subclass:
->
-> - **`budget-403-account`**: the OpenRouter account credit is exhausted — an operator top-up,
->   not an estimator/cap problem. No estimator change fixes it.
-> - **`budget-403-key`**: a single key hit its rate/limit cap. On a fresh key well under its
->   account-level cap this is a mint defect (the key was issued with too-low limits).
-> - **`budget-403`** (residual): the in-pod meaning — estimator/cap problem → escalate the ⚠ path.
->
-> The finalize twin is tracked as **agent-runtime#85** (filed by the same G-A checkpoint that
-> produced this note). When that lands the table gains real rows for the subclasses and this
-> note is replaced — it is a temporary bridge, not a permanent fixture.
+> **Raw-log fallback path (homelab#871 / PR #879) split `budget-403` into subclasses.**
+> The in-pod finalize (`agent-session.sh` finalize) emits the `error_class` that lands in the
+> ledger. The raw-log fallback (no structured report) greps the harness run log and emits the
+> finer-grained subclasses above. The table now carries the full taxonomy; the subclass note
+> from FU-202 (homelab#1233) replaced the temporary bridge.
 
 Chain exhausted (all models struck for this task) → `agent/blocked` with the strike list in the
 comment — that IS worth a human.

@@ -15,6 +15,9 @@
 #      the env list's own shapes (list item / value / comment), so no `if`/`case` gate and no
 #      list-terminating YAML key sits between the devbox block and the var;
 #   3. the comment above it names the two denied destinations, so the pin carries its own alert.
+#   4. (homelab#1247) the env card ALSO ships `MERMAID_LINT_NO_INSTALL` = "1" in the same
+#      always-on block — the kill-switch scripts/mermaid-lint.sh honors, so an md-touching ride
+#      never runs `npm ci` against the CNP-denied registry (~12k POLICY_DENIED/24h before it).
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -78,6 +81,36 @@ for dest in models.opencode.ai registry.npmjs.org; do
     bad "comment above the var names $dest" "no '$dest' in the comment block (L$((var_ln-5))–L$((var_ln-1)))"
   fi
 done
+
+# ── 5. the mermaid-lint kill-switch (homelab#1247) — same block, same discipline ────────────────
+ml_ln="$(grep -nF -- '- name: MERMAID_LINT_NO_INSTALL' "$LAUNCHER" | awk -F: 'NR==1{print $1}')"
+if [ -n "$ml_ln" ]; then
+  ok "env card ships MERMAID_LINT_NO_INSTALL"
+  ml_val="$(sed -n "$((ml_ln+1))p" "$LAUNCHER" | sed -E 's/^[ ]*value: *"?([^"]*)"?$/\1/')"
+  [ "$ml_val" = "1" ] && ok 'MERMAID_LINT_NO_INSTALL value is "1"' || bad 'MERMAID_LINT_NO_INSTALL value is "1"' "line $((ml_ln+1)) reads: value=$ml_val"
+  # same always-on-block walk as check 3, anchored at the opencode var this suite already pinned:
+  # only env-list shapes (list item / value / comment) may sit between them.
+  if [ -n "$var_ln" ] && [ "$var_ln" -lt "$ml_ln" ] && awk -v a="$var_ln" -v v="$ml_ln" '
+      NR >= a && NR <= v {
+        line = $0; sub(/^[ \t]+/, "", line)
+        if (line == "" || line ~ /^#/) next
+        if (line ~ /^- name:/ || line ~ /^value:/) next
+        bad = 1
+      }
+      END { exit bad }' "$LAUNCHER"; then
+    ok "MERMAID_LINT_NO_INSTALL sits in the same always-on env block"
+  else
+    bad "MERMAID_LINT_NO_INSTALL sits in the same always-on env block" "a non-env-list line lies between the opencode var (L$var_ln) and it (L$ml_ln), or the ordering flipped"
+  fi
+  # the CONSUMER honors it: scripts/mermaid-lint.sh tests the var before its npm ci
+  if grep -qF 'MERMAID_LINT_NO_INSTALL' "$ROOT/scripts/mermaid-lint.sh" 2>/dev/null; then
+    ok "scripts/mermaid-lint.sh honors the var"
+  else
+    bad "scripts/mermaid-lint.sh honors the var" "no MERMAID_LINT_NO_INSTALL reference in scripts/mermaid-lint.sh — the env line is a no-op"
+  fi
+else
+  bad "env card ships MERMAID_LINT_NO_INSTALL" "grep found no '- name: MERMAID_LINT_NO_INSTALL' in agents/agent-session.sh (homelab#1247)"
+fi
 
 # ── result ──────────────────────────────────────────────────────────────────────────────────────
 printf '  %s passed, %s failed\n' "$PASS" "$FAIL"
