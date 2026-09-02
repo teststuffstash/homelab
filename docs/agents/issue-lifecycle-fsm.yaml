@@ -400,6 +400,10 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: 'budget-exhausted-key\|budget-403-key' }
       - desc: "probe failure holds every candidate and writes nothing (rule #6 — never fail INTO a write)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FLEET STRIKE" }
+      - desc: "live-window anchor — the NEWEST strike in the group must fall inside 24h of now; without this, a group that once clustered stays 'detected' on every future tick forever (homelab#1235 round-2 fix)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'now_s - max_ts.*86400' }
+      - desc: "marker-based idempotency on both posting paths — the first line of the fleet-strike comment is a machine marker carrying the group identity; a repeat tick against an already-actioned fleet strike finds the identical marker and skips the post (homelab#1235 round-2 fix)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'fleet-strike-fp: error_class' }
     incidents:
       - "2026-09-01: FOUR goal-#326 r1 strikes with identical error_class=unknown were never correlated; the operator + seat did it by hand. Prose-warned classes recur; executable gates hold (ADR-103)."
 
