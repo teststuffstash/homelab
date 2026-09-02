@@ -1,0 +1,2 @@
+OUT → no strike emitted — error_class=[budget-403]
+RC 0
