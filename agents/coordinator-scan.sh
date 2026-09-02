@@ -3461,8 +3461,8 @@ EOF_GOVERNANCE
                 if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
                   # Find the newest AGENT_STRIKE: comment with this error_class
                   ts="$(jq -r --arg ec "$ec" '
-                    [.[] | (.body // "") | select(test("^AGENT_STRIKE:"))
-                     | select(contains("error_class=\($ec)"))
+                    [.[] | select((.body // "") | test("^AGENT_STRIKE:") and
+                      contains("error_class=\($ec)"))
                      | .created_at] | last // ""
                   ' <<<"$icmt" 2>/dev/null || true)"
                   if [ -n "$ts" ]; then
@@ -3484,7 +3484,12 @@ EOF_GOVERNANCE
                 if [ -n "$min_ts" ] && [ -n "$max_ts" ]; then
                   span="$(( max_ts - min_ts ))"
                   [ "$span" -le 86400 ] || all_within_24h=0
-                fi
+                  # The window must also be LIVE, not merely historical: the NEWEST strike in the
+                  # group has to fall inside 24h of now. Without this, `max_ts - min_ts` is
+                  # immutable historical data and a group that once clustered stays "detected"
+                  # on every future tick forever.
+                  [ "$(( now_s - max_ts ))" -le 86400 ] || all_within_24h=0
+                  fi
               fi
               if [ "$all_within_24h" = 1 ]; then
                 fleet_strike_issues="${fleet_strike_issues}${ec}=${nums} "
@@ -3516,11 +3521,18 @@ EOF_GOVERNANCE
         done
         # ONE comment listing all affected issues
         affected_list=""
+        sorted_nums="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')"
         for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
           [ -n "$fn" ] || continue
           affected_list="${affected_list}- #${fn}\n"
         done
+        # Marker-based idempotency: the first line of the comment is a machine marker carrying
+        # the group identity. A repeat tick against an already-actioned fleet strike finds the
+        # identical marker and skips the post (same discipline as state-fp:, homelab#244/IL-T26).
+        fleet_strike_marker="fleet-strike-fp: error_class=${ec} issues=${sorted_nums}"
         comment_body="$(printf '%s\n' \
+          "${fleet_strike_marker}" \
+          "" \
           "🤖 **Fleet strike detected** — \`error_class=${ec}\` on ≥2 distinct issues within 24h (FU-200)." \
           "" \
           "Affected issues:" \
@@ -3531,22 +3543,48 @@ EOF_GOVERNANCE
           "" \
           "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
           "" \
-          "- \`error_class=${ec}\" on $(printf '%s' "$nums" | tr ',' '\n' | sort -u | wc -l | tr -d ' ') distinct issues." \
+          "- \`error_class=${ec}\` on $(printf '%s' "$nums" | tr ',' '\n' | sort -u | wc -l | tr -d ' ') distinct issues." \
           "- All within a 24h window." \
           "" \
           "To re-enable dispatch on any issue, strip \`agent/error\` by hand after the root cause is resolved." )"
         # Post the comment on the FIRST affected issue only (ONE comment listing them)
         first_fn="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | head -1)"
         if [ -n "$first_fn" ]; then
-          gh issue comment "$first_fn" --repo "$slug" --body "$comment_body" >/dev/null 2>&1 || true
+          # Idempotency check: skip if a comment already starts with the identical marker
+          existing_comments="$(gh api "repos/${slug}/issues/${first_fn}/comments?per_page=100" 2>/dev/null || true)"
+          already_posted=0
+          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${existing_comments:-null}"; then
+            if jq -e --arg m "$fleet_strike_marker" \
+              '[.[] | (.body // "") | startswith($m)] | any' \
+              <<<"$existing_comments" >/dev/null 2>&1; then
+              already_posted=1
+            fi
+          fi
+          if [ "$already_posted" = 0 ]; then
+            gh issue comment "$first_fn" --repo "$slug" --body "$comment_body" >/dev/null 2>&1 || true
+          fi
         fi
         # ONE deduped inert platform filing
         if [ -n "$existing_filing" ]; then
-          # Extend the existing filing with a comment
-          gh issue comment "$existing_filing" --repo "$slug" --body "$(printf '%s\n' \
-            "Additional affected issues detected: $(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ' ')" \
-            "" \
-            "Updated \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`." )" >/dev/null 2>&1 || true
+          # Idempotency check: skip if the filing already has a comment with the identical marker
+          filing_comments="$(gh api "repos/${slug}/issues/${existing_filing}/comments?per_page=100" 2>/dev/null || true)"
+          filing_already_extended=0
+          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${filing_comments:-null}"; then
+            if jq -e --arg m "$fleet_strike_marker" \
+              '[.[] | (.body // "") | startswith($m)] | any' \
+              <<<"$filing_comments" >/dev/null 2>&1; then
+              filing_already_extended=1
+            fi
+          fi
+          if [ "$filing_already_extended" = 0 ]; then
+            # Extend the existing filing with a comment
+            gh issue comment "$existing_filing" --repo "$slug" --body "$(printf '%s\n' \
+              "${fleet_strike_marker}" \
+              "" \
+              "Additional affected issues detected: $(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ' ')" \
+              "" \
+              "Updated \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`." )" >/dev/null 2>&1 || true
+          fi
         else
           # Create a new inert platform filing
           gh issue create --repo "$slug" \

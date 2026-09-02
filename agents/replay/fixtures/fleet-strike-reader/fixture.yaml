@@ -7,6 +7,13 @@
 #   2. Posts ONE comment on the first affected issue listing all of them.
 #   3. Files ONE deduped inert platform issue (or extends an existing open match).
 #
+# THREE TICKS under replay:
+#   TICK 1 — first pass against the #326 four-strike world (no prior action). 18 actions.
+#   TICK 2 — second pass against the POST-ACTION world (agent/error applied, marker present,
+#            filing exists). ZERO actions (idempotency guards fire).
+#   TICK 3 — stale world (same strikes but now_s >24h after the newest). ZERO actions
+#            (live-window check fires).
+#
 # THE #326 FOUR-STRIKE WORLD (recorded fixture). Four issues (#326, #327, #328, #329) each carry
 # an AGENT_STRIKE: comment with `error_class=unknown`, all within 24h. The scan detects the
 # fleet strike and applies agent/error to all four, comments on #326, and creates a new filing
@@ -22,6 +29,12 @@
 #     budget-403-key even when they appear as AGENT_STRIKE: (historical rows pre-#1233
 #     merge). These are MINT defects, not worker strikes — counting them as fleet strikes
 #     would be wrong.
+#   • LIVE-WINDOW CHECK: the newest strike must be within 24h of now_s, not merely within
+#     24h of the oldest strike. Without this, a group that once clustered stays "detected"
+#     on every future tick forever.
+#   • MARKER-BASED IDEMPOTENCY: the comment body starts with a `fleet-strike-fp:` marker
+#     carrying the group identity. A repeat tick finds the identical marker and skips the
+#     post (same discipline as state-fp:, homelab#244/IL-T26).
 pins:
   - IL-T30
 name: fleet-strike-reader
@@ -29,6 +42,10 @@ mode: actions
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
+  - block:fleet-strike-reader
+  - file:tick2.sh
+  - block:fleet-strike-reader
+  - file:tick3.sh
   - block:fleet-strike-reader
   - file:post.sh
 scrub:
