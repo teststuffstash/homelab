@@ -1,4 +1,4 @@
-HERE="$REPLAY_ROOT"
+HERE="$REPLAY_ROOT/agents"
 PROXY_URL="http://openrouter-proxy.agent-egress.svc.cluster.local:8080"
 _keyref=""
 POD="agent-1268-subscription"

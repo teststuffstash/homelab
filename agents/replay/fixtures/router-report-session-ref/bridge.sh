@@ -1,4 +1,4 @@
-HERE="$REPLAY_ROOT"
+HERE="$REPLAY_ROOT/agents"
 PROXY_URL="http://openrouter-proxy.agent-egress.svc.cluster.local:8080"
 _keyref="homelab/homelab-session-1268"
 POD="agent-1268-r2"

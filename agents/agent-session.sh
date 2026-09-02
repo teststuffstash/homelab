@@ -2433,8 +2433,8 @@ if [ -n "$RUN_CMD" ]; then
     # *:opencode-go/*) have no key ref (_keyref is empty) and post without the Bearer
     # header — no ref, no provider, no new failure mode.
     _report_provider=""
-    if [ -n "$PROXY_URL" ] && { [ -n "$STATS" ] || [ -n "${ERR_CLASS:-}" ]; }; then
-      _rstack="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
+    if [ -n "${PROXY_URL:-}" ] && { [ -n "${STATS:-}" ] || [ -n "${ERR_CLASS:-}" ]; }; then
+      _rstack="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)" || _rstack=""
       _report="$(jq -cn --arg session "$POD" --arg task "$TASK" --arg stack "${_rstack:-}" \
         --arg model "$MODEL" --arg round "$ROUND" --arg err "${ERR_CLASS:-}" --arg pr "$PR_URL" \
         --arg rail "${AGENT_RAIL:-}" \
@@ -2445,7 +2445,7 @@ if [ -n "$RUN_CMD" ]; then
          error_class: (if $err != "" then $err else ($stats.error_class? // "") end),
          outcome: (if $pr != "" then "pr" else ($stats.exit_status? // "no-pr") end)}' 2>/dev/null)"
       if [ -n "$_report" ]; then
-        if [ -n "$_keyref" ]; then
+        if [ -n "${_keyref:-}" ]; then
           _reply="$(curl -fsS -m 5 -X POST -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ref:$_keyref" \
             -d "$_report" "${PROXY_URL}/report" 2>/dev/null)" || _reply=""
