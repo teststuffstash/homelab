@@ -5622,22 +5622,41 @@ data: [DONE]
     # a budget defer — exactly FU-202's re-mint→redispatch timing. With the fix, the budget
     # check triggers a cache punch + fresh resolve, which returns H2, the mismatch fires,
     # and the entry is treated as a cache miss (fail-open → dispatch).
-    # We monkeypatch _resolve_ref with a call-order-aware mock: the first call (the #1260 hash
-    # comparison, which reads through the stale _refs cache) returns H1; the second call (after
-    # the cache punch) returns H2. This exercises the actual cache-punch code path — without
-    # call-order awareness, a mock that always returns H2 makes the first comparison already
-    # mismatch, and the budget-exhausted check (and thus the punch) is never reached (vacuous).
+    # We seed _refs[stale_ref] with H1 for real (so the first _resolve_ref call is a cache hit)
+    # and monkeypatch urllib.request.urlopen to simulate the re-mint (H2) on the cache miss
+    # after the punch. This exercises the actual cache-punch code path — the mock is invoked
+    # only when the cache is empty, not on every call.
     stale_ref = "default/test-headroom-stale-cache"
-    _resolve_ref_saved = _resolve_ref
-    _resolve_call_count = 0
-    def _mock_resolve_ref(ref):
-        nonlocal _resolve_call_count
-        _resolve_call_count += 1
-        if _resolve_call_count == 1:
-            return {"key": "test-key", "hash": "H1", "kind": "openrouter", "guardrail": "", "has_cr": True}
-        return {"key": "test-key", "hash": "H2", "kind": "openrouter", "guardrail": "", "has_cr": True}
+    _urlopen_saved = urllib.request.urlopen
+    class _MockK8sResponse:
+        def __init__(self, data):
+            self._data = json.dumps(data).encode()
+        def read(self):
+            return self._data
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+    def _mock_urlopen(req, *a, **kw):
+        url = req.get_full_url()
+        if "/api/v1/namespaces/" in url and "/secrets/" in url:
+            # Secret fetch — return a valid session key
+            return _MockK8sResponse({
+                "metadata": {"labels": {"openrouter.teststuff.net/session-key": "true"}},
+                "data": {
+                    "OPENROUTER_API_KEY": base64.b64encode(b"test-key").decode(),
+                    "GUARDRAIL": base64.b64encode(b"").decode(),
+                },
+            })
+        # CR list — return a CR with hash H2 (simulating re-mint)
+        return _MockK8sResponse({
+            "items": [{
+                "spec": {"secretName": stale_ref.split("/")[1], "guardrail": ""},
+                "status": {"openrouter": {"hash": "H2"}},
+            }]
+        })
     try:
-        globals()['_resolve_ref'] = _mock_resolve_ref
+        urllib.request.urlopen = _mock_urlopen
         with _headroom_lock:
             _headroom[stale_ref] = {
                 "limit": 10.0,
@@ -5657,7 +5676,7 @@ data: [DONE]
         check(d["decision"] == "dispatch",
               f"headroom-remint: stale ref cache → dispatch after punch (got {d.get('decision')}: {d.get('reason', '')})")
     finally:
-        globals()['_resolve_ref'] = _resolve_ref_saved
+        urllib.request.urlopen = _urlopen_saved
         with _headroom_lock:
             _headroom.pop(stale_ref, None)
         with _refs_lock:
