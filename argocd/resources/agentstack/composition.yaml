@@ -1044,18 +1044,42 @@ spec:
                           if [ ! -f /work/main/.agents/probe.md ]; then
                             echo "NO PROBE BRIEF: {{ $xr.spec.mainRepo }}/.agents/probe.md does not exist — the prober is enabled but has nothing to run. Write the brief (roles.md §prober; oracle UC-1 probe-e2e is the donor shape)."; exit 0
                           fi
+                          # Run the probe session, capturing the full report
+                          CLAUDE_EXIT=0
                           claude -p "You are the PROBER for stack {{ $stack }} (homelab docs/agents/roles.md §prober): an agentic canary probing the LIVE product contract, prod-READ and report-only. Your brief follows between the BEGIN/END markers. You hold NO git or GitHub credentials by construction — your entire output is this session's stdout report: state what you probed, what answered correctly, and what broke, with evidence. Never mutate anything.
                           ----BEGIN BRIEF----
                           $(cat /work/main/.agents/probe.md)
                           ----END BRIEF----" \
                             --model "$PROBE_MODEL" --permission-mode bypassPermissions --max-turns 30 </dev/null \
-                            || echo "WARN: probe session failed — the contract state is UNKNOWN, not good (next tick retries)"
+                            > /work/report.md 2>&1 || CLAUDE_EXIT=$?
+                          cat /work/report.md
+                          if [ "$CLAUDE_EXIT" -ne 0 ]; then
+                            echo "WARN: probe session failed (exit $CLAUDE_EXIT) — the contract state is UNKNOWN, not good (next tick retries)"
+                          fi
+                          # Upload the report to S3 for durable storage (homelab#1275)
+                          command -v s5cmd >/dev/null 2>&1 || { echo "FATAL: s5cmd not in this image — cannot upload probe report"; exit 1; }
+                          export AWS_ACCESS_KEY_ID="$WRITER_ID" AWS_SECRET_ACCESS_KEY="$WRITER_SECRET" AWS_REGION=garage
+                          TS=$(date -u +%Y%m%dT%H%M%SZ)
+                          DEST="s3://agent-transcripts/{{ $stack }}/probe/${TS}/report.md"
+                          if s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /work/report.md "$DEST"; then
+                            echo "probe report uploaded: ${DEST}"
+                          else
+                            echo "FATAL: probe report upload FAILED — the report is the product (homelab#1275)"
+                            exit 1
+                          fi
                       env:
                         - { name: HOME, value: "/home/node" }
                         - { name: PROBE_MODEL, value: {{ default "haiku" (get $pr "model") | quote }} }
                         - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
                         - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:{{ $loopns }}/claude-session" }
                         - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
+                        - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+                        - name: WRITER_ID
+                          valueFrom:
+                            secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id }
+                        - name: WRITER_SECRET
+                          valueFrom:
+                            secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key }
                       volumeMounts:
                         - { name: work, mountPath: /work }
                       resources:
