@@ -40,4 +40,5 @@ parts:
   - file:bridge.sh
   - block:strike-classifier
   - block:strike-line-format
+  - block:strike-provider-append
   - file:post.sh

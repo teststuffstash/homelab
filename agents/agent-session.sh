@@ -2491,6 +2491,7 @@ if [ -n "$RUN_CMD" ]; then
     # <<<REPLAY:router-report<<<
 
     if [ -n "$STRIKE_APPLIES" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
+      # >>>REPLAY:strike-provider-append>>>
       # Provider append: source from /report reply, fall back to STATS for subscription rides.
       # FU-201 c (#1268): provider is sourced from the /report reply when available (the proxy
       # resolves it from provider_events via the session key ref). Falls back to STATS for
@@ -2500,6 +2501,7 @@ if [ -n "$RUN_CMD" ]; then
       [ -n "$_strike_provider" ] || _strike_provider="$(printf '%s' "${STATS:-}" | jq -r '.provider // ""' 2>/dev/null || true)"
       [ -z "$STRIKE_LINE" ]    || [ -z "$_strike_provider" ] || STRIKE_LINE="${STRIKE_LINE} provider=${_strike_provider}"
       [ -z "$KEY_RETRY_LINE" ] || [ -z "$_strike_provider" ] || KEY_RETRY_LINE="${KEY_RETRY_LINE} provider=${_strike_provider}"
+      # <<<REPLAY:strike-provider-append<<<
 
     if [ -n "$STRIKE_LINE" ]; then
       if [ -z "${PR_URL:-}" ]; then
