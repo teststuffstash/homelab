@@ -662,6 +662,9 @@ health signal.
 | `queued-held-by-ghost` | operator | Held by a phantom/infeasible blocker — the blocker's liveness is the question |
 | `queued-ready` | machine | Dispatchable — next tick |
 | `deferred-capacity` | machine | Held by WIP ceiling |
+| `footprint-held` | operator | Queued issue held by an in-progress issue's `Touches` (ADR-097 intersection) |
+| `cap-held` | operator | Queued issue held by the per-base PR budget cap (`REPO_PR_CAP`, machine-flowing PRs only) |
+| `blockpark` | operator | Queued issue held by the codeowner-parked PR budget (`REPO_BLOCKPARK_CAP`) |
 | `guarded-path` | operator | Pin-only guarded path — operator push needed |
 | `orphan-unarmed` | operator | Open PR not on merge path — arm or park |
 | `container` | none | Post-launch bucket, container issue |
@@ -714,7 +717,7 @@ Two fixtures commit the behaviour:
 - **`item-class`** (actions mode): pins the `item_class_push()` function — the curl call,
   the metric names and labels, the group-replace URL, and the three degenerate paths (no
   gateway, no pod identity, gateway refuses). The fixture's bridge exercises the #833
-  counterfactual (`strike-held who=operator`), the #834 scenario
+  counterfactual (`held-merged-unlinked who=operator`), the #834 scenario
   (`queued-held-by-ghost`), a riding row, a container row, and a backlog-aggregate row.
 - **`board-machine`** (suite mode): pins the `--machine` output grammar against a synthetic
   Prometheus response carrying the same five classes. Asserts the stable sort, the header
