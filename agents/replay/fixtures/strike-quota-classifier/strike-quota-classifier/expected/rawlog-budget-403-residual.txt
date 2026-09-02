@@ -1,0 +1,3 @@
+CALL kubectl -n test-namespace get pod test-pod-xyz -o jsonpath={.status.reason}
+OUT → no strike emitted — error_class=[budget-403]
+RC 0
