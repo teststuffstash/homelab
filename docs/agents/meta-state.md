@@ -36,9 +36,19 @@ meant to avoid.)
   operator at tree-empty per the Production-leg. **Wave-2 roster change: FU-200 + FU-201
   legs MOVED into #1231** — remaining wave-2 = #1211, #1212, FU-199 residue, #1198, #1199
   (+ #1224/#1225 operator-lane), still minted at #1162's close sweep, AFTER #1231
-  (router-first, PR#1226). **PR#1208 DONE** (merged 2026-09-01 ~22:19Z, seat codeowner read;
-  #1151 closed). G1's PR#1241 read+approved same sitting; G2–G5 parks land per the standing
-  NEEDSMETA watch.
+  (router-first, PR#1226). **MACHINE SET G1–G5 ALL LANDED by 2026-09-02 ~04:00Z**
+  (seat codeowner reads on G1 PR#1241, G2 PR#1253, G3 PR#1257, G4 PR#1258; G5 bot-merged via
+  PR#1254's fix round): escalation carrier + KEY-RETRY split + provider-attributed strikes w/
+  pair-exclusion (STRIKE_ENFORCE stays OFF — recording precedes policy) + fleet-strike reader
+  (key-class excluded both structurally and historically) + provider_policy/exacto. Sprout tail
+  (#1259 tier-floor enforcement — FU-201's remaining leg, #1261 taxonomy coherence) queued/riding
+  under the goal grant; bucket #1243 auto-minted. **Remaining before verdict: E1 #1237 + E2
+  #1238 (operator/seat sittings — damped agent-fix-only pending #1249) + tree-empty → operator's
+  goal/validated read.** ⚠ #1249 (bare-member walk queues containers/operator legs — #1242's
+  walk misfire, damper = agent-fix-without-queued on #1237/#1238/#1239, verified holding): fix
+  the walk's exclusions before stripping the damper. FU-202 core delivered (archive candidate
+  at next fu-sweep). #1255 (homelab lacks .agents/build.yaml — build rides degrade loudly to
+  fix.yaml) = operator recipe-paste sitting.
 - **⚑ 2026-09-01 LATE SITTING — v1.3.1 BANKED (operator: "deserves a place when it works");
   PR#1220 armed (banked block + S8 row).** Pickups: (1) at #1162's `goal/validated` close
   sweep, batch-release the bucket residue and **mint WAVE 2 = the dispatch-belts theme**

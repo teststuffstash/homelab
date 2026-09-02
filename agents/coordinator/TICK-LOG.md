@@ -6291,3 +6291,25 @@ first live ADR-110 maintenance session before the ADR existed.
   branch cut at `81eaf5a8` (IL-G02). Queue DEFERRED to post-#1228 (merge order + member
   surfaces live on the scan branch); watch armed. #1225 gains face 5 (negative-row blindness)
   at the next touch — recorded here, the issue comment rides the next batch.
+
+## 2026-09-01/02 NIGHT — the unattended corpus session (operator: "durable monitors, codeowner reviews, running unattended")
+
+- CONDITION: PR#1228 armed behind seat repair; wave-2 queue act gated on it. COMMAND: standing
+  set armed (meta-events + 2700s heartbeat + full-terminal PR watchers); pipeline driven
+  event-only. #1208 read+merged first (BLOCKPARK blocking-class), #1228 read+merged (theme
+  #1163 closed), bookkeeping pushed, belts top hop, ALL 7 wave-2 members queued + rung.
+- 8 seat codeowner reads → 8 merges this session: #1208 #1228 #1241 #1213 #1242 #1253 #1257
+  #1258 (+ seat PR#1248 authored/landed). Wave-1 themes #1163/#1164/#1165 all closed; router
+  Goal #1231 G1–G5 complete; wave 2 burned to #1240+#1256.
+- FINDINGS fixed en route: FU-171 3rd resight (reviewer token died mid-31-min review; 46-min
+  pod-key stall) + tracker header repair; #1247 mermaid-lint npm storm killed at the tool
+  (PR#1248, MERMAID_LINT_NO_INSTALL) after the machine lane named the caller; pin-vacuity
+  gate's documented mode:suite exclusion ENFORCED (operator-direct 33c6f547 — the gate ran
+  suites against the PR checkout, false-vacuous on every suite extension; #1225 leg 3);
+  #1242's bare-member walk queues containers/operator legs (#1249 filed, damper =
+  agent-fix-only on #1237/#1238/#1239 — level-triggered walk undid a bare un-queue within
+  the hour, verified damper holds); or-op NormalizeSecret deploy verified live on the legacy
+  Secret; #1136 closed on evidence.
+- LESSON (park economics, measured): every master move dismissed the sibling parks' approvals
+  — serial approvals (one park at a time, re-approve at re-park) kept the churn machine-only;
+  the #887 updater-skip clause is the durable fix.
