@@ -5622,11 +5622,19 @@ data: [DONE]
     # a budget defer — exactly FU-202's re-mint→redispatch timing. With the fix, the budget
     # check triggers a cache punch + fresh resolve, which returns H2, the mismatch fires,
     # and the entry is treated as a cache miss (fail-open → dispatch).
-    # We monkeypatch _resolve_ref to simulate the re-mint (H2) because the test environment
-    # has no k8s API — the fresh resolve after the cache punch would otherwise fail.
+    # We monkeypatch _resolve_ref with a call-order-aware mock: the first call (the #1260 hash
+    # comparison, which reads through the stale _refs cache) returns H1; the second call (after
+    # the cache punch) returns H2. This exercises the actual cache-punch code path — without
+    # call-order awareness, a mock that always returns H2 makes the first comparison already
+    # mismatch, and the budget-exhausted check (and thus the punch) is never reached (vacuous).
     stale_ref = "default/test-headroom-stale-cache"
     _resolve_ref_saved = _resolve_ref
+    _resolve_call_count = 0
     def _mock_resolve_ref(ref):
+        nonlocal _resolve_call_count
+        _resolve_call_count += 1
+        if _resolve_call_count == 1:
+            return {"key": "test-key", "hash": "H1", "kind": "openrouter", "guardrail": "", "has_cr": True}
         return {"key": "test-key", "hash": "H2", "kind": "openrouter", "guardrail": "", "has_cr": True}
     try:
         globals()['_resolve_ref'] = _mock_resolve_ref
