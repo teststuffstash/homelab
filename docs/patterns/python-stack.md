@@ -43,6 +43,23 @@ Why the cache and the proxy are complementary, not redundant: uv's cache stores 
 still pays unpack per job (~10–20 s) but serves the untrusted lane and the miss path, and removes
 the WAN/PyPI-429 dependency (the FU-196 argument, transplanted).
 
+## Internal Python tools ship as WHEELS — images optional
+
+The default publishing rail (ghcr image per tag) produces an artifact the tool's actual
+consumers cannot run: CI jobs on ARC ephemeral runners have **no docker daemon**. Ship a release
+wheel instead and consume it with uv. Worked example (allure-behavior-snippets v0.3.1,
+2026-09-02): a 21s `release-wheel` workflow (`pipx run build` + `gh release create`), consumed as
+`uv run --no-project --with <release-wheel-url> <console-script>` — one cacheable artifact, deps
+resolve with it, existing git/ghcr tags untouched.
+
+## `docker build` and non-Hub `FROM`s
+
+dockerd's `registry-mirrors` is **Hub-only** — a `FROM ghcr.io/...` in your Dockerfile pulls
+direct WAN on every layer-cache miss, whatever the mirror family covers for containerd. Don't
+absorb that with per-repo retry loops or `ARG`-parameterized FROMs: the fleet fix is BuildKit
+per-registry mirrors in the runner's `buildkitd.toml` (homelab#1308). Until it lands, know the
+flake class exists.
+
 ## S3 publishing against Garage
 
 - Always set explicit `--max-workers` on mc transfers — autodetect serializes to ~1 object/s
