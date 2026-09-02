@@ -739,9 +739,9 @@ render_env_card() {
   # WHY: version skew — production serves the pinned release over the released corpus; a worktree
   # runs HEAD. Name the pin so a prod/worktree behavioral diff is interpretable rather than mysterious.
   # Both lines are gated on the MCP knob being present AND the harness actually attaching the
-  # config (no MCP = no feedback tool to direct). The opencode arm never attaches an MCP server
-  # (#1039 non-goal), so the card must not claim the tool is available on that harness.
-  if [ -n "${MCP_ENDPOINT:-}" ] && [ "$HARNESS" != "opencode" ]; then
+  # config (no MCP = no feedback tool to direct). All three harnesses (claude, goose, opencode)
+  # now attach MCP (#1276), so the card claims the tool is available on any harness with the knob.
+  if [ -n "${MCP_ENDPOINT:-}" ]; then
     printf '%s\n' "- **Feedback tool: available** (harness: ${HARNESS}, model: ${MODEL}). File structured feedback using the MCP tool — the harness and model above are stamped by the launcher, not self-reported."
     printf '%s\n' "- **Version skew:** Production serves ${AGENT_BASE_IMAGE##*:} (pinned release); this worktree runs HEAD. If behavior differs from production, the pin is the reference."
   fi
@@ -1044,8 +1044,8 @@ if [ -n "${RECIPE:-}" ]; then
   # client-side emit ceiling. The claude arm stays untouched — the var is goose's.
   # >>>REPLAY:harness-run-cmd>>>
   # ── MCP attach (#1041): render the claim knob into each harness's REAL attach interface ─────
-  # Rendered only when the stack declares spec.mcp.endpoint. The two harnesses take an MCP server
-  # differently, and neither takes the shape #1041 first shipped (oracle-fleet#330 r1+r2, 2026-09-01:
+  # Rendered only when the stack declares spec.mcp.endpoint. The three harnesses take an MCP server
+  # differently, and none took the shape #1041 first shipped (oracle-fleet#330 r1+r2, 2026-09-01:
   # goose rejected `--mcp-config` outright; claude ignored the `CLAUDE_CODE_MCP_CONFIG` env var —
   # it does not exist — so the file was written and never loaded; both verified against the
   # agent-base pins goose-cli 1.47.0 / claude-code 2.1.245):
@@ -1054,24 +1054,32 @@ if [ -n "${RECIPE:-}" ]; then
   #           /tmp/mcp-config.json (MCP_PRELUDE); tools need no allowlist under
   #           --dangerously-skip-permissions.
   #   goose:  `--with-streamable-http-extension <URL>` — the URL rides the CLI directly, no file.
+  #   opencode: `OPENCODE_CONFIG` env var — the MCP server config is deep-merged into the session
+  #             config JSON at /tmp/opencode-session.json (MCP_OPENCODE_CONFIG_JSON), in opencode's
+  #             own {"mcp":{<name>:{type:"remote",url:...}}} shape (#1276, proven against pinned
+  #             opencode 1.18.21 via `opencode mcp add` on 2026-09-02).
   # spec.mcp.tools is the ENV CARD's line (what the ride is told it has), not a harness input —
-  # it is still parsed here so an unparseable knob degrades loudly to no attach on both arms
+  # it is still parsed here so an unparseable knob degrades loudly to no attach on all three arms
   # (same guard as the reviewer arm); an aborted launcher here is fleet-wide, so this sibling
   # must never be the one that keeps set -e alive.
   # ⚠ This block sits INSIDE the replay region because replay clauses run self-contained — a shared
   # helper defined at the script top is invisible to them (proven by RC-127). MCP_PRELUDE,
-  # MCP_CONFIG_B64 and MCP_GOOSE_FLAG are consumed by the case arms below, inside the same region.
-  MCP_PRELUDE=""; MCP_GOOSE_FLAG=""
+  # MCP_CONFIG_B64, MCP_GOOSE_FLAG and MCP_OPENCODE_CONFIG_JSON are consumed by the case arms
+  # below (or the opencode-session-config block), inside the same region.
+  MCP_PRELUDE=""; MCP_GOOSE_FLAG=""; MCP_OPENCODE_CONFIG_JSON=""
   if [ -n "${MCP_ENDPOINT:-}" ]; then
     MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" '{mcpServers: {"stack-mcp": {type: "http", url: $url}}}' 2>/dev/null)" || MCP_CONFIG_JSON=""
-    if [ -n "$MCP_CONFIG_JSON" ]; then
+    MCP_OPENCODE_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" '{mcp: {"stack-mcp": {type: "remote", url: $url}}}' 2>/dev/null)" || MCP_OPENCODE_CONFIG_JSON=""
+    if [ -n "$MCP_CONFIG_JSON" ] && [ -n "$MCP_OPENCODE_CONFIG_JSON" ]; then
       MCP_CONFIG_B64="$(printf '%s' "$MCP_CONFIG_JSON" | base64 -w0)"
       MCP_PRELUDE="printf '%s' '${MCP_CONFIG_B64}' | base64 -d > /tmp/mcp-config.json; "
       # @sh-quoted: the endpoint is an unconstrained XRD string and RUN_CMD runs under bash -lc in
       # the pod — a raw '${MCP_ENDPOINT}' inside single quotes would let a literal ' break out
-      # (reviewer catch, PR#1186). The claude arm never touches the shell with it (jq --arg).
+      # (reviewer catch, PR#1186). The claude arm never touches the shell with it (jq --arg) and
+      # the opencode arm embeds it via jq --arg into the config JSON.
       MCP_GOOSE_FLAG=" --with-streamable-http-extension $(printf '%s' "$MCP_ENDPOINT" | jq -Rr @sh)"
     else
+      MCP_OPENCODE_CONFIG_JSON=""
       echo "agent-session: MCP tools knob unparseable — dispatching WITHOUT MCP attach" >&2
     fi
   fi
@@ -1104,7 +1112,7 @@ if [ -n "${RECIPE:-}" ]; then
   case "$HARNESS" in
     claude) RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}claude -p --model ${_claude_model}${MCP_CONFIG_B64:+ --mcp-config /tmp/mcp-config.json} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
     goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}${MCP_GOOSE_FLAG}";;
-    opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP not wired: explicit non-goal of #1039 — opencode's MCP config mechanism is unknown for this pinned image, and enforced-egress rides never default to opencode per homelab#990
+    opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP wired via OPENCODE_CONFIG (merged into /tmp/opencode-session.json in the opencode-session-config block above) — #1276
   esac
   # <<<REPLAY:harness-run-cmd<<<
 fi
@@ -1503,6 +1511,16 @@ if [ "$HARNESS" = "opencode" ]; then
     OC_CONFIG="$(jq -cn --argjson base "${OC_CONFIG:-null}" '
       ($base // {"$schema": "https://opencode.ai/config.json"})
       * {mode: {autoApprove: {permission: {}, options: {}}}}')"
+  fi
+  # homelab#1276: merge the MCP server config into the opencode session config when the stack
+  # declares spec.mcp.endpoint. The opencode config format uses a top-level "mcp" key with
+  # {type: "remote", url: ...} — proven against the pinned binary (opencode 1.18.21) via
+  # `opencode mcp add` on 2026-09-02. MCP_OPENCODE_CONFIG_JSON is set in the MCP attach block
+  # above (harness-run-cmd replay region) when MCP_ENDPOINT is non-empty and parseable.
+  if [ -n "${MCP_OPENCODE_CONFIG_JSON:-}" ]; then
+    OC_CONFIG="$(jq -cn --argjson base "${OC_CONFIG:-null}" --argjson mcp "$MCP_OPENCODE_CONFIG_JSON" '
+      ($base // {"$schema": "https://opencode.ai/config.json"}) * $mcp')"
+    echo "→ opencode MCP server attached: stack-mcp (remote, ${MCP_ENDPOINT})"
   fi
   if [ -n "$OC_CONFIG" ]; then
     # base64 keeps the JSON inert through the bash -c → jq -Rs → pod-yaml quoting layers.
