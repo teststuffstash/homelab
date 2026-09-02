@@ -2826,9 +2826,14 @@ class Proxy(BaseHTTPRequestHandler):
             caller = _token_review(auth[len("Bearer "):]) if auth.startswith("Bearer ") else None
             expected = f"system:serviceaccount:{ns}:agentstack-loop"
             token_value = None
-            if ns.endswith("-agents") and caller == expected and role in ("coordinator", "reviewer"):
+            # role → secret-name prefix. "intake" (homelab#1095/ADR-119) is the issues-only
+            # homelab token for cross-boundary dedup-and-extend; same TokenReview + label belt.
+            _loop_roles = {"coordinator": "loop-git",
+                           "reviewer": "loop-reviewer-git",
+                           "intake": "loop-intake-git"}
+            if ns.endswith("-agents") and caller == expected and role in _loop_roles:
                 stack = ns[: -len("-agents")]
-                name = f"loop-git-{stack}" if role == "coordinator" else f"loop-reviewer-git-{stack}"
+                name = f"{_loop_roles[role]}-{stack}"
                 token_value = _resolve_loop_git(name, ns)
             elif caller != expected:
                 log(f"GET /loop-git-token ns={ns} → 403 (caller={caller or 'unauthenticated'})")
