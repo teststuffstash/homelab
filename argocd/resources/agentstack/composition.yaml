@@ -405,6 +405,61 @@ spec:
                       kind: GithubAccessToken
                       name: loop-reviewer-git-{{ $stack }}-gen
             ---
+            # homelab#1095 / ADR-119: the PLATFORM-INTAKE token — issues-only WRITE on homelab, so a
+            # stack coordinator can dedup-and-extend platform issues (comment/edit/label/reopen) per
+            # the cross-boundary filing contract instead of only creating fresh ones (how duplicate
+            # evidence issues start). A SEPARATE token because an installation token carries ONE
+            # permissions map for ALL its repositories — widening loop-git's repo list would hand
+            # stack loops contents/actions:write on the platform repo, which the airlock forbids.
+            # Rendered for every perStack stack uniformly (the platform stack's own loop-git already
+            # covers homelab; its intake token is redundant but harmless).
+            apiVersion: generators.external-secrets.io/v1alpha1
+            kind: GithubAccessToken
+            metadata:
+              name: loop-intake-git-{{ $stack }}-gen
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-intake-git-gen
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              appID: "4150968"       # homelab-agents App — issues:write exists at App level
+              installID: "142724430"
+              auth:
+                privateKey:
+                  secretRef: { name: agents-github-app, key: privateKey }
+              permissions:
+                issues: write        # the WHOLE grant — no contents, no PRs, no actions
+              repositories:
+                - homelab
+            ---
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: loop-intake-git-{{ $stack }}
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-intake-git-es
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              refreshInterval: 45m
+              target:
+                name: loop-intake-git-{{ $stack }}
+                creationPolicy: Owner
+                template:
+                  engineVersion: v2
+                  metadata:
+                    labels:
+                      homelab.teststuff.net/loop-git-token: "true"
+                      platform.teststuff.net/loop-ns: {{ $loopns }}
+                  data:
+                    GH_TOKEN: {{ `'{{ .token }}'` }}
+              dataFrom:
+                - sourceRef:
+                    generatorRef:
+                      apiVersion: generators.external-secrets.io/v1alpha1
+                      kind: GithubAccessToken
+                      name: loop-intake-git-{{ $stack }}-gen
+            ---
             # THE one documented Secret exception in {{ $loopns }}: the WRITE-ONLY transcripts S3
             # key (append-to-bucket only — a leak cannot cross the stack boundary; git/subscription
             # creds stay ref/broker-only). Same rail as the fixer namespaces.
