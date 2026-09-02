@@ -161,6 +161,7 @@ is stale, so it cannot drift the way the prose register did.
 | `assembly-cr-dispatch-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-emit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-no-trailer` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-cr-themed-emit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `asvs` | suite | - | `-` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
