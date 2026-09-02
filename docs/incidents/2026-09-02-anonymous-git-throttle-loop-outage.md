@@ -55,8 +55,12 @@ wrong was merged. Secondary casualty: fleet#345 sat in the C4/C5 silent-stall li
   any open PR is invisible to both the stall wake and the review flip — needs a design ruling
   (wake with a distinguishing marker? age-bound the exclusion?). → filed as the next
   fu-sweep/board item; first sighting evidence is #345's timeline.
-- Anonymous-idiom sweep: `agent-session.sh`'s context clones (`_CTXU`, WARN-tolerant) are
-  helper-covered in-pod but the idiom deserves the same grep-audit #1136 should have run:
-  `grep -rn "git clone" agents/` with an auth story per site.
+- ~~Anonymous-idiom sweep~~ **EXECUTED same day** (`0c6d00f7`): the per-stack CronWorkflows are
+  **composition-rendered**, so #1136 never reached them — FOUR more anonymous sites in
+  `argocd/resources/agentstack/composition.yaml` (coordinate/review/janitor with GH_TOKEN one
+  line above; the prober with no token at all → soft broker fetch added). Found because ticks
+  KEPT failing after the `46c079cb` launcher fix — root cause 2 restated: the idiom lived in
+  three homes (wf files, launcher, composition) and each got fixed only when it burned.
+  `agent-session.sh`'s context clones remain helper-covered in-pod.
 - My PR#351 comment's wrong claim is corrected on-thread (asks-are-claims applies to the seat's
   own assertions — the design-agents-G1 class, self-caught late).
