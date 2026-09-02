@@ -329,6 +329,8 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-touches/undeclared` | actions | - | `agents/reviewer-session.sh` | - |
 | `route-request/labels` | actions | - | `agents/agent-session.sh` | - |
 | `route-request/workbranch-tight` | actions | - | `agents/agent-session.sh` | - |
+| `router-report-no-ref` | actions | - | `agents/agent-session.sh` | - |
+| `router-report-session-ref` | actions | - | `agents/agent-session.sh` | - |
 | `run-phase-metric/run-phase-metric` | actions | - | `agents/agent-session.sh` | - |
 | `scan-governance/non-dot-meta` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-governance/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
