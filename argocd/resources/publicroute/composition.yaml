@@ -135,7 +135,7 @@ spec:
                     proxied = true
                     ttl     = 1
                   }
-                  {{- /* Profile-specific resources — api shapes filled in (#1304), consumer shapes filled in (#1306) */}}
+                  {{- /* Profile-specific resources — api shapes filled in (#1304), consumer shapes filled in (#1305) */}}
                   {{- if eq $profile "api" }}
                   # --- api profile: per-IP rate limiting ---
                   # Renders a cloudflare_ruleset rate-limit rule on the zone for this hostname.
