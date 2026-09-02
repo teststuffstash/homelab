@@ -448,7 +448,10 @@ def record_generation(gen_id: str, requested_model: str, data: dict) -> bool:
 
 def record_provider_event(model: str, provider: str, status: int) -> None:
     """Passive data-plane observation: one row per forwarded OpenRouter chat/completions
-    response. `class` buckets the status for cheap aggregation."""
+    response. `class` buckets the status for cheap aggregation.
+    FU-186 step 1: strip :exacto suffix so cooldown/breaker bookkeeping is keyed under the
+    bare model id — the same id the /route eligibility loop filters candidates against."""
+    model = model.removesuffix(":exacto")
     klass = ("2xx" if 200 <= status < 300 else
              "429" if status == 429 else
              "4xx" if 400 <= status < 500 else
@@ -2213,6 +2216,31 @@ def self_test() -> int:
         f"coding with provider_policy=exacto must append :exacto: {_exacto}"
     assert _exacto.get("provider_policy") == "exacto", \
         f"decision must echo provider_policy: {_exacto}"
+    _classes.clear()
+    _classes.update(copy.deepcopy(_saved_classes))
+    # (c) NON-VACUOUS: cooldown/breaker bookkeeping under the BARE id, not the :exacto-suffixed id.
+    #     This assertion goes RED against the pre-fix source (where or_model kept the suffix) and
+    #     GREEN after the fix (openrouter-proxy.py strips :exacto from the bookkeeping key).
+    _classes["classes"]["coding"]["provider_policy"] = "exacto"
+    _exacto2 = route(dict(base), CTX)
+    _exacto_model = _exacto2["model"]  # e.g. "inclusionai/ling-3.0-flash:free:exacto"
+    _bare_model = _exacto_model.removesuffix(":exacto")  # e.g. "inclusionai/ling-3.0-flash:free"
+    # Trip a cooldown using the model as it arrives on the completion path (suffixed).
+    for _ in range(8):
+        record_provider_event(_exacto_model, "novita", 429)
+    # The cooldown must be keyed under the BARE id — the same id the /route eligibility loop
+    # filters candidates against. The suffixed id must NOT appear in active_cooldowns.
+    assert cooldown_note(_bare_model, 429, role="worker") == "tripped", \
+        f"cooldown must be keyed under bare id {_bare_model}, not suffixed {_exacto_model}"
+    assert _bare_model in active_cooldowns(role="worker"), \
+        f"bare model {_bare_model} must be in active_cooldowns"
+    assert _exacto_model not in active_cooldowns(role="worker"), \
+        f"suffixed model {_exacto_model} must NOT be in active_cooldowns"
+    # Clear the cooldown so it doesn't pollute subsequent tests.
+    for _ in range(8):
+        record_provider_event(_bare_model, "novita", 200)
+    assert cooldown_note(_bare_model, 200, role="worker") == "cleared", \
+        f"cooldown must clear for {_bare_model}"
     _classes.clear()
     _classes.update(copy.deepcopy(_saved_classes))
     # free model starts 429ing: burst past min_events/bad_share trips a cooldown
