@@ -1,3 +1,4 @@
-OUT DISPATCH #849d (homelab, base=master)
+OUT ORPHAN [homelab] ⏳ BLOCKPARK budget (10 codeowner-parked PRs against master ≥ cap 5 — FU-199):
+OUT ORPHAN   issue #849d — master-based issue with collision base
 OUT REACHED: end
 RC 0
