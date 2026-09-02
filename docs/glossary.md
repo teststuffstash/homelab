@@ -51,8 +51,6 @@ mission) would drown the check in false positives and stay judgment-lint territo
 | **e2e** | reserved for the ACTUAL target environment (synthetic production traffic) — not the kind gate | same ruling |
 | **registry (first-party)** | the push-mode in-cluster OCI registry `registry.teststuff.net` (ADR-121) — first-party artifacts pushed at release (the ert-corpus class). ⛔ distinct from the pull-through **registry mirrors** (ADR-091, `registry-cache` ns), which proxy upstreams and are never pushed to | `argocd/resources/registry/` (manifest headers carry the design); ADR-121 |
 | **diff-ci** | the local pre-flight: `devbox run diff-ci` runs only the CI gates the current diff can affect, from the path→task map in `scripts/diff-ci.sh` — the ONE HOME ci.yaml's skip step eval-extracts its trigger regexes from (#518, flip live 2026-08-31). CI stays authoritative; PR-context gates (pin-only/governance/ratchet) run only there | [`ci.md`](ci.md) |
-| **consumer** (PublicRoute profile) | the route class for browser-facing websites: edge caching defaults on, RUM/client telemetry available, challenges legal. Selected by `profile: consumer` on the claim | [`cloudflare.md`](cloudflare.md) §Built mechanism; XRD: `argocd/resources/publicroute/xrd.yaml` |
-| **api** (PublicRoute profile) | the route class for machine-facing endpoints: per-IP rate limiting ON, structured 429 on limit, NO challenge-shaped mitigations, CORS/preflight at the edge. Selected by `profile: api` on the claim | [`cloudflare.md`](cloudflare.md) §Built mechanism; XRD: `argocd/resources/publicroute/xrd.yaml` |
 
 ## Pending renames (recorded here, executed by the FU-163 sweep)
 

@@ -198,28 +198,37 @@ spec:
                   # Edge-owned CORS headers + preflight handling from the claim's origins
                   # allow-list (.spec.origins). Empty/absent means no CORS restriction at
                   # the edge — the origin controls its own CORS policy.
-                  # Preflight: respond to OPTIONS with 204 (no origin round-trip).
+                  # Preflight: the edge enforces the allow-list (a preflight from an origin
+                  # outside .spec.origins is rejected here with a structured 403); an ALLOWED
+                  # preflight reaches the origin, which answers it — the Ruleset Engine cannot
+                  # synthesize a 2xx, so an edge-terminated 204 would need a Worker/Snippet +
+                  # a cf-api-proxy allowlist entry (Goal #1302 acceptance 5), deliberately not
+                  # in this change.
                   {{- if $xr.spec.origins }}
                   resource "cloudflare_ruleset" "cors_preflight" {
                     zone_id  = local.zone_id
                     name     = "PublicRoute {{ $host }} CORS preflight"
                     kind     = "zone"
                     phase    = "http_request_firewall_custom"
-                    {{- range $i, $origin := $xr.spec.origins }}
                     rules {
-                      ref        = "preflight_{{ $i }}"
-                      action     = "block"
-                      expression = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and http.request.headers.origin eq \"{{ $origin }}\")"
+                      ref         = "preflight_disallowed_origin"
+                      action      = "block"
+                      description = "api profile: reject CORS preflight from origins outside the claim allow-list"
+                      expression  = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and not http.request.headers[\"origin\"][0] in { {{- range $xr.spec.origins }} \"{{ . }}\"{{ end }} })"
                       action_parameters {
                         response {
-                          status_code  = 204
-                          content_type = "text/plain"
-                          content      = ""
+                          status_code  = 403
+                          content_type = "application/json"
+                          content      = jsonencode({
+                            success  = false
+                            errors   = [{ code = 10403, message = "origin not allowed" }]
+                            messages = []
+                            result   = null
+                          })
                         }
                       }
                       enabled = true
                     }
-                    {{- end }}
                   }
                   # CORS response headers: set Access-Control-* on matching origins.
                   resource "cloudflare_ruleset" "cors_headers" {
@@ -231,7 +240,7 @@ spec:
                     rules {
                       ref        = "cors_headers_{{ $i }}"
                       action     = "rewrite"
-                      expression = "(http.host eq \"{{ $host }}\" and http.request.headers.origin eq \"{{ $origin }}\")"
+                      expression = "(http.host eq \"{{ $host }}\" and http.request.headers[\"origin\"][0] eq \"{{ $origin }}\")"
                       action_parameters {
                         headers {
                           name      = "Access-Control-Allow-Origin"
