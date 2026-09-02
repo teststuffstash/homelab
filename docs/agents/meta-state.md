@@ -8,6 +8,49 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-02 OPERATOR SITTING WIND-DOWN (~09:30Z) — batch-1 verdicts + G-B rulings + two
+  grants landed (TICK-LOG entry has the arc). The fresh-session pickup set:**
+  - **Verdicts applied**: #1039 + #775 `goal/validated` (operator via seat; #778 released to
+    FU-181). VERIFY next session: the IL-T19 close sweeps actually closed both trees.
+    **#1162 holds ~24h**: validate when #1247's soak-to-zero reads clean (~09-03; drops were
+    0/4h at 06:30Z); its close sweep disposes store entries 28–30 + bucket #1170/#1200.
+  - **#818 HELD with a posted verdict condition** (4 clauses on the goal): teeth drills DEFERRED
+    to oracle's production launch (first-week no-users experimentation window, operator ruling);
+    lens posture RULED advisory-steady-state (roles.md §Lenses; future = MORE oft-triggering
+    lenses); responder = shadow (#1274 → PR#1278 MERGED, REMEDIATION-WOULD live — read STACK
+    rows only; oracle-first arming later); prober = #1275 (S3 sink, queued) → oracle-fleet#344
+    (class-1 adoption, blockedBy #1275 — the rollout-procedure PILOT; #289 closed re-homed).
+    Class-2 stays operator-manual (consumer-model cells, GPT-5.2-Luna-class).
+  - **#1095 grant LIVE + PROVEN**: PR#1287 merged — per-stack `loop-intake-git-*` (issues-only
+    on homelab, role=intake); proof comment on #1095 posted WITH oracle's own intake token.
+    #1288 queued (env-dependent proxy self-test — false-red in jail runs, the FU-153 class).
+  - **opencode MCP arm MERGED (PR#1284) + live canary PASSED** (1.18.21 × shipped config ×
+    live oracle server, statute round-trip — evidence on #1276). Harness matrix closed on all
+    three → **the dispatch-declared `requires:` FU is now sanctioned to file** (operator's
+    conditional — next session files it). ⚠ INCIDENT owned: the seat's first canary attempt
+    deleted live pod `agent-oracle-fleet-issue-321-r2` (newest-pod pick after a refused
+    dispatch) — attribution comment on #321; loop re-dispatches; never delete a pod you did
+    not verifiably create.
+  - **ADR-103 gate false-positive class CLOSED** (operator-direct `326ce6e7`): comment-only
+    diffs exempt (#1215), stacked-base = warn-never-verdict (#1225 faces 1+2), contract doc'd
+    in workflow.md; #1215/#1225 closed, **#1224 (parts-coverage) = the remaining item, future
+    operator sitting**. `#1255 done` — `.agents/build.yaml` on master (`a0fc3347`).
+  - **#1280 HELD-FOR-EVIDENCE** (operator: kind-timing suspicion needs a distribution first);
+    **#1286** (ci-cause marker + ledger column — the CI-failure database leg) queued.
+  - **/handoff ×2 processed → done/**: e2e-blind-rounds → #1280 + #1281(closed, re-routed
+    stack-side Allure) + ar#116 (stale-evidence check); ghcr mirror BOUNCED (poisoned blob now
+    200) + #1282 queued (narrowed to alert+runbook).
+  - **Oracle**: #345's bolded `**Touches:**` repaired (was serializing the repo — #347 held,
+    #348 behind its edge); **#1294 queued** (TOUCHES-MALFORMED scan detector, the G4 surface
+    fix). ⚠ MERGE ORDER: #347 → #348 land into `goal/326-dashboard-as-code` FIRST, then the
+    operator's codeowner merge of assembly PR#346 (bot-approved, parked) — merging early
+    strands their `Base:` at a dead ref (the #211 class).
+  - **Riding at wind-down**: #1268/PR#1273 review cycle (round ~6, nearing the 8-verdict
+    arbitration ceiling — un-armed human-merge tier, the seat merges at green+approved);
+    queued rides #1222 #1282 #1286 #1288 #1294 + #1275 flowing on the platform loop.
+  - **Tracker debt for the next sweep** (goals-first plan now discharged): 81 open FUs,
+    6 OVERSIZE, 17 stale-archive entries; FU-200/201/202 archive candidates; then
+    board→fu→docs pipeline (last full run 08-25).
 - **⚑ 2026-09-02 ~05:15Z WIND-DOWN — WAVE 2 + ROUTER GOAL MACHINE SET BOTH COMPLETE (the
   unattended corpus session, ~8h).** Belts assembly **PR#1272 MERGED** (seat-opened under the
   manual pilot — checkpoint store sat 2<5, the S8 delta-4 gap; one surface-widening round =
