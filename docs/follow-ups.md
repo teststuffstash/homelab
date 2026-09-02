@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-205** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-206** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -106,6 +106,20 @@ six OVERSIZE items pointer-ized into
       super admin today, signups disabled).
 
 ## GitOps & platform
+
+- [ ] **FU-205** — **WAN-upstream accounting: one view of what hits GitHub/PyPI/ghcr/… from
+      where** (operator ask 2026-09-02, after two same-day WAN-limit incidents: ghcr stream
+      kills → ADR-121, and the anonymous-git 401 throttle → the loop outage postmortem). No
+      FU/ADR covers it (grepped netflow|ipfix|ntopng|insight). Inventory verified live: OPNsense
+      **NetFlow v9 capture ACTIVE on all ifaces + Insight aggregators syncing** (per-src totals
+      300s, per-src details daily) — the router already sees every WAN flow, **no VLAN needed
+      for visibility** (source-IP filtering suffices; a VLAN is a policy/isolation decision,
+      separate); Hubble already exports per-namespace DNS intent + FQDN-labeled drops; the
+      github-exporter already exports per-identity `github_rate_limit_remaining`. Next concrete
+      action: a small design pass picking (a) NetFlow v9 export → in-cluster collector
+      (goflow2-class) → Prometheus with a dst-CIDR→provider map (github meta CIDRs, PyPI,
+      ghcr/Fastly), vs (b) querying Insight's aggregates directly; plus a Grafana "WAN
+      dependencies" board joining all three sources. Link: the incident postmortem §Residuals.
 
 - [ ] **FU-204** — **C4/C5's bare-mention exclusion is a silent-stall limbo** (2026-09-02, first
       live sighting: fleet#345 — its r1 died on a model rate-limit, the label stayed
