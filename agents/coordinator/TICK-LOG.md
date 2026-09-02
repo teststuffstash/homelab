@@ -6366,3 +6366,34 @@ first live ADR-110 maintenance session before the ADR existed.
   PR#346 (Base strands at the squash).
 - Board triage of the operator's five: #1222 queued, #1282 queued-narrowed, #1255 fixed-here,
   #1224 left (operator sitting), #1095 → the grant above.
+
+## 2026-09-02 ~09:10–12:00Z — NodeSystemSaturation(wk-01) → ADR-121 first-party registry, same day (operator-attended seat)
+
+- **Page triage** (wk-01 load 6.5/core): mirror-ghcr cold-proxying the 6.4GB `ert-corpus` layer
+  post-bounce — ghcr killed the stream 3 laps (`PROTOCOL_ERROR` at 3.0/5.5/4.0GB → 500 →
+  containerd restarts from zero), mirror+puller+2 agent rides co-located on the 4-core VM.
+  Evidence → #1282 comment. Rollout un-wedged by cordon+delete (pod → thinkcentre); ghcr then
+  throttled ~300KB/s (~25GB of failed pulls); rollout eventually self-recovered ~11:0x.
+- **Side finding** (operator Q → #351 comment): GitHub 401s ANONYMOUS git upload-pack POSTs
+  from our WAN IP, IP-wide (torvalds/linux repro; info/refs stays 200) — killed oracle-fleet
+  PR#351's snippets clone (stderr-swallowed exit 128). Loop pods unaffected (credential
+  helper, agent-base entrypoint). Hardening guidance left on #351.
+- **Operator: "do v1 right now"** → ADR-121 shipped same-session (PR#1296 + 3 quickfixes):
+  registry:3 on Garage s3 (bucket 20Gi, loki-shape Workspace), nginx per-method auth
+  (anonymous pull / authed push — operator rulings incl. HTTPS-no-insecure-registry),
+  `registry.teststuff.net` = 3.33↔40.33 (acme+haproxy applied+verified, FRR intact).
+  Live-deploy lessons, each a direct-lane quickfix: (1) registry:3 debug server squats :5001
+  (nginx port collision); (2) `/v2/` ping MUST 401-challenge or containers/image never sends
+  creds; (3) RELATIVEURLS or the https pusher's PATCH lands on the OPNsense GUI :80 (413).
+  Consumer side: oracle-fleet PR#352 dual-push MERGED (loud-skip until operator sets
+  `REGISTRY_PUSH_TOKEN` Actions secret); oracle-iac pin flip staged (unpushed, gated on seed).
+  FU-196 v1 SHIPPED noted in tracker; FU-203 (retention) filed; glossary/SERVICES/ip-plan rows.
+- **Seed saga (open at entry time)**: 6.4GB streams clean, commit-time multipart copy fails —
+  Garage `Missing block` (dedup'd blocks × deletions from killed attempts racing; resync queue
+  4.5k→9.9k = single throttled worker reaping my debris). Debris cleared, worker tuning
+  bumped ephemerally (count 4 / tranq 1), drain-gated retry armed. Also: infisical-secret
+  `$`-mangling found (htpasswd stored corrupt; `{SHA}` workaround + script-header warning).
+- **PR#1292 codeowner gate read** (operator-pointed, corpus waived): APPROVED+auto-merged
+  (11:00Z). Alert craft excellent; ONE accepted gap — probes `/v2/`, but #1282's signature is
+  blob-500-while-/v2/-200 (live-proven all morning) and the operator's narrowing said "known
+  blob path" — filed #1297 (metrics leg preferred, DEBUG_ADDR precedent now in-repo).
