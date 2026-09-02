@@ -31,21 +31,18 @@ Files: `argocd/resources/publicroute/{xrd,composition}.yaml` (+ `example-claim.y
 the shape), app `argocd/platform/publicroute.yaml`, provider secret
 `argocd/resources/crossplane/cloudflare-ingress-externalsecret.yaml`.
 
-**Predicted shape — per-route API-vs-website classes (operator direction, 2026-08-12; not built,
-recorded so the build lands here and not ad hoc):** every shipped public hostname is one of two
-kinds, and the claim should say which — an **API** route (e.g. `mcp.minutark.ee`) or a
-**website** route (e.g. `www.minutark.ee`) — with the composition fanning out class-appropriate
-edge defaults the way ADR-101's zone classes fan out zone defaults. API class: an OpenAPI schema
-URL wired into Schema validation 2.0 (**all plans since ~2026-08**, live-verified on the free
-zone; ⚠ free validates bodies ≤1 KB only — oversize bypasses the action, so app-side validation
-stays the gate; OAS v3.0 only), and NEVER challenge-shaped mitigations (captchas/managed
-challenges are browser interstitials a machine client structurally cannot solve — the reason
-Bot Fight Mode was declined, generalized to a class invariant). Website class: cache/speed posture (edge caching rules,
-maybe RUM per the pages-exist ruling) and challenge-shaped mitigations become legal. The
-quick-start wizard's zone-wide knobs (Bot Fight Mode, client-side security, leaked-credentials,
-speed optimizations) were DECLINED 2026-08-12 precisely because they cannot see this split —
-zone-wide toggles are the wrong altitude; the class default is per-route, in the claim.
-Naming + XRD field shape land with the build (glossary row in the coining commit, FU-163).
+**Built mechanism — per-route profile classes (built #1303-#1307, 2026-09-02):** every shipped
+public hostname carries a `profile` field (`consumer` | `api`, REQUIRED — no default on the
+object, the 2026-07-16 API-server-stamp lesson) that selects which class defaults the
+composition fans out — the way ADR-101's zone classes fan out zone defaults. **api** profile:
+per-IP rate limiting ON (threshold from claim field `.spec.rateLimit.threshold`, default 1200/min,
+bounds 60-6000), structured 429 JSON body a machine client can parse, NO challenge-shaped
+mitigation reaches the route (Skip rule on the zone's `http_response` phase), and CORS/preflight
+owned at the edge from the claim's `origins` allow-list. **consumer** profile: edge caching
+defaults on (respect-origin, 1h default TTL), RUM/client telemetry available here only,
+challenges legal. The XRD field shape (`profile`, `rateLimit`, `origins`) landed with #1303;
+the composition shapes landed with #1304 (api) and #1306 (consumer). Glossary rows: FU-163
+coining commit.
 
 **Completion state (2026-08-08):**
 
@@ -55,7 +52,7 @@ Naming + XRD field shape land with the build (glossary row in the coining commit
 | Armed — `CLOUDFLARE_INGRESS_WRITE` minted+stored, ESO synced, provider pod carries it in-process | ✅ (verified by exec) |
 | First consumer — the minutark placeholder claim (oracle-iac) landed 2026-08-12 (§Zone classes); the operator-witnessed echo/test claim is still the FU-039 next act | 🟡 |
 | `ha.teststuff.net` retrofit = consumer #2 (retires `tofu/cloudflare/` + the write-key) | ☐ operator-witnessed, after the test claim |
-| Zone-phase ruleset aggregation (cache rules / api-no-challenge Skip) | ☐ deliberately deferred until ≥ consumer #2 (the ≥2-projects rule) |
+| Zone-phase ruleset aggregation (cache rules / api-no-challenge Skip / CORS) | ✅ built (#1303-#1307); per-zone safe on minutark.ee (product zone, one owner) |
 | Product zones (a claim owning a whole zone, e.g. the IdP/oracle-sales domains) | ☐ future — §Zone classes |
 
 Until a claim exists, the capability is machinery with the switch on: rendering, credential

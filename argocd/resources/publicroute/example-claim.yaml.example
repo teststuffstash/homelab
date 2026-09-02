@@ -3,7 +3,9 @@
 # arms CLOUDFLARE_INGRESS_WRITE in Infisical.
 #
 # v1alpha2: profile field is REQUIRED (no default on the object). consumer = edge caching on,
-# challenges legal. api = per-IP rate limiting, no challenge-shaped mitigations.
+# challenges legal. api = per-IP rate limiting, no challenge-shaped mitigations, CORS at edge.
+---
+# Consumer profile example: edge caching on, challenges legal.
 apiVersion: platform.teststuff.net/v1alpha2
 kind: PublicRoute
 metadata:
@@ -15,3 +17,22 @@ spec:
   backend:
     service: podinfo.default.svc.cluster.local.
     port: 9898
+---
+# Api profile example: per-IP rate limiting, no challenges, CORS at edge.
+apiVersion: platform.teststuff.net/v1alpha2
+kind: PublicRoute
+metadata:
+  name: mcp
+  namespace: oracle-fleet
+spec:
+  profile: api
+  hostname: mcp.minutark.ee
+  backend:
+    service: oracle-gateway.oracle-fleet.svc.cluster.local.
+    port: 8080
+    protocol: https
+  rateLimit:
+    threshold: 1200
+  origins:
+    - https://app.minutark.ee
+    - https://dashboard.minutark.ee

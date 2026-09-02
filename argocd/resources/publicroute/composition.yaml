@@ -14,9 +14,10 @@
 # which class defaults the composition renders — the way ADR-101's zone classes fan out zone
 # defaults (docs/cloudflare.md §Predicted shape). For v1alpha1 claims (legacy, no profile), the
 # composition defaults to consumer-class rendering for backwards compatibility.
-# ⚠ Rendering of profile-specific resources is skeletal — the full resource shapes land with
-# later children (#1304-#1307). The FIELD contract and the fan-out seam are what this change
-# delivers.
+# ⚠ Rendering of profile-specific resources: api-profile shapes (rate-limit rule with
+# structured 429, no-challenge Skip, CORS/preflight) are filled in (#1304). Consumer-profile
+# shapes (edge caching) are filled in (#1306). The FIELD contract and the fan-out seam are
+# what #1310 delivered.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
@@ -134,13 +135,12 @@ spec:
                     proxied = true
                     ttl     = 1
                   }
-                  {{- /* Profile-specific resources — skeletal; full shapes land with #1304-#1307 */}}
+                  {{- /* Profile-specific resources — api shapes filled in (#1304), consumer shapes filled in (#1306) */}}
                   {{- if eq $profile "api" }}
                   # --- api profile: per-IP rate limiting ---
                   # Renders a cloudflare_ruleset rate-limit rule on the zone for this hostname.
-                  # Threshold from claim field .spec.rateLimit.threshold (default 1200/min).
-                  # Structured 429 response body a machine client can parse.
-                  # Full shape: #1304 (rate-limit rule resource).
+                  # Threshold from claim field .spec.rateLimit.threshold (default 1200/min,
+                  # bounds 60-6000). Structured 429 response body a machine client can parse.
                   resource "cloudflare_ruleset" "rate_limit" {
                     zone_id  = local.zone_id
                     name     = "PublicRoute {{ $host }} rate limit"
@@ -175,7 +175,7 @@ spec:
                   # Ensures NO challenge-shaped mitigation (captcha/managed challenge) reaches
                   # this route. Zone-phase rulesets are per-phase-per-zone (ONE entrypoint per
                   # phase), so this Skip goes on the zone's http_response phase ruleset.
-                  # Full shape: #1305 (Skip rule resource).
+                  # The never-challenge invariant is part of #1304 (api profile deliverable).
                   resource "cloudflare_ruleset" "skip_challenge" {
                     zone_id  = local.zone_id
                     name     = "PublicRoute {{ $host }} skip challenge"
@@ -192,10 +192,75 @@ spec:
                       enabled = true
                     }
                   }
+                  # --- api profile: CORS/preflight ---
+                  # Edge-owned CORS headers + preflight handling from the claim's origins
+                  # allow-list (.spec.origins). Empty/absent means no CORS restriction at
+                  # the edge — the origin controls its own CORS policy.
+                  # Preflight: respond to OPTIONS with 204 (no origin round-trip).
+                  {{- if $xr.spec.origins }}
+                  resource "cloudflare_ruleset" "cors_preflight" {
+                    zone_id  = local.zone_id
+                    name     = "PublicRoute {{ $host }} CORS preflight"
+                    kind     = "zone"
+                    phase    = "http_request_origin"
+                    {{- range $i, $origin := $xr.spec.origins }}
+                    rules {
+                      ref        = "preflight_{{ $i }}"
+                      action     = "respond"
+                      expression = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and http.request.headers.origin eq \"{{ $origin }}\")"
+                      action_parameters {
+                        response {
+                          status_code  = 204
+                          content_type = "text/plain"
+                          content      = ""
+                        }
+                      }
+                      enabled = true
+                    }
+                    {{- end }}
+                  }
+                  # CORS response headers: set Access-Control-* on matching origins.
+                  resource "cloudflare_ruleset" "cors_headers" {
+                    zone_id  = local.zone_id
+                    name     = "PublicRoute {{ $host }} CORS headers"
+                    kind     = "zone"
+                    phase    = "http_response_headers_transform"
+                    {{- range $i, $origin := $xr.spec.origins }}
+                    rules {
+                      ref        = "cors_headers_{{ $i }}"
+                      action     = "set"
+                      expression = "(http.host eq \"{{ $host }}\" and http.request.headers.origin eq \"{{ $origin }}\")"
+                      action_parameters {
+                        headers {
+                          name      = "Access-Control-Allow-Origin"
+                          value     = "{{ $origin }}"
+                          operation = "set"
+                        }
+                        headers {
+                          name      = "Access-Control-Allow-Methods"
+                          value     = "GET,HEAD,PUT,PATCH,POST,DELETE"
+                          operation = "set"
+                        }
+                        headers {
+                          name      = "Access-Control-Allow-Headers"
+                          value     = "Content-Type,Authorization,X-Requested-With"
+                          operation = "set"
+                        }
+                        headers {
+                          name      = "Access-Control-Max-Age"
+                          value     = "86400"
+                          operation = "set"
+                        }
+                      }
+                      enabled = true
+                    }
+                    {{- end }}
+                  }
+                  {{- end }}
                   {{- else }}
                   # --- consumer profile: edge caching on ---
                   # Respect-origin cache headers with a 1h default TTL.
-                  # Full shape: #1306 (cache rule resource).
+                  # Filled in (#1306).
                   resource "cloudflare_ruleset" "cache_rule" {
                     zone_id  = local.zone_id
                     name     = "PublicRoute {{ $host }} cache"
