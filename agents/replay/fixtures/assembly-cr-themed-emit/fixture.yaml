@@ -1,0 +1,23 @@
+# assembly-cr-themed-emit (homelab#1229) — the changes-requested clause emits a goal-checkpoint unit
+# when a v1.3 themed assembly PR (HEAD goal/**) with CHANGES_REQUESTED carries a `Fixes #<level-2>`
+# closing a theme container, but NO line-anchored `Assembly-for:` trailer. The v1.3 discriminator
+# resolves the goal ancestor via goal_resolve_ancestor and emits the unit for that goal.
+#
+# THE CONTRACT:
+#   1. No `Assembly-for:` trailer is found (themed shape).
+#   2. `Fixes #1165` is extracted from the PR body.
+#   3. goal_resolve_ancestor resolves #1165 → goal #1162.
+#   4. A goal-checkpoint unit is emitted for goal #1162.
+#   5. No orphan line is produced for this PR.
+name: assembly-cr-themed-emit
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab

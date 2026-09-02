@@ -1,6 +1,6 @@
 OUT DISPATCH #849b (homelab, base=goal/29-p0-complete)
 OUT DISPATCH #849c (homelab, base=goal/29-p0-complete)
-OUT ORPHAN [homelab] ⏳ PR budget (3 armed PRs against master ≥ cap 3 — TRACKS rule 1, updater churn):
+OUT ORPHAN [homelab] ⏳ PR budget (3 machine-flowing PRs against master ≥ cap 3 — TRACKS rule 1, updater churn):
 OUT ORPHAN   issue #849a — master-based issue with 3 master PRs
 OUT REACHED: end
 RC 0

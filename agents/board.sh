@@ -344,7 +344,10 @@ if [ "$machine" = 1 ]; then
     case "$class" in
       riding)                  echo "who=machine  class=riding id=${id} age=${elapsed}" ;;
       phantom)                 echo "who=operator class=phantom id=${id} since=${elapsed} note=\"agent/in-progress with no live pod — reconcile pending\"" ;;
-      held-merged-unlinked)    echo "who=operator class=held-merged-unlinked id=${id} pod=none link=weak since=${elapsed} next=\"repair strong link or hand-close\"" ;;
+      strike-held)             echo "who=operator class=strike-held id=${id} pod=none since=${elapsed} next=\"verify goal branch, then close or re-queue\"" ;;
+      footprint-held)          echo "who=operator class=footprint-held id=${id} since=${elapsed} note=\"held by in-progress issue's Touches\"" ;;
+      cap-held)                echo "who=operator class=cap-held id=${id} since=${elapsed} note=\"held by PR budget cap\"" ;;
+      blockpark)               echo "who=operator class=blockpark id=${id} since=${elapsed} note=\"held by codeowner-parked PR budget\"" ;;
       parked-blocked)          echo "who=operator class=parked-blocked id=${id} since=${elapsed} note=\"human-gated — agent/blocked\"" ;;
       parked-infeasible)       echo "who=operator class=parked-infeasible id=${id} since=${elapsed} note=\"AGENT_INFEASIBLE — re-scope needed\"" ;;
       arbitrate-standing)      echo "who=operator class=arbitrate-standing id=${id} since=${elapsed} note=\"escalated to human — agent/arbitrate\"" ;;
