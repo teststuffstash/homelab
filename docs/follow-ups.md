@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-203** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-204** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -124,7 +124,22 @@ six OVERSIZE items pointer-ized into
       `registry:3` (Garage s3 driver candidate), release pipeline pushes, oracle-iac pins it;
       needs its ADR (backend, auth, retention, ghcr's remaining role). **v0 LIVE 2026-08-30**
       (PR#1034 + operator mint): mirror serves the private corpus anonymously on the LAN, 720h TTL,
-      Talos containerd pulls observed through it. **Next:** the v1 ADR.
+      Talos containerd pulls observed through it. **v1 SHIPPED 2026-09-02** (ADR-121,
+      `argocd/resources/registry/`, `registry.teststuff.net` — operator-ordered same-day after
+      the #1282 recurrence saturated wk-01 twice more mid-pull). Retention = FU-203.
+      **Next:** consumer cutover — oracle-fleet `release-corpus.sh` dual-pushes (ghcr + local;
+      needs the `REGISTRY_PUSH_TOKEN` repo Actions secret, operator console step), oracle-iac
+      pin flips `repository:` to `registry.teststuff.net/oracle-fleet/ert-corpus` at the next
+      release; the ingester image can follow later.
+
+- [ ] **FU-203** — **The first-party registry has no retention** (2026-09-02, born with ADR-121 —
+      the "keep 2 latest prod releases + latest built" policy is the reason v1 exists, but v1
+      ships without it). Bucket `registry` capped 20Gi ≈ 3 corpus releases; the ert delta cron is
+      suspended so manual releases + manual pruning hold, but the cap is load-bearing the week
+      the weekly cadence un-suspends. Next: a tag-aware prune job (list tags → keep policy set →
+      DELETE manifests + `registry garbage-collect` — deletes work here, it's not a proxy) as a
+      CronJob in `argocd/resources/registry/`; wire `devbox run storage-ledger` to count the
+      bucket. Link: ADR-121, FU-196.
 
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
