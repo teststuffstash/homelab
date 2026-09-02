@@ -1803,3 +1803,28 @@ over 3h (2026-08-31), cron fan-out structurally forbidden, per-stack crons alrea
 backstop duty. **Consequences:** coordinate-argo.yaml + the scan's switchboard terminal
 (replay: `doorbell/switchboard-*` ×4); reflexes-argo.yaml + devbox.json operator-direct
 (eae8c51f); closes homelab#994; glossary row `switchboard`.
+
+### ADR-121 — First-party artifacts: a push-mode registry on Garage, ghcr demoted to CI images (2026-09-02)
+
+**Decision.** A first-party **push-mode** OCI registry — `registry:3` on the **Garage S3 driver**
+(bucket `registry`, 20Gi cap, platform-owned Workspace — the loki shape), ns `registry`,
+`argocd/resources/registry/`. **Anonymous LAN pull, authenticated push** (operator ruling
+2026-09-02): an nginx front applies basic auth to every method except GET/HEAD — distribution
+cannot express per-method auth. Exposure is the standard pair (`registry.teststuff.net`,
+HAProxy `3.33` ↔ LB `40.33`, LE cert) so containerd trusts it with **zero node config** — no
+insecure-registry anywhere (operator constraint). First consumer: the oracle `ert-corpus`
+(6.4GB/release, built in-cluster, staged on Garage) — release dual-pushes ghcr + here, the
+oracle-iac pin flips to this name; ghcr keeps CI/base images (ADR-082 unchanged).
+**Considered:** stay on ghcr + mirror creds (FU-196 v0 — LIVE, but every cold pull is a WAN
+roll: 429 storms oracle-fleet#274, mid-stream PROTOCOL_ERROR kills + a poisoned mirror commit
+#1282, a NodeSystemSaturation page per pull — 6GB out + 6GB×N back over WAN for bytes built
+50cm from their consumers); Harbor/zot (re-rejected per ADR-091 — this IS the reserved
+"first-party hosting moves in-house" revisit, and one distribution instance still covers it);
+Longhorn PVC backend (bulk tier 88% committed; corpus is data → S3, CONTEXT.md #1);
+Forgejo's package registry (couples a trial-status forge to the serving path).
+**Consequences:** corpus pulls never leave the LAN; the #1282 concurrent-cold-pull poison
+window closes for this class (push at release = born warm); retention is REQUIRED before the
+weekly delta cadence un-suspends — **FU-203** (tag-aware prune; the policy a pull-through
+could never express). Push cred: Infisical `REGISTRY_PUSH_{HTPASSWD,TOKEN}`; the Actions repo
+secret is an operator console step (secrets.md §Minting doctrine item 2). FU-196 tracks the
+consumer cutover.
