@@ -89,6 +89,10 @@ spec:
             - name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING
               value: "{enabled: true, age: 1h, interval: 15m, dryrun: false}"
             - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
+            # The image's default config runs a DEBUG server on :5001 — the nginx front's port,
+            # same pod netns → bind collision, registry fatal-exits (found live, first deploy).
+            # Pin it to localhost:5002; it also serves /metrics there if scraping is ever wanted.
+            - { name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:5002" }
           ports:
             - { name: http, containerPort: 5000 }
           securityContext:
