@@ -1,0 +1,3 @@
+CALL curl -fsS -m 5 -X POST -H Content-Type: application/json -d '{"session":"agent-1268-subscription","task":"issue-1268","stack":"homelab","role":"worker","round":1,"model":"claude/opus","rail":"claude","cost_usd":0.03,"error_class":"","outcome":"no-pr"}' http://openrouter-proxy.agent-egress.svc.cluster.local:8080/report
+OUT → router report posted (http://openrouter-proxy.agent-egress.svc.cluster.local:8080/report)
+RC 0
