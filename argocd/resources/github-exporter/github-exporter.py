@@ -306,10 +306,13 @@ def collect_workflow_runs(lines):
         "# TYPE github_workflow_run_queued_since_timestamp gauge",
         "# HELP github_workflow_run_queued_since_timestamp Creation epoch of a run still waiting for a runner (status=queued ONLY) — queued-age = time() - this. Absent once the run starts, so the alert self-resolves (FU-150).",
         "# TYPE github_ci_job_queue_seconds gauge",
-        "# HELP github_ci_job_queue_seconds Job-level queue time (created_at to started_at) per (repo, workflow, job). Delta-only: one /jobs call per new completed run.",
+        "# HELP github_ci_job_queue_seconds Job-level queue time (created_at to started_at) per (repo, workflow, job, runner_pool). Delta-only: one /jobs call per new completed run.",
         "# TYPE github_ci_job_duration_seconds gauge",
-        "# HELP github_ci_job_duration_seconds Job-level execution time (started_at to completed_at) per (repo, workflow, job).",
+        "# HELP github_ci_job_duration_seconds Job-level execution time (started_at to completed_at) per (repo, workflow, job, runner_pool).",
+        "# TYPE github_ci_runner_busy_jobs gauge",
+        "# HELP github_ci_runner_busy_jobs In-progress CI jobs per runner pool at poll time (runs-on labels via the in-flight /jobs fetch). Capacity: proxmox-vm=2 slots (tofu/ci-runner.tf), arc maxRunners=4 (argocd/platform/arc-runners.yaml). arc/proxmox-vm always emit (0 is a reading); other pools only while busy.",
     ]
+    _busy_pools.clear()
     for repo in repos:
         # created=>=<ts> — GitHub search qualifier, URL-encoded
         path = f"/repos/{ORG}/{repo}/actions/runs?created=%3E%3D{since}"
@@ -330,6 +333,13 @@ def collect_workflow_runs(lines):
             lines += run_series(labels, run)
             if not _first_successful_poll:
                 lines += collect_job_timings(repo, run)
+    # Busy-slot gauge (ask-D instrument): counts accumulated by _runner_class over this cycle's
+    # in-flight runs. Fixed-capacity pools emit 0 explicitly; collector failure keeps the family
+    # absent (absent ≠ zero, same doctrine as every other family here).
+    for pool in sorted(set(_BUSY_ALWAYS) | set(_busy_pools)):
+        lines.append(metric("github_ci_runner_busy_jobs",
+                            {"owner": ORG, "runner_pool": pool},
+                            _busy_pools.get(pool, 0)))
 
 
 def run_series(labels, run):
@@ -371,10 +381,36 @@ def run_series(labels, run):
     return out
 
 
+def _pool_of(labs):
+    """Runner POOL from a job's runs-on label set — finer than _runner_class's hosted/self-hosted
+    split: the pool is the capacity unit (the ask-D instrument, python golden-path proposal
+    2026-09-02 — queue time and busy slots must split arc vs proxmox-vm before any ci-runner-02
+    decision). Closed value set to keep cardinality fixed."""
+    labs = [str(x).lower() for x in (labs or [])]
+    if any("proxmox-vm" in x for x in labs):
+        return "proxmox-vm"
+    if any("homelab-ephemeral" in x for x in labs):
+        return "arc"
+    if any("self-hosted" in x or "homelab" in x for x in labs):
+        return "self-hosted-other"
+    if labs:
+        return "hosted"
+    return "unknown"
+
+
+# Poll-scoped in-progress job counts per pool. Reset by collect_workflow_runs each cycle, filled
+# as a side effect of _runner_class's in-flight /jobs fetches — zero additional API calls. Pools
+# with fixed self-hosted capacity always emit (0 is a real reading); others only when busy. A
+# failed per-run jobs probe undercounts rather than guesses (rule #6).
+_busy_pools = {}
+_BUSY_ALWAYS = ("arc", "proxmox-vm")
+
+
 def _runner_class(repo, run):
     """hosted | self-hosted | mixed | unknown — from the run's job runner labels (the runs API
     itself carries nothing). Memoized for completed runs; a failed probe returns unknown rather
-    than a guess (rule #6)."""
+    than a guess (rule #6). Side effect: counts in-progress jobs into _busy_pools (the busy-slot
+    gauge rides the same fetch)."""
     rid = run.get("id")
     done = (run.get("status") == "completed")
     if rid in _run_runner and done:
@@ -384,6 +420,9 @@ def _runner_class(repo, run):
         kinds = set()
         for j in jobs:
             labs = [str(x).lower() for x in (j.get("labels") or [])]
+            if (j.get("status") or "") == "in_progress":
+                pool = _pool_of(labs)
+                _busy_pools[pool] = _busy_pools.get(pool, 0) + 1
             if any("self-hosted" in x or "homelab" in x for x in labs):
                 kinds.add("self-hosted")
             elif labs:
@@ -429,6 +468,7 @@ def collect_job_timings(repo, run):
                 "workflow": run.get("name") or "",
                 "job": job_name,
                 "run_id": rid,
+                "runner_pool": _pool_of(job.get("labels")),
             }
             queue_seconds = epoch(started_at) - epoch(created_at)
             duration_seconds = epoch(completed_at) - epoch(started_at)
@@ -2377,9 +2417,10 @@ def self_test():
     }
     _FIXTURE_JOBS = [
         {"name": "checkout", "created_at": "2026-08-19T10:00:15Z", "started_at": "2026-08-19T10:00:20Z",
-         "completed_at": "2026-08-19T10:00:30Z"},
+         "completed_at": "2026-08-19T10:00:30Z", "labels": ["homelab-ephemeral"]},
         {"name": "setup-python", "created_at": "2026-08-19T10:00:15Z", "started_at": "2026-08-19T10:00:35Z",
-         "completed_at": "2026-08-19T10:01:45Z"},
+         "completed_at": "2026-08-19T10:01:45Z", "labels": ["self-hosted", "proxmox-vm"]},
+        # run-tests deliberately has NO labels key: the runner_pool label must degrade to "unknown".
         {"name": "run-tests", "created_at": "2026-08-19T10:00:15Z", "started_at": "2026-08-19T10:02:00Z",
          "completed_at": "2026-08-19T10:04:50Z"},
     ]
@@ -2422,6 +2463,11 @@ def self_test():
         body1 = "\n".join(lines1)
         assert f'run_id="{_FIXTURE_JOBS_RUN["id"]}"' in body1, \
             "job series must carry run_id label to disambiguate multiple runs"
+
+        # Ask-D instrument: the runner_pool label classifies each job's runs-on label set.
+        assert 'runner_pool="arc"' in body1, "homelab-ephemeral must classify as pool arc"
+        assert 'runner_pool="proxmox-vm"' in body1, "proxmox-vm label must classify as its pool"
+        assert 'runner_pool="unknown"' in body1, "a job without labels must classify as unknown"
 
         # Second scrape: return cached lines WITHOUT calling API.
         lines2 = collect_job_timings("homelab", _FIXTURE_JOBS_RUN)
@@ -2467,6 +2513,35 @@ def self_test():
         globals()['gh'] = saved_gh
         _job_timings.clear()
         _jobs_fetched.clear()
+
+    # ── ask-D instrument: busy-slot counting rides _runner_class's in-flight jobs fetch ──────────
+    assert _pool_of(["self-hosted", "proxmox-vm"]) == "proxmox-vm"
+    assert _pool_of(["homelab-ephemeral"]) == "arc"
+    assert _pool_of(["ubuntu-latest"]) == "hosted"
+    assert _pool_of(["self-hosted"]) == "self-hosted-other"
+    assert _pool_of([]) == "unknown" and _pool_of(None) == "unknown"
+
+    saved_gh_busy = globals()['gh']
+
+    def _mock_gh_busy(path, token=None):
+        assert "/jobs" in path, f"busy test expects only a jobs fetch, got {path}"
+        return {"jobs": [
+            {"name": "e2e", "status": "in_progress", "labels": ["self-hosted", "proxmox-vm"]},
+            {"name": "e2e-2", "status": "in_progress", "labels": ["self-hosted", "proxmox-vm"]},
+            {"name": "gate", "status": "queued", "labels": ["homelab-ephemeral"]},
+        ]}
+
+    globals()['gh'] = _mock_gh_busy
+    _busy_pools.clear()
+    try:
+        cls = _runner_class("test-repo", {"id": 555001, "status": "in_progress"})
+        assert cls == "self-hosted", f"self-hosted label sets must classify self-hosted, got {cls}"
+        assert _busy_pools.get("proxmox-vm") == 2, \
+            f"two in-progress VM jobs must count 2 busy slots, got {_busy_pools}"
+        assert "arc" not in _busy_pools, "a queued (not started) job must NOT count as busy"
+    finally:
+        globals()['gh'] = saved_gh_busy
+        _busy_pools.clear()
 
     # ── FU-150 OURS half (#284): the queued-age series and the alert that consumes it ────────────
     ident = {"owner": ORG, "repo": "homelab", "workflow": "CI", "branch": "master",
@@ -2940,6 +3015,11 @@ def self_test():
         # The run_updated_timestamp samples should still be there (not a job timing)
         assert any(line.startswith("github_workflow_run_updated_timestamp{") for line in lines_first), \
             "workflow run metric samples must be emitted even on first poll"
+        # The busy-slot gauge costs no extra API call, so it emits even on first poll — and the
+        # fixed-capacity pools read 0 explicitly when idle (ask-D instrument).
+        assert any(line.startswith('github_ci_runner_busy_jobs{') and line.endswith(" 0")
+                   for line in lines_first), \
+            "busy-slot gauge must emit explicit zeros for the fixed-capacity pools on an idle poll"
 
         # Verify _first_successful_poll is reset after collect_workflow_runs
         # (simulating what happens in poll_forever after this collector succeeds)
@@ -3397,7 +3477,8 @@ def self_test():
     print("github-exporter self-test: OK (closing-keyword regex coverage, goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
-          "scale, job-level queue/duration metrics + caching + retry on API failure, issue "
+          "scale, job-level queue/duration metrics + caching + retry on API failure, "
+          "runner-pool split + busy-slot gauge (ask-D instrument), issue "
           "lifecycle series with re-queue first-epoch rule, first-poll job-timings skip when "
           "_first_successful_poll flag is set, sentinel head-changed edge-trigger, "
           "updater behind edge-trigger (ADR-111 #743), "
