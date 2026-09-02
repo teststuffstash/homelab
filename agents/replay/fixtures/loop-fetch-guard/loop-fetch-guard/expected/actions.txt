@@ -13,4 +13,9 @@ OUT >>> Case 4: Real concatenation in PREP (fixed form with trailing separator)
 OUT REACHED
 OUT EXIT: 0
 OUT REAL_CONCAT_OK
+OUT >>> Case 5: intake fetch degrades non-fatally (homelab#1095)
+OUT WARN: intake token fetch failed — homelab issue mutations degrade to create-only (homelab#1095)
+OUT INTAKE_EMPTY
+OUT REACHED5
+OUT EXIT: 0
 RC 0
