@@ -476,8 +476,10 @@ page is never the evidence.)
 **Per-stack and per-task control (operator ruling, same conversation):** projects blacklist
 independently — the AgentStack claim gains `modelDeny: [...]`, composed into the /route filter
 launcher-side (cluster-wins claim semantics, same seam as the chain). Per-task override rides
-labels, not new machinery: `label_map` already maps `track/iac`→class and
-`agent-budget/xs`→prefer_free; `task/research`→`research` class gives FU-105 its reasoning tier
+labels, not new machinery: `label_map` already maps `track/iac`→class,
+`agent-budget/xs`→prefer_free, `agent-budget/md`→tier_floor=cheap, and
+`agent-budget/lg`→tier_floor=large+never_free (all enforced in /route since homelab#1259);
+`task/research`→`research` class gives FU-105 its reasoning tier
 + `openrouter/fusion` head + dual-model without touching the coding lane, and an explicit
 `model/<alias>` issue label is the "--model wins" escape hatch, issue-shaped. If per-prompt
 difficulty ever matters, it enters as a coordinator-scan **labeling** step (auditable, one

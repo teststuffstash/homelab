@@ -48,6 +48,12 @@ STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-
 # responses and tool-call malformation that the serving provider caused.
 SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm"}
 
+# ── #1259: tier ordering for label_map tier_floor enforcement ──
+# Ordered from cheapest to most expensive. Used to compare a model's model_tiers grade against
+# the tier_floor from a resolved label_map entry. A model whose tier is below the floor is
+# excluded from the candidate walk.
+_TIER_ORDER = {"free": 0, "cheap": 1, "large": 2, "premium": 3}
+
 # ⚑ ENFORCEMENT IS OFF BY DEFAULT — operator ruling 2026-08-07, and it makes an ACCIDENT explicit.
 # Strikes were never being recorded (the drift below), so `route()` has always filtered against an
 # empty table. That accident turned out to be *better* than the design: circles#19 died on
@@ -1299,10 +1305,20 @@ def route(payload: dict, ctx: dict) -> dict:
     pick_fn = ctx.get("pick", random.choice) if jitter_on else (lambda xs: xs[0])
     cls = str(payload.get("class") or "")
     label_map = _classes.get("label_map") or {}
+    label_entry = {}  # first matching label_map entry for tier constraints (#1259)
     for lab in labels:
         entry = label_map.get(lab) or {}
-        if entry.get("class") and not cls:
-            cls = str(entry["class"])
+        if entry:
+            if not label_entry:
+                label_entry = entry  # capture first match for tier_floor/never_free
+            if entry.get("class") and not cls:
+                cls = str(entry["class"])
+    # ── #1259: tier_floor/never_free from the resolved label_map entry ──
+    # lg does NOT resolve a class — capability_floor_block reads the separate class_floors table,
+    # and label_map is the escalation carrier, not a second floor source. ADR-094 holds: the label
+    # indirection is the contract; class_floors wins when both speak.
+    tier_floor = str(label_entry.get("tier_floor") or "") if label_entry else ""
+    never_free = _as_bool(label_entry.get("never_free"), False) if label_entry else False
     if not cls:
         cls = str((_classes.get("role_defaults") or {}).get(role) or "coding")
     cinfo = (_classes.get("classes") or {}).get(cls) or {}
@@ -1361,6 +1377,17 @@ def route(payload: dict, ctx: dict) -> dict:
     eligible: list[tuple[str, str]] = []
     for m in chain:
         rail = "subscription" if m.startswith("claude/") else "openrouter"
+        # ── #1259: label_map tier_floor/never_free enforcement ──
+        # Checked before the main eligibility chain so failing models are skipped early
+        # without breaking the elif structure below.
+        if never_free and m.endswith(":free"):
+            skipped.append({"model": m, "reason": "never-free:label_map"})
+            continue
+        if tier_floor:
+            m_tier = (_classes.get("model_tiers") or {}).get(m)
+            if m_tier and _TIER_ORDER.get(m_tier, -1) < _TIER_ORDER.get(tier_floor, -1):
+                skipped.append({"model": m, "reason": f"tier-floor:{tier_floor}>{m_tier}"})
+                continue
         if m in deny:
             skipped.append({"model": m, "reason": "claim-deny"})
         elif m in struck_models:
@@ -2853,6 +2880,41 @@ def self_test() -> int:
         "metrics must have a role=worker gauge line"
     assert 'router_cooldowns_active{role="probe"}' in _metrics_body, \
         "metrics must have a role=probe gauge line"
+    # ── #1259: label_map tier_floor/never_free enforcement ──
+    # agent-budget/lg: tier_floor="large", never_free=true
+    # Use a chain with a :free model, a cheap model, and a large model to prove both filters bind.
+    _lg_chain = ["inclusionai/ling-3.0-flash:free", "deepseek/deepseek-v4-flash",
+                  "moonshotai/kimi-k3"]
+    _lg = route(dict(base, chain=_lg_chain, labels=["agent-budget/lg"]), CTX)
+    assert _lg["decision"] == "dispatch", f"lg must dispatch with a large candidate: {_lg}"
+    assert _lg["model"] == "moonshotai/kimi-k3", \
+        f"lg must pick the large-tier model, got {_lg['model']}"
+    _lg_tier = (_classes.get("model_tiers") or {}).get(_lg["model"])
+    assert _lg_tier and _TIER_ORDER.get(_lg_tier, -1) >= _TIER_ORDER.get("large", -1), \
+        f"lg must pick at/above large tier, got {_lg['model']} (tier={_lg_tier})"
+    assert not _lg["model"].endswith(":free"), \
+        f"lg must never pick a :free model, got {_lg['model']}"
+    assert any(s["reason"] == "never-free:label_map" for s in _lg["skipped"]), \
+        f"lg must skip :free models: {_lg['skipped']}"
+    assert any(s["reason"].startswith("tier-floor:") for s in _lg["skipped"]), \
+        f"lg must skip below-floor models: {_lg['skipped']}"
+    # agent-budget/md: tier_floor="cheap" — free models excluded, cheap+ passes
+    _md = route(dict(base, labels=["agent-budget/md"]), CTX)
+    assert _md["decision"] == "dispatch", f"md must dispatch: {_md}"
+    assert _md["model"] == "deepseek/deepseek-v4-flash", \
+        f"md must pick the first cheap+ model, got {_md['model']}"
+    _md_tier = (_classes.get("model_tiers") or {}).get(_md["model"])
+    assert _md_tier and _TIER_ORDER.get(_md_tier, -1) >= _TIER_ORDER.get("cheap", -1), \
+        f"md must pick at/above cheap tier, got {_md['model']} (tier={_md_tier})"
+    assert any(s["reason"].startswith("tier-floor:") for s in _md["skipped"]), \
+        f"md must skip free models: {_md['skipped']}"
+    # No size label: byte-identical to today's pick (no drift for the untouched majority)
+    _no_label = route(dict(base), CTX)
+    assert _no_label["decision"] == "dispatch" and _no_label["model"] == "inclusionai/ling-3.0-flash:free", \
+        f"no-label must match base pick (no drift): {_no_label}"
+    assert not any(s["reason"].startswith("never-free:") or s["reason"].startswith("tier-floor:")
+                   for s in _no_label["skipped"]), \
+        "no-label must not trigger tier_floor/never_free skips"
     # Clean up the test rows so they don't pollute later assertions
     _write("DELETE FROM model_cooldowns WHERE model='dual-role-model'", ())
     print("router self-test: OK "
