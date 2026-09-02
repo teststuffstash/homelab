@@ -545,5 +545,21 @@ want       "already bound → issue filed normally" "labelled agent-fix"
 wantnocall "already bound → no /sub_issues POST" "/sub_issues"
 want       "already bound → logged as 'skip re-link'" "skip re-link"
 
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "#1274 — REMEDIATION-WOULD shadow marker (dial trial, leg 1)"
+# The responder triage session's output gains ONE structured line when its verdict names a
+# mechanical remediation it would have performed had the dial been armed. The brief carries the
+# instruction unconditionally (no stack conditional); the LLM emits the line when it would act
+# and omits it for report-only verdicts. The claude stub captures the brief, so we assert the
+# instruction shape here; the LLM-side emission is verified in production by the first real
+# stack-alert triage after merge.
+
+scenario remediation-would-marker
+go "$(alert rw1 '{"alertname":"AgentWorkerEgressDropped","source":"oracle-fleet","severity":"warning"}')"
+wantbrief "remediation-would → brief carries the REMEDIATION-WOULD instruction" "REMEDIATION-WOULD MARKER"
+wantbrief "remediation-would → instruction names the marker format" "REMEDIATION-WOULD: <verb>"
+wantbrief "remediation-would → instruction says do NOT emit for report-only" "Do NOT emit this line when your verdict is report-only"
+wantbrief "remediation-would → instruction says at most one per session" "At most one per distinct remediation per session"
+
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
