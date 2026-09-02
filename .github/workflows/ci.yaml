@@ -261,6 +261,21 @@ jobs:
             while IFS= read -r f; do
               [ -n "$f" ] || continue
               case "$f" in agents/replay/fixtures/*) ;; *) continue ;; esac
+              # homelab#1215 / #1225 face 1: a COMMENT-ONLY diff to a commentable fixture file is
+              # not a pin claim — a well-behaved PR cross-references a sibling fixture in header
+              # comments, and attributing that as "this dir pins my fix" steers diffs AWAY from
+              # documentation (PR#1168's neighbour fixture). Only commentable types get the
+              # exemption; worlds/expected/psv count as behavioral on ANY diff, and an
+              # unreadable/empty patch counts as behavioral (fail toward checking).
+              case "$f" in
+                *.yaml|*.yml|*.sh|*.md)
+                  fpatch=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq ".[] | select(.filename==\"$f\") | .patch // \"\"")
+                  fsubst=$(printf '%s\n' "$fpatch" | grep -E '^[-+][^-+]' | grep -vE '^[-+][[:space:]]*(#|$)' || true)
+                  if [ -n "$fpatch" ] && [ -z "$fsubst" ]; then
+                    echo "ratchet: pin-vacuity — $f is comment/blank-only (not a pin claim, homelab#1215)"
+                    continue
+                  fi ;;
+              esac
               d=$(dirname "$f")
               while [ "$d" != "agents/replay/fixtures" ] && [ "$d" != "." ] && [ ! -f "$d/fixture.yaml" ]; do d=$(dirname "$d"); done
               [ -f "$d/fixture.yaml" ] || continue
@@ -290,10 +305,19 @@ jobs:
               done <<< "$fxdirs"
               git worktree remove --force /tmp/ratchet-base
               if [ -n "$vacuous" ]; then
-                echo "::error::ADR-103 pin-vacuity (homelab#1107): these changed fixtures PASS against the PRE-FIX source — a pin that passes without the fix pins nothing:"
-                printf '  %s\n' $vacuous
-                echo "Re-record the world or tighten expected/actions.txt so the fixture reds on the base tree and greens on this PR."
-                exit 1
+                # homelab#1225 face 2: on a STACKED base (goal/** theme/assembly branches) the
+                # base tree may already carry the fix (pin and fix ship in different PRs), so a
+                # pass-on-base proves nothing either way — warn, never a verdict (PR#1216 argued
+                # around a hard red in PR-body prose, which is worse than a visible unknown).
+                if [ "$GITHUB_BASE_REF" != "master" ]; then
+                  echo "::warning::ADR-103 pin-vacuity: cannot prove vacuity against stacked base '$GITHUB_BASE_REF' — the fix may predate this PR there (homelab#1225 face 2). Unproven, not vacuous:"
+                  printf '  %s\n' $vacuous
+                else
+                  echo "::error::ADR-103 pin-vacuity (homelab#1107): these changed fixtures PASS against the PRE-FIX source — a pin that passes without the fix pins nothing:"
+                  printf '  %s\n' $vacuous
+                  echo "Re-record the world or tighten expected/actions.txt so the fixture reds on the base tree and greens on this PR."
+                  exit 1
+                fi
               fi
             fi
           fi
