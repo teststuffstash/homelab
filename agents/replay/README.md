@@ -230,6 +230,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/opencode-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/re-review-shadow-skip-tag` | actions | - | `agents/re-review.sh` | - |
 | `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
@@ -254,6 +255,7 @@ is stale, so it cannot drift the way the prose register did.
 | `opencode-hostaliases/non-opencode` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-phonehome-killswitch/opencode-phonehome-killswitch` | suite | - | `-` | - |
 | `opencode-session-config` | actions | - | `agents/agent-session.sh` | - |
+| `opencode-session-config/with-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/clear` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/go` | actions | - | `agents/subscription-latch.sh` | - |

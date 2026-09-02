@@ -1,0 +1,2 @@
+OUT RUN_CMD: printf '%s' 'UkVDSVBF' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m openrouter/deepseek/deepseek-v4-flash 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '19'.'
+RC 0
