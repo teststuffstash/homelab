@@ -6321,3 +6321,48 @@ first live ADR-110 maintenance session before the ADR existed.
   with evidence, 0 out-of-sitting summonses. Left riding: #1269's fix round (vacuous-pin CR —
   next session's park), the #1268/ar#115 provider-attribution finding (checkpoint's), the
   operator's #1162 goal/validated read.
+
+## 2026-09-02 — operator sitting: batch-1 verdicts, G-B exercise-bar rulings, two grants, gate-class fixes (the /design-agents "board vs goals" question → goals-first executed)
+
+- **Condition:** operator asked board/docs/fu-pass vs goal bookkeeping; corpus + live reads said
+  goals-first (close sweeps change what the global passes read). Executed as an operator sitting.
+- **Verdicts:** #1039 + #775 validated (#778 released to FU-181); **#818 HELD** — the operator's
+  exercised-in-a-stack bar refuted the shipped-=-done soak read (GAPS design-agents-G5 filed:
+  verdict reads verify acceptance VERBS against observed events). Verdict condition posted:
+  teeth→oracle-prod drill window · lens RULED advisory-steady-state (roles.md) · responder
+  shadow · prober rollout+durable sink. #1162 → 24h soak hold (#1247 zero-drop acceptance).
+- **G-B children built + landed same sitting:** #1274 REMEDIATION-WOULD shadow consumer
+  (PR#1278 merged; seat corrected the remediation CLASS in-diff — imperative-dial verbs, GitOps
+  excluded); #1275 prober S3 sink queued; oracle#344 class-1 adoption filed as the platform→stack
+  ROLLOUT-PROCEDURE PILOT (adoption-issue-on-stack-repo; #289 closed re-homed); probe-class2.md
+  PROPOSED banner fixed (merged PR#333, operator-manual pending consumer-model cells).
+- **#1095 grant** (operator "do the grant"): least-privilege THIRD token per stack
+  (`loop-intake-git-*`, issues-only on homelab, proxy role=intake, non-fatal launcher fetch,
+  fixture case 5) — PR#1287 merged, proxy rolled, PROOF comment on #1095 posted with oracle's
+  own intake token. Found+filed en route: #1288 (proxy self-test env-dependence — false-red in
+  jail, green in CI; one false master-incident diagnosis spent before the venue was checked).
+- **opencode MCP arm** (#1276 → PR#1284, loop-authored): codeowner-read + merged; live canary
+  PASSED jail-side (npx opencode-ai@1.18.21 × shipped config × live mcp.oracle — statute call).
+  ⚠ SEAT INCIDENT: first canary attempt killed live pod agent-oracle-fleet-issue-321-r2 (greedy
+  newest-pod pick after the chainless guard refused the jail dispatch; cleanup ran anyway).
+  Attribution on #321; PR#342's CR-at-head means the loop re-dispatches; lesson = never delete
+  a pod this session did not verifiably create, and gate cleanup on the create step's success.
+- **ADR-103 stall question** ("keep happening frequently?") → measured: teething of the 2-day-old
+  pin-vacuity gate, 4 of 5 firings false-positive faces, all parked operator-lane. Operator "do
+  it" → `326ce6e7` operator-direct: comment-only exemption (#1215), stacked-base warn-never-
+  verdict (#1225), gate contract in workflow.md; #1215/#1225 closed; #1224 remains. Plus
+  `.agents/build.yaml` landed (#1255, `a0fc3347`) — task/build rides stop degrading to fix.
+- **Stalls pointed by operator:** PR#1273 (ratchet-red on un-armed tier — seat dispatched the
+  fix round after two launcher slips: recipe path is dispatcher-side; jail dispatches run with
+  proxy/pushgateway unreachable) — C9 re-armed it and the loop carried r3–r5; riding at
+  wind-down. /handoff ×2 processed (e2e blind rounds → #1280 diagnose-ride+directives-are-
+  claims, #1281 closed re-routed to stack Allure, ar#116 stale-evidence; ghcr mirror bounced,
+  blob 500→200, #1282 queued narrowed).
+- **#1280 ruling:** held for evidence (operator: kind-timing dominance is anecdote); #1286
+  queued = the ci-cause marker + ledger column (the CI-failure database, basis tags as DATA).
+- **Oracle queue question** (#347/#348 behind #346?): no — #345's `**Touches:**` (BOLDED) parsed
+  as undeclared=exclusive and serialized the repo. Instance repaired on #345; surface = #1294
+  queued (TOUCHES-MALFORMED report class). Operator warned: merge #347→#348 before assembly
+  PR#346 (Base strands at the squash).
+- Board triage of the operator's five: #1222 queued, #1282 queued-narrowed, #1255 fixed-here,
+  #1224 left (operator sitting), #1095 → the grant above.
