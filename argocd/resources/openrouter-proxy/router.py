@@ -1305,20 +1305,26 @@ def route(payload: dict, ctx: dict) -> dict:
     pick_fn = ctx.get("pick", random.choice) if jitter_on else (lambda xs: xs[0])
     cls = str(payload.get("class") or "")
     label_map = _classes.get("label_map") or {}
-    label_entry = {}  # first matching label_map entry for tier constraints (#1259)
+    # ── #1259: tier_floor/never_free merged across ALL matching labels ──
+    # Merge tier constraints across every matching label_map entry rather than taking the
+    # first match — a non-budget label (e.g. track/iac) may sort before agent-budget/lg in
+    # the issue's label list, and its entry carries no tier keys. Taking the first match
+    # would silently drop the budget label's constraints for exactly the multi-label
+    # combination the docs call out as normal usage.
+    # lg does NOT resolve a class — capability_floor_block reads the separate class_floors
+    # table, and label_map is the escalation carrier, not a second floor source. ADR-094
+    # holds: the label indirection is the contract; class_floors wins when both speak.
+    tier_floor = ""
+    never_free = False
     for lab in labels:
         entry = label_map.get(lab) or {}
         if entry:
-            if not label_entry:
-                label_entry = entry  # capture first match for tier_floor/never_free
             if entry.get("class") and not cls:
                 cls = str(entry["class"])
-    # ── #1259: tier_floor/never_free from the resolved label_map entry ──
-    # lg does NOT resolve a class — capability_floor_block reads the separate class_floors table,
-    # and label_map is the escalation carrier, not a second floor source. ADR-094 holds: the label
-    # indirection is the contract; class_floors wins when both speak.
-    tier_floor = str(label_entry.get("tier_floor") or "") if label_entry else ""
-    never_free = _as_bool(label_entry.get("never_free"), False) if label_entry else False
+            if entry.get("tier_floor") and not tier_floor:
+                tier_floor = str(entry["tier_floor"])
+            if entry.get("never_free"):
+                never_free = True
     if not cls:
         cls = str((_classes.get("role_defaults") or {}).get(role) or "coding")
     cinfo = (_classes.get("classes") or {}).get(cls) or {}
@@ -2915,6 +2921,23 @@ def self_test() -> int:
     assert not any(s["reason"].startswith("never-free:") or s["reason"].startswith("tier-floor:")
                    for s in _no_label["skipped"]), \
         "no-label must not trigger tier_floor/never_free skips"
+    # Multi-label: track/iac + agent-budget/lg — the non-budget label sorts first in GitHub's
+    # label list, so this row proves the merge-across-all-labels fix (the first-match capture
+    # would silently drop tier_floor/never_free from the budget label).
+    _multi = route(dict(base, chain=_lg_chain, labels=["track/iac", "agent-budget/lg"]), CTX)
+    assert _multi["decision"] == "dispatch", \
+        f"multi-label (track/iac + lg) must dispatch: {_multi}"
+    assert _multi["model"] == "moonshotai/kimi-k3", \
+        f"multi-label must pick the large-tier model, got {_multi['model']}"
+    _multi_tier = (_classes.get("model_tiers") or {}).get(_multi["model"])
+    assert _multi_tier and _TIER_ORDER.get(_multi_tier, -1) >= _TIER_ORDER.get("large", -1), \
+        f"multi-label must pick at/above large tier, got {_multi['model']} (tier={_multi_tier})"
+    assert not _multi["model"].endswith(":free"), \
+        f"multi-label must never pick a :free model, got {_multi['model']}"
+    assert any(s["reason"] == "never-free:label_map" for s in _multi["skipped"]), \
+        f"multi-label must skip :free models: {_multi['skipped']}"
+    assert any(s["reason"].startswith("tier-floor:") for s in _multi["skipped"]), \
+        f"multi-label must skip below-floor models: {_multi['skipped']}"
     # Clean up the test rows so they don't pollute later assertions
     _write("DELETE FROM model_cooldowns WHERE model='dual-role-model'", ())
     print("router self-test: OK "
