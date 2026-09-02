@@ -419,6 +419,57 @@ Probe hygiene rules (script files, dry-run under the real interpreter, PROBE-FAI
 empty, kill leftovers by process before re-arming) stay in `meta-state.md` §Re-arm — they are
 per-session practice, re-read at bootstrap.
 
+## Registry cache
+
+Pull-through mirrors for docker.io, ghcr.io, and mcr.microsoft.com (namespace `registry-cache`).
+Each mirror is a distribution/registry v3 proxy Deployment (`mirror-docker-io`, `mirror-ghcr`,
+`mirror-mcr`) with a Longhorn PVC and a LoadBalancer Service (BGP VIPs: .20, .21, .31).
+
+### Mirror returning 5xx / corrupt blob
+
+**Symptom:** `RegistryMirrorProbeFailing` alert fires (blackbox probe against `/v2/` returns 5xx
+or timeout). Or: consumers see `unexpected commit digest` / `short read: expected N bytes but got
+0` for a layer that exists upstream — the mirror has a committed blob that is corrupt on disk
+(homelab#1282).
+
+**Remedy — bounce the mirror Deployment:**
+
+```bash
+kubectl -n registry-cache rollout restart deploy/mirror-<name>
+```
+
+The restart re-runs the `store-maintenance.yaml` initContainer garbage-collect, which clears
+corrupt committed blobs. This is the only reliable remedy for a poisoned blob on a proxied repo.
+
+**What does NOT work:**
+
+- `DELETE /v2/<name>/blobs/<digest>` returns **405 Method Not Allowed** on proxied repos despite
+  `REGISTRY_STORAGE_DELETE_ENABLED=true` — the registry API does not support blob deletion for
+  pull-through cache repos. Do not attempt this path.
+- The weekly `gc-mirrors` CronJob (Sunday 04:00 UTC) also clears corrupt state, but waiting for
+  it is not an incident response.
+
+### Full disk / PVC sizing
+
+**Symptom:** `RegistryMirrorCacheAlmostFull` alert fires (PVC >85% full). A full disk does NOT
+crash the mirror — it silently TRUNCATES in-flight blob writes, and consumers see layer digest
+mismatches + 500s.
+
+**Remedy:** Check what is consuming space — legitimate blobs (capacity/TTL decision) vs `_uploads`
+debris (should self-reap within ~1h via uploadpurging). If the working set has grown, increase
+the PVC size in the mirror's `PersistentVolumeClaim` manifest (longhorn-bulk storage class).
+
+### Weekly GC not running
+
+**Symptom:** `RegistryGCMirrorsStale` or `RegistryGCMirrorsSuspended` alert fires.
+
+**Remedy:** Check the CronJob exists and is not suspended:
+```bash
+kubectl -n registry-cache get cronjob gc-mirrors
+kubectl -n registry-cache get jobs -l cronjob=gc-mirrors
+```
+If RBAC or scheduling broke, the pods will show Backoff or RBAC errors in events.
+
 ### Meta-session probe & triage discipline (durable)
 
 Evicted from `meta-state.md` §Durable warnings 2026-08-23 (S4 #765 — non-transient content was

@@ -1,0 +1,39 @@
+# witness-only: RegistryMirrorProbeFailingMaxDirection
+# RegistryMirrorProbeFailing (homelab#1282) — lifted VERBATIM out of prometheusrule.yaml (comments
+# AND annotations stripped — the manifest is its one home). The rules file that
+# mirror-probes.promtool-test loads. Not a manifest and not applied to anything: `promtool test
+# rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
+# `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on purpose
+# — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest there would
+# fail it.
+#
+# ANNOTATIONS ARE STRIPPED deliberately, following gc-mirrors.promtool-rules: this pins FIRING
+# BEHAVIOUR, not prose. The descriptions are runbooks and change on their own schedule; copying
+# them here would give the runbook two homes.
+#
+# ⚠ THIS COPY IS NOT DRIFT-PINNED — same standing caveat as gc-mirrors.promtool-rules. A stale
+# copy tests the OLD expr and passes VACUOUSLY. Re-copy after editing this alert:
+#
+#   yq -o=json '{"groups": [{"name": "registry-cache", "rules": [.spec.groups[].rules[] | select(.alert == "RegistryMirrorProbeFailing") | del(.annotations)]}]}' \
+#     argocd/resources/registry-cache/prometheusrule.yaml | yq -P '.'
+#   (one line on purpose — a wrapped yq program string is the #344 lexer bug)
+groups:
+  - name: registry-cache
+    rules:
+      - alert: RegistryMirrorProbeFailing
+        expr: min_over_time(probe_success{job="blackbox-mirrors"}[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+
+  # ── DIRECTION WITNESS — `max_over_time`, the class's default and the wrong function here ──────
+  # Class rule (ii): max is alert-PRESERVING only where HIGH is the bad reading. `probe_success ==
+  # 0` is the opposite, so max holds the HEALTHIEST sample of the window and delays every page by
+  # the whole range. Executed in mirror-probes.promtool-test rather than asserted in a comment.
+  - name: direction-witness-max
+    rules:
+      - alert: RegistryMirrorProbeFailingMaxDirection
+        expr: max_over_time(probe_success{job="blackbox-mirrors"}[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
