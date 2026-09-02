@@ -248,7 +248,11 @@ COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF_PATH} --permi
 # Clone the current homelab (public) so the coordinator runs the live brief + launchers + estimator.
 # The /work/session-start marker is the "what did THIS session write" baseline the exit-trap upload
 # diffs the transcripts PVC against (the PVC accumulates across sessions).
-PREP="set -e; ${LOOP_FETCH}touch /work/session-start; timeout 120 git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab"
+# homelab#1136 pattern, applied here 2026-09-02: AUTHENTICATED clone when GH_TOKEN is present
+# (LOOP_FETCH exports it just before). This was the ONE clone site #1136 missed — item pods died
+# anonymous for ~4h when GitHub 401-throttled anonymous git from the WAN IP (345/347/348/362,
+# the same class as #1136's 47 failed workflows). Absent token = the old anonymous behavior.
+PREP="set -e; ${LOOP_FETCH}touch /work/session-start; _cu=\"${REPO_URL}\"; [ -n \"\${GH_TOKEN:-}\" ] && _cu=\"\$(printf '%s' \"${REPO_URL}\" | sed \"s|^https://github.com/|https://x-access-token:\${GH_TOKEN}@github.com/|\")\"; timeout 120 git clone --depth 1 -b ${BASE_REF} \"\$_cu\" /work/homelab"
 
 # A coordinator is scoped to a STACK, so clone ALL its repos (--repos) shallow into /work/<repo>
 # and run from the stack's MAIN repo (--main-repo, default homelab) — so that repo's CLAUDE.md + specs

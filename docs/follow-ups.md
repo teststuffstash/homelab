@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-204** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-205** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -107,30 +107,15 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
-- [ ] **FU-196** — **The ghcr mirror cannot serve private org images — a 6GB single point of
-      ghcr-dependence for the oracle corpus** (2026-08-30, surfaced by the oracle-fleet#274 Rung A
-      bring-up: ghcr 429-rate-limited the `ert-corpus` blob; the mirror couldn't help — anonymous
-      upstream, ADR-091's "all we consume [was] public" predates the private corpus). Talos nodes
-      ALREADY route ghcr via `192.168.40.21` (`tofu/talos.tf`), so containerd silently falls back
-      to direct ghcr for private pulls: a serving-pod move during a ghcr outage/429 storm =
-      degraded or down. Two steps (operator, 2026-08-30): **v0 = mirror creds** — scoped
-      machine-user PAT (per-package read: `ert-corpus` + `oracle-fleet-ingester`) as `mirror-ghcr`
-      proxy creds via ESO; ADR-091 update accepts LAN-readability of those packages + longer TTL.
-      PAT documented durably per doctrine (operator): a `scripts/ghcr-mirror-pat-bootstrap.sh`
-      mint script (`github-exporter-pat-bootstrap.sh` shape — account, scopes, package grants,
-      Infisical key), expiry into the FU-156 gauge, secrets.md row. **v1 = a HOSTED local
-      registry** — a cache can't express policy retention ("2 latest prod releases + latest
-      built"; homelab#116's GC ate digest-pinned images for exactly this reason); push-mode
-      `registry:3` (Garage s3 driver candidate), release pipeline pushes, oracle-iac pins it;
-      needs its ADR (backend, auth, retention, ghcr's remaining role). **v0 LIVE 2026-08-30**
-      (PR#1034 + operator mint): mirror serves the private corpus anonymously on the LAN, 720h TTL,
-      Talos containerd pulls observed through it. **v1 SHIPPED 2026-09-02** (ADR-121,
-      `argocd/resources/registry/`, `registry.teststuff.net` — operator-ordered same-day after
-      the #1282 recurrence saturated wk-01 twice more mid-pull). Retention = FU-203.
-      **Next:** consumer cutover — oracle-fleet `release-corpus.sh` dual-pushes (ghcr + local;
-      needs the `REGISTRY_PUSH_TOKEN` repo Actions secret, operator console step), oracle-iac
-      pin flips `repository:` to `registry.teststuff.net/oracle-fleet/ert-corpus` at the next
-      release; the ingester image can follow later.
+- [ ] **FU-204** — **C4/C5's bare-mention exclusion is a silent-stall limbo** (2026-09-02, first
+      live sighting: fleet#345 — its r1 died on a model rate-limit, the label stayed
+      `agent/in-progress`, and assembly PR#346's coverage-map bare mention excluded it from BOTH
+      the stall wake and the review flip; only a human re-tick recovered it). The exclusion is
+      deliberately conservative (the circles#36 sibling-seam lesson) but has no escape hatch.
+      Needs a design ruling: age-bound the exclusion, or wake-with-marker for coordinator
+      judgment instead of auto-requeue. Evidence:
+      `docs/incidents/2026-09-02-anonymous-git-throttle-loop-outage.md` §Residuals; the clause:
+      `agents/coordinator-scan.sh` C4/C5.
 
 - [ ] **FU-203** — **The first-party registry has no retention** (2026-09-02, born with ADR-121 —
       the "keep 2 latest prod releases + latest built" policy is the reason v1 exists, but v1
