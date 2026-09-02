@@ -2589,8 +2589,25 @@ EOF_GOVERNANCE
       # shape the goal-lane post-launch transition keys on — IL-T18).
       g="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body//"")|capture("(?mi)^[ \\t]*assembly-for:[ \\t]*#(?<g>[0-9]+)\\b")|.g' 2>/dev/null || echo "")"
       case "$g" in ''|*[!0-9]*)
-        orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested but no line-anchored \`Assembly-for: #<n>\` trailer — cannot route to a goal; report-only (FU-143)\n"
-        continue
+        # v1.3 themed assembly discriminator (homelab#1229): a goal/** HEAD whose body carries
+        # `Fixes #<level-2>` where the level-2 is a task/goal descendant routes to the goal
+        # ancestor via goal_resolve_ancestor. The themed shape (Goal #1162) deliberately has
+        # NO Assembly-for: trailer — the Fixes keyword closes the theme container on merge.
+        g="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body//"")|capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)")|.i' 2>/dev/null || echo "")"
+        case "$g" in ''|*[!0-9]*)
+          orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested but no line-anchored \`Assembly-for: #<n>\` trailer — cannot route to a goal; report-only (FU-143)\n"
+          continue
+        ;; esac
+        # Resolve the goal ancestor from the Fixes-referenced issue.
+        command -v goal_resolve_ancestor >/dev/null 2>&1 || . "${HERE}/goal-budget.sh"
+        goal_resolve_ancestor "$slug" "$g"
+        if [ -z "$GB_GOAL" ]; then
+          orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested and \`Fixes #${g}\` but #${g} is not a task/goal descendant — cannot route to a goal; report-only (FU-143)\n"
+          continue
+        fi
+        g_fixes="$g"
+        g="$GB_GOAL"
+        echo "  [$repo] ASSEMBLY PR #${u} has changes-requested — resolved goal #${g} from v1.3 themed shape (\`Fixes #${g_fixes}\` → goal_resolve_ancestor, homelab#1229)"
       ;; esac
       # state-fp debounce: one ride per verdict state (homelab#198).
       afp="$(pr_state_fp_pair "$slug" "$u" assembly-cr)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
