@@ -18,7 +18,7 @@ curl() {
 
 {
   echo "=== scenario 1: accumulate and flush new items ==="
-  item_class_push "homelab" "833" "strike-held" "operator"
+  item_class_push "homelab" "833" "held-merged-unlinked" "operator"
   item_class_push "homelab" "834" "queued-held-by-ghost" "operator"
   item_class_push "homelab" "889" "riding" "machine"
   item_class_push "homelab" "840" "container" "none"
@@ -32,10 +32,10 @@ curl() {
   echo "=== scenario 2: timestamp carry-over for unchanged items ==="
   CURL_GET_BODY="# HELP agent_item_class_since_timestamp_seconds Unix epoch when classified
 # TYPE agent_item_class_since_timestamp_seconds gauge
-agent_item_class_since_timestamp_seconds{repo=\"homelab\",item=\"833\",class=\"strike-held\",who=\"operator\"} 1786000000
+agent_item_class_since_timestamp_seconds{repo=\"homelab\",item=\"833\",class=\"held-merged-unlinked\",who=\"operator\"} 1786000000
 agent_item_class_since_timestamp_seconds{repo=\"homelab\",item=\"834\",class=\"queued-held-by-ghost\",who=\"operator\"} 1786100000"
 
-  item_class_push "homelab" "833" "strike-held" "operator"
+  item_class_push "homelab" "833" "held-merged-unlinked" "operator"
   item_class_push "homelab" "835" "riding" "machine"
   printf 'ACCUMULATED %s\n' "$(printf '%b' "$ITEM_CLASS_ROWS" | wc -l)"
 

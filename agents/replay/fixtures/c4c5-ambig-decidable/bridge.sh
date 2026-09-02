@@ -23,4 +23,5 @@ BODIES="$(cat "$REPLAY_WORLD/gh/pr-list-bodies.json")"
 inprog="$(cat "$REPLAY_WORLD/gh/issue-list-inprog.json")"
 # ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
 # so a harness running one extracted block has no flush to assert on.
-item_class_push() { :; }
+# item_class_push is NOT stubbed here — the no-strike world must verify that strike-held rows
+# are pushed for undecidable C4/C5 goal children (FU-199 / #1240).

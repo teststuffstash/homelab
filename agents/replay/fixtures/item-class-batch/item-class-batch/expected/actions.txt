@@ -7,8 +7,8 @@ STDIN # TYPE agent_item_class gauge
 STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
 STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
 STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-STDIN agent_item_class{repo="homelab",item="833",class="strike-held",who="operator"} 1
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="833",class="strike-held",who="operator"} 1786465900
+STDIN agent_item_class{repo="homelab",item="833",class="held-merged-unlinked",who="operator"} 1
+STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="833",class="held-merged-unlinked",who="operator"} 1786465900
 STDIN agent_item_class{repo="homelab",item="834",class="queued-held-by-ghost",who="operator"} 1
 STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="834",class="queued-held-by-ghost",who="operator"} 1786465900
 STDIN agent_item_class{repo="homelab",item="889",class="riding",who="machine"} 1
@@ -27,8 +27,8 @@ STDIN # TYPE agent_item_class gauge
 STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
 STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
 STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-STDIN agent_item_class{repo="homelab",item="833",class="strike-held",who="operator"} 1
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="833",class="strike-held",who="operator"} 1786000000
+STDIN agent_item_class{repo="homelab",item="833",class="held-merged-unlinked",who="operator"} 1
+STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="833",class="held-merged-unlinked",who="operator"} 1786000000
 STDIN agent_item_class{repo="homelab",item="835",class="riding",who="machine"} 1
 STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="835",class="riding",who="machine"} 1786465900
 FLUSH_DONE 0

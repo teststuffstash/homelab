@@ -1,4 +1,4 @@
-=== push: strike-held (who=operator) ===
+=== push: held-merged-unlinked (who=operator) ===
 RETURN 0
 === push: queued-held-by-ghost (who=operator) ===
 RETURN 0

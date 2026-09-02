@@ -12,8 +12,8 @@ curl() {
 }
 
 {
-  echo "=== push: strike-held (who=operator) ==="
-  item_class_push "homelab" "833" "strike-held" "operator"
+  echo "=== push: held-merged-unlinked (who=operator) ==="
+  item_class_push "homelab" "833" "held-merged-unlinked" "operator"
   printf 'RETURN %s\n' "$?"
 
   echo "=== push: queued-held-by-ghost (who=operator) ==="
