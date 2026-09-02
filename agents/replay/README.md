@@ -161,6 +161,7 @@ is stale, so it cannot drift the way the prose register did.
 | `assembly-cr-dispatch-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-emit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-no-trailer` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-cr-themed-emit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `asvs` | suite | - | `-` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
@@ -243,6 +244,7 @@ is stale, so it cannot drift the way the prose register did.
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/null-author` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merged-closeout-default-branch` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
+| `merged-closeout-ilg06-detect` | actions | - | `agents/coordinator-scan.sh` | - |
 | `model-id-carrier` | table | - | `agents/agent-session.sh` | - |
 | `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
 | `opencode-hostaliases/default-profile` | actions | - | `agents/agent-session.sh` | - |
@@ -255,6 +257,8 @@ is stale, so it cannot drift the way the prose register did.
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/clear` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail/go` | actions | - | `agents/subscription-latch.sh` | - |
+| `post-merge-push/detected` | actions | - | `agents/agent-session.sh` | - |
+| `post-merge-push/silent` | actions | - | `agents/agent-session.sh` | - |
 | `pr-cap-per-base` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/collision` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |

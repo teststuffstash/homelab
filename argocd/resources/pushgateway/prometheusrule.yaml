@@ -353,7 +353,13 @@ spec:
             or
             (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="parked-infeasible",who="operator"}[5m]))) > 4 * 3600
             or
-            (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="held-merged-unlinked",who="operator"}[5m]))) > 4 * 3600
+            (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="strike-held",who="operator"}[5m]))) > 4 * 3600
+            or
+            (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="footprint-held",who="operator"}[5m]))) > 4 * 3600
+            or
+            (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="cap-held",who="operator"}[5m]))) > 4 * 3600
+            or
+            (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="blockpark",who="operator"}[5m]))) > 4 * 3600
             or
             (time() - max by (repo, item) (max_over_time(agent_item_class_since_timestamp_seconds{class="queued-held-by-ghost",who="operator"}[5m]))) > 4 * 3600
             or
@@ -364,7 +370,7 @@ spec:
             platform_machinery: "true"
           annotations:
             summary: "Operator-attention items (who=operator) have been standing >4h on {{ $labels.repo }}"
-            description: "SYMPTOM ONLY — the board's who=operator class contains items that need the operator's attention (parked, merged-unlinked, queued-held-by-ghost, phantom). An active seat drains the board long before 4h; this alert exists for the no-seat case. Check the BIG PICTURE at the Grafana attention table (board.teststuff.net once leg 6 lands). Deploy silences the `for:` window — a pushgateway redeploy during an active standing resets the timer, accepted because the design is slow enough that a reset window is tolerable."
+            description: "SYMPTOM ONLY — the board's who=operator class contains items that need the operator's attention (strike-held, footprint-held, cap-held, blockpark, queued-held-by-ghost, phantom). An active seat drains the board long before 4h; this alert exists for the no-seat case. Check the BIG PICTURE at the Grafana attention table (board.teststuff.net once leg 6 lands). Deploy silences the `for:` window — a pushgateway redeploy during an active standing resets the timer, accepted because the design is slow enough that a reset window is tolerable."
         # The SECOND half of homelab#103, and the worse half: a wedged coordinate workflow holds
         # the `coordinator-scan` mutex, and every later tick queues behind it Pending. The loop
         # stops dispatching and NOTHING says so — `get wf` shows activity, and the Pending reason
