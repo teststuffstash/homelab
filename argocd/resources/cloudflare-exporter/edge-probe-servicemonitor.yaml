@@ -1,0 +1,11 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cloudflare-edge-probe
+  labels: { app: cloudflare-edge-probe }
+spec:
+  selector:
+    matchLabels: { app: cloudflare-edge-probe }
+  endpoints:
+    - port: http-metrics
+      interval: 120s # the probe polls Cloudflare on its own cadence (POLL_INTERVAL_SECONDS)
