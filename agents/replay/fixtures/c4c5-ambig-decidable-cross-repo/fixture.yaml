@@ -30,6 +30,8 @@ parts:
   - block:c4c5-derivations
   - file:bridge.sh
   - block:fu146-resumable-match
+  - file:observe-resumable-match.sh
   - file:bridge.sh
   - block:fu146-resumable-match
+  - file:observe-resumable-match.sh
   - file:post.sh

@@ -4066,7 +4066,6 @@ EOF_GOVERNANCE
           fi
         done
       fi
-      echo "  RESOLVED: ${urepo}#${uitem#issue-} →${uworkbranch}"
       # <<<REPLAY:fu146-resumable-match<<<
       dispatch_rc=0
       bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
