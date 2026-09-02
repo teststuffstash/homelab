@@ -1,0 +1,6 @@
+[
+  {
+    "body": "AGENT_STRIKE: round=1 error_class=unknown model=opus/claude-sonnet-4-2026-08-01\n\nThe worker went terminal without pushing. The issue is still actionable — the deliverable is unchanged.\n\n**Result:** `error`\n**Duration:** 142s\n**Exit code:** 1\n\n<details><summary>Raw log excerpt</summary>\n\n```\nFATAL: unexpected error communicating with API\n```\n</details>",
+    "created_at": "2026-09-01T10:00:00Z"
+  }
+]

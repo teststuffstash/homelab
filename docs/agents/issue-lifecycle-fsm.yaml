@@ -30,6 +30,7 @@ diagram: |
       Queued --> InProgress: queued-dispatch → ride opens PR (IL-T05)
       InProgress --> InProgress: worker died → c4c5-redispatch (IL-T06)
       InProgress --> InProgress: goal child + AGENT_STRIKE + resumable branch → decidable, emit --work-branch (IL-T29)
+      InProgress --> Error: fleet-strike — same error_class on ≥2 issues in 24h → agent/error (IL-T30)
       InProgress --> Queued: phantom label, persisted → scan reconciles it (IL-T16)
       Review --> Queued: phantom label, persisted → scan reconciles it (IL-T27)
       InProgress --> Blocked: worker ruled it NOT IMPLEMENTABLE → AGENT_INFEASIBLE parks it (IL-T26)
@@ -375,6 +376,30 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "second-strike rule" }
     incidents:
       - "2026-09-01 oracle-fleet#329: the third C4/C5 ambig sighting in ~24h froze the whole oracle lane ~4h — 0 WIP, 0 PRs, every scan tick green, homelab#1149 was the identical shape the day before. The AGENT_STRIKE: + Resumable branch pushed: evidence was machine-anchored one comment up; the hold just didn't look."
+
+  - id: IL-T30
+    name: fleet-strike reader — same error_class on ≥2 issues in 24h ⇒ agent/error + comment + filing
+    owner: coordinator-scan, deterministically — no LLM tick in the path
+    when: "≥2 distinct OPEN issues with agent-fix carry an AGENT_STRIKE: comment bearing the same
+      `error_class=` value, and the newest such comments are all within 24h of each other ⇒ the
+      scan applies `agent/error` to each affected issue, posts ONE comment on the first affected
+      issue listing all of them, and files ONE deduped inert platform issue (or extends an existing
+      open match). Forward-compatible with the G2 key-class split: counts strike-class rows only
+      (AGENT_STRIKE: comments), never key-class rows."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/fleet-strike-reader
+    guards:
+      - desc: "the AGENT_STRIKE: marker is ANCHORED at the start of a COMMENT — same discipline as AGENT_INFEASIBLE: (homelab#257) and AGENT_STRIKE: (FU-199)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("\^AGENT_STRIKE:"\)' }
+      - desc: "match on the structured `error_class=` field only, never log excerpts"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'error_class=' }
+      - desc: "dedup — before filing, check for an existing OPEN issue titled fleet-strike: error_class=<ec>; extend it instead of creating a new one"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'fleet-strike: error_class' }
+      - desc: "probe failure holds every candidate and writes nothing (rule #6 — never fail INTO a write)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "FLEET STRIKE" }
+    incidents:
+      - "2026-09-01: FOUR goal-#326 r1 strikes with identical error_class=unknown were never correlated; the operator + seat did it by hand. Prose-warned classes recur; executable gates hold (ADR-103)."
 
   - id: IL-T07
     name: close by master merge
