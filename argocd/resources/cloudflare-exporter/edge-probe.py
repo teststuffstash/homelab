@@ -51,6 +51,11 @@ _lock = threading.Lock()
 _body = "# probe has not completed a cycle yet\n"
 _errors = 0
 _last_success = 0
+# Readiness gate: return non-200 when the last successful poll is older than this threshold.
+# Set to 3× the poll interval (120s) so a single transient failure does not flap readiness,
+# but a pod stuck for 3+ consecutive cycles becomes not Ready. At startup _last_success is 0,
+# so a pod that has never polled is immediately not Ready.
+HEALTHZ_STALE_SECONDS = 360
 
 HEADERS = [
     "# HELP cloudflare_edge_requests_total Per-route request count by host and status.",
@@ -282,8 +287,17 @@ class Handler(BaseHTTPRequestHandler):
         with _lock:
             body = _body.encode()
         if self.path == "/healthz":
-            body = b"ok\n"
-        self.send_response(200)
+            if _last_success == 0 or time.time() - _last_success > HEALTHZ_STALE_SECONDS:
+                self.send_response(503)
+                body = b"stale\n"
+            else:
+                self.send_response(200)
+                body = b"ok\n"
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
