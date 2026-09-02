@@ -30,6 +30,26 @@ data:
       listen 5001;
       # 6GB blob pushes: never buffer or cap the body.
       client_max_body_size 0;
+      # Probe target — /v2/ answers 401 to unauthenticated pings (below), which would fail an
+      # httpGet readiness probe (success = 2xx/3xx).
+      location = /healthz { return 200; }
+      # THE PING MUST CHALLENGE (found live, first seed): containers/image (skopeo et al.)
+      # resolves the registry's auth scheme ONLY from GET /v2/ — an anonymous 200 there means
+      # "no auth anywhere", the client never attaches credentials, and the first gated POST
+      # dies fatal on 401 instead of retrying. So: no Authorization header → 401 + the Basic
+      # challenge (the standard registry convention); with a header, normal auth applies.
+      # Anonymous PULL is untouched — content GETs below stay open, and containerd/docker
+      # treat a 401 ping as "auth-capable registry", not an error.
+      location = /v2/ {
+        if ($http_authorization = "") {
+          add_header WWW-Authenticate 'Basic realm="registry push"' always;
+          return 401;
+        }
+        auth_basic "registry push";
+        auth_basic_user_file /etc/nginx/htpasswd/htpasswd;
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $http_host;
+      }
       location /v2/ {
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host $http_host;
@@ -117,7 +137,7 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
           readinessProbe:
-            httpGet: { path: /v2/, port: 5001 }
+            httpGet: { path: /healthz, port: 5001 }
             initialDelaySeconds: 3
             periodSeconds: 10
           volumeMounts:
