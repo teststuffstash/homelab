@@ -8,6 +8,13 @@
 #   INFISICAL_ENV=staging INFISICAL_PATH=/svc devbox run infisical-secret KEY=val
 #
 # Then consume it with an ExternalSecret (see argocd/resources/extras/demo-externalsecret.yaml).
+#
+# ⚠ VALUES CONTAINING `$` GET SHELL-EXPANDED IN TRANSIT and store silently corrupted (found
+# 2026-09-02: an htpasswd `$apr1$…` line stored as 11 bytes — `$apr1`/`$hash` expanded to empty
+# somewhere in the devbox-run layering; identical through `devbox run infisical-secret` AND a
+# direct `bash scripts/infisical-secret.sh`). Until root-caused: avoid `$` in secret values
+# where the format allows (htpasswd: use `{SHA}` hashes — no `$`), or set via the Infisical UI,
+# and ALWAYS read the value back (the consuming k8s Secret) after storing one with specials.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ $# -ge 1 ] || { echo "usage: $0 KEY=VALUE [KEY2=VALUE2 ...]   (env: INFISICAL_ENV=prod INFISICAL_PATH=/)" >&2; exit 2; }
