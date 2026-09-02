@@ -537,3 +537,39 @@ git history (pre-2026-07-17) + TICK-LOG meta-7.
 - **Staleness timer T**: red-beyond-T is owned by the ci-red clause (content-based attempts +
   arbitrate cap — MP-T12/T13, shipped 2026-07-28/08-02; **MP-G01** closed); the fix-round bound
   stays the single knob in [`workflow.md`](workflow.md) §Hazards.
+
+## Post-merge-push hazard (homelab#1212)
+
+**Auto-merge can land a PR while that PR's own worker pod is still running.** A push the pod makes
+afterwards then strands the remainder of the round's directed work on a branch forked off a
+pre-round parent, and it lands nowhere.
+
+Nothing in the loop notices. From every angle the outcome reads clean:
+
+- the PR is **merged**, **green**, and **reviewer-approved**;
+- the issue closes out through the ordinary merged-closeout path;
+- the run stats post normally, and the strike/no-op detectors see nothing (a round that ran and
+  pushed is not a no-op round).
+
+Proven live on PR #1206 / issue #1203 (2026-09-01): auto-merge squashed two commits at 18:33:52Z;
+the r3 worker force-pushed a third at 18:37:34Z, ~4 minutes later. The cross-repo regression row
+directed in round 3 was therefore never on `goal/1162-scan`, and the repo-qualified
+`resumable_branches` fix shipped with no replay row pinning it. Only a by-hand diff of merged
+files against the round-3 directive found it.
+
+### Guards
+
+Two independent guards, one in each repo:
+
+1. **Launcher-side post-merge-push detector** (`agents/agent-session.sh`, homelab half): after the
+   harness exits, if this ride's PR merged during the run and its head branch received commits
+   after `mergedAt`, emit ONE loud marker (log line + issue comment) naming the branch so the
+   stranded work is salvageable by `--work-branch`. This is the **detection** half — it makes the
+   strand visible.
+
+2. **Finalize-side refusal guard** (`agent-finalize`, agent-runtime#66): refuses to push when the
+   PR is already merged, and parks loudly instead of pushing into the void. This is the
+   **prevention** half — it stops the strand from happening.
+
+Both guards name the branch so the stranded work is recoverable via `--work-branch` without a
+by-hand diff (the resume path already works: #1210 resumes `agent/20260901-165514`).
