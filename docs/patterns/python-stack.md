@@ -70,4 +70,4 @@ flake class exists.
 
 Gate (fast, ephemeral) **in parallel with** artifact/e2e (long-lived runner); evidence/report
 publishing in a trailing non-required job. The merge-blocking wall is `max(gate, e2e)`, never the
-sum.
+sum. If the e2e half runs **kind**, its own contract is [`kind-ci.md`](kind-ci.md).
