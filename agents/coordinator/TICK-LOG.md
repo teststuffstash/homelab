@@ -6313,3 +6313,11 @@ first live ADR-110 maintenance session before the ADR existed.
 - LESSON (park economics, measured): every master move dismissed the sibling parks' approvals
   — serial approvals (one park at a time, re-approve at re-park) kept the churn machine-only;
   the #887 updater-skip clause is the durable fix.
+- WIND-DOWN (05:15Z, operator-ordered after #1271): belts assembly PR#1272 seat-opened (store
+  2<5 → no checkpoint due; S8 delta-4 gap worked as the pilot's manual lane) + merged after one
+  surface-widening round; wave 2 CLOSED. Sprout parks #1265/#1270/#1271 read+approved serially
+  (park-economics discipline held: one approval per master move). Session total: 12 codeowner
+  reads → 12 merges, 2 seat PRs authored+landed, 1 operator-direct gate fix, 3 issues filed
+  with evidence, 0 out-of-sitting summonses. Left riding: #1269's fix round (vacuous-pin CR —
+  next session's park), the #1268/ar#115 provider-attribution finding (checkpoint's), the
+  operator's #1162 goal/validated read.

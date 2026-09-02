@@ -8,6 +8,20 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-02 ~05:15Z WIND-DOWN — WAVE 2 + ROUTER GOAL MACHINE SET BOTH COMPLETE (the
+  unattended corpus session, ~8h).** Belts assembly **PR#1272 MERGED** (seat-opened under the
+  manual pilot — checkpoint store sat 2<5, the S8 delta-4 gap; one surface-widening round =
+  store-entry-19 recurring, S8 delta-2 evidence; adoption readout = store entry 30 on #1162);
+  theme #1239 closed → **Goal #1162 tree = bucket #1170 + operator legs — the operator's
+  `goal/validated` read is NEXT**. Sprout tail: #1265/#1270/#1271 read+approved serially
+  (#1271 merge confirm pending at wind-down); **#1269 (#1266 ref-cache punch) mid fix-round**
+  on a vacuous-pin CHANGES_REQUESTED — its park is the NEXT session's read; #1268/ar#115
+  (G3 provider attribution dead in prod — /report sends no session ref) inert, checkpoint
+  disposes. ⚠ STANDING: the #1249 damper (agent-fix-only on #1237/#1238/#1239 — #1239 now
+  CLOSED so moot there) must outlive until the walk exclusions land; #1255 (.agents/build.yaml
+  paste) = operator sitting. FU-201 COMPLETE end-to-end (a: PR#1265 enforcement, b: PR#1241
+  carrier); FU-200 (PR#1258) + FU-202 (PR#1253) delivered — all three archive candidates at
+  the next fu-sweep.
 - **⚑ 2026-09-01 LATE NIGHT — WAVE-2 QUEUE ACT EXECUTED (the unattended corpus session).**
   PR#1228 (scan assembly, theme #1163) MERGED `846c0f76` ~22:20Z after the seat's ADR-110 read;
   #1163 closed; PR#1208 (#1151 Touches-classifier lint) merged first (blocking-class, unparked
