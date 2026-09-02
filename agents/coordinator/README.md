@@ -882,11 +882,11 @@ resolves a label to a route class via `label_map` in `model-classes.json` (expli
 which labels exist and what constraints they are DECLARED to carry — cite it in rulings rather
 than copying values.
 
-⚠ **The `md`/`lg` rows are declared vocabulary, not yet enforced.** `route()` reads only a row's
-`class` key, and neither row sets one, so `tier_floor`/`never_free` have no reader in the request
-path — a re-grade today records the escalation without changing which model is picked. The router
-wiring that makes them bind is FU-201's remaining (a) leg. Until it lands: re-grade for the
-record, and never report the escalation as SERVED.
+✅ **The `md`/`lg` rows are enforced** (homelab#1259, 2026-09-02). `route()` reads `tier_floor`
+and `never_free` off the resolved `label_map` row: `lg` excludes `:free` models and floors at
+`large` tier; `md` floors at `cheap` tier. A re-grade now changes which model is picked. The
+decision echoes which key bound in the `skipped` reasons (`never-free:label_map`,
+`tier-floor:<floor>><model_tier>`), so a shadow ride is auditable from the store.
 
 ADR-094 holds: the play never names a model; the label indirection is the contract.
 
