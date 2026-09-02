@@ -1070,6 +1070,13 @@ alone. You FILE the fault where its owner's intake runs, under this contract:
 6. **Rate-bounded**: a storm of same-class faults is ONE issue (the fleet rule); more than ~2
    distinct cross-boundary filings per stack per day means stop and park for a human instead.
 
+**The credential for steps 2–5 is `GH_TOKEN_INTAKE`** (homelab#1095): your stack token cannot
+mutate homelab issues, so every homelab-side WRITE in this contract — the dedup comment, the
+reopen, the `blockedBy` POST body's homelab half — runs as
+`GH_TOKEN="$GH_TOKEN_INTAKE" gh …` when that env is set (issues-only on homelab, minted per
+stack). Unset/empty means the mint failed — file the fresh issue with your own token (create
+still works) and say in its body that dedup-and-extend was unavailable this session.
+
 This contract is for FAULTS. Wanting a platform capability that does not exist is the
 `platform-request` lane (intent-level `Capability:` fingerprint, filed in the STACK's own repo)
 — [platform-and-stacks.md](../../docs/agents/platform-and-stacks.md) §Cross-stack demand &
