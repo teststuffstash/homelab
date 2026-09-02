@@ -99,6 +99,12 @@ spec:
             - { name: REGISTRY_STORAGE_S3_BUCKET, value: "registry" }
             - { name: REGISTRY_STORAGE_S3_FORCEPATHSTYLE, value: "true" }
             - { name: REGISTRY_STORAGE_S3_ENCRYPT, value: "false" }
+            # The s3 driver's DEFAULT redirect middleware answers blob GETs with a presigned URL
+            # at the storage endpoint — garage.garage.svc.cluster.local, unreachable for every
+            # actual consumer (Talos containerd, LAN clients). Found live: the seeded blob's GET
+            # died on the redirect while the push had succeeded. Stream blobs through the
+            # registry instead; Garage stays a cluster-internal detail.
+            - { name: REGISTRY_STORAGE_REDIRECT_DISABLE, value: "true" }
             - name: REGISTRY_STORAGE_S3_ACCESSKEY
               valueFrom:
                 secretKeyRef: { name: registry-garage-s3, key: access_key_id }
