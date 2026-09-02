@@ -3233,6 +3233,12 @@ class Proxy(BaseHTTPRequestHandler):
                     if exacto_no_pin:
                         notes.append("exacto:no-pin")
                     or_model = normalize_model(str(payload["model"]))
+                    # FU-186 step 1: strip :exacto from the bookkeeping key so cooldown/breaker
+                    # state is keyed under the bare model id — the same id the /route eligibility
+                    # loop filters candidates against (router.py L1291/L1300). The raw payload
+                    # model keeps the suffix so Auto Exacto still owns provider ordering upstream.
+                    if exacto_no_pin:
+                        or_model = or_model.removesuffix(":exacto")
                     # ADR-107 / homelab#445: the opencode legs — a model id starting with
                     # `opencode-go/` (Go rail) or `opencode/` (Zen free rail) routes to the
                     # opencode.ai host with the prefix stripped and auth replaced by the rail key.
