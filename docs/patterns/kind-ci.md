@@ -2,9 +2,10 @@
 
 > The consumption contract for **ephemeral kind clusters in a stack's CI gate** — the sibling of
 > [`python-stack.md`](python-stack.md) and [`observability.md`](observability.md) (same shape:
-> written once so the next consumer copies instead of re-learning). Two stacks paid for these
-> lessons — **oracle** (`oracle-fleet/scripts/e2e-kind.sh`) and **sleep**
-> (`sleep-tracking/scripts/test-integration.sh`) — and the platform ate two incidents
+> written once so the next consumer copies instead of re-learning). Three stacks run kind in
+> their gates — **oracle** (`oracle-fleet/scripts/e2e-kind.sh`), **sleep**
+> (`sleep-tracking/scripts/test-integration.sh`), and **circles** (`kind@latest` in its devbox,
+> the `.agents/build.yaml` integration gate; FU-153's in-pod evidence) — and the platform ate two incidents
 > (oracle-fleet#228 2026-08-09, the 2026-09-02 fleet-wide e2e outage) before this page existed.
 > Every claim cites its receipt.
 
