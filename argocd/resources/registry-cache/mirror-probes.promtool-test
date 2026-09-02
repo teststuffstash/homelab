@@ -1,0 +1,194 @@
+# Behaviour fixture for RegistryMirrorProbeFailing (homelab#1282 — the #288/#313/#332 restart-gap
+# class applied to the single-replica blackbox prober, sized by #349's bound, identical reasoning
+# to EndpointProbeFailing in argocd/resources/blackbox/).
+#
+#   devbox run -- promtool test rules argocd/resources/registry-cache/mirror-probes.promtool-test
+#
+# `devbox run prometheus-rules-lint` runs this in CI (it executes `promtool test rules` over every
+# *.promtool-test under argocd/), so a red fixture here is a red required check. Named
+# .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+# WHAT IS BEING PINNED, in the order the argument runs:
+#   1. THE HOLE — blackbox-exporter is `replicas: 1` and every probe is scraped THROUGH it, so a
+#      roll empties all mirror probes at once and the raw expr's `for: 10m` restarts.
+#   2. THE CEILING — a hole wider than the range still restarts it. Accepted, so asserted.
+#   3. THE DIRECTION — `min_over_time`, because low is the bad reading. The class's default `max`
+#      is loaded as a witness and shown arriving late.
+#   4. THE PRICE — recovery is up to 5m late, asserted rather than claimed.
+#   5. EACH MIRROR FIRES INDEPENDENTLY — three targets, one alertname, no cross-talk.
+#
+# ⚠ FIXTURE NOTE: `stale` in an input series injects a real staleness marker, which is exactly
+# what Prometheus writes when a scrape fails — so the holes below bite instantly, with no 5m-
+# lookback cushion, the way a real prober roll does.
+#
+# CLOCK: promtool's test clock starts at 0 and `interval: 1m` matches the Probe's own 60s
+# interval, so one step here is one probe.
+rule_files:
+  - mirror-probes.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1. THE HOLE: a prober roll mid-outage does not restart the window ─────────────────────────
+  # mirror-docker-io is genuinely returning 5xx from t=0. At t=21 blackbox-exporter is replaced —
+  # the scrape fails, Prometheus staleness-marks every probe series, and four minutes pass before
+  # a real sample lands again. The mirror never recovered; only the measurement went away.
+  - interval: 1m
+    name: a prober roll mid-outage does not restart the 10m window
+    input_series:
+      - series: 'probe_success{instance="http://192.168.40.20/v2/",job="blackbox-mirrors",namespace="monitoring"}'
+        values: "0+0x20 stale _x2 0+0x60"
+    alert_rule_test:
+      # `for: 10m` has not elapsed yet
+      - eval_time: 9m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: &docker_alert
+          - exp_labels:
+              severity: warning
+              instance: http://192.168.40.20/v2/
+              job: blackbox-mirrors
+              namespace: monitoring
+      # mid-hole, past the staleness marker: the raw selector is EMPTY here. The bridged one is
+      # not — the range still reaches the samples at t=19,20.
+      - eval_time: 21m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: *docker_alert
+      - eval_time: 23m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: *docker_alert
+      # …and it never stopped firing, so the recovery of the SCRAPE is a non-event
+      - eval_time: 30m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: *docker_alert
+      - eval_time: 80m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: *docker_alert
+
+  # ── 2. THE CEILING — a hole wider than [5m] does still restart the window ─────────────────────
+  # Accepted, not fixed: a crash-loop, a cold image pull off a mirror, or a node drain outruns the
+  # bridge. Asserted here so the limit is executed rather than assumed (the #313/#333 discipline).
+  # Nine minutes of hole: last real sample t=20, first one after t=28.
+  - interval: 1m
+    name: a hole wider than the [5m] bridge does reset the 10m window (accepted ceiling)
+    input_series:
+      - series: 'probe_success{instance="http://192.168.40.20/v2/",job="blackbox-mirrors",namespace="monitoring"}'
+        values: "0+0x20 stale _x6 0+0x60"
+    alert_rule_test:
+      # still inside the bridge — t=20 is the newest sample in (19,24]
+      - eval_time: 24m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: *docker_alert
+      # past it: (20,25] holds nothing at all, and the alert really does drop
+      - eval_time: 25m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: []
+      # the probe returns at t=28 and pays a full fresh 10m
+      - eval_time: 37m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: []
+      - eval_time: 38m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: *docker_alert
+
+  # ── 3. THE DIRECTION — `max_over_time` is the class's default and the wrong function here ──────
+  # Class rule (ii): max is alert-PRESERVING only where HIGH is the bad reading. Here it holds the
+  # healthiest sample of the window, so the range must fill entirely with failures before it flips
+  # — four of the five minutes, on a 1m grid — and the page lands four minutes late on a mirror
+  # that went down at t=5 and stayed down.
+  # This test uses a witness rule loaded alongside the shipped one. The shipped expr uses
+  # min_over_time and fires at t=15; the max_over_time witness is still pending at t=18.
+  - interval: 1m
+    name: min_over_time fires on schedule; max_over_time delays by nearly the whole range
+    input_series:
+      - series: 'probe_success{instance="http://192.168.40.20/v2/",job="blackbox-mirrors",namespace="monitoring"}'
+        values: "1+0x4 0+0x60"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: *docker_alert
+      # the wrong direction is still pending here — a mirror down since t=5, unreported
+      - eval_time: 15m
+        alertname: RegistryMirrorProbeFailingMaxDirection
+        exp_alerts: []
+      - eval_time: 18m
+        alertname: RegistryMirrorProbeFailingMaxDirection
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: RegistryMirrorProbeFailingMaxDirection
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: http://192.168.40.20/v2/
+              job: blackbox-mirrors
+              namespace: monitoring
+
+  # ── 4. THE PRICE — recovery is up to 5m late, asserted rather than claimed ────────────────────
+  # `min_over_time` means "failed at least once in the last 5m", so a recovered mirror leaves the
+  # alert ringing for up to 5m after the first success. Against `for: 10m` on a mirror that was
+  # genuinely down, that is the cheaper fault — but it is a real cost, so it is asserted.
+  - interval: 1m
+    name: a recovered mirror clears the alert, up to 5m late
+    input_series:
+      - series: 'probe_success{instance="http://192.168.40.20/v2/",job="blackbox-mirrors",namespace="monitoring"}'
+        values: "0+0x29 1+0x40"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: *docker_alert
+      # recovered at t=30 and STILL ringing: the bridge's cost, in the open
+      - eval_time: 33m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: *docker_alert
+      # ...and gone once the range window clears, ~5m after the fix
+      - eval_time: 36m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts: []
+
+  # ── 5. EACH MIRROR FIRES INDEPENDENTLY — no cross-talk between targets ────────────────────────
+  # Three targets share the same alertname and job. A failure on one must not suppress or delay
+  # the others. Here docker-io is down, ghcr is healthy, and mcr is down — exactly two alerts.
+  - interval: 1m
+    name: each mirror fires independently — two down, one up, two alerts
+    input_series:
+      - series: 'probe_success{instance="http://192.168.40.20/v2/",job="blackbox-mirrors",namespace="monitoring"}'
+        values: "0+0x60"
+      - series: 'probe_success{instance="http://192.168.40.21/v2/",job="blackbox-mirrors",namespace="monitoring"}'
+        values: "1+0x60"
+      - series: 'probe_success{instance="http://192.168.40.31/v2/",job="blackbox-mirrors",namespace="monitoring"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: http://192.168.40.20/v2/
+              job: blackbox-mirrors
+              namespace: monitoring
+          - exp_labels:
+              severity: warning
+              instance: http://192.168.40.31/v2/
+              job: blackbox-mirrors
+              namespace: monitoring
+      - eval_time: 30m
+        alertname: RegistryMirrorProbeFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: http://192.168.40.20/v2/
+              job: blackbox-mirrors
+              namespace: monitoring
+          - exp_labels:
+              severity: warning
+              instance: http://192.168.40.31/v2/
+              job: blackbox-mirrors
+              namespace: monitoring
