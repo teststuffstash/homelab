@@ -788,7 +788,7 @@ spec:
                             || { echo "FATAL: loop-git token fetch refused/failed — not scanning blind"; exit 1; }
                           export GH_TOKEN
                           rm -rf /work/homelab
-                          timeout 120 git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
+                          timeout 120 git clone --depth 1 -b master "https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab.git" /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
                           export SCAN_STACK={{ $stack }} LOOP_NS={{ $loopns }}
                           exec bash /work/homelab/agents/coordinator-scan.sh --spawn
                       env:
@@ -849,7 +849,7 @@ spec:
                             "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator")" \
                             || { echo "FATAL: loop-git token fetch refused/failed — not polling blind"; exit 1; }
                           rm -rf /work/homelab
-                          timeout 120 git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
+                          timeout 120 git clone --depth 1 -b master "https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab.git" /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
                           export SCAN_STACK={{ $stack }}
                           exec bash /work/homelab/agents/review-reflex.sh
                       env:
@@ -919,7 +919,7 @@ spec:
                             || { echo "FATAL: loop-git token fetch refused/failed — not sweeping blind"; exit 1; }
                           export GH_TOKEN
                           rm -rf /work/homelab
-                          timeout 120 git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
+                          timeout 120 git clone --depth 1 -b master "https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab.git" /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
                           export SCAN_STACK={{ $stack }} LOOP_NS={{ $loopns }} SCAN_JANITOR=1
                           exec bash /work/homelab/agents/coordinator-scan.sh --spawn
                       env:
@@ -1091,11 +1091,17 @@ spec:
                         - |
                           set -e
                           rm -rf /work/homelab /work/main
-                          timeout 120 git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
+                          # 2026-09-02 (the #1136 idiom sweep, incident postmortem): SOFT token fetch — this
+                          # template had no GH_TOKEN at all, and anonymous git from our IP 401-throttles under
+                          # load. Absent/refused token degrades to the old anonymous clone, never a new FATAL.
+                          GH_TOKEN="$(curl -fsS --max-time 10 -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator" 2>/dev/null || true)"
+                          _hu="https://github.com/teststuffstash/homelab.git"; _mu="https://github.com/teststuffstash/{{ $xr.spec.mainRepo }}.git"
+                          [ -n "${GH_TOKEN:-}" ] && { _hu="https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab.git"; _mu="https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/{{ $xr.spec.mainRepo }}.git"; }
+                          timeout 120 git clone --depth 1 -b master "$_hu" /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
                           if ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh; then
                             echo "probe DEFERRED — subscription limited (FU-088); next cron tick retries"; exit 0
                           fi
-                          git clone --depth 1 https://github.com/teststuffstash/{{ $xr.spec.mainRepo }}.git /work/main
+                          git clone --depth 1 "$_mu" /work/main
                           if [ ! -f /work/main/.agents/probe.md ]; then
                             echo "NO PROBE BRIEF: {{ $xr.spec.mainRepo }}/.agents/probe.md does not exist — the prober is enabled but has nothing to run. Write the brief (roles.md §prober; oracle UC-1 probe-e2e is the donor shape)."; exit 0
                           fi
