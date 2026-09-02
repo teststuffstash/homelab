@@ -984,6 +984,12 @@ spec:
                     - { matchName: codeload.github.com }
                     - { matchPattern: "*.githubusercontent.com" }
                     - { matchName: cache.nixos.org }
+                    {{- if $xr.spec.mcp }}
+                    {{- $mcpHost := $xr.spec.mcp.endpoint | trimPrefix "https://" | trimPrefix "http://" | splitList "/" | first | splitList ":" | first }}
+                    # MCP endpoint HOST, derived from spec.mcp.endpoint — same derivation as the
+                    # worker CNP (composition.yaml:1448). Stacks without spec.mcp render no extra leg.
+                    - { matchName: {{ $mcpHost }} }
+                    {{- end }}
                   toPorts:
                     - ports:
                         - { port: "443", protocol: TCP }
