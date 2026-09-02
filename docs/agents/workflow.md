@@ -409,6 +409,16 @@ replay harness** — a play's output is judgment, not an action stream, so its g
 lint (the lint greps play passages), ADR-094's launcher-owned orders shrinking the judgment
 surface, and the one-ride-per-state debounces bounding a bad judgment's cost.
 
+**What the pin-vacuity gate proves — and does not (homelab#1107, refined #1215/#1225,
+2026-09-02).** It proves red-on-base for actions-mode fixtures on default-branch PRs. It
+deliberately does NOT judge: `mode: suite` fixtures (self-asserting — they resolve the PR's own
+sources), comment/blank-only diffs to commentable fixture files (documentation, not a pin claim
+— #1215), or PRs onto **stacked bases** (`goal/**`: the fix may predate the PR there; those get
+a "cannot prove vacuity" warning, never a verdict). And a **pure-absence contract** cannot red
+on any base — author such fixtures to pin a positive instead (the exactly-one-CALL pattern,
+PR#1272's repair). Whether the fixture REACHES the changed lines is #1224's parts-coverage leg,
+not this gate.
+
 ### Hazards to bake in from day one
 
 - **Bounded rounds** — max review rounds (e.g. 3) then escalate; a flaky reviewer/CI otherwise burns
