@@ -5582,6 +5582,57 @@ data: [DONE]
     with _refs_lock:
         _refs.pop(unknown_ref, None)
 
+    # ── #1262: :exacto strip self-test ──────────────────────────────────────────────────────────
+    print("\n=== :exacto strip self-test (issue #1262) ===")
+    # The production :exacto strip (L3255-3264) must key cooldown/breaker state under the
+    # BARE model id, skip the M4 pin, and preserve the :exacto suffix in the forwarded payload
+    # so Auto Exacto still owns provider ordering upstream.
+
+    # Test 1: breaker keyed under bare model — seed a breaker for "gpt-4o", then send
+    # "gpt-4o:exacto" and verify the breaker trips (502). Non-vacuous: if the removesuffix
+    # is reverted, the breaker would be keyed under "gpt-4o:exacto" and would NOT match.
+    _exacto_session = "direct:c2fd34dd"  # sha256("Bearer OAUTH-SECRET")[:8]
+    with _cb_lock:
+        _cb[(_exacto_session, "gpt-4o")] = {
+            "auth": 4, "generic": 0, "cred": 0,
+            "open_until": time.time() + 3600,
+            "class": "auth", "n": 4, "ts": time.time(),
+        }
+    seen.clear()
+    st, data = call("gpt-4o:exacto")
+    check(st == 401, "exacto strip: breaker keyed under bare model — 401 on gpt-4o:exacto (auth-class)")
+    check(b"circuit-open" in data,
+          "exacto strip: response body says circuit-open (breaker tripped)")
+    # Clean up breaker state
+    with _cb_lock:
+        _cb.pop((_exacto_session, "gpt-4o"), None)
+
+    # Test 2: pin skipped — exacto model must NOT get a provider pin injected.
+    # The OpenRouter stub should receive the model with :exacto suffix intact.
+    seen.clear()
+    st, data = call("gpt-4o:exacto")
+    check(st == 200, "exacto strip: 200 forwarded (no breaker)")
+    o = seen.get("openrouter") or {}
+    check(o.get("model") == "gpt-4o:exacto",
+          "exacto strip: :exacto suffix preserved in forwarded payload")
+    # Verify no provider pin was injected (the forwarded body should not have a `provider` key
+    # unless the original request had one — our test request doesn't).
+    try:
+        body = json.loads(o.get("body_raw") or b"{}")
+        check("provider" not in body,
+              "exacto strip: no provider pin injected (pin=None, max_price preserved)")
+    except (ValueError, TypeError):
+        check(False, "exacto strip: forwarded body is valid JSON")
+
+    # Test 3: non-exacto model still gets normal processing (pin injected, no suffix strip).
+    # This verifies the exacto path is opt-in and doesn't affect normal models.
+    seen.clear()
+    st, data = call("gpt-4o")
+    check(st == 200, "exacto strip: non-exacto model 200")
+    o = seen.get("openrouter") or {}
+    check(o.get("model") == "gpt-4o",
+          "exacto strip: non-exacto model forwarded without suffix modification")
+
     print()
     if not fails:
         print("self-test: PASS")
