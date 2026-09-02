@@ -6425,3 +6425,10 @@ first live ADR-110 maintenance session before the ADR existed.
   died on a model rate-limit at 07:35, then sat in the C4/C5 bare-mention limbo — PR#346
   mentions it — the limbo is the postmortem's design residual); healing watch armed for the
   next tick. My #351 "loop pods unaffected" claim corrected on-thread.
+- **Addendum ~14:1xZ — the launcher fix was NOT enough**: ticks kept failing (Loki scoped-door
+  forensics on the GC'd pods — the door works, recipe in loki-tenancy.md) → the per-stack crons
+  are COMPOSITION-rendered and carried FOUR more anonymous clone sites (`0c6d00f7` sweeps them;
+  postmortem residual marked executed). Also same hour: allure-reports bucket hit its 5Gi cap
+  exactly (Garage answers quota as 403 "insufficient permissions") → oracle-iac PR#491 5→10Gi;
+  FU-205 filed for WAN-upstream accounting (family-privacy boundary + CI-VM legs, operator
+  constraints recorded).
