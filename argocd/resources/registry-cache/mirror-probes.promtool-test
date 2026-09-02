@@ -115,6 +115,21 @@ tests:
       - eval_time: 15m
         alertname: RegistryMirrorProbeFailing
         exp_alerts: *docker_alert
+      # the wrong direction is still pending here — a mirror down since t=5, unreported
+      - eval_time: 15m
+        alertname: RegistryMirrorProbeFailingMaxDirection
+        exp_alerts: []
+      - eval_time: 18m
+        alertname: RegistryMirrorProbeFailingMaxDirection
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: RegistryMirrorProbeFailingMaxDirection
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: http://192.168.40.20/v2/
+              job: blackbox-mirrors
+              namespace: monitoring
 
   # ── 4. THE PRICE — recovery is up to 5m late, asserted rather than claimed ────────────────────
   # `min_over_time` means "failed at least once in the last 5m", so a recovered mirror leaves the
