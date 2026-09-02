@@ -1,0 +1,18 @@
+# #1274 — REMEDIATION-WOULD shadow marker (dial trial, leg 1).
+#
+# The responder triage session's brief gains a REMEDIATION-WOULD MARKER instruction block
+# telling the LLM to emit a structured line when its verdict names a mechanical remediation
+# it would have performed had the dial been armed, and to omit it for report-only verdicts.
+#
+# This fixture verifies the instruction is present in the extracted brief by checking that
+# the YAML's embedded shell script contains the marker text.
+#
+# mode: suite — standalone entrypoint, no network, no cluster, no credentials.
+name: responder-remediation-would
+mode: suite
+entrypoint: agents/responder-remediation-would-replay.sh
+# hermeticity contract: the suite needs `yq` (extract the shipped script from the YAML) —
+# present under devbox, absent outside it. Declared so the harness reports "requires <tool>"
+# instead of the inner test's own exit-2.
+requires:
+  - yq

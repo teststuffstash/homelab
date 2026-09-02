@@ -278,6 +278,7 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-cause-line/malformed` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/valid` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-graduation/responder-graduation` | suite | - | `-` | - |
+| `responder-remediation-would/responder-remediation-would` | suite | - | `-` | - |
 | `responder-reopen/fix-verdict` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-reopen/report-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
