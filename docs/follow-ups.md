@@ -108,18 +108,17 @@ six OVERSIZE items pointer-ized into
 ## GitOps & platform
 
 - [ ] **FU-205** — **WAN-upstream accounting: one view of what hits GitHub/PyPI/ghcr/… from
-      where** (operator ask 2026-09-02, after two same-day WAN-limit incidents: ghcr stream
-      kills → ADR-121, and the anonymous-git 401 throttle → the loop outage postmortem). No
-      FU/ADR covers it (grepped netflow|ipfix|ntopng|insight). Inventory verified live: OPNsense
-      **NetFlow v9 capture ACTIVE on all ifaces + Insight aggregators syncing** (per-src totals
-      300s, per-src details daily) — the router already sees every WAN flow, **no VLAN needed
-      for visibility** (source-IP filtering suffices; a VLAN is a policy/isolation decision,
-      separate); Hubble already exports per-namespace DNS intent + FQDN-labeled drops; the
-      github-exporter already exports per-identity `github_rate_limit_remaining`. Next concrete
-      action: a small design pass picking (a) NetFlow v9 export → in-cluster collector
-      (goflow2-class) → Prometheus with a dst-CIDR→provider map (github meta CIDRs, PyPI,
-      ghcr/Fastly), vs (b) querying Insight's aggregates directly; plus a Grafana "WAN
-      dependencies" board joining all three sources. Link: the incident postmortem §Residuals.
+      where** (operator ask 2026-09-02 after two same-day WAN-limit incidents; no FU/ADR covers
+      it). **Hard constraint (operator): FAMILY traffic must never reach the cluster** — so raw
+      router NetFlow cannot export to Prometheus unfiltered, and flowd has no src-CIDR filter:
+      either the **homelab VLAN** (capture/export per-interface = structural filter — the real
+      argument for the VLAN, reframed from my visibility-only first take) or router data stays
+      router-local (Insight, operator-eyes). **CI VMs (ci-runner-01, the jail host) are outside
+      Hubble** — they need host-side counters (nftables per-provider-CIDR sets → node-exporter
+      textfile) shipping homelab-origin data only. Already live: Hubble per-ns DNS/drops;
+      per-identity `github_rate_limit_remaining`; Insight on-router. Next: the design pass
+      (VLAN-vs-router-local + the VM counter leg + the Grafana join). Link: the 2026-09-02
+      loop-outage postmortem §Residuals.
 
 - [ ] **FU-204** — **C4/C5's bare-mention exclusion is a silent-stall limbo** (2026-09-02, first
       live sighting: fleet#345 — its r1 died on a model rate-limit, the label stayed
