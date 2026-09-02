@@ -63,6 +63,13 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       the operator wanted the SURFACE — the arbitrate "re-dispatch stronger" verdict has no
       carrier to the router ("they did not meet") → FU-201. The hand edit was sanctioned as the
       un-wedge; presenting it as the fix was the gap.
+- [ ] design-agents-G5 — a Goal's verdict-readiness was relayed as DUE from SHIPPED machinery
+      while its Production-leg's verbs (demoting/advising/probing) name OBSERVED events: on #818
+      the operator's exercised-in-a-stack bar refuted 3 of 4 deliverables (teeth never fired —
+      burnt-bool 30d max 0; blocking knob — no stack sets `lenses:`; dial — nothing rendered).
+      Fix candidate: the live-state rule extends to ACCEPTANCE VERBS — a verdict recommendation
+      verifies each Production-leg verb against an observed event, never a ship record.
+      Sighted 2026-09-02 (operator catch: "most of it has not been exercised in a stack yet").
 - [ ] design-agents-G2 — a lifecycle LABEL was reported as activity ("#833 is riding —
       in-progress") from a live `gh` read alone: the label is a CLAIM, and the state is the
       JOIN (label × live pod × PR state) — the issue's PR had merged 8h earlier with no pod
