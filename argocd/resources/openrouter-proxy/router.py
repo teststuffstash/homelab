@@ -21,6 +21,7 @@ import needs no packaging). `--self-test` runs the in-memory round-trip; CI runs
 `devbox run router-self-test`.
 """
 
+import copy
 import json
 import math
 import os
@@ -471,7 +472,10 @@ def record_generation(gen_id: str, requested_model: str, data: dict) -> bool:
 
 def record_provider_event(model: str, provider: str, status: int) -> None:
     """Passive data-plane observation: one row per forwarded OpenRouter chat/completions
-    response. `class` buckets the status for cheap aggregation."""
+    response. `class` buckets the status for cheap aggregation.
+    FU-186 step 1: strip :exacto suffix so cooldown/breaker bookkeeping is keyed under the
+    bare model id — the same id the /route eligibility loop filters candidates against."""
+    model = model.removesuffix(":exacto")
     klass = ("2xx" if 200 <= status < 300 else
              "429" if status == 429 else
              "4xx" if 400 <= status < 500 else
@@ -1401,12 +1405,18 @@ def route(payload: dict, ctx: dict) -> dict:
             result = {"model": pick[0], "rail": rail, "price_per_mtok": pick[1],
                       "basis": pick[2], "jitter_pool": [p[0] for p in band]}
         break
+    # FU-186 step 1: class-level provider_policy — append :exacto suffix when the resolved
+    # class carries provider_policy: "exacto", so the completion path skips pin injection
+    # (the :exacto suffix is already handled at openrouter-proxy.py L3232/L3302).
+    if result and cinfo.get("provider_policy") == "exacto":
+        result["model"] += ":exacto"
     if result:
         half_open = bool(_read(
             "SELECT 1 FROM model_cooldowns WHERE model=? AND role=? AND until <= ?",
             (result["model"], role, now)))
         decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
-                    "half_open": half_open, "skipped": skipped, "jitter": jitter_on, **result}
+                    "half_open": half_open, "skipped": skipped, "jitter": jitter_on,
+                    "provider_policy": cinfo.get("provider_policy"), **result}
     else:
         if decorrelate_family and not eligible and skipped and \
                 all(s["reason"] == f"decorrelate:{decorrelate_family}" for s in skipped):
@@ -2232,6 +2242,49 @@ def self_test() -> int:
                       deny=["deepseek/deepseek-v4-flash"]), CTX)
     assert _def["decision"] == "defer" and _def.get("resolved") is None, \
         f"defer must not carry resolved: {_def.get('resolved')}"
+    # ── FU-186 step 1: provider_policy knob — exacto skips pin injection ──
+    # (a) With no class carrying provider_policy, an audit/research route serving
+    #     openrouter/fusion is pin-preserving (no :exacto suffix, no provider_policy key).
+    _audit = route(dict(base, role="audit", chain=["openrouter/fusion"]), CTX)
+    assert _audit["decision"] == "dispatch" and _audit["model"] == "openrouter/fusion", \
+        f"audit route must serve openrouter/fusion without :exacto: {_audit}"
+    assert _audit.get("provider_policy") is None, \
+        f"audit class has no provider_policy: {_audit}"
+    # (b) A class that DOES carry provider_policy: "exacto" appends :exacto and echoes the policy.
+    _saved_classes = copy.deepcopy(_classes)
+    _classes["classes"]["coding"]["provider_policy"] = "exacto"
+    _exacto = route(dict(base), CTX)  # role=worker → class coding
+    assert _exacto["decision"] == "dispatch" and _exacto["model"] == "inclusionai/ling-3.0-flash:free:exacto", \
+        f"coding with provider_policy=exacto must append :exacto: {_exacto}"
+    assert _exacto.get("provider_policy") == "exacto", \
+        f"decision must echo provider_policy: {_exacto}"
+    _classes.clear()
+    _classes.update(copy.deepcopy(_saved_classes))
+    # (c) NON-VACUOUS: cooldown/breaker bookkeeping under the BARE id, not the :exacto-suffixed id.
+    #     This assertion goes RED against the pre-fix source (where or_model kept the suffix) and
+    #     GREEN after the fix (openrouter-proxy.py strips :exacto from the bookkeeping key).
+    _classes["classes"]["coding"]["provider_policy"] = "exacto"
+    _exacto2 = route(dict(base), CTX)
+    _exacto_model = _exacto2["model"]  # e.g. "inclusionai/ling-3.0-flash:free:exacto"
+    _bare_model = _exacto_model.removesuffix(":exacto")  # e.g. "inclusionai/ling-3.0-flash:free"
+    # Trip a cooldown using the model as it arrives on the completion path (suffixed).
+    for _ in range(8):
+        record_provider_event(_exacto_model, "novita", 429)
+    # The cooldown must be keyed under the BARE id — the same id the /route eligibility loop
+    # filters candidates against. The suffixed id must NOT appear in active_cooldowns.
+    assert cooldown_note(_bare_model, 429, role="worker") == "tripped", \
+        f"cooldown must be keyed under bare id {_bare_model}, not suffixed {_exacto_model}"
+    assert _bare_model in active_cooldowns(role="worker"), \
+        f"bare model {_bare_model} must be in active_cooldowns"
+    assert _exacto_model not in active_cooldowns(role="worker"), \
+        f"suffixed model {_exacto_model} must NOT be in active_cooldowns"
+    # Clear the cooldown so it doesn't pollute subsequent tests.
+    for _ in range(8):
+        record_provider_event(_bare_model, "novita", 200)
+    assert cooldown_note(_bare_model, 200, role="worker") == "cleared", \
+        f"cooldown must clear for {_bare_model}"
+    _classes.clear()
+    _classes.update(copy.deepcopy(_saved_classes))
     # free model starts 429ing: burst past min_events/bad_share trips a cooldown
     for _ in range(8):
         record_provider_event("inclusionai/ling-3.0-flash:free", "novita", 429)

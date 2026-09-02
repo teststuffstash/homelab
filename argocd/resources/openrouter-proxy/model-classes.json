@@ -1,5 +1,5 @@
 {
- "_comment": "ADR-096 class policy \u2014 the router-owned half of model routing (the per-stack candidate CHAINS stay in agents/stacks.json / AgentStack claims; launchers pass them to POST /route, the router filters against THIS file + strikes + capacity). Lives in the kustomize dir because kustomize configMapGenerator cannot load outside its root; consumers use the API, never this file directly. tier_thresholds = FU-109 (dispatch units defer later than heavy sessions). model_tiers must cover every stacks.json chain entry (CI: devbox run router-self-test + agents-registration-lint). rotation_fallback IS the FU-095 rotation v1 \u2014 no rankings API exists (probed 2026-07-27), so the list is git-curated, fed by the weekly scout digest; entries are chain-TAIL candidates only, graduation into heads stays human.",
+ "_comment": "ADR-096 class policy — the router-owned half of model routing (the per-stack candidate CHAINS stay in agents/stacks.json / AgentStack claims; launchers pass them to POST /route, the router filters against THIS file + strikes + capacity). Lives in the kustomize dir because kustomize configMapGenerator cannot load outside its root; consumers use the API, never this file directly. tier_thresholds = FU-109 (dispatch units defer later than heavy sessions). model_tiers must cover every stacks.json chain entry (CI: devbox run router-self-test + agents-registration-lint). rotation_fallback IS the FU-095 rotation v1 — no rankings API exists (probed 2026-07-27), so the list is git-curated, fed by the weekly scout digest; entries are chain-TAIL candidates only, graduation into heads stays human. provider_policy (FU-186): per-class key; absent = today's pin behaviour (provider.order injected). \"exacto\" skips pin injection — the completion path appends :exacto to the served model id, which the proxy forwards UNTOUCHED with the M4 pin skipped, letting upstream's tool-call-quality ordering own provider selection. Priced classes carry no policy by construction.",
  "classes": {
   "coding": {
    "chain_source": "stack",
@@ -178,12 +178,12 @@
   "tight_floor_tier": 1
  },
  "tier_thresholds": {
-  "_comment": "FU-109 (P2, live): a tier only RAISES a window's threshold \u2014 the proxy composes effective = max(ANTHROPIC_UTIL_THRESHOLD_<W>, tier). dispatch = ~30s dispatch units (coordinator/responder), heavy = full sessions (reviewer, claude-tier worker).",
+  "_comment": "FU-109 (P2, live): a tier only RAISES a window's threshold — the proxy composes effective = max(ANTHROPIC_UTIL_THRESHOLD_<W>, tier). dispatch = ~30s dispatch units (coordinator/responder), heavy = full sessions (reviewer, claude-tier worker).",
   "dispatch": 0.9,
   "heavy": 0.8
  },
  "cooldown": {
-  "_comment": "ADR-096 addendum 4: model-level temporary blacklist. Trip when >= min_events in window_s and the non-2xx share >= bad_share (reason = dominant class); hold base_s doubling per consecutive trip up to max_s; ANY 2xx clears + resets the streak (half-open recovery: an expired hold makes the model eligible again and cheapest-effective ordering re-picks it \u2014 natural traffic is the probe). Keyed on OUR passive events, never upstream uptime (laguna measured 100% upstream while 81% 429 for our account, 2026-08-02).",
+  "_comment": "ADR-096 addendum 4: model-level temporary blacklist. Trip when >= min_events in window_s and the non-2xx share >= bad_share (reason = dominant class); hold base_s doubling per consecutive trip up to max_s; ANY 2xx clears + resets the streak (half-open recovery: an expired hold makes the model eligible again and cheapest-effective ordering re-picks it — natural traffic is the probe). Keyed on OUR passive events, never upstream uptime (laguna measured 100% upstream while 81% 429 for our account, 2026-08-02).",
   "window_s": 600,
   "min_events": 6,
   "bad_share": 0.5,
@@ -191,13 +191,13 @@
   "max_s": 3600
  },
  "circuit_breaker": {
-  "_comment": "ADR-096 addendum 3: in-flight 4XX breaker per (session, model). auth (401/403) trips fast \u2014 an auth failure never self-heals mid-session (the 140-401 laguna:free storm); generic 4xx gets more rope; 429 NEVER counts (fail-over/back-off, not session-abort). hold_s = how long forwarding stays stopped.",
+  "_comment": "ADR-096 addendum 3: in-flight 4XX breaker per (session, model). auth (401/403) trips fast — an auth failure never self-heals mid-session (the 140-401 laguna:free storm); generic 4xx gets more rope; 429 NEVER counts (fail-over/back-off, not session-abort). hold_s = how long forwarding stays stopped.",
   "auth_threshold": 4,
   "generic_threshold": 10,
   "hold_s": 900
  },
  "selection": {
-  "_comment": "The /route ordering rule (operator 2026-07-27, built in P3): among same-class/same-tier candidates the EFFECTIVE-cheapest wins, with a small randomization \u2014 a uniform pick among candidates within jitter_band_pct of the cheapest \u2014 so evidence keeps accruing across near-priced models instead of a monoculture. Price basis order (ADR-096 addendum 2): MARKET effective price (frontend stats/effective-pricing \u2014 30d traffic-weighted, real cache rates; same basis the pins use) \u2192 harvested /generation billed costs as the cross-check \u2192 registry list-blend as cold-start fallback.",
+  "_comment": "The /route ordering rule (operator 2026-07-27, built in P3): among same-class/same-tier candidates the EFFECTIVE-cheapest wins, with a small randomization — a uniform pick among candidates within jitter_band_pct of the cheapest — so evidence keeps accruing across near-priced models instead of a monoculture. Price basis order (ADR-096 addendum 2): MARKET effective price (frontend stats/effective-pricing — 30d traffic-weighted, real cache rates; same basis the pins use) → harvested /generation billed costs as the cross-check → registry list-blend as cold-start fallback.",
   "rule": "cheapest-effective-jitter",
   "jitter_band_pct": 15
  },
@@ -216,7 +216,7 @@
   "openrouter/fusion": "premium",
   "openrouter/free": "free",
   "xiaomi/mimo-v2.5": "cheap",
-    "opencode-go/deepseek-v4-flash": "cheap"
+  "opencode-go/deepseek-v4-flash": "cheap"
  },
  "rotation_fallback": {
   "coding": [],
