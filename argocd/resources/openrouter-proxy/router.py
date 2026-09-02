@@ -306,7 +306,7 @@ def _read(sql: str, params: tuple = ()) -> list[tuple]:
         return []
 
 
-def record_report(d: dict, session_ref: str = "") -> tuple[bool, bool]:
+def record_report(d: dict, session_ref: str = "") -> tuple[bool, bool, str]:
     """One POST /report body → run_reports (+ a strikes row when it IS a strike: strike-class
     error and no PR came out — mirrors the launcher's AGENT_STRIKE condition; the GitHub comment
     stays the human/audit twin). Returns (stored, striked, provider). Idempotent per session (the launcher
@@ -1774,18 +1774,18 @@ def self_test() -> int:
     init(None, os.path.join(os.path.dirname(os.path.abspath(__file__)), "model-classes.json")
          if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                         "model-classes.json")) else None)
-    stored, striked = record_report({
+    stored, striked, _prov1 = record_report({
         "session": "t-1", "task": "issue-9", "stack": "sleep", "role": "worker", "round": 2,
         "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.12,
         "error_class": "harness-death", "outcome": "no-pr"})
     assert stored and striked, "strike-class report must store + strike"
-    stored2, striked2 = record_report({
+    stored2, striked2, _prov2 = record_report({
         "session": "t-1", "task": "issue-9", "stack": "sleep",
         "model": "deepseek/deepseek-v4-flash", "error_class": "harness-death",
         "outcome": "no-pr"})
     assert stored2 and striked2, "re-POST must remain idempotent"
     assert (_read("SELECT COUNT(*) FROM strikes") or [(0,)])[0][0] == 1, "no double-strike"
-    clean, striked3 = record_report({
+    clean, striked3, _prov3 = record_report({
         "session": "t-2", "task": "issue-9", "stack": "sleep",
         "model": "qwen/qwen3-coder", "cost_usd": 0.31, "error_class": "", "outcome": "pr"})
     assert clean and not striked3, "clean run must not strike"
@@ -1795,7 +1795,7 @@ def self_test() -> int:
     # harness deaths. This row is what actually arrives: the coarse class in `outcome`, a finer
     # sub-type in `error_class`. Same trap as FU-115b, where the fixture matched the buggy code
     # instead of the caller's output.
-    stored4, striked4 = record_report({
+    stored4, striked4, _prov4 = record_report({
         "session": "t-3", "task": "issue-19", "stack": "circles", "role": "worker", "round": 1,
         "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.0368, "rail": "subscription-fallback",
         "error_class": "goose-32602-truncation", "outcome": "harness-death"})
@@ -1814,7 +1814,7 @@ def self_test() -> int:
     # and assert the strike row carries the provider.
     record_provider_event("deepseek/deepseek-v4-flash", "Fireworks", 200,
                           session="test-ns/test-session-secret")
-    stored5, striked5 = record_report({
+    stored5, striked5, provider5 = record_report({
         "session": "t-provider-1", "task": "issue-42", "stack": "sleep", "role": "worker",
         "round": 1, "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.05,
         "error_class": "provider-5xx", "outcome": "no-pr"},
@@ -1823,6 +1823,8 @@ def self_test() -> int:
     _p_row = _read("SELECT provider FROM strikes WHERE session='t-provider-1'")
     assert _p_row and _p_row[0][0] == "Fireworks", \
         f"strike provider must be 'Fireworks' from provider_events lookup, got {_p_row}"
+    assert provider5 == "Fireworks", \
+        f"record_report must RETURN the resolved provider (the /report reply's third value), got {provider5!r}"
     # THE MIGRATED STORE, on a side connection. Everything above runs against a FRESH database, so
     # it only ever proves the CREATE TABLE path — but the live store is a PVC sqlite that will take
     # this column by ALTER, and the two layouts have to agree for a positional INSERT to be valid.
