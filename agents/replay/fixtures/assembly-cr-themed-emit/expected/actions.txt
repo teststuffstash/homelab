@@ -1,0 +1,6 @@
+OUT   [homelab] ASSEMBLY PR #1213 has changes-requested — resolved goal #1162 from v1.3 themed shape (`Fixes #1165` → goal_resolve_ancestor, homelab#1229)
+OUT   [homelab] ASSEMBLY PR #1213 has changes-requested (FU-143) — emitting goal-checkpoint for goal #1162 (trigger=assembly-cr)
+OUT UNIT goal-checkpoint|homelab|issue-1162
+OUT SIDE_MAP homelab:issue-1162:1213
+OUT REACHED: end
+RC 0
