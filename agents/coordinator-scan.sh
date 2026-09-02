@@ -3385,6 +3385,227 @@ EOF_GOVERNANCE
       fi
     fi
     # <<<REPLAY:done-phantom-belt<<<
+    # ── FLEET-STRIKE READER (FU-200, Goal #1231 acceptance 4) ─────────────────────────────────
+    # A scan-side window count: same `error_class=` on ≥2 distinct issues inside 24h ⇒ apply
+    # `agent/error` per affected item + ONE comment listing them + ONE deduped inert platform
+    # filing per the brief's filing contract. Match on the structured `error_class=` field only,
+    # never log excerpts. Forward-compatible with the G2 key-class split: the reader counts
+    # strike-class rows only (AGENT_STRIKE: comments), never key-class rows.
+    #
+    # The scan already reads AGENT_STRIKE comments per issue for the C4/C5 chain-walk (the
+    # ambig-decidable block). This clause extends that read to a CROSS-ISSUE window: same
+    # error_class on ≥2 distinct issues inside 24h.
+    #
+    # DEDUP: before filing, check for an existing OPEN issue in the repo whose title starts
+    # with "fleet-strike:" and whose body names the same error_class. If one exists, extend it
+    # (add a comment listing the new affected issues) instead of creating a new filing.
+    # >>>REPLAY:fleet-strike-reader>>>
+    # Read all open issues with agent-fix label (already fetched as $openall). For each, fetch
+    # comments and extract AGENT_STRIKE lines with error_class=. Group by error_class and check
+    # for ≥2 distinct issues within 24h.
+    fleet_strike_issues=""   # space-separated "error_class=issue_nums" pairs
+    if [ -n "$dispatchable" ]; then
+      # Get all agent-fix issues (not just queued/in-progress — strikes can be on any state)
+      all_fix="$(printf '%s' "$openall" | jq -r '[.[]|(.labels|map(.name)) as $L|select($L|index("agent-fix"))|.number] | unique | .[]' 2>/dev/null || true)"
+      if [ -n "$all_fix" ]; then
+        # Fetch comments for each issue and extract AGENT_STRIKE error_class values.
+        # Collect (error_class, issue_number) pairs, then group by error_class using jq.
+        pairs=""
+        for fn in $all_fix; do
+          icmt="$(gh api "repos/${slug}/issues/${fn}/comments?per_page=100" 2>/dev/null)" || icmt=""
+          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
+            # Extract error_class from AGENT_STRIKE comments. Anchored at start-of-comment,
+            # same discipline as AGENT_INFEASIBLE: (homelab#257) and AGENT_STRIKE: (FU-199).
+            # Match the structured `error_class=` field only, never log excerpts.
+            classes="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:")) | capture("error_class=(?<ec>[^ \\t\\n]+)") | .ec] | unique | .[]' <<<"$icmt" 2>/dev/null || true)"
+            if [ -n "$classes" ]; then
+              while IFS= read -r ec; do
+                [ -n "$ec" ] || continue
+                # FU-202 belt: key-class error_class values (budget-exhausted-key, budget-403-key)
+                # are MINT defects, not worker strikes. New rides post KEY-RETRY: (not AGENT_STRIKE:)
+                # so the ^AGENT_STRIKE: anchor already excludes them going forward. But the 24h
+                # window can span the #1233 merge, and historical corpus records key-class as
+                # AGENT_STRIKE:. Explicitly exclude them here so the fleet-strike reader never
+                # counts a mint defect as a fleet strike.
+                case "$ec" in
+                  budget-exhausted-key|budget-403-key) continue;;
+                esac
+                pairs="${pairs}${ec}:${fn}\n"
+              done <<< "$classes"
+            fi
+          fi
+        done
+        # Group by error_class using awk: collect comma-separated issue numbers per class
+        strike_map="$(printf '%b' "$pairs" | awk -F: '
+          { ec = $1; fn = $2 }
+          { if (ec != "") { seen[ec] = seen[ec] ? seen[ec] "," fn : fn } }
+          END { for (ec in seen) print ec "=" seen[ec] }
+        ' 2>/dev/null || true)"
+        # Check each error_class for ≥2 distinct issues
+        if [ -n "$strike_map" ]; then
+          while IFS= read -r entry; do
+            [ -n "$entry" ] || continue
+            ec="${entry%%=*}"
+            nums="${entry#*=}"
+            # Count distinct issues
+            count="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | wc -l | tr -d ' ')"
+            if [ "$count" -ge 2 ]; then
+              # Check 24h window: fetch the newest AGENT_STRIKE comment's timestamp for each issue
+              # and verify all are within 24h of each other
+              now_s="$(date -u +%s)"
+              timestamps=""
+              all_within_24h=1
+              for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
+                [ -n "$fn" ] || continue
+                icmt="$(gh api "repos/${slug}/issues/${fn}/comments?per_page=100" 2>/dev/null)" || icmt=""
+                if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
+                  # Find the newest AGENT_STRIKE: comment with this error_class
+                  ts="$(jq -r --arg ec "$ec" '
+                    [.[] | select((.body // "") | test("^AGENT_STRIKE:") and
+                      contains("error_class=\($ec)"))
+                     | .created_at] | last // ""
+                  ' <<<"$icmt" 2>/dev/null || true)"
+                  if [ -n "$ts" ]; then
+                    ts_s="$(jq -rn --arg t "$ts" '($t | fromdateiso8601? // null) // -1' 2>/dev/null || echo -1)"
+                    timestamps="${timestamps}${fn}=${ts_s}\n"
+                  fi
+                fi
+              done
+              # Check that all timestamps are within 86400s (24h) of each other
+              if [ -n "$timestamps" ]; then
+                min_ts="" max_ts=""
+                while IFS= read -r ts_entry; do
+                  [ -n "$ts_entry" ] || continue
+                  ts_val="${ts_entry#*=}"
+                  case "$ts_val" in ''|*[!0-9-]*) continue;; esac
+                  if [ -z "$min_ts" ] || [ "$ts_val" -lt "$min_ts" ]; then min_ts="$ts_val"; fi
+                  if [ -z "$max_ts" ] || [ "$ts_val" -gt "$max_ts" ]; then max_ts="$ts_val"; fi
+                done <<< "$(printf '%b' "$timestamps")"
+                if [ -n "$min_ts" ] && [ -n "$max_ts" ]; then
+                  span="$(( max_ts - min_ts ))"
+                  [ "$span" -le 86400 ] || all_within_24h=0
+                  # The window must also be LIVE, not merely historical: the NEWEST strike in the
+                  # group has to fall inside 24h of now. Without this, `max_ts - min_ts` is
+                  # immutable historical data and a group that once clustered stays "detected"
+                  # on every future tick forever.
+                  [ "$(( now_s - max_ts ))" -le 86400 ] || all_within_24h=0
+                  fi
+              fi
+              if [ "$all_within_24h" = 1 ]; then
+                fleet_strike_issues="${fleet_strike_issues}${ec}=${nums} "
+                orphans="${orphans}[$repo] ⚠ FLEET STRIKE: error_class=${ec} on issues $(printf '%s' "$nums" | tr ',' '\n' | sed 's/^/#/' | tr '\n' ' ' | sed 's/ $//') — applying agent/error, commenting, filing\n"
+              fi
+            fi
+          done <<< "$strike_map"
+        fi
+      fi
+    fi
+    # Apply actions for each fleet strike
+    if [ -n "$fleet_strike_issues" ]; then
+      for fs_entry in $fleet_strike_issues; do
+        ec="${fs_entry%%=*}"
+        nums="${fs_entry#*=}"
+        # Dedup: check for an existing OPEN issue titled "fleet-strike: error_class=<ec>"
+        existing_filing="$(gh issue list --repo "$slug" --state open --limit 50 --json number,title \
+          --jq "[.[] | select(.title | startswith(\"fleet-strike: error_class=${ec}\"))] | first | .number // \"\"" 2>/dev/null || true)"
+        case "$existing_filing" in ''|*[!0-9]*) existing_filing="";; esac
+        # Apply agent/error to each affected issue
+        for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
+          [ -n "$fn" ] || continue
+          # Check if already has agent/error
+          has_error="$(printf '%s' "$openall" | jq -r --argjson n "$fn" \
+            '[.[] | select(.number == $n) | (.labels|map(.name)) | index("agent/error")] | first // false' 2>/dev/null || false)"
+          if [ "$has_error" = "false" ]; then
+            gh issue edit "$fn" --repo "$slug" --add-label agent/error >/dev/null 2>&1 || true
+          fi
+        done
+        # ONE comment listing all affected issues
+        affected_list=""
+        sorted_nums="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')"
+        for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
+          [ -n "$fn" ] || continue
+          affected_list="${affected_list}- #${fn}\n"
+        done
+        # Marker-based idempotency: the first line of the comment is a machine marker carrying
+        # the group identity. A repeat tick against an already-actioned fleet strike finds the
+        # identical marker and skips the post (same discipline as state-fp:, homelab#244/IL-T26).
+        fleet_strike_marker="fleet-strike-fp: error_class=${ec} issues=${sorted_nums}"
+        comment_body="$(printf '%s\n' \
+          "${fleet_strike_marker}" \
+          "" \
+          "🤖 **Fleet strike detected** — \`error_class=${ec}\` on ≥2 distinct issues within 24h (FU-200)." \
+          "" \
+          "Affected issues:" \
+          "$(printf '%b' "$affected_list")" \
+          "Each has been labelled \`agent/error\` (human-first, report-only)." \
+          "" \
+          "**What this means.** The same error class appeared across multiple independent rides. This is a platform-level pattern, not an isolated worker fault — a human should investigate the root cause before any of these issues are re-dispatched." \
+          "" \
+          "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
+          "" \
+          "- \`error_class=${ec}\` on $(printf '%s' "$nums" | tr ',' '\n' | sort -u | wc -l | tr -d ' ') distinct issues." \
+          "- All within a 24h window." \
+          "" \
+          "To re-enable dispatch on any issue, strip \`agent/error\` by hand after the root cause is resolved." )"
+        # Post the comment on the FIRST affected issue only (ONE comment listing them)
+        first_fn="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | head -1)"
+        if [ -n "$first_fn" ]; then
+          # Idempotency check: skip if a comment already starts with the identical marker
+          existing_comments="$(gh api "repos/${slug}/issues/${first_fn}/comments?per_page=100" 2>/dev/null || true)"
+          already_posted=0
+          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${existing_comments:-null}"; then
+            if jq -e --arg m "$fleet_strike_marker" \
+              '[.[] | (.body // "") | startswith($m)] | any' \
+              <<<"$existing_comments" >/dev/null 2>&1; then
+              already_posted=1
+            fi
+          fi
+          if [ "$already_posted" = 0 ]; then
+            gh issue comment "$first_fn" --repo "$slug" --body "$comment_body" >/dev/null 2>&1 || true
+          fi
+        fi
+        # ONE deduped inert platform filing
+        if [ -n "$existing_filing" ]; then
+          # Idempotency check: skip if the filing already has a comment with the identical marker
+          filing_comments="$(gh api "repos/${slug}/issues/${existing_filing}/comments?per_page=100" 2>/dev/null || true)"
+          filing_already_extended=0
+          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${filing_comments:-null}"; then
+            if jq -e --arg m "$fleet_strike_marker" \
+              '[.[] | (.body // "") | startswith($m)] | any' \
+              <<<"$filing_comments" >/dev/null 2>&1; then
+              filing_already_extended=1
+            fi
+          fi
+          if [ "$filing_already_extended" = 0 ]; then
+            # Extend the existing filing with a comment
+            gh issue comment "$existing_filing" --repo "$slug" --body "$(printf '%s\n' \
+              "${fleet_strike_marker}" \
+              "" \
+              "Additional affected issues detected: $(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ' ')" \
+              "" \
+              "Updated \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`." )" >/dev/null 2>&1 || true
+          fi
+        else
+          # Create a new inert platform filing
+          gh issue create --repo "$slug" \
+            --title "fleet-strike: error_class=${ec}" \
+            --label "agent-fix" \
+            --body "$(printf '%s\n' \
+              "🤖 **Fleet strike filing** — inert platform issue (FU-200)." \
+              "" \
+              "**error_class:** \`${ec}\`" \
+              "" \
+              "**Affected issues:** $(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ' ')" \
+              "" \
+              "**Detected at:** \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`" \
+              "" \
+              "This is a DEDUPED filing: one per error_class per 24h window. The affected issues carry \`agent/error\` and are human-first, report-only until the root cause is resolved." \
+              "" \
+              "**What to do.** Investigate the platform-level pattern behind \`${ec}\`. Each affected issue's ride transcript is in \`s3://agent-transcripts/\`. Once the root cause is fixed, strip \`agent/error\` from each affected issue to re-enable dispatch." )" >/dev/null 2>&1 || true
+        fi
+      done
+    fi
+    # <<<REPLAY:fleet-strike-reader<<<
     # arbitrate (FU-086 / MP-G04, built 2026-07-27): the review reflex labels a rounds-exhausted
     # PR `agent/arbitrate` (escalation, NOT anomaly — agent/error stays for impossible states).
     # The coordinator is the designed tie-breaker: one unit per labeled PR; the item session

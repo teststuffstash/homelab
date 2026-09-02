@@ -1,0 +1,6 @@
+[
+  {
+    "body": "fleet-strike-fp: error_class=unknown issues=326,327,328,329\n\n🤖 **Fleet strike filing** — inert platform issue (FU-200).\n\n**error_class:** `unknown`\n\n**Affected issues:** 326 327 328 329 \n\n**Detected at:** `2026-09-01T18:00:00Z`\n\nThis is a DEDUPED filing: one per error_class per 24h window. The affected issues carry `agent/error` and are human-first, report-only until the root cause is resolved.\n\n**What to do.** Investigate the platform-level pattern behind `unknown`. Each affected issue's ride transcript is in `s3://agent-transcripts/`. Once the root cause is fixed, strip `agent/error` from each affected issue to re-enable dispatch.",
+    "created_at": "2026-09-01T18:00:00Z"
+  }
+]

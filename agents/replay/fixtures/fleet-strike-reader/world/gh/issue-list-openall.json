@@ -1,0 +1,6 @@
+[
+  {"number": 326, "title": "worker crashed on opus", "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}], "body": "Touches: argocd/resources/deployment.yaml\nBase: master\n", "isPinned": false, "blockedBy": [], "parent": null, "author": {"login": "homelab-agents-1234"}},
+  {"number": 327, "title": "worker crashed on deepseek", "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}], "body": "Touches: argocd/resources/deployment.yaml\nBase: master\n", "isPinned": false, "blockedBy": [], "parent": null, "author": {"login": "homelab-agents-1234"}},
+  {"number": 328, "title": "worker crashed on claude", "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}], "body": "Touches: argocd/resources/configmap.yaml\nBase: master\n", "isPinned": false, "blockedBy": [], "parent": null, "author": {"login": "homelab-agents-1234"}},
+  {"number": 329, "title": "worker crashed on gemini", "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}], "body": "Touches: argocd/resources/rbac.yaml\nBase: master\n", "isPinned": false, "blockedBy": [], "parent": null, "author": {"login": "homelab-agents-1234"}}
+]
