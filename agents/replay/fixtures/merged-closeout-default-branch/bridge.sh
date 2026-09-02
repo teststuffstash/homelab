@@ -6,8 +6,8 @@
 # `closed_ip` is fetched INSIDE the block via `gh issue list --state closed`; the gh stub serves
 # it from world/gh/ files. `c6g` and `c6g_nums` are set by the FU-143 detection block above; for
 # this fixture they are empty (no goal children). `c6db` and `c6db_nums` are set by the IL-G06
-# detection block above; for this fixture they are populated by the bridge to simulate the
-# detection result.
+# detection block above; this bridge does NOT pre-populate them — the detection block derives
+# them from the (empty) merged-PR world, and that derivation is empty here. See fixture.yaml.
 #
 # The bridge provides the loop context variables.
 slug="teststuffstash/homelab"

@@ -654,7 +654,7 @@ health signal.
 |---|---|---|
 | `riding` | machine | A worker pod is actively riding this issue |
 | `phantom` | operator | `agent/in-progress` with no live pod — reconciliation pending |
-| `held-merged-unlinked` | operator | Merged PR mentions the issue but does not close it — weak link |
+| `strike-held` | operator | C4/C5 goal-child held on strike evidence — undecidable state |
 | `parked-blocked` | operator | `agent/blocked` — human-gated |
 | `parked-infeasible` | operator | `AGENT_INFEASIBLE` — re-scope needed |
 | `arbitrate-standing` | operator | Escalated to human — `agent/arbitrate` |
@@ -662,6 +662,9 @@ health signal.
 | `queued-held-by-ghost` | operator | Held by a phantom/infeasible blocker — the blocker's liveness is the question |
 | `queued-ready` | machine | Dispatchable — next tick |
 | `deferred-capacity` | machine | Held by WIP ceiling |
+| `footprint-held` | operator | Queued issue held by an in-progress issue's `Touches` (ADR-097 intersection) |
+| `cap-held` | operator | Queued issue held by the per-base PR budget cap (`REPO_PR_CAP`, machine-flowing PRs only) |
+| `blockpark` | operator | Queued issue held by the codeowner-parked PR budget (`REPO_BLOCKPARK_CAP`) |
 | `guarded-path` | operator | Pin-only guarded path — operator push needed |
 | `orphan-unarmed` | operator | Open PR not on merge path — arm or park |
 | `container` | none | Post-launch bucket, container issue |
@@ -678,7 +681,7 @@ Prometheus (never re-derives them board-side — the one-computer rule):
 
 ```
 board v1 scope=stack:platform ts=<iso> sources=labels:live pods:live derived:tick@<iso>
-who=operator class=held-merged-unlinked id=homelab#833 pod=none link=weak since=7h30m next="repair strong link or hand-close"
+who=operator class=strike-held id=homelab#833 pod=none since=7h30m next="verify goal branch, then close or re-queue"
 who=operator class=queued-held-by-ghost id=homelab#834 since=7h30m note="held by phantom/infeasible blocker"
 who=machine  class=riding id=homelab#889 age=6m
 who=none     class=container id=homelab#840 note="post-launch bucket, container"

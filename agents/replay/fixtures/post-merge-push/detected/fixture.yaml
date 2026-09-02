@@ -1,0 +1,18 @@
+# homelab#1212 — post-merge-push detector: a merged PR whose head branch received commits after
+# mergedAt emits ONE loud marker (log line + issue comment) naming the branch so the stranded
+# work is salvageable by --work-branch (acceptance 1+2).
+#
+# CONDITION UNDER REPLAY. After the harness exits, agent-session.sh checks whether this ride's PR
+# merged during the run. If so, it probes the head branch for commits after mergedAt and emits a
+# marker naming the branch.
+#
+# THE CONTRACT (one world, one arm):
+#   World: PR #1250 is MERGED at 2026-09-01T18:33:52Z, head branch fix-issue-1212-post-merge-guard
+#          still exists with a commit dated 2026-09-01T18:37:34Z (after merge).
+#   The detector emits the marker log line AND posts an issue comment naming the branch.
+name: post-merge-push-detected
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:post-merge-push
