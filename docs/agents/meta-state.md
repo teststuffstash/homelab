@@ -8,8 +8,21 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ 2026-09-02 ~12:00Z ADR-121 REGISTRY SESSION (operator-attended) — first-party registry
-  LIVE, corpus seed IN FLIGHT. Pickup set:**
+- **⚑ 2026-09-02 ~13:30Z ADR-121 SESSION WIND-DOWN — cutover DONE E2E; G-G launched; loop
+  outage fixed. Pickup set:**
+  - **VERIFY loop healed**: `coordinator-session.sh` PREP clone authenticated (`46c079cb`)
+    after the ~4h anonymous-git-throttle outage (postmortem
+    `docs/incidents/2026-09-02-anonymous-git-throttle-loop-outage.md`). Next
+    coordinate-oracle tick + fleet#345's re-dispatch should go green; if ticks still fail,
+    the cause is NOT the clone — dig fresh. Throttle decays only while nothing hammers
+    anonymously (test: `GIT_TERMINAL_PROMPT=0 git -c credential.helper= ls-remote
+    https://github.com/torvalds/linux HEAD`).
+  - **G-G Goal #1302** decomposed+queued (#1303→#1307, `goal/1302-public-edge`); goal→master
+    merge stays operator. #1308 (BuildKit mirrors) filed UNQUEUED — operator queues or the
+    sweep adopts. FU-204 filed (C4/C5 bare-mention limbo — design ruling needed).
+  - **Registry residuals**: FU-203 retention; #1297 per-blob detection; OTLP-spam env cleanup
+    (registry + 3 mirrors); garage worker tuning is ephemeral (resets on pod restart).
+  - **(superseded pickup below kept for provenance)**
   - **Seed retry gate**: garage resync drain monitor was running at session end (jail task
     `bvwh4d6wa`, retry when queue <300). Retry = skopeo push of `oci-layout` in the session
     scratchpad → `registry.teststuff.net/oracle-fleet/ert-corpus:2026-09-01` (creds: Infisical
