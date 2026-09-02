@@ -3,7 +3,7 @@
 #      CNAME on the platform zone; tunnel token → connection secret (claim ns, never git)
 #   2. a cloudflared Deployment (claim ns) consuming that token
 #   3. profile-specific Cloudflare resources (v1alpha2+):
-#      - consumer: edge caching rule (respect-origin, 1h default)
+#      - consumer: edge caching rule (respect-origin, 1h default) + RUM/client telemetry
 #      - api: per-IP rate-limit rule + no-challenge Skip rule
 # SUBTREE ENFORCEMENT lives here (fail-loud template): hostname must be under
 # <ns>.teststuff.net. The zone/account ids are platform constants (docs/cloudflare.md).
@@ -16,7 +16,7 @@
 # composition defaults to consumer-class rendering for backwards compatibility.
 # ⚠ Rendering of profile-specific resources: api-profile shapes (rate-limit rule with
 # structured 429, no-challenge Skip, CORS/preflight) are filled in (#1304). Consumer-profile
-# shapes (edge caching) are filled in (#1306). The FIELD contract and the fan-out seam are
+# shapes (edge caching) are filled in (#1305). The FIELD contract and the fan-out seam are
 # what #1310 delivered.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
@@ -135,7 +135,7 @@ spec:
                     proxied = true
                     ttl     = 1
                   }
-                  {{- /* Profile-specific resources — api shapes filled in (#1304), consumer shapes filled in (#1306) */}}
+                  {{- /* Profile-specific resources — api shapes filled in (#1304), consumer shapes filled in (#1305) */}}
                   {{- if eq $profile "api" }}
                   # --- api profile: per-IP rate limiting ---
                   # Renders a cloudflare_ruleset rate-limit rule on the zone for this hostname.
@@ -271,7 +271,7 @@ spec:
                   {{- else }}
                   # --- consumer profile: edge caching on ---
                   # Respect-origin cache headers with a 1h default TTL.
-                  # Filled in (#1306).
+                  # Filled in (#1305).
                   resource "cloudflare_ruleset" "cache_rule" {
                     zone_id  = local.zone_id
                     name     = "PublicRoute {{ $host }} cache"
@@ -289,6 +289,29 @@ spec:
                       }
                       enabled = true
                     }
+                  }
+                  # --- consumer profile: RUM/client telemetry ---
+                  # Web Analytics (RUM) for the consumer route. The site is associated with the
+                  # zone (auto_install injects the JS snippet for orange-clouded sites). A
+                  # catch-all rule includes all traffic under the hostname.
+                  # ⚠ Requires account-level API paths in cf-api-proxy allowlist:
+                  #   /client/v4/accounts/{account_id}/rum/site_info  (site CRUD)
+                  #   /client/v4/accounts/{account_id}/rum/v2/        (rules CRUD)
+                  # The zone-scoped web_analytics/rules entry does NOT cover these.
+                  resource "cloudflare_web_analytics_site" "rum" {
+                    account_id  = local.account_id
+                    zone_tag    = local.zone_id
+                    auto_install = true
+                    enabled     = true
+                    host        = "{{ $host }}"
+                  }
+                  resource "cloudflare_web_analytics_rule" "rum" {
+                    account_id  = local.account_id
+                    ruleset_id  = cloudflare_web_analytics_site.rum.ruleset.id
+                    host        = "{{ $host }}"
+                    inclusive   = true
+                    is_paused   = false
+                    paths       = ["*"]
                   }
                   {{- end }}
                   output "tunnel_token" {
