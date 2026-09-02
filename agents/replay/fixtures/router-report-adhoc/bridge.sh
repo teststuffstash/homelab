@@ -5,11 +5,13 @@ POD="agent-adhoc-r1"
 PROJECT="homelab"
 TASK="adhoc-migrate-cert"
 MODEL="claude/opus"
+STRUCK_MODEL="claude/opus"
 ROUND="1"
 AGENT_RAIL="subscription"
 ERR_CLASS=""
 PR_URL=""
 STATS='{"exit_status":"clean","error_class":"","cost_usd":0.02}'
+RUNLOG="/dev/null"
 
 # Stub curl to return JSON with provider (but no Authorization header on subscription rail)
 curl() {

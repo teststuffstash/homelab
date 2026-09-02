@@ -5,11 +5,13 @@ POD="agent-1268-r2"
 PROJECT="homelab"
 TASK="issue-1268"
 MODEL="deepseek/deepseek-v4-flash"
+STRUCK_MODEL="deepseek/deepseek-v4-flash"
 ROUND="2"
 AGENT_RAIL="openrouter"
 ERR_CLASS=""
 PR_URL=""
 STATS='{"exit_status":"clean","error_class":"","cost_usd":0.05}'
+RUNLOG="/dev/null"
 
 # Stub curl to return JSON with provider when Authorization header is present
 curl() {

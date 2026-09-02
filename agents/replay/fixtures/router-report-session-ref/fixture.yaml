@@ -3,4 +3,4 @@ mode: actions
 source: agents/agent-session.sh
 parts:
   - file:bridge.sh
-  - block:router-report
+  - block:strike-scope

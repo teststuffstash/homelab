@@ -2346,6 +2346,7 @@ if [ -n "$RUN_CMD" ]; then
   fi
   # <<<REPLAY:post-merge-push<<<
 
+  # >>>REPLAY:strike-scope>>>
   # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates with a
   # harness death is an infra strike candidate — classify it and post ONE structured comment to the ISSUE.
   # That comment IS the strike store: state lives in GitHub, and the coordinator greps `AGENT_STRIKE:`
@@ -2507,6 +2508,7 @@ if [ -n "$RUN_CMD" ]; then
       fi
     fi
     # <<<REPLAY:router-report<<<
+    # <<<REPLAY:strike-scope<<<
 
     if [ -n "$STRIKE_APPLIES" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
       # >>>REPLAY:strike-provider-append>>>
