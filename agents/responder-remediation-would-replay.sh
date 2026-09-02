@@ -50,10 +50,11 @@ OUT="$(cat "$TMP/script.sh")"
 
 want "A1: REMEDIATION-WOULD MARKER section header" "REMEDIATION-WOULD MARKER"
 want "A2: marker format instruction"               "REMEDIATION-WOULD: <verb>"
-want "A3: example remediation line"                "bump oracle-fleet/agent/agentstack.yaml"
+want "A3: example remediation line"                "delete oracle-fleet/pod/"
 want "A4: at-most-one-per-session guard"           "At most one per distinct remediation per session"
 want "A5: report-only exclusion"                   "Do NOT emit this line when your verdict is report-only"
 want "A6: no-mechanical-remediation exclusion"     "when no mechanical remediation applies"
+want "A7: GitOps class excluded (dial class only)" "takes NO marker"
 
 # ── verify the HARD RULES section is still present (no regression) ──────────────────────────────
 section "3 — HARD RULES section preserved (no regression)"
