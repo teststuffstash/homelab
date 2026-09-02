@@ -306,17 +306,22 @@ _refs: dict[str, tuple[float, dict | None]] = {}  # "ns/name" -> (expires_epoch,
 _refs_lock = threading.Lock()
 
 
-def _cr_guardrail(ns: str, secret_name: str) -> tuple[str | None, bool | None]:
+def _cr_guardrail(ns: str, secret_name: str) -> tuple[str | None, bool | None, str | None]:
     """FU-138: the AUTHORITATIVE guardrail is the OpenRouterKey CR, not the Secret.
 
     The Secret's GUARDRAIL is written by the operator only when it MINTS (create/rotate), so a
     guardrail change on an already-minted standing key never reaches it — enforcement went dead
     silently, and every claim change needed a hand patch (circles-iac#1, 2026-08-04). The CR is
     rendered from the AgentStack claim in git, so reading it here makes claim → composition → CR →
-    proxy the one path. Returns (guardrail, has_cr):
-      - (str, True): CR found with guardrail value ("" = open)
-      - (None, False): no CR owns this Secret (pre-CR key, list succeeded)
-      - (None, None): list failed (fail-open: keep the Secret's guardrail, not a blocked state)"""
+    proxy the one path. Returns (guardrail, has_cr, hash):
+      - (str, True, str|None): CR found with guardrail value ("" = open) and optional status hash
+      - (None, False, None): no CR owns this Secret (pre-CR key, list succeeded)
+      - (None, None, None): list failed (fail-open: keep the Secret's guardrail, not a blocked state)
+
+    The hash is the openrouter-operator's `status.openrouter.hash` — a content fingerprint that
+    changes on every re-mint. The proxy uses it to detect stale headroom cache entries (issue
+    #1260): a hash mismatch between the resolved ref and the headroom entry means the key was
+    re-minted and the cached limit_remaining belongs to the dead key."""
     try:
         token = open(f"{_SA_DIR}/token").read().strip()
         ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
@@ -329,20 +334,23 @@ def _cr_guardrail(ns: str, secret_name: str) -> tuple[str | None, bool | None]:
             items = (json.load(resp).get("items") or [])
     except Exception as e:  # noqa: BLE001 — unreadable CRs must not disarm the Secret's guardrail
         log(f"ref: openrouterkeys list failed in {ns}: {e} — falling back to the Secret's GUARDRAIL")
-        return None, None
+        return None, None, None
     for cr in items:
         spec = cr.get("spec") or {}
         # Mirror the CRD default: secretName, else <project>-openrouter (models.py target_secret_name).
         target = spec.get("secretName") or f"{spec.get('project', '')}-openrouter"
         if target == secret_name:
-            return spec.get("guardrail") or "", True
-    return None, False
+            status_hash = cr.get("status", {}).get("openrouter", {}).get("hash")
+            return spec.get("guardrail") or "", True, status_hash
+    return None, False, None
 
 
 def _resolve_ref(ref: str) -> dict | None:
-    """`ns/name` -> {"key": OPENROUTER_API_KEY, "guardrail": ..., "has_cr": bool|None}, or None
-    (missing/unlabeled/unreadable). guardrail feeds the FU-024 only-free enforcement; has_cr
-    (True/False/None) distinguishes "CR exists" / "no CR, pre-CR key" / "CR list failed"."""
+    """`ns/name` -> {"key": OPENROUTER_API_KEY, "guardrail": ..., "has_cr": bool|None, "hash": str|None},
+    or None (missing/unlabeled/unreadable). guardrail feeds the FU-024 only-free enforcement; has_cr
+    (True/False/None) distinguishes "CR exists" / "no CR, pre-CR key" / "CR list failed". hash is
+    the openrouter-operator's `status.openrouter.hash` from the owning CR — used by the headroom
+    cache to detect re-minted keys (issue #1260)."""
     now = time.time()
     with _refs_lock:
         hit = _refs.get(ref)
@@ -366,7 +374,7 @@ def _resolve_ref(ref: str) -> dict | None:
             b64 = data.get("OPENROUTER_API_KEY") or data.get("AUTH_TOKEN") or ""
             if b64:
                 secret_guardrail = base64.b64decode(data.get("GUARDRAIL", "")).decode()
-                cr_guardrail, has_cr = _cr_guardrail(ns, name)  # FU-138: CR wins when one owns the Secret
+                cr_guardrail, has_cr, cr_hash = _cr_guardrail(ns, name)  # FU-138: CR wins when one owns the Secret
                 if cr_guardrail is not None and cr_guardrail != secret_guardrail:
                     log(f"ref: {ref} guardrail from CR: '{cr_guardrail or 'none'}' "
                         f"(Secret says '{secret_guardrail or 'none'}' — stale, FU-138)")
@@ -374,6 +382,7 @@ def _resolve_ref(ref: str) -> dict | None:
                     "key": base64.b64decode(b64).decode(),
                     "guardrail": secret_guardrail if cr_guardrail is None else cr_guardrail,
                     "has_cr": has_cr,  # exposed for _headroom_tick to avoid a second CR list call
+                    "hash": cr_hash,  # issue #1260: status.openrouter.hash — changes on re-mint
                     # ADR-096 P2: which rail this ref belongs to — OpenRouter keys enroll for
                     # the headroom poll; anthropic oauth refs must never hit /api/v1/auth/key.
                     "kind": "openrouter" if data.get("OPENROUTER_API_KEY") else "anthropic",
@@ -1602,6 +1611,7 @@ def _headroom_tick() -> int:
                 "usage": data.get("usage"),
                 "usage_weekly": data.get("usage_weekly"),
                 "is_free_tier": data.get("is_free_tier"),
+                "hash": resolved.get("hash"),  # issue #1260: status.openrouter.hash — changes on re-mint
                 "fetched_at": time.time(),
             }
         n += 1
@@ -3038,8 +3048,21 @@ class Proxy(BaseHTTPRequestHandler):
                 if down:
                     return False, f"or-capacity-down:{down}"
                 if key_ref:
+                    # issue #1260: detect re-minted keys via hash mismatch. The openrouter-operator
+                    # writes `status.openrouter.hash` on every mint; a re-mint produces a new hash.
+                    # If the headroom entry's hash differs from the current ref's hash, the cached
+                    # limit_remaining belongs to the dead key — treat as cache miss (fail open).
+                    # Option 1 chosen over Option 2 (timestamp staleness) because the hash is a
+                    # content-based identifier that directly ties the entry to the key instance,
+                    # with no clock-skew sensitivity. The ref cache (60s TTL) bounds the stale
+                    # window; the 900s poller is unchanged — no new hot-path API call per request.
+                    resolved = _resolve_ref(key_ref)
+                    current_hash = resolved.get("hash") if resolved else None
                     with _headroom_lock:
                         d = _headroom.get(str(key_ref))
+                    if d and current_hash is not None and d.get("hash") is not None \
+                            and d["hash"] != current_hash:
+                        d = None  # hash mismatch = stale entry, treat as cache miss
                     if d and isinstance(d.get("limit"), (int, float)) \
                             and isinstance(d.get("limit_remaining"), (int, float)) \
                             and d["limit_remaining"] <= max(0.05, 0.02 * d["limit"]):
@@ -5473,6 +5496,91 @@ data: [DONE]
     # Clean up breaker state
     with _cb_lock:
         _cb.clear()
+
+    print("\n=== Headroom re-mint detection (issue #1260) ===")
+    # Acceptance: a re-minted key (new hash) is NOT served the previous key's exhausted snapshot.
+    # Test via the /route endpoint (the only path that calls _openrouter_ok).
+    # Non-vacuous: without the hash check, the exhausted entry would produce a budget defer.
+    def route_call(payload):
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("POST", "/route",
+                  body=json.dumps(payload),
+                  headers={"Content-Type": "application/json"})
+        r = c.getresponse()
+        data = json.loads(r.read())
+        c.close()
+        return data
+
+    route_base = {
+        "stack": "sleep", "task": "issue-1260", "role": "worker",
+        "session": "t-headroom", "chain": ["inclusionai/ling-3.0-flash:free"],
+    }
+
+    # Test 1: hash mismatch → fail-open (re-minted key not served stale exhaustion)
+    headroom_ref = "default/test-headroom-remint"
+    with _headroom_lock:
+        _headroom[headroom_ref] = {
+            "limit": 10.0,
+            "limit_remaining": 0.0,
+            "hash": "old-hash-value",
+            "fetched_at": time.time(),
+        }
+    with _refs_lock:
+        _refs[headroom_ref] = (time.time() + 3600, {
+            "key": "test-key",
+            "hash": "new-hash-value",
+            "kind": "openrouter",
+            "guardrail": "",
+            "has_cr": True,
+        })
+    d = route_call(dict(route_base, key_ref=headroom_ref))
+    check(d["decision"] == "dispatch",
+          f"headroom-remint: hash mismatch → dispatch (got {d.get('decision')}: {d.get('reason', '')})")
+    with _headroom_lock:
+        _headroom.pop(headroom_ref, None)
+    with _refs_lock:
+        _refs.pop(headroom_ref, None)
+
+    # Test 2: matching hash + exhausted → budget defer (normal path preserved)
+    matching_ref = "default/test-headroom-exhausted"
+    with _headroom_lock:
+        _headroom[matching_ref] = {
+            "limit": 10.0,
+            "limit_remaining": 0.0,
+            "hash": "same-hash",
+            "fetched_at": time.time(),
+        }
+    with _refs_lock:
+        _refs[matching_ref] = (time.time() + 3600, {
+            "key": "test-key",
+            "hash": "same-hash",
+            "kind": "openrouter",
+            "guardrail": "",
+            "has_cr": True,
+        })
+    d = route_call(dict(route_base, key_ref=matching_ref))
+    check(d["decision"] == "defer" and "budget-exhausted" in d.get("reason", ""),
+          f"headroom-remint: matching hash + exhausted → defer (got {d.get('decision')}: {d.get('reason', '')})")
+    with _headroom_lock:
+        _headroom.pop(matching_ref, None)
+    with _refs_lock:
+        _refs.pop(matching_ref, None)
+
+    # Test 3: no headroom entry → fail-open (unknown ref is not budget-exhausted)
+    unknown_ref = "default/test-headroom-unknown"
+    with _refs_lock:
+        _refs[unknown_ref] = (time.time() + 3600, {
+            "key": "test-key",
+            "hash": "some-hash",
+            "kind": "openrouter",
+            "guardrail": "",
+            "has_cr": True,
+        })
+    d = route_call(dict(route_base, key_ref=unknown_ref))
+    check(d["decision"] == "dispatch",
+          f"headroom-remint: no headroom entry → dispatch (got {d.get('decision')}: {d.get('reason', '')})")
+    with _refs_lock:
+        _refs.pop(unknown_ref, None)
 
     print()
     if not fails:
