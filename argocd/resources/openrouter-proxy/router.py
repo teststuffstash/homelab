@@ -303,7 +303,7 @@ def _read(sql: str, params: tuple = ()) -> list[tuple]:
 def record_report(d: dict, session_ref: str = "") -> tuple[bool, bool]:
     """One POST /report body → run_reports (+ a strikes row when it IS a strike: strike-class
     error and no PR came out — mirrors the launcher's AGENT_STRIKE condition; the GitHub comment
-    stays the human/audit twin). Returns (stored, striked). Idempotent per session (the launcher
+    stays the human/audit twin). Returns (stored, striked, provider). Idempotent per session (the launcher
     may retry): INSERT OR REPLACE on the session key.
 
     FU-201 c: `session_ref` is the proxy-side session key ref (from the /report request's
@@ -359,7 +359,7 @@ def record_report(d: dict, session_ref: str = "") -> tuple[bool, bool]:
         if fold:
             _log(f"ladder cell {fold['class']}/{fold['urgency']}: {fold['verdict']} at "
                  f"{fold['used_tier']} → start_tier={fold['start_tier']} (shadow)")
-    return stored, striked
+    return stored, striked, provider
 
 
 def _ladder_cfg() -> dict:

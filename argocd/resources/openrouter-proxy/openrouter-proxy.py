@@ -2934,11 +2934,11 @@ class Proxy(BaseHTTPRequestHandler):
             _session_ref = ""
             if _auth_hdr.startswith("Bearer ref:"):
                 _session_ref = _auth_hdr[len("Bearer ref:"):].strip()
-            stored, striked = router.record_report(report, session_ref=_session_ref)
+            stored, striked, provider = router.record_report(report, session_ref=_session_ref)
             log(f"POST /report session={report.get('session')} "
                 f"error_class={report.get('error_class') or 'clean'} → "
-                f"stored={stored} strike={striked}")
-            self._reply_json(200 if stored else 503, {"stored": stored, "strike": striked})
+                f"stored={stored} strike={striked} provider={provider}")
+            self._reply_json(200 if stored else 503, {"stored": stored, "strike": striked, "provider": provider})
             return
         if self.path == "/search":
             # FU-134: web research as a PLATFORM capability, not a property of whichever harness got
