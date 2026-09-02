@@ -2280,7 +2280,7 @@ class Proxy(BaseHTTPRequestHandler):
         # polluting each other).
         if go_leg:
             note += _go_capacity_update(status, resp.headers)
-        elif anthropic and not go_leg and not zen_leg:
+        elif anthropic and not go_leg and not zen_leg and not or_leg:
             note += _anthropic_latch_update(status, resp.headers)
         elif or_model and not go_leg and not zen_leg:  # OpenRouter accounting — opencode is a DIFFERENT provider
             # ADR-096: passive provider health for OpenRouter only. opencode-rail outcomes must
@@ -3409,6 +3409,7 @@ class Proxy(BaseHTTPRequestHandler):
                         body = json.dumps(translated).encode()
                         note = "or-translate-leg"
                         or_model = bare  # For logging, use the bare model id
+                        cb_session = _cb_session(self.headers)
             except ValueError:
                 pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
@@ -4697,6 +4698,18 @@ data: [DONE]
               f"or-translate: response has text content block (got {content})")
     except (ValueError, TypeError) as e:
         check(False, f"or-translate: response is valid JSON (err={e}, data={data[:200]!r})")
+
+    # FU-201 c: or_leg must record a provider_events row with the session key ref
+    # (the cb_session identity from _cb_session(), not None). This pin FAILS against
+    # the branch before the fix — cb_session was unset in the OR_PREFIX arm.
+    _pe_rows = router._read(
+        "SELECT session FROM provider_events WHERE model=? ORDER BY ts DESC LIMIT 1",
+        ("openai/gpt-5",))
+    _pe_session = _pe_rows[0][0] if _pe_rows else ""
+    check(_pe_session != "",
+          f"or-translate: provider_events.session is non-empty (got {_pe_session!r})")
+    check(_pe_session.startswith("direct:"),
+          f"or-translate: provider_events.session starts with 'direct:' (got {_pe_session!r})")
 
     # Test 2: tool call round-trip through the translation
     _or_response = {
