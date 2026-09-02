@@ -654,7 +654,7 @@ health signal.
 |---|---|---|
 | `riding` | machine | A worker pod is actively riding this issue |
 | `phantom` | operator | `agent/in-progress` with no live pod — reconciliation pending |
-| `held-merged-unlinked` | operator | Merged PR mentions the issue but does not close it — weak link |
+| `strike-held` | operator | C4/C5 goal-child held on strike evidence — undecidable state |
 | `parked-blocked` | operator | `agent/blocked` — human-gated |
 | `parked-infeasible` | operator | `AGENT_INFEASIBLE` — re-scope needed |
 | `arbitrate-standing` | operator | Escalated to human — `agent/arbitrate` |
@@ -678,7 +678,7 @@ Prometheus (never re-derives them board-side — the one-computer rule):
 
 ```
 board v1 scope=stack:platform ts=<iso> sources=labels:live pods:live derived:tick@<iso>
-who=operator class=held-merged-unlinked id=homelab#833 pod=none link=weak since=7h30m next="repair strong link or hand-close"
+who=operator class=strike-held id=homelab#833 pod=none since=7h30m next="verify goal branch, then close or re-queue"
 who=operator class=queued-held-by-ghost id=homelab#834 since=7h30m note="held by phantom/infeasible blocker"
 who=machine  class=riding id=homelab#889 age=6m
 who=none     class=container id=homelab#840 note="post-launch bucket, container"
@@ -714,7 +714,7 @@ Two fixtures commit the behaviour:
 - **`item-class`** (actions mode): pins the `item_class_push()` function — the curl call,
   the metric names and labels, the group-replace URL, and the three degenerate paths (no
   gateway, no pod identity, gateway refuses). The fixture's bridge exercises the #833
-  counterfactual (`held-merged-unlinked who=operator`), the #834 scenario
+  counterfactual (`strike-held who=operator`), the #834 scenario
   (`queued-held-by-ghost`), a riding row, a container row, and a backlog-aggregate row.
 - **`board-machine`** (suite mode): pins the `--machine` output grammar against a synthetic
   Prometheus response carrying the same five classes. Asserts the stable sort, the header
