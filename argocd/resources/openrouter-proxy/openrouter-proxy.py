@@ -34,6 +34,7 @@ Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter 
 """
 
 import base64
+import builtins
 import hashlib
 import io
 import json
@@ -5633,6 +5634,8 @@ data: [DONE]
     # only when the cache is empty, not on every call.
     stale_ref = "default/test-headroom-stale-cache"
     _urlopen_saved = urllib.request.urlopen
+    _open_saved = builtins.open
+    _ssl_create_default_context_saved = ssl.create_default_context
     class _MockK8sResponse:
         def __init__(self, data):
             self._data = json.dumps(data).encode()
@@ -5660,8 +5663,18 @@ data: [DONE]
                 "status": {"openrouter": {"hash": "H2"}},
             }]
         })
+    def _mock_open(path, *a, **kw):
+        """Return fake SA token content for in-cluster paths; delegate otherwise."""
+        if path == f"{_SA_DIR}/token":
+            return io.StringIO("fake-sa-token-for-testing")
+        return _open_saved(path, *a, **kw)
+    def _mock_ssl_create_default_context(*a, **kw):
+        """Return a default SSL context without loading a cafile (C-level I/O not interceptable)."""
+        return _ssl_create_default_context_saved()
     try:
         urllib.request.urlopen = _mock_urlopen
+        builtins.open = _mock_open
+        ssl.create_default_context = _mock_ssl_create_default_context
         with _headroom_lock:
             _headroom[stale_ref] = {
                 "limit": 10.0,
@@ -5682,6 +5695,8 @@ data: [DONE]
               f"headroom-remint: stale ref cache → dispatch after punch (got {d.get('decision')}: {d.get('reason', '')})")
     finally:
         urllib.request.urlopen = _urlopen_saved
+        builtins.open = _open_saved
+        ssl.create_default_context = _ssl_create_default_context_saved
         with _headroom_lock:
             _headroom.pop(stale_ref, None)
         with _refs_lock:
