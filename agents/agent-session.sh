@@ -2425,6 +2425,7 @@ if [ -n "$RUN_CMD" ]; then
     # gets a KEY-RETRY marker instead (FU-202), and residual budget-403 which escalates.
     [ -n "${PR_URL:-}" ] || [ -n "$EMIT_KEY_RETRY" ] || [ "$ERR_CLASS" = "budget-403" ] || EMIT_STRIKE=1
 
+    # >>>REPLAY:router-report>>>
     # ROUTER REPORT (ADR-096, M5 attribution) — moved BEFORE strike composition so the
     # resolved provider from the reply feeds into the AGENT_STRIKE/KEY-RETRY line.
     # Issue #1268: the report carries the session key ref so the proxy can look up the
@@ -2460,6 +2461,7 @@ if [ -n "$RUN_CMD" ]; then
         fi
       fi
     fi
+    # <<<REPLAY:router-report<<<
 
     # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
     # no specific signature must not be recorded as having an error. Inside the block on purpose:
