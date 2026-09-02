@@ -2425,13 +2425,40 @@ if [ -n "$RUN_CMD" ]; then
     # gets a KEY-RETRY marker instead (FU-202), and residual budget-403 which escalates.
     [ -n "${PR_URL:-}" ] || [ -n "$EMIT_KEY_RETRY" ] || [ "$ERR_CLASS" = "budget-403" ] || EMIT_STRIKE=1
 
+    # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
+    # no specific signature must not be recorded as having an error. Inside the block on purpose:
+    # this reset is behaviour replay has to pin, not control flow it may drop (PR #942 review).
+    # FU-202: key-class errors keep their error_class for the KEY-RETRY marker.
+    # Residual budget-403 keeps its error_class for the escalate path.
+    [ -n "$EMIT_STRIKE" ] || [ -n "$EMIT_KEY_RETRY" ] || [ "$ERR_CLASS" = "budget-403" ] || ERR_CLASS=""
+    # STRIKE_LINE is empty exactly when EMIT_STRIKE is unset, so the gate itself is extracted and
+    # the composed replay script branches on it the way the shipped script does.
+    STRIKE_LINE=""
+    if [ -n "$EMIT_STRIKE" ]; then
+      STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+      if [ -n "${BUDGET_MATCH:-}" ]; then
+        STRIKE_LINE="${STRIKE_LINE} match=${BUDGET_MATCH}"
+      fi
+    fi
+    # KEY_RETRY_LINE is the key-class equivalent — a marker, not a strike.
+    KEY_RETRY_LINE=""
+    if [ -n "$EMIT_KEY_RETRY" ]; then
+      KEY_RETRY_LINE="KEY-RETRY: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+      if [ -n "${BUDGET_MATCH:-}" ]; then
+        KEY_RETRY_LINE="${KEY_RETRY_LINE} match=${BUDGET_MATCH}"
+      fi
+    fi
+    # <<<REPLAY:strike-line-format<<<
+  fi
+
     # >>>REPLAY:router-report>>>
-    # ROUTER REPORT (ADR-096, M5 attribution) — moved BEFORE strike composition so the
-    # resolved provider from the reply feeds into the AGENT_STRIKE/KEY-RETRY line.
+    # ROUTER REPORT (ADR-096, M5 attribution) — unconditional POST, runs for every run with
+    # PROXY_URL set and STATS or ERR_CLASS defined. The session key ref (_keyref) is sent
+    # in the Authorization header when non-empty (OpenRouter rail); subscription rides
+    # (claude/*, *:claude/*, *:opencode-go/*) have empty _keyref and post without the header.
     # Issue #1268: the report carries the session key ref so the proxy can look up the
-    # served provider from provider_events. Subscription rides (claude/*, *:claude/*,
-    # *:opencode-go/*) have no key ref (_keyref is empty) and post without the Bearer
-    # header — no ref, no provider, no new failure mode.
+    # served provider from provider_events. The reply includes the resolved provider for
+    # composing into strike/key-retry lines.
     _report_provider=""
     if [ -n "${PROXY_URL:-}" ] && { [ -n "${STATS:-}" ] || [ -n "${ERR_CLASS:-}" ]; }; then
       _rstack="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)" || _rstack=""
@@ -2463,42 +2490,17 @@ if [ -n "$RUN_CMD" ]; then
     fi
     # <<<REPLAY:router-report<<<
 
-    # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
-    # no specific signature must not be recorded as having an error. Inside the block on purpose:
-    # this reset is behaviour replay has to pin, not control flow it may drop (PR #942 review).
-    # FU-202: key-class errors keep their error_class for the KEY-RETRY marker.
-    # Residual budget-403 keeps its error_class for the escalate path.
-    [ -n "$EMIT_STRIKE" ] || [ -n "$EMIT_KEY_RETRY" ] || [ "$ERR_CLASS" = "budget-403" ] || ERR_CLASS=""
-    # STRIKE_LINE is empty exactly when EMIT_STRIKE is unset, so the gate itself is extracted and
-    # the composed replay script branches on it the way the shipped script does.
-    STRIKE_LINE=""
-    # FU-201 c (#1268): provider is sourced from the /report reply when available (the proxy
-    # resolves it from provider_events via the session key ref). Falls back to STATS for
-    # subscription rides that have no key ref. Absent a provider field, the strike still
-    # records — the router sources it proxy-side from provider_events.
-    _strike_provider="$_report_provider"
-    [ -z "$_strike_provider" ] && _strike_provider="$(printf '%s' "${STATS:-}" | jq -r '.provider // ""' 2>/dev/null || true)"
-    if [ -n "$EMIT_STRIKE" ]; then
-      STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
-      if [ -n "$_strike_provider" ]; then
-        STRIKE_LINE="${STRIKE_LINE} provider=${_strike_provider}"
-      fi
-      if [ -n "${BUDGET_MATCH:-}" ]; then
-        STRIKE_LINE="${STRIKE_LINE} match=${BUDGET_MATCH}"
-      fi
-    fi
-    # KEY_RETRY_LINE is the key-class equivalent — a marker, not a strike.
-    KEY_RETRY_LINE=""
-    if [ -n "$EMIT_KEY_RETRY" ]; then
-      KEY_RETRY_LINE="KEY-RETRY: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
-      if [ -n "$_strike_provider" ]; then
-        KEY_RETRY_LINE="${KEY_RETRY_LINE} provider=${_strike_provider}"
-      fi
-      if [ -n "${BUDGET_MATCH:-}" ]; then
-        KEY_RETRY_LINE="${KEY_RETRY_LINE} match=${BUDGET_MATCH}"
-      fi
-    fi
-    # <<<REPLAY:strike-line-format<<<
+    if [ -n "$STRIKE_APPLIES" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
+      # Provider append: source from /report reply, fall back to STATS for subscription rides.
+      # FU-201 c (#1268): provider is sourced from the /report reply when available (the proxy
+      # resolves it from provider_events via the session key ref). Falls back to STATS for
+      # subscription rides that have no key ref. Absent a provider field, the strike still
+      # records — the router sources it proxy-side from provider_events.
+      _strike_provider="${_report_provider:-}"
+      [ -n "$_strike_provider" ] || _strike_provider="$(printf '%s' "${STATS:-}" | jq -r '.provider // ""' 2>/dev/null || true)"
+      [ -z "$STRIKE_LINE" ]    || [ -z "$_strike_provider" ] || STRIKE_LINE="${STRIKE_LINE} provider=${_strike_provider}"
+      [ -z "$KEY_RETRY_LINE" ] || [ -z "$_strike_provider" ] || KEY_RETRY_LINE="${KEY_RETRY_LINE} provider=${_strike_provider}"
+
     if [ -n "$STRIKE_LINE" ]; then
       if [ -z "${PR_URL:-}" ]; then
         echo "→ no PR opened — ${STRIKE_LINE}"
