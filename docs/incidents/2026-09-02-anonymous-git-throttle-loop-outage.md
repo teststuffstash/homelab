@@ -104,3 +104,27 @@ and the API work. #1329 (the #1315 gate) sits at a stale CHANGES_REQUESTED with 
 fine until 2026-09-02; the two trips are ~09:15 (09-02) and ~07:25 (09-03). The seat's four
 `workflow_dispatch` CI runs + three PR runs in 06:45–07:20 precede today's trip, but seven
 `actions/checkout`s are noise against the loop's volume — unproven either way.
+
+**Decay + root cause of the recurrence (settled 08:1x–08:2x):** authenticated clones worked
+again from ~08:10 (jail PAT, the coordinator-git token, the broker token from a loop pod — all
+three); anonymous stayed refused with yesterday's `expected flush after ref listing`. #1329
+re-reviewed and merged at 08:18. **Why an "authenticated" loop trips an anonymous throttle**
+(`GIT_TRACE_CURL` on a token-in-URL clone of a public repo): git sends credentials only after a
+401 challenge, and the refs GET of a public repo answers 200 anonymously — so every clone was
+`GET info/refs` (anonymous, 200) → `POST git-upload-pack` (anonymous, **401**) → the same POST
+again with Basic auth (200). Two anonymous requests per clone, ~700 clones/day ⇒ the loop itself
+supplied ~30 anonymous upload-pack hits per hour to the per-IP counter, all day, and the "401
+retry" is exactly the request GitHub started refusing outright during the 07:25–08:10 window.
+**Fix (the header sweep, same day):** `git clone -c "http.extraHeader=Authorization: Basic
+<base64 x-access-token:TOKEN>" https://github.com/…` — the `actions/checkout` pattern: the
+credential rides the FIRST request (trace: no 401 round trip at all), and `clone -c` persists
+it in the clone's config so later fetch/push stay authenticated with a plain remote URL. Applied
+to every clone site the two earlier sweeps had touched (14 wf-manifest blocks, deploy-revert's
+iac clone, retro's report push, the composition's three clones + the prober's two, the launcher
+PREP, `scripts/devbox-update.sh`) and pinned by the `deploy-revert-token-clone` replay family.
+Residual: worker rides authenticate through the agent-base credential helper, which is
+challenge-based too — same anonymous-first shape, far lower volume; a per-URL
+`http.<url>.extraHeader` in the ride's git config would close it if it ever shows up in the
+counts. What is NOT known: GitHub's threshold, and whether zero anonymous requests keeps the
+address clear — the first full day after the sweep answers that (FU-007's push-mirror is the
+structural answer if it does not).

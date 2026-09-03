@@ -1,9 +1,9 @@
-# homelab#1180: the deploy-revert clone URL carries the broker token when GH_TOKEN is set.
-#
-# The sibling templates (coordinate-argo.yaml, reflexes-argo.yaml, fix-debounce-argo.yaml) embed
-# the broker token in the git URL via `_cu="https://x-access-token:${GH_TOKEN}@github.com/…"`.
-# deploy-revert-argo.yaml was missing this — the clone and push were anonymous. This fixture
-# asserts that when GH_TOKEN is set, the `_cu` variable carries the tokenised URL.
+# homelab#1180 → 2026-09-03 header sweep: when GH_TOKEN is set, the token rides `_ah` (a
+# preemptive `http.extraHeader` Basic credential, base64 of `x-access-token:<token>`) and the
+# clone URL `_cu` stays PLAIN. Token-in-URL (the #1136/#1180 idiom) still let git send two
+# anonymous requests per clone before the 401 retry — the exact traffic GitHub's per-IP throttle
+# counts (incidents/2026-09-02-anonymous-git-throttle-loop-outage.md §Recurrence). This fixture
+# asserts both: the URL carries no token, the header carries the right one.
 name: deploy-revert-token-clone-set
 mode: actions
 source: agents/coordinator/deploy-revert-argo.yaml
