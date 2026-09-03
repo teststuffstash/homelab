@@ -1145,8 +1145,12 @@ esac
 fu042_guard_a() {
   PF_PR_LINE="$(gh pr list --repo "$PF_SLUG" --state open --json number,body,headRefName \
     --jq "[.[] | select(.body | test(\"(?i)\\\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #${PF_ISSUE}\\\\b\"))] | .[] | \"\(.number) \(.headRefName)\"" 2>/dev/null)" || {
-    echo "PREFLIGHT REFUSED: gh pr list failed — cannot verify duplicate-PR guard (FU-042)." >&2
-    exit 3
+    # An unreadable PR list is a DEFERRAL, not a refusal (the homelab#1175 shape, rule #6: never
+    # fail INTO a write). A refusal tells the coordinator "fix the state"; an API blip has no state
+    # to fix — the next pass retries. Codeowner read 2026-09-03 (ADR-110), on the 07:25Z throttle:
+    # a refusal here would have parked every dispatch for the outage's length.
+    echo "→ dispatch deferred — gh pr list unreadable, cannot run the duplicate-PR guard (FU-042; resets N/A) — the next pass retries" >&2
+    exit 0
   }
   # FU-042 (b): multiple open PRs on one issue — refuse loudly rather than silently picking one.
   # gh pr list returns newest-first; with >1 open PR the invariant is already broken and a
