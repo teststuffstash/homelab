@@ -10,6 +10,10 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-011** *(archived 2026-09-03)* — **provider-terraform pinned to a digest** (the running
+  revision's resolved digest, `argocd/resources/crossplane/provider.yaml`), in the #1315 gate PR
+  that also pinned the three Terraform provider versions in the ProviderConfig. Evidence: the
+  digest is the pod's `imageID`; ArgoCD sync leaves the revision unchanged.
 - **FU-196** *(archived 2026-09-02)* — **ghcr single-point-of-dependence for the oracle corpus:
   RESOLVED by ADR-121.** v0 (mirror creds) 2026-08-30; v1 (first-party push-mode registry on
   Garage, `registry.teststuff.net`) built + cut over in one operator-attended session 2026-09-02

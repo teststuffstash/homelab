@@ -1,0 +1,19 @@
+# publicroute-tf-validate fixture — the consumer profile (edge caching + RUM), platform zone.
+# The composite (XR), not the claim: the Composition reads spec.claimRef for ns/name, which
+# Crossplane stamps when a claim is bound — render gets it from here. Mirrors the shape in
+# argocd/resources/publicroute/example-claim.yaml.example; keep the two in step.
+apiVersion: platform.teststuff.net/v1alpha2
+kind: XPublicRoute
+metadata:
+  name: probe-xr
+spec:
+  claimRef:
+    apiVersion: platform.teststuff.net/v1alpha2
+    kind: PublicRoute
+    name: probe
+    namespace: default
+  profile: consumer
+  hostname: cf-probe.default.teststuff.net
+  backend:
+    service: podinfo.default.svc.cluster.local.
+    port: 9898
