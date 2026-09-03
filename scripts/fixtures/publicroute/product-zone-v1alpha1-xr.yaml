@@ -1,0 +1,22 @@
+# publicroute-tf-validate fixture — v1alpha1, PRODUCT zone (ADR-101): the owning namespace
+# claims a hostname anywhere in its zone, https backend with SNI + a second cloudflared replica,
+# so every optional v1alpha1 field renders. Skipped once the Composition composes v1alpha2.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: XPublicRoute
+metadata:
+  name: mcp-xr
+spec:
+  claimRef:
+    apiVersion: platform.teststuff.net/v1alpha1
+    kind: PublicRoute
+    name: mcp
+    namespace: oracle-fleet
+  zone: minutark.ee
+  hostname: mcp.minutark.ee
+  backend:
+    service: oracle-gateway.oracle-fleet.svc.cluster.local.
+    port: 8080
+    protocol: https
+    originServerName: mcp.minutark.ee
+    noTLSVerify: false
+  replicas: 2
