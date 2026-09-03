@@ -1,0 +1,31 @@
+# homelab#1294 — a Touches-like line that the strict ADR-097 grammar does not parse
+# (bolded, bulleted, heading forms), flagged report-only.
+#
+# WHY THIS IS A CHECK AND NOT A DOC LINE. An issue body may use `**Touches:**` (markdown-bolded),
+# `- Touches:` (bulleted), or `### Touches:` (heading) — the parser sees nothing → the issue is
+# treated as EXCLUSIVE → every queued sibling whose footprint is actually disjoint serializes
+# behind it. The failure is silent: the author BELIEVES a footprint is declared, the scan
+# enforces the opposite. On oracle-fleet#345 this cost hours of queue latency.
+#
+# THE SEVEN ISSUES:
+#   #401 Touches: agents/coordinator-scan.sh          (strict grammar — no report)
+#   #402 **Touches:** agents/coordinator-scan.sh       (bolded — MALFORMED → REPORTED)
+#   #403 - Touches: agents/coordinator-scan.sh         (bulleted — MALFORMED → REPORTED)
+#   #404 ### Touches: agents/coordinator-scan.sh       (heading — MALFORMED → REPORTED)
+#   #405 *Touches:* agents/coordinator-scan.sh         (italic — MALFORMED → REPORTED)
+#   #406 No Touches line (exclusive `*` sentinel)      — NOT CHECKED (no Touches-like line)
+#   #407 Touches: *                                    (strict grammar, wildcard — no report)
+#
+# No `gh` call appears in the action stream on purpose — the lint rides `openall`, the fetch
+# the repo pass already made.
+# pins: (none — report-only check, not a lifecycle transition)
+name: touches-malformed
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:touches-malformed
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
