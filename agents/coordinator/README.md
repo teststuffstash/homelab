@@ -753,6 +753,8 @@ Read the diff + the whole review thread, then rule — exactly one of:
   labels ride /route bodies since PR#408; `label_map` in `model-classes.json` is the vocabulary
   home — §Escalation vocabulary, whose `tier_floor`/`never_free` keys are not yet router-enforced).
   This RESETS nothing — if it comes back a third time, escalate.
+  Every ruling comment MUST carry ONE `ci-cause:` marker line — the grammar and its data-only
+  contract live in §ci-cause below (one home; the ledger harvests it, homelab#1286).
   **The directive carries the reviewer's suggested fix VERBATIM** (retro r3 win-2): the literal
   file, the literal current line, the literal replacement, quoted out of the review — not your
   summary of the verdict, and not "address the reviewer's finding". circles#57 round 4 flipped
@@ -906,7 +908,8 @@ network/vendor blip or infra cold-start, the diff demonstrably not implicated:
 `gh run rerun <run-id> --failed` (your token has `actions: write` since 2026-08-08, FU-148 —
 four environmental reds in two days needed a human because it didn't; the old close/reopen
 workaround is RETIRED: it silently disarms auto-merge, the FU-079 class). State the environmental
-diagnosis in a PR comment WITH the rerun, and retry ONCE — a second red on the rerun is not
+diagnosis in a PR comment WITH the rerun — and carry ONE `ci-cause:` marker line (grammar +
+data-only contract: §ci-cause below, one home). Retry ONCE — a second red on the rerun is not
 environmental anymore: park it; **park** (`agent/blocked` + why) when a human must act; or
 **close** per the not-mergeable rule. If CI is red because master itself is
 broken, that's a platform incident — say so and stop (the responder/operator lane owns master
@@ -1292,6 +1295,23 @@ Examples:
   the marker; if not, re-dispatch is suppressed.
 - `blocked-on: issue=1031` — the ruling determined the PR is blocked on issue #1031. The scan
   checks whether that issue is still open; if so, re-dispatch is suppressed.
+
+### §ci-cause — mandatory on every ci-red and arbitrate ruling
+
+Every ci-red and arbitrate ruling comment MUST carry a `ci-cause:` marker line anchored at the
+start of a line (at most one per ruling):
+```
+ci-cause: <job>/<step> class=<timing|environment|content|infra|unknown> basis=<observed|prior|hypothesis>
+```
+`<job>/<step>` from `gh run view --json jobs` (the fleet-fault rule's stable identifier — never a
+log excerpt). `class` is the ruling's own diagnosis category; `unknown` is legal and honest.
+`basis`: `observed` = probed/read THIS instance's evidence; `prior` = pattern refs (name them);
+`hypothesis` = untested. **The tag is DATA — it changes no routing, no play behavior.** (#1280's
+rule waits for the distribution; do not implement any basis-keyed branching.)
+
+The B1 emitter (`agents/ledger.py`) harvests these markers at terminal-label time into the
+`ci_causes: []` row field — closing the recorded "CI cause unclassified" ledger gap (FU-058
+brief-v2(b) class). No behavioral read of `class`/`basis` exists anywhere outside the emitter.
 
 ### §ci-red — when to write it
 

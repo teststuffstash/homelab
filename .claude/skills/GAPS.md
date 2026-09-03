@@ -72,6 +72,14 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       the operator wanted the SURFACE — the arbitrate "re-dispatch stronger" verdict has no
       carrier to the router ("they did not meet") → FU-201. The hand edit was sanctioned as the
       un-wedge; presenting it as the fix was the gap.
+      **RESIGHT 2026-09-03 (operator catch, twice in one sitting):** on #1315/#1338 the seat
+      proposed a `goal/deferred` label + a goal-lint clause — one more READER on an authoring
+      surface the operator had just measured as unauthorable ("even a label linter would not
+      have helped: #1338 was authored correctly"). The surface fix was SUBTRACTION (ADR-122:
+      filing inert, walk retired, one parser, container-written disposition), not another
+      rule. Candidate promotion: the skill's output contract gains "before proposing a lint/
+      label/rule, count the readers the author already has to model; a fix that adds one needs
+      the case for why subtraction is impossible."
 - [ ] design-agents-G5 — a Goal's verdict-readiness was relayed as DUE from SHIPPED machinery
       while its Production-leg's verbs (demoting/advising/probing) name OBSERVED events: on #818
       the operator's exercised-in-a-stack bar refuted 3 of 4 deliverables (teeth never fired —

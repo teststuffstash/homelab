@@ -1840,6 +1840,43 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       [ -n "$bfm_lines" ] && orphans="${orphans}[$repo] 🏷 BODY-TOUCHES mismatch: issue body references paths outside declared footprint (homelab#808 report-only — may be a deliberate re-scope):\n${bfm_lines}\n"
     fi
     # <<<REPLAY:body-footprint-mismatch<<<
+    # ── TOUCHES-MALFORMED (homelab#1294) — report-only ──────────────────────────────────────
+    # An issue body may use a markdown-bolded `**Touches:**`, bulleted `- Touches:`, or heading
+    # `### Touches:` form that the strict ADR-097 grammar (line-anchored `Touches:`) does not
+    # parse. The parser sees nothing → the issue is treated as EXCLUSIVE → every queued sibling
+    # whose footprint is actually disjoint serializes behind it. The failure is silent: the
+    # author BELIEVES a footprint is declared, the scan enforces the opposite.
+    #
+    # Report-only, never a parse attempt of the malformed form (guessing a footprint is worse
+    # than exclusive — the safe default stands). Same probe for `Base:`/`Depends-on:`-like
+    # lines is NOT in scope per homelab#1294.
+    # >>>REPLAY:touches-malformed>>>
+    if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}"; then
+      tm_lines=""
+      while IFS='|' read -r tmn tml; do
+        [ -n "$tmn" ] || continue
+        tm_lines="${tm_lines}  ⚠ TOUCHES-MALFORMED: issue #${tmn} declares a footprint the parser cannot read (line: \"${tml}\") — un-bold/un-bullet it or the issue is treated as EXCLUSIVE\n"
+      done <<< "$(printf '%s' "$openall" | jq -r '
+        [.[] | .number as $n
+         | (.body // "") as $b
+         | select($b != "")
+         # Loose probe: match Touches-like lines that are bolded, bulleted, heading, etc.
+         # but NOT the strict grammar (line-anchored unadorned "Touches:").
+         | (([$b | scan("(?mi)^[ \\t]*(?:[*_#> -]+)?touches(?:[*_]+)?:[ \\t]*(.+)$")] | first // []) | first // "") as $loose_touches
+         | select($loose_touches != "")
+         # Strict grammar: line-anchored unadorned "Touches:" — if this matches, the issue
+         # is parseable and NOT malformed.
+         | (([$b | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | first // []) | first // "") as $strict_touches
+         | select($strict_touches == "")
+         # Find the exact malformed line for the verbatim quote
+         | ([$b | scan("(?im)^[ \\t]*(?:[*_#> -]+)?touches(?:[*_]+)?:[^\\n]*")] | first // "") as $verbatim
+         | select($verbatim != "")
+         | "\($n)|\($verbatim | gsub("[\\t]"; " ") | gsub("^[ ]+|[ ]+$"; ""))"
+        ] | .[]
+      ' 2>/dev/null || true)"
+      [ -n "$tm_lines" ] && orphans="${orphans}[$repo] ⚠ TOUCHES-MALFORMED: issue body has a Touches-like line the parser cannot read (homelab#1294 report-only — un-bold/un-bullet it or the issue is treated as EXCLUSIVE):\n${tm_lines}\n"
+    fi
+    # <<<REPLAY:touches-malformed<<<
     # ── CLAUSE-REPLAY PAIRING (homelab#825) — report-only ────────────────────────────────────
     # The ADR-103 ratchet requires any PR changing a clause file must touch agents/replay/**.
     # An issue whose declared `Touches:` reaches any ratchet clause file but does not reach

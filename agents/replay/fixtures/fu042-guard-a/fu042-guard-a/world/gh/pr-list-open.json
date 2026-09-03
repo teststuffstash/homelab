@@ -8,5 +8,15 @@
     "number": 400,
     "headRefName": "fix/issue-352-unrelated-work",
     "body": "This stays unresolved #352 until triaged."
+  },
+  {
+    "number": 401,
+    "headRefName": "fix/issue-353-first",
+    "body": "Fixes #353 — first approach."
+  },
+  {
+    "number": 402,
+    "headRefName": "fix/issue-353-second",
+    "body": "Fixes #353 — second approach."
   }
 ]
