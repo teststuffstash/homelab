@@ -32,12 +32,17 @@ meant to avoid.)
     composite refused on `claimRef` v1alpha1 (seat patched the XR — docs gotcha 5, PR#1346);
     cf-api-proxy served the pre-G-G allowlist (FU-190 fourth sighting; `rollout restart`);
     then Cloudflare 403 "Authentication error" — `homelab-ingress-write` is v1 (DNS+Tunnel).
-    **PR#1348** = ingress-write v2 (Cache Settings / Zone WAF / Zone Transform Rules Write);
-    **OPERATOR: Tier-0 apply (`tofu/cloudflare-token/README.md` §Apply) + re-store
-    `CLOUDFLARE_INGRESS_WRITE`**, then nudge Workspace `pr-oracle-fleet-minutark` and read the
-    cache-phase ruleset on minutark.ee (#1334 check 2). ⚖ RUM write permission group not found
-    in the 395-group list — the apply tells. Until then the consumer profile is rendered, not
-    live; `cf-cache-status: DYNAMIC` at the apex.
+    **PR#1348 merged + APPLIED (operator, 12:11Z/12:19Z; plan "No changes" after the seat matched
+    the file to the API's read-back — the policy order FLIPS on every modify, recorded in the
+    file header, committed `588c8e11`).** Token value unchanged, so no re-store. With it live the
+    apply moved to the PAYLOAD: cache rule 400 (20107, `respect_origin` takes no `default`) →
+    **PR#1353** (composition + docs); RUM 403 stays — **no Web Analytics/RUM WRITE permission
+    group exists for a user token** (395-group list + docs), so the consumer profile's RUM
+    half is undeliverable through this token: design residual for #1311 (dashboard RUM /
+    account-owned token / drop RUM from the profile) — the Workspace stays Synced=False on it
+    while the cache rule lands independently. **VERIFIED 12:3xZ after #1353 synced: cache-phase ruleset live on minutark.ee, apex
+    `cf-cache-status: HIT` (max-age 14400) — #1334 check 2 OBSERVED (evidence comment on #1334);
+    check 3 = the RUM residual above; check 1 waits on the api claim (oracle-iac#485).**
   - **Oracle hand fixes REFUTED both coordinator diagnoses**: PR#391 still "Deployment not
     Ready" with probe/warm-up untimed (evidence dump added to e2e-serve.sh on that branch —
     the next red carries pod logs); PR#392 still 403 with the live-pod forward (seat's own
