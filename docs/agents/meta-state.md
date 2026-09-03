@@ -10,11 +10,13 @@ meant to avoid.)
 
 - **⚑ 2026-09-03 ~18:40Z (the #532 pre-merge support session — TICK-LOG has the arc). Fresh-session
   pickup:**
-  - **Request-map pattern PR (ADR-124, phase 1: platform.yaml + renderer + self-test + CI step +
-    oracle-shaped example)** — merge when the bot approves (⚠ it touches .github/workflows/ci.yaml:
-    if the reviewer refuses the workflow hunk, split it operator-direct). Then post the template
-    pointer on oracle-fleet#176 (the oracle repo owns its real map). Open seams for the platform:
-    S5 Skip over-broad (decide), S4 ddos_l7 (verify) — cloudflare.md completion table.
+  - ~~Request-map pattern~~ MERGED (PR#1360 → 7747ecfa, CI step included); template pointer posted
+    on oracle-fleet#176 (the oracle repo owns its real map). Platform legs left: **FU-206** (ops paths
+    blocked at the edge), **S5** (Skip drops the Free managed WAF — live evidence: the managed WAF is
+    blocking /wp-config.php scanners on the apex today), **S4** (ddos_l7 outside the Skip — verify
+    the Free override) — cloudflare.md completion table; `CTR-ACCESSLOG` (ray + stage id access
+    line) proposed as the next contract row; Tempo deferred until an emitter exists (assessment in
+    this session's transcript, no FU filed — file one if the operator wants it staged).
   - **PR#1359 (records: ADR-123 operational paths non-public by default + FU-206 build + glossary
     row)** — merge when the bot approves; FU-206 is the next platform build on the edge (one more
     rule in the merged custom-phase ruleset, both profiles, dry-run through the proxy first).
