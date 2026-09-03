@@ -71,9 +71,13 @@ yq "select(.kind == \"Function\")
 
 # ── tofu: provider from the nix filesystem mirror, no registry access ────────────────────────
 # OpenTofu resolves `cloudflare/cloudflare` to registry.opentofu.org; the nix layout is keyed by
-# registry.terraform.io (same binaries) — a symlink bridges the hostname.
-mkdir -p "$work/mirror"
-ln -s "$(dirname "$(dirname "$prov_dir")")" "$work/mirror/registry.opentofu.org"
+# registry.terraform.io (same binaries). Real directories down to <os_arch> with the provider
+# FILE symlinked in — tofu's mirror walker does not descend into symlinked directories (a
+# symlinked host dir "was not found in any of the search locations", run 33725934501).
+for arch_dir in "$prov_dir"/*/; do
+  m="$work/mirror/registry.opentofu.org/cloudflare/cloudflare/$nix_ver/$(basename "$arch_dir")"
+  mkdir -p "$m"; ln -s "$arch_dir"* "$m/"
+done
 cat > "$work/tofu.rc" <<EOF
 provider_installation {
   filesystem_mirror { path = "$work/mirror" }
