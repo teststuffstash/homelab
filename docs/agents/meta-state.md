@@ -12,6 +12,12 @@ meant to avoid.)
   pickup:**
   - oracle-fleet **#414** filed under bucket #386 (the #410 platform-read fixes: absolute /status fetch,
     Cache-Control per asset, 429/403 wording) — inert (`agent-fix`+`task/fix`), operator queues.
+  - **#1334 check 1 OBSERVED** (api 429 served on Free, Retry-After 10; handoff task from the oracle seat
+    relayed + closed) → **PR#1365** flips the docs; merge when the bot approves. #1334 state: 1+2 ✅, 3 ✗ RUM
+    residual — the human's `goal/validated` verdict on #1302 is now unblocked on evidence.
+  - **Handoff inbox (oracle) still holds two older tasks** — `20260903-1245-ci-red-data-point-391…` (data
+    point + suggestions, "not an ask"; read for a new class, answer) and `20260903-1815-in-pod-kind-unrunnable-issue-399-r1`
+    (pointer: kind node segfault in a kata pod + mirror pull path; needs the ride's transcripts). Next `/handoff`.
   - **PR#1364 runner-image-prepull DaemonSet** (node half of #80's mirror warm: first pull per node was
     429–909 s, the hp-01 one failed a sentinel run at the 900 s deadline) — merge when the bot approves,
     then verify `ds/runner-image-prepull` ready == workers and the tag under every worker's status.images.
