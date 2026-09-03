@@ -3,7 +3,7 @@
 #      CNAME on the platform zone; tunnel token → connection secret (claim ns, never git)
 #   2. a cloudflared Deployment (claim ns) consuming that token
 #   3. profile-specific Cloudflare resources (v1alpha2+):
-#      - consumer: edge caching rule (respect-origin, 1h default) + RUM/client telemetry
+#      - consumer: edge caching rule (respect-origin; Cloudflare default TTL when the origin sends none) + RUM/client telemetry
 #      - api: per-IP rate-limit rule + no-challenge Skip rule
 # SUBTREE ENFORCEMENT lives here (fail-loud template): hostname must be under
 # <ns>.teststuff.net. The zone/account ids are platform constants (docs/cloudflare.md).
@@ -260,7 +260,7 @@ spec:
                   {{- end }}
                   {{- else }}
                   # --- consumer profile: edge caching on ---
-                  # Respect-origin cache headers with a 1h default TTL.
+                  # Respect-origin cache headers (Cloudflare default edge TTL when the origin sends none).
                   # Filled in (#1305).
                   resource "cloudflare_ruleset" "cache_rule" {
                     zone_id  = local.zone_id
@@ -272,9 +272,13 @@ spec:
                       description = "consumer profile: edge caching default on"
                       expression  = "(http.host eq \"{{ $host }}\")"
                       action_parameters = {
+                        # respect_origin = "origin cache-control if present, Cloudflare's default
+                        # edge TTL if not" — it takes NO `default`: the API rejects one with 20107
+                        # "default is useless in respect_origin mode" (first live apply, minutark.ee
+                        # 2026-09-03, oracle-iac#530 → homelab#1334). A fixed TTL is `override_origin`
+                        # + `default`, which is NOT the consumer profile's contract.
                         edge_ttl = {
-                          mode    = "respect_origin"
-                          default = 3600
+                          mode = "respect_origin"
                         }
                       }
                       enabled = true
