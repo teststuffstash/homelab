@@ -6610,3 +6610,32 @@ first live ADR-110 maintenance session before the ADR existed.
   origin/master after confirming TICK-LOG/follow-ups/spike were identical and only meta-state
   held local-only lines, which were re-applied). **Cut PR branches from `origin/master`, never
   local master, while the batched-push rule keeps bookkeeping local.**
+
+## 2026-09-03 ~19:00–22:30Z — request map (ADR-124, v2), ADR-123, #532 live + #1334 check 1, sentinel latency, and the pve thin pool's FOURTH fill (operator-attended session, continued)
+
+- **Design → records**: ADR-123 (operational paths non-public by default, FU-206) and ADR-124 (the
+  public request map: one picture per app rendered from the platform map + the app map; PR#1360,
+  v2 PR#1361 after the #410 read added `applies_to`, CTR-CACHE, `depends_on`, a static-site
+  template). Templates + pointer handed to oracle (#176, #414 under bucket #386).
+- **#532 merged 21:28Z → `mcp.minutark.ee` public**; #1334 check 1 OBSERVED (97×429, JSON body,
+  `Retry-After: 10`, no interstitial — platform half from GraphQL, client half via the handoff
+  channel, PR#1365 flips the docs). Apex flipped to the static site 21:22:44Z → gotcha 7 (502
+  window = Workspace reconcile; cache window = silent origin, no purge token; operator purged).
+- **Sentinel latency root-caused** (runner-image auto-bump named a pin-less file → sentinel sat
+  on a 17-day-old bake, 3.5 min of nix copies per check) → fixed direct (cfb98bbb); then the
+  4.9 GiB first-pull tax per node (429–909 s; hp-01 blew the 900 s deadline) → PR#1364, a
+  pre-puller DaemonSet (node half of #80's mirror warm). **Its first rollout caused the incident.**
+- **INCIDENT 22:05Z — pve thin pool 100 % (4th fill)**: the DaemonSet pulled 4.9 GiB onto wk-02,
+  thinkcentre, wk-metal-04 at once; the pool (353 GB, 488 GB thin-provisioned, 1 GB VG free, no
+  meter) hit 100 %; cp-01/wk-01/wk-02 paused on `io-error`; API down ~8 min; Alertmanager +
+  Prometheus down → NO alert (operator saw a 503). Recovery: DaemonSet paused (live + git
+  3fd6b54f); `lvextend +1000M` → write mode; `qm resume` ×3; fstrim ×4 (wk-01 89→47 %, wk-03
+  86→48 %, wk-02 236 GiB discards); **ci-runner-01 destroyed** (operator: "CI VMs are
+  sacrificial") → pool 64 %; Longhorn salvage of forgejo-pg-1 (both replicas re-marked, then
+  attached); wedged pods force-deleted (garage-0, eventbus js-1/2). Postmortem
+  `docs/incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md`; FU-207 (ci-runner-01
+  recreate vs retire), FU-208 (pre-puller rollout shape), FU-093 meter now blocking.
+- ⚠ **Probe lesson, twice-earned today**: a headroom check for anything writing GBs to a pve VM
+  reads the POOL (`lvs -o data_percent pve`), never the guest FS; a pve VM NotReady with its
+  Talos API unreachable → `qm status --verbose | grep qmpstatus` first. And the seat's own
+  change was the trigger: the pre-puller's PR body said "headroom checked" about the wrong sum.
