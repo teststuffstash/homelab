@@ -1,7 +1,6 @@
-# homelab#1180: the deploy-revert clone URL degrades to anonymous when GH_TOKEN is unset.
-#
-# Sibling of ../set: when GH_TOKEN is absent, the `_cu` variable must stay as the anonymous
-# https URL — never `https://x-access-token:@github.com/…` (empty token after the colon).
+# homelab#1180 → 2026-09-03 header sweep: when GH_TOKEN is absent, the clone degrades to
+# anonymous — `_cu` is the plain https URL and `_ah` is the EMPTY `http.extraHeader=` (git
+# treats an empty value as "no extra header"), never a header with an empty credential.
 name: deploy-revert-token-clone-unset
 mode: actions
 source: agents/coordinator/deploy-revert-argo.yaml

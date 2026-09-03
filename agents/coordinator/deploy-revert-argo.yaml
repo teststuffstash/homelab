@@ -207,9 +207,9 @@ spec:
             # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
             # old anonymous behavior (degrade, never a new hard dependency).
             _cu="https://github.com/${SLUG}.git"
-            [ -n "${GH_TOKEN:-}" ] && _cu="https://x-access-token:${GH_TOKEN}@github.com/${SLUG}.git"
+            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
             # <<<REPLAY:deploy-revert-token-clone<<<
-            git clone --depth 30 "$_cu" /work/iac
+            git clone -c "$_ah" --depth 30 "$_cu" /work/iac
             cd /work/iac
             git config user.name "deploy-revert (FU-044)"
             git config user.email "noreply@teststuff.net"
@@ -218,7 +218,6 @@ spec:
             fi
             git checkout -b "$BR"
             git revert --no-edit "$SHA" || { echo "FATAL: git revert conflicted — human/coordinator lane (no blind force)"; exit 1; }
-            git remote set-url origin "$_cu"
             git push origin "$BR"
             PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
               --title "revert: ${TITLE} (auto-rollback — ${APP} Degraded post-deploy)" \
