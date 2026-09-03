@@ -8,6 +8,29 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-03 ~13:00Z WIND-DOWN (the goal-stalls design-agents sitting — TICK-LOG has
+  the arc). Fresh-session pickup:**
+  - **ADR-122 landed (PR#1344; verify merged)** — filing inert / walk retired / one parser /
+    container-written disposition; **S8 re-headed** (ROADMAP). Build order: the walk
+    retirement is hotfix-class and may land BEFORE the stint — nothing filed for it yet
+    (operator's call whether the seat cuts it next sitting or S8 opens with it).
+  - **Codeowner reads done**: #1343 #1339 #1273 merged/approved; **#1290 + #1289 carry seat
+    in-diff fixes** (deferral-not-refusal on a gh outage; one home for the `ci-cause:` spec) —
+    approve once the bot re-approves at the new heads (`gh pr view` reviewDecision). **#1295
+    HELD for the operator**: under ADR-122 it is one more grammar reader (report-only,
+    harmless) — merge as an interim belt or close as superseded.
+  - **Oracle un-wedge**: PR#391/#392 carry the seat's hand-applied round-4 directives (CI is
+    the judge; arbitrate labels stripped, #356 → review); #394's CI rerun re-armed its ci-red
+    fingerprint; **oracle-iac#531** (the #530 two-liner, CI-only lane) → on merge verify the
+    apex XR binds and the consumer profile renders (cache ruleset + RUM on minutark.ee), then
+    #1334's checks 2/3 become observable; #360 (fleet) then wants the `mcp` api claim
+    (oracle-iac#485 — oracle jail's). **homelab#1342 QUEUED** (router→opencode unprefixed
+    model; agents/** → parks on the seat). #1338 CLOSED with the pointer. The state-fp
+    debounce issue filed + queued (FU-199 face). #1334 stays `agent-fix`+`agent/error` until
+    #1249/ADR-122 land (the damper).
+  - Not done, named: #176's stale blockedBy on stint #269 (holds nothing; misleads); the two
+    Error coordinator pods in `oracle-agents` (throttle-era noise); FU-084/FU-098 stale-archive
+    entries (next docs-cleanup).
 - **⚑ 2026-09-03 ~10:05Z WIND-DOWN (the #1315 gate + git-throttle + G-G merge session — TICK-LOG
   has the arc). Fresh-session pickup:**
   - **G-G merged (#1336 → 7cde3dd4, seat as codeowner); #1302 is post-launch.** The verdict

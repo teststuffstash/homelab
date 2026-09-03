@@ -490,16 +490,16 @@ the block needs pruning, not more headings.
       ported 2026-08-07 (operator, oracle-fleet#173). **Next:** the sleep-tracking recipes —
       the donor for the next `new-stack --from` must already have it. Relates FU-114.
 
-- [ ] **FU-199** — **Silent holds freeze whole lanes invisibly.** Four faces in ~48h: the C4/C5
-      goal-child hold never read the strike + resumable-branch evidence (oracle#329 ×2,
-      homelab#1149 — struck children held hours, footprints freezing siblings); class
-      `held-merged-unlinked` misnamed; footprint-held siblings got no `who=operator` row; the
-      PR-cap hold (3 human-waiting PRs, the 2026-09-01 board freeze) held every dispatch.
-      **Next:** hold-narrowing = #1203/PR#1206 merged (#1210 pins it); residue = honest
-      strike-held rows + hold-chain propagation (footprint/cap-held ⇒ who=operator + aggregate)
-      + the CAP SPLIT (v1.3.1 delta 1, issue-authoring.md 2026-09-01): the dispatch cap counts
-      only machine-flowing PRs — human-waiting parks get their own bound + BLOCKPARK.
-      Relates FU-187, FU-143, homelab#887.
+- [ ] **FU-199** — **Silent holds freeze whole lanes invisibly.** Faces: the C4/C5 goal-child
+      hold ignoring strike + resumable-branch evidence (oracle#329 ×2, homelab#1149); class
+      `held-merged-unlinked` misnamed; footprint-held siblings with no `who=operator` row; the
+      PR-cap hold (the 2026-09-01 board freeze); **+2026-09-03: the state-fp debounce** — a
+      completed no-op round after an arbitrate re-dispatch (oracle PR#391, 7.5h silent) and a
+      capacity-deferred ci-red dispatch (PR#394) both hash identical, so "DEBOUNCED, a human is
+      the next mover" is reported and no human is told. **Next:** hold-narrowing = #1203/PR#1206
+      merged; residue = honest strike-held rows + hold-chain propagation + the CAP SPLIT
+      (v1.3.1 delta 1, homelab#887) + the fingerprint faces (their own scan issue, filed
+      2026-09-03). Relates FU-187, FU-143, FU-147.
 
 - [ ] **FU-200** — **The brief's fleet-strike rule has no deterministic reader.** "Same
       `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h ⇒ ONE
