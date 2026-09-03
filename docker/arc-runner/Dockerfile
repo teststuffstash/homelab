@@ -8,7 +8,9 @@
 #   - devbox, pinned binary
 #   - nix.conf pointing at the LAN pull-through cache first (argocd/resources/nix-cache)
 # Built+pushed by .github/workflows/runner-image.yaml; consumed by the scale set image pin in
-# argocd/platform/arc-runners.yaml (keep the runner version compatible with the ARC chart there).
+# argocd/platform/arc-runners.yaml (keep the runner version compatible with the ARC chart there), the
+# iac-sentinel WorkflowTemplate, and the runner-image-prepull DaemonSet (every worker holds the 4.9 GiB
+# image before a pod asks — a first pull cost 429–909 s and failed a sentinel run, 2026-09-03).
 # Phase 2 (FU-015): a warm /nix store layer per devbox.lock closure.
 FROM ghcr.io/actions/actions-runner:2.336.0
 
