@@ -6592,3 +6592,21 @@ first live ADR-110 maintenance session before the ADR existed.
 - ⚠ Doctrine, now written down (gotcha 6): `tofu validate` proves HCL, only the API proves
   entitlement — the Free plan's rate-limit periods and the Skip's legal phase were both
   invisible to the #1329 gate and to two reviewer rounds.
+- **Outcomes (by 19:05Z)**: PR#1356 merged → both probes Ready, four alerts CLEARED,
+  `cloudflare_edge_probe_ok{minutark.ee}=1`; PR#1357 merged → `publicroute` Synced 5ceecdd5, #532
+  told the precondition is met; **www.minutark.ee fixed** — operator asked for the fix: no redirect
+  existed anywhere (zone.ee's URL-redirect feature is inert behind Cloudflare NS), so a Single
+  Redirect www→apex in the zone bootstrap (PR#1358). Its dry-run with the tofu-apply key was
+  "request is not authorized" (Zone WAF Write does NOT unlock `http_request_dynamic_redirect`
+  despite the docs' list) → `Dynamic URL Redirects Write` added to the token; operator applied
+  the token root host-side (the shared tree was switched to the PR branch for the plan — "no
+  changes" on master was the first read), jail applied the redirect: 301 with path+query
+  preserved, verified. Left for #532's merge: the jail `~/.claude.json` oracle connector re-point
+  and #1334 check 1.
+- ⚠ Seat gotcha: the PR branches were cut from LOCAL master, which carried four unpushed
+  bookkeeping commits (two from the previous session) — each squash merge silently carried that
+  bookkeeping into origin (#1356's diff shows follow-ups.md + the FU-072 spike), and the
+  wind-down rebase then conflicted on content origin already had (resolved by resetting to
+  origin/master after confirming TICK-LOG/follow-ups/spike were identical and only meta-state
+  held local-only lines, which were re-applied). **Cut PR branches from `origin/master`, never
+  local master, while the batched-push rule keeps bookkeeping local.**

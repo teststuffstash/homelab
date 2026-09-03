@@ -10,7 +10,11 @@ meant to avoid.)
 
 - **⚑ 2026-09-03 ~18:40Z (the #532 pre-merge support session — TICK-LOG has the arc). Fresh-session
   pickup:**
-  - **PR#1357 (composition: api profile Free-plan shape) MUST merge + `publicroute` app Synced
+  - ~~PR#1358~~ MERGED + APPLIED (operator token modify 18:5xZ, jail redirect apply 19:00Z):
+    `www.minutark.ee` → 301 apex, verified; evidence on PR#1358 + fleet#360. Shared tree back on master.
+  - ~~PR#1357~~ MERGED + `publicroute` Synced 5ceecdd5 (18:45Z): the platform precondition for
+    oracle-iac#532 is met (told on #532). PR#1356 MERGED: probes Ready, all four alerts cleared,
+    `cloudflare_edge_probe_ok` live. **PR#1357 (composition: api profile Free-plan shape) MUST merge + `publicroute` app Synced
     BEFORE oracle-iac#532 merges** — else `mcp.minutark.ee` serves with no rate limit/Skip
     (evidence on #532). Then, once #532 lands: verify Workspace `pr-oracle-fleet-mcp-minutark`
     Synced=True (three rulesets on minutark.ee: ratelimit + firewall_custom + cache), run
