@@ -24,6 +24,11 @@
 # is docker.io, which dockerd mirrors transparently. Docker IS required (render runs the functions
 # as containers) — the jail has none, the ARC runner and ci-runner-01 do.
 #
+# Cost (run 33726331917, ARC runner, 2026-09-03): 136s total — 130s on the FIRST fixture (the
+# fresh per-job dind daemon pulls two function images + the engine image; render + init +
+# validate themselves are seconds), then 2–4s per further fixture. That is why ci.yaml
+# skip-maps this step to PUBLICROUTE_PATHS instead of running it on every PR.
+#
 # Engine caveat: the cluster's provider-terraform v1.1.1 embeds Terraform 1.5.5; this gate
 # validates with OpenTofu. Provider SCHEMA checks are identical (same provider binary), and every
 # defect seen so far was a schema error. Only a language feature OpenTofu accepts and Terraform 1.5
