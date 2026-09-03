@@ -10,6 +10,8 @@ meant to avoid.)
 
 - **⚑ 2026-09-03 ~18:40Z (the #532 pre-merge support session — TICK-LOG has the arc). Fresh-session
   pickup:**
+  - oracle-fleet **#414** filed under bucket #386 (the #410 platform-read fixes: absolute /status fetch,
+    Cache-Control per asset, 429/403 wording) — inert (`agent-fix`+`task/fix`), operator queues.
   - **Request map v2 PR (applies_to, CTR-CACHE, depends_on, static-site template; after the #410 read)** —
     merge when the bot approves; then an addendum on oracle-fleet#176 (second template + the two
     #410 findings: relative /status fetch on the apex, no Cache-Control).
