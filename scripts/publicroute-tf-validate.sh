@@ -87,10 +87,18 @@ render() { # <xr-file> <out-file>
     --timeout 3m > "$2" 2> "$2.err"
 }
 
-echo "publicroute-tf-validate: crossplane ${xp_version}, functions via ${FN_REGISTRY}, cloudflare provider ${cf_pin} (nix)"
+# Fixtures carry the XRD version they are written for (`*-v1alphaN-*`); only those matching the
+# Composition's compositeTypeRef run — render refuses a mismatch, and the legacy set stays on
+# disk as documentation when the XRD moves (goal #1302: v1alpha1 → v1alpha2). Zero matching
+# fixtures of either kind is a FAIL: a version flip must bring its fixtures along.
+xr_version="$(yq -r '.spec.compositeTypeRef.apiVersion' "$COMPOSITION")"
+matches() { [ "$(yq -r '.apiVersion' "$1")" = "$xr_version" ]; }
+
+echo "publicroute-tf-validate: crossplane ${xp_version}, functions via ${FN_REGISTRY}, cloudflare provider ${cf_pin} (nix), XR ${xr_version}"
 validated=0
 for xr in "$FIXTURES"/*-xr.yaml; do
   name="$(basename "$xr" -xr.yaml)"
+  matches "$xr" || { echo "  --  $name (skipped: fixture is $(yq -r '.apiVersion' "$xr"), composition composes $xr_version)"; continue; }
   if ! render "$xr" "$work/$name.rendered.yaml"; then
     echo "publicroute-tf-validate: FAIL — render of fixture '$name' errored:" >&2; cat "$work/$name.rendered.yaml.err" >&2; exit 1
   fi
@@ -120,9 +128,12 @@ done
 [ "$validated" -gt 0 ] || { echo "publicroute-tf-validate: FAIL — no *-xr.yaml fixtures under $FIXTURES" >&2; exit 1; }
 
 # ── negative: the subtree guard must still fire ──────────────────────────────────────────────
+guarded=0
 for xr in "$FIXTURES"/*-xr.must-fail.yaml; do
   [ -e "$xr" ] || continue
   name="$(basename "$xr" -xr.must-fail.yaml)"
+  matches "$xr" || { echo "  --  $name (skipped: fixture is $(yq -r '.apiVersion' "$xr"), composition composes $xr_version)"; continue; }
+  guarded=$((guarded + 1))
   if render "$xr" "$work/$name.rendered.yaml"; then
     echo "publicroute-tf-validate: FAIL — fixture '$name' was expected to FAIL rendering (template guard), but rendered" >&2; exit 1
   fi
@@ -130,4 +141,5 @@ for xr in "$FIXTURES"/*-xr.must-fail.yaml; do
     || { echo "publicroute-tf-validate: FAIL — fixture '$name' failed for a reason other than the template guard:" >&2; cat "$work/$name.rendered.yaml.err" >&2; exit 1; }
   echo "  ok  $name (guard fired: $(grep -o 'PublicRoute [^"]*' "$work/$name.rendered.yaml.err" | head -1 | cut -c1-100))"
 done
-echo "publicroute-tf-validate: OK — $validated profile fixture(s) render and validate against cloudflare ${cf_pin}"
+[ "$guarded" -gt 0 ] || { echo "publicroute-tf-validate: FAIL — no *-xr.must-fail.yaml fixture for $xr_version; the subtree guard is unproven" >&2; exit 1; }
+echo "publicroute-tf-validate: OK — $validated fixture(s) render and validate against cloudflare ${cf_pin}; $guarded guard fixture(s) refused"
