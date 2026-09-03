@@ -77,9 +77,12 @@ spec:
             # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
             # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
             # old anonymous behavior (degrade, never a new hard dependency).
-            _cu="https://github.com/teststuffstash/homelab.git"
-            [ -n "${GH_TOKEN:-}" ] && _cu="https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab.git"
-            git clone --depth 1 -b master "$_cu" /work/homelab
+            # Preemptive auth (the 2026-09-03 throttle recurrence): the token rides `http.extraHeader` on the
+            # FIRST request. Token-in-URL still made two ANONYMOUS requests per clone (GET refs + POST
+            # upload-pack → 401 → authenticated retry) — ~700 anonymous hits/day on GitHub's per-IP throttle
+            # from an "authenticated" loop. `clone -c` persists it for later fetch/push. Empty = anonymous.
+            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
             cd /work/homelab
             # Bring-up guard: these manifests and the script (#742) merge as separate PRs — a run
             # landing in the gap no-ops loudly instead of redding every */15 tick. Harmless
