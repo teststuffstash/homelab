@@ -7,7 +7,7 @@
   ],
   "reviews": [],
   "comments": [
-    {"body":"🤖 `state-fp:9851e0b6d3e6` — deterministic scan dispatching a `ci-red` unit at 2026-08-09T01:40:00Z.\n\nMachine-readable debounce marker (homelab#198), written by `agents/coordinator-scan.sh`, not by the session that follows.","createdAt":"2026-08-09T01:40:00Z"}
+    {"body":"🤖 `state-fp:38657ac2e903` — deterministic scan dispatching a `ci-red` unit at 2026-08-09T01:40:00Z.\n\nMachine-readable debounce marker (homelab#198), written by `agents/coordinator-scan.sh`, not by the session that follows.","createdAt":"2026-08-09T01:40:00Z"}
   ],
   "commits": [
     {"oid":"aaaaaaaa11111111111111111111111111111111","messageHeadline":"fix: resolve the issue"}
