@@ -1,0 +1,56 @@
+# runner-image pre-puller — every worker holds the pinned warm-store runner image BEFORE an ARC
+# runner or an iac-sentinel pod asks for it. The image is 4.9 GiB (the whole fleet's devbox closures
+# baked into /nix, FU-015); its first pull on a node took 429 s (wk-01) and 909 s on hp-01 — past the
+# sentinel's 900 s activeDeadlineSeconds, a failed check-run for nothing (2026-09-03). Every bake mints
+# a new tag, so without this the tax repeats per node per bake. A DaemonSet whose only container IS the
+# image (sleeping) pulls it on rollout and keeps it marked in-use, so kubelet imageGC never evicts it.
+# The tag is bumped by .github/workflows/runner-image.yaml's post-build step, same as the scale set
+# (argocd/platform/arc-runners.yaml) and the sentinel (agents/coordinator/sentinel-argo.yaml).
+# Layering with the prior art: scripts/warm-registry-mirror.sh (#80) warms the LAN ghcr MIRROR with the
+# new image's blobs inside the pin PR's `ci` job, BEFORE the merge flips anything — registry-side. This
+# DaemonSet is the node side: it rolls after the merge and pulls from that warm mirror (pure reads, the
+# #80 storm cannot recur), three nodes at a time.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: runner-image-prepull
+  namespace: arc-runners
+  labels: { app: runner-image-prepull }
+spec:
+  selector:
+    matchLabels: { app: runner-image-prepull }
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 3 } # a new tag = a 4.9 GiB pull per node; three at a time keeps the ghcr mirror honest
+  template:
+    metadata:
+      labels: { app: runner-image-prepull }
+    spec:
+      # Every WORKER: ARC runners pin the ephemeral tier (homelab.io/ephemeral=true), the sentinel
+      # prefers non-Longhorn nodes and can land on any worker — so both sets, control plane excluded.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - { key: node-role.kubernetes.io/control-plane, operator: DoesNotExist }
+      tolerations:
+        - { key: homelab.io/ephemeral, operator: Exists }
+      priorityClassName: system-node-critical
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001 # the runner user baked into the image
+        runAsGroup: 1001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: hold
+          image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.3-g8fa36a37da7e
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits: { memory: 32Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
