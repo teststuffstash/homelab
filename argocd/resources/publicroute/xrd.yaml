@@ -1,10 +1,12 @@
 # PublicRoute (FU-039 public ingress, ADR-101) — a stack claims a public hostname; the platform
 # owns everything else (zone, tunnel plumbing defaults, credentials, deprecation lifecycle,
 # edge observability). v1 scope: routes on the PLATFORM zone (teststuff.net) via a PER-CLAIM
-# Cloudflare Tunnel — per-hostname-safe resources only. Zone-phase rulesets (cache rules,
-# api-no-challenge Skip rules) are the known-open aggregation leg: Cloudflare allows ONE
-# entrypoint ruleset per phase per zone, so per-claim Workspaces cannot own them — that design
-# lands with the second consumer (docs/cloudflare.md §Public ingress).
+# Cloudflare Tunnel — plus, since v1alpha2 (goal #1302), the profile's zone-phase rulesets
+# (rate-limit / skip-challenge / CORS / cache) rendered PER CLAIM. Cloudflare keeps ONE
+# entry-point ruleset per phase per zone, so this is a live limit — at most one claim per
+# profile per zone, and no api+origins claim on the platform zone (its firewall_custom phase
+# is the ha mTLS ruleset) — until the aggregation leg lands (docs/cloudflare.md §PublicRoute,
+# completion table; FU-039).
 #
 # v1alpha2: profile field (consumer|api) added — the route class fans out edge defaults the
 # way ADR-101's zone classes fan out zone defaults (docs/cloudflare.md §Predicted shape).
