@@ -362,6 +362,22 @@ GitHub docs + a credential-free `tofu validate` before any apply.
    owning -iac repo — the apex claim sat Synced=False (Ready=True, still serving) until
    oracle-iac#530.
 
+7. **A backend flip on a live claim has TWO windows, and only the first is the platform's (2026-09-03,
+   the minutark apex placeholder → static site).** (a) **The 502 window**: ArgoCD prunes the old
+   Service the moment the -iac commit syncs, but the tunnel keeps the old origin until the Workspace
+   reconciles the claim's new `backend` (provider-terraform's poll, or a nudge) and cloudflared logs
+   `Updated to new configuration … version=N+1` — ~2 min here; every uncached path 502s meanwhile.
+   Choreograph it: change the claim first, watch `GET accounts/{a}/cfd_tunnel/{id}/configurations`
+   for the version bump, THEN remove the old Service. (b) **The cache window is longer and is the
+   consumer's**: the edge kept serving the placeholder's `/` as a HIT (age 50 min at the flip) and
+   will until its TTL runs out — a silent origin (no `Cache-Control`; nginx here) gets Cloudflare's
+   default 120 min on 200s, 3 min on 404s; the `max-age=14400` clients see is the zone's **Browser
+   Cache TTL** (4 h), not the origin. **No token we hold carries `Cache Purge`** (a zone-scope
+   permission group; nobody mints it) — so a flip cannot be hurried short of the dashboard. Either
+   the origin sets `Cache-Control` (request-map row `CTR-CACHE`, oracle-fleet#414) or the tofu-apply
+   token gains `Cache Purge` for launch-day hygiene (operator mint). The RUM `Synced=False` on the
+   same Workspace did NOT block the tunnel update — terraform applied the other resources.
+
 Client-side gotchas from the phone rollout: a cached NXDOMAIN needs **airplane-mode toggle**
 (force-stop doesn't flush system DNS; Chrome masks it via DoH, the HA app's WebView doesn't);
 the companion app's Internal URL stays `homeassistant.teststuff.net` (LAN HAProxy, NXDOMAIN
