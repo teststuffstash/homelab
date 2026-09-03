@@ -1,7 +1,13 @@
 # Scoped write token for the PublicRoute composition (FU-039 public ingress, ADR-101) — the
-# in-cluster provider-terraform credential. v1 scope = the ROUTES leg only: DNS Write on the
-# PLATFORM zone + Tunnel Write on the account. Deliberately NOT WAF/SSL — the zone-phase
-# rulesets (cache, api-no-challenge) are the open aggregation leg and get their own decision.
+# in-cluster provider-terraform credential. v1 (2026-08-08) = the ROUTES leg only: DNS Write +
+# Tunnel Write. v2 (2026-09-03, G-G goal #1302) adds the PROFILE legs the composition now renders
+# per claim — zone-phase rulesets (cache / rate-limit / managed-skip / CORS) — because the first
+# live consumer-profile apply died at Cloudflare with "Authentication error" while the cf-api-proxy
+# allowlist (the OTHER layer) had already been widened. SSL stays out (no profile renders it).
+# ⚖ RUM (`cloudflare_web_analytics_site`/`_rule`, account-scoped /rum/site_info): NO write
+# permission group named Web Analytics/RUM exists in the 395-group list (2026-09-03 read) — the
+# operator's apply + a re-run of the Workspace tells whether Account-scoped rulesets/settings
+# cover it; until then the consumer profile's RUM half may still 403 (record the outcome here).
 # Storing this token in Infisical as CLOUDFLARE_INGRESS_WRITE is the ARMING act for the whole
 # capability (the crossplane ExternalSecret stays NotReady until then).
 locals {
@@ -25,9 +31,13 @@ resource "cloudflare_api_token" "ingress_write" {
     },
     {
       effect = "allow"
-      permission_groups = [
-        { id = data.cloudflare_api_token_permission_groups_list.dns_write.result[0].id },
-      ]
+      # sort(): the API returns permission_groups ascending by id (see observability-read.tf).
+      permission_groups = [for gid in sort([
+        data.cloudflare_api_token_permission_groups_list.dns_write.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.cache_settings_write.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.waf_write.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.zone_transform_rules_write.result[0].id,
+      ]) : { id = gid }]
       resources = jsonencode(local.ingress_zone_resources)
     },
   ]
