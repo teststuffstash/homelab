@@ -10,6 +10,11 @@ meant to avoid.)
 
 - **⚑ 2026-09-03 ~18:40Z (the #532 pre-merge support session — TICK-LOG has the arc). Fresh-session
   pickup:**
+  - **Request-map pattern PR (ADR-124, phase 1: platform.yaml + renderer + self-test + CI step +
+    oracle-shaped example)** — merge when the bot approves (⚠ it touches .github/workflows/ci.yaml:
+    if the reviewer refuses the workflow hunk, split it operator-direct). Then post the template
+    pointer on oracle-fleet#176 (the oracle repo owns its real map). Open seams for the platform:
+    S5 Skip over-broad (decide), S4 ddos_l7 (verify) — cloudflare.md completion table.
   - **PR#1359 (records: ADR-123 operational paths non-public by default + FU-206 build + glossary
     row)** — merge when the bot approves; FU-206 is the next platform build on the edge (one more
     rule in the merged custom-phase ruleset, both profiles, dry-run through the proxy first).
