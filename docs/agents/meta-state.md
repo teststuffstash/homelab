@@ -10,6 +10,9 @@ meant to avoid.)
 
 - **⚑ 2026-09-03 ~18:40Z (the #532 pre-merge support session — TICK-LOG has the arc). Fresh-session
   pickup:**
+  - **PR#1359 (records: ADR-123 operational paths non-public by default + FU-206 build + glossary
+    row)** — merge when the bot approves; FU-206 is the next platform build on the edge (one more
+    rule in the merged custom-phase ruleset, both profiles, dry-run through the proxy first).
   - ~~PR#1358~~ MERGED + APPLIED (operator token modify 18:5xZ, jail redirect apply 19:00Z):
     `www.minutark.ee` → 301 apex, verified; evidence on PR#1358 + fleet#360. Shared tree back on master.
   - ~~PR#1357~~ MERGED + `publicroute` Synced 5ceecdd5 (18:45Z): the platform precondition for
