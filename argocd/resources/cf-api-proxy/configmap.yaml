@@ -7,7 +7,6 @@
 #   • dns_records CRUD on the two product zones
 #   • cfd_tunnel CRUD/config/token under the account
 #   • rulesets CRUD on the two product zones (rate-limit rules, cache rules, skip rules)
-#   • web_analytics/rules CRUD on the two product zones (RUM)
 #   • rum/site_info CRUD under the account (cloudflare_web_analytics_site)
 #   • rum/v2/{ruleset_id}/rule CRUD under the account (cloudflare_web_analytics_rule)
 #   • read-only zone lookups + token verify
@@ -69,11 +68,6 @@ data:
         proxy_pass $cf_upstream;
       }
 
-      # web_analytics/rules CRUD on the product zones — RUM/client telemetry (consumer profile).
-      location ~ ^/client/v4/zones/(6b63f95592a9e036f8b8f6934511d321|fa1b02951c29ee4828b8948d0dd7baaf)/web_analytics/rules {
-        proxy_pass $cf_upstream;
-      }
-
       # rum/site_info CRUD under the account — cloudflare_web_analytics_site (consumer profile RUM).
       location ~ ^/client/v4/accounts/07b08646b26bb43cd3073826f43b73da/rum/site_info {
         proxy_pass $cf_upstream;
@@ -88,7 +82,7 @@ data:
       # method; a POST here falls to 403 — settings/argo WRITES can never transit this proxy.
       location ~ ^/client/v4/(user/tokens/verify|zones($|\?)|zones/(6b63f95592a9e036f8b8f6934511d321|fa1b02951c29ee4828b8948d0dd7baaf)($|/)) {
         if ($cf_ro_allowed = 0) {
-          return 403 '{"success":false,"errors":[{"code":10403,"message":"cf-api-proxy: write outside dns_records/cfd_tunnel/rulesets/web_analytics/rum — argocd/resources/cf-api-proxy/configmap.yaml"}],"messages":[],"result":null}';
+          return 403 '{"success":false,"errors":[{"code":10403,"message":"cf-api-proxy: write outside dns_records/cfd_tunnel/rulesets/rum — argocd/resources/cf-api-proxy/configmap.yaml"}],"messages":[],"result":null}';
         }
         default_type application/json;
         proxy_pass $cf_upstream;
