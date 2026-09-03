@@ -12,6 +12,10 @@ meant to avoid.)
   pickup:**
   - oracle-fleet **#414** filed under bucket #386 (the #410 platform-read fixes: absolute /status fetch,
     Cache-Control per asset, 429/403 wording) — inert (`agent-fix`+`task/fix`), operator queues.
+  - **PR#1364 runner-image-prepull DaemonSet** (node half of #80's mirror warm: first pull per node was
+    429–909 s, the hp-01 one failed a sentinel run at the 900 s deadline) — merge when the bot approves,
+    then verify `ds/runner-image-prepull` ready == workers and the tag under every worker's status.images.
+    Auto-bump PR#1362 (identical closure, workflow-file trigger) CLOSED, not merged.
   - **Sentinel latency root-caused + fixed direct (cfb98bbb):** the runner-image auto-bump named
     reflexes-argo.yaml (no pin) so sentinel-argo.yaml sat on the 2026-08-17 bake and re-copied every
     lock drift per run (~3.5 min of 4–5); pin → 2026.9.3 + bump list corrected. Template synced 21:10Z;
