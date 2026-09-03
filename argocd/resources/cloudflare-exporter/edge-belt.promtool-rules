@@ -1,0 +1,64 @@
+# CloudflareEdgeProbeBlind — the edge observability belt (#1306), lifted VERBATIM out of
+# prometheusrule.yaml (comments stripped, the manifest is their one home). This is the rules file
+# that edge-belt.promtool-test loads. Not a manifest and not applied to anything: `promtool test
+# rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
+# `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on purpose
+# — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest there would
+# fail it.
+#
+# witness-only: CloudflareEdgeProbeBlindPre334
+#
+# The THIRD fixture pair in this directory (spend-belt.promtool-* was the first, #334;
+# exporter-down.promtool-* was the second, #351). A SEPARATE PAIR rather than a fourth rule in
+# spend-belt.promtool-rules, for the same reason exporter-down.promtool-rules records: promtool
+# evaluates EVERY rule in EVERY loaded file at EVERY step of EVERY test in that file, so rules
+# sharing a file must tolerate each other's inputs. These tests drive the `cloudflare_edge_probe_ok`
+# series through holes and stale markers that the spend-belt cases have no business seeing, and
+# vice versa.
+#
+# ⚠ NOT DRIFT-PINNED (the general harness that would extract `.spec.groups` at run time lives in
+# `scripts/**` + `.github/**`, outside the fixer lane's tier — homelab#337). A stale hand copy
+# tests the OLD expr and passes VACUOUSLY. Re-copy after every expr edit:
+#
+#   devbox run -- yq -o=json '{"groups": [{"name": "cloudflare-edge-belt", "rules": [.spec.groups[].rules[] | select(.alert == "CloudflareEdgeProbeBlind")]}]}' argocd/resources/cloudflare-exporter/prometheusrule.yaml | devbox run -- yq -P '.'
+#
+# …that command regenerates the `cloudflare-edge-belt` group ONLY. The `regression-witness-pre-334`
+# group at the bottom is not in the CR and must survive the re-copy — re-append it (see its header).
+#
+# The OTHER checks in this directory do NOT see this alert: `devbox run edge-probe-self-test`
+# replays the edge expr out of the committed CR and models no `up` series at all, and manifest-lint
+# SKIPS the CR outright (kubeconform has no PrometheusRule schema). For CloudflareEdgeProbeBlind,
+# this fixture is the whole gate.
+groups:
+  - name: cloudflare-edge-belt
+    rules:
+      - alert: CloudflareEdgeProbeBlind
+        expr: min by (zone) (min_over_time(cloudflare_edge_probe_ok[10m])) == 0 or absent(min_over_time(cloudflare_edge_probe_ok[10m]))
+        for: 30m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: 'Cloudflare edge probe is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}'
+          description: 'The edge probe has not read a zone''s edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token''s GraphQL reads on the product zone (docs/cloudflare.md §Token matrix).'
+
+  # ── REGRESSION WITNESS — NOT deployed, and deliberately not in prometheusrule.yaml ────────────
+  # The pre-#334 form of CloudflareEdgeProbeBlind, verbatim. Checked at the SAME eval times as its
+  # shipped twin in edge-belt.promtool-test, so every claim the manifest makes about the class
+  # ("the roll restarted this window", "the absent() arm swapped the alert's identity") is executed
+  # against the form that had the defect rather than asserted about it. `for:`, thresholds and
+  # `severity` are carried unchanged — only the expr differs, which is what keeps the contrast
+  # attributable to the bridge alone. Annotations are trimmed to `summary`, the convention the
+  # openrouter-proxy, github-exporter and spend-belt witness groups already use.
+  # Fossils, not copies: if the expr is ever revisited, this group stays as it is. It is also what
+  # stops a STALE hand copy of the group above from passing vacuously — with the old expr in both
+  # places the pairs would agree and every roll assertion below fails.
+  - name: regression-witness-pre-334
+    rules:
+      - alert: CloudflareEdgeProbeBlindPre334
+        expr: cloudflare_edge_probe_ok == 0 or absent(cloudflare_edge_probe_ok)
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Cloudflare edge probe is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}'
