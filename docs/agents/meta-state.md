@@ -12,6 +12,13 @@ meant to avoid.)
   pickup:**
   - oracle-fleet **#414** filed under bucket #386 (the #410 platform-read fixes: absolute /status fetch,
     Cache-Control per asset, 429/403 wording) — inert (`agent-fix`+`task/fix`), operator queues.
+  - **⚠ INCIDENT 2026-09-03 22:05Z — pve thin pool 100 % (4th fill), triggered by the pre-puller's 4.9 GiB pulls:**
+    cp-01/wk-01/wk-02 paused on io-error, API down ~8 min, no alert. Recovered: +1 GB extend, VMs resumed,
+    4 fstrims, ci-runner-01 DESTROYED (operator: sacrificial) → pool 64 %. Postmortem
+    `docs/incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md`. Pickups: **FU-093 pool meter is
+    now blocking**; **FU-207** ci-runner-01 recreate-vs-retire (tofu drift on `ci_runner`); **FU-208**
+    pre-puller rollout shape (DaemonSet PAUSED via nodeSelector, 3fd6b54f). Verify Longhorn healthy +
+    Prometheus up before anything else writes GBs to a pve VM.
   - **#1334 check 1 OBSERVED** (api 429 served on Free, Retry-After 10; handoff task from the oracle seat
     relayed + closed) → **PR#1365** flips the docs; merge when the bot approves. #1334 state: 1+2 ✅, 3 ✗ RUM
     residual — the human's `goal/validated` verdict on #1302 is now unblocked on evidence.
