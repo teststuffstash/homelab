@@ -5,6 +5,7 @@ _selftest-unrecorded-read	_selftest
 _selftest-wrong-expectation	_selftest
 adopted-not-queued-surfaces	adopted-not-queued-surfaces
 arbitrate-blocked-on-human-bot-comment-after	arbitrate
+arbitrate-no-op-after-directive	arbitrate
 arbitrate-blocked-on-human-resolved	arbitrate
 arbitrate-blocked-on-human-review-only	arbitrate
 arbitrate-blocked-on-human-still-blocked	arbitrate
@@ -25,6 +26,7 @@ c4c5-bodies-probe-fail	c4c5-bodies-probe-fail
 c4c5-infeasible-parks	c4c5-infeasible
 c4c5-infeasible-probe-fail	c4c5-infeasible
 c4c5-infeasible-quoted-inert	c4c5-infeasible
+ci-red-deferred-then-debounced	ci-red-rounds-two-channels
 ci-red-rerun-wake	ci-red-rounds-two-channels
 ci-red-rerun-wake-dispatch	ci-red-rounds-two-channels
 ci-red-rounds-two-channels	ci-red-rounds-two-channels

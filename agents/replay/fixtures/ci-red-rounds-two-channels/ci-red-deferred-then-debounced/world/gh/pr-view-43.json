@@ -1,0 +1,15 @@
+{
+  "headRefOid": "aaaaaaaa11111111111111111111111111111111",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "statusCheckRollup": [
+    {"__typename":"CheckRun","name":"e2e","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2026-08-09T01:00:00Z"},
+    {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS","startedAt":"2026-08-09T01:00:00Z"}
+  ],
+  "reviews": [],
+  "comments": [
+    {"body":"🤖 `state-fp:85e57b5a2a13` — deterministic scan dispatching a `ci-red` unit at 2026-08-09T01:40:00Z.\n\nMachine-readable debounce marker (homelab#198), written by `agents/coordinator-scan.sh`, not by the session that follows.","createdAt":"2026-08-09T01:40:00Z"}
+  ],
+  "commits": [
+    {"oid":"aaaaaaaa11111111111111111111111111111111","messageHeadline":"fix: resolve the issue"}
+  ]
+}
