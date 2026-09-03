@@ -1,0 +1,94 @@
+# The PLATFORM half of the public request map (docs/patterns/public-request-flow.md, ADR-124).
+# Machine-readable on purpose: an app renders its own merged picture from THIS file + its own map
+# with scripts/request-flow-render.py. Values are POINTERS (where the knob lives), never numbers
+# restated — the number's home is the claim, the composition, the zone bootstrap or the chart.
+# seq: platform stages 10–89; an app's stages start at 100. Owners: cloudflare | platform | app.
+schema:
+  version: 1
+  row: [seq, stage, owner, guard, value, rejection, verify, id]
+  owners: [cloudflare, platform, app]
+  app_seq_min: 100
+
+profiles:
+  api:
+    stages:
+      - {seq: 10, id: PRF-DNS, owner: platform, stage: "DNS — proxied CNAME to the claim's own tunnel",
+         guard: "hostname must lie in the claim's zone/subtree (composition template fail-loud)",
+         value: "PublicRoute `.spec.hostname` + `.spec.zone`; zone map = composition constant",
+         rejection: "NXDOMAIN (no record) / template fail (claim never reconciles)",
+         verify: "dig +short <host> @1.1.1.1 → Cloudflare anycast IPs"}
+      - {seq: 15, id: PRF-TLS, owner: platform, stage: "TLS at the edge — min TLS 1.2, always-https",
+         guard: "zone settings from the product-zone bootstrap", value: "tofu/cloudflare/minutark.tf (`min_tls_version`, `always_use_https`)",
+         rejection: "handshake failure / 301 to https", verify: "curl -I http://<host>/ → 301; openssl s_client -tls1_1 fails"}
+      - {seq: 20, id: PRF-DDOS, owner: cloudflare, stage: "HTTP DDoS managed ruleset (ddos_l7)",
+         guard: "always on; actions may be CHALLENGE-shaped — NOT covered by the api never-challenge Skip (seam S4)",
+         value: "Cloudflare-managed; Free-plan action override unverified", rejection: "block or managed challenge (interstitial)",
+         verify: "UNVERIFIED — docs/cloudflare.md §PublicRoute completion table"}
+      - {seq: 30, id: PRF-CUSTOM, owner: platform, stage: "WAF custom rules — never-challenge Skip · CORS preflight block · operational-path block",
+         guard: "ONE http_request_firewall_custom ruleset per claim: Skip products bic/securityLevel/uaBlock + phases sbfm/managed; OPTIONS from an Origin outside the allow-list → 403; /metrics,/healthz → 403 (ADR-123, ☐ FU-206)",
+         value: "PublicRoute `.spec.origins`; composition (argocd/resources/publicroute/composition.yaml)",
+         rejection: "structured 403 JSON (`{\"success\":false,\"errors\":[{\"code\":10403,…}]}`)",
+         verify: "GET /zones/{zone}/rulesets → kind=zone phase=http_request_firewall_custom; curl -X OPTIONS -H 'Origin: https://evil' → 403"}
+      - {seq: 40, id: PRF-RATELIMIT, owner: platform, stage: "per-IP rate limit — ⌈threshold/6⌉ per 10 s window (Free plan's only period)",
+         guard: "characteristics cf.colo.id + ip.src; mitigation 10 s; counting is per colo",
+         value: "PublicRoute `.spec.rateLimit.threshold` (per-minute figure; bounds in the XRD)",
+         rejection: "429, Cloudflare-envelope JSON (`code 10429`); Retry-After: UNVERIFIED (seam S3)",
+         verify: "homelab#1334 check 1 — >threshold/6 requests in 10 s from one IP → 429 JSON, never an interstitial"}
+      - {seq: 50, id: PRF-WAF, owner: cloudflare, stage: "Free managed WAF ruleset",
+         guard: "SKIPPED for the host by stage 30's Skip (phase http_request_firewall_managed in its list) — seam S5, probably over-broad",
+         value: "composition Skip rule `phases`", rejection: "none for this host", verify: "ruleset read: the Skip's phases list"}
+      - {seq: 60, id: PRF-CACHE, owner: platform, stage: "cache", guard: "api profile renders no cache rule",
+         value: "—", rejection: "—", verify: "curl -I → cf-cache-status: DYNAMIC"}
+      - {seq: 70, id: PRF-TUNNEL, owner: platform, stage: "edge → origin: the claim's tunnel + cloudflared Deployment",
+         guard: "proxy read timeout 100 s and upload cap 100 MB are FIXED on Free (the app owns tighter bounds — CTR-BODY, CTR-TIMEOUT); tunnel routes ONLY the claim hostname (others → http_status:404)",
+         value: "PublicRoute `.spec.backend`, `.spec.replicas`; Cloudflare plan constants",
+         rejection: "524 (origin timeout), 413 (upload cap), 1033 (tunnel down), 404 (unlisted hostname)",
+         verify: "kubectl -n <ns> get deploy pr-<ns>-<claim>-cloudflared; GET accounts/{a}/cfd_tunnel → healthy"}
+      - {seq: 80, id: PRF-SERVICE, owner: platform, stage: "Service → pod (Cilium, ClusterIP)",
+         guard: "no NetworkPolicy on the backend by default; the LAN path joins here",
+         value: "PublicRoute `.spec.backend.service` (trailing dot — gotcha 1) + `.port`",
+         rejection: "502/503 from cloudflared when no endpoints", verify: "kubectl -n <ns> get endpoints <svc>"}
+  consumer:
+    stages:
+      - {seq: 10, id: PRF-DNS, owner: platform, stage: "DNS — proxied CNAME to the claim's own tunnel",
+         guard: "hostname must lie in the claim's zone/subtree (composition template fail-loud)",
+         value: "PublicRoute `.spec.hostname` + `.spec.zone`", rejection: "NXDOMAIN / template fail", verify: "dig +short <host> @1.1.1.1"}
+      - {seq: 15, id: PRF-TLS, owner: platform, stage: "TLS at the edge — min TLS 1.2, always-https",
+         guard: "zone settings from the product-zone bootstrap", value: "tofu/cloudflare/minutark.tf", rejection: "handshake failure / 301", verify: "curl -I http://<host>/ → 301"}
+      - {seq: 20, id: PRF-DDOS, owner: cloudflare, stage: "HTTP DDoS managed ruleset (ddos_l7)", guard: "always on; challenges are LEGAL on this profile",
+         value: "Cloudflare-managed", rejection: "block or managed challenge", verify: "—"}
+      - {seq: 30, id: PRF-CUSTOM, owner: platform, stage: "WAF custom rules — operational-path block", guard: "/metrics,/healthz → 403 (ADR-123, ☐ FU-206); no Skip — challenges legal",
+         value: "composition", rejection: "structured 403 JSON", verify: "GET /zones/{zone}/rulesets"}
+      - {seq: 50, id: PRF-WAF, owner: cloudflare, stage: "Free managed WAF ruleset", guard: "runs normally (block-shaped rules)", value: "Cloudflare-managed", rejection: "403 block page", verify: "—"}
+      - {seq: 60, id: PRF-CACHE, owner: platform, stage: "cache — respect origin cache-control, Cloudflare default TTL when absent",
+         guard: "http_request_cache_settings ruleset per claim (one per zone!)", value: "composition; the origin's Cache-Control",
+         rejection: "—", verify: "curl -I → cf-cache-status HIT/MISS/REVALIDATED (homelab#1334 check 2)"}
+      - {seq: 65, id: PRF-RUM, owner: platform, stage: "RUM / Web Analytics beacon", guard: "rendered by the composition; ☐ UNDELIVERABLE through the ingress-write token (no RUM write permission group exists)",
+         value: "composition (`cloudflare_web_analytics_site/_rule`)", rejection: "—", verify: "docs/cloudflare.md §Observability"}
+      - {seq: 70, id: PRF-TUNNEL, owner: platform, stage: "edge → origin: the claim's tunnel + cloudflared", guard: "100 s read timeout, 100 MB upload cap (Free constants); tunnel routes only the claim hostname",
+         value: "PublicRoute `.spec.backend`, `.spec.replicas`", rejection: "524 / 413 / 1033 / 404", verify: "GET accounts/{a}/cfd_tunnel → healthy"}
+      - {seq: 80, id: PRF-SERVICE, owner: platform, stage: "Service → pod (Cilium, ClusterIP)", guard: "the LAN path joins here",
+         value: "PublicRoute `.spec.backend.service` + `.port`", rejection: "502/503 when no endpoints", verify: "kubectl get endpoints"}
+
+# The LAN path (ADR-092) — the same app, a different edge: none of stages 20–65 exist here.
+lan:
+  stages:
+    - {seq: 10, id: LAN-DNS, owner: platform, stage: "DNS — Unbound override *.<stack>.teststuff.net → the stack's Cilium Gateway VIP",
+       guard: "ADR-092 subdomain delegation", value: "ansible/group_vars (opnsense-unbound); the stack's Gateway", rejection: "NXDOMAIN off-LAN (by design)", verify: "dig <host> @192.168.2.1"}
+    - {seq: 15, id: LAN-TLS, owner: platform, stage: "TLS at OPNsense HAProxy (ACME cert) → Cilium Gateway", guard: "LAN-only; no WAF, no rate limit, no DDoS layer",
+       value: "ansible/opnsense-haproxy.yml; ADR-092 gateway", rejection: "503 from HAProxy when the backend is down", verify: "curl -I https://<host>/"}
+    - {seq: 70, id: LAN-ROUTE, owner: app, stage: "HTTPRoute — PathPrefix = the app's endpoint path", guard: "the chart's HTTPRoute; unmatched paths never reach the app",
+       value: "the app chart (oracle: `mcpServer.gateway.endpointPath`)", rejection: "404 from the Gateway", verify: "kubectl -n <ns> get httproute"}
+    - {seq: 80, id: PRF-SERVICE, owner: platform, stage: "Service → pod (Cilium, ClusterIP)", guard: "joins the public path here", value: "the chart's Service", rejection: "503", verify: "kubectl get endpoints"}
+
+# Contract rows — what the PLATFORM ASSUMES THE APP PROVIDES. An app map fulfils a row with
+# `fulfils: <id>`; the renderer lists unfulfilled rows as gaps (and fails under --strict).
+contract:
+  - {id: CTR-PATH, stage: "one endpoint path; everything else 404", why: "the tunnel forwards the whole hostname — the app is the only path filter on the public side"}
+  - {id: CTR-OPS, stage: "answer /metrics and /healthz BEFORE auth for the kubelet and Prometheus", why: "the edge hides them from the public (ADR-123, FU-206); the LAN scrape path must keep working"}
+  - {id: CTR-BODY, stage: "bound the request body BEFORE reading it", why: "the edge cap is fixed at 100 MB on Free and `http.request.body.size` is an Enterprise field"}
+  - {id: CTR-TIMEOUT, stage: "bound backend/upstream time", why: "the edge's 100 s proxy read timeout is fixed below Enterprise"}
+  - {id: CTR-ORIGIN, stage: "default-deny Origin on the LAN path; relax on the public path only to the SAME list the edge enforces", why: "one Deployment serves both paths (seam S2) — a global 'public mode' drops the DNS-rebinding defence on the LAN"}
+  - {id: CTR-OPTIONS, stage: "answer an ALLOWED CORS preflight (OPTIONS → 204 + headers)", why: "the Ruleset Engine cannot synthesize a 2xx; the edge only rejects disallowed preflights and rewrites response headers (seam S1)"}
+  - {id: CTR-IDENTITY, stage: "capacity and per-key/per-identity limiting", why: "Free-plan edge characteristics are IP only — fairness is the edge's, metering is the app's"}
+  - {id: CTR-ERRORS, stage: "document the rejection grammar of every app stage", why: "three grammars already share one URL (edge envelope, app `{error}`, JSON-RPC frames) — seam S3; a client must be able to parse each"}

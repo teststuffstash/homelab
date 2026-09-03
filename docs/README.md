@@ -33,6 +33,7 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 | [renovate.md](renovate.md) | The **org-wide Renovate policy** — threat model (Trivy-style compromise), cooldown/SHA-pinning/OSV, the automerge-vs-review split, coordinator × Renovate verbs |
 | [garage.md](garage.md) | Garage S3 platform reference — deploy, layout bootstrap, LAN-only access model |
 | [garage-bulk-migration.md](garage-bulk-migration.md) | Garage data → longhorn-bulk migration recipe — repeats for any STS volumeClaimTemplate change |
+| [patterns/public-request-flow.md](patterns/public-request-flow.md) | **The public request map** (ADR-124) — one picture per app, rendered from the platform's stage map + the app's; contract rows, the seams register, the renderer |
 | [patterns/app-owned-resources.md](patterns/app-owned-resources.md) | How an app provisions its own buckets/keys/DBs from its own repo (ADR-074/076) |
 | [slsa.md](slsa.md) | Self-hosted supply-chain (SLSA) plan — parked; Phase-1 cosign/SBOM = FU-016 |
 | [sleep-iac.md](sleep-iac.md) | The live three-layer sleep stack + deploy pipeline (ADR-084) — AppProject tenancy, what moves, prune-safe migration |
