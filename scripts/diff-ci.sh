@@ -21,6 +21,9 @@ cd "$(dirname "$0")/.."
 # these verbatim (the #518 flip, live 2026-08-31); keep them one line, single-quoted, eval-safe.
 PROM_PATHS='^(argocd/|tofu/|scripts/prometheus-rules-lint\.sh|devbox\.(json|lock)$)'
 CLAUSE_PATHS='^(agents/|devbox\.(json|lock)$)'
+# #1315: the Composition, the two cluster pins it renders with (functions + provider version),
+# the gate's own script/fixtures, and the devbox closure that ships the nix provider.
+PUBLICROUTE_PATHS='^(argocd/resources/publicroute/|argocd/resources/crossplane/(providerconfig|functions)\.yaml$|argocd/platform/crossplane\.yaml$|scripts/publicroute-tf-validate\.sh$|scripts/fixtures/publicroute/|devbox\.(json|lock)$)'
 
 # task:trigger-regex (first `:` splits; task may carry args and is word-split at run time).
 # Buckets are deliberately COARSE (agents/ runs the whole agents suite, ~10 quick tasks) —
@@ -33,6 +36,8 @@ MAP=(
   "prometheus-rules-lint:$PROM_PATHS"
   "exporter-self-test:^argocd/resources/github-exporter/"
   "spend-probe-self-test:^argocd/resources/cloudflare-exporter/"
+  "publicroute-tf-validate:$PUBLICROUTE_PATHS"
+  "argo-lint:^agents/coordinator/"
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"
   "responder-behaviour-test:^agents/"
