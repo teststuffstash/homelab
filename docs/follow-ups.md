@@ -230,7 +230,11 @@ six OVERSIZE items pointer-ized into
       in-cluster consumers like Garage transcript upload. **⚠ 2026-08-26: the workaround's
       dispatch-time endpoint-IP rewrite goes stale when the proxy rolls mid-ride and black-holes
       the ride's LLM rail** (issue-272-r1 slept to the 4h deadline; evidence in the spike doc) —
-      root-causing this, or a headless-Service name, closes that too. Relates FU-116, FU-187.
+      root-causing this, or a headless-Service name, closes that too. **2026-09-03 re-probe: the
+      symptom is GONE on all four kata nodes** (kata+runc pairs, TCP + UDP VIPs — spike doc
+      §Re-probe); 355-r5 + 387-r3 were meanwhile black-holed by exactly this rewrite (proxy
+      rolled 12:26 on PR#1351). **Next:** delete `resolve_ep` + the rewrites in
+      `agents/agent-session.sh` and the `dnsPolicy: None` leg (PR lane). Relates FU-116, FU-187.
 - [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: mirror **homelab**
       itself into Forgejo — ⚠ the `sleep-lab` pull-mirrors are **BROKEN since the 2026-08-04 DB
       migration** (`SyncMirrors` failing; fix = the idp session's orphaned-repo recipe: remove dir on

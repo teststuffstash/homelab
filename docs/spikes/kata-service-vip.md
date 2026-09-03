@@ -1,6 +1,7 @@
 # Spike — kata guests can't reach cluster-service VIPs
 
-**Tracked by:** FU-072. **Status:** diagnosed, not root-caused. Workaround in place.
+**Tracked by:** FU-072. **Status:** symptom GONE on re-probe (2026-09-03, §Re-probe below) — never
+root-caused; the workaround is now the only thing still causing harm (the stale-endpoint class).
 **Environment:** Cilium 1.19, `kubeProxyReplacement`, `bpf-lb-sock=false`. First seen 2026-07-13 on
 wk-metal-03.
 
@@ -33,6 +34,41 @@ different result by runtime.
 
 Kata CI-gate pods run `dnsPolicy: None` with the LAN resolver (192.168.2.1). Fine for k3d/registry
 work. **Blocks in-cluster consumers** — notably Garage transcript upload from kata pods.
+
+## Re-probe (2026-09-03): VIPs reachable from kata on every kata node
+
+Operator ask after two rides (`oracle-fleet` issue-355-r5, issue-387-r3) were black-holed by the
+endpoint rewrite when `openrouter-proxy` rolled at 12:26 (PR#1351 → ArgoCD sync). Matched
+kata + runc `busybox` pods per node (namespace `fu072-probe`, no CNP, default `dnsPolicy`),
+plus the two LIVE kata rides (egress CNP, `dnsPolicy: None`):
+
+| Node | Runtime | `10.98.187.234:8080` TCP (proxy VIP) | `10.96.0.10:53` UDP (kube-dns) | `10.96.0.1:443` TCP |
+|---|---|---|---|---|
+| wk-metal-01 | kata / runc | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
+| wk-metal-02 | kata / runc | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
+| wk-metal-03 | kata (live ride 387-r3) / runc | ✅ / ✅ | — / ✅ | — / ✅ |
+| wk-metal-04 | kata (probe + live ride 355-r5) / runc | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
+
+(A fresh kata probe on wk-metal-03 stayed Pending — `Insufficient memory`: one laptop = one
+~4 GiB kata ride, by design.) Same Cilium 1.19.1 and the same `cilium-config` LB keys as at first
+sighting; what changed is not recoverable from git (history re-rooted 2026-08-19). Candidate:
+the 2026-07-28 Cilium agent rollout on all four metal nodes (DS generation 8 — the
+[kata OOM-cascade incident](../incidents/2026-07-27-kata-ride-oom-cascade.md)'s fix raised
+`cilium-agent` from BestEffort to Burstable, re-creating every agent; the first sighting was on the
+same laptop that had been OOM-killing its agent) — VIPs were never re-tested after it; the 2026-08-26 collateral finding only documented the rewrite's stale-IP cost.
+Further probes from the live 355-r5 ride (egress CNP enforced): **cluster DNS works** — kube-dns
+VIP `10.96.0.10` answers over TCP and UDP for `*.svc.cluster.local`, so `dnsPolicy: None` is
+removable too (the LAN resolver returns NXDOMAIN for every svc name, by construction). The garage
+and pushgateway ClusterIPs answer as well. **The blast radius of a proxy roll is wider than the
+LLM rail:** `GIT_CRED_BROKER_URL`, `AGENT_REPORT_URL` and `AGENT_SEARCH_URL` are all derived
+from the same `PROXY_URL`, so a stranded ride can neither think, mint a git token (push/PR), nor
+report; agent-finalize's calls all carry timeouts (5–120 s), so finalize degrades silently rather
+than hanging. Roll rate: **18 distinct openrouter-proxy pods in 7 days** (every router PR merge
+rolls it), garage and pushgateway 2 each; Hubble shows 2.8k POLICY_DENIED drops to the dead IP in
+2 h — that IS the `AgentWorkerEgressDropped` firing (the identity no longer exists, so
+`toEndpoints` can't match).
+**Consequence:** the workaround (endpoint-IP rewrite + `dnsPolicy: None`) is now pure liability —
+FU-072's next action is deleting it, not root-causing the original symptom.
 
 ## Collateral finding (2026-08-26): the endpoint IP goes stale when the target rolls
 
