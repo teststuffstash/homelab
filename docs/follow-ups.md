@@ -241,8 +241,6 @@ six OVERSIZE items pointer-ized into
       `argocd/README.md` → "Forgejo cutover".
 - [ ] **FU-010** — Infisical↔CNPG uses `sslmode=disable` (node-pg rejects CNPG's self-signed
       cert). Fine pod-to-pod; revisit if Cilium transparent encryption lands.
-- [ ] **FU-011** — Pin the Crossplane `provider-terraform` package to a digest (currently the
-      `:v1.1.1` tag).
 - [ ] **FU-012** — **Remote/encrypted tofu state backend** (every root is local, gitignored state).
       Hard prerequisite for anything that plans/applies off the operator's machine — the FU-097
       drift belt and the out-of-cluster applier. **3 of 5 roots MIGRATED 2026-08-04** — `cloudflare`

@@ -267,7 +267,11 @@ out to need form-checking the policies don't give. `tofu validate` stays separat
 download per PR, the FU-130 WAN class). A third residue joined 2026-08-11 (PR#250's finding):
 `manifest-lint` globs only `argocd/{resources,platform}`, so **`agents/coordinator/*.yaml`** — the
 loop's own Sensors/CronWorkflows/WorkflowTemplates — is schema-checked by nobody; same owner, same
-step (the sentinel covering homelab), not a separate errand.
+step (the sentinel covering homelab), not a separate errand. _2026-09-03 (#1315):_ the Workflow
+kinds now get `argo lint --offline` in `ci` (`devbox run argo-lint` — template references, not
+just schema); the Sensors/EventSources remain the sentinel's. The same PR closed a fourth residue
+of this class: the PublicRoute Composition's **templated Terraform** (a string no schema gate
+reads) is rendered + `tofu validate`d by `devbox run publicroute-tf-validate`.
 
 **The fixer block landed the same day** (`agents/fixer/openrouter-operator/agentstack.yaml`:
 budget $5/week, `guardrail: none` — the stack chain is a paid model, `claudeTier: false` per the
