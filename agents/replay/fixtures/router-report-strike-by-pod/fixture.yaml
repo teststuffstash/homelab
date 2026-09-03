@@ -1,0 +1,6 @@
+name: router-report-strike-by-pod
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:strike-scope

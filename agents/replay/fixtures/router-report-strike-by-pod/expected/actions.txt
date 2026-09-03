@@ -1,0 +1,3 @@
+CALL curl -fsS -m 5 -X POST -H Content-Type: application/json -H Authorization: Bearer ref:homelab/homelab-session-1268-pod-struck -d {"session":"agent-1268-pod-struck","task":"issue-1268","stack":"platform","role":"worker","round":3,"model":"deepseek/deepseek-v4-flash","rail":"openrouter","cost_usd":0.03,"error_class":"","outcome":"clean"} http://openrouter-proxy.agent-egress.svc.cluster.local:8080/report
+OUT → router report posted (http://openrouter-proxy.agent-egress.svc.cluster.local:8080/report)
+RC 0
