@@ -6554,3 +6554,41 @@ first live ADR-110 maintenance session before the ADR existed.
 - ⚠ Seat gotcha, twice: `devbox run -- kubectl` inside a shell variable is one word to zsh;
   and a failed `git checkout` before a scripted edit lands the edit on the branch you are still
   on — `git show --stat HEAD` before pushing a hand fix.
+
+## 2026-09-03 ~18:00–18:40Z — oracle-iac#532 pre-merge support: api profile dry-run through the proxy (two rejections), the probe status-line bug behind all four Cloudflare alerts (operator-attended session)
+
+- **Ask**: read docs/cloudflare.md + fleet#360 + oracle-iac#532 + every firing Cloudflare alert;
+  #532 (the `mcp.minutark.ee` api claim, merge = public exposure) is about to merge.
+- **Alerts** (CloudflareSpendProbeBlind 10:16Z, CloudflareEdgeProbeBlind 10:05Z, TargetDown ×2,
+  edge-probe RolloutStuck/ReplicasMismatch): ONE cause under the four — both probes' `/metrics`
+  branch called `send_header()` without `send_response()`, so the first header went out as the
+  status line; Prometheus: `malformed HTTP status code "text/plain;"` on all three probe
+  targets since the #1336 sync (09:46Z). `/healthz` had its own status line → the spend pod sat
+  Ready while unscrapeable. Plus #1340's residual (the GraphQL guard tested the REST `success`
+  field, absent from the GraphQL envelope → every poll raised even after #1343's shape fix).
+  **PR#1356** (both fixes + self-test legs over a real socket / a fake urlopen — the handler
+  leg fails master's handler with `BadStatusLine`; closes #1340).
+- **#532 read**: claim valid against XRD v1alpha2, product-zone owner + subtree guards pass,
+  phases disjoint from the apex consumer claim, backend Service has endpoints, no pre-existing
+  `mcp` DNS record, ingress-write v2 carries WAF Write. Then the thing no diff shows: the exact
+  rendered api rulesets POSTed to minutark.ee THROUGH cf-api-proxy (the Workspace's own path),
+  deleted after (204s, zero residue): rate limit ✗ 20155 (`cf.colo.id` required) → ✗ "not
+  entitled to use the period 60, can only use a period among [10]" (Free) → ✓ at period 10/
+  timeout 10 with the JSON 429; Skip products/phases in `http_request_firewall_managed` ✗ 20120
+  "phase 'http_request_sbfm' is not authorized" → ✓ in `http_request_firewall_custom`. Apply is
+  not transactional ⇒ merging #532 on the old composition = tunnel+CNAME live, Workspace
+  Synced=False, route public with NO rate limit and NO Skip. **PR#1357** (composition: 10 s
+  windows, ⌈threshold/6⌉ per window, `cf.colo.id`, Skip + preflight merged into ONE custom-phase
+  ruleset; docs §API profile + completion row widened (ANY api claim on teststuff.net collides
+  with the ha mTLS entry point) + gotcha 6 with the probe table + the doctrine "dry-run a new
+  Cloudflare shape through the proxy before its first claim merges"; glossary). Rendered both
+  fixtures locally → `tofu validate` green on cloudflare 1.0.5 (no docker in the jail for the
+  #1329 gate; CI runs it).
+- **Posted on #532**: hold until #1357 synced; `endpointPath: /` (c9842fc) strands
+  `oracle-fleet/agent/agentstack.yaml` slo+mcp endpoints at `/mcp` (exact path match → SLO 404
+  → auto-merge freeze; worker MCP attach dead) — add the two-line re-point to the PR; public
+  `/metrics` + `/healthz` on the api hostname (gateway answers before auth) as a go/no-go read;
+  aside for #360: `www.minutark.ee` is HTTP-404 (tunnel config routes only the apex hostname).
+- ⚠ Doctrine, now written down (gotcha 6): `tofu validate` proves HCL, only the API proves
+  entitlement — the Free plan's rate-limit periods and the Skip's legal phase were both
+  invisible to the #1329 gate and to two reviewer rounds.
