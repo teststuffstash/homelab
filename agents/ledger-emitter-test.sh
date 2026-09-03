@@ -94,14 +94,22 @@ def fake_s5(args, key_id, key_secret):
 
 def fake_sh(args, env=None):
     if args[0] == "gh" and args[1] == "api":
-        # gh api ... --jq '[.[] | .body]' returns an array of the comment BODIES. proj#7 has a
-        # strike-only round 5, plus a duplicate round 2 (which already has a manifest ->
-        # merge_rounds must keep the manifest entry). One non-strike comment must be ignored.
-        return json.dumps([
-            "AGENT_STRIKE: model=model-c error_class=auth-storm round=5 session=pod5\n\n<details>struck",
-            "AGENT_STRIKE: model=model-b error_class=unknown round=2 session=pod2",
-            "a plain human comment — no strike line",
-        ])
+        url = args[2]
+        # proj#7 issue comments — strike-only rounds (existing test data)
+        if "issues/7/comments" in url:
+            return json.dumps([
+                "AGENT_STRIKE: model=model-c error_class=auth-storm round=5 session=pod5\n\n<details>struck",
+                "AGENT_STRIKE: model=model-b error_class=unknown round=2 session=pod2",
+                "a plain human comment — no strike line",
+            ])
+        # proj#1 PR comments (pr_url = https://github.com/org/proj/pull/1) — ci-cause markers
+        # (homelab#1286). Two markers in order, plus one non-marker comment.
+        if "issues/1/comments" in url:
+            return json.dumps([
+                "ci-cause: ci/manifest-lint class=environment basis=observed\n\nReran and passed.",
+                "ci-cause: ci/argocd-validate class=infra basis=hypothesis\n\nSuspect cold cache.",
+                "a plain human comment — no ci-cause line",
+            ])
     raise AssertionError("fake_sh unexpected: %r" % (args,))
 
 ledger.s5 = fake_s5
@@ -185,6 +193,17 @@ check(row["retry_storms"] == 1, "row retry_storms counts the strike-only auth-st
 check(row["total_cost_usd"] == 0.65, "row total_cost_usd = 0.10+0.05+0.20+0.30 = 0.65")
 check(row["budget_tier"] == "sm" and row["budget_cap_usd"] == 0.5, "row budget tier/cap present")
 check(row["calibration_error"] == round(0.65 / (0.5 * 5), 3), "row calibration_error = 0.65/(0.5*5) — per-round utilisation, not cumulative")
+
+# ci_causes: harvested from both issue and PR comments (homelab#1286). proj#7 has no
+# ci-cause markers on its own issue comments, but its PR (proj#1) has two markers.
+check("ci_causes" in row, "row carries ci_causes field (never absent)")
+check(len(row["ci_causes"]) == 2, "row ci_causes has 2 entries (from PR comments)")
+check(row["ci_causes"][0]["job_step"] == "ci/manifest-lint", "ci_causes[0] job_step = ci/manifest-lint")
+check(row["ci_causes"][0]["class"] == "environment", "ci_causes[0] class = environment")
+check(row["ci_causes"][0]["basis"] == "observed", "ci_causes[0] basis = observed")
+check(row["ci_causes"][1]["job_step"] == "ci/argocd-validate", "ci_causes[1] job_step = ci/argocd-validate")
+check(row["ci_causes"][1]["class"] == "infra", "ci_causes[1] class = infra")
+check(row["ci_causes"][1]["basis"] == "hypothesis", "ci_causes[1] basis = hypothesis")
 
 # ── 6. _budget_from_cr() prefix-anchoring (homelab#929 r3) ──────────────────────────────
 # The prefix must be anchored with "-round-" so issue "92" does not match
@@ -343,6 +362,9 @@ try:
     check(row8["calibration_error"] is None, "reviewer-only row calibration_error is None (no rounds to divide by)")
     check(row8["rounds"] == [], "reviewer-only row rounds is empty list")
     check(row8["total_cost_usd"] == 0.0, "reviewer-only row total_cost_usd is 0.0")
+    # ci_causes: zero markers → empty list, never absent (homelab#1286)
+    check("ci_causes" in row8, "reviewer-only row carries ci_causes field (never absent)")
+    check(row8["ci_causes"] == [], "reviewer-only row ci_causes is empty list (no markers)")
 except Exception as e:
     bad("reviewer-only main crashed (zero-round guard missing)", str(e))
 finally:
