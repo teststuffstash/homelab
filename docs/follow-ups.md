@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-206** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-207** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -106,6 +106,17 @@ six OVERSIZE items pointer-ized into
       super admin today, signups disabled).
 
 ## GitOps & platform
+
+- [ ] **FU-206** — **PublicRoute: block operational paths at the edge by default (ADR-123).**
+      Every claim serves its backend's `/metrics` + `/healthz` publicly today — the gateway answers
+      them before auth, the tunnel forwards the whole hostname (seen at the oracle-iac#532
+      pre-merge read, 2026-09-03). Deferred: ruled after the api-profile fix (PR#1357) had landed
+      and #532 was merging. **Next:** the composition renders one more rule in the claim's
+      `http_request_firewall_custom` ruleset for BOTH profiles (structured 403; default path list
+      `/metrics`, `/healthz`; a per-path opt-in claim field — name clears the glossary), dry-run
+      through cf-api-proxy first ([`docs/cloudflare.md`](cloudflare.md) gotcha 6); product zones
+      only until zone-phase aggregation (teststuff.net = FU-039's leg). Link: cloudflare.md
+      §PublicRoute completion table.
 
 - [ ] **FU-205** — **WAN-upstream accounting: one view of what hits GitHub/PyPI/ghcr/… from
       where** (operator ask 2026-09-02 after two same-day WAN-limit incidents; no FU/ADR covers

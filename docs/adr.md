@@ -1865,3 +1865,27 @@ ADR-109's "dispatch requires both" and ADR-106 (3)'s bucket-by-title are superse
 v1.3.1 delta 3 (`Origin:` + typed defer/release) is subsumed; IL-T17's bucket exclusion becomes
 an ordinary disposition. Not changed: the fingerprint-debounce faces (FU-199) and the router
 defects (#1342) — separate classes, replayed 2026-09-03 and untouched by these rules.
+
+### ADR-123 — Operational paths are non-public by default: the edge blocks them on every PublicRoute; the health contract is the platform's to evolve (2026-09-03)
+
+**Status:** Accepted (operator direction 2026-09-03, at the oracle-iac#532 pre-merge read; build =
+FU-206). **Decision:** (1) A PublicRoute serves the claim's backend to the internet, but the
+backend's **operational paths** — `/metrics`, `/healthz` and their kin — are non-public by
+default: the composition blocks them at the edge for EVERY claim, both profiles, as one more rule
+in the claim's `http_request_firewall_custom` ruleset (a structured 403, never a challenge); a
+claim that genuinely wants one public opts in per path. Enforcement is edge-side, never an
+app-side IP allow-list: the LAN scrape/probe path stays open and the app carries no knowledge of
+its own exposure. (2) The health endpoint's CONTRACT is the platform's and will evolve: today
+`/healthz` answers the kubelet ("am I ready"); multi-origin service (ROADMAP §HA model rung 3 —
+Cloudflare LB, home primary + Civo failover) needs an answer that RANKS origins ("am I better
+than the other datacenter"), which a single app cannot know — that contract is designed
+platform-side when rung 3 is built, and no app's `/healthz` shape is public API until then.
+**Considered:** app-side allow-lists (rejected: every app re-implements exposure knowledge, and
+the LAN route is the same Deployment); a claim field only (rejected: ADR-119's always-yes class
+— an honest consumer never wants `/metrics` public); waiting for the ≥2-consumers rule
+(overridden: security-shaped, the default is the safe side, the opt-in is the escape). **Why:**
+the first api-profile claim (oracle-iac#532) would have served the gateway's Prometheus exposition
+to the internet — the gateway answers `/metrics`/`/healthz` before auth by design and the tunnel
+forwards the whole hostname. **Consequences:** composition change (FU-206); on the platform zone
+the same phase is the ha mTLS entry point, so teststuff.net claims get it only with zone-phase
+aggregation (FU-039's leg); the health-contract leg is a rung-3 design item, named here.
