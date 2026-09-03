@@ -21,8 +21,8 @@ stack is another, and the platform half changes under both.
 |---|---|---|
 | the row schema, the platform stages per profile (`api`, `consumer`), the LAN path, the **contract rows** (what the platform assumes of an app) | **platform** | [`request-flow/platform.yaml`](request-flow/platform.yaml) |
 | the renderer + its self-test (byte-identical example, validator teeth) | **platform** | `scripts/request-flow-render.py` (`devbox run request-flow-render`, `request-flow-self-test`) |
-| the app stages — one row per guard, each pointing at the app's spec id | **stack** — from its own repo | the app's `request-flow.yaml` (template: [`request-flow/example-app.yaml`](request-flow/example-app.yaml)) |
-| the rendered picture — table + diagram + contract status | **stack** — generated in its CI | the app repo's docs (example output: [`request-flow/example-rendered.md`](request-flow/example-rendered.md)) |
+| the app stages — one row per guard, each pointing at the app's spec id | **stack** — from its own repo | the app's `request-flow.yaml` (templates: [`example-app.yaml`](request-flow/example-app.yaml) = an api-profile gateway, [`example-static-site.yaml`](request-flow/example-static-site.yaml) = a consumer-profile static site) |
+| the rendered picture — table + diagram + contract status + cross-map dependencies | **stack** — generated in its CI | the app repo's docs (example outputs: [`example-rendered.md`](request-flow/example-rendered.md), [`example-static-rendered.md`](request-flow/example-static-rendered.md)) |
 | the edge MECHANISM behind every platform row (rulesets, tokens, gotchas) | platform | [`cloudflare.md`](../cloudflare.md) §PublicRoute — this doc only sequences and assigns |
 
 Same split as observability: the platform runs the mechanism, the stack ships its artifacts, and
@@ -30,7 +30,7 @@ they meet through a schema, not through a copied paragraph.
 
 ## The schema — one row per stage
 
-`seq · stage · owner · guard · value · rejection · verify · id` (+ `fulfils` on app rows).
+`seq · stage · owner · guard · value · rejection · verify · id` (+ `fulfils`, `depends_on` on app rows; `applies_to` on contract rows).
 
 - **seq** orders the merge: platform stages 10–89 (DNS → TLS → DDoS → custom rules → rate limit →
   managed WAF → cache → tunnel → Service), app stages from 100. The LAN path (ADR-092) is a
@@ -45,6 +45,16 @@ they meet through a schema, not through a copied paragraph.
   of `cloudflare.md` gotcha 6, written per stage).
 - **id** is the app's spec id (`SRV-…`) or the platform's (`PRF-…`, `LAN-…`, `CTR-…`) — the
   "requirements MUST have unique identifiers" principle, so a row is a link, not prose.
+
+- **depends_on** (app rows) names a call this stage makes to ANOTHER PublicRoute
+  (`"<host>/<path>"`): a dashed edge in the diagram and a cross-map table. It exists because a
+  claim has exactly **one backend per hostname and no path routing** — composing two backends
+  under one site (the apex's freshness badge calling `mcp.minutark.ee/status`) is a cross-host
+  call, and a picture that hides it looks self-contained while it is only as live as the other
+  map.
+- **applies_to** (contract rows) scopes a platform assumption to a profile: a static site is not
+  asked to bound a request body it never reads; an api route is not asked to set `Cache-Control`
+  for a cache rule it does not have.
 
 **Contract rows** (`CTR-*`) are the platform's assumptions about the app: the things the Free
 plan's edge structurally cannot do (body cap, backend timeout, per-identity metering, answering a
@@ -79,6 +89,8 @@ a platform-map edit that changes the picture reds CI until the example is regene
 | S4 | **DDoS L7 is outside the never-challenge Skip**: `ddos_l7` mitigations can be challenge-shaped; whether Free allows an action override is unverified | `PRF-DDOS` — ☐ verify (cloudflare.md completion table) |
 | S5 | **The Skip drops the Free managed WAF**: listing `http_request_firewall_managed` in the Skip's phases removes block-shaped WAF rules for the api host, not just challenges | `PRF-WAF` — ☐ decide (cloudflare.md completion table) |
 | S6 | **Operational paths are public** until the composition blocks them (ADR-123) | `PRF-CUSTOM` — ☐ FU-206 |
+| S7 | **A silent origin is cached for two hours**: the consumer profile respects the origin and falls back to Cloudflare's default TTL; nginx sends no `Cache-Control`; no token we hold can purge | `CTR-CACHE` — GAP in the static-site example |
+| S8 | **Cross-map calls were invisible**: the apex page depends on the api host's `/status` (its CORS answer, its claim being live) and no row said so | `depends_on` — closed in the schema (v2); the static-site example draws the edge |
 
 ## Phase 2 — the platform half from the reconciler, not a file
 

@@ -4,8 +4,10 @@
 Two inputs, one picture: the PLATFORM map (docs/patterns/request-flow/platform.yaml — the edge,
 the tunnel, the LAN path, the contract rows the platform assumes of an app) and the APP map (the
 app repo's own stages, one row per guard, each pointing at its spec id). Rows merge by `seq`
-(platform 10–89, app ≥ 100); contract rows are matched by the app's `fulfils: <id>`; unfulfilled
-ones render as GAPS (exit 2 under --strict). Output is deterministic: same inputs → same bytes,
+(platform 10–89, app ≥ 100); contract rows apply per profile (`applies_to`) and are matched by the
+app's `fulfils: <id>`; unfulfilled ones render as GAPS (exit 2 under --strict). An app row's
+`depends_on: ["<host>/<path>"]` names a call to ANOTHER PublicRoute — a dashed edge in the diagram
+and a cross-map table, because a claim has one backend per hostname and this is how two compose. Output is deterministic: same inputs → same bytes,
 with a content hash of each input in the header as provenance (never a git sha — the committed
 example must not change when an unrelated commit touches the file).
 
@@ -74,11 +76,22 @@ def validate(platform: dict, app: dict, profile: str) -> list[str]:
         if s in seen:
             errs.append(f"app row {row.get('id')}: duplicate seq {s}")
         seen.add(s)
-    contract_ids = {c["id"] for c in platform.get("contract", [])}
+    contract = platform.get("contract", [])
+    contract_ids = {c["id"] for c in contract}
+    for c in contract:
+        for pr in c.get("applies_to", ["api", "consumer"]):
+            if pr not in platform.get("profiles", {}):
+                errs.append(f"contract row {c['id']}: applies_to unknown profile {pr!r}")
+    applicable = {c["id"] for c in contract if profile in c.get("applies_to", ["api", "consumer"])}
     for row in app.get("stages", []):
         f = row.get("fulfils")
         if f and f not in contract_ids:
             errs.append(f"app row {row.get('id')}: fulfils unknown contract row {f!r}")
+        elif f and f not in applicable:
+            errs.append(f"app row {row.get('id')}: fulfils {f!r}, which does not apply to the {profile!r} profile")
+        deps = row.get("depends_on", [])
+        if not isinstance(deps, list) or any(not isinstance(d, str) or "/" not in d for d in deps):
+            errs.append(f"app row {row.get('id')}: depends_on must be a list of '<host>/<path>' strings, got {deps!r}")
     return errs
 
 
@@ -88,7 +101,9 @@ def render(platform: dict, app: dict, profile: str, lan: bool, paths: tuple[str,
     lan_rows = [dict(r, owner_kind="lan") for r in platform.get("lan", {}).get("stages", [])] if lan else []
     merged = sorted(p_rows + a_rows, key=lambda r: (int(r["seq"]), str(r["id"])))
     fulfilled = {r["fulfils"]: r["id"] for r in a_rows if r.get("fulfils")}
-    gaps = [c for c in platform.get("contract", []) if c["id"] not in fulfilled]
+    contract = [c for c in platform.get("contract", []) if profile in c.get("applies_to", ["api", "consumer"])]
+    gaps = [c for c in contract if c["id"] not in fulfilled]
+    deps = [(r, d) for r in a_rows for d in (r.get("depends_on") or [])]
 
     out: list[str] = []
     out.append(f"# Request map — {esc(app.get('app', 'app'))} · `{profile}` profile")
@@ -117,6 +132,9 @@ def render(platform: dict, app: dict, profile: str, lan: bool, paths: tuple[str,
         out.append(f'    {node}["{r["seq"]} {label}"]')
         out.append(f"    {prev} --> {node}")
         prev = node
+    for i, (r, d) in enumerate(deps):
+        out.append(f'    D{i}(["{d}"])')
+        out.append(f"    A{r['seq']} -.->|calls| D{i}")
     if lan_rows:
         out.append("    L([LAN client])")
         lprev = "L"
@@ -147,11 +165,19 @@ def render(platform: dict, app: dict, profile: str, lan: bool, paths: tuple[str,
         for r in sorted(lan_rows, key=lambda r: int(r["seq"])):
             out.append("| " + " | ".join(esc(r.get(c)) for c in COLS) + " |")
     out.append("")
-    out.append("## Contract — what the platform assumes of the app")
+    if deps:
+        out.append("## Cross-map dependencies (calls to ANOTHER PublicRoute)")
+        out.append("")
+        out.append("| from stage | calls | note |")
+        out.append("|---|---|---|")
+        for r, d in deps:
+            out.append(f"| `{r['id']}` (seq {r['seq']}) | `{d}` | that host has its own request map — this picture is only as live as that one |")
+        out.append("")
+    out.append(f"## Contract — what the platform assumes of a `{profile}`-profile app")
     out.append("")
     out.append("| contract row | why the app owns it | fulfilled by |")
     out.append("|---|---|---|")
-    for c in platform.get("contract", []):
+    for c in contract:
         who = f"`{fulfilled[c['id']]}`" if c["id"] in fulfilled else "**GAP**"
         out.append(f"| `{c['id']}` — {esc(c['stage'])} | {esc(c['why'])} | {who} |")
     out.append("")
@@ -198,27 +224,39 @@ def main(argv: list[str]) -> int:
 def self_test() -> int:
     """The committed example renders byte-identical, its two deliberate gaps are exactly the two
     seams it documents, and the validator catches the shapes it exists to catch."""
-    plat_p, app_p = os.path.join(EXAMPLE_DIR, "platform.yaml"), os.path.join(EXAMPLE_DIR, "example-app.yaml")
-    platform, app = load_yaml(plat_p), load_yaml(app_p)
-    assert validate(platform, app, "api") == [], validate(platform, app, "api")
-    assert validate(platform, app, "consumer") == []
-    text, gaps = render(platform, app, "api", True, (plat_p, app_p))
-    assert {g["id"] for g in gaps} == {"CTR-OPTIONS", "CTR-ERRORS"}, [g["id"] for g in gaps]
-    want = os.path.join(EXAMPLE_DIR, "example-rendered.md")
-    with open(want, encoding="utf-8") as f:
-        committed = f.read()
-    assert text == committed, (
-        f"{os.path.relpath(want, ROOT)} is stale — regenerate:\n  devbox run request-flow-render -- "
-        f"--profile api --lan --app docs/patterns/request-flow/example-app.yaml --out {os.path.relpath(want, ROOT)}")
-    # determinism: a second render is byte-identical
-    assert render(platform, app, "api", True, (plat_p, app_p))[0] == text
+    plat_p = os.path.join(EXAMPLE_DIR, "platform.yaml")
+    platform = load_yaml(plat_p)
+    examples = (
+        ("example-app.yaml", "api", "example-rendered.md", {"CTR-OPTIONS", "CTR-ERRORS"}, 0),
+        ("example-static-site.yaml", "consumer", "example-static-rendered.md", {"CTR-CACHE"}, 1),
+    )
+    for app_file, profile, rendered, want_gaps, want_deps in examples:
+        app_p = os.path.join(EXAMPLE_DIR, app_file)
+        app = load_yaml(app_p)
+        assert validate(platform, app, profile) == [], validate(platform, app, profile)
+        text, gaps = render(platform, app, profile, True, (plat_p, app_p))
+        assert {g["id"] for g in gaps} == want_gaps, (app_file, [g["id"] for g in gaps])
+        assert text.count("-.->|calls|") == want_deps, (app_file, "depends_on edges")
+        want = os.path.join(EXAMPLE_DIR, rendered)
+        with open(want, encoding="utf-8") as f:
+            committed = f.read()
+        assert text == committed, (
+            f"{os.path.relpath(want, ROOT)} is stale — regenerate:\n  devbox run request-flow-render -- "
+            f"--profile {profile} --lan --app docs/patterns/request-flow/{app_file} --out {os.path.relpath(want, ROOT)}")
+        # determinism: a second render is byte-identical
+        assert render(platform, app, profile, True, (plat_p, app_p))[0] == text
+    app = load_yaml(os.path.join(EXAMPLE_DIR, "example-app.yaml"))
     # the validator's teeth
     bad = {"stages": [{"seq": 50, "id": "X", "stage": "collides"}]}
     assert any("below app_seq_min" in e for e in validate(platform, bad, "api"))
     bad = {"stages": [{"seq": 100, "id": "X", "stage": "s", "fulfils": "CTR-NOPE"}]}
     assert any("unknown contract row" in e for e in validate(platform, bad, "api"))
     assert validate(platform, app, "nope")  # unknown profile → error, not a crash
-    print("request-flow-render self-test: OK (example renders byte-identical; gaps = CTR-OPTIONS + CTR-ERRORS; validator catches seq/contract/profile faults)")
+    bad = {"stages": [{"seq": 100, "id": "X", "stage": "s", "fulfils": "CTR-CACHE"}]}
+    assert any("does not apply to the 'api' profile" in e for e in validate(platform, bad, "api"))
+    bad = {"stages": [{"seq": 100, "id": "X", "stage": "s", "depends_on": "mcp.minutark.ee/status"}]}
+    assert any("depends_on must be a list" in e for e in validate(platform, bad, "api"))
+    print("request-flow-render self-test: OK (both examples render byte-identical; gaps api = CTR-OPTIONS + CTR-ERRORS, consumer = CTR-CACHE; one depends_on edge; validator catches seq/contract/profile/applies_to/depends_on faults)")
     return 0
 
 

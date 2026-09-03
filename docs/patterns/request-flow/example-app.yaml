@@ -1,4 +1,5 @@
-# EXAMPLE app map — the oracle-fleet gateway as its specs read on 2026-09-03
+# EXAMPLE app map — the oracle-fleet gateway as its specs read on 2026-09-03 (+ the /status row
+# from goal #176's assembly, oracle-fleet#410, spec id SRV-STATUS on that branch)
 # (specs/server/mcp-conformance.md). The real map is the oracle repo's to own; this copy exists so
 # the platform's self-test has an app to render and so a stack has a template to start from.
 # Two contract rows are DELIBERATELY unfulfilled (CTR-OPTIONS, CTR-ERRORS) — that is how seams S1
@@ -11,6 +12,8 @@ stages:
      rejection: "HTTP 200, JSON-RPC error -32600 \"Request body too large\"", verify: "tests/test_gateway.py (oversized declared + actual)"}
   - {seq: 110, id: SRV-HTTP-ENDPOINT, fulfils: CTR-PATH, stage: "single endpoint path, exact match", guard: "POST → 200 json / 202 notification; GET → 405; other paths → 404",
      value: "chart `mcpServer.gateway.endpointPath`", rejection: "404 `{\"error\":\"not found\"}`", verify: "curl https://<host>/nope → 404"}
+  - {seq: 112, id: SRV-STATUS, stage: "/status — corpus freshness document (LOEMIND date, digest, schema, staleness, alert)", guard: "answered pre-auth like /metrics; PRODUCT surface, never on the ADR-123 block list; sets its own Access-Control-Allow-Origin for the apex (CORS-in-app for one path)",
+     value: "gateway/app.py (`status_path`); ACAO hardcoded to https://minutark.ee", rejection: "405 on non-GET; a fourth response grammar on the host (plain JSON document)", verify: "curl -H 'Origin: https://minutark.ee' https://mcp.minutark.ee/status → 200 + ACAO"}
   - {seq: 115, id: SRV-SERVE-READINESS, fulfils: CTR-OPS, stage: "/healthz exercises the stdio child; /metrics answered before auth", guard: "answered BEFORE origin/auth/rate-limit",
      value: "gateway/app.py (`health_path`, `metrics_path`)", rejection: "503 when the child is latched broken", verify: "kubelet readiness; ServiceMonitor scrape"}
   - {seq: 120, id: SRV-HTTP-ORIGIN, fulfils: CTR-ORIGIN, stage: "Origin check — default-deny allow-list (public mode = accept any)", guard: "⚠ `publicOriginMode` is deployment-global (seam S2)",

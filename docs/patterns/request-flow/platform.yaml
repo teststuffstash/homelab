@@ -4,10 +4,17 @@
 # restated — the number's home is the claim, the composition, the zone bootstrap or the chart.
 # seq: platform stages 10–89; an app's stages start at 100. Owners: cloudflare | platform | app.
 schema:
-  version: 1
+  version: 2
   row: [seq, stage, owner, guard, value, rejection, verify, id]
   owners: [cloudflare, platform, app]
   app_seq_min: 100
+  # App-row extras: `fulfils: CTR-*` claims a contract row; `depends_on: ["<host><path>", …]` names a
+  # call this stage makes to ANOTHER PublicRoute (rendered as a dashed edge — the schema's only way
+  # to compose two backends under one site, since a claim has exactly one backend per hostname).
+  # Contract-row extra: `applies_to: [api, consumer]` (default both) — a static site is not asked
+  # to bound a request body it never reads.
+  app_row_extras: [fulfils, depends_on]
+  contract_row_extras: [applies_to]
 
 profiles:
   api:
@@ -40,7 +47,7 @@ profiles:
       - {seq: 60, id: PRF-CACHE, owner: platform, stage: "cache", guard: "api profile renders no cache rule",
          value: "—", rejection: "—", verify: "curl -I → cf-cache-status: DYNAMIC"}
       - {seq: 70, id: PRF-TUNNEL, owner: platform, stage: "edge → origin: the claim's tunnel + cloudflared Deployment",
-         guard: "proxy read timeout 100 s and upload cap 100 MB are FIXED on Free (the app owns tighter bounds — CTR-BODY, CTR-TIMEOUT); tunnel routes ONLY the claim hostname (others → http_status:404)",
+         guard: "proxy read timeout 100 s and upload cap 100 MB are FIXED on Free (the app owns tighter bounds — CTR-BODY, CTR-TIMEOUT); tunnel routes ONLY the claim hostname (others → http_status:404) and to ONE backend — no path routing: composing two backends under one site is a cross-host call (`depends_on`)",
          value: "PublicRoute `.spec.backend`, `.spec.replicas`; Cloudflare plan constants",
          rejection: "524 (origin timeout), 413 (upload cap), 1033 (tunnel down), 404 (unlisted hostname)",
          verify: "kubectl -n <ns> get deploy pr-<ns>-<claim>-cloudflared; GET accounts/{a}/cfd_tunnel → healthy"}
@@ -84,11 +91,12 @@ lan:
 # Contract rows — what the PLATFORM ASSUMES THE APP PROVIDES. An app map fulfils a row with
 # `fulfils: <id>`; the renderer lists unfulfilled rows as gaps (and fails under --strict).
 contract:
-  - {id: CTR-PATH, stage: "one endpoint path; everything else 404", why: "the tunnel forwards the whole hostname — the app is the only path filter on the public side"}
-  - {id: CTR-OPS, stage: "answer /metrics and /healthz BEFORE auth for the kubelet and Prometheus", why: "the edge hides them from the public (ADR-123, FU-206); the LAN scrape path must keep working"}
-  - {id: CTR-BODY, stage: "bound the request body BEFORE reading it", why: "the edge cap is fixed at 100 MB on Free and `http.request.body.size` is an Enterprise field"}
-  - {id: CTR-TIMEOUT, stage: "bound backend/upstream time", why: "the edge's 100 s proxy read timeout is fixed below Enterprise"}
-  - {id: CTR-ORIGIN, stage: "default-deny Origin on the LAN path; relax on the public path only to the SAME list the edge enforces", why: "one Deployment serves both paths (seam S2) — a global 'public mode' drops the DNS-rebinding defence on the LAN"}
-  - {id: CTR-OPTIONS, stage: "answer an ALLOWED CORS preflight (OPTIONS → 204 + headers)", why: "the Ruleset Engine cannot synthesize a 2xx; the edge only rejects disallowed preflights and rewrites response headers (seam S1)"}
-  - {id: CTR-IDENTITY, stage: "capacity and per-key/per-identity limiting", why: "Free-plan edge characteristics are IP only — fairness is the edge's, metering is the app's"}
-  - {id: CTR-ERRORS, stage: "document the rejection grammar of every app stage", why: "three grammars already share one URL (edge envelope, app `{error}`, JSON-RPC frames) — seam S3; a client must be able to parse each"}
+  - {id: CTR-PATH, applies_to: [api], stage: "one endpoint path; everything else 404", why: "the tunnel forwards the whole hostname — the app is the only path filter on the public side"}
+  - {id: CTR-OPS, applies_to: [api, consumer], stage: "answer readiness (and /metrics where it exists) BEFORE auth for the kubelet and Prometheus", why: "the edge hides operational paths from the public (ADR-123, FU-206); the LAN scrape/probe path must keep working"}
+  - {id: CTR-BODY, applies_to: [api], stage: "bound the request body BEFORE reading it", why: "the edge cap is fixed at 100 MB on Free and `http.request.body.size` is an Enterprise field"}
+  - {id: CTR-TIMEOUT, applies_to: [api], stage: "bound backend/upstream time", why: "the edge's 100 s proxy read timeout is fixed below Enterprise"}
+  - {id: CTR-ORIGIN, applies_to: [api], stage: "default-deny Origin on the LAN path; relax on the public path only to the SAME list the edge enforces", why: "one Deployment serves both paths (seam S2) — a global 'public mode' drops the DNS-rebinding defence on the LAN"}
+  - {id: CTR-OPTIONS, applies_to: [api], stage: "answer an ALLOWED CORS preflight (OPTIONS → 204 + headers)", why: "the Ruleset Engine cannot synthesize a 2xx; the edge only rejects disallowed preflights and rewrites response headers (seam S1)"}
+  - {id: CTR-IDENTITY, applies_to: [api], stage: "capacity and per-key/per-identity limiting", why: "Free-plan edge characteristics are IP only — fairness is the edge's, metering is the app's"}
+  - {id: CTR-ERRORS, applies_to: [api, consumer], stage: "document the rejection grammar of every app stage", why: "three grammars already share one URL (edge envelope, app `{error}`, JSON-RPC frames) — seam S3; a client must be able to parse each; a connect doc quotes THIS column"}
+  - {id: CTR-CACHE, applies_to: [consumer], stage: "set Cache-Control on EVERY response", why: "the consumer profile respects the origin and falls back to Cloudflare's default TTL on silence (200 → 120 min, 404 → 3 min); no token we hold carries cache purge — a silent origin ships a two-hour-stale launch page (oracle-fleet#410 read, 2026-09-03)"}
