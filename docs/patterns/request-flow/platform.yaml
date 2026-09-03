@@ -39,7 +39,7 @@ profiles:
       - {seq: 40, id: PRF-RATELIMIT, owner: platform, stage: "per-IP rate limit — ⌈threshold/6⌉ per 10 s window (Free plan's only period)",
          guard: "characteristics cf.colo.id + ip.src; mitigation 10 s; counting is per colo",
          value: "PublicRoute `.spec.rateLimit.threshold` (per-minute figure; bounds in the XRD)",
-         rejection: "429, Cloudflare-envelope JSON (`code 10429`); Retry-After: UNVERIFIED (seam S3)",
+         rejection: "429, Cloudflare-envelope JSON (`code 10429`), `Retry-After: 10` (= mitigation timeout; verified live 2026-09-03, homelab#1334 check 1)",
          verify: "homelab#1334 check 1 — >threshold/6 requests in 10 s from one IP → 429 JSON, never an interstitial"}
       - {seq: 50, id: PRF-WAF, owner: cloudflare, stage: "Free managed WAF ruleset",
          guard: "SKIPPED for the host by stage 30's Skip (phase http_request_firewall_managed in its list) — seam S5, probably over-broad",
