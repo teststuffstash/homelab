@@ -183,6 +183,10 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        # The status line is NOT implied by send_header(): without send_response() the first
+        # header goes out AS the status line and Prometheus reads `malformed HTTP status code
+        # "text/plain;"` — every probe target down, both *ProbeBlind alerts firing (2026-09-03).
+        self.send_response(200)
         self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -351,6 +355,45 @@ def _exposition(table, zone_ids=(_Z_PLATFORM, _Z_PRODUCT)):
     return lines
 
 
+def _handler_check(sample):
+    """GET /metrics, /healthz, /nope through a REAL ThreadingHTTPServer on an ephemeral port. The
+    fixtures above stop at the collector; this is the one seam that sees the STATUS LINE — which
+    send_header() does not imply (2026-09-03: /metrics went out header-first, Prometheus read
+    `malformed HTTP status code "text/plain;"`, every probe target down, both belts blind)."""
+    global _body, _last_success
+    import http.client
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    saved_body, saved_success = _body, _last_success
+    try:
+        with _lock:
+            _body = f"# self-test exposition\n{sample}\n"
+
+        def get(path):
+            conn = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=5)
+            conn.request("GET", path)
+            resp = conn.getresponse()
+            data = resp.read()
+            conn.close()
+            return resp.status, resp.getheader("Content-Type") or "", data
+
+        status, ctype, data = get("/metrics")
+        assert status == 200, f"/metrics answered {status}, not 200"
+        assert "version=0.0.4" in ctype, f"/metrics Content-Type {ctype!r} is not the exposition type"
+        assert sample.encode() in data, "/metrics body must be the collector's exposition"
+        _last_success = 0
+        assert get("/healthz")[0] == 503, "/healthz must be 503 before the first successful poll"
+        _last_success = time.time()
+        assert get("/healthz")[0] == 200, "/healthz must be 200 after a fresh success"
+        assert get("/nope")[0] == 404
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        with _lock:
+            _body = saved_body
+        _last_success = saved_success
+
+
 def self_test():
     """`python3 spend-probe.py --self-test` — recorded fixtures through the real collector, then
     through the committed alert expressions."""
@@ -433,7 +476,10 @@ def self_test():
     assert firing_zones(exprs[blind], {}) == {"<absent>"}, \
         f"{blind} must survive the series disappearing: {exprs[blind]!r}"
 
-    print("cloudflare spend-probe self-test: OK (parser, today's exposition, and the committed "
+    # 8. The HTTP handler over a real socket — status line, exposition type, healthz gate.
+    _handler_check('cloudflare_zone_spend_probe_ok{zone="minutark.ee"} 1')
+
+    print("cloudflare spend-probe self-test: OK (parser, handler over a real socket, today's exposition, and the committed "
           f"{plan}/{blind} exprs replayed against flipped + blind fixtures; the retired argo "
           "leg asserted absent)")
     return 0
