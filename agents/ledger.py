@@ -90,6 +90,11 @@ def parse_ts(name):
 # the strike" is not the strike (the infeasible-marker doctrine, coordinator-scan).
 STRIKE_RE = re.compile(r"^AGENT_STRIKE: model=(\S+) error_class=(\S+) round=(\d+)")
 
+# ci-cause marker — mandatory on every ci-red and arbitrate ruling comment (homelab#1286).
+# Format: ci-cause: <job>/<step> class=<class> basis=<basis>
+# The marker is DATA only — no behavioral read of class/basis exists outside the emitter.
+CI_CAUSE_RE = re.compile(r"^ci-cause: (\S+) class=(\S+) basis=(\S+)")
+
 # ── Rail vocabulary (homelab#795 — G-A, one taxonomy across ledger + proxy + rules) ────────────
 # The launcher (agent-runtime's agent-session.sh, AGENT_RAIL) emits FOUR values:
 #   openrouter          — default, everything routed through OpenRouter
@@ -217,6 +222,72 @@ def strike_rounds(org, project, issue):
             continue
         seen.add(rnd)
         out.append({"round": rnd, "model": m.group(1), "error_class": m.group(2)})
+    return out
+
+
+def ci_causes(org, project, issue):
+    """Parse ci-cause markers from issue comments → [{job_step, class, basis, ts}].
+
+    Reads the same comment surface as strike_rounds() — the issue's own timeline. ci-red and
+    arbitrate rulings are posted on the PR, not the issue, so this function covers the case
+    where a ruling comment is on the issue itself (e.g. a ci-red escalation that posts on the
+    issue). For PR-posted rulings, the caller must also read the PR's comments and pass them
+    through the same regex — see the PR comment reader in ci_causes_from_pr().
+
+    Best-effort: an unreadable comments probe is skipped loudly, never fatal to the reflex.
+    Returns [] on any failure, never None — so the ledger row always carries a list (empty
+    means no markers found, never absent-vs-error ambiguity).
+    """
+    try:
+        bodies = json.loads(sh([
+            "gh", "api", "repos/%s/%s/issues/%s/comments?per_page=100" % (org, project, issue),
+            "--jq", "[.[] | .body]",
+        ]))
+    except Exception as e:
+        print("ledger: ci-cause comments unreadable for %s#%s (%s) — ci_causes skipped"
+              % (project, issue, e), file=sys.stderr)
+        return []
+    out = []
+    for body in bodies:
+        m = CI_CAUSE_RE.search(body or "")
+        if not m:
+            continue
+        out.append({
+            "job_step": m.group(1),
+            "class": m.group(2),
+            "basis": m.group(3),
+        })
+    return out
+
+
+def ci_causes_from_pr(org, project, pr_number):
+    """Parse ci-cause markers from PR comments.
+
+    ci-red and arbitrate rulings are posted on the PR (the play text is the carrier — both
+    plays), so the harvest must also read the PR's comments to find markers that were posted
+    there. This function reads the PR's comment timeline and applies the same CI_CAUSE_RE.
+
+    Best-effort: an unreadable probe is skipped loudly, never fatal. Returns [] on failure.
+    """
+    try:
+        bodies = json.loads(sh([
+            "gh", "api", "repos/%s/%s/issues/%s/comments?per_page=100" % (org, project, pr_number),
+            "--jq", "[.[] | .body]",
+        ]))
+    except Exception as e:
+        print("ledger: ci-cause PR comments unreadable for %s#%s (%s) — ci_causes_from_pr skipped"
+              % (project, pr_number, e), file=sys.stderr)
+        return []
+    out = []
+    for body in bodies:
+        m = CI_CAUSE_RE.search(body or "")
+        if not m:
+            continue
+        out.append({
+            "job_step": m.group(1),
+            "class": m.group(2),
+            "basis": m.group(3),
+        })
     return out
 
 
@@ -370,12 +441,22 @@ def main():
         summ["retry_storms"] = sum(
             1 for v in ((r["exit_status"] or r["error_class"]) for r in rounds)
             if v == "auth-storm" or v.startswith("budget-403"))
+        # ci-cause markers: harvest from both the issue's own comments and the PR's comments
+        # (ci-red and arbitrate rulings are posted on the PR — homelab#1286).
+        causes = ci_causes(org, project, issue)
+        pr_url = summ.get("pr_url", "")
+        if pr_url:
+            m = re.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
+            if m:
+                pr_org, pr_repo, pr_num = m.group(1), m.group(2), m.group(3)
+                causes.extend(ci_causes_from_pr(pr_org, pr_repo, pr_num))
         rec = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "key": key, "project": project, "issue": issue, "stack": repos.get(project, ""),
             "terminal_label": label, "issue_state": state, "closed_at": closed_at,
             "budget_tier": tier, "budget_cap_usd": cap,
             "calibration_error": round(summ["total_cost_usd"] / (cap * len(rounds)), 3) if cap and rounds else None,
+            "ci_causes": causes,
         }
         rec.update(summ)
         # r4 F5: mark mid-flight stamps — at emit time the issue is still OPEN or the terminal
