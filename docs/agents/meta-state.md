@@ -12,6 +12,13 @@ meant to avoid.)
   pickup:**
   - oracle-fleet **#414** filed under bucket #386 (the #410 platform-read fixes: absolute /status fetch,
     Cache-Control per asset, 429/403 wording) — inert (`agent-fix`+`task/fix`), operator queues.
+  - **Sentinel latency root-caused + fixed direct (cfb98bbb):** the runner-image auto-bump named
+    reflexes-argo.yaml (no pin) so sentinel-argo.yaml sat on the 2026-08-17 bake and re-copied every
+    lock drift per run (~3.5 min of 4–5); pin → 2026.9.3 + bump list corrected. Template synced 21:10Z;
+    verify the next runs' bootstrap ≈ 0 `copying path` lines and the iac-sentinel status floor ≈ scan+queue.
+  - **Apex flipped 21:22:44Z** (tunnel config v2 → static-site); gotcha 7 recorded (PR#1363 merged):
+    502 window = Workspace reconcile, cache window = silent origin + no Cache Purge token (operator
+    purged via dashboard). Decision open: mint `Cache Purge` onto tofu-apply, or rely on #414's Cache-Control.
   - ~~Request map v2~~ MERGED (PR#1361): applies_to, CTR-CACHE, depends_on, static-site template;
     addendum posted on oracle-fleet#176.
   - ~~Request-map pattern~~ MERGED (PR#1360 → 7747ecfa, CI step included); template pointer posted
