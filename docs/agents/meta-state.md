@@ -8,6 +8,20 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-03 ~18:40Z (the #532 pre-merge support session — TICK-LOG has the arc). Fresh-session
+  pickup:**
+  - **PR#1357 (composition: api profile Free-plan shape) MUST merge + `publicroute` app Synced
+    BEFORE oracle-iac#532 merges** — else `mcp.minutark.ee` serves with no rate limit/Skip
+    (evidence on #532). Then, once #532 lands: verify Workspace `pr-oracle-fleet-mcp-minutark`
+    Synced=True (three rulesets on minutark.ee: ratelimit + firewall_custom + cache), run
+    **#1334 check 1** (≥200 req/10 s from one IP → 429 with the JSON body, no interstitial),
+    and **re-point the jail's `~/.claude.json` oracle connector to `https://mcp.oracle.teststuff.net/`**
+    (endpointPath moved to the root; the agentstack.yaml re-point is asked for in #532).
+  - **PR#1356 (probe status line + #1340 residual)**: on merge verify both probe pods Ready,
+    the four alerts resolve, and `cloudflare_edge_requests_total` appears — that is #1334's
+    edge-series evidence source.
+  - Operator reads surfaced, not owned here: public `/metrics` on the api hostname (fleet);
+    `www.minutark.ee` HTTP-404 (fleet #360 consumer half; tunnel config routes only the apex).
 - **⚑ 2026-09-03 ~13:00Z WIND-DOWN (the goal-stalls design-agents sitting — TICK-LOG has
   the arc). Fresh-session pickup:**
   - **ADR-122 landed (PR#1344; verify merged)** — filing inert / walk retired / one parser /
