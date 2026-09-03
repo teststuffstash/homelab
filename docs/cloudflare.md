@@ -136,9 +136,9 @@ NOT route through it: jail applies are operator-plan-gated, and the bootstrap ne
 - **The nginx location table IS the permission model** — method+path in git, reviewed like any
   manifest: `dns_records` CRUD on the two product zones, `cfd_tunnel` under the account,
   `rulesets` CRUD on the two product zones (rate-limit rules, cache rules, skip rules),
-  `web_analytics/rules` CRUD on the two product zones (RUM), `rum/site_info` CRUD under the
-  account (`cloudflare_web_analytics_site`), `rum/v2/{ruleset_id}/rule` CRUD under the account
-  (`cloudflare_web_analytics_rule`), read-only zone lookups + token verify. Everything else
+  `rum/site_info` CRUD under the account (`cloudflare_web_analytics_site`),
+  `rum/v2/{ruleset_id}/rule` CRUD under the account (`cloudflare_web_analytics_rule`),
+  read-only zone lookups + token verify. Everything else
   403s in Cloudflare's own error shape, naming the configmap.
 - **Two independent layers**: a request must pass the allowlist AND the token's permission
   groups (live-verified 2026-08-09: an Argo enable dies at the proxy; a settings READ passes
@@ -148,13 +148,13 @@ NOT route through it: jail applies are operator-plan-gated, and the bootstrap ne
   token the pod doesn't have. A Cilium egress lockdown on provider-terraform is the deliberate
   residual (needs the full egress inventory: garage, infisical, k8s API — do it with care, it
   can brick Garage bucket reconciles fleet-wide).
-- **Extended for consumer-profile RUM** (#1322/#1324): the consumer profile renders
+- **Extended for consumer-profile RUM** (#1322/#1324/#1335): the consumer profile renders
   `cloudflare_web_analytics_site` and `cloudflare_web_analytics_rule`, which use account-scoped
   API paths (`/client/v4/accounts/{account_id}/rum/site_info` and
-  `/client/v4/accounts/{account_id}/rum/v2/{ruleset_id}/rule`). These were added to the location
-  table alongside the zone-scoped `web_analytics/rules` path. The zone-scoped
-  `web_analytics/rules` entry does NOT cover the account-scoped RUM paths — both layers are
-  needed for the consumer profile's RUM resources.
+  `/client/v4/accounts/{account_id}/rum/v2/{ruleset_id}/rule`). These account-scoped paths are
+  the whole of what RUM needs — the zone-scoped `web_analytics/rules` entry was removed as dead
+  (#1322 established the rendered resources use account-scoped paths only, #1324 added the
+  account-scoped pair, #1335 removed the unused zone-scoped entry).
 - Re-resolution: `resolver <kube-dns> valid=30s` + variable `proxy_pass` (the ert-egress-proxy
   pin-forever lesson).
 
