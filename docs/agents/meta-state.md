@@ -8,6 +8,24 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-03 ~10:05Z WIND-DOWN (the #1315 gate + git-throttle + G-G merge session — TICK-LOG
+  has the arc). Fresh-session pickup:**
+  - **G-G merged (#1336 → 7cde3dd4, seat as codeowner); #1302 is post-launch.** The verdict
+    (#1334) waits on THREE queued fixes the rollout exposed: **oracle-iac#530** (apex claim →
+    v1alpha2 + `profile: consumer` — landing it IS the live cache+RUM change), **#1340**
+    (edge-probe GraphQL query schema-invalid live; verified shapes in the issue; the
+    `cloudflare-exporter` app is Degraded until then), **#1335** (dead proxy location). Design
+    residual **#1338** (one claim per profile per zone). Live un-wedge done: the Composition
+    was `kubectl replace --force`d (compositeTypeRef immutable — doc gotcha 4, #1341 merged).
+  - **Git-throttle watch**: PR#1333 (+72dcf12e) made every loop clone preemptively
+    authenticated. The first full day decides whether the WAN IP stays clear; a recurrence
+    with zero anonymous requests = FU-007 push-mirror becomes the next deliverable
+    (incident record §Recurrence; memory `git-preemptive-auth`).
+  - **PR gate queue (ADR-110 corpus read)**: **#1273, #1289, #1290, #1295** still parked —
+    this session never loaded the corpus and did not execute the gate.
+  - **#1200 residual named**: no ArgoCD sync-failed/OutOfSync alert exists (the coordinator
+    CNP sat un-applied 35h unnoticed; fixed #1337) — a belt to add, beside the CNP schema.
+  - Operator-owed unchanged: #1308 queue call, FU-205 design pass.
 - **⚑ 2026-09-02 ~16:00Z FINAL WIND-DOWN (the ADR-121 + three-incidents session — TICK-LOG has
   the full arc). Everything VERIFIED closed: registry cutover production-proven (wk-01 LAN pull
   6m31s; dual-publish run green both targets); loop healed (composition was the third home of
