@@ -280,7 +280,9 @@ six OVERSIZE items pointer-ized into
       product zones, the edge-metrics GraphQL poller whose FIRST deliverable is the replacement
       edge-5xx belt — none exists since #350/#363): [`docs/cloudflare.md`](cloudflare.md)
       §PublicRoute + §Observability. Still thin homelab PRs per stack: LAN subdomain opt-in
-      (ADR-092), git repos, AppProject/ns. **Next:** the operator-witnessed test claim.
+      (ADR-092), git repos, AppProject/ns. **Next:** zone-phase ruleset aggregation (one claim per
+      profile per zone today) and the ha retrofit as consumer #2 — the first consumers are live and
+      checked (cloudflare.md completion table, homelab#1334).
       Program: `ROADMAP.md` → "Platform self-service via Crossplane".
       Relates ADR-076, ADR-085, ADR-092, ADR-101.
 - [ ] **FU-055** — Flip the `oracle-fleet` repo `private` → `public` when that stack reaches its
