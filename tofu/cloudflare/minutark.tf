@@ -53,6 +53,37 @@ resource "cloudflare_dns_record" "minutark_dmarc" {
   ttl     = 3600
 }
 
+# ── redirects ───────────────────────────────────────────────────────────────────────────────────
+# The www CNAME above sends www traffic INTO the apex claim's tunnel, but cloudflared routes by Host
+# and the PublicRoute tunnel config lists only the claim hostname → www answered 404 (observed
+# 2026-09-03; zone.ee's own URL-redirect feature is inert once the NS point at Cloudflare). The apex
+# is canonical (claim hostname, cache rule, RUM all sit on it), so www redirects to it at the edge —
+# a Single Redirect (Free plan; evaluated before the tunnel, so www never reaches the origin).
+# `ref` keeps the rule id stable across updates (provider docs). Zone-bootstrap plumbing, not a
+# route — it stays here beside the record it completes, not in the claim.
+resource "cloudflare_ruleset" "minutark_redirects" {
+  zone_id = var.minutark_zone_id
+  name    = "minutark.ee redirects"
+  kind    = "zone"
+  phase   = "http_request_dynamic_redirect"
+  rules = [{
+    ref         = "www_to_apex"
+    action      = "redirect"
+    description = "www.minutark.ee → minutark.ee (apex canonical)"
+    expression  = "(http.host eq \"www.minutark.ee\")"
+    action_parameters = {
+      from_value = {
+        target_url = {
+          expression = "concat(\"https://minutark.ee\", http.request.uri.path)"
+        }
+        status_code           = 301
+        preserve_query_string = true
+      }
+    }
+    enabled = true
+  }]
+}
+
 # ── zone settings ───────────────────────────────────────────────────────────────────────────────
 # TLS 1.2 floor blocks ~nobody (browsers dropped 1.0/1.1 in 2020; MCP clients are modern stacks;
 # 1.2 is the compliance floor everywhere). API-first product ⇒ no plain-HTTP use case.
