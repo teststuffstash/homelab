@@ -231,27 +231,31 @@ spec:
                     }]
                   }
                   # CORS response headers: set Access-Control-* on matching origins.
+                  # Build a single rules list populated by the range — v5 attribute syntax
+                  # cannot have one rules = [...] per iteration (duplicate argument error).
                   resource "cloudflare_ruleset" "cors_headers" {
                     zone_id  = local.zone_id
                     name     = "PublicRoute {{ $host }} CORS headers"
                     kind     = "zone"
                     phase    = "http_response_headers_transform"
+                    rules = [
                     {{- range $i, $origin := $xr.spec.origins }}
-                    rules = [{
-                      ref        = "cors_headers_{{ $i }}"
-                      action     = "rewrite"
-                      expression = "(http.host eq \"{{ $host }}\" and http.request.headers[\"origin\"][0] eq \"{{ $origin }}\")"
-                      action_parameters = {
-                        headers = {
-                          "Access-Control-Allow-Origin" = { operation = "set", value = "{{ $origin }}" }
-                          "Access-Control-Allow-Methods" = { operation = "set", value = "GET,HEAD,PUT,PATCH,POST,DELETE" }
-                          "Access-Control-Allow-Headers" = { operation = "set", value = "Content-Type,Authorization,X-Requested-With" }
-                          "Access-Control-Max-Age"      = { operation = "set", value = "86400" }
+                      {
+                        ref        = "cors_headers_{{ $i }}"
+                        action     = "rewrite"
+                        expression = "(http.host eq \"{{ $host }}\" and http.request.headers[\"origin\"][0] eq \"{{ $origin }}\")"
+                        action_parameters = {
+                          headers = {
+                            "Access-Control-Allow-Origin"  = { operation = "set", value = "{{ $origin }}" }
+                            "Access-Control-Allow-Methods" = { operation = "set", value = "GET,HEAD,PUT,PATCH,POST,DELETE" }
+                            "Access-Control-Allow-Headers" = { operation = "set", value = "Content-Type,Authorization,X-Requested-With" }
+                            "Access-Control-Max-Age"       = { operation = "set", value = "86400" }
+                          }
                         }
-                      }
-                      enabled = true
-                    }]
+                        enabled = true
+                      },
                     {{- end }}
+                    ]
                   }
                   {{- end }}
                   {{- else }}
