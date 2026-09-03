@@ -12,7 +12,7 @@
    "tier": "heavy"
   },
   "review": {
-   "chain_source": "stack",
+   "_comment": "chain_head added 2026-09-03 (the THIRD instance of the goal-decompose 08-23 / dispatch 08-25 class, codified per the >=2 rule): on chainless stacks chain_source resolves nothing, so the served walk drew the cheapest ROTATION model for reviews — xiaomi/mimo-v2.5 [market], 44+9 of 55 review decisions in the 24h shadow read — while the doctrine (review = the safety net, sonnet-class, model-routing.md M10) was carried only by the FU-188 incident pin's fallback in reviewer-session.sh. The head makes the served decision say what the lane actually runs; rails stay subscription-first with the rotation as capacity failover. Retires with the P4 flip like the other two heads.", "chain_head": ["claude/sonnet"], "chain_source": "stack",
    "decorrelate": "family",
    "reasoning": true,
    "min_tier_rule": "gte-author",
