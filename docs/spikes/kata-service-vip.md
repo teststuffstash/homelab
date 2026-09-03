@@ -56,6 +56,17 @@ the 2026-07-28 Cilium agent rollout on all four metal nodes (DS generation 8 —
 [kata OOM-cascade incident](../incidents/2026-07-27-kata-ride-oom-cascade.md)'s fix raised
 `cilium-agent` from BestEffort to Burstable, re-creating every agent; the first sighting was on the
 same laptop that had been OOM-killing its agent) — VIPs were never re-tested after it; the 2026-08-26 collateral finding only documented the rewrite's stale-IP cost.
+Further probes from the live 355-r5 ride (egress CNP enforced): **cluster DNS works** — kube-dns
+VIP `10.96.0.10` answers over TCP and UDP for `*.svc.cluster.local`, so `dnsPolicy: None` is
+removable too (the LAN resolver returns NXDOMAIN for every svc name, by construction). The garage
+and pushgateway ClusterIPs answer as well. **The blast radius of a proxy roll is wider than the
+LLM rail:** `GIT_CRED_BROKER_URL`, `AGENT_REPORT_URL` and `AGENT_SEARCH_URL` are all derived
+from the same `PROXY_URL`, so a stranded ride can neither think, mint a git token (push/PR), nor
+report; agent-finalize's calls all carry timeouts (5–120 s), so finalize degrades silently rather
+than hanging. Roll rate: **18 distinct openrouter-proxy pods in 7 days** (every router PR merge
+rolls it), garage and pushgateway 2 each; Hubble shows 2.8k POLICY_DENIED drops to the dead IP in
+2 h — that IS the `AgentWorkerEgressDropped` firing (the identity no longer exists, so
+`toEndpoints` can't match).
 **Consequence:** the workaround (endpoint-IP rewrite + `dnsPolicy: None`) is now pure liability —
 FU-072's next action is deleting it, not root-causing the original symptom.
 
