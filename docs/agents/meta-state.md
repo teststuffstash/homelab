@@ -45,7 +45,10 @@ meant to avoid.)
     they arbitrate once more it is the oracle jail's read, not another flash round.
   - Not done, named: #176's stale blockedBy on stint #269 (holds nothing; misleads); the two
     Error coordinator pods in `oracle-agents` (throttle-era noise); FU-084/FU-098 stale-archive
-    entries (next docs-cleanup); #1290/#1289 approvals once the bot re-verdicts at head.
+    entries (next docs-cleanup). **Reviewer STEP-0 false anomaly (PR#1289, 11:42Z):** the arm
+    compared its 09-02 approval's commit date against an updater-rewritten date and latched
+    `agent/error` on a plain human push — cleared by the seat; a FU-199-shaped face for the
+    state-fp issue's neighbour (not filed; one instance).
 - **⚑ 2026-09-03 ~10:05Z WIND-DOWN (the #1315 gate + git-throttle + G-G merge session — TICK-LOG
   has the arc). Fresh-session pickup:**
   - **G-G merged (#1336 → 7cde3dd4, seat as codeowner); #1302 is post-launch.** The verdict
