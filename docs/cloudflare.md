@@ -343,6 +343,19 @@ GitHub docs + a credential-free `tofu validate` before any apply.
    the plan shows only a policy/group reorder, it is cosmetic. Confirmed on the
    `observability-read` audit-logs fix: apply "failed", audit endpoint worked seconds later.
 
+4. **(2026-09-03, goal #1302 assembly) `Composition.spec.compositeTypeRef` is IMMUTABLE.** Moving
+   the PublicRoute composition from v1alpha1 to v1alpha2 in place was rejected by the API server
+   (`Value is immutable`), ArgoCD's server-side-apply sync retried forever, and the XRD — which
+   had already flipped its referenceable version — left the live composite reporting "referenced
+   composition is not compatible". Un-wedged with `kubectl replace --force` from master; composed
+   resources (Workspace, cloudflared) are owned by the XR, not the Composition, so nothing
+   serving was touched. Next time: either a NEW composition name per XR version, or the
+   `argocd.argoproj.io/sync-options: Replace=true` annotation on the Composition for the flip
+   commit. Companion gotcha: a version that makes a field REQUIRED (`profile`) strands every
+   stored composite lacking it (`spec.profile: Required value`) until its CLAIM is updated in the
+   owning -iac repo — the apex claim sat Synced=False (Ready=True, still serving) until
+   oracle-iac#530.
+
 Client-side gotchas from the phone rollout: a cached NXDOMAIN needs **airplane-mode toggle**
 (force-stop doesn't flush system DNS; Chrome masks it via DoH, the HA app's WebView doesn't);
 the companion app's Internal URL stays `homeassistant.teststuff.net` (LAN HAProxy, NXDOMAIN
