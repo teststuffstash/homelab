@@ -1,0 +1,68 @@
+# cloudflare-edge-probe (homelab#1306) — the edge observability GraphQL poller on the product zone.
+# Stock python image + the script from the generated ConfigMap, the spend-probe pattern (both pin
+# `python:3.13-slim` the same way). Parks in CreateContainerConfigError until ESO materialises the
+# token Secret — the SAME Secret the exporter beside it uses, no new credential.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-edge-probe
+  labels: { app: cloudflare-edge-probe }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: cloudflare-edge-probe }
+  template:
+    metadata:
+      labels: { app: cloudflare-edge-probe }
+    spec:
+      containers:
+        - name: probe
+          image: python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00
+          command: ["python3", "/app/edge-probe.py"]
+          env:
+            # CLOUDFLARE_OBSERVABILITY_READ via the exporter's existing ExternalSecret
+            # (externalsecret.yaml, same namespace) — it carries ALL zones read incl. analytics,
+            # which is what the GraphQL queries need. ⚠ Do NOT point this at cf-api-proxy: that
+            # allowlist injects the ingress-write token instead; this is a direct read against
+            # api.cloudflare.com/client/v4/graphql, same as the spend probe's direct REST reads.
+            - name: CF_API_TOKEN
+              valueFrom:
+                secretKeyRef: { name: cloudflare-exporter-token, key: token }
+            # The product zone: minutark.ee (oracle-fleet). Zone ids are not secrets (the sibling
+            # deployment carries one in plain env too).
+            # ⚠ Only the product zone: teststuff.net is the platform zone and is out of scope for
+            # the oracle stack's dashboards. The poller queries one zone at a time, so it cannot
+            # poison a batch (homelab#132 round 3).
+            - name: CF_EDGE_ZONE_IDS
+              value: "fa1b02951c29ee4828b8948d0dd7baaf"
+            # Poll short windows (5 min) into Prometheus and retention becomes ours. Adaptive
+            # retention is 1w1d; Prometheus owns the history.
+            - name: POLL_INTERVAL_SECONDS
+              value: "120"
+          ports:
+            - { name: http-metrics, containerPort: 9506 }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 9506 }
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - name: script
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: script
+          configMap:
+            name: cloudflare-edge-probe-script # kustomize rewrites to the hashed name

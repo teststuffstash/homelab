@@ -229,16 +229,19 @@ six OVERSIZE items pointer-ized into
       dispatch-time endpoint-IP rewrite goes stale when the proxy rolls mid-ride and black-holes
       the ride's LLM rail** (issue-272-r1 slept to the 4h deadline; evidence in the spike doc) —
       root-causing this, or a headless-Service name, closes that too. Relates FU-116, FU-187.
-- [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: pull-mirror the
-      **homelab** repo itself into Forgejo (the `sleep-lab` org mirrors exist since 2026-06-21) —
-      ⚠ **and those mirrors are BROKEN since the 2026-08-04 Forgejo DB migration**: pod logs show
-      `SyncMirrors` failing for the sleep-lab repos (observed 2026-08-08 by the idp jail session
-      while repairing the same migration's orphaned-repo residue — its fix recipe: remove the
-      orphan dir on the git volume via kubectl exec, recreate through the API with the wallet
-      password; the API token lacks org scopes). Next: apply that recipe to the sleep-lab
-      mirrors, verify a sync cycle, THEN the cutover steps. Then flip `var.argocd_repo_url` +
-      child-app `repoURL`s and deliver the Forgejo read cred via ESO. Procedure:
-      `argocd/README.md` → "Forgejo cutover".
+- [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: mirror **homelab**
+      itself into Forgejo — ⚠ the `sleep-lab` pull-mirrors are **BROKEN since the 2026-08-04 DB
+      migration** (`SyncMirrors` failing; fix = the idp session's orphaned-repo recipe: remove dir on
+      the git volume, recreate via API + wallet password). **2026-09-02: second consumer** — the
+      loop's deterministic workflow clones (~700/day × ~12MB, 9 manifests, `_cu` since homelab#1136)
+      ride WAN to GitHub. Operator ruling: pull-mirroring = backup-grade, NOT live consumption
+      (≈6h stale); the live path is a **push-mirror step in `sync.yaml`** on master push
+      (in-cluster runner, seconds-fresh), pull interval = missed-push belt. ⚠ NO build yet — the
+      primary-git-location flip has side effects the operator is weighing. Next: repair mirrors +
+      verify a sync; cutover per `argocd/README.md` §Forgejo cutover; loop clone-URL flip on
+      go-ahead. **2026-09-03:** the loop's clones were anonymous-FIRST (2 anon requests each,
+      token-in-URL) — PR#1333 moved every site to preemptive `http.extraHeader` auth; a recurrence
+      with zero anonymous requests is the trigger that makes the push-mirror the next deliverable.
 - [ ] **FU-010** — Infisical↔CNPG uses `sslmode=disable` (node-pg rejects CNPG's self-signed
       cert). Fine pod-to-pod; revisit if Cilium transparent encryption lands.
 - [ ] **FU-012** — **Remote/encrypted tofu state backend** (every root is local, gitignored state).

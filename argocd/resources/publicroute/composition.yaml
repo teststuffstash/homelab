@@ -2,17 +2,29 @@
 #   1. a provider-terraform Workspace (claim ns): Cloudflare Tunnel + remote config + proxied
 #      CNAME on the platform zone; tunnel token → connection secret (claim ns, never git)
 #   2. a cloudflared Deployment (claim ns) consuming that token
+#   3. profile-specific Cloudflare resources (v1alpha2+):
+#      - consumer: edge caching rule (respect-origin, 1h default) + RUM/client telemetry
+#      - api: per-IP rate-limit rule + no-challenge Skip rule
 # SUBTREE ENFORCEMENT lives here (fail-loud template): hostname must be under
 # <ns>.teststuff.net. The zone/account ids are platform constants (docs/cloudflare.md).
 # v5 provider idioms mirror tofu/cloudflare (the proven ha.teststuff.net one-off, which this
 # XRD exists to eventually absorb as consumer #2).
+#
+# Profile fan-out (v1alpha2+): the profile field (required, no default on the object) selects
+# which class defaults the composition renders — the way ADR-101's zone classes fan out zone
+# defaults (docs/cloudflare.md §Predicted shape). For v1alpha1 claims (legacy, no profile), the
+# composition defaults to consumer-class rendering for backwards compatibility.
+# ⚠ Rendering of profile-specific resources: api-profile shapes (rate-limit rule with
+# structured 429, no-challenge Skip, CORS/preflight) are filled in (#1304). Consumer-profile
+# shapes (edge caching) are filled in (#1305). The FIELD contract and the fan-out seam are
+# what #1310 delivered.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
   name: publicroute
 spec:
   compositeTypeRef:
-    apiVersion: platform.teststuff.net/v1alpha1
+    apiVersion: platform.teststuff.net/v1alpha2
     kind: XPublicRoute
   mode: Pipeline
   pipeline:
@@ -55,6 +67,12 @@ spec:
             {{- end }}
             {{- $res := printf "pr-%s-%s" $ns $claim }}
             {{- $origin := printf "%s://%s:%d" (default "http" $b.protocol) $b.service (int $b.port) }}
+            {{- /* Profile fan-out: v1alpha2+ claims carry .spec.profile (required, no default).
+                 v1alpha1 claims (legacy, no profile field) default to consumer-class rendering
+                 for backwards compatibility. */}}
+            {{- $profile := or $xr.spec.profile "consumer" }}
+            {{- $rateLimit := 1200 }}
+            {{- if $xr.spec.rateLimit }}{{ $rateLimit = $xr.spec.rateLimit.threshold }}{{ end }}
             ---
             apiVersion: tf.upbound.io/v1beta1
             kind: Workspace
@@ -117,6 +135,175 @@ spec:
                     proxied = true
                     ttl     = 1
                   }
+                  {{- /* Profile-specific resources — api shapes filled in (#1304), consumer shapes filled in (#1305) */}}
+                  {{- if eq $profile "api" }}
+                  # --- api profile: per-IP rate limiting ---
+                  # Renders a cloudflare_ruleset rate-limit rule on the zone for this hostname.
+                  # Threshold from claim field .spec.rateLimit.threshold (default 1200/min,
+                  # bounds 60-6000). Structured 429 response body a machine client can parse.
+                  resource "cloudflare_ruleset" "rate_limit" {
+                    zone_id  = local.zone_id
+                    name     = "PublicRoute {{ $host }} rate limit"
+                    kind     = "zone"
+                    phase    = "http_ratelimit"
+                    rules = [{
+                      action      = "block"
+                      description = "per-IP rate limit ({{ $rateLimit }}/min)"
+                      expression  = "(http.host eq \"{{ $host }}\")"
+                      ratelimit = {
+                        characteristics = ["ip.src"]
+                        period          = 60
+                        requests_per_period = {{ $rateLimit }}
+                        mitigation_timeout  = 60
+                      }
+                      action_parameters = {
+                        response = {
+                          status_code = 429
+                          content_type = "application/json"
+                          content = jsonencode({
+                            success = false
+                            errors = [{ code = 10429, message = "rate limit exceeded" }]
+                            messages = []
+                            result = null
+                          })
+                        }
+                      }
+                      enabled = true
+                    }]
+                  }
+                  # --- api profile: no-challenge Skip rule ---
+                  # Ensures NO challenge-shaped mitigation (captcha/managed challenge) reaches
+                  # this route. Zone-phase rulesets are per-phase-per-zone (ONE entrypoint per
+                  # phase), so this Skip goes on the zone's http_request_firewall_managed phase
+                  # ruleset, skipping challenge products (bic, securityLevel, uaBlock) and
+                  # challenge phases (http_request_sbfm, http_request_firewall_managed).
+                  # The never-challenge invariant is part of #1304 (api profile deliverable).
+                  resource "cloudflare_ruleset" "skip_challenge" {
+                    zone_id  = local.zone_id
+                    name     = "PublicRoute {{ $host }} skip challenge"
+                    kind     = "zone"
+                    phase    = "http_request_firewall_managed"
+                    rules = [{
+                      action      = "skip"
+                      description = "api profile: skip all challenge-shaped mitigations"
+                      expression  = "(http.host eq \"{{ $host }}\")"
+                      action_parameters = {
+                        products = ["bic", "securityLevel", "uaBlock"]
+                        phases  = ["http_request_sbfm", "http_request_firewall_managed"]
+                      }
+                      enabled = true
+                    }]
+                  }
+                  # --- api profile: CORS/preflight ---
+                  # Edge-owned CORS headers + preflight handling from the claim's origins
+                  # allow-list (.spec.origins). Empty/absent means no CORS restriction at
+                  # the edge — the origin controls its own CORS policy.
+                  # Preflight: the edge enforces the allow-list (a preflight from an origin
+                  # outside .spec.origins is rejected here with a structured 403); an ALLOWED
+                  # preflight reaches the origin, which answers it — the Ruleset Engine cannot
+                  # synthesize a 2xx, so an edge-terminated 204 would need a Worker/Snippet +
+                  # a cf-api-proxy allowlist entry (Goal #1302 acceptance 5), deliberately not
+                  # in this change.
+                  {{- if $xr.spec.origins }}
+                  resource "cloudflare_ruleset" "cors_preflight" {
+                    zone_id  = local.zone_id
+                    name     = "PublicRoute {{ $host }} CORS preflight"
+                    kind     = "zone"
+                    phase    = "http_request_firewall_custom"
+                    rules = [{
+                      ref         = "preflight_disallowed_origin"
+                      action      = "block"
+                      description = "api profile: reject CORS preflight from origins outside the claim allow-list"
+                      expression  = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and not http.request.headers[\"origin\"][0] in { {{- range $xr.spec.origins }} \"{{ . }}\"{{ end }} })"
+                      action_parameters = {
+                        response = {
+                          status_code  = 403
+                          content_type = "application/json"
+                          content      = jsonencode({
+                            success  = false
+                            errors   = [{ code = 10403, message = "origin not allowed" }]
+                            messages = []
+                            result   = null
+                          })
+                        }
+                      }
+                      enabled = true
+                    }]
+                  }
+                  # CORS response headers: set Access-Control-* on matching origins.
+                  # Build a single rules list populated by the range — v5 attribute syntax
+                  # cannot have one rules = [...] per iteration (duplicate argument error).
+                  resource "cloudflare_ruleset" "cors_headers" {
+                    zone_id  = local.zone_id
+                    name     = "PublicRoute {{ $host }} CORS headers"
+                    kind     = "zone"
+                    phase    = "http_response_headers_transform"
+                    rules = [
+                    {{- range $i, $origin := $xr.spec.origins }}
+                      {
+                        ref        = "cors_headers_{{ $i }}"
+                        action     = "rewrite"
+                        expression = "(http.host eq \"{{ $host }}\" and http.request.headers[\"origin\"][0] eq \"{{ $origin }}\")"
+                        action_parameters = {
+                          headers = {
+                            "Access-Control-Allow-Origin"  = { operation = "set", value = "{{ $origin }}" }
+                            "Access-Control-Allow-Methods" = { operation = "set", value = "GET,HEAD,PUT,PATCH,POST,DELETE" }
+                            "Access-Control-Allow-Headers" = { operation = "set", value = "Content-Type,Authorization,X-Requested-With" }
+                            "Access-Control-Max-Age"       = { operation = "set", value = "86400" }
+                          }
+                        }
+                        enabled = true
+                      },
+                    {{- end }}
+                    ]
+                  }
+                  {{- end }}
+                  {{- else }}
+                  # --- consumer profile: edge caching on ---
+                  # Respect-origin cache headers with a 1h default TTL.
+                  # Filled in (#1305).
+                  resource "cloudflare_ruleset" "cache_rule" {
+                    zone_id  = local.zone_id
+                    name     = "PublicRoute {{ $host }} cache"
+                    kind     = "zone"
+                    phase    = "http_request_cache_settings"
+                    rules = [{
+                      action      = "set_cache_settings"
+                      description = "consumer profile: edge caching default on"
+                      expression  = "(http.host eq \"{{ $host }}\")"
+                      action_parameters = {
+                        edge_ttl = {
+                          mode    = "respect_origin"
+                          default = 3600
+                        }
+                      }
+                      enabled = true
+                    }]
+                  }
+                  # --- consumer profile: RUM/client telemetry ---
+                  # Web Analytics (RUM) for the consumer route. The site is associated with the
+                  # zone (auto_install injects the JS snippet for orange-clouded sites). A
+                  # catch-all rule includes all traffic under the hostname.
+                  # ⚠ Requires account-level API paths in cf-api-proxy allowlist:
+                  #   /client/v4/accounts/{account_id}/rum/site_info  (site CRUD)
+                  #   /client/v4/accounts/{account_id}/rum/v2/        (rules CRUD)
+                  # The zone-scoped web_analytics/rules entry does NOT cover these.
+                  resource "cloudflare_web_analytics_site" "rum" {
+                    account_id  = local.account_id
+                    zone_tag    = local.zone_id
+                    auto_install = true
+                    enabled     = true
+                    host        = "{{ $host }}"
+                  }
+                  resource "cloudflare_web_analytics_rule" "rum" {
+                    account_id  = local.account_id
+                    ruleset_id  = cloudflare_web_analytics_site.rum.ruleset.id
+                    host        = "{{ $host }}"
+                    inclusive   = true
+                    is_paused   = false
+                    paths       = ["*"]
+                  }
+                  {{- end }}
                   output "tunnel_token" {
                     value     = data.cloudflare_zero_trust_tunnel_cloudflared_token.this.token
                     sensitive = true
