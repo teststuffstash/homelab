@@ -1889,3 +1889,28 @@ to the internet — the gateway answers `/metrics`/`/healthz` before auth by des
 forwards the whole hostname. **Consequences:** composition change (FU-206); on the platform zone
 the same phase is the ha mTLS entry point, so teststuff.net claims get it only with zone-phase
 aggregation (FU-039's leg); the health-contract leg is a rung-3 design item, named here.
+
+### ADR-124 — The public request map is rendered per app from two machine-readable maps, never hand-merged (2026-09-03)
+
+**Status:** Accepted (operator direction 2026-09-03, after the oracle-iac#532 read; phase 1 built
+same day). **Decision:** the end-to-end request path of a publicly served app — Cloudflare's
+limits and configuration, the platform's tunnel/network, the app's own guards — is documented as
+ONE picture per app, **rendered** from two maps in one row schema: the platform publishes its
+stages per profile plus the LAN path plus **contract rows** (what it assumes of the app) in
+`docs/patterns/request-flow/platform.yaml`; each app publishes its stages (one row per guard, each
+pointing at its spec id) in its own repo; `scripts/request-flow-render.py` merges by `seq`,
+marks unfulfilled contract rows as GAPS (`--strict` fails), and stamps both inputs' content hashes
+as provenance. Values are pointers to where a knob lives, never restated numbers. Pattern doc:
+`docs/patterns/public-request-flow.md`. **Considered:** one hand-written flow doc in homelab
+(rejected: the app half is the stack's and changes without a homelab PR — and oracle is one of N
+apps); one per app repo including the platform rows (rejected: N copies of the platform half, each
+stale on the next composition change); a prose seams list in a review (rejected: that is how the
+five seams of 2026-09-03 stayed invisible until a design read). **Why:** the edge/app split is
+exactly where the bugs land — five seams (preflight, global origin mode, three rejection grammars,
+DDoS L7 outside the Skip, the Skip dropping the managed WAF) surfaced only when the stages were
+laid in order; a table with a GAP cell is a lint, a paragraph is not. Same lens as
+`machines/generate.py` (tables from one YAML) and ADR-085's generated catalog. **Consequences:**
+phase 1 = hand-written platform map + renderer + self-test (CI); phase 2 = the platform rows
+published on the PublicRoute XR status so the app renders against what is live (cloudflare.md
+completion table). Stacks own their map + rendered picture; the oracle example in-tree is a
+template, not the oracle's record.

@@ -1,0 +1,26 @@
+# EXAMPLE app map — the oracle-fleet gateway as its specs read on 2026-09-03
+# (specs/server/mcp-conformance.md). The real map is the oracle repo's to own; this copy exists so
+# the platform's self-test has an app to render and so a stack has a template to start from.
+# Two contract rows are DELIBERATELY unfulfilled (CTR-OPTIONS, CTR-ERRORS) — that is how seams S1
+# and S3 look once the picture is generated: gaps in a table, not paragraphs in a review.
+app: "oracle-fleet gateway (EXAMPLE — mirrors the spec rows of 2026-09-03; the oracle repo owns the real map)"
+spec_base: "https://github.com/teststuffstash/oracle-fleet/blob/master/specs/server/mcp-conformance.md"
+stages:
+  - {seq: 100, id: SRV-HTTP-BODY-CAP, fulfils: CTR-BODY, stage: "Content-Length gate, header-first, then actual size",
+     guard: "1 MiB default; declared > cap → rejected before rfile.read, connection closed", value: "chart `mcpServer.gateway.maxBodyBytes`",
+     rejection: "HTTP 200, JSON-RPC error -32600 \"Request body too large\"", verify: "tests/test_gateway.py (oversized declared + actual)"}
+  - {seq: 110, id: SRV-HTTP-ENDPOINT, fulfils: CTR-PATH, stage: "single endpoint path, exact match", guard: "POST → 200 json / 202 notification; GET → 405; other paths → 404",
+     value: "chart `mcpServer.gateway.endpointPath`", rejection: "404 `{\"error\":\"not found\"}`", verify: "curl https://<host>/nope → 404"}
+  - {seq: 115, id: SRV-SERVE-READINESS, fulfils: CTR-OPS, stage: "/healthz exercises the stdio child; /metrics answered before auth", guard: "answered BEFORE origin/auth/rate-limit",
+     value: "gateway/app.py (`health_path`, `metrics_path`)", rejection: "503 when the child is latched broken", verify: "kubelet readiness; ServiceMonitor scrape"}
+  - {seq: 120, id: SRV-HTTP-ORIGIN, fulfils: CTR-ORIGIN, stage: "Origin check — default-deny allow-list (public mode = accept any)", guard: "⚠ `publicOriginMode` is deployment-global (seam S2)",
+     value: "chart `mcpServer.gateway.allowedOrigins` / `publicOriginMode`", rejection: "403 `{\"error\":\"origin not allowed\"}`", verify: "e2e-serve.sh 403→200→403 toggle"}
+  - {seq: 130, id: SRV-AUTH, stage: "static API keys (v1); none configured → identity \"anonymous\"", guard: "Authorization: Bearer", value: "chart `mcpServer.gateway.apiKeysSecret`",
+     rejection: "401 + WWW-Authenticate", verify: "tests/test_gateway.py"}
+  - {seq: 135, id: SRV-HTTP-PROTOVER, stage: "MCP-Protocol-Version", guard: "unsupported → 400; absent → assumed 2025-03-26", value: "gateway/app.py constants", rejection: "400", verify: "tests/test_gateway.py"}
+  - {seq: 140, id: SRV-TOOLS-SECURITY, fulfils: CTR-IDENTITY, stage: "shared limiter per identity, per replica", guard: "one \"anonymous\" bucket per replica until keys exist — capacity, not fairness",
+     value: "chart `mcpServer.gateway.rateLimitPerMin`", rejection: "429 `{\"error\":\"rate limit exceeded\"}` + Retry-After: 60 (⚠ edge window is 10 s — seam S3)", verify: "k6 ramp (SRV-PERF-OVERLOAD)"}
+  - {seq: 150, id: SRV-HTTP-TIMEOUT, fulfils: CTR-TIMEOUT, stage: "backend call timeout", guard: "select()-deadline on the stdio pipe; probe/warm-up untimed", value: "chart `mcpServer.gateway.backendCallTimeoutSecs`",
+     rejection: "HTTP 200, JSON-RPC error -32603 \"backend call failed or timed out\"", verify: "tests/test_gateway_resilience.py"}
+  - {seq: 160, id: SRV-SERVE-READINESS, stage: "stdio child respawn budget", guard: "MAX_RESPAWNS in RESPAWN_WINDOW → latched broken → readiness 503 → pod restart",
+     value: "gateway/backend.py constants", rejection: "503 on /healthz", verify: "tests/test_gateway_resilience.py"}

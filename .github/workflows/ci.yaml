@@ -196,6 +196,12 @@ jobs:
       - name: cloudflare edge-probe self-test (devbox run edge-probe-self-test)
         run: devbox run edge-probe-self-test
 
+      # ADR-124: the public request map's renderer — the committed example must render
+      # byte-identical from the committed platform map (a platform-map edit that changes the
+      # picture reds here until the example is regenerated with it); validator teeth included.
+      - name: request-map renderer self-test (devbox run request-flow-self-test)
+        run: devbox run request-flow-self-test
+
       # The #158 rail-degrade contract (leg 1: a subscription-rail dispatch NEVER waits on
       # OpenRouter key state) pinned as an executed replay — launcher blocks extracted from
       # agent-session.sh by sentinel at run time, so the pin cannot drift from the code (#166).
