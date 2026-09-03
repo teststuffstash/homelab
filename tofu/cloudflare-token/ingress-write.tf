@@ -18,9 +18,17 @@ locals {
 resource "cloudflare_api_token" "ingress_write" {
   name = "homelab-ingress-write"
 
-  # ⚠ POLICY ORDER IS LOAD-BEARING: account-scoped policy FIRST (the API's return order) —
-  # provider 5.19.1 compares policies positionally; zone-first = perpetual swap-diff + four
-  # "inconsistent result" errors per apply (see observability-read.tf for the full record).
+  # ⚠ POLICY ORDER IS LOAD-BEARING AND NOT STABLE ACROSS A MODIFY. Provider 5.x compares policies
+  # positionally, and the API returns them in an order that FLIPPED on each of the two v2 modifies
+  # (2026-09-03: sent account-first → read back zone-first; sent zone-first → read back
+  # account-first — the policies are re-created with fresh ids on every modify, and the
+  # read-back order follows those). So: every modify of this resource ends in "Provider produced
+  # inconsistent result after apply" while succeeding on the wire (verify with
+  # `GET /user/tokens/<id>` through the inventory-read token). The recipe is ONE more plan after
+  # the apply and matching the file to the read-back order — never a second apply to "fix" the
+  # order, which only flips it again. Account-first is what the API returned after the last
+  # modify; keep it until a modify moves it. Upstream: cloudflare/terraform-provider-cloudflare
+  # #5548, #5710 (fix PR#6440 covered account_token, not this shape).
   policies = [
     {
       effect = "allow"
