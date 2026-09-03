@@ -4,7 +4,7 @@
 #   2. a cloudflared Deployment (claim ns) consuming that token
 #   3. profile-specific Cloudflare resources (v1alpha2+):
 #      - consumer: edge caching rule (respect-origin; Cloudflare default TTL when the origin sends none) + RUM/client telemetry
-#      - api: per-IP rate-limit rule + no-challenge Skip rule
+#      - api: per-IP rate-limit rule (10 s windows — Free-plan entitlement) + never-challenge Skip (custom phase)
 # SUBTREE ENFORCEMENT lives here (fail-loud template): hostname must be under
 # <ns>.teststuff.net. The zone/account ids are platform constants (docs/cloudflare.md).
 # v5 provider idioms mirror tofu/cloudflare (the proven ha.teststuff.net one-off, which this
@@ -141,20 +141,27 @@ spec:
                   # Renders a cloudflare_ruleset rate-limit rule on the zone for this hostname.
                   # Threshold from claim field .spec.rateLimit.threshold (default 1200/min,
                   # bounds 60-6000). Structured 429 response body a machine client can parse.
+                  # Free-plan entitlement, live-probed through cf-api-proxy 2026-09-03
+                  # (docs/cloudflare.md gotcha 6): period and mitigation_timeout may ONLY be 10 s
+                  # ("not entitled to use the period 60, can only use a period among [10]"), and
+                  # `cf.colo.id` is REQUIRED in characteristics (20155 — counting is per colo).
+                  # The claim field stays per-minute; the edge enforces ceil(threshold/6) per 10 s.
+                  {{- $perWindow := div (add $rateLimit 5) 6 }}
                   resource "cloudflare_ruleset" "rate_limit" {
                     zone_id  = local.zone_id
                     name     = "PublicRoute {{ $host }} rate limit"
                     kind     = "zone"
                     phase    = "http_ratelimit"
                     rules = [{
+                      ref         = "per_ip_rate_limit"
                       action      = "block"
-                      description = "per-IP rate limit ({{ $rateLimit }}/min)"
+                      description = "per-IP rate limit ({{ $rateLimit }}/min = {{ $perWindow }} per 10 s)"
                       expression  = "(http.host eq \"{{ $host }}\")"
                       ratelimit = {
-                        characteristics = ["ip.src"]
-                        period          = 60
-                        requests_per_period = {{ $rateLimit }}
-                        mitigation_timeout  = 60
+                        characteristics     = ["cf.colo.id", "ip.src"]
+                        period              = 10
+                        requests_per_period = {{ $perWindow }}
+                        mitigation_timeout  = 10
                       }
                       action_parameters = {
                         response = {
@@ -171,65 +178,67 @@ spec:
                       enabled = true
                     }]
                   }
-                  # --- api profile: no-challenge Skip rule ---
-                  # Ensures NO challenge-shaped mitigation (captcha/managed challenge) reaches
-                  # this route. Zone-phase rulesets are per-phase-per-zone (ONE entrypoint per
-                  # phase), so this Skip goes on the zone's http_request_firewall_managed phase
-                  # ruleset, skipping challenge products (bic, securityLevel, uaBlock) and
-                  # challenge phases (http_request_sbfm, http_request_firewall_managed).
-                  # The never-challenge invariant is part of #1304 (api profile deliverable).
-                  resource "cloudflare_ruleset" "skip_challenge" {
+                  # --- api profile: never-challenge Skip + CORS preflight = ONE custom-phase ruleset ---
+                  # A Skip with `products`/`phases` is a WAF CUSTOM rule (http_request_firewall_custom).
+                  # Placing it in the managed phase is refused by the API — 20120 "skip action parameter
+                  # phase 'http_request_sbfm' is not authorized" (live through cf-api-proxy, 2026-09-03);
+                  # in the custom phase the same rule is accepted on the Free zone. It skips the
+                  # challenge products (bic, securityLevel, uaBlock) and the challenge phases
+                  # (http_request_sbfm, http_request_firewall_managed) for this host.
+                  # ONE entry-point ruleset per phase per zone (#1338): the CORS preflight block, which
+                  # lives in the same phase, rides in THIS resource — a sibling cloudflare_ruleset in
+                  # the same phase would collide with itself at apply. Preflight block first (a
+                  # disallowed OPTIONS dies here), then the Skip. On the platform zone this phase is
+                  # already the ha mTLS entry point (tofu/cloudflare/mtls.tf) — any api claim on
+                  # teststuff.net is unsupported until zone-phase aggregation lands (docs/cloudflare.md
+                  # §Completion state).
+                  resource "cloudflare_ruleset" "firewall_custom" {
                     zone_id  = local.zone_id
-                    name     = "PublicRoute {{ $host }} skip challenge"
-                    kind     = "zone"
-                    phase    = "http_request_firewall_managed"
-                    rules = [{
-                      action      = "skip"
-                      description = "api profile: skip all challenge-shaped mitigations"
-                      expression  = "(http.host eq \"{{ $host }}\")"
-                      action_parameters = {
-                        products = ["bic", "securityLevel", "uaBlock"]
-                        phases  = ["http_request_sbfm", "http_request_firewall_managed"]
-                      }
-                      enabled = true
-                    }]
-                  }
-                  # --- api profile: CORS/preflight ---
-                  # Edge-owned CORS headers + preflight handling from the claim's origins
-                  # allow-list (.spec.origins). Empty/absent means no CORS restriction at
-                  # the edge — the origin controls its own CORS policy.
-                  # Preflight: the edge enforces the allow-list (a preflight from an origin
-                  # outside .spec.origins is rejected here with a structured 403); an ALLOWED
-                  # preflight reaches the origin, which answers it — the Ruleset Engine cannot
-                  # synthesize a 2xx, so an edge-terminated 204 would need a Worker/Snippet +
-                  # a cf-api-proxy allowlist entry (Goal #1302 acceptance 5), deliberately not
-                  # in this change.
-                  {{- if $xr.spec.origins }}
-                  resource "cloudflare_ruleset" "cors_preflight" {
-                    zone_id  = local.zone_id
-                    name     = "PublicRoute {{ $host }} CORS preflight"
+                    name     = "PublicRoute {{ $host }} api firewall"
                     kind     = "zone"
                     phase    = "http_request_firewall_custom"
-                    rules = [{
-                      ref         = "preflight_disallowed_origin"
-                      action      = "block"
-                      description = "api profile: reject CORS preflight from origins outside the claim allow-list"
-                      expression  = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and not http.request.headers[\"origin\"][0] in { {{- range $xr.spec.origins }} \"{{ . }}\"{{ end }} })"
-                      action_parameters = {
-                        response = {
-                          status_code  = 403
-                          content_type = "application/json"
-                          content      = jsonencode({
-                            success  = false
-                            errors   = [{ code = 10403, message = "origin not allowed" }]
-                            messages = []
-                            result   = null
-                          })
+                    rules = [
+                    {{- if $xr.spec.origins }}
+                      {
+                        ref         = "preflight_disallowed_origin"
+                        action      = "block"
+                        description = "api profile: reject CORS preflight from origins outside the claim allow-list"
+                        expression  = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and not http.request.headers[\"origin\"][0] in { {{- range $xr.spec.origins }} \"{{ . }}\"{{ end }} })"
+                        action_parameters = {
+                          response = {
+                            status_code  = 403
+                            content_type = "application/json"
+                            content      = jsonencode({
+                              success  = false
+                              errors   = [{ code = 10403, message = "origin not allowed" }]
+                              messages = []
+                              result   = null
+                            })
+                          }
                         }
-                      }
-                      enabled = true
-                    }]
+                        enabled = true
+                      },
+                    {{- end }}
+                      {
+                        ref         = "skip_challenge"
+                        action      = "skip"
+                        description = "api profile: skip all challenge-shaped mitigations"
+                        expression  = "(http.host eq \"{{ $host }}\")"
+                        action_parameters = {
+                          products = ["bic", "securityLevel", "uaBlock"]
+                          phases   = ["http_request_sbfm", "http_request_firewall_managed"]
+                        }
+                        enabled = true
+                      },
+                    ]
                   }
+                  # --- api profile: CORS response headers ---
+                  # Edge-owned Access-Control-* from the claim's origins allow-list (.spec.origins).
+                  # Empty/absent means no CORS at the edge — the origin controls its own policy. An
+                  # ALLOWED preflight reaches the origin, which answers it — the Ruleset Engine cannot
+                  # synthesize a 2xx, so an edge-terminated 204 would need a Worker/Snippet + a
+                  # cf-api-proxy allowlist entry (Goal #1302 acceptance 5), deliberately not built.
+                  {{- if $xr.spec.origins }}
                   # CORS response headers: set Access-Control-* on matching origins.
                   # Build a single rules list populated by the range — v5 attribute syntax
                   # cannot have one rules = [...] per iteration (duplicate argument error).
