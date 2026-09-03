@@ -1828,3 +1828,40 @@ weekly delta cadence un-suspends — **FU-203** (tag-aware prune; the policy a p
 could never express). Push cred: Infisical `REGISTRY_PUSH_{HTPASSWD,TOKEN}`; the Actions repo
 secret is an operator console step (secrets.md §Minting doctrine item 2). FU-196 tracks the
 consumer cutover.
+
+### ADR-122 — Issue authoring is dumb, the container disposes: filing is inert, a tree member has a disposition, the walk retires (2026-09-03)
+
+**Status:** Accepted (operator direction 2026-09-03, the design-agents sitting after the G-G
+assembly; build = the re-headed S8, ROADMAP work map). **Decision:** (1) **Filing is inert, no
+exceptions.** No reader queues an issue from its shape; the bare-tree-member walk (#1153 →
+PR#1242) retires. Queueing under a Goal happens only at the two authoring moments ADR-106 names
+(decompose, checkpoint mint) or by a human applying `agent/queued`. (2) **One release valve.**
+`agent/queued` means go; `agent-fix` leaves the author's surface as a dispatch precondition
+(it stays ADR-109's backlog marker). Class (`fix`/`build`/`goal`) stays author-declared, as a
+field, not a label. (3) **One machine block, one parser.** The line-anchored body grammars (13
+today; `Touches:` is parsed in 9 files) collapse into a single front-matter block read by one
+shared Python function every consumer calls (ADR-113); `Origin:` joins it. (4) **Lineage is
+dumb, disposition is the container's.** A filing binds to its origin issue at ANY door without
+judging scope (rule 8's mint-to-origin stands; `Origin:` makes a later move free). A tree
+member carries a disposition — `undispositioned` | `adopted` | `deferred` — written only by the
+container's checkpoint/closeout act. An undispositioned member WAKES the checkpoint (a finding
+in the tree, trigger (a)'s shape) and never blocks it; the completion predicate counts
+adopted-open members only; `deferred` keeps lineage, leaves scope, and the container may move
+it — the `post-launch:` title exception (#933) dissolves into this state. **Considered:** one
+more authoring rule + a goal-lint clause (the pattern of the last five fixes — rules 7–9,
+goal-lint, the walk, the Touches lint — each ADDED a reader; #1338 was authored correctly and
+still went wrong, so no linter helps); a `goal/deferred` label applied by the filer (rejected:
+the filer is the wrong actor); provenance-only filing with no tree binding (rejected same
+sitting: the container knows its rules better than the filer). **Why:** measured 2026-09-03 —
+13 body grammars, 23 machine-meaningful labels, 6 comment markers, 2 edge kinds, a 159-line
+consumer card, and ≥4 readers that MUTATE author state. A Fable-class seat authored #1338
+correctly; the walk re-queued it 86s later, cost a ride and a false SOLVE row; #1334 the same
+morning, twice (#1249); #1315's undispositioned binding held G-G's assembly ~10.5h because
+trigger (b) counts every open member; #390 half-minted on #175 with no reader. The sum of
+individually-right readers is unauthorable — the A5/doorbell shape. **Consequences:** the walk
+deletion is hotfix-class (one scan block + a replay row) and may land before the stint;
+(2)–(4) are S8's new head (issue-authoring.md §lineage contract rule 9, version row v1.4);
+ADR-109's "dispatch requires both" and ADR-106 (3)'s bucket-by-title are superseded in part;
+v1.3.1 delta 3 (`Origin:` + typed defer/release) is subsumed; IL-T17's bucket exclusion becomes
+an ordinary disposition. Not changed: the fingerprint-debounce faces (FU-199) and the router
+defects (#1342) — separate classes, replayed 2026-09-03 and untouched by these rules.
