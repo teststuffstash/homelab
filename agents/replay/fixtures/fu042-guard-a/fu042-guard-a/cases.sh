@@ -35,4 +35,13 @@ PF_ISSUE="352"; WORK_BRANCH=""
 fu042_guard_a
 printf 'MIDWORD_MENTION continues\n'
 
+echo "REACHED: duplicate PRs (#353 has two Fixes PRs) — must refuse loudly"
+PF_ISSUE="353"; WORK_BRANCH=""
+set +e
+dup_err="$( { fu042_guard_a; } 2>&1 )"
+dup_rc=$?
+set -e
+printf 'DUPLICATE_PRS rc=%s\n' "$dup_rc"
+printf '%s\n' "$dup_err" >&2
+
 echo "REACHED: end"
