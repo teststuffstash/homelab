@@ -2362,6 +2362,7 @@ if [ -n "$RUN_CMD" ]; then
   fi
   # <<<REPLAY:post-merge-push<<<
 
+  # >>>REPLAY:strike-scope>>>
   # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates with a
   # harness death is an infra strike candidate — classify it and post ONE structured comment to the ISSUE.
   # That comment IS the strike store: state lives in GitHub, and the coordinator greps `AGENT_STRIKE:`
@@ -2458,6 +2459,7 @@ if [ -n "$RUN_CMD" ]; then
     # PR-less ride: strike on any classified error (FU-062 semantics), EXCEPT key-class which
     # gets a KEY-RETRY marker instead (FU-202), and residual budget-403 which escalates.
     [ -n "${PR_URL:-}" ] || [ -n "$EMIT_KEY_RETRY" ] || [ "$ERR_CLASS" = "budget-403" ] || EMIT_STRIKE=1
+
     # A non-striking run must report an empty error_class, not "unknown" — a PR-present ride with
     # no specific signature must not be recorded as having an error. Inside the block on purpose:
     # this reset is behaviour replay has to pin, not control flow it may drop (PR #942 review).
@@ -2467,16 +2469,8 @@ if [ -n "$RUN_CMD" ]; then
     # STRIKE_LINE is empty exactly when EMIT_STRIKE is unset, so the gate itself is extracted and
     # the composed replay script branches on it the way the shipped script does.
     STRIKE_LINE=""
-    # FU-201 c: provider is sourced from STATS when available (the harness records the served
-    # provider). Absent a provider field, the strike still records — the router sources it
-    # proxy-side from provider_events (not generations — _generation_lookup skips session
-    # keys). Declared here so both STRIKE and KEY-RETRY blocks can use it.
-    _strike_provider="$(printf '%s' "${STATS:-}" | jq -r '.provider // ""' 2>/dev/null || true)"
     if [ -n "$EMIT_STRIKE" ]; then
       STRIKE_LINE="AGENT_STRIKE: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
-      if [ -n "$_strike_provider" ]; then
-        STRIKE_LINE="${STRIKE_LINE} provider=${_strike_provider}"
-      fi
       if [ -n "${BUDGET_MATCH:-}" ]; then
         STRIKE_LINE="${STRIKE_LINE} match=${BUDGET_MATCH}"
       fi
@@ -2485,14 +2479,66 @@ if [ -n "$RUN_CMD" ]; then
     KEY_RETRY_LINE=""
     if [ -n "$EMIT_KEY_RETRY" ]; then
       KEY_RETRY_LINE="KEY-RETRY: model=${STRUCK_MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
-      if [ -n "$_strike_provider" ]; then
-        KEY_RETRY_LINE="${KEY_RETRY_LINE} provider=${_strike_provider}"
-      fi
       if [ -n "${BUDGET_MATCH:-}" ]; then
         KEY_RETRY_LINE="${KEY_RETRY_LINE} match=${BUDGET_MATCH}"
       fi
     fi
     # <<<REPLAY:strike-line-format<<<
+  fi
+
+    # >>>REPLAY:router-report>>>
+    # ROUTER REPORT (ADR-096, M5 attribution) — unconditional POST, runs for every run with
+    # PROXY_URL set and STATS or ERR_CLASS defined. The session key ref (_keyref) is sent
+    # in the Authorization header when non-empty (OpenRouter rail); subscription rides
+    # (claude/*, *:claude/*, *:opencode-go/*) have empty _keyref and post without the header.
+    # Issue #1268: the report carries the session key ref so the proxy can look up the
+    # served provider from provider_events. The reply includes the resolved provider for
+    # composing into strike/key-retry lines.
+    _report_provider=""
+    if [ -n "${PROXY_URL:-}" ] && { [ -n "${STATS:-}" ] || [ -n "${ERR_CLASS:-}" ]; }; then
+      _rstack="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)" || _rstack=""
+      _report="$(jq -cn --arg session "$POD" --arg task "$TASK" --arg stack "${_rstack:-}" \
+        --arg model "$MODEL" --arg round "$ROUND" --arg err "${ERR_CLASS:-}" --arg pr "$PR_URL" \
+        --arg rail "${AGENT_RAIL:-}" \
+        --argjson stats "${STATS:-null}" '
+        {session: $session, task: $task, stack: $stack, role: "worker",
+         round: ($round | tonumber? // 1), model: $model, rail: $rail,
+         cost_usd: (($stats.cost_usd? // 0) | tonumber? // 0),
+         error_class: (if $err != "" then $err else ($stats.error_class? // "") end),
+         outcome: (if $pr != "" then "pr" else ($stats.exit_status? // "no-pr") end)}' 2>/dev/null)"
+      if [ -n "$_report" ]; then
+        if [ -n "${_keyref:-}" ]; then
+          _reply="$(curl -fsS -m 5 -X POST -H 'Content-Type: application/json' \
+            -H "Authorization: Bearer ref:$_keyref" \
+            -d "$_report" "${PROXY_URL}/report" 2>/dev/null)" || _reply=""
+        else
+          _reply="$(curl -fsS -m 5 -X POST -H 'Content-Type: application/json' \
+            -d "$_report" "${PROXY_URL}/report" 2>/dev/null)" || _reply=""
+        fi
+        if [ -n "$_reply" ]; then
+          _report_provider="$(printf '%s' "$_reply" | jq -r '.provider // ""' 2>/dev/null || true)"
+          echo "→ router report posted (${PROXY_URL}/report)"
+        else
+          echo "  (router report unreachable — non-fatal, jail runs land here)"
+        fi
+      fi
+    fi
+    # <<<REPLAY:router-report<<<
+    # <<<REPLAY:strike-scope<<<
+
+    if [ -n "$STRIKE_APPLIES" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
+      # >>>REPLAY:strike-provider-append>>>
+      # Provider append: source from /report reply, fall back to STATS for subscription rides.
+      # FU-201 c (#1268): provider is sourced from the /report reply when available (the proxy
+      # resolves it from provider_events via the session key ref). Falls back to STATS for
+      # subscription rides that have no key ref. Absent a provider field, the strike still
+      # records — the router sources it proxy-side from provider_events.
+      _strike_provider="${_report_provider:-}"
+      [ -n "$_strike_provider" ] || _strike_provider="$(printf '%s' "${STATS:-}" | jq -r '.provider // ""' 2>/dev/null || true)"
+      [ -z "$STRIKE_LINE" ]    || [ -z "$_strike_provider" ] || STRIKE_LINE="${STRIKE_LINE} provider=${_strike_provider}"
+      [ -z "$KEY_RETRY_LINE" ] || [ -z "$_strike_provider" ] || KEY_RETRY_LINE="${KEY_RETRY_LINE} provider=${_strike_provider}"
+      # <<<REPLAY:strike-provider-append<<<
+
     if [ -n "$STRIKE_LINE" ]; then
       if [ -z "${PR_URL:-}" ]; then
         echo "→ no PR opened — ${STRIKE_LINE}"
@@ -2532,34 +2578,6 @@ if [ -n "$RUN_CMD" ]; then
     fi
   fi
 
-  # ROUTER REPORT (ADR-096, M5 attribution): every run's outcome → POST /report on the egress
-  # proxy's control plane — run_reports + (for strike-class errors without a PR) the queryable
-  # strike row the /route filter reads. The AGENT_STRIKE comment above stays the human/audit
-  # twin; this is the machine one. Best-effort + idempotent per session (INSERT OR REPLACE):
-  # unreachable off-cluster (jail runs — the ClusterIP doesn't cross the BGP boundary) is fine.
-  if [ -n "$PROXY_URL" ] && { [ -n "$STATS" ] || [ -n "${ERR_CLASS:-}" ]; }; then
-    _rstack="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
-    # homelab#158: `rail` rides the report so a degraded ride is attributable in the store, not only
-    # in the pod labels. Since homelab#164 the store IS that surface: run_reports carries a `rail`
-    # column and record_report() persists this field (router.py), so the 90-day run_reports
-    # retention is what answers "what did the outage cost us". The pod label and the launcher log
-    # were the only surfaces PRE-#164, when the ingest dropped the field for want of a column.
-    _report="$(jq -cn --arg session "$POD" --arg task "$TASK" --arg stack "${_rstack:-}" \
-      --arg model "$MODEL" --arg round "$ROUND" --arg err "${ERR_CLASS:-}" --arg pr "$PR_URL" \
-      --arg rail "${AGENT_RAIL:-}" \
-      --argjson stats "${STATS:-null}" '
-      {session: $session, task: $task, stack: $stack, role: "worker",
-       round: ($round | tonumber? // 1), model: $model, rail: $rail,
-       cost_usd: (($stats.cost_usd? // 0) | tonumber? // 0),
-       error_class: (if $err != "" then $err else ($stats.error_class? // "") end),
-       outcome: (if $pr != "" then "pr" else ($stats.exit_status? // "no-pr") end)}' 2>/dev/null)"
-    if [ -n "$_report" ]; then
-      curl -fsS -m 5 -X POST -H 'Content-Type: application/json' \
-        -d "$_report" "${PROXY_URL}/report" >/dev/null 2>&1 \
-        && echo "→ router report posted (${PROXY_URL}/report)" \
-        || echo "  (router report unreachable — non-fatal, jail runs land here)"
-    fi
-  fi
   # FU-085: ring the coordinator doorbell — a tasked worker's terminal state is scan-actionable
   # (C4/C5 re-dispatch, strike chain-walk, C6 bookkeeping). Doorbell, never a work item: the scan
   # re-lists and re-applies the full predicate; a false wake costs `gh` calls, not an LLM tick.
