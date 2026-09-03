@@ -362,6 +362,19 @@ the companion app's Internal URL stays `homeassistant.teststuff.net` (LAN HAProx
 off-LAN) and External must be `https://ha.teststuff.net` — pointing External at the LAN name
 works on WiFi and dies on mobile.
 
+5. **A storage-version flip with a new REQUIRED field strands the stored XR on TWO things, not
+   one (2026-09-03, the G-G rollout, oracle-iac#530).** Gotcha 4 covers the claim manifest;
+   after the claim moved to `v1alpha2 + profile`, the composite STILL refused: its
+   `spec.claimRef.apiVersion` was pinned at `v1alpha1`, so the claim controller declined to
+   propagate the new field ("refusing to operate on composite resource … not bound to this
+   claim") while the XR controller could not update the XR without it (`spec.profile: Required
+   value`). Neither side can move first. Un-wedge = two merge patches on the XR, composed
+   resources untouched (the tunnel served throughout):
+   `kubectl patch xpublicroute <xr> --type merge -p '{"spec":{"profile":"<class>"}}'` then
+   `… -p '{"spec":{"claimRef":{"apiVersion":"platform.teststuff.net/v1alpha2"}}}'`. Design
+   consequence for the NEXT XRD rev: ship a conversion webhook, or add the field as optional
+   with the class default and make it REQUIRED one rev later, once every stored XR carries it.
+
 ## Cloudflare MCP
 
 `github.com/cloudflare/mcp-server-cloudflare` — 13 Cloudflare-hosted remote servers, mostly
