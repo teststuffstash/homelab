@@ -146,18 +146,18 @@ spec:
                     name     = "PublicRoute {{ $host }} rate limit"
                     kind     = "zone"
                     phase    = "http_ratelimit"
-                    rules {
+                    rules = [{
                       action      = "block"
                       description = "per-IP rate limit ({{ $rateLimit }}/min)"
                       expression  = "(http.host eq \"{{ $host }}\")"
-                      ratelimit {
+                      ratelimit = {
                         characteristics = ["ip.src"]
                         period          = 60
                         requests_per_period = {{ $rateLimit }}
                         mitigation_timeout  = 60
                       }
-                      action_parameters {
-                        response {
+                      action_parameters = {
+                        response = {
                           status_code = 429
                           content_type = "application/json"
                           content = jsonencode({
@@ -169,7 +169,7 @@ spec:
                         }
                       }
                       enabled = true
-                    }
+                    }]
                   }
                   # --- api profile: no-challenge Skip rule ---
                   # Ensures NO challenge-shaped mitigation (captcha/managed challenge) reaches
@@ -183,16 +183,16 @@ spec:
                     name     = "PublicRoute {{ $host }} skip challenge"
                     kind     = "zone"
                     phase    = "http_request_firewall_managed"
-                    rules {
+                    rules = [{
                       action      = "skip"
                       description = "api profile: skip all challenge-shaped mitigations"
                       expression  = "(http.host eq \"{{ $host }}\")"
-                      action_parameters {
+                      action_parameters = {
                         products = ["bic", "securityLevel", "uaBlock"]
                         phases  = ["http_request_sbfm", "http_request_firewall_managed"]
                       }
                       enabled = true
-                    }
+                    }]
                   }
                   # --- api profile: CORS/preflight ---
                   # Edge-owned CORS headers + preflight handling from the claim's origins
@@ -210,13 +210,13 @@ spec:
                     name     = "PublicRoute {{ $host }} CORS preflight"
                     kind     = "zone"
                     phase    = "http_request_firewall_custom"
-                    rules {
+                    rules = [{
                       ref         = "preflight_disallowed_origin"
                       action      = "block"
                       description = "api profile: reject CORS preflight from origins outside the claim allow-list"
                       expression  = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and not http.request.headers[\"origin\"][0] in { {{- range $xr.spec.origins }} \"{{ . }}\"{{ end }} })"
-                      action_parameters {
-                        response {
+                      action_parameters = {
+                        response = {
                           status_code  = 403
                           content_type = "application/json"
                           content      = jsonencode({
@@ -228,7 +228,7 @@ spec:
                         }
                       }
                       enabled = true
-                    }
+                    }]
                   }
                   # CORS response headers: set Access-Control-* on matching origins.
                   resource "cloudflare_ruleset" "cors_headers" {
@@ -237,34 +237,20 @@ spec:
                     kind     = "zone"
                     phase    = "http_response_headers_transform"
                     {{- range $i, $origin := $xr.spec.origins }}
-                    rules {
+                    rules = [{
                       ref        = "cors_headers_{{ $i }}"
                       action     = "rewrite"
                       expression = "(http.host eq \"{{ $host }}\" and http.request.headers[\"origin\"][0] eq \"{{ $origin }}\")"
-                      action_parameters {
-                        headers {
-                          name      = "Access-Control-Allow-Origin"
-                          value     = "{{ $origin }}"
-                          operation = "set"
-                        }
-                        headers {
-                          name      = "Access-Control-Allow-Methods"
-                          value     = "GET,HEAD,PUT,PATCH,POST,DELETE"
-                          operation = "set"
-                        }
-                        headers {
-                          name      = "Access-Control-Allow-Headers"
-                          value     = "Content-Type,Authorization,X-Requested-With"
-                          operation = "set"
-                        }
-                        headers {
-                          name      = "Access-Control-Max-Age"
-                          value     = "86400"
-                          operation = "set"
+                      action_parameters = {
+                        headers = {
+                          "Access-Control-Allow-Origin" = { operation = "set", value = "{{ $origin }}" }
+                          "Access-Control-Allow-Methods" = { operation = "set", value = "GET,HEAD,PUT,PATCH,POST,DELETE" }
+                          "Access-Control-Allow-Headers" = { operation = "set", value = "Content-Type,Authorization,X-Requested-With" }
+                          "Access-Control-Max-Age"      = { operation = "set", value = "86400" }
                         }
                       }
                       enabled = true
-                    }
+                    }]
                     {{- end }}
                   }
                   {{- end }}
@@ -276,19 +262,19 @@ spec:
                     zone_id  = local.zone_id
                     name     = "PublicRoute {{ $host }} cache"
                     kind     = "zone"
-                    phase    = "http_cache_settings"
-                    rules {
+                    phase    = "http_request_cache_settings"
+                    rules = [{
                       action      = "set_cache_settings"
                       description = "consumer profile: edge caching default on"
                       expression  = "(http.host eq \"{{ $host }}\")"
-                      action_parameters {
-                        edge_cache_ttl {
+                      action_parameters = {
+                        edge_ttl = {
                           mode    = "respect_origin"
                           default = 3600
                         }
                       }
                       enabled = true
-                    }
+                    }]
                   }
                   # --- consumer profile: RUM/client telemetry ---
                   # Web Analytics (RUM) for the consumer route. The site is associated with the
