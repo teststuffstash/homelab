@@ -1,0 +1,19 @@
+# EXAMPLE app map — the minutark.ee static landing/connect site (oracle-fleet chart `static-site`,
+# goal #176 assembly oracle-fleet#410) on the CONSUMER profile. No spec ids exist for it yet, so the
+# ids are SITE-* placeholders — the oracle repo assigns real ones. Two things this template shows:
+# a deliberate GAP (CTR-CACHE — nginx sends no Cache-Control, so the edge caches every 200 for
+# 120 min) and a `depends_on` edge: the freshness badge on the apex calls ANOTHER PublicRoute
+# (mcp.minutark.ee/status), which is the only way two backends compose under one site.
+app: "minutark.ee static site (EXAMPLE — the oracle chart's static-site as of oracle-fleet#410; the oracle repo owns the real map)"
+spec_base: "https://github.com/teststuffstash/oracle-fleet/blob/master/chart/templates/static-site.yaml"
+stages:
+  - {seq: 100, id: SITE-ROUTE, stage: "nginx `try_files $uri $uri/ =404` — hand-written HTML/CSS, llms.txt", guard: "no other location: /status on THIS host is a 404 (index/connect must fetch it absolute, on the api host)",
+     value: "chart `staticSite.*`; chart/static/*", rejection: "nginx 404 HTML page (cached 3 min at the edge)", verify: "curl -I https://minutark.ee/status → 404; /connect.html → 200"}
+  - {seq: 105, id: SITE-READY, fulfils: CTR-OPS, stage: "readiness = GET / 200", guard: "no /metrics, no /healthz — the kubelet probes the root", value: "chart static-site Deployment probes",
+     rejection: "—", verify: "kubectl -n oracle-fleet get pods -l app=static-site"}
+  - {seq: 110, id: SITE-CACHE, stage: "response cache headers", guard: "nginx default: ETag + Last-Modified, NO Cache-Control → the consumer profile applies Cloudflare's default TTL (120 min on 200)",
+     value: "nginx config in chart/templates/static-site.yaml (no add_header today)", rejection: "—", verify: "curl -I https://minutark.ee/connect.html → cf-cache-status + age; cache-control absent"}
+  - {seq: 120, id: SITE-STATUS-BADGE, depends_on: ["mcp.minutark.ee/status"], stage: "freshness badge — browser fetch of the api host's /status", guard: "cross-origin; relies on the api host's own Access-Control-Allow-Origin and on the api claim being LIVE",
+     value: "chart/static/status.html (absolute URL); index.html + connect.html still fetch RELATIVE (bug: hits stage 100's 404)", rejection: "badge 'unavailable' when the api host is down or CORS fails", verify: "browser devtools on https://minutark.ee/status.html; curl the api host with Origin"}
+  - {seq: 130, id: SITE-ERRORS, fulfils: CTR-ERRORS, stage: "rejection grammar: nginx 404/403 HTML; edge 403 JSON (operational-path block, when FU-206 lands); edge challenge pages are LEGAL on this profile",
+     value: "nginx defaults", rejection: "text/html error pages", verify: "curl -I https://minutark.ee/nope → 404 text/html"}

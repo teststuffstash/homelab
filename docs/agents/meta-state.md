@@ -10,6 +10,20 @@ meant to avoid.)
 
 - **⚑ 2026-09-03 ~18:40Z (the #532 pre-merge support session — TICK-LOG has the arc). Fresh-session
   pickup:**
+  - oracle-fleet **#414** filed under bucket #386 (the #410 platform-read fixes: absolute /status fetch,
+    Cache-Control per asset, 429/403 wording) — inert (`agent-fix`+`task/fix`), operator queues.
+  - ~~Request map v2~~ MERGED (PR#1361): applies_to, CTR-CACHE, depends_on, static-site template;
+    addendum posted on oracle-fleet#176.
+  - ~~Request-map pattern~~ MERGED (PR#1360 → 7747ecfa, CI step included); template pointer posted
+    on oracle-fleet#176 (the oracle repo owns its real map). Platform legs left: **FU-206** (ops paths
+    blocked at the edge), **S5** (Skip drops the Free managed WAF — live evidence: the managed WAF is
+    blocking /wp-config.php scanners on the apex today), **S4** (ddos_l7 outside the Skip — verify
+    the Free override) — cloudflare.md completion table; `CTR-ACCESSLOG` (ray + stage id access
+    line) proposed as the next contract row; Tempo deferred until an emitter exists (assessment in
+    this session's transcript, no FU filed — file one if the operator wants it staged).
+  - **PR#1359 (records: ADR-123 operational paths non-public by default + FU-206 build + glossary
+    row)** — merge when the bot approves; FU-206 is the next platform build on the edge (one more
+    rule in the merged custom-phase ruleset, both profiles, dry-run through the proxy first).
   - ~~PR#1358~~ MERGED + APPLIED (operator token modify 18:5xZ, jail redirect apply 19:00Z):
     `www.minutark.ee` → 301 apex, verified; evidence on PR#1358 + fleet#360. Shared tree back on master.
   - ~~PR#1357~~ MERGED + `publicroute` Synced 5ceecdd5 (18:45Z): the platform precondition for
