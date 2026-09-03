@@ -40,9 +40,9 @@ meant to avoid.)
     group exists for a user token** (395-group list + docs), so the consumer profile's RUM
     half is undeliverable through this token: design residual for #1311 (dashboard RUM /
     account-owned token / drop RUM from the profile) — the Workspace stays Synced=False on it
-    while the cache rule lands independently. Verify after #1353 syncs: nudge the Workspace,
-    `GET /zones/{minutark}/rulesets` shows `http_request_cache_settings`; apex
-    `cf-cache-status` moves off DYNAMIC only for cacheable responses (#1334 check 2).
+    while the cache rule lands independently. **VERIFIED 12:3xZ after #1353 synced: cache-phase ruleset live on minutark.ee, apex
+    `cf-cache-status: HIT` (max-age 14400) — #1334 check 2 OBSERVED (evidence comment on #1334);
+    check 3 = the RUM residual above; check 1 waits on the api claim (oracle-iac#485).**
   - **Oracle hand fixes REFUTED both coordinator diagnoses**: PR#391 still "Deployment not
     Ready" with probe/warm-up untimed (evidence dump added to e2e-serve.sh on that branch —
     the next red carries pod logs); PR#392 still 403 with the live-pod forward (seat's own
