@@ -37,9 +37,13 @@ spec:
         - ports:
             - { port: "53", protocol: UDP }
             - { port: "53", protocol: TCP }
-      rules:
-        dns:
-          - matchPattern: "*"
+          # L7 DNS rules nest under the toPorts entry — at the egress-entry level the API server
+          # rejects the object ("field not declared in schema") and ArgoCD's SSA sync fails: this
+          # CNP never existed live from 50afe5f9 (2026-09-01) until this fix (#1200 class, the
+          # kinds manifest-lint skips; found via the OutOfSync app during #1333's rollout).
+          rules:
+            dns:
+              - matchPattern: "*"
     # Registry mirrors — BASELINE (read-only pull-through caches, ADR-091)
     - toEndpoints:
         - matchLabels:
