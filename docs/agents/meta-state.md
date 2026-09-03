@@ -12,9 +12,8 @@ meant to avoid.)
   pickup:**
   - oracle-fleet **#414** filed under bucket #386 (the #410 platform-read fixes: absolute /status fetch,
     Cache-Control per asset, 429/403 wording) — inert (`agent-fix`+`task/fix`), operator queues.
-  - **Request map v2 PR (applies_to, CTR-CACHE, depends_on, static-site template; after the #410 read)** —
-    merge when the bot approves; then an addendum on oracle-fleet#176 (second template + the two
-    #410 findings: relative /status fetch on the apex, no Cache-Control).
+  - ~~Request map v2~~ MERGED (PR#1361): applies_to, CTR-CACHE, depends_on, static-site template;
+    addendum posted on oracle-fleet#176.
   - ~~Request-map pattern~~ MERGED (PR#1360 → 7747ecfa, CI step included); template pointer posted
     on oracle-fleet#176 (the oracle repo owns its real map). Platform legs left: **FU-206** (ops paths
     blocked at the edge), **S5** (Skip drops the Free managed WAF — live evidence: the managed WAF is
