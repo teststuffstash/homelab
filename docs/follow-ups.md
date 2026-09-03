@@ -199,7 +199,9 @@ six OVERSIZE items pointer-ized into
       THIRD sighting 2026-08-31: `blackbox/blackbox.yaml` (no annotation) — PR#1141's
       `dns_github` module synced but the 5d-old pod served 400s to every probe scrape
       (`blackbox-unbound-github` TargetDown ~3h) until a manual `/-/reload`; the new belt
-      shipped dead. **Next:** audit which other raw resources mount ConfigMaps — the count
+      shipped dead. FOURTH 2026-09-03: `cf-api-proxy` (no annotation, nginx renders the
+      ConfigMap at start) — G-G's allowlist synced, the 8d-old pod 403'd the first consumer
+      profile apply ("write outside dns_records/cfd_tunnel"); `rollout restart` by the seat. **Next:** audit which other raw resources mount ConfigMaps — the count
       decides between kustomize `configMapGenerator` (no human step, proven in-repo:
       [`otel-collector/`](../argocd/resources/otel-collector/kustomization.yaml)) and a CI check
       reddening on a `*-config.yaml` moved without its consumer's annotation. ⚠ generator +
