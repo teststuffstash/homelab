@@ -34,6 +34,14 @@ spec:
             nodeSelectorTerms:
               - matchExpressions:
                   - { key: node-role.kubernetes.io/control-plane, operator: DoesNotExist }
+      # ⚠ PAUSED 2026-09-03 22:1xZ (incident): the first rollout's 4.9 GiB pulls ran on wk-02, thinkcentre and
+      # wk-metal-04 concurrently (maxUnavailable 3); wk-02 — the Proxmox VM carrying Alertmanager, the apex
+      # cloudflared, ArgoCD's repo server and Longhorn replicas — went NotReady at 22:01Z, three minutes into
+      # its pull, and dropped off the network. No node carries this label, so the DaemonSet schedules
+      # nowhere until the postmortem decides the safe rollout shape (one node at a time; Longhorn/VM nodes
+      # excluded or last). Remove the selector to resume.
+      nodeSelector:
+        homelab.io/runner-image-prepull: paused-2026-09-03
       tolerations:
         - { key: homelab.io/ephemeral, operator: Exists }
       securityContext:
