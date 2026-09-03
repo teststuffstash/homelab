@@ -6,9 +6,9 @@
 # prose ("not vacuous" section) — the exact live shape that parked #344 on 2026-08-12 and pointed
 # the next round at the WRONG branch (fix/issue-351-…).
 #
-# THE CONTRACT (five arms, one world — the arms change the bridge variables, never the guard):
+# THE CONTRACT (six arms, one world — the arms change the bridge variables, never the guard):
 #   1. mention-only — dispatching #344 with no --work-branch must NOT refuse: #366 mentions #344
-#      but does not strong-link it, so the issue is free. (The regression: the old predicate
+#      in prose but does not strong-link it, so the issue is free. (The regression: the old predicate
 #      `#N\b` refused here and pointed at fix/issue-351-….)
 #   2. strong-link — dispatching #351 must refuse, naming #366 and its branch.
 #   3. resume-match — #351 with --work-branch == #366's headRef must pass, printing the resume line.
@@ -21,6 +21,10 @@
 #      / `prefixes` / `disclose`, parking the issue and pointing the round at the wrong branch —
 #      the same failure the guard exists to kill, just triggered by prose. Reviewer finding,
 #      PR #567 round 1.)
+#   6. duplicate-PRs — dispatching #353 with no --work-branch must refuse LOUDLY when multiple
+#      open PRs strongly link the same issue: the world has PR #401 (Fixes #353) AND PR #402
+#      (Fixes #353). The guard must detect length > 1 and refuse with a message naming the
+#      duplicate condition, rather than silently picking one via [0] (homelab#1222).
 #
 # THE PREDICATE IS THE C6 STRONG-LINK GRAMMAR (seat ruling 2026-08-18): the review-flip belt and
 # finalize key on the same set — a sibling-seam mention is not a link, and `Implements #N` (the

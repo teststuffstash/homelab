@@ -1,8 +1,9 @@
-CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #344\\b"))][0] | select(.) | "\(.number) \(.headRefName)"
-CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #351\\b"))][0] | select(.) | "\(.number) \(.headRefName)"
-CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #351\\b"))][0] | select(.) | "\(.number) \(.headRefName)"
-CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #351\\b"))][0] | select(.) | "\(.number) \(.headRefName)"
-CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #352\\b"))][0] | select(.) | "\(.number) \(.headRefName)"
+CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #344\\b"))] | .[] | "\(.number) \(.headRefName)"
+CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #351\\b"))] | .[] | "\(.number) \(.headRefName)"
+CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #351\\b"))] | .[] | "\(.number) \(.headRefName)"
+CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #351\\b"))] | .[] | "\(.number) \(.headRefName)"
+CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #352\\b"))] | .[] | "\(.number) \(.headRefName)"
+CALL gh pr list --repo teststuffstash/homelab --state open --json number,body,headRefName --jq [.[] | select(.body | test("(?i)\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #353\\b"))] | .[] | "\(.number) \(.headRefName)"
 OUT REACHED: bare-mention PR (#344 in prose) — must NOT refuse
 OUT MENTION_ONLY continues
 OUT REACHED: strong-link PR (#351 Fixes) — must refuse
@@ -14,7 +15,10 @@ OUT REACHED: strong-link PR, --work-branch != headRef — must refuse
 OUT RESUME_MISMATCH rc=3
 OUT REACHED: mid-word match (#352 unresolved in prose) — must NOT refuse
 OUT MIDWORD_MENTION continues
+OUT REACHED: duplicate PRs (#353 has two Fixes PRs) — must refuse loudly
+OUT DUPLICATE_PRS rc=3
 OUT REACHED: end
 ERR PREFLIGHT REFUSED: issue #351 already has open PR #366 (teststuffstash/homelab, branch fix/issue-351-exporter-down-fixture) — resume it with --work-branch fix/issue-351-exporter-down-fixture, don't fork it (FU-042).
 ERR PREFLIGHT REFUSED: --work-branch fix/issue-351-some-other does not match open PR #366's branch fix/issue-351-exporter-down-fixture — a resume must land on the PR's own branch (FU-042).
+ERR PREFLIGHT REFUSED: issue #353 has multiple open PRs — resolve duplicates before dispatching (FU-042).
 RC 0

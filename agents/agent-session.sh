@@ -1159,7 +1159,21 @@ esac
 # >>>REPLAY:fu042-guard-a>>>
 fu042_guard_a() {
   PF_PR_LINE="$(gh pr list --repo "$PF_SLUG" --state open --json number,body,headRefName \
-    --jq "[.[] | select(.body | test(\"(?i)\\\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #${PF_ISSUE}\\\\b\"))][0] | select(.) | \"\(.number) \(.headRefName)\"" 2>/dev/null || true)"
+    --jq "[.[] | select(.body | test(\"(?i)\\\\b(implements|close[sd]?|fix(e[sd])?|resolve[sd]?):? #${PF_ISSUE}\\\\b\"))] | .[] | \"\(.number) \(.headRefName)\"" 2>/dev/null)" || {
+    # An unreadable PR list is a DEFERRAL, not a refusal (the homelab#1175 shape, rule #6: never
+    # fail INTO a write). A refusal tells the coordinator "fix the state"; an API blip has no state
+    # to fix — the next pass retries. Codeowner read 2026-09-03 (ADR-110), on the 07:25Z throttle:
+    # a refusal here would have parked every dispatch for the outage's length.
+    echo "→ dispatch deferred — gh pr list unreadable, cannot run the duplicate-PR guard (FU-042; resets N/A) — the next pass retries" >&2
+    exit 0
+  }
+  # FU-042 (b): multiple open PRs on one issue — refuse loudly rather than silently picking one.
+  # gh pr list returns newest-first; with >1 open PR the invariant is already broken and a
+  # legitimate fix round on the canonical PR is un-dispatchable until the duplicate is resolved.
+  if [ "$(printf '%s\n' "$PF_PR_LINE" | grep -c . || true)" -gt 1 ]; then
+    echo "PREFLIGHT REFUSED: issue #${PF_ISSUE} has multiple open PRs — resolve duplicates before dispatching (FU-042)." >&2
+    exit 3
+  fi
   if [ -n "$PF_PR_LINE" ]; then
     PF_PR="${PF_PR_LINE%% *}"; PF_HEAD="${PF_PR_LINE#* }"
     if [ -z "$WORK_BRANCH" ]; then
@@ -1186,9 +1200,11 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     # round would fork the work. The predicate and the two refusal arms live in fu042_guard_a
     # (defined above the pre-flight) so the clause-replay fixture can drive them; the legitimate
     # exception is a FIX ROUND resuming that PR's own branch (--work-branch == the PR's headRef).
-    if command -v gh >/dev/null 2>&1; then
-      fu042_guard_a
+    if ! command -v gh >/dev/null 2>&1; then
+      echo "PREFLIGHT REFUSED: gh not on PATH — cannot check for duplicate PRs (FU-042)." >&2
+      exit 3
     fi
+    fu042_guard_a
     # (b) live-worker cap per project: default WIP=1; a repo with independent TRACK lanes
     # (TRACKS.md) may run one worker per lane — the dispatcher sets AGENT_WIP_LIMIT=<lanes>
     # (added 2026-07-10 when #2/#3 opened the first two-lane parallel dispatch).
