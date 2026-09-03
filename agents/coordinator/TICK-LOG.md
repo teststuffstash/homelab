@@ -6449,3 +6449,44 @@ first live ADR-110 maintenance session before the ADR existed.
   declared in `tofu/ci-runner.tf` var default), NOT homelab-pve-ssh — janitor+cron installed
   live, last debris removed, only a live run's cluster + the buildx builder remain. Pattern doc
   `docs/patterns/kind-ci.md` shipped (PR#1313, three consumers: oracle/sleep/circles).
+
+## 2026-09-03 ~06:00–08:45Z — #1315 operator lane (Composition Terraform gate) → the throttle recurs, root cause found in our own clones (operator-attended seat)
+
+- **#1315 read, then built.** Hand-rendering the goal branch's PublicRoute Composition and
+  `tofu validate`-ing it against the pinned v5 provider: **every profile invalid** (v4 `rules {}`
+  blocks, `http_cache_settings` ≠ a phase, `edge_cache_ttl`/`headers` shapes) — the issue's own
+  evidence undercounted it. Landed: 29596cd9 direct (ARC dind accepts the ghcr mirror VIP —
+  `pin-only-lint` is that file's owner and said so, PR#1327 closed on its word) → **PR#1329**
+  (render via `crossplane composition render` at the cluster's function/engine pins → extract
+  Workspace modules → `tofu validate` against a nix-packaged provider through a filesystem
+  mirror, WAN-free; fixtures per XRD version; one must-fail subtree-guard fixture; argo-lint over
+  the coordinator's Workflow kinds; ProviderConfig pins garage/infisical/cloudflare; FU-011
+  digest pin archived). Four `workflow_dispatch` runs each caught one script defect (yq null on
+  the runtime-config doc; fixture/XRD version mismatch; tofu's mirror walker not following
+  symlinked DIRS — real dirs + symlinked file). Cost 136–140s/run, cold image pulls into the
+  per-job dind, warm mirror doesn't help → skip-mapped. Review r1 blocked on the issue's
+  `Touches:` (widened, seat), merged 08:18. **#1331** (edge-probe self-test wiring) → goal
+  branch, merged. **#1328** filed + queued on the goal branch with the validated shapes.
+- **Cache-tier design question (operator):** LAN pull-through vs a baked artifact volume for
+  validation inputs. Ruled from numbers: the nix bake was forced by thousands of paths + xz on
+  ThinkPads (~340s); validation artifacts are ~40 objects/~70MB, 107 CI runs/day ≈ 7.5GB/day LAN
+  ≈ a minute of gigabit — LAN cache suffices; three flip criteria recorded (object count in the
+  thousands, decompress CPU in wall time, cache as availability problem). The only genuinely
+  missing leg is JSON schemas (kubeconform fetches ~35 from GitHub per run; a CRD-catalog cache
+  would also shrink manifest-lint's 125 skips) — an ADR-070 fifth leg, not filed yet.
+- **07:25Z the throttle recurs — worse.** Every loop tick, every stack, exit 128; probes from a
+  loop pod (broker token) AND the jail (fine-grained PAT) refused with the "unauthenticated
+  downloads" message → authenticated git blocked too for ~45 min; API + tarball path fine.
+  Decayed ~08:10; the 08:30 tick green. **Root cause (GIT_TRACE_CURL): token-in-URL clones of a
+  public repo are anonymous-FIRST** — GET refs anon 200, POST upload-pack anon 401, retry with
+  auth — two anonymous requests per clone × ~700/day = the loop fed the counter itself; today
+  GitHub refused the anonymous request outright and git had nothing to retry. Operator asked for
+  the docs: none exist for git (support: "no hard limits"; repository-limits: 15 reads/s per repo,
+  recommendation) → recorded in the incident + a memory. **Header sweep shipped as PR#1333**
+  (`clone -c http.extraHeader=Authorization: Basic …`, the actions/checkout pattern; 14 wf
+  blocks + deploy-revert + retro push + composition ×5 + launcher PREP + devbox-update; replay
+  family re-pinned; diff-ci 17 green). Residual: worker rides' credential helper is
+  challenge-based too — low volume; recurrence with zero anon requests = FU-007 push-mirror
+  becomes the next deliverable.
+- **Seen, not mine:** codeowner parks #1273/#1289/#1290/#1295 (this session never loaded the
+  design-agents corpus → did not execute the ADR-110 gate).
