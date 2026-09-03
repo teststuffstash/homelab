@@ -1,0 +1,7 @@
+OUT ORPHAN [homelab] ⚠ TOUCHES-MALFORMED: issue body has a Touches-like line the parser cannot read (homelab#1294 report-only — un-bold/un-bullet it or the issue is treated as EXCLUSIVE):
+OUT ORPHAN   ⚠ TOUCHES-MALFORMED: issue #402 declares a footprint the parser cannot read (line: "**Touches:** agents/coordinator-scan.sh") — un-bold/un-bullet it or the issue is treated as EXCLUSIVE
+OUT ORPHAN   ⚠ TOUCHES-MALFORMED: issue #403 declares a footprint the parser cannot read (line: "- Touches: agents/coordinator-scan.sh") — un-bold/un-bullet it or the issue is treated as EXCLUSIVE
+OUT ORPHAN   ⚠ TOUCHES-MALFORMED: issue #404 declares a footprint the parser cannot read (line: "### Touches: agents/coordinator-scan.sh") — un-bold/un-bullet it or the issue is treated as EXCLUSIVE
+OUT ORPHAN   ⚠ TOUCHES-MALFORMED: issue #405 declares a footprint the parser cannot read (line: "*Touches:* agents/coordinator-scan.sh") — un-bold/un-bullet it or the issue is treated as EXCLUSIVE
+OUT REACHED: end
+RC 0
