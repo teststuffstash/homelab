@@ -6516,3 +6516,41 @@ first live ADR-110 maintenance session before the ADR existed.
   `firewallEventsAdaptive` is a flat event list) — the recorded-fixture self-test pinned the
   author's guess. Verified the working shapes from the jail → **#1340** filed +
   queued under #1311 with the exact queries. cloudflare-exporter app Degraded until then.
+
+## 2026-09-03 ~10:30–13:00Z — the three goal stalls (#175/#176/#1302) read with the corpus; ADR-122; six codeowner reads; oracle un-wedged (operator-attended corpus session)
+
+- **Stalls read** (Loki scan report + board + goal-lint + PR threads): #175 = PR#392 escalated
+  correctly (#356 blocked, fix written) + **PR#391 debounced silently** (second no-op after the
+  arbitrate directive; the arbitrate fingerprint hashes neither stats nor labels); #176 =
+  **PR#394 debounced silently** (ci-red marker written, then the pre-flight deferred on WIP;
+  no round ever ran) + #360/#361 waiting on G-G's consumer claim; #1302 = post-launch, verdict
+  chain = oracle-iac#530 (`agent/error` on homelab#1342, the router→opencode unprefixed-model
+  class, UNQUEUED) → #1334 (walk livelock ×2, #1249) → #1340/#1335 (codeowner-parked on
+  docs/). Two of three stalls invisible to `board`. The operator then named the one my first
+  read missed: **#1315 held G-G's assembly ~10.5h** — the completion predicate counts every
+  open descendant; the 15:03Z checkpoint's `defer-to-named-issue` was prose.
+- **Operator ruling → ADR-122** ("issue authoring is too complex for even Fable to do right;
+  #1338 was filed correctly and the walk re-queued it 86s later — a label linter would not
+  have helped"): filing inert (walk retired), one release valve, one machine block + parser,
+  lineage dumb / disposition the container's (`undispositioned` wakes, never blocks). Replayed
+  against all three goals before drafting; the G-G replay's honest half: the tree-block was
+  accidental protection for the invalid-HCL composition until PR#1329's gate existed. Landed
+  PR#1344 (ADR + lineage rule 9 + version row v1.4 + S8 re-headed + glossary). My own G4
+  resight recorded (proposed a label + lint twice before the subtraction).
+- **Codeowner reads (ADR-110)**: #1343 + #1339 merged (alert-born, small); #1273 approved
+  (G3 of #1231, reviewer's round-7 verification stands); **#1290 in-diff fix** — a `gh pr list`
+  failure now DEFERS (the #1175 shape) instead of refusing: on today's 07:25Z throttle a
+  refusal would have parked every dispatch; **#1289 in-diff fix** — the `ci-cause:` spec pasted
+  three times in the brief collapsed to §ci-cause + two pointers; **#1295 held** — a new
+  Touches regex probe is exactly the reader class ADR-122 retires; operator decides.
+- **Oracle un-wedge**: PR#391 (`8a2e8db`, per-call timeout override; probe + warm-up untimed)
+  and PR#392 (`3e7e982`, port-forward to the live pod by `deletionTimestamp`) hand-applied per
+  the coordinator's own round-4 directives — three flash/pro rounds had "verified without
+  fixing" (the PR#1216 shape); arbitrate labels stripped, #356 → review; #394 CI rerun
+  (re-arms the ci-red fp); oracle-iac#531 = the #530 two-liner (seat PR, CI-only lane), #530 →
+  review; homelab#1342 queued with a Touches line (drainage clause 1: incoming blockedBy from a
+  stuck stack issue); #1338 closed with the pointer (FU-039 + the completion table own it).
+  Filed + queued the state-fp debounce issue (FU-199 extended with the two faces).
+- ⚠ Seat gotcha, twice: `devbox run -- kubectl` inside a shell variable is one word to zsh;
+  and a failed `git checkout` before a scripted edit lands the edit on the branch you are still
+  on — `git show --stat HEAD` before pushing a hand fix.
