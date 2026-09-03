@@ -160,8 +160,10 @@ def graphql_query(zone_tag, start, end):
             payload = json.load(resp)
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"GraphQL query → HTTP {exc.code}: {exc.read()[:500]!r}") from None
-    if not payload.get("success"):
-        raise RuntimeError(f"GraphQL query → success=false: {payload.get('errors')}")
+    # GraphQL envelope: {"data": …, "errors": null} — there is NO REST `success` field here
+    # (that guard raised on every response, #1340 residual). Errors are the signal.
+    if payload.get("errors"):
+        raise RuntimeError(f"GraphQL query → errors: {payload['errors']}")
     zones = payload.get("data", {}).get("viewer", {}).get("zones", [])
     if not zones:
         raise RuntimeError(f"GraphQL query returned no zones for zoneTag={zone_tag}")
@@ -292,6 +294,10 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        # The status line is NOT implied by send_header(): without send_response() the first
+        # header goes out AS the status line and Prometheus reads `malformed HTTP status code
+        # "text/plain;"` — every probe target down, both *ProbeBlind alerts firing (2026-09-03).
+        self.send_response(200)
         self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -473,6 +479,80 @@ def _exposition(requests_rows, firewall_rows, zone_ids=(_Z_PRODUCT,)):
     return lines
 
 
+def _handler_check(sample):
+    """GET /metrics, /healthz, /nope through a REAL ThreadingHTTPServer on an ephemeral port. The
+    fixtures above stop at the collector; this is the one seam that sees the STATUS LINE — which
+    send_header() does not imply (2026-09-03: /metrics went out header-first, Prometheus read
+    `malformed HTTP status code "text/plain;"`, every probe target down, both belts blind)."""
+    global _body, _last_success
+    import http.client
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    saved_body, saved_success = _body, _last_success
+    try:
+        with _lock:
+            _body = f"# self-test exposition\n{sample}\n"
+
+        def get(path):
+            conn = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=5)
+            conn.request("GET", path)
+            resp = conn.getresponse()
+            data = resp.read()
+            conn.close()
+            return resp.status, resp.getheader("Content-Type") or "", data
+
+        status, ctype, data = get("/metrics")
+        assert status == 200, f"/metrics answered {status}, not 200"
+        assert "version=0.0.4" in ctype, f"/metrics Content-Type {ctype!r} is not the exposition type"
+        assert sample.encode() in data, "/metrics body must be the collector's exposition"
+        _last_success = 0
+        assert get("/healthz")[0] == 503, "/healthz must be 503 before the first successful poll"
+        _last_success = time.time()
+        assert get("/healthz")[0] == 200, "/healthz must be 200 after a fresh success"
+        assert get("/nope")[0] == 404
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        with _lock:
+            _body = saved_body
+        _last_success = saved_success
+
+
+def _transport_check():
+    """graphql_query() through a fake urlopen. The GraphQL envelope is {"data": …, "errors": null}
+    — it has NO REST `success` field — and the collect(fetch=…) seam above cannot reach this guard
+    by construction (#1340's residual: the fixture rewrite was green while every live poll raised)."""
+    import io
+
+    class _Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake(payload):
+        return lambda req, timeout=None: _Resp(json.dumps(payload).encode())
+
+    real = urllib.request.urlopen
+    try:
+        urllib.request.urlopen = fake({"data": {"viewer": {"zones": [{
+            "httpRequestsAdaptiveGroups": _FLIPPED_REQUESTS,
+            "firewallEventsAdaptive": _FLIPPED_FIREWALL,
+        }]}}, "errors": None})
+        req_rows, fw_rows = graphql_query(_Z_PRODUCT, "2026-09-02T18:45:00Z", "2026-09-02T18:50:00Z")
+        assert req_rows == _FLIPPED_REQUESTS and fw_rows == _FLIPPED_FIREWALL, \
+            "a clean GraphQL envelope (errors: null, no success field) must yield the rows"
+        urllib.request.urlopen = fake({"data": None, "errors": [{"message": 'unknown field "requests"'}]})
+        try:
+            graphql_query(_Z_PRODUCT, "a", "b")
+            raise AssertionError("a non-empty errors list must raise")
+        except RuntimeError as exc:
+            assert "unknown field" in str(exc), f"the raise must carry the API's message: {exc}"
+    finally:
+        urllib.request.urlopen = real
+
+
 def self_test():
     """`python3 edge-probe.py --self-test` — recorded fixtures through the real collector, then
     through the committed alert expressions."""
@@ -547,7 +627,13 @@ def self_test():
     assert firing_zones(exprs[blind], {}) == {"<absent>"}, \
         f"{blind} must survive the series disappearing: {exprs[blind]!r}"
 
-    print("cloudflare edge-probe self-test: OK (parser, today's exposition, and the committed "
+    # 8. The HTTP handler over a real socket — status line, exposition type, healthz gate.
+    _handler_check('cloudflare_edge_probe_ok{zone="minutark.ee"} 1')
+
+    # 9. The GraphQL transport guard through a fake urlopen — the seam the fixtures cannot reach.
+    _transport_check()
+
+    print("cloudflare edge-probe self-test: OK (parser, handler over a real socket, GraphQL transport guard, today's exposition, and the committed "
           f"{blind} expr replayed against flipped + blind fixtures; the retired "
           "CloudflareEdge5xx asserted absent)")
     return 0
