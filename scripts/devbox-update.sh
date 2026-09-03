@@ -24,7 +24,7 @@ DIR="${DEVBOX_DIR:-.}"
 BRANCH="devbox-update"
 
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
-git clone --quiet --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$WORK/r"
+git clone -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')" --quiet --depth 1 "https://github.com/${REPO}.git" "$WORK/r"
 cd "$WORK/r"
 
 echo "[$REPO] devbox update ($DIR)…"

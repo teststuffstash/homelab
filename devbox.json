@@ -102,6 +102,12 @@
       "outputs": [
         "cli"
       ]
+    },
+    "crossplane-cli": {
+      "version": "2.4.1"
+    },
+    "terraform-providers.cloudflare_cloudflare": {
+      "version": "5.23.0"
     }
   },
   "env": {
@@ -201,6 +207,12 @@
       ],
       "spend-probe-self-test": [
         "python3 argocd/resources/cloudflare-exporter/spend-probe.py --self-test"
+      ],
+      "publicroute-tf-validate": [
+        "bash scripts/publicroute-tf-validate.sh"
+      ],
+      "argo-lint": [
+        "argo lint --offline $(grep -lE '^kind: (Cron)?Workflow(Template)?$' agents/coordinator/*.yaml)"
       ],
       "cloudflare-token-audit": [
         "bash scripts/cloudflare-token-audit.sh"

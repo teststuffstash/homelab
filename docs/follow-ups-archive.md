@@ -10,6 +10,20 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-011** *(archived 2026-09-03)* — **provider-terraform pinned to a digest** (the running
+  revision's resolved digest, `argocd/resources/crossplane/provider.yaml`), in the #1315 gate PR
+  that also pinned the three Terraform provider versions in the ProviderConfig. Evidence: the
+  digest is the pod's `imageID`; ArgoCD sync leaves the revision unchanged.
+- **FU-196** *(archived 2026-09-02)* — **ghcr single-point-of-dependence for the oracle corpus:
+  RESOLVED by ADR-121.** v0 (mirror creds) 2026-08-30; v1 (first-party push-mode registry on
+  Garage, `registry.teststuff.net`) built + cut over in one operator-attended session 2026-09-02
+  after the #1282 recurrence: PR#1296+quickfixes, oracle-fleet#352 dual-publish, oracle-iac#490
+  pin flip, `REGISTRY_PUSH_TOKEN` via the new secrets-sync single-value row (PR#1298).
+  Acceptance evidence: wk-01 pulled the 6.4GB corpus from the LAN registry in 6m31s in
+  production; dispatch proof run released BOTH targets digest-verified. Residuals live on:
+  FU-203 (retention), #1297 (per-blob detection), ingester-image migration = optional later
+  (ADR-121 notes it). Gotcha trail in the ADR + the registry manifest headers (debug-port
+  collision, ping-must-challenge, RELATIVEURLS, s3 redirect-disable).
 - **FU-052** *(archived 2026-08-30)* — **Onboard the remaining app repos: nothing remains.**
   agent-runtime onboarded 2026-08-07/08 (PR#37 — recipes, tests, CODEOWNERS; the claim's fixer
   flip); snore-recorder 2026-08-02 (FU-051's leg — #15 recipes/CalVer/deploy-pin, sleep-iac#57

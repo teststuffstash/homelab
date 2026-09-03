@@ -8,8 +8,23 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ 2026-09-02 ~12:00Z ADR-121 REGISTRY SESSION (operator-attended) — first-party registry
-  LIVE, corpus seed IN FLIGHT. Pickup set:**
+- **⚑ 2026-09-02 ~16:00Z FINAL WIND-DOWN (the ADR-121 + three-incidents session — TICK-LOG has
+  the full arc). Everything VERIFIED closed: registry cutover production-proven (wk-01 LAN pull
+  6m31s; dual-publish run green both targets); loop healed (composition was the third home of
+  the anonymous-clone idiom — `0c6d00f7`; trapped tick green 13:04Z); kind/inotify incident
+  closed (e2e green post-fix; janitor live+templated; ⚠ ci-runner `debian@` SSH = the FORGEJO
+  keypair, tofu/ci-runner.tf). Fresh-session pickup:**
+  - **PR gate queue (ADR-110 corpus read)**: master-bound machine PRs **#1295, #1290, #1289**
+    parked open; #1313 (kind-ci pattern, seat) auto-merges. G-G is EXECUTING — child PR#1312
+    already open onto `goal/1302-public-edge` (feature→goal automated; **goal→master stays
+    operator**).
+  - **Operator-owed**: #1308 queue call (BuildKit mirrors); FU-205 design pass (WAN accounting
+    — family-privacy VLAN-vs-router-local fork + CI-VM counters); eventually the G-G
+    goal-branch merge + #1302 verdict.
+  - **Residuals tracked**: FU-203 (registry retention), FU-204 (C4/C5 limbo), #1297 (per-blob
+    detection), OTLP-spam env cleanup (registry + 3 mirrors), garage resync worker tuning is
+    EPHEMERAL (resets on garage-0 restart).
+  - **(superseded pickup below kept for provenance)**
   - **Seed retry gate**: garage resync drain monitor was running at session end (jail task
     `bvwh4d6wa`, retry when queue <300). Retry = skopeo push of `oci-layout` in the session
     scratchpad → `registry.teststuff.net/oracle-fleet/ert-corpus:2026-09-01` (creds: Infisical

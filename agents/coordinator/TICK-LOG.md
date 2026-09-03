@@ -6397,3 +6397,55 @@ first live ADR-110 maintenance session before the ADR existed.
   (11:00Z). Alert craft excellent; ONE accepted gap — probes `/v2/`, but #1282's signature is
   blob-500-while-/v2/-200 (live-proven all morning) and the operator's narrowing said "known
   blob path" — filed #1297 (metrics leg preferred, DEBUG_ADDR precedent now in-repo).
+
+## 2026-09-02 ~12:00–13:30Z — seed lands, cutover proven E2E; G-G launched; the throttle takes the loop down and the missed clone site is found (operator-attended, continued)
+
+- **ADR-121 cutover COMPLETE, production-proven**: seed attempt 4 succeeded post-drain
+  (garage resync 14.5k→40 in 16 min once workers unthrottled; two more registry quickfixes en
+  route — s3 REDIRECT_DISABLE after presigned in-cluster URLs, RELATIVEURLS before it); digest
+  `cb735ff` exact; oracle-iac#490 pin flip merged; **wk-01 pulled the 6.4GB corpus from
+  registry.teststuff.net in 6m31s** (the same node that burned 40 min of WAN laps at 09:xx).
+  Operator set `REGISTRY_PUSH_TOKEN` via the NEW `github-secrets-sync` single-value row
+  (PR#1298); dispatch proof run: **✓ released BOTH** ghcr + LAN registry, digest-verified.
+  FU-196 archived this session. Garage worker tuning (count 4/tranq 1) left in place —
+  EPHEMERAL, resets on garage-0 restart.
+- **G-G LAUNCHED**: Goal #1302 (Budget: 30, operator-ordered) + seat decompose in-session:
+  #1303 (field+fan-out+cf-api-proxy table, born together) → #1304 api / #1305 consumer /
+  #1306 observability / #1307 docs+proof; all sub-issue-linked, queued, `goal/1302-public-edge`
+  created. Ground-truth pass first: BOTH former unblockers were already done (two-zone ingress
+  token live in the proxy, DS at the .ee parent authoritative) — oracle-iac#351 closed with a
+  drift-free `tofu plan` as its own acceptance; ROADMAP row corrected twice (PR#1301+#1309).
+- **Python proposal re-read** (it grew): ask C filed as #1308 (BuildKit per-registry mirrors —
+  dockerd `registry-mirrors` is Hub-only), wheels-not-images rail added to
+  docs/patterns/python-stack.md (PR#1309; the amendment raced #1301's merge). #1299/#1300
+  operator-queued.
+- **INCIDENT: anonymous-git throttle took the oracle loop down ~4h** — full postmortem
+  `docs/incidents/2026-09-02-anonymous-git-throttle-loop-outage.md`. The one clone site
+  homelab#1136 missed (`coordinator-session.sh` PREP) fixed `46c079cb`; #345 re-queued (its r1
+  died on a model rate-limit at 07:35, then sat in the C4/C5 bare-mention limbo — PR#346
+  mentions it — the limbo is the postmortem's design residual); healing watch armed for the
+  next tick. My #351 "loop pods unaffected" claim corrected on-thread.
+- **Addendum ~14:1xZ — the launcher fix was NOT enough**: ticks kept failing (Loki scoped-door
+  forensics on the GC'd pods — the door works, recipe in loki-tenancy.md) → the per-stack crons
+  are COMPOSITION-rendered and carried FOUR more anonymous clone sites (`0c6d00f7` sweeps them;
+  postmortem residual marked executed). Also same hour: allure-reports bucket hit its 5Gi cap
+  exactly (Garage answers quota as 403 "insufficient permissions") → oracle-iac PR#491 5→10Gi;
+  FU-205 filed for WAN-upstream accounting (family-privacy boundary + CI-VM legs, operator
+  constraints recorded). **VERIFIED HEALED 13:04Z** (trapped the live tick): authenticated
+  clone → full scan → FU-146 double-dispatch refusal working → dispatched #363 → clean exit.
+  Loop draining its queue (#345 judged, #363 dispatched, G-G children waiting).
+- **INCIDENT 3 (~14:4x–15:1xZ): every oracle e2e failed at kind boot** ("Multi-User System"
+  timeout) — **inotify-instance exhaustion on ci-runner-01**: 515/512 held by SIX+ leaked
+  `oracle-e2e-*` kind clusters (cancelled runs never run teardown; the 2026-08-09 #228 class
+  recurring at the raised limit — leaks accumulate to ANY limit). Un-wedged via qm guest exec
+  (jail SSH key ≠ the VM's authorized key — Proxmox-hop is the access path): swept 9+2
+  containers (inotify 515→65), sysctl'd 1024/524288 live. Cloud-init template updated (limits +
+  an hourly kind-janitor cron); ⚠ the LIVE janitor install is pending — the guest agent went
+  unresponsive under the released CI burst (5 runs in flight) — retry armed; template covers
+  recreates. Cause-side fix (pre-create sweep) briefed onto the in-flight #363 CI-shape ride.
+  **CLOSED ~15:4xZ**: post-fix e2e PROVEN green (the #345 ride's full run succeeded); the dead
+  guest agent was restarted via DIRECT SSH once the key mapping surfaced — ⚠ ci-runner-01's
+  `debian@` authorized key is the **FORGEJO keypair** (`~/.claude/homelab-forgejo/id_ed25519`;
+  declared in `tofu/ci-runner.tf` var default), NOT homelab-pve-ssh — janitor+cron installed
+  live, last debris removed, only a live run's cluster + the buildx builder remain. Pattern doc
+  `docs/patterns/kind-ci.md` shipped (PR#1313, three consumers: oracle/sleep/circles).

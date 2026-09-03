@@ -1,2 +1,3 @@
-OUT https://x-access-token:ghp_fake1234567890abcdef@github.com/teststuffstash/oracle-iac.git
+OUT https://github.com/teststuffstash/oracle-iac.git
+OUT http.extraHeader=Authorization: Basic eC1hY2Nlc3MtdG9rZW46Z2hwX2Zha2UxMjM0NTY3ODkwYWJjZGVm
 RC 0

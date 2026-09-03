@@ -1,0 +1,19 @@
+# publicroute-tf-validate fixture — v1alpha1 (the version master's Composition composes; no
+# profile field), platform zone: a namespace claiming inside its delegated subtree. The gate
+# runs a fixture only when its apiVersion matches the Composition's compositeTypeRef — when the
+# XRD moves to v1alpha2 (goal #1302), the *-v1alpha2-* fixtures take over and this one is skipped.
+# The composite (XR), not the claim: the template reads spec.claimRef for ns/name.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: XPublicRoute
+metadata:
+  name: probe-xr
+spec:
+  claimRef:
+    apiVersion: platform.teststuff.net/v1alpha1
+    kind: PublicRoute
+    name: probe
+    namespace: default
+  hostname: cf-probe.default.teststuff.net
+  backend:
+    service: podinfo.default.svc.cluster.local.
+    port: 9898

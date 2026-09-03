@@ -42,11 +42,35 @@ write_files:
   # slots + one leaked cluster is enough): the freshest cluster's CoreDNS starves and every DNS
   # lookup fails Errno -3 while pod/node status stays green (measured 116/128 with two leaked
   # clusters, 2026-08-09, oracle-fleet#228). Applied live the same day; runcmd covers first boot.
+  # 512→1024 + watches 2026-09-02: 512 exhausted AGAIN (515 in use, SIX leaked clusters up to
+  # 26h old — every fleet e2e failed at kind boot with "could not find ... Multi-User System").
+  # Raising the limit buys headroom; the janitor below is the actual fix (leaks accumulate to
+  # ANY limit). Applied live the same day, both.
   - path: /etc/sysctl.d/99-kind-inotify.conf
     permissions: '0644'
     owner: root:root
     content: |
-      fs.inotify.max_user_instances=512
+      fs.inotify.max_user_instances=1024
+      fs.inotify.max_user_watches=524288
+  # Reap leaked kind-family containers: cancelled/timed-out CI jobs never run their teardown
+  # (the 2026-09-02 exhaustion's cause). Hourly, ≥3h-old only — a live e2e run is minutes.
+  # The cause-side half (pre-create sweep in the e2e script) rides oracle-fleet#363.
+  - path: /usr/local/bin/kind-janitor.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      # NB: {{.Names}} is docker's Go-template syntax — it passes through tftpl untouched
+      # (Terraform templates only interpret $${ and %%{ sequences).
+      docker ps -a --format '{{.Names}}'$'\t''{{.Status}}' \
+        | grep -E "^(oracle-e2e-|oracle-serve-|kind-registry-)" \
+        | grep -E "Up ([3-9]|[1-9][0-9]+) hours|days|weeks|Exited" \
+        | cut -f1 | xargs -r docker rm -f
+  - path: /etc/cron.d/kind-janitor
+    permissions: '0644'
+    owner: root:root
+    content: |
+      17 * * * * root /usr/local/bin/kind-janitor.sh 2>&1 | logger -t kind-janitor
 runcmd:
   - systemctl enable --now qemu-guest-agent
   - sysctl --system
