@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-207** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-209** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -106,6 +106,22 @@ six OVERSIZE items pointer-ized into
       super admin today, signups disabled).
 
 ## GitOps & platform
+
+- [ ] **FU-207** — **ci-runner-01 destroyed 2026-09-03 (operator: "CI VMs are sacrificial") to
+      free the full pve thin pool — decide recreate vs retire.** `tofu/ci-runner.tf`
+      (`proxmox_virtual_environment_vm.ci_runner`) now drifts: a plan wants to recreate the VM
+      (80 GB thin disk back on the same pool) and the GitHub runner needs re-registering
+      (`scripts/github-runner-bootstrap.sh`). ADR-082's Docker/binfmt build lane is down until
+      then. **Next:** operator decision; if recreate, only after FU-093's pool meter exists and
+      the pool has ≥80 GB headroom. Link: [incident](incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md).
+- [ ] **FU-208** — **runner-image-prepull rollout shape (PAUSED via nodeSelector since
+      2026-09-03 22:12Z).** The DaemonSet's first rollout pulled 4.9 GiB onto three nodes at
+      once, incl. the wk-02 VM, and tipped the thin pool (incident above). Deferred: the safe
+      shape needs FU-093's meter. **Next:** exclude the thin-pool VMs (cp-01, wk-01, wk-02,
+      wk-03) or gate them behind a pool-headroom check, `maxUnavailable: 1`, then remove the pause
+      selector in `argocd/resources/runner-image-prepull/daemonset.yaml`; separately, a
+      sentinel-scoped devbox closure would shrink the image the sentinel needs from 4.9 GiB to
+      hundreds of MB. Relates FU-093, #80 (mirror warm).
 
 - [ ] **FU-206** — **PublicRoute: block operational paths at the edge by default (ADR-123).**
       Every claim serves its backend's `/metrics` + `/healthz` publicly today — the gateway answers
@@ -825,7 +841,9 @@ the block needs pruning, not more headings.
       #977/#978 riding); pve fstrim SCHEDULED (PR#925 daily
       CronJob, first run 78.72%→62.99%). **Next:** the pve thin-pool Data% metric + alert (the
       pool ITSELF is still unmetered — the new belts prove the trim runs, not that it
-      suffices); then a Longhorn `filesystem-trim` RecurringJob (node fstrim cannot reclaim
+      suffices). **FOURTH fill 2026-09-03** ([incident](incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md)):
+      three VMs paused, API down 8 min, no alert — the pool meter is now the blocking act;
+      then a Longhorn `filesystem-trim` RecurringJob (node fstrim cannot reclaim
       inside replica sparse files); ci-runner-01's own fstrim.timer is assumed-not-verified.
       Relates ADR-089, ADR-114, homelab#934.
 

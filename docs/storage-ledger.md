@@ -82,6 +82,11 @@ A ledger that isn't measured is a spreadsheet. Four sightings in six days, all t
    ~15–17 sustained 2h+, no rebuilds or degraded volumes — plain workload IO grinding a near-full
    bulk disk. The alert was, again, the only visibility.
 
+> **Fourth fill, 2026-09-03** — the pool hit 100 % again, this time pausing cp-01, wk-01 and wk-02 on
+> `io-error` (API down ~8 min, no alert); trigger = a 4.9 GiB image pull onto wk-02. Recovery: +1 GB
+> extend, four fstrims, ci-runner-01 destroyed → 64 %. Thin volumes now 408 GB on 353 GB. Record:
+> [incident](incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md); the meter is FU-093's blocking act.
+
 ## The Longhorn side has a SECOND sum — provisioning, not bytes (2026-08-04)
 
 The rule above meters **bytes committed vs bytes available**. Longhorn enforces a different sum
