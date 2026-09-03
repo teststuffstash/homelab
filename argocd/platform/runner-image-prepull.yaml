@@ -1,0 +1,26 @@
+# Pre-pulls the pinned warm-store runner image onto every worker so ARC runners and the iac-sentinel
+# never pay the 4.9 GiB first-pull on a node (429–909 s, 2026-09-03). Raw manifest in
+# argocd/resources/runner-image-prepull/; the tag rides the runner-image.yaml auto-bump. Wave 5: the
+# arc-runners namespace is created at wave 4 — a lower wave would stall a cold app-of-apps bootstrap.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: runner-image-prepull
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5" # with arc-runners.yaml: the arc-runners namespace is created at wave 4 (github-runner-secrets.yaml)
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/runner-image-prepull
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: arc-runners
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
