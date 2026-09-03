@@ -141,6 +141,13 @@ The epic rules:
    an `alert-fp:` body line or a 🚨 title, which flows as ordinary `Follow-ups:` regardless).
    Economic basis: every platform-repo mint eventually costs a corpus-session gate read
    (ADR-110) — the binding resource.
+9. **Binding is dumb; disposition is the container's (ADR-122, 2026-09-03; build = S8).** Any
+   door binds a filing to its origin without judging scope. A tree member is `undispositioned`
+   until the container's checkpoint/closeout rules it `adopted` (scope — counts for completion)
+   or `deferred` (lineage kept, out of scope, movable by the container). An undispositioned
+   member WAKES the checkpoint; it never blocks it — #1315's ~10.5h hold of G-G's assembly and
+   the #1338/#1334 walk re-queues (#1249) are the evidence. Until S8 lands, the interim is the
+   #1249 damper: `agent-fix` without `agent/queued` on a member that must stay inert.
 
 ⚠ **`task/goal`-keyed machinery is GOAL-kind machinery by definition** (operator caution,
 2026-08-19): the scan's goal clauses, budget walks and terminals key on that label, and a rule
@@ -802,6 +809,7 @@ Add the row in the same commit as the superseding decision.
 |---|---|---|---|---|
 | **v1** | 2026-08-05..08 — circles#17→#29, oracle-fleet goal-174 | FU-090 leg (c) + `Base: goal/**` branches; close = "goal met" ruling | machine-ruled "met" 100 min before operator refutation (#17); 19-sprout tree growing 3 generations 34h post-close (goal-174); `Base:` rot + self-queue outliving the goal (the 2026-08-09 census) | ADR-102 |
 | **v1.1** | 2026-08-11..12 — homelab#278 (the FU-165 pilot) | ADR-102: budget-funded container, post-launch bucket, midpoint merge, human verdict terminals | bucket flattens the derivation DAG (2 vs 5 generations); worker-findings inflow ungated (52 edges, all worker/ride-authored); per-event cadence (21 rulings, 46 singleton mints); `Touches:` fence ~7× against small folds; dispatcher-bound throughput (queue 3,550 min vs pod 605, 361 min starvation); no consumer for goal-thread operator directives — all in [`../spikes/goal-lane-v1.1-fu165-pilot.md`](../spikes/goal-lane-v1.1-fu165-pilot.md) | ADR-106 |
+| **v1.4** | design ACCEPTED 2026-09-03 (ADR-122); build = S8, re-headed | filing inert (the bare-tree-member walk retired); one release valve (`agent/queued`, `agent-fix` off the JOIN); one machine block + one parser for the body grammars, `Origin:` included; tree-member disposition `undispositioned / adopted / deferred` written by the container, read by trigger (b) and the completion predicate | evidence: #1338 correctly authored, walk-queued 86s later → ride + false SOLVE row; #1334 walk livelock ×2 (#1249); #1315's undispositioned binding held G-G's assembly ~10.5h; #390 half-minted on #175 with no reader | — |
 | **v1.2** | design ACCEPTED 2026-08-12 (ADR-106); build = Bucket A4/A2 + the next platform Goal | FU-168 (ADR-094 concurrency + ADR-097 fence, numbers decide) · #295 bucket semantics · typed findings disposition · §M10 checkpoints · FU-166(b) · **stack-scoped goals** (operator, 2026-08-12: the tree spans the claim's repos incl. `-iac` — a Goal belongs to a STACK; v1.1 proved cross-repo lineage/budget/ride on ONE agent-runtime child, but sibling repos have no merge doorbell and `-iac` descendants were never exercised, so "done means deployed" stops at the app-repo merge everywhere homelab isn't its own -iac) | — | — |
 
 ### ⚖ BANKED (2026-08-23, operator direction from the G-A day-1 retro — NOT adopted; a v1.3 candidate row): theme-branch decomposition for deploy-to-test stacks
@@ -857,6 +865,9 @@ throughput** — the human's whole contact with a Goal is N assembly reads + one
    filing carries an `Origin: #N` body line so a later container move is lossless; a TYPED
    defer/release disposition the completion walk skips (4 of wave 1's 7 parent moves were
    this missing act — the bucket move was the workaround, per the readout comment).
+   **SUBSUMED by ADR-122 (2026-09-03, v1.4):** `Origin:` becomes a field of the one machine
+   block, and the typed defer/release becomes the container-written disposition state
+   (rule 9 of the lineage contract) — G-G's #1315 was this delta's second sighting.
 4. **Theme formation by the goal-checkpoint** — deterministic nomination (footprint
    prefix-intersection over open sprouts, ≥2 sharing a surface — the existing
    `agents/footprint.sh` predicate, new consumer), the checkpoint judges membership
