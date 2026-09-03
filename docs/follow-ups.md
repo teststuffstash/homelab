@@ -238,7 +238,10 @@ six OVERSIZE items pointer-ized into
       (≈6h stale); the live path is a **push-mirror step in `sync.yaml`** on master push
       (in-cluster runner, seconds-fresh), pull interval = missed-push belt. ⚠ NO build yet — the
       primary-git-location flip has side effects the operator is weighing. Next: repair mirrors +
-      verify a sync; cutover per `argocd/README.md` §Forgejo cutover; loop `_cu` flip on go-ahead.
+      verify a sync; cutover per `argocd/README.md` §Forgejo cutover; loop clone-URL flip on
+      go-ahead. **2026-09-03:** the loop's clones were anonymous-FIRST (2 anon requests each,
+      token-in-URL) — PR#1333 moved every site to preemptive `http.extraHeader` auth; a recurrence
+      with zero anonymous requests is the trigger that makes the push-mirror the next deliverable.
 - [ ] **FU-010** — Infisical↔CNPG uses `sslmode=disable` (node-pg rejects CNPG's self-signed
       cert). Fine pod-to-pod; revisit if Cilium transparent encryption lands.
 - [ ] **FU-012** — **Remote/encrypted tofu state backend** (every root is local, gitignored state).
