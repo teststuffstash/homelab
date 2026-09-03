@@ -6490,3 +6490,29 @@ first live ADR-110 maintenance session before the ADR existed.
   becomes the next deliverable.
 - **Seen, not mine:** codeowner parks #1273/#1289/#1290/#1295 (this session never loaded the
   design-agents corpus → did not execute the ADR-110 gate).
+
+## 2026-09-03 ~09:00–10:00Z — #1336 codeowner read + merge (goal #1302 assembly), and what the merge revealed (operator-attended seat, no corpus by operator call)
+
+- **Read:** the v5 port got its first machine validation on the PR head (the #1315 gate: api 7
+  / consumer 6 resources, guard fires); merge clean; allowlist = the rendered surface; kyverno +
+  gitleaks green. **Sentinel red = path-rule false positive by construction** (App-authored
+  assembly inheriting the seat's ci.yaml hunk from #1331) → hunk lifted off the goal branch
+  (57ec2444), landed on master directly after the merge (14daa01a, with the batched
+  bookkeeping). **Found in the read:** the goal's doc rewrite dropped the zone-phase
+  aggregation deferral while the composition renders zone-phase rulesets PER CLAIM (Cloudflare:
+  one entry point per phase per zone) → live limit = one claim per profile per zone, no
+  api+origins claim on the platform zone (firewall_custom = the ha mTLS entry point) — recorded
+  in the doc + XRD header (cfdb5324), filed **#1338** under #1311; doc's cache phase name fixed.
+  Approved + squash-merged 09:35 (7cde3dd4); #1302 → post-launch by the scan; #1335 queued.
+- **Post-merge, three live findings:** (1) `Composition.spec.compositeTypeRef` is IMMUTABLE —
+  the in-place v1alpha1→v1alpha2 flip wedged the publicroute app (SSA rejected, retrying);
+  un-wedged by `kubectl replace --force` from master (composed resources untouched — they
+  belong to the XR). Gotcha to record in docs/cloudflare.md (or `Replace=true` on the
+  Composition). (2) The apex composite is stuck on the flagged residual: v1alpha2 requires
+  `profile`, the stored XR has none → `spec.profile: Required value`; Ready stays True (tunnel
+  serving). Fix is the claim manifest in oracle-iac → **oracle-iac#530** filed + queued (two
+  lines; landing it IS the live cache+RUM change #1334 measures). (3) `cloudflare-edge-probe`
+  never Ready: its GraphQL query is schema-invalid live (`unknown field "requests"`;
+  `firewallEventsAdaptive` is a flat event list) — the recorded-fixture self-test pinned the
+  author's guess. Verified the working shapes from the jail → **#1340** filed +
+  queued under #1311 with the exact queries. cloudflare-exporter app Degraded until then.
