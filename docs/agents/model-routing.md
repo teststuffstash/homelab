@@ -503,7 +503,10 @@ role to `/route` and the launcher case maps died with them; the era's narrative 
 - **The AUTHORING-vs-CHECKING axis.** `goal-decompose` runs the reasoning tier (now the
   `goal-decompose` class in `model-classes.json`, subscription rail); reviews stay
   sonnet-class — a review is a review, proven twice on live goal-reviews (2026-08-05) and on
-  sleep-tracking#9. Escalate a specific hard goal with `GOAL_MODEL`
+  sleep-tracking#9. **Made a served fact 2026-09-03:** the `review` class carries
+  `chain_head: ["claude/sonnet"]` (the third `chain_head` stand-in after goal-decompose and
+  dispatch) — until then, on chainless stacks the served walk drew `xiaomi/mimo-v2.5 [market]`
+  for reviews and only the FU-188 pin's fallback kept the lane on sonnet. Escalate a specific hard goal with `GOAL_MODEL`
   (`coordinator-session.sh`); never raise a clause's floor.
 - **The assembly reviewer must DIFFER from the decomposing model** (issue-authoring leg (c));
   decorrelation is consumed as the #516 `/route` primitive since PR#803.
