@@ -10,6 +10,9 @@ meant to avoid.)
 
 - **⚑ 2026-09-03 ~18:40Z (the #532 pre-merge support session — TICK-LOG has the arc). Fresh-session
   pickup:**
+  - **Request map v2 PR (applies_to, CTR-CACHE, depends_on, static-site template; after the #410 read)** —
+    merge when the bot approves; then an addendum on oracle-fleet#176 (second template + the two
+    #410 findings: relative /status fetch on the apex, no Cache-Control).
   - ~~Request-map pattern~~ MERGED (PR#1360 → 7747ecfa, CI step included); template pointer posted
     on oracle-fleet#176 (the oracle repo owns its real map). Platform legs left: **FU-206** (ops paths
     blocked at the edge), **S5** (Skip drops the Free managed WAF — live evidence: the managed WAF is
