@@ -113,6 +113,7 @@ def graphql_query(zone_tag, start, end):
                 filter: {datetime_gt: $start, datetime_lt: $end}
                 orderBy: [datetime_DESC]
               ) {
+                count
                 dimensions {
                   datetime
                   clientRequestHTTPHost
@@ -120,8 +121,7 @@ def graphql_query(zone_tag, start, end):
                   cacheStatus
                 }
                 sum {
-                  requests
-                  bytes
+                  edgeResponseBytes
                 }
               }
               firewallEventsAdaptive(
@@ -129,15 +129,10 @@ def graphql_query(zone_tag, start, end):
                 filter: {datetime_gt: $start, datetime_lt: $end}
                 orderBy: [datetime_DESC]
               ) {
-                dimensions {
-                  datetime
-                  clientRequestHTTPHost
-                  action
-                  source
-                }
-                sum {
-                  occurrences
-                }
+                datetime
+                clientRequestHTTPHost
+                action
+                source
               }
             }
           }
@@ -207,7 +202,7 @@ def collect(lines, fetch=None, zone_ids=None):
                 host = dims.get("clientRequestHTTPHost", "unknown")
                 status = str(dims.get("edgeResponseStatus", "0"))
                 cache = dims.get("cacheStatus", "unknown")
-                count = row.get("sum", {}).get("requests", 0)
+                count = row.get("count", 0)
                 key = (host, status)
                 host_req[key] = host_req.get(key, 0) + count
                 if host not in host_cache:
@@ -233,14 +228,13 @@ def collect(lines, fetch=None, zone_ids=None):
                 }, ratio))
 
             # Aggregate firewall events by host + action
+            # firewallEventsAdaptive returns flat event rows (one row per event).
             host_fw = {}  # (host, action) -> count
             for row in firewall_rows:
-                dims = row.get("dimensions", {})
-                host = dims.get("clientRequestHTTPHost", "unknown")
-                action = dims.get("action", "unknown")
-                count = row.get("sum", {}).get("occurrences", 0)
+                host = row.get("clientRequestHTTPHost", "unknown")
+                action = row.get("action", "unknown")
                 key = (host, action)
-                host_fw[key] = host_fw.get(key, 0) + count
+                host_fw[key] = host_fw.get(key, 0) + 1
 
             for (host, action), count in sorted(host_fw.items()):
                 lines.append(metric("cloudflare_edge_rate_limit_events_total", {
@@ -325,42 +319,54 @@ _TODAY_FIREWALL = []
 # FLIPPED: traffic on the product zone with cache misses and a rate-limit event.
 _FLIPPED_REQUESTS = [
     {
+        "count": 42,
         "dimensions": {
             "datetime": "2026-09-02T18:50:00Z",
             "clientRequestHTTPHost": "mcp.minutark.ee",
             "edgeResponseStatus": 200,
             "cacheStatus": "miss",
         },
-        "sum": {"requests": 42, "bytes": 16384},
+        "sum": {"edgeResponseBytes": 16384},
     },
     {
+        "count": 5,
         "dimensions": {
             "datetime": "2026-09-02T18:50:00Z",
             "clientRequestHTTPHost": "mcp.minutark.ee",
             "edgeResponseStatus": 429,
             "cacheStatus": "unknown",
         },
-        "sum": {"requests": 5, "bytes": 512},
+        "sum": {"edgeResponseBytes": 512},
     },
     {
+        "count": 100,
         "dimensions": {
             "datetime": "2026-09-02T18:50:00Z",
             "clientRequestHTTPHost": "minutark.ee",
             "edgeResponseStatus": 200,
             "cacheStatus": "hit",
         },
-        "sum": {"requests": 100, "bytes": 40960},
+        "sum": {"edgeResponseBytes": 40960},
     },
 ]
 _FLIPPED_FIREWALL = [
     {
-        "dimensions": {
-            "datetime": "2026-09-02T18:50:00Z",
-            "clientRequestHTTPHost": "mcp.minutark.ee",
-            "action": "rate_limit",
-            "source": "rateLimiter",
-        },
-        "sum": {"occurrences": 3},
+        "datetime": "2026-09-02T18:50:00Z",
+        "clientRequestHTTPHost": "mcp.minutark.ee",
+        "action": "rate_limit",
+        "source": "rateLimiter",
+    },
+    {
+        "datetime": "2026-09-02T18:50:00Z",
+        "clientRequestHTTPHost": "mcp.minutark.ee",
+        "action": "rate_limit",
+        "source": "rateLimiter",
+    },
+    {
+        "datetime": "2026-09-02T18:50:00Z",
+        "clientRequestHTTPHost": "mcp.minutark.ee",
+        "action": "rate_limit",
+        "source": "rateLimiter",
     },
 ]
 
