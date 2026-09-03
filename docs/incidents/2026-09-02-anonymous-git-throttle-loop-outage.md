@@ -64,3 +64,43 @@ wrong was merged. Secondary casualty: fleet#345 sat in the C4/C5 silent-stall li
   `agent-session.sh`'s context clones remain helper-covered in-pod.
 - My PR#351 comment's wrong claim is corrected on-thread (asks-are-claims applies to the seat's
   own assertions — the design-agents-G1 class, self-caught late).
+
+## Recurrence 2026-09-03 — and this time AUTHENTICATED clones are throttled too
+
+**Timeline (UTC):** ~07:25 first exit-128s (review-perstack, review, switchboard, ledger-reflex,
+update-pr-branch-cron, coordinate-perstack); by 08:00 every workflow that clones master fails
+(argo, 3h window: 07h 7 failed / 38 ok → 08h 10 failed / 0 ok). Seat noticed via a PR re-review
+that never came (#1329, head green at 07:40), then `argo list -A`.
+
+**Evidence (seat probes, 07:5x–08:2x):**
+- In-cluster pod, the loop's exact flow (`agentstack-loop` SA → broker `/loop-git-token` →
+  `x-access-token:` clone): broker serves (TokenReview ok, 390-char token), clone fails —
+  `fatal: remote error: GitHub is temporarily limiting some unauthenticated downloads to protect
+  the stability of the platform. Please retry later or authenticate.`
+- Jail, same WAN IP, fine-grained PAT (credential helper AND `x-access-token:` URL form): the
+  SAME message. Anonymous `ls-remote` of `torvalds/linux`: same. → **IP-wide, and the message's
+  "unauthenticated" is misleading: authenticated upload-pack is refused too.** (Yesterday's
+  "what held" — authenticated clones kept succeeding — does NOT hold today.)
+- `api.github.com` 200, `github.com` 200, `gh` API calls fine (core 5000/5000); **the API tarball
+  path works, authenticated AND anonymous** (`GET repos/…/tarball/master` → 302 codeload → 200,
+  3.4 MB). Only git's `upload-pack` is throttled.
+- Not our token, not the broker, not GitHub status (All Systems Operational).
+
+**Consequences:** the loop is fully down (no coordinate/review/reflex can clone); the bot
+reviewer cannot re-review → the PR lane is closed for the duration; only the seat's direct lane
+and the API work. #1329 (the #1315 gate) sits at a stale CHANGES_REQUESTED with CI green.
+
+**Mitigation options (operator decision — none executed by the seat):**
+1. Wait for decay. Yesterday it held ~4h while the loop kept retrying every 30 min.
+2. Suspend the clone-heavy CronWorkflows (`argo cron suspend`) for a cooldown so the throttle
+   can decay, then resume — reversible, direct-lane-shaped.
+3. Replace the `git clone --depth 1 -b master` idiom with the API tarball (`gh api
+   repos/…/tarball/master | tar xz`) — proven to bypass the throttle today, but the idiom
+   lives in three homes (wf manifests, launcher PREP, composition — root cause 2 of this
+   record) and FU-007's push-mirror is the designed direction; a fourth mechanism is a design
+   ruling, not a quickfix.
+
+**Open question:** what trips it. ~700 authenticated clones/day is the steady state that was
+fine until 2026-09-02; the two trips are ~09:15 (09-02) and ~07:25 (09-03). The seat's four
+`workflow_dispatch` CI runs + three PR runs in 06:45–07:20 precede today's trip, but seven
+`actions/checkout`s are noise against the loop's volume — unproven either way.
