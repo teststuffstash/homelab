@@ -32,6 +32,7 @@ MAP=(
   "sentinel-smoke:^(policy/iac/|scripts/iac-sentinel\.sh|devbox\.(json|lock)$)"
   "prometheus-rules-lint:$PROM_PATHS"
   "exporter-self-test:^argocd/resources/github-exporter/"
+  "edge-probe-self-test:^argocd/resources/cloudflare-exporter/"
   "spend-probe-self-test:^argocd/resources/cloudflare-exporter/"
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"

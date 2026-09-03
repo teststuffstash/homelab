@@ -167,6 +167,14 @@ jobs:
       - name: cloudflare spend-probe self-test (devbox run spend-probe-self-test)
         run: devbox run spend-probe-self-test
 
+      # Goal #1302 (#1306 → PR #1320): the edge-probe's self-test — the committed
+      # CloudflareEdgeProbeBlind expr replayed against flipped/blind fixtures + the retired
+      # CloudflareEdge5xx asserted absent — existed and NOTHING executed it (the assertion-suite-
+      # never-executed class, fourth instance; #1315's widened scope). Same shape as the
+      # spend-probe row above; 0.3s, no network.
+      - name: cloudflare edge-probe self-test (devbox run edge-probe-self-test)
+        run: devbox run edge-probe-self-test
+
       # The #158 rail-degrade contract (leg 1: a subscription-rail dispatch NEVER waits on
       # OpenRouter key state) pinned as an executed replay — launcher blocks extracted from
       # agent-session.sh by sentinel at run time, so the pin cannot drift from the code (#166).
