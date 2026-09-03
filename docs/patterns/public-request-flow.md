@@ -85,7 +85,7 @@ a platform-map edit that changes the picture reds CI until the example is regene
 |---|---|---|
 | S1 | **Preflight is not edge-terminable on Free**: the Ruleset Engine cannot synthesize a 2xx, so an allowed `OPTIONS` reaches the origin; the oracle gateway has no `OPTIONS` handler | `CTR-OPTIONS` — GAP in the example |
 | S2 | **Public-origin mode is deployment-global**: one Deployment serves the LAN route and the tunnel; a boolean that accepts any Origin drops the DNS-rebinding default-deny on the LAN too | `CTR-ORIGIN` — fulfilled in name; the fix is one allow-list (the claim's `origins` mirrored into the chart) instead of a mode |
-| S3 | **Three rejection grammars on one URL**: edge 429 = Cloudflare envelope; app 429 = `{"error"}` + `Retry-After: 60` (the edge window is 10 s); body-cap/timeout = HTTP 200 JSON-RPC frames | `CTR-ERRORS` — GAP in the example |
+| S3 | **Three rejection grammars on one URL**: edge 429 = Cloudflare envelope + `Retry-After: 10` (verified 2026-09-03); app 429 = `{"error"}` + `Retry-After: 60`; body-cap/timeout = HTTP 200 JSON-RPC frames — two `Retry-After` values from one host | `CTR-ERRORS` — GAP in the example |
 | S4 | **DDoS L7 is outside the never-challenge Skip**: `ddos_l7` mitigations can be challenge-shaped; whether Free allows an action override is unverified | `PRF-DDOS` — ☐ verify (cloudflare.md completion table) |
 | S5 | **The Skip drops the Free managed WAF**: listing `http_request_firewall_managed` in the Skip's phases removes block-shaped WAF rules for the api host, not just challenges | `PRF-WAF` — ☐ decide (cloudflare.md completion table) |
 | S6 | **Operational paths are public** until the composition blocks them (ADR-123) | `PRF-CUSTOM` — ☐ FU-206 |
