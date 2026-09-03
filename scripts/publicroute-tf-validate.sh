@@ -64,8 +64,8 @@ nix_ver="$(basename "$prov_dir")"
 # ── functions manifest for render: same images/tags as the cluster, pulled via the LAN mirror ──
 # xpkg.crossplane.io fronts ghcr.io/crossplane-contrib; the mirror is a pull-through of ghcr, so
 # rewriting the host is all the redirection there is (kind-ci REGISTRY_MIRROR_GHCR pattern).
-yq "(.spec.package) |= sub(\"^xpkg.crossplane.io/\", \"${FN_REGISTRY}/\")
-    | select(.kind == \"Function\")
+yq "select(.kind == \"Function\")
+    | .spec.package |= sub(\"^xpkg.crossplane.io/\", \"${FN_REGISTRY}/\")
     | .metadata.annotations[\"render.crossplane.io/runtime-docker-pull-policy\"] = \"IfNotPresent\"" \
   "$FUNCTIONS" > "$work/functions.yaml"
 
