@@ -1,0 +1,473 @@
+# Behaviour fixture for CloudflareEdgeProbeBlind (#1306) — the edge observability belt, third
+# fixture pair in this directory (spend-belt.promtool-* was the first, #334; exporter-down.promtool-*
+# was the second, #351).
+#
+#   devbox run -- promtool test rules argocd/resources/cloudflare-exporter/edge-belt.promtool-test
+#
+# Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+# CI-enforced since 2026-08-11: .github/workflows/ci.yaml runs `devbox run prometheus-rules-lint`,
+# which runs `promtool test rules` over every *.promtool-test under argocd/.
+#
+# CLOCK: promtool's test clock starts at 0. Range selectors are LEFT-OPEN in Prometheus 3.x, so
+# `[10m]` at t sees (t-10m, t] — a last real sample at T stays in range through T+9m at a 1m
+# interval and is gone at T+10m. Every boundary claim below is pinned by a promql_expr_test rather
+# than counted in a comment.
+#
+# ✅ WHAT THIS FILE RESOLVES: CloudflareEdgeProbeBlind sits on a gauge scraped from a
+# `replicas: 1` Deployment (cloudflare-edge-probe), so it carries BOTH halves of the #288 defect:
+# `pod`/`instance` on the series gives the alert a churning identity, and a single replica means
+# the vector empties outright while the new pod starts. A roll therefore restarts a `for:` window
+# measuring a condition that never stopped being true — a blind probe stays blind.
+# Fixed with the #288 two-part shape, `min by (zone)` + `min_over_time([10m])`.
+#
+# TWO things here are NOT a mechanical port of #328, and each is a test rather than a comment:
+#   (i)   DIRECTION. The alert is LOW-is-bad (`probe_ok == 0`), so it bridges with `min_over_time`.
+#         The mechanical `max` port reads the healthiest sample in the window and delays a real
+#         blindness by the whole range.
+#   (ii)  THE absent() ARM. CloudflareEdgeProbeBlind's second arm produces a LABEL-LESS alert
+#         instance, so an unbridged roll does not merely gap the alert — it swaps `{zone=…}` for
+#         `{}` and back, which is a window restart with no change in the underlying condition.
+#         Bridging the arm (`absent(min_over_time(…[10m]))`) is what removes it.
+#
+# NOT covered here: the edge-probe's data-series alerts (edge-5xx, rate-limit threshold) — those
+# are follow-ups, not blockers for this round (#1306 scope).
+rule_files:
+  - edge-belt.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1/7 — ONE edge-probe roll, both zones ────────────────────────────────────────────────────
+  # The roll shape #288 measured (70-120s of vector-empty; a 2m hole here, with an explicit `stale`
+  # marker). Every gauge the pod exports gaps at the same instant, because it is one pod.
+  # One blind zone and one healthy decoy, so the test also proves `by (zone)` selects the RIGHT
+  # zone instead of collapsing the two into one alert.
+  - interval: 1m
+    name: "an edge-probe roll no longer re-clocks the blind alert's `for: 30m`"
+    input_series:
+      # minutark.ee is blind (probe_ok=0), teststuff.net is healthy (probe_ok=1)
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7946494648-mp24c",service="cloudflare-edge-probe"}'
+        values: "0+0x2 stale"
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.185:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-6b8d5c9f42-q7x2n",service="cloudflare-edge-probe"}'
+        values: "_x5 0+0x120"
+      - series: 'cloudflare_edge_probe_ok{zone="teststuff.net",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7946494648-mp24c",service="cloudflare-edge-probe"}'
+        values: "1+0x2 stale"
+      - series: 'cloudflare_edge_probe_ok{zone="teststuff.net",container="probe",endpoint="http-metrics",instance="10.244.2.185:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-6b8d5c9f42-q7x2n",service="cloudflare-edge-probe"}'
+        values: "_x5 1+0x120"
+    promql_expr_test:
+      # mid-hole (t=4m), the identity swap the bridge removes: the bare arm says "the probe is
+      # gone" and would start a label-less alert instance…
+      - expr: absent(cloudflare_edge_probe_ok)
+        eval_time: 4m
+        exp_samples:
+          - labels: "{}"
+            value: 1
+      # …while the bridged arm still sees the outgoing pod's samples and stays quiet
+      - expr: absent(min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 4m
+        exp_samples: []
+    alert_rule_test:
+      # `for: 30m` is honoured — the bridge does not make the alert fire early
+      - eval_time: 29m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts: []
+      # on time at 30m, straight through the hole, and on the blind zone only
+      - eval_time: 31m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              zone: minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+              description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+      # a healthy zone never trips the blind alert
+      - eval_time: 31m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              zone: minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+              description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+      # THE WITNESS: the pre-#334 form is silent when the shipped alert pages…
+      - eval_time: 31m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts: []
+      # …and pages only 5m after the NEW pod's first sample (5m + 30m), under a per-pod identity
+      # that no longer matches the one that was pending. 5 minutes lost to a 2-minute roll, on a
+      # window that is 30 minutes long.
+      - eval_time: 36m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              zone: minutark.ee
+              container: probe
+              endpoint: http-metrics
+              instance: 10.244.2.185:9506
+              job: cloudflare-edge-probe
+              namespace: monitoring
+              pod: cloudflare-edge-probe-6b8d5c9f42-q7x2n
+              service: cloudflare-edge-probe
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+
+  # ── 2/7 — THE DIRECTION ──────────────────────────────────────────────────────────────────────
+  # `probe_ok == 0` is LOW-is-bad, so the alert-preserving bridge is `min_over_time`: the WORST
+  # sample in the window wins, and a probe failure is seen the moment it is scraped. The mechanical
+  # `max_over_time` port keeps reporting the last healthy `1` for the whole range, so it cannot
+  # even start its `for: 30m` until the range has rolled over.
+  - interval: 1m
+    name: "the bridge direction matters: `min_over_time` sees the 0 at 21m, `max_over_time` at 30m"
+    input_series:
+      # healthy until t=20m, then the probe goes blind
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7946494648-mp24c",service="cloudflare-edge-probe"}'
+        values: "1+0x20 0+0x100"
+    promql_expr_test:
+      # shipped: the 0 at t=21m is in every window from t=21m on, so the condition is true at once
+      - expr: min by (zone) (min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 21m
+        exp_samples:
+          - labels: '{zone="minutark.ee"}'
+            value: 0
+      # the mechanical port: the last `1` (t=20m) is inside (19m, 29m]…
+      - expr: max by (zone) (max_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 29m
+        exp_samples:
+          - labels: '{zone="minutark.ee"}'
+            value: 1
+      # …and out of (20m, 30m], which is the first moment it can even start its window
+      - expr: max by (zone) (max_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 30m
+        exp_samples:
+          - labels: '{zone="minutark.ee"}'
+            value: 0
+    alert_rule_test:
+      # `for: 30m`: the condition is true from 21m, so the shipped alert fires at 51m
+      - eval_time: 50m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts: []
+      - eval_time: 52m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              zone: minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+              description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+      # the pre-#334 form also has `for: 30m`, so it fires at the same minute
+      - eval_time: 52m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              zone: minutark.ee
+              container: probe
+              endpoint: http-metrics
+              instance: 10.244.2.180:9506
+              job: cloudflare-edge-probe
+              namespace: monitoring
+              pod: cloudflare-edge-probe-7946494648-mp24c
+              service: cloudflare-edge-probe
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+
+  # ── 3/7 — THE absent() ARM TRANSITION ────────────────────────────────────────────────────────
+  # Both zones blind, probe_ok == 0 on each, CloudflareEdgeProbeBlind firing for a real cause.
+  # Now roll the probe pod underneath that. The pre-#334 expr does something worse than gap: the
+  # `== 0` arm empties AND the `absent()` arm turns true, so the alert trades two `{zone=…}`
+  # instances for one label-less `{}` instance and back again — an identity change with no change
+  # in the condition, which is a `for: 30m` restart by another route.
+  - interval: 1m
+    name: "a roll no longer flips CloudflareEdgeProbeBlind between per-zone and absent() identity"
+    input_series:
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7946494648-mp24c",service="cloudflare-edge-probe"}'
+        values: "0+0x20 stale"
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.185:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-6b8d5c9f42-q7x2n",service="cloudflare-edge-probe"}'
+        values: "_x24 0+0x120"
+      - series: 'cloudflare_edge_probe_ok{zone="teststuff.net",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7946494648-mp24c",service="cloudflare-edge-probe"}'
+        values: "0+0x20 stale"
+      - series: 'cloudflare_edge_probe_ok{zone="teststuff.net",container="probe",endpoint="http-metrics",instance="10.244.2.185:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-6b8d5c9f42-q7x2n",service="cloudflare-edge-probe"}'
+        values: "_x24 0+0x120"
+    promql_expr_test:
+      # mid-hole (t=22m): the pre-#334 arm pair swaps identity — the zone arm has nothing…
+      - expr: cloudflare_edge_probe_ok == 0
+        eval_time: 22m
+        exp_samples: []
+      # …and the absent arm supplies a label-less instance in its place
+      - expr: absent(cloudflare_edge_probe_ok)
+        eval_time: 22m
+        exp_samples:
+          - labels: "{}"
+            value: 1
+      # the shipped pair: the zone arm never lets go, so the absent arm never gets a turn
+      - expr: min by (zone) (min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 22m
+        exp_samples:
+          - labels: '{zone="minutark.ee"}'
+            value: 0
+          - labels: '{zone="teststuff.net"}'
+            value: 0
+      - expr: absent(min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 22m
+        exp_samples: []
+    alert_rule_test:
+      # `for: 30m` honoured…
+      - eval_time: 29m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts: []
+      # …and paged on time at 30m, per zone, straight through the roll
+      - eval_time: 31m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              zone: minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+              description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              zone: teststuff.net
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone teststuff.net"
+              description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+      # THE WITNESS: silent at the same moment — its two zone windows died with the old pod and the
+      # 3-minute `{}` instance the absent() arm raised in their place never reached `for: 30m`
+      - eval_time: 31m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts: []
+      - eval_time: 53m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts: []
+      # …and it re-pages 30m after the new pod's first sample (24m + 30m), 24 minutes late
+      - eval_time: 55m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              zone: minutark.ee
+              container: probe
+              endpoint: http-metrics
+              instance: 10.244.2.185:9506
+              job: cloudflare-edge-probe
+              namespace: monitoring
+              pod: cloudflare-edge-probe-6b8d5c9f42-q7x2n
+              service: cloudflare-edge-probe
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+          - exp_labels:
+              severity: warning
+              zone: teststuff.net
+              container: probe
+              endpoint: http-metrics
+              instance: 10.244.2.185:9506
+              job: cloudflare-edge-probe
+              namespace: monitoring
+              pod: cloudflare-edge-probe-6b8d5c9f42-q7x2n
+              service: cloudflare-edge-probe
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone teststuff.net"
+
+  # ── 4/7 — the probe VANISHES (FU-150) ────────────────────────────────────────────────────────
+  # Pod deleted, ESO secret pulled, Deployment scaled to zero. Absence is still the alert — but
+  # the bridge holds the last reading for the range first, so the label-less instance starts 10
+  # minutes later than it used to and the page lands at ~50m instead of ~41m.
+  - interval: 1m
+    name: "a probe that disappears still fires through absent(), 10m later than the unbridged arm"
+    input_series:
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7946494648-mp24c",service="cloudflare-edge-probe"}'
+        values: "1+0x10 stale"
+    promql_expr_test:
+      # the last samples (t=10m) are inside (9m, 19m], so the zone arm still reads "healthy"…
+      - expr: absent(min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 19m
+        exp_samples: []
+      # …and at (10m, 20m] the range is empty, which is where the absent arm takes over
+      - expr: absent(min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 20m
+        exp_samples:
+          - labels: "{}"
+            value: 1
+    alert_rule_test:
+      # the unbridged witness starts its window the moment the target goes stale (t=11m) and pages
+      # at 41m
+      - eval_time: 40m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts: []
+      - eval_time: 42m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind"
+      # the shipped alert waits out the range first: 20m + `for: 30m` = 50m. The price, in full.
+      - eval_time: 49m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts: []
+      # …and it does fire — label-less, with the summary's `{{ if $labels.zone }}` clause correctly
+      # rendering nothing, because there is no zone left to name
+      - eval_time: 51m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind"
+              description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+
+  # ── 5/7 — THE CEILING ────────────────────────────────────────────────────────────────────────
+  # [10m] is a bridge, not immunity. A hole longer than the range empties the vector for real and
+  # costs the whole `for: 30m` again.
+  - interval: 1m
+    name: a 13m hole DOES reset the window — the accepted limit of [10m]
+    input_series:
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7946494648-mp24c",service="cloudflare-edge-probe"}'
+        values: "0+0x10 stale"
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.185:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-6b8d5c9f42-q7x2n",service="cloudflare-edge-probe"}'
+        values: "_x24 0+0x120"
+    promql_expr_test:
+      # nine gapped scrapes survive: the last real samples (t=10m) are inside (9m, 19m]
+      - expr: min by (zone) (min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 19m
+        exp_samples:
+          - labels: '{zone="minutark.ee"}'
+            value: 0
+      # the tenth does not — and the absent arm takes over in the same evaluation
+      - expr: min by (zone) (min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 20m
+        exp_samples: []
+      - expr: absent(min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 20m
+        exp_samples:
+          - labels: "{}"
+            value: 1
+    alert_rule_test:
+      # without the hole this pages at 30m; the 19 minutes it had accumulated are gone
+      - eval_time: 30m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts: []
+      # …and it re-pages 30m after the new pod's first sample (24m + 30m)
+      - eval_time: 53m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts: []
+      - eval_time: 55m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              zone: minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+              description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+      # the witness lands in the same minute — at the ceiling the two forms are indistinguishable
+      - eval_time: 55m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              zone: minutark.ee
+              container: probe
+              endpoint: http-metrics
+              instance: 10.244.2.185:9506
+              job: cloudflare-edge-probe
+              namespace: monitoring
+              pod: cloudflare-edge-probe-6b8d5c9f42-q7x2n
+              service: cloudflare-edge-probe
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+
+  # ── 6/7 — THE PRICE OF DROPPING IDENTITY ─────────────────────────────────────────────────────
+  # `min` on the LOW-is-bad `probe_ok` is alert-preserving — the BAD replica always wins the
+  # aggregation and the belt still fires. Two real costs remain: the alert can no longer name the
+  # pod, and one stuck replica pages for the whole zone.
+  # UNREACHABLE today: the Deployment is `replicas: 1`. If ever scaled out, this is the test to
+  # revisit first.
+  - interval: 1m
+    name: "accepted cost: the bad replica wins and the pod name is gone (unreachable at replicas: 1)"
+    input_series:
+      # a hypothetical second replica: one probe stuck blind, one perfectly healthy, same zone
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7946494648-mp24c",service="cloudflare-edge-probe"}'
+        values: "0+0x120"
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.185:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-6b8d5c9f42-q7x2n",service="cloudflare-edge-probe"}'
+        values: "1+0x120"
+    alert_rule_test:
+      # LOW-is-bad: `min` keeps the stuck replica's 0, so the belt fires — no masking
+      - eval_time: 31m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              zone: minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+              description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+      # what is actually lost: the pre-#334 form named the offending pod, and only that pod
+      - eval_time: 31m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              zone: minutark.ee
+              container: probe
+              endpoint: http-metrics
+              instance: 10.244.2.180:9506
+              job: cloudflare-edge-probe
+              namespace: monitoring
+              pod: cloudflare-edge-probe-7946494648-mp24c
+              service: cloudflare-edge-probe
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+
+  # ── 7/7 — the SYMMETRY of the range ──────────────────────────────────────────────────────────
+  # For up to a range window after the probe recovers, `min_over_time` still reports the blind
+  # sample, so the alert clears late. Bounded and exact: the last `0` (t=40m) leaves the range at
+  # t=50m.
+  - interval: 1m
+    name: "accepted cost: a probe that recovers keeps reading blind for ≤10m"
+    input_series:
+      - series: 'cloudflare_edge_probe_ok{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7946494648-mp24c",service="cloudflare-edge-probe"}'
+        values: "0+0x40 1+0x100"
+    promql_expr_test:
+      - expr: min by (zone) (min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 49m
+        exp_samples:
+          - labels: '{zone="minutark.ee"}'
+            value: 0
+      - expr: min by (zone) (min_over_time(cloudflare_edge_probe_ok[10m]))
+        eval_time: 50m
+        exp_samples:
+          - labels: '{zone="minutark.ee"}'
+            value: 1
+    alert_rule_test:
+      # the probe recovers at t=41m; the pre-#334 form resolves in that same evaluation…
+      - eval_time: 45m
+        alertname: CloudflareEdgeProbeBlindPre334
+        exp_alerts: []
+      # …while the shipped alert holds the low-water reading until the range rolls over
+      - eval_time: 45m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              zone: minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge probe is blind on zone minutark.ee"
+              description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+      # …bounded by the range, not open-ended
+      - eval_time: 51m
+        alertname: CloudflareEdgeProbeBlind
+        exp_alerts: []

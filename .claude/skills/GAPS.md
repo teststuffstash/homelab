@@ -51,6 +51,15 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       2026-08-30 (operator catch: "still multiple rounds escalate to me doing a manual click
       instead of a simple grep/curl"). **promoted→** the skill's output contract gains
       asks-are-claims, same commit; the fleet half is the ground-rules bullet (PR#1044).
+      **RESIGHT 2026-09-02 (operator catch — first in the MACHINE lane, wiring ruled correct):**
+      the fleet half's clause was delivered but did not take on a cluster ride: an item-scoped
+      coordinator (oracle, judging its issue's deploy leg) filed homelab#1319 under the ADR-119
+      intake contract — whose rule 4 carries asks-are-claims verbatim, in the pod's own master
+      clone — and still asked the operator to check the homelab-deploy install list, refuted by
+      one /apps read (install intact; transient blip, next run green). A prose clause at rule
+      4's tail of a ~1050-line brief is the suspect, and the "(ground-rules)" pointer names a
+      file only worker rides receive. Belt candidates: a retro seed (§B2) on brief-clause
+      compliance, or a deterministic declared-record check at the filing door (the #1207 shape).
 - [ ] design-agents-G4 — the seat proposed a PER-INSTANCE hand fix ("I can wire #326's two
       blockedBy edges and the task/build labels") where the operator wanted the CONSUMER
       SURFACE fixed: the consumer card gains the rules the instance tripped, and a deterministic
