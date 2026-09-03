@@ -1,0 +1,18 @@
+# publicroute-tf-validate NEGATIVE fixture (v1alpha1) — must FAIL to render: a namespace
+# claiming a hostname outside its delegated subtree hits the Composition's `fail` guard, which
+# IS the privilege boundary (docs/cloudflare.md). The `.must-fail.yaml` suffix is what the gate
+# keys on; the v1alpha2 twin covers the same guard once the XRD moves.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: XPublicRoute
+metadata:
+  name: escape-xr
+spec:
+  claimRef:
+    apiVersion: platform.teststuff.net/v1alpha1
+    kind: PublicRoute
+    name: escape
+    namespace: sleep-tracking
+  hostname: ha.teststuff.net
+  backend:
+    service: whatever.sleep-tracking.svc.cluster.local.
+    port: 8080

@@ -1,0 +1,27 @@
+# publicroute-tf-validate fixture — the api profile on a PRODUCT zone with every optional field
+# set (rate limit + CORS origins), so all api-branch resources render: rate-limit ruleset,
+# no-challenge Skip, CORS preflight block, CORS headers rewrite. Mirrors the second document in
+# argocd/resources/publicroute/example-claim.yaml.example; keep the two in step.
+apiVersion: platform.teststuff.net/v1alpha2
+kind: XPublicRoute
+metadata:
+  name: mcp-xr
+spec:
+  claimRef:
+    apiVersion: platform.teststuff.net/v1alpha2
+    kind: PublicRoute
+    name: mcp
+    namespace: oracle-fleet
+  profile: api
+  zone: minutark.ee
+  hostname: mcp.minutark.ee
+  backend:
+    service: oracle-gateway.oracle-fleet.svc.cluster.local.
+    port: 8080
+    protocol: https
+    originServerName: mcp.minutark.ee
+  rateLimit:
+    threshold: 1200
+  origins:
+    - https://app.minutark.ee
+    - https://dashboard.minutark.ee

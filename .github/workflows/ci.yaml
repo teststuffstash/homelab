@@ -63,18 +63,20 @@ jobs:
         run: |
           devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
             --paginate --jq '.[].filename' > /tmp/ci-changed-files
-          prom=false; clause=false
+          prom=false; clause=false; publicroute=false
           # ONE HOME (#518, the pin-only-lint pattern): the trigger regexes live in
           # scripts/diff-ci.sh (single-line, single-quoted, eval-safe by contract there) —
           # eval-extracted here so the local pre-flight and CI's skip map cannot drift.
           # Rationale for each set is documented at the definitions.
           eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"
           eval "$(grep -m1 '^CLAUSE_PATHS=' scripts/diff-ci.sh)"
-          [ -n "$PROM_PATHS" ] && [ -n "$CLAUSE_PATHS" ] || { echo "FATAL: could not extract PROM_PATHS/CLAUSE_PATHS from scripts/diff-ci.sh — skip map unavailable, failing closed"; exit 1; }
+          eval "$(grep -m1 '^PUBLICROUTE_PATHS=' scripts/diff-ci.sh)"
+          [ -n "$PROM_PATHS" ] && [ -n "$CLAUSE_PATHS" ] && [ -n "$PUBLICROUTE_PATHS" ] || { echo "FATAL: could not extract PROM_PATHS/CLAUSE_PATHS/PUBLICROUTE_PATHS from scripts/diff-ci.sh — skip map unavailable, failing closed"; exit 1; }
           grep -qE "$PROM_PATHS" /tmp/ci-changed-files && prom=true
           grep -qE "$CLAUSE_PATHS" /tmp/ci-changed-files && clause=true
-          { echo "prom=$prom"; echo "clause=$clause"; } >> "$GITHUB_OUTPUT"
-          echo "skip map: prometheus-rules-lint=$prom clause-replay=$clause ($(grep -c . /tmp/ci-changed-files) changed file(s))"
+          grep -qE "$PUBLICROUTE_PATHS" /tmp/ci-changed-files && publicroute=true
+          { echo "prom=$prom"; echo "clause=$clause"; echo "publicroute=$publicroute"; } >> "$GITHUB_OUTPUT"
+          echo "skip map: prometheus-rules-lint=$prom clause-replay=$clause publicroute-tf-validate=$publicroute ($(grep -c . /tmp/ci-changed-files) changed file(s))"
 
       # FU-158 (operator ruling 2026-08-11: promtool over more per-file self-tests): every
       # PrometheusRule's exprs must parse — kubeconform SKIPS the kind, so this is the only
@@ -126,6 +128,25 @@ jobs:
       # says so loudly; the script fails if it ever validates nothing.
       - name: Schema-validate the raw manifests ArgoCD applies (devbox run manifest-lint)
         run: devbox run manifest-lint
+
+      # #1315: the PublicRoute Composition TEMPLATES Terraform that provider-terraform applies
+      # against the live Cloudflare zones — manifest-lint validates the Composition CR and never
+      # reads the module string inside, so PR #1312 shipped schema-invalid rulesets twice,
+      # CI-green both times (and the merged round still fails validate for every profile). This
+      # renders each fixture XR through the real function pipeline and `tofu validate`s the
+      # rendered module against the ProviderConfig's pinned provider (nix-packaged, WAN-free —
+      # the FU-130 class; images via the LAN mirrors, docker from the dind sidecar). Skip-mapped
+      # like the heavies: only when the Composition, its pins, or the gate itself changed.
+      - name: PublicRoute Composition renders valid Terraform (devbox run publicroute-tf-validate)
+        if: github.event_name != 'pull_request' || steps.diff.outputs.publicroute == 'true'
+        run: devbox run publicroute-tf-validate
+
+      # The loop's own CronWorkflows/WorkflowTemplates (agents/coordinator/, ArgoCD-synced from
+      # master) sit outside manifest-lint's glob and kubeconform skips the kinds anyway
+      # (docs/agents/iac-lane.md §tier-1 residue). `argo lint --offline` resolves template
+      # references, not just schema — the oracle-iac ci.sh shape. 0.3s, no downloads.
+      - name: Argo Workflow manifests lint (devbox run argo-lint)
+        run: devbox run argo-lint
 
       # homelab#1134: the sentinel's engines (kyverno + gitleaks) are a REQUIRED status on
       # master and goal/**, run cluster-side FROM master — so nothing here exercised them, and a

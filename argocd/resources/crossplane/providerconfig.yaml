@@ -2,6 +2,13 @@
 # (reads GARAGE_ENDPOINT/GARAGE_TOKEN from the pod env, set by runtimeconfig.yaml) and a
 # kubernetes backend for state (provider-terraform doesn't persist state itself — each
 # workspace's state is a Secret in crossplane-system).
+#
+# Provider versions are PINNED (#1315, 2026-09-03): unpinned meant "latest at init", i.e. a
+# Workspace's provider could change under it on any reconcile, and nothing in CI could validate
+# against "whatever resolves today". The cloudflare pin is read by scripts/publicroute-tf-validate.sh
+# and must equal the nix-packaged provider in devbox.json (the gate reds on a mismatch) — bump
+# the two together. Note the engine is Terraform 1.5.5 (embedded in provider-terraform v1.1.1),
+# so providers are pulled from registry.terraform.io by the reconciler.
 apiVersion: tf.upbound.io/v1beta1
 kind: ProviderConfig
 metadata:
@@ -11,13 +18,16 @@ spec:
     terraform {
       required_providers {
         garage = {
-          source = "jkossis/garage"
+          source  = "jkossis/garage"
+          version = "1.0.5"
         }
         infisical = {
-          source = "Infisical/infisical"
+          source  = "Infisical/infisical"
+          version = "0.19.30"
         }
         cloudflare = {
-          source = "cloudflare/cloudflare"
+          source  = "cloudflare/cloudflare"
+          version = "5.23.0"
         }
       }
       backend "kubernetes" {
