@@ -56,6 +56,10 @@ spec:
         #     + LAN nix substituter) instead of unpinned stock :latest (bump the tag per build);
         #   - FU-073(c): dockerd --registry-mirror → the in-cluster docker.io pull-through mirror
         #     (BGP VIP, ADR-091; Hub-only by dockerd design, plain http hence insecure-registry);
+        #     the ghcr mirror VIP is insecure-registry'd too (#1315): dockerd cannot mirror ghcr,
+        #     so a CI gate that wants a LAN pull of a ghcr image names the mirror path outright
+        #     (`192.168.40.21/<org>/<image>`, the kind-ci REGISTRY_MIRROR_GHCR pattern) — the
+        #     daemon must accept plain http for that VIP or the pull is refused;
         #   - pin docker:dind (was :latest-floating via the chart).
         # On chart upgrades: re-render with containerMode dind and diff against this spec.
         template:
@@ -109,6 +113,7 @@ spec:
                   - --group=$(DOCKER_GROUP_GID)
                   - --registry-mirror=http://192.168.40.20
                   - --insecure-registry=192.168.40.20
+                  - --insecure-registry=192.168.40.21
                 env:
                   - name: DOCKER_GROUP_GID
                     value: "123"
