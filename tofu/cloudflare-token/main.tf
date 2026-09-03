@@ -25,6 +25,21 @@ data "cloudflare_api_token_permission_groups_list" "waf_write" {
   scope = "com.cloudflare.api.account.zone"
 }
 
+# G-G (homelab goal #1302, 2026-09-03): the PublicRoute profiles render zone-phase rulesets and
+# RUM through cf-api-proxy with THIS token. First live consumer-profile apply (oracle-iac#530)
+# 403'd at Cloudflare ("Authentication error", code 10000) — the proxy allowlist had been
+# widened (acceptance item 5), the token never was. Cache Settings Write = http_request_cache_settings
+# (consumer); Zone WAF Write (existing data source) = http_ratelimit + http_request_firewall_*;
+# Zone Transform Rules Write = http_response_headers_transform (api CORS headers).
+data "cloudflare_api_token_permission_groups_list" "cache_settings_write" {
+  name  = "Cache%20Settings%20Write"
+  scope = "com.cloudflare.api.account.zone"
+}
+data "cloudflare_api_token_permission_groups_list" "zone_transform_rules_write" {
+  name  = "Zone%20Transform%20Rules%20Write"
+  scope = "com.cloudflare.api.account.zone"
+}
+
 data "cloudflare_api_token_permission_groups_list" "tunnel_write" {
   name  = "Cloudflare%20Tunnel%20Write"
   scope = "com.cloudflare.api.account"
