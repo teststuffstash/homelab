@@ -36,7 +36,6 @@ spec:
                   - { key: node-role.kubernetes.io/control-plane, operator: DoesNotExist }
       tolerations:
         - { key: homelab.io/ephemeral, operator: Exists }
-      priorityClassName: system-node-critical
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001 # the runner user baked into the image
