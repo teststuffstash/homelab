@@ -208,6 +208,12 @@
       "spend-probe-self-test": [
         "python3 argocd/resources/cloudflare-exporter/spend-probe.py --self-test"
       ],
+      "request-flow-render": [
+        "python3 scripts/request-flow-render.py \"$@\""
+      ],
+      "request-flow-self-test": [
+        "python3 scripts/request-flow-render.py --self-test"
+      ],
       "publicroute-tf-validate": [
         "bash scripts/publicroute-tf-validate.sh"
       ],
