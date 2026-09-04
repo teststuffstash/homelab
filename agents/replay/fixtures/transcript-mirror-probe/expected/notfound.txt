@@ -1,0 +1,3 @@
+CALL kubectl -n agent-runtime get secret agent-transcripts-s3
+OUT → transcript mirror agent-transcripts-s3 absent in ns agent-runtime (claim not synced?) — run proceeds, upload will be skipped
+RC 0
