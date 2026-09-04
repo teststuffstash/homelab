@@ -49,7 +49,9 @@ rules:
     resources: [persistentvolumeclaims]
     verbs: [get, list]
   # homelab#1205: context-prefetch writes the bundle to a ConfigMap (off argv) in the pod's namespace.
-  # Created before the pod via ownerReferences patch, deleted after the pod completes.
+  # Created before the pod, then `patch`ed with an ownerReference to it so kube GC collects the
+  # bundle with the pod; `delete` is the launcher's own cleanup for the exits that PRECEDE
+  # pod-create (dispatch-gate defers and refusals), where no owner exists yet.
   - apiGroups: [""]
     resources: [configmaps]
     verbs: [create, delete, patch]

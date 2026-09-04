@@ -61,6 +61,7 @@ MAP=(
   "follow-ups-lint:^docs/"
   "docs-graph-lint:\.md$"
   "mermaid-lint:\.md$"
+  "request-flow-self-test:^(scripts/request-flow-render\.py|docs/patterns/request-flow|agents/|devbox\.(json|lock)$)"
 )
 # Gates that exist in ci.yaml but are PR-context-only (base/author) — exempt from the
 # coverage belt below, with the reason on the record.

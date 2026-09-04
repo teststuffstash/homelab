@@ -1520,6 +1520,13 @@ $(printf '%s' "$PF_CI_FAILURE_MD" | sed 's/^/    /')"
       PF_CM_CREATED=""; PF_CM_MOUNT=""; PF_CM_VOLUME=""
       if printf '%s' "$PF_CM_MANIFEST" | "$KUBECTL" $KUBE create -f - 2>/dev/null; then
         PF_CM_CREATED="1"
+        PF_POD_CREATED=""
+        # homelab#1205: 10 exit sites sit between here and the pod create at :2244 — the Go-rail
+        # semaphore defer, the FU-088 both-rails-latched defer, the credit floor, the same-key
+        # refusal — and each one would otherwise leak this ConfigMap. Past pod-create the pod's
+        # ownerReference owns it (patch below), so this fires ONLY while no pod of ours exists:
+        # deleting a bundle a live pod has mounted is the failure mode this must not have.
+        trap '[ -n "${PF_CM_CREATED:-}" ] && [ -z "${PF_POD_CREATED:-}" ] && "$KUBECTL" $KUBE -n "$NS" delete configmap "${PF_CM_NAME}" --ignore-not-found >/dev/null 2>&1 || true' EXIT
         # Record the ConfigMap mount for the pod manifest
         PF_CM_MOUNT=$'\n        - { name: context-bundle, mountPath: /work/context }'
         PF_CM_VOLUME=$'\n    - name: context-bundle\n      configMap: { name: '"${PF_CM_NAME}"$' }'
@@ -2241,7 +2248,10 @@ case "$TASK" in issue-[0-9]*|pr-[0-9]*)
 # because past this point a pod exists and the cost stops being ours.
 run_phase dispatch-gates
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - \
-  || { echo "PREFLIGHT REFUSED (atomic): create of ${POD} failed — a racing dispatcher won the (task, round) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
+  || { PF_POD_RACE="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.metadata.uid}' 2>/dev/null || echo UNREADABLE)"; \
+       [ -z "$PF_POD_RACE" ] || PF_POD_CREATED="1"; \
+       echo "PREFLIGHT REFUSED (atomic): create of ${POD} failed — a racing dispatcher won the (task, round) key, or the manifest is invalid (see kubectl error above)." >&2; \
+       exit 3; } # Empty ⇒ no pod exists ⇒ the bundle is ours and the trap cleans it up. A uid **or an unreadable probe** ⇒ set the flag and leak one ConfigMap. That asymmetry is the point and is not a bug to tidy: an unreadable read must never authorise a destructive write (ground rule #6).
 apiVersion: v1
 kind: Pod
 metadata:
@@ -2459,6 +2469,16 @@ ${CLAUDE_ENV}
       volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}${PF_CM_MOUNT}
   volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}${PF_CM_VOLUME}
 EOF
+
+PF_POD_CREATED="1"
+if [ -n "${PF_CM_CREATED:-}" ]; then
+  PF_POD_UID="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
+  if [ -n "$PF_POD_UID" ]; then
+    "$KUBECTL" $KUBE -n "$NS" patch configmap "${PF_CM_NAME}" --type=merge \
+      -p "{\"metadata\":{\"ownerReferences\":[{\"apiVersion\":\"v1\",\"kind\":\"Pod\",\"name\":\"${POD}\",\"uid\":\"${PF_POD_UID}\",\"blockOwnerDeletion\":false}]}}" >/dev/null 2>&1 \
+      || echo "→ context pre-fetch: ownerReference patch failed — ${PF_CM_NAME} falls back to the launcher's own cleanup" >&2
+  fi
+fi
 
 echo "→ waiting for ${POD} (a cold node may pull the image + nix store for minutes)…"
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=600s || true
