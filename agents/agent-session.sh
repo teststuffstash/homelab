@@ -1613,6 +1613,7 @@ else                                  AGENT_RAIL="openrouter"; fi
 # <<<REPLAY:agent-rail<<<
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
 PGW_URL="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
+# >>>REPLAY:transcript-mirror-probe>>>
 TS_SECRET_ERR="$("$KUBECTL" $KUBE -n "$NS" get secret agent-transcripts-s3 2>&1 >/dev/null)" || {
   case "$TS_SECRET_ERR" in
     *NotFound*)
@@ -1626,6 +1627,7 @@ TS_SECRET_ERR="$("$KUBECTL" $KUBE -n "$NS" get secret agent-transcripts-s3 2>&1 
       ;;
   esac
 }
+# <<<REPLAY:transcript-mirror-probe<<<
 
 # Persistent uv (PyPI wheel) cache: if a `agent-uv-cache` PVC exists in the namespace, mount it so
 # `devbox run ci`'s `uv sync` fetches wheels once across runs (the nix cache only covers `devbox

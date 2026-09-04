@@ -1,0 +1,6 @@
+# transcript-mirror-probe — the decision table (family contract in fixture.yaml; homelab#1182).
+# id        | world | patch | env                              | expect      | params
+forbidden   |       |       | STUB_KUBECTL_MODE=forbidden       | forbidden   |
+notfound    |       |       | STUB_KUBECTL_MODE=notfound        | notfound    |
+unexpected  |       |       | STUB_KUBECTL_MODE=unexpected      | unexpected  |
+ok          |       |       | STUB_KUBECTL_MODE=ok              | ok          |
