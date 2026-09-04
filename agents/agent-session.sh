@@ -509,7 +509,24 @@ else
   eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
 fi
 [ -z "$MODEL_HARNESS" ] || [ -n "${HARNESS_SET:-}" ] || HARNESS="$MODEL_HARNESS"
-OPENCODE_MODEL="$MODEL"  # Full provider-prefixed id for opencode CLI (-m must receive openrouter/<vendor>/<model>)
+# Compose the full provider-prefixed id for opencode CLI
+# (-m must receive openrouter/<vendor>/<model>).  On the router-adopted path
+# MODEL was set to the bare _rmodel (e.g. deepseek/deepseek-v4-flash) without
+# the openrouter/ rail prefix — compose it from the parsed fields so opencode
+# doesn't silently fall back to its default model (#876/#896/#1342).
+case "$MODEL_RAIL" in
+  openrouter)
+    # opencode's -m is <provider>/<model id>, split at the FIRST slash — so the rail prefix is
+    # ALWAYS prepended, including for a cloaked codename whose OpenRouter id itself starts with
+    # openrouter/ (model_id.py keeps it whole): openrouter/openrouter/<codename>. Stripping the
+    # rail for that case would hand opencode provider=openrouter, model=<codename> — not an id
+    # OpenRouter serves.
+    OPENCODE_MODEL="openrouter/$MODEL_MODEL" ;;
+  anthropic-subscription)
+    OPENCODE_MODEL="claude/$MODEL_MODEL" ;;
+  *)
+    OPENCODE_MODEL="$MODEL_MODEL" ;;
+esac
 MODEL="$MODEL_MODEL"
 # <<<REPLAY:model-id-resolution<<<
 
