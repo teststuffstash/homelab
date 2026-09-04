@@ -716,6 +716,16 @@ the block needs pruning, not more headings.
       promtool cover; check upstream sync-manager fixes (`v4.0.7` today) before any bump.
       Relates FU-187 (sibling belt-blindness).
 
+- [ ] **FU-210** — **Responder sessions leave no transcript — a triage that files nothing is
+      unrecoverable.** 2026-09-03 22:29Z `CNPGInstanceNotReady`/`ExporterDown` fired for
+      forgejo-pg-1 (a real pg_rewind divergence after the incident failover); the responder
+      received them (sensor payloads), marked `workload:forgejo/forgejo-pg-1` triaged on 09-04
+      (ledger + 1/12 budget), filed NO issue anywhere in the org, and the probe lane deferred to it
+      ("COVERED"). The alert stood 8 h until the seat applied the runbook recipe. Why: the A1
+      capture hooks (`docs/agents/observability-and-retro.md`) cover worker/reviewer/coordinator
+      only — the bucket has no responder prefix, Loki has no agent-coordinator pod streams.
+      **Next:** upload the respond session's `~/.claude/projects` + a manifest like the reviewer's
+      exit trap (`homelab/alert-<fp>/responder-r1-<ts>/`); then the decision is readable.
 - [ ] **FU-187** — **Quiet-stall detection: a Running agent pod with a silent rail is invisible
       to every belt** (issue-272-r1, 2026-08-26: opencode slept ~3h on a black-holed proxy IP,
       0-byte run.log, until the 4h activeDeadline reap — which ALSO skips finalize: no strike,
