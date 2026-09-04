@@ -16,3 +16,9 @@ ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
 # durable home is tofu (recreatable), the hypervisor's own config has none —
 # which is exactly why the playbook snapshots it before every touch.
 pve_backup_dest: /home/node/.claude/homelab-pve-backup
+
+# --- pve-node-exporter (FU-093, the thin-pool meter) ---
+# Scraped by Prometheus as a static LAN target (argocd/resources/pve-metrics/scrapeconfig.yaml
+# carries the SAME host:port — change both).
+pve_node_exporter_port: 9100
+pve_textfile_dir: /var/lib/prometheus/node-exporter
