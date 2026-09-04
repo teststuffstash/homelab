@@ -86,14 +86,14 @@ jobs:
         run: |
           # detach fully (own fds, no step pipes) — a leaked step fd can hold the step open.
           # Bare script under the shellenv snapshot, NOT `devbox run` — see the warm-up step.
-          ( source /tmp/devbox-env.sh && bash scripts/prometheus-rules-lint.sh; echo $? > /tmp/prom-lint.rc ) > /tmp/prom-lint.log 2>&1 < /dev/null &
+          ( set +e; source /tmp/devbox-env.sh && bash scripts/prometheus-rules-lint.sh; echo $? > /tmp/prom-lint.rc ) > /tmp/prom-lint.log 2>&1 < /dev/null &
 
       # ADR-103 leg 1: every committed clause replay executes on every push — the generalized
       # harness (agents/replay/, homelab#206). Runs ∥; verdict at "— collect" below.
       - name: Clause replays — start ∥ (devbox run clause-replay)
         if: github.event_name != 'pull_request' || steps.diff.outputs.clause == 'true'
         run: |
-          ( source /tmp/devbox-env.sh && bash agents/replay/run.sh; echo $? > /tmp/clause-replay.rc ) > /tmp/clause-replay.log 2>&1 < /dev/null &
+          ( set +e; source /tmp/devbox-env.sh && bash agents/replay/run.sh; echo $? > /tmp/clause-replay.rc ) > /tmp/clause-replay.log 2>&1 < /dev/null &
 
       # Mirror pre-warm (#80): when THIS PR changes the runner-image pin, pull the new image's
       # blobs through the LAN ghcr mirror once while CI gates the merge — the ≤maxRunners node
@@ -109,7 +109,7 @@ jobs:
         run: |
           if grep -qx "argocd/platform/arc-runners.yaml" /tmp/ci-changed-files; then
             IMAGE="$(grep -oE 'ghcr\.io/[^" ]*/arc-runner:[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]{12}' argocd/platform/arc-runners.yaml | head -1)"
-            ( bash scripts/warm-registry-mirror.sh "$IMAGE"; echo $? > /tmp/mirror-warm.rc ) > /tmp/mirror-warm.log 2>&1 < /dev/null &
+            ( set +e; bash scripts/warm-registry-mirror.sh "$IMAGE"; echo $? > /tmp/mirror-warm.rc ) > /tmp/mirror-warm.log 2>&1 < /dev/null &
           else
             echo "runner pin untouched — skipping"
             echo 0 > /tmp/mirror-warm.rc; echo "(pin untouched — no warm ran)" > /tmp/mirror-warm.log
@@ -453,6 +453,11 @@ jobs:
       # ── collect the ∥ suites started at the top of the job (#518). Each waits for its rc
       # file, replays the full log, and exits with the suite's own code — a hung/killed
       # background run fails loudly at the timeout instead of hanging the job to its 6h default.
+      # ⚠ The start subshells run `set +e` ON PURPOSE (2026-09-04): a `run:` step's shell is
+      # `bash -e`, the subshell inherits it, and a RED suite then killed the subshell before
+      # `echo $? > rc` — so every red replay cost the full 600 s wait here and reported
+      # "never finished" instead of its own diff (PR#1366 and every fixer PR that morning:
+      # 11–22 min reds for a 76 s harness). Green wrote rc=0 and was fast, which is why it hid.
       - name: Clause replays — collect (started ∥ above)
         if: github.event_name != 'pull_request' || steps.diff.outputs.clause == 'true'
         run: |
