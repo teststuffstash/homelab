@@ -4,7 +4,7 @@ CALL gh api repos/teststuffstash/test-project/pulls/42 --jq {title, body, headRe
 CALL gh api repos/teststuffstash/test-project/compare/master...fix/issue-1175-test --jq .commits[] | "\(.sha[0:8]) \(.commit.message | split("\n")[0])"
 CALL gh api repos/teststuffstash/test-project/pulls/42/reviews --paginate
 CALL gh api repos/teststuffstash/test-project/pulls/42/comments --paginate
-CALL gh api repos/teststuffstash/test-project/pulls/42 --jq .head.sha
+CALL gh api repos/teststuffstash/test-project/pulls/42 --jq {ref: .head.ref, sha: .head.sha}
 CALL gh api repos/teststuffstash/test-project/commits/abc123def456/check-runs
 CALL kubectl create -f -
 STDIN apiVersion: v1
@@ -18,6 +18,7 @@ STDIN     index.txt  OK
 STDIN     issue.md  OK
 STDIN     pr.md  OK
 STDIN     reviews.md  OK
+STDIN     ci-failure.md  MISSING  No failing check runs found
 STDIN   issue.md: |
 STDIN     # Issue #1175
 STDIN     ## launcher context-PREFETCH stage: gather every deterministic read into /work/context/

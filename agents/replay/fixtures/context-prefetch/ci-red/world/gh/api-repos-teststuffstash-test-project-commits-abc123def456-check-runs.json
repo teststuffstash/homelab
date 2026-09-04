@@ -2,13 +2,13 @@
   "check_runs": [
     {
       "name": "diff-ci",
-      "conclusion": "FAILURE",
+      "conclusion": "failure",
       "details_url": "https://github.com/teststuffstash/test-project/actions/runs/123",
       "html_url": "https://github.com/teststuffstash/test-project/actions/runs/123"
     },
     {
       "name": "manifest-lint",
-      "conclusion": "FAILURE",
+      "conclusion": "failure",
       "details_url": "https://github.com/teststuffstash/test-project/actions/runs/124",
       "html_url": "https://github.com/teststuffstash/test-project/actions/runs/124"
     }

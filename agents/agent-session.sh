@@ -1423,12 +1423,16 @@ ${PF_ARB_BODY}"
       if [ -n "${WORK_BRANCH:-}" ] && [ -n "${PF_PR:-}" ]; then
         # Check CI status: fetch check runs for the PR head
         PF_HEAD_SHA=""
-        PF_HEAD_SHA="$(gh api "repos/${PF_SLUG}/pulls/${PF_PR}" --jq '.head.sha' 2>/dev/null)" || PF_HEAD_SHA=""
+        PF_PR_REF=""
+        PF_HEAD_DATA="$(gh api "repos/${PF_SLUG}/pulls/${PF_PR}" --jq '{ref: .head.ref, sha: .head.sha}' 2>/dev/null)" || PF_HEAD_DATA=""
+        PF_PR_REF="$(printf '%s' "$PF_HEAD_DATA" | jq -r '.ref // ""' 2>/dev/null || echo "")"
+        PF_HEAD_SHA="$(printf '%s' "$PF_HEAD_DATA" | jq -r '.sha // ""' 2>/dev/null || echo "")"
         if [ -n "$PF_HEAD_SHA" ]; then
           PF_CHECKS=""
           PF_CHECKS_RAW="$(gh api "repos/${PF_SLUG}/commits/${PF_HEAD_SHA}/check-runs" 2>/dev/null)" || PF_CHECKS_RAW=""
-          PF_CHECKS="$(printf '%s' "$PF_CHECKS_RAW" | jq -r '[.check_runs[] | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT") | {name, conclusion, url: .html_url}]' 2>/dev/null)" || PF_CHECKS=""
-          if [ -n "$PF_CHECKS" ]; then
+          PF_CHECKS="$(printf '%s' "$PF_CHECKS_RAW" | jq -r '[.check_runs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | {name, conclusion, url: .html_url}]' 2>/dev/null)" || PF_CHECKS=""
+          PF_CHECKS_COUNT="$(printf '%s' "$PF_CHECKS" | jq 'length' 2>/dev/null || echo 0)"
+          if [ "$PF_CHECKS_COUNT" -gt 0 ]; then
             PF_CI_FAILURE_MD="## CI Failures (head ${PF_HEAD_SHA:0:8})
 
 | Check | Conclusion | URL |
@@ -1444,24 +1448,28 @@ ${PF_ARB_BODY}"
             # Fetch log tail via gh run list + view (bounded to last 200 lines per failing step)
             # REQUIRED: the log must be readable — unreadable defers (homelab#1205)
             PF_LOG_TAIL=""
-            PF_RUN_ID="$(gh run list --repo "${PF_SLUG}" --branch "${PF_PR_HEAD}" --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || PF_RUN_ID=""
+            PF_RUN_ID="$(gh run list --repo "${PF_SLUG}" --branch "${PF_PR_REF}" --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || PF_RUN_ID=""
             if [ -z "$PF_RUN_ID" ] || [ "$PF_RUN_ID" = "null" ]; then
-              echo "→ dispatch deferred — directive unreadable (CI run log unreadable for PR #${PF_PR} branch ${PF_PR_HEAD}) — the next pass retries (homelab#1205)" >&2
-              exit 0
-            fi
-            PF_LOG_TAIL="$(gh run view "${PF_RUN_ID}" --repo "${PF_SLUG}" --log-failed 2>/dev/null | tail -200)" || PF_LOG_TAIL=""
-            if [ -z "$PF_LOG_TAIL" ]; then
-              echo "→ dispatch deferred — directive unreadable (CI run log empty for PR #${PF_PR} run ${PF_RUN_ID}) — the next pass retries (homelab#1205)" >&2
-              exit 0
-            fi
-            PF_CI_FAILURE_MD="${PF_CI_FAILURE_MD}
+              PF_INDEX_ITEM "ci-failure.md" "MISSING" "CI run log unreadable for PR #${PF_PR} branch ${PF_PR_REF}"
+            else
+              PF_LOG_TAIL="$(gh run view "${PF_RUN_ID}" --repo "${PF_SLUG}" --log-failed 2>/dev/null | tail -200)" || PF_LOG_TAIL=""
+              if [ -z "$PF_LOG_TAIL" ]; then
+                PF_INDEX_ITEM "ci-failure.md" "MISSING" "CI run log empty for PR #${PF_PR} run ${PF_RUN_ID}"
+              else
+                PF_CI_FAILURE_MD="${PF_CI_FAILURE_MD}
 
 ## Log tail (last 200 lines)
 \`\`\`
 ${PF_LOG_TAIL}
 \`\`\`"
-            PF_INDEX_ITEM "ci-failure.md" "OK"
+                PF_INDEX_ITEM "ci-failure.md" "OK"
+              fi
+            fi
+          else
+            PF_INDEX_ITEM "ci-failure.md" "MISSING" "No failing check runs found"
           fi
+        else
+          PF_INDEX_ITEM "ci-failure.md" "MISSING" "PR head SHA fetch failed"
         fi
       fi
 
@@ -2486,6 +2494,10 @@ if [ -n "$RUN_CMD" ]; then
   # classification below has something to read.
   [ -s "$RUNLOG" ] || "$KUBECTL" $KUBE -n "$NS" logs "${POD}" > "$RUNLOG" 2>/dev/null || true
   echo "→ run finished. delete with: kubectl -n ${NS} delete pod ${POD}"
+  # Clean up the context-prefetch ConfigMap (homelab#1205)
+  if [ -n "${PF_CM_CREATED}" ]; then
+    "$KUBECTL" $KUBE -n "$NS" delete configmap "${POD}-context" --ignore-not-found >/dev/null 2>&1 || true
+  fi
   # FU-160 / homelab#324: NO `run_phase ride` here, and the absence is the fix. Reaching this line
   # means the launcher outlived the ride — which happened on 5 of 24 measured rides, so a phase
   # closed here would be a sample of the rides that let the launcher live, presented as a fleet
