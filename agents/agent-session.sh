@@ -1291,13 +1291,22 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
         exit 0
       fi
       # Materialize the issue + comments into /work/issue.md as a prelude to the pod command.
-      # Build the markdown: title, body, then comments in order with author + timestamp.
+      # Build the markdown: title, labels, body, then comments in order with author + timestamp.
+      # Per #1175 widened-scope table row 1: "title, labels, body, then every comment in order".
       PF_ISSUE_TITLE="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.title')"
       PF_ISSUE_BODY="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.body // ""')"
+      PF_ISSUE_LABELS="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.labels | join(", ")')"
+      PF_ISSUE_LABELS_LINE="
+"
+      if [ -n "$PF_ISSUE_LABELS" ]; then
+        PF_ISSUE_LABELS_LINE="
+**Labels:** ${PF_ISSUE_LABELS}
+
+"
+      fi
       PF_ISSUE_MD="# Issue #${PF_ISSUE}
 ## ${PF_ISSUE_TITLE}
-
-${PF_ISSUE_BODY}
+${PF_ISSUE_LABELS_LINE}${PF_ISSUE_BODY}
 
 ## Comments"
       # Process each comment from the raw JSON array
