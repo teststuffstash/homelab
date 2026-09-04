@@ -1543,7 +1543,8 @@ spec:
                     # MCP endpoint HOST, derived from spec.mcp.endpoint. The knob holds a URL —
                     # the launcher's harness attach flag needs the whole thing (#1041) — but toFQDNs
                     # matches a DNS query name, so the leg takes the bare host. That host must be
-                    # an FQDN, never a service VIP (FU-072/kata).
+                    # an FQDN, never a service VIP: a toFQDNs leg cannot match a bare IP. (Was
+                    # additionally a kata-reachability rule until FU-072 landed, 2026-09-04.)
                     - { matchName: {{ $mcpHost }} }
                     {{- end }}
                     {{- if $docker }}
