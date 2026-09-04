@@ -77,6 +77,7 @@ pick-rail-clear	pick-rail
 pick-rail-go	pick-rail
 pr-cap-per-base	pr-cap-per-base
 pr-cap-per-base-collision	pr-cap-per-base
+pr-cap-per-base-counts	pr-cap-per-base
 pr-cap-per-base-jq-extraction	pr-cap-per-base
 rail-degrade	rail-degrade
 reflex-tick-proceed	reflex-tick

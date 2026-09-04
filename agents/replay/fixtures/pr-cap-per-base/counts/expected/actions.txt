@@ -1,0 +1,5 @@
+OUT ARMED master|1
+OUT BLOCKPARK goal/1-x|1
+OUT BLOCKPARK master|2
+OUT REACHED: end
+RC 0
