@@ -1,0 +1,23 @@
+# FU-199: a completed no-op round (stats marker) newer than the newest state-fp marker
+# re-arms the arbitrate gate — the fingerprint didn't change (STATE_FP_JQ_ARBITRATE drops stats),
+# but a round completed, so the state has effectively changed.
+#
+# CONDITION UNDER REPLAY. oracle-fleet PR #234 carries `agent/arbitrate` and has a `state-fp:`
+# marker from a previous dispatch. A stats comment (completed no-op round) was posted AFTER the
+# marker. The gate should re-arm and emit a unit instead of debouncing.
+pins:
+  - MP-T11
+name: arbitrate-no-op-after-directive
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

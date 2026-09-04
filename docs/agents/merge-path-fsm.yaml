@@ -287,6 +287,7 @@ transitions:
       - agents/replay/fixtures/arbitrate/probe-unreadable
       - agents/replay/fixtures/arbitrate/landing-sequence
       - agents/replay/fixtures/arbitrate/fu147-refire-blocked
+      - agents/replay/fixtures/arbitrate/no-op-after-directive
       - agents/replay/fixtures/state-fp/state-fp
       - agents/replay/fixtures/changes-requested/blocked-held
       - agents/replay/fixtures/changes-requested/dispatched
@@ -319,6 +320,7 @@ transitions:
       - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-rounds-two-channels
       - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-rerun-wake
       - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-rerun-wake-dispatch
+      - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-deferred-then-debounced
       - agents/replay/fixtures/ci-red-rounds-sibling-mention
       - agents/replay/fixtures/ci-red-goal-head-excluded
     guards:

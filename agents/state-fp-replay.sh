@@ -451,8 +451,11 @@ wantnot  "R1: no debounce with nothing recorded"                     "ci-red DEB
 survives "R1"
 UCLAUSE=ci-red _go mark
 eq       "R1: a ci-red dispatch records the marker too"              "$(markers)" "1"
+# FU-199: the gate now re-arms when no round completed since the marker.
+# Add a stats comment to simulate a completed round, so the debounce holds.
+fx '.comments += [{"body":"🤖 Agent run stats — round 1 completed","createdAt":"2026-08-09T04:00:00Z"}]'
 _go cired
-want     "R2: an identical red state DEBOUNCES"                      "ci-red DEBOUNCED"
+want     "R2: an identical red state DEBOUNCES (round completed)"    "ci-red DEBOUNCED"
 want     "R2: the line names the head it is still red at"            "still red at ${HEAD8}"
 want     "R2: and the hash"                                          "state-fp:${BASE_CIRED}"
 wantnot  "R2: the dispatch is skipped entirely (continue)"           "DISPATCH ci-red|"
@@ -575,6 +578,88 @@ eq       "W2: an unrelated clause is NOT marked"                     "$(markers)
 fx_base; UCLAUSE=arbitrate UITEM="issue-77" _go mark
 eq       "W3: an ISSUE unit is NOT marked"                           "$(markers)" "0"
 UITEM="pr-${PR}"
+
+# ── 9 ── FU-199: ARBITRATE — a completed no-op round re-arms the gate ──────────────────────────
+# PR#391 (#355): the 01:40Z arbitrate ruling re-dispatched with a directive; round 4 completed as
+# a no-op (stats posted, HEAD unchanged). The scan re-labelled agent/arbitrate at 03:02Z, but
+# STATE_FP_JQ_ARBITRATE drops stats, so the fingerprint equalled the old marker and the clause
+# reported DEBOUNCED forever. The fix: fold "a completed round (stats marker) newer than the
+# newest state-fp marker" into the debounce input — if a round completed since the marker, the
+# gate re-arms and the clause re-evaluates.
+section "9 — FU-199: arbitrate re-arms on completed no-op round"
+fx_base
+UCLAUSE=arbitrate _go mark
+eq       "N0: a marker is on the thread"                             "$(markers)" "1"
+_go arbitrate
+want     "N0: (control) identical state debounces"                   "arbitrate DEBOUNCED"
+wantnot  "N0: no unit emitted"                                       "UNITS arbitrate|"
+# Add a stats comment (simulating a completed no-op round) newer than the marker
+fx '.comments += [{"body":"🤖 Agent run stats — round 4 completed (no-op)","createdAt":"2026-08-09T04:00:00Z"}]'
+_go arbitrate
+want     "N1: a stats comment newer than the marker RE-ARMS the gate" "UNITS arbitrate|${REPO}|pr-${PR}"
+wantnot  "N1: no debounce line"                                       "DEBOUNCED"
+survives "N1"
+# The re-armed dispatch writes a new marker (at STUB_NOW, which is after the stats comment)
+UCLAUSE=arbitrate _go mark
+eq       "N1: the new dispatch records a second marker"              "$(markers)" "2"
+# The stats comment is still newer than the new marker, so the gate re-arms again
+_go arbitrate
+want     "N2: the gate re-arms again (stats still newer than marker)" "UNITS arbitrate|${REPO}|pr-${PR}"
+wantnot  "N2: no debounce"                                            "DEBOUNCED"
+survives "N2"
+# Move the stats comment before the new marker to simulate a completed round that was
+# already accounted for — the gate should debounce against the new marker.
+# The new marker is at STUB_NOW (~03:0X); move the stats comment before it.
+fx '(.comments[] | select((.body // "") | test("Agent run stats"))).createdAt = "2026-08-09T02:00:00Z"'
+_go arbitrate
+want     "N3: with stats before the new marker, the gate debounces"  "arbitrate DEBOUNCED"
+wantnot  "N3: no unit"                                               "UNITS arbitrate|"
+survives "N3"
+
+# ── 10 ── FU-199: CI-RED — a deferred dispatch must not leave the marker armed ──────────────────
+# PR#394 (#387): the ci-red marker was written at 01:40Z; the launcher pre-flight deferred on
+# capacity (WIP 1/1) at 01:45Z and no round ever ran. The marker stood, so the clause reported
+# "already dispatched at this exact input" on every tick. The fix: if no round completed (no
+# stats comment) since the marker was written, the marker is stale — re-arm the gate.
+section "10 — FU-199: ci-red re-arms when no round completed since marker"
+fx_base
+UCLAUSE=ci-red _go mark
+eq       "D0: a ci-red marker is on the thread"                      "$(markers)" "1"
+# FU-199: with no stats comment (no round completed), the gate re-arms immediately
+_go cired
+want     "D0: no stats comment → gate re-arms and dispatches"        "DISPATCH ci-red|${REPO}|pr-${PR}"
+wantnot  "D0: no debounce"                                           "ci-red DEBOUNCED"
+survives "D0"
+# Add a stats comment to simulate a completed round — the gate should debounce
+fx '.comments += [{"body":"🤖 Agent run stats — round 1 completed","createdAt":"2026-08-09T04:00:00Z"}]'
+UCLAUSE=ci-red _go mark
+eq       "D1: a new marker is on the thread"                         "$(markers)" "2"
+_go cired
+want     "D1: with a completed round, the gate debounces"            "ci-red DEBOUNCED"
+wantnot  "D1: no dispatch"                                           "DISPATCH ci-red|"
+survives "D1"
+# Remove the marker to simulate the old behavior (no debounce at all)
+fx '.comments = [.comments[] | select((.body // "") | test("state-fp:") | not)]'
+eq       "D2: marker removed"                                        "$(markers)" "0"
+_go cired
+want     "D2: with no marker, the clause dispatches"                 "DISPATCH ci-red|${REPO}|pr-${PR}"
+wantnot  "D2: no debounce"                                           "ci-red DEBOUNCED"
+survives "D2"
+
+# ── 11 ── FU-199: DEBOUNCED report lines with no completed round become who=operator ────────────
+# Both clauses: when the debounce holds AND there's no completed round since the marker, the
+# report line becomes a who=operator row so the board shows it.
+section "11 — FU-199: DEBOUNCED with no completed round → who=operator"
+fx_base
+UCLAUSE=arbitrate _go mark
+eq       "O0: marker on thread"                                      "$(markers)" "1"
+# The arbitrate fixture has no stats comment — debounce holds with no completed round
+_go arbitrate
+want     "O0: arbitrate debounces with no completed round"           "arbitrate DEBOUNCED"
+# Verify the item_class_push was called (who=operator) by checking the ORPHANS line
+# The item_class_push is called inside the debounce block, so the ORPHANS line is set
+want     "O0: the report line is present"                            "arbitrate DEBOUNCED"
+survives "O0"
 
 # ── result ──────────────────────────────────────────────────────────────────────────────────────
 section "result"

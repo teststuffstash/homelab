@@ -1,0 +1,20 @@
+{
+  "headRefOid": "aaaaaaaa11111111111111111111111111111111",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "statusCheckRollup": [
+    {"__typename":"CheckRun","name":"e2e","status":"COMPLETED","conclusion":"FAILURE"},
+    {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"},
+    {"__typename":"CheckRun","name":"manifest-lint","status":"COMPLETED","conclusion":"SUCCESS"}
+  ],
+  "reviews": [
+    {"state":"CHANGES_REQUESTED","submittedAt":"2026-08-08T22:10:00Z"},
+    {"state":"COMMENTED","submittedAt":"2026-08-09T01:00:00Z"}
+  ],
+  "comments": [
+    {"body":"🤖 `state-fp:cf0afcf67790` — deterministic scan dispatching a `arbitrate` unit at 2026-08-09T01:40:00Z.\n\nMachine-readable debounce marker (homelab#198), written by `agents/coordinator-scan.sh`, not by the session that follows.","createdAt":"2026-08-09T01:40:00Z"},
+    {"body":"🤖 Agent run stats — round 4 completed (no-op)","createdAt":"2026-08-09T03:02:00Z"}
+  ],
+  "commits": [
+    {"oid":"aaaaaaaa11111111111111111111111111111111","messageHeadline":"fix: resolve the actual issue"}
+  ]
+}

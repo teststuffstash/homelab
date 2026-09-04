@@ -152,6 +152,7 @@ is stale, so it cannot drift the way the prose register did.
 | `arbitrate/first-tick` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/fu147-refire-blocked` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/landing-sequence` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `arbitrate/no-op-after-directive` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/probe-unreadable` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/quoted-mid-body` | actions | - | `agents/coordinator-scan.sh` | - |
 | `argv-payload/over-ceiling` | actions | - | `agents/agent-session.sh` | - |
@@ -179,6 +180,7 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
+| `ci-red-rounds-two-channels/ci-red-deferred-then-debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rerun-wake-dispatch` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rerun-wake` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |

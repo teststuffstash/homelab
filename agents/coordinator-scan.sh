@@ -3733,8 +3733,30 @@ EOF_GOVERNANCE
       esac
       afp="$(pr_state_fp_pair "$slug" "$u" arbitrate "$pr_json_ab")"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
-        orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
-        continue
+        # FU-199: a completed no-op round (stats marker) newer than the newest state-fp marker
+        # re-arms the gate — the fingerprint didn't change (STATE_FP_JQ_ARBITRATE drops stats),
+        # but a round completed, so the state has effectively changed. The brief's "a second
+        # consecutive no-op is a terminal-ride finding → escalate" must be able to fire.
+        # Inline stats_ts jq (same shape as STATS_TS_DEF in the round-evidence block) so this
+        # check works in extracted replay blocks that do not carry that variable.
+        afp_marker_ts="$(printf '%s' "$pr_json_ab" | jq -r '[.comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}"))] | sort_by(.createdAt) | last | .createdAt // ""' 2>/dev/null)" || afp_marker_ts=''
+        afp_stats_ts="$(printf '%s' "$pr_json_ab" | jq -r '
+          def stats_ts: [ .comments[]? | (.body // "") as $b
+            | if ($b | startswith("<!-- agent-summary -->"))
+              then [ $b | scan("<!-- agent-event kind=stats ts=([^ ]+) -->")[0] ]
+              elif ($b | test("Agent run stats")) then [ .createdAt ]
+              else [] end | .[] ];
+          stats_ts | max // ""' 2>/dev/null)" || afp_stats_ts=''
+        if [ -n "$afp_marker_ts" ] && [ -n "$afp_stats_ts" ] && [[ "$afp_stats_ts" > "$afp_marker_ts" ]] 2>/dev/null; then
+          # A round completed since the marker — re-arm the gate (don't debounce)
+          :
+        else
+          # No round completed since the marker — debounce holds, but report as who=operator
+          # so the board shows it (FU-199)
+          orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
+          item_class_push "$repo" "pr-${u}" "arbitrate-standing" "operator"
+          continue
+        fi
       fi
       units="${units}arbitrate|${repo}|pr-${u}\n"
       item_class_push "$repo" "pr-${u}" "arbitrate-standing" "operator"
@@ -3925,8 +3947,26 @@ EOF_GOVERNANCE
           esac
           rfp="$(pr_state_fp_pair "$slug" "$u" ci-red "$pr_json_cr")"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
           if [ -n "$rfp_cur" ] && [ "$rfp_cur" = "$rfp_prev" ]; then
-            orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
-            continue
+            # FU-199: a launcher pre-flight deferral must not leave the marker armed.
+            # If no round completed (no stats comment) since the marker was written,
+            # the marker is stale — re-arm the gate so the clause re-evaluates.
+            # Inline stats_ts jq (same shape as STATS_TS_DEF in the round-evidence block) so this
+            # check works in extracted replay blocks that do not carry that variable.
+            rfp_marker_ts="$(printf '%s' "$pr_json_cr" | jq -r '[.comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}"))] | sort_by(.createdAt) | last | .createdAt // ""' 2>/dev/null)" || rfp_marker_ts=''
+            rfp_stats_ts="$(printf '%s' "$pr_json_cr" | jq -r '
+              def stats_ts: [ .comments[]? | (.body // "") as $b
+                | if ($b | startswith("<!-- agent-summary -->"))
+                  then [ $b | scan("<!-- agent-event kind=stats ts=([^ ]+) -->")[0] ]
+                  elif ($b | test("Agent run stats")) then [ .createdAt ]
+                  else [] end | .[] ];
+              stats_ts | max // ""' 2>/dev/null)" || rfp_stats_ts=''
+            if [ -n "$rfp_marker_ts" ] && [ -n "$rfp_stats_ts" ] && [[ "$rfp_stats_ts" > "$rfp_marker_ts" ]] 2>/dev/null; then
+              # A round completed since the marker — debounce holds normally
+              orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
+              continue
+            fi
+            # No round completed since the marker — re-arm the gate (don't debounce).
+            # The marker is stale; fall through to re-evaluate dispatch.
           fi
           # <<<REPLAY:ci-red-gate<<<
           # DISPATCH a fix round (under the attempt cap — the ISSUE-keyed one, see above)
