@@ -163,6 +163,8 @@ is stale, so it cannot drift the way the prose register did.
 | `assembly-cr-no-trailer` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-themed-emit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `asvs` | suite | - | `-` | - |
+| `base-arm-master` | actions | - | `agents/agent-session.sh` | - |
+| `base-arm-nonprotected` | actions | - | `agents/agent-session.sh` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-footprint-mismatch/body-footprint-mismatch` | actions | - | `agents/coordinator-scan.sh` | - |

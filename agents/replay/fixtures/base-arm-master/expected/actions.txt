@@ -1,0 +1,4 @@
+OUT → Base: master (declared on #1349) — forking from it, PR opens against it, auto-merge ARMED (protected integration branch)
+OUT → VERIFIED: NO_ARM is empty — PR will be ARMED
+OUT REACHED: end
+RC 0

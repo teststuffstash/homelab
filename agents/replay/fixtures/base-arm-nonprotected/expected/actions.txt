@@ -1,0 +1,4 @@
+OUT → Base: feature-x (declared on #1349) — forking from it, PR opens against it, auto-merge NOT armed (base is not a protected goal/** or master branch)
+OUT → VERIFIED: NO_ARM=1 — PR will NOT be armed (expected for non-protected base)
+OUT REACHED: end
+RC 0
