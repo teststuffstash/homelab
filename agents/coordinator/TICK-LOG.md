@@ -6712,3 +6712,30 @@ first live ADR-110 maintenance session before the ADR existed.
   kubelet imageGC of the old tag on wk-01/wk-02, the 15:17Z trim, FU-093's Longhorn trim (~41 GiB),
   FU-208's smaller image. Pool at wind-down: 75.67 %.
 
+
+## 2026-09-04 ~08:20–08:45Z — operator question on oracle-fleet#243 (inotify leak): the belt had never run
+
+- **Question**: what has homelab done since #243, and is the inotify leak still the stack's
+  problem? Answer: **the stack's own fix is the one that holds** — `scripts/lib/e2e-sweep.sh`
+  (pre-create sweep, 90 min, own-run excluded) landed with oracle-fleet#363 on 09-02; #243's ask
+  is shipped and the issue is closable. Headroom is 1024 instances / 524288 watches, codified and
+  now proven through a real recreate (today's FU-207 VM, cloud-init applied them at 05:49Z).
+- **Finding: the platform-side belt from the 09-02 incident (b26fffb5) had never once run.** It
+  was an `/etc/cron.d` drop-in and the **Debian 12 genericcloud image ships no cron package** —
+  `/usr/sbin/cron` absent, no `cron.service`, zero journal entries on the fresh VM. Independently,
+  its prefix list still said `oracle-e2e-*`, which #363's rename had already retired — so even
+  with a scheduler it matched nothing the fleet leaks today. A belt written and never observed
+  running is the class here: the 09-02 note said "janitor+cron installed live", and nothing since
+  checked it had fired.
+- **Fixed**: systemd `kind-janitor.timer` (hourly :17, `Persistent`) + `.service`, prefixes
+  widened (`oracle-fleet-e2e-`, `sleep-itest-`, `circles-test`), status regex anchored (the old
+  `days|weeks|Exited` alternation matched the name column too). Applied live FIRST (a
+  template-only fix waits on a VM recreate, and the pool sits at 75.7 %), functionally verified by
+  planting exited oracle+sleep control-planes and running the unit — both reaped; installed script
+  byte-identical to the template render. **PR#1371 merged 08:41Z** (bot approve, ~7 min);
+  `docs/patterns/kind-ci.md` rule 2 gains the caveat that the belt matches a FIXED PREFIX LIST, so
+  a rename silently drops a stack out of it.
+- ⚠ **Two stack-side rule violations reported to the operator, not filed** (they belong to their
+  own loops): **sleep-tracking** has no pre-create sweep (trap-only, same shared daemon, the exact
+  #243 cancel-path gap), and **circles** uses a fixed `circles-test` cluster name (rule 1) —
+  contained only because its gate runs in ride pods today.
