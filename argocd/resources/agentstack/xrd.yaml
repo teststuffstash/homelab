@@ -155,9 +155,9 @@ spec:
                   description: >-
                     MCP (Model Context Protocol) tool server endpoint for agent sessions
                     (stack-wide). When present, the Composition renders the endpoint's HOST
-                    (derived from the URL) into every fixer repo's worker egress CNP
-                    (toFQDNs leg) — the agent session connects to this server for tool calls
-                    (statute, search, give_feedback).
+                    (derived from the URL) into the loop-ns agent-loop-egress CNP and every
+                    fixer repo's worker egress CNP (toFQDNs legs) — the agent session connects
+                    to this server for tool calls (statute, search, give_feedback).
                     NO default on this object ON PURPOSE: an omitted defaulted object is
                     stamped into the stored claim by the API server and permanently OutOfSyncs
                     every claim file that does not carry it (the 2026-07-16 claudeTier lesson).
@@ -172,7 +172,7 @@ spec:
                   properties:
                     endpoint:
                       type: string
-                      description: "The MCP server URL — scheme + host + path (e.g. https://mcp.oracle.teststuff.net/mcp). The launcher passes it verbatim to the harness's attach flag (claude --mcp-config file / goose --with-streamable-http-extension); the Composition derives the bare HOST from it for the worker CNP toFQDNs leg. That host must be an FQDN, never a service VIP — a toFQDNs leg matches a DNS query name and cannot match a bare IP."
+                      description: "The MCP server URL — scheme + host + path (e.g. https://mcp.oracle.teststuff.net/mcp). The launcher passes it verbatim to the harness's attach flag (claude --mcp-config file / goose --with-streamable-http-extension); the Composition derives the bare HOST from it for the loop-ns agent-loop-egress CNP and the worker CNP toFQDNs legs. That host must be an FQDN, never a service VIP — a toFQDNs leg matches a DNS query name and cannot match a bare IP."
                     tools:
                       type: array
                       items:
