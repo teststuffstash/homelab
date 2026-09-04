@@ -10,6 +10,11 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-207** *(archived 2026-09-04)* — **ci-runner-01 recreated from tofu** (`tofu apply`: the
+  cloud-init snippet replaced + VM 9001 created, 1m57s), after FU-093's pool meter existed and the
+  pool had ~120 GB headroom (66 %). Cloud-init re-registered both runner slots (`--replace`, "√
+  Successfully replaced the runner" ×2), docker 29.8 up, `fstrim.timer` enabled+active, discard
+  honoured (DISC-GRAN 4K). Pool 67 → 71 % once the guest had its images. ADR-082's lane is back.
 - **FU-011** *(archived 2026-09-03)* — **provider-terraform pinned to a digest** (the running
   revision's resolved digest, `argocd/resources/crossplane/provider.yaml`), in the #1315 gate PR
   that also pinned the three Terraform provider versions in the ProviderConfig. Evidence: the

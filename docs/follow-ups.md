@@ -107,21 +107,14 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
-- [ ] **FU-207** — **ci-runner-01 destroyed 2026-09-03 (operator: "CI VMs are sacrificial") to
-      free the full pve thin pool — decide recreate vs retire.** `tofu/ci-runner.tf`
-      (`proxmox_virtual_environment_vm.ci_runner`) now drifts: a plan wants to recreate the VM
-      (80 GB thin disk back on the same pool) and the GitHub runner needs re-registering
-      (`scripts/github-runner-bootstrap.sh`). ADR-082's Docker/binfmt build lane is down until
-      then. **Next:** operator decision; if recreate, only after FU-093's pool meter exists and
-      the pool has ≥80 GB headroom. Link: [incident](incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md).
-- [ ] **FU-208** — **runner-image-prepull rollout shape (PAUSED via nodeSelector since
-      2026-09-03 22:12Z).** The DaemonSet's first rollout pulled 4.9 GiB onto three nodes at
-      once, incl. the wk-02 VM, and tipped the thin pool (incident above). Deferred: the safe
-      shape needs FU-093's meter. **Next:** exclude the thin-pool VMs (cp-01, wk-01, wk-02,
-      wk-03) or gate them behind a pool-headroom check, `maxUnavailable: 1`, then remove the pause
-      selector in `argocd/resources/runner-image-prepull/daemonset.yaml`; separately, a
-      sentinel-scoped devbox closure would shrink the image the sentinel needs from 4.9 GiB to
-      hundreds of MB. Relates FU-093, #80 (mirror warm).
+- [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
+      The rollout-shape half SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on
+      `topology.kubernetes.io/zone` — metal two-at-a-time, pool VMs one-at-a-time behind an init
+      gate on `pve_lvm_thin_pool_data_percent` < 75 (no sample = hold); pause selector removed,
+      9/9 pods ready. What remains is the size itself: every bake is a 4.9 GiB pull per node
+      because the image carries the whole fleet's devbox closures (FU-015). **Next:** a
+      sentinel-scoped closure (or a second, small image for `agents/coordinator/sentinel-argo.yaml`)
+      — hundreds of MB, so a node's first pull stops being a 429–909 s tax. Relates FU-093, #80.
 
 - [ ] **FU-206** — **PublicRoute: block operational paths at the edge by default (ADR-123).**
       Every claim serves its backend's `/metrics` + `/healthz` publicly today — the gateway answers
@@ -837,17 +830,15 @@ the block needs pruning, not more headings.
       the `AgentStack` claim (would carry the tier as policy — platform-and-stacks.md) and the merge-path reflexes.
 
 - [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** The rule, history (Longhorn
-      metering 2026-08-04, the ADR-089 quota arming 2026-08-07, the 08-24 third-100% incident)
-      and status detail: [`docs/storage-ledger.md`](storage-ledger.md). Garage metrics leg
-      SHIPPED by the machine lane (#934 → #965, 2026-08-25/26 — belts live, defect tail
-      #977/#978 riding); pve fstrim SCHEDULED (PR#925 daily
-      CronJob, first run 78.72%→62.99%). **Next:** the pve thin-pool Data% metric + alert (the
-      pool ITSELF is still unmetered — the new belts prove the trim runs, not that it
-      suffices). **FOURTH fill 2026-09-03** ([incident](incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md)):
-      three VMs paused, API down 8 min, no alert — the pool meter is now the blocking act;
-      then a Longhorn `filesystem-trim` RecurringJob (node fstrim cannot reclaim
-      inside replica sparse files); ci-runner-01's own fstrim.timer is assumed-not-verified.
-      Relates ADR-089, ADR-114, homelab#934.
+      metering 2026-08-04, the ADR-089 quota arming 2026-08-07, the 08-24 third-100% incident, the
+      09-03 fourth) and status detail: [`docs/storage-ledger.md`](storage-ledger.md). Garage
+      metrics SHIPPED (#934 → #965); pve fstrim SCHEDULED (PR#925); **pve thin-pool meter BUILT
+      2026-09-04 (PR#1367)** — node_exporter textfile on the hypervisor, `PveThinPool*` /
+      `PveVmIoError` belts, ci-runner-01's own `fstrim.timer` VERIFIED enabled+active on the
+      recreated guest. Pool sat at **71 %** right after the recreate (ci-runner-01 back at 15 GB):
+      the 80 % warning is close; watch its first firing. **Next:** a Longhorn `filesystem-trim`
+      RecurringJob (node fstrim cannot reclaim inside replica sparse files). Relates ADR-089,
+      ADR-114, homelab#934.
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
