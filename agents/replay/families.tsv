@@ -20,6 +20,8 @@ argv-payload-warn-band	argv-payload
 asvs	asvs
 base-arm-master	base-arm-master
 base-arm-nonprotected	base-arm-nonprotected
+base-arm-research-goal	base-arm-research-goal
+base-arm-research-master	base-arm-research-master
 board-classification	board-classification
 body-footprint-mismatch	body-footprint-mismatch
 c4c5-ambig-decidable	c4c5-ambig-decidable
