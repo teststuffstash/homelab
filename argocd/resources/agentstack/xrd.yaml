@@ -164,14 +164,15 @@ spec:
                     Absent = no MCP attached. The endpoint field takes a URL (scheme + host +
                     path, e.g. https://mcp.oracle.teststuff.net/mcp); the Composition derives
                     the bare HOST from it for the CNP toFQDNs leg. That host must be an FQDN,
-                    never a service VIP (FU-072/kata: kata guests cannot reach service VIPs).
+                    never a service VIP — a toFQDNs leg matches a DNS query name and cannot match
+                    a bare IP.
                     This is DISTINCT from spec.slo.endpoint (which is the blackbox probe target
                     for FU-104 availability monitoring); they may share a URL for a given stack
                     but serve different consumers and must not be conflated.
                   properties:
                     endpoint:
                       type: string
-                      description: "The MCP server URL — scheme + host + path (e.g. https://mcp.oracle.teststuff.net/mcp). The launcher passes it verbatim to the harness's attach flag (claude --mcp-config file / goose --with-streamable-http-extension); the Composition derives the bare HOST from it for the worker CNP toFQDNs leg. That host must be an FQDN, never a service VIP (kata guests cannot reach service VIPs, FU-072)."
+                      description: "The MCP server URL — scheme + host + path (e.g. https://mcp.oracle.teststuff.net/mcp). The launcher passes it verbatim to the harness's attach flag (claude --mcp-config file / goose --with-streamable-http-extension); the Composition derives the bare HOST from it for the worker CNP toFQDNs leg. That host must be an FQDN, never a service VIP — a toFQDNs leg matches a DNS query name and cannot match a bare IP."
                     tools:
                       type: array
                       items:
