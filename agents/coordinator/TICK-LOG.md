@@ -6797,3 +6797,44 @@ first live ADR-110 maintenance session before the ADR existed.
   first LLM call. Regression signature: `AgentWorkerEgressDropped` with a BARE POD IP as the
   Hubble destination → `git revert 773ad63e` (the endpoints-read grants were deliberately kept,
   so a revert needs no RBAC change).
+
+## 2026-09-04 ~11:00–11:40Z — oracle-fleet#418 stall read + three ADR-110 codeowner reads + the FU-072 soak armed (design-agents corpus session)
+
+- **Operator: "look at the stall of oracle-fleet#418, then codeowner reads to unblock homelab
+  workers to soak FU-072".** The Goal is not stalled by design; one platform-caused limbo held its
+  whole subtree. Scan (run report-only from the jail, `SCAN_STACK=oracle`) said it itself:
+  **#432 = "goal child in an undecidable state — C4/C5 HELD"** — ride 432-r1 was the FU-072
+  third occurrence's victim (dead proxy IP baked in, died 09:11Z on its first LLM call, pod gone),
+  and because `AGENT_REPORT_URL`/the broker were the SAME dead IP no `AGENT_STRIKE:` ever
+  landed, so the IL-T29 narrowing had nothing to read → the FU-204 limbo. **#433 = footprint-held**
+  on #432's stale `agent/in-progress` (`tests/**`). Verified nothing pushed (no branch, goal
+  branch unchanged since #431) → re-queued #432 by hand (queued first, in-progress second),
+  audit comment on the issue, `devbox run ring oracle` — the scan was Running at 11:34Z. **This
+  ride IS the first docker-mode ride under the service-DNS launcher — the FU-072 soak.** Watcher
+  armed (exits on a PR, a Connection-refused/API-error log signature, `AgentWorkerEgressDropped`
+  firing, or a strike).
+  The rest of the tree is human-gated by design: #422/#423's research PRs #425/#426 are
+  un-armed `research/*` rides (FU-105 — the operator asked mid-session why #426 has no
+  auto-merge: that is the research lane's contract, the ⚖ spec proposals wait for the
+  `specs/` codeowner, oracle-side read); #428/#429 are the #424 arbitration's follow-up-class
+  filings — `agent-fix` without `agent/queued`, goal members nobody dispositioned (ADR-122's
+  unbuilt S8 half; the 08:03Z checkpoint listed them as "owned" and queued nothing) — the
+  operator's/oracle jail's queue call ($0.80/$10 spent); #416 (regeneration) is unblocked
+  (#419+#420 closed) and operator-attended.
+- **Codeowner reads (ADR-110):** **PR#1354 MERGED** (`goal/*|master)` arm + two fixtures —
+  small, correct). **PR#1352** sound — the ci-red re-arm's "no stats since marker" test is safe
+  ONLY because the clause's upstream per-item/WIP holds catch a riding round first (checked
+  before ruling); one in-diff finding fixed on the branch: a stray `worlds/arbitrate/…/--` file
+  (a mis-invoked `--record`'s captured stderr) deleted. **PR#1347** carried a latent bug: the
+  `openrouter/*)` special case stripped the rail for cloaked codenames, handing opencode
+  provider=openrouter model=`<codename>` (the #876 class through the other door — opencode
+  splits `-m` at the FIRST slash); fixed on the branch (always prepend) + a `router-adopted-cloaked`
+  carrier row; 14 replays green. Both wait for the bot's re-approval at the new heads (watcher
+  armed), then the seat approves.
+- **homelab#1300 wore `agent/queued` without `agent-fix` since 09-02** (operator-authored batch)
+  — invisible to dispatch for two days; `agent-fix` added. #1299 (same batch) left: its
+  `Touches:` lands on the pin-only GUARDED `arc-runners.yaml` — operator lane, said on #1300.
+- ⚠ `argo logs` on the GC'd coordinate/review workflow pods returns nothing; the truthful read
+  of what a stack's scan sees is `SCAN_STACK=<stack> devbox run -- bash agents/coordinator-scan.sh`
+  from the jail (report-only; the ci-red clause PROBE_FAILs there on the PAT's missing
+  checks:read — jail artifact, not a cluster fact).
