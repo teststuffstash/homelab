@@ -1700,15 +1700,18 @@ if [ -n "$DOCKER" ]; then
   KATA_BLOCK=$'  runtimeClassName: kata'
   # Pull-through mirrors (FU-073, argocd/resources/registry-cache/): docker.io rides the mirror
   # via dockerd registry-mirrors (Hub-only by dockerd design); the ghcr mirror is exported for
-  # gate scripts (kind: certs.d/hosts.toml into the node, oracle-fleet#35). BGP VIPs, git-pinned —
-  # reachable from kata guests where ClusterIPs are not (FU-072). NO upstream fallback once the
+  # gate scripts (kind: certs.d/hosts.toml into the node, oracle-fleet#35). BGP VIPs, git-pinned:
+  # a LAN address the kata guest and the dind's own containerd both reach without cluster DNS —
+  # kept for that reason, not the old FU-072 one (kata reaches ClusterIPs again since 2026-09-04).
+  # NO upstream fallback once the
   # egress CNP drops the docker.io FQDNs: mirror down ⇒ pulls hang ⇒ AgentWorkerEgressDropped.
   MIRROR_DOCKER_IO="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}"
   MIRROR_GHCR="${AGENT_MIRROR_GHCR-http://192.168.40.21}"
   MIRROR_MCR="${AGENT_MIRROR_MCR-http://192.168.40.31}"
-  # nix-cache via its BGP VIP (FU-073e): the entrypoint's default is the ClusterIP service DNS,
-  # unreachable from a kata guest (FU-072) — without this override a docker ride's `devbox
-  # install` fell back to cache.nixos.org over the WAN (~4 min cold, measured 2026-07-14).
+  # nix-cache via its BGP VIP (FU-073e). The reachability reason is gone (kata reaches ClusterIPs
+  # again since 2026-09-04), but the override stays until someone measures the ClusterIP path:
+  # without it a docker ride's `devbox install` fell back to cache.nixos.org over the WAN (~4 min
+  # cold, measured 2026-07-14), and that is the failure this line exists to prevent.
   NIX_CACHE_VIP="${AGENT_NIX_CACHE_URL-http://192.168.40.23}"
   DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"\n        - name: REGISTRY_MIRROR_MCR\n          value: "'"$MIRROR_MCR"$'"'
   DOCKER_MOUNT=$'\n        - { name: docker-run, mountPath: /docker-run }'
@@ -2081,8 +2084,11 @@ ${DIND_CONTAINER}
         - name: AGENT_REPORT_URL
           value: "${PROXY_URL:+${PROXY_URL}/report}"
         # FU-134: the platform web-research endpoint, named in the env card. An env var rather than a
-        # literal in the card text because the VIP/DNS form differs per ride (kata guests cannot
-        # reach ClusterIPs — FU-072), and the card must never print an address this pod cannot use.
+        # literal in the card text so the card can never print an address this pod cannot use.
+        # ⚠ The form no longer differs per ride: the docker-mode endpoint-IP override that made it
+        # differ was deleted with FU-072 (2026-09-04), so `PROXY_URL` is now one service-DNS value
+        # for every ride and this indirection has no remaining variance to absorb. Left as-is here
+        # (behaviour-neutral); collapsing it to a literal is a card-rendering change, not this one's.
         - name: AGENT_SEARCH_URL
           value: "${PROXY_URL:+${PROXY_URL}/search}"
         - name: NODE_NAME

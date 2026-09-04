@@ -96,8 +96,10 @@ pinned opencode 1.18.21 build. The env card therefore renders the feedback-tool 
 lines for opencode too whenever `MCP_ENDPOINT` is set — this REVERSES the suppression homelab#1118
 pinned, which was correct only while the harness genuinely lacked the tool. Unchanged by #1276:
 homelab#990's rule that enforced-egress rides never DEFAULT to opencode. That host
-must be an FQDN, never a service VIP (kata guests cannot reach service VIPs, FU-072); the pod
-receives it as a reachable variable.
+must be an FQDN, never a service VIP — because the CNP renders it as a **`toFQDNs` leg**, which
+matches a DNS query name and so can never match a bare IP (composition.yaml §MCP endpoint HOST).
+The reachability reason this line used to give is gone: kata reaches service VIPs again
+(2026-09-04, FU-072). The pod receives the endpoint as a reachable variable.
 
 **NO default on the object** — an omitted defaulted object is stamped into the stored claim by the
 API server and permanently OutOfSyncs every claim file that does not carry it (the 2026-07-16
