@@ -1,0 +1,2 @@
+CALL kubectl -n agent-runtime get secret agent-transcripts-s3
+RC 0
