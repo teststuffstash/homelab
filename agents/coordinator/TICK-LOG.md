@@ -6690,4 +6690,17 @@ first live ADR-110 maintenance session before the ADR existed.
   caught my 408: ci-runner-01 is back), scratch ×5, a third physical Garage zone, Longhorn
   in-volume reclaim (~41 GiB), mirrors-never-wipe, image store off the laptops' Longhorn
   partition, `fast` too small to be the scratch tier (26.7 G = one ride).
+- **#1366 parked on the human** (operator): my 09-03 sentinel pin fix put `agents/coordinator/
+  sentinel-argo.yaml` into the auto-bump's file list without the CODEOWNERS carve-out → every pin
+  PR asked the operator. Fixed direct (c6262200: carve-out + pin-only-lint GUARDED). The branch
+  update then left the pve DaemonSet on the old tag (the #1367 split) — one-line pin pushed onto
+  `runner-image-pin`. Side effect: that direct push changed a clause input (GUARDED) with a stale
+  fixture → `scan-guarded/pre-dispatch` red on every PR replay (fixed 07396948).
+- **CI 11–22 min reds (operator: "clause replays take 10 minutes now")** — not the harness (76 s
+  locally, runner at 0.3 cores): the ∥ start subshell inherited the step's `bash -e`, a RED suite
+  killed it before `echo $? > rc`, and collect burned its full 600 s then said "never finished".
+  Green wrote rc=0 → fast, which is why only red runs were slow. `set +e` in all three start
+  subshells (3f0869b5, direct — workflows are self-gating). The direct lane now runs the clause
+  replays in `githooks/pre-push` when a clause path or scripts/ is touched (ADR-103 for pushes CI
+  never sees). Storage: FU-211 filed (generate the ledger's numbers, machines.yaml-style).
 

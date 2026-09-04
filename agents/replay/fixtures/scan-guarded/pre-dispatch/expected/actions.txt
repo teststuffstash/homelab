@@ -7,7 +7,7 @@ OUT DISPATCH #402 (homelab, declared: *)
 OUT DISPATCH #403 (homelab, declared: **/*.yaml)
 OUT DISPATCH #404 (oracle-fleet, declared: agents/coordinator/)
 OUT ORPHAN [homelab] ⛔ pin-only GUARDED path — NOT dispatched (a PR may write only a pin line there, so `ci` is structurally red; the route is an operator push to master — CODEOWNERS §Carve-outs). Re-scope or split the issue, or hand it to the operator:
-OUT ORPHAN   issue #299 — goal child: the OpenRouterKey manifest + the SCOUT_MCP_KEY env line (declared: agents/coordinator/ → guarded: agents/coordinator/reflexes-argo.yaml)
+OUT ORPHAN   issue #299 — goal child: the OpenRouterKey manifest + the SCOUT_MCP_KEY env line (declared: agents/coordinator/ → guarded: agents/coordinator/reflexes-argo.yaml agents/coordinator/sentinel-argo.yaml)
 OUT ORPHAN [homelab] ⛔ pin-only GUARDED path — NOT dispatched (a PR may write only a pin line there, so `ci` is structurally red; the route is an operator push to master — CODEOWNERS §Carve-outs). Re-scope or split the issue, or hand it to the operator:
 OUT ORPHAN   issue #400 — openrouter-operator: add a syncPolicy retry backoff (declared: argocd/platform/openrouter-operator.yaml → guarded: argocd/platform/openrouter-operator.yaml)
 OUT ORPHAN [homelab] ⛔ pin-only GUARDED path — NOT dispatched (a PR may write only a pin line there, so `ci` is structurally red; the route is an operator push to master — CODEOWNERS §Carve-outs). Re-scope or split the issue, or hand it to the operator:
