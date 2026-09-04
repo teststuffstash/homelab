@@ -246,18 +246,26 @@ six OVERSIZE items pointer-ized into
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
       upgrade`; likely also the origin of the kata `/dev/kmsg` regression, see
       `docs/spikes/kata-ci-gate.md`). Verify install.image is honored from maintenance mode.
-- [ ] **FU-072** — **Root-cause why kata pods can't reach `10.96.x` service VIPs** (runc pods on
-      the same node can). Symptom matrix, what's ruled out, and the next probes:
-      [`docs/spikes/kata-service-vip.md`](spikes/kata-service-vip.md). Workaround in place (kata
-      CI-gate pods use `dnsPolicy: None` + the LAN resolver) — fine for k3d/registry work, blocks
-      in-cluster consumers like Garage transcript upload. **⚠ 2026-08-26: the workaround's
-      dispatch-time endpoint-IP rewrite goes stale when the proxy rolls mid-ride and black-holes
-      the ride's LLM rail** (issue-272-r1 slept to the 4h deadline; evidence in the spike doc) —
-      root-causing this, or a headless-Service name, closes that too. **2026-09-03 re-probe: the
-      symptom is GONE on all four kata nodes** (kata+runc pairs, TCP + UDP VIPs — spike doc
-      §Re-probe); 355-r5 + 387-r3 were meanwhile black-holed by exactly this rewrite (proxy
-      rolled 12:26 on PR#1351). **Next:** delete `resolve_ep` + the rewrites in
-      `agents/agent-session.sh` and the `dnsPolicy: None` leg (PR lane). Relates FU-116, FU-187.
+- [ ] **FU-072** — **The kata service-VIP workaround is REMOVED; soaking.** The original symptom
+      (kata guests black-hole `10.96.x` VIPs, runc pods on the same node fine) was re-probed GONE
+      on all four kata nodes 2026-09-03 and never root-caused — but the workaround it justified
+      resolved a pod IP once at dispatch and cost three rides in two days (the third to a
+      DiskPressure eviction, not a deploy). History, symptom matrix and all three occurrences:
+      [`docs/spikes/kata-service-vip.md`](spikes/kata-service-vip.md). **2026-09-04 (PR#1372):
+      `resolve_ep`, the three rewrites and `dnsPolicy: None` deleted** — every ride uses service
+      DNS; verified by a kata pod under the ENFORCED fixer CNP (proxy/garage/pushgateway VIPs
+      answer, `openrouter.ai` still denied). **Soak is TWO legs (operator correction 2026-09-04):
+      (1) the service-VIP leg — PROVEN by oracle-fleet 432-r1 (kata, wk-metal-04, 11:40Z, enforced
+      CNP): LLM loop + `/report` through the proxy svc name, phase metrics to the pushgateway svc
+      name, transcripts uploaded to garage → PR#434 in ~10 min, zero drops; (2) the dind/kind leg —
+      UNEXERCISED: only a `task/build` ride runs `devbox run e2e` in-pod (`devbox run ci` starts no
+      kind), and in-pod kind has its own open fault (the #399-r1 segfault, oracle handoff inbox).
+      Next:** watch the first in-pod `devbox run e2e` under kube-dns (the only thing the change
+      touches for kind: `dnsPolicy: None` → kube-dns). The regression signature stays
+      `AgentWorkerEgressDropped` carrying a BARE POD IP as its Hubble destination;
+      `git revert 773ad63e` if it returns. Once soaked, drop the now-dead CNP
+      LAN-resolver DNS leg and the `endpoints`-read grants. Relates FU-116, FU-187.
+
 - [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: mirror **homelab**
       itself into Forgejo — ⚠ the `sleep-lab` pull-mirrors are **BROKEN since the 2026-08-04 DB
       migration** (`SyncMirrors` failing; fix = the idp session's orphaned-repo recipe: remove dir on
@@ -527,10 +535,12 @@ the block needs pruning, not more headings.
       PR-cap hold (the 2026-09-01 board freeze); **+2026-09-03: the state-fp debounce** — a
       completed no-op round after an arbitrate re-dispatch (oracle PR#391, 7.5h silent) and a
       capacity-deferred ci-red dispatch (PR#394) both hash identical, so "DEBOUNCED, a human is
-      the next mover" is reported and no human is told. **Next:** hold-narrowing = #1203/PR#1206
-      merged; residue = honest strike-held rows + hold-chain propagation + the CAP SPLIT
-      (v1.3.1 delta 1, homelab#887) + the fingerprint faces (their own scan issue, filed
-      2026-09-03). Relates FU-187, FU-143, FU-147.
+      the next mover" is reported and no human is told. **2026-09-04:** the fingerprint faces
+      FIXED (#1345 → PR#1352); the CAP SPLIT is complete — updater park-skip (#887 → PR#1375,
+      measured 39/41 CI runs on unchanged parks before it) + parks counted BLOCKED|BEHIND
+      (PR#1376). **Next:** honest strike-held rows + hold-chain propagation (the remaining
+      board faces); the C4/C5 goal-child limbo with NO strike evidence (oracle#432 today —
+      FU-072's dead IP ate the strike post) is FU-204's. Relates FU-187, FU-143, FU-147.
 
 - [ ] **FU-200** — **The brief's fleet-strike rule has no deterministic reader.** "Same
       `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h ⇒ ONE
@@ -863,6 +873,22 @@ the block needs pruning, not more headings.
       `docs/storage-ledger.md` (tier table, pool line, quota table, the requirements rows' "today"
       figures) stamped with the read date, per `machines/generate.py`; judgments stay prose.
       Relates FU-093, FU-177 (same class: one source, generated blocks).
+
+- [ ] **FU-212** — **Responder workflows Error on an RBAC gap and the alert gets no triage at all.**
+      Four `respond-*` workflows on 2026-09-04 (08:18, 08:32, 08:37, 08:42 — all `PodSigkilled`,
+      while other runs of the SAME alert succeeded, so it is intermittent, not per-class) died with
+      `error in entry template execution: configmaps is forbidden: User
+      system:serviceaccount:argo:argo-workflows-workflow-controller cannot create resource
+      "configmaps" ... in the namespace "agent-coordinator"`. The Role bound to that SA there
+      (`argo-workflows-workflow`) grants only `argoproj.io/workflowtaskresults: create,patch` — and
+      every stack namespace's Composition-rendered Role (ADR-096 §RBAC) is identical, so this hits
+      the whole fleet, not just the coordinator ns. Controller is v4.0.7; what it wants a ConfigMap
+      *for* is not established (memoization cache and sync-lock state are the candidates — the
+      responder declares a `synchronization.semaphores` configMapKeyRef). An Errored responder is
+      silent: no ledger entry, no issue, no notification. **Next:** reproduce against v4.0.7 to name
+      the write, then add it to the rendered Role (Composition + the coordinator's own manifest);
+      until then an alert on `argo_workflows_error_count` / Errored respond-* would at least make it
+      visible. Relates FU-210 (the other half of "a responder run that leaves no record").
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
