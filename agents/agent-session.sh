@@ -2086,7 +2086,7 @@ ${DIND_CONTAINER}
         # FU-134: the platform web-research endpoint, named in the env card. An env var rather than a
         # literal in the card text so the card can never print an address this pod cannot use.
         # ⚠ The form no longer differs per ride: the docker-mode endpoint-IP override that made it
-        # differ was deleted with FU-072 (2026-09-04), so `PROXY_URL` is now one service-DNS value
+        # differ was deleted with FU-072 (2026-09-04), so PROXY_URL is now one service-DNS value
         # for every ride and this indirection has no remaining variance to absorb. Left as-is here
         # (behaviour-neutral); collapsing it to a literal is a card-rendering change, not this one's.
         - name: AGENT_SEARCH_URL
