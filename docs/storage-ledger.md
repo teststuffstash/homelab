@@ -144,7 +144,7 @@ again 2026-08-24 (the autoextend belt fired at 80% on 08-17 and failed exactly a
 below predicted — 257 VG extents left), froze wk-01 twice, and wiped Garage's metadata:
 [incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md). `discard=on` returns
 nothing on its own — Talos guests never fstrim, so freed blocks only came back with the 08-07
-and 08-24 manual trims. **The trim is automated since 2026-08-25** — a daily privileged CronJob
+and 08-24 manual trims. **The trim is automated since 2026-08-25** — a privileged CronJob (daily; twice daily since 2026-09-04)
 per pool VM, `argocd/resources/node-fstrim/`, with the reclaim pushed to the pushgateway and two
 alerts on the belt itself (below). It went in at 78.72% and took the pool to **62.99%** on its
 first run: wk-02 returned 236 GiB, wk-01 76 GiB, cp-01 and wk-03 36 GiB each. Metering the *pool*
@@ -250,7 +250,8 @@ threshold**.
   ([`tofu-state.md`](tofu-state.md)); it was sized against the actual 1.4MB main-root state
   precisely because the tier has no room for a round-number guess.
 - **Guest fstrim — BUILT 2026-08-25** (`argocd/resources/node-fstrim/`, FU-093's "periodic trim").
-  A daily CronJob per pool VM (`zone: proxmox`), staggered, privileged, `/var` hostPath'd; the
+  A CronJob per pool VM (`zone: proxmox`; daily, **twice daily since 2026-09-04** — the fourth
+  fill happened 19 h after a run), staggered, privileged, `/var` hostPath'd; the
   runbook recipe made a schedule. It pushes `node_fstrim_bytes_trimmed` / `_success` /
   `_last_run_timestamp` per node, and `NodeFstrimFailed` + `NodeFstrimStale` alert on the belt —
   because the historical failure was not a trim that broke, it was a reclaim path with no owner.
