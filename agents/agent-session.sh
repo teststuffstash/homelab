@@ -1296,10 +1296,12 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
       PF_ISSUE_TITLE="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.title')"
       PF_ISSUE_BODY="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.body // ""')"
       PF_ISSUE_LABELS="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.labels | join(", ")')"
-      PF_ISSUE_LABELS_LINE=""
+      PF_ISSUE_LABELS_LINE="
+"
       if [ -n "$PF_ISSUE_LABELS" ]; then
         PF_ISSUE_LABELS_LINE="
 **Labels:** ${PF_ISSUE_LABELS}
+
 "
       fi
       PF_ISSUE_MD="# Issue #${PF_ISSUE}
