@@ -1,7 +1,8 @@
 # Spike — kata guests can't reach cluster-service VIPs
 
 **Tracked by:** FU-072. **Status:** symptom GONE on re-probe (2026-09-03, §Re-probe below) — never
-root-caused; the workaround is now the only thing still causing harm (the stale-endpoint class).
+root-caused; the workaround is now the only thing still causing harm (the stale-endpoint class,
+third occurrence 2026-09-04 — §Third occurrence).
 **Environment:** Cilium 1.19, `kubeProxyReplacement`, `bpf-lb-sock=false`. First seen 2026-07-13 on
 wk-metal-03.
 
@@ -69,6 +70,28 @@ rolls it), garage and pushgateway 2 each; Hubble shows 2.8k POLICY_DENIED drops 
 `toEndpoints` can't match).
 **Consequence:** the workaround (endpoint-IP rewrite + `dnsPolicy: None`) is now pure liability —
 FU-072's next action is deleting it, not root-causing the original symptom.
+
+## Third occurrence (2026-09-04): the trigger is any reschedule, not a deploy roll
+
+`AgentWorkerEgressDropped{source="oracle-fleet"}` fired 08:16:47Z; the drop destination was
+`10.244.6.86`, a **pod IP belonging to nothing** (Hubble's `destinationContext` resolves live
+identities, so a stale target shows as a bare IP — that signature alone names this class).
+
+The chain, read backwards from the alert: hp-01 hit `NodeHasDiskPressure` at ~08:15Z
+(`EvictionThresholdMet`, ephemeral-storage — the morning's pre-puller bake, the same class that
+took wk-03's 35 GB fs), kubelet evicted `openrouter-proxy` off it, and the pod came back on wk-02
+as `10.244.0.220` (**same ReplicaSet**, `86f7697b74`, 20 h old — this was not a deploy).
+Ride `agent-oracle-fleet-issue-432-r1` (kata, wk-metal-04) had been dispatched at 08:08:08Z with
+`10.244.6.86` baked into all six derived URLs — `OPENROUTER_HOST`, `ANTHROPIC_BASE_URL`,
+`AGENT_REPORT_URL`, `AGENT_SEARCH_URL`, `GIT_CRED_BROKER_URL`, and the proxy leg of the CNP. It
+then spent ~1 h in the devbox install phase, so it did not touch the LLM rail until **09:11:38Z**,
+where it died `API Error: Connection refused` on its first call; `finalize` has been retrying the
+broker token every 10 s since (`<urlopen error timed out>` → "falling back to mount/env").
+
+**What this adds to the 2026-08-26 finding: the trigger set is far wider than "a router PR
+merged".** Any eviction, drain, node-pressure reschedule or OOM restart of a target moves the IP,
+and the ride's window of exposure is the whole ride, not the ~4×/day roll rate. It also cost more
+than the round: an hour of devbox install burned before the failure was even observable.
 
 ## Collateral finding (2026-08-26): the endpoint IP goes stale when the target rolls
 

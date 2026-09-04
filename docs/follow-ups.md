@@ -256,7 +256,9 @@ six OVERSIZE items pointer-ized into
       root-causing this, or a headless-Service name, closes that too. **2026-09-03 re-probe: the
       symptom is GONE on all four kata nodes** (kata+runc pairs, TCP + UDP VIPs — spike doc
       §Re-probe); 355-r5 + 387-r3 were meanwhile black-holed by exactly this rewrite (proxy
-      rolled 12:26 on PR#1351). **Next:** delete `resolve_ep` + the rewrites in
+      rolled 12:26 on PR#1351). **2026-09-04: third occurrence** — and the trigger set is
+      ANY reschedule (a DiskPressure eviction moved the proxy; no deploy involved), costing ride
+      432-r1 after an hour of install: spike doc §Third occurrence. **Next:** delete `resolve_ep` + the rewrites in
       `agents/agent-session.sh` and the `dnsPolicy: None` leg (PR lane). Relates FU-116, FU-187.
 - [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: mirror **homelab**
       itself into Forgejo — ⚠ the `sleep-lab` pull-mirrors are **BROKEN since the 2026-08-04 DB
@@ -863,6 +865,22 @@ the block needs pruning, not more headings.
       `docs/storage-ledger.md` (tier table, pool line, quota table, the requirements rows' "today"
       figures) stamped with the read date, per `machines/generate.py`; judgments stay prose.
       Relates FU-093, FU-177 (same class: one source, generated blocks).
+
+- [ ] **FU-212** — **Responder workflows Error on an RBAC gap and the alert gets no triage at all.**
+      Four `respond-*` workflows on 2026-09-04 (08:18, 08:32, 08:37, 08:42 — all `PodSigkilled`,
+      while other runs of the SAME alert succeeded, so it is intermittent, not per-class) died with
+      `error in entry template execution: configmaps is forbidden: User
+      system:serviceaccount:argo:argo-workflows-workflow-controller cannot create resource
+      "configmaps" ... in the namespace "agent-coordinator"`. The Role bound to that SA there
+      (`argo-workflows-workflow`) grants only `argoproj.io/workflowtaskresults: create,patch` — and
+      every stack namespace's Composition-rendered Role (ADR-096 §RBAC) is identical, so this hits
+      the whole fleet, not just the coordinator ns. Controller is v4.0.7; what it wants a ConfigMap
+      *for* is not established (memoization cache and sync-lock state are the candidates — the
+      responder declares a `synchronization.semaphores` configMapKeyRef). An Errored responder is
+      silent: no ledger entry, no issue, no notification. **Next:** reproduce against v4.0.7 to name
+      the write, then add it to the rendered Role (Composition + the coordinator's own manifest);
+      until then an alert on `argo_workflows_error_count` / Errored respond-* would at least make it
+      visible. Relates FU-210 (the other half of "a responder run that leaves no record").
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query

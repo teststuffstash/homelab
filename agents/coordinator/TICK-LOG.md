@@ -6739,3 +6739,36 @@ first live ADR-110 maintenance session before the ADR existed.
   own loops): **sleep-tracking** has no pre-create sweep (trap-only, same shared daemon, the exact
   #243 cancel-path gap), and **circles** uses a fixed `circles-test` cluster name (rule 1) —
   contained only because its gate runs in ride pods today.
+
+## 2026-09-04 ~09:00–09:30Z — `AgentWorkerEgressDropped/oracle-fleet`: the FU-072 workaround, third time, on a new trigger
+
+- **Operator: "is this the same kata VIP problem?"** — **no, and that distinction is the whole
+  finding.** The original symptom (kata guests black-hole `10.96.x` VIPs) was re-probed GONE on
+  all four kata nodes 2026-09-03. What fired is its **workaround**: the dispatch-time endpoint-IP
+  rewrite. Signature: the Hubble drop destination is a bare pod IP (`10.244.6.86`) rather than an
+  FQDN — a dead identity `toEndpoints` cannot match.
+- **Chain** (spike doc §Third occurrence has it in full): hp-01 `NodeHasDiskPressure` ~08:15Z
+  (ephemeral-storage, the morning's pre-puller bake — the wk-03 class recurring) → kubelet evicted
+  `openrouter-proxy` → back on wk-02, new IP, **same ReplicaSet** → ride 432-r1 (dispatched
+  08:08:08Z, kata/wk-metal-04) held the dead IP in all six derived URLs → spent ~1 h in devbox
+  install, then died `Connection refused` on its FIRST LLM call at 09:11:38Z. finalize has been
+  retrying the broker token every 10 s since. **New vs 2026-08-26: the trigger is ANY reschedule,
+  not a router PR merge** — the exposure window is the whole ride, not the ~4×/day roll rate.
+  FU-072 unchanged in direction (delete `resolve_ep` + the rewrites + the `dnsPolicy: None` leg),
+  but this is the third ride lost to it in two days; the operator decision is whether to execute
+  it now.
+- **Two platform findings while reading the board:**
+  - **FU-210 second instance**: `respond-k8fww` handled this exact alert at 08:19:19Z and
+    **Succeeded** — no ledger entry (`responder-seen` has no oracle-fleet egress key; the only two
+    egress entries are 08-26 openrouter-operator and 09-01 sleep-tracking), no issue, no
+    transcript. A triage that files nothing is indistinguishable from one that never ran.
+  - **FU-212 filed** (new): FOUR responder workflows today Errored on
+    `configmaps is forbidden: … argo-workflows-workflow-controller … in the namespace
+    "agent-coordinator"` (08:18/08:32/08:37/08:42, all PodSigkilled — but other PodSigkilled runs
+    succeeded, so intermittent, not per-class). The bound Role grants only
+    `workflowtaskresults: create,patch`, and every stack namespace's Composition-rendered Role is
+    identical → fleet-wide. Controller v4.0.7; what it wants the ConfigMap for is not established.
+    Those alerts got no triage at all and nothing said so.
+- ⚠ `docs/agents/meta-state.md` is **850 lines** — its own header says "tiny, transient", and the
+  §Live state block alone runs 760. Last pruned 2026-08-25. It is now the token cost a fresh
+  `/meta-coordinate` bootstrap exists to avoid; due for a prune.
