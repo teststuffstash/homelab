@@ -267,7 +267,12 @@ it); its routine package maintenance is code anyway: `devbox run -- ansible-play
 ansible/pve-upgrade.yml` (ANSIBLE_CONFIG=ansible/ansible.cfg; SSH key is jail-local). The play
 snapshots `/etc/pve` to `~/.claude/homelab-pve-backup/`, runs an IN-MAJOR `apt dist-upgrade`
 (8→9-style major jumps are a separate, sources-edit event), and reports REBOOT-PENDING — it
-never reboots. The reboot is a window (first run: 2026-08-18, ~15 min total outage):
+never reboots. The host's thin pool is metered the same way — `devbox run -- ansible-playbook
+ansible/pve-node-exporter.yml` puts node_exporter + a textfile timer on pve (FU-093; alerts
+`PveThinPool*`/`PveVmIoError` in `argocd/resources/pve-metrics/`; re-run after a reinstall).
+When a pool VM goes NotReady with its Talos API "no route to host", read the hypervisor FIRST:
+`qm status <vmid> --verbose | grep qmpstatus` (`io-error` = paused on a failed write) and
+`lvs -o lv_name,data_percent pve`. The reboot is a window (first run: 2026-08-18, ~15 min total outage):
 
 1. **Pre-flight:** Longhorn 0 degraded volumes; no agent rides mid-flight you care about.
 2. **Full-stop, not drain** — cp-01 is the only control plane, so the API goes down either
