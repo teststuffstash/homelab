@@ -1432,6 +1432,7 @@ ${PF_ARB_BODY}"
           PF_CHECKS_RAW="$(gh api "repos/${PF_SLUG}/commits/${PF_HEAD_SHA}/check-runs" 2>/dev/null)" || PF_CHECKS_RAW=""
           PF_CHECKS="$(printf '%s' "$PF_CHECKS_RAW" | jq -r '[.check_runs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | {name, conclusion, url: .html_url}]' 2>/dev/null)" || PF_CHECKS=""
           PF_CHECKS_COUNT="$(printf '%s' "$PF_CHECKS" | jq 'length' 2>/dev/null || echo 0)"
+          [ -n "$PF_CHECKS_COUNT" ] || PF_CHECKS_COUNT=0
           if [ "$PF_CHECKS_COUNT" -gt 0 ]; then
             PF_CI_FAILURE_MD="## CI Failures (head ${PF_HEAD_SHA:0:8})
 
@@ -1450,11 +1451,13 @@ ${PF_ARB_BODY}"
             PF_LOG_TAIL=""
             PF_RUN_ID="$(gh run list --repo "${PF_SLUG}" --branch "${PF_PR_REF}" --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || PF_RUN_ID=""
             if [ -z "$PF_RUN_ID" ] || [ "$PF_RUN_ID" = "null" ]; then
-              PF_INDEX_ITEM "ci-failure.md" "MISSING" "CI run log unreadable for PR #${PF_PR} branch ${PF_PR_REF}"
+              echo "→ dispatch deferred — directive unreadable (CI run log for PR #${PF_PR} branch ${PF_PR_REF}; required for ci-red round) — the next pass retries (homelab#1205)" >&2
+              exit 0
             else
               PF_LOG_TAIL="$(gh run view "${PF_RUN_ID}" --repo "${PF_SLUG}" --log-failed 2>/dev/null | tail -200)" || PF_LOG_TAIL=""
               if [ -z "$PF_LOG_TAIL" ]; then
-                PF_INDEX_ITEM "ci-failure.md" "MISSING" "CI run log empty for PR #${PF_PR} run ${PF_RUN_ID}"
+                echo "→ dispatch deferred — directive unreadable (CI run log empty for PR #${PF_PR} run ${PF_RUN_ID}; required for ci-red round) — the next pass retries (homelab#1205)" >&2
+                exit 0
               else
                 PF_CI_FAILURE_MD="${PF_CI_FAILURE_MD}
 

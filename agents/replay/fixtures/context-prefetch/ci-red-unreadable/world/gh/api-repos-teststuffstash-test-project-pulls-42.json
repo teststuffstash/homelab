@@ -5,5 +5,5 @@
   "baseRefName": "master",
   "number": 42,
   "state": "open",
-  "head": {"sha": "abc123def456"}
+  "head": {"ref": "fix/issue-1175-test", "sha": "abc123def456"}
 }
