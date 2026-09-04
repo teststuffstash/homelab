@@ -17,8 +17,9 @@ if [ -n "$PF_PAYLOAD" ]; then
   else
     echo "→ prelude no-labels arm verified: no **Labels:** line present"
   fi
-  # Assert blank line between ## <title> and body (grep -z treats whole input as one line)
-  if printf '%s' "$PF_DECODED" | grep -zq '^## .*\n\n'; then
+  # Assert blank line between ## <title> and body: look for "## <title>" followed by
+  # an empty line (two consecutive newlines). Use awk to check the pattern.
+  if printf '%s' "$PF_DECODED" | awk '/^## /{getline line; if(length(line)==0) {found=1; exit 0}} END{exit !found+0}'; then
     echo "→ prelude blank-line verified: blank line present between title and body"
   else
     echo "→ prelude blank-line MISSING: no blank line between title and body"
