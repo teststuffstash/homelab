@@ -890,16 +890,16 @@ the block needs pruning, not more headings.
       until then an alert on `argo_workflows_error_count` / Errored respond-* would at least make it
       visible. Relates FU-210 (the other half of "a responder run that leaves no record").
 
-- [ ] **FU-213** — **opencode.ai is PARKED — the proxy's client sends no `x-opencode-session`
-      header** (operator mail, 2026-09-04): requests from `homelab-openrouter-proxy` (the UA BOTH
-      legs send — python-urllib's own is Cloudflare-1010'd) lack the per-conversation header
-      OpenCode optimizes on, and "may error" from 09-06. Killed same-day at the proxy rather than
-      waiting for the errors: `OPENCODE_RAIL_DISABLED=1` → both legs refuse 503 and
-      `/opencode-limit` serves `limited=true reason=rail-disabled`, so `--pick-rail` skips Go and a
-      Go-primary worker takes the M12 degrade to `claude/haiku`. The jail shim
-      (`scripts/claude-model-shim.py`, UA `claude-model-shim/1.0`) is deliberately NOT parked —
-      unflagged, operator-driven, and where a fix gets tested. **Next:** send the header (the proxy
-      already threads `cb_session`) and re-enable with `"0"`, or drop the rail. Relates FU-181, ADR-107.
+- [ ] **FU-213** — **opencode.ai is PARKED: our client sends no `x-opencode-session` header**
+      (operator mail, 2026-09-04 — "may error" from 09-06). Parked same-day at the egress proxy:
+      `OPENCODE_RAIL_DISABLED=1` → both legs 503, `/opencode-limit` serves
+      `limited=true reason=rail-disabled`, so `--pick-rail` skips Go and a Go-primary ride takes
+      the M12 degrade to `claude/haiku`. The jail shim (own UA, unflagged) stays live — it is
+      where a fix gets tested. What the header is, the public prior art
+      ([earendil-works/pi#4847](https://github.com/earendil-works/pi/issues/4847), same defect,
+      fixed 2026-05-22), and where the id comes from:
+      [`agents/chainless-redesign.md`](agents/chainless-redesign.md) §The `x-opencode-session`
+      header. **Next:** send it (+ `x-opencode-client`) and re-enable with `"0"`, or drop the rail.
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query

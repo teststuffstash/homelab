@@ -324,7 +324,37 @@ migrate through).
 >
 > **PARKED 2026-09-04 (FU-213):** both opencode.ai legs are off at the egress proxy
 > (`OPENCODE_RAIL_DISABLED=1`) until the `x-opencode-session` header question is settled —
-> vendor-side pause, posture unchanged.
+> vendor-side pause, posture unchanged. Status + next action: FU-213.
+
+### The `x-opencode-session` header (the park's cause, 2026-09-04)
+
+OpenCode mailed that this platform's client — `User-Agent: homelab-openrouter-proxy`, which BOTH
+legs send (python-urllib's own UA is Cloudflare-1010'd, probed above) — sends no
+`x-opencode-session`, and that such requests "may error" from 2026-09-06.
+
+What the header IS, from the one public account of the same defect —
+[earendil-works/pi#4847](https://github.com/earendil-works/pi/issues/4847) (filed 2026-05-21,
+fixed 2026-05-22):
+
+- It is a **provider-affinity key, not auth**: opencode routes requests carrying the same id to
+  the same upstream provider so the prompt cache hits. One stable id **per conversation**.
+- **Absent, opencode falls back to CLIENT-IP affinity** (issue thread) — which is why nothing has
+  broken here yet: the whole fleet egresses one IP. That fallback is also the reason the mail
+  reads "may error" rather than "does error"; do not treat the IP path as a plan.
+- pi's fix attaches two headers in the same SDK path that sets its other provider defaults:
+  `x-opencode-session: <session id>` and `x-opencode-client: pi` (the second is courtesy/stats,
+  and pi changed no User-Agent). Explicit configured headers still win.
+- ⚠ The trap named in that thread: a **hardcoded** id pins every request from the installation to
+  one provider — affinity bound to the client instead of the conversation. Ours is a FLEET behind
+  one proxy, so a constant would be strictly worse than the IP fallback it replaces: the id must
+  be the RIDE's.
+- Where the id would come from: `_cb_session(self.headers)` already computes exactly that
+  granularity for the breaker — the injected credential's opaque ref (the per-session/per-project
+  secret name) — and `_forward_upstream` already carries a `cb_session` argument into the same
+  leg-header allowlist that sets the UA. Two gaps to close, both in that function's callers:
+  the Go/Zen arms leave `cb_session` **None** (it is computed on the OpenRouter/breaker arms
+  only), and a direct-key ride degrades to `direct:<key-hash>` — one bucket for every ride sharing
+  that key, i.e. the hardcoded-id trap by another route.
 
 - Endpoints: `https://opencode.ai/zen/go/v1/messages` (Anthropic-compat) ·
   `…/v1/chat/completions` (OpenAI-compat) · `…/v1/models` (25 live ids). **Bearer auth works**;
