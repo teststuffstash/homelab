@@ -6868,4 +6868,12 @@ first live ADR-110 maintenance session before the ADR existed.
   empty); #1249 waits for S8 (linked); #1200 left open (operator: think later — not covered by
   any proxy); #1370 = FU-171 resight, inert.
 - Watches: codeowner-park watcher on the exporter series (zero gh calls) — first wake = PR#1375.
+- **13:00–14:20Z codeowner reads off the park watcher (exporter series, zero gh calls):** PR#1375
+  (#887 park-skip, loop-built) · PR#1377 (#1182) · PR#1383 (#1291 — two bot APPROVEDs 8 s apart at
+  one head: the double-dispatch class) · or-op PR#59 (#56 — implements the surface-never-re-mint
+  ruling; nit: transition time rewritten every pass) · PR#1379 (#1204). 6 of the 12 triage items
+  landed within ~2 h. **#418 follow-up (operator):** #428/#429 were never going to queue — the
+  arbitrate door files goal children inert and no reader queues an existing tree member (the
+  checkpoint disposes STORE entries only) → hand-queued + **#1381 filed+queued** (carry
+  `harvest=store` on arbitrate/changes-requested units, append instead of file). Wind-down 14:20Z.
 

@@ -8,6 +8,28 @@ meant to avoid.)
 
 ## Live state (pruned 2026-08-25 evening, the sweep-pipeline session — history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ 2026-09-04 ~14:20Z WIND-DOWN (the #418-stall + park-economics + board-triage corpus session
+  — TICK-LOG has the arc). Fresh-session pickup:**
+  - **FU-072 soak = two legs.** Service-VIP leg PROVEN (oracle 432-r1 → PR#434 merged 12:00Z, zero
+    drops); **dind/kind leg UNEXERCISED** — needs the first in-pod `devbox run e2e` (a `task/build`
+    ride), and that path carries the pre-existing #399-r1 kind-node segfault sitting in the oracle
+    handoff inbox (`/handoff`). Regression signature unchanged: `AgentWorkerEgressDropped` with a
+    bare pod IP; revert `773ad63e`.
+  - **oracle-fleet#418**: #432/#433 done; #428/#429 hand-queued 13:0xZ (riding); research PRs
+    **#425/#426 wait on the operator's `specs/` read (by design)**; #416 regeneration is
+    operator-attended (blockers closed). **homelab#1381 queued** — the arbitrate door files goal
+    children inert with no reader; fix = carry `harvest=store` like merged-closeout.
+  - **Park economics COMPLETE**: PR#1375 (updater skips parks) + PR#1376 (blockpark counts
+    BLOCKED|BEHIND) + PR#1352 (state-fp faces). Research-into-goal ruling landed (PR#1373: card
+    rule 10, launcher arms research into `goal/**`).
+  - **Board**: queued + riding = #1205 (in-progress), #1381 #1374 #1350 #1300 (#1299/#1207 are
+    operator-lane, guarded/deny paths — de-queue or hand-do). Codeowner reads are the morning's:
+    the park watcher recipe = poll `github_pull_request_codeowner_park` on Prometheus (zero gh
+    calls) — `scratchpad/watch-parks.sh` was session-local, re-write in 20 lines if wanted.
+    PR#1379 approved, auto-merging behind the updater.
+  - **Operator-owed**: #1200 (think later — no proxy covers a manifest lint), #1249 (S8 head (a)),
+    #1370 (FU-171 resight), or-op#34 (needs a real 429), #946/#1224/#1237/#1238 (seat sittings),
+    #1299/#1207 (operator-lane deliverables).
 - **⚑ 2026-09-03 ~18:40Z (the #532 pre-merge support session — TICK-LOG has the arc). Fresh-session
   pickup:**
   - oracle-fleet **#414** filed under bucket #386 (the #410 platform-read fixes: absolute /status fetch,
