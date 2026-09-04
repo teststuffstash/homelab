@@ -1,0 +1,4 @@
+OUT → research recipe into goal/418-answers-match-the-printed-law: auto-merge ARMED — the human read is the goal's assembly (goal→master), not this hop
+OUT → VERIFIED: NO_ARM is empty — PR will be ARMED
+OUT REACHED: end
+RC 0

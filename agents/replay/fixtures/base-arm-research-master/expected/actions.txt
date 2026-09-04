@@ -1,0 +1,4 @@
+OUT → --no-arm derived from research recipe into master (human-gated PR — the weave, FU-105)
+OUT → VERIFIED: NO_ARM=1 — PR will NOT be armed (expected for non-protected base)
+OUT REACHED: end
+RC 0

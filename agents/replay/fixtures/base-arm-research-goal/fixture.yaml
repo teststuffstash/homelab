@@ -1,0 +1,14 @@
+# research-arm-guard (operator ruling 2026-09-04, oracle-fleet#418): un-arming a research ride is
+# keyed on (recipe, base), never on the recipe alone.
+#
+# THE CONTRACT:
+#   1. research recipe + Base: goal/** → auto-merge ARMED (bot review into the goal; the ⚖ rows
+#      get their one human read at the assembly, goal→master).
+#   2. The launcher's stdout line names the base and says it armed.
+name: base-arm-research-goal
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:research-arm-guard
+  - file:../base-arm-master/post.sh

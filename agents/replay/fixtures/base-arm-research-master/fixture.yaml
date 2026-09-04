@@ -1,0 +1,14 @@
+# research-arm-guard (operator ruling 2026-09-04, oracle-fleet#418): un-arming a research ride is
+# keyed on (recipe, base), never on the recipe alone.
+#
+# THE CONTRACT:
+#   1. research recipe + base master → auto-merge NOT armed (the FU-105 human weave stands
+#      exactly as before this ruling).
+#   2. NO_ARM is set to 1.
+name: base-arm-research-master
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:research-arm-guard
+  - file:../base-arm-nonprotected/post.sh
