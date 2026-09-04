@@ -1,8 +1,9 @@
 # Spike — kata guests can't reach cluster-service VIPs
 
 **Tracked by:** FU-072. **Status:** symptom GONE on re-probe (2026-09-03, §Re-probe below) — never
-root-caused; the workaround is now the only thing still causing harm (the stale-endpoint class,
-third occurrence 2026-09-04 — §Third occurrence).
+root-caused. **The workaround was REMOVED 2026-09-04** (PR#1372: `resolve_ep`, the three rewrites
+and `dnsPolicy: None`) after its third occurrence cost a ride — every ride now uses service DNS,
+and this page is history plus the revert criterion (§Third occurrence).
 **Environment:** Cilium 1.19, `kubeProxyReplacement`, `bpf-lb-sock=false`. First seen 2026-07-13 on
 wk-metal-03.
 

@@ -6772,3 +6772,28 @@ first live ADR-110 maintenance session before the ADR existed.
 - ⚠ `docs/agents/meta-state.md` is **850 lines** — its own header says "tiny, transient", and the
   §Live state block alone runs 760. Last pruned 2026-08-25. It is now the token cost a fresh
   `/meta-coordinate` bootstrap exists to avoid; due for a prune.
+- **FU-072 EXECUTED the same session (operator: "let's try it, be ready to revert") — PR#1372
+  merged 09:56Z.** `resolve_ep`, the three rewrites (proxy/garage/pushgateway) and
+  `dnsPolicy: None` deleted; every ride uses service DNS. Verified BEFORE committing on the
+  combination nobody had tested — a kata pod under the ENFORCED fixer CNP (the 09-03 re-probe used
+  unpolicied pods plus rides still on `dnsPolicy: None`): cluster resolv.conf, svc DNS via
+  kube-dns, proxy VIP 200, garage VIP 403 (S3 answering unauthenticated), pushgateway VIP 200,
+  and `openrouter.ai:443` still DENIED as the negative control. Probe carried its own label +
+  a scoped CNP copy so it never counted as WIP.
+- **Both gates earned their keep on this one.** (1) The ADR-103 ratchet blocked the first push —
+  a clause path changed with no fixture. Checked whether a fixture could apply rather than
+  reaching for the escape hatch: the harness composes clauses ONLY from `>>>REPLAY:` blocks and
+  the deleted code sits outside every marker, so none could, before or after → recorded in
+  `agents/replay/fixtures/README.md` (the #1113 shape). (2) The reviewer requested changes on
+  FOUR sibling comments still asserting "kata can't reach ClusterIPs" — correct, and one was a
+  same-file self-contradiction. Fixing them surfaced that the MCP "FQDN, never a service VIP"
+  rule had the WRONG reason all along: the real one is that the CNP renders that host into a
+  `toFQDNs` leg, which cannot match a bare IP — stated in four places (agentstack.md,
+  composition.yaml, xrd.yaml ×2), two of which the review never reached. (3) My own review-fix
+  then tripped `prompt-transport-lint`: backticks around PROXY_URL inside the pod-manifest
+  heredoc, which EXPANDS — live command substitution, a real defect, not a false positive.
+- ⚠ **The soak is not done.** No docker-mode ride has run under the new launcher yet; 432-r1 was
+  dispatched under the old one and holds the dead IP. Watch the first `fixer.docker: true` ride's
+  first LLM call. Regression signature: `AgentWorkerEgressDropped` with a BARE POD IP as the
+  Hubble destination → `git revert 773ad63e` (the endpoints-read grants were deliberately kept,
+  so a revert needs no RBAC change).

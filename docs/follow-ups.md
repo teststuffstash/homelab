@@ -246,20 +246,19 @@ six OVERSIZE items pointer-ized into
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
       upgrade`; likely also the origin of the kata `/dev/kmsg` regression, see
       `docs/spikes/kata-ci-gate.md`). Verify install.image is honored from maintenance mode.
-- [ ] **FU-072** — **Root-cause why kata pods can't reach `10.96.x` service VIPs** (runc pods on
-      the same node can). Symptom matrix, what's ruled out, and the next probes:
-      [`docs/spikes/kata-service-vip.md`](spikes/kata-service-vip.md). Workaround in place (kata
-      CI-gate pods use `dnsPolicy: None` + the LAN resolver) — fine for k3d/registry work, blocks
-      in-cluster consumers like Garage transcript upload. **⚠ 2026-08-26: the workaround's
-      dispatch-time endpoint-IP rewrite goes stale when the proxy rolls mid-ride and black-holes
-      the ride's LLM rail** (issue-272-r1 slept to the 4h deadline; evidence in the spike doc) —
-      root-causing this, or a headless-Service name, closes that too. **2026-09-03 re-probe: the
-      symptom is GONE on all four kata nodes** (kata+runc pairs, TCP + UDP VIPs — spike doc
-      §Re-probe); 355-r5 + 387-r3 were meanwhile black-holed by exactly this rewrite (proxy
-      rolled 12:26 on PR#1351). **2026-09-04: third occurrence** — and the trigger set is
-      ANY reschedule (a DiskPressure eviction moved the proxy; no deploy involved), costing ride
-      432-r1 after an hour of install: spike doc §Third occurrence. **Next:** delete `resolve_ep` + the rewrites in
-      `agents/agent-session.sh` and the `dnsPolicy: None` leg (PR lane). Relates FU-116, FU-187.
+- [ ] **FU-072** — **The kata service-VIP workaround is REMOVED; soaking.** The original symptom
+      (kata guests black-hole `10.96.x` VIPs, runc pods on the same node fine) was re-probed GONE
+      on all four kata nodes 2026-09-03 and never root-caused — but the workaround it justified
+      resolved a pod IP once at dispatch and cost three rides in two days (the third to a
+      DiskPressure eviction, not a deploy). History, symptom matrix and all three occurrences:
+      [`docs/spikes/kata-service-vip.md`](spikes/kata-service-vip.md). **2026-09-04 (PR#1372):
+      `resolve_ep`, the three rewrites and `dnsPolicy: None` deleted** — every ride uses service
+      DNS; verified by a kata pod under the ENFORCED fixer CNP (proxy/garage/pushgateway VIPs
+      answer, `openrouter.ai` still denied). **Next:** watch the first docker-mode rides — the
+      regression signature is `AgentWorkerEgressDropped` carrying a BARE POD IP as its Hubble
+      destination; `git revert 773ad63e` if it returns. Once soaked, drop the now-dead CNP
+      LAN-resolver DNS leg and the `endpoints`-read grants. Relates FU-116, FU-187.
+
 - [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: mirror **homelab**
       itself into Forgejo — ⚠ the `sleep-lab` pull-mirrors are **BROKEN since the 2026-08-04 DB
       migration** (`SyncMirrors` failing; fix = the idp session's orphaned-repo recipe: remove dir on
