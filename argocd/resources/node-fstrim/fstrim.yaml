@@ -75,7 +75,7 @@ data:
     fi
 
     # Report the outcome, not the attempt. A trim that silently does nothing looks identical to
-    # one that worked, and the pve layer has no exporter of its own — this push is the only
+    # one that worked — the pool level is the pve-metrics belt's (since 2026-09-04); this push is the
     # in-cluster evidence that the reclaim path is alive (storage-ledger.md: "a ledger that isn't
     # measured is a spreadsheet"). Best-effort: monitoring being down must not fail the trim.
     wget -q -O- --timeout=5 \

@@ -1,10 +1,10 @@
 # Metering for the guest-fstrim belt (FU-093) — see fstrim.yaml for why the belt exists.
 #
-# The pve layer has NO exporter: nothing in or out of the cluster watches the thin pool, which is
-# exactly why it filled three times without a single alert (storage-ledger.md §"A THIRD sum").
-# These rules cannot watch the pool either. What they CAN watch is whether the one mechanism that
-# returns blocks to it is still running — a dead reclaim path is the leading indicator, and it is
-# the part that failed silently before: every trim so far was a human noticing.
+# The pool ITSELF is metered since 2026-09-04 (argocd/resources/pve-metrics/, the PveThinPool*
+# belt on the hypervisor's node_exporter textfile — after a FOURTH fill, 09-03, with no alert).
+# These rules watch the other half: whether the one mechanism that returns blocks to it is still
+# running — a dead reclaim path is the leading indicator, and it is the part that failed silently
+# before: every trim so far was a human noticing.
 #
 # The series come from the CronJob's pushgateway post (job="node_fstrim", node=<node>). Pushed
 # metrics persist after a Job ends, which is what makes the staleness rule work: the timestamp
