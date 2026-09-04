@@ -516,10 +516,12 @@ fi
 # doesn't silently fall back to its default model (#876/#896/#1342).
 case "$MODEL_RAIL" in
   openrouter)
-    case "$MODEL_MODEL" in
-      openrouter/*) OPENCODE_MODEL="$MODEL_MODEL" ;;  # cloaked codename, prefix kept
-      *)            OPENCODE_MODEL="openrouter/$MODEL_MODEL" ;;
-    esac ;;
+    # opencode's -m is <provider>/<model id>, split at the FIRST slash — so the rail prefix is
+    # ALWAYS prepended, including for a cloaked codename whose OpenRouter id itself starts with
+    # openrouter/ (model_id.py keeps it whole): openrouter/openrouter/<codename>. Stripping the
+    # rail for that case would hand opencode provider=openrouter, model=<codename> — not an id
+    # OpenRouter serves.
+    OPENCODE_MODEL="openrouter/$MODEL_MODEL" ;;
   anthropic-subscription)
     OPENCODE_MODEL="claude/$MODEL_MODEL" ;;
   *)

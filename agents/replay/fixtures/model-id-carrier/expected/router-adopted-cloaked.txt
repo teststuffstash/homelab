@@ -1,0 +1,7 @@
+CALL python3 $ROOT/agents/model_id.py --shell openrouter/sonoma-sky-alpha
+OUT MODEL='openrouter/sonoma-sky-alpha'
+OUT MODEL_RAIL='openrouter'
+OUT MODEL_HARNESS=''
+OUT HARNESS='goose'
+OUT OPENCODE_MODEL='openrouter/openrouter/sonoma-sky-alpha'
+RC 0

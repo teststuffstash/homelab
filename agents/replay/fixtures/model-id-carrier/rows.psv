@@ -6,3 +6,4 @@ decision-unset     |       |       |     | decision-unset       |
 model-empty        |       |       |     | model-empty          |
 shadow-divergent   |       |       |     | shadow-divergent     |
 router-adopted-bare|       |       | HARNESS=goose | router-adopted-bare  |
+router-adopted-cloaked|       |       | HARNESS=goose | router-adopted-cloaked |
