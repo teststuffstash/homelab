@@ -321,6 +321,10 @@ migrate through).
 > best find of the rail saga is the ZEN sibling's **big-pickle as deepseek's $0 shadow** (A5
 > shadow re-reviews homelab#923, the G-E fan-out arm; matrix row has the caveats). FU-181 holds
 > the post-reset hygiene legs; the P4 flip is DE-GATED from Sep-13 by the same ruling.
+>
+> **PARKED 2026-09-04 (FU-213):** both opencode.ai legs are off at the egress proxy
+> (`OPENCODE_RAIL_DISABLED=1`) until the `x-opencode-session` header question is settled —
+> vendor-side pause, posture unchanged.
 
 - Endpoints: `https://opencode.ai/zen/go/v1/messages` (Anthropic-compat) ·
   `…/v1/chat/completions` (OpenAI-compat) · `…/v1/models` (25 live ids). **Bearer auth works**;

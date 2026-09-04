@@ -73,6 +73,32 @@ GO_PREFIX = "opencode-go/"
 ZEN_UPSTREAM = os.environ.get("OPENCODE_ZEN_BASE", "https://opencode.ai/zen")
 ZEN_KEY = os.environ.get("OPENCODE_ZEN_API_KEY", GO_KEY)
 ZEN_PREFIX = "opencode/"
+# FU-213 (operator, 2026-09-04): the opencode.ai KILL SWITCH. OpenCode mailed that requests
+# from this proxy's client (`User-Agent: homelab-openrouter-proxy`, the UA both legs send —
+# set because Cloudflare 1010-blocks python-urllib's own) carry no `x-opencode-session` header
+# and "may error" from 2026-09-06. Until that header question is settled the whole vendor parks
+# behind one env var — BOTH legs by default, because they share the account, the key and the UA:
+#   OPENCODE_RAIL_DISABLED=1|all|both  → Go + Zen off
+#   OPENCODE_RAIL_DISABLED=go|zen      → that leg only (comma/space list accepted)
+#   unset|0|false|no                   → live (the default; nothing changes for a normal deploy)
+# Two halves, so NO ride reaches opencode.ai by any path:
+#   (a) /opencode-limit serves limited=true, reason="rail-disabled" — a CAPACITY-class reason on
+#       purpose: `--pick-rail` then never picks Go, and agent-session.sh's Go arm takes the M12
+#       RAIL DEGRADE to the subscription fallback instead of parking the ride (a `semaphore`/
+#       empty reason would defer). One flip, every consumer inherits it — no launcher knob;
+#   (b) the forward path refuses 503 — the belt for anything already dispatched at flip time,
+#       and for a direct ride that never consulted the gate.
+# Read from the environment at CALL time (not import) so a self-test can toggle it.
+
+
+def _rail_disabled(leg: str) -> bool:
+    """True while `leg` ("go"/"zen") is parked by OPENCODE_RAIL_DISABLED (FU-213)."""
+    v = os.environ.get("OPENCODE_RAIL_DISABLED", "").strip().lower()
+    if v in ("", "0", "false", "no", "off"):
+        return False
+    if v in ("1", "true", "yes", "on", "all", "both"):
+        return True
+    return leg in v.replace(",", " ").split()
 # homelab#791: the OpenRouter translation leg — `openrouter/` prefixed model ids on the
 # /anthropic/* path get their Anthropic-format /v1/messages request translated to an
 # OpenAI-format /chat/completions call and forwarded to OpenRouter. The prefix is STRIPPED
@@ -1876,6 +1902,8 @@ def _go_limit_reason(status: dict, go_semaphore: dict, go_capacity: dict) -> str
     (homelab#605). When NOT limited the raw capacity field is still echoed — it stays populated
     after the hold expires until a 2xx clears it, and consumers key on `limited`, never on
     `reason != null` (CAP5/M12, the rail-degrade-replay contract)."""
+    if _rail_disabled("go"):
+        return "rail-disabled"  # FU-213: the operator's park beats every measured cause
     if go_capacity["limited"]:
         return go_capacity["reason"]
     if status["limited"]:
@@ -2111,6 +2139,13 @@ class Proxy(BaseHTTPRequestHandler):
         # ADR-107 (homelab#421): Go leg routing is by MODEL, not path — check it FIRST.
         # When /anthropic/* carries an opencode-go/ model, Go wins (claude CLI --model).
         if go_leg:  # Go rail — swap upstream, replace auth with Go key
+            # FU-213: the rail is parked — refuse HERE, before any opencode.ai call. 503 (not
+            # 502): the upstream is fine, this proxy is withholding the leg, and a retry after
+            # the flip succeeds.
+            if _rail_disabled("go"):
+                log(f"{self.command} {self.path} → 503 [go-leg] model={or_model or '-'} - Go rail disabled (OPENCODE_RAIL_DISABLED)")
+                self._reply_json(503, {"error": "the OpenCode Go rail is disabled (OPENCODE_RAIL_DISABLED) - FU-213"})
+                return
             # Strip ?beta=true query using the proper helper (preserves other params).
             path = _strip_beta_query(self.path)
             # Map the inbound SURFACE onto Go's own paths: both /anthropic/v1/* (claude CLI via
@@ -2131,6 +2166,11 @@ class Proxy(BaseHTTPRequestHandler):
                 self._reply_json(502, {"error": "GO_KEY is not set - the Go rail has no credential"})
                 return
         elif zen_leg:  # homelab#445: Zen free rail — same surface mapping as the Go leg.
+            # FU-213: same park as the Go leg above (same vendor, same key, same UA).
+            if _rail_disabled("zen"):
+                log(f"{self.command} {self.path} → 503 [zen-leg] model={or_model or '-'} - Zen rail disabled (OPENCODE_RAIL_DISABLED)")
+                self._reply_json(503, {"error": "the OpenCode Zen rail is disabled (OPENCODE_RAIL_DISABLED) - FU-213"})
+                return
             path = _strip_beta_query(self.path)
             if path.startswith("/anthropic/"):
                 path = path[len("/anthropic"):]
@@ -2550,7 +2590,8 @@ class Proxy(BaseHTTPRequestHandler):
             status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
             go_semaphore = _go_semaphore_state()
             go_capacity = _go_capacity_snapshot(time.time())
-            limited = status["limited"] or go_semaphore["limited"] or go_capacity["limited"]
+            limited = (status["limited"] or go_semaphore["limited"]
+                       or go_capacity["limited"] or _rail_disabled("go"))
             payload = json.dumps({
                 "limited": limited,
                 # homelab#605: the top-level `reason` names WHY `limited` is true — the capacity
@@ -2655,6 +2696,12 @@ class Proxy(BaseHTTPRequestHandler):
                       "# HELP router_go_observed_429_total GO_UPSTREAM exhaustion responses by HTTP status, observed on the Go leg (in-memory; resets on roll) — the observed-capacity latch's counter (FU-170 leg d).",
                       *[f'router_go_observed_429_total{{code="{code}"}} {go_cap_429.get(code, 0)}'
                         for code in (429, 402)]]
+            # FU-213: the operator's park, visible beside the measured latch — a disabled rail
+            # and an exhausted one look identical from /opencode-limit's `limited` alone.
+            lines += ["# TYPE router_opencode_rail_disabled gauge",
+                      "# HELP router_opencode_rail_disabled 1 while the leg is parked by OPENCODE_RAIL_DISABLED (the operator's kill switch, FU-213) - not a measured limit.",
+                      *[f'router_opencode_rail_disabled{{leg="{leg}"}} {1 if _rail_disabled(leg) else 0}'
+                        for leg in ("go", "zen")]]
             go_cap = _go_capacity_snapshot(now)
             lines += ["# TYPE router_go_capacity_latched gauge",
                       "# HELP router_go_capacity_latched 1 while the Go-rail observed-capacity latch holds (an upstream 429/402 from GO_UPSTREAM — the blind-ledger correction, FU-170 leg d).",
@@ -4572,6 +4619,79 @@ data: [DONE]
     z = seen.get("zen") or {}
     check(z.get("user_agent") == "homelab-openrouter-proxy",
           f"Zen-leg User-Agent: homelab-openrouter-proxy (got {z.get('user_agent')})")
+
+    # Test 17c (FU-213): the OPENCODE_RAIL_DISABLED kill switch. Both halves are pinned — the
+    # leg REFUSES (503, and the stub is never reached: the whole point is that no request leaves
+    # for opencode.ai) and /opencode-limit + /metrics SAY SO, so every launcher gate inherits the
+    # park without a knob of its own. The leg-selective value is pinned too: parking Zen must not
+    # take Go down with it.
+    _old_disable = os.environ.get("OPENCODE_RAIL_DISABLED")
+    try:
+        for _val, _legs in (("1", ("go", "zen")), ("all", ("go", "zen")),
+                            ("go", ("go",)), ("zen", ("zen",))):
+            os.environ["OPENCODE_RAIL_DISABLED"] = _val
+            for _leg, _model in (("go", "opencode-go/kimi-k3"),
+                                 ("zen", "opencode/nemotron-3-ultra-free")):
+                seen.clear()
+                c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+                c.request("POST", "/api/v1/chat/completions",
+                          body=json.dumps({"model": _model,
+                                           "messages": [{"role": "user", "content": "hi"}]}),
+                          headers={"Content-Type": "application/json",
+                                   "Authorization": "Bearer test-key"})
+                r = c.getresponse()
+                st, body = r.status, r.read().decode()
+                c.close()
+                if _leg in _legs:
+                    check(st == 503,
+                          f"rail-disabled={_val}: {_leg} leg refuses 503 (got {st})")
+                    check("OPENCODE_RAIL_DISABLED" in body,
+                          f"rail-disabled={_val}: {_leg} refusal names the knob (got {body[:120]})")
+                    check(seen.get(_leg) is None,
+                          f"rail-disabled={_val}: {_leg} upstream NEVER called (stub saw {seen.get(_leg)})")
+                else:
+                    check(st == 200,
+                          f"rail-disabled={_val}: {_leg} leg still serves (got {st})")
+                    check(seen.get(_leg) is not None,
+                          f"rail-disabled={_val}: {_leg} upstream still reached")
+        # /opencode-limit: the operator's park reads as a CAPACITY-class reason, so the
+        # launcher arm degrades instead of deferring (agent-session.sh M12), and --pick-rail
+        # skips Go. `limited` is what consumers key on — assert both.
+        os.environ["OPENCODE_RAIL_DISABLED"] = "1"
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("GET", "/opencode-limit")
+        r = c.getresponse()
+        resp = json.loads(r.read())
+        c.close()
+        check(resp["limited"] is True,
+              f"rail-disabled: /opencode-limit limited=true (got {resp['limited']})")
+        check(resp["reason"] == "rail-disabled",
+              f"rail-disabled: /opencode-limit reason typed (got {resp['reason']})")
+        check(resp["reason"] not in ("semaphore", "", None),
+              "rail-disabled: the reason is capacity-class (the launcher degrades, never defers)")
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("GET", "/metrics")
+        r = c.getresponse()
+        _m = r.read().decode()
+        c.close()
+        check('router_opencode_rail_disabled{leg="go"} 1' in _m
+              and 'router_opencode_rail_disabled{leg="zen"} 1' in _m,
+              "rail-disabled: /metrics gauge reads 1 for both legs")
+    finally:
+        if _old_disable is None:
+            os.environ.pop("OPENCODE_RAIL_DISABLED", None)
+        else:
+            os.environ["OPENCODE_RAIL_DISABLED"] = _old_disable
+    # The default (unset) must leave both legs live — every later test depends on it.
+    check(not _rail_disabled("go") and not _rail_disabled("zen"),
+          "rail-disabled: unset restores both legs (the default is LIVE)")
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/opencode-limit")
+    r = c.getresponse()
+    resp = json.loads(r.read())
+    c.close()
+    check(resp["reason"] != "rail-disabled",
+          f"rail-disabled: cleared knob drops the reason (got {resp['reason']})")
 
     # ── Zen metering (homelab#445): usd=0.0, gometer.price skipped, extract_usage kept ───────────
     print("\n=== Zen metering tests (homelab#445) ===")

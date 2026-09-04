@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-209** (the counter lagged a FOURTH time — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-214** (the counter lagged a FIFTH time — it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -889,6 +889,17 @@ the block needs pruning, not more headings.
       the write, then add it to the rendered Role (Composition + the coordinator's own manifest);
       until then an alert on `argo_workflows_error_count` / Errored respond-* would at least make it
       visible. Relates FU-210 (the other half of "a responder run that leaves no record").
+
+- [ ] **FU-213** — **opencode.ai is PARKED — the proxy's client sends no `x-opencode-session`
+      header** (operator mail, 2026-09-04): requests from `homelab-openrouter-proxy` (the UA BOTH
+      legs send — python-urllib's own is Cloudflare-1010'd) lack the per-conversation header
+      OpenCode optimizes on, and "may error" from 09-06. Killed same-day at the proxy rather than
+      waiting for the errors: `OPENCODE_RAIL_DISABLED=1` → both legs refuse 503 and
+      `/opencode-limit` serves `limited=true reason=rail-disabled`, so `--pick-rail` skips Go and a
+      Go-primary worker takes the M12 degrade to `claude/haiku`. The jail shim
+      (`scripts/claude-model-shim.py`, UA `claude-model-shim/1.0`) is deliberately NOT parked —
+      unflagged, operator-driven, and where a fix gets tested. **Next:** send the header (the proxy
+      already threads `cb_session`) and re-enable with `"0"`, or drop the rail. Relates FU-181, ADR-107.
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
