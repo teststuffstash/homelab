@@ -1,0 +1,14 @@
+# homelab#1349 — Base: non-protected arming guard: a declared base that is neither master nor
+# goal/* stays un-armed (NO_ARM=1), so the existing protection against arming into an
+# unprotected branch is preserved.
+#
+# THE CONTRACT:
+#   1. Base: feature-x (non-master, non-goal/*) → auto-merge NOT armed.
+#   2. NO_ARM is set to 1.
+name: base-arm-nonprotected
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:base-arm-guard
+  - file:post.sh

@@ -802,13 +802,15 @@ if [ -n "${RECIPE:-}" ]; then
         # auto-merge waits on branch-protection conditions, so arming into an UNPROTECTED branch
         # merges on open — no CI, no review. Verified live before this flip; do not widen the
         # match to "any non-default base" without protecting that base first.
+        # >>>REPLAY:base-arm-guard>>>
         case "$BASE_REF" in
-          goal/*)
+          goal/*|master)
             echo "→ Base: ${BASE_REF} (declared on #${ISSUE_N}) — forking from it, PR opens against it, auto-merge ARMED (protected integration branch)" ;;
           *)
             NO_ARM=1
-            echo "→ Base: ${BASE_REF} (declared on #${ISSUE_N}) — forking from it, PR opens against it, auto-merge NOT armed (base is not a protected goal/** branch)" ;;
+            echo "→ Base: ${BASE_REF} (declared on #${ISSUE_N}) — forking from it, PR opens against it, auto-merge NOT armed (base is not a protected goal/** or master branch)" ;;
         esac
+        # <<<REPLAY:base-arm-guard<<<
       fi
     fi
     # ── GOAL CONTEXT — a child must know the goal it serves (FU-090 leg (c), 2026-08-05) ────────
