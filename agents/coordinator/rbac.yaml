@@ -48,6 +48,11 @@ rules:
   - apiGroups: [""]
     resources: [persistentvolumeclaims]
     verbs: [get, list]
+  # homelab#1205: context-prefetch writes the bundle to a ConfigMap (off argv) in the pod's namespace.
+  # Created before the pod, garbage-collected when the pod is deleted (no explicit cleanup needed).
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create, delete]
   # Mint / observe / clean up ephemeral per-session budget keys. status: wait for the minted hash
   # instead of reading the Secret value.
   - apiGroups: [openrouter.teststuff.net]

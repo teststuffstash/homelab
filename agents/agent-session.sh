@@ -745,7 +745,7 @@ render_env_card() {
   case "${TASK:-}" in
     issue-[0-9]*)
       if [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
-        printf '%s\n' "- **Issue context:** Your issue + comments were pre-fetched at dispatch: read \`/work/issue.md\` FIRST; a live \`gh issue view\` is optional."
+        printf '%s\n' "- **Issue context:** Your issue + comments were pre-fetched at dispatch: read \`/work/context/index.txt\` for the bundle index, then \`/work/context/issue.md\` FIRST; a live \`gh issue view\` is optional."
       fi
       ;;
   esac
@@ -1272,25 +1272,30 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
       exit 3
     fi
     # >>>REPLAY:context-prefetch>>>
-    # ── Context pre-fetch: pre-read the directive channel via REST (homelab#1175) ──────────────
+    # ── Context pre-fetch: pre-read the directive channel via REST (homelab#1175, #1205) ──────
     # Pre-read the issue + comments via REST API (never GraphQL — the pool that failed on #969
-    # is the App installation's GraphQL pool; REST has its own). Materialize into /work/issue.md
-    # as a prelude to the pod command. Unreadable ⇒ DEFER (exit 0), not strike, not start.
+    # is the App installation's GraphQL pool; REST has its own). Materialize into /work/context/
+    # as a ConfigMap mounted in the pod (off argv — homelab#1205). Unreadable ⇒ DEFER (exit 0),
+    # not strike, not start. Optional items that fail land a MISSING: line in the bundle index.
     if command -v gh >/dev/null 2>&1; then
+      # ── Bundle index ── tracks every item, MISSING or OK
+      PF_INDEX=""
+      PF_INDEX_ITEM() { PF_INDEX="${PF_INDEX}${1}  ${2}${3:+  ${3}}"$'\n'; }
+      PF_INDEX_ITEM "index.txt" "OK"
+
+      # ── 1. Issue + comments (REQUIRED — unreadable defers) ────────────────────────────────
       PF_ISSUE_DATA=""
       PF_ISSUE_DATA="$(gh api "repos/${PF_SLUG}/issues/${PF_ISSUE}" --jq '{title, body, labels: [.labels[].name]}' 2>/dev/null)" || PF_ISSUE_DATA=""
       if [ -z "$PF_ISSUE_DATA" ]; then
         echo "→ dispatch deferred — directive unreadable (repos/${PF_SLUG}/issues/${PF_ISSUE}; resets N/A) — the next pass retries (homelab#1175)" >&2
         exit 0
       fi
-      # Fetch comments as raw JSON array, then process with jq in the script
       PF_COMMENTS_RAW=""
       PF_COMMENTS_RAW="$(gh api "repos/${PF_SLUG}/issues/${PF_ISSUE}/comments" --paginate 2>/dev/null)" || PF_COMMENTS_RAW=""
       if [ -z "$PF_COMMENTS_RAW" ]; then
         echo "→ dispatch deferred — directive unreadable (repos/${PF_SLUG}/issues/${PF_ISSUE}/comments; resets N/A) — the next pass retries (homelab#1175)" >&2
         exit 0
       fi
-      # Materialize the issue + comments into /work/issue.md as a prelude to the pod command.
       # Build the markdown: title, body, then comments in order with author + timestamp.
       PF_ISSUE_TITLE="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.title')"
       PF_ISSUE_BODY="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.body // ""')"
@@ -1300,7 +1305,6 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
 ${PF_ISSUE_BODY}
 
 ## Comments"
-      # Process each comment from the raw JSON array
       while IFS= read -r line; do
         [ -z "$line" ] && continue
         PF_AUTHOR="$(printf '%s' "$line" | jq -r '.user.login // ""')"
@@ -1312,13 +1316,213 @@ ${PF_ISSUE_BODY}
 
 ${PF_COMMENT_BODY}"
       done <<< "$(printf '%s' "$PF_COMMENTS_RAW" | jq -c '.[]')"
-      PF_ISSUE_B64="$(printf '%s' "$PF_ISSUE_MD" | base64 -w0)"
-      PF_ISSUE_PRELUDE="printf '%s' '${PF_ISSUE_B64}' | base64 -d > /work/issue.md; "
-      # Prepend the prelude to RUN_CMD so the pod writes /work/issue.md before the harness starts
-      if [ -n "${RUN_CMD:-}" ]; then
-        RUN_CMD="${PF_ISSUE_PRELUDE}${RUN_CMD}"
+      # Ensure the issue markdown ends with a newline (for clean YAML in ConfigMap)
+      PF_ISSUE_MD="${PF_ISSUE_MD}
+"
+      PF_INDEX_ITEM "issue.md" "OK"
+
+      # ── 2. Fix round: pr.md + reviews.md (when --work-branch is set) ──────────────────────
+      PF_PR_MD=""; PF_REVIEWS_MD=""; PF_ARB_MD=""
+      if [ -n "${WORK_BRANCH:-}" ] && [ -n "${PF_PR:-}" ]; then
+        # Fetch PR body + git log (homelab#1205 row 2)
+        PF_PR_DATA=""
+        PF_PR_DATA="$(gh api "repos/${PF_SLUG}/pulls/${PF_PR}" --jq '{title, body, headRefName, baseRefName}' 2>/dev/null)" || PF_PR_DATA=""
+        if [ -n "$PF_PR_DATA" ]; then
+          PF_PR_TITLE="$(printf '%s' "$PF_PR_DATA" | jq -r '.title')"
+          PF_PR_BODY="$(printf '%s' "$PF_PR_DATA" | jq -r '.body // ""')"
+          PF_PR_HEAD="$(printf '%s' "$PF_PR_DATA" | jq -r '.headRefName')"
+          PF_PR_BASE="$(printf '%s' "$PF_PR_DATA" | jq -r '.baseRefName')"
+          # Git log: commits on head not in base
+          PF_GIT_LOG=""
+          PF_GIT_LOG="$(gh api "repos/${PF_SLUG}/compare/${PF_PR_BASE}...${PF_PR_HEAD}" --jq '.commits[] | "\(.sha[0:8]) \(.commit.message | split("\n")[0])"' 2>/dev/null)" || PF_GIT_LOG=""
+          PF_PR_MD="# PR #${PF_PR}: ${PF_PR_TITLE}
+
+${PF_PR_BODY}
+
+## Commits (${PF_PR_BASE}...${PF_PR_HEAD})
+${PF_GIT_LOG:-_(no commits or compare failed)_}"
+          PF_INDEX_ITEM "pr.md" "OK"
+        else
+          PF_INDEX_ITEM "pr.md" "MISSING" "HTTP error or empty response from pulls/${PF_PR}"
+        fi
+
+        # Fetch reviews (verdicts newest-first, inline comments with file:line)
+        # REQUIRED: the newest review verdict must be readable — unreadable defers (homelab#1205)
+        PF_REVIEWS_RAW=""
+        PF_REVIEWS_RAW="$(gh api "repos/${PF_SLUG}/pulls/${PF_PR}/reviews" --paginate 2>/dev/null)" || PF_REVIEWS_RAW=""
+        if [ -z "$PF_REVIEWS_RAW" ]; then
+          echo "→ dispatch deferred — directive unreadable (repos/${PF_SLUG}/pulls/${PF_PR}/reviews; newest verdict required for fix round) — the next pass retries (homelab#1205)" >&2
+          exit 0
+        fi
+        # Verify the newest verdict has a readable state
+        PF_NEWEST_VERDICT="$(printf '%s' "$PF_REVIEWS_RAW" | jq -c 'sort_by(.submitted_at) | last | {state, user: .user.login, submitted_at}' 2>/dev/null)" || PF_NEWEST_VERDICT=""
+        if [ -z "$PF_NEWEST_VERDICT" ] || [ "$PF_NEWEST_VERDICT" = "null" ]; then
+          echo "→ dispatch deferred — directive unreadable (newest review verdict unparseable for PR #${PF_PR}) — the next pass retries (homelab#1205)" >&2
+          exit 0
+        fi
+          PF_REVIEWS_MD="## Reviews (newest first)"
+          while IFS= read -r rline; do
+            [ -z "$rline" ] && continue
+            PF_RV_AUTHOR="$(printf '%s' "$rline" | jq -r '.user.login // ""')"
+            PF_RV_STATE="$(printf '%s' "$rline" | jq -r '.state // ""')"
+            PF_RV_BODY="$(printf '%s' "$rline" | jq -r '.body // ""')"
+            PF_RV_SUBMITTED="$(printf '%s' "$rline" | jq -r '.submitted_at // ""')"
+            PF_REVIEWS_MD="${PF_REVIEWS_MD}
+
+### ${PF_RV_AUTHOR} — ${PF_RV_STATE} (${PF_RV_SUBMITTED})
+
+${PF_RV_BODY}"
+          done <<< "$(printf '%s' "$PF_REVIEWS_RAW" | jq -c 'sort_by(.submitted_at) | reverse[]')"
+          # Fetch inline PR comments with file:line
+          PF_PR_COMMENTS=""
+          PF_PR_COMMENTS="$(gh api "repos/${PF_SLUG}/pulls/${PF_PR}/comments" --paginate 2>/dev/null)" || PF_PR_COMMENTS=""
+          if [ -n "$PF_PR_COMMENTS" ]; then
+            PF_REVIEWS_MD="${PF_REVIEWS_MD}
+
+## Inline comments (file:line)"
+            while IFS= read -r cline; do
+              [ -z "$cline" ] && continue
+              PF_C_AUTHOR="$(printf '%s' "$cline" | jq -r '.user.login // ""')"
+              PF_C_PATH="$(printf '%s' "$cline" | jq -r '.path // ""')"
+              PF_C_LINE="$(printf '%s' "$cline" | jq -r '.line // ""')"
+              PF_C_BODY="$(printf '%s' "$cline" | jq -r '.body // ""')"
+              PF_C_CREATED="$(printf '%s' "$cline" | jq -r '.created_at // ""')"
+              PF_REVIEWS_MD="${PF_REVIEWS_MD}
+
+- **${PF_C_AUTHOR}** at ${PF_C_PATH}:${PF_C_LINE} (${PF_C_CREATED})
+  ${PF_C_BODY}"
+            done <<< "$(printf '%s' "$PF_PR_COMMENTS" | jq -c '.[]')"
+          fi
+          PF_INDEX_ITEM "reviews.md" "OK"
+
+        # Coordinator's ruling/arbitration comment (search issue comments for ARBITRATE)
+        PF_ARB_MD=""
+        PF_ARB_COMMENT="$(printf '%s' "$PF_COMMENTS_RAW" | jq -c '[.[] | select(.body | test("ARBITRATE"))] | last' 2>/dev/null)" || PF_ARB_COMMENT=""
+        if [ -n "$PF_ARB_COMMENT" ] && [ "$PF_ARB_COMMENT" != "null" ]; then
+          PF_ARB_AUTHOR="$(printf '%s' "$PF_ARB_COMMENT" | jq -r '.user.login // ""')"
+          PF_ARB_BODY="$(printf '%s' "$PF_ARB_COMMENT" | jq -r '.body // ""')"
+          PF_ARB_CREATED="$(printf '%s' "$PF_ARB_COMMENT" | jq -r '.created_at // ""')"
+          PF_ARB_MD="## Coordinator Ruling (${PF_ARB_AUTHOR}, ${PF_ARB_CREATED})
+
+${PF_ARB_BODY}"
+          PF_INDEX_ITEM "arbitration.md" "OK"
+        fi
       fi
-      echo "→ context pre-fetch: issue #${PF_ISSUE} + comments materialized as /work/issue.md (prepended to pod command)"
+
+      # ── 3. CI-red round: ci-failure.md ──────────────────────────────────────────────────
+      PF_CI_FAILURE_MD=""
+      if [ -n "${WORK_BRANCH:-}" ] && [ -n "${PF_PR:-}" ]; then
+        # Check CI status: fetch check runs for the PR head
+        PF_HEAD_SHA=""
+        PF_HEAD_SHA="$(gh api "repos/${PF_SLUG}/pulls/${PF_PR}" --jq '.head.sha' 2>/dev/null)" || PF_HEAD_SHA=""
+        if [ -n "$PF_HEAD_SHA" ]; then
+          PF_CHECKS=""
+          PF_CHECKS_RAW="$(gh api "repos/${PF_SLUG}/commits/${PF_HEAD_SHA}/check-runs" 2>/dev/null)" || PF_CHECKS_RAW=""
+          PF_CHECKS="$(printf '%s' "$PF_CHECKS_RAW" | jq -r '[.check_runs[] | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT") | {name, conclusion, url: .html_url}]' 2>/dev/null)" || PF_CHECKS=""
+          if [ -n "$PF_CHECKS" ]; then
+            PF_CI_FAILURE_MD="## CI Failures (head ${PF_HEAD_SHA:0:8})
+
+| Check | Conclusion | URL |
+|---|---|---|"
+            while IFS= read -r ck; do
+              [ -z "$ck" ] && continue
+              PF_CK_NAME="$(printf '%s' "$ck" | jq -r '.name // ""')"
+              PF_CK_CONCLUSION="$(printf '%s' "$ck" | jq -r '.conclusion // ""')"
+              PF_CK_URL="$(printf '%s' "$ck" | jq -r '.url // ""')"
+              PF_CI_FAILURE_MD="${PF_CI_FAILURE_MD}
+| ${PF_CK_NAME} | ${PF_CK_CONCLUSION} | ${PF_CK_URL} |"
+            done <<< "$(printf '%s' "$PF_CHECKS" | jq -c '.[]')"
+            # Fetch log tail via gh run list + view (bounded to last 200 lines per failing step)
+            # REQUIRED: the log must be readable — unreadable defers (homelab#1205)
+            PF_LOG_TAIL=""
+            PF_RUN_ID="$(gh run list --repo "${PF_SLUG}" --branch "${PF_PR_HEAD}" --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || PF_RUN_ID=""
+            if [ -z "$PF_RUN_ID" ] || [ "$PF_RUN_ID" = "null" ]; then
+              echo "→ dispatch deferred — directive unreadable (CI run log unreadable for PR #${PF_PR} branch ${PF_PR_HEAD}) — the next pass retries (homelab#1205)" >&2
+              exit 0
+            fi
+            PF_LOG_TAIL="$(gh run view "${PF_RUN_ID}" --repo "${PF_SLUG}" --log-failed 2>/dev/null | tail -200)" || PF_LOG_TAIL=""
+            if [ -z "$PF_LOG_TAIL" ]; then
+              echo "→ dispatch deferred — directive unreadable (CI run log empty for PR #${PF_PR} run ${PF_RUN_ID}) — the next pass retries (homelab#1205)" >&2
+              exit 0
+            fi
+            PF_CI_FAILURE_MD="${PF_CI_FAILURE_MD}
+
+## Log tail (last 200 lines)
+\`\`\`
+${PF_LOG_TAIL}
+\`\`\`"
+            PF_INDEX_ITEM "ci-failure.md" "OK"
+          fi
+        fi
+      fi
+
+      # ── Write the bundle to a ConfigMap (off argv — homelab#1205) ────────────────────────
+      # The ConfigMap is created in the pod's namespace and mounted at /work/context/.
+      # This avoids embedding base64 content in the command string (argv ceiling issue).
+      PF_CM_NAME="${POD}-context"
+      # Build the ConfigMap manifest
+      PF_CM_MANIFEST="$(cat <<_CMEOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${PF_CM_NAME}
+  namespace: ${NS}
+data:
+  index.txt: |
+$(printf '%s' "$PF_INDEX" | sed 's/^/    /')
+  issue.md: |
+$(printf '%s' "$PF_ISSUE_MD" | sed 's/^/    /')
+_CMEOF
+)"
+      # Add optional items to the ConfigMap
+      if [ -n "$PF_PR_MD" ]; then
+        PF_CM_MANIFEST="${PF_CM_MANIFEST}
+  pr.md: |
+$(printf '%s' "$PF_PR_MD" | sed 's/^/    /')"
+      fi
+      if [ -n "$PF_REVIEWS_MD" ]; then
+        PF_CM_MANIFEST="${PF_CM_MANIFEST}
+  reviews.md: |
+$(printf '%s' "$PF_REVIEWS_MD" | sed 's/^/    /')"
+      fi
+      if [ -n "$PF_ARB_MD" ]; then
+        PF_CM_MANIFEST="${PF_CM_MANIFEST}
+  arbitration.md: |
+$(printf '%s' "$PF_ARB_MD" | sed 's/^/    /')"
+      fi
+      if [ -n "$PF_CI_FAILURE_MD" ]; then
+        PF_CM_MANIFEST="${PF_CM_MANIFEST}
+  ci-failure.md: |
+$(printf '%s' "$PF_CI_FAILURE_MD" | sed 's/^/    /')"
+      fi
+
+      # Create the ConfigMap (best-effort — if it fails, fall back to argv delivery)
+      PF_CM_CREATED=""; PF_CM_MOUNT=""; PF_CM_VOLUME=""
+      if printf '%s' "$PF_CM_MANIFEST" | "$KUBECTL" $KUBE create -f - 2>/dev/null; then
+        PF_CM_CREATED="1"
+        # Record the ConfigMap mount for the pod manifest
+        PF_CM_MOUNT=$'\n        - { name: context-bundle, mountPath: /work/context }'
+        PF_CM_VOLUME=$'\n    - name: context-bundle\n      configMap: { name: '"${PF_CM_NAME}"$' }'
+        echo "→ context pre-fetch: bundle written to ConfigMap ${PF_CM_NAME} in ns ${NS} (off argv)"
+        # The prelude just creates the mount point (ConfigMap is mounted by the pod manifest)
+        PF_CONTEXT_PRELUDE="mkdir -p /work/context; "
+      else
+        echo "→ context pre-fetch: ConfigMap creation failed — falling back to argv delivery" >&2
+        PF_CM_CREATED=""
+        # Fall back to argv delivery (base64-encode and prepend to RUN_CMD)
+        PF_BUNDLE_B64="$(printf '%s' "index.txt:
+${PF_INDEX}
+---
+issue.md:
+${PF_ISSUE_MD}" | base64 -w0)"
+        PF_CONTEXT_PRELUDE="mkdir -p /work/context; printf '%s' '${PF_BUNDLE_B64}' | base64 -d > /work/context/bundle.txt; "
+      fi
+
+      # Prepend the context prelude to RUN_CMD
+      if [ -n "${RUN_CMD:-}" ]; then
+        RUN_CMD="${PF_CONTEXT_PRELUDE}${RUN_CMD}"
+      fi
+      echo "→ context pre-fetch: issue #${PF_ISSUE} + comments materialized (homelab#1175, #1205)"
     fi
     # <<<REPLAY:context-prefetch<<<
   ;; esac
@@ -2219,8 +2423,8 @@ ${CLAUDE_ENV}
       resources:
         requests: ${AGENT_REQUESTS}
         limits:   ${AGENT_LIMITS}
-      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}
-  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}
+      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}${PF_CM_MOUNT}
+  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}${PF_CM_VOLUME}
 EOF
 
 echo "→ waiting for ${POD} (a cold node may pull the image + nix store for minutes)…"
