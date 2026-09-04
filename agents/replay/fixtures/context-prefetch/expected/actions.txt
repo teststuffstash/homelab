@@ -2,4 +2,5 @@ CALL gh api repos/teststuffstash/test-project/issues/1175 --jq {title, body, lab
 CALL gh api repos/teststuffstash/test-project/issues/1175/comments --paginate
 OUT → context pre-fetch: issue #1175 + comments materialized as /work/issue.md (prepended to pod command)
 OUT → prelude prepend verified: RUN_CMD starts with printf+base64 prelude
+OUT → prelude labels line verified: **Labels:** agent-fix, task/fix
 RC 0
