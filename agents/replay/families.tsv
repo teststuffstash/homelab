@@ -11,6 +11,7 @@ arbitrate-blocked-on-human-still-blocked	arbitrate
 arbitrate-first-tick	arbitrate
 arbitrate-fu147-refire-blocked	arbitrate
 arbitrate-landing-sequence	arbitrate
+arbitrate-no-op-after-directive	arbitrate
 arbitrate-probe-unreadable	arbitrate
 arbitrate-quoted-mid-body	arbitrate
 argv-payload-over-ceiling	argv-payload
@@ -27,6 +28,7 @@ c4c5-bodies-probe-fail	c4c5-bodies-probe-fail
 c4c5-infeasible-parks	c4c5-infeasible
 c4c5-infeasible-probe-fail	c4c5-infeasible
 c4c5-infeasible-quoted-inert	c4c5-infeasible
+ci-red-deferred-then-debounced	ci-red-rounds-two-channels
 ci-red-rerun-wake	ci-red-rounds-two-channels
 ci-red-rerun-wake-dispatch	ci-red-rounds-two-channels
 ci-red-rounds-two-channels	ci-red-rounds-two-channels

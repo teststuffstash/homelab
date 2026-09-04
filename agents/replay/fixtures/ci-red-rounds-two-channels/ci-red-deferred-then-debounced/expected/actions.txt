@@ -1,0 +1,3 @@
+CALL gh pr view 43 --repo teststuffstash/circles --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+OUT REACHED: end
+RC 0

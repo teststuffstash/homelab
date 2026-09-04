@@ -927,6 +927,19 @@ handed out every tick. Same rule as above: the marker is machine-written, never 
 If you find a red PR whose report line says DEBOUNCED and no round ever completed on it, the
 finding is the terminal ride (pod, launcher, budget), not another fix round.
 
+> **FU-199 (2026-09-03): two blind spots closed.** The state-fp debounce had two silent stalls
+> that the board could not see:
+> 1. **Arbitrate no-op-after-directive** — a completed no-op round (stats posted, HEAD unchanged)
+>    after an arbitrate re-dispatch left the fingerprint unchanged (STATE_FP_JQ_ARBITRATE drops
+>    stats), so the clause reported DEBOUNCED forever. Fixed: if a stats comment is newer than the
+>    newest state-fp marker, the gate re-arms — the round is a state change even though the hash
+>    did not move.
+> 2. **Ci-red deferred dispatch** — a launcher capacity deferral left the marker armed with no
+>    round ever running, so the clause reported DEBOUNCED on every tick. Fixed: if no stats
+>    comment exists newer than the marker, the gate re-arms — the marker is stale.
+> 3. **Both**: a DEBOUNCED report line for a PR with no completed round since its marker now
+>    publishes a `who=operator` board row, so the board shows it instead of being invisible.
+
 ### One fleet fault, not N parks (retro r3 F3)
 
 The environmental ruling above is per PR, which is exactly how a fault that every PR in the repo is

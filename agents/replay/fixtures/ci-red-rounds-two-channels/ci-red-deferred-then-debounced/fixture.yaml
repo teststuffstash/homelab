@@ -1,0 +1,25 @@
+# FU-199: a launcher pre-flight deferral must not leave the marker armed.
+# If no round completed (no stats comment) since the marker was written,
+# the marker is stale — re-arm the gate so the clause re-evaluates.
+#
+# CONDITION UNDER REPLAY. circles PR #43 has ci-red (armed, red CI) and a `state-fp:` marker
+# from a previous dispatch. No stats comment exists — the launcher deferred on capacity and
+# no round ever ran. The gate should re-arm and dispatch instead of debouncing.
+pins:
+  - MP-T12
+name: ci-red-deferred-then-debounced
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:ci-red-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles
+  - IN_PR=43
+  - IN_HEAD8=aaaaaaaa
