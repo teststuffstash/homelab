@@ -320,7 +320,10 @@ never harder posture on quiet ones.
   broker token (branch-scope narrowing = an open hardening dial). **Proven E2E 2026-07-27**
   (sleep spec PR #38: 17 ⚖ + 9 suspected bugs, dual-model reviewed, human-gated). The un-armed
   gate is now launcher-owned: `--no-arm` auto-derives from a `research*` recipe →
-  `AGENT_ARM_PR=0` (agent-runtime), and the C9 re-arm belt skips `research/*` branches.
+  `AGENT_ARM_PR=0` (agent-runtime), and the C9 re-arm belt skips `research/*` branches — **into
+  the default branch only** (2026-09-04): a research ride whose `Base:` is `goal/**` ARMS, because
+  its human read is the goal's assembly, not the fix→goal hop
+  ([issue-authoring.md](issue-authoring.md) Goal card rule 10).
   Vocabulary (FU-163, rename executed 2026-08-23): a research MISSION is not an ADR-102 Goal —
   research PRECEDES the Goal (it prepares the contract the Goal then implements). The historical
   bare `goal` dispatch label no longer exists and never had a machine reader; `mission` is the

@@ -634,7 +634,7 @@ Base: goal/<n>-<slug> | master
 <named, so sprouts don't drift in>
 ```
 
-**The nine rules you drive** (the machine handles the rest; rules 7–9 added 2026-09-01 from
+**The ten rules you drive** (the machine handles the rest; rules 7–9 added 2026-09-01 from
 oracle-fleet#326 — a jail-authored Goal that tripped all three):
 
 1. The header lines are machine-parsed — exactly one `Budget:` line, ever; prose
@@ -675,6 +675,17 @@ oracle-fleet#326 — a jail-authored Goal that tripped all three):
    gh + jq only — never `devbox run` in a stack jail's homelab clone, it materializes the whole
    closure). Every rule above is a deterministic check over the Goal and its tree; a FAIL is
    fixed on the issue, never worked around in the machinery.
+10. **Research is never mixed into the build tree** (operator ruling 2026-09-04, from
+   oracle-fleet#418). Research PRECEDES the Goal as a mission
+   ([research-and-specs.md](research-and-specs.md) §Research precedes the Goal) — or, when a
+   Goal genuinely carries a research lane, that lane is its own **theme** (a level-2 child with
+   its own `goal/<n>-<theme>` branch, §⚖ v1.3.1): the arms ride bot-gated into the theme, the
+   theme assembly is the ONE human read, and a rejected theme is simply never merged. A ⚖-proposal
+   child riding directly on the Goal's branch beside build children is the mixed shape: it parks
+   the human read at the fix→goal hop (the doctrine's automated one) and a rejected proposal
+   needs a revert child on the build branch. Research rides into `goal/**` ARM
+   (`agents/agent-session.sh` research-arm-guard); only research into the default branch stays
+   un-armed (the weave, FU-105).
 
 **Failure signatures** (each is a scar this doc already records):
 
@@ -683,6 +694,7 @@ oracle-fleet#326 — a jail-authored Goal that tripped all three):
 | two `Budget:` lines (prose `€12`, footer `$16`) | the machine line is the only truth — #29's trap; fix the container, don't annotate it |
 | no `Production-leg:` | this Goal can never reach a terminal verdict — only assembly-complete; add the leg or an explicit evidence-in-lieu statement |
 | no `Base:` line on the Goal | children inherit nothing and dispatch against master silently; the assembly read dissolves piecewise (oracle-fleet#281: #283/#284 went to master against the recorded goal-branch placement, every downstream gate green) |
+| a research (⚖ proposal-only) child riding directly on the Goal's branch beside build children | the mixed shape — rule 10: research precedes the Goal as a mission, or rides its own theme branch; oracle-fleet#418 C4/C5 parked #425/#426 on a human at the fix→goal hop |
 | `Base: master` on a Goal | legitimate only with a stated reason — a direct-master Goal is more likely a **stint** (operator, 2026-08-30); if no reason survives writing it down, it isn't a Goal |
 | children filed without sub-issue binding | an orphan tree nothing owns (goal-174: 19 sprouts, 3 generations, still growing 34h after close) |
 | Goal closed at assembly merge | post-launch sprouts fall into master-limbo — reopen; the post-launch sub-issue is the harvest target |

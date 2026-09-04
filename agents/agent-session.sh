@@ -60,7 +60,7 @@ while [ $# -gt 0 ]; do
     --work-branch) WORK_BRANCH="$2"; shift 2;;  # resume an EXISTING remote branch (fix round on a PR branch / a salvaged WIP branch) — the entrypoint checks it out tracking origin, deterministically (old finding C)
     --recipe)    RECIPE="$2"; shift 2;;  # claude harness: launcher BUILDS the run command from this goose recipe path — never LLM-assembled (2026-07-21 #55 incident)
     --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
-    --no-arm)    NO_ARM=1; shift;;      # human-gated PR (FU-105 researcher): finalize skips arm-at-open (AGENT_ARM_PR=0); C9 skips research/* branches
+    --no-arm)    NO_ARM=1; shift;;      # explicit operator override only — un-arming is otherwise DERIVED (unprotected base, or a research recipe into the default branch); finalize skips arm-at-open (AGENT_ARM_PR=0); C9 skips research/* branches
     --context-repo) CONTEXT_REPOS="${CONTEXT_REPOS:+$CONTEXT_REPOS }$2"; shift 2;;  # repeatable: read-only reference clone at /work/context/<name> (docs/spikes/context-repos.md pilot); public https URLs only — anonymous clone, no token
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -571,7 +571,7 @@ if [ -n "${RECIPE:-}" ]; then
   # name so the un-armed gate is launcher-owned, never a dispatcher memory test (ADR-094; the
   # first live ride was armed by finalize right past the recipe's "do not arm").
   case "$(basename "$RECIPE")" in
-    research*) NO_ARM=1; RESEARCH_RECIPE=1; echo "→ --no-arm derived from research recipe (human-gated PR)";;
+    research*) RESEARCH_RECIPE=1;;   # arming decided AFTER the base is known (research-arm-guard below)
   esac
 fi
 
@@ -813,6 +813,22 @@ if [ -n "${RECIPE:-}" ]; then
         # <<<REPLAY:base-arm-guard<<<
       fi
     fi
+    # RESEARCH RIDES ARM INTO A GOAL (operator ruling 2026-09-04, the oracle-fleet#418 read). A
+    # research recipe's PR is human-gated BY DESIGN (FU-105) — but that gate is the human WEAVE
+    # at the DEFAULT branch, not the fix→goal hop ("feature→goal is fine to automate; goal→master
+    # stays human", issue-authoring.md §Base). Inside a goal the ⚖ rows get their one human read
+    # at the assembly, so the ride arms like any other child; into master (or an unprotected
+    # base, un-armed above) it stays un-armed. Un-arming is the EXCEPTION, keyed on
+    # (recipe, base) — never on the recipe alone: the recipe-only rule parked #425/#426 on a
+    # human at the wrong hop.
+    # >>>REPLAY:research-arm-guard>>>
+    if [ -n "${RESEARCH_RECIPE:-}" ]; then
+      case "$BASE_REF" in
+        goal/*) echo "→ research recipe into ${BASE_REF}: auto-merge ARMED — the human read is the goal's assembly (goal→master), not this hop" ;;
+        *)      NO_ARM=1; echo "→ --no-arm derived from research recipe into ${BASE_REF} (human-gated PR — the weave, FU-105)" ;;
+      esac
+    fi
+    # <<<REPLAY:research-arm-guard<<<
     # ── GOAL CONTEXT — a child must know the goal it serves (FU-090 leg (c), 2026-08-05) ────────
     # The harvest/decompose plays link children as NATIVE sub-issues, and until now NOTHING read
     # those links back: the lineage rendered in the GitHub UI and meant nothing to the machinery,
