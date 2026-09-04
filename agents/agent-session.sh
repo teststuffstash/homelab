@@ -1349,25 +1349,13 @@ if [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
 fi
 
 # ── docker mode (kata microVM + dind sidecar; spike: docs/spikes/kata-ci-gate.md) ──
-# Kata guests can't reach cluster-service VIPs (FU-072), so every in-cluster dependency is
-# rewritten to a RESOLVED ENDPOINT (pod) IP at dispatch — pod-to-pod works from kata, and the
-# egress CNP's toEndpoints rules still match (identity-based). A ride outlives no endpoint here
-# in practice (singleton services); when FU-072 lands, delete resolve_ep and the rewrites.
-resolve_ep() { # <ns> <svc> → first endpoint IP, empty on failure
-  "$KUBECTL" $KUBE -n "$1" get endpoints "$2" -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true
-}
-if [ -n "$DOCKER" ]; then
-  if [ -n "$PROXY_URL" ]; then
-    EP="$(resolve_ep agent-egress openrouter-proxy)"
-    if [ -n "$EP" ]; then
-      PROXY_URL="http://${EP}:8080"
-      GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
-      echo "→ docker mode: openrouter-proxy via endpoint IP ${EP} (FU-072 workaround)"
-    else
-      echo "WARN docker mode: openrouter-proxy endpoint unresolvable — goose/claude LLM egress will fail from the kata guest (FU-072)" >&2
-    fi
-  fi
-fi
+# NO endpoint-IP rewrite here any more (FU-072, removed 2026-09-04). Kata guests reach
+# cluster-service VIPs again — re-probed on all four kata nodes 2026-09-03, TCP + UDP, including
+# from live rides with the egress CNP enforced (docs/spikes/kata-service-vip.md §Re-probe). The
+# rewrite resolved a pod IP ONCE at dispatch, so any reschedule of a dependency black-holed the
+# ride mid-flight: three rides lost that way in two days (§Third occurrence). Service DNS is the
+# rule (homelab#138); if kata VIP reachability ever regresses, revert this commit rather than
+# re-deriving the workaround.
 
 # ── claude harness (FU-066): the SUBSCRIPTION worker tier — Haiku by default ──
 # Auth is ADR-087 leg A through the proxy's /anthropic upstream: the pod holds ONLY
@@ -1590,10 +1578,6 @@ else                                  AGENT_RAIL="openrouter"; fi
 # <<<REPLAY:agent-rail<<<
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
 PGW_URL="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
-if [ -n "$DOCKER" ]; then # FU-072: service VIPs unreachable from kata guests — ride on endpoint IPs
-  EP="$(resolve_ep garage garage)";                          [ -n "$EP" ] && TS_ENDPOINT="http://${EP}:3900" || echo "→ docker mode: garage endpoint unresolvable — transcript upload will be skipped"
-  EP="$(resolve_ep monitoring prometheus-pushgateway)";      [ -n "$EP" ] && PGW_URL="http://${EP}:9091" || echo "→ docker mode: pushgateway endpoint unresolvable — run metrics push will fail silently"
-fi
 "$KUBECTL" $KUBE -n "$NS" get secret agent-transcripts-s3 >/dev/null 2>&1 \
   || echo "→ transcript mirror agent-transcripts-s3 absent in ns ${NS} (claim not synced?) — run proceeds, upload will be skipped"
 
@@ -1675,8 +1659,9 @@ fi
 
 # ── docker-mode pod fragments (kata microVM + dind sidecar; every accommodation is a spike
 # finding, docs/spikes/kata-ci-gate.md): RuntimeClass kata schedules onto the kata-labeled
-# laptops + tolerates the compute taint by itself. dnsPolicy None + LAN resolver = the FU-072
-# workaround. The sidecar preamble: inotify sysctls (kubelet watches), mknod /dev/kmsg (kata
+# laptops + tolerates the compute taint by itself. (The FU-072 `dnsPolicy: None` + LAN-resolver
+# workaround was removed 2026-09-04 — see the KATA_BLOCK comment.) The sidecar preamble:
+# inotify sysctls (kubelet watches), mknod /dev/kmsg (kata
 # guests lack it; kubelet/cadvisor hard-requires it — THE spike root cause), MTU clamp 1350,
 # mkfs+mount /var/lib/docker from an ephemeral BLOCK PVC (longhorn-scratch, FU-081): kata
 # hotplugs a block volume as virtio-blk — the one disk shape where overlay2 works in the guest
@@ -1708,7 +1693,11 @@ AGENT_REQUESTS='{ cpu: "500m", memory: "4Gi" }'
 if [ -n "$DOCKER" ]; then
   AGENT_LIMITS='{ cpu: "2", memory: "2Gi" }'    # heavy lifting moves into the dind sidecar
   AGENT_REQUESTS='{ cpu: "500m", memory: "2Gi" }'
-  KATA_BLOCK=$'  runtimeClassName: kata\n  dnsPolicy: "None"\n  dnsConfig:\n    nameservers: ["192.168.2.1"]'
+  # dnsPolicy stays the cluster default (FU-072, 2026-09-04): kube-dns answers kata guests over
+  # both TCP and UDP for *.svc.cluster.local, and the CNP's kube-dns leg is baseline, not gated on
+  # docker. The old `dnsPolicy: None` + LAN resolver (192.168.2.1) could not resolve svc names at
+  # all — which is what forced the endpoint-IP rewrite above.
+  KATA_BLOCK=$'  runtimeClassName: kata'
   # Pull-through mirrors (FU-073, argocd/resources/registry-cache/): docker.io rides the mirror
   # via dockerd registry-mirrors (Hub-only by dockerd design); the ghcr mirror is exported for
   # gate scripts (kind: certs.d/hosts.toml into the node, oracle-fleet#35). BGP VIPs, git-pinned —

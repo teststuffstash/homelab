@@ -66,13 +66,17 @@ an ephemeral in-cluster runner** — same policy question, same per-project answ
   and stays non-root — the repo brings its own docker/kind CLI via devbox.json. Every sidecar
   accommodation is a spike finding (`docs/spikes/kata-ci-gate.md`): mknod `/dev/kmsg`, cgroup
   nesting via the dind entrypoint, MTU clamp, tmpfs docker-lib.
-- **Egress:** the composed CNP adds the docker-only legs — the kata LAN-resolver DNS leg
-  (`dnsPolicy: None`, FU-072) and the `ghcr.io` FQDN (the dind's own ghcr pulls stay direct until
-  the gate configs route ghcr through the mirror per-tool). The pull-through mirrors themselves are
-  **baseline** tier — open to every ride (§The egress dial).
-- **In-cluster services** (openrouter-proxy, garage, pushgateway) are rewritten to resolved
-  endpoint IPs at dispatch (`resolve_ep` in agent-session.sh) — kata guests can't reach service
-  VIPs (FU-072); delete the rewrites when that lands.
+- **Egress:** the composed CNP adds the docker-only legs — the kata LAN-VIP belt (nix-cache,
+  devbox-search) and the `ghcr.io` FQDN (the dind's own ghcr pulls stay direct until the gate
+  configs route ghcr through the mirror per-tool). The pull-through mirrors themselves are
+  **baseline** tier — open to every ride (§The egress dial). ⚠ The LAN-resolver DNS leg
+  (`192.168.2.1`) went **dead** when `dnsPolicy: None` was removed 2026-09-04 (FU-072): kata pods
+  now use kube-dns, which is a baseline leg. Delete that leg once this soaks.
+- **In-cluster services** (openrouter-proxy, garage, pushgateway) are reached by **service DNS**,
+  like every other ride (homelab#138). The FU-072 workaround that rewrote them to resolved endpoint
+  IPs at dispatch was deleted 2026-09-04: kata guests reach service VIPs again (re-probed on all
+  four kata nodes), and resolving once at dispatch black-holed any ride that outlived a dependency
+  reschedule — [the spike](../spikes/kata-service-vip.md) has the three occurrences.
 
 ## The MCP knob (`spec.mcp`, #1039)
 
@@ -122,7 +126,7 @@ leg-by-leg.
 | tier | legs | rule |
 |---|---|---|
 | **baseline** (every ride, every stack) | kube-apiserver (READ-RBAC visibility, homelab#97) · DNS (kube-dns) · **registry mirrors (docker.io `.40.20`, ghcr `.40.21` — moved here by homelab#520)** · egress proxy + git-cred broker (`agent-egress` — the only LLM+credential exit) · nix-cache · devbox-search · garage · monitoring/pushgateway · github.com + `*.githubusercontent.com` + cache.nixos.org | open to everybody; each leg carries a one-line rationale |
-| **capability-gated** (`fixer.docker: true`) | kata LAN-resolver DNS leg (`192.168.2.1` — `dnsPolicy: None` mechanics, genuinely docker-only) · kata LAN-VIP belt (nix-cache `.40.23` / devbox-search `.40.27` — kata rides install via them) · upstream registry FQDN `ghcr.io` (dockerd's `registry-mirrors` is Hub-only, so the dind's own ghcr pulls go direct until the gate configs route ghcr through the mirror per-tool; then this leg is deleted — the recorded plan) | gated ONLY for risk, cost, or genuine capability-specificity — the gate's reason is written at the leg |
+| **capability-gated** (`fixer.docker: true`) | kata LAN-resolver DNS leg (`192.168.2.1` — ⚠ DEAD since 2026-09-04, `dnsPolicy: None` removed with the FU-072 workaround; delete after soak) · kata LAN-VIP belt (nix-cache `.40.23` / devbox-search `.40.27` — kata rides install via them) · upstream registry FQDN `ghcr.io` (dockerd's `registry-mirrors` is Hub-only, so the dind's own ghcr pulls go direct until the gate configs route ghcr through the mirror per-tool; then this leg is deleted — the recorded plan) | gated ONLY for risk, cost, or genuine capability-specificity — the gate's reason is written at the leg |
 | **ecosystem profile** | `python` → pypi.org / files.pythonhosted.org · `node` → registry.npmjs.org | claim-selected |
 | **harvest-earned** | `extraFQDNs` | per-stack, monitor-phase evidence, never speculation (unchanged) |
 | **stack-declared MCP** (`spec.mcp`) | MCP endpoint HOST, derived from `spec.mcp.endpoint` (a URL — the launcher passes it verbatim to the harness's attach flag, #1041) — the agent session's tool server; the derived host must be an FQDN, never a service VIP (FU-072/kata) | present when the stack declares `spec.mcp`; the endpoint is rendered into EVERY fixer repo's CNP (stack-wide knob, per-repo leg). ⚠ NOT into the loop-ns `agent-loop-egress` CNP (#1213, monitor-mode): REVIEWER pods attach MCP too (since #1186) and reach the host today only because the loop CNP does not enforce — the enforce flip must add this leg first or every reviewer MCP attach hangs (the 2026-09-01 #1039 evidence comment's caveat, made a prerequisite) |
