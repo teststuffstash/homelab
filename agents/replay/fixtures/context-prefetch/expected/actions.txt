@@ -14,6 +14,8 @@ STDIN   issue.md: |
 STDIN     # Issue #1175
 STDIN     ## launcher context-PREFETCH stage: gather every deterministic read into /work/context/
 STDIN     
+STDIN     **Labels:** agent-fix, task/fix
+STDIN     
 STDIN     Touches: agents/agent-session.sh, agents/replay/**
 STDIN     
 STDIN     The MECHANISM half of #1069 (operator direction, 2026-09-01). Pre-read the directive channel via REST and materialize into /work/issue.md.

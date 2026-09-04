@@ -1296,13 +1296,22 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
         echo "→ dispatch deferred — directive unreadable (repos/${PF_SLUG}/issues/${PF_ISSUE}/comments; resets N/A) — the next pass retries (homelab#1175)" >&2
         exit 0
       fi
-      # Build the markdown: title, body, then comments in order with author + timestamp.
+      # Build the markdown: title, labels, body, then comments in order with author + timestamp.
+      # Per #1175 widened-scope table row 1: "title, labels, body, then every comment in order".
       PF_ISSUE_TITLE="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.title')"
       PF_ISSUE_BODY="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.body // ""')"
+      PF_ISSUE_LABELS="$(printf '%s' "$PF_ISSUE_DATA" | jq -r '.labels | join(", ")')"
+      PF_ISSUE_LABELS_LINE="
+"
+      if [ -n "$PF_ISSUE_LABELS" ]; then
+        PF_ISSUE_LABELS_LINE="
+**Labels:** ${PF_ISSUE_LABELS}
+
+"
+      fi
       PF_ISSUE_MD="# Issue #${PF_ISSUE}
 ## ${PF_ISSUE_TITLE}
-
-${PF_ISSUE_BODY}
+${PF_ISSUE_LABELS_LINE}${PF_ISSUE_BODY}
 
 ## Comments"
       while IFS= read -r line; do
@@ -1817,8 +1826,21 @@ else                                  AGENT_RAIL="openrouter"; fi
 # <<<REPLAY:agent-rail<<<
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
 PGW_URL="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
-"$KUBECTL" $KUBE -n "$NS" get secret agent-transcripts-s3 >/dev/null 2>&1 \
-  || echo "→ transcript mirror agent-transcripts-s3 absent in ns ${NS} (claim not synced?) — run proceeds, upload will be skipped"
+# >>>REPLAY:transcript-mirror-probe>>>
+TS_SECRET_ERR="$("$KUBECTL" $KUBE -n "$NS" get secret agent-transcripts-s3 2>&1 >/dev/null)" || {
+  case "$TS_SECRET_ERR" in
+    *NotFound*)
+      echo "→ transcript mirror agent-transcripts-s3 absent in ns ${NS} (claim not synced?) — run proceeds, upload will be skipped"
+      ;;
+    *Forbidden*)
+      echo "→ transcript mirror probe: cannot check agent-transcripts-s3 in ns ${NS} (RBAC denied — launcher SA has no secret access by design). Worker reads the secret under its own SA via secretKeyRef optional:true, so this is not a verdict on the upload."
+      ;;
+    *)
+      echo "→ transcript mirror probe: unexpected error checking agent-transcripts-s3 in ns ${NS}: $(echo "$TS_SECRET_ERR" | head -1)"
+      ;;
+  esac
+}
+# <<<REPLAY:transcript-mirror-probe<<<
 
 # Persistent uv (PyPI wheel) cache: if a `agent-uv-cache` PVC exists in the namespace, mount it so
 # `devbox run ci`'s `uv sync` fetches wheels once across runs (the nix cache only covers `devbox

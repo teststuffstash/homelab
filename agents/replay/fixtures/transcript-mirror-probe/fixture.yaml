@@ -1,0 +1,21 @@
+# transcript-mirror-probe — the transcript mirror S3 secret probe (homelab#1182).
+#
+# THE CONTRACT: the launcher probes for `agent-transcripts-s3` before every ride. The probe
+# captures stderr separately and distinguishes three cases:
+#
+#   NotFound  → "absent" — the claim hasn't synced, upload will be skipped (original message)
+#   Forbidden → "RBAC denied — launcher SA has no secret access by design. Worker reads the
+#               secret under its own SA via secretKeyRef optional:true, so this is not a verdict
+#               on the upload."
+#   other     → "unexpected error" — something else went wrong
+#
+# The launcher SA (`platform-agents:agentstack-loop`) has no Secret access by design, so
+# Forbidden is the expected outcome on every dispatch. The fix (homelab#1182) made the probe
+# distinguish it from NotFound instead of treating any non-zero exit as "absent".
+name: transcript-mirror-probe
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:transcript-mirror-probe
+rows: rows.psv

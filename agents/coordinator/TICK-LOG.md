@@ -6712,3 +6712,168 @@ first live ADR-110 maintenance session before the ADR existed.
   kubelet imageGC of the old tag on wk-01/wk-02, the 15:17Z trim, FU-093's Longhorn trim (~41 GiB),
   FU-208's smaller image. Pool at wind-down: 75.67 %.
 
+
+## 2026-09-04 ~08:20–08:45Z — operator question on oracle-fleet#243 (inotify leak): the belt had never run
+
+- **Question**: what has homelab done since #243, and is the inotify leak still the stack's
+  problem? Answer: **the stack's own fix is the one that holds** — `scripts/lib/e2e-sweep.sh`
+  (pre-create sweep, 90 min, own-run excluded) landed with oracle-fleet#363 on 09-02; #243's ask
+  is shipped and the issue is closable. Headroom is 1024 instances / 524288 watches, codified and
+  now proven through a real recreate (today's FU-207 VM, cloud-init applied them at 05:49Z).
+- **Finding: the platform-side belt from the 09-02 incident (b26fffb5) had never once run.** It
+  was an `/etc/cron.d` drop-in and the **Debian 12 genericcloud image ships no cron package** —
+  `/usr/sbin/cron` absent, no `cron.service`, zero journal entries on the fresh VM. Independently,
+  its prefix list still said `oracle-e2e-*`, which #363's rename had already retired — so even
+  with a scheduler it matched nothing the fleet leaks today. A belt written and never observed
+  running is the class here: the 09-02 note said "janitor+cron installed live", and nothing since
+  checked it had fired.
+- **Fixed**: systemd `kind-janitor.timer` (hourly :17, `Persistent`) + `.service`, prefixes
+  widened (`oracle-fleet-e2e-`, `sleep-itest-`, `circles-test`), status regex anchored (the old
+  `days|weeks|Exited` alternation matched the name column too). Applied live FIRST (a
+  template-only fix waits on a VM recreate, and the pool sits at 75.7 %), functionally verified by
+  planting exited oracle+sleep control-planes and running the unit — both reaped; installed script
+  byte-identical to the template render. **PR#1371 merged 08:41Z** (bot approve, ~7 min);
+  `docs/patterns/kind-ci.md` rule 2 gains the caveat that the belt matches a FIXED PREFIX LIST, so
+  a rename silently drops a stack out of it.
+- ⚠ **Two stack-side rule violations reported to the operator, not filed** (they belong to their
+  own loops): **sleep-tracking** has no pre-create sweep (trap-only, same shared daemon, the exact
+  #243 cancel-path gap), and **circles** uses a fixed `circles-test` cluster name (rule 1) —
+  contained only because its gate runs in ride pods today.
+
+## 2026-09-04 ~09:00–09:30Z — `AgentWorkerEgressDropped/oracle-fleet`: the FU-072 workaround, third time, on a new trigger
+
+- **Operator: "is this the same kata VIP problem?"** — **no, and that distinction is the whole
+  finding.** The original symptom (kata guests black-hole `10.96.x` VIPs) was re-probed GONE on
+  all four kata nodes 2026-09-03. What fired is its **workaround**: the dispatch-time endpoint-IP
+  rewrite. Signature: the Hubble drop destination is a bare pod IP (`10.244.6.86`) rather than an
+  FQDN — a dead identity `toEndpoints` cannot match.
+- **Chain** (spike doc §Third occurrence has it in full): hp-01 `NodeHasDiskPressure` ~08:15Z
+  (ephemeral-storage, the morning's pre-puller bake — the wk-03 class recurring) → kubelet evicted
+  `openrouter-proxy` → back on wk-02, new IP, **same ReplicaSet** → ride 432-r1 (dispatched
+  08:08:08Z, kata/wk-metal-04) held the dead IP in all six derived URLs → spent ~1 h in devbox
+  install, then died `Connection refused` on its FIRST LLM call at 09:11:38Z. finalize has been
+  retrying the broker token every 10 s since. **New vs 2026-08-26: the trigger is ANY reschedule,
+  not a router PR merge** — the exposure window is the whole ride, not the ~4×/day roll rate.
+  FU-072 unchanged in direction (delete `resolve_ep` + the rewrites + the `dnsPolicy: None` leg),
+  but this is the third ride lost to it in two days; the operator decision is whether to execute
+  it now.
+- **Two platform findings while reading the board:**
+  - **FU-210 second instance**: `respond-k8fww` handled this exact alert at 08:19:19Z and
+    **Succeeded** — no ledger entry (`responder-seen` has no oracle-fleet egress key; the only two
+    egress entries are 08-26 openrouter-operator and 09-01 sleep-tracking), no issue, no
+    transcript. A triage that files nothing is indistinguishable from one that never ran.
+  - **FU-212 filed** (new): FOUR responder workflows today Errored on
+    `configmaps is forbidden: … argo-workflows-workflow-controller … in the namespace
+    "agent-coordinator"` (08:18/08:32/08:37/08:42, all PodSigkilled — but other PodSigkilled runs
+    succeeded, so intermittent, not per-class). The bound Role grants only
+    `workflowtaskresults: create,patch`, and every stack namespace's Composition-rendered Role is
+    identical → fleet-wide. Controller v4.0.7; what it wants the ConfigMap for is not established.
+    Those alerts got no triage at all and nothing said so.
+- ⚠ `docs/agents/meta-state.md` is **850 lines** — its own header says "tiny, transient", and the
+  §Live state block alone runs 760. Last pruned 2026-08-25. It is now the token cost a fresh
+  `/meta-coordinate` bootstrap exists to avoid; due for a prune.
+- **FU-072 EXECUTED the same session (operator: "let's try it, be ready to revert") — PR#1372
+  merged 09:56Z.** `resolve_ep`, the three rewrites (proxy/garage/pushgateway) and
+  `dnsPolicy: None` deleted; every ride uses service DNS. Verified BEFORE committing on the
+  combination nobody had tested — a kata pod under the ENFORCED fixer CNP (the 09-03 re-probe used
+  unpolicied pods plus rides still on `dnsPolicy: None`): cluster resolv.conf, svc DNS via
+  kube-dns, proxy VIP 200, garage VIP 403 (S3 answering unauthenticated), pushgateway VIP 200,
+  and `openrouter.ai:443` still DENIED as the negative control. Probe carried its own label +
+  a scoped CNP copy so it never counted as WIP.
+- **Both gates earned their keep on this one.** (1) The ADR-103 ratchet blocked the first push —
+  a clause path changed with no fixture. Checked whether a fixture could apply rather than
+  reaching for the escape hatch: the harness composes clauses ONLY from `>>>REPLAY:` blocks and
+  the deleted code sits outside every marker, so none could, before or after → recorded in
+  `agents/replay/fixtures/README.md` (the #1113 shape). (2) The reviewer requested changes on
+  FOUR sibling comments still asserting "kata can't reach ClusterIPs" — correct, and one was a
+  same-file self-contradiction. Fixing them surfaced that the MCP "FQDN, never a service VIP"
+  rule had the WRONG reason all along: the real one is that the CNP renders that host into a
+  `toFQDNs` leg, which cannot match a bare IP — stated in four places (agentstack.md,
+  composition.yaml, xrd.yaml ×2), two of which the review never reached. (3) My own review-fix
+  then tripped `prompt-transport-lint`: backticks around PROXY_URL inside the pod-manifest
+  heredoc, which EXPANDS — live command substitution, a real defect, not a false positive.
+- ⚠ **The soak is not done.** No docker-mode ride has run under the new launcher yet; 432-r1 was
+  dispatched under the old one and holds the dead IP. Watch the first `fixer.docker: true` ride's
+  first LLM call. Regression signature: `AgentWorkerEgressDropped` with a BARE POD IP as the
+  Hubble destination → `git revert 773ad63e` (the endpoints-read grants were deliberately kept,
+  so a revert needs no RBAC change).
+
+## 2026-09-04 ~11:00–11:40Z — oracle-fleet#418 stall read + three ADR-110 codeowner reads + the FU-072 soak armed (design-agents corpus session)
+
+- **Operator: "look at the stall of oracle-fleet#418, then codeowner reads to unblock homelab
+  workers to soak FU-072".** The Goal is not stalled by design; one platform-caused limbo held its
+  whole subtree. Scan (run report-only from the jail, `SCAN_STACK=oracle`) said it itself:
+  **#432 = "goal child in an undecidable state — C4/C5 HELD"** — ride 432-r1 was the FU-072
+  third occurrence's victim (dead proxy IP baked in, died 09:11Z on its first LLM call, pod gone),
+  and because `AGENT_REPORT_URL`/the broker were the SAME dead IP no `AGENT_STRIKE:` ever
+  landed, so the IL-T29 narrowing had nothing to read → the FU-204 limbo. **#433 = footprint-held**
+  on #432's stale `agent/in-progress` (`tests/**`). Verified nothing pushed (no branch, goal
+  branch unchanged since #431) → re-queued #432 by hand (queued first, in-progress second),
+  audit comment on the issue, `devbox run ring oracle` — the scan was Running at 11:34Z. **This
+  ride IS the first docker-mode ride under the service-DNS launcher — the FU-072 soak.** Watcher
+  armed (exits on a PR, a Connection-refused/API-error log signature, `AgentWorkerEgressDropped`
+  firing, or a strike).
+  The rest of the tree is human-gated by design: #422/#423's research PRs #425/#426 are
+  un-armed `research/*` rides (FU-105 — the operator asked mid-session why #426 has no
+  auto-merge: that is the research lane's contract, the ⚖ spec proposals wait for the
+  `specs/` codeowner, oracle-side read); #428/#429 are the #424 arbitration's follow-up-class
+  filings — `agent-fix` without `agent/queued`, goal members nobody dispositioned (ADR-122's
+  unbuilt S8 half; the 08:03Z checkpoint listed them as "owned" and queued nothing) — the
+  operator's/oracle jail's queue call ($0.80/$10 spent); #416 (regeneration) is unblocked
+  (#419+#420 closed) and operator-attended.
+- **Codeowner reads (ADR-110):** **PR#1354 MERGED** (`goal/*|master)` arm + two fixtures —
+  small, correct). **PR#1352** sound — the ci-red re-arm's "no stats since marker" test is safe
+  ONLY because the clause's upstream per-item/WIP holds catch a riding round first (checked
+  before ruling); one in-diff finding fixed on the branch: a stray `worlds/arbitrate/…/--` file
+  (a mis-invoked `--record`'s captured stderr) deleted. **PR#1347** carried a latent bug: the
+  `openrouter/*)` special case stripped the rail for cloaked codenames, handing opencode
+  provider=openrouter model=`<codename>` (the #876 class through the other door — opencode
+  splits `-m` at the FIRST slash); fixed on the branch (always prepend) + a `router-adopted-cloaked`
+  carrier row; 14 replays green. Both wait for the bot's re-approval at the new heads (watcher
+  armed), then the seat approves.
+- **homelab#1300 wore `agent/queued` without `agent-fix` since 09-02** (operator-authored batch)
+  — invisible to dispatch for two days; `agent-fix` added. #1299 (same batch) left: its
+  `Touches:` lands on the pin-only GUARDED `arc-runners.yaml` — operator lane, said on #1300.
+- ⚠ `argo logs` on the GC'd coordinate/review workflow pods returns nothing; the truthful read
+  of what a stack's scan sees is `SCAN_STACK=<stack> devbox run -- bash agents/coordinator-scan.sh`
+  from the jail (report-only; the ci-red clause PROBE_FAILs there on the PAT's missing
+  checks:read — jail artifact, not a cluster fact).
+- **Correction (operator, ~12:10Z): "`devbox run ci` on oracle does not start the kind cluster,
+  `devbox run e2e` does."** So 432-r1 proved the SERVICE-VIP leg only — LLM loop + `/report` via
+  the proxy svc name, phase metrics via the pushgateway svc name, transcripts to garage, PR#434
+  in ~10 min, zero drops — which is exactly the three targets the deleted rewrites covered. The
+  dind/kind leg (registry mirrors from inside dind, kind nodes resolving via kube-dns instead of
+  the removed LAN resolver) is UNEXERCISED: only `task/build` rides run `devbox run e2e` in-pod,
+  and that path already carries its own pre-FU-072 fault (#399-r1 kind-node segfault, in the
+  oracle handoff inbox). FU-072's Next re-split into the two legs.
+
+## 2026-09-04 ~12:00–13:00Z — research-into-goal ruling, park economics landed, board triage (corpus session, continued)
+
+- **Operator ruling on the #418 read:** the codeowner read belongs at goal→master, never
+  fix→goal; research inside a Goal is a THEME or precedes it as a mission — never mixed. **PR#1373
+  merged:** Goal card rule 10 + failure row; the launcher's `--no-arm` is now keyed on
+  (recipe, base) — research into `goal/**` ARMS, into master stays the FU-105 weave; un-arming is
+  the exception (unprotected base · research→default · the explicit flag, which has no caller).
+- **Why only 3 parks with all the CI runs (operator):** the homelab queue was EMPTY (label slips
+  #1300/#1299, #1207 operator-lane, 16 unqueued backlog), not capped (BLOCKPARK 10 is live); the
+  CI runs were the unbuilt updater skip — measured 36/32/27 refreshes, 39/41 CI runs on unchanged
+  parks, and the bot approval SURVIVED every update-branch merge (dismiss-on-push does not fire on
+  base merges). #887 re-scoped + queued with the numbers → **PR#1375 (loop-built, seat-read,
+  merged)**; **PR#1376** widened the scan's blockpark count to BLOCKED|BEHIND first (a skipped
+  park's steady state). Footprint holds unaffected (`busy_fps` = in-progress only; #1314 closed on
+  that ruling).
+- **Board triage (operator: "queue what needs the corpus; skip disk/cloudflare"):** queued 12
+  (homelab #1182 #1204 #1205 #1285 #1374 #1291 #1219 #1350, agent-runtime#116, or-op #56 (ruling:
+  surface, never re-mint unattended) #57 #58); closed #1314 (design) + #1102 (container, tree
+  empty); #1249 waits for S8 (linked); #1200 left open (operator: think later — not covered by
+  any proxy); #1370 = FU-171 resight, inert.
+- Watches: codeowner-park watcher on the exporter series (zero gh calls) — first wake = PR#1375.
+- **13:00–14:20Z codeowner reads off the park watcher (exporter series, zero gh calls):** PR#1375
+  (#887 park-skip, loop-built) · PR#1377 (#1182) · PR#1383 (#1291 — two bot APPROVEDs 8 s apart at
+  one head: the double-dispatch class) · or-op PR#59 (#56 — implements the surface-never-re-mint
+  ruling; nit: transition time rewritten every pass) · PR#1379 (#1204). 6 of the 12 triage items
+  landed within ~2 h. **#418 follow-up (operator):** #428/#429 were never going to queue — the
+  arbitrate door files goal children inert and no reader queues an existing tree member (the
+  checkpoint disposes STORE entries only) → hand-queued + **#1381 filed+queued** (carry
+  `harvest=store` on arbitrate/changes-requested units, append instead of file). Wind-down 14:20Z.
+
