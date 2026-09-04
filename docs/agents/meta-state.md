@@ -18,6 +18,11 @@ meant to avoid.)
     FU-208 re-headed to the image-size leg). Pool **71 %** with ci-runner-01 back — the first
     `PveThinPoolFillingUp` (80 %) may fire within days; the answer is the fstrim jobs + FU-093's
     next act (Longhorn filesystem-trim), not a threshold bump. Longhorn healthy; PR#1365 merged.
+    Later the same session: fstrim TWICE daily (6e49d420); forgejo-pg-1 re-cloned (was a real
+    pg_rewind divergence, 8 h unattended → FU-210 responder-transcript gap); scratch quota 60→100Gi
+    in the three docker stacks (#1321 closed); ledger §Requirements register (PR#1368 — verify
+    merged). Tomorrow's 03:17Z fstrim is the meter's first measured per-run reclaim — read
+    `pve_lvm_thin_pool_data_percent` before/after to size the cadence (FU-093).
   - **#1334 check 1 OBSERVED** (api 429 served on Free, Retry-After 10; handoff task from the oracle seat
     relayed + closed) → **PR#1365** flips the docs; merge when the bot approves. #1334 state: 1+2 ✅, 3 ✗ RUM
     residual — the human's `goal/validated` verdict on #1302 is now unblocked on evidence.
