@@ -27,7 +27,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BASE="${1:-origin/master}"
-GUARDED='argocd/platform/arc-runners\.yaml|agents/coordinator/reflexes-argo\.yaml|argocd/platform/openrouter-operator\.yaml'
+GUARDED='argocd/platform/arc-runners\.yaml|agents/coordinator/reflexes-argo\.yaml|agents/coordinator/sentinel-argo\.yaml|argocd/platform/openrouter-operator\.yaml'
 # Two pin shapes, one rule. The arc-runner bump writes an `image:` line; the chart-deploy lane
 # writes a `targetRevision:` line (CalVer + -g<sha>, ADR-084). Anything else in a guarded file is
 # still refused, so widening the FILE set does not widen what may be written to it.

@@ -67,6 +67,11 @@
 # line. A real edit goes to master directly, the operator path (CLAUDE.md §"How changes land").
 /argocd/platform/arc-runners.yaml
 /agents/coordinator/reflexes-argo.yaml
+# The iac-sentinel's own pin (cfb98bbb, 2026-09-03): the bump list named reflexes-argo.yaml, which
+# carries no pin, so the sentinel sat on a 17-day-old bake; the pin now lives in sentinel-argo.yaml
+# and the auto-bump writes it — without this carve-out every pin PR parked on the human (PR#1366).
+# Same guard as the two above: pin-only-lint allows only arc-runner image-pin lines here via a PR.
+/agents/coordinator/sentinel-argo.yaml
 
 # The agent-coordinator deploy-pin (FU-152). The tag used to be swept across EIGHT manifests under
 # agents/coordinator/ — seven of them owned by the /agents/ rule above, so a one-line first-party

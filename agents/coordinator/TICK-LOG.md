@@ -6676,4 +6676,18 @@ first live ADR-110 maintenance session before the ADR existed.
   both alerts cleared. Finding: the responder HAD triaged the subject (ledger 09-04, 1/12 budget)
   and filed nothing, and no transcript exists to say why (no responder capture hook; Loki has no
   agent-coordinator streams) → **FU-210**.
+- **#1321 (operator: "would this help?")** — read: NO for the pool (scratch is `diskSelector: bulk`
+  → only the two kata laptops; wk-02 is `std`), and the issue misdiagnoses its own problem: the
+  FU-116 janitor already reaps `app=agent-session` pods (30 min Succeeded / 2 h Failed, per 30-min
+  scan) — the three "leaked" pods were 19–30 min old. The real defect was arithmetic: 60Gi = 3
+  rides was a per-HOUR cap. **Operator: raise it** → `scratch: 100Gi` (5 rides) in all three
+  docker-mode stacks (oracle-iac#563, sleep-iac#85, circles-iac#78, CI-only lane, merged in
+  minutes; live quotas verified 100Gi); bulk headroom 216 + 237 GiB free, replica-1. #1321
+  commented + closed.
+- **Operator: "are we tracking storage REQUIREMENTS anywhere?"** — no: the ledger held have +
+  committed, ROADMAP one Ceph line, ADR-114 a direction. → `docs/storage-ledger.md` §Requirements
+  register (PR#1368): seven rows, need/want, sized — pool 488 GB promised on 354 (bot review
+  caught my 408: ci-runner-01 is back), scratch ×5, a third physical Garage zone, Longhorn
+  in-volume reclaim (~41 GiB), mirrors-never-wipe, image store off the laptops' Longhorn
+  partition, `fast` too small to be the scratch tier (26.7 G = one ride).
 
