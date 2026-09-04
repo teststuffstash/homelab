@@ -1,4 +1,4 @@
-CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid
+CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews
 CALL gh pr view {{n}} --repo teststuffstash/testrepo --json commits,reviews
 CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/{{n}}/update-branch -f expected_head_sha={{oid}}
 OUT updater[teststuffstash/testrepo]: no armed+BEHIND PR to update

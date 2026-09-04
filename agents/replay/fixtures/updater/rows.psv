@@ -8,3 +8,5 @@ unstrand-unreadable   | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  |
 conflict-dirty        | board | gh/pr-list.json @ patches/dirty-90.jq       |  | dirty-label   | n=90
 conflict-clear        | board | gh/pr-list.json @ patches/label-conflict-90.jq | | label-clear | n=90
 update-fail           | board | gh/pr-list.json @ patches/conflict-101.jq  | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | update-fail |
+park-skip             | board | gh/pr-list.json @ patches/add-park-skip.jq       |     | noop          |
+human-approved-pick   | board | gh/pr-list.json @ patches/add-human-approved.jq  |     | picks         | n=131 oid=human131oid456

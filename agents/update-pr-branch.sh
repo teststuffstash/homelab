@@ -32,7 +32,7 @@ REPO="${1:?usage: update-pr-branch.sh <owner/repo>}"
 # One list serves all three legs — the snapshot is per-pass by design (level-triggered; anything
 # it misses, the next pass sees).
 PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
-  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid)"
+  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews)"
 
 # Defensive: `gh pr edit --add-label` FAILS on a missing label, so create it idempotently first
 # (the AgentStack claim provisions it via IssueLabels, but this survives a not-yet-claimed repo or
@@ -55,8 +55,17 @@ label_conflict() {
 # ── leg 1: the main pick ── oldest armed + BEHIND + not-changes-requested, ONE per pass (FIFO —
 # `sort: created asc` in the action era). CHANGES_REQUESTED PRs are the unstrand leg's (below);
 # DIRTY PRs are the labeler's (an update-branch call cannot resolve a conflict).
+# Codeowner-parked PRs (bot-approved at head ∧ reviewDecision == REVIEW_REQUIRED ∧ armed) are
+# SKIPPED — the updater leaves them BEHIND so they accumulate no CI cost between human sittings.
+# At human approval reviewDecision flips to APPROVED and the next pass refreshes (one CI cycle).
+# Measured: PR#1347/#1352/#1354, 47 master moves, 36/32/27 merge commits each, 39/41 CI runs
+# each — ≈3.5h runner time on three PRs whose content never changed (homelab#887, 2026-09-04).
 pick="$(jq -r '[.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
-                             and .reviewDecision != "CHANGES_REQUESTED")]
+                             and .reviewDecision != "CHANGES_REQUESTED"
+                             and (.reviewDecision != "REVIEW_REQUIRED" or
+                                  ([((.latestReviews // [])[] | select((.author.login
+                                    | startswith("homelab-reviewer")) and .state == "APPROVED"))]
+                                   | length) == 0))]
                | sort_by(.createdAt) | .[0].number // empty' <<<"$PRS")"
 if [ -n "$pick" ]; then
   pick_oid="$(jq -r --argjson n "$pick" '.[] | select(.number == $n) | .headRefOid // empty' <<<"$PRS")"
