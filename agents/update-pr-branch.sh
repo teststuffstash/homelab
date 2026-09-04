@@ -63,7 +63,7 @@ label_conflict() {
 pick="$(jq -r '[.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
                              and .reviewDecision != "CHANGES_REQUESTED"
                              and (.reviewDecision != "REVIEW_REQUIRED" or
-                                  ([((.latestReviews // [])[] | select((.author.login
+                                  ([((.latestReviews // [])[] | select(((.author.login // "")
                                     | startswith("homelab-reviewer")) and .state == "APPROVED"))]
                                    | length) == 0))]
                | sort_by(.createdAt) | .[0].number // empty' <<<"$PRS")"
