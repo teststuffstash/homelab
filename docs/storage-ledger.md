@@ -254,13 +254,29 @@ threshold**.
   runbook recipe made a schedule. It pushes `node_fstrim_bytes_trimmed` / `_success` /
   `_last_run_timestamp` per node, and `NodeFstrimFailed` + `NodeFstrimStale` alert on the belt —
   because the historical failure was not a trim that broke, it was a reclaim path with no owner.
-  ⚠ What this does NOT do: watch the pool. There is still no pve exporter, so if the trim keeps up
-  nobody learns the pool's level; the alerts prove the mechanism runs, not that it is sufficient.
+  ⚠ What this does NOT do: watch the pool — that is the pool meter below (built 2026-09-04, after
+  the fourth fill); these alerts prove the mechanism runs, the meter says whether it suffices.
   ⚠ Nor does it reach **ci-runner-01** — same pool, not a k8s node; it is an ordinary Linux guest
   and its own `fstrim.timer` is the cover. Unverified, and worth a look.
   ⚠ Second layer, not built: a Longhorn `filesystem-trim` RecurringJob. A node-level fstrim cannot
   reclaim space *inside* a replica's sparse file, so volume-level churn needs its own trim before
   the node one can see it.
+- **pve thin-pool metering — BUILT 2026-09-04** (FU-093's blocking act after the
+  [fourth fill](incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md)). Debian's packaged
+  node_exporter on the hypervisor plus a one-minute systemd timer feeding its textfile collector
+  (`ansible/pve-node-exporter.yml`, idempotent; re-run after a pve reinstall): `lvs` → the pool's
+  `data%`/`metadata%`/size, every thin LV's promise + allocation (the overcommit sum, live), `vgs`
+  → VG free extents (what autoextend could consume — 28 MB), and `qm status --verbose` → each
+  guest's `qmpstatus` (`io-error` = paused on a failed write, the 09-03 signature). Scraped as a
+  static LAN target (`argocd/resources/pve-metrics/`, job `pve-node`) with six belts:
+  `PveThinPoolFillingUp` (>80 %, warning), `PveThinPoolAlmostFull` (>90 %, critical),
+  `PveThinPoolMetadataHigh`, `PveVmIoError` (critical), and the meter's own liveness
+  (`PveMetricsStale` on the textfile mtime, `PveMetricsAbsent`) — promtool-fixtured. Chosen over
+  an in-cluster Proxmox-API exporter: no credential to mint/store/rotate (the tofu token's role
+  cannot create users anyway), and the host's NVMe/memory series come free. The same series gates
+  the runner-image pre-puller's pool-VM pulls at 75 % (FU-208). ⚠ Shared fate stands: at 100 %
+  Prometheus is down with the pool — the belt is for the approach, so the 80 % warning is the
+  load-bearing one.
 - **Garage metering — BUILT 2026-08-25/26** (homelab#934 → #965, `3d5fa082`): the chart flags
   flipped (`monitoring.metrics.enabled` + `serviceMonitor.enabled` in
   `argocd/platform/garage.yaml`), so the already-running exporter's 48 families are scraped, and

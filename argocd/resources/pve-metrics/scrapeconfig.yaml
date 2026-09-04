@@ -1,0 +1,22 @@
+# Scrape the Proxmox host's node_exporter (installed by ansible/pve-node-exporter.yml — the pve
+# thin-pool meter, FU-093). pve is not a cluster node, so no ServiceMonitor can reach it: this is
+# a static LAN target, the same host:port group_vars/pve.yml pins (change both).
+#
+# Label: unlike the *Monitor/Probe/Rule selectors (all `NilUsesHelmValues: false` in the stack
+# values → cluster-wide), the chart leaves scrapeConfigSelector at its default — the `release`
+# label of the Helm release. Carried here rather than flipping one more values knob for one CR.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: pve-node
+  namespace: monitoring
+  labels:
+    app: pve-metrics
+    release: kube-prometheus-stack
+spec:
+  jobName: pve-node
+  scrapeInterval: 60s
+  metricsPath: /metrics
+  staticConfigs:
+    - targets: ["192.168.2.3:9100"]
+      labels: { host: pve }
