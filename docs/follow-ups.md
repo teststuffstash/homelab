@@ -110,8 +110,11 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       The rollout-shape half SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on
       `topology.kubernetes.io/zone` — metal two-at-a-time, pool VMs one-at-a-time behind an init
-      gate on `pve_lvm_thin_pool_data_percent` < 75 (no sample = hold); pause selector removed,
-      9/9 pods ready. What remains is the size itself: every bake is a 4.9 GiB pull per node
+      gate on `pve_lvm_thin_pool_data_percent` < 75 (no sample = hold). First live bake
+      (#1366, 08:0xZ): wk-03's 35 GB fs hit DiskPressure holding BOTH tags (evicted, GC'd the old,
+      re-pulled clean); the pool went 71 → 79 % on one VM pull + ci-runner-01, two manual trims
+      → 75 %, and the gate HELD wk-03 at 75 % — by design, but the old tag on wk-01/wk-02 only
+      leaves via kubelet imageGC. What remains is the size itself: every bake is a 4.9 GiB pull per node
       because the image carries the whole fleet's devbox closures (FU-015). **Next:** a
       sentinel-scoped closure (or a second, small image for `agents/coordinator/sentinel-argo.yaml`)
       — hundreds of MB, so a node's first pull stops being a 429–909 s tax. Relates FU-093, #80.
