@@ -54,7 +54,10 @@ write_files:
       fs.inotify.max_user_watches=524288
   # Reap leaked kind-family containers: cancelled/timed-out CI jobs never run their teardown
   # (the 2026-09-02 exhaustion's cause). Hourly, ≥3h-old only — a live e2e run is minutes.
-  # The cause-side half (pre-create sweep in the e2e script) rides oracle-fleet#363.
+  # Belt only; the cause-side half is each stack's pre-create sweep (docs/patterns/kind-ci.md
+  # rule 2 — landed for oracle in oracle-fleet#363, `scripts/lib/e2e-sweep.sh`).
+  # ⚠ The prefixes must track the stacks' CURRENT cluster names: oracle renamed to
+  # `oracle-fleet-e2e-*` in #363 and the pre-#363 names still appear on runner-local leftovers.
   - path: /usr/local/bin/kind-janitor.sh
     permissions: '0755'
     owner: root:root
@@ -63,14 +66,35 @@ write_files:
       # NB: {{.Names}} is docker's Go-template syntax — it passes through tftpl untouched
       # (Terraform templates only interpret $${ and %%{ sequences).
       docker ps -a --format '{{.Names}}'$'\t''{{.Status}}' \
-        | grep -E "^(oracle-e2e-|oracle-serve-|kind-registry-)" \
-        | grep -E "Up ([3-9]|[1-9][0-9]+) hours|days|weeks|Exited" \
+        | grep -E "^(oracle-fleet-e2e-|oracle-e2e-|oracle-serve-|sleep-itest-|circles-test|kind-registry-)" \
+        | grep -E "$(printf '%s' 'Up ([3-9]|[0-9]{2,}) hours|Up [0-9]+ (days|weeks|months)|Exited')" \
         | cut -f1 | xargs -r docker rm -f
-  - path: /etc/cron.d/kind-janitor
+  # systemd timer, NOT cron: the Debian 12 genericcloud image ships NO cron package, so the
+  # /etc/cron.d drop-in this replaced was inert from the day it was written (found 2026-09-04 on
+  # the freshly recreated VM — janitor script present, nothing ever ran it).
+  - path: /etc/systemd/system/kind-janitor.service
     permissions: '0644'
     owner: root:root
     content: |
-      17 * * * * root /usr/local/bin/kind-janitor.sh 2>&1 | logger -t kind-janitor
+      [Unit]
+      Description=Reap leaked kind CI containers
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/kind-janitor.sh
+  - path: /etc/systemd/system/kind-janitor.timer
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Hourly kind-janitor sweep
+
+      [Timer]
+      OnCalendar=*-*-* *:17:00
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
 runcmd:
   - systemctl enable --now qemu-guest-agent
   - sysctl --system
@@ -78,6 +102,7 @@ runcmd:
   - mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nStorage=persistent\n' > /etc/systemd/journald.conf.d/persistent.conf && systemctl restart systemd-journald
   - curl -fsSL https://get.docker.com | sh
   - systemctl enable --now docker
+  - systemctl enable --now kind-janitor.timer
   # FU-015/ADR-082 parity: nix + devbox so the stacks' devbox-based gates (sleep `devbox run
   # test-integration`, oracle `e2e-kind`) run REPRODUCIBLY on this VM, not just the ARC runner —
   # same single-user install as docker/arc-runner/Dockerfile, owned by the sudo-less `runner`
