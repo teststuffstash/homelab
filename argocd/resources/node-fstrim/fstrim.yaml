@@ -93,10 +93,14 @@ metadata:
   name: fstrim-cp-01
   namespace: node-maintenance
 spec:
-  # Daily. The pool went 47.69% -> 77.41% in a single day of ordinary churn (2026-08-25), so a
-  # weekly cadence would spend most of the week above the autoextend threshold that cannot fire.
-  # Staggered by node so four discards do not land on the one NVMe together.
-  schedule: "17 3 * * *"
+  # Twice daily (operator quickfix 2026-09-04). Daily was in place for the fourth fill: the 03:17
+  # run had fired 19 h before the 22:05Z 100 %, and the recovery trims returned 65–85 GB the guests
+  # had freed since — 18–24 points of pool sitting unreturned (TICK-LOG 2026-09-04). The pool went
+  # 47.69% -> 77.41% in one day of ordinary churn already on 2026-08-25. Two runs halve the ratchet
+  # while the pve meter (argocd/resources/pve-metrics/) measures the real per-run reclaim; size the
+  # cadence from that, not from here. Staggered by node so four discards do not land on the one
+  # NVMe together.
+  schedule: "17 3,15 * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   successfulJobsHistoryLimit: 2
@@ -141,10 +145,14 @@ metadata:
   name: fstrim-wk-01
   namespace: node-maintenance
 spec:
-  # Daily. The pool went 47.69% -> 77.41% in a single day of ordinary churn (2026-08-25), so a
-  # weekly cadence would spend most of the week above the autoextend threshold that cannot fire.
-  # Staggered by node so four discards do not land on the one NVMe together.
-  schedule: "23 3 * * *"
+  # Twice daily (operator quickfix 2026-09-04). Daily was in place for the fourth fill: the 03:17
+  # run had fired 19 h before the 22:05Z 100 %, and the recovery trims returned 65–85 GB the guests
+  # had freed since — 18–24 points of pool sitting unreturned (TICK-LOG 2026-09-04). The pool went
+  # 47.69% -> 77.41% in one day of ordinary churn already on 2026-08-25. Two runs halve the ratchet
+  # while the pve meter (argocd/resources/pve-metrics/) measures the real per-run reclaim; size the
+  # cadence from that, not from here. Staggered by node so four discards do not land on the one
+  # NVMe together.
+  schedule: "23 3,15 * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   successfulJobsHistoryLimit: 2
@@ -189,10 +197,14 @@ metadata:
   name: fstrim-wk-02
   namespace: node-maintenance
 spec:
-  # Daily. The pool went 47.69% -> 77.41% in a single day of ordinary churn (2026-08-25), so a
-  # weekly cadence would spend most of the week above the autoextend threshold that cannot fire.
-  # Staggered by node so four discards do not land on the one NVMe together.
-  schedule: "29 3 * * *"
+  # Twice daily (operator quickfix 2026-09-04). Daily was in place for the fourth fill: the 03:17
+  # run had fired 19 h before the 22:05Z 100 %, and the recovery trims returned 65–85 GB the guests
+  # had freed since — 18–24 points of pool sitting unreturned (TICK-LOG 2026-09-04). The pool went
+  # 47.69% -> 77.41% in one day of ordinary churn already on 2026-08-25. Two runs halve the ratchet
+  # while the pve meter (argocd/resources/pve-metrics/) measures the real per-run reclaim; size the
+  # cadence from that, not from here. Staggered by node so four discards do not land on the one
+  # NVMe together.
+  schedule: "29 3,15 * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   successfulJobsHistoryLimit: 2
@@ -237,10 +249,14 @@ metadata:
   name: fstrim-wk-03
   namespace: node-maintenance
 spec:
-  # Daily. The pool went 47.69% -> 77.41% in a single day of ordinary churn (2026-08-25), so a
-  # weekly cadence would spend most of the week above the autoextend threshold that cannot fire.
-  # Staggered by node so four discards do not land on the one NVMe together.
-  schedule: "35 3 * * *"
+  # Twice daily (operator quickfix 2026-09-04). Daily was in place for the fourth fill: the 03:17
+  # run had fired 19 h before the 22:05Z 100 %, and the recovery trims returned 65–85 GB the guests
+  # had freed since — 18–24 points of pool sitting unreturned (TICK-LOG 2026-09-04). The pool went
+  # 47.69% -> 77.41% in one day of ordinary churn already on 2026-08-25. Two runs halve the ratchet
+  # while the pve meter (argocd/resources/pve-metrics/) measures the real per-run reclaim; size the
+  # cadence from that, not from here. Staggered by node so four discards do not land on the one
+  # NVMe together.
+  schedule: "35 3,15 * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   successfulJobsHistoryLimit: 2
