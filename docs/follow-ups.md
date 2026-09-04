@@ -849,6 +849,17 @@ the block needs pruning, not more headings.
       the 80 % warning is close; watch its first firing. **Next:** a Longhorn `filesystem-trim`
       RecurringJob (node fstrim cannot reclaim inside replica sparse files). Relates ADR-089,
       ADR-114, homelab#934.
+- [ ] **FU-211** — **The storage ledger's numbers are hand-typed — generate them, machines.yaml-style.**
+      PR#1368 took three bot rounds on transposed/stale figures (408 vs 488 GB promised, 353 vs
+      354 GB pool) in the one cell a human reads for the buy-a-disk call; the "Current shape" table
+      is a dated snapshot (2026-08-25) nobody refreshes. The truth is LIVE, not a YAML: Longhorn
+      node/disk status (raw, allocatable, scheduled, used per tier), the pve meter
+      (`pve_lvm_thin_lv_size_bytes` Σ = promised, pool size/data%), ResourceQuotas (scratch caps),
+      Garage Workspaces (bucket caps — `scripts/storage-ledger-check.sh` already sums these).
+      **Next:** extend that script with a `--render` that rewrites marker-delimited blocks in
+      `docs/storage-ledger.md` (tier table, pool line, quota table, the requirements rows' "today"
+      figures) stamped with the read date, per `machines/generate.py`; judgments stay prose.
+      Relates FU-093, FU-177 (same class: one source, generated blocks).
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
