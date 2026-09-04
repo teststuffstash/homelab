@@ -32,11 +32,11 @@ spec:
               pve's LVM thin pool. The pool only ratchets up; three fills have frozen wk-01 twice
               and wiped Garage's metadata. Read the Job log in ns node-maintenance, then check the
               pool directly on pve with `lvs -o lv_name,data_percent pve`.
-        # The trim STOPPED running. Daily schedule → 3 days is two missed runs, not one late one.
-        # This is the rule that would have caught what actually happened historically: nothing
-        # failed, the reclaim simply had no owner.
+        # The trim STOPPED running. Twice-daily schedule (since 2026-09-04) → 36 h is three missed
+        # runs, not one late one. This is the rule that would have caught what actually happened
+        # historically: nothing failed, the reclaim simply had no owner.
         - alert: NodeFstrimStale
-          expr: time() - node_fstrim_last_run_timestamp > 259200
+          expr: time() - node_fstrim_last_run_timestamp > 129600
           for: 1h
           labels: { severity: warning }
           annotations:
