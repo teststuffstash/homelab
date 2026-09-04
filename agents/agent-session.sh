@@ -1613,8 +1613,19 @@ else                                  AGENT_RAIL="openrouter"; fi
 # <<<REPLAY:agent-rail<<<
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
 PGW_URL="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
-"$KUBECTL" $KUBE -n "$NS" get secret agent-transcripts-s3 >/dev/null 2>&1 \
-  || echo "→ transcript mirror agent-transcripts-s3 absent in ns ${NS} (claim not synced?) — run proceeds, upload will be skipped"
+TS_SECRET_ERR="$("$KUBECTL" $KUBE -n "$NS" get secret agent-transcripts-s3 2>&1 >/dev/null)" || {
+  case "$TS_SECRET_ERR" in
+    *NotFound*)
+      echo "→ transcript mirror agent-transcripts-s3 absent in ns ${NS} (claim not synced?) — run proceeds, upload will be skipped"
+      ;;
+    *Forbidden*)
+      echo "→ transcript mirror probe: cannot check agent-transcripts-s3 in ns ${NS} (RBAC denied — launcher SA has no secret access by design). Worker reads the secret under its own SA via secretKeyRef optional:true, so this is not a verdict on the upload."
+      ;;
+    *)
+      echo "→ transcript mirror probe: unexpected error checking agent-transcripts-s3 in ns ${NS}: $(echo "$TS_SECRET_ERR" | head -1)"
+      ;;
+  esac
+}
 
 # Persistent uv (PyPI wheel) cache: if a `agent-uv-cache` PVC exists in the namespace, mount it so
 # `devbox run ci`'s `uv sync` fetches wheels once across runs (the nix cache only covers `devbox
