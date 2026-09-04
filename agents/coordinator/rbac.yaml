@@ -34,10 +34,11 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get, list]
-  # agent-session.sh docker mode resolves in-cluster ENDPOINT IPs (FU-072 kata workaround:
-  # openrouter-proxy/garage/pushgateway rewrites). Without this an IN-CLUSTER dispatcher's
-  # resolve_ep 403s → kata rides ship raw svc URLs → ConnectionRefused (found live meta-8,
-  # oracle-fleet#52 r1 strike). Read-only.
+  # ⚠ Was the FU-072 kata endpoint-IP rewrite's read (`resolve_ep`, deleted 2026-09-04 — kata
+  # reaches service VIPs again). Kept read-only pending a check that no other launcher path
+  # reads endpoints; drop it once that is established. Revert-safe: restoring the rewrite needs
+  # this grant back (meta-8: without it kata rides shipped raw svc URLs → ConnectionRefused,
+  # oracle-fleet#52 r1 strike).
   - apiGroups: [""]
     resources: [endpoints]
     verbs: [get, list]
