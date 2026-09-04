@@ -1,0 +1,7 @@
+CALL python3 $ROOT/agents/model_id.py --shell deepseek/deepseek-v4-flash
+OUT MODEL='deepseek/deepseek-v4-flash'
+OUT MODEL_RAIL='openrouter'
+OUT MODEL_HARNESS=''
+OUT HARNESS='goose'
+OUT OPENCODE_MODEL='openrouter/deepseek/deepseek-v4-flash'
+RC 0

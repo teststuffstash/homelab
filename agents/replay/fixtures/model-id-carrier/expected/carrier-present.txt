@@ -2,4 +2,5 @@ OUT MODEL='haiku'
 OUT MODEL_RAIL='anthropic-subscription'
 OUT MODEL_HARNESS='claude'
 OUT HARNESS='claude'
+OUT OPENCODE_MODEL='claude/haiku'
 RC 0
