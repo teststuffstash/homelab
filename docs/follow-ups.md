@@ -254,9 +254,16 @@ six OVERSIZE items pointer-ized into
       [`docs/spikes/kata-service-vip.md`](spikes/kata-service-vip.md). **2026-09-04 (PR#1372):
       `resolve_ep`, the three rewrites and `dnsPolicy: None` deleted** — every ride uses service
       DNS; verified by a kata pod under the ENFORCED fixer CNP (proxy/garage/pushgateway VIPs
-      answer, `openrouter.ai` still denied). **Next:** watch the first docker-mode rides — the
-      regression signature is `AgentWorkerEgressDropped` carrying a BARE POD IP as its Hubble
-      destination; `git revert 773ad63e` if it returns. Once soaked, drop the now-dead CNP
+      answer, `openrouter.ai` still denied). **Soak is TWO legs (operator correction 2026-09-04):
+      (1) the service-VIP leg — PROVEN by oracle-fleet 432-r1 (kata, wk-metal-04, 11:40Z, enforced
+      CNP): LLM loop + `/report` through the proxy svc name, phase metrics to the pushgateway svc
+      name, transcripts uploaded to garage → PR#434 in ~10 min, zero drops; (2) the dind/kind leg —
+      UNEXERCISED: only a `task/build` ride runs `devbox run e2e` in-pod (`devbox run ci` starts no
+      kind), and in-pod kind has its own open fault (the #399-r1 segfault, oracle handoff inbox).
+      Next:** watch the first in-pod `devbox run e2e` under kube-dns (the only thing the change
+      touches for kind: `dnsPolicy: None` → kube-dns). The regression signature stays
+      `AgentWorkerEgressDropped` carrying a BARE POD IP as its Hubble destination;
+      `git revert 773ad63e` if it returns. Once soaked, drop the now-dead CNP
       LAN-resolver DNS leg and the `endpoints`-read grants. Relates FU-116, FU-187.
 
 - [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: mirror **homelab**

@@ -6838,3 +6838,12 @@ first live ADR-110 maintenance session before the ADR existed.
   of what a stack's scan sees is `SCAN_STACK=<stack> devbox run -- bash agents/coordinator-scan.sh`
   from the jail (report-only; the ci-red clause PROBE_FAILs there on the PAT's missing
   checks:read — jail artifact, not a cluster fact).
+- **Correction (operator, ~12:10Z): "`devbox run ci` on oracle does not start the kind cluster,
+  `devbox run e2e` does."** So 432-r1 proved the SERVICE-VIP leg only — LLM loop + `/report` via
+  the proxy svc name, phase metrics via the pushgateway svc name, transcripts to garage, PR#434
+  in ~10 min, zero drops — which is exactly the three targets the deleted rewrites covered. The
+  dind/kind leg (registry mirrors from inside dind, kind nodes resolving via kube-dns instead of
+  the removed LAN resolver) is UNEXERCISED: only `task/build` rides run `devbox run e2e` in-pod,
+  and that path already carries its own pre-FU-072 fault (#399-r1 kind-node segfault, in the
+  oracle handoff inbox). FU-072's Next re-split into the two legs.
+
