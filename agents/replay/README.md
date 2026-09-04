@@ -268,6 +268,7 @@ is stale, so it cannot drift the way the prose register did.
 | `post-merge-push/silent` | actions | - | `agents/agent-session.sh` | - |
 | `pr-cap-per-base` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/collision` | actions | - | `agents/coordinator-scan.sh` | - |
+| `pr-cap-per-base/counts` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |
 | `queued-classification/held` | actions | - | `agents/coordinator-scan.sh` | - |
 | `queued-classification/ready` | actions | - | `agents/coordinator-scan.sh` | - |

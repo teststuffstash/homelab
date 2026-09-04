@@ -1560,14 +1560,19 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # FU-199 / #1240 CAP SPLIT: only machine-flowing PRs (reviewDecision == "APPROVED") count
     # toward REPO_PR_CAP. Codeowner-parked PRs (reviewDecision == "REVIEW_REQUIRED" AND
     # mergeStateStatus == "BLOCKED") count toward REPO_BLOCKPARK_CAP instead.
+    # A park is REVIEW_REQUIRED whether GitHub reports it BLOCKED (current) or BEHIND (master
+    # moved and the updater left it — homelab#887's park-skip makes BEHIND the park's steady
+    # state); either way it waits on the codeowner and counts here, never against REPO_PR_CAP.
+    # >>>REPLAY:per-base-counts>>>
     per_base_armed="$(jq -r '[.[] | select(.autoMergeRequest != null) | select(.reviewDecision == "APPROVED")]
       | group_by(.baseRefName)
       | map("\(.[0].baseRefName)|\(length)")
       | .[]' <<<"$prsjson")"
-    per_base_blockpark="$(jq -r '[.[] | select(.autoMergeRequest != null) | select(.reviewDecision == "REVIEW_REQUIRED") | select(.mergeStateStatus == "BLOCKED")]
+    per_base_blockpark="$(jq -r '[.[] | select(.autoMergeRequest != null) | select(.reviewDecision == "REVIEW_REQUIRED") | select(.mergeStateStatus == "BLOCKED" or .mergeStateStatus == "BEHIND")]
       | group_by(.baseRefName)
       | map("\(.[0].baseRefName)|\(length)")
       | .[]' <<<"$prsjson")"
+    # <<<REPLAY:per-base-counts<<<
     # ADR-097 project-WIP predicate (was binary WIP=1; found live meta-8: two dispatchers raced
     # #52 inside one scan window; 2026-07-21 #55: two CRON ticks raced through the phase=Running
     # filter while a kata pod sat Pending — so the probe counts everything non-terminal): the
