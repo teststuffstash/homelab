@@ -1,7 +1,7 @@
 CALL gh api repos/teststuffstash/test-project/issues/1175 --jq {title, body, labels: [.labels[].name]}
 CALL gh api repos/teststuffstash/test-project/issues/1175/comments --paginate
 CALL gh api repos/teststuffstash/test-project/pulls/42 --jq {title, body, headRefName, baseRefName}
-CALL gh api repos/teststuffstash/test-project/compare/master...fix/issue-1175-test --jq .commits[] | \(.sha[0:8]) \(.commit.message | split("\n")[0])
+CALL gh api repos/teststuffstash/test-project/compare/master...fix/issue-1175-test --jq .commits[] | "\(.sha[0:8]) \(.commit.message | split("\n")[0])"
 CALL gh api repos/teststuffstash/test-project/pulls/42/reviews --paginate
 ERR → dispatch deferred — directive unreadable (repos/teststuffstash/test-project/pulls/42/reviews; newest verdict required for fix round) — the next pass retries (homelab#1205)
 RC 0
