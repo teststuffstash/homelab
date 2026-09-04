@@ -6877,3 +6877,27 @@ first live ADR-110 maintenance session before the ADR existed.
   checkpoint disposes STORE entries only) → hand-queued + **#1381 filed+queued** (carry
   `harvest=store` on arbitrate/changes-requested units, append instead of file). Wind-down 14:20Z.
 
+
+## 2026-09-04 (18:2x–18:50Z) — vendor mail: opencode.ai parked (FU-213)
+
+- **Condition:** operator forwarded an OpenCode mail — requests from `homelab-openrouter-proxy`
+  carry no `x-opencode-session` header and "may error" from **09-06**. Asked for a temporary
+  whole-rail off switch.
+- **Command:** kill at the CHOKE POINT, both halves, one env var — `OPENCODE_RAIL_DISABLED`
+  (PR#1391, merged 18:48Z): `/opencode-limit` serves `limited=true reason=rail-disabled` (a
+  CAPACITY-class reason, so `--pick-rail` skips Go and a Go-primary ride takes the M12 degrade to
+  `claude/haiku` — a `semaphore`/empty reason would have DEFERRED every Go ride instead), and both
+  legs refuse 503 before calling out. Zen parked with Go (same account/key/UA); the jail shim
+  (own UA, unflagged) left live as the test bench.
+- **Verified live** on the rolled pod (`-76fc48958f-nnmdb`, 18:48:51Z): limit view
+  `limited=True reason=rail-disabled`, `router_opencode_rail_disabled{leg}` = 1/1 with
+  `router_go_capacity_latched 0` (the operator's park stays distinguishable from a measured
+  latch — its 30-min alert does NOT fire from this), and both legs 503 with the refusal logged
+  before any egress.
+- **Operator-supplied prior art:** earendil-works/pi#4847 — same defect, fixed 2026-05-22. The
+  header is a provider-affinity key for cache hits (one id per conversation), and **absent it
+  opencode falls back to CLIENT-IP affinity** — why nothing here had broken yet (one egress IP)
+  and why the mail reads "may error". Facts + the two gaps in our own path (Go/Zen arms leave
+  `cb_session` None; direct-key rides collapse to `direct:<key-hash>` = the hardcoded-id trap)
+  went to `docs/agents/chainless-redesign.md` §The `x-opencode-session` header; FU-213 is the
+  pointer.
