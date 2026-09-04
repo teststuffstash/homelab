@@ -4338,7 +4338,7 @@ EOF_GOVERNANCE
     # >>>REPLAY:harvest-disposition>>>
     uharvest=""
     case "$uclause" in
-      merged-closeout|goal-checkpoint)
+      merged-closeout|goal-checkpoint|arbitrate|changes-requested)
         hslug="${ORG}/${urepo}"; hgoal=""; hbucket=""; hsq=""; hwhy=""
         case "$uclause" in
           # A goal-checkpoint unit IS the goal. Nothing to walk.
@@ -4357,9 +4357,24 @@ EOF_GOVERNANCE
           # is at the helper). It moved because agent-session.sh was answering the same question
           # with ONE hop, so this block resolved `goal=278 bucket=295` for rides the launcher was
           # gating against #295 — a bucket with no `Budget:` line, i.e. no gate at all.
-          *) command -v goal_resolve_ancestor >/dev/null 2>&1 || . "${HERE}/goal-budget.sh"
-             goal_resolve_ancestor "$hslug" "${uitem#issue-}"
-             hgoal="$GB_GOAL" ;;
+          merged-closeout)
+            command -v goal_resolve_ancestor >/dev/null 2>&1 || . "${HERE}/goal-budget.sh"
+            goal_resolve_ancestor "$hslug" "${uitem#issue-}"
+            hgoal="$GB_GOAL" ;;
+          # arbitrate and changes-requested are PR-shaped items (pr-<N>). Extract the PR's
+          # linked issue from the body (Fixes/Closes/Implements #N), then walk the goal
+          # ancestor chain from that issue — same goal_resolve_ancestor call the closeout
+          # path uses, one walk (homelab#1381).
+          arbitrate|changes-requested)
+            hpr="${uitem#pr-}"
+            hprjson="$(gh pr view "$hpr" --repo "$hslug" --json body 2>/dev/null || echo '{}')"
+            hpr_issue="$(printf '%s' "$hprjson" | jq -r '(.body // "") | capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i // ""' 2>/dev/null)" || hpr_issue=""
+            if [ -n "$hpr_issue" ]; then
+              command -v goal_resolve_ancestor >/dev/null 2>&1 || . "${HERE}/goal-budget.sh"
+              goal_resolve_ancestor "$hslug" "$hpr_issue"
+              hgoal="$GB_GOAL"
+            fi
+            ;;
         esac
         if [ -n "$hgoal" ]; then
           hgj="$(gh issue view "$hgoal" --repo "$hslug" --json title,state 2>/dev/null || echo '{}')"
@@ -4406,7 +4421,10 @@ EOF_GOVERNANCE
           # and the CHECKPOINT is the one minting moment — budget-gated THERE (goal_budget_read
           # moved into that play; children parent to their ORIGINATING issue, the bucket back to
           # post-assembly strays only). A dead goal's findings land inert, as ever.
-          if [ "$uclause" = "merged-closeout" ]; then
+          # homelab#1381: arbitrate and changes-requested units also carry harvest=store|inert
+          # so a follow-up-class finding on a goal child routes through the findings store
+          # instead of landing inert with no reader.
+          if [ "$uclause" = "merged-closeout" ] || [ "$uclause" = "arbitrate" ] || [ "$uclause" = "changes-requested" ]; then
             if [ "$hgstate" != "OPEN" ]; then
               hsq="inert"; hwhy="goal #${hgoal} is ${hgstate} — findings from a dead goal land inert (ADR-102 terminals)"
             else
