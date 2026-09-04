@@ -6703,4 +6703,12 @@ first live ADR-110 maintenance session before the ADR existed.
   subshells (3f0869b5, direct — workflows are self-gating). The direct lane now runs the clause
   replays in `githooks/pre-push` when a clause path or scripts/ is touched (ADR-103 for pushes CI
   never sees). Storage: FU-211 filed (generate the ledger's numbers, machines.yaml-style).
+- **#1366 merged → first live pre-puller bake in the FU-208 shape**: metal 2-at-a-time (hp-01 +
+  wk-metal-04 still pulling at wind-down, the known 429–909 s class); pve one-at-a-time: wk-03
+  first (gate 70 %) → DiskPressure from two tags on its 35 GB fs → pod evicted, kubelet GC'd the
+  old tag, node clean; wk-01 pulled at 71 %; pool 71.4 → **78.84 %** (a pull unpacks to far more
+  than 4.9 GiB, plus ci-runner-01's fresh 15 GB); manual fstrim wk-01/wk-02 → 75.4 %; the gate
+  HELD wk-02/wk-03 at ≥75 % — correct, and one point under the 80 % warning. Levers in order:
+  kubelet imageGC of the old tag on wk-01/wk-02, the 15:17Z trim, FU-093's Longhorn trim (~41 GiB),
+  FU-208's smaller image. Pool at wind-down: 75.67 %.
 
