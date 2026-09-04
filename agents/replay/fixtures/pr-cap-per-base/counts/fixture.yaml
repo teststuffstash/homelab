@@ -1,0 +1,16 @@
+# FU-199 cap split, the COUNTING half (the sibling fixtures hand-construct per_base_* and never run
+# these jqs). A codeowner park is REVIEW_REQUIRED whether GitHub reports it BLOCKED or BEHIND —
+# once homelab#887's park-skip lands, BEHIND is the park's steady state, and a BLOCKED-only
+# selector dropped such parks out of BOTH caps (the 2026-09-04 seat read).
+#
+# THE CONTRACT, over one recorded-shape prsjson:
+#   1. per_base_armed counts ONLY armed + APPROVED (machine-flowing) PRs, per base.
+#   2. per_base_blockpark counts armed + REVIEW_REQUIRED PRs whether BLOCKED or BEHIND, per base.
+#   3. an un-armed PR and a CHANGES_REQUESTED PR count in neither.
+name: pr-cap-per-base-counts
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:per-base-counts
+  - file:post.sh
