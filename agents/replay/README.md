@@ -375,6 +375,7 @@ is stale, so it cannot drift the way the prose register did.
 | `summary-comment` | table | - | `-` | - |
 | `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
 | `touches-malformed/touches-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
+| `transcript-mirror-probe` | table | - | `agents/agent-session.sh` | - |
 | `unblocked-unlabeled/blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unblocked-unlabeled/surfaces` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unit-fast-path-author/unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |
