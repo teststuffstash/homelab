@@ -1,0 +1,9 @@
+# The pve thin-pool meter (FU-093): one run writes pve.prom for node_exporter's textfile collector.
+# Driven by pve-textfile-metrics.timer. Managed by ansible/roles/pve-node-exporter — edit there.
+[Unit]
+Description=pve textfile metrics (LVM thin pool, VG, guest qmpstatus) for node_exporter
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pve-textfile-metrics.sh /var/lib/prometheus/node-exporter/pve.prom

@@ -1,0 +1,85 @@
+# pve-node-exporter — the pve thin-pool meter (FU-093): Debian's packaged node_exporter on the
+# hypervisor + a systemd timer feeding its textfile collector with the LVM thin-pool level, VG free
+# extents, per-thin-LV allocation and every guest's qmpstatus (files/pve-textfile-metrics.sh has
+# the why). Prometheus scrapes it as a static LAN target — argocd/resources/pve-metrics/.
+#
+# Chosen over an in-cluster Proxmox-API exporter deliberately: no credential to mint, store and
+# rotate (the tofu token's role cannot create users, so that path is a root-side mint anyway), and
+# the host's own node_exporter series (NVMe IO, memory, load) come for free. The pve host is the one
+# hand-installed box; this role is what makes its metering re-creatable (docs/runbook.md
+# §Proxmox host maintenance window). Idempotent — re-run any time.
+---
+- name: Install node_exporter (Debian package, bookworm main)
+  ansible.builtin.apt:
+    name: prometheus-node-exporter
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Pin node_exporter's flags (explicit textfile dir + listen address)
+  ansible.builtin.copy:
+    dest: /etc/default/prometheus-node-exporter
+    mode: "0644"
+    content: |
+      # Managed by ansible/roles/pve-node-exporter — edit there.
+      ARGS="--collector.textfile.directory={{ pve_textfile_dir }} --web.listen-address=:{{ pve_node_exporter_port }}"
+  notify: restart node_exporter
+
+- name: Textfile directory exists (Debian's default; explicit so the timer never writes into a void)
+  ansible.builtin.file:
+    path: "{{ pve_textfile_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Install the collector script
+  ansible.builtin.copy:
+    src: pve-textfile-metrics.sh
+    dest: /usr/local/bin/pve-textfile-metrics.sh
+    mode: "0755"
+
+- name: Install the collector service + timer units
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - pve-textfile-metrics.service
+    - pve-textfile-metrics.timer
+  register: pve_units
+
+- name: Reload systemd when a unit changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: pve_units.changed
+
+- name: node_exporter enabled + running
+  ansible.builtin.systemd:
+    name: prometheus-node-exporter
+    enabled: true
+    state: started
+
+- name: Collector timer enabled + running
+  ansible.builtin.systemd:
+    name: pve-textfile-metrics.timer
+    enabled: true
+    state: started
+
+- name: Run the collector once now (the timer's first tick is 60 s away; the verify below wants a file)
+  ansible.builtin.command: /usr/local/bin/pve-textfile-metrics.sh {{ pve_textfile_dir }}/pve.prom
+  changed_when: false
+
+- name: Flush handlers before verifying
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify the pool series is served on the exporter port (isolated end-state check)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ pve_node_exporter_port }}/metrics"
+    return_content: true
+  register: pve_metrics
+  retries: 5
+  delay: 2
+  until: pve_metrics.status == 200 and 'pve_lvm_thin_pool_data_percent' in pve_metrics.content
+
+- name: Report
+  ansible.builtin.debug:
+    msg: "{{ pve_metrics.content | regex_findall('pve_lvm_thin_pool_data_percent.*|pve_lvm_vg_free_bytes.*|pve_qemu_status.*') }}"

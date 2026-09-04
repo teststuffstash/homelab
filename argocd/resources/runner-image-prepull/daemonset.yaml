@@ -5,28 +5,42 @@
 # a new tag, so without this the tax repeats per node per bake. A DaemonSet whose only container IS the
 # image (sleeping) pulls it on rollout and keeps it marked in-use, so kubelet imageGC never evicts it.
 # The tag is bumped by .github/workflows/runner-image.yaml's post-build step, same as the scale set
-# (argocd/platform/arc-runners.yaml) and the sentinel (agents/coordinator/sentinel-argo.yaml).
+# (argocd/platform/arc-runners.yaml) and the sentinel (agents/coordinator/sentinel-argo.yaml) — the
+# sed is per FILE, so both DaemonSets below move together.
 # Layering with the prior art: scripts/warm-registry-mirror.sh (#80) warms the LAN ghcr MIRROR with the
 # new image's blobs inside the pin PR's `ci` job, BEFORE the merge flips anything — registry-side. This
 # DaemonSet is the node side: it rolls after the merge and pulls from that warm mirror (pure reads, the
-# #80 storm cannot recur), three nodes at a time.
+# #80 storm cannot recur).
+#
+# TWO DaemonSets, split on topology.kubernetes.io/zone (FU-208). The first rollout (maxUnavailable 3)
+# pulled onto wk-02 — a Proxmox VM whose 240 GB thin disk sits on pve's oversubscribed thin pool — and
+# the pool hit 100 %: cp-01/wk-01/wk-02 paused on io-error, the API was down ~8 min
+# (docs/incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md). The headroom that matters for a
+# pool VM is the POOL's, never the guest filesystem's, and no DaemonSet knob reads it — hence:
+#   • `runner-image-prepull`     — the metal workers (zone != proxmox): real disks, two at a time.
+#   • `runner-image-prepull-pve` — the pool VMs (zone == proxmox): ONE at a time, and each pod's
+#     init container holds the 4.9 GiB pull until Prometheus says the pool is under 75 %
+#     (pve_lvm_thin_pool_data_percent, the FU-093 meter; argocd/resources/pve-metrics/). No sample =
+#     no pull (fail closed): an unmetered pool is exactly the state that produced the incident.
+#     kubelet pulls a container's image when it STARTS that container, so the main image is not
+#     fetched until the gate exits 0.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: runner-image-prepull
   namespace: arc-runners
-  labels: { app: runner-image-prepull }
+  labels: { app: runner-image-prepull, tier: metal }
 spec:
   selector:
-    matchLabels: { app: runner-image-prepull }
+    matchLabels: { app: runner-image-prepull, tier: metal }
   updateStrategy:
     type: RollingUpdate
-    rollingUpdate: { maxUnavailable: 3 } # a new tag = a 4.9 GiB pull per node; three at a time keeps the ghcr mirror honest
+    rollingUpdate: { maxUnavailable: 2 } # a new tag = a 4.9 GiB pull per node; two at a time keeps the ghcr mirror honest
   template:
     metadata:
-      labels: { app: runner-image-prepull }
+      labels: { app: runner-image-prepull, tier: metal }
     spec:
-      # Every WORKER: ARC runners pin the ephemeral tier (homelab.io/ephemeral=true), the sentinel
+      # Every metal WORKER: ARC runners pin the ephemeral tier (homelab.io/ephemeral=true), the sentinel
       # prefers non-Longhorn nodes and can land on any worker — so both sets, control plane excluded.
       affinity:
         nodeAffinity:
@@ -34,14 +48,7 @@ spec:
             nodeSelectorTerms:
               - matchExpressions:
                   - { key: node-role.kubernetes.io/control-plane, operator: DoesNotExist }
-      # ⚠ PAUSED 2026-09-03 22:1xZ (incident): the first rollout's 4.9 GiB pulls ran on wk-02, thinkcentre and
-      # wk-metal-04 concurrently (maxUnavailable 3); wk-02 — the Proxmox VM carrying Alertmanager, the apex
-      # cloudflared, ArgoCD's repo server and Longhorn replicas — went NotReady at 22:01Z, three minutes into
-      # its pull, and dropped off the network. No node carries this label, so the DaemonSet schedules
-      # nowhere until the postmortem decides the safe rollout shape (one node at a time; Longhorn/VM nodes
-      # excluded or last). Remove the selector to resume.
-      nodeSelector:
-        homelab.io/runner-image-prepull: paused-2026-09-03
+                  - { key: topology.kubernetes.io/zone, operator: NotIn, values: ["proxmox"] }
       tolerations:
         - { key: homelab.io/ephemeral, operator: Exists }
       securityContext:
@@ -49,6 +56,99 @@ spec:
         runAsUser: 1001 # the runner user baked into the image
         runAsGroup: 1001
         seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: hold
+          image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.3-g8fa36a37da7e
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits: { memory: 32Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runner-image-prepull-gate
+  namespace: arc-runners
+data:
+  # The pool gate: block until the pve thin pool has headroom, or forever if nobody can say.
+  # Runs in the -pve DaemonSet's init container (busybox: wget + sed). Threshold sits under the
+  # PveThinPoolFillingUp warning (80 %) so a warm-up never pushes the pool into the alert band.
+  gate.sh: |
+    #!/bin/sh
+    set -u
+    PROM="${PROMETHEUS_URL:?}"
+    MAX="${POOL_MAX_PERCENT:?}"
+    Q="$PROM/api/v1/query?query=max%28pve_lvm_thin_pool_data_percent%29"
+    while :; do
+      v="$(wget -qO- -T 10 "$Q" 2>/dev/null | sed -n 's/.*"value":\[[^,]*,"\([0-9]*\)\(\.[0-9]*\)\{0,1\}".*/\1/p')"
+      if [ -z "${v:-}" ]; then
+        echo "pool-gate: no pve_lvm_thin_pool_data_percent sample from $PROM (meter down or stale) — holding, fail closed"
+      elif [ "$v" -lt "$MAX" ]; then
+        echo "pool-gate: pve thin pool at ${v}% < ${MAX}% — pulling on ${NODE_NAME:-?}"
+        exit 0
+      else
+        echo "pool-gate: pve thin pool at ${v}% >= ${MAX}% — holding the pull on ${NODE_NAME:-?}"
+      fi
+      sleep 60
+    done
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: runner-image-prepull-pve
+  namespace: arc-runners
+  labels: { app: runner-image-prepull, tier: pve }
+spec:
+  selector:
+    matchLabels: { app: runner-image-prepull, tier: pve }
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 1 } # ONE pool VM at a time — they share one thin pool (FU-208)
+  template:
+    metadata:
+      labels: { app: runner-image-prepull, tier: pve }
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - { key: node-role.kubernetes.io/control-plane, operator: DoesNotExist }
+                  - { key: topology.kubernetes.io/zone, operator: In, values: ["proxmox"] }
+      tolerations:
+        - { key: homelab.io/ephemeral, operator: Exists }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile: { type: RuntimeDefault }
+      volumes:
+        - name: gate
+          configMap: { name: runner-image-prepull-gate, defaultMode: 0555 }
+      initContainers:
+        - name: pool-gate
+          # Same pinned busybox as argocd/resources/loki/kmsg-reader.yaml — tiny, already on every node.
+          image: docker.io/library/busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+          command: ["/bin/sh", "/gate/gate.sh"]
+          env:
+            - { name: PROMETHEUS_URL, value: "http://kube-prometheus-stack-prometheus.monitoring.svc:9090" }
+            - { name: POOL_MAX_PERCENT, value: "75" }
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+          volumeMounts:
+            - { name: gate, mountPath: /gate, readOnly: true }
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits: { memory: 32Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
       containers:
         - name: hold
           image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.3-g8fa36a37da7e

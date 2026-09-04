@@ -43,6 +43,7 @@ because their real values are here, not baked in).
 | `matchbox-proxydhcp.yml` | `matchbox-proxydhcp` | dnsmasq proxy-DHCP boot server |
 | `matchbox-talos-assets.yml` | `matchbox-talos-assets` | Talos kernel/initramfs into Matchbox assets |
 | `pve-upgrade.yml` | — | in-major Proxmox dist-upgrade + `/etc/pve` snapshot (never reboots); `devbox run -- ansible-playbook ansible/pve-upgrade.yml` |
+| `pve-node-exporter.yml` | `pve-node-exporter` | the pve thin-pool meter (FU-093): node_exporter + textfile timer on the hypervisor; `devbox run -- ansible-playbook ansible/pve-node-exporter.yml` |
 
 ## Running
 

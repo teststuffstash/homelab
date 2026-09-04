@@ -1,0 +1,10 @@
+# The pve thin-pool meter (FU-093): node_exporter + a textfile timer on the Proxmox host. Thin
+# role-caller — logic in roles/pve-node-exporter, config (SSH connection, port, dir) in
+# group_vars/pve.yml. Idempotent; re-run after a pve reinstall or to change a value.
+# Run: devbox run -- ansible-playbook ansible/pve-node-exporter.yml
+#      (ANSIBLE_CONFIG=ansible/ansible.cfg; SSH key is jail-local, no creds env)
+- name: Proxmox host node_exporter + thin-pool textfile metrics
+  hosts: pve
+  gather_facts: false
+  roles:
+    - pve-node-exporter
