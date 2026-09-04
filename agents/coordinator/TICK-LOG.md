@@ -6847,3 +6847,25 @@ first live ADR-110 maintenance session before the ADR existed.
   and that path already carries its own pre-FU-072 fault (#399-r1 kind-node segfault, in the
   oracle handoff inbox). FU-072's Next re-split into the two legs.
 
+## 2026-09-04 ~12:00–13:00Z — research-into-goal ruling, park economics landed, board triage (corpus session, continued)
+
+- **Operator ruling on the #418 read:** the codeowner read belongs at goal→master, never
+  fix→goal; research inside a Goal is a THEME or precedes it as a mission — never mixed. **PR#1373
+  merged:** Goal card rule 10 + failure row; the launcher's `--no-arm` is now keyed on
+  (recipe, base) — research into `goal/**` ARMS, into master stays the FU-105 weave; un-arming is
+  the exception (unprotected base · research→default · the explicit flag, which has no caller).
+- **Why only 3 parks with all the CI runs (operator):** the homelab queue was EMPTY (label slips
+  #1300/#1299, #1207 operator-lane, 16 unqueued backlog), not capped (BLOCKPARK 10 is live); the
+  CI runs were the unbuilt updater skip — measured 36/32/27 refreshes, 39/41 CI runs on unchanged
+  parks, and the bot approval SURVIVED every update-branch merge (dismiss-on-push does not fire on
+  base merges). #887 re-scoped + queued with the numbers → **PR#1375 (loop-built, seat-read,
+  merged)**; **PR#1376** widened the scan's blockpark count to BLOCKED|BEHIND first (a skipped
+  park's steady state). Footprint holds unaffected (`busy_fps` = in-progress only; #1314 closed on
+  that ruling).
+- **Board triage (operator: "queue what needs the corpus; skip disk/cloudflare"):** queued 12
+  (homelab #1182 #1204 #1205 #1285 #1374 #1291 #1219 #1350, agent-runtime#116, or-op #56 (ruling:
+  surface, never re-mint unattended) #57 #58); closed #1314 (design) + #1102 (container, tree
+  empty); #1249 waits for S8 (linked); #1200 left open (operator: think later — not covered by
+  any proxy); #1370 = FU-171 resight, inert.
+- Watches: codeowner-park watcher on the exporter series (zero gh calls) — first wake = PR#1375.
+

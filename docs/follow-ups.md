@@ -535,10 +535,12 @@ the block needs pruning, not more headings.
       PR-cap hold (the 2026-09-01 board freeze); **+2026-09-03: the state-fp debounce** — a
       completed no-op round after an arbitrate re-dispatch (oracle PR#391, 7.5h silent) and a
       capacity-deferred ci-red dispatch (PR#394) both hash identical, so "DEBOUNCED, a human is
-      the next mover" is reported and no human is told. **Next:** hold-narrowing = #1203/PR#1206
-      merged; residue = honest strike-held rows + hold-chain propagation + the CAP SPLIT
-      (v1.3.1 delta 1, homelab#887) + the fingerprint faces (their own scan issue, filed
-      2026-09-03). Relates FU-187, FU-143, FU-147.
+      the next mover" is reported and no human is told. **2026-09-04:** the fingerprint faces
+      FIXED (#1345 → PR#1352); the CAP SPLIT is complete — updater park-skip (#887 → PR#1375,
+      measured 39/41 CI runs on unchanged parks before it) + parks counted BLOCKED|BEHIND
+      (PR#1376). **Next:** honest strike-held rows + hold-chain propagation (the remaining
+      board faces); the C4/C5 goal-child limbo with NO strike evidence (oracle#432 today —
+      FU-072's dead IP ate the strike post) is FU-204's. Relates FU-187, FU-143, FU-147.
 
 - [ ] **FU-200** — **The brief's fleet-strike rule has no deterministic reader.** "Same
       `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h ⇒ ONE
