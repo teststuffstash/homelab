@@ -6662,4 +6662,18 @@ first live ADR-110 maintenance session before the ADR existed.
   **71 %** (vm-9001 at 18.8 % of 80 GB). PR#1367 merged (bot approve, ~3 min).
 - ⚠ Standing: 71 % is 9 points from the warning and 4 from the pre-pull gate; the daily fstrim
   and FU-093's Longhorn-trim leg are the levers, the oversubscription (ADR-114) is the cause.
+- **Operator Q&A → two more acts.** (1) "Would the daily fstrim have prevented it?" — NO: it had
+  run 03:17Z, 19 h before; 65–85 GB (18–24 pool points) freed in-guest sat unreturned at 22:05Z;
+  the `bytes_trimmed` series is guest free space, not reclaim (identical every night). (2) The
+  Longhorn `filesystem-trim` RecurringJob: upper bound 40.9 GiB (12 points) — all 25 pool-VM
+  replicas sit on wk-02; Prometheus 12.3 / loki 9.7 / garage-meta 8.0 GiB of the gap; snapshots
+  hold part of it (`remove-snapshots-during-filesystem-trim` = false), and it is a one-off, not
+  the daily churn. → **fstrim now twice daily** (03:xx + 15:xx, quickfix direct 6e49d420; stale
+  alert 3 d → 36 h) while the meter measures the first real per-run reclaim tonight.
+- **CNPG alerts standing since 22:29Z** (operator): not stale — forgejo-pg-1 was the old primary
+  stuck on `pg_rewind: no common ancestor` (TL33 vs primary pg-3 TL34); runbook §Broken-replica
+  recovery applied (PVC + pod deleted) → forgejo-pg-4 cloned + streaming in 50 s, cluster healthy,
+  both alerts cleared. Finding: the responder HAD triaged the subject (ledger 09-04, 1/12 budget)
+  and filed nothing, and no transcript exists to say why (no responder capture hook; Loki has no
+  agent-coordinator streams) → **FU-210**.
 
