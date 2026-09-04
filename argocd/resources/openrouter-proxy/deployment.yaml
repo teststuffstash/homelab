@@ -79,6 +79,16 @@ spec:
             # set it to "" to retire the leg.
             - name: CREDIT_METRICS_URL
               value: http://openrouter-operator-metrics.openrouter-operator.svc.cluster.local:9090/metrics
+            # FU-213 (operator, 2026-09-04): opencode.ai is PARKED. OpenCode mailed that this
+            # proxy's client (User-Agent homelab-openrouter-proxy) sends no `x-opencode-session`
+            # header and "may error" from 2026-09-06; both legs park until that is settled, since
+            # they share the account, the key and the UA. "1"/"all" = both, "go"/"zen" = one leg,
+            # "0" = live. While set, /opencode-limit serves limited=true reason="rail-disabled"
+            # (so --pick-rail skips Go and the worker gate degrades to the subscription fallback)
+            # and both legs refuse 503 without calling out. RE-ENABLE by setting "0" — the rail's
+            # posture (janitorial/failover) is unchanged, this is a vendor-side pause.
+            - name: OPENCODE_RAIL_DISABLED
+              value: "1"
             # ADR-107 chunk C (homelab#423): the OpenCode Go API key, consumed by the Go leg
             # (PR#429). optional: true — the pod must keep serving the Anthropic/OpenRouter legs
             # even if ESO hasn't materialized the Secret; the code fails closed per-request.
