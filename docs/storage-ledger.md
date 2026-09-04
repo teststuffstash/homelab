@@ -303,7 +303,34 @@ threshold**.
   the unbounded version is exactly what produced the 2026-07-25 scratch exhaustion in the list
   above. Now set: platform repos in `agents/fixer/openrouter-operator/agentstack.yaml`; the three
   docker-mode repos (`sleep-tracking`, `oracle-fleet`, `circles`) via their own IaC repos, at
-  `scratch: 60Gi` = 20Gi × 3 concurrent rides.
+  `scratch: 60Gi` = 20Gi × 3 concurrent rides — **raised to 100Gi = 5 rides on 2026-09-04**
+  (oracle-iac#563, sleep-iac#85, circles-iac#78; homelab#1321): a Completed ride keeps its 20Gi
+  for 30–60 min until the scan janitor's grace (FU-116) releases it, so ×3 was a per-HOUR cap on
+  finished rides, not a concurrency cap. Headroom at the raise: 216 + 237 GiB free on the two
+  bulk disks, scratch replica-1.
+
+## Requirements — what is NEEDED, not what exists (2026-09-04)
+
+The tables above say what the tiers hold and what is charged against them. Nothing said what the
+platform *needs* — the operator asked (2026-09-04), and the answer was "nowhere": ROADMAP carries
+one line ("Compute HA — 3-node Proxmox cluster, Ceph") and ADR-114 a direction ("cheap boxes with
+their own storage"). This section is that register. One row per requirement, sized where the
+evidence allows; **need** = a failure has already happened without it, **want** = it buys a known
+improvement. Status lives with the pointer (FU/issue), not here.
+
+| requirement | size | why (evidence) | class | pointer |
+|---|---|---|---|---|
+| **pve thin pool honest** — promised ≤ pool, or the pool grows | today 408 GB promised on 354 GB (wk-02 240, ci-runner-01 80, wk-01 80, cp-01 40, wk-03 40, LXC 8); a 1 TB NVMe replaces the 500 GB, or wk-02's 240 GB disk leaves the pool | four 100 % fills in a month, the fourth took the control plane down 8 min; twice-daily fstrim + the meter are belts, not capacity | need | FU-093, ADR-114 (new box, not more disks in pve) |
+| **bulk scratch for 5 concurrent docker rides per stack** | 100Gi × 3 stacks = 300Gi worst case, replica-1 on 453 GiB free | 60Gi wedged the fourth dispatch inside an hour (homelab#1321) | need | #1321 (done 2026-09-04) |
+| **a third PHYSICAL zone for Garage rf=3** | one disk ≥ Garage's data share in a third box (hp-01's second 128 G SSD is `std`; the interim third zone is `proxmox`/wk-02 — the pool above) | ADR-114's redundancy story ends on a VM that pauses when the pool fills; meta rf=1 on wk-02 since 08-25 (FU-137) | need | FU-137, ADR-114 |
+| **Longhorn in-volume reclaim** | ~41 GiB one-off on wk-02 (Prometheus 12, loki 10, garage-meta 8), then the volumes' own churn | node fstrim cannot reach blocks inside replica sparse files; measured 2026-09-04 | want | FU-093 next act (`filesystem-trim` RecurringJob) |
+| **registry mirrors never wipe** | grow the PVC (ghcr 100Gi at ~19 G actual) whenever `RegistryMirrorWipedRepeatedly` fires — never lower the threshold | a wipe costs a day of slow builds (homelab#116) | want | §mirrors above |
+| **image store off the Longhorn bulk partition on the kata laptops** | a second partition or disk per laptop, or kubelet imageGC below the Longhorn reserve | <25 % free on the shared partition = no scratch PVC = every docker ride wedged (2026-09-01) | want | PR#1193's floor alert is the belt |
+| **worker scratch on `fast`** (Optane, replica-1) for the platform-repo rides | 20Gi × 2 fits the 26.7 G tier only for two rides — not for the docker stacks | FU-159 ruling: `fast` = scratch for disk-write-heavy pods, never load-bearing data | want | FU-159 |
+
+What is NOT a requirement: total bytes. Every tier is 42–68 % physically used; the pressure is
+distribution (one thin pool under four VMs, one shared partition per laptop) — the same reading
+as the 2026-08-04 history table.
 
 ## Consumer
 
