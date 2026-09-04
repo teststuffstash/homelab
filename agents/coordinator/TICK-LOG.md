@@ -6639,3 +6639,27 @@ first live ADR-110 maintenance session before the ADR existed.
   reads the POOL (`lvs -o data_percent pve`), never the guest FS; a pve VM NotReady with its
   Talos API unreachable → `qm status --verbose | grep qmpstatus` first. And the seat's own
   change was the trigger: the pre-puller's PR body said "headroom checked" about the wrong sum.
+
+## 2026-09-04 ~06:30–08:30Z — the incident's three pickups: pve pool meter (FU-093), ci-runner-01 back (FU-207), pre-puller rollout shape (FU-208) (operator-directed session)
+
+- **Operator order**: "get ci runner back" via the three residuals, meter first. Read first:
+  pool 66.4 % / VG free 28 MB / all four VMs running; every worker already held the 2026.9.3 tag.
+- **FU-093 meter — chosen shape**: node_exporter on the HYPERVISOR (Debian package) + a 60 s
+  systemd timer writing `pve.prom` (thin-pool data%/meta%/size, per-thin-LV promise+allocation,
+  VG free, per-guest `qmpstatus`) — over an in-cluster Proxmox-API exporter because it needs no
+  credential (the tofu role lacks User.Modify anyway) and the host's NVMe/memory series come free.
+  `ansible/pve-node-exporter.yml` applied (12 ok / 6 changed); series scraped as job `pve-node` via
+  a static ScrapeConfig (the chart's default `release` selector label — not one more values flip);
+  six belts promtool-fixtured (an `absent()` keeps its equality-matcher label — fixture fixed).
+- **FU-208 shape**: two DaemonSets split on `topology.kubernetes.io/zone`; pool VMs one at a time
+  behind a busybox init gate on `max(pve_lvm_thin_pool_data_percent) < 75`, fail closed. Gate
+  exercised against live Prometheus (pass at 75 / hold at 50) before commit. Post-merge gotcha: a
+  DaemonSet selector is immutable — Argo OutOfSync until the old `runner-image-prepull` was
+  deleted live and recreated (6/6 metal + 3/3 pve, all Synced).
+- **FU-207**: `tofu plan` = 2 add / 1 destroy (cloud-init snippet content drift + the VM) →
+  applied; VM 9001 up in 1m57s; cloud-init done ~5 min; both runner slots "Successfully replaced";
+  `fstrim.timer` enabled+active (the storage-ledger's "assumed-not-verified" closed). Pool 67 →
+  **71 %** (vm-9001 at 18.8 % of 80 GB). PR#1367 merged (bot approve, ~3 min).
+- ⚠ Standing: 71 % is 9 points from the warning and 4 from the pre-pull gate; the daily fstrim
+  and FU-093's Longhorn-trim leg are the levers, the oversubscription (ADR-114) is the cause.
+
