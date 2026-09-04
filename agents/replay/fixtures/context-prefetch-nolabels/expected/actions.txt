@@ -1,7 +1,0 @@
-CALL gh api repos/teststuffstash/test-project/issues/1175 --jq {title, body, labels: [.labels[].name]}
-CALL gh api repos/teststuffstash/test-project/issues/1175/comments --paginate
-OUT → context pre-fetch: issue #1175 + comments materialized as /work/issue.md (prepended to pod command)
-OUT → prelude prepend verified: RUN_CMD starts with printf+base64 prelude
-OUT → prelude no-labels arm verified: no **Labels:** line present
-OUT → prelude blank-line verified: blank line present between title and body
-RC 0
