@@ -110,7 +110,8 @@ Four deterministic pieces around the existing gates:
    sweeping the whole stacks.json universe
    ([`update-pr-argo.yaml`](../../agents/coordinator/update-pr-argo.yaml)). Semantics carried over
    from the adRise-action era unchanged: update *before* review (see ordering, below), FIFO
-   (oldest first), armed-only, and **exactly one PR per pass** — the oldest open PR that is green,
+   (oldest first), armed-only, and **exactly one PR per (repo, base) lane per pass** (ADR-125) —
+   the oldest open PR in that lane that is green,
    auto-merge-armed, conflict-free, and behind — via the update-branch API (merge commit; the
    endpoint cannot rebase, which is what we want — no history rewrite, no force-push, a stale
    worker clone can still `git pull`).
@@ -128,11 +129,11 @@ Four deterministic pieces around the existing gates:
    unapproved AND no changes-requested** (*unapproved* = the reviewer bot has no approval at the
    current head — NOT GitHub's `reviewDecision`, which on code-owner-gated repos stays
    `REVIEW_REQUIRED` until the human owner approves; see the edge case below); pick the oldest
-   **one per repo** (within a repo, reviews
+   **one per (repo, base) lane** (ADR-125 — within a lane, reviews
    must serialize — see below); run `agents/reviewer-session.sh <repo> <pr>` for each, **capped at
-   K concurrent reviewer pods globally** (start K=2). Cross-repo reviews can't invalidate each
-   other (masters move independently), so the per-repo serialization that protects review
-   economics costs nothing across repos; K exists only to protect the shared subscription quota.
+   K concurrent reviewer pods globally** (start K=2). Reviews in different lanes can't invalidate
+   each other (their bases move independently), so the per-lane serialization that protects review
+   economics costs nothing across lanes; K exists only to protect the shared subscription quota.
    Anything it *can't* mechanically progress (conflict, round limit, flip-flop — see the
    escalation table) it **labels for the coordinator** rather than acting on. Edge-triggered by the
    exporter POST with the `*/15` backstop (ADR-093) — the edge+level pattern from
@@ -198,7 +199,7 @@ lane label — an un-armed, unlabeled PR is invisible to the updater, the reflex
 stalls silently (live: oracle-fleet#16 stuck at ci "Expected" after a stacked-base retarget, then
 BEHIND). `coordinator-scan` reports every such PR as a report-only orphan.
 
-### Why update-before-review, and why reviews serialize per repo
+### Why update-before-review, and why reviews serialize per (repo, base) lane
 
 Two orderings were on the table:
 
@@ -209,12 +210,13 @@ Two orderings were on the table:
   **before** the reviewer ever runs; approval is the final event and auto-merge fires immediately.
   One reviewer run per PR.
 
-But update-before-review only holds if reviews are **serialized within a repo**: if the reflex
-eagerly dispatched reviews for *all* current+green PRs in one repo (say 3 PRs opened against the same master tip
-— none is "behind"), the first merge makes the other two stale, their updates dismiss their fresh
+But update-before-review only holds if reviews are **serialized within a lane**: if the reflex
+eagerly dispatched reviews for *all* current+green PRs sharing one base (say 3 PRs opened against
+the same master tip — none is "behind"), the first merge makes the other two stale, their updates dismiss their fresh
 approvals, and we're back to double reviews. Hence: the review reflex dispatches **one review at a time per
-repo**, exactly like the updater updates one at a time per repo. Reviews in *different* repos
-parallelize freely (a merge in repo X can't stale a PR in repo Y). The cost is within-repo review
+lane**, exactly like the updater updates one at a time per lane. PRs in *different* lanes
+parallelize freely (a merge in repo X can't stale a PR in repo Y, and a master merge can't stale a
+`goal/**`-based PR). The cost is within-lane review
 latency (they queue); at ~4–8 min per review on an autonomous pipeline, that's irrelevant.
 
 **The serialization unit is the (repo, BASE) LANE, not the repo** (ADR-125, homelab#1422): the
@@ -290,8 +292,9 @@ flowchart TD
     C --> X2[exit — next trigger continues the chain]
 ```
 
-One update per invocation, oldest first. A red or conflicted PR is *skipped, not blocking*: the
-next qualifying PR gets the slot, and the skipped PR just sits (red → worker/human fixes it;
+One update per lane per invocation, oldest first (ADR-125). A red or conflicted PR is *skipped,
+not blocking*: the next qualifying PR in that lane gets the slot, and the skipped PR just sits
+(red → worker/human fixes it;
 conflicted → can't be auto-updated, needs a coordinator decision — the review reflex never
 reviews it because it can never become "current").
 
@@ -359,7 +362,7 @@ Levers that shrink L before it ever hurts (see [`../renovate.md`](../renovate.md
 
 ## Scaling model
 
-Stack economics (per-repo O(N) invariant, IDP-sized platform extrapolation, what saturates
+Stack economics (per-lane O(N) invariant, IDP-sized platform extrapolation, what saturates
 first) MOVED to [`platform-and-stacks.md`](platform-and-stacks.md) §Stack economics
 (2026-07-27, FU-107) — it is stack-axis sizing, not merge mechanics. The merge-path-relevant
 conclusion stays here: the serializer pins reviews to the theoretical floor (1/PR); past that
