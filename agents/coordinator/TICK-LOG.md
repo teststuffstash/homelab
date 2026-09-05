@@ -7137,3 +7137,37 @@ first live ADR-110 maintenance session before the ADR existed.
   `serveexpired` is now a one-line var (FU-215 next).
 - Side sighting, unread: `specs.oracle.teststuff.net` blackbox hit its 9.5 s timeout twice at
   ~17:52–17:53Z in the same minutes — LAN target, likely unrelated; noted only.
+
+## 2026-09-05 ~18:20–19:00Z — codeowner reads + the CI-red open-PR set (design-agents corpus session, operator question)
+
+- **`/design-agents codeowner reads and open PR-s — some seat ones are now CI-red?`** Grounding: full
+  agents corpus + the board + per-PR `gh run list --commit` + failed-step logs + local re-runs of the
+  failing suite. Seven open PRs at 18:19Z, five red at heads that were all updater merges from
+  17:33–17:48Z. Three classes:
+  - **The FU-215 DNS window (17:55–17:59Z), environmental:** PR#1446 `actions/checkout` "Could not
+    resolve host: github.com" ×3 at 17:55:58–17:56:24Z; PR#1449 + PR#1453 `argocd-validate-pins`
+    "chart … not pullable" at 17:55:31Z / 17:58:52Z — the pin (`openrouter-operator:2026.9.5-gb80422a922d1`,
+    #1443) pulls fine from the jail. Re-run; all four re-runs were then CANCELLED by cancel-in-progress
+    as the 18:2x–18:4xZ master merges re-pointed every head (fresh runs on the new heads instead).
+  - **A latent suite flake that reads as content:** PR#1436 `board-classification` — "printf: Broken
+    pipe" beside "✗ container row — missing". `agents/board-test.sh` runs `set -uo pipefail` and
+    `present()` was `printf '%s' "$3" | grep -Fq`: grep -q exits on the first match, printf takes
+    EPIPE, the pipeline reads failed → a PRESENT row reports missing. 5/5 local passes (timing).
+    Fixed on the branch (here-string, abf4f17d).
+  - **Genuine content reds, loop-owned:** PR#1448 (#1440) 4 replay rows + stale index; PR#1453
+    (#1438) 3 `reviewer-exit-contract` rows.
+- **Codeowner read (ADR-110): PR#1409 APPROVED 18:23Z** (small — prose narrowing of the reviewer
+  STEP-0 anomaly arm, Class B register; the #1403 2nd-sighting class); auto-merge on green.
+- **The loop's `blocked-on: human` ask on PR#1448, verified then executed as a quickfix
+  (`12249396`):** master's `gh run list --limit 1` picked a `renovate-approve` skip sharing the CI
+  run's createdAt → empty `--log-failed` → permanent ci-red defer (3 sightings: oracle-fleet#460,
+  PR#1453, PR#1448). Probed on the branch: `--limit 1` → the in-flight run, `--status failure
+  --limit 1` → the failing one. Landed the flag + the sentinel pair + the two
+  `context-prefetch/ci-red*` expected streams; NOT the PARTIAL relaxation of #1205's REQUIRED-read
+  contract (codeowner note on PR#1448 + the #1440 directive channel: drop it — the PR becomes
+  fixture-only, escape (a)). ⚠ **The direct lane IS ratchet-gated:** `githooks/pre-push` runs the
+  full clause-replay, and the first push was BLOCKED until the two expected streams rode along
+  (394/394 after). Side effect: the quickfix made PR#1448 DIRTY on the same lines → seat
+  conflict-merge taking master's launcher (the PR's launcher diff is now empty).
+- Churn note: master moved 3× in 25 min (#1454, #1455 deploy, the quickfix) → every open PR
+  re-cycled through the updater, ~15 CI runs for 6 PRs — the L-scenario shape, expected.
