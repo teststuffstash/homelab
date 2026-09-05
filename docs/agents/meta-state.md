@@ -11,12 +11,54 @@ never the session's arc — that is TICK-LOG's.)
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ BOARD (09-04 wind-down, re-read 09-05):** in review #1205 (PR#1386), #1381, #1374,
-  #1350; queued #1300, #1299, #1207 (the last two are operator-lane — guarded/deny paths —
-  de-queue or hand-do). Codeowner-park queue EMPTY 09-05 (#1273/#1289/#1290/#1295 all
+  #1350; queued #1300, #1299, #1207 — ALL THREE structurally undeliverable by a worker (the
+  OPERATOR-ONLY list below). Codeowner-park queue EMPTY 09-05 (#1273/#1289/#1290/#1295 all
   merged). Park-watcher recipe = poll `github_pull_request_codeowner_park` on Prometheus
   (zero gh calls). Inert with owners: #1069 (workers no-op on App GraphQL exhaustion — spans
   recipe + agent-runtime exit contract, 🌱 triage) · #518 (runner infra) · #628 (container)
   · #857 (maintenance-session class).
+- **⚑ OPERATOR-ONLY — from the four `coordinate-<stack>-1788589800` logs (2026-09-05 06:30Z,
+  read out of Loki; every item live-verified the same hour). The machine will never act on
+  these; the next session picks them up in this order:**
+  1. **Queued but undeliverable (operator push to master, or re-scope/split):** homelab
+     **#1207** (⛔ operator-lane: `agents/ground-rules.md` + `scripts/goal-lint.sh`) ·
+     **#1300** (⛔ pin-only GUARDED: `argocd/platform/arc-runners.yaml` +
+     `openrouter-operator.yaml` — split the pin lines out or hand-do) · **#1299** (queued
+     WITHOUT `agent-fix`, so the scan never even lists it; its footprint is the guarded
+     `arc-runners.yaml` anyway — de-queue + hand-do) · **#1390** 🌱 (`scripts/diff-ci.sh` MAP
+     entry — NEVER-TOUCH by the filer's own words) · **#1308** (the queue call; CLAUSE-REPLAY
+     warns its `Touches:` must reach `agents/replay/**` first).
+  2. **Ghost-held queued issues (blocker closed, its own blocker open — queue the root or cut
+     the edge):** or-op **#57/#58** ← #56 (closed) ← **#60** (open, agent-fix, unqueued) ·
+     oracle-fleet **#361** ← #360 (closed) ← **oracle-iac#485** (platform-request, the mcp api
+     claim — oracle jail's deliverable, platform grants).
+  3. **FU-090 gate — adopt (`agent-fix[+queued]`) or close:** UNBLOCKED-UNLABELED homelab
+     **#1069**, **#946** (both >24h, blockers closed); 🌱 platform-claim: homelab **#857**,
+     agent-runtime **#120 #119**, or-op **#34**; 🧬 unbound sprouts homelab **#1392 #1370
+     #1316** (+#1069/#857) — bind to origin or state standalone. Stack sprouts are their
+     jails' (oracle-fleet 11 + UNBLOCKED #416/#176/#84, sleep 2, circles 5) — relay, don't
+     triage.
+  4. **Walk noise = ONE fix, not twelve tasks:** the 🏷 "bare tree members — route to
+     operator" lines are ALL post-launch BUCKETS (homelab #1311 #1243 #1170 #840;
+     oracle-fleet #430 #416 #386 #384 #332 #290; sleep #126) + #1334 (`agent/error`). Land
+     **#1249** (ADR-122 walk retirement, S8 head (a)) and they vanish.
+  5. **Phantom `agent/done` HELD (closed with no merged PR — confirm the close or relabel):**
+     homelab **#913 #903**; oracle-fleet #25 #24 #22 #7; sleep #7.
+  6. **PRs where a human is the next mover:** sleep-iac **PR#80** (merge conflict,
+     seat-authored — the seat's own push); oracle-fleet **#425/#426** un-armed research PRs
+     (the operator's `specs/` read, by design); circles **PR#25** un-armed (specs contract —
+     arm or park); sleep-tracking **PR#143** ci-red held because #141 is `agent/blocked`.
+  7. **Hygiene:** stale agent branches, delete or resume — homelab 11
+     (`agent/20260824-104524 …-132129 20260825-171429 20260830-233803 20260901-165514`,
+     `fix/cost-rethink fix/issue-126-… fix/issue-500-… fix/issue-721-…
+     fix/reviewer-app-statuses-… fix/window-shares`), agent-runtime 1, oracle-fleet 4,
+     circles 4, sleep 1 · oracle-fleet#84 carries a RETIRED `Depends-on:` line → native edge.
+  8. **Backlog queue calls (suitable-unqueued, `devbox run board -- <stack> --full`):**
+     homelab 14 (oldest #518, 08-18) · oracle-fleet 20 (oldest #212, 08-08) · circles 3 ·
+     sleep 1 · or-op 1 (#60 — item 2's root).
+  9. **Loop health, unexamined:** three `coordinate-perstack-*` runs FAILED 09-04 (platform
+     12:45Z exit 128, platform 12:58Z + oracle 20:59Z exit 141); every cron tick since is
+     green — read the Loki lines before calling it transient.
 - **⚑ OPERATOR-OWED (one list):** #1200 (manifest lint has no proxy — think later; residual:
   no ArgoCD sync-failed/OutOfSync alert exists, a belt to add beside the CNP schema) · #1249
   (S8 head (a): retire the bare-tree-member walk — hotfix-class, may land before the stint;
