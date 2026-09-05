@@ -21,7 +21,8 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 - **Issue authoring from specs/failures**: file well-formed issues (spec anchors, deliverables
   with ⚖ guidance pre-decided where the call is the codeowner's, acceptance criteria, track/*
   label, dependencies as NATIVE blocked-by edges — the `Depends-on:` body-line reader retired
-  2026-08-07, FU-111). Queue = `agent-fix` + `agent/queued`. Bot-authored 🌱 sprouts stay
+  2026-08-07, FU-111). Queue = `agent/queued` (the one dispatch precondition, ADR-122 (2), #1432)
+  — `agent-fix` is the separate ADR-109 backlog/opt-in marker. Bot-authored 🌱 sprouts stay
   unlabeled for the operator.
 - **C6 close-the-loop — MACHINE-OWNED since 2026-07-27** (the `merged-closeout` clause,
   MP-T10): the scan dispatches a `merged-closeout` unit; the coordinator session verifies,
