@@ -25,7 +25,9 @@ carries a row saying so. Binding is dumb, disposition is the container's
 
 WHY PYTHON, WHY A MODULE. ADR-113: logic is Python from birth. Stdlib only (no `yaml`, no
 `requests` — the jail python3 has neither), `gh` reached through `subprocess` the way the
-repo's other Python does, so the replay harness's PATH-shim `gh` serves it unchanged.
+repo's other Python does, so the replay harness's PATH-shim `gh` serves it unchanged. The
+comments GET is `--paginate --slurp`, never bare `--paginate` — see `_parse_comments_payload`
+for why the bare form breaks on exactly the containers that matter most.
 
 FAIL-CLOSED EVERYWHERE (rule #6: never fail INTO a write). The comments read has THREE
 outcomes, not two — found / confirmed-absent / UNREADABLE — and the split is load-bearing for
@@ -133,24 +135,48 @@ def now_iso() -> str:
 
 # ── the seam: the comments fetch (monkeypatched by the self-test; PATH-shimmed by replay) ────
 
-def _fetch_comments(slug: str, issue: int) -> list:
-    """One GET of the container's comments. Raises Unreadable on ANY doubt."""
+def _parse_comments_payload(stdout: str) -> list:
+    """THE one parse of `gh api --paginate --slurp` output → a flat list of comments.
+
+    ⚠ `--paginate` ALONE is a trap and it bites exactly the containers this store exists for.
+    Per `gh help api`, plain `--paginate` writes each page's JSON document back-to-back, so a
+    container with more than 100 comments yields `[...][...]` — not one JSON document, so
+    `json.loads` raises and the read reports UNREADABLE forever: trigger (c) held and every
+    `set` refused, on precisely the goals whose trees grew large enough to need disposing.
+    `--slurp` is the documented fix: gh "wraps the pages in an outer JSON array", giving
+    `[[<page 1>], [<page 2>], …]`. So the payload is flattened ONE level when every element is
+    itself a list. A single recorded page (`[{…}, {…}]`, the shape the replay worlds hold) has
+    dict elements and passes through untouched, which is what lets one parser serve both.
+    """
     try:
-        p = subprocess.run(
-            ["gh", "api", f"repos/{slug}/issues/{issue}/comments?per_page=100", "--paginate"],
-            capture_output=True, text=True)
-    except OSError as e:                        # gh absent from PATH — a probe failure, not "absent"
-        raise Unreadable(f"gh could not be executed: {e}")
-    if p.returncode != 0:
-        raise Unreadable(f"gh api exited {p.returncode}: {p.stderr.strip()[:200]}")
-    try:
-        data = json.loads(p.stdout or "null")
+        data = json.loads(stdout or "null")
     except ValueError:
         raise Unreadable("comments payload is not JSON (a 200 that is not JSON is the "
                          "`garbage` shape — never parse it as empty)")
     if not isinstance(data, list):
         raise Unreadable(f"comments payload is {type(data).__name__}, not a list")
+    if data and all(isinstance(page, list) for page in data):
+        return [c for page in data for c in page]
     return data
+
+
+def _gh_comments_raw(slug: str, issue: int) -> str:
+    """The subprocess seam: one paginated GET, raw stdout. Raises Unreadable on ANY doubt."""
+    try:
+        p = subprocess.run(
+            ["gh", "api", f"repos/{slug}/issues/{issue}/comments?per_page=100",
+             "--paginate", "--slurp"],
+            capture_output=True, text=True)
+    except OSError as e:                        # gh absent from PATH — a probe failure, not "absent"
+        raise Unreadable(f"gh could not be executed: {e}")
+    if p.returncode != 0:
+        raise Unreadable(f"gh api exited {p.returncode}: {p.stderr.strip()[:200]}")
+    return p.stdout
+
+
+def _fetch_comments(slug: str, issue: int) -> list:
+    """One GET of the container's comments, flattened. Raises Unreadable on ANY doubt."""
+    return _parse_comments_payload(_gh_comments_raw(slug, issue))
 
 
 def find(slug: str, issue: int) -> "tuple[int | None, str]":
@@ -267,6 +293,52 @@ def self_test() -> int:
     mixed = MARK + "\n#1315 deferred 2026-09-05T12:00:00Z by=checkpoint\nthis is not a row\n"
     check("parse: a malformed row is excluded, its well-formed sibling survives",
           list(parse(mixed).keys()), ["1315"])
+
+    # ── PAGINATION: the `--slurp` shape, through the real parse ── Expectations derived from
+    # `gh help api`'s documented contract, NOT from running gh: plain `--paginate` "outputs each
+    # page of results in sequence" (back-to-back JSON documents), while `--slurp` "wraps the
+    # pages in an outer JSON array" — so the slurped payload is [[page1…],[page2…]] and the
+    # parser owes exactly one level of flattening. Both shapes go through the SAME function the
+    # subprocess path uses, so a regression here cannot hide behind the fixture recordings.
+    _c = lambda i: {"id": i, "body": f"comment {i}"}          # noqa: E731 — a fixture, not production
+    # Two pages of two: the outer array has 2 elements, each a LIST ⇒ flatten ⇒ 4 comments, in
+    # page order (page 1's both, then page 2's both).
+    two_pages = json.dumps([[_c(1), _c(2)], [_c(3), _c(4)]])
+    check("--slurp: two pages flatten to one ordered list",
+          [c["id"] for c in _parse_comments_payload(two_pages)], [1, 2, 3, 4])
+    # ONE page, as gh returns it under --slurp: still wrapped, so [[…]] ⇒ 2 comments.
+    check("--slurp: a single wrapped page flattens too",
+          [c["id"] for c in _parse_comments_payload(json.dumps([[_c(1), _c(2)]]))], [1, 2])
+    # The un-wrapped shape every committed replay world holds: elements are DICTS, not lists, so
+    # the flatten must not fire and the list passes through untouched.
+    check("un-wrapped single page (the recorded-world shape) passes through",
+          [c["id"] for c in _parse_comments_payload(json.dumps([_c(1), _c(2)]))], [1, 2])
+    check("--slurp: an empty payload is no comments, not a flatten error",
+          _parse_comments_payload("[]"), [])
+    # A 200 that is not JSON, and a JSON non-list, are both UNREADABLE — never "no comments".
+    for desc, raw in (("non-JSON stdout", "upstream connect error"), ("a JSON object", '{"a":1}')):
+        try:
+            _parse_comments_payload(raw)
+        except Unreadable:
+            n += 1
+            print(f"  ✓ {desc} is UNREADABLE, not empty")
+        else:
+            raise AssertionError(f"{desc} parsed as readable — a blind read can now create a store")
+    # …and END-TO-END: the store sitting on page 2 must still be FOUND. This is the regression the
+    # bare `--paginate` bug produced — a container with >100 comments could never read its own
+    # store, so trigger (c) held forever and every `set` refused, on the largest trees only.
+    global _gh_comments_raw
+    _real_raw = _gh_comments_raw
+    try:
+        _gh_comments_raw = lambda slug, issue: json.dumps(          # noqa: E731
+            [[_c(i) for i in range(1, 101)],
+             [{"id": 999, "body": MARK + "\n#42 adopted 2026-09-05T12:00:00Z by=closeout\n"}]])
+        cid, body = find("o/r", 1)
+        check("a store on PAGE 2 is found (the >100-comment container)", cid, 999)
+        check("…and parses to its one row", parse(body),
+              {"42": {"disposition": "adopted", "at": "2026-09-05T12:00:00Z", "by": "closeout"}})
+    finally:
+        _gh_comments_raw = _real_raw
 
     # ── the UNREADABLE path, through the real seam ── find() must RAISE, so that set_disposition
     # can never reach _put on a blind read (the second-store-comment failure mode). Driven by
