@@ -133,6 +133,13 @@ never the session's arc — that is TICK-LOG's.)
     Garage forensic-backup deletion owed above is the lever — the answer is fstrim (twice daily since 09-04) + FU-093's next
     act (Longhorn filesystem-trim), not a threshold bump. Read `pve_lvm_thin_pool_data_percent`
     before/after a 03:17Z fstrim to size the cadence.
+  - **Unbound github.com SERVFAIL, transient 08:15–08:19Z 09-05** (`UnboundGithubServfail`
+    reached pending, never fired; `dig +cd` answered while plain SERVFAILed → DNSSEC validation
+    path for that one zone went bogus; authoritative nsone answered from the jail; cleared by
+    itself). Remedy if it recurs and holds: Unbound restart via the OPNsense API
+    (`POST /api/unbound/service/restart` — find the wallet's OPNsense API key/secret entry names
+    first, `keepass-env.sh` does not export `OPNSENSE_API_KEY`). Side effect seen: the seat's
+    `gh` and the exporter poll both failed for the window (`gh pr list failed` PROBEFAIL).
   - **Git-throttle watch**: every loop clone is preemptively authenticated since PR#1333; a
     recurrence with zero anonymous requests = FU-007 push-mirror becomes the next
     deliverable (incident record §Recurrence; memory `git-preemptive-auth`).
