@@ -20,7 +20,7 @@
 #      Repos = the FULL require_code_owner_review=true set in tofu/github/variables.tf —
 #      platform lane included since the 2026-08-11 bot-reviewer enable (see CODEOWNER_REPOS).
 #   3. An UNLABELED issue on a platform repo older than a day — invisible to every clause (the
-#      loop dispatches on agent-fix∧agent/queued; the debounce rings on responder verdict lines;
+#      loop dispatches on agent/queued alone (ADR-122 (2), #1432); the debounce rings on responder verdict lines;
 #      neither ever sees it). Five agent-runtime issues sat this way for up to a MONTH
 #      (2026-08-08, operator catch) because only homelab's board got swept. Emission = triage it.
 #      ⚠ Responder alert-record issues (body carries 'alert-fp:') are EXCLUDED: unlabeled is

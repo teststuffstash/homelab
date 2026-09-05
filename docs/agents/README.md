@@ -133,7 +133,7 @@ graph TB
 
   proxy["Egress proxy (ADR-087/096)<br/>resolves ref: creds · brokers git tokens · budgets + routes models"]
 
-  meta -->|"issue: agent-fix + agent/queued"| scan
+  meta -->|"issue: agent/queued"| scan
   scan -->|one unit| coord
   coord -->|dispatch round N| worker
   worker -->|branch + PR| ci["CI — devbox run ci + system test<br/>Tofu'd Proxmox VM runner, k3d"]
