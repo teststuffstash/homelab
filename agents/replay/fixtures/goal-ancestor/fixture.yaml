@@ -24,6 +24,12 @@
 #                      with NO `task/goal`): either stop condition ALONE halts the walk, and the
 #                      patch ADDS the mis-authoring to a clean #62 — without this row the
 #                      `Budget:`-line half of the stop-OR ships untested and can decay into an AND.
+#   child-with-budget-and-parent  the homelab#1392 fix: a child (#92) whose parent (#91) carries
+#                      its own `Budget: 1` line AND a native parent (#62, the real goal with
+#                      `task/goal`). The walk MUST climb past #91 instead of stopping on its
+#                      `Budget:` line — the old stop-OR conflated a per-issue budget cap with a
+#                      goal signal. The patch adds `task/goal` to #62 so the walk finds the real
+#                      goal after climbing.
 # post.sh is the observation point: `GATE SUBJECT: #<n>` prints the variable the pre-flight passes
 # to `goal_budget_read` next — how a resolution fixture asserts on enforcement it does not run.
 #
