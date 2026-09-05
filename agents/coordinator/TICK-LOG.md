@@ -6985,3 +6985,50 @@ first live ADR-110 maintenance session before the ADR existed.
   bases; cost ≈ 1.2M subagent tokens; misses to ledger: none blocking — one fabricated prose
   claim (a no-web subagent asserted no public Cilium schema catalog exists; seat corrected on
   the branch), one bot-nit class (a `create` verb widened a shared RBAC rule).
+
+## 2026-09-05 ~11:00–13:30Z — S8 head sitting: stint #1418 launched, S7 closeout-1 posted, ADR-125/126 drafted, four subagent chunks + the codeowner reads (design-agents corpus session, operator-attended)
+
+- **`/design-agents S8 stint next?` → yes, with two things landed first.** Grounding: full corpus +
+  ADR-122 + the work map; live board reads. Verdict: S8's ADR-122 head is un-gated (head (a)
+  landed PR#1400 the same morning); the theme half is gated on the wave-2 readout, which is NOT
+  recorded on #1162; S7 closeout-1 (#741) overdue and #1393 (S5 original 5) both touch S8's
+  files, so they go first. Operator: "Lets go. And use sub-agents to help with the main session
+  context pressure" — and mid-sitting "Do the codeowners reviews also in this session".
+- **S7 closeout-1 POSTED on #741** (overdue since ~08-29): acceptance live-verified — hosted
+  `update-pr-branch` runs since 08-27 = 0 on all 12 claim repos; in-cluster updater 33 edge
+  Succeeded + 2 cron Succeeded + **2 cron Failed exit 128** (09-04 12:45Z, 09-05 10:30Z — the
+  transport class of the same hour's coordinate-perstack failures / FU-215 window; residual,
+  read the next one's Loki lines); `GithubActionsMinutesHigh` quiet; MP-T02/T06 replayed. The
+  doc leg rides #1393's PR (#1433). Close #741 at the next sweep once #1433 merges.
+- **Stint #1418 authored** (`stint: subtract readers — ADR-122 dispositions, (repo, base) lanes,
+  v1.3 themes (S8)`, Size 3), five design pins settled at the head: (1) the `---`-fenced
+  `key: value` machine block + ONE Python parser with a metered legacy read; (2) dispositions
+  live on the CONTAINER as one machine comment (`<!-- epic-dispositions v1 -->`), never on the
+  member, never a label — label-means-adopted default so pre-S8 goals need no backfill; (3)
+  `agent/queued` alone is the valve; (4) (repo, base) is the serialization unit; (5) themes HELD
+  on the wave-2 readout. Originals: #1430 (1a parser) · #1431 (1b readers, blocked by 1a) ·
+  #1419 (2 dispositions) · #1432 (3 JOIN) · #1420 (4 card, blocked by 1a/1b/2/3) · #1421 (5 ADR
+  pair) · #1422 (6 per-base lanes, absorbs #829) · #1423 (7 themes, HELD) · #1424 (8 currency).
+  Inventory subagent (read-only, sonnet): 12 live grammars + 2 design-only (`Origin`, `Size`),
+  `Touches:` in 11 files, 13 markers, the JOIN gates a write in exactly 2 places — counts on
+  the parent.
+- **ADR-125 + ADR-126 drafted (original 5, PR#1425)**: the banked v1.3/v1.3.1 blocks promoted
+  to the design home, glossary `theme` row, ROADMAP S8 → LAUNCHED. merge-path.md's per-base
+  clause deferred to #1422 (the trims PR was rewriting the file).
+- **Subagent chunks (clones re-pointed at GitHub, base origin/master, PR flow granted):** #1393
+  trims (opus) → PR#1433 (−396 net lines, settle-test run 3; seat read: clean, one currency nit
+  → #1424); #1419 dispositions (opus) — stopped after read-in with four sound deviations
+  (suite entrypoint must be a .sh wrapper; a second comments GET per goal; the 6/6 overlay for
+  trigger (c); one failure hits both reads), resumed with all four accepted; #1432 JOIN
+  (sonnet); #1430 parser (opus). Width 4 — the operator's "credits to burn today".
+- **Codeowner reads (ADR-110)**: #1416 (README ci.yaml) + #1398 (goal-budget stop narrows:
+  `Budget:` only where no parent) + #1404 (PyPI cache — the 09:41Z CR is addressed: sub_filter
+  present) APPROVED; #1409 CI-red (loop's fix round), #1410/#1396 bot-CR (loop's); seat PRs
+  #1399/#1401 were bot-blocked on FOOTPRINT ESCAPES (the 2026-09-05 (b) class again): widened
+  #1200's and #1207's `Touches:` on the ISSUES (the dispatch-side rule), dismissed #1399's stale
+  CR with the audit message, fixed #1401's red fixture (`env-card-docker-buildkit` expectation
+  lacked the #1207 ground-rules bullet after master's #1402 fixture met this branch's card) and
+  pushed. GitHub refuses a self-approval on seat-PAT PRs — the read is recorded as a comment.
+- Seat process notes: `set -e` + `rm -rf` in a compound clone command was rejected by the
+  operator — split into plain steps; `echo ====` breaks zsh (`=cmd` expansion); a `git clone
+  --local` of a SHALLOW repo silently ignores `--local` (fine — plain clone).
