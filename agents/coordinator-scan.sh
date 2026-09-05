@@ -2592,63 +2592,11 @@ EOF_GOVERNANCE
         fi
       done
     fi
-    # ── BARE TREE MEMBERS OF OPEN GOALS (homelab#1153) ──────────────────────────────────────
-    # Issues whose native GitHub parent chain resolves (via goal_resolve_ancestor) to an open
-    # funded goal but are NOT already queued or labelled — they are "bare" tree members that
-    # the harvest/dispatch machinery never touched. Walk them per goal and decide:
-    #   machine-doable → agent-fix + agent/queued (the launcher pre-flight enforces the budget)
-    #   operator-lane   → surfaced on the goal thread via orphans
-    # Uses the ONE home (goal-budget.sh) — never a second ancestor read (homelab#367).
-    if [ -n "$goals" ]; then
-      command -v goal_resolve_ancestor >/dev/null 2>&1 || . "${HERE:-.}/goal-budget.sh"
-      command -v classify_touches >/dev/null 2>&1 || . "${HERE:-.}/footprint.sh"
-      # Iterate open issues that are NOT queued, NOT goals, and have a native GitHub parent.
-      # openall already carries the parent field (from the one fetch at the top of the loop).
-      bare_tally=""
-      bare_highlights=""
-      while IFS='|' read -r bn btouches; do
-        [ -n "$bn" ] || continue
-        goal_resolve_ancestor "$slug" "$bn"
-        [ -n "$GB_GOAL" ] || continue
-        # Only care about goals in THIS repo's open goals set
-        # goals is newline-separated (jq -r), so a quoted substring match fails with ≥2 goals.
-        _bm_match=0
-        for _bm_g in $goals; do [ "$_bm_g" = "$GB_GOAL" ] && { _bm_match=1; break; }; done
-        [ "$_bm_match" = 1 ] || continue
-        # Undeclared footprint (*) — surface for human triage (FU-090 / ADR-097), never
-        # auto-queued as machine-doable with no scope.
-        if [ "$btouches" = "*" ]; then
-          bare_highlights="${bare_highlights}  issue #${bn} — resolves to goal #${GB_GOAL} but undeclared footprint — route to operator\n"
-          bare_tally="${bare_tally} ${bn}"
-          continue
-        fi
-        case "$(classify_touches "$btouches")" in
-          machine-merge|codeowner-merge)
-            if gh issue edit "$bn" --repo "$slug" --add-label "agent-fix,agent/queued" >/dev/null 2>&1; then
-              echo "  [$repo] bare tree member #${bn} → queued under goal #${GB_GOAL}"
-              bare_tally="${bare_tally} ${bn}"
-            else
-              bare_highlights="${bare_highlights}  issue #${bn} — resolves to goal #${GB_GOAL} but could NOT be queued (gh write refused)\n"
-            fi
-            ;;
-          codeowner-author)
-            bare_highlights="${bare_highlights}  issue #${bn} — resolves to goal #${GB_GOAL} but operator-lane path (${btouches}) — route to operator\n"
-            bare_tally="${bare_tally} ${bn}"
-            ;;
-        esac
-      done <<< "$(printf '%s' "$openall" | jq -r '
-        [.[] | select((.parent.number // null) != null)
-             | select((.labels|map(.name)|index("agent-fix"))|not)
-             | select((.labels|map(.name)|index("task/goal"))|not)
-             | (.body // "") as $b
-             | ([$b | scan("(?mi)^[ \t]*touches:[ \t]*(.+)$")] | flatten | join(",")) as $t
-             | (if $t == "" then "*" else $t end) as $t_final
-             | "\(.number)|\($t_final)"
-        ] | .[]
-      ' 2>/dev/null || true)"
-      [ -n "$bare_tally" ] && echo "  [$repo] goal-grant consult: walked${bare_tally} bare tree member(s)"
-      [ -n "$bare_highlights" ] && orphans="${orphans}[$repo] 🏷 bare tree members — route to operator:\n${bare_highlights}"
-    fi
+    # ── BARE TREE MEMBERS OF OPEN GOALS — the walk RETIRED 2026-09-05 (ADR-122 (1)) ─────────
+    # Filing is inert, no exceptions: no reader queues an issue from its SHAPE. A tree member
+    # without `agent/queued` is the CONTAINER's to dispose (docs/agents/issue-authoring.md
+    # §The lineage contract rule 9 — `undispositioned | adopted | deferred`, built in S8), never
+    # the scan's to queue. History: homelab#1153 → PR#1242 → #1249 (three misfires in one tick).
     # <<<REPLAY:goal-lane<<<
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 native blocked-by; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ blocked-by CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"

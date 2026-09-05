@@ -146,8 +146,11 @@ The epic rules:
    until the container's checkpoint/closeout rules it `adopted` (scope — counts for completion)
    or `deferred` (lineage kept, out of scope, movable by the container). An undispositioned
    member WAKES the checkpoint; it never blocks it — #1315's ~10.5h hold of G-G's assembly and
-   the #1338/#1334 walk re-queues (#1249) are the evidence. Until S8 lands, the interim is the
-   #1249 damper: `agent-fix` without `agent/queued` on a member that must stay inert.
+   the #1338/#1334 walk re-queues (#1249) are the evidence. **The walk that broke this retired
+   2026-09-05** (the bare-tree-member walk, #1153 → PR#1242 → PR#PRNUM, ADR-122 (1)): filing is
+   inert by construction now, so the interim #1249 damper (`agent-fix` without `agent/queued` on
+   a member that must stay inert) is no longer needed — an unqueued member simply sits. The
+   disposition STATE itself is still S8's to build.
 
 ⚠ **`task/goal`-keyed machinery is GOAL-kind machinery by definition** (operator caution,
 2026-08-19): the scan's goal clauses, budget walks and terminals key on that label, and a rule
