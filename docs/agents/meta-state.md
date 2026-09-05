@@ -10,16 +10,27 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ S8 IN FLIGHT (head sitting 2026-09-05 ~12:00Z, corpus session — stint #1418, Size 3):**
-  originals #1419 (dispositions) · #1420 (consumer card, blocked by 1–3) · #1421 (ADR pair —
-  **PR#1425 open, armed**) · #1422 (per-base lanes, absorbs #829) · #1423 (themes, HELD on the
-  wave-2 readout) · #1424 (currency); originals 1 (parser) + 3 (JOIN) file off the inventory
-  subagent's report (`scratchpad/s8-inventory.md`). #1393 (S5 original 5 + the S7 merge-path
-  currency) rides a subagent PR; **#741 S7 closeout-1 POSTED** — close #741 once that PR merges.
-  Pins on #1418 (block grammar, dispositions on the container, one valve, (repo, base), theme
-  hold). Residual from the S7 read: two `update-pr-branch-cron` runs exit 128 (09-04 12:45Z,
-  09-05 10:30Z) — read the next one's Loki lines (tenant `agent-coordinator`) before calling
-  it transient.
+- **⚑ S8 IN FLIGHT (head sitting 2026-09-05 11:00–~15:00Z, corpus session — stint #1418,
+  Size 3; pins on the parent):** LANDED: #1393 (S5 original 5, PR#1433 — S5's tree is EMPTY,
+  #979 closes at a later sweep, ≥72h quiet) · **#741 S7 CLOSED** · originals filed #1430 (1a
+  parser) #1431 (1b readers) #1419 (2 dispositions) #1432 (3 JOIN) #1420 (4 card) #1421 (5 ADR
+  pair) #1422 (6 lanes) #1423 (7 themes, HELD on the wave-2 readout) #1424 (8 currency) + sprout
+  #1439 (goal-findings.sh bare `--paginate` → `--slurp` + fold the two goal-lane comment reads).
+  **PRs at wind-down — check each first thing:** PR#1425 (ADR-125/126, seat — bot round-1 fix
+  pushed, awaiting re-review) · PR#1434 (#1432 JOIN, subagent — round 2 pushed) · PR#1437
+  (#1419 dispositions, subagent — codeowner read DONE, in-diff `--slurp` fix landed, **never
+  reviewed: the reflex skips BEHIND PRs for a FIRST review and master moved 7× in its window** —
+  if still unreviewed once current + green, `bash agents/reviewer-session.sh homelab 1437` is
+  the sanctioned hand-dispatch; design input recorded on #1422) · #1430 (1a parser, subagent
+  opus — PR not yet open at the last check). Next originals: 1b #1431 (after 1a), then #1420;
+  #1422 needs ADR-125's per-base pick + the BEHIND-first-review finding; #1423 stays held
+  until the wave-2 readout is recorded on #1162. Codeowner reads this sitting: #1416 #1398
+  #1404 #1399 #1401 merged; or-op#64 approved, or-op#65 approved after a one-line in-diff fix
+  (`has_openrouter_key` required, not defaulted True). Residual from the S7 read: two
+  `update-pr-branch-cron` runs exit 128 (09-04 12:45Z, 09-05 10:30Z) — read the next one's Loki
+  lines (tenant `agent-coordinator`) before calling it transient. Loop-filed today, untriaged:
+  #1427 (a `blocked-on: human` comment does not hold the changes-requested clause — needs
+  `agent/blocked`), #1428/#1429 (registry-cache probes/debug port).
 - **⚑ NEXT SESSION (seat wind-down 2026-09-05 ~09:45Z, ctx 794k — the stint's machine tail
   was still running; nothing here needs the corpus unless marked):** (1) **#1404** (PyPI cache,
   loop PR for #1300): the seat REQUESTED CHANGES 09:41Z — `/simple/` must `sub_filter` the
