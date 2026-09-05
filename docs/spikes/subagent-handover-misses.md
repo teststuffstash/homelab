@@ -148,3 +148,11 @@ everything derivable once the transcript link exists. The rules that keep it che
   terminal for the sole-codeowner waiver (seat-authored PRs never park — they merge on the bot
   approval), so it times out (exit 5) on every seat PR; the dispatch prompt should say the
   expected terminal is MERGED, not a park.
+- **2026-09-05 (#1207 → PR#1401, second sighting of the 2026-08-23 (b) class — promotable):** the
+  seat dispatched from an issue whose Deliverable named four surfaces while its `Touches:` declared
+  two; the subagent implemented the Deliverable (correctly) and the bot blocked the PR as a
+  governance-path footprint escape. Cost: one review round + a dismissal. RULE (dispatch-side, the
+  seat's): before dispatching a seat PR from an issue, reconcile the issue's `Touches:` with every
+  file the body names or the brief will need, and widen the ISSUE first — the reviewer's escape
+  check reads the issue, never the dispatch prompt. Same check goal-lint now runs for Goal children
+  (PR#1401 itself) — the seat is the one author surface without it.
