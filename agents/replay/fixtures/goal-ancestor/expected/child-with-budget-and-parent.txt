@@ -1,7 +1,9 @@
-CALL gh api repos/teststuffstash/circles/issues/90/parent --jq .number
+CALL gh api repos/teststuffstash/circles/issues/92/parent --jq .number
+CALL gh issue view 91 --repo teststuffstash/circles --json labels,body
+CALL gh api repos/teststuffstash/circles/issues/91/parent
 CALL gh issue view 62 --repo teststuffstash/circles --json labels,body
-CALL gh api repos/teststuffstash/circles/issues/62/parent
 CALL gh issue view 62 --repo teststuffstash/circles --json number,title,body --jq "#\(.number) — \(.title)\n" +\n          ( ((.body // "") | split("\n")) as $l\n            | [ range(0; ($l|length)) | select($l[.] | test("^#+ *(Goal|Acceptance)"; "i")) ] as $starts\n            | if ($starts|length) == 0 then ""\n              else [ $starts[] as $s\n                     | ( [ range($s+1; ($l|length)) | select($l[.] | test("^#+ ")) ] | first ) as $stop\n                     | $l[$s : (if $stop == null then ($l|length) else $stop end)] | join("\n") ]\n                   | join("\n\n")\n              end )
+OUT → Goal context: #92's parent #91 is not the goal — walked 1 hop(s) up to goal #62 (post-launch lane, ADR-102)
 OUT → Goal context: child of #62 — injecting its Goal + Acceptance (bounded) into the env card
 OUT GATE SUBJECT: #62
 OUT CARD | #62 — Goal: the kind system gate

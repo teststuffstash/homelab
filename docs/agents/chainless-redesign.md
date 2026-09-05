@@ -363,59 +363,36 @@ fixed 2026-05-22):
   only), and a direct-key ride degrades to `direct:<key-hash>` — one bucket for every ride sharing
   that key, i.e. the hardcoded-id trap by another route.
 
-- Endpoints: `https://opencode.ai/zen/go/v1/messages` (Anthropic-compat) ·
-  `…/v1/chat/completions` (OpenAI-compat) · `…/v1/models` (25 live ids). **Bearer auth works**;
-  `/v1/messages` additionally demands `x-api-key` (send both). Cloudflare 1010-blocks the
-  python-urllib UA (probe artifact — curl and header-less http.client pass).
-- Pricing publishes **cached-read rates** — the decisive column: the platform's token shape is
-  cacheRead-dominated, and at GPT-5.6-Luna-class rates a full reviewer-lane week ≈ $12 of usage
-  value (fits $30/wk); at Grok-class rates it does not. Model choice inside Go decides capacity.
-- **The compat boundary — REVISED same day: it is PER-MODEL, not endpoint-global.** The first
-  bisect (glm-5.2) read as endpoint-wide: Anthropic-shaped tools 422, OpenAI-shaped silently
-  dropped, models tool-calling fine on `/chat/completions`. The homelab-go session's per-model
-  probing then split it: **qwen3.5-plus, qwen3.8-max and kimi-k3 accept Anthropic-shaped tools
-  and return proper `tool_use` blocks** (`stop_reason: tool_use` — re-verified independently at
-  takeover), while glm-5.2 422s every function tool (deepseek-* 403'd too until the
-  China-hosting workspace opt-in was toggled — both pass post-toggle, matrix §quirks). Two
-  quirks stay normalized in the jail shim: string-shorthand message content (glm drops it;
-  blocks form fine) and claude-code's `?beta=true` + `anthropic-beta` decorations (422).
-- **Metadata surface (probed 2026-08-13): registry-POOR.** `/v1/models` returns ids only — no
-  pricing, no multipliers, no quota API ("track your usage in the console"; docs admit "for some
-  models, their usage multiplier is lower" with NO numbers — the actual multipliers appear only
-  in the opencode client's picker: DeepSeek V4 Flash and GPT-5.6 Luna show "(2x usage)").
-  ✅ **"Nx usage" RESOLVED for billing (console dump 2026-08-13): billed Cost = list price ×1
-  for every model, badged included** (flash exact-list, luna ≈list; worked rows in the matrix) —
-  window accounting builds on list prices. The limit-side effect is community-confirmed
-  FAVORABLE (the operator's half-off reading, r/opencode ×3): badged models draw the windows at
-  HALF their billed list-$ — flash's effective window cR ≈ $0.0014/M. Unverified at the limit
-  boundary; the tell = a badged model NOT latching when billed $ predicts it. Detail + the derived qwen3.5-plus rates:
-  [`../spikes/opencode-model-matrix.md`](../spikes/opencode-model-matrix.md).
-  Contrast OpenRouter's models/endpoints/generation APIs + MCP: the Go-rail registry must be a
-  **curated snapshot** (the §M8 gated-data pattern) — docs pricing table + picker multipliers +
-  our own per-model canary matrix — with windows self-metered from per-request usage.
-- **The Zen sibling**: the same key reaches `…/zen/v1` — opencode's pay-per-token GATEWAY (60
-  models incl. `claude-*`; never route claude there — the Anthropic subscription exists) with a
-  **free tier**: `deepseek-v4-flash-free`, `mimo-v2.5-free`, `hy3-free`, `nemotron-3-ultra-free`,
-  `nemotron-3.5-lightning-free`, `laguna-s-2.1-free`, `big-pickle` — a candidate rung-0 on this
-  rail (mostly the same models as the OpenRouter free rung). Tool-compat UNPROVEN (first probes
-  400) — canary before any slot use.
-- **Slot economics (curated 2026-08-13, revised same day post-opt-in + console billing; unit =
-  1M cacheRead + 100k output, the subagent shape):**
-  **deepseek-v4-flash ≈ $0.031 — the pick: cheapest priced tool-caller on every axis, billed at
-  list ×1 (console-verified), tools ✅ post China-opt-in — PROMOTED to haiku slot + subagent
-  default** (the earlier "region-locked, out regardless of math" verdict was the un-toggled
-  workspace gate, matrix §quirks) · qwen3.5-plus ≈ $0.13 (rates DERIVED from console billing —
-  in $0.25/M, cR $0.025/M, out ≈$1/M; the prior slot holder) · mimo-v2.5 ≈ $0.031 on paper but
-  tools 400 on the compat path · qwen3.7-plus ≈ $0.20 · qwen3.8-max ≈ $0.85 · glm-5.2 ≈ $0.70
-  (tool-broken) · kimi-k3 ≈ $1.80 (sparse big calls only) — against $12/5h·$30/wk·$60/mo
-  usage-value windows (measured 2026-08-13: a full day of probing + canaries + two sessions ≈
-  **$0.09**). Next probe: kimi-k2.7-code ($0.19/M cached, 1×) as a mid-tier candidate.
-- **Consequence: the Anthropic⟷OpenAI translator is OPTIONAL, not critical-path** — it only
-  widens the model set beyond the tool-verified trio. What replaces it on the critical path is the
-  maintained **per-model tool-compat matrix** —
-  [`../spikes/opencode-model-matrix.md`](../spikes/opencode-model-matrix.md) (the rail-canary
-  shape): a Go model enters a slot only after its `tool_use` round-trip passes there. First Go-served subagent ran 2026-08-13
-  (~14:45Z, qwen3.5-plus; OTLP-confirmed `query_source=subagent` with zero Anthropic draw).
+### What the probing settled (2026-08-13; the numbers live in the matrix spike)
+
+The per-model rows, prices, quirks and canary verdicts are
+[`../spikes/opencode-model-matrix.md`](../spikes/opencode-model-matrix.md) — the maintained home.
+What stands here is the doctrine the probe produced:
+
+- **Transport.** `…/zen/go/v1/messages` (Anthropic-compat) · `…/v1/chat/completions`
+  (OpenAI-compat) · `…/v1/models`. Bearer auth works; `/v1/messages` additionally demands
+  `x-api-key` (send both). Cloudflare **1010-blocks the python-urllib UA** — a probe artifact
+  that later became load-bearing (the UA the proxy sends is why §`x-opencode-session` above
+  matters at all).
+- **Tool-compat is PER-MODEL, not endpoint-global.** The first bisect read as endpoint-wide and
+  was wrong: some models accept Anthropic-shaped tools and return proper `tool_use`, others 422
+  every function tool. **A Go model enters a slot only after its `tool_use` round-trip passes in
+  the matrix** — which is why the Anthropic⟷OpenAI translator is OPTIONAL rather than
+  critical-path: it widens the model set, the matrix is the gate. Two quirks stay normalized in
+  the jail shim: string-shorthand message content and claude-code's `?beta=true` decorations.
+- **The rail is registry-POOR.** `/v1/models` returns ids only — no pricing, no multipliers, no
+  quota API; the usage multipliers appear only in the vendor client's picker. So the Go-rail
+  registry must be a **curated snapshot** (the §M8 gated-data pattern — docs table + picker
+  multipliers + our own canary matrix) with windows **self-metered from per-request usage**,
+  never discovered. Billing resolved to list ×1 for every model, while badged models draw the
+  WINDOWS at half their billed list-$ — favorable, and unverified at the limit boundary (the
+  tell: a badged model not latching when billed $ predicts it).
+- **Pricing publishes cached-read rates, and that column decides capacity** — the platform's
+  token shape is cacheRead-dominated, so model choice inside Go, not the rail itself, is what
+  fits or busts a weekly window.
+- **The Zen sibling** (`…/zen/v1`, the same key) is opencode's pay-per-token gateway with a free
+  tier — never route `claude-*` there (the Anthropic subscription exists), and canary any free
+  model before a slot: first probes 400'd on tools.
 
 ## Jail tooling (the working prototype — shipped PR#409/#410 + claude-jail)
 
@@ -482,45 +459,29 @@ pointer) · FU-127 (structured `{rail, harness, model}`) · FU-131/#278 (account
 (dispatch throughput) · the banked tier-thesis revision (TICK-LOG 2026-08-13 — review leverage =
 decorrelation + tool-grounding, not tier; feeds class policy when piloted).
 
-## Rollout status (2026-08-13)
+## Rollout status
 
-**2026-08-17 — the platform Go-flash dogfood (operator direction).** Go subscription scope
-narrowed to FLASH-ONLY initially ("see how the monthly cap holds up"; Luna reserved pending the
-#448 translator — its Anthropic-compat surface is broken even for text, matrix row). Worker
-plumbing shipped (PR#458: `opencode-go/*` parser rail, full-id run cmd, `/opencode-limit` gate,
-`rail=opencode-go` labels; rung-1 canary clean same day — tool loop through the proxy Go leg,
-cache-read shape confirmed). The PLATFORM claim flipped to `workerModel:
-opencode-go/deepseek-v4-flash`, fallback `claude/haiku` — deliberately amending the M12
-independence ruling as a TEMPORARY dogfood (platform has the most issue traffic → fastest
-metrics; reverts to haiku once stack chains ride Go flash). Oracle/sleep chains untouched;
-circles folds in at the role-wiring leg. Reviewer failover model = qwen3.5-plus (PR#457 — a
-flash failover would review flash-authored code; decorrelation wins). **Same-day follow-through:**
-the #448 OpenAI-surface translator SHIPPED after all (PR#465, LiteLLM SDK leg in the jail shim —
-luna's Anthropic-compat surface is broken even for text, matrix row; build-order item 1's
-"returns to backlog only if the working set proves too narrow" fired); Go window accounting
-FIXED (PR#481 — epoch-anchored bounds 5h=daily-grid:217m / 7d=Mon:00Z / 30d=day-13:11:30Z,
-window-DRAW pricing; a false 81% weekly latch and a ~30× under-count both traced to rolling
-windows + cache-assuming prices; meter now console-exact after calibration rows); the Go
-**concurrency semaphore** landed (PR#484, FU-170(a), `OPENCODE_MAX_RUNNING=5`); and
-`opencode_subscription_reset_timestamp_seconds` + the two-row parity dashboard shipped
-(PR#483, uid `claude-subscription` → "Agent subscriptions — headroom").
+**LIVE.** Chunks A–H shipped in the 2026-08-14 completion wave (PRs #429–#443, #528), and the
+2026-08-17 operator dogfood narrowed Go's subscription scope to **flash-only** ("see how the
+monthly cap holds up") with the PLATFORM claim on `opencode-go/deepseek-v4-flash` /
+fallback `claude/haiku` — a TEMPORARY amendment of the §M12 independence ruling, since platform
+carries the most issue traffic and therefore produces metrics fastest. The reviewer's failover
+model is deliberately NOT flash (a flash failover would review flash-authored code —
+decorrelation wins). The `#448` OpenAI-surface translator shipped after all (PR#465), as did Go
+window accounting (PR#481), the Go concurrency semaphore (PR#484, FU-170(a)) and the
+subscription-parity dashboard (PR#483).
 
-**Chunks A–D shipped/live** (PR#429/#433/#434/#435/#436); two live-DOA defects in the leg, both
-stub-invisible, both matrix-predicted, both caught only by seat post-merge probes: (1) no
-User-Agent on the Go allowlist → Cloudflare 1010 on every live request; (2) the inbound surface
-path joined verbatim → opencode.ai's SPA 404 served as 200 HTML (and the self-test had pinned
-that join). First organic Go-served review: PR#437 (kimi-k3, input snapshot recorded to the
-transcripts bucket). Weekly latch back at 0.95 with the failover carrying latched weeks. Meter
-scope: cluster-dispatched only until #438 lands (jail self-metering + push per
-[ADR-108](../adr.md)).
+Three lessons the rollout is worth remembering for:
 
-**Part 1's FIRST closeout ran 2026-08-19 (#420 — the stint-ritual pilot; the container stays
-OPEN in its post-originals phase, operator correction same day: #540 is a post-originals BUG
-sprout in the stint's own deliverable, so it binds and holds the parent).** E–H all shipped
-in the 2026-08-14 completion wave (PRs #440–#443; E = time-travel re-review via
-`agents/re-review.sh`, G = the ADR-108 gometer, H = automatic-role failover with coordinators
-staying latched by ruling), #439 leg 2 (#528) merged, and flip-acceptance 1 landed 2026-08-19
-(the list above). Bound at closeout: homelab#540 (the gometer 5h-window anchoring bug — the post-originals
-sprout that keeps #420 open until its final closeout). Outside the container: the post-reset
-sonnet re-reviews (fired at closeout, complete same day), flip-acceptance 2–4, and the
-FU-170/FU-171/FU-172 residues on their own tracker items.
+- **Stub-invisible defects survive every gate below a live probe.** Two live-DOA defects rode the
+  leg — a missing User-Agent on the Go allowlist (Cloudflare 1010 on every real request) and an
+  inbound path joined verbatim (the vendor SPA's 404 served as 200 HTML, with the self-test
+  pinning the bad join). Both were matrix-predicted; both were caught only by seat post-merge
+  probes.
+- **Rolling windows lie about a rail with grid-anchored quotas.** A false 81 % weekly latch and a
+  ~30× under-count both traced to rolling windows plus cache-assuming prices; the meter is
+  console-exact only since the epoch-anchored bounds + window-DRAW pricing of PR#481.
+- **Part 1's first closeout (#420, 2026-08-19) is the stint-ritual pilot** — and the operator's
+  same-day correction is the rule: a post-originals BUG sprout in the stint's own deliverable
+  BINDS and holds the parent open. Residues live on their own tracker items (FU-170/171/172),
+  not here.
