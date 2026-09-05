@@ -14,3 +14,4 @@ PF_SLUG="teststuffstash/test-project"
 # kube.sh resolution: in the replay PATH-shim, kubectl is on $PATH via the stubs.
 KUBECTL="kubectl"
 KUBE=""
+POD="agent-test-project-issue-1175-r1"
