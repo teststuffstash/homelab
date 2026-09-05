@@ -760,3 +760,61 @@ Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the
   this diff emits none. Evidence rather than assertion — the full suite stays green on the
   change with every `expected/actions.txt` untouched.
 - **homelab#1035 (2026-08-30, PR #1078)** — two rationale comments restored inside the `>>>REPLAY:config-defaults>>>` block of `agents/coordinator-scan.sh` (`REPO_MAX_WIP=3` citing ADR-097/TRACKS rule 1; `ISSUE_LIST_LIMIT=200` citing the homelab#840 24-day-invisible-queued-issue finding). Comment-only — no value, predicate, or control-flow changed, so the extracted clause values are byte-identical and no action stream moves. Evidence rather than assertion — `devbox run clause-replay` 298 passed, every `expected/actions.txt` untouched.
+
+## Pin-vacuity routing rule for coverage of unmodified behavior (ADR-103, 2026-09-05)
+
+ADR-103's pin-vacuity gate (homelab#1107) rejects changed fixtures that pass against the
+pre-fix tree. This is the right default — a fixture that passes on base adds no regression
+coverage. But it has no opt-out, so in a clause-changing PR two requirements can be
+simultaneously mandatory and unsatisfiable:
+
+- the review rubric says *restore the regression coverage your PR dropped*, and
+- the gate says *your changed fixtures must red on base*
+
+— and a fixture pinning a branch the PR leaves **unmodified** necessarily passes on base.
+That collision cost homelab#1151 a full round and homelab#1379 a round plus an arbitration.
+
+### The two escapes
+
+When a PR must add coverage for behavior it does **not** modify (e.g. restoring a fixture
+dropped by a prior clause change, or adding coverage for an arm the PR leaves untouched),
+use one of these routes:
+
+**(b) Fold into a fixture that already reds on base** (preferred). If an existing fixture
+whose world already exercises the arm you need fails on base for its own reasons, add your
+assertion there and name why in the fixture header comment. The added assertion is not
+vacuous (the fixture already reds), so the gate is satisfied honestly. No second PR, no
+coverage loss.
+
+- Worked example: homelab#1208 (PR #1208) put governance probe-fail cases inside
+  `agents/replay/fixtures/scan-governance/set-unreadable/`, which fails on base for its own
+  (operator-lane) reasons. The reasoning is written into that fixture's header comment.
+- **Limitation**: (b) requires an existing fixture whose world already exercises the arm you
+  need. The replay harness is one-world-one-arm (`fixture.yaml` → one world, one arm), so if
+  the arm you need has no fixture whose world covers it, (b) does not apply.
+- Counter-example: homelab#1379 (PR #1379) needed coverage for the **no-labels** arm of the
+  context-prefetch clause. The `context-prefetch/` fixture's world carries labels, so the
+  no-labels arm had nowhere to fold. The fixture was dropped from the clause-changing PR and
+  re-landed via escape (a) as homelab#1384.
+
+**(a) Fixture-only follow-up PR** (fallback). Pin-vacuity only runs when clause files ALSO
+changed (`if [ -n "$clause" ] && [ -n "$replay" ]` in the CI workflow), so a fixture-only PR
+is never vacuity-checked. Land the clause-changing PR without the fixture, then open a
+second PR adding only the fixture.
+
+- Costs a second PR and a second round, but is always available.
+- Worked example: homelab#1384 (PR #1384), the fixture-only follow-up to homelab#1379.
+
+### What this rule is not
+
+Escape **(c)** — a `vacuity-exempt: <reason>` key in `fixture.yaml` that the gate honors — is
+a deliberate ruling for the operator, not part of this deliverable. It lives in
+`.github/workflows/ci.yml` (an operator-lane path a worker cannot touch), and it is not
+obviously needed if (b) is documented and (a) is available.
+
+### Who this rule is for
+
+The routing rule is as much for the **coordinator writing a directive** as for the worker and
+the reviewer. The homelab#1379 collision was invisible to the coordinator that wrote the
+round-3 directive — it ordered the unsatisfiable fixture in good faith, citing the ratchet's
+*first* gate (which was already satisfied). The rule here prevents that class of directive.
