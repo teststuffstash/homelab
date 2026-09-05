@@ -3,5 +3,9 @@
 # strike-resumable  = #329 has AGENT_STRIKE: + Resumable branch pushed: → decidable: emits C4/C5
 #                     unit with work-branch; #330 beside it keeps its ordinary v2 + unit
 # no-strike         = #329 has NO AGENT_STRIKE: comment → held as today; #330 keeps its v2 + unit
+# block-class-wins  = the SAME strike-resumable world, with #330's body carrying a machine block
+#                     `Class: build`: the block WINS over the `task/*` label in the C4/C5 class
+#                     derivation (ADR-122 (3), homelab#1460), so its unit re-dispatches as `build`
 strike-resumable | strike-resumable |       |      | strike-resumable
 no-strike        | no-strike        |       |      | no-strike
+block-class-wins | strike-resumable |       |      | block-class-wins

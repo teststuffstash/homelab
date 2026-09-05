@@ -32,3 +32,7 @@ item_class_push() {
   local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}"
   ITEM_CLASS_ROWS="${ITEM_CLASS_ROWS}${repo}|${item}|${class}|${who}|...\n"
 }
+# The ONE body-grammar parser (ADR-122 (3), homelab#1460): the C4/C5 class derivation reads the
+# block through it, so the bridge points IB_PY at the REAL module in the checkout — the same
+# line goal/bridge.sh already carries.
+IB_PY="$REPLAY_ROOT/agents/issue_body.py"

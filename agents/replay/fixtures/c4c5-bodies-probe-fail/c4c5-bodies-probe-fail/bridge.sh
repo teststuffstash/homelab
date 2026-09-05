@@ -18,3 +18,7 @@ infeas_done=""
 item_class_push() {
   printf 'CALL item_class_push %s %s %s %s\n' "$1" "$2" "$3" "$4" >> "$REPLAY_ACTIONS"
 }
+
+# The ONE body-grammar parser (ADR-122 (3), homelab#1460): the C4/C5 class derivation reads the
+# block through it, so the bridge points IB_PY at the REAL module in the checkout.
+IB_PY="$REPLAY_ROOT/agents/issue_body.py"

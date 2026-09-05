@@ -3680,12 +3680,24 @@ EOF_GOVERNANCE
               # and emitting the unit too would race the queued lane onto the same issue. An issue
               # the INFEASIBLE terminal parked is excluded for the opposite reason — it is human-
               # gated, and the whole point of the marker is that this unit must never carry it.
+              # CLASS: the block's `Class` key WINS, the `task/*` label is the transition
+              # fallback — the same precedence the queued lane applies (ADR-122 (3), homelab#1460).
+              # The body is already in hand (`inprog` is listed with `body`), so this costs no
+              # extra `gh` call: it rides out of the same jq row, base64'd like `ib_rows` does.
+              # A body the parser REFUSES holds the issue (rule #6 — a malformed block never
+              # dispatches), exactly as the queued lane's `!` column does.
               for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                   --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                   "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
-                   | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
-                units="${units}c4c5-redispatch|${repo}|issue-${u%%|*}|${u#*|}\n"
-                item_class_push "$repo" "issue-${u%%|*}" "phantom" "machine"
+                   | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))|\(.body // "" | @base64)"'); do
+                u_n="${u%%|*}"; u_rest="${u#*|}"; u_label="${u_rest%%|*}"; u_b64="${u_rest#*|}"
+                if u_class="$(ib_get Class "${repo:-}#${u_n}" "$(ib_body "$u_b64")")"; then
+                  units="${units}c4c5-redispatch|${repo}|issue-${u_n}|${u_class:-$u_label}\n"
+                  item_class_push "$repo" "issue-${u_n}" "phantom" "machine"
+                else
+                  orphans="${orphans}[$repo] ⛔ issue #${u_n} — machine block MALFORMED (issue_body.py exit 2); C4/C5 redispatch HELD (rule #6 — a body the parser refuses never dispatches).\n"
+                  item_class_push "$repo" "issue-${u_n}" "strike-held" "machine"
+                fi
               done
             fi
             # Add resumable (decidable) goal children to dispatchable units — they were excluded
@@ -3696,6 +3708,11 @@ EOF_GOVERNANCE
                   .[] | select(.number == ($n|tonumber))
                   | ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))
                 ')"
+                # Same precedence as the loop above: the block's `Class` wins over the label.
+                ad_body="$(printf '%s' "$inprog" | jq -r --arg n "$ad_n" '
+                  .[] | select(.number == ($n|tonumber)) | (.body // "")')"
+                ad_cv="$(ib_get Class "${repo:-}#${ad_n}" "$ad_body")" || ad_cv=""
+                [ -n "$ad_cv" ] && ad_class="$ad_cv"
                 units="${units}c4c5-redispatch|${repo}|issue-${ad_n}|${ad_class}\n"
                 item_class_push "$repo" "issue-${ad_n}" "phantom" "machine"
                 orphans="${orphans}[$repo] ✓ issue #${ad_n} — AGENT_STRIKE + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
