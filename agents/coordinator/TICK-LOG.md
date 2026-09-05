@@ -7249,3 +7249,43 @@ first live ADR-110 maintenance session before the ADR existed.
 - Alerts seen: `NodeSystemSaturation` 21:11Z → cleared 21:13Z, `NodeDiskIOSaturation` 21:13Z
   (the CI burst + five clones on the pop-os node's siblings — responder lane's). Weekly window
   read 55 % at 21:10Z (operator), reset 22:00Z.
+- **21:28–21:50Z — the second fan-out (operator: "let some subagents do more work", weekly at
+  55 %, reset 22:00Z):** three opus chunks. **F = #1452** on master → **PR#1465** (updater leg 1
+  merge-ready-only: `merge_ready` = APPROVED ∨ bot-approved-at-head, `commits,reviews` on the one
+  picker call, knob `UPDATER_MERGE_READY_ONLY`; the sole-codeowner waiver arm DROPPED — not
+  readable from the picker's snapshot, fails toward not-updated = the #887 park skip; 411/411,
+  the two new no-update rows red on base; rebased once over #1458's FSM edit, BLOCKED+armed).
+  **G = #1420** stacked on 1b → branch `fix/s8-1420-consumer-card-three-acts` PARKED on origin
+  (card 159→58 lines, three acts; scratch #1463/#1464 authored from the card, goal-lint 0 FAIL /
+  3 WARN all scratch artifacts, both closed; finding: `goal-lint` reads the child class off the
+  `task/*` LABEL not the block's `Class` — card says mirror the label until that read retires,
+  closeout-2 item; `sub_issue_id` needs `-F` not `-f`). **H = #1460 legs 1/2/4/5** stacked on
+  1b — see below.
+- **PR#1459 CI RED (operator catch, 21:33Z) = the ADR-103 pin-vacuity gate**, not a clause:
+  chunk A had added a bridge seam line + `requires: python3` to six fixtures whose streams did
+  not move (fu143-fast-path-goal-head, merged-closeout-{default-branch,ilg06-detect},
+  session-belt/{fast-path,fast-path-probe-fail}, unit-fast-path-author) → they PASS on base →
+  vacuous. Root cause: the scan's `IB_PY` default was cwd-relative and run.sh cds into the
+  FIXTURE dir. Fix IN the clause (config-defaults: `IB_PY` = explicit > `$HERE` >
+  `$REPLAY_ROOT/agents` > `agents`), the six fixtures reverted byte-identical to master; full
+  suite 411/411; pushed 92ea364b. Two lessons: (1) a `requires:`/seam-only fixture edit is a
+  fixture CHANGE to the gate — declare `requires: python3` on unmoved-stream fixtures via a
+  fixture-only PR (escape (a)) → #1460 leg 6; (2) **the replay suite flakes under host load**
+  — with three subagents running full suites concurrently, fix-debounce rows lost their stream
+  after the first list read (int-run3), 11/11 alone a minute later; CI runs alone, the seat
+  should not run the ratchet suite beside a fan-out. (3) **Pushing a PR branch races the
+  in-cluster updater** (two non-ff rejects in 10 min): disarm auto-merge → pull → push →
+  re-arm — the updater is armed-only, so the window is closed by construction.
+- **H = #1460 (21:28–21:48Z):** legs 2 + 1 shipped on `fix/s8-1460-parser-residue` (PARKED on
+  origin, stacked on the OLD 1b tip): the `fix-debounce` LEGACY variant (`keep_empty` — `paste`
+  keeps an empty line as an empty field, pinned against the canonical union), c4c5 `Class`
+  precedence with a malformed body HOLDING (strike-held, loud ORPHAN — the chunk's own rule-#6
+  call, not the issue's label-fallback silence); 407/407, self-test 87/87. Legs 4/5 not started.
+  ⚠ It re-added five bridge `IB_PY=` seam lines — the exact edit the pin-vacuity gate rejected
+  on #1459 an hour earlier; drop them at rebase. Two tooling notes from the chunk: `run.sh`
+  takes fixture PATHS not names; a `rows.psv` comment block AFTER the data rows silently glues
+  into the last row's expect field (lint candidate). One more unreproduced fix-debounce flake
+  (`unblocked-queues`, once) — the load-flake class above, now three sightings across two
+  sessions' worth of parallel suites: the family's currency probe is the suspect.
+- **Wind-down 21:5xZ:** bookkeeping pushed; watch already down; jail-transcripts synced.
+  Open bot-waits at exit: PR#1459 (1b), PR#1465 (#1452). Parked: #1420, #1460 branches.
