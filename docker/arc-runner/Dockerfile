@@ -96,6 +96,4 @@ RUN warm-one homelab && rm -rf /tmp/warm
 # between renovate bumps. Rebuild this image when renovate bumps an action pin.
 COPY --chown=runner:runner warm-actions.sh /usr/local/bin/warm-actions
 RUN mkdir -p /home/runner/_actions/_cache && chown -R runner:runner /home/runner/_actions
-USER runner
 RUN warm-actions /home/runner/_actions/_cache
-USER root

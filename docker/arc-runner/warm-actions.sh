@@ -39,47 +39,27 @@ for action in $ACTIONS; do
   # Resolve the ref to a commit SHA via the GitHub API.
   # Lightweight tag → object.sha is the commit SHA directly.
   # Annotated tag → object.sha is the tag object; follow git/tags to the commit.
-  sha=$(python3 -c "
-import json, urllib.request, sys
-
-owner = '$owner'
-repo = '$repo'
-ref = '$ref'
-
-# Try as a tag ref first
-url = f'https://api.github.com/repos/{owner}/{repo}/git/ref/tags/{ref}'
-try:
-    req = urllib.request.Request(url)
-    # GitHub API requires a User-Agent
-    req.add_header('User-Agent', 'arc-runner-warm-actions/1.0')
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        data = json.load(resp)
-        obj = data['object']
-        sha = obj['sha']
-        if obj['type'] == 'tag':
-            # Annotated tag — follow to the underlying commit
-            url2 = f'https://api.github.com/repos/{owner}/{repo}/git/tags/{sha}'
-            req2 = urllib.request.Request(url2)
-            req2.add_header('User-Agent', 'arc-runner-warm-actions/1.0')
-            with urllib.request.urlopen(req2, timeout=15) as resp2:
-                data2 = json.load(resp2)
-                sha = data2['object']['sha']
-        print(sha)
-        sys.exit(0)
-except Exception as e:
-    # Fallback: try as a commit ref (for SHA-pinned references)
-    url = f'https://api.github.com/repos/{owner}/{repo}/commits/{ref}'
-    try:
-        req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'arc-runner-warm-actions/1.0')
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.load(resp)
-            print(data['sha'])
-            sys.exit(0)
-    except Exception as e2:
-        print('', end='')
-        sys.exit(1)
-" 2>/dev/null) || sha=""
+  sha=
+  tag_data=$(curl -sS --fail -H "User-Agent: arc-runner-warm-actions/1.0" \
+    "https://api.github.com/repos/$owner/$repo/git/ref/tags/$ref" 2>/dev/null) || tag_data=
+  if [ -n "$tag_data" ]; then
+    obj_type=$(echo "$tag_data" | jq -r '.object.type' 2>/dev/null)
+    obj_sha=$(echo "$tag_data" | jq -r '.object.sha' 2>/dev/null)
+    if [ "$obj_type" = "tag" ]; then
+      # Annotated tag — follow to the underlying commit
+      sha=$(curl -sS --fail -H "User-Agent: arc-runner-warm-actions/1.0" \
+        "https://api.github.com/repos/$owner/$repo/git/tags/$obj_sha" 2>/dev/null \
+        | jq -r '.object.sha' 2>/dev/null)
+    else
+      sha="$obj_sha"
+    fi
+  fi
+  # Fallback: try as a commit ref (for SHA-pinned references)
+  if [ -z "$sha" ]; then
+    sha=$(curl -sS --fail -H "User-Agent: arc-runner-warm-actions/1.0" \
+      "https://api.github.com/repos/$owner/$repo/commits/$ref" 2>/dev/null \
+      | jq -r '.sha' 2>/dev/null) || sha=""
+  fi
 
   if [ -z "$sha" ]; then
     echo "── could not resolve $owner/$repo@$ref — skipping (will be fetched at runtime)"
@@ -98,6 +78,12 @@ except Exception as e:
   size=$(du -sh "$CACHE_DIR/$owner/$repo/$sha.tar.gz" | cut -f1)
   echo "── cached $owner/$repo/$sha.tar.gz ($size)"
 done
+
+# Fail loudly if nothing was cached — a resolution regression must break the build
+find "$CACHE_DIR" -name '*.tar.gz' | grep -q . || {
+  echo "── FATAL: no action tarballs cached — resolution regression or network failure"
+  exit 1
+}
 
 echo "── action archive cache warmed: $(du -sh "$CACHE_DIR" | cut -f1)"
 echo "── contents:"
