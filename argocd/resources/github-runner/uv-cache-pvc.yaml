@@ -1,0 +1,35 @@
+# Shared uv wheel cache for the trusted CI lane — homelab#1299 (python golden path, ask A).
+# Mounted by every `arc-runners` runner pod at UV_CACHE_DIR=/uv-cache (argocd/platform/arc-runners.yaml).
+#
+# Placement: Longhorn RWX (share-manager), not hostPath. The runner scale set pins to the
+# `homelab.io/ephemeral` kata laptops, whose bulk/scratch partition already SHARES with the
+# container image store and has its own disk-floor wedge class (<25% free → no scratch PVC → no
+# docker:true worker pod anywhere, the PR#1193 imageGC-floor incident) — an unbounded hostPath
+# cache on those nodes re-opens exactly that class. A Longhorn RWX volume is one extra moving
+# part (share-manager) but keeps the cache off the contended local partition and lets every
+# runner pod mount the same volume regardless of which of the two ephemeral nodes it lands on.
+#
+# Sizing: 20Gi requested, storageClassName longhorn (numberOfReplicas: 2 on this cluster) →
+# ~40Gi raw. uv's cache is content-addressed and lock-guarded, so concurrent pods sharing one
+# volume is supported by design (on this RWX/NFS-backed mount uv's normal hardlink install
+# degrades to a copy — still a LAN-local copy, never WAN). Growth signal: none of the existing
+# Longhorn alerts (argocd/resources/longhorn-alerts/prometheusrule.yaml) watch a single PVC's own
+# usage — they watch per-disk/per-node bytes and provisioning, so this volume filling shows up
+# there only indirectly (as disk pressure on whichever node's replicas host it). No PVC-level
+# alert covers this volume today.
+#
+# Constraints (platform facts, from the issue): persist WHEELS, never venvs — a persisted venv on
+# ephemeral pods reimports the staleness class oracle-fleet#314 keyed away. Trusted CI lane ONLY —
+# agent-worker sandboxes must never mount this (a poisoned unpacked wheel would be a cross-ride
+# tampering vector); their speed path is the read-through PyPI proxy instead (homelab#1300).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: arc-uv-cache
+  namespace: arc-runners
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi

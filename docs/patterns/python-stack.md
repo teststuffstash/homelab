@@ -31,12 +31,18 @@ interpreter, always. (Three fixes to learn this: fleet#314 → #315 → #316 fou
 | Runner class | Venv | Wheel cache |
 |---|---|---|
 | **Long-lived** (proxmox VM) | keyed by `sha256(devbox.lock)` — `VENV_SUFFIX`, fleet#314 — with warmup self-heal (fleet#315) | local, persists naturally |
-| **Ephemeral** (ARC `homelab-ephemeral`) | rebuilt EVERY job — **persist wheels, never venvs** (a persisted venv on ephemeral pods reimports exactly the staleness class #314 keyed away) | `UV_CACHE_DIR` on the shared runner cache where it exists (homelab#1299); uv's cache is lock-guarded + content-addressed, concurrent pods are supported |
+| **Ephemeral** (ARC `homelab-ephemeral`) | rebuilt EVERY job — **persist wheels, never venvs** (a persisted venv on ephemeral pods reimports exactly the staleness class #314 keyed away) | `UV_CACHE_DIR=/uv-cache`, a shared Longhorn RWX PVC (`arc-uv-cache`, 20Gi, `argocd/resources/github-runner/uv-cache-pvc.yaml`) mounted by every runner pod (homelab#1299, LIVE); uv's cache is lock-guarded + content-addressed, concurrent pods are supported |
+
+Placement note (#1299): the ephemeral pool's nodes are the same kata laptops whose bulk/scratch
+partition already shares with the image store (the PR#1193 disk-floor class), so the cache PVC is
+Longhorn RWX rather than a hostPath on that partition — one extra moving part (share-manager)
+buys isolation from that contention. On this RWX mount uv's normal hardlink install degrades to a
+copy (still LAN-local, never WAN).
 
 **Isolation rule (MUST):** agent-worker *sandboxes* never share a writable wheel cache — a
 poisoned unpacked wheel is a cross-ride tampering vector. Writable shared cache = trusted CI
-lane only; sandboxes get speed from the read-through PyPI proxy instead (homelab#1300), via
-`UV_DEFAULT_INDEX`, when it exists.
+lane only; the `arc-uv-cache` PVC above is never mounted into a sandbox pod. Sandboxes get speed
+from the read-through PyPI proxy instead (homelab#1300), via `UV_DEFAULT_INDEX`, when it exists.
 
 Why the cache and the proxy are complementary, not redundant: uv's cache stores wheels already
 **unpacked** and installs by hardlink — a hit skips download *and* unpack (~1–3 s). A proxy hit
