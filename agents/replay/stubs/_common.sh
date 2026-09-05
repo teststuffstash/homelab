@@ -18,7 +18,9 @@
 #
 # Per-call failure injection (homelab#740, generalized to any stub tool homelab#1386): STUB_<TOOL>_
 # <slugged-world-key>=fail|empty|body404|garbage overrides the tool's run-global $STUB_<TOOL> for
-# ONE named call, evaluated for BOTH reads and writes. The slug is the same bare-words slug
+# ONE named call. For `gh` it is evaluated for BOTH reads and writes with every mode; for `kubectl`
+# only the WRITE (mutation) branch consults it and only `fail` is implemented (homelab#1386 — extend
+# when a fixture needs a refused READ or another mode). The slug is the same bare-words slug
 # _rp_serve uses (e.g. `STUB_GH_api_repos_foo_issues_1` for `gh api repos/foo/issues/1`, or
 # `STUB_KUBECTL_create` for a `kubectl create ...` write). The prefix is $_RP_TOOL uppercased, so
 # each stub gets its own namespace for free. Run-global $STUB_<TOOL> keeps today's semantics — a

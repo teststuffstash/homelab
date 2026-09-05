@@ -110,8 +110,14 @@ rules:
   # #1205: context-prefetch's agentstack-loop Role now CREATEs a per-pod configmaps — mirrored here
   # so the compose can grant that verb (escalation-check, see header).
   - apiGroups: [""]
-    resources: [configmaps, endpoints, events, persistentvolumeclaims, persistentvolumeclaims/status, services]
+    resources: [configmaps]
     verbs: [get, list, watch, create, patch, delete]
+  # `create` is granted to configmaps ALONE (the split above, codeowner read on #1386): the shared
+  # rule below must not gain a verb none of its kinds has a consumer for — least privilege on the
+  # Composition's own ceiling is the whole point of this file.
+  - apiGroups: [""]
+    resources: [endpoints, events, persistentvolumeclaims, persistentvolumeclaims/status, services]
+    verbs: [get, list, watch, patch, delete]
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get, list, watch]
