@@ -457,7 +457,12 @@ job, in order (re-read live state first, exit clean if someone already closed it
      surface for the fix, as comma-separated path prefixes/globs, STARTING from the parent
      issue's own `Touches:` narrowed to what this follow-up actually needs. Judge it from the
      merged diff + the bullet; when honestly unsure, OMIT the line — omitted means exclusive
-     (safe, just serial), a wrong narrow line risks two workers in one file.
+     (safe, just serial), a wrong narrow line risks two workers in one file. **Classify the
+     footprint before you file it** (`agents/footprint.sh`'s `classify_touches()`, the same
+     predicate `scripts/goal-lint.sh` runs over a Goal tree): a `codeowner-author` verdict (the
+     ❌ set) or a hit on `scripts/pin-only-lint.sh`'s `GUARDED` set means no worker can ever land
+     this follow-up as a PR — say so in the body as a plain sentence naming the classifier
+     (never a new body line) rather than leaving it for the scan log alone (homelab#1207).
    - **A dependency** only if the bullet states one — create the native edge (FU-111:
      `gh api -X POST repos/<slug>/issues/<harvested-N>/dependencies/blocked_by
      -F issue_id=<the BLOCKER's numeric .id>`). No `Depends-on:` body line — the reader retired
