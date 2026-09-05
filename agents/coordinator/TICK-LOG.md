@@ -7089,3 +7089,29 @@ first live ADR-110 maintenance session before the ADR existed.
   `ride-latency-breakdown.md` §Second specimen + FU-216 (memory-backed /tmp) + FU-217 (tool
   timeout). Inventory fix: wk-metal-03 cpu_cores 2→4 (logical). Operator: oracle's own ci/e2e
   optimisation comes first; the FUs are the slow-day pickup.
+
+## 2026-09-05 ~15:45–17:30Z — S8 second sitting: originals 2/3/5 landed, 6 dispatched as 6a/6b, the CI-starvation + Garage reads (design-agents corpus session, operator-attended)
+
+- **`/design-agents lets continue S8`.** Grounding: full agents corpus + ADR-122/125/126 + the work
+  map + stint #1418; live board/PR/Prometheus reads. Latch had cleared by 15:47Z (PR#1425 merged
+  as the corpus loaded). Codeowner reads: PR#1436 (1a) APPROVED with one 1b input (parse error
+  exit 2 → `gb_budget_line`'s `|| true` fails the money gate OPEN; `GB_REF` unset); PR#1446 (6a)
+  APPROVED; PR#1396 approved + #1417 closed (releases PR#1409); PR#1435 closed as a conflict,
+  #1413 re-queued. Round drives: #1434 r2 footprint escape → Touches widened + CR dismissed;
+  #1437 r3 (sonnet) fail-closed `gopen_n_ckpt`; #1436 r2 (seat) per-child meter ref; #1446
+  pin-vacuity → `dirty-skips` dropped per escape (a). Landed: #1421, #1419, #1432.
+- **Original 6 split 6a/6b (opus ×2).** Design pins recorded on #1422: BEHIND first-review
+  admission (approvals survive update-branch — PR#1386 ×4) and the #829 aging derivation
+  (dispatch markers newer than the queued-at event, N=3, straight to front, fail-closed on probe).
+  6a's author caught the seat's prompt premise (the named fixture pinned the LAUNCHER gate, not
+  the reflex) and a latent decorrelate leak — ledger rows written at the verdict.
+- **Operator questions → measurements.** ERT parse 9 h = 248k PUTs × 220 ms, gated by
+  wk-metal-04's 185 ms/write disk through the rf=2 data volume; the meta pin is worth ~15–25 %;
+  ADR-114 is the fix; app-side #466/#467 filed by the operator. Disk subagent: degraded SATA link
+  (3.0 Gb/s, CRC 1,867) on a healthy Kingston SA400 → cable swap. CI: one ARC set, 3 slots
+  (FU-218), homelab ≥300 runs/day starving oracle; operator ruled a GitHub merge queue on homelab
+  "correct but unfair" → **#1452** (updater updates only merge-ready PRs, fair to every stack).
+  #1441 governance/pin-only two-dot diff fixed DIRECT (base.sha).
+- Seat miss: a zsh word-split bug cancelled six live CI runs (re-run within a minute).
+- Wind-down: PR#1436/#1446/#1449 open (see meta-state); ONE push of the batched bookkeeping.
+
