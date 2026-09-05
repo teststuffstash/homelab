@@ -231,14 +231,19 @@ transitions:
 
   - id: IL-T05
     name: queued-dispatch
-    owner: scan (schedules ONE unit) → coordinator item session (judges) → launcher (opens the ride)
+    owner: scan (schedules ONE unit PER LANE) → coordinator item session (judges) → launcher (opens the ride)
     when: "agent/queued ∧ ¬direction-change ∧ ¬agent/error ∧ nothing held (ADR-122 (2), S8 #1432 — agent-fix dropped off the JOIN)"
     status: guarded
-    unreplayed: "scan priority + pod-name key (kubectl-create semantics) — backfill by fix-density"
-    unreplayed: "scan priority + pod-name key (kubectl-create semantics) — backfill by fix-density"
+    replay:
+      - agents/replay/fixtures/scan-lane-walk   # THE TABLE (ADR-125 (3), homelab#829): two-lanes = two dispatches in one pass; aged/not-yet = the within-lane aging predicate either side of N; probe-unreadable = an unreadable probe never escalates
+    unreplayed: "launcher pod-name key (kubectl-create semantics) — backfill by fix-density"
     guards:
-      - desc: "the queued-dispatch unit rides the priority list (in-flight recovery first)"
+      - desc: "the queued-dispatch unit rides the priority list, PER LANE (repo, base) — in-flight recovery first WITHIN a lane, never across (ADR-125)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'queued-dispatch\|' }
+      - desc: "the lane is (repo, base): the walk groups units by it and dispatches at most one per lane per pass"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "unit_lane_keys" }
+      - desc: "within-lane aging (#829) — a new-work unit that lost SCAN_AGING_N lane dispatches goes to the front, derived from GitHub state, never held in-process"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "SCAN_AGING_N" }
       - desc: "launcher dispatch idempotency — the pod name IS the (task, round) key"
         anchor: { file: agents/agent-session.sh, pattern: "the key IS the pod name" }
       - desc: "a task/goal issue routes to goal-decompose, NEVER to a worker recipe"

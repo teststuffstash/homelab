@@ -1,0 +1,10 @@
+OUT   lane homelab@master: 1 units, walk → changes-requested|pr-500
+OUT → dispatching item unit for test-stack: homelab pr-500 (changes-requested, model sonnet, wip 1)…
+OUT   [MOCK] coordinator-session.sh spawned → exit 0
+OUT   lane homelab@goal/x: 1 units, walk → queued-dispatch|issue-600
+OUT   [MOCK] subscription-latch (tier=dispatch) → clear
+OUT → dispatching item unit for test-stack: homelab issue-600 (queued-dispatch, class fix, child of goal #590, model sonnet, wip 1)…
+OUT   [MOCK] coordinator-session.sh spawned → exit 0
+OUT TEST RESULT: dispatch_succeeded=1, tried_units=''
+OUT REACHED: end
+RC 0

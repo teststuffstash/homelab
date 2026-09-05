@@ -1,3 +1,3 @@
-CALL item_class_push homelab issue-101 queued-held machine
+CALL item_class_push homelab issue-101 queued-held machine master
 OUT RESULT classification=queued-held
 RC 0
