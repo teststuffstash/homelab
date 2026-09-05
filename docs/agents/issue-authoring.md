@@ -181,7 +181,8 @@ The label's one meaning, ratified after four readers had drifted to four
 (the opt-in table / "adoption ends triage" / the responder's diagnosis / ¬agent-fix as the
 jail-lane marker — no doc owned it): **`agent-fix` = "machine-doable; the loop MAY be given
 this."** One bit. It says nothing about *when*, nothing about *whose*, and applying it promises
-nothing. `agent/queued` is the only release valve; dispatch requires both (unchanged).
+nothing. `agent/queued` is the only release valve and the only dispatch precondition (ADR-122
+(2), S8 #1432); `agent-fix` is never re-tested at dispatch.
 Consequences of reading it any other way, now retired:
 
 - `agent-fix` without an `agent/*` state is **ordinary backlog** — a normal, legal, possibly

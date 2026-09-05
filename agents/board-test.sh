@@ -109,11 +109,11 @@ absent "disjoint: a bot issue with agent-fix is BACKLOG, not TRIAGE"      "circl
 absent "triage: post-launch buckets are containers, not work"             "circles#112" "$SEC_TRIAGE"
 absent "triage: stint: parents are containers, not strays (2026-08-19)"   "circles#115" "$SEC_TRIAGE"
 absent "triage: a zero-label issue younger than a day waits"              "circles#106" "$SEC_TRIAGE"
-# Half-labeled (2026-08-19, oracle-fleet#260): queued WITHOUT agent-fix is invisible to every
-# dispatch clause and every other board section — TRIAGE surfaces it with a ⚠ repair line.
-present "triage: agent/queued WITHOUT agent-fix surfaces as ⚠ half-labeled" "⚠ circles#114" "$SEC_TRIAGE"
-absent "triage: a properly-paired queued issue draws no half-labeled ⚠"    "⚠ circles#110" "$SEC_TRIAGE"
-absent "backlog: half-labeled is not suitable-unqueued (no agent-fix)"     "circles#114" "$SEC_BACKLOG"
+# `agent/queued` WITHOUT `agent-fix` retired as an anti-pattern (ADR-122 (2), S8 #1432): it is a
+# legal, dispatchable state now — no board line anywhere, same as an ordinary paired queued issue.
+absent "triage: agent/queued WITHOUT agent-fix draws no line (legal state, ADR-122 (2), #1432)" "circles#114" "$SEC_TRIAGE"
+absent "triage: a properly-paired queued issue draws no line either"      "circles#110" "$SEC_TRIAGE"
+absent "backlog: agent/queued-without-agent-fix is not suitable-unqueued (no agent-fix)" "circles#114" "$SEC_BACKLOG"
 # Within SOLVE, a blocked issue already flagged agent/error shows ⛔ only (FU-069), never ⏸ too.
 absent "solve: agent/error overrides agent/blocked (no double line)"      "⏸ circles#103" "$SEC_SOLVE"
 # ── the FIX row (2026-08-19): seat-authored changes-requested PRs are the seat's own queue ───

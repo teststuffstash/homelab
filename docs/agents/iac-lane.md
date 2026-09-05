@@ -126,8 +126,8 @@ filing uncorrelated ISSUES; this is about DISPATCHING them uncorrelated. Same ro
 a cron's latency is random within its window, a bell's is exactly the debounce. The verdict/queue
 split is the load-bearing move: `agent-fix` became a *diagnosis* (the triage session ends its issue
 with `fix-verdict: fix|report-only`; the responder shell applies the label — inert, because the
-scan dispatches only on `agent-fix ∧ agent/queued`) and `agent/queued` is granted ONLY by the
-set-judged debouncer:
+scan's dispatch precondition is `agent/queued` alone (ADR-122 (2), S8 #1432)) and `agent/queued`
+is granted ONLY by the set-judged debouncer:
 
 - **Edge**: the responder rings `POST /fix-verdict` after labelling → Sensor submits a
   `fix-debounce` workflow (`agents/coordinator/fix-debounce-argo.yaml`).

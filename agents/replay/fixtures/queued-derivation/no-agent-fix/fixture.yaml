@@ -1,0 +1,20 @@
+# homelab#1432 (ADR-122 (2), S8 original 3) — `agent/queued` alone is the one release valve;
+# `agent-fix` drops out of the scan's `queued` derivation JOIN.
+#
+# CONDITION UNDER REPLAY. `openall` carries one open issue labelled ONLY `agent/queued` (no
+# `agent-fix`) — the exact state board.sh's now-retired "half-labeled" anti-pattern line used to
+# flag, and the pre-#1432 JOIN (`agent-fix ∧ agent/queued ∧ ¬direction-change ∧ ¬agent/error`)
+# would have excluded from `queued` entirely, leaving it undispatchable.
+#
+# THE CONTRACT:
+#   1. The `queued` array derived from `openall` contains exactly one entry.
+#   2. That entry is issue #501 — the agent/queued-only issue — appearing in the dispatch stream
+#      exactly as an agent-fix+agent/queued issue would.
+#
+name: queued-derivation-no-agent-fix
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:queued-derivation
+  - file:post.sh
