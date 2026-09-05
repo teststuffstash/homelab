@@ -44,13 +44,10 @@ breaker #1 for that stack.
   (operator, 2026-08-05). The test blocks THE LOOP from authorising its own goal, which is the
   risk worth blocking.
 
-⚠ **The ALERT lane crossed this line differently** (superseded 2026-08-07 — the 2026-08-04
-shell-selfQueue was replaced by the verdict/queue split): the responder's shell applies only
-`agent-fix` (inert diagnosis); `agent/queued` is granted by the set-judged **fix-debounce**
-(deterministic gates + a set-pass at ≥2 pending; pending set excludes every human-waiting label
-since PR#243/#244). Mechanism: [iac-lane.md](iac-lane.md) §"one root cause, N alert issues". So
-"bot-authored ⇒ inert" holds for the surfaces below; the alert lane queues through the debounce,
-never the session.
+⚠ So **"bot-authored ⇒ inert" holds for every surface below**, and the alert lane's exception is
+the debounce, never the session: the responder's shell applies `agent-fix` only, and the
+set-judged fix-debounce grants `agent/queued` (deterministic gates + a set-pass at ≥2 pending,
+the pending set excluding every human-waiting label since PR#243/#244).
 
 ## Gate the merge, not the launch — operator ruling, 2026-08-05
 
@@ -265,12 +262,9 @@ Existing containment carries over unchanged (lane WIP, capacity gates, pod-name 
 ### Keeping the goal in view — the forest/trees rule (operator, 2026-08-05)
 
 The failure this must not have: *decompose once, then wake only for sub-issues, and the goal is
-forgotten.* Until 2026-08-05 that was **guaranteed** rather than likely: the harvest had been
-**writing** sub-issue links (`POST …/sub_issues`) since 2026-08-02 and **neither
-`coordinator-scan.sh` nor `agent-session.sh` read them back** — the lineage was write-only,
-rendering in the GitHub UI and consumed by nothing. Rung 1 shipped the write, not the read. All
-three legs below are now built; keep them that way, because each one silently degrades to the old
-behaviour if its read is removed:
+forgotten* — which was **guaranteed** while the lineage was write-only (links posted since
+2026-08-02, read back by nothing). All three legs below are built; keep them that way, because
+each silently degrades to the old behaviour if its READ is removed:
 
 1. **The coordinator holds the goal, on every child unit.** The scan carries the parent id in the
    unit (a 5th field — FU-114 L3 widened it to 4 for the task class, same move). Any child's unit
@@ -301,52 +295,43 @@ gets designed from observed behaviour rather than guessed at.
 
 ### As built
 
+The mechanism is one row per leg; the anchors are the files, and the FSM/scan clauses are the
+current truth if this table and the code ever disagree:
+
 | leg | where |
 |---|---|
 | `goal-decompose` trigger | `coordinator-scan.sh` — emitted instead of `queued-dispatch`, before recipe selection |
 | both plays | `agents/coordinator/README.md` §`goal-decompose`, §`goal-review` |
 | `task/goal` label | the claim taxonomy (Composition). ⚠ GitHub caps label descriptions at **100 chars** and `IssueLabels` is authoritative — one over-long description freezes the taxonomy for every claim-owned repo |
-| bounded goal context | `agent-session.sh` reads the goal, injects **Goal + Acceptance only** |
-| which ancestor IS the goal | `goal_resolve_ancestor` in `agents/goal-budget.sh` — ONE walk, both callers (launcher pre-flight + scan harvest), bound 6, stopping at a `task/goal` label **or** a machine-readable `Budget:` line. Added by homelab#367, which found the launcher reading one hop: a post-launch sprout resolved to its ADR-102 bucket, so the gate below read `no-budget` (off) while the goal sat `exhausted`, and the card came from an issue with no Goal/Acceptance in it |
-| parent on child units | `coordinator-scan.sh` 5th unit field → `parent=<n>` in the item brief |
+| which ancestor IS the goal | `goal_resolve_ancestor` in `agents/goal-budget.sh` — ONE walk, both callers, bound 6, stopping at a `task/goal` label **or** a machine-readable `Budget:` line (homelab#367, pinned by the `goal-ancestor-*` replay family) |
+| bounded goal context · parent on child units | `agent-session.sh` injects **Goal + Acceptance only**; the scan's 5th unit field carries `parent=<n>` |
 | Σ(child caps) ≤ `Budget:` | `agent-session.sh` pre-flight, over open AND closed children, summing `cap_usd` (what the key ALLOWS, not what it forecasts) |
 | `goal-review` | `coordinator-scan.sh`, stateless: a child closed after the loop's newest comment on the goal |
 
-Two traps found while building, both of the fail-open kind: `gh issue list` has **no `--argjson`**
-(a jq flag) — behind a `|| echo '[]'` that made the budget gate pass everything; and `[ a \> b ]`
-is a bashism that can invert the goal-review predicate under another shell. Both are now
-sort-based / piped-to-real-jq, and a zero-children result says so aloud instead of failing open.
+Two build-time traps, both of the fail-open kind, and both now fixed: `gh issue list` has **no
+`--argjson`** (a jq flag) — behind a `|| echo '[]'` it made the budget gate pass everything; and
+`[ a \> b ]` is a bashism that can invert the goal-review predicate under another shell. A
+zero-children result now says so aloud instead of failing open.
 
 ## The sprout index — the accounting substrate leg (c) was missing
 
-Operator synthesis 2026-07-31, from the sleep harvest run. This is arguably the "real goal
-candidate" leg (c) was waiting for.
+Operator synthesis 2026-07-31, from the sleep harvest run. **The insight:** the harvest tree
+already *is* an unbudgeted goal decomposition; what goal-budget lacked was a **sprout index** —
+the lineage DAG (issue → PR → harvested child) carrying **depth and breadth**. Two runs measured
+the gap, and the signals they name are what the rungs below encode:
 
-**The insight:** the harvest tree already *is* an unbudgeted goal decomposition. What goal-budget
-lacked was a **sprout index** — the lineage DAG (issue → PR → harvested child) carrying **depth and
-breadth**.
-
-The 2026-07-31 run showed the gap live, in both directions at once:
-
-- With no depth-awareness the reviewer **harvests indiscriminately** — 3 of 5 sprouts were
-  self-acknowledged noise (#93/#101/#102, closed).
-- And it **defers a same-class-as-the-fix defect it should have completed in-PR** — #96, the 14th
-  band column the #57 COALESCE fix missed.
-
-Both failures are the same missing signal.
-
-The 2026-08-08 oracle goal run added the goal-lane cost of the same gap: with harvests
-auto-queued (`Base: goal/**` exception), a style-only reviewer comment became sprout #211 at
-depth 3 (#177→#185→#208→#211), and **each cosmetic sprout merge moved the goal branch head and
-DISMISSED the assembly PR's approval — three times** — so the churn was gating the goal's own
-terminus. Meanwhile two real crash bugs (#193/#194) sat queued behind six cosmetics until the
-operator's survey flagged them for a hand-pin. The depth-aware gate needs BOTH signals: depth
-(≥2 = don't auto-queue) and the reviewer's own severity language (a comment the reviewer calls
-style-only must not become queued work unasked). And the assembly merge left a THIRD residue:
-auto-merge deleted the goal branch, so every still-queued sprout's inherited `Base: goal/**`
-line pointed at a dead ref — seven bodies hand-stripped to the master default before the pinned
-crash-bug rides struck on a failed fork. The assembly closeout should retarget (or drop) the
-surviving sprouts' `Base:` lines as part of closing the goal.
+- **2026-07-31 (sleep):** with no depth-awareness the reviewer harvests indiscriminately (3 of 5
+  sprouts were self-acknowledged noise) AND defers a same-class-as-the-fix defect it should have
+  completed in-PR. Both failures are the same missing signal.
+- **2026-08-08 (the oracle goal run):** with harvests auto-queued under the `Base: goal/**`
+  exception, a style-only reviewer comment became a depth-3 sprout, and **each cosmetic sprout
+  merge moved the goal branch head and DISMISSED the assembly PR's approval** — three times — so
+  the churn gated the goal's own terminus while two real crash bugs sat queued behind six
+  cosmetics. The gate therefore needs BOTH signals: **depth** (≥2 = don't auto-queue) and the
+  **reviewer's own severity language** (a comment the reviewer calls style-only must not become
+  queued work unasked). The same merge left a third residue — auto-merge deleted the goal branch,
+  so every still-queued sprout's inherited `Base: goal/**` pointed at a dead ref: **the assembly
+  closeout retargets or drops surviving sprouts' `Base:` lines as part of closing the goal.**
 
 ### The rungs
 
@@ -374,15 +359,11 @@ surviving sprouts' `Base:` lines as part of closing the goal.
 
 ### Down-payment shipped 2026-07-31
 
-Prompt-only, no index yet — proving the #96/#92 mis-sorts are fixable from the diff alone:
-`agents/reviewer-session.sh` gained a **complete-the-fix** narrow-blocking case and a **HARVEST
-BAR** (inert / not-a-gap / won't-fix / style stay comments, never `Follow-ups:`).
-
-**The structured sub-issue lineage SHIPPED 2026-08-02** (rung 1): the merged-closeout play
-links each harvested issue as a native sub-issue of the ORIGINATING issue (PR provenance stays
-in the body; failed link non-fatal + noted) with a ⚠ deep-sprout flag at depth ≥2 — API
-round-tripped live before adoption. **Next rungs:** the exporter sprout-RATE gauge (walk
-`parent`/sub_issues on the existing GraphQL walk) + the depth-aware harvest gate reading it.
+Prompt-only, no index yet: `agents/reviewer-session.sh` gained a **complete-the-fix** narrow
+blocking case and a **HARVEST BAR** (inert / not-a-gap / won't-fix / style stay comments, never
+`Follow-ups:`). Rung 1 — the structured native sub-issue lineage — **shipped 2026-08-02** in the
+merged-closeout play (PR provenance stays in the body; a failed link is non-fatal and noted).
+**Next rungs:** the exporter sprout-RATE gauge and the depth-aware harvest gate reading it.
 
 ## The machine block (ADR-122 (3), 2026-09-05)
 
@@ -474,11 +455,9 @@ ruling: **feature → goal is fine to automate; goal → master stays human.**
 
 ⚠ **The protection is a PRECONDITION, not a nicety.** GitHub's auto-merge waits on
 branch-protection conditions; with none, arming a PR merges it **on open** — no CI, no review.
-Verified before the flip: circles' three rulesets all targeted `~DEFAULT_BRANCH` only, so the
-stacked base had no rules at all. `tofu/github/repo_rulesets.tf` now includes
-`refs/heads/goal/**` in both `required-checks` and `required-approval`, so a child PR waits for
-`ci` + one approving review exactly as a master PR does. **Applied and verified 2026-08-05**:
-`GET /repos/…/rules/branches/goal%2F17-p0-mvp` returns `pull_request` + `required_status_checks`.
+`tofu/github/repo_rulesets.tf` includes `refs/heads/goal/**` in both `required-checks` and
+`required-approval`, so a child PR waits for `ci` + one approving review exactly as a master PR
+does (applied and verified 2026-08-05 against the live rules endpoint).
 
 **Arming is keyed on the `goal/` PREFIX, not on "is this master".** Both the launcher
 (`agent-session.sh`) and the re-arm belt (`review-reflex.sh` C9) arm a PR whose base is the repo
@@ -486,19 +465,15 @@ default **or** matches `goal/*`; every other non-default base still refuses. Tha
 should not be relaxed to "any stacked base": the prefix is the only thing that carries the ruleset,
 so widening the match without widening the protection re-creates merge-on-open.
 
-⚠ **Renaming a base branch closes the PR whose HEAD it is.** Learned the hard way migrating
-`research/issue-1-weave` → `goal/17-p0-mvp`: GitHub retargets PRs where the branch is the BASE
-(#21, #24 moved cleanly) but CLOSES the one where it is the HEAD — circles#16, the weave PR itself,
-reopened as #25 with identical content. `Base:` body lines are text and do not follow a rename
-either; they need editing (#17/#18/#19/#22/#23).
+⚠ **Renaming a base branch closes the PR whose HEAD it is** (learned migrating
+`research/issue-1-weave` → `goal/17-p0-mvp`, circles#16 → #25): GitHub retargets PRs where the
+branch is the BASE but CLOSES the one where it is the HEAD, and `Base:` body lines are text that
+does not follow a rename either — they need editing.
 
 Who writes the line: the issue author, at authoring time, like every other body line — and since
 authored issues are inert until a human labels them (breaker #1 above), a wrong `Base:` is caught
-in the same read that adopts the issue.
-
-Why a body line and not a label: the value is DATA (which branch), and labels cannot carry it —
-the same argument as `Touches:`. First use: circles#17/#18/#19 against the woven spec tree in
-circles#16.
+in the same read that adopts the issue. Why a body line and not a label: the value is DATA (which
+branch), and labels cannot carry it — the same argument as `Touches:`.
 
 ### ⚠ A child cannot close itself — FU-143
 
@@ -584,15 +559,11 @@ armed PR permanently BLOCKED on a check that could never report.
 
 ## Dependencies: native `blockedBy` is the only reader (FU-111 — retired the body line 2026-08-07)
 
-Authoring a dependency = **create the native edge** (verified live: create, cross-repo, list-ride
-all work — `gh api -X POST repos/<owner>/<repo>/issues/<n>/dependencies/blocked_by -F
-issue_id=<the BLOCKER's numeric id>`). **The `Depends-on:` body-line reader is RETIRED
-(2026-08-07)** — the migration completed once native edges were observed flowing under the App
-token in real scans (circles #30→#31→#32: App-authored edges, full blocked→unblocked→closed
-lifecycle in dependency order; the FU-108 probe-that-looks bar). The one open body-line holdout,
-oracle-fleet#84, was migrated to a native edge before the reader was removed. Only the native
-edge gates now; a body line is inert prose. Cycle detection also reads native `blockedBy`
-(the dep's nodes pointing back), no longer the dep's body.
+Authoring a dependency = **create the native edge** — `gh api -X POST
+repos/<owner>/<repo>/issues/<n>/dependencies/blocked_by -F issue_id=<the BLOCKER's numeric id>`
+(create, cross-repo and list-ride all verified live). **The `Depends-on:` body-line reader is
+RETIRED (2026-08-07):** only the native edge gates, a body line is inert prose, and cycle
+detection reads native `blockedBy` too.
 
 **Authoring a sequenced issue — the two lines that must both be true** (homelab#226, after the
 2026-08-09 miss below):
@@ -611,19 +582,18 @@ by `agents/replay/fixtures/depends-on-retired-format` and `…/unblocked-unlabel
 | ⚠ **RETIRED FORMAT** | any open issue whose body carries a line-anchored `Depends-on:` (bulleted form included) | the line gates nothing — re-author it as a native edge, then delete it |
 | 🔓 **UNBLOCKED-UNLABELED** | an issue >24h old, no `agent*` label, ≥1 blocked-by edge, **all** of them closed | the gate you were waiting on is gone and nobody has triaged this |
 
-**The miss they were built from, 2026-08-09.** oracle-fleet#225 + oracle-iac#322 (the delta-job
-deployment) were filed on 2026-08-08 deliberately unlabelled, sequenced behind oracle-fleet#215 —
-with a `Depends-on:` body line written the day *after* FU-111 retired its reader. #215 closed at
-04:23Z; nothing fired for 12h, until the operator asked. Two failures, one of each kind: a
-dependency written in a dead format (so it could never fire on blocker close), and a resolved gate
-that no clause was watching (the needs-meta `unlabeled >24h` clause covers PLATFORM repos only, and
-the 🌱 slice reports a stack issue identically before and after its blockers close).
+**The miss they were built from (2026-08-09, oracle-fleet#225 + oracle-iac#322):** a chain filed
+unlabelled behind oracle-fleet#215 with a `Depends-on:` body line written the day *after* its
+reader was retired. The blocker closed and nothing fired for 12 h. Two failures, one of each
+kind — a dependency in a dead format (it could never fire on blocker close) and a resolved gate
+no clause was watching.
 
-🔓 is **report-only**, and that is not a gap to close later: the FU-090 human gate is the point.
-What was missing is visibility of a resolved gate, never permission to walk through it. It is also
-**not author-filtered** — the 🌱 slice is bot-only, which is exactly why a jail-authored chain was
-invisible to it, and an author allowlist would re-narrow the same way one ring out. The blocked-by
-requirement is what keeps it quiet instead: an issue that never had a blocker never appears.
+🔓 is **report-only**, and that is not a gap to close later: the FU-090 human gate is the point —
+what was missing is visibility of a resolved gate, never permission to walk through it. It is also
+**not author-filtered**, deliberately: the 🌱 slice is bot-only, which is exactly why a
+jail-authored chain was invisible to it, and an author allowlist would re-narrow the same way one
+ring out. The blocked-by requirement is what keeps it quiet instead — an issue that never had a
+blocker never appears.
 
 ## Why sub-issues here and not elsewhere
 

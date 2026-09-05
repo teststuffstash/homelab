@@ -130,12 +130,11 @@ gb_budget_line() {
 # force to the question it is asked about: two components disagreeing on WHICH issue is the goal is
 # the same defect class as two components summing it differently, reached one indirection earlier.
 #
-# STOP CONDITION: a `task/goal` label OR a machine-readable `Budget:` line — the two discriminators
-# docs/agents/issue-authoring.md names ("labels route, body lines parameterise"), read in ONE
-# `gh issue view --json labels,body` per hop. EITHER alone stops the walk, on purpose: the label is
-# what the goal lane routes on, the `Budget:` line is what the gate spends against, and an ancestor
-# carrying one without the other is a mis-authored goal that must still be FOUND — walking past a
-# funded issue is precisely how money goes unwatched.
+# STOP CONDITION: `task/goal` label stops unconditionally — the goal lane routes on it.
+# A machine-readable `Budget:` line stops the walk ONLY when the issue has NO native parent
+# to climb past (homelab#367's funded-but-unlabelled goal case preserved). An ordinary work
+# item with its own per-issue `Budget:` line AND a native parent must NOT be mistaken for a
+# goal — the walk climbs past it to the real goal ancestor (homelab#1392).
 #
 # THE BOUND IS 6, measured rather than guessed, and it travels with the walk instead of being
 # re-argued at each caller: the reviewer's depth-≥2 bar suggested 4, until #207's dry-run walked the
@@ -155,9 +154,14 @@ goal_resolve_ancestor() {   # <slug> <issue> [max-hops]
     _gr_view="$(gh issue view "$_gr_cur" --repo "$_gr_slug" --json labels,body 2>/dev/null || true)"
     _gr_lbl="$(printf '%s' "$_gr_view" | jq -r '[.labels[].name]|index("task/goal")!=null' 2>/dev/null || echo false)"
     _gr_bud="$(printf '%s' "$_gr_view" | jq -r '.body // ""' 2>/dev/null | gb_budget_line)"
-    if [ "$_gr_lbl" = "true" ] || [ -n "$_gr_bud" ]; then GB_GOAL="$_gr_cur"; return 0; fi
+    # `task/goal` label stops unconditionally (homelab#367).
+    if [ "$_gr_lbl" = "true" ]; then GB_GOAL="$_gr_cur"; return 0; fi
+    # `Budget:` line stops only when the issue has NO native parent to climb past
+    # (homelab#367's funded-but-unlabelled goal preserved; homelab#1392: an ordinary
+    # work item with its own `Budget:` line must not be mistaken for a goal).
     _gr_par="$(gh api "repos/${_gr_slug}/issues/${_gr_cur}/parent" 2>/dev/null \
                 | jq -r '.number // ""' 2>/dev/null || true)"
+    if [ -n "$_gr_bud" ] && [ -z "$_gr_par" ]; then GB_GOAL="$_gr_cur"; return 0; fi
     case "$_gr_par" in ''|*[!0-9]*) return 0 ;; esac
     _gr_cur="$_gr_par"; GB_HOPS=$((GB_HOPS + 1))
   done

@@ -33,16 +33,13 @@ is [`../../.github/renovate-global.json`](../../.github/renovate-global.json).
 > E2E on oracle-fleet#37, merged). The `CronJob`/polling framing throughout the rest of this doc is the
 > original design; the mechanics below now read as: **edge-trigger primary, `*/15` backstop.**
 
-> **Update (2026-08-21, ADR-111 — the updater moves IN-CLUSTER; build = [stint](chainless-redesign.md) S7, homelab#741;
-> CUTOVER EXECUTED 2026-08-26, homelab#745):** the reusable workflow + per-repo callers (and their
-> GitHub cron) are RETIRED in favor of the ADR-093 shape the review path already uses — an exporter
-> edge (`maybe_dispatch_behind`) + a `*/15` Argo CronWorkflow backstop running a platform-owned
-> script (`agents/update-pr-branch.sh`), same `homelab-merge` App identity via ESO. Why (measured):
-> 91–96% of updater runs were the GitHub cron backstop, ~4,800 hosted min/mo at the 1-min billing
-> floor (#698), and the hosted-independence rationale below was per-leg only — CI and review are
-> cluster-resident anyway. The `MERGE_GH_APP_*` org Actions secrets retired with it. Where the
-> prose below still describes the adRise action / reusable workflow, read it as the design-era
-> narrative; the FSM (MP-T02) carries the current anchors.
+> **Update (ADR-111 — the updater is IN-CLUSTER; build = [stint](chainless-redesign.md) S7,
+> homelab#741; CUTOVER EXECUTED 2026-08-26, homelab#745):** the reusable workflow, its per-repo
+> callers and their GitHub cron are RETIRED for the ADR-093 shape the review path already uses,
+> and the `MERGE_GH_APP_*` org Actions secrets went with them. The evidence (91–96 % of updater
+> runs were the GitHub cron backstop; ~4,800 hosted min/mo at the 1-min billing floor, #698) is
+> in ADR-111; the current anchors are the FSM's **MP-T02** (update) and **MP-T06** (conflict).
+> Where prose below still says *action* or *reusable workflow*, read it as design-era narrative.
 
 > **The machine itself is MODELED, not just described:** [`merge-path-fsm.yaml`](merge-path-fsm.yaml)
 > is the machine-readable state/event/guard model — every guard anchored to code (grep-checked by
@@ -117,10 +114,10 @@ Four deterministic pieces around the existing gates:
    auto-merge-armed, conflict-free, and behind — via the update-branch API (merge commit; the
    endpoint cannot rebase, which is what we want — no history rewrite, no force-push, a stale
    worker clone can still `git pull`).
-   **Stacked PRs are excluded twice over** (2026-08-05, the `Base:` line): the action is configured
-   `base: master`, so a PR based on an unmerged branch is never selected, and such a PR is never
-   armed anyway. Checked against the live workflow rather than assumed — no change was needed there,
-   and the conflict-labeler in the same workflow only labels ARMED PRs, so it stays quiet too.
+   **Stacked PRs are excluded by arming** (2026-08-05, the `Base:` line): a PR based on an
+   unmerged branch is never armed, and the pick is armed-only — the action-era `base: master`
+   configuration did the same job by a second route. The conflict labeler (leg 3) is armed-only
+   too, so it stays quiet on them.
 3. **Review reflex** — the *coordinator subsystem's* deterministic half, in ns `agent-coordinator`
    (it holds both reviewer secrets), pure bash + `gh`. **Now edge-triggered (ADR-093):** the
    github-exporter POSTs a reviewable PR to an Argo Events webhook EventSource → Sensor → `review`
@@ -308,41 +305,17 @@ This is ~90 % of real traffic (the coordinator mostly runs one fixer at a time t
 ### M — three concurrent fixer PRs (a coordinator batch)
 
 PRs **A, B, C** open within minutes of each other, all branched from the same master tip, all go
-green. None is "behind" yet, so the updater is idle; the review reflex serializes the reviews.
+green. None is "behind" yet, so the updater is idle; the review reflex serializes the reviews —
+review A → merge → updater brings B current → CI → review B → merge → same for C.
 
-```mermaid
-gantt
-    dateFormat  HH:mm
-    axisFormat  %H:%M
-    title 3 concurrent PRs, serialized (times illustrative)
-    section PR A
-    ci (initial)            :a1, 00:00, 8m
-    review → approve → MERGE :a2, 00:10, 5m
-    section PR B
-    ci (initial)            :b1, 00:00, 8m
-    updater: merge master in :b2, 00:15, 2m
-    ci (after update)       :b3, 00:17, 8m
-    review → approve → MERGE :b4, 00:25, 5m
-    section PR C
-    ci (initial)            :c1, 00:00, 8m
-    updater: merge master in :c2, 00:30, 2m
-    ci (after update)       :c3, 00:32, 8m
-    review → approve → MERGE :c4, 00:40, 5m
-```
+| | CI cycles | reviewer runs |
+|---|---|---|
+| 3 initial runs + 2 head-of-line updates | 5 | |
+| 3 serialized reviews | | 3 |
 
-| step | event | CI cycles | reviewer runs |
-|---|---|---|---|
-| 1 | A, B, C open; initial CI ×3 (parallel) | 3 | |
-| 2 | reflex dispatches review of **A** (oldest) → approve → auto-merge | | 1 |
-| 3 | master moved → updater updates **B** (oldest behind) → CI | 1 | |
-| 4 | reflex dispatches review of **B** → approve → auto-merge | | 1 |
-| 5 | updater updates **C** → CI | 1 | |
-| 6 | reflex dispatches review of **C** → approve → auto-merge | | 1 |
-| | **totals** | **5** | **3** |
-
-Elapsed ≈ 45 min, fully unattended. Compare blanket-update + eager review for the same batch:
-6 CI cycles and up to 6 reviewer runs (every merge dismisses every sibling's approval) — the gap is
-modest at N=3 and quadratic from there.
+Elapsed ≈ 45 min, fully unattended. Blanket-update + eager review for the same batch: 6 CI cycles
+and up to 6 reviewer runs (every merge dismisses every sibling's approval) — modest at N=3 and
+quadratic from there.
 
 ### L — Renovate Monday: 10 dep PRs + 1 agent PR + one operator direct-push
 
@@ -418,50 +391,33 @@ floor only policy and scheduling help, which is why the O(N²) options above are
   ⚠ MP-T08 carve-out (2026-07-24, fleet#104): when the PR **author is the sole codeowner**,
   GitHub waives the required codeowner review — such PRs never park, so on meta-authored
   spec-touching PRs the delegated gate read must land BEFORE the bot verdict.
-- **Runaway dispatch — the layered breakers** (hardening after the loop above; propagation to
-  workers/coordinator = FU-069). A stateless, level-triggered reflex turns ANY predicate bug into
-  an infinite dispatcher, and the #13 loop showed nothing watches for that — so no single check is
-  trusted; three independent layers, in escalating distance from the bug:
-  1. *In-band circuit breaker (reflex):* the reflex skips any PR labelled **`agent/error`** (and
-     **`agent/arbitrate`** — both are filtered before the pick, so a trip fires exactly once and
-     cannot re-trip on itself), and trips `agent/error` itself (+ one `AGENT_ERROR:` comment)
-     when its picked PR carries verdict
-     counts no legitimate pick can have — a bot approval at head, or ≥2 bot verdicts at head. Both
-     of those are counted **per PR**, at *this* PR's newest commit: the state they catch is a
-     worker↔reviewer flip-flop on one head, which has no meaning summed across PRs. The third
-     condition — **≥`REVIEW_ROUNDS_MAX` (8) verdicts ever** — is counted **per ISSUE, not per PR**
-     (homelab#156, FU-154): the per-PR count is the fast path, then the reflex sums the same
-     verdict evidence across every PR in the repo whose branch (`issue-<n>-`) or body (`#<n>`)
-     references that issue and takes the larger, so close-and-re-PR — a *designed* play on the
-     conflict/supersede lanes — cannot launder a fresh budget. That sum fails open on a bad read
-     (the per-PR count stands, loud WARN: availability of the gate < the gate), so it can only
-     ever under-count. It also escalates rather than errors: **`agent/arbitrate`** + one
-     `ARBITRATE:` comment, the escalation table's rounds-exhausted row → coordinator tie-break
-     (MP-T11, [`merge-path-fsm.md`](merge-path-fsm.md)) — rounds-exhausted means the *work* did
-     not converge, the two at-head signatures mean the *machinery* misbehaved and are human-first.
-     All three are deliberately recomputed from raw fields, NOT the pick predicate's defs — shared
-     code is a shared bug. That is orthogonal to the counting unit, and the pairing is not an
-     oversight: recomputed-from-raw is about not sharing the predicate's *code*, issue-keyed is
-     about which *rows* get counted, and the rounds ceiling is deliberately both at once.
-  2. *Agent self-guard (reviewer prompt STEP 0):* the reviewer re-checks its dispatch premise at
-     EXECUTION time and submits no verdict when it no longer holds — but **which terminal that
-     refusal picks depends on whether dispatching again would resolve the state** (homelab#122 /
-     PR #123, master `11c2045`, 2026-08-08). A **precondition failure** — `mergeStateStatus`
-     DIRTY/UNKNOWN, checks not concluded on the current head, or **one** verdict of its own
-     identity already at this exact commit — is ordinary semaphore contention (the queue gap
-     routinely reaches ~10 min), so it posts one `STANDING ASIDE:` comment keyed by (head sha,
-     precondition), adds **no** label, and stops; the path is level-triggered, so the state
-     settling *is* the re-dispatch. Only a **genuine anomaly** — **more than one** own verdict at
-     head, a pile of near-identical bot reviews/comments, a review history irreconcilable with the
-     commits, contradictory labels — trips the breaker: `agent/error` + one `AGENT_ERROR:` comment
-     (the reviewer App has had `issues:write` since FU-069 b, 2026-07-16). One burned no-op
-     session, no duplicate verdict — and, since #123, no frozen PR: oracle-fleet#60's 5 h
-     fix-round freeze was the precondition case latching the breaker.
-  3. *Out-of-band detection (github-exporter):* per-PR `github_pull_request_reviews_recent`
-     (verdicts per author in the trailing hour — the exporter PAT can't see commit objects, so
-     since-head isn't computable there) and `github_pull_request_label` metrics feed the
-     **AgentReviewLoop** (>3 verdicts/h) and **AgentErrorFlagged** Prometheus alerts — different
-     code and different token than the reflex, so it fires even when layer 1 is the buggy layer.
+- **Runaway dispatch — the layered breakers** (hardening after the oracle-fleet#13 loop;
+  propagation to workers/coordinator = FU-069). A stateless, level-triggered reflex turns ANY
+  predicate bug into an infinite dispatcher, and nothing was watching for that — so **no single
+  check is trusted**: three independent layers, in escalating distance from the bug. (1) an
+  in-band circuit breaker in the reflex (`agent/error` / `agent/arbitrate` filtered before the
+  pick, so a trip fires once and cannot re-trip on itself); (2) the reviewer's own **STEP-0
+  self-guard**, which re-checks its dispatch premise at EXECUTION time and picks its terminal by
+  whether re-dispatching would resolve the state — a precondition failure is ordinary semaphore
+  contention (one standing-aside comment, no label, the level-triggered path re-dispatches),
+  only a genuine anomaly trips the breaker; (3) out-of-band exporter metrics feeding the
+  **AgentReviewLoop** / **AgentErrorFlagged** alerts — different code and different token than
+  the reflex, so they fire even when layer 1 is the buggy layer. **The guards, arm by arm, live
+  in the FSM** ([`merge-path-fsm.md`](merge-path-fsm.md) **MP-T03**, with MP-T11 for the
+  arbitrate escalation); three design rules stand here:
+  - **The counting UNIT is part of the predicate.** The two at-head signatures (a bot approval at
+    head; ≥2 bot verdicts at head) are counted **per PR** — the state they catch is a
+    worker↔reviewer flip-flop on one head, which has no meaning summed across PRs. The rounds
+    ceiling (≥`REVIEW_ROUNDS_MAX`) is counted **per ISSUE** (homelab#156, FU-154), summing verdict
+    evidence across every PR referencing that issue, so close-and-re-PR — a *designed* play on the
+    conflict/supersede lanes — cannot launder a fresh budget. That sum **fails open** on a bad read
+    (loud WARN, per-PR count stands): availability of the gate < the gate, so it can only
+    under-count.
+  - **Rounds-exhausted escalates; the at-head signatures error.** Rounds-exhausted means the
+    *work* did not converge → `agent/arbitrate` + a coordinator tie-break; the at-head signatures
+    mean the *machinery* misbehaved and are human-first.
+  - **Recompute from raw fields, never the pick predicate's definitions** — shared code is a
+    shared bug. Orthogonal to the counting unit, and the pairing is deliberate.
   `agent/error` is also the HUMAN kill switch: anyone can add it to halt agent automation on that
   PR; removing it resumes. Budget framing: workers are cost-capped by their per-round OpenRouter
   keys, but reviewer/coordinator sessions ride the flat-rate subscription where no $-cap exists —
@@ -477,39 +433,34 @@ floor only policy and scheduling help, which is why the O(N²) options above are
   double-dispatch. Under ADR-093 the live case is the **edge-trigger (exporter POST) and the `*/15`
   backstop both firing for one PR**; that's safe via three guards: the reviewer **pod-label
   idempotency** (`app=agent-reviewer,project,pr`), the reviewer's **STEP-0 self-guard**, and the
-  **review WorkflowTemplate's pre-dispatch pod check**. The original CronJob-era layering still
-  describes the shape:
-  1. *Serialize the reconciler (best-effort, throughput):* the CronJob runs with
-     `concurrencyPolicy: Forbid`; the wake path creates its Job under a **fixed name**
-     (`review-reflex-manual`) — `kubectl create` is atomic, `AlreadyExists` = someone's already
-     reconciling, exit 0. A "missed" wake loses nothing: the wake carries urgency, never
-     information — the next cron tick re-lists (level-triggered backstop).
-  2. *Deterministic child names (correctness):* the reviewer Job is named
-     `review-<repo>-<pr>-<headsha8>`, the worker Job `fix-<repo>-<issue>-r<round>` (mechanizing
-     `workflow.md`'s idempotency key). Create-with-deterministic-name **is** an atomic
-     test-and-set at the API server — two racing reflex instances can't both spawn it, and a new
-     push (new head SHA) legitimately mints a new name while event re-delivery doesn't.
-  The updater needs neither: Actions `concurrency` groups serialize its runs natively (⚠ its
-  sibling `renovate-approve` DID need exactly this — per-PR group + fail-closed dup-check,
-  homelab#114, 2026-08-11), and
-  update-branch now carries `expected_head_sha` (homelab#986), so a concurrent push causes 422
-  ("head branch was modified") instead of clobbering the commit — the race is safe, the next pass
-  re-lists the new head. Without `expected_head_sha` the race could silently overwrite a
-  concurrent author push (seen live on PR#963).
-- **Updater token** — must be an App token, not `GITHUB_TOKEN` (its pushes wouldn't re-trigger
-  CI). Minted from a **dedicated, minimal `homelab-merge` App** (`actions/create-github-app-token`,
-  App id + private key as the `MERGE_GH_APP_*` org Actions secrets). Grant:
-  contents:write **+ pull_requests:write** (update-branch is a `/pulls/` mutation — a GitHub App needs
-  BOTH, or the endpoint 403s "Resource not accessible by integration"; PR:read alone is not enough) +
-  checks:read + statuses:read (`require_passed_checks`) + metadata:read — **no Issues**. Chosen over reusing
-  `homelab-agents` (which the design first proposed) because reuse would copy the *agents* key —
-  which also mints the coordinator token (issues:write, multi-repo, merge) — into a GitHub org
-  Actions secret readable by the **semi-trusted CI plane** (an in-repo agent PR branch can add a
-  workflow that reads org secrets). The dedicated App keeps that CI-exposed key least-privilege: a
-  leak grants only branch-updates. No self-approval conflict (the updater only pushes + reads, never
-  approves; `require_last_push_approval = false`) — so the distinct identity is for blast-radius +
-  audit legibility, not a hard GitHub constraint. Bootstrap: `scripts/github-app-bootstrap.sh homelab-merge`;
-  published to Actions by `tofu/github/actions_secrets.tf` via `devbox run github-tofu apply`.
+  **review WorkflowTemplate's pre-dispatch pod check**. The shape the CronJob era established and
+  the Argo era kept: *serialize the reconciler* for throughput (best-effort — a missed wake loses
+  nothing, because a wake carries urgency and never information; the level-triggered backstop
+  re-lists), and *deterministic child names* for correctness — the reviewer pod is
+  `(repo, pr, head-sha8)`, the worker pod `(task, round)`, and create-with-deterministic-name **is**
+  an atomic test-and-set at the API server: two racing dispatchers cannot both spawn it, while a
+  new push legitimately mints a new name and an event re-delivery does not (MP-T03/MP-T07).
+  The in-cluster updater serializes on **one Argo mutex across both submission paths** (a Cron
+  `Forbid` policy cannot see Sensor submissions, so the hosted era's `cancel-in-progress: false`
+  is carried by the mutex now — MP-T02), and update-branch carries `expected_head_sha`
+  (homelab#986), so a concurrent push causes 422 ("head branch was modified") instead of
+  clobbering the commit — the race is safe, the next pass re-lists the new head. Without
+  `expected_head_sha` the race could silently overwrite a concurrent author push (seen live on
+  PR#963). ⚠ Its sibling `renovate-approve` — still a hosted reusable workflow — DID need the
+  Actions-`concurrency` treatment: per-PR group + fail-closed dup-check (homelab#114, 2026-08-11).
+- **Updater token** — must be an App token, not a workflow `GITHUB_TOKEN` (a `GITHUB_TOKEN` push
+  doesn't re-trigger `ci`, so a strict branch never sees green). The identity is the dedicated,
+  minimal **`homelab-merge` App**; the grant is contents:write **+ pull_requests:write**
+  (update-branch is a `/pulls/` mutation — an App needs BOTH or it 403s "Resource not accessible
+  by integration") + checks:read + statuses:read + metadata:read, and deliberately **no Issues**
+  — *a leaked merge key must not grant issue writes*, which is why the merge-conflict LABEL write
+  rides `coordinator-git` as `UPDATER_LABEL_TOKEN` in the WorkflowTemplate. A dedicated App rather
+  than reusing `homelab-agents` (which also mints the coordinator's issues:write multi-repo token):
+  blast-radius + audit legibility, not a hard GitHub constraint — the updater only pushes and
+  reads, never approves. **Delivery is ESO since the ADR-111 cutover**
+  ([`updater-git.yaml`](../../agents/coordinator/updater-git.yaml), homelab#744) — the org
+  Actions secret readable by the semi-trusted CI plane, which is what the dedicated App existed to
+  contain, is gone. The App key is already in Infisical, so no operator bootstrap step remains.
 - **Review reflex dies** — PRs accumulate approved=0; nothing merges; nothing breaks. The `*/15`
   CronWorkflow backstop re-lists next tick and resumes (and covers a missed exporter POST too).
   Same level-triggered posture as the coordinator doctrine.
@@ -519,12 +470,11 @@ floor only policy and scheduling help, which is why the O(N²) options above are
   a concurrent push causes 422 instead of clobbering the commit. The updater skips the 422 and
   the next pass re-lists the new head (level-triggered; the commit is preserved).
 
-## Rollout — COMPLETE (all four phases shipped by 2026-07-17, ADR-093)
+## Rollout — COMPLETE
 
-Updater reusable workflow → review reflex → arm-at-open hygiene → Argo-native edge-trigger
-(exporter POST → Sensor → `review` WorkflowTemplate, `*/15` CronWorkflow backstop), extended
-per-stack by FU-080/FU-100 (2026-07-27). The phased plan and the CronJob-era wake mechanics:
-git history (pre-2026-07-17) + TICK-LOG meta-7.
+All four phases shipped by 2026-07-17 (ADR-093), per-stack extension FU-080/FU-100 (2026-07-27),
+and the updater's hosted→in-cluster cutover 2026-08-26 (ADR-111, homelab#745). The phased plan,
+the CronJob-era wake mechanics and the reusable-workflow era: git history + TICK-LOG meta-7.
 
 ## Decisions (formerly open questions — all resolved)
 
