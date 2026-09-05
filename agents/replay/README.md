@@ -151,6 +151,7 @@ is stale, so it cannot drift the way the prose register did.
 | `arbitrate/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/first-tick` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/fu147-refire-blocked` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `arbitrate/goal-child` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/landing-sequence` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/no-op-after-directive` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/probe-unreadable` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |

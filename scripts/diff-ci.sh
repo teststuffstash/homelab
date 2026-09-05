@@ -61,6 +61,11 @@ MAP=(
   "follow-ups-lint:^docs/"
   "docs-graph-lint:\.md$"
   "mermaid-lint:\.md$"
+  # request-flow-self-test renders docs/patterns/request-flow/{platform,example-*}.yaml with
+  # scripts/request-flow-render.py and byte-compares the committed example-*-rendered.md — those
+  # are its only inputs (#1390; the round-5 worker on PR#1386 proposed an `agents/` arm too, which
+  # nothing in the self-test reads).
+  "request-flow-self-test:^(scripts/request-flow-render\.py|docs/patterns/request-flow/|devbox\.(json|lock)$)"
 )
 # Gates that exist in ci.yaml but are PR-context-only (base/author) — exempt from the
 # coverage belt below, with the reason on the record.

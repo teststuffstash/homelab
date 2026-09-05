@@ -1,0 +1,23 @@
+# arbitrate goal-child — the harvest-disposition block with an arbitrate clause and a PR that
+# fixes a goal child issue. Asserts the unit carries `harvest=store` (homelab#1381).
+#
+# The PR (#234) carries `Fixes #35` in its body; #35 is a goal child of #29 (task/goal, Budget: 12,
+# state OPEN). The block resolves the goal ancestor, finds/creates the post-launch bucket, and
+# emits `harvest=store` — the same path merged-closeout uses.
+name: arbitrate-goal-child
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:harvest-disposition
+  - file:post.sh
+scrub:
+  # The bucket body is prose the block owns; pin its provenance sentence, not its paragraphs.
+  - s|--body Post-launch bucket for goal #29 .*|--body <bucket body — see agents/coordinator-scan.sh>|
+env:
+  - IN_ORG=teststuffstash
+  - IN_REPO=circles
+  - IN_CLAUSE=arbitrate
+  - IN_ITEM=pr-234
+  - IN_WMODEL=claude/haiku
+  - IN_CAP=2.0000
