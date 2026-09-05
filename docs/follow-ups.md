@@ -240,6 +240,8 @@ six OVERSIZE items pointer-ized into
       (local XFS, wk-metal-01/04 + wk-02 interim), CNPG replica-1 + required zone anti-affinity,
       backup CronJob. Offsite stays parked behind oracle/idp prod. Relates FU-013, FU-012, ADR-031.
       ⚠ meta volume is **1 replica (wk-02)**; the "no `std` disk fits a 2nd" blocker LIFTED 08-25 — the rebuild left it at 6%.
+      **Sighting 2026-09-05:** the 9 h ERT parse is gated by wk-metal-04's 185 ms/write disk through
+      the rf=2 data volume — measured in [`storage-ledger.md`](storage-ledger.md) §2026-09-05; the build-out is the fix.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
