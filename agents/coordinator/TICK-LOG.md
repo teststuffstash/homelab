@@ -6922,3 +6922,25 @@ first live ADR-110 maintenance session before the ADR existed.
   #983's method, eight files ranked by longest cold run) — S5 stays open past its quiet
   window by design; FU-164's due read closed as settle-test run 2 in the spike, next = the
   v1 cluster leg. All direct-lane bookkeeping, batched for the wind-down push.
+
+## 2026-09-05 (07:1x–07:5xZ) — the same sitting, second half: coordinate-log read + backlog queue
+
+- **Condition:** operator asked for the operator-only set out of the per-stack coordinate logs
+  ("some of them are queued"), then "queue the infra now" over homelab's 14 suitable-unqueued.
+- **Read:** the four `coordinate-<stack>-1788589800` runs (06:30Z) out of Loki (pods podGC'd;
+  port-forward to `svc/loki`, tenant = the loop namespace, `{namespace, pod}` selector — the
+  recipe works from the seat's admin kubeconfig, no door token needed). Every flagged item
+  REST-verified before listing. Two findings: the twelve 🏷 "bare tree members — route to
+  operator" are ALL post-launch buckets (one fix, #1249's walk retirement); **#1299 is queued
+  without `agent-fix`, so the scan never lists it** — silent, not held.
+- **Command:** meta-state gained the OPERATOR-ONLY bullet (9 items, ordered) — `edb34779`.
+  Backlog: 14 = 3 goals + **4 queued** (#1384, #1378, #518 image-half with the lane split
+  commented, #1392 with the missing `Touches:` authored + a fix ruling) + **#1316 closed**
+  (self-resolved 09-02 15:18Z; residual = oracle-fleet's allure-publish timeout, named on the
+  issue) + 6 stay (#1200 operator-lane, #1370 diagnosis-first, #1280/#829 design, #1237/#1238
+  seat spikes) — `53e7845d`.
+- **Three `coordinate-perstack-*` FAILED runs (09-04, exit 128/141) left unexamined** — in the
+  OPERATOR-ONLY list as item 9.
+- **Wind-down:** operator's next session = a CORPUS sitting (codeowner reads + the operator-seat
+  issues). Batch pushed through the pre-push hook; transcripts synced; no monitors were armed
+  this session.

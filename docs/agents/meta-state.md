@@ -10,6 +10,12 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ NEXT SESSION (operator, 2026-09-05 ~07:50Z): a CORPUS sitting — load `/design-agents`,
+  then (1) the ADR-110 codeowner reads on whatever parked since 09-05 morning (queue was
+  EMPTY at 07:00Z; the four seat-queued rides below park on `agents/**` at bot approval),
+  (2) the OPERATOR-ONLY list below top to bottom — items 1 (three undeliverable queued
+  issues) and 4 (#1249, one fix for twelve walk lines) first, (3) #1393's heat trims if
+  room remains (S5's fifth original — subtraction, #983's method).**
 - **⚑ BOARD (09-04 wind-down, re-read 09-05):** in review #1205 (PR#1386), #1381, #1374,
   #1350; queued #1300, #1299, #1207 — ALL THREE structurally undeliverable by a worker (the
   OPERATOR-ONLY list below); **queued 09-05 by the seat: #1384 #1378 #518 #1392** (#1384
