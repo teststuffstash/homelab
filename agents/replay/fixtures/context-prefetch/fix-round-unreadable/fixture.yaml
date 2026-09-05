@@ -1,0 +1,11 @@
+# homelab#1205 — fix round unreadable: reviews API returns empty → defer (required verdict).
+# STUB_GH makes the reviews call fail (empty response), triggering the required-unreadable deferral.
+name: context-prefetch/fix-round-unreadable
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
+env:
+  - STUB_GH_api_repos_teststuffstash_test_project_pulls_42_reviews=empty
