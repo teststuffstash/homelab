@@ -1,0 +1,5 @@
+CALL gh pr view 42 --repo teststuffstash/test-project --json reviews,comments,labels,commits,headRefOid
+OUT exit-contract: terminal OK — homelab-reviewer silent-dedup-aside recorded (idempotent aside reused, homelab#1438)
+OUT FINAL: 0
+OUT TERMINAL_OK: 1
+RC 0

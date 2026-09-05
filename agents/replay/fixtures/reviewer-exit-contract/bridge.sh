@@ -12,6 +12,16 @@ PR_NUMBER="${PR_NUMBER:-42}"
 REPO_SLUG="${REPO_SLUG:-teststuffstash/test-project}"
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"
 
+# The silent-dedup record (homelab#1438): session-scoped path, ALWAYS cleared before the row's
+# conditional write — a leftover from a sibling row (or a previous job on a persistent runner)
+# must never mint a terminal for a row that set no SILENT_DEDUP.
+SILENT_DEDUP_RECORD="${TMPDIR:-/tmp}/silent_dedup_record.$$"
+export SILENT_DEDUP_RECORD
+rm -f "$SILENT_DEDUP_RECORD"
+if [ "${SILENT_DEDUP:-0}" = "1" ]; then
+  echo "SILENT_DEDUP_ASIDE: checks-pending at 0c2be42f" > "$SILENT_DEDUP_RECORD"
+fi
+
 gh() {
   {
     printf 'CALL gh'

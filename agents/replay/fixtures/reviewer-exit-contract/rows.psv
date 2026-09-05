@@ -8,13 +8,14 @@
 # terminal at the content sha (newest_sha8 path) and a verdict between content and merge
 # (newest_commit date path) — both FINAL=0. Under the old startswith("Merge branch ") filter both
 # rows false-red FINAL=10 (a legitimately-posted aside/verdict invisible to the assert).
-# id                                        | world | patch (relpath @ patches/*.jq)                           | env                 | expect              | params
-live-verdict-at-head                        | clean | gh/pr-view-42.json @ patches/add-verdict.jq            | RC=0                | live-verdict        |
-standing-aside-at-head                      | clean | gh/pr-view-42.json @ patches/add-aside.jq              | RC=0                | standing-aside      |
-agent-error-present                         | clean | gh/pr-view-42.json @ patches/add-agent-error.jq        | RC=0                | agent-error         |
-no-terminal-silent-green                    | clean |                                                         | RC=0                | no-terminal-green   |
-no-terminal-claude-crashed                  | clean |                                                         | RC=127               | no-terminal-crashed |
-state-read-fails                            | clean |                                                         | RC=0 STUB_GH_FAIL=1 | state-read-fails    |
-conflict-merge-aside-at-content-sha         | clean | gh/pr-view-42.json @ patches/conflict-merge-aside.jq    | RC=0                | standing-aside      |
-conflict-merge-verdict-between-content-merge| clean | gh/pr-view-42.json @ patches/conflict-merge-verdict.jq  | RC=0                | live-verdict        |
-issue-unreadable-standing-aside             | clean | gh/pr-view-42.json @ patches/add-issue-unreadable.jq   | RC=0                | standing-aside      |
+# id                                        | world | patch (relpath @ patches/*.jq)                           | env                 | expect                | params
+live-verdict-at-head                        | clean | gh/pr-view-42.json @ patches/add-verdict.jq            | RC=0                | live-verdict          |
+standing-aside-at-head                      | clean | gh/pr-view-42.json @ patches/add-aside.jq              | RC=0                | standing-aside        |
+agent-error-present                         | clean | gh/pr-view-42.json @ patches/add-agent-error.jq        | RC=0                | agent-error           |
+no-terminal-silent-green                    | clean |                                                         | RC=0                | no-terminal-green     |
+no-terminal-claude-crashed                  | clean |                                                         | RC=127               | no-terminal-crashed   |
+state-read-fails                            | clean |                                                         | RC=0 STUB_GH_FAIL=1 | state-read-fails      |
+conflict-merge-aside-at-content-sha         | clean | gh/pr-view-42.json @ patches/conflict-merge-aside.jq    | RC=0                | standing-aside        |
+conflict-merge-verdict-between-content-merge| clean | gh/pr-view-42.json @ patches/conflict-merge-verdict.jq  | RC=0                | live-verdict          |
+issue-unreadable-standing-aside             | clean | gh/pr-view-42.json @ patches/add-issue-unreadable.jq   | RC=0                | standing-aside        |
+silent-dedup-checks-pending                 | clean | gh/pr-view-42.json @ patches/silent-dedup-checks-pending.jq | RC=0 SILENT_DEDUP=1 | silent-dedup-recorded |
