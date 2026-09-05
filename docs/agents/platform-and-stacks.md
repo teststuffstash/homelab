@@ -208,11 +208,13 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
 
 ## Stack economics — scaling the merge path (moved from merge-path.md, 2026-07-27 / FU-107)
 
-**Per-repo invariant:** per merged PR in steady state, `CI cycles = 1 initial + 1 update`
-(update skipped when master hasn't moved) and `reviewer runs = 1`, plus one extra of each per
-master-interruption in an approval→merge window. A batch of N concurrent PRs in one repo costs
-~2N−1 CI / N reviews (the serializer); across repos everything composes linearly (own master,
-own updater chain, own review queue).
+**Per-lane invariant:** per merged PR in steady state, `CI cycles = 1 initial + 1 update`
+(update skipped when the base hasn't moved) and `reviewer runs = 1`, plus one extra of each per
+base-interruption in an approval→merge window. A batch of N concurrent PRs in one **lane** — a
+(repo, base) pair, the serialization unit since ADR-125 — costs
+~2N−1 CI / N reviews (the serializer); across lanes everything composes linearly (own base,
+own updater chain, own review queue), so a repo running a Goal on a `goal/**` base drains it in
+parallel with its master lane.
 
 **Platform extrapolation** (reference stack ≈ IDP: TARA-Login fork, identity-store, passkey,
 `idp-iac` → ~4–5 repos, service repos on the ~20-min ADR-082 full-stack gate; sizing target =
@@ -234,7 +236,8 @@ What saturates first:
   2026-08-26).
 
 **What breaks first:** reviewer quota on burst days (stagger Renovate; dep-bump policy decided
-— FU-046) → single-repo drain latency → nothing in the merge mechanics itself (per-repo chains
+— FU-046) → single-repo drain latency (the ARC pool and the full-stack gate are repo-scoped, so
+lanes do not split it) → nothing in the merge mechanics itself (per-lane chains
 independent; onboarding a repo = a workflow caller + a `protected_repos` entry).
 
 **Out of scope:** cross-repo coordinated changes — ordering across repos is the coordinator's
