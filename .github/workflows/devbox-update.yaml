@@ -42,11 +42,11 @@ jobs:
           - { repo: oracle-iac, dir: "." }
     steps:
       # the script lives here; also gives us xz/jq + single-user Nix + devbox (same pattern as ci.yaml)
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       # No toolchain install: the runner image (docker/arc-runner/, FU-015) bakes nix + devbox.
       - name: Mint homelab-renovate token for ${{ matrix.repo }}
         id: app
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
         with:
           app-id: ${{ secrets.RENOVATE_APP_ID }}
           private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
