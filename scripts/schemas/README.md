@@ -10,10 +10,11 @@ the cluster being down.
 
 ## Why the cluster and not a schema registry
 
-There's no maintained public JSON-Schema catalog for Cilium CRDs (unlike, say, `datreeio`'s catalog
-for common CRDs) — the CRD itself, already `openAPIV3Schema`-shaped, IS the schema. The cluster's
-own CRD is authoritative for the version actually running, which a third-party catalog snapshot
-could drift from silently.
+A public catalog exists (`datreeio/CRDs-catalog` carries `cilium.io` schemas), but it is a
+third-party snapshot of SOME Cilium version, fetched over the WAN at lint time — both properties
+this gate must not have (offline CI, FU-197; version parity with the running CNI). The CRD itself,
+already `openAPIV3Schema`-shaped, IS the schema, and the cluster's own CRD is authoritative for the
+version actually running; vendoring it pins exactly that.
 
 ## Files
 
