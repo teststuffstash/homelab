@@ -6877,3 +6877,70 @@ first live ADR-110 maintenance session before the ADR existed.
   checkpoint disposes STORE entries only) → hand-queued + **#1381 filed+queued** (carry
   `harvest=store` on arbitrate/changes-requested units, append instead of file). Wind-down 14:20Z.
 
+
+## 2026-09-04 (18:2x–18:50Z) — vendor mail: opencode.ai parked (FU-213)
+
+- **Condition:** operator forwarded an OpenCode mail — requests from `homelab-openrouter-proxy`
+  carry no `x-opencode-session` header and "may error" from **09-06**. Asked for a temporary
+  whole-rail off switch.
+- **Command:** kill at the CHOKE POINT, both halves, one env var — `OPENCODE_RAIL_DISABLED`
+  (PR#1391, merged 18:48Z): `/opencode-limit` serves `limited=true reason=rail-disabled` (a
+  CAPACITY-class reason, so `--pick-rail` skips Go and a Go-primary ride takes the M12 degrade to
+  `claude/haiku` — a `semaphore`/empty reason would have DEFERRED every Go ride instead), and both
+  legs refuse 503 before calling out. Zen parked with Go (same account/key/UA); the jail shim
+  (own UA, unflagged) left live as the test bench.
+- **Verified live** on the rolled pod (`-76fc48958f-nnmdb`, 18:48:51Z): limit view
+  `limited=True reason=rail-disabled`, `router_opencode_rail_disabled{leg}` = 1/1 with
+  `router_go_capacity_latched 0` (the operator's park stays distinguishable from a measured
+  latch — its 30-min alert does NOT fire from this), and both legs 503 with the refusal logged
+  before any egress.
+- **Operator-supplied prior art:** earendil-works/pi#4847 — same defect, fixed 2026-05-22. The
+  header is a provider-affinity key for cache hits (one id per conversation), and **absent it
+  opencode falls back to CLIENT-IP affinity** — why nothing here had broken yet (one egress IP)
+  and why the mail reads "may error". Facts + the two gaps in our own path (Go/Zen arms leave
+  `cb_session` None; direct-key rides collapse to `direct:<key-hash>` = the hardcoded-id trap)
+  went to `docs/agents/chainless-redesign.md` §The `x-opencode-session` header; FU-213 is the
+  pointer.
+
+## 2026-09-05 (06:3x–07:1xZ) — the corpus-cost sitting: measure, prune, file the fifth S5 original
+
+- **Condition:** operator asked (`/design-agents`) how much context the skill's read plan takes
+  and whether another slimming stint is due. Corpus NOT loaded for the answer — measured instead.
+- **Measured:** one corpus load = **299k / 346k cache-creation tokens** (session-ctx `--big` on
+  the 09-03 and 09-04 corpus sessions) against the "~110k" the skill carried since the 08-18
+  trim (never re-measured). Read plan ~820 KB / 9,900 lines; docs/agents 516→645 KB since
+  08-19, 45 % of the growth meta-state.md (17→75 KB — "tiny, transient" by its own header).
+  Ten corpus loads in the six days since 08-31; the last three corpus sessions ended at
+  670k/779k/868k ctx, all past the ≥500k rule. Post-S5 windowed doc-heat (37 transcripts,
+  `DOC_HEAT_SRC` symlink dir): 72 % of read-plan lines never targeted.
+- **Command (operator: "do the 3 suggestions"):** (1) skill cost line → the measured figure
+  (`43f9f387`); (2) **meta-state pruned 872→~200 lines** to its contract — every kept item
+  live-verified by REST reads first (G-A/G-F validated+closed, park queue empty, #994/#1102/
+  #887/#459 closed → dropped; two design inputs kept because they have NO other home: the
+  08-31 drainage ruling is ADR-shaped and unrecorded, the stack→platform instances 3+4);
+  (3) **homelab#1393 filed + bound as #979's fifth original** (post-S5 heat-cited trims,
+  #983's method, eight files ranked by longest cold run) — S5 stays open past its quiet
+  window by design; FU-164's due read closed as settle-test run 2 in the spike, next = the
+  v1 cluster leg. All direct-lane bookkeeping, batched for the wind-down push.
+
+## 2026-09-05 (07:1x–07:5xZ) — the same sitting, second half: coordinate-log read + backlog queue
+
+- **Condition:** operator asked for the operator-only set out of the per-stack coordinate logs
+  ("some of them are queued"), then "queue the infra now" over homelab's 14 suitable-unqueued.
+- **Read:** the four `coordinate-<stack>-1788589800` runs (06:30Z) out of Loki (pods podGC'd;
+  port-forward to `svc/loki`, tenant = the loop namespace, `{namespace, pod}` selector — the
+  recipe works from the seat's admin kubeconfig, no door token needed). Every flagged item
+  REST-verified before listing. Two findings: the twelve 🏷 "bare tree members — route to
+  operator" are ALL post-launch buckets (one fix, #1249's walk retirement); **#1299 is queued
+  without `agent-fix`, so the scan never lists it** — silent, not held.
+- **Command:** meta-state gained the OPERATOR-ONLY bullet (9 items, ordered) — `edb34779`.
+  Backlog: 14 = 3 goals + **4 queued** (#1384, #1378, #518 image-half with the lane split
+  commented, #1392 with the missing `Touches:` authored + a fix ruling) + **#1316 closed**
+  (self-resolved 09-02 15:18Z; residual = oracle-fleet's allure-publish timeout, named on the
+  issue) + 6 stay (#1200 operator-lane, #1370 diagnosis-first, #1280/#829 design, #1237/#1238
+  seat spikes) — `53e7845d`.
+- **Three `coordinate-perstack-*` FAILED runs (09-04, exit 128/141) left unexamined** — in the
+  OPERATOR-ONLY list as item 9.
+- **Wind-down:** operator's next session = a CORPUS sitting (codeowner reads + the operator-seat
+  issues). Batch pushed through the pre-push hook; transcripts synced; no monitors were armed
+  this session.
