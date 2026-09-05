@@ -115,8 +115,11 @@ transitions:
   - id: MP-T03
     name: review dispatch
     owner: exporter edge (POST → Sensor → review WorkflowTemplate) + */15 CronWorkflow backstop
-    when: "green ∧ current ∧ armed ∧ bot_review_at_head=none ∧ ¬automerge-lane ∧ ¬agent_error ∧
-      reviewer.enabled ∧ capacity — ONE dispatch per (repo, base) LANE per tick (ADR-125 (1))"
+    when: "green ∧ ¬conflicted ∧ armed ∧ bot_review_at_head=none ∧ ¬automerge-lane ∧
+      ¬agent_error ∧ reviewer.enabled ∧ capacity — ONE dispatch per (repo, base) LANE per tick
+      (ADR-125 (1)). CURRENCY IS NOT A PRECONDITION (homelab#1422, 2026-09-05): a BEHIND-but-green
+      PR that has never been reviewed is admitted to its FIRST review. Re-review on a BEHIND branch
+      was already allowed — MP-T04"
     status: guarded
     replay:
       - agents/reviewer-optout-replay.sh
@@ -124,6 +127,9 @@ transitions:
       - agents/replay/fixtures/review-pick/two-lanes-two-picks
       - agents/replay/fixtures/review-pick/same-lane-oldest
       - agents/replay/fixtures/review-pick/behind-cr-no-content-held
+      - agents/replay/fixtures/review-pick/behind-first-review-admitted
+      - agents/replay/fixtures/reviewer-currency/behind-proceeds
+      - agents/replay/fixtures/reviewer-currency/dirty-skips
     guards:
       - desc: "ONE pick per (repo, base) LANE, oldest first within the lane (ADR-125 (1),
           homelab#1422) — group_by(.baseRefName) over the SAME filtered candidate set. Master-lane
@@ -188,6 +194,15 @@ transitions:
           history irreconcilable with the commit history, contradictory labels; an agent/error already
           present still means touch nothing and stop silently"
         anchor: { file: agents/reviewer-session.sh, pattern: "GENUINE ANOMALY" }
+      - desc: "BEHIND is NOT a skip on either half of the dispatch (homelab#1422, 2026-09-05).
+          The reflex predicate dropped `(mergeStateStatus != BEHIND) or reviewable_again`, and the
+          launcher currency gate narrowed from BEHIND|DIRTY to DIRTY — leaving the latter would
+          have turned every admitted pick into a dispatch that dies at spawn. Evidence: an
+          update-branch merge does not dismiss a verdict (GitHub re-points the review commit_id;
+          PR#1386 survived 4 updater merges 07:06-07:37Z, #1388/#1389 the same day), while the
+          skip starved first reviews (PR#1437: 7 master moves, 3 updater merges, no first review).
+          DIRTY still skips — that arm is now pinned by fixtures/reviewer-currency/dirty-skips"
+        anchor: { file: agents/reviewer-session.sh, pattern: "NARROWED to DIRTY" }
       - desc: "in-band breaker: impossible verdict counts trip agent/error"
         anchor: { file: agents/review-reflex.sh, pattern: "CIRCUIT-BREAKER TELEMETRY" }
       - desc: "out-of-band: AgentReviewLoop / AgentErrorFlagged alerts (different code+token)"

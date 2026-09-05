@@ -235,9 +235,26 @@ EOF_C9
 
   # >>>REPLAY:review-pick>>>
   # Reviewable = armed ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits )
-  #              ∧ NOT `automerge`-labelled ∧ ( not-BEHIND unless it's a RE-review ).
+  #              ∧ NOT `automerge`-labelled.  CURRENCY IS NOT A PRECONDITION.
   #   green: every check present is a success-equivalent AND at least one check ran (never rubber-stamp a no-CI PR).
-  #   BEHIND → updater's job; DIRTY → conflict (coordinator's job); APPROVED → already merging.
+  #   DIRTY → conflict (coordinator's job); APPROVED → already merging.
+  #   BEHIND USED TO SKIP HERE, and does not any more (2026-09-05, homelab#1422). The skip was
+  #   designed against `dismiss_stale_reviews_on_push = true` (tofu/github/repo_rulesets.tf:138)
+  #   eating a fresh approval on the updater's catch-up merge — "update before review", the
+  #   ordering merge-path.md §Why update-before-review argues for. The premise is FALSE for
+  #   update-branch merges: GitHub RE-POINTS a review's commit_id on them, so the approval
+  #   survives. Measured the day this changed: PR#1386's bot approval survived four updater
+  #   merges (07:06-07:37Z), as did #1388's and #1389's. Only CONTENT pushes dismiss.
+  #   Meanwhile the skip cost real first-review starvation — PR#1437 sat BEHIND through 7 master
+  #   moves and 3 updater merges the same day and never got a first review, because on a busy
+  #   master "current" is a window a PR can miss indefinitely. So a BEHIND-but-green PR is
+  #   admitted to its FIRST review and the updater + CI simply run after the verdict. Everything
+  #   else stands: DIRTY still skips, `reviewable_again` still governs RE-reviews (a
+  #   changes-requested PR with no new content is not reviewable, BEHIND or not — replayed as
+  #   fixtures/review-pick/behind-cr-no-content-held), `bot_approved_head` still holds.
+  #   ⚠ The launcher's spawn-time currency gate (reviewer-session.sh) is the second half of this
+  #   rule and was narrowed to DIRTY in the same commit — leaving it would have let this pick be
+  #   dispatched and then immediately skipped at spawn.
   #   "unreviewed" means THE REVIEWER BOT hasn't approved the current head — NOT reviewDecision !=
   #   APPROVED. On code-owner-gated repos (oracle-fleet: /specs/ + /.agents/ gate on Rasmus,
   #   tofu/github/variables.tf) reviewDecision stays REVIEW_REQUIRED after a bot approval, waiting
@@ -285,7 +302,6 @@ EOF_C9
       | select(([ .labels[]?.name ] | index("agent/arbitrate")) | not)
       | select(.autoMergeRequest != null)
       | select(.mergeStateStatus != "DIRTY")
-      | select((.mergeStateStatus != "BEHIND") or reviewable_again)
       | select(green)
       | select((.reviewDecision // "") != "APPROVED")
       | select(((.reviewDecision // "") != "CHANGES_REQUESTED") or reviewable_again)
