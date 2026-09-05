@@ -12,7 +12,8 @@ never the session's arc — that is TICK-LOG's.)
 
 - **⚑ BOARD (09-04 wind-down, re-read 09-05):** in review #1205 (PR#1386), #1381, #1374,
   #1350; queued #1300, #1299, #1207 — ALL THREE structurally undeliverable by a worker (the
-  OPERATOR-ONLY list below). Codeowner-park queue EMPTY 09-05 (#1273/#1289/#1290/#1295 all
+  OPERATOR-ONLY list below); **queued 09-05 by the seat: #1384 #1378 #518 #1392** (#1384
+  serializes behind #1205/#1374 on `agents/replay/**`; #1392/#518 codeowner-park at merge). Codeowner-park queue EMPTY 09-05 (#1273/#1289/#1290/#1295 all
   merged). Park-watcher recipe = poll `github_pull_request_codeowner_park` on Prometheus
   (zero gh calls). Inert with owners: #1069 (workers no-op on App GraphQL exhaustion — spans
   recipe + agent-runtime exit contract, 🌱 triage) · #518 (runner infra) · #628 (container)
@@ -54,8 +55,13 @@ never the session's arc — that is TICK-LOG's.)
      fix/reviewer-app-statuses-… fix/window-shares`), agent-runtime 1, oracle-fleet 4,
      circles 4, sleep 1 · oracle-fleet#84 carries a RETIRED `Depends-on:` line → native edge.
   8. **Backlog queue calls (suitable-unqueued, `devbox run board -- <stack> --full`):**
-     homelab 14 (oldest #518, 08-18) · oracle-fleet 20 (oldest #212, 08-08) · circles 3 ·
-     sleep 1 · or-op 1 (#60 — item 2's root).
+     homelab **read 09-05 (operator: "queue the infra now")** — 14 = 3 goal containers
+     (#1302 #1231 #1162, not units) + **4 QUEUED from the seat: #1384 #1378 #518 (image half
+     only) #1392 (+Touches authored)** + #1316 CLOSED (self-resolved 09-02, residual is
+     oracle-fleet's allure-publish timeout) + 6 that stay: #1200 (scripts/** = operator-lane,
+     hand-do) · #1370 (needs a cluster diagnosis first — FU-171) · #1280 + #829 (design-shaped,
+     corpus sitting) · #1237 #1238 (operator/seat-run spikes) · oracle-fleet 20 (oldest #212,
+     08-08) · circles 3 · sleep 1 · or-op 1 (#60 — item 2's root).
   9. **Loop health, unexamined:** three `coordinate-perstack-*` runs FAILED 09-04 (platform
      12:45Z exit 128, platform 12:58Z + oracle 20:59Z exit 141); every cron tick since is
      green — read the Loki lines before calling it transient.
