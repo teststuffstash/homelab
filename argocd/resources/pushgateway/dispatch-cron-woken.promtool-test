@@ -1,0 +1,106 @@
+# BEHAVIOUR fixture for AgentDispatchCronWoken after the ADR-125 lane split (homelab#829/#1422).
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/dispatch-cron-woken.promtool-test
+#   (and in CI: `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/)
+#
+# WHAT THE SPLIT BUYS, and what these rows are written to pin. `agent_dispatch_cron_woken_timestamp`
+# is an epoch gauge stamped at each cron-woken dispatch, so `changes()` over a window COUNTS those
+# dispatches (017790c). Before ADR-125 the series was one per project and the alert summed by
+# project; now the lane base rides the pushgateway grouping key, so a project is SEVERAL series and
+# the alert sums by (project, base).
+#
+#   - Row 1 is the case the split exists for: a project whose goal lane took two cron-woken
+#     dispatches while its master lane took one. `sum by (project)` would report 3 for the project
+#     and fire — but on the WRONG identity, naming a stack rather than the lane whose doorbell is
+#     dead; more importantly its mirror image (1 + 1, below) is the one that matters.
+#   - Row 2 is that mirror: one cron wake on each of two lanes. The pre-split sum is 2 and FIRES,
+#     the per-lane sums are 1 and 1 and stay quiet — two independent tolerated races are not a dead
+#     doorbell, and this is the false page the split removes.
+#   - Row 3 is fail-closed: a single lane that really is cron-driven still pages, at 2, on its own
+#     lane identity — the split must not make the alert harder to trip for the condition it exists
+#     for.
+#   - Row 4 is the migration residue: a pre-split series carrying NO `base` label. It is frozen (a
+#     group nothing re-pushes), so `changes()` over it is 0 and it can never fire by itself.
+#
+# CLOCK: promtool starts at 0. `changes()` counts VALUE CHANGES in the window, so a series that is
+# stamped k times shows k-1 changes from its first sample — every row's stamps are therefore one
+# more than the count it asserts. The alert carries no `for:`, so it fires on the first evaluation
+# at which the expression holds.
+rule_files:
+  - dispatch-cron-woken.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ 1. TWO LANES, ONE OF THEM CRON-DRIVEN ════════════════════════════════════════════════════
+  # goal/278: stamped at 0, 5m, 10m → 2 changes ⇒ >= 2, fires on that lane.
+  # master:   stamped at 0, 5m       → 1 change  ⇒ quiet.
+  # The alert names ONE lane, which is the whole point: the goal lane's doorbell is dead and the
+  # master lane's is not, and a project-level sum could say neither of those things.
+  - interval: 1m
+    name: "one lane's dead doorbell fires on that lane, not on the stack"
+    input_series:
+      - series: 'agent_dispatch_cron_woken_timestamp{job="agent_dispatch_phase",project="homelab",role="coordinator-scan",base="goal-278"}'
+        values: "1000 1000 1000 1000 1000 1300 1300 1300 1300 1300 1600+0x20"
+      - series: 'agent_dispatch_cron_woken_timestamp{job="agent_dispatch_phase",project="homelab",role="coordinator-scan",base="master"}'
+        values: "2000 2000 2000 2000 2000 2300+0x25"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgentDispatchCronWoken
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              project: homelab
+              base: goal-278
+            exp_annotations: {}
+
+  # ══ 2. THE FALSE PAGE THE SPLIT REMOVES ══════════════════════════════════════════════════════
+  # One cron wake on each of two lanes: per-lane changes() are 1 and 1. Pre-split, `sum by
+  # (project)` added them to 2 and fired — two unrelated tolerated races rendered as one dead
+  # doorbell. Nothing fires here, and that silence is the assertion.
+  - interval: 1m
+    name: "one tolerated race per lane is not a dead doorbell"
+    input_series:
+      - series: 'agent_dispatch_cron_woken_timestamp{job="agent_dispatch_phase",project="oracle-fleet",role="coordinator-scan",base="goal-14"}'
+        values: "1000 1000 1000 1000 1000 1300+0x25"
+      - series: 'agent_dispatch_cron_woken_timestamp{job="agent_dispatch_phase",project="oracle-fleet",role="coordinator-scan",base="master"}'
+        values: "2000 2000 2000 2000 2000 2300+0x25"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgentDispatchCronWoken
+        exp_alerts: []
+
+  # ══ 3. FAIL-CLOSED — the condition the alert exists for still pages ═══════════════════════════
+  # A single lane, stamped three times ⇒ 2 changes ⇒ fires. Sum-by-lane must not raise the bar for
+  # the real defect just because it lowered the noise.
+  - interval: 1m
+    name: "a genuinely cron-driven lane still pages at 2"
+    input_series:
+      - series: 'agent_dispatch_cron_woken_timestamp{job="agent_dispatch_phase",project="circles",role="coordinator-scan",base="master"}'
+        values: "1000 1000 1000 1000 1000 1300 1300 1300 1300 1300 1600+0x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgentDispatchCronWoken
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              project: circles
+              base: master
+            exp_annotations: {}
+
+  # ══ 4. MIGRATION RESIDUE IS INERT ════════════════════════════════════════════════════════════
+  # A pre-ADR-125 sample sits in the un-keyed group and no longer gets re-pushed, so it is a
+  # constant: changes() == 0. It joins the sum under base="" and cannot fire alone. Written because
+  # the alternative reading — "the stale row will page forever" — is the reason a relabelling like
+  # this is usually deferred, and it is simply not true here.
+  - interval: 1m
+    name: "a frozen pre-split series (no base label) never fires"
+    input_series:
+      - series: 'agent_dispatch_cron_woken_timestamp{job="agent_dispatch_phase",project="snore-recorder",role="coordinator-scan"}'
+        values: "1000+0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgentDispatchCronWoken
+        exp_alerts: []

@@ -1,5 +1,7 @@
 CALL item_class_flush
+OUT   lane homelab@master: 2 units, walk → c4c5-redispatch|issue-77
 OUT   FU-121: homelab issue-77 closed since the list snapshot — redispatch skipped; trying next unit
+OUT   lane homelab@master: 2 units, walk → queued-dispatch|issue-100
 OUT → dispatching item unit for test-stack: homelab issue-100 (queued-dispatch, model sonnet, wip 1)…
 OUT   [MOCK] coordinator-session.sh called for issue-100, returning exit 1 (real error)
 RC 1
