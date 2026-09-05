@@ -22,3 +22,32 @@
   loop: "{{ unbound_hosts }}"
   loop_control: { label: "{{ item.hostname }}.{{ item.domain }} -> {{ item.value }}" }
   notify: reconfigure unbound
+
+# --- Advanced settings (unbound_advanced) ------------------------------------------------
+# No typed module covers Unbound's Advanced tab, so: read the live settings, POST the pinned
+# dict only when some key differs (idempotent — a steady-state run changes nothing), then the
+# same reconfigure handler applies. `unbound/settings/set` merges: unlisted fields keep their
+# current value, so the dict only needs the keys we pin. An unset boolean reads back as "" —
+# it compares unequal to "1" once and reads back "1" from then on.
+- name: Read Unbound settings
+  oxlorg.opnsense.raw: { module: unbound, controller: settings, command: get }
+  register: unbound_settings
+
+- name: Compute Unbound advanced keys that differ from the pinned values
+  ansible.builtin.set_fact:
+    unbound_advanced_drift: >-
+      {{ unbound_advanced_drift | default([])
+         + ([item.key] if (unbound_settings.response.unbound.advanced[item.key] | default('') | string)
+                          != (item.value | string) else []) }}
+  loop: "{{ unbound_advanced | dict2items }}"
+  loop_control: { label: "{{ item.key }}={{ item.value }}" }
+
+- name: "Unbound advanced settings (drifted keys: {{ unbound_advanced_drift | default([]) | join(', ') }})"
+  oxlorg.opnsense.raw:
+    module: unbound
+    controller: settings
+    command: set
+    action: post
+    data: { unbound: { advanced: "{{ unbound_advanced }}" } }
+  when: unbound_advanced_drift | default([]) | length > 0
+  notify: reconfigure unbound
