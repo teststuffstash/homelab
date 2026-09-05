@@ -129,6 +129,7 @@ transitions:
       - agents/replay/fixtures/review-pick/behind-cr-no-content-held
       - agents/replay/fixtures/review-pick/behind-first-review-admitted
       - agents/replay/fixtures/reviewer-currency/behind-proceeds
+      - agents/replay/fixtures/reviewer-currency/dirty-skips
     guards:
       - desc: "ONE pick per (repo, base) LANE, oldest first within the lane (ADR-125 (1),
           homelab#1422) — group_by(.baseRefName) over the SAME filtered candidate set. Master-lane
