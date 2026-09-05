@@ -26,6 +26,16 @@
 #       abandoned → descendants are DE-QUEUED but left OPEN (compare-then-write on `agent/queued`),
 #                   goal closes `--reason not planned`
 #
+#   FILING IS INERT (ADR-122 (1), 2026-09-05)  the lane does NOT queue tree members, and the
+#     `bare-members-inert` / `bare-member-counted-not-queued` / `two-goal-inert` rows pin that
+#     absence POSITIVELY. The retired bare-tree-member walk (#1153 → PR#1242) queued every
+#     unlabelled native descendant of an open funded goal whose footprint classified machine- or
+#     codeowner-merge; #1249 recorded three misfires in one tick (a v1.3 theme container and two
+#     deliberate operator legs of Goal #1231). No reader queues an issue from its SHAPE: a bare
+#     member is COUNTED by the container — it moves the burn-down — and DISPOSED at the
+#     checkpoint (`undispositioned | adopted | deferred`, docs/agents/issue-authoring.md
+#     §The lineage contract rule 9, built in S8). Nothing in this lane writes a label on it.
+#
 # WORLDS (family-local — none of these issue numbers exist in the registry circles-29-tree):
 #   terminal  the VALIDATED terminal as the base shape: goal #29 post-launch with the
 #             `goal/validated` label, bucket #77 + live sprout #95 + unrelated #240. The
@@ -34,11 +44,15 @@
 #             issue-list is SHARED across all three — the descendant walk reads number/state/
 #             parent/labels of DESCENDANTS, never the goal's own verdict label.
 #   open-pre  the PRE-LAUNCH open goal shared by the assembly-complete / checkpoint-due /
-#             nonassembly-merge-inert rows: goal #29 OPEN with no verdict label, closed children
-#             #30/#31, bucket #77, unrelated #240. The checkpoint-due shape is the base (its
-#             findings-store comment with 6 undispositioned findings); assembly-complete overlays
+#             nonassembly-merge-inert / bare-member / base-* rows: goal #29 OPEN with no verdict
+#             label, closed children #30/#31, bucket #77, unrelated #240. The checkpoint-due
+#             shape is the base (its findings-store comment with 6 undispositioned findings);
+#             assembly-complete overlays
 #             the merged-PR list (the assembly PR #88 + its sub-issues) and nonassembly-merge-inert
-#             overlays an EMPTY findings store.
+#             overlays an EMPTY findings store. The bare-member rows patch unlabelled
+#             native descendants of #29 onto its `openall`; `bare-member-counted-not-queued`
+#             ALSO overlays an issue-list carrying #301, so the member is in the container's
+#             descendant set and moves the burn-down.
 pins:
   - IL-T12
   - IL-T18
