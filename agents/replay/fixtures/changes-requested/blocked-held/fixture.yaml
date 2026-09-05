@@ -1,17 +1,21 @@
 # changes-requested/blocked-held (homelab#1097) — a PR labelled `agent/blocked` with
 # CHANGES_REQUESTED is EXCLUDED by the PR-label exclusion set and must NOT dispatch.
 #
-# CONDITION UNDER REPLAY. PR #1094 is worker-authored, CHANGES_REQUESTED, and carries the
-# `agent/blocked` label (the coordinator's own escalate terminal). The jq selector's PR-label
-# exclusion set now includes `agent/blocked` beside its three same-class neighbours
-# (`major/awaiting-human`, `agent/error`, `agent/arbitrate`), so the PR is filtered out before
-# any probe or hold is reached.
+# CONDITION UNDER REPLAY. Two PRs:
+#   - PR #1094 is worker-authored, CHANGES_REQUESTED, and carries the `agent/blocked` label
+#     (the coordinator's own escalate terminal). The jq selector's PR-label exclusion set
+#     now includes `agent/blocked` beside its three same-class neighbours
+#     (`major/awaiting-human`, `agent/error`, `agent/arbitrate`), so the PR is filtered out
+#     before any probe or hold is reached.
+#   - PR #1100 is CHANGES_REQUESTED with a terminal ruling bearing `blocked-on: human` and
+#     no human engagement since. The new blocked-on gate now holds it (homelab#1427).
+#     This PR pins the new gate alongside the existing contract.
 #
 # THE CONTRACT:
-#   1. No `gh pr view` call is made — the PR never enters the loop body.
-#   2. No UNIT is emitted.
-#   3. No ORPHAN line is produced — the exclusion is silent, matching the behaviour of the
-#      three existing exclusion labels.
+#   1. PR #1094 never enters the loop body; no `gh pr view` call is made.
+#   2. PR #1100 enters the loop but is held by the blocked-on gate; one ORPHAN line
+#      reports the blocked state.
+#   3. No UNIT is emitted for either PR.
 pins:
   - MP-T11
 name: changes-requested-blocked-held
