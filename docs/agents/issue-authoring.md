@@ -394,6 +394,13 @@ Flat `key: value` lines, keys exactly as spelled in the sections below (`Touches
 bullets, no duplicates, no multi-line values — anything else inside the fences is a **loud parse
 error**, never a silent skip. A body with no block is legal.
 
+**Authors never type the block by hand** — it is composed by the parser's own writer and re-read
+before the issue is posted: `python3 agents/issue_body.py set "Touches=…" "Base=…" "Origin=…"
+< body.md > body.final.md`, then `python3 agents/issue_body.py json < body.final.md` (exit 2 ⇒ fix
+the block, never post), then `gh issue create --body-file body.final.md`. The coordinator's
+authoring plays carry the in-pod form of this in
+[`agents/coordinator/README.md`](../../agents/coordinator/README.md) §Authoring an issue body.
+
 The legacy line-anchored forms are still READ for the transition window and metered: each
 fall-through prints `LEGACY-GRAMMAR <key> <ref>` on stderr. Writers switch at S8 original 1b
 (#1431); the legacy read retires at S8 closeout 2.
