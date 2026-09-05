@@ -1,0 +1,8 @@
+{
+  "number": 92,
+  "title": "fix: tighten the kind-system gate for cross-repo refs",
+  "labels": [
+    { "name": "agent-fix" }
+  ],
+  "body": "Base: goal/62-kind-system-gate\nTouches: kind-registry/**\n\n## Summary\n\nThe kind-system gate currently allows cross-repo refs to bypass validation.\n"
+}
