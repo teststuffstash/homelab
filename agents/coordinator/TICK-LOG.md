@@ -7042,3 +7042,37 @@ first live ADR-110 maintenance session before the ADR existed.
   survive update-branch merges, so the skip may be obsolete), the #1430 parser chunk (subagent
   still building). Sprout #1439 filed (goal-findings.sh's bare `--paginate`). Ledger rows for
   the four chunks written; next session = 1b (#1431) after 1a lands, then #1420.
+
+## 2026-09-05 ~13:00Z — alert check-in (short seat session, no corpus)
+
+- **Board: 16 firing.** Disk is the cluster: `PveThinPoolFillingUp` 86.3 % (79.6 % at 07:00Z after
+  the 03:35Z fstrim — +24 GB in 6 h while the three pool guests' `/var` moved <3 GB: the growth was
+  untrimmed churn, wk-03 holding 15 GB of freed blocks, wk-01 4 GB). **Command:** manual
+  `fstrim-wk-03` + `fstrim-wk-01` jobs (`node-maintenance`, the memory recipe) → pool **81.0 %**,
+  wk-03's LV 84.9 → 48.9 %, ~72 GB headroom. The post-trim FLOOR is what climbs (~75 → 79.6 → 81 %
+  over two days; wk-02 `/var` −20 GB/24 h, all of it under Longhorn's instance-manager, 168 GB
+  written/24 h — replica actual-size growth, not images: kubelet imageFs 83 GB, flat). Composition
+  now: wk-02 199 GB · wk-01 62 · wk-03 36→~21 · ci-runner-01 23 · cp-01 5 · matchbox 3 of 380 GB;
+  VG free 28 MB, autoextend inert. Only free lever left is FU-207 (ci-runner-01).
+- `LonghornDiskBelowSchedulingFloor` wk-02 78 % — same disk, same growth; Longhorn places no new
+  replica there. `KubeDaemonSetRolloutStuck` / `KubeContainerWaiting` / `KubePodNotReady`
+  (`runner-image-prepull-pve-jdc7m`) = the FU-208 pool-gate holding at ≥75 % — correct behaviour,
+  but with the floor above the threshold the hold is permanent; FU-208 extended with the sighting.
+- `NodeSystemSaturation` wk-01 (load 3.4/core, 68 % busy, iowait 9 %) + `NodeDiskIOSaturation`
+  wk-metal-04 (72 % util, Longhorn instance-manager 28 MB/s): both the oracle stack's
+  `ert-pipeline-attended-7twxq-parse` job (4 h on wk-02) writing thousands of `ert-snapshots/parsed/`
+  objects → Garage meta (`meta-garage-0`, 11 MB/s writes; garage-0 on wk-01, meta replica on
+  metal-04). Stack workload — relay, don't triage; passes with the job.
+- Agent belts: `AgentErrorFlagged` PR#1435 = the FU-069 breaker on the merge-conflict clause
+  re-dispatching on unchanged state — the loop filed **#1444**, label is the correct hold until it
+  lands; `CodeownerParkWaiting` or-op#65 — PR merged 12:43:56Z, alert resolved on its own by
+  13:05Z (10 m window); `AgentDispatchCronWoken` ×2 = FU-178's emitter hunt (open);
+  `AgentAttentionStanding` oracle-fleet = meta-state operator items 5–7;
+  `RouterRunModelUnverifiable` ×3 (`opencode-go/deepseek-v4-flash` worker, one row per stack,
+  since 09-03 22:24Z; harvest `missed`=0, no increase in 2 h) — the counter is COMPUTED from the
+  store so the condition stands until the rows age out; the rides are #1378/#1392's deepseek r1
+  (pre-haiku-flip). No FU matches `Go ledger|unverifiable` — left standing, not filed (3 rows,
+  the rail is retired for platform).
+- Stale subagent reports arrived from the S8 sitting: PR#1436 (1a parser) OPEN green, never
+  reviewed; PR#1434 round-2 pushed, green — both wait on the FU-088 latch (~18:00Z). #1436's
+  author flags `body.md` tracked at the repo root since 0825b983 (#1386) — looks accidental, check.
