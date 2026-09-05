@@ -5,6 +5,7 @@
     "mergeStateStatus": "CLEAN",
     "autoMergeRequest": { "enabledAt": "2026-08-20T10:01:00Z" },
     "reviewDecision": "",
+    "baseRefName": "master",
     "labels": []
   },
   {
@@ -13,6 +14,7 @@
     "mergeStateStatus": "BEHIND",
     "autoMergeRequest": null,
     "reviewDecision": "",
+    "baseRefName": "master",
     "labels": []
   }
 ]

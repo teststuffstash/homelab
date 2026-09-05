@@ -3,7 +3,7 @@
 # review but reviewDecision is still REVIEW_REQUIRED (a human codeowner must also approve).
 . + [
   { number: 130, createdAt: "2026-09-03T12:00:00Z", mergeStateStatus: "BEHIND",
-    autoMergeRequest: { enabledAt: "2026-09-03T12:01:00Z" }, reviewDecision: "REVIEW_REQUIRED",
+    autoMergeRequest: { enabledAt: "2026-09-03T12:01:00Z" }, reviewDecision: "REVIEW_REQUIRED", baseRefName: "master",
     labels: [],
     headRefOid: "park130oid789",
     latestReviews: [

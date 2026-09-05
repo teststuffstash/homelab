@@ -1,0 +1,27 @@
+# review-pick-same-lane-oldest (ADR-125 (1), homelab#1422) — WITHIN a lane the serializer is
+# unchanged: one pick per pass, oldest first.
+#
+# CONDITION UNDER REPLAY. The two-lane world with #110 re-based onto `master`, so both candidates
+# now share ONE lane (#101 created 09:00, #102 created 10:00). This is the row that keeps the
+# per-lane split from decaying into "review everything at once": grouping must not raise the number
+# of concurrent reviews inside a base, because that is exactly where a merge stales a sibling's
+# fresh approval.
+#
+# THE CONTRACT (executes the REAL pick jq from review-reflex.sh via sentinel):
+#   1. ONE pick line, not two.
+#   2. It is the OLDER PR (#101, createdAt 09:00 < 10:00) — `sort_by(.createdAt) | .[0]` applied
+#      inside the group, exactly as it was applied to the repo before.
+#
+# EXPECTED STREAM (computed from the world + the block's format string): #101, three zero verdict
+# counts, branch fix/issue-11-alpha, issue key 11 from the branch capture, base master.
+#
+# Parts: bridge.sh + block:review-pick (real code) + post.sh — shared with two-lanes-two-picks.
+name: review-pick-same-lane-oldest
+mode: actions
+pins:
+  - MP-T03
+source: agents/review-reflex.sh
+parts:
+  - file:../two-lanes-two-picks/bridge.sh
+  - block:review-pick
+  - file:../two-lanes-two-picks/post.sh

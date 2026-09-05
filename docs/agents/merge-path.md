@@ -217,6 +217,13 @@ repo**, exactly like the updater updates one at a time per repo. Reviews in *dif
 parallelize freely (a merge in repo X can't stale a PR in repo Y). The cost is within-repo review
 latency (they queue); at ~4–8 min per review on an autonomous pipeline, that's irrelevant.
 
+**The serialization unit is the (repo, BASE) LANE, not the repo** (ADR-125, homelab#1422): the
+staling chain above only ever runs between PRs sharing a base, so the reflex picks one PR per lane
+and the updater's main leg updates one per lane — the default branch is one lane, every `goal/**`
+base is another, and a master merge cannot dismiss a goal-lane approval. `REVIEW_CONCURRENCY` and
+the FU-088 subscription latch are untouched and stay the fleet-wide ceiling; lanes buy parallelism
+inside it.
+
 The only remaining double-review window: master moves in the seconds between "approval submitted"
 and "auto-merge executes" (e.g. an operator direct-push, which bypasses the gates as OrgAdmin).
 Then that PR is updated and re-reviewed once. Rare, self-healing, counted in scenario L below.
