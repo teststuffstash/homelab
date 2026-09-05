@@ -25,6 +25,14 @@ if _rp_is_mutation "$MUTATING_VERBS" "$WORDS"; then
     *" -f - "*|*" --filename - "*|*" -f- "*)
       sed 's/^/STDIN /' >> "$REPLAY_ACTIONS" ;;
   esac
+  # Per-call failure injection (homelab#1386): STUB_KUBECTL_<slug>=fail refuses ONE named write —
+  # a clause with a create-then-fallback branch (context-prefetch's ConfigMap) needs to observe a
+  # REFUSED write, and writes otherwise always succeed unconditionally.
+  PC_OVERRIDE="$(_rp_per_call_override "$(_rp_slug "$WORDS")")" || PC_OVERRIDE=''
+  if [ "$PC_OVERRIDE" = fail ]; then
+    printf 'error: the server could not find the requested resource\n' >&2
+    exit 1
+  fi
   _rp_serve "$WORDS" optional || true
   exit 0
 fi
