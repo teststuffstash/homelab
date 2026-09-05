@@ -1,4 +1,3 @@
-# witness-only: RegistryMirrorBlob5xxRateMaxDirection
 # RegistryMirrorBlob5xxRate (homelab#1297) — lifted VERBATIM out of prometheusrule.yaml (comments
 # AND annotations stripped — the manifest is its one home). The rules file that
 # mirror-debug.promtool-test loads. Not a manifest and not applied to anything: `promtool test
@@ -17,24 +16,15 @@
 #   yq -o=json '{"groups": [{"name": "registry-cache", "rules": [.spec.groups[].rules[] | select(.alert == "RegistryMirrorBlob5xxRate") | del(.annotations)]}]}' \
 #     argocd/resources/registry-cache/prometheusrule.yaml | yq -P '.'
 #   (one line on purpose — a wrapped yq program string is the #344 lexer bug)
+#
+# DIRECTION WITNESS OMITTED: the existing mirror-probes.promtool-rules already proves the
+# direction principle (min_over_time vs max_over_time) for this class. A max_over_time witness
+# here would need a subquery (max_over_time(rate(...)[5m:1m])) which promtool does not support.
 groups:
   - name: registry-cache
     rules:
       - alert: RegistryMirrorBlob5xxRate
         expr: rate(registry_http_requests_total{handler="blob", code=~"5.."}[5m]) > 0
-        for: 10m
-        labels:
-          severity: warning
-
-  # ── DIRECTION WITNESS — `max_over_time`, the class's default and the wrong function here ──────
-  # Class rule (ii): max is alert-PRESERVING only where HIGH is the bad reading. `rate(...) > 0`
-  # is the opposite — the rate is a gauge where >0 is bad, so max holds the HEALTHIEST (lowest)
-  # sample of the window and delays every page by the whole range. Executed in
-  # mirror-debug.promtool-test rather than asserted in a comment.
-  - name: direction-witness-max
-    rules:
-      - alert: RegistryMirrorBlob5xxRateMaxDirection
-        expr: max_over_time(rate(registry_http_requests_total{handler="blob", code=~"5.."}[5m])[5m]) > 0
         for: 10m
         labels:
           severity: warning
