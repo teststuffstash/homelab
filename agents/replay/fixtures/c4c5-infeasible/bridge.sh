@@ -21,3 +21,8 @@ inprog="$(cat "$REPLAY_WORLD/gh/issue-list-inprog.json")"
 # ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
 # so a harness running one extracted block has no flush to assert on.
 item_class_push() { :; }
+
+# The ONE body-grammar parser (ADR-122 (3), homelab#1460): the C4/C5 class derivation reads the
+# block through it, so the bridge points IB_PY at the REAL module in the checkout — the same
+# line goal/bridge.sh already carries.
+IB_PY="$REPLAY_ROOT/agents/issue_body.py"
