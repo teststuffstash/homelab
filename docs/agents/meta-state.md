@@ -13,12 +13,12 @@ never the session's arc — that is TICK-LOG's.)
 - **⚑ NEXT SESSION (seat, 2026-09-05 ~08:10Z, mid-stint pickup — this corpus session may still
   be running; check `gh pr list` before acting): (1) ADR-110 codeowner reads on the seat-subagent
   PRs that park: #1399 (#1200 vendored CNP schema), #1401 (#1207 filing-door classify), #1402
-  (#1308 BuildKit mirrors, both legs), the #1249 walk-retirement PR (number TBD), and #1386
+  (#1308 BuildKit mirrors, both legs), #1397 (approved 08:36Z, merges on auto-merge), and #1386
   (its two codeowner-read defects fixed in-PR at 75b5ba26; re-review pending after a false
   `agent/error` was cleared — homelab#1403). (2) **After #1386 merges:** close or narrow #1069
   (its homelab half is the prefetch's required-read deferral; the finalize half is
-  agent-runtime's). (3) **After #1249 merges:** drop `agent/error` from #1334 (the #1249 damper
-  lifts) and re-read #1237/#1238 (they stay unqueued by intent). (4) **Apply #1308 leg 1 on
+  agent-runtime's). (3) DONE 08:35Z — #1400 merged, #1334's `agent/error` lifted; #1237/#1238 stay unqueued by
+  intent. (4) **Apply #1308 leg 1 on
   ci-runner-01** (buildkitd.toml + the `homelab-mirrors` builder) — via the pending ci-runner
   `tofu apply` replace, or the interim SSH hand-apply of the same two artifacts; the PR body
   carries the recommendation. (5) #1393 heat trims if room remains.**
@@ -49,7 +49,10 @@ never the session's arc — that is TICK-LOG's.)
      seat-authored — the seat's own push); oracle-fleet **#425/#426** un-armed research PRs
      (the operator's `specs/` read, by design); circles **PR#25** un-armed (specs contract —
      arm or park); sleep-tracking **PR#143** ci-red held because #141 is `agent/blocked`.
-  7. **Hygiene:** stale agent branches, delete or resume — homelab 11
+  7. **Hygiene:** a ZOMBIE hosted run — `update-pr-branch` (retired workflow) queued since
+     2026-08-19 04:58Z on `ubuntu-latest`, id 32217689970; cancel says completed, DELETE 403s
+     with the jail PAT — an operator-identity/UI delete, or ignore (excluded from
+     CiDispatchStalled as `runner=hosted`) · stale agent branches, delete or resume — homelab 11
      (`agent/20260824-104524 …-132129 20260825-171429 20260830-233803 20260901-165514`,
      `fix/cost-rethink fix/issue-126-… fix/issue-500-… fix/issue-721-…
      fix/reviewer-app-statuses-… fix/window-shares`), agent-runtime 1, oracle-fleet 4,
@@ -201,8 +204,8 @@ never the session's arc — that is TICK-LOG's.)
     after the harness matrix closed on all three arms, 09-02) — not yet filed.
 - **Soaks** (each owned by an FU/issue — this line is only the calendar): retro r3 Mon 09-07
   · FU-148 first organic environmental-red retry · or-op#34 first daily-429 ·
-  renovate-approve one-approval-per-head (#114) · CiDispatchStalled quiet-month window opens
-  ~09-11 (FU-150) · FU-192 per-tenant ingest sizing (due ~09-03, PAST) · **paid-flash REVERT EXECUTED 2026-09-05 07:54Z** (PR#1395 — none of #715's three
+  renovate-approve one-approval-per-head (#114) · CiDispatchStalled FIRED 09-05 08:36Z (ARC pool saturated by the seat's PR burst — L-scenario
+  churn, not a wedge) → the quiet-month window (FU-150) restarts from 09-05 · FU-192 per-tenant ingest sizing (due ~09-03, PAST) · **paid-flash REVERT EXECUTED 2026-09-05 07:54Z** (PR#1395 — none of #715's three
   triggers had fired; operator-ordered; the FU-095 flip child, if wanted, mints from here;
   Go re-flip = FU-181) · opencode.ai
   rails PARKED behind `OPENCODE_RAIL_DISABLED` since 09-04 (FU-213; the vendor's 09-06
