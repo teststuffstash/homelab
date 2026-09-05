@@ -265,7 +265,16 @@ Composition's own naming and moves only if the Composition's does.
   WorkflowTemplate; CronWorkflow and Sensor both `workflowTemplateRef` it (the review-argo shape).
   Scoping went further than the planned `--repo`: ADR-094 item-scoped dispatch (FU-086) — the
   scan emits `(clause, repo, item)` units and the session judges ONE unit via
-  `coordinator-session.sh --item`.
+  `coordinator-session.sh --item`. **Since ADR-125 the scan's clause priority walk runs once per
+  LANE — a (repo, base) pair — so up to one unit per lane is dispatched per pass** (the fleet
+  ceiling is still the subscription latch, probed before every spawn; per-lane slots were
+  rejected). Within a lane the priority is a preference rather than an absolute: a `queued-dispatch`
+  or `goal-decompose` unit that has lost `SCAN_AGING_N` (3) consecutive lane dispatches escalates
+  to the front of that lane's walk, with the loss count DERIVED from GitHub state — the newest
+  `agent/queued` labeled event versus the `<!-- agent-event … -->` markers on the lane's other
+  in-flight items — and never held in the scan's head (homelab#829). The lane also labels the
+  famine gauges: `agent_item_class{…,base=…}` and the cron/edge wake series, so
+  `AgentDispatchCronWoken` counts a dead doorbell per lane instead of per stack.
 - **Proven out; residue SHIPPED (FU-086, archived complete):** the coordinator cron relaxed
   `*/10 → */30` 2026-08-02 (the review reflex's own `*/5 → */15` move — less GraphQL burn), and
   the FU-085 compound shipped 2026-08-03 — reviewer verdicts carry their unit → Sensor

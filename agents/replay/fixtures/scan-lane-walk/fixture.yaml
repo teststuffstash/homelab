@@ -1,0 +1,42 @@
+# scan-lane-walk — THE FAMILY. ADR-125 (3): the scan's clause priority walk runs ONCE PER LANE,
+# and a WITHIN-lane aging predicate escalates a new-work unit that has lost N lane dispatches
+# (homelab#829, absorbed into #1422).
+#
+# THE CONTRACT, as a decision table over one dispatch loop:
+#   1. TWO LANES, TWO DISPATCHES IN ONE PASS (`two-lanes`). A `changes-requested` PR unit based on
+#      `master` and a queued child based on `goal/x` are different lanes: master-lane merges cannot
+#      re-base a goal/**-based PR and vice versa, so nothing is serialized by holding one behind
+#      the other. Both dispatch. The SECOND spawn re-probes the subscription latch — the latch is
+#      the FLEET ceiling and per-lane slots were rejected in ADR-125's Considered; the first spawn
+#      rides the pass-level probe that sits above this block.
+#   2. AGING ESCALATES AFTER N=3 LOSSES (`aged`). One lane holding a standing `changes-requested`
+#      unit plus a `goal-decompose` unit queued at 12:00Z, with THREE dispatch markers newer than
+#      that on the lane's other in-flight item. lost = 3 ≥ N, so the goal unit goes STRAIGHT to the
+#      front of the walk and wins over the recovery clause it would otherwise always lose to.
+#   3. AND NOT BEFORE (`not-yet`). The same world with TWO markers: lost = 2 < N, the ordinary
+#      priority holds and the recovery unit dispatches. This is the non-regression #829 demands —
+#      "recovery work exists to finish PRs already in flight, and starving THAT is how a
+#      half-merged wave rots".
+#   4. AN UNREADABLE PROBE NEVER ESCALATES (`probe-unreadable`). The `agent/queued` events read
+#      fails: one report line, no aging, ordinary walk. Rule #6 — never fail INTO a dispatch.
+#
+# The aging state is DERIVED and read-only (#829's first design question): `queued_at` is the
+# newest `labeled` event for `agent/queued` on the issue, and the loss count is the number of
+# `<!-- agent-event kind=… ts=… -->` markers newer than it inside the lane siblings' single
+# `<!-- agent-summary -->` comments (grammar: agents/machine-comment.sh). Nothing is written.
+#
+# Rows differ ONLY by `ROW`, which selects the world the bridge mocks — the deltas here are gh
+# RESPONSES (an events timestamp, a marker count, a probe failure), not recorded JSON documents,
+# so they live in the bridge's `case` beside the reasoning that makes each one a condition. Same
+# shape as the fu146-dispatch-loop fixtures this family sits beside.
+pins:
+  - IL-T05
+name: scan-lane-walk
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - block:unit-lane
+  - file:bridge.sh
+  - block:fu146-dispatch-loop
+  - file:cases.sh
+rows: rows.psv

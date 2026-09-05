@@ -16,6 +16,7 @@ name: item-class
 mode: actions
 source: agents/coordinator-scan.sh
 parts:
+  - block:unit-lane
   - block:item-class
   - file:bridge.sh
 env:

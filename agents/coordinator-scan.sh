@@ -43,6 +43,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # Add new defaults here when a replayed block references them.
 ORG="${ORG:-teststuffstash}"
 REPO_MAX_WIP="${REPO_MAX_WIP:-3}"   # ADR-097 hard ceiling: concurrent workers per repo. TRACKS rule 1 counts armed PRs per base; was binary WIP=1 until meta-8 proved two dispatchers race inside one scan window (2026-07-21 #55). 3 allows slack for a second worker without unbounded concurrency.
+SCAN_AGING_N="${SCAN_AGING_N:-3}"   # #829 / ADR-125 (3): a NEW-WORK unit that has lost this many consecutive LANE dispatches escalates to the front of its lane's walk. 3 = the smallest count that is not one unlucky tick: the #818 evening lost ~45 min, which at the measured ride length is four to five recovery rides, so two losses is ordinary contention and three is a pattern.
 ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"   # homelab#840: gh's unstated 30-result default silently hid queued #110 for 24 days (46 open issues, window floor #840). 200 is well above any repo's open-issue count; the scan prints a loud TRUNCATED warning if the fetch fills the limit.
 # <<<REPLAY:config-defaults<<<
 STACKS_FILE="${STACKS_FILE:-${HERE}/stacks.json}"
@@ -201,6 +202,114 @@ scan_phase() {   # $1 = dispatch | deterministic — record a phase transition f
   return 0
 }
 # <<<REPLAY:scan-phase<<<
+
+# ── LANES: the serialization unit is (repo, base) — ADR-125 ─────────────────────────────────────
+# A LANE is a (repo, base-branch) pair. ADR-125's ground: the serializer exists to avoid the
+# merge→behind→dismiss-approval chain, and that chain only runs between PRs sharing a BASE. Work on
+# `master` and work on `goal/**` cannot invalidate each other, so queueing one behind the other is
+# starvation with no safety purchased by it (goal #278's 361 starved minutes; #818's decompose
+# losing ~45 min to a self-regenerating changes-requested stream, 2026-08-23 — homelab#829).
+# The clause priority walk below therefore runs ONCE PER LANE instead of once per stack.
+#
+# WHERE A UNIT'S BASE COMES FROM, and why it is RECORDED here rather than re-read at dispatch:
+#   - an ISSUE unit's base is the issue body's `Base:` line, defaulted to the repo's default
+#     branch. That is the SAME read the homelab#849 per-base cap already does (`qbase`); this map
+#     reuses the existing body, never a second regex — S8 original 1b migrates every `Base:`
+#     reader onto agents/issue_body.py, and a new regex here would be a reader it must then delete.
+#   - a PR unit's base is `baseRefName`, already on the per-repo `prsjson` fetch.
+# Both are known inside the per-repo pass; the dispatch loop runs AFTER that pass, so the pass
+# records and the loop reads. Recording costs no API call; re-reading at dispatch would.
+#
+# THE FALLBACK CHAIN IS FAIL-SAFE: unknown item → the repo's default branch → `master`. An unknown
+# lane never invents parallelism; it folds the item into the default-branch lane, which is exactly
+# the whole-stack behaviour that shipped before this.
+#
+# ⚠ The base is stored VERBATIM off `Base:` / `baseRefName`, whitespace-trimmed and nothing else —
+# the #849 cap already matches a raw `Base:` value against a raw `baseRefName`, so trimming further
+# (backticks, `refs/heads/`) here would make the two disagree about what one lane is. Trimming
+# whitespace is not cosmetic: a lane key with a space in it would word-split the walk below.
+# >>>REPLAY:unit-lane>>>
+UNIT_LANES=""             # newline-joined "repo|item|base"   (item = issue-N / pr-N)
+REPO_DEFAULT_BRANCHES=""  # newline-joined "repo|default-branch"
+
+unit_lane_record() {   # unit_lane_record <repo> <item> <base>
+  local b="${3:-}"
+  b="${b#"${b%%[![:space:]]*}"}"; b="${b%"${b##*[![:space:]]}"}"
+  [ -n "${1:-}" ] && [ -n "${2:-}" ] && [ -n "$b" ] || return 0
+  # A lane key is word-split by the walk, and git refuses a ref name containing whitespace — so a
+  # `Base:` line with an internal space is prose, not a branch. Record nothing: the item falls back
+  # to the repo's default-branch lane, which is the pre-ADR-125 behaviour for it.
+  case "$b" in *[[:space:]]*) return 0;; esac
+  UNIT_LANES="${UNIT_LANES}${1}|${2}|${b}
+"
+}
+
+unit_lane_default_record() {   # unit_lane_default_record <repo> <default-branch>
+  [ -n "${1:-}" ] && [ -n "${2:-}" ] || return 0
+  REPO_DEFAULT_BRANCHES="${REPO_DEFAULT_BRANCHES}${1}|${2}
+"
+}
+
+unit_lane_default() {   # unit_lane_default <repo> → its default branch, `master` when unrecorded
+  local d
+  d="$(printf '%s' "$REPO_DEFAULT_BRANCHES" | awk -F'|' -v r="${1:-}" '$1 == r { print $2; exit }')"
+  printf '%s' "${d:-master}"
+}
+
+unit_lane_of() {   # unit_lane_of <repo> <item> → the lane's base branch (never empty)
+  local b
+  b="$(printf '%s' "$UNIT_LANES" | awk -F'|' -v r="${1:-}" -v i="${2:-}" '$1 == r && $2 == i { print $3; exit }')"
+  [ -n "$b" ] || b="$(unit_lane_default "${1:-}")"
+  printf '%s' "$b"
+}
+
+# The WALK ORDER over lanes. Repos come in EMISSION order and lanes are ordered WITHIN a repo by
+# their oldest item: GitHub numbers issues and PRs out of ONE per-repo sequence, so a lower number
+# IS an older item. Across repos the same comparison is meaningless (two sequences), which is why
+# repos are grouped rather than globally sorted — a global number sort would interleave two repos
+# on a number that means nothing between them. Ties (only reachable when an item id does not parse)
+# put the repo's DEFAULT-BRANCH lane first, then sort by lane key, so the order is total and the
+# walk is reproducible from the unit list alone.
+unit_lane_keys() {   # unit_lane_keys <units-blob> → "repo|base" lines, in walk order
+  local ln clause rest repo item base num rows=""
+  while IFS= read -r ln; do
+    [ -n "$ln" ] || continue
+    clause="${ln%%|*}"; rest="${ln#*|}"; repo="${rest%%|*}"; rest="${rest#*|}"; item="${rest%%|*}"
+    [ -n "$clause" ] && [ -n "$repo" ] && [ -n "$item" ] || continue
+    base="$(unit_lane_of "$repo" "$item")"
+    num="${item##*-}"
+    case "$num" in ''|*[!0-9]*) num=999999999;; esac
+    rows="${rows}${repo}	${base}	${num}	$( [ "$base" = "$(unit_lane_default "$repo")" ] && echo 0 || echo 1 )
+"
+  done <<EOF
+$(printf '%b' "${1:-}")
+EOF
+  printf '%s' "$rows" | awk -F'\t' '
+    NF < 4 { next }
+    {
+      key = $1 "|" $2
+      if (!($1 in ridx)) ridx[$1] = ++rn
+      if (!(key in seen)) { seen[key] = 1; ord[key] = ridx[$1]; minnum[key] = $3 + 0; isdef[key] = $4 + 0; keys[++n] = key }
+      else if ($3 + 0 < minnum[key]) minnum[key] = $3 + 0
+    }
+    END { for (i = 1; i <= n; i++) { k = keys[i]; printf "%d\t%d\t%d\t%s\n", ord[k], minnum[k], isdef[k], k } }
+  ' | sort -t'	' -k1,1n -k2,2n -k3,3n -k4,4 | cut -f4
+}
+
+unit_lane_units() {   # unit_lane_units <units-blob> <repo> <base> → the unit lines in that lane
+  local ln clause rest repo item
+  while IFS= read -r ln; do
+    [ -n "$ln" ] || continue
+    clause="${ln%%|*}"; rest="${ln#*|}"; repo="${rest%%|*}"; rest="${rest#*|}"; item="${rest%%|*}"
+    [ -n "$clause" ] && [ -n "$repo" ] && [ -n "$item" ] || continue
+    [ "$repo" = "${2:-}" ] || continue
+    [ "$(unit_lane_of "$repo" "$item")" = "${3:-}" ] || continue
+    printf '%s\n' "$ln"
+  done <<EOF
+$(printf '%b' "${1:-}")
+EOF
+}
+# <<<REPLAY:unit-lane<<<
 # ── ITEM CLASS EXPORT (homelab#892) — per-tick derived class → pushgateway ─────────────────────
 # The scan classifies every open issue/PR it sees into one of the derived classes below. At the
 # end of each stack's pass, the class map is pushed to the pushgateway (job `agent_board`, grouped
@@ -215,21 +324,27 @@ scan_phase() {   # $1 = dispatch | deterministic — record a phase transition f
 #   footprint-held, cap-held, blockpark
 # who ∈ operator | machine | none
 # >>>REPLAY:item-class>>>
-# Per-pass accumulator: newline-joined lines "repo|item|class|who|first_timestamp"
+# Per-pass accumulator: newline-joined lines "repo|item|class|who|base" (ADR-125 lane label)
 # Gets flushed once after the stacks loop via item_class_flush.
 ITEM_CLASS_ROWS=""
 
 item_class_push() {   # accumulate one item class row for batch push
-  local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}"
-  # Append to accumulator; caller will flush at end of stack's pass
-  ITEM_CLASS_ROWS="${ITEM_CLASS_ROWS}${repo}|${item}|${class}|${who}|...\n"
+  local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}" base="${5:-}"
+  # ADR-125 per-lane famine gauge: every row carries the item's LANE base, so a starved lane is a
+  # query (`agent_item_class{class="queued-ready"} by (base)`) instead of an anecdote. The base is
+  # OPTIONAL at the call site on purpose — `unit_lane_of` is the ONE resolution home (record at
+  # emission, fall back to the repo default branch, then `master`), so a caller only passes it
+  # explicitly where it holds a better answer than the map: the queued clause's own `$qbase`, and
+  # the aggregate/container rows, which are not one item's lane and take the default branch.
+  [ -n "$base" ] || base="$(unit_lane_of "$repo" "$item")"
+  ITEM_CLASS_ROWS="${ITEM_CLASS_ROWS}${repo}|${item}|${class}|${who}|${base}\n"
 }
 
 item_class_flush() {   # batch-push all accumulated rows, carrying first-transition timestamps
   [ -n "$SCAN_PHASE_PGW" ] && [ -n "$SCAN_PHASE_POD" ] || return 0
   [ -z "$ITEM_CLASS_ROWS" ] && return 0
 
-  local now rows_body metrics_before metric_line repo item class who since_ts ts_line
+  local now rows_body metrics_before metric_line repo item class who base since_ts ts_line
   now="$(sp_now)"
 
   # Query pushgateway to get existing metrics for timestamp carry-over (GET the group's current state)
@@ -247,15 +362,21 @@ item_class_flush() {   # batch-push all accumulated rows, carrying first-transit
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    IFS='|' read -r repo item class who since_ts <<<"$line"
+    IFS='|' read -r repo item class who base <<<"$line"
     [ -n "$repo" ] && [ -n "$item" ] && [ -n "$class" ] && [ -n "$who" ] || continue
+    # A row with no base is a caller that predates the lane map, not a reason to drop the row:
+    # fall back to the repo default branch so the series never loses a member to a missing label.
+    [ -n "$base" ] || base="$(unit_lane_default "$repo")"
 
     # Look up the timestamp from the previous tick (if the item+class pair existed and is unchanged)
     # Extract from metrics_before: agent_item_class_since_timestamp_seconds{...repo="X",item="Y",class="Z",...} VALUE
     if [ -n "$metrics_before" ]; then
+      # ⚠ The carry-over must match on the FULL label set the row is pushed with — `base` included.
+      # A since-timestamp looked up on four of five labels would survive a lane change and report
+      # the item as having been in its new lane since before it moved (ADR-125 per-lane rows).
       ts_line="$(printf '%s' "$metrics_before" | grep -F "agent_item_class_since_timestamp_seconds" \
         | grep "repo=\"${repo}\"" | grep "item=\"${item}\"" | grep "class=\"${class}\"" \
-        | grep "who=\"${who}\"" | sed 's/.*} //' | head -1 || true)"
+        | grep "who=\"${who}\"" | grep "base=\"${base}\"" | sed 's/.*} //' | head -1 || true)"
     else
       ts_line=""
     fi
@@ -266,8 +387,8 @@ item_class_flush() {   # batch-push all accumulated rows, carrying first-transit
       *) since_ts="$now" ;;
     esac
 
-    rows_body="${rows_body}agent_item_class{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\"} 1
-agent_item_class_since_timestamp_seconds{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\"} ${since_ts}
+    rows_body="${rows_body}agent_item_class{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\",base=\"${base}\"} 1
+agent_item_class_since_timestamp_seconds{repo=\"${repo}\",item=\"${item}\",class=\"${class}\",who=\"${who}\",base=\"${base}\"} ${since_ts}
 "
   done <<<"$(printf '%b' "$ITEM_CLASS_ROWS")"
 
@@ -722,7 +843,8 @@ DISPATCH_PHASE_MARK="$DISPATCH_PHASE_T0"
 dispatch_phase() {   # $1 = the stack's MAIN repo — publish the scan-side rows, at a dispatch
                      # $2 = clause (queued-dispatch / changes-requested / ci-red / …) — keys the per-clause wake series (homelab#459)
                      # $3 = unit class, BARE (`fix` / `goal` — :1642 defaults it; never `task/fix`) — populated on queued-dispatch/c4c5 only
-  local project="${1:-}" clause="${2:-}" ukind="${3:-}" now ring family="" wake="" cseg="" useg=""
+                     # $4 = the dispatched unit's LANE base (ADR-125) — keys the per-lane wake series; empty = unkeyed (the pre-ADR-125 group)
+  local project="${1:-}" clause="${2:-}" ukind="${3:-}" ubase="${4:-}" now ring family="" wake="" cseg="" useg="" bseg=""
   now="$(dp_now)"
   # The per-clause breakdown (homelab#459 — the FU-168 emitter hunt) rides a SECOND push below
   # whose GROUPING KEY carries the dimensions. It cannot be body labels on any shared-group
@@ -735,6 +857,16 @@ dispatch_phase() {   # $1 = the stack's MAIN repo — publish the scan-side rows
   # segment must never be empty or carry `/`, so strip to [A-Za-z0-9._-] and drop what's left empty.
   cseg="$(printf '%s' "$clause" | tr -cd 'A-Za-z0-9._-')"
   [ -n "$ukind" ] && useg="$(printf '%s' "$ukind" | tr -cd 'A-Za-z0-9._-')"
+  # ADR-125 per-lane famine gauge. The base rides the GROUPING KEY, never a body label, for the
+  # same pushgateway reason the two wake metric NAMES exist: a POST replaces every sample sharing
+  # a metric name within a group irrespective of label values, so a `base` body label would make a
+  # master-lane dispatch EVICT the goal lane's last stamp — and `changes()` over an evicted gauge
+  # undercounts exactly the dispatches this alert is built to count. A key segment cannot contain
+  # `/`, and a goal lane base is `goal/<n>`: `/` → `-` FIRST, then the same strip as the others, so
+  # `goal/278` and `goal-278` are one lane's key only if they were one lane's branch (they are not:
+  # `-` is legal in a branch name, but two branches differing solely in `/`-vs-`-` at the same
+  # position do not occur in this scheme — `goal/<n>` is minted by the launcher, ADR-102).
+  [ -n "$ubase" ] && bseg="$(printf '%s' "$ubase" | tr '/' '-' | tr -cd 'A-Za-z0-9._-')"
   # A scan that dispatches twice (the global instance sweeping two stacks) measures the SECOND
   # dispatch from the first one's end, not from the pod's start — otherwise stack B's `scan` row
   # would carry stack A's whole streamed session. The mark moves whether or not anything is
@@ -788,7 +920,7 @@ agent_dispatch_cron_woken_timestamp ${now}
     "$family" \
     "$wake" \
     | curl -fsS --max-time 5 --data-binary @- \
-        "${DISPATCH_PHASE_PGW}/metrics/job/agent_dispatch_phase/project/${project}/role/coordinator-scan" >/dev/null 2>&1 \
+        "${DISPATCH_PHASE_PGW}/metrics/job/agent_dispatch_phase/project/${project}/role/coordinator-scan${bseg:+/base/${bseg}}" >/dev/null 2>&1 \
     || { [ -n "$DISPATCH_PHASE_WARNED" ] \
            || echo "dispatch_phase: pushgateway unreachable (${DISPATCH_PHASE_PGW}) — dispatch unaffected; this scan contributes no agent_dispatch_phase_seconds (a jail run lands here: the ClusterIP does not cross the BGP boundary)" >&2
          DISPATCH_PHASE_WARNED=1; }
@@ -801,6 +933,7 @@ agent_dispatch_cron_woken_timestamp ${now}
   if [ -n "$cseg" ] && [ "${SCAN_JANITOR:-}" != "1" ]; then
     local wurl="${DISPATCH_PHASE_PGW}/metrics/job/agent_dispatch_phase/project/${project}/role/coordinator-scan/clause/${cseg}"
     [ -n "$useg" ] && wurl="${wurl}/unit/${useg}"
+    [ -n "$bseg" ] && wurl="${wurl}/base/${bseg}"
     printf '%s\n%s\n%s\n' \
       "# TYPE agent_dispatch_wake_clause_timestamp gauge" \
       "# HELP agent_dispatch_wake_clause_timestamp Epoch of this stack's last dispatch for this clause (homelab#459 — clause/unit ride the grouping key, one sticky series per (project, clause, unit))." \
@@ -1573,6 +1706,23 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       | map("\(.[0].baseRefName)|\(length)")
       | .[]' <<<"$prsjson")"
     # <<<REPLAY:per-base-counts<<<
+    # ── the LANE MAP for this repo (ADR-125) ────────────────────────────────────────────────
+    # Recorded HERE because this is the one point in the pass where both sources are already in
+    # hand and cost nothing more: `openall` carries every open issue's body (the `Base:` line the
+    # #849 cap reads) and `prsjson` carries every open PR's `baseRefName`. The dispatch loop runs
+    # after this pass and only READS the map — see §LANES at the top of this file for the shape
+    # and the fail-safe fallback chain. No new API call, no second `Base:` regex: the jq below is
+    # the same `scan("(?mi)^[ \t]*base:...")` the queued clause already runs on the same bodies.
+    # >>>REPLAY:unit-lane-record>>>
+    unit_lane_default_record "$repo" "$default_branch"
+    while IFS='|' read -r _litem _lbase; do
+      [ -n "$_litem" ] || continue
+      unit_lane_record "$repo" "$_litem" "${_lbase:-$default_branch}"
+    done <<EOF
+$(printf '%s' "$openall" | jq -r '.[] | "issue-\(.number)|" + ([.body // "" | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "")' 2>/dev/null || true)
+$(printf '%s' "$prsjson" | jq -r '.[] | "pr-\(.number)|\(.baseRefName // "")"' 2>/dev/null || true)
+EOF
+    # <<<REPLAY:unit-lane-record<<<
     # ADR-097 project-WIP predicate (was binary WIP=1; found live meta-8: two dispatchers raced
     # #52 inside one scan window; 2026-07-21 #55: two CRON ticks raced through the phase=Running
     # filter while a kata pod sat Pending — so the probe counts everything non-terminal): the
@@ -1754,7 +1904,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         | "\(length) suitable-unqueued (oldest #\($old.number) since \(($old.createdAt // "unknown")[0:10]))"' 2>/dev/null || true)"
     if [ -n "$adopted" ]; then
       orphans="${orphans}[$repo] ⏸ backlog: ${adopted} — agent-fix without a state label; ordinary backlog (ADR-109), expand: devbox run board -- <stack> --full\n"
-      item_class_push "$repo" "aggregate" "backlog-aggregate" "operator"
+      item_class_push "$repo" "aggregate" "backlog-aggregate" "operator" "$default_branch"
     fi
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
     # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so
@@ -1972,7 +2122,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       done
       if [ -n "$blocked" ]; then
         qblocked="${qblocked}  issue #${qnum} — ${qtitle} (waiting${blocked})\n"
-        item_class_push "$repo" "issue-${qnum}" "parked-blocked" "operator"
+        item_class_push "$repo" "issue-${qnum}" "parked-blocked" "operator" "$qbase"
         continue
       fi
       # ── HOLD-CHAIN PROPAGATION (queued-held-by-ghost, #833) ────────────────────────────────
@@ -1995,7 +2145,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       done
       if [ -n "$ghost_held" ]; then
         orphans="${orphans}[$repo] ⏳ queued-held-by-ghost — dependency closed but its own blocker still open (hold-chain propagation, #833):\n  issue #${qnum} — ${qtitle} (${ghost_held})\n"
-        item_class_push "$repo" "issue-${qnum}" "queued-held-by-ghost" "operator"
+        item_class_push "$repo" "issue-${qnum}" "queued-held-by-ghost" "operator" "$qbase"
         continue
       fi
       # ADR-094 scheduling predicates (deterministic — the LLM never picks):
@@ -2047,7 +2197,7 @@ EOF_GUARDED
         fi
         if [ -n "$ghit" ]; then
           orphans="${orphans}[$repo] ⛔ pin-only GUARDED path — NOT dispatched (a PR may write only a pin line there, so \`ci\` is structurally red; the route is an operator push to master — CODEOWNERS §Carve-outs). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches} → guarded:${ghit})\n"
-          item_class_push "$repo" "issue-${qnum}" "guarded-path" "operator"
+          item_class_push "$repo" "issue-${qnum}" "guarded-path" "operator" "$qbase"
           continue
         fi
       fi
@@ -2138,7 +2288,7 @@ EOF_GOVERNANCE
       # issues; disjoint declared footprints dispatch in parallel (launcher limit rides wipmap).
       elif fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
         orphans="${orphans}[$repo] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
-        item_class_push "$repo" "issue-${qnum}" "footprint-held" "operator"
+        item_class_push "$repo" "issue-${qnum}" "footprint-held" "operator" "$qbase"
         continue
       fi
       # <<<REPLAY:footprint-hold<<<
@@ -2167,14 +2317,14 @@ EOF_GOVERNANCE
       qbase_armed="$(printf '%s' "$per_base_armed" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
       if [ "${qbase_armed:-0}" -ge "$REPO_PR_CAP" ]; then
         orphans="${orphans}[$repo] ⏳ PR budget (${qbase_armed} machine-flowing PRs against ${qbase} ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
-        item_class_push "$repo" "issue-${qnum}" "cap-held" "operator"
+        item_class_push "$repo" "issue-${qnum}" "cap-held" "operator" "$qbase"
         continue
       fi
       # FU-199 / #1240 CAP SPLIT: codeowner-parked PRs have their own larger bound.
       qbase_blockpark="$(printf '%s' "$per_base_blockpark" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
       if [ "${qbase_blockpark:-0}" -ge "$REPO_BLOCKPARK_CAP" ]; then
         orphans="${orphans}[$repo] ⏳ BLOCKPARK budget (${qbase_blockpark} codeowner-parked PRs against ${qbase} ≥ cap ${REPO_BLOCKPARK_CAP} — FU-199):\n  issue #${qnum} — ${qtitle}\n"
-        item_class_push "$repo" "issue-${qnum}" "blockpark" "operator"
+        item_class_push "$repo" "issue-${qnum}" "blockpark" "operator" "$qbase"
         continue
       fi
       # <<<REPLAY:pr-cap-per-base<<<
@@ -2239,7 +2389,7 @@ EOF_GOVERNANCE
         else
           units="${units}goal-decompose|${repo}|issue-${qnum}\n"
         fi
-        item_class_push "$repo" "issue-${qnum}" "container" "machine"
+        item_class_push "$repo" "issue-${qnum}" "container" "machine" "$default_branch"
         continue
       fi
       # <<<REPLAY:goal-decompose<<<
@@ -2259,7 +2409,7 @@ EOF_GOVERNANCE
       else
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       fi
-      item_class_push "$repo" "issue-${qnum}" "$qclass_item" "machine"
+      item_class_push "$repo" "issue-${qnum}" "$qclass_item" "machine" "$qbase"
       # <<<REPLAY:queued-classification<<<
     done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
             | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), (((.parent.number // "") | tostring) | if . == "" then "-" else . end), (([.body // "" | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "" | if . == "" then "-" else . end)) ] | @tsv')
@@ -2588,7 +2738,7 @@ EOF_GOVERNANCE
         if [ -n "$gck" ]; then
           echo "  [$repo] goal #${g}: CHECKPOINT due (${gck}; store ${gtot} total / ${gdisp} dispositioned)"
           units="${units}goal-checkpoint|${repo}|issue-${g}\n"
-          item_class_push "$repo" "issue-${g}" "container" "machine"
+          item_class_push "$repo" "issue-${g}" "container" "machine" "$default_branch"
         fi
       done
     fi
@@ -2687,7 +2837,7 @@ EOF_GOVERNANCE
       # Emit a goal-checkpoint unit for the goal (trigger=assembly-cr).
       echo "  [$repo] ASSEMBLY PR #${u} has changes-requested (FU-143) — emitting goal-checkpoint for goal #${g} (trigger=assembly-cr)"
       units="${units}goal-checkpoint|${repo}|issue-${g}\n"
-      item_class_push "$repo" "issue-${g}" "container" "machine"
+      item_class_push "$repo" "issue-${g}" "container" "machine" "$default_branch"
       # Carry the assembly PR number to the dispatch site via a side map (not the unit tuple,
       # whose 4th field is uclass and 5th is uparent). Written at emission, consumed at the
       # confirmed-dispatch site (>>>REPLAY:dispatch-marker>>>) where the state-fp marker is
@@ -4121,28 +4271,133 @@ EOF_GOVERNANCE
     # because the clause loop below greps by clause name, so higher-priority clauses (in-flight
     # recovery etc.) still win regardless of position.
     units="${punits}${units}"
-    while [ -z "$dispatch_succeeded" ]; do
+    # ── ADR-125 (3): THE CLAUSE WALK RUNS ONCE PER LANE ───────────────────────────────────────
+    # Before this, ONE unit left this block per stack per pass: the first clause with an untried
+    # unit won across the whole stack, so a self-regenerating `changes-requested` stream on master
+    # could hold every goal-lane unit out indefinitely (#829; #818's decompose lost ~45 min on
+    # 2026-08-23). A lane is (repo, base) and lanes cannot invalidate each other's merges, so the
+    # walk is per lane and up to ONE unit per lane dispatches per pass.
+    #
+    # WHAT STAYS PER DISPATCH, deliberately: the subscription latch probe before each spawn (the
+    # latch is the FLEET ceiling — per-lane slots were rejected in ADR-125's Considered, because
+    # the semaphore protects the subscription pool, not a lane), the FU-146 exit-3 retry, the
+    # FU-121 fresh-close probe, `tried_units`, and every WIP/footprint/cap hold (those are
+    # computed upstream per unit and are untouched by this change).
+    lane_keys="$(unit_lane_keys "$units")"
+    if [ -z "$lane_keys" ]; then
+      echo "  actionable items but no dispatchable unit (context-only repos / gated) — report-only."
+      dispatch_succeeded=1
+    fi
+    dispatches_done=0
+    latch_limited=""
+    for lane in $lane_keys; do
+      lrepo="${lane%%|*}"; lbase="${lane#*|}"
+      lane_units="$(unit_lane_units "$units" "$lrepo" "$lbase")"
+      lane_n="$(printf '%s\n' "$lane_units" | grep -c . || true)"
+      if [ -n "$latch_limited" ]; then
+        echo "  lane ${lrepo}@${lbase}: not walked — the subscription latch ended this pass (fleet ceiling, FU-088)"
+        continue
+      fi
+      # ── WITHIN-LANE AGING (#829, ADR-125 (3)) ───────────────────────────────────────────────
+      # Priority is a PREFERENCE, not an absolute: a NEW-WORK unit that has lost N consecutive lane
+      # dispatches goes to the FRONT of this lane's walk. STRAIGHT to the front, not one step up —
+      # after N honoured preferences the ordering has had its say, and a per-step ladder would need
+      # per-step state, which is exactly the in-process state #829 forbids.
+      #
+      # DERIVED, READ-ONLY, NOTHING NEW WRITTEN (#829's first design question):
+      #   queued_at  = the newest `labeled` event for `agent/queued` on the issue — the moment the
+      #                unit became eligible, already on the issue's own timeline.
+      #   lost       = how many dispatch markers newer than queued_at sit on the lane's OTHER
+      #                in-flight items: the `<!-- agent-event kind=… ts=… -->` lines inside each
+      #                item's single `<!-- agent-summary -->` comment (grammar owned by
+      #                agents/machine-comment.sh). One marker = one ride this lane spent while the
+      #                candidate waited.
+      # ⚠ Today the only kind mc_event emits is `stats` (agent-session.sh, one per completed fix
+      # round); `kind=dispatch` does not exist yet. The count is kind-AGNOSTIC on purpose so it
+      # reads what the timeline actually carries and picks up a future dispatch marker for free.
+      # The consequence is UNDER-counting, never over: a ride that finishes without posting a
+      # marker is invisible here, so aging fires later than the ideal, never earlier. That is the
+      # safe direction — the failure mode of over-counting is preempting live recovery work.
+      #
+      # RULE #6, both probes: unreadable events or unreadable comments ⇒ NO aging, ordinary walk,
+      # one report line. A probe that cannot be read is never allowed to become a dispatch.
+      #
+      # COST BOUND: evaluated once per lane, and only when the lane actually holds a
+      # higher-priority unit — with nothing above it the candidate wins the walk anyway and the
+      # probes would buy nothing.
+      aging_front=""
+      if printf '%s\n' "$lane_units" | grep -qE '^(c4c5-redispatch|arbitrate|changes-requested|merge-conflict|unarmed-major|infra-enrich|ci-red|merged-closeout|goal-checkpoint)\|'; then
+        while IFS= read -r acand; do
+          [ -n "$acand" ] || continue
+          case " $tried_units " in *" $acand "*) continue;; esac
+          aclause="${acand%%|*}"; arest="${acand#*|}"; arepo="${arest%%|*}"; arest="${arest#*|}"; aitem="${arest%%|*}"
+          case "$aitem" in issue-*) :;; *) continue;; esac
+          aq="$(gh api "repos/${ORG}/${arepo}/issues/${aitem#issue-}/events" --paginate \
+                  --jq '.[] | select(.event == "labeled" and .label.name == "agent/queued") | .created_at' 2>/dev/null | tail -1)" || aq=""
+          if [ -z "$aq" ]; then
+            echo "  aging: ${aclause}|${aitem} — no readable \`agent/queued\` labeled event; ordinary walk this pass (rule #6, no aging)"
+            continue
+          fi
+          alost=0; aprobe_ok=1
+          while IFS= read -r aother; do
+            [ -n "$aother" ] || continue
+            orest="${aother#*|}"; orepo="${orest%%|*}"; orest="${orest#*|}"; oitem="${orest%%|*}"
+            [ "$oitem" = "$aitem" ] && continue
+            if ! omarks="$(gh api "repos/${ORG}/${orepo}/issues/${oitem#*-}/comments" --paginate \
+                  --jq '.[] | select((.body // "") | startswith("<!-- agent-summary -->")) | .body | scan("<!-- agent-event kind=[^ ]+ ts=([^ ]+) -->") | .[0]' 2>/dev/null)"; then
+              aprobe_ok=""; break
+            fi
+            alost=$(( alost + $(printf '%s\n' "$omarks" | awk -v q="$aq" 'NF && $0 > q' | grep -c . || true) ))
+          done <<EOF
+$(printf '%s\n' "$lane_units")
+EOF
+          if [ -z "$aprobe_ok" ]; then
+            echo "  aging: ${aclause}|${aitem} — dispatch markers unreadable on a lane sibling; ordinary walk this pass (rule #6, no aging)"
+            continue
+          fi
+          if [ "$alost" -ge "$SCAN_AGING_N" ]; then
+            aging_front="$acand"
+            echo "  aging: ${aclause}|${aitem} lost ${alost} lane dispatches since ${aq} — escalated to front (N=${SCAN_AGING_N})"
+            break
+          fi
+        done <<EOF
+$(printf '%s\n' "$lane_units" | grep -E '^(goal-decompose|queued-dispatch)\|' || true)
+EOF
+      fi
+      lane_done=""
+      while [ -z "$lane_done" ]; do
       unit=""
+      # An aged unit jumps the whole walk — including the recovery classes — exactly once, while it
+      # is still untried this pass.
+      if [ -n "$aging_front" ]; then
+        case " $tried_units " in
+          *" $aging_front "*) : ;;
+          *) unit="$aging_front" ;;
+        esac
+      fi
       # Priority: in-flight recovery first, then merge-path exceptions, then CLOSE loops on merged
       # work (C6 — cheap bookkeeping that keeps state honest), and only then open NEW work.
       # goal-decompose sits just BEFORE queued-dispatch: it opens new work like a queued issue does,
       # but it must win over it when a repo has both, because a goal left undecomposed is what makes
       # its children exist at all (leg (c), 2026-08-05). It stays BELOW every recovery and merge-path
       # clause — an in-flight failure is always more urgent than planning the next thing.
+      [ -n "$unit" ] || \
       for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout goal-checkpoint goal-decompose queued-dispatch; do
         # First candidate of THIS clause not yet tried this pass (PR#631 r1: `grep -m1` against
         # the unmodified $units re-found the same skipped line forever, so a clause with two
         # units never drained past its first — the loop fell through to lower-priority clauses
         # while same-clause work sat dispatchable). The subshell only READS tried_units.
-        unit="$(printf '%b' "$units" | grep "^${clause}|" | while IFS= read -r cand; do
+        # Scoped to THIS LANE's units (ADR-125): the walk is per lane, so a higher-priority unit
+        # in another lane no longer suppresses this one.
+        unit="$(printf '%s\n' "$lane_units" | grep "^${clause}|" | while IFS= read -r cand; do
           case " $tried_units " in *" $cand "*) continue;; esac
           printf '%s\n' "$cand"; break
         done || true)"
         [ -n "$unit" ] && break
       done
       if [ -z "$unit" ]; then
-        echo "  actionable items but no dispatchable unit (context-only repos / gated) — report-only."
-        dispatch_succeeded=1
+        echo "  lane ${lrepo}@${lbase}: nothing dispatchable"
+        lane_done=1
         continue
       fi
     uclause="${unit%%|*}"; rest="${unit#*|}"; urepo="${rest%%|*}"; rest2="${rest#*|}"
@@ -4161,6 +4416,10 @@ EOF_GOVERNANCE
       *"|"*) uparent="${uclass#*|}"; uclass="${uclass%%|*}";;
       *)     uparent="";;
     esac
+    # The lane's walk verdict, one line per selection (ADR-125). `n units` is the lane's whole
+    # unit count, so a lane that retries after an FU-121 skip or an exit-3 prints the same count
+    # beside a different pick — which is exactly the trace needed to read a starved lane.
+    echo "  lane ${lrepo}@${lbase}: ${lane_n} units, walk → ${uclause}|${uitem}"
     # FU-121: a c4c5 redispatch can race a closing issue (the #71 r9 spurious round — the scan's
     # list snapshot predated the close). Re-probe the ISSUE fresh immediately before spending a
     # session: closed → skip this unit (the next scan's list won't carry it). Probe failure
@@ -4385,13 +4644,25 @@ EOF_GOVERNANCE
         ;;
     esac
     # <<<REPLAY:harvest-disposition<<<
+      # ADR-125 per-dispatch latch probe. The pass-level probe above this block covers the FIRST
+      # spawn; every SUBSEQUENT one must re-ask, because the latch is the fleet ceiling and a
+      # `limited` verdict between two lanes must stop the pass rather than let the walk keep
+      # spending. A limited verdict ends the pass for every remaining lane, and says so.
+      # `dispatches_done` counts pods this pass actually CREATED, so an FU-146 exit-3 does not
+      # arm it: that refusal means a racing dispatcher's pod already exists and OUR pass spent
+      # nothing, so charging it a latch probe would defer real work on someone else's spend.
+      if [ "$dispatches_done" -gt 0 ] && ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
+        echo "  capacity: subscription limited (FU-088) — the fleet ceiling ends this pass; remaining lanes are not walked (level-triggered; next scan re-checks)."
+        latch_limited=1; lane_done=1
+        continue
+      fi
       echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
       # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
       # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
       # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
       # spin-up, not the streamed ride, and the `coordinator-scan` mutex now spans only the
       # deterministic pass (the pod uploads, pushes its own session row, rings the doorbell itself).
-      dispatch_phase "$mainrepo" "$uclause" "${uclass:-}"   # FU-160: the ring→scan and scan rows close on the same boundary
+      dispatch_phase "$mainrepo" "$uclause" "${uclass:-}" "$lbase"   # FU-160: the ring→scan and scan rows close on the same boundary; ADR-125: the lane keys the wake series
       scan_phase dispatch
       # ── FU-146 exit-3 dispatch gate (racing dispatcher won): report, retry next unit ─────────
       # When `coordinator-session.sh` exits with 3, the item pod exists and a racing dispatcher
@@ -4423,7 +4694,9 @@ EOF_GOVERNANCE
       if [ $dispatch_rc -eq 3 ]; then
         echo "  FU-146: exit 3 — ${name}/${urepo}/${uitem} taken by racing dispatcher; trying next unit"
         tried_units="${tried_units} ${unit}"
-        # Continue the retry loop (stay in while, re-find a unit)
+        # Continue the retry loop (stay in THIS LANE's while, re-find a unit). A racing dispatcher
+        # took this unit, not the lane's turn — the lane keeps its dispatch if another unit in it
+        # is dispatchable, and falls to "nothing dispatchable" if none is.
       elif [ $dispatch_rc -ne 0 ]; then
         # PR#915 review (2026-08-26 07:45Z finding): the batch accumulator dies with the process —
         # flush the tick's classified rows BEFORE the hard exit, or every stack already scanned
@@ -4433,10 +4706,14 @@ EOF_GOVERNANCE
         item_class_flush
         exit $dispatch_rc
       else
-        # Success
+        # Success — ONE unit per lane per pass (ADR-125). `dispatch_succeeded` now means "this pass
+        # dispatched at least once"; the walk moves on to the NEXT LANE rather than ending the pass.
         dispatch_succeeded=1
+        dispatches_done=$((dispatches_done + 1))
+        lane_done=1
       fi
       scan_phase deterministic
+      done
     done
     # <<<REPLAY:fu146-dispatch-loop<<<
   else

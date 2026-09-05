@@ -30,3 +30,8 @@ qpin="${QPIN:-}"
 # ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
 # so a harness running one extracted block has no flush to assert on.
 item_class_push() { :; }
+
+# ADR-125: `item_class_push` rows carry the item's LANE base. This bridge stubs the push and never
+# runs the per-repo pass that records the lane map, so the caller's explicit argument — the repo's
+# default branch for aggregate/container rows — is supplied here.
+default_branch="${default_branch:-master}"

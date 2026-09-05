@@ -22,3 +22,8 @@ item_class_push() {
   local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}"
   ITEM_CLASS_ROWS="${ITEM_CLASS_ROWS}${repo}|${item}|${class}|${who}|...\n"
 }
+
+# ADR-125: `item_class_push` rows carry the item's LANE base. The queued clause passes its own
+# `$qbase` (the issue's `Base:` line, defaulted to the repo default branch — the same value the
+# homelab#849 per-base cap reads); this bridge replays a default-branch issue.
+qbase="${qbase:-master}"
