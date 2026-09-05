@@ -36,6 +36,10 @@ ci-red-rerun-wake	ci-red-rounds-two-channels
 ci-red-rerun-wake-dispatch	ci-red-rounds-two-channels
 ci-red-rounds-two-channels	ci-red-rounds-two-channels
 context-prefetch	context-prefetch
+context-prefetch/ci-red	context-prefetch
+context-prefetch/ci-red-unreadable	context-prefetch
+context-prefetch/fix-round	context-prefetch
+context-prefetch/fix-round-unreadable	context-prefetch
 depends-on-retired-format	depends-on-retired-format
 deploy-revert-token-clone/set	deploy-revert-token-clone
 deploy-revert-token-clone/unset	deploy-revert-token-clone
