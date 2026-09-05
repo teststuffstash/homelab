@@ -335,6 +335,7 @@ is stale, so it cannot drift the way the prose register did.
 | `review-pick/two-lanes-two-picks` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `reviewer-currency/behind-proceeds` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-currency/dirty-skips` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-currency/probe-fail-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-depth-lane-split` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-exit-contract` | table | - | `agents/reviewer-session.sh` | MP-T03 |
