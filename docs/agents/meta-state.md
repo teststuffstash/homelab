@@ -10,6 +10,16 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ S8 IN FLIGHT (head sitting 2026-09-05 ~12:00Z, corpus session — stint #1418, Size 3):**
+  originals #1419 (dispositions) · #1420 (consumer card, blocked by 1–3) · #1421 (ADR pair —
+  **PR#1425 open, armed**) · #1422 (per-base lanes, absorbs #829) · #1423 (themes, HELD on the
+  wave-2 readout) · #1424 (currency); originals 1 (parser) + 3 (JOIN) file off the inventory
+  subagent's report (`scratchpad/s8-inventory.md`). #1393 (S5 original 5 + the S7 merge-path
+  currency) rides a subagent PR; **#741 S7 closeout-1 POSTED** — close #741 once that PR merges.
+  Pins on #1418 (block grammar, dispositions on the container, one valve, (repo, base), theme
+  hold). Residual from the S7 read: two `update-pr-branch-cron` runs exit 128 (09-04 12:45Z,
+  09-05 10:30Z) — read the next one's Loki lines (tenant `agent-coordinator`) before calling
+  it transient.
 - **⚑ NEXT SESSION (seat wind-down 2026-09-05 ~09:45Z, ctx 794k — the stint's machine tail
   was still running; nothing here needs the corpus unless marked):** (1) **#1404** (PyPI cache,
   loop PR for #1300): the seat REQUESTED CHANGES 09:41Z — `/simple/` must `sub_filter` the
