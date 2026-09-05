@@ -6944,3 +6944,44 @@ first live ADR-110 maintenance session before the ADR existed.
 - **Wind-down:** operator's next session = a CORPUS sitting (codeowner reads + the operator-seat
   issues). Batch pushed through the pre-push hook; transcripts synced; no monitors were armed
   this session.
+
+## 2026-09-05 07:00–08:35Z — corpus sitting: codeowner reads + operator-lane queue, haiku flip, six subagents (design-agents corpus session, operator-attended)
+
+- **Condition:** operator: "/design-agents codeowner reviews + operator lane issues; ask early",
+  then mid-turn: "put homelab back on claude/haiku — credits to burn today", "use sub-agents for
+  seat-authored things", "keep watch on the board, do reviews and queue items — openrouter
+  included". Corpus loaded (~300k). Board: 4 bot PRs parked, 5 undeliverable queued issues.
+- **Codeowner reads (ADR-110):** #1387 #1388 #1389 approved → merged 07:35Z (approvals SURVIVE
+  updater merges — GitHub re-points a review's commit_id on update-branch; the dismiss-on-push
+  worry is content-pushes only). #1386 held on two in-diff defects (per-repo `agentstack-loop`
+  Role had no `configmaps` verbs → every graduated stack would take the argv fallback, which
+  wrote `bundle.txt` while the env card named `index.txt`/`issue.md`); fixed in-PR by a
+  subagent (75b5ba26) + the seat's least-privilege split of the aggregated ClusterRole rule
+  (9c60f1e9); the reviewer false-tripped `agent/error` on the re-pointed commit_id (2nd
+  sighting after PR#1289) → cleared by hand, **#1403 filed+queued**.
+- **Haiku flip:** PR#1395 merged 07:54Z — platform claim `workerModel: claude/haiku`,
+  fallbacks `[]` (the lapsed #715 revert). `agents/fixer/**` is NOT codeowner-owned: the bot
+  approval merged it; seat-authored PRs never park anyway (MP-T08 sole-codeowner waiver) —
+  hence the seat's reads on its own PRs land BEFORE the bot verdict.
+- **Operator answers (asked early):** #1299 Longhorn RWX + seat direct · #1300 re-scope + worker
+  · #1308 seat does both legs · #1207 seat PR. Executed: #1299 direct 9a0354ec (PVC `arc-uv-cache`
+  20Gi RWX + `UV_CACHE_DIR`; verified live 08:22Z — the scale-set roll dropped the warm runner,
+  ~10 min CI pickup gap); #1390 direct 1907048f (diff-ci MAP entry, no `agents/` arm); #1300
+  Touches narrowed off the guarded glob (VIP 40.34, 20Gi); #1207 → PR#1401; #1308 → PR#1402
+  (buildx 0.37 + missing ghcr insecure-registry live-verified on ci-runner-01 by the subagent;
+  leg-1 APPLY is the operator/infra sitting); #1249 → **PR#1400 MERGED 08:33Z** (walk retired,
+  four walk rows → three ADR-122 pins incl. a positive burn-down count); #1200 → PR#1399.
+- **Queue/gate:** or-op#60 queued → coordinator rode → **PR#61 approved by the seat** (expr `> 0`
+  matches the count gauge); agent-runtime#119 #120 queued; homelab#1297 queued; #1069
+  commented (resolves with #1386, finalize half is agent-runtime's); #1334 `agent/error` lifted
+  after #1400. ADR-119 dispositions: oracle-iac#485 DELIVERED (closes on consumption → un-parks
+  oracle-fleet#361), #486 leg 1 delivered / leg 2 blocked on #1311 (edge wired).
+- **Incidents/belts read:** github-exporter GraphQL "Resource limits for this query exceeded" →
+  whole PR series family absent, review edge + park watcher dark → **#1405 filed+queued**;
+  Unbound github.com SERVFAIL 08:15–08:19Z (DNSSEC-validation path, `+cd` answered, self-cleared;
+  remedy recorded in meta-state); FAMINE convoy = iac-sentinel-edge burst (watch-noise);
+  PveThinPoolFillingUp 82 % + wk-02 Longhorn floor recorded, not acted (maintenance class).
+- **Subagent lane:** six clone subagents (card prepended verbatim), all on `origin/master`
+  bases; cost ≈ 1.2M subagent tokens; misses to ledger: none blocking — one fabricated prose
+  claim (a no-web subagent asserted no public Cilium schema catalog exists; seat corrected on
+  the branch), one bot-nit class (a `create` verb widened a shared RBAC rule).
