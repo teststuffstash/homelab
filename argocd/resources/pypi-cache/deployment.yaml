@@ -19,7 +19,7 @@ spec:
       # REQUIRES recomputing this hash in the same commit:
       #   sha256sum argocd/resources/pypi-cache/configmap.yaml
       annotations:
-        checksum/config: b66b21b6ca9587bc68fcd5eec3368438ff9e406b4d5a370dbbbffc4c49a68cd5
+        checksum/config: 191b533281800df4eb53fcf7b74d3de045bfdff90d9d9096384f06d57ca9e0aa
     spec:
       securityContext:
         runAsNonRoot: true
