@@ -1,0 +1,6 @@
+2026-09-05T12:34:56.789Z ⚠ Error in step 5: Python package verification failed
+2026-09-05T12:34:57.123Z   File "/usr/local/lib/python3.10/site-packages/pip/_internal/commands/check.py", line 42, in run
+2026-09-05T12:34:57.456Z     raise PipCheckError(
+2026-09-05T12:34:57.789Z pip._internal.exceptions.PipCheckError: test-package version mismatch
+2026-09-05T12:34:58.012Z ✗ Step failed with exit code 1
+2026-09-05T12:34:58.345Z Running cleanup...
