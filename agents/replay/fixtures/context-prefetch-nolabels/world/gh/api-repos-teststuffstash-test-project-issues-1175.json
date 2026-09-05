@@ -1,0 +1,7 @@
+{
+    "title": "launcher context-PREFETCH stage: gather every deterministic read into /work/context/",
+    "body": "Touches: agents/agent-session.sh, agents/replay/**\n\nThe MECHANISM half of #1069 (operator direction, 2026-09-01). Pre-read the directive channel via REST and materialize into /work/issue.md.",
+    "labels": [],
+    "state": "open",
+    "number": 1175
+}
