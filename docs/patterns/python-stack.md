@@ -49,6 +49,13 @@ Why the cache and the proxy are complementary, not redundant: uv's cache stores 
 still pays unpack per job (~10–20 s) but serves the untrusted lane and the miss path, and removes
 the WAN/PyPI-429 dependency (the FU-196 argument, transplanted).
 
+**Endpoint:** the PyPI cache is at `http://192.168.40.34` (BGP VIP, kata-reachable) or
+in-cluster `http://pypi-cache.pypi-cache.svc`. Agent-worker sandbox rides set
+`UV_DEFAULT_INDEX=http://192.168.40.34/simple/` (the launcher env plumbing wires this when the
+cache is LIVE). The `/simple/` location rewrites upstream `https://files.pythonhosted.org` links
+to point back at this proxy, so artifact fetches land on `/packages/` and are cached — no
+client-side config beyond `UV_DEFAULT_INDEX`.
+
 ## Internal Python tools ship as WHEELS — images optional
 
 The default publishing rail (ghcr image per tag) produces an artifact the tool's actual
