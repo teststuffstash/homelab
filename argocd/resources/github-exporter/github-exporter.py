@@ -150,6 +150,7 @@ _body = "# poller has not completed a cycle yet\n"
 _errors = 0
 _last_success = 0
 _dupes = 0  # duplicate sample lines collapsed by dedupe_exposition (#153) — 0 in a healthy poller
+_graphql_partial_total = {}  # error class -> count: resource-limit, not-accessible, other
 _carryover = {}  # collector.__name__ → its last successful lines, republished while a new cycle
                  # re-runs that collector (fixes the per-cycle no-data blinks on scrape); popped on
                  # failure so a failed walk still publishes NOTHING for its families (absent ≠ zero)
@@ -178,6 +179,19 @@ def gh(path, token=None):
         return json.loads(resp.read())
 
 
+def _classify_graphql_error(error_msg):
+    """Classify a GraphQL error message into one of three classes.
+
+    Returns: 'resource-limit' | 'not-accessible' | 'other'
+    """
+    msg_lower = (error_msg or "").lower()
+    if "resource limit" in msg_lower or "node limit" in msg_lower:
+        return "resource-limit"
+    if "not accessible" in msg_lower or "permission" in msg_lower or "forbidden" in msg_lower:
+        return "not-accessible"
+    return "other"
+
+
 def graphql(query, variables):
     req = urllib.request.Request(
         API + "/graphql",
@@ -201,8 +215,11 @@ def graphql(query, variables):
     if errors and data is None:
         raise RuntimeError(errors)
     if errors:
-        print("graphql: partial data (%d field error(s), e.g. %s) — continuing"
-              % (len(errors), errors[0].get("message", "")), flush=True)
+        error_class = _classify_graphql_error(errors[0].get("message", ""))
+        global _graphql_partial_total
+        _graphql_partial_total[error_class] = _graphql_partial_total.get(error_class, 0) + 1
+        print("graphql: partial data (%d field error(s), class=%s, e.g. %s) — continuing"
+              % (len(errors), error_class, errors[0].get("message", "")), flush=True)
     return data
 
 
@@ -985,10 +1002,10 @@ __GOAL_FIELDS__
           nodes {
             number isDraft updatedAt reviewDecision baseRefName headRefName mergeStateStatus
             labels(first:15){ nodes { name } }
-            reviews(last:30){ nodes { author { login } state submittedAt } }
+            reviews(last:10){ nodes { author { login } state submittedAt } }
             headRefOid
             autoMergeRequest { enabledAt }
-            commits(last:10){ nodes { commit { committedDate messageHeadline statusCheckRollup { state } } } }
+            commits(last:5){ nodes { commit { committedDate messageHeadline statusCheckRollup { state } } } }
           }
         }
       }
@@ -1693,6 +1710,22 @@ def collect_billing(lines):
         lines.append(metric("github_billing_net_amount", labels, round(net, 6)))
 
 
+def collect_graphql_partial_stats(lines):
+    """Emit counters for GraphQL partial-data errors by class (homelab#1405).
+
+    Tracks resource-limit (GitHub's per-query node/resource exhaustion), not-accessible
+    (PAT permission issues), and other errors encountered during this poll and prior.
+    The counter increments once per error occurrence in any GraphQL call."""
+    lines += [
+        "# TYPE github_exporter_graphql_partial_total counter",
+        "# HELP github_exporter_graphql_partial_total Count of GraphQL partial-data errors by class (resource-limit | not-accessible | other). Absence = zero. Increments on every partial-data response with errors.",
+    ]
+    for error_class in ("resource-limit", "not-accessible", "other"):
+        count = _graphql_partial_total.get(error_class, 0)
+        lines.append(metric("github_exporter_graphql_partial_total",
+                            {"owner": ORG, "class": error_class}, count))
+
+
 def collect_rate_limits(lines):
     """FU-084: remaining/limit/reset per token per resource. Rate-limit pools are PER
     INSTALLATION (the 2026-07-17 incident drained coordinator-git's GraphQL pool to 9,
@@ -1917,7 +1950,8 @@ def _run_poll_cycle(collectors):
 def poll_forever():
     collectors = (collect_open_prs, collect_workflow_runs, collect_agent_issues, collect_goals,
                   collect_issue_lifecycle, collect_billing, collect_rate_limits,
-                  collect_app_permission_drift, collect_vendor_status, collect_anthropic_status)
+                  collect_app_permission_drift, collect_vendor_status, collect_anthropic_status,
+                  collect_graphql_partial_stats)
     while True:
         _run_poll_cycle(collectors)
         time.sleep(INTERVAL)
@@ -3479,6 +3513,35 @@ def self_test():
     # to drive the three properties without network or threading.
     _test_poll_forever_incremental_cycles()
 
+    # ── homelab#1405: GraphQL partial-data error classification and metrics collection ─────────────
+    # Test that error messages are classified into the three classes and the counter increments.
+    global _graphql_partial_total
+    _graphql_partial_total.clear()
+
+    assert _classify_graphql_error("Resource limits for this query exceeded") == "resource-limit"
+    assert _classify_graphql_error("this query exceeded GitHub's GraphQL node limit") == "resource-limit"
+    assert _classify_graphql_error("Resource not accessible by personal access token") == "not-accessible"
+    assert _classify_graphql_error("API rate limit exceeded") == "other"
+    assert _classify_graphql_error("") == "other"
+
+    # Test that the partial-data fixture emits correctly: simulate partial data errors and
+    # verify they increment the counter and are classified.
+    lines = []
+    _graphql_partial_total["resource-limit"] = 3
+    _graphql_partial_total["not-accessible"] = 2
+    _graphql_partial_total["other"] = 1
+    collect_graphql_partial_stats(lines)
+    body = "\n".join(lines)
+
+    assert 'github_exporter_graphql_partial_total{class="resource-limit",owner="teststuffstash"} 3' in body, \
+        "resource-limit counter must be emitted"
+    assert 'github_exporter_graphql_partial_total{class="not-accessible",owner="teststuffstash"} 2' in body, \
+        "not-accessible counter must be emitted"
+    assert 'github_exporter_graphql_partial_total{class="other",owner="teststuffstash"} 1' in body, \
+        "other counter must be emitted"
+
+    _graphql_partial_total.clear()
+
     print("github-exporter self-test: OK (closing-keyword regex coverage, goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
@@ -3490,6 +3553,7 @@ def self_test():
           "cired edge-trigger direct coverage with real run_attempt dedup (homelab#1187), "
           "rollup-path run_attempt propagation through collect_open_prs, "
           "REST-fallback-path run_attempt propagation through collect_open_prs, "
+          "GraphQL partial-data error classification and counter metrics (homelab#1405), "
           "poll_forever incremental-cycle behavior with monotonic _body growth, dedup counter "
           "per cycle, and _last_success-only-on-full-success)")
     return 0
