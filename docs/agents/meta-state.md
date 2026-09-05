@@ -10,45 +10,39 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ NEXT SESSION (operator, 2026-09-05 ~07:50Z): a CORPUS sitting — load `/design-agents`,
-  then (1) the ADR-110 codeowner reads on whatever parked since 09-05 morning (queue was
-  EMPTY at 07:00Z; the four seat-queued rides below park on `agents/**` at bot approval),
-  (2) the OPERATOR-ONLY list below top to bottom — items 1 (three undeliverable queued
-  issues) and 4 (#1249, one fix for twelve walk lines) first, (3) #1393's heat trims if
-  room remains (S5's fifth original — subtraction, #983's method).**
-- **⚑ BOARD (09-04 wind-down, re-read 09-05):** in review #1205 (PR#1386), #1381, #1374,
-  #1350; queued #1300, #1299, #1207 — ALL THREE structurally undeliverable by a worker (the
-  OPERATOR-ONLY list below); **queued 09-05 by the seat: #1384 #1378 #518 #1392** (#1384
-  serializes behind #1205/#1374 on `agents/replay/**`; #1392/#518 codeowner-park at merge). Codeowner-park queue EMPTY 09-05 (#1273/#1289/#1290/#1295 all
-  merged). Park-watcher recipe = poll `github_pull_request_codeowner_park` on Prometheus
-  (zero gh calls). Inert with owners: #1069 (workers no-op on App GraphQL exhaustion — spans
-  recipe + agent-runtime exit contract, 🌱 triage) · #518 (runner infra) · #628 (container)
-  · #857 (maintenance-session class).
+- **⚑ NEXT SESSION (seat, 2026-09-05 ~08:10Z, mid-stint pickup — this corpus session may still
+  be running; check `gh pr list` before acting): (1) ADR-110 codeowner reads on the seat-subagent
+  PRs that park: #1399 (#1200 vendored CNP schema), #1401 (#1207 filing-door classify), #1402
+  (#1308 BuildKit mirrors, both legs), the #1249 walk-retirement PR (number TBD), and #1386
+  (its two codeowner-read defects fixed in-PR at 75b5ba26; re-review pending after a false
+  `agent/error` was cleared — homelab#1403). (2) **After #1386 merges:** close or narrow #1069
+  (its homelab half is the prefetch's required-read deferral; the finalize half is
+  agent-runtime's). (3) **After #1249 merges:** drop `agent/error` from #1334 (the #1249 damper
+  lifts) and re-read #1237/#1238 (they stay unqueued by intent). (4) **Apply #1308 leg 1 on
+  ci-runner-01** (buildkitd.toml + the `homelab-mirrors` builder) — via the pending ci-runner
+  `tofu apply` replace, or the interim SSH hand-apply of the same two artifacts; the PR body
+  carries the recommendation. (5) #1393 heat trims if room remains.**
+- **⚑ BOARD (09-05 ~08:10Z):** in review #1386 (re-review after the seat's fix push) ·
+  riding #1378 #1392 (r1, deepseek — dispatched before the haiku flip); #1384 #518 completed r1
+  → PRs in review · queued this morning by the seat: **or-op#60** (item-2 root; coordinator pod
+  up 08:0xZ), **agent-runtime#119 #120** (finalize sprouts), **homelab#1297** (mirror poison
+  belt), **#1403** (reviewer false-anomaly, 2 sightings) · #1300 re-scoped (Touches narrowed off
+  the guarded glob, VIP 40.34, 20Gi) and stays queued · de-queued + seat-landed: #1299 (direct,
+  9a0354ec), #1207 (PR#1401), #1308 (PR#1402), #1390 (direct, 1907048f), #1200 (PR#1399).
+  **Platform claim = `claude/haiku`, no fallback, LIVE 07:54Z (PR#1395; operator: credits to
+  burn today)** — the #715 revert clause executed. Park-watcher recipe = poll
+  `github_pull_request_codeowner_park` on Prometheus (zero gh calls). Inert with owners: #1069
+  (→ item 2 above) · #518 (runner infra) · #628 (container) · #857 (maintenance-session class).
 - **⚑ OPERATOR-ONLY — from the four `coordinate-<stack>-1788589800` logs (2026-09-05 06:30Z,
   read out of Loki; every item live-verified the same hour). The machine will never act on
   these; the next session picks them up in this order:**
-  1. **Queued but undeliverable (operator push to master, or re-scope/split):** homelab
-     **#1207** (⛔ operator-lane: `agents/ground-rules.md` + `scripts/goal-lint.sh`) ·
-     **#1300** (⛔ pin-only GUARDED: `argocd/platform/arc-runners.yaml` +
-     `openrouter-operator.yaml` — split the pin lines out or hand-do) · **#1299** (queued
-     WITHOUT `agent-fix`, so the scan never even lists it; its footprint is the guarded
-     `arc-runners.yaml` anyway — de-queue + hand-do) · **#1390** 🌱 (`scripts/diff-ci.sh` MAP
-     entry — NEVER-TOUCH by the filer's own words) · **#1308** (the queue call; CLAUSE-REPLAY
-     warns its `Touches:` must reach `agents/replay/**` first).
-  2. **Ghost-held queued issues (blocker closed, its own blocker open — queue the root or cut
-     the edge):** or-op **#57/#58** ← #56 (closed) ← **#60** (open, agent-fix, unqueued) ·
-     oracle-fleet **#361** ← #360 (closed) ← **oracle-iac#485** (platform-request, the mcp api
-     claim — oracle jail's deliverable, platform grants).
-  3. **FU-090 gate — adopt (`agent-fix[+queued]`) or close:** UNBLOCKED-UNLABELED homelab
-     **#1069**, **#946** (both >24h, blockers closed); 🌱 platform-claim: homelab **#857**,
-     agent-runtime **#120 #119**, or-op **#34**; 🧬 unbound sprouts homelab **#1392 #1370
-     #1316** (+#1069/#857) — bind to origin or state standalone. Stack sprouts are their
-     jails' (oracle-fleet 11 + UNBLOCKED #416/#176/#84, sleep 2, circles 5) — relay, don't
-     triage.
-  4. **Walk noise = ONE fix, not twelve tasks:** the 🏷 "bare tree members — route to
-     operator" lines are ALL post-launch BUCKETS (homelab #1311 #1243 #1170 #840;
-     oracle-fleet #430 #416 #386 #384 #332 #290; sleep #126) + #1334 (`agent/error`). Land
-     **#1249** (ADR-122 walk retirement, S8 head (a)) and they vanish.
+  1–4. **DONE 2026-09-05 (this sitting):** the five undeliverable queue items re-scoped or
+     seat-landed (BOARD above); or-op#60 queued (the #57/#58 ghost-hold root — oracle-fleet#361's
+     hold is oracle-iac#485, dispositioned DELIVERED, closes on the oracle jail's side); the
+     FU-090 gate adopted #119/#120/#1297, commented #1069 (resolves with #1386), left #857 /
+     agent-runtime none / or-op#34 (needs a real 429) as they were; #1249 rides as a seat PR.
+     Still theirs: stack sprouts (oracle-fleet 11 + UNBLOCKED #416/#176/#84, sleep 2, circles 5)
+     — relay, don't triage.
   5. **Phantom `agent/done` HELD (closed with no merged PR — confirm the close or relabel):**
      homelab **#913 #903**; oracle-fleet #25 #24 #22 #7; sleep #7.
   6. **PRs where a human is the next mover:** sleep-iac **PR#80** (merge conflict,
@@ -71,10 +65,9 @@ never the session's arc — that is TICK-LOG's.)
   9. **Loop health, unexamined:** three `coordinate-perstack-*` runs FAILED 09-04 (platform
      12:45Z exit 128, platform 12:58Z + oracle 20:59Z exit 141); every cron tick since is
      green — read the Loki lines before calling it transient.
-- **⚑ OPERATOR-OWED (one list):** #1200 (manifest lint has no proxy — think later; residual:
-  no ArgoCD sync-failed/OutOfSync alert exists, a belt to add beside the CNP schema) · #1249
-  (S8 head (a): retire the bare-tree-member walk — hotfix-class, may land before the stint;
-  nothing filed; the #1237/#1238/#1334 agent-fix-only damper holds until it lands) · #1370
+- **⚑ OPERATOR-OWED (one list):** (#1200 → PR#1399, #1249 → seat PR, both 09-05; residual
+  from #1200: no ArgoCD sync-failed/OutOfSync alert exists — a belt to add) · **#1308 leg-1
+  APPLY on ci-runner-01** (NEXT SESSION item 4) · #1370
   (FU-171 resight) · or-op#34 (needs a real 429) · seat sittings #946 (A5 seed) / #1224
   (parts-coverage) / #1237 (E1) / #1238 (E2) · #1308 (BuildKit mirrors queue call) · FU-205
   design pass (WAN accounting) · #1280 held-for-evidence (kind-timing distribution first) ·
@@ -135,8 +128,9 @@ never the session's arc — that is TICK-LOG's.)
     **dind/kind leg is UNEXERCISED** — needs the first in-pod `devbox run e2e` (a
     `task/build` ride), which also carries the #399-r1 kind segfault above. Regression
     signature: `AgentWorkerEgressDropped` with a bare pod IP; revert `773ad63e`.
-  - **pve thin pool 71 %** with ci-runner-01 back; the first `PveThinPoolFillingUp` (80 %)
-    may fire within days — the answer is fstrim (twice daily since 09-04) + FU-093's next
+  - **pve thin pool 82.2 % — `PveThinPoolFillingUp` FIRING since 09-05 morning** (read 07:40Z);
+    `LonghornDiskBelowSchedulingFloor` firing on wk-02 `default-disk` (56 GB free) too — the
+    Garage forensic-backup deletion owed above is the lever — the answer is fstrim (twice daily since 09-04) + FU-093's next
     act (Longhorn filesystem-trim), not a threshold bump. Read `pve_lvm_thin_pool_data_percent`
     before/after a 03:17Z fstrim to size the cadence.
   - **Git-throttle watch**: every loop clone is preemptively authenticated since PR#1333; a
@@ -157,8 +151,13 @@ never the session's arc — that is TICK-LOG's.)
   threshold-crossing; "unlabeled >24h" false-flags containers (wants the
   sprout-report-skips-buckets exclusion); gh `--jq` takes NO `--arg`; reviewDecision never
   changes across CR→CR re-verdicts (key on newest-verdict timestamp); reviewer STEP-0 false
-  anomaly on updater-rewritten commit dates (PR#1289, one instance — a FU-199-shaped face,
-  unfiled).
+  anomaly on update-branch re-pointed review commit_ids — **FILED homelab#1403 (queued) at the
+  2nd sighting (PR#1289, PR#1386)**; NEW sighting 09-05: the in-cluster updater merged master
+  into bot-approved + REVIEW_REQUIRED PR#1386 FOUR times in 31 min (07:06–07:37Z) — the #887
+  park-skip clause did not hold it; read `agents/update-pr-branch.sh`'s predicate before filing.
+  Also: GitHub RE-POINTS a review's commit_id on update-branch (approvals survive updater
+  merges — the 2026-09-05 merges of #1388/#1389 confirm; the merge-path.md dismiss-on-push
+  worry applies to CONTENT pushes only).
 - **⚑ DESIGN INPUTS WITH NO OTHER HOME (operator: deliberately not FUs — pick up in a
   design-agents sitting):**
   - **Drainage economics RULING (2026-08-31, operator-confirmed; TICK-LOG has the arc)** —
@@ -194,9 +193,9 @@ never the session's arc — that is TICK-LOG's.)
 - **Soaks** (each owned by an FU/issue — this line is only the calendar): retro r3 Mon 09-07
   · FU-148 first organic environmental-red retry · or-op#34 first daily-429 ·
   renovate-approve one-approval-per-head (#114) · CiDispatchStalled quiet-month window opens
-  ~09-11 (FU-150) · FU-192 per-tenant ingest sizing (due ~09-03, PAST) · **paid-flash
-  REVERT ~2026-09-03 / fixup-end / OR depletion, whichever first** (PR#715; the FU-095 flip
-  child mints at the revert; Go re-flip = FU-181) — check whether it fired · opencode.ai
+  ~09-11 (FU-150) · FU-192 per-tenant ingest sizing (due ~09-03, PAST) · **paid-flash REVERT EXECUTED 2026-09-05 07:54Z** (PR#1395 — none of #715's three
+  triggers had fired; operator-ordered; the FU-095 flip child, if wanted, mints from here;
+  Go re-flip = FU-181) · opencode.ai
   rails PARKED behind `OPENCODE_RAIL_DISABLED` since 09-04 (FU-213; the vendor's 09-06
   header deadline; the jail shim stays live as the test bench).
 
