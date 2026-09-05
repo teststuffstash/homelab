@@ -12,6 +12,15 @@
 # (never `devbox run` in a stack jail's homelab clone — that materializes homelab's whole
 # closure; operator, 2026-09-01). The stack's own token suffices: it reads only that repo.
 #
+# THIRD READER OF classify_touches() (homelab#1207, #1102 leg 1 sequenced half): the tree walk
+# already reads each leaf's `Touches:` line, so it also classifies it here — a leaf whose
+# footprint lands in the ❌ operator-author set or on a pin-only GUARDED path (#309) is a FAIL,
+# not a WARN: no worker can ever land it as a PR, and the fix belongs at authoring time, not one
+# scan-log line later (#1056's cost). `agents/footprint.sh` is sourced (bash-only, no devbox
+# needed) rather than re-declared; the GUARDED set is read from `scripts/pin-only-lint.sh`'s
+# `GUARDED=` line the same way `coordinator-scan.sh`'s `guarded_paths()` does — one home, a third
+# reader, never a second regex.
+#
 #   exit 0  — no FAIL (WARN lines are advice)
 #   exit 1  — at least one FAIL: fix the issue, never the machinery
 #   exit 2  — probe failure (unreadable goal/tree) — say so, never report clean
@@ -19,6 +28,11 @@ set -uo pipefail
 
 slug="${1:-}"; goal="${2:-}"
 [ -n "$slug" ] && [ -n "$goal" ] || { echo "usage: goal-lint.sh <owner/repo> <goal-number>" >&2; exit 2; }
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=agents/footprint.sh
+. "$HERE/../agents/footprint.sh"
+export CLASSIFY_CODEOWNERS="$HERE/../CODEOWNERS"
 
 fails=0; warns=0; incomplete=0
 fail() { echo "FAIL: $*"; fails=$((fails+1)); }
@@ -43,6 +57,20 @@ command -v python3 >/dev/null 2>&1 || { echo "PROBE-FAIL: python3 not on PATH �
 line() { printf '%s\n' "$1" | python3 "$IB" get "$2" --legacy goal-lint --ref "$slug#$goal" || true; }
 count_lines() { printf '%s\n' "$1" | grep -cE "^[[:space:]]*$2:" || true; }
 branch_exists() { api "repos/$slug/branches/$(printf '%s' "$1" | sed 's|/|%2F|g')" --jq .name >/dev/null; }
+
+# ── pin-only GUARDED paths (homelab#309) — ONE home: scripts/pin-only-lint.sh's `GUARDED=` line.
+# Same read shape as `coordinator-scan.sh`'s `guarded_paths()`: grep the line, eval it, split the
+# `|`-alternation into plain paths. Empty output = could not read (never "none guarded").
+guarded_paths() {
+  local gline="" GUARDED=""
+  [ -r "$HERE/pin-only-lint.sh" ] && gline="$(grep -m1 '^GUARDED=' "$HERE/pin-only-lint.sh" || true)"
+  [ -n "$gline" ] || return 1
+  eval "$gline" || return 1
+  [ -n "$GUARDED" ] || return 1
+  printf '%s\n' "$GUARDED" | tr '|' '\n' | sed 's/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$'
+}
+GUARDED_PATHS="$(guarded_paths || true)"
+[ -n "$GUARDED_PATHS" ] || warn "pin-only GUARDED set unreadable at $HERE/pin-only-lint.sh — cannot check Touches against it (homelab#309)"
 
 # ── the Goal ────────────────────────────────────────────────────────────────────────────────
 gj="$(api "repos/$slug/issues/$goal")" || { echo "PROBE-FAIL: cannot read $slug#$goal" >&2; exit 2; }
@@ -136,6 +164,22 @@ walk() {  # walk <issue-number> <depth>
       leaves=$((leaves+1)); LEAF_NUMS+=("$k")
       [ -n "$cb" ] || fail "#$k (work item) has no \`Base:\` — it will fork from master and its diff will swallow the goal branch"
       printf '%s\n' "$b" | grep -qE '^[[:space:]]*Touches:' || warn "#$k has no \`Touches:\` — footprint is EXCLUSIVE (serial with every sibling)"
+      ctouches="$(line "$b" Touches)"
+      if [ -n "$ctouches" ]; then
+        if [ "$(classify_touches "$ctouches")" = "codeowner-author" ]; then
+          fail "#$k Touches lands in the operator-author set ($ctouches) — no worker can deliver it; split that half out or hand it to the seat (iac-lane.md §The platform lane)"
+        fi
+        if [ -n "$GUARDED_PATHS" ]; then
+          cghit=""
+          while IFS= read -r gpath; do
+            [ -n "$gpath" ] || continue
+            fp_conflict_strict "$ctouches" "$gpath" && cghit="${cghit} ${gpath}"
+          done <<EOF_CGUARD
+$GUARDED_PATHS
+EOF_CGUARD
+          [ -n "$cghit" ] && fail "#$k Touches lands on pin-only GUARDED${cghit} — a PR may carry only a pin line there; operator push to master (homelab#309)"
+        fi
+      fi
       [ "$is_work" -eq 1 ] || warn "#$k lacks \`agent-fix\` — invisible to every dispatch clause until labelled"
       if ! printf ' %s ' "$l" | grep -qE ' task/[a-z]+ '; then
         if printf '%s' "$t" | grep -qiE '\b(build|harness|e2e|as-code|implement|scaffold|wire|add)\b'; then
