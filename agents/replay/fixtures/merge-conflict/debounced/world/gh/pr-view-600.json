@@ -9,5 +9,6 @@
   "comments": [
     {"body":"🤖 `state-fp:a10d92af08ec` — deterministic scan dispatching a `merge-conflict` unit at 2026-08-19T09:36:00Z. Machine-readable debounce marker (homelab#198), written by `agents/coordinator-scan.sh`, not by the session that follows.","createdAt":"2026-08-19T09:36:00Z"},
     {"body":"the DIRTY head is blocking the merge","createdAt":"2026-08-19T09:10:00Z"}
-  ]
+  ],
+  "commits": [{"oid":"faba0fd111111111111111111111111111111111","committedDate":"2026-08-19T09:10:00Z"}]
 }

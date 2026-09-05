@@ -1,16 +1,21 @@
-# ── bridge ── the per-repo loop variables the merge-conflict clause reads. Same shape as the
-# clause fixture's bridge; this family reuses it so the null-author leg differs only in its world.
+# Bridge for merge-conflict with agent/blocked source issue hold test
+# This tests acceptance item 1: a merge-conflict unit is not emitted while its source issue is agent/blocked
+
 slug="$IN_SLUG"
 repo="$IN_REPO"
 prsjson="$(cat "$REPLAY_WORLD/gh/pr-list.json")"
+openall="$(cat "$REPLAY_WORLD/gh/issues-list.json")"
 orphans=""
 units=""
-# ── stubs ── variables and functions the merge-conflict clause reads
-openall='[]'
+
+# Stubs for FU-146 per-item hold and other shared logic
 WIPPODS_JSON='{"items":[]}'
 wip_busy=""
 sess_holds() { return 1; }
-pr_blocked_on_check() { printf 'clear\n'; }
+
+# Stub functions
+item_class_push() { :; }
+pr_blocked_on_check() { printf 'clear\n'; }  # No blocked-on markers in this test
 state_fp_for_clause() {
   local clause="$1" fp_probe="$2"
   local clause_marker hash
@@ -30,6 +35,3 @@ state_fp_for_clause() {
      | (((.body // "") | [ scan("state-fp:([0-9a-f]{6,64})") ] | last) // "")' 2>/dev/null)" || hash=""
   printf '%s' "$hash"
 }
-# ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
-# so a harness running one extracted block has no flush to assert on.
-item_class_push() { :; }
