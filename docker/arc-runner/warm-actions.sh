@@ -43,13 +43,13 @@ for action in $ACTIONS; do
   tag_data=$(curl -sS --fail -H "User-Agent: arc-runner-warm-actions/1.0" \
     "https://api.github.com/repos/$owner/$repo/git/ref/tags/$ref" 2>/dev/null) || tag_data=
   if [ -n "$tag_data" ]; then
-    obj_type=$(echo "$tag_data" | jq -r '.object.type' 2>/dev/null)
-    obj_sha=$(echo "$tag_data" | jq -r '.object.sha' 2>/dev/null)
+    obj_type=$(echo "$tag_data" | jq -r '.object.type' 2>/dev/null) || obj_type=""
+    obj_sha=$(echo "$tag_data" | jq -r '.object.sha' 2>/dev/null) || obj_sha=""
     if [ "$obj_type" = "tag" ]; then
       # Annotated tag — follow to the underlying commit
       sha=$(curl -sS --fail -H "User-Agent: arc-runner-warm-actions/1.0" \
         "https://api.github.com/repos/$owner/$repo/git/tags/$obj_sha" 2>/dev/null \
-        | jq -r '.object.sha' 2>/dev/null)
+        | jq -r '.object.sha' 2>/dev/null) || sha=""
     else
       sha="$obj_sha"
     fi
