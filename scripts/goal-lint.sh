@@ -4,8 +4,9 @@
 # 2026-09-01: Goals are authored from JAILS (not the in-cluster decompose play) and still arrive
 # malformed (oracle-fleet#326: no goal branch, children without a task/* class, no ordering
 # edges) — so the mistakes are caught at the surface the author touches, before anything is
-# queued, instead of one ride later. Pure `gh` REST reads — bash + gh + jq only, all three in
-# the jail image, so it needs NO devbox:
+# queued, instead of one ride later. Pure `gh` REST reads — bash + gh + jq + python3 (the ONE
+# body parser, ADR-122 (3); python3 is in the jail image beside the other three), so it needs NO
+# devbox:
 #   homelab jail:  devbox run goal-lint -- <owner/repo> <goal-number>
 #   stack jail:    bash /workspace/homelab/scripts/goal-lint.sh <owner/repo> <goal-number>
 # (never `devbox run` in a stack jail's homelab clone — that materializes homelab's whole
@@ -25,7 +26,21 @@ warn() { echo "WARN: $*"; warns=$((warns+1)); }
 ok()   { echo "ok:   $*"; }
 
 api() { gh api "$@" 2>/dev/null; }
-line() { printf '%s\n' "$1" | grep -m1 -E "^[[:space:]]*$2:[[:space:]]*" | sed -E "s/^[[:space:]]*$2:[[:space:]]*//; s/[[:space:]]+$//"; }
+
+# ── the body grammar: ONE parser (ADR-122 (3), homelab#1430) ────────────────────────────────
+# `line()` was this script's own regex over the body until #1430; it is now a thin call into
+# agents/issue_body.py, which reads the `---`-fenced MACHINE BLOCK first and falls back to the
+# legacy line-anchored form, printing one `LEGACY-GRAMMAR <key> <ref>` line to stderr per
+# fall-through (the migration meter — do not suppress it; the transition window closes at S8
+# closeout 2). `--legacy goal-lint` selects the variant that restates THIS helper's historical
+# semantics exactly — case-sensitive key, leading whitespace allowed, first match, trailing trim,
+# no value normalization — so a body carrying no block lints byte-identically to before.
+# `count_lines` stays local on purpose: it is a lint about the BODY's SHAPE ("exactly one machine
+# line", #29's €12-in-prose trap), not a value read, and the parser exposes no duplicate count.
+IB="$(cd "$(dirname "$0")/.." && pwd)/agents/issue_body.py"
+[ -f "$IB" ] || { echo "PROBE-FAIL: $IB is missing — the body grammar has ONE parser and it is not here" >&2; exit 2; }
+command -v python3 >/dev/null 2>&1 || { echo "PROBE-FAIL: python3 not on PATH — agents/issue_body.py is the body parser (ADR-122 (3))" >&2; exit 2; }
+line() { printf '%s\n' "$1" | python3 "$IB" get "$2" --legacy goal-lint --ref "$slug#$goal" || true; }
 count_lines() { printf '%s\n' "$1" | grep -cE "^[[:space:]]*$2:" || true; }
 branch_exists() { api "repos/$slug/branches/$(printf '%s' "$1" | sed 's|/|%2F|g')" --jq .name >/dev/null; }
 

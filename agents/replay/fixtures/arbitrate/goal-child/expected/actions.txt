@@ -10,4 +10,5 @@ CALL gh api -X POST repos/teststuffstash/circles/issues/29/sub_issues -F sub_iss
 OUT   harvest disposition (ADR-106): circles pr-234 → goal #29, bucket 77, harvest store — v1.2: findings APPEND to the store; minting is the checkpoint's, budget-gated there (ADR-106 (3))
 OUT ITEM repo=circles item=pr-234 clause=arbitrate goal=29 bucket=77 harvest=store
 OUT REACHED: end
+ERR LEGACY-GRAMMAR Budget -
 RC 0
