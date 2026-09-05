@@ -60,7 +60,10 @@ spec:
         #     so a CI gate that wants a LAN pull of a ghcr image names the mirror path outright
         #     (`192.168.40.21/<org>/<image>`, the kind-ci REGISTRY_MIRROR_GHCR pattern) — the
         #     daemon must accept plain http for that VIP or the pull is refused;
-        #   - pin docker:dind (was :latest-floating via the chart).
+        #   - pin docker:dind (was :latest-floating via the chart);
+        #   - homelab#1299: mount the shared uv wheel cache (Longhorn RWX PVC arc-uv-cache,
+        #     argocd/resources/github-runner/uv-cache-pvc.yaml) at UV_CACHE_DIR=/uv-cache —
+        #     wheels only, never venvs; trusted CI lane only, agent sandboxes never mount it.
         # On chart upgrades: re-render with containerMode dind and diff against this spec.
         template:
           spec:
@@ -145,11 +148,15 @@ spec:
                     value: unix:///var/run/docker.sock
                   - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
                     value: "120"
+                  - name: UV_CACHE_DIR
+                    value: /uv-cache
                 volumeMounts:
                   - name: work
                     mountPath: /home/runner/_work
                   - name: dind-sock
                     mountPath: /var/run
+                  - name: uv-cache
+                    mountPath: /uv-cache
             volumes:
               - name: work
                 emptyDir: {}
@@ -157,6 +164,9 @@ spec:
                 emptyDir: {}
               - name: dind-externals
                 emptyDir: {}
+              - name: uv-cache
+                persistentVolumeClaim:
+                  claimName: arc-uv-cache
   destination:
     server: https://kubernetes.default.svc
     namespace: arc-runners

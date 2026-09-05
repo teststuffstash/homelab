@@ -103,11 +103,13 @@ def fake_sh(args, env=None):
                 "a plain human comment — no strike line",
             ])
         # proj#1 PR comments (pr_url = https://github.com/org/proj/pull/1) — ci-cause markers
-        # (homelab#1286). Two markers in order, plus one non-marker comment.
+        # (homelab#1286). Three markers: two at byte 0, one preceded by prose (tests that
+        # re.MULTILINE anchoring works — without it, the prose-preceded marker is missed).
         if "issues/1/comments" in url:
             return json.dumps([
                 "ci-cause: ci/manifest-lint class=environment basis=observed\n\nReran and passed.",
                 "ci-cause: ci/argocd-validate class=infra basis=hypothesis\n\nSuspect cold cache.",
+                "Reran and passed after the infra fix.\nci-cause: ci/manifest-lint class=environment basis=observed\n\nThe second run was clean.",
                 "a plain human comment — no ci-cause line",
             ])
     raise AssertionError("fake_sh unexpected: %r" % (args,))
@@ -195,15 +197,20 @@ check(row["budget_tier"] == "sm" and row["budget_cap_usd"] == 0.5, "row budget t
 check(row["calibration_error"] == round(0.65 / (0.5 * 5), 3), "row calibration_error = 0.65/(0.5*5) — per-round utilisation, not cumulative")
 
 # ci_causes: harvested from both issue and PR comments (homelab#1286). proj#7 has no
-# ci-cause markers on its own issue comments, but its PR (proj#1) has two markers.
+# ci-cause markers on its own issue comments, but its PR (proj#1) has three markers:
+# two at byte 0, one preceded by prose (tests re.MULTILINE anchoring).
 check("ci_causes" in row, "row carries ci_causes field (never absent)")
-check(len(row["ci_causes"]) == 2, "row ci_causes has 2 entries (from PR comments)")
+check(len(row["ci_causes"]) == 3, "row ci_causes has 3 entries (2 at byte 0 + 1 prose-preceded)")
 check(row["ci_causes"][0]["job_step"] == "ci/manifest-lint", "ci_causes[0] job_step = ci/manifest-lint")
 check(row["ci_causes"][0]["class"] == "environment", "ci_causes[0] class = environment")
 check(row["ci_causes"][0]["basis"] == "observed", "ci_causes[0] basis = observed")
 check(row["ci_causes"][1]["job_step"] == "ci/argocd-validate", "ci_causes[1] job_step = ci/argocd-validate")
 check(row["ci_causes"][1]["class"] == "infra", "ci_causes[1] class = infra")
 check(row["ci_causes"][1]["basis"] == "hypothesis", "ci_causes[1] basis = hypothesis")
+# Third entry: marker preceded by prose — only matches with re.MULTILINE anchoring
+check(row["ci_causes"][2]["job_step"] == "ci/manifest-lint", "ci_causes[2] job_step = ci/manifest-lint (prose-preceded marker)")
+check(row["ci_causes"][2]["class"] == "environment", "ci_causes[2] class = environment (prose-preceded marker)")
+check(row["ci_causes"][2]["basis"] == "observed", "ci_causes[2] basis = observed (prose-preceded marker)")
 
 # ── 6. _budget_from_cr() prefix-anchoring (homelab#929 r3) ──────────────────────────────
 # The prefix must be anchored with "-round-" so issue "92" does not match
