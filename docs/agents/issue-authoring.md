@@ -621,7 +621,7 @@ oracle-fleet#326 — a jail-authored Goal that tripped all three):
    fails at clone without it (the #326 miss). **Choosing `master` is a smell to justify**: a Goal whose children all land
    directly on master is more likely a stint — say why it's a Goal anyway, or run it as one.
    (Softens at v1.3 theme adoption, S8: a themed Goal legitimately declares `master` while its
-   level-2 themes carry their own `goal/<n>-<theme>` branches — see §⚖ BANKED below.)
+   level-2 themes carry their own `goal/<n>-<theme>` branches — see §Theme-branch decomposition for deploy-to-test stacks below (ADR-126).)
 3. Children are **native sub-issues** and bind at filing — never floating issues that mention
    the Goal.
 4. Decompose and checkpoint sittings load the stack's design corpus first (e.g. oracle-fleet:
