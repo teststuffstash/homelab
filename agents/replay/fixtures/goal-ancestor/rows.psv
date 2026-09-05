@@ -6,3 +6,4 @@ bucket-child      | homelab-278-tree            |                               
 direct-child      | homelab-278-tree            |                                                         | PROJECT=homelab ISSUE_N=291 | direct-child      |
 none-fallback     | circles-constructed-parents |                                                         | PROJECT=circles ISSUE_N=88  | none-fallback     |
 unlabelled-budget | circles-constructed-parents | gh/issue-view-62.json @ patches/add-unlabelled-budget.jq | PROJECT=circles ISSUE_N=90  | unlabelled-budget |
+child-with-budget-and-parent | circles-constructed-parents | gh/issue-view-62.json @ patches/add-task-goal-to-62.jq | PROJECT=circles ISSUE_N=92  | child-with-budget-and-parent |
