@@ -622,23 +622,24 @@ parked "until board scale pays"; the sprout index is what makes them pay.
 
 ### Creating a Goal — the consumer card
 
-Everything a stack needs to author and drive a Goal is in this card; **everything below it is
-machinery that reacts to a well-formed container** — you don't need to read it to file one.
-(Consumer-card shape per the loki-tenancy precedent; proposed from the oracle jail 2026-08-27/30,
-landed 2026-08-30. Worked example: oracle-fleet#270.)
+Authoring a Goal is **three acts**; everything below this card is machinery reacting to a well-formed
+container. (Consumer-card shape, loki-tenancy precedent 2026-08-30; cut to three acts at ADR-122 (3). Worked example: oracle-fleet#270.)
 
-**The skeleton** (title `Goal: <intent in one line>`, label `task/goal`):
+**Act 1 — the body.** Title `Goal: <intent in one line>`, label `task/goal`, and ONE `---`-fenced
+[machine block](#the-machine-block-adr-122-3-2026-09-05) at the top — you never hand-type its lines:
+`issue_body.py set …` writes them and `issue_body.py json` (exit 2 ⇒ fix, never post) is your gate.
 
 ```markdown
-Budget: <N>
-Verdict-authority: human | kpi
+---
+Budget: 30
+Verdict-authority: human
 Production-leg: <deploy surface | operator live-probe | explicit evidence-in-lieu statement>
-Base: goal/<n>-<slug> | master
+Base: goal/<n>-<slug>
+Class: goal
+---
 
 ## Goal
-<intent in a paragraph + an acid test — the concrete case that must be expressible/passing>
-
-<design pins — decisions already settled; children elaborate them, never contradict them>
+<intent + an acid test — the concrete case that must pass; plus the design pins children elaborate>
 
 ## Acceptance
 1. <numbered, checkable>
@@ -647,74 +648,37 @@ Base: goal/<n>-<slug> | master
 <named, so sprouts don't drift in>
 ```
 
-**The ten rules you drive** (the machine handles the rest; rules 7–9 added 2026-09-01 from
-oracle-fleet#326 — a jail-authored Goal that tripped all three):
+`Base:` is a forced choice, never a default: `goal/<n>-<slug>` (children stack on the assembly branch;
+one codeowner read of the net swap) or an explicit `master` (children land piecewise, no assembly read
+— a smell to justify, see the table). Fill `<n>` after filing and **cut the branch yourself from
+master** (IL-G02): nothing in the machinery creates it. `Budget` is the only money truth; prose points.
 
-1. The header lines are machine-parsed — exactly one `Budget:` line, ever; prose
-   references money only by pointing at that line.
-2. **`Base:` is a forced choice, never a default**: `goal/<n>-<slug>` (children stack on the
-   assembly branch; one codeowner read of the net swap) or an explicit `master` (children land
-   piecewise; there is no assembly read). Children inherit the line **verbatim** at decompose
-   (the decompose play) — a Goal that omits it sends every child to master silently
-   (oracle-fleet#281). Fill in `<n>` after filing; **the branch itself is the AUTHOR's to cut
-   from master** (IL-G02) — nothing in the machinery creates it, and the first child ride
-   fails at clone without it (the #326 miss). **Choosing `master` is a smell to justify**: a Goal whose children all land
-   directly on master is more likely a stint — say why it's a Goal anyway, or run it as one.
-   (Softens at v1.3 theme adoption, S8: a themed Goal legitimately declares `master` while its
-   level-2 themes carry their own `goal/<n>-<theme>` branches — see §Theme-branch decomposition for deploy-to-test stacks below (ADR-126).)
-3. Children are **native sub-issues** and bind at filing — never floating issues that mention
-   the Goal.
-4. Decompose and checkpoint sittings load the stack's design corpus first (e.g. oracle-fleet:
-   `/design`) — the reasoning seat reads the plan before authoring or re-cutting children.
-   (Binds the jail/operator sittings; the cluster decompose approximates it by reading the
-   goal's cited docs.)
-5. **Merge is a midpoint.** Assembly merge opens the post-launch sub-issue; every sprout from
-   descendant-PR reviews harvests there, drawing the same budget. Do not treat assembly as done.
-6. The Goal closes at **tree-empty + terminal verdict** (per `Verdict-authority:`), never at
-   merge, never by declaring victory in a comment.
-7. **Children carry a class and an order.** Each child gets `agent-fix` plus a `task/*` class
-   — `task/build` for build-shaped work (chart code, a harness, CI wiring), `task/fix` for a
-   defect; the recipe is chosen by that label, and a build task under `fix.yaml` gets a
-   bug-hunter's brief (the sleep#48 trap). Ordering between children is a **native `blockedBy`
-   edge** (body lines gate nothing); overlapping footprints otherwise serialize in arbitrary
-   order.
-8. **Pre-authored children ⇒ the Goal stays unqueued.** `task/goal` alone makes it a goal to
-   the machinery (burn-down, checkpoint, terminals); `agent/queued` on the Goal summons the
-   decomposer against children you already wrote. Queue the *children* — breaker #1 is the
-   human's — and leave the Goal at `task/goal` (`agent/blocked` is the decompose play's own
-   tracking convention, tolerated, never required).
-9. **Lint before you queue.** `devbox run goal-lint -- <owner/repo> <n>` in the homelab jail;
-   from a stack jail `bash /workspace/homelab/scripts/goal-lint.sh <owner/repo> <n>` (bash +
-   gh + jq only — never `devbox run` in a stack jail's homelab clone, it materializes the whole
-   closure). Every rule above is a deterministic check over the Goal and its tree; a FAIL is
-   fixed on the issue, never worked around in the machinery.
-10. **Research is never mixed into the build tree** (operator ruling 2026-09-04, from
-   oracle-fleet#418). Research PRECEDES the Goal as a mission
-   ([research-and-specs.md](research-and-specs.md) §Research precedes the Goal) — or, when a
-   Goal genuinely carries a research lane, that lane is its own **theme** (a level-2 child with
-   its own `goal/<n>-<theme>` branch, §⚖ v1.3.1): the arms ride bot-gated into the theme, the
-   theme assembly is the ONE human read, and a rejected theme is simply never merged. A ⚖-proposal
-   child riding directly on the Goal's branch beside build children is the mixed shape: it parks
-   the human read at the fix→goal hop (the doctrine's automated one) and a rejected proposal
-   needs a revert child on the build branch. Research rides into `goal/**` ARM
-   (`agents/agent-session.sh` research-arm-guard); only research into the default branch stays
-   un-armed (the weave, FU-105).
+**Act 2 — bind every child as a native sub-issue** (`sub_issues` POST) at filing, never a floating issue that mentions the Goal. Each child carries its own block:
+`Base` inherited verbatim from the Goal (the decompose play does this), `Touches`, and `Class: build | fix` — mirrored by the matching `task/*` LABEL until the label read retires (ADR-122 (2)):
+the recipe pick and `goal-lint` still read the label, and build-shaped work read as a fix gets a bug-hunter's brief (the sleep#48 trap).
+Ordering between children is a native `blockedBy` edge; overlapping footprints otherwise serialize in arbitrary order.
 
-**Failure signatures** (each is a scar this doc already records):
+**Act 3 — `agent/queued` on the CHILDREN, never the Goal.** `task/goal` alone makes it a goal to the machinery (burn-down, checkpoint, terminals); `agent/queued` on the Goal
+summons the decomposer against children you already wrote — breaker #1 is the human's. Lint before you queue: `devbox run goal-lint -- <owner/repo> <n>` in the homelab jail,
+or `bash /workspace/homelab/scripts/goal-lint.sh <owner/repo> <n>` from a stack jail (bash + gh + jq only). A FAIL is fixed on the issue, never in the machinery.
+
+Three standing rules the acts do not encode: decompose and checkpoint sittings **load the stack's design corpus first**; **merge is a midpoint** (assembly opens the post-launch
+sub-issue on the same budget — the Goal closes at tree-empty + terminal verdict per `Verdict-authority`, never at merge); and **research is never mixed into the build tree** — it
+precedes the Goal as a mission ([research-and-specs.md](research-and-specs.md) §Research precedes the Goal) or rides its own theme branch (§Theme-branch decomposition below).
+
+**Failure signatures** (each a scar this doc records; the block turns the old grammar traps —
+duplicate `Budget:` lines, a `€12`/`$16` prose split, a mis-spelled or indented key — into parse errors):
 
 | symptom | it means |
 |---|---|
-| two `Budget:` lines (prose `€12`, footer `$16`) | the machine line is the only truth — #29's trap; fix the container, don't annotate it |
-| no `Production-leg:` | this Goal can never reach a terminal verdict — only assembly-complete; add the leg or an explicit evidence-in-lieu statement |
-| no `Base:` line on the Goal | children inherit nothing and dispatch against master silently; the assembly read dissolves piecewise (oracle-fleet#281: #283/#284 went to master against the recorded goal-branch placement, every downstream gate green) |
-| a research (⚖ proposal-only) child riding directly on the Goal's branch beside build children | the mixed shape — rule 10: research precedes the Goal as a mission, or rides its own theme branch; oracle-fleet#418 C4/C5 parked #425/#426 on a human at the fix→goal hop |
-| `Base: master` on a Goal | legitimate only with a stated reason — a direct-master Goal is more likely a **stint** (operator, 2026-08-30); if no reason survives writing it down, it isn't a Goal |
+| `Base:` names a branch that does not exist | the author never cut it (IL-G02) — the first child ride dies at clone; `goal-lint` fails on it (oracle-fleet#326) |
+| `Base: master` | legitimate only with a stated reason — a direct-master Goal is more likely a **stint** (operator, 2026-08-30); if no reason survives writing it down, it isn't a Goal |
 | children filed without sub-issue binding | an orphan tree nothing owns (goal-174: 19 sprouts, 3 generations, still growing 34h after close) |
+| children with no `Class` and no `blockedBy` edges | they ride the wrong recipe, in arbitrary order — act 2 (oracle-fleet#326) |
+| `agent/queued` on a Goal whose children already exist | the decomposer re-decomposes — act 3 |
 | Goal closed at assembly merge | post-launch sprouts fall into master-limbo — reopen; the post-launch sub-issue is the harvest target |
-| lowercase "goal" in agents-corpus prose | retired term — say **Goal** (the type), **mission** (research), or "intent/target" |
-| `Base: goal/<n>-…` names a branch that does not exist | the author never cut it (IL-G02) — the first child ride dies at clone; `goal-lint` fails on it (oracle-fleet#326) |
-| children without a `task/*` class, or with no `blockedBy` edges between them | they ride the wrong recipe / in arbitrary order — rule 7 (oracle-fleet#326) |
-| `agent/queued` on a Goal whose children already exist | the decomposer re-decomposes — rule 8 |
+
+### The machinery the card drives (ADR-102 lifecycle v3)
 
 Supersedes the goal-half of this doc's earlier close semantics (harvest-time queueing after
 close, IL-G04's unbuilt gauge, the retarget-to-master drift). Validated retroactively against
