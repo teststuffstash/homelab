@@ -28,6 +28,3 @@ parts:
 scrub:
   - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
   - 's/ [0-9]\{1,\}m / Nm /g'
-# hermeticity contract (homelab#329): the clause reads issue bodies through agents/issue_body.py.
-requires:
-  - python3

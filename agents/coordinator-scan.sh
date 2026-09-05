@@ -52,9 +52,14 @@ ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"   # homelab#840: gh's unstated 30-re
 # helpers live in THIS block because run.sh prepends it to every composition, so an extracted
 # clause gets them without a per-fixture copy — extraction, never transcription.
 # PATH SEAM: the real scan resolves the module beside itself (`$HERE`, set at the top of this
-# file); a replay composition sees this block BEFORE its bridge sets HERE, so an affected bridge
-# overrides IB_PY with `$REPLAY_ROOT/agents/issue_body.py` (its one seam line).
-IB_PY="${IB_PY:-${HERE:-agents}/issue_body.py}"
+# file); a replay composition sees this block BEFORE its bridge sets HERE — $REPLAY_ROOT covers it.
+# Resolution order: an explicit IB_PY (a bridge seam) > $HERE (the real script dir) >
+# $REPLAY_ROOT/agents (run.sh cds into the FIXTURE dir, so a bare relative path would miss —
+# the pin-vacuity lesson on PR#1459: a per-fixture seam is a fixture CHANGE the gate then
+# judges vacuous) > `agents` (cwd = repo root).
+IB_PY="${IB_PY:-${HERE:-${REPLAY_ROOT:+$REPLAY_ROOT/agents}}}"
+case "$IB_PY" in "") IB_PY=agents;; esac
+case "$IB_PY" in *.py) ;; *) IB_PY="$IB_PY/issue_body.py";; esac
 # ib_get <Key> <ref> <body> → the value on stdout, empty when the key is absent (the greps it
 # replaces behaved the same way). EXIT 2 = the body's machine block is MALFORMED — rule #6, never
 # fail INTO a write: every caller that would dispatch, lane-key or classify on the value treats 2

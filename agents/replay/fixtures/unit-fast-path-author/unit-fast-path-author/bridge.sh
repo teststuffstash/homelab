@@ -17,7 +17,3 @@ JSON
 item_class_push() {
   printf 'CALL item_class_push %s %s %s %s\n' "$1" "$2" "$3" "$4" >> "$REPLAY_ACTIONS"
 }
-
-# ── seam (ADR-122 (3), homelab#1431) ── the ONE issue-body parser. The scan resolves it beside
-# itself; a composition sees config-defaults BEFORE this bridge, so the path is set here.
-IB_PY="$REPLAY_ROOT/agents/issue_body.py"
