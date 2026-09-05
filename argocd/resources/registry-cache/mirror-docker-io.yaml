@@ -87,6 +87,7 @@ spec:
             # 127.0.0.1:5002 because that pod HAS an nginx front on :5001; here :5001 is
             # free and the debug server is the only listener on it.
             - { name: REGISTRY_HTTP_DEBUG_ADDR, value: ":5001" }
+            - { name: REGISTRY_HTTP_DEBUG_PROMETHEUS_ENABLED, value: "true" }
             # Upload-debris reaping — same rationale as mirror-ghcr (#80): abandoned
             # pull-through uploads must reap in ~1h, not the 168h default.
             # NB: must be ONE env var holding the whole YAML map — per-key

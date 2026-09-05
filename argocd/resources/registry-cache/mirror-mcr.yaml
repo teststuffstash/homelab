@@ -82,6 +82,7 @@ spec:
             # 127.0.0.1:5002 because that pod HAS an nginx front on :5001; here :5001 is
             # free and the debug server is the only listener on it.
             - { name: REGISTRY_HTTP_DEBUG_ADDR, value: ":5001" }
+            - { name: REGISTRY_HTTP_DEBUG_PROMETHEUS_ENABLED, value: "true" }
             # Upload-debris reaping at 1h (homelab#80) — one env var holding the whole map,
             # per-key vars panic the registry; rationale in mirror-ghcr.yaml.
             - name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING
