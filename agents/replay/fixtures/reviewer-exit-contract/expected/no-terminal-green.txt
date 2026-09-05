@@ -1,5 +1,5 @@
 CALL gh pr view 42 --repo teststuffstash/test-project --json reviews,comments,labels,commits,headRefOid
 OUT FINAL: 10
 OUT TERMINAL_OK: 0
-ERR exit-contract: NO TERMINAL — no homelab-reviewer verdict, no standing-aside, no agent/error at head abc1234d (verdict=0 aside=0 error=0); a green here would mask a dead review plane
+ERR exit-contract: NO TERMINAL — no homelab-reviewer verdict, no standing-aside, no agent/error, no silent-dedup at head abc1234d (verdict=0 aside=0 error=0 silent_dedup=0); a green here would mask a dead review plane
 RC 10
