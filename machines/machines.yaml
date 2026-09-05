@@ -279,7 +279,7 @@ machines:
     label: "`wk-metal-03` (laptop i5-6200U, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node)
     hardware: laptop, i5-6200U (Skylake, VT-x/KVM + AVX2)
-    cpu_cores: 2
+    cpu_cores: 4         # 2C / 4T (the column is LOGICAL cpus — `talosctl get cpu`: 2 cores, 4 threads)
     memory_gb: 8
     ip: 192.168.2.184
     plug: null

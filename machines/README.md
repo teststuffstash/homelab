@@ -14,6 +14,6 @@ Benchmark = stress-ng `matrixprod` bogo-ops/s (synthetic, comparable across thes
 | hp-01 | k8s worker + Longhorn (WoL-capable) | HP desktop | — | 8 | hp | — | — | — | — | — | Wake-on-LAN (PXE-booted); smart plug switch.tuyalocal_hp exists but AC-restore is flaky — prefer WoL |
 | wk-metal-01 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier | Lenovo ThinkPad X240 | 4 | 8 | laptop3 | 9.1 | 28.8 | 1182.1 | 1932.2 | 67.1 | — |
 | wk-metal-02 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) | Lenovo ThinkPad X250 | 4 | 8 | laptop4 | — | — | — | — | — | — |
-| wk-metal-03 | k8s worker, ephemeral/compute tier (tainted; kata node) | laptop, i5-6200U (Skylake, VT-x/KVM + AVX2) | 2 | 8 | — | — | — | — | — | — | — |
+| wk-metal-03 | k8s worker, ephemeral/compute tier (tainted; kata node) | laptop, i5-6200U (Skylake, VT-x/KVM + AVX2) | 4 | 8 | — | — | — | — | — | — | — |
 | wk-metal-04 | k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier | desktop, i5-3570K (Ivy Bridge, VT-x/EPT, no AVX2) | 4 | 16 | — | — | — | — | — | — | — |
 | pop-os | the Docker host running this jail | workstation (Pop!_OS) | — | — | — | — | — | — | — | — | — |
