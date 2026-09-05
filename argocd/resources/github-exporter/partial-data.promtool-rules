@@ -1,0 +1,28 @@
+# Behaviour fixture for GithubExporterPartialData (homelab#1405) — validates that the alert
+# correctly fires when partial-data errors occur AND the PR series is absent, and stays silent
+# when either condition does not hold.
+#
+# Fix round 2 findings (arbitration 2026-09-05T11:09:30Z):
+#   1. `by (job)` was dropping the `class` label → changed to `by (job, class)` so the label
+#      survives to the annotation
+#   2. The right-hand side `(count by (job) (github_pull_request_open) == 0 or absent(…))` never
+#      matched — `count` over an absent series returns empty vector (never 0), and `absent()` has
+#      no labels to match against `job`. Fixed to `and on() absent(github_pull_request_open)`.
+#   3. The expression is now testable: alert fires when counter increments AND PR family is absent,
+#      stays silent when either condition does not hold.
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/partial-data.promtool-test
+#
+# Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+groups:
+  - name: github-partial-data
+    rules:
+      - alert: GithubExporterPartialData
+        expr: (max by (job, class) (increase(github_exporter_graphql_partial_total[15m])) > 0) and on() absent(github_pull_request_open)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "github-exporter: GraphQL partial data — PR series missing"
+          description: "GraphQL walk returned partial data (class: {{ $labels.class }}) in the last 15m and the entire `github_pull_request_*` series family is absent from Prometheus. The review edge, codeowner-park watcher and behind-dispatcher are dark (FU-108 class — the read succeeds with nothing in it). Check: the `class` label says which path to follow — `resource-limit` → the walk's nested `first:` fan-out against GitHub's query-cost ceiling, see github-exporter.py; `not-accessible` → the exporter PAT's repo access (scripts/github-exporter-pat-bootstrap.sh, docs/github-setup.md §Tokens); `other` → the pod log's field errors. githubstatus.com rules out a GitHub-side outage. The */15 reflex + coordinate CronWorkflow backstops own re-reviews and CI-reds meanwhile."
