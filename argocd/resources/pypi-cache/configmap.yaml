@@ -49,6 +49,11 @@ data:
           proxy_http_version 1.1;
           proxy_set_header Connection "";
 
+          proxy_set_header Accept-Encoding "";          # sub_filter needs an uncompressed body
+          sub_filter_once off;
+          sub_filter_types text/html application/vnd.pypi.simple.v1+html application/vnd.pypi.simple.v1+json;
+          sub_filter "https://files.pythonhosted.org" "$scheme://$http_host";   # VIP and svc name both keep working
+
           proxy_cache pypi_simple;
           proxy_cache_key "$request_uri";
           proxy_cache_valid 200 5m;                    # index pages change — short TTL
