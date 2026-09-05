@@ -10,53 +10,16 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ S8 IN FLIGHT (second sitting 2026-09-05 15:45–~17:30Z, corpus session, ctx ~700k at
-  wind-down — stint #1418, Size 3):** LANDED this sitting: **#1421** (ADR-125/126, PR#1425),
-  **#1419** (dispositions on the container, PR#1437 — r3 fail-closed fix by a sonnet round),
-  **#1432** (`agent/queued` the one valve, PR#1434 — round-2 footprint finding resolved
-  dispatch-side: Touches widened + stale CR dismissed). **OPEN at exit (third sitting 2026-09-05 ~18:20–19:00Z — the codeowner-reads/CI-red sweep,
-  TICK-LOG):** PR#1436 (1a parser; round-2 fix c6fb0d7f in; the 17:33Z red was a
-  `board-test.sh` pipefail flake — `printf | grep -q` — fixed on the branch abf4f17d; awaits
-  the bot's re-review) · PR#1446 (6a — codeowner-approved as a comment; its red was the FU-215
-  DNS window at checkout; awaits its FIRST bot review, then **re-land
-  `reviewer-currency/dirty-skips` fixture-only**) · PR#1449 (6b — bot APPROVED at head after
-  the pin-vacuity fix-by-cause 92fe27aa; its red was the DNS window at `argocd-validate-pins`;
-  auto-merges on green). Every head re-cycled 3× behind the 18:2x–18:4xZ master merges (#1454,
-  #1455, the #1440 quickfix) — L-scenario churn, not a wedge. **Wind-down 18:50Z: the 5h
-  window at 84 % (operator) — the FU-088 latch holds the reviewer + the haiku round ~2 h (to
-  ~20:50Z).** #1409 MERGED 18:44Z. #1449 lands on its own (approval at head, no review needed —
-  was BLOCKED on the post-#1409 updater cycle at exit). NEXT SESSION picks up: #1446's first bot
-  review → merge → **re-land `reviewer-currency/dirty-skips` fixture-only** (the four files +
-  the FSM `replay:` entry are in `985924e3^`); #1436's re-review; PR#1448's fixture round
-  (fixture-only, red on `ci-failure-run-select` + index — the loop rides it once the latch
-  clears; #1453 follows when #1448 merges). **Second sweep 19:15–20:20Z (operator: "get the open
-  list down so CI keeps up"):** #1448 MERGED 20:07Z (the loop's round c829beed fixed the fixture
-  once the latch let it ride; #1440 closed) · #1449 MERGED 20:08Z · **#1453: the seat executed
-  the coordinator's round-2 directive by hand** (TERMINAL 4 before the aside terminal,
-  session-scoped `SILENT_DEDUP_RECORD`, bridge clears first; family 10/10) → codeowner-APPROVED
-  20:15Z, CLEAN, auto-merging · #1446 + #1436 green, **operator chose to WAIT for the bot**
-  (latch ~20:50Z) over an admin merge — their merge + the `dirty-skips` re-land are the next
-  session's first act if the bot has landed them.
-  **⚑ BUDGET WINDOW FOR THE NEXT SESSION (operator, 2026-09-05 20:22Z): the 5h window resets
-  ~20:35Z and the WEEKLY window resets ~21:55Z — burn THIS week's remainder, not next week's.**
-  Run it as a corpus session with WIDE subagent fan-out (width 4+, opus chunks — the S8 build
-  mode) from bootstrap, aimed at 1b #1431 (+ #1420/#1424 if the chunks allow), and WIND DOWN
-  BEFORE ~21:55Z regardless of in-flight work — a chunk that has not pushed by then parks on
-  its branch for the session after. The bot reviews of #1446/#1436 resume at the 5h reset, so
-  #1422 (6a+6b) and #1430 (1a) should be closable at bootstrap; re-land `dirty-skips` and
-  queue #1439 first (both ≤5 min). Codeowner reads on incoming loop PRs ride the SEATPR/park
-  sources under ADR-110 (merge the small, park the big — never admin-merge). **Next originals:** 1b #1431 (after 1a;
-  carries the fail-CLOSED-on-exit-2 input + `GB_REF` per issue, recorded on #1431) → #1420 (card
-  to three acts) → #1424 (currency; folds the goal-ancestor stop-condition nit). #1423 HELD.
-  Sprouts: **#1452** (updater updates only MERGE-READY PRs — the platform-native merge queue,
-  operator: a GitHub merge queue on homelab is "correct but unfair"; blocked on #1422) · #1439
-  (goal-findings `--slurp` fold, HOLD until 6b lands — same file) · loop-filed #1450/#1451
-  (checkpoint trigger (b) retiring edge for themes; single-repo descendant walk) — dispose at
-  closeout 1. #1422 closes when 6a+6b both merge (seat closes; neither PR carries Fixes).
-  Loop-filed issues this sitting: QUEUED #1438 #1440 (PR#1448) #1428 #1429 (merged PR#1447)
-  #1413 (re-queued after PR#1435 closed as a conflict); #1427 + #1444 queued behind
-  `blockedBy #1422`; #1441 fixed DIRECT (5739f5f2: both lint steps diff against
-  `pull_request.base.sha`); #1417 closed → FU-215; #1442 stays inert (wave-2 mint).
+- **⚑ S8 IN FLIGHT (fourth sitting 2026-09-05 20:41–~21:50Z, the budget-window corpus session
+  — stint #1418, Size 3):** **#1436 (1a) MERGED 20:56Z (#1430 closed) · #1446 (6a) MERGED 21:06Z → #1422 CLOSED.** **1b #1431 built by a 4-chunk opus fan-out on clones, integrated into ONE branch
+  `fix/s8-1b-one-parser-readers`** — chunk D (authoring plays write the block; in-pod
+  `--self-test` PASSED on a live oracle coordinator pod, 73/73) + A (scan — new `body-block-malformed` family, `queued-held-malformed-block` class) + B (launcher/reviewer — `PREFLIGHT REFUSED`, `GB_MALFORMED`, `GB_REF` per hop, a new `agent-session` LEGACY variant) + C (fix-debounce/responder shell legs — the responder's first touch upserts the block, both forms emitted). PR: **PR#1459 (armed 21:17Z, BEHIND-but-MERGEABLE against 6a, awaits its FIRST bot review)**; residue = **sprout #1460** bound under #1431 (#1431 closes when #1460 lands — do NOT close it at #1459's merge).
+  **OPEN at exit (bot-waits, all armed, codeowner reads on record — merge the small):** PR#1459, PR#1461, PR#1458. **#1439 QUEUED** (loop rides it). **#1456 filed inert** (coordinate cron exit
+  141 — the loop-health item 9 read; operator queues if wanted). Sprout from chunk D: the
+  scan's bucket-create + `model-scout.sh` canary filings still hand-roll bodies (writers not in
+  #1431's list) — = #1460 leg 4. **PR#1461** = #1424 half 1 (per-base doc currency; armed; left-behind on #1424: workflow.md:13/:63 per-repo prose + merge-path item 3's retired "up-to-date" predicate — one-line edits, fold into #1424's second half). **PR#1458** dirty-skips re-land armed (6a merged → pushed). oracle-fleet PR#471 ARMED 21:07Z (was an un-armed seat PR — FU-079). Next originals: #1420 (card → three acts; needs 1b merged) →
+  #1424 (currency; after 6a) — neither pre-drafted this sitting (both overlap in-flight
+  branches). #1423 HELD. #1452 blocked on #1422.
 - **⚑ OPERATOR (physical / decisions), from this sitting:** (1) **wk-metal-04 SATA cable swap**
   — the Garage data volume's 150 ms/write is that disk's degraded link (3.0 of 6.0 Gb/s, 1,867
   CRC errors, 23 resets; SMART health fine) — `storage-ledger.md` §2026-09-05; verify `sata_spd`
@@ -118,9 +81,9 @@ never the session's arc — that is TICK-LOG's.)
      hand-do) · #1370 (needs a cluster diagnosis first — FU-171) · #1280 + #829 (design-shaped,
      corpus sitting) · #1237 #1238 (operator/seat-run spikes) · oracle-fleet 20 (oldest #212,
      08-08) · circles 3 · sleep 1 · or-op 1 (#60 — item 2's root).
-  9. **Loop health, unexamined:** three `coordinate-perstack-*` runs FAILED 09-04 (platform
-     12:45Z exit 128, platform 12:58Z + oracle 20:59Z exit 141); every cron tick since is
-     green — read the Loki lines before calling it transient.
+  9. **Loop health — READ 2026-09-05 21:0xZ → homelab#1456 (inert):** the 09-04/09-05 `coordinate-*`
+     Failed ticks are exit 141 (SIGPIPE) ~70 s after the homelab clone with zero scan output
+     (Loki); the producer hunt + a Failed-tick belt are the issue's deliverables. Queue it if wanted.
 - **⚑ OPERATOR-OWED (one list):** (#1200 → PR#1399, #1249 → seat PR, both 09-05; residual
   from #1200: no ArgoCD sync-failed/OutOfSync alert exists — a belt to add) · **#1308 leg-1
   APPLY on ci-runner-01** (NEXT SESSION item 4) · #1370
