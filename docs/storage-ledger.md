@@ -372,6 +372,15 @@ on any layout (oracle-fleet#466 is the resume half); (2) **ADR-114** (Garage rf=
 XFS, Garage's own 2-of-3 write quorum) takes the slowest node off the critical path — FU-137's
 overdue build-out; (3) pinning `garage-0` to wk-02 with meta `dataLocality: best-effort` removes
 only the meta hop (~1–1.5 h of a 9 h job). Not done: an interim rf=1 data volume (reopens the
-2026-08-24 class). Open question before ADR-114 places a zone on it: is wk-metal-04's disk a
-spinning one or a failing SSD (SMART read).
+2026-08-24 class). **Answered the same evening (SMART + sysfs read via an ephemeral privileged pod):** the disk
+is a KINGSTON SA400S37480G (SATA SSD, 5 % endurance used, health PASSED, not near-full) on a
+**degraded SATA link — negotiated 3.0 Gb/s of 6.0, 1,867 interface CRC errors, 23 PhyRdy→PhyNRdy
+transitions / COMRESETs lifetime, one logged `ICRC, ABRT` on a WRITE DMA EXT** (wk-metal-01's
+link: 6.0 Gb/s, flat 0.6–18 ms). Latency over 7 d alternates ~1 ms ↔ 50–215 ms in lockstep with
+write size (NCQ retries after CRC errors stall the queue on large transfers). Same signature as
+the thinkcentre NIC-cable precedent. **Remedy = replace the SATA data cable / reseat (operator at
+the box, ~10 min), then confirm `sata_spd` reads 6.0 Gbps and the CRC counter stops climbing.**
+Fleet gotcha recorded: Kingston SA400's vendor attribute 231 `SSD_Life_Left` reads 6 while the
+standardized `Percentage Used Endurance Indicator` reads 5 % — trust the standardized field.
+Also confirmed: Talos never trims ANY node (the fstrim CronJob is pve-VM-only by design).
 
