@@ -14,16 +14,22 @@ never the session's arc — that is TICK-LOG's.)
   wind-down — stint #1418, Size 3):** LANDED this sitting: **#1421** (ADR-125/126, PR#1425),
   **#1419** (dispositions on the container, PR#1437 — r3 fail-closed fix by a sonnet round),
   **#1432** (`agent/queued` the one valve, PR#1434 — round-2 footprint finding resolved
-  dispatch-side: Touches widened + stale CR dismissed). **OPEN at exit — check each first:**
-  PR#1436 (1a parser; codeowner read APPROVED as a comment; seat round-2 fix c6fb0d7f = the
-  per-child meter ref; master merged 7ba271bf after a comment-only conflict; awaiting re-review)
-  · PR#1446 (6a reflex+updater per-lane + the BEHIND first-review admission — codeowner-approved;
-  `dirty-skips` dropped per the replay README escape (a) after the pin-vacuity red, **re-land it
-  fixture-only once merged**) · PR#1449 (6b scan per-lane walk + #829 aging + `base` gauges —
-  went CI-red on pin-vacuity (`assembly-cr-emit`, `assembly-cr-themed-emit`,
-  `footprint-hold-goal-exempt`, `goal`, …) AND DIRTY vs master; the opus subagent holds the
-  routing directive (revert non-behavioural fixture edits / escape (a); merge master); if no
-  push lands, do it by hand in a clone of its branch). **Next originals:** 1b #1431 (after 1a;
+  dispatch-side: Touches widened + stale CR dismissed). **OPEN at exit (third sitting 2026-09-05 ~18:20–19:00Z — the codeowner-reads/CI-red sweep,
+  TICK-LOG):** PR#1436 (1a parser; round-2 fix c6fb0d7f in; the 17:33Z red was a
+  `board-test.sh` pipefail flake — `printf | grep -q` — fixed on the branch abf4f17d; awaits
+  the bot's re-review) · PR#1446 (6a — codeowner-approved as a comment; its red was the FU-215
+  DNS window at checkout; awaits its FIRST bot review, then **re-land
+  `reviewer-currency/dirty-skips` fixture-only**) · PR#1449 (6b — bot APPROVED at head after
+  the pin-vacuity fix-by-cause 92fe27aa; its red was the DNS window at `argocd-validate-pins`;
+  auto-merges on green). Every head re-cycled 3× behind the 18:2x–18:4xZ master merges (#1454,
+  #1455, the #1440 quickfix) — L-scenario churn, not a wedge. **Wind-down 18:50Z: the 5h
+  window at 84 % (operator) — the FU-088 latch holds the reviewer + the haiku round ~2 h (to
+  ~20:50Z).** #1409 MERGED 18:44Z. #1449 lands on its own (approval at head, no review needed —
+  was BLOCKED on the post-#1409 updater cycle at exit). NEXT SESSION picks up: #1446's first bot
+  review → merge → **re-land `reviewer-currency/dirty-skips` fixture-only** (the four files +
+  the FSM `replay:` entry are in `985924e3^`); #1436's re-review; PR#1448's fixture round
+  (fixture-only, red on `ci-failure-run-select` + index — the loop rides it once the latch
+  clears; #1453 follows when #1448 merges). **Next originals:** 1b #1431 (after 1a;
   carries the fail-CLOSED-on-exit-2 input + `GB_REF` per issue, recorded on #1431) → #1420 (card
   to three acts) → #1424 (currency; folds the goal-ancestor stop-condition nit). #1423 HELD.
   Sprouts: **#1452** (updater updates only MERGE-READY PRs — the platform-native merge queue,
@@ -49,6 +55,11 @@ never the session's arc — that is TICK-LOG's.)
   respond workflow retries. (6) Seat miss to remember: a zsh `set -- $var` classifier cancelled
   six LIVE CI runs (all re-run) — the card's no-word-split gotcha bites the seat too.
 - **⚑ BOARD (09-05 ~09:45Z — see NEXT for the four open seat/loop PRs; earlier read follows):** in review #1386 (re-review after the seat's fix push) ·
+  **18:20–19:00Z sweep:** **#1409 codeowner-APPROVED 18:23Z** (the #1403 fix; auto-merges on
+  green) · **#1440's launcher fix landed DIRECT as a quickfix (`12249396`)** — PR#1448 is
+  fixture-only now (seat conflict-merge took master's launcher; the loop's round rides on the
+  directive amendment on #1440: drop the PARTIAL relaxation of #1205) · #1453 parks
+  `blocked-on: issue=1440` until PR#1448 merges ·
   riding #1378 #1392 (r1, deepseek — dispatched before the haiku flip); #1384 #518 completed r1
   → PRs in review · queued this morning by the seat: **or-op#60** (item-2 root; coordinator pod
   up 08:0xZ), **agent-runtime#119 #120** (finalize sprouts), **homelab#1297** (mirror poison
