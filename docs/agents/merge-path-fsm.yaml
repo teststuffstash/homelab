@@ -111,6 +111,7 @@ transitions:
     replay:
       - agents/reviewer-optout-replay.sh
       - agents/replay/fixtures/reviewer-exit-contract
+      - agents/replay/fixtures/reviewer-currency/dirty-skips
     guards:
       - desc: "bot-approval-at-head over NON-MERGE commits (branch_updated ≠ content_pushed)"
         anchor: { file: agents/review-reflex.sh, pattern: "UPDATER MERGE COMMITS ARE NOT NEW CONTENT" }

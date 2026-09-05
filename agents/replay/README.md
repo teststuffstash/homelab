@@ -328,6 +328,7 @@ is stale, so it cannot drift the way the prose register did.
 | `review-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T27 |
 | `reviewer-currency/behind-skips` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-currency/dirty-skips` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-currency/probe-fail-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-depth-lane-split` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-exit-contract` | table | - | `agents/reviewer-session.sh` | MP-T03 |
