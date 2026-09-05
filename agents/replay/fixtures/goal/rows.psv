@@ -15,16 +15,38 @@
 #                           no refusal (the choice being explicit is the point)
 # base-required           = task/goal + agent/queued, NO Base: line → fail-closed refusal, no decompose
 #                           unit; the refusal names both legal values and links the consumer card
-bare-member-machine | open-pre | openall.json @ patches/add-bare-member-machine.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-machine
-bare-member-operator | open-pre | openall.json @ patches/add-bare-member-operator.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-operator
-# two-goal-bare-member  = two open goals (29, 123), bare member #303 resolves to #123 → queued
-#                         under #123. Pins fix 1: the old `case " $goals " in` pattern match
-#                         fails with newline-separated goals (≥2 goals → NOMATCH).
-# bare-member-no-touches = bare member #304 has NO Touches: line → btouches="*" → surfaced as
-#                          orphan, never auto-queued. Pins fix 2: the old code classified "*" as
-#                          machine-merge and queued it unscoped.
-two-goal-bare-member     | open-pre | openall.json @ patches/add-second-goal.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | two-goal-bare-member
-bare-member-no-touches   | open-pre | openall.json @ patches/add-bare-member-no-touches.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-no-touches
+#
+# ── ADR-122 (1), 2026-09-05: FILING IS INERT — the bare-tree-member walk RETIRED ────────────────
+# The three rows below pinned the walk (#1153 → PR#1242) and now pin its ABSENCE, positively. The
+# walk queued every unlabelled native descendant of an open funded goal whose footprint classified
+# machine/codeowner-merge; within one tick of landing it queued a v1.3 theme container (#1239) and
+# both deliberate operator/seat legs of Goal #1231 (#1237/#1238) — #1249. ADR-122 (1) ruled the
+# shape itself illegitimate: no reader queues an issue from its shape, and a tree member without
+# `agent/queued` is the CONTAINER's to dispose (issue-authoring.md §lineage contract rule 9, S8).
+#
+# bare-members-inert      = the three shapes the walk switched on, in ONE world: machine-doable
+#                           path (#301), operator-lane path (#302), no `Touches:` line (#304).
+#                           Under ADR-122 the classification is irrelevant — all three are the
+#                           same nothing — so the row shares the `checkpoint-due` template BY
+#                           REFERENCE: the claim is that a world with three bare members emits a
+#                           stream byte-identical to the world without them. Three rows → one.
+# bare-member-counted-not-queued
+#                         = the same machine-doable member (#301) AND an issue-list overlay that
+#                           makes it a real OPEN descendant. The CONTAINER counts it: burn-down
+#                           1 open / 2 closed of 3 → 2 open / 2 closed of 4 (store PATCHed) and
+#                           trigger (b) correctly stops firing (child set no longer complete),
+#                           while nothing queues it. This is the POSITIVE half of the pin — a
+#                           pure-absence contract cannot red on any base (workflow.md §"What the
+#                           pin-vacuity gate proves"). Disposing that member is S8's checkpoint.
+# two-goal-inert          = two open goals (#29, #123), bare member #303 under the SECOND. The
+#                           lane still walks both goals (goal #123's assembly probe is the extra
+#                           positive line) and neither queues #303. Was `two-goal-bare-member`,
+#                           which pinned the walk's own newline-vs-substring goals match — code
+#                           that no longer exists; the world stays because a multi-goal repo is
+#                           where the #1249 misfires actually happened.
+bare-members-inert             | open-pre | openall.json @ patches/add-bare-members.jq        | IN_SLUG=teststuffstash/circles IN_REPO=circles | checkpoint-due
+bare-member-counted-not-queued | open-pre | openall.json @ patches/add-bare-member-counted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-counted-not-queued
+two-goal-inert                 | open-pre | openall.json @ patches/add-second-goal.jq         | IN_SLUG=teststuffstash/circles IN_REPO=circles | two-goal-inert
 base-master-pass   | open-pre | openall.json @ patches/base-master-pass.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles QCLASS=goal QNUM=301 QBASE_RAW=master QPIN=- | base-master-pass
 base-required      | open-pre | openall.json @ patches/base-required.jq    | IN_SLUG=teststuffstash/circles IN_REPO=circles QCLASS=goal QNUM=300 QBASE_RAW=- QPIN=- | base-required
 abandoned          | terminal | openall.json @ patches/verdict-abandoned.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | abandoned
