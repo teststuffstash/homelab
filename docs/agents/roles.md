@@ -228,8 +228,9 @@ never harder posture on quiet ones.
   cap (unique-fp storms); breakers = one-issue-max, no kubectl mutations, no agent labels
   (inert, breaker #1), loop-smell → report-only stop.
   **Dispatch SPLIT from triage 2026-08-07 (FU-133 dispatch half):** the session's issue carries
-  `fix-verdict: fix|report-only` (a diagnosis); the shell applies `agent-fix` (inert — the scan
-  needs `agent-fix ∧ agent/queued`) and rings `/fix-verdict`; the `fix-debounce` machinery
+  `fix-verdict: fix|report-only` (a diagnosis); the shell applies `agent-fix` (inert — the scan's
+  dispatch precondition is `agent/queued` alone, ADR-122 (2), S8 #1432) and rings `/fix-verdict`;
+  the `fix-debounce` machinery
   (`fix-debounce-argo.yaml`) judges the whole pending SET before any `agent/queued` lands —
   mechanism in [`iac-lane.md`](iac-lane.md) §"one root cause, N alert issues". This replaced
   the per-issue `selfQueue` knob (cb4ae5a, which dispatched same-cause issues in parallel).

@@ -1,0 +1,93 @@
+[
+  {
+    "number": 29,
+    "title": "Goal: P0 complete — bake, page, evidence chain",
+    "state": "OPEN",
+    "closedAt": null,
+    "parent": null,
+    "labels": [
+      {
+        "name": "task/goal"
+      },
+      {
+        "name": "agent/blocked"
+      }
+    ]
+  },
+  {
+    "number": 30,
+    "title": "p0: the bake harness",
+    "state": "CLOSED",
+    "closedAt": "2026-08-08T12:00:00Z",
+    "parent": {
+      "number": 29
+    },
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/done"
+      }
+    ]
+  },
+  {
+    "number": 31,
+    "title": "p0: the paging rule",
+    "state": "CLOSED",
+    "closedAt": "2026-08-09T09:10:00Z",
+    "parent": {
+      "number": 29
+    },
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/done"
+      }
+    ]
+  },
+  {
+    "number": 77,
+    "title": "post-launch: Goal: P0 complete — bake, page, evidence chain",
+    "state": "OPEN",
+    "closedAt": null,
+    "parent": {
+      "number": 29
+    },
+    "labels": []
+  },
+  {
+    "number": 240,
+    "title": "unrelated master-lane bug",
+    "state": "OPEN",
+    "closedAt": null,
+    "parent": null,
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/queued"
+      }
+    ]
+  },
+  {
+    "number": 301,
+    "title": "tree member — released by a human",
+    "state": "OPEN",
+    "closedAt": null,
+    "parent": {
+      "number": 29
+    },
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/queued"
+      }
+    ]
+  }
+]
