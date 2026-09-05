@@ -23,7 +23,12 @@ set -euo pipefail
 MARK='<!-- goal-findings v1 -->'
 
 _gf_comments() {   # $1 slug, $2 issue → full comments json (id+body) or ""
-  gh api "repos/$1/issues/$2/comments?per_page=100" --paginate 2>/dev/null || true
+  # --paginate alone emits back-to-back JSON documents (one per page), unparseable past 100
+  # comments; --slurp wraps pages in an outer array for safe parsing. Flatten one level if
+  # all outer elements are arrays (the multi-page slurped case [[page1],[page2],...]), else
+  # pass through unchanged (the single-page or recorded-world shape [comment, comment, ...]).
+  local raw; raw="$(gh api "repos/$1/issues/$2/comments?per_page=100" --paginate --slurp 2>/dev/null)" || raw=""
+  printf '%s' "$raw" | jq -c 'if type == "array" and (. | length > 0) and (.[0] | type == "array") then [.[] | .[] | select(type == "object")] else . end' 2>/dev/null || echo ""
 }
 
 GF_ID=""; GF_BODY=""
