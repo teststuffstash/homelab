@@ -214,14 +214,40 @@ for repo in $all_repos; do
   fi
 done
 
+# The `Capability:` grammar is read by the ONE parser (ADR-122 (3), homelab#1430,
+# agents/issue_body.py) — the machine block first, the legacy `^Capability:[ \t]+` line as the
+# transition-window fallback (one `LEGACY-GRAMMAR Capability <ref>` line to stderr each time; the
+# migration meter, not suppressed). Annotated ONCE per issue here, before the jq grouping, so the
+# grouping stays a single jq pass and the board never forks a python per rendered ROW; the loop is
+# bounded by the `platform-request` label (a handful across the whole universe), not by board size.
+# Read-only and fail-soft by construction: no parser ⇒ the group is `unknown`, exactly as an
+# unparseable body already grouped.
+IB="$ROOT/agents/issue_body.py"
+if [ "$(printf '%s' "$demand_json" | jq 'length')" -gt 0 ]; then
+  ann=""
+  while IFS= read -r item; do
+    [ -n "$item" ] || continue
+    icap=""
+    if [ -f "$IB" ] && command -v python3 >/dev/null 2>&1; then
+      iref="$(printf '%s' "$item" | jq -r '"\(.repo)#\(.number)"')"
+      icap="$(printf '%s' "$item" | jq -r '.body // ""' | python3 "$IB" get Capability --ref "$iref" || true)"
+    else
+      echo "WARN board: agents/issue_body.py or python3 unavailable — Capability: fingerprints degrade to \`unknown\`" >&2
+    fi
+    [ -n "$icap" ] || icap="unknown"
+    ann="${ann}$(printf '%s' "$item" | jq -c --arg cap "$icap" '. + {capability: $cap}')"$'\n'
+  done <<< "$(printf '%s' "$demand_json" | jq -c '.[]')"
+  demand_json="$(printf '%s' "$ann" | jq -sc '.')"
+fi
+
 # Group by capability fingerprint and format
 demand_section=""
 demand_rows=""
 if [ "$(printf '%s' "$demand_json" | jq 'length')" -gt 0 ]; then
   groups="$(printf '%s' "$demand_json" | jq -c "$JQ"'[
-    .[] | select(haslab("platform-request"))] | group_by((.body | capture("(?im)^Capability:[ \t]+(?<cap>[^\\n]+)") | .cap) // "unknown")
+    .[] | select(haslab("platform-request"))] | group_by(.capability)
     | map({
-        capability: ((.[0].body | capture("(?im)^Capability:[ \t]+(?<cap>[^\\n]+)") | .cap) // "unknown"),
+        capability: .[0].capability,
         items: [.[] | {ref: "\(.repo)#\(.number)", title: .title, age: age, stacks: .stacks, created: (.createdAt | fromdateiso8601)}],
         stack_count: ([.[].stacks | split(",") | .[]] | unique | length),
         oldest_created: ([.[].createdAt | fromdateiso8601] | min)

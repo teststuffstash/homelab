@@ -1,0 +1,21 @@
+# S8 original 1a (homelab#1430, ADR-122 (3)) — the ONE issue-body parser registers here so
+# "executed replay" keeps one runner and one index.
+#
+# mode: suite — the subject is a parser CONTRACT (a grammar + thirteen legacy forms it restates),
+# not an action stream. The assertions live inside the parser as `--self-test` because every
+# expectation is derived from the grammar or from the shell reader it replaces, and both live in
+# that file's comments; run.sh executes the shim below, which is nothing but the entry call.
+#
+# WHY IT MATTERS THAT THIS RUNS ON EVERY PUSH: the legacy table is a set of restatements of
+# regexes that still exist in agents/coordinator-scan.sh, agents/goal-budget.sh,
+# agents/board.sh and agents/reviewer-session.sh. Until S8 closeout 2 retires them, a divergence
+# between a restatement and its original is silent — a `Budget:` the launcher reads and the lint
+# does not is the money gate reading a different number from the author. These cases pin each
+# restatement to the semantics its citation names.
+#
+# hermeticity contract (homelab#329): needs `python3` — present under devbox, absent outside it.
+name: issue-body
+mode: suite
+entrypoint: agents/replay/fixtures/issue-body/issue-body/run.sh
+requires:
+  - python3
