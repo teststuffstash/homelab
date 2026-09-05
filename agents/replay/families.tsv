@@ -10,6 +10,7 @@ arbitrate-blocked-on-human-review-only	arbitrate
 arbitrate-blocked-on-human-still-blocked	arbitrate
 arbitrate-first-tick	arbitrate
 arbitrate-fu147-refire-blocked	arbitrate
+arbitrate-goal-child	arbitrate
 arbitrate-landing-sequence	arbitrate
 arbitrate-no-op-after-directive	arbitrate
 arbitrate-probe-unreadable	arbitrate
