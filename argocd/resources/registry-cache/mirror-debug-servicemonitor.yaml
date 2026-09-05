@@ -1,0 +1,21 @@
+# ServiceMonitor for registry mirror debug/metrics endpoints (homelab#1297). Each mirror
+# Deployment now sets REGISTRY_HTTP_DEBUG_ADDR=:5001, exposing registry_http_requests_total
+# and other distribution metrics. The Service exposes port 5001 as "debug"; this ServiceMonitor
+# scrapes it.
+#
+# Picked up cluster-wide (serviceMonitorSelectorNilUsesHelmValues=false in tofu/monitoring.tf).
+# The openrouter-proxy pattern (argocd/resources/openrouter-proxy/servicemonitor.yaml).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mirror-debug
+  labels:
+    app: mirror-debug
+spec:
+  selector:
+    matchExpressions:
+      - { key: app, operator: In, values: [mirror-docker-io, mirror-ghcr, mirror-mcr] }
+  endpoints:
+    - port: debug
+      path: /metrics
+      interval: 60s
