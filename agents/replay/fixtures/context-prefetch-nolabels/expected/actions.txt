@@ -23,7 +23,6 @@ STDIN
 STDIN     ### homelab-agents-1234 (2026-09-01T07:19:57Z)
 STDIN     
 STDIN     <!-- agent-summary -->
-STDIN
 STDIN     🤖 **Agent activity** — one machine comment per timeline.
 STDIN     
 STDIN     - `2026-09-01T07:19:56Z` · **picking this up (round 1)** — dispatching a fix-class worker. <!-- agent-event kind=dispatch ts=2026-09-01T07:19:56Z -->
