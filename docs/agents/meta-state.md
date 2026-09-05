@@ -29,7 +29,14 @@ never the session's arc — that is TICK-LOG's.)
   review → merge → **re-land `reviewer-currency/dirty-skips` fixture-only** (the four files +
   the FSM `replay:` entry are in `985924e3^`); #1436's re-review; PR#1448's fixture round
   (fixture-only, red on `ci-failure-run-select` + index — the loop rides it once the latch
-  clears; #1453 follows when #1448 merges). **Next originals:** 1b #1431 (after 1a;
+  clears; #1453 follows when #1448 merges). **Second sweep 19:15–20:20Z (operator: "get the open
+  list down so CI keeps up"):** #1448 MERGED 20:07Z (the loop's round c829beed fixed the fixture
+  once the latch let it ride; #1440 closed) · #1449 MERGED 20:08Z · **#1453: the seat executed
+  the coordinator's round-2 directive by hand** (TERMINAL 4 before the aside terminal,
+  session-scoped `SILENT_DEDUP_RECORD`, bridge clears first; family 10/10) → codeowner-APPROVED
+  20:15Z, CLEAN, auto-merging · #1446 + #1436 green, **operator chose to WAIT for the bot**
+  (latch ~20:50Z) over an admin merge — their merge + the `dirty-skips` re-land are the next
+  session's first act if the bot has landed them. **Next originals:** 1b #1431 (after 1a;
   carries the fail-CLOSED-on-exit-2 input + `GB_REF` per issue, recorded on #1431) → #1420 (card
   to three acts) → #1424 (currency; folds the goal-ancestor stop-condition nit). #1423 HELD.
   Sprouts: **#1452** (updater updates only MERGE-READY PRs — the platform-native merge queue,
