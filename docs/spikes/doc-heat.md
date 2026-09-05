@@ -127,6 +127,42 @@ stint's fifth original (homelab#1393, #983's method), so the accepted decisions 
 run 3 there. What run 2 settles: the windowing recipe (environment-driven source dir), and
 that the corpus cost line in the skill is a measured figure from now on.
 
+## Settle test — run 3 (2026-09-05, S5 original 5 — homelab#1393)
+
+Run 2's measurement filed the trims; this is the execution, by #983's method (a cold narrative
+span becomes a short what-stands block plus a pointer to the owning doc/FSM/ADR — nothing silently
+deleted). Heat cited per decision is run 2's **windowed** figure (the 37 transcripts since
+2026-08-31), which is the authoritative one post-S5.
+
+**−396 net lines across the eight design-agents corpus files, paid on every 300–350k-token load:**
+
+| file (cold % · longest cold run) | decision | net |
+|---|---|---|
+| `agents/replay/README.md` (50 % · 385) | the eleven per-family essays → **twelve distilled seam patterns (S1–S12)**, which is what the cleanup contract's move 3 always specified ("this README keeps only doctrine"); the no-fixture-applies register → kept **by CLASS** (declaration-to-the-scheduler · text outside every `>>>REPLAY:` sentinel · the retro lane's standing debt) with every issue id retained as provenance. Generated index block untouched. | **−149** |
+| `docs/agents/merge-path.md` (99 % · 370) | the S7 currency debt: the hosted-updater narrative (adRise action, reusable workflow, `MERGE_GH_APP_*` org secrets, Actions `concurrency` groups, §Updater token as a GitHub-Actions credential, §Rollout phases) → what-stands + ADR-111 / MP-T02 / MP-T06 pointers; the layered-breakers bullet → three design rules + MP-T03; worked examples M/L → their totals. §The problem, §Constraints, §Options considered, §Why update-before-review, §Post-merge-push hazard untouched. | **−50** |
+| `docs/agents/observability-and-retro.md` (98 % · 331) | the 2026-07-08 prior-art survey → the four decisions it produced (incl. the Langfuse rejection); Part A′'s ranked breakdown → its one-line takeaway + the phase-metric pointer; the `AgentCoordinateScanWedged` build narrative → the doctrine + the replay fixtures that pin it (its still-open `Forbid` half kept in full); the multi-model pilot's run-1+2 log → the routing verdict table + three standing lessons + the run-3 shape. | **−50** |
+| `docs/agents/issue-authoring.md` (81 % · 328) | the pre-ADR-102 "keeping the goal in view" history, the §As-built table's duplication, the sprout-index run narratives and §Down-payment, §Base:'s rename story (rules kept), and the §Dependencies 2026-08-09 miss → compressed. Deliberately untouched, per the stint plan: §The lineage contract, §Label semantics, §The goal container / consumer card, §Goal lane versions, both ⚖ BANKED blocks (S8 rewrites those). | **−30** |
+| `docs/agents/iac-lane.md` (98 % · 277) | the first ≥2-pending set-pass narrative → its currency lesson; the three "landed 2026-08-0x" precondition paragraphs → one, with the ordering rationale kept; the sentinel's measured-overhead table → the rule it produced. **Most of this file's cold mass survived on class excuse** — see the rejections below. | **−12** |
+| `docs/agents/chainless-redesign.md` (95 % · 271) | the OpenCode Go probed-facts log → what the probing SETTLED (transport, per-model tool-compat, registry-poor ⇒ curated snapshot, cacheRead-decides-capacity), numbers pointed at [`opencode-model-matrix.md`](opencode-model-matrix.md); §Rollout status → live state + three lessons. §The jail stint, §The claim-knob ledger, §The cost rethink, §Preconditions untouched. | **−39** |
+| `docs/agents/roles.md` (98 % · 218) | §Context delivery's dated sighting pile-up → four findings that still bind (the map above it is the current truth, and the section's own closing paragraph says the refactor executed); the responder entry's build narratives compressed, its POLICY_DENIED runbook kept whole-command (`responder-argo.yaml` points here for it). | **−42** |
+| `docs/agents/model-routing.md` (69 % · 171) | §M1a's taxonomy-drift narrative → the two-field lesson + the fixture-matched-the-code lesson + the operator ruling (verbatim); M11a's emitter table → a pointer to the metric family. §M10 was already trimmed in run 1. | **−24** |
+
+**Candidates REJECTED on class excuse (the doctrine working, and worth naming):**
+`iac-lane.md` §Governance-changes-batch-into-a-CHECKPOINT (an OPEN operator pile — cold because
+nobody has re-read it since it was written, not because it is spent) and §Progressive delivery
+(entirely forward-looking rungs); `merge-path.md` §Sequence and its worked scenario S (the one
+visual for the whole design); `issue-authoring.md` §Gate the merge, not the launch (an operator
+ruling quoted verbatim — no other home); `chainless-redesign.md` §Build order (items 2–6 are open
+work and item 6 carries a trap that costs a revert to relearn); every ⚖ BANKED / ⚖ RULED block in
+the corpus.
+
+**What run 3 adds to the settle record:** the method scales — a second pass over a corpus the
+first pass had already combed still found 1,038 lines of removable narrative, and the two classes
+it removed are stable ones (*shipped-and-anchored mechanism* whose current home is an FSM row,
+script header or fixture; and *dated evidence* whose verdict is stated above it). The re-measure
+is the acceptance: `session-ctx.sh --big` on the first corpus session after this merge, against
+run 2's 299k/346k.
+
 ## Links
 
 FU-164 (pointer) · [context-repos.md](context-repos.md) (the shared sweep — FU-117 archived) ·
