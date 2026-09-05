@@ -5,14 +5,16 @@
 #
 #   GH_TOKEN=<homelab-merge App token> bash agents/update-pr-branch.sh <owner/repo>
 #
-# Keeps exactly ONE PR current with master per pass so GitHub auto-merge can fire (the ruleset
-# requires an up-to-date branch). MUST run with the homelab-merge App token, not a workflow
+# Keeps exactly ONE PR per (repo, BASE) LANE current with its base per pass so GitHub auto-merge
+# can fire (the ruleset requires an up-to-date branch). ADR-125: the lane, not the repo, is the
+# serialization unit — a master-lane update cannot stale a goal-lane PR's approval, so holding the
+# goal lane behind it bought nothing and cost the goal its wall-clock. MUST run with the homelab-merge App token, not a workflow
 # GITHUB_TOKEN (a GITHUB_TOKEN push doesn't re-trigger `ci`, so a strict branch never sees green).
 # In-cluster the token arrives as the `updater-git` ESO secret (homelab#744); a jail hand-run
 # mints one ad-hoc. See docs/agents/merge-path.md §Chosen design ▸2 + §Updater token.
 #
-# Level-triggered: each pass re-reads the world and acts on at most one main-leg update; a lost
-# doorbell costs nothing (the */15 cron re-derives). Races are safe: update-branch carries
+# Level-triggered: each pass re-reads the world and acts on at most one main-leg update PER LANE; a
+# lost doorbell costs nothing (the */15 cron re-derives). Races are safe: update-branch carries
 # expected_head_sha (homelab#986), so a concurrent push causes 422 (skip, next pass re-lists)
 # instead of clobbering the commit. The merge gate is GitHub's, evaluated once.
 #
@@ -32,7 +34,7 @@ REPO="${1:?usage: update-pr-branch.sh <owner/repo>}"
 # One list serves all three legs — the snapshot is per-pass by design (level-triggered; anything
 # it misses, the next pass sees).
 PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
-  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews)"
+  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName)"
 
 # Defensive: `gh pr edit --add-label` FAILS on a missing label, so create it idempotently first
 # (the AgentStack claim provisions it via IssueLabels, but this survives a not-yet-claimed repo or
@@ -52,32 +54,48 @@ label_conflict() {
     || echo "updater[$REPO]: could not label #$1 merge-conflict (token lacks issues:write?) — the */15 pass retries"
 }
 
-# ── leg 1: the main pick ── oldest armed + BEHIND + not-changes-requested, ONE per pass (FIFO —
-# `sort: created asc` in the action era). CHANGES_REQUESTED PRs are the unstrand leg's (below);
-# DIRTY PRs are the labeler's (an update-branch call cannot resolve a conflict).
+# ── leg 1: the main pick ── oldest armed + BEHIND + not-changes-requested, ONE per (repo, base)
+# LANE per pass (FIFO within the lane — `sort: created asc` in the action era). CHANGES_REQUESTED
+# PRs are the unstrand leg's (below); DIRTY PRs are the labeler's (an update-branch call cannot
+# resolve a conflict).
+# ADR-125 (2), homelab#1422: the pick groups by `baseRefName` before taking the oldest. One update
+# per repo per pass serialized lanes that cannot invalidate each other — the merge -> behind ->
+# dismiss-approval chain this leg paces only ever runs between PRs sharing a base. Legs 2 and 3
+# below are untouched: the unstrand belt is per-PR by construction, and the labeler is a sweep.
 # Codeowner-parked PRs (bot-approved at head ∧ reviewDecision == REVIEW_REQUIRED ∧ armed) are
 # SKIPPED — the updater leaves them BEHIND so they accumulate no CI cost between human sittings.
 # At human approval reviewDecision flips to APPROVED and the next pass refreshes (one CI cycle).
 # Measured: PR#1347/#1352/#1354, 47 master moves, 36/32/27 merge commits each, 39/41 CI runs
 # each — ≈3.5h runner time on three PRs whose content never changed (homelab#887, 2026-09-04).
-pick="$(jq -r '[.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
-                             and .reviewDecision != "CHANGES_REQUESTED"
-                             and (.reviewDecision != "REVIEW_REQUIRED" or
-                                  ([((.latestReviews // [])[] | select(((.author.login // "")
-                                    | startswith("homelab-reviewer")) and .state == "APPROVED"))]
-                                   | length) == 0))]
-               | sort_by(.createdAt) | .[0].number // empty' <<<"$PRS")"
-if [ -n "$pick" ]; then
-  pick_oid="$(jq -r --argjson n "$pick" '.[] | select(.number == $n) | .headRefOid // empty' <<<"$PRS")"
-  echo "updater[$REPO]: updating #$pick (oldest armed+BEHIND, FIFO)"
-  if ! gh api -X PUT "repos/$REPO/pulls/$pick/update-branch" \
-    ${pick_oid:+-f expected_head_sha="$pick_oid"} >/dev/null; then
-    # 422 = conflict OR expected_head_sha race (homelab#986). Both are safe to skip: a race
-    # preserves the concurrent push's commit; a conflict is caught by the DIRTY labeler (leg 3)
-    # on the next pass. Replayed: fixtures/updater `update-fail` row (covers both race and
-    # conflict — the script deliberately no longer distinguishes them on 422, homelab#1007).
-    echo "updater[$REPO]: update of #$pick failed (422) — skipping; next pass retries"
-  fi
+picks="$(jq -r '[.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
+                              and .reviewDecision != "CHANGES_REQUESTED"
+                              and (.reviewDecision != "REVIEW_REQUIRED" or
+                                   ([((.latestReviews // [])[] | select(((.author.login // "")
+                                     | startswith("homelab-reviewer")) and .state == "APPROVED"))]
+                                    | length) == 0))]
+                | group_by(.baseRefName // "")
+                | map(sort_by(.createdAt) | .[0])
+                | .[] | "\(.number) \(.headRefOid // "-")"' <<<"$PRS")"
+if [ -n "$picks" ]; then
+  # One update per lane. `while read` over a here-string: a pipe would run the body in a subshell,
+  # which costs nothing today but is the shape that silently loses state the moment this leg keeps
+  # any.
+  # The OUT line is deliberately unchanged: the lane is visible as the SET of picks in one pass
+  # (one line per lane), and re-wording it would have rewritten every expected stream in the
+  # `updater` replay family for no behavioural reason.
+  while read -r pick pick_oid; do
+    [ -n "$pick" ] || continue
+    [ "$pick_oid" != "-" ] || pick_oid=""
+    echo "updater[$REPO]: updating #$pick (oldest armed+BEHIND, FIFO)"
+    if ! gh api -X PUT "repos/$REPO/pulls/$pick/update-branch" \
+      ${pick_oid:+-f expected_head_sha="$pick_oid"} >/dev/null; then
+      # 422 = conflict OR expected_head_sha race (homelab#986). Both are safe to skip: a race
+      # preserves the concurrent push's commit; a conflict is caught by the DIRTY labeler (leg 3)
+      # on the next pass. Replayed: fixtures/updater `update-fail` row (covers both race and
+      # conflict — the script deliberately no longer distinguishes them on 422, homelab#1007).
+      echo "updater[$REPO]: update of #$pick failed (422) — skipping; next pass retries"
+    fi
+  done <<<"$picks"
 else
   echo "updater[$REPO]: no armed+BEHIND PR to update"
 fi

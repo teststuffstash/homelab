@@ -6,11 +6,12 @@
 # Runs on a ~5-min CronJob in ns agent-coordinator (agents/coordinator/review-reflex.yaml). Each tick,
 # LEVEL-TRIGGERED (re-lists the world; holds no state):
 #   1. reap finished reviewer pods (restartPolicy: Never leaves them Completed/Failed).
-#   2. per repo, pick the OLDEST PR that is armed ∧ green ∧ not-behind ∧ not-conflicted ∧ reviewable
+#   2. per (repo, BASE) LANE, pick the OLDEST PR that is armed ∧ green ∧ not-conflicted ∧ reviewable
 #      (unreviewed, OR changes-requested with new commits since the last review).
-#   3. dispatch reviewer-session.sh for it — ONE per repo (reviews serialize within a repo so a merge
-#      never stales a sibling's fresh approval; see merge-path.md §Why update-before-review), capped at
-#      K concurrent reviewer pods GLOBALLY (protects the shared operator subscription quota).
+#   3. dispatch reviewer-session.sh for it — ONE per LANE (ADR-125: reviews serialize per (repo, base)
+#      so a merge never stales a sibling's fresh approval, and only PRs sharing a base can do that to
+#      each other; see merge-path.md §Why update-before-review), capped at K concurrent reviewer pods
+#      GLOBALLY (protects the shared operator subscription quota — the lane split never raises K).
 # Anything it can't mechanically progress (conflict, changes-requested-no-new-commits, red) it leaves for
 # the updater workflow or the coordinator — it only ever dispatches a review, never merges or decides.
 #
@@ -152,7 +153,7 @@ for phase in Succeeded Failed; do
     --field-selector "status.phase==${phase}" --ignore-not-found >/dev/null 2>&1 || true
 done
 
-dispatch=()   # "repo pr" pairs, at most one per repo per tick
+dispatch=()   # "repo pr head [decorrelate-arg]" tuples, at most one per (repo, base) LANE per tick
 
 for repo in $REPOS; do
   slug="$ORG/$repo"
@@ -232,10 +233,28 @@ $(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" --arg default "$DEFAU
         | .number')
 EOF_C9
 
+  # >>>REPLAY:review-pick>>>
   # Reviewable = armed ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits )
-  #              ∧ NOT `automerge`-labelled ∧ ( not-BEHIND unless it's a RE-review ).
+  #              ∧ NOT `automerge`-labelled.  CURRENCY IS NOT A PRECONDITION.
   #   green: every check present is a success-equivalent AND at least one check ran (never rubber-stamp a no-CI PR).
-  #   BEHIND → updater's job; DIRTY → conflict (coordinator's job); APPROVED → already merging.
+  #   DIRTY → conflict (coordinator's job); APPROVED → already merging.
+  #   BEHIND USED TO SKIP HERE, and does not any more (2026-09-05, homelab#1422). The skip was
+  #   designed against `dismiss_stale_reviews_on_push = true` (tofu/github/repo_rulesets.tf:138)
+  #   eating a fresh approval on the updater's catch-up merge — "update before review", the
+  #   ordering merge-path.md §Why update-before-review argues for. The premise is FALSE for
+  #   update-branch merges: GitHub RE-POINTS a review's commit_id on them, so the approval
+  #   survives. Measured the day this changed: PR#1386's bot approval survived four updater
+  #   merges (07:06-07:37Z), as did #1388's and #1389's. Only CONTENT pushes dismiss.
+  #   Meanwhile the skip cost real first-review starvation — PR#1437 sat BEHIND through 7 master
+  #   moves and 3 updater merges the same day and never got a first review, because on a busy
+  #   master "current" is a window a PR can miss indefinitely. So a BEHIND-but-green PR is
+  #   admitted to its FIRST review and the updater + CI simply run after the verdict. Everything
+  #   else stands: DIRTY still skips, `reviewable_again` still governs RE-reviews (a
+  #   changes-requested PR with no new content is not reviewable, BEHIND or not — replayed as
+  #   fixtures/review-pick/behind-cr-no-content-held), `bot_approved_head` still holds.
+  #   ⚠ The launcher's spawn-time currency gate (reviewer-session.sh) is the second half of this
+  #   rule and was narrowed to DIRTY in the same commit — leaving it would have let this pick be
+  #   dispatched and then immediately skipped at spawn.
   #   "unreviewed" means THE REVIEWER BOT hasn't approved the current head — NOT reviewDecision !=
   #   APPROVED. On code-owner-gated repos (oracle-fleet: /specs/ + /.agents/ gate on Rasmus,
   #   tofu/github/variables.tf) reviewDecision stays REVIEW_REQUIRED after a bot approval, waiting
@@ -256,7 +275,7 @@ EOF_C9
   #   bumps (devbox-update.sh gate, FU-022) are HUMAN-GATED and COORDINATOR-owned — the coordinator
   #   dispatches their investigation review directly (even while red) and hands off to a human; the reflex
   #   must NOT reach across the arming wall for them, or the two would fight over one PR. See merge-path.md.
-  pick="$(printf '%s' "$prs" | jq -r --arg bot "$REVIEWER_LOGIN" '
+  picks="$(printf '%s' "$prs" | jq -r --arg bot "$REVIEWER_LOGIN" --arg default "$DEFAULT_BRANCH" '
     def green:
       ([ .statusCheckRollup[]? | (.conclusion // .state // "") ]) as $c
       | ($c | length) > 0
@@ -283,12 +302,23 @@ EOF_C9
       | select(([ .labels[]?.name ] | index("agent/arbitrate")) | not)
       | select(.autoMergeRequest != null)
       | select(.mergeStateStatus != "DIRTY")
-      | select((.mergeStateStatus != "BEHIND") or reviewable_again)
       | select(green)
       | select((.reviewDecision // "") != "APPROVED")
       | select(((.reviewDecision // "") != "CHANGES_REQUESTED") or reviewable_again)
       | select(bot_approved_head | not)
-    ] | sort_by(.createdAt) | .[0] // empty
+    ]
+    # PER-LANE PICK (ADR-125 (1), homelab#1422). The serialization unit is (repo, BASE), not the
+    # repo: the serializer exists to avoid the merge -> behind -> dismiss-approval chain, and that
+    # chain only ever runs between PRs sharing a base. A repo-level boundary serialized master-lane
+    # and goal-lane work that cannot invalidate each other (goal #278 lost 361 minutes to it). So:
+    # group the SAME filtered candidate set by base, and emit the oldest of each group. The loop
+    # below runs every per-pick step (decorrelation, breaker telemetry, the issue-keyed rounds
+    # ceiling, the pod-name key) once per lane exactly as it ran once per repo before. The K
+    # concurrency cap and the FU-088 latch are UNCHANGED and stay the fleet-wide ceiling — lanes
+    # buy parallelism inside that ceiling, they never raise it.
+    | group_by(.baseRefName // $default)
+    | map(sort_by(.createdAt) | .[0])
+    | .[]
     # CIRCUIT-BREAKER TELEMETRY rides along with the pick: the bot verdict counts, recomputed from
     # the RAW fields on purpose — the breaker must not share code (or bugs) with the defs above.
     # A stateless level-triggered reflex turns any predicate bug into an infinite dispatcher (the
@@ -306,11 +336,17 @@ EOF_C9
     | ((((.headRefName // "") | capture("issue-(?<i>[0-9]+)(-|$)") | .i)
         // ((.body // "") | capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i)
         // "-")) as $ikey
-    | "\(.number) \($verdicts | length) \($at_head | length) \([ $at_head[] | select(.state == "APPROVED") ] | length) \(.headRefName // "-") \($ikey)"
+    | "\(.number) \($verdicts | length) \($at_head | length) \([ $at_head[] | select(.state == "APPROVED") ] | length) \(.headRefName // "-") \($ikey) \(.baseRefName // $default)"
   ')"
+  # <<<REPLAY:review-pick<<<
 
-  [ -n "$pick" ] || { log "[$repo] nothing to review"; continue; }
-  read -r pick v_total v_head v_head_approved pick_head pick_issue <<<"$pick"
+  [ -n "$picks" ] || { log "[$repo] nothing to review"; continue; }
+  # ONE pick per lane, each carried through the full per-pick gauntlet below. A here-string (not a
+  # pipe) so `dispatch+=` lands in THIS shell, and `continue` still means "next lane", never "next
+  # repo" — a breaker trip on the master lane must not silence a goal lane's pick.
+  while read -r pick v_total v_head v_head_approved pick_head pick_issue pick_base; do
+  [ -n "$pick" ] || continue
+  log "[$repo] lane=$pick_base pick=#$pick"
 
   # ── Decorrelation: resolve the newest round's SERVED model for this task ────────────────
   # The dispatch resolves the M5 evidence row (the served model, never the requested id) from
@@ -415,7 +451,10 @@ EOF_C9
     continue
   fi
 
-  dispatch+=("$repo $pick $pick_head")
+  dispatch+=("$repo $pick $pick_head $decorrelate_arg")
+  # The lane loop's body is deliberately left at the enclosing indentation: re-flowing ~130 lines
+  # would bury the one change (per repo -> per lane) in a whitespace diff.
+  done <<< "$picks"
 done
 
 [ "${#dispatch[@]}" -gt 0 ] || { log "no PRs to dispatch this tick"; exit 0; }
@@ -426,6 +465,12 @@ running=0
 for pair in "${dispatch[@]}"; do
   # shellcheck disable=SC2086
   set -- $pair; repo="$1"; pr="$2"; phead="${3:-}"
+  # Fields 4+ are this pick's decorrelate flag (possibly absent). It rides the TUPLE because the
+  # loop above now resolves one per lane: reading the bare `decorrelate_arg` here would hand every
+  # dispatch whatever the last resolution left behind (already wrong across repos, and unmissable
+  # once a repo contributes several picks).
+  dcorr=""
+  if [ "$#" -gt 3 ]; then dcorr="${*:4}"; fi
   # A pick whose HEAD is goal/** is the ASSEMBLY PR (goal -> master, the review-goal.md shape) —
   # the one review the whole goal rests on, cumulative over several separately-reviewed slices.
   # Model is configurable via REVIEW_GOAL_MODEL (default sonnet; mirrors GOAL_MODEL in
@@ -440,9 +485,9 @@ for pair in "${dispatch[@]}"; do
     goal/*) extra="--model ${REVIEW_GOAL_MODEL:-sonnet} --rubric .agents/review-goal.md"
             log "→ assembly PR (head ${phead}): model ${REVIEW_GOAL_MODEL:-sonnet}, rubric review-goal.md";;
   esac
-  log "→ dispatch reviewer: ${repo} #${pr}${LOOP_NS_ARG:+ (loop-ns ${LOOP_NS_ARG})}${decorrelate_arg:+ (decorrelate-from ${decorrelate_arg#--decorrelate-from })}"
+  log "→ dispatch reviewer: ${repo} #${pr}${LOOP_NS_ARG:+ (loop-ns ${LOOP_NS_ARG})}${dcorr:+ (decorrelate-from ${dcorr#--decorrelate-from })}"
   # shellcheck disable=SC2086
-  bash "$HERE/reviewer-session.sh" "$repo" "$pr" $extra $decorrelate_arg ${LOOP_NS_ARG:+--loop-ns "$LOOP_NS_ARG"} &
+  bash "$HERE/reviewer-session.sh" "$repo" "$pr" $extra $dcorr ${LOOP_NS_ARG:+--loop-ns "$LOOP_NS_ARG"} &
   running=$((running + 1))
   if [ "$running" -ge "$K" ]; then wait -n || true; running=$((running - 1)); fi
 done

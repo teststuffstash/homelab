@@ -196,6 +196,15 @@ rm -f "$SILENT_DEDUP_RECORD"
 # today: each dispatched at a green+current head, BEHIND by pod-execution — the pod and its
 # subscription semaphore slot were already spent. The in-pod STEP-0 stays the belt behind this
 # gate; probe FAILURE is fail-OPEN (a GitHub blip must not block every review).
+# NARROWED to DIRTY (2026-09-05, homelab#1422): BEHIND is no longer a skip anywhere on the review
+# path. The reflex admits a BEHIND-but-green PR to its FIRST review because an update-branch merge
+# does NOT dismiss a verdict (GitHub re-points the review commit_id — PR#1386 survived four of
+# them), while the skip starved PR#1437 through 7 master moves; keeping the skip HERE would have
+# turned every such pick into a dispatch that dies at spawn. DIRTY stays: a conflicted head belongs
+# to the merge-conflict lane, and STEP-0 stands aside on it in-pod anyway. What a BEHIND head can
+# still cost is a STEP-0 checks-pending aside when the updater's merge lands mid-flight — an
+# ordinary, self-healing outcome on a level-triggered path, and the price of ending the
+# starvation.
 PR_JSON="$(gh pr view "$PR" --repo "$REPO_SLUG" --json headRefOid,state,mergeStateStatus 2>/dev/null)" || PR_JSON=""
 PR_STATE="$(printf '%s' "$PR_JSON" | jq -r '.state // empty' 2>/dev/null)" || PR_STATE=""
 PR_MERGE_STATE="$(printf '%s' "$PR_JSON" | jq -r '.mergeStateStatus // empty' 2>/dev/null)" || PR_MERGE_STATE=""
@@ -204,7 +213,7 @@ if [ -n "$PR_STATE" ] && [ "$PR_STATE" != "OPEN" ]; then
   echo "→ review of ${REPO_SLUG}#${PR} skipped — PR is ${PR_STATE} (currency gate; nothing to review)"
   exit 0
 fi
-if [ "$PR_MERGE_STATE" = "BEHIND" ] || [ "$PR_MERGE_STATE" = "DIRTY" ]; then
+if [ "$PR_MERGE_STATE" = "DIRTY" ]; then
   echo "→ review of ${REPO_SLUG}#${PR} skipped — head is ${PR_MERGE_STATE} at spawn time (currency gate: the level-triggered path re-picks when current; was a STANDING-ASIDE pod burn before)"
   exit 0
 fi

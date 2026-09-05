@@ -1,0 +1,38 @@
+# review-pick-behind-first-review-admitted (homelab#1422, 2026-09-05) — a BEHIND-but-green PR that
+# has never been reviewed is admitted to its FIRST review.
+#
+# WHAT THIS ROW REVERSES. The predicate carried
+# `select((.mergeStateStatus != "BEHIND") or reviewable_again)` — currency as a precondition for a
+# first review, designed against `dismiss_stale_reviews_on_push = true`
+# (tofu/github/repo_rulesets.tf:138) eating the fresh approval on the updater's catch-up merge.
+# GitHub RE-POINTS a review's commit_id on an update-branch merge, so it does not: PR#1386's bot
+# approval survived four updater merges on 2026-09-05 (07:06-07:37Z), and #1388/#1389 merged the
+# same day the same way. Only CONTENT pushes dismiss. The skip's cost was not theoretical either —
+# PR#1437 sat BEHIND through 7 master moves and 3 updater merges that day with no first review,
+# because on a busy master "current" is a window a PR can miss indefinitely.
+#
+# CONDITION UNDER REPLAY. #150: armed, green, undrafted, unlabelled, ZERO reviews, and
+# mergeStateStatus BEHIND. Under the old predicate this array was empty and the reflex logged
+# "nothing to review" forever; under the new one it is the lane's pick and the updater + CI run
+# after the verdict.
+#
+# THE CONTRACT (executes the REAL pick jq from review-reflex.sh via sentinel): ONE pick line for
+# #150. Its counterpart is the sibling `behind-cr-no-content-held`, which must STAY held — the
+# changes-requested clause is untouched, so admission is about currency only, never about
+# re-reviewing a verdict nobody has answered.
+#
+# EXPECTED STREAM (computed from the world + the block's format string
+# "<number> <verdicts> <at-head> <approved-at-head> <headRefName> <issue-key> <base>"): #150, three
+# zero verdict counts (reviews is empty), branch fix/issue-44-delta, issue key 44 from the branch
+# capture `issue-(?<i>[0-9]+)(-|$)`, base master.
+#
+# Parts: bridge.sh + block:review-pick (real code) + post.sh — shared with two-lanes-two-picks.
+name: review-pick-behind-first-review-admitted
+mode: actions
+pins:
+  - MP-T03
+source: agents/review-reflex.sh
+parts:
+  - file:../two-lanes-two-picks/bridge.sh
+  - block:review-pick
+  - file:../two-lanes-two-picks/post.sh
