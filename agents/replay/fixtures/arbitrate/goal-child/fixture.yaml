@@ -14,6 +14,9 @@ parts:
 scrub:
   # The bucket body is prose the block owns; pin its provenance sentence, not its paragraphs.
   - s|--body Post-launch bucket for goal #29 .*|--body <bucket body — see agents/coordinator-scan.sh>|
+  # The bucket's `deferred by=bucket` disposition row (ADR-122 (4)) carries a wall-clock stamp —
+  # the STATE is the contract, the instant is not.
+  - s|\(-f body=<!-- epic-dispositions v1 -->..#[0-9]* deferred \)[0-9T:Z-]*\( by=bucket\)|\1<ts>\2|
 env:
   - IN_ORG=teststuffstash
   - IN_REPO=circles
