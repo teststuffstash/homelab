@@ -2,7 +2,9 @@
 # adRise-action replacement, MP-T02/MP-T06's first executed replay).
 #
 # THE CONTRACT: per pass over one `gh pr list` snapshot, three legs —
-#   1. main pick: armed ∧ BEHIND ∧ ¬CHANGES_REQUESTED, oldest first (FIFO), ONE update per pass.
+#   1. main pick: armed ∧ BEHIND ∧ ¬CHANGES_REQUESTED, oldest first (FIFO), ONE update per
+#      (repo, base) LANE per pass — ADR-125 (2)/homelab#1422; before that it was one per REPO,
+#      which serialized a goal lane behind master traffic that cannot stale its approvals.
 #      NO green requirement (2026-07-10: requiring checks wedges base-side CI fixes out of PRs).
 #   2. unstrand (the CR∧BEHIND crack, narrowed 2026-08-17): armed ∧ BEHIND ∧ CHANGES_REQUESTED,
 #      breaker labels excluded, updated ONLY when the newest NON-merge commit post-dates the
@@ -14,7 +16,11 @@
 # and the Sensor/WorkflowTemplate/cron around this script (update-pr-argo.yaml) are ACTIVATION
 # MACHINERY — routing surface with no clause logic of their own; THIS family is their behavior
 # pin, and the CRON-SERVICED detector line is asserted operationally (log-read), not replayed.
-# Base world `board` is CLEAN (#90 armed∧CLEAN + #91 unarmed∧BEHIND = the armed-only witness);
+# Base world `board` is CLEAN (#90 armed∧CLEAN + #91 unarmed∧BEHIND = the armed-only witness), and
+# every recorded PR carries `baseRefName` because the pass now asks for it; the lane rows
+# (`two-lanes-two-updates`, `same-lane-one-update`) are the ADR-125 pin — two bases in one pass
+# yield TWO calls, two PRs on ONE base still yield one.
+#
 # each row patches its condition in. The 422-on-update branch is pinned by the `update-fail` row
 # (per-call failure injection, STUB_GH_<slug> — homelab#740 / PR#759). The race-422 row was
 # dropped (homelab#1007): `agents/update-pr-branch.sh` deliberately no longer distinguishes race

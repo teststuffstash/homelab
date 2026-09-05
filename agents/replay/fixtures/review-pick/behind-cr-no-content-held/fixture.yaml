@@ -1,0 +1,34 @@
+# review-pick-behind-cr-no-content-held — a CHANGES_REQUESTED PR with NO new content since the
+# verdict is not reviewable, BEHIND or not.
+#
+# WHY THIS ROW EXISTS. It is the guard on the BEHIND-admission change (ADR-125's currency finding,
+# same stint): once `(.mergeStateStatus != "BEHIND") or reviewable_again` is gone from the
+# predicate, the ONLY thing still holding this PR back is the changes-requested clause. If a future
+# edit weakens that clause, the reflex would re-dispatch a reviewer at a head whose author has not
+# answered the verdict — the flip-flop the ROUNDS ceiling exists to stop, arriving one layer
+# earlier. Before the admission this row was doubly held (BEHIND *and* CR); it must stay held on
+# the CR clause alone.
+#
+# CONDITION UNDER REPLAY. #140: armed, green, BEHIND, reviewDecision CHANGES_REQUESTED, one
+# homelab-reviewer CHANGES_REQUESTED verdict at 10:00 — and the ONLY commit after it is an updater
+# merge (`Merge branch 'master' into ...`, 12:00). `newest_commit_at` filters merge headlines, so
+# the newest CONTENT commit stays 09:00 < 10:00 and `reviewable_again` is false.
+#
+# THE CONTRACT (executes the REAL pick jq from review-reflex.sh via sentinel):
+#   1. NO pick line — the candidate array is empty and `.[]` over it emits nothing.
+#   2. The merge commit does not resurrect it. A predicate that counted merges as content would
+#      make `reviewable_again` true and this fixture would red with a PICK line — which is the
+#      oracle-fleet#57 nine-review loop, red-cased.
+#
+# EXPECTED STREAM (computed from the world + the predicate): only post.sh's REACHED line, RC 0.
+#
+# Parts: bridge.sh + block:review-pick (real code) + post.sh — shared with two-lanes-two-picks.
+name: review-pick-behind-cr-no-content-held
+mode: actions
+pins:
+  - MP-T03
+source: agents/review-reflex.sh
+parts:
+  - file:../two-lanes-two-picks/bridge.sh
+  - block:review-pick
+  - file:../two-lanes-two-picks/post.sh

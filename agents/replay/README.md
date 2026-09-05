@@ -329,7 +329,11 @@ is stale, so it cannot drift the way the prose register did.
 | `review-flip-belt/probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-flip-belt/review-flip-belt` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T27 |
-| `reviewer-currency/behind-skips` | actions | - | `agents/reviewer-session.sh` | - |
+| `review-pick/behind-cr-no-content-held` | actions | - | `agents/review-reflex.sh` | MP-T03 |
+| `review-pick/behind-first-review-admitted` | actions | - | `agents/review-reflex.sh` | MP-T03 |
+| `review-pick/same-lane-oldest` | actions | - | `agents/review-reflex.sh` | MP-T03 |
+| `review-pick/two-lanes-two-picks` | actions | - | `agents/review-reflex.sh` | MP-T03 |
+| `reviewer-currency/behind-proceeds` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/probe-fail-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-depth-lane-split` | actions | - | `agents/reviewer-session.sh` | - |
