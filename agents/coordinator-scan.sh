@@ -46,6 +46,26 @@ ORG="${ORG:-teststuffstash}"
 REPO_MAX_WIP="${REPO_MAX_WIP:-3}"   # ADR-097 hard ceiling: concurrent workers per repo. TRACKS rule 1 counts armed PRs per base; was binary WIP=1 until meta-8 proved two dispatchers race inside one scan window (2026-07-21 #55). 3 allows slack for a second worker without unbounded concurrency.
 SCAN_AGING_N="${SCAN_AGING_N:-3}"   # #829 / ADR-125 (3): a NEW-WORK unit that has lost this many consecutive LANE dispatches escalates to the front of its lane's walk. 3 = the smallest count that is not one unlucky tick: the #818 evening lost ~45 min, which at the measured ride length is four to five recovery rides, so two losses is ordinary contention and three is a pattern.
 ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"   # homelab#840: gh's unstated 30-result default silently hid queued #110 for 24 days (46 open issues, window floor #840). 200 is well above any repo's open-issue count; the scan prints a loud TRUNCATED warning if the fetch fills the limit.
+# ── the ONE issue-body parser (ADR-122 (3), homelab#1431) ──────────────────────────────────────
+# Every body-grammar READ in this file goes through `agents/issue_body.py`; no reader here carries
+# its own line-anchored regex any more (`Touches:` alone had four spellings in this file). The
+# helpers live in THIS block because run.sh prepends it to every composition, so an extracted
+# clause gets them without a per-fixture copy — extraction, never transcription.
+# PATH SEAM: the real scan resolves the module beside itself (`$HERE`, set at the top of this
+# file); a replay composition sees this block BEFORE its bridge sets HERE, so an affected bridge
+# overrides IB_PY with `$REPLAY_ROOT/agents/issue_body.py` (its one seam line).
+IB_PY="${IB_PY:-${HERE:-agents}/issue_body.py}"
+# ib_get <Key> <ref> <body> → the value on stdout, empty when the key is absent (the greps it
+# replaces behaved the same way). EXIT 2 = the body's machine block is MALFORMED — rule #6, never
+# fail INTO a write: every caller that would dispatch, lane-key or classify on the value treats 2
+# as a HOLD, never as "absent". The parser's `LEGACY-GRAMMAR <key> <ref>` line stays on stderr on
+# purpose — it is the transition's only progress meter (issue_body.py §The legacy read).
+ib_get() { printf '%s' "${3:-}" | python3 "$IB_PY" get "$1" --ref "${2:--}"; }
+# ib_rows <issues-json-array> → one `<number>|<base64 body>` line per element, input order. The
+# body is base64'd because a line-oriented read loop cannot carry a multi-line body intact.
+ib_rows() { printf '%s' "${1:-[]}" | jq -r '.[] | "\(.number)|\(.body // "" | @base64)"' 2>/dev/null || true; }
+# ib_body <base64> → the decoded body.
+ib_body() { printf '%s' "${1:-}" | base64 -d 2>/dev/null || true; }
 # <<<REPLAY:config-defaults<<<
 STACKS_FILE="${STACKS_FILE:-${HERE}/stacks.json}"
 SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
@@ -320,7 +340,7 @@ EOF
 #
 # Classes (low-cardinality enum, v1):
 #   riding, phantom, strike-held, parked-blocked, parked-infeasible,
-#   arbitrate-standing, queued-held, queued-held-by-ghost, queued-ready,
+#   arbitrate-standing, queued-held, queued-held-by-ghost, queued-held-malformed-block, queued-ready,
 #   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate,
 #   footprint-held, cap-held, blockpark
 # who ∈ operator | machine | none
@@ -1218,10 +1238,15 @@ fast_unit_dispatch() {
       echo "unit fast-path: goal #${fitem#issue-}: could not read who applied agent/queued — refusing to dispatch (fail-closed)"
       return 0
     fi
-    # Base: line mandatory on task/goal containers (homelab#1053). Mirror the main scan's
-    # regex: require at least one character after the colon (homelab#828 r2 finding 2).
+    # Base: line mandatory on task/goal containers (homelab#1053). Read through the ONE parser
+    # (ADR-122 (3)): the machine block's `Base:` wins, else the legacy line-anchored form with the
+    # main scan's exact semantics — at least one character after the colon (homelab#828 r2 f2).
     fqbody="$(jq -r '.body // ""' <<<"$fijson")"
-    if ! printf '%s' "$fqbody" | grep -qiP '^[ \t]*base:[ \t]*.+' >/dev/null 2>&1; then
+    if ! fqbase="$(ib_get Base "${frepo}#${fitem#issue-}" "$fqbody")"; then
+      echo "unit fast-path: goal #${fitem#issue-} has a MALFORMED machine block — refusing to dispatch (fail-closed, ADR-122 (3): a body the parser refuses is never read half-way into a dispatch)"
+      return 0
+    fi
+    if [ -z "$fqbase" ]; then
       echo "unit fast-path: goal #${fitem#issue-} has no Base: body line — refusing to dispatch"
       return 0
     fi
@@ -1504,6 +1529,29 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       | jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"${queued:-null}" || queued='[]'
     # <<<REPLAY:queued-derivation<<<
+    # ── BODY-BLOCK MALFORMED (ADR-122 (3), homelab#1431) — the fail-CLOSED gate ───────────────
+    # `agents/issue_body.py` exits 2 on a machine block it REFUSES: an unknown key, an indented or
+    # bulleted line, a duplicate key, an unterminated fence. That is the one thing the collapse of
+    # thirteen grammars into one buys — a line the author believed was read is now loud instead of
+    # silently skipped. Rule #6 (never fail INTO a write) fixes the disposition: the issue is HELD
+    # (never dispatched) and reported ONCE here, in the shape of the TOUCHES-MALFORMED probe below,
+    # rather than reported by each of the five readers that would each hit the same exit 2.
+    # The report carries the parser's own message — it names the offending line and the grammar.
+    # >>>REPLAY:body-block-malformed>>>
+    bbm_nums=""
+    if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}"; then
+      bbm_lines=""
+      while IFS='|' read -r _bbn _bbb; do
+        [ -n "$_bbn" ] || continue
+        _bberr="$(ib_body "$_bbb" | python3 "$IB_PY" json --ref "${repo:-}#${_bbn}" 2>&1 >/dev/null)" && continue
+        bbm_nums="${bbm_nums}${_bbn} "
+        bbm_lines="${bbm_lines}  ⛔ issue #${_bbn} — ${_bberr}\n"
+      done <<EOF_BBM
+$(ib_rows "$openall")
+EOF_BBM
+      [ -n "$bbm_lines" ] && orphans="${orphans}[$repo] ⛔ BODY-BLOCK MALFORMED: the machine block does not parse, so the issue is HELD — never dispatched, never read half-way (ADR-122 (3), fail-closed). Fix the block (\`agents/issue_body.py\` names the line and the grammar):\n${bbm_lines}\n"
+    fi
+    # <<<REPLAY:body-block-malformed<<<
     # In-progress issues once per repo — the C4/C5 clause below AND the ADR-097 footprint
     # predicate (declared `Touches:` body lines; no line = exclusive `*`) read it.
     # NB agent/error stays IN this fetch (an error-flagged in-progress issue still holds its
@@ -1529,10 +1577,20 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # busy_fps, so it does not hold sibling dispatches (cross-reference fp_goal_exempt in
     # agents/footprint.sh — both readers share `task/goal` as the exemption key).
     # >>>REPLAY:busy-fps>>>
-    busy_fps="$(printf '%s' "$inprog" | jq -r '.[]
-      | select(((.labels|map(.name))|index("task/goal"))|not)
-      | ([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(","))
-      | if . == "" then "*" else . end')"
+    # ADR-122 (3): the footprint is read by `agents/issue_body.py` (block `Touches:` wins, else
+    # the legacy line-anchored union — the same `flatten | join(",")` semantics this clause had).
+    # A body the parser REFUSES stays `*` (exclusive, conflicts with everything): fail-closed is
+    # the safe side here, and the malformed pass above already reported it by number.
+    busy_fps=""
+    while IFS='|' read -r _bfn _bfb; do
+      [ -n "$_bfn" ] || continue
+      _bft="$(ib_get Touches "${repo:-}#${_bfn}" "$(ib_body "$_bfb")")" || _bft=""
+      [ -n "$_bft" ] || _bft="*"
+      busy_fps="${busy_fps}${_bft}
+"
+    done <<EOF_BUSYFPS
+$(ib_rows "$(printf '%s' "$inprog" | jq '[.[] | select(((.labels|map(.name))|index("task/goal"))|not)]' 2>/dev/null || echo '[]')")
+EOF_BUSYFPS
     # <<<REPLAY:busy-fps<<<
     # ── FU-143 (contract points 1+2): a goal child cannot self-close ──────────────────────────
     # An OPEN in-progress issue whose body declares `Base: goal/**` and whose referencing PR
@@ -1558,11 +1616,21 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     goalcand="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/in-progress")) or ($L|index("agent/review"))))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${goalcand:-null}" || goalcand='[]'
-    goalbased="$(printf '%s' "$goalcand" | jq -r '.[]
-      | select(((.labels|map(.name))|index("agent/error"))|not)
-      | .number as $n
-      | ((((.body // "") | capture("(?m)^[ \\t]*[Bb]ase:[ \\t]*(?<b>goal/[^ \\t\\r\\n]+)") | .b)? // "")) as $b
-      | select($b != "") | "\($n)|\($b)"')" || goalbased=""
+    # ADR-122 (3): `Base:` via the ONE parser. The old capture was `goal/[^ \t\r\n]+` — it took
+    # the value only when it STARTED with `goal/` and cut at the first blank; both halves are kept
+    # here explicitly (trim at the first blank, then require the `goal/` prefix), so a `Base:` line
+    # with internal prose still records nothing. A malformed block yields no goal base — the issue
+    # falls through to the ordinary default-branch legs, which hold rather than close.
+    goalbased=""
+    while IFS='|' read -r _gcn _gcb; do
+      [ -n "$_gcn" ] || continue
+      _gcv="$(ib_get Base "${repo:-}#${_gcn}" "$(ib_body "$_gcb")")" || _gcv=""
+      _gcv="${_gcv%%[[:space:]]*}"
+      case "$_gcv" in goal/?*) goalbased="${goalbased}${_gcn}|${_gcv}
+" ;; esac
+    done <<EOF_GOALBASED
+$(ib_rows "$(printf '%s' "$goalcand" | jq '[.[] | select(((.labels|map(.name))|index("agent/error"))|not)]' 2>/dev/null || echo '[]')")
+EOF_GOALBASED
     # FU-143 SOAK FAILURE, 2026-08-06 — every goal-based in-progress issue, matched or not.
     # C6 below can only claim an issue whose merged PR CITES it; circles#36 merged into
     # goal/29-p0-complete citing only its sibling #31, so #30 fell out of c6g, C4/C5 read
@@ -1637,11 +1705,18 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # Candidate set: OPEN issues with agent-fix and (agent/in-progress or agent/review) that do
     # NOT carry a `Base: goal/**` line (i.e., default-branch issues). Reuses $goalcand which was
     # already fetched above for the goal-child leg.
-    dbcand="$(printf '%s' "$goalcand" | jq -r '.[]
-      | select(((.labels|map(.name))|index("agent/error"))|not)
-      | .number as $n
-      | ((((.body // "") | capture("(?m)^[ \\t]*[Bb]ase:[ \\t]*(?<b>goal/[^ \\t\\r\\n]+)") | .b)? // "")) as $b
-      | select($b == "") | "\($n)"')" || dbcand=""
+    # ADR-122 (3): the exact complement of $goalbased above, read through the ONE parser —
+    # candidates are the open issues whose `Base:` is NOT a goal branch (default-branch issues).
+    dbcand=""
+    while IFS='|' read -r _dbn _dbb; do
+      [ -n "$_dbn" ] || continue
+      _dbv="$(ib_get Base "${repo:-}#${_dbn}" "$(ib_body "$_dbb")")" || _dbv=""
+      _dbv="${_dbv%%[[:space:]]*}"
+      case "$_dbv" in goal/?*) : ;; *) dbcand="${dbcand}${_dbn}
+" ;; esac
+    done <<EOF_DBCAND
+$(ib_rows "$(printf '%s' "$goalcand" | jq '[.[] | select(((.labels|map(.name))|index("agent/error"))|not)]' 2>/dev/null || echo '[]')")
+EOF_DBCAND
     if [ -n "$dbcand" ]; then
       dbmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || dbmerged='X'
       dbopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body // ""]' 2>/dev/null)" || dbopen='X'
@@ -1719,15 +1794,28 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # hand and cost nothing more: `openall` carries every open issue's body (the `Base:` line the
     # #849 cap reads) and `prsjson` carries every open PR's `baseRefName`. The dispatch loop runs
     # after this pass and only READS the map — see §LANES at the top of this file for the shape
-    # and the fail-safe fallback chain. No new API call, no second `Base:` regex: the jq below is
-    # the same `scan("(?mi)^[ \t]*base:...")` the queued clause already runs on the same bodies.
+    # and the fail-safe fallback chain. No new API call and no second `Base:` grammar: the read is
+    # `agents/issue_body.py` (ADR-122 (3)), the same parser the queued clause runs on these bodies.
     # >>>REPLAY:unit-lane-record>>>
     unit_lane_default_record "$repo" "$default_branch"
+    # A malformed block records NO lane for the issue — the map's documented fallback chain then
+    # lands it on the repo default, exactly as an issue with no `Base:` line. Safe by construction:
+    # the map is read-only routing, and the DISPATCH of that same issue is held outright by the
+    # malformed gate in the queued clause below (rule #6 lives at the write, not here).
+    _lane_rows=""
+    while IFS='|' read -r _lin _lib; do
+      [ -n "$_lin" ] || continue
+      _liv="$(ib_get Base "${repo:-}#${_lin}" "$(ib_body "$_lib")")" || _liv=""
+      _lane_rows="${_lane_rows}issue-${_lin}|${_liv}
+"
+    done <<EOF_LANEROWS
+$(ib_rows "$openall")
+EOF_LANEROWS
     while IFS='|' read -r _litem _lbase; do
       [ -n "$_litem" ] || continue
       unit_lane_record "$repo" "$_litem" "${_lbase:-$default_branch}"
     done <<EOF
-$(printf '%s' "$openall" | jq -r '.[] | "issue-\(.number)|" + ([.body // "" | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "")' 2>/dev/null || true)
+${_lane_rows}
 $(printf '%s' "$prsjson" | jq -r '.[] | "pr-\(.number)|\(.baseRefName // "")"' 2>/dev/null || true)
 EOF
     # <<<REPLAY:unit-lane-record<<<
@@ -1979,8 +2067,16 @@ EOF
     if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}"; then
       bfm_lines=""
       # Extract Touches footprint and backtick-quoted paths for each issue, then check coverage.
-      while IFS='|' read -r bfmn bfmt bfmp; do
+      # ADR-122 (3): the footprint comes from the ONE parser; jq keeps only what is NOT a body
+      # grammar — the backtick-quoted paths this clause compares against. NOTE (behaviour, called
+      # out deliberately): the old regex read the FIRST `Touches:` line, the parser returns the
+      # legacy UNION (`flatten | join(",")`) — the same value the queued clause actually enforces.
+      # A body with two `Touches:` lines therefore reports against its whole declaration now, which
+      # is the enforcing reader's semantics; report-only either way.
+      while IFS='|' read -r bfmn bfmb bfmp; do
         [ -n "$bfmn" ] || continue
+        bfmt="$(ib_get Touches "${repo:-}#${bfmn}" "$(ib_body "$bfmb")")" || continue   # malformed → already reported+held
+        [ -n "$bfmt" ] && [ "$bfmt" != "*" ] || continue
         uncovered=""; oldifs="$IFS"; IFS=','
         for path in $bfmp; do
           if ! fp_conflict_strict "$bfmt" "$path"; then
@@ -1993,11 +2089,9 @@ EOF
         [.[] | .number as $n
          | (.body // "") as $b
          | select($b != "")
-         | (([$b | scan("(?mi)^[ \t]*touches:[ \t]*(.+)$")] | first // []) | first // "") as $touches
-         | select($touches != "" and $touches != "*")
          | ([$b | scan("`([a-zA-Z0-9._/*-][a-zA-Z0-9._/*-]+)`") | .[0]] | unique) as $paths
          | select(($paths | length) > 0)
-         | "\($n)|\($touches)|\($paths | join(","))"
+         | "\($n)|\($b | @base64)|\($paths | join(","))"
         ] | .[]
       ' 2>/dev/null || true)"
       [ -n "$bfm_lines" ] && orphans="${orphans}[$repo] 🏷 BODY-TOUCHES mismatch: issue body references paths outside declared footprint (homelab#808 report-only — may be a deliberate re-scope):\n${bfm_lines}\n"
@@ -2016,25 +2110,27 @@ EOF
     # >>>REPLAY:touches-malformed>>>
     if [ "${openall_fetch_rc:-0}" = 0 ] && jq -e . >/dev/null 2>&1 <<<"${openall:-null}"; then
       tm_lines=""
-      while IFS='|' read -r tmn tml; do
+      # The LOOSE probe stays in jq: it is not a body-grammar READ but a detector for lines the
+      # grammar deliberately does not accept (ADR-122 (3) keeps `**Touches:**` out of the block on
+      # purpose). What moved onto `agents/issue_body.py` is the STRICT half — "is a footprint
+      # actually readable on this issue" — which is now the parser's answer (block `Touches:` or
+      # the legacy line), so this probe can never disagree with the reader it warns about.
+      while IFS='|' read -r tmn tmb tml; do
         [ -n "$tmn" ] || continue
+        tmt="$(ib_get Touches "${repo:-}#${tmn}" "$(ib_body "$tmb")")" || continue   # malformed → already reported+held
+        [ -z "$tmt" ] || continue
         tm_lines="${tm_lines}  ⚠ TOUCHES-MALFORMED: issue #${tmn} declares a footprint the parser cannot read (line: \"${tml}\") — un-bold/un-bullet it or the issue is treated as EXCLUSIVE\n"
       done <<< "$(printf '%s' "$openall" | jq -r '
         [.[] | .number as $n
          | (.body // "") as $b
          | select($b != "")
          # Loose probe: match Touches-like lines that are bolded, bulleted, heading, etc.
-         # but NOT the strict grammar (line-anchored unadorned "Touches:").
          | (([$b | scan("(?mi)^[ \\t]*(?:[*_#> -]+)?touches(?:[*_]+)?:[ \\t]*(.+)$")] | first // []) | first // "") as $loose_touches
          | select($loose_touches != "")
-         # Strict grammar: line-anchored unadorned "Touches:" — if this matches, the issue
-         # is parseable and NOT malformed.
-         | (([$b | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | first // []) | first // "") as $strict_touches
-         | select($strict_touches == "")
          # Find the exact malformed line for the verbatim quote
          | ([$b | scan("(?im)^[ \\t]*(?:[*_#> -]+)?touches(?:[*_]+)?:[^\\n]*")] | first // "") as $verbatim
          | select($verbatim != "")
-         | "\($n)|\($verbatim | gsub("[\\t]"; " ") | gsub("^[ ]+|[ ]+$"; ""))"
+         | "\($n)|\($b | @base64)|\($verbatim | gsub("[\\t]"; " ") | gsub("^[ ]+|[ ]+$"; ""))"
         ] | .[]
       ' 2>/dev/null || true)"
       [ -n "$tm_lines" ] && orphans="${orphans}[$repo] ⚠ TOUCHES-MALFORMED: issue body has a Touches-like line the parser cannot read (homelab#1294 report-only — un-bold/un-bullet it or the issue is treated as EXCLUSIVE):\n${tm_lines}\n"
@@ -2056,8 +2152,11 @@ EOF
       # Emit the parity finding once (on the main repo) rather than repeating for every stack/repo.
       [ "$repo" = "homelab" ] && [ -n "$PARITY_ISSUES" ] && orphans="${orphans}[$repo] 🔗 CLAUSE-LIST PARITY: clause_files list does not match the ratchet regex in ci.yaml (homelab#853):\n${PARITY_ISSUES}\n"
 
-      while IFS='|' read -r crmn crmt; do
+      # ADR-122 (3): footprint via the ONE parser (same union semantics as the queued reader).
+      while IFS='|' read -r crmn crmb; do
         [ -n "$crmn" ] || continue
+        crmt="$(ib_get Touches "${repo:-}#${crmn}" "$(ib_body "$crmb")")" || continue   # malformed → already reported+held
+        [ -n "$crmt" ] && [ "$crmt" != "*" ] || continue
         # Check if any clause file is covered by the touches footprint
         touched_clause=""
         while IFS= read -r cf; do
@@ -2078,9 +2177,7 @@ EOF
         [.[] | .number as $n
          | (.body // "") as $b
          | select($b != "")
-         | (([$b | scan("(?mi)^[ \t]*touches:[ \t]*(.+)$")] | first // []) | first // "") as $touches
-         | select($touches != "" and $touches != "*")
-         | "\($n)|\($touches)"
+         | "\($n)|\($b | @base64)"
         ] | .[]
       ' 2>/dev/null || true)"
       [ -n "$crm_lines" ] && orphans="${orphans}[$repo] ⚠️ CLAUSE-REPLAY pairing: issue touches a ratchet clause file but does not declare \`agents/replay/**\` (homelab#825 report-only — the PR would red on the ADR-103 ratchet):\n${crm_lines}\n"
@@ -2097,6 +2194,15 @@ EOF
       # FU-114 L3: the task class rides the unit (label task/* → .agents/<class>.yaml, default fix)
       [ -n "$qclass" ] || qclass="fix"
       [ -n "$qnum" ] || continue
+      # ADR-122 (3) fail-CLOSED: `!` in the touches column = the parser REFUSED this body's machine
+      # block. Never dispatch on a body that was not fully read (rule #6 — never fail INTO a
+      # write). The BODY-BLOCK MALFORMED clause above already reported the issue by number with the
+      # parser's own message, so this is a silent hold, not a second report.
+      if [ "$qtouches" = "!" ]; then
+        iss="${iss}  issue #${qnum} — ${qtitle} [⛔ malformed machine block — HELD, see BODY-BLOCK MALFORMED above]\n"
+        item_class_push "$repo" "issue-${qnum}" "queued-held-malformed-block" "operator" "${default_branch:-}"
+        continue
+      fi
       # ADR-097: "-" = no Touches: line = exclusive footprint (`*` conflicts with everything —
       # legacy issues keep WIP=1 semantics without backfill).
       [ "$qtouches" = "-" ] && qtouches="*"
@@ -2419,8 +2525,28 @@ EOF_GOVERNANCE
       fi
       item_class_push "$repo" "issue-${qnum}" "$qclass_item" "machine" "${qbase:-}"
       # <<<REPLAY:queued-classification<<<
-    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
-            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), (((.parent.number // "") | tostring) | if . == "" then "-" else . end), (([.body // "" | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "" | if . == "" then "-" else . end)) ] | @tsv')
+    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
+            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), (((.parent.number // "") | tostring) | if . == "" then "-" else . end), (.body // "" | @base64) ] | @tsv' \
+            | while IFS="$(printf '\t')" read -r _qn _qt _qd _qp _qlabelclass _qpar _qb64; do
+                # ADR-122 (3): the three body grammars this row carried — `Touches:`, `Base:` and
+                # the class — are read HERE by `agents/issue_body.py`, never by a regex in the jq
+                # above. The `-` placeholders survive: they are the tab-collapse guard the read
+                # loop below undoes (an empty middle field shifts every later field left).
+                # CLASS: the block's `Class` key WINS; the `task/*` label is the transition
+                # fallback (`Class` has no legacy body form — a body parser cannot see a label).
+                # A body the parser refuses emits `!` in the touches column: the loop below HOLDS
+                # the issue on it (rule #6 — a malformed block never dispatches).
+                _qbody="$(ib_body "$_qb64")"
+                if _qtv="$(ib_get Touches "${repo:-}#${_qn}" "$_qbody")"; then
+                  _qbv="$(ib_get Base "${repo:-}#${_qn}" "$_qbody")" || _qbv=""
+                  _qcv="$(ib_get Class "${repo:-}#${_qn}" "$_qbody")" || _qcv=""
+                  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_qn" "$_qt" \
+                    "${_qtv:--}" "$_qd" "$_qp" "${_qcv:-$_qlabelclass}" "$_qpar" "${_qbv:--}"
+                else
+                  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_qn" "$_qt" \
+                    "!" "$_qd" "$_qp" "$_qlabelclass" "$_qpar" "-"
+                fi
+              done)
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     # ── the goal lane (FU-090 leg (c) 2026-08-05; per-closure session DEMOTED by ADR-106 (3) 2026-08-12) ───────────────────────────────────────────────
     # The forest/trees rule's third leg: a goal must be RE-EVALUATED, not merely survive its
@@ -2505,7 +2631,12 @@ EOF_GOVERNANCE
           # authorisation is not an authorisation — rule #6, never fail INTO a write).
           # ⚠ pipe to a REAL jq: `gh --jq` takes only an expression, and behind `|| echo ""` a
           # rejected --arg would yield an empty actor that this test must then treat as refusal.
-          gauth="$(printf '%s\n' "$gbody" | awk '/^[ \t]*[Vv]erdict-authority:/ { v = $0; sub(/^[^:]*:[ \t]*/, "", v); gsub(/[ \t\r]/, "", v); print tolower(v); exit }')"
+          # ADR-122 (3): the ONE parser. Its LEGACY entry for `Verdict-authority` restates this
+          # clause's awk verbatim (first match, whitespace/CR deleted, lowercased) — see the
+          # `_verdict_norm` citation in agents/issue_body.py. A malformed block reads as no
+          # declaration, which defaults to `human`: the strictest value, and the only one this
+          # clause actions (fail-closed).
+          gauth="$(ib_get Verdict-authority "${repo:-}#${g}" "$gbody")" || gauth=""
           [ -n "$gauth" ] || gauth="human"
           gactor="$(gh api "repos/${slug}/issues/${g}/events" --paginate 2>/dev/null \
             | jq -r --arg L "goal/${gverdict}" \
@@ -2600,7 +2731,10 @@ EOF_GOVERNANCE
                   # The revert POINTER is declared, never guessed. ADR-102 makes the assembly squash
                   # the revert unit, so the pointer is a pin-rollback or a revert commit — both
                   # facts only the person who rolled back holds. A missing line is said plainly.
-                  grev="$(printf '%s\n' "$gbody" | awk '/^[ \t]*[Rr]evert:/ { v = $0; sub(/^[^:]*:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); print v; exit }')"
+                  # ADR-122 (3): the ONE parser; its LEGACY `Revert` entry restates this awk
+                  # (first match, trailing trim only). Unread ⇒ empty ⇒ the "NONE DECLARED" note
+                  # below fires, which is the honest audit record.
+                  grev="$(ib_get Revert "${repo:-}#${g}" "$gbody")" || grev=""
                   greason="completed"
                   gnote="**REVERTED** — production refuted the idea, and a refuted goal is a SUCCESSFULLY closed experiment, not a failure (hence \`completed\`, not \`not planned\`). Revert pointer: ${grev:-⚠ NONE DECLARED — add a \`Revert:\` line naming the pin rollback or the revert commit of the assembly squash; this comment is the audit record and it is incomplete without one}. ${gdone} open descendant(s) closed with the goal." ;;
                 abandoned)

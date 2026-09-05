@@ -41,3 +41,7 @@ item_class_push() {
   local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}"
   echo "item_class_push: $repo $item $class $who" >&2
 }
+
+# ── seam (ADR-122 (3), homelab#1431) ── the ONE issue-body parser. The scan resolves it beside
+# itself; a composition sees config-defaults BEFORE this bridge, so the path is set here.
+IB_PY="$REPLAY_ROOT/agents/issue_body.py"

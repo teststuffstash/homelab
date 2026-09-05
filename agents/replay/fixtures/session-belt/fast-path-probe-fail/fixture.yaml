@@ -21,3 +21,6 @@ env:
   - ORG=teststuffstash
   - SCAN_STACK=circles
   - STUB_KUBECTL=fail
+# hermeticity contract (homelab#329): the clause reads issue bodies through agents/issue_body.py.
+requires:
+  - python3

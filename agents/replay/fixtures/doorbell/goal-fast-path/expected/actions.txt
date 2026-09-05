@@ -26,4 +26,5 @@ OUT REACHED: valueless Base: on decompose leg — refuses
 OUT unit fast-path: goal #9 has no Base: body line — refusing to dispatch
 OUT RETURN 0
 OUT REACHED: end
+ERR LEGACY-GRAMMAR Base circles#5
 RC 0

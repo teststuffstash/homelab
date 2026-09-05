@@ -1,4 +1,8 @@
 OUT ORPHAN [homelab] 🏷 BODY-TOUCHES mismatch: issue body references paths outside declared footprint (homelab#808 report-only — may be a deliberate re-scope):
 OUT ORPHAN   issue #303 — body paths `agents/foo.sh` not covered by declared `Touches:` (argocd/resources/)
 OUT REACHED: end
+ERR LEGACY-GRAMMAR Touches homelab#301
+ERR LEGACY-GRAMMAR Touches homelab#302
+ERR LEGACY-GRAMMAR Touches homelab#303
+ERR LEGACY-GRAMMAR Touches homelab#305
 RC 0
