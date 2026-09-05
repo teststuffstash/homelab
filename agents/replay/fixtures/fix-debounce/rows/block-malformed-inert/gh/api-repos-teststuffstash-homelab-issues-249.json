@@ -1,0 +1,10 @@
+{
+  "number": 249,
+  "state": "open",
+  "labels": [
+    {
+      "name": "agent-fix"
+    }
+  ],
+  "body": "---\nalert-fp: 1f0a9c73d5b2e846\nAlert-FP: 1f0a9c73d5b2e846\n---\n## Defect\n\nThe machine block carries a key that is NOT in the grammar (`Alert-FP` — the\ncase-mangled spelling a hand edit produces). issue_body.py refuses the whole block LOUDLY\n(exit 2) rather than skipping the line, and the lane test fails CLOSED: an issue whose\nmachine truth cannot be read is never dispatched.\n\nTouches: agents/coordinator/fix-debounce-argo.yaml\n"
+}

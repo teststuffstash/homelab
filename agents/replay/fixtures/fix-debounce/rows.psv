@@ -9,3 +9,9 @@ quoted-marker-inert      | anchoring |                                          
 currency-note-once       | lifecycle |                                                                                             | FC_NOW=1786456800 MC_NOW=2026-08-11T14:00:00Z | currency-note-once     |
 currency-resolved-inert  | lifecycle |                                                                                             | FC_NOW=1786456800 MC_NOW=2026-08-11T14:00:00Z | currency-resolved      |
 currency-refired-inert   | lifecycle |                                                                                             | FC_NOW=1786456800 MC_NOW=2026-08-11T14:00:00Z | currency-refired       |
+# ADR-122 (3) / #1431 — the same two decisions, driven off the MACHINE BLOCK instead of the
+# legacy lines: a block-authored #249 must queue exactly like `anchored-marker-queues` (and emit
+# no LEGACY-GRAMMAR meter line for itself), and a block carrying a key outside the grammar must
+# fail CLOSED — one loud line naming the issue, nobody queued.
+block-authored-queues    | anchoring |                                                                                             | FC_NOW=1786456800                            | queues-block-authored  | issue=249
+block-malformed-inert    | anchoring |                                                                                             |                                              | inert-block-malformed  |

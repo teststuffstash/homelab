@@ -1,11 +1,10 @@
 CALL gh api repos/teststuffstash/homelab/issues?labels=agent-fix&state=open&per_page=50 --jq .[] | select(.pull_request | not) | select([.labels[].name] | any(startswith("agent/")) | not) | {repo: "teststuffstash/homelab", number: .number, title: .title, body: (.body // "")}
-CALL gh api repos/teststuffstash/homelab/issues/{{issue}} --jq .body // ""
+OUT → teststuffstash/homelab#249: machine block MALFORMED (issue_body.py exit 2) — NOT in the pending set (fail-closed)
 OUT self-referential, left for a human to queue:
 OUT   teststuffstash/homelab#226 ResponderSelfReferential: the alert lane's own namespace is degraded
-OUT pending set: 1 issue(s)
-OUT single pending issue — deterministic fast path
-OUT inert teststuffstash/homelab#{{issue}} — footprint takes effect pre-merge: agents/coordinator/retro-argo.yaml,scripts/reflex-now.sh (iac-lane ❌ table — classify_touches)
-ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#{{issue}}
+OUT pending set: 0 issue(s)
+OUT nothing to decide
+ERR issue_body: machine block line 3: unknown key 'Alert-FP' — the grammar is exactly: Touches, Base, Budget, Verdict-authority, Production-leg, Revert, Origin, Size, Capability, alert-fp, self-referential, fix-verdict, Class
 ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#226
 ERR LEGACY-GRAMMAR self-referential teststuffstash/homelab#226
 RC 0
