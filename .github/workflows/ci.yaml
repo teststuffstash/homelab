@@ -368,22 +368,29 @@ jobs:
 
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)
         if: github.event_name == 'pull_request'
+        # homelab#1441: diff against the PR's base SHA AT EVENT TIME — the merge commit's first
+        # parent — never the base BRANCH tip. The checkout is refs/pull/N/merge; fetching the tip
+        # separately races a busy master, and a two-dot diff against a NEWER tip lists every file
+        # master added since as a "change" of the PR (a merely-behind worker PR went red on
+        # governance files it never touched). base.sha is depth-independent and exact.
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
-          devbox run pin-only-lint FETCH_HEAD
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          devbox run pin-only-lint "$BASE_SHA"
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
       # ADR-106 (4): the .agents/fix.yaml NEVER-TOUCH tier as a machine check — a WORKER-authored
       # diff touching governance paths (.github/.agents/scripts/policy/devbox/CODEOWNERS) is red.
       # Seat/renovate PRs pass (author-scoped); rationale + set live in the script (one home).
       - name: Worker diffs may not touch governance paths (devbox run governance-lint)
         if: github.event_name == 'pull_request'
+        # homelab#1441: same base.sha rule as pin-only-lint above (the two-dot diff against a
+        # moved tip is what failed PR#1435 on files master added after its fork).
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
-          devbox run governance-lint FETCH_HEAD
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          devbox run governance-lint "$BASE_SHA"
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           # homelab#1036 — the assembly-lane arm reads these (goal/** head + Assembly-for: trailer)
           PR_HEAD_REF: ${{ github.head_ref }}
