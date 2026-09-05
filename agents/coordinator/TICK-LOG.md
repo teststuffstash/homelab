@@ -7182,3 +7182,70 @@ first live ADR-110 maintenance session before the ADR existed.
   10/10, CI green → codeowner-approved 20:15Z, auto-merging. #1449 merged 20:08Z. Remaining
   #1446/#1436: green, codeowner reads on record, no bot approval (latch); asked the operator —
   **wait for the bot, no admin merge** (the PR lane's review on S8 machinery outweighs 40 min).
+
+## 2026-09-05 20:41–~21:50Z — the budget-window session: S8 1b fan-out + the two bot-waits (design-agents corpus session, operator direction from the 20:22Z meta-state)
+
+- **Bootstrap 20:41Z** — full corpus load (`/design-agents continue read plan from meta-state`); 5h
+  window had reset ~20:35Z, weekly resets ~21:55Z → the whole sitting is a ≤70-min burn of THIS
+  week's remainder, wind-down before the weekly reset regardless of in-flight work.
+- **Board at bootstrap:** #1453 MERGED 20:14Z (the seat's hand-executed round-2). #1446 (6a) still
+  had NO bot review, #1436 (1a) CHANGES_REQUESTED at c46703ed with the fix + the board-test
+  flake fix pushed since — both waited on the latch: the responder pods in `agent-coordinator`
+  read `Error` ×4 (20:14–20:34Z), all the FU-113b DEFERRED-retry shape (`utilization 5h=0.9`,
+  both rails latched) — not a fault. Post-reset the reviewer picked #1436 (operator saw
+  `reviewer-homelab-1436-cb2b49ae` running, 20:5xZ; the Grafana agent-running board showed 1446
+  only — the 1436 pod name is keyed on the newest updater-merge head, cb2b49ae).
+- **≤5-min acts:** #1439 QUEUED (`agent-fix`+`agent/queued`; its 6b hold lifted at 20:08Z).
+  `reviewer-currency/dirty-skips` re-land STAGED on `fix/reland-reviewer-currency-dirty-skips`
+  (commit 42783e05: the four files byte-identical to 985924e3^, the MP-T03 `replay:` entry on
+  MASTER's shape, FSM view + index regenerated; verified `run.sh -v` 1/1 on master). Pushed only
+  once #1446 merges — 6a rewrites the same MP-T03 replay list, and a second seat PR on that line
+  before 6a lands is one more conflict-cycle for the updater in a starved CI week (#1452's
+  measurement). If the bot has not landed 6a by wind-down, the branch parks local.
+- **Loop-health read (meta-state item 9, closed):** `coordinate-platform-1788640200` FAILED
+  20:30Z exit 141 — Loki (tenant `platform-agents`, port-forward to `loki.loki.svc:3100`) shows
+  `Cloning into '/work/homelab'…` then `exit status 141` 70 s later with ZERO scan output; the
+  template clones unpiped and `exec`s the scan, so the SIGPIPE is the scan's own early read
+  (`| head`/`grep -q` class — the board-test flake's sibling). 3 sightings (09-04 12:58 platform,
+  09-04 20:59 oracle, 09-05 20:30 platform) → **filed homelab#1456 (inert, `agent-fix`)** with
+  the Loki record + the producer hunt + the missing Failed-tick belt; dedup search negative.
+- **S8 1b (#1431) fan-out, 20:52Z — four opus clone-subagents, width 4, all stacked on the
+  unmerged 1a branch (`s8-1a-base` = origin/fix/s8-issue-body-parser-1430; the parser exists only
+  there), hard deadline 21:35Z, commit-and-STOP, no push:** A = scan/footprint/touches-check
+  readers + fail-closed HOLD on a malformed block + replay rows; B = launcher (`Base`, `Budget`
+  via goal-budget `GB_REF` `--ref`, PREFLIGHT REFUSED on exit 2) + reviewer (`Touches` UNION,
+  `alert-fp`); C = responder/fix-debounce shell legs + governance-lint + the responder FILES the
+  block (runtime-verified from the manifests first); D = the coordinator brief's authoring plays
+  write the block via the parser's writer + the in-pod `--self-test` acceptance via kubectl exec
+  (module `kubectl cp`'d — master has no parser yet). The #1431 design comment (fail-CLOSED at
+  every spending/dispatching gate; `--ref` to the meter) is in every brief. Results: below.
+  **Results (all four chunks green + committed by 21:12Z, ≤25 min each; seat-integrated on
+  ONE branch — cherry-picks applied clean, index regenerated once, combined suite 405/405,
+  merge-path/docs-graph/argo-lint/responder-behaviour 117/117/touches-check/self-test 78/78
+  green; pre-push gate passed):** **PR#1459 opened + armed 21:17Z** (Part of #1431 — 96 files,
+  +1097/−107; the PR body carries every #354 stream call-out and the semantic narrowings). The
+  chunks' named residue (c4c5 `Class` reads · fix-debounce's `Touches` gate has NO LEGACY
+  variant · responder resolve-leg greps run pre-clone · scan/scout WRITERS · three sentinel gaps)
+  = **sprout #1460, bound under #1431**; #1431 closes when it lands. Handover misses for the
+  ledger (verbatim in the chunk reports): the A prompt named two files that parse no body
+  (footprint.sh/touches-check.sh take strings); "byte-identical variant" had no rule for a
+  reader the LEGACY table does not record (A converged to the enforcing reader, B/C added or
+  refused variants — three different resolutions of one gap); C's "responder filing shell" does
+  not exist (the SESSION files; the platform's first touch upserts the block instead); E's
+  `--local` clone `origin` is the SEAT's checkout, two commits behind GitHub — a dispatch naming
+  a merged PR must name the SHA or say fetch GitHub.
+- **Landed by the bot during the sitting:** #1436 (1a) 20:56Z, #1446 (6a) 21:06Z → #1422 CLOSED
+  by the seat (6a+6b), #1430 already closed. **PR#1458** (dirty-skips fixture-only re-land,
+  armed 21:07Z) and **PR#1461** (#1424 half 1 — per-base lane doc currency: merge-path.md items
+  2–3 + §Why…serialize per (repo, base) lane, platform-and-stacks §Stack economics per-lane,
+  glossary `lane` row; armed 21:19Z; left behind on #1424: workflow.md:13/:63 per-repo prose +
+  merge-path item 3's retired "up-to-date" predicate).
+- **Operator question, oracle-fleet PR#471 "waiting for review a long time":** un-ARMED seat PR
+  (CI green at head since 18:54Z; the reflex/updater/auto-merge select armed only, C9 re-arms
+  worker PRs only — FU-079 arm-at-open) → armed 21:07Z; BEHIND → updater → CI → review; sole
+  codeowner waiver merges on bot approval. Second question ("launch reviewers manually on
+  issues?") — the unit is a PR; `reviewer-session.sh <repo> <pr>` only for a PR the reflex would
+  pick; #1446 was BEHIND at the time (master's gate skips BEHIND at spawn) so no manual launch.
+- Alerts seen: `NodeSystemSaturation` 21:11Z → cleared 21:13Z, `NodeDiskIOSaturation` 21:13Z
+  (the CI burst + five clones on the pop-os node's siblings — responder lane's). Weekly window
+  read 55 % at 21:10Z (operator), reset 22:00Z.

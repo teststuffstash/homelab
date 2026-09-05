@@ -1,0 +1,43 @@
+[
+  {
+    "number": 140,
+    "createdAt": "2026-08-19T09:00:00Z",
+    "isDraft": false,
+    "mergeStateStatus": "BEHIND",
+    "reviewDecision": "CHANGES_REQUESTED",
+    "autoMergeRequest": {
+      "enabledAt": "2026-08-19T09:01:00Z"
+    },
+    "statusCheckRollup": [
+      {
+        "conclusion": "SUCCESS"
+      }
+    ],
+    "reviews": [
+      {
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "state": "CHANGES_REQUESTED",
+        "submittedAt": "2026-08-19T10:00:00Z"
+      }
+    ],
+    "commits": [
+      {
+        "messageHeadline": "feat: gamma",
+        "committedDate": "2026-08-19T09:00:00Z"
+      },
+      {
+        "messageHeadline": "Merge branch 'master' into fix/issue-33-gamma",
+        "committedDate": "2026-08-19T12:00:00Z"
+      }
+    ],
+    "labels": [],
+    "author": {
+      "login": "app/homelab-agents-1234"
+    },
+    "headRefName": "fix/issue-33-gamma",
+    "baseRefName": "master",
+    "body": ""
+  }
+]

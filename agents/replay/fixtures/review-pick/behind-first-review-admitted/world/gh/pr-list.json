@@ -1,0 +1,31 @@
+[
+  {
+    "number": 150,
+    "createdAt": "2026-08-19T09:00:00Z",
+    "isDraft": false,
+    "mergeStateStatus": "BEHIND",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "autoMergeRequest": {
+      "enabledAt": "2026-08-19T09:01:00Z"
+    },
+    "statusCheckRollup": [
+      {
+        "conclusion": "SUCCESS"
+      }
+    ],
+    "reviews": [],
+    "commits": [
+      {
+        "messageHeadline": "feat: delta",
+        "committedDate": "2026-08-19T09:00:00Z"
+      }
+    ],
+    "labels": [],
+    "author": {
+      "login": "app/homelab-agents-1234"
+    },
+    "headRefName": "fix/issue-44-delta",
+    "baseRefName": "master",
+    "body": ""
+  }
+]

@@ -6,7 +6,7 @@
 # no crash).
 . + [
   { number: 133, createdAt: "2026-09-03T14:00:00Z", mergeStateStatus: "BEHIND",
-    autoMergeRequest: { enabledAt: "2026-09-03T14:01:00Z" }, reviewDecision: "REVIEW_REQUIRED",
+    autoMergeRequest: { enabledAt: "2026-09-03T14:01:00Z" }, reviewDecision: "REVIEW_REQUIRED", baseRefName: "master",
     labels: [],
     headRefOid: "nullauth133oid",
     latestReviews: [

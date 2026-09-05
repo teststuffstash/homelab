@@ -1,0 +1,42 @@
+# reviewer-currency-behind-proceeds (2026-09-05, homelab#1422 — was `behind-skips`, 2026-08-17)
+# — the CURRENCY GATE no longer skips a BEHIND head.
+#
+# WHAT CHANGED AND WHY. This fixture pinned the OPPOSITE assertion until today: a head that had
+# fallen BEHIND by spawn time was skipped, on the premise that the updater's catch-up merge would
+# dismiss any verdict the pod produced ("update before review", merge-path.md). The premise is
+# false for update-branch merges — GitHub RE-POINTS a review's commit_id on them, and PR#1386's
+# bot approval survived four updater merges on 2026-09-05 (07:06-07:37Z), as did #1388's and
+# #1389's; only CONTENT pushes dismiss. The skip's real cost was first-review starvation: PR#1437
+# sat BEHIND through 7 master moves and 3 updater merges the same day and never got a first
+# review. So the reflex now admits a BEHIND-but-green, never-reviewed PR (ADR-125's currency
+# finding, `fixtures/review-pick/behind-first-review-admitted`) and this launcher gate had to stop
+# refusing it at spawn — otherwise every such pick becomes a dispatch that dies one step later.
+# The DIRTY half of the gate is unchanged and is now pinned by the sibling `dirty-skips` row: the
+# assertion moved, it did not vanish.
+#
+# CONDITION UNDER REPLAY. The launcher's combined FU-092 probe (ONE `gh pr view` fetching
+# headRefOid,state,mergeStateStatus) returns state=OPEN, mergeStateStatus=BEHIND — the exact world
+# this fixture has always recorded, unchanged.
+#
+# THE CONTRACT (executes the REAL currency-gate block from reviewer-session.sh via sentinel):
+#   1. state=OPEN passes the state check; BEHIND is no longer a skip condition, so neither branch
+#      fires and execution continues.
+#   2. HEADSHA8 still derives from the SAME JSON (`.headRefOid`): cut -c1-8 of `abc1234def` =
+#      `abc1234d`, the FU-092 pod name key.
+#
+# EXPECTED STREAM (computed from the world + the shipped block):
+#   CALL — gh pr view 42 --repo teststuffstash/test-project --json headRefOid,state,mergeStateStatus
+#   OUT  — "REACHED: past-currency-gate"   ← post.sh observation; its presence IS the admission
+#   OUT  — "POD KEY: abc1234d"             ← 8-char headRefOid prefix, computed FROM the input
+#   RC   — 0
+#
+# Parts: bridge.sh (seams: function-shadow gh) + block:reviewer-currency-gate (real code) + post.sh
+name: reviewer-currency-behind-proceeds
+mode: actions
+pins:
+  - MP-T03
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-currency-gate
+  - file:post.sh

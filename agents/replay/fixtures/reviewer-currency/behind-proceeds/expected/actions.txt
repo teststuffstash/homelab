@@ -1,0 +1,4 @@
+CALL gh pr view 42 --repo teststuffstash/test-project --json headRefOid,state,mergeStateStatus
+OUT REACHED: past-currency-gate
+OUT POD KEY: abc1234d
+RC 0

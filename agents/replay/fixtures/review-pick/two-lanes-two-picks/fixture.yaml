@@ -1,0 +1,33 @@
+# review-pick-two-lanes-two-picks (ADR-125 (1), homelab#1422) — the reflex picks ONE reviewable PR
+# per (repo, BASE) LANE, not one per repo.
+#
+# CONDITION UNDER REPLAY. One recorded `gh pr list` payload with two PRs that are identical in
+# every respect the predicate reads — armed, CLEAN, green, undrafted, unlabelled, never reviewed —
+# except their base: #101 is on `master` (the DEFAULT_BRANCH the bridge sets) and #110 is on
+# `goal/x`. Before ADR-125 the reflex took `sort_by(.createdAt) | .[0]` over the whole repo, so
+# #101 (older) won and #110 waited for a whole tick — every tick, for as long as master had
+# reviewable traffic. That serialization bought nothing: the merge -> behind -> dismiss-approval
+# chain the reviewer serializer exists to avoid only ever runs between PRs sharing a base.
+#
+# THE CONTRACT (executes the REAL pick jq from review-reflex.sh via sentinel):
+#   1. TWO pick lines come out of one payload — one per lane.
+#   2. Their order is jq's `group_by` key order, ascending: "goal/x" < "master", so #110 leads.
+#   3. Each line carries the lane as its last field, which is what the shell `read` below the
+#      block consumes to log `lane=<base>` and what makes the per-lane loop legible in the pod log.
+#
+# EXPECTED STREAM (computed from the world + the emitted format string in the block, NOT from a
+# run: "<number> <verdicts> <at-head> <approved-at-head> <headRefName> <issue-key> <base>"):
+#   #110 — 0 bot verdicts recorded, so all three counts are 0; headRefName fix/issue-22-beta;
+#          the issue key is the branch capture `issue-(?<i>[0-9]+)(-|$)` = 22; base goal/x.
+#   #101 — same shape, branch fix/issue-11-alpha, issue key 11, base master.
+#
+# Parts: bridge.sh (the loop's variables) + block:review-pick (real code) + post.sh (observation).
+name: review-pick-two-lanes-two-picks
+mode: actions
+pins:
+  - MP-T03
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:review-pick
+  - file:post.sh
