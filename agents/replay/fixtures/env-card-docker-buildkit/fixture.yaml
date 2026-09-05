@@ -1,0 +1,13 @@
+# homelab#1308 — the docker-mode ride's env card, Docker: YES branch. Pins the new BuildKit
+# per-registry-mirror sentence: dockerd's own registry-mirrors is Hub-only, so a non-Hub FROM in
+# `docker build` needs a docker-container builder pointed at $BUILDKITD_TOML.
+#
+# CONDITION UNDER REPLAY. render_env_card() with DOCKER=1 (pre.sh) and the common defaults
+# (post.sh, HARNESS=claude so the WebSearch branch is taken).
+name: env-card-docker-buildkit
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:render_env_card
+  - file:pre.sh
+  - file:post.sh
