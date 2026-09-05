@@ -10,23 +10,27 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ NEXT SESSION (seat, 2026-09-05 ~08:10Z, mid-stint pickup — this corpus session may still
-  be running; check `gh pr list` before acting): (1) ADR-110 codeowner reads on the seat-subagent
-  PRs that park: #1399 (#1200 vendored CNP schema), #1401 (#1207 filing-door classify), #1402
-  (#1308 BuildKit mirrors, both legs), #1397 (approved 08:36Z, merges on auto-merge), and #1386
-  (its two codeowner-read defects fixed in-PR at 75b5ba26; re-review pending after a false
-  `agent/error` was cleared — homelab#1403). (2) **After #1386 merges:** close or narrow #1069
-  (its homelab half is the prefetch's required-read deferral; the finalize half is
-  agent-runtime's). (3) DONE 08:35Z — #1400 merged, #1334's `agent/error` lifted; #1237/#1238 stay unqueued by
-  intent. (4) **Apply #1308 leg 1 on
-  ci-runner-01** (buildkitd.toml + the `homelab-mirrors` builder) — via the pending ci-runner
-  `tofu apply` replace, or the interim SSH hand-apply of the same two artifacts; the PR body
-  carries the recommendation. (5) #1393 heat trims if room remains.**
-- **⚑ BOARD (09-05 ~08:10Z):** in review #1386 (re-review after the seat's fix push) ·
+- **⚑ NEXT SESSION (seat wind-down 2026-09-05 ~09:45Z, ctx 794k — the stint's machine tail
+  was still running; nothing here needs the corpus unless marked):** (1) **#1404** (PyPI cache,
+  loop PR for #1300): the seat REQUESTED CHANGES 09:41Z — `/simple/` must `sub_filter` the
+  absolute `files.pythonhosted.org` links to `$scheme://$http_host` or the `/packages/` cache is
+  never hit (the PR's docs sentence claims the opposite); the CR clause dispatches the fix round,
+  then a codeowner read on `argocd/platform/pypi-cache.yaml` (light). #1413 (consumer wiring:
+  launcher env + VIP egress leg) is queued behind it via blockedBy. (2) Seat PRs **#1399 #1401
+  #1402** were green and awaiting bot verdicts — they MERGE on the bot approval alone (sole-
+  codeowner waiver); if they still sit unreviewed, the exporter edge is dark (#1405) and
+  `bash agents/reviewer-session.sh homelab <pr>` is the sanctioned hand-dispatch once green +
+  current. (3) **#1386** carried bot + codeowner approval at 09:26Z, waiting on CI → auto-merge;
+  when merged, close or narrow **#1069** (homelab half resolved by the prefetch's required-read
+  deferral; the finalize half is agent-runtime's). (4) **#1308 leg-1 APPLY on ci-runner-01**
+  (buildkitd.toml + the `homelab-mirrors` builder; PR#1402 body carries the tofu-replace vs SSH
+  recommendation) — operator/infra sitting. (5) FU-215: capture Unbound state during the next
+  `github.com` SERVFAIL window. (6) #1393 heat trims (corpus).**
+- **⚑ BOARD (09-05 ~09:45Z — see NEXT for the four open seat/loop PRs; earlier read follows):** in review #1386 (re-review after the seat's fix push) ·
   riding #1378 #1392 (r1, deepseek — dispatched before the haiku flip); #1384 #518 completed r1
   → PRs in review · queued this morning by the seat: **or-op#60** (item-2 root; coordinator pod
   up 08:0xZ), **agent-runtime#119 #120** (finalize sprouts), **homelab#1297** (mirror poison
-  belt), **#1403** (reviewer false-anomaly, 2 sightings) · #1300 re-scoped (Touches narrowed off
+  belt), **#1403** (reviewer false-anomaly, 2 sightings), **#1405** (exporter GraphQL partial data — PR series family absent), **#1412** (README ci.yml→ci.yaml), **#1413** (PyPI consumers, blocked by #1300), agent-runtime **#123 #124** (finalize sprouts); or-op #60/#62 rode and merged (PR#61/#63 seat-approved) · #1300 re-scoped (Touches narrowed off
   the guarded glob, VIP 40.34, 20Gi) and stays queued · de-queued + seat-landed: #1299 (direct,
   9a0354ec), #1207 (PR#1401), #1308 (PR#1402), #1390 (direct, 1907048f), #1200 (PR#1399).
   **Platform claim = `claude/haiku`, no fallback, LIVE 07:54Z (PR#1395; operator: credits to
