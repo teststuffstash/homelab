@@ -1,0 +1,18 @@
+# homelab#1204 — context pre-fetch no-labels arm: issue with empty labels array.
+# Regression test: when an issue has no labels, the rendered /work/issue.md must
+# still have a blank line between the ## <title> heading and the body (no
+# **Labels:** line). The labels-arm fixture (context-prefetch/) covers the
+# labels-present case.
+#
+# THE CONTRACT (one world, one arm):
+#   World: one issue with title/body/empty-labels + two comments.
+#   The bridge sets RUN_CMD so the prelude prepend is observable.
+#   The fixture asserts the gh API calls, the prelude prepend, and the
+#   absence of a **Labels:** line in the decoded prelude payload.
+name: context-prefetch-nolabels
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
