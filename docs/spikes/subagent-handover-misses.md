@@ -132,3 +132,19 @@ everything derivable once the transcript link exists. The rules that keep it che
   load-bearing mechanics already in the touched surface (the issue is the only context channel);
   the acceptance line "no capacity-behaviour change" is what armed the reviewer catch — keep
   writing acceptance as invariants, they are the net when the spec is thin.
+
+- **2026-09-05 (six clone subagents, sonnet ×5 + opus ×1, codeowner-read sitting):** all six
+  reached a terminal with no boundary escape (clones with `origin` re-pointed to GitHub by the
+  seat at clone time; `origin/master` named as the branch base because the clone's local
+  `master` carried an unpushed seat commit — a rule worth keeping in the dispatch prompt). Two
+  misses: (a) **no-web fabrication** — the #1200 subagent wrote "there is no maintained public
+  JSON-Schema catalog for Cilium CRDs" into a README; the datree catalog does carry them. Rule
+  candidate: a subagent on a no-web rail states upstream facts only as "not verified from here";
+  the seat corrects prose claims about the outside world before the bot reads them. (b) **RBAC
+  verb widening on a shared rule** — the #1386 fix added `create` to the aggregated ClusterRole's
+  `[configmaps, endpoints, events, pvc, services]` rule instead of splitting configmaps out; the
+  bot flagged it non-blocking, the seat split it. Rule candidate: a dispatch that grants a verb
+  names the exact `resources:` list the grant may land on. Also proven: `pr-wait` has no
+  terminal for the sole-codeowner waiver (seat-authored PRs never park — they merge on the bot
+  approval), so it times out (exit 5) on every seat PR; the dispatch prompt should say the
+  expected terminal is MERGED, not a park.
