@@ -30,11 +30,16 @@ PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf '  ✓ %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf '  ✗ %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/      /'; }
 
+# present/absent read the haystack from a HERE-STRING, never `printf | grep -q`: this file runs
+# under `set -o pipefail`, and grep -q exits on the first match — a printf still writing then
+# takes EPIPE, the pipeline reads as failed, and a row that IS present reports "missing" (the
+# 2026-09-05 CI flake on PR#1436: "printf: Broken pipe" beside a ✗ container row; local runs
+# passed 5/5). Timing-dependent, so it only bites on a loaded runner.
 present() { # present <desc> <needle> <haystack>
-  if printf '%s' "$3" | grep -Fq -- "$2"; then ok "$1"; else bad "$1 — missing: $2"; fi
+  if grep -Fq -- "$2" <<< "$3"; then ok "$1"; else bad "$1 — missing: $2"; fi
 }
 absent() { # absent <desc> <needle> <haystack>
-  if printf '%s' "$3" | grep -Fq -- "$2"; then bad "$1 — present but must not be: $2"; else ok "$1"; fi
+  if grep -Fq -- "$2" <<< "$3"; then bad "$1 — present but must not be: $2"; else ok "$1"; fi
 }
 # section <header> <full-output> — the lines under one board section, up to the next § or the
 # totals line (blank lines dropped). The disjointness checks must be scoped to a SECTION: an
