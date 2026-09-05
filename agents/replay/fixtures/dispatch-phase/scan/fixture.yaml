@@ -27,7 +27,14 @@
 #      second dispatch cannot bill itself for the first one's streamed session; `ring-to-scan`
 #      measures to T0 — the POD's start — and therefore reports the SAME value at both dispatches.
 #      Collapse them into one mark and leg 3 goes red, which is the only place that bug shows.
-#   4. THE CLOCK ADVANCES EVEN WHEN NOTHING IS PUSHED (legs 4 and 5 land between real ones and the
+#   4. THE LANE KEYS BOTH GROUPS (ADR-125). A dispatch that names its unit's base branch keys
+#      BOTH pushes with `/base/<seg>` — a grouping-key segment, never a body label, because a
+#      POST replaces every sample sharing a metric name within a group and a `base` body label
+#      would let a master-lane dispatch evict the goal lane's last wake stamp (the same rule that
+#      made edge/cron two metric NAMES). `/` cannot ride a key segment, so `goal/278` keys as
+#      `goal-278`. A caller with no base (the whole-stack tick, the janitor) keys as before — the
+#      absence of a `/base/` segment on every earlier leg is that assertion.
+#   5. THE CLOCK ADVANCES EVEN WHEN NOTHING IS PUSHED (legs 4 and 5 land between real ones and the
 #      durations stay honest), and every degenerate path RETURNs 0 with the unreachable-gateway
 #      warning LATCHED to one line. A scan that deferred a dispatch because a metrics sink was
 #      down would be a strictly worse bug than the invisibility this metric exists to fix.

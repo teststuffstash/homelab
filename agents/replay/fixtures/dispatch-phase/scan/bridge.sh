@@ -104,4 +104,20 @@ DISPATCH_PHASE_WAKE=""; DISPATCH_PHASE_POD=coordinate-circles-2
 DP_NOW=1786465210; dispatch_phase circles "queued-dispatch" "fix"
 printf 'RETURN %s\n' "$?"
 
+# ── the per-LANE wake series (ADR-125): the lane base rides the GROUPING KEY of BOTH pushes, so
+# a master-lane dispatch cannot evict the goal lane's last wake stamp — the same pushgateway
+# replacement rule that made the edge/cron stamps two metric NAMES rather than one `source` label.
+# `/` is not legal in a key segment, so `goal/278` keys as `goal-278`.
+# The FIRST leg is the ADR-125 default-lane case (base=master), the SECOND the goal lane; the
+# absence of a `/base/` segment in every leg above is the un-keyed pre-ADR-125 group, which the
+# whole-stack and janitor callers still use.
+echo "REACHED: edge dispatch on the master lane — base keys both groups"
+DISPATCH_PHASE_WAKE=""; DISPATCH_PHASE_POD=coordinate-circles-2
+DP_NOW=1786465220; dispatch_phase circles "queued-dispatch" "fix" "master"
+printf 'RETURN %s\n' "$?"
+
+echo "REACHED: edge dispatch on a goal lane — the slash keys as a dash"
+DP_NOW=1786465230; dispatch_phase circles "changes-requested" "" "goal/278"
+printf 'RETURN %s\n' "$?"
+
 echo "REACHED: end"
