@@ -108,16 +108,15 @@ six OVERSIZE items pointer-ized into
 ## GitOps & platform
 
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
-      The rollout-shape half SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on
-      `topology.kubernetes.io/zone` — metal two-at-a-time, pool VMs one-at-a-time behind an init
-      gate on `pve_lvm_thin_pool_data_percent` < 75 (no sample = hold). First live bake
-      (#1366, 08:0xZ): wk-03's 35 GB fs hit DiskPressure holding BOTH tags (evicted, GC'd the old,
-      re-pulled clean); the pool went 71 → 79 % on one VM pull + ci-runner-01, two manual trims
-      → 75 %, and the gate HELD wk-03 at 75 % — by design, but the old tag on wk-01/wk-02 only
-      leaves via kubelet imageGC. What remains is the size itself: every bake is a 4.9 GiB pull per node
-      because the image carries the whole fleet's devbox closures (FU-015). **Next:** a
-      sentinel-scoped closure (or a second, small image for `agents/coordinator/sentinel-argo.yaml`)
-      — hundreds of MB, so a node's first pull stops being a 429–909 s tax. Relates FU-093, #80.
+      Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
+      — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
+      `pve_lvm_thin_pool_data_percent` < 75 (no sample = hold); first bake (#1366) took the pool
+      71 → 79 % and the gate HELD wk-03, by design. **2026-09-05: the pool's post-trim floor is
+      ~80 % (79.6 after the 03:35 trim, 81.0 after a manual one), so the gate is a PERMANENT hold** —
+      wk-02's pod sits `Init:0/1`, the kube-prometheus defaults (`KubeDaemonSetRolloutStuck` /
+      `KubeContainerWaiting` / `KubePodNotReady`) fire on it, and a runner landing on wk-03 pulls the
+      same 4.9 GiB ungated. **Next:** a sentinel-scoped closure (or a second, small image for
+      `agents/coordinator/sentinel-argo.yaml`) — hundreds of MB. Relates FU-015, FU-093, FU-207, #80.
 
 - [ ] **FU-206** — **PublicRoute: block operational paths at the edge by default (ADR-123).**
       Every claim serves its backend's `/metrics` + `/healthz` publicly today — the gateway answers
