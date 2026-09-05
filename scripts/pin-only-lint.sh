@@ -38,7 +38,7 @@ PIN_LINE='^[-+][[:space:]]*(image:[[:space:]]*ghcr\.io/teststuffstash/homelab/ar
 # twice in labels-handoff.sh before catching it.
 if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
   echo "pin-only-lint: FAIL — base ref '$BASE' not resolvable; refusing to report success." >&2
-  echo "  In CI, fetch the base first: git fetch --no-tags --depth=1 origin \$GITHUB_BASE_REF" >&2
+  echo "  In CI, fetch the base first: git fetch --no-tags --depth=1 origin \$BASE_SHA  (the PR base SHA at event time — never the branch tip, homelab#1441)" >&2
   exit 2
 fi
 

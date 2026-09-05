@@ -52,7 +52,7 @@ fi
 # FU-125/FU-108/FU-131 failure class (pin-only-lint's rule, copied deliberately).
 if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
   echo "governance-lint: FAIL — base ref '$BASE' not resolvable; refusing to report success." >&2
-  echo "  In CI, fetch the base first: git fetch --no-tags --depth=1 origin \$GITHUB_BASE_REF" >&2
+  echo "  In CI, fetch the base first: git fetch --no-tags --depth=1 origin \$BASE_SHA  (the PR base SHA at event time — never the branch tip, homelab#1441)" >&2
   exit 2
 fi
 
