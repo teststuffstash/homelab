@@ -1630,6 +1630,12 @@ spec:
               - apiGroups: [""]
                 resources: [persistentvolumeclaims]
                 verbs: [get, list]
+              # #1205: context-prefetch writes the ride's bundle as a ConfigMap here (created
+              # pre-pod, ownerRef-patched onto it after, deleted on pre-pod exits) — this loop SA
+              # is what runs the launcher in every graduated (per-stack) stack.
+              - apiGroups: [""]
+                resources: [configmaps]
+                verbs: [create, patch, delete]
               - apiGroups: [openrouter.teststuff.net]
                 resources: [openrouterkeys, openrouterkeys/status]
                 verbs: [get, list, watch, create, update, patch, delete]
