@@ -7115,3 +7115,25 @@ first live ADR-110 maintenance session before the ADR existed.
 - Seat miss: a zsh word-split bug cancelled six live CI runs (re-run within a minute).
 - Wind-down: PR#1436/#1446/#1449 open (see meta-state); ONE push of the batched bookkeeping.
 
+
+## 2026-09-05 ~17:55–18:20Z — Unbound github SERVFAIL, fourth window (operator report, short seat session)
+
+- **Operator: "the github unbound issue — biting again"; cleared by itself at 17:58:24Z** while
+  the probe was being read (FU-215). Probe series for the day: 08:17–08:19, 09:19–09:21,
+  10:28–10:37 (alert fired), 17:56–17:58Z; the 10:28 window came AFTER the 09:20Z restart, so
+  restart ≠ remedy. Unbound's own view via the OPNsense API: DNSSEC is OFF (the morning's
+  validation theory is dead — `+cd` answering was timing); `probe_duration` climbs to 0.5–0.7 s
+  for ~8 min before each fail (one upstream timeout per recursion, then a second server
+  answers); `dumpinfra` has 99/385 IPv4 upstreams with timeout-inflated RTO (root servers,
+  gandi, azure-dns, docker.io included) → WAN-wide UDP loss episodes, github visible because
+  `api.github.com` (TTL 60 s) is recursed every minute. WAN has no IPv6 (318 v6 infra entries
+  never answered, inert). Resolver log at verbosity 1 has NOTHING for any window; dpinger
+  gateway monitoring is off (no loss series). OPNsense log stamps are local (UTC+3).
+- **Shipped as code, PR#1454 (`fix/unbound-log-servfail`):** the opnsense-unbound role gains an
+  `unbound_advanced` dict (read live → POST on drift → existing reconfigure handler);
+  `logservfail: "1"` pinned. Play run: changed=1 then changed=0; live read-back `1`; Unbound
+  restarted 18:06Z, resolving. The first run also re-saved the argo/apps overrides (description
+  drift; steady on re-run). Next window → `log-servfail` line names the reason; belt candidate
+  `serveexpired` is now a one-line var (FU-215 next).
+- Side sighting, unread: `specs.oracle.teststuff.net` blackbox hit its 9.5 s timeout twice at
+  ~17:52–17:53Z in the same minutes — LAN target, likely unrelated; noted only.
