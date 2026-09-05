@@ -351,6 +351,7 @@ transitions:
     when: "armed ∧ CI-red ∧ no Running worker ∧ fix-round attempts < RED_ROUNDS_MAX"
     status: guarded
     replay:
+      - agents/replay/fixtures/ci-failure-run-select/ci-failure-run-select
       - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-rounds-two-channels
       - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-rerun-wake
       - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-rerun-wake-dispatch
