@@ -30,11 +30,16 @@ PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf '  ✓ %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf '  ✗ %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/      /'; }
 
+# present/absent read the haystack from a HERE-STRING, never `printf | grep -q`: this file runs
+# under `set -o pipefail`, and grep -q exits on the first match — a printf still writing then
+# takes EPIPE, the pipeline reads as failed, and a row that IS present reports "missing" (the
+# 2026-09-05 CI flake on PR#1436: "printf: Broken pipe" beside a ✗ container row; local runs
+# passed 5/5). Timing-dependent, so it only bites on a loaded runner.
 present() { # present <desc> <needle> <haystack>
-  if printf '%s' "$3" | grep -Fq -- "$2"; then ok "$1"; else bad "$1 — missing: $2"; fi
+  if grep -Fq -- "$2" <<< "$3"; then ok "$1"; else bad "$1 — missing: $2"; fi
 }
 absent() { # absent <desc> <needle> <haystack>
-  if printf '%s' "$3" | grep -Fq -- "$2"; then bad "$1 — present but must not be: $2"; else ok "$1"; fi
+  if grep -Fq -- "$2" <<< "$3"; then bad "$1 — present but must not be: $2"; else ok "$1"; fi
 }
 # section <header> <full-output> — the lines under one board section, up to the next § or the
 # totals line (blank lines dropped). The disjointness checks must be scoped to a SECTION: an
@@ -83,6 +88,25 @@ readonly_calls() { # readonly_calls <desc> <actions-file>
   fi
 }
 
+# ── the stderr contract, with the migration meter carved out (ADR-122 (3), homelab#1430) ──────
+# board.sh reads the `Capability:` grammar through the ONE parser (agents/issue_body.py), which
+# prints `LEGACY-GRAMMAR Capability <ref>` on stderr for every legacy fall-through. That line is
+# the MIGRATION METER and is never suppressed by contract — but it is not a WARN, and the
+# assertion this test has always made is "the board reported nothing wrong". So the meter lines
+# are separated out, the no-WARN assertion is unchanged for everything else, and the meter is
+# additionally pinned POSITIVELY: its absence would mean the board had quietly stopped reading
+# through the shared parser. Both halves retire together at S8 closeout 2, with the legacy read.
+stderr_clean() {   # stderr_clean <desc> <errfile>
+  grep -v '^LEGACY-GRAMMAR ' "$2" > "$2.nometer" 2>/dev/null || true
+  if [ ! -s "$2.nometer" ]; then ok "$1: no WARN on stderr (the LEGACY-GRAMMAR meter aside)"
+  else bad "$1: unexpected stderr" "$(cat "$2.nometer")"; fi
+  if grep -q '^LEGACY-GRAMMAR Capability ' "$2"; then
+    ok "$1: the Capability: read ran through agents/issue_body.py (the meter fired)"
+  else
+    bad "$1: no LEGACY-GRAMMAR Capability line — the board is no longer reading the grammar through the one parser" "$(cat "$2")"
+  fi
+}
+
 # ══ 1. the recorded world, plain view ═════════════════════════════════════════════════════════
 board "$TMP/plain.actions" "$TMP/plain.err" "" platform
 if [ "$BOARD_RC" = 0 ]; then ok "plain: board.sh exits 0"; else bad "plain: board.sh exited $BOARD_RC"; fi
@@ -92,7 +116,7 @@ if diff -u "$FIX/expected/board-plain.txt" <(printf '%s\n' "$BOARD_OUT") > "$TMP
 else
   bad "plain: rendered board moved" "$(head -40 "$TMP/plain.diff")"
 fi
-[ ! -s "$TMP/plain.err" ] && ok "plain: no WARN on stderr" || bad "plain: unexpected stderr" "$(cat "$TMP/plain.err")"
+stderr_clean "plain" "$TMP/plain.err"
 readonly_calls "plain" "$TMP/plain.actions"
 
 # ── the SOLVE/TRIAGE disjointness the round-1 review caught (PR#490) ─────────────────────────
@@ -147,7 +171,7 @@ if diff -u "$FIX/expected/board-full.txt" <(printf '%s\n' "$BOARD_OUT") > "$TMP/
 else
   bad "full: rendered board moved" "$(head -40 "$TMP/full.diff")"
 fi
-[ ! -s "$TMP/full.err" ] && ok "full: no WARN on stderr" || bad "full: unexpected stderr" "$(cat "$TMP/full.err")"
+stderr_clean "full"  "$TMP/full.err"
 readonly_calls "full" "$TMP/full.actions"
 present "full: aggregate line unchanged under --full" "circles: 3 suitable-unqueued (oldest 17d)" "$BOARD_OUT"
 present "full: backlog detail is sorted by number (oldest first)" "  circles#108 suitable backlog older (17d)" "$BOARD_OUT"

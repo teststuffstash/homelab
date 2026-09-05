@@ -374,6 +374,30 @@ blocking case and a **HARVEST BAR** (inert / not-a-gap / won't-fix / style stay 
 merged-closeout play (PR provenance stays in the body; a failed link is non-fatal and noted).
 **Next rungs:** the exporter sprout-RATE gauge and the depth-aware harvest gate reading it.
 
+## The machine block (ADR-122 (3), 2026-09-05)
+
+The thirteen line-anchored body grammars collapse into ONE `---`-fenced block at the TOP of the
+body, read by ONE parser — [`agents/issue_body.py`](../../agents/issue_body.py):
+
+```
+---
+Touches: agents/foo.sh, docs/bar.md
+Base: goal/12-slug
+Budget: 30
+Class: build
+---
+```
+
+Flat `key: value` lines, keys exactly as spelled in the sections below (`Touches`, `Base`,
+`Budget`, `Verdict-authority`, `Production-leg`, `Revert`, `Origin`, `Size`, `Capability`,
+`alert-fp`, `self-referential`, `fix-verdict`, `Class`), lists comma-separated. No nesting, no
+bullets, no duplicates, no multi-line values — anything else inside the fences is a **loud parse
+error**, never a silent skip. A body with no block is legal.
+
+The legacy line-anchored forms are still READ for the transition window and metered: each
+fall-through prints `LEGACY-GRAMMAR <key> <ref>` on stderr. Writers switch at S8 original 1b
+(#1431); the legacy read retires at S8 closeout 2.
+
 ## Touches: the declared footprint (ADR-097, 2026-08-03)
 
 Every authored agent issue carries a **`Touches:`** body line — the expected write surface as
