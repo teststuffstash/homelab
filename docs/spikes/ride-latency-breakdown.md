@@ -120,3 +120,87 @@ why every guard in `AgentRunPhaseSlow` would misfire on them. Also unchanged by 
 **whether the image was node-cached** is still not a fact anyone emits — `pod-spinup` makes a cold
 pull VISIBLE as a number, which is what the alert keys on, but attributing it still means reading
 pod events while they exist.
+
+## Second specimen (2026-09-05): a TEST-HEAVY ride — where the time goes when the model runs the suite
+
+**Tracked by:** FU-216 (memory-backed `/tmp`), FU-217 (goose tool timeout vs suite), FU-218 (ARC
+capacity honesty). Ideas parked 2026-09-05 for a slower day — nothing here is built.
+
+The floor specimen above is a two-line diff on a lint-only lane. The other shape is a ride whose
+model runs the project's full `devbox run ci` inside the pod, and it is bounded by different
+things. Specimen: **oracle-fleet#370 round 2** → PR#460 (deepseek-v4-flash via goose, docker-mode
+kata ride on `wk-metal-04`, 12:44–13:15Z, 1,866 s ride, 688 s queue wait). Transcript:
+`s3://agent-transcripts/oracle-fleet/issue-370/worker-r2-20260905T131542Z/` (goose
+`sessions.db`, message ids 53–58 are the two ci runs). Round 1 of the same issue has NO transcript:
+it looped on `devbox run ci` timeouts (300 → 600 → 500 s) and died exit 255 before finalize.
+
+| offset | segment | time |
+|---|---|---|
+| 0:00–4:52 | read issue + both e2e scripts + ci.yaml, two edits, commit, push | ~5 min |
+| 4:56–14:59 | `devbox run ci` #1 — venv created (50 pkgs, 18 s), pytest started, **killed by goose's 600 s shell-tool timeout** | 10 min |
+| 15:12–28:43 | `devbox run ci` #2 (model wrapped it in a 900 s poll loop) — 750 tests in 641 s + postgres test + mkdocs + helm + promtool | 13.5 min |
+| 28:53–30:14 | scan-secrets, `gh pr create`, final output | ~1.5 min |
+
+**24 of 30 minutes were the suite, run twice.** The same `ci` job on an ARC runner took 381–430 s
+in three runs that day; inside the ride the pytest phase alone took 641 s.
+
+### What bounded it (node readings for the ride window, `wk-metal-04`, 2-min steps)
+
+- **Disk, not CPU.** IO pressure-stall (`node_pressure_io_waiting`) 82–91 % of wall time
+  throughout, disk util 65–79 %; CPU busy 85–94 % but CPU pressure-stall only 4–8 %. The
+  neighbours: the Longhorn instance-manager (bulk replicas + the Garage meta replica, 33 MB/s)
+  and a homelab ride. The suite's slowest-20 are all build/delta tests at 17–27 s each — file
+  writers.
+- **Every ride write crosses virtiofs to the same disk.** The pod has NO volume for `/work` or
+  `/tmp` (see `agents/agent-session.sh` volumes: only uv-cache / docker-run / docker-lib /
+  context-bundle) — both live on the container rootfs, which kata serves to the guest over
+  virtiofs from the host overlay on `/var`, the partition the replicas were hammering. ci.sh
+  writes there: postgres `initdb` into `mktemp -d`, pytest `tmp_path` corpus sqlite fixtures,
+  chart renders (`/tmp`), the uv venv (`/work/repo/.venv`, ~0.5 GB).
+- **The 2-CPU agent limit is not the lever (yet).** oracle-fleet's pytest is serial (no
+  pytest-xdist); one process ≈ one CPU. Docker-mode limits are agent 2 + dind 2 = the whole
+  4-thread laptop (kata sizes the VM to the limits' sum, capped at host CPUs; the host-side
+  sandbox cgroup allows ≈4.25 CPUs incl. the 250m RuntimeClass overhead). Raising agent to 3
+  only changes intra-VM sharing with dind. Worth revisiting as agent 3 / dind 1 ONLY once the
+  suite is parallel (`-n auto` on 2C/4T ≈ 2.5 cores of throughput). Core services are not the
+  risk: CFS shares from requests keep cilium/kubelet/longhorn-manager proportional; the
+  CPU-sensitive neighbour is the Longhorn instance-manager's replica latency.
+- **Goose's shell-tool timeout (600 s) is shorter than the suite** → the model re-runs or
+  wraps it, and round 1 died on it. Not a strike class anyone names (model-routing.md lists
+  `timeout` as a strike, not this).
+- Network was irrelevant: uv resolved + installed 50 packages in ~30 s.
+
+### Ideas parked here (operator, 2026-09-05 — "big wins in oracle's ci/e2e first")
+
+1. **Memory-backed `/tmp` for rides** — `emptyDir: {medium: Memory, sizeLimit: …}` at `/tmp`
+   catches postgres, pytest tmp_path and chart renders with zero ci.sh changes; a second step
+   points `UV_PROJECT_ENVIRONMENT` at it for the venv. ⚠ In a kata guest tmpfs is guest RAM
+   charged to the agent container's cgroup (2 Gi in docker mode; python+uv+pytest ≈ 0.5 GB
+   resident → ~1–1.2 GiB usable). Precedent: [kata-ci-gate.md](kata-ci-gate.md) attempt 4 — a
+   3 Gi tmpfs in a 5 Gi VM guest-OOMed. `sizeLimit` turns overflow into a legible eviction
+   instead of a guest OOM. Memory requests == limits for rides (2026-07-27 rule), so on 8 GB
+   laptops the room comes from shrinking dind (2560Mi) for test-heavy rides, or accepting the
+   envelope; on `wk-metal-04` it fits today. **First act: one ride with `TMPDIR` on the
+   emptyDir and `du -sh /tmp /work/repo/.venv` at exit — that number sets `sizeLimit`.**
+2. **Tool timeout ≥ measured suite time, or scoped pytest** (touched paths / `-x -q`) in the
+   worker recipe — removes the repeat-and-die class outright.
+3. **Longhorn replicas off ride nodes** (the storage plan's third zone does this) — the disk
+   stall was a neighbour, not the ride.
+4. **Hardware ask, when oracle brings one:** ride count per node is set by MEMORY (a docker
+   ride's kata VM grows to ~5 Gi → one per 8 GB laptop, two–three on the 16 GB desktop); cores
+   set how fast each suite finishes. Rank: RAM per ride node, then physical cores, then a local
+   disk carrying no Longhorn replicas. A 32 GB / 6–8-core mini-PC is five or six rides — the
+   same box class [storage-ledger.md](../storage-ledger.md) §Requirements wants.
+
+### CI side, same day (ARC pool)
+
+Oracle-fleet `ci` on `homelab-ephemeral`: 387 s p50; the pool's 24 h queue p50 2 s / p90 ~10 min
+/ max ~40 min over 1,103 jobs, utilisation 17 % avg / ~60 % in the busy 6 h, at the maxRunners
+cap only 0–2 % of the time. The queue is placement, not slots: a runner pod requests 2.5 Gi and an
+8 GB laptop has ~6.2 Gi allocatable minus ~1.3 Gi of DaemonSets → **one runner per node**, and only
+`wk-03`, `wk-metal-01`, `wk-metal-02` carry the `homelab.io/ephemeral=true` LABEL the runner set
+selects on (`wk-metal-03/-04` carry the taint only — reserved for kata rides BY DECISION,
+`tofu/talos.tf`). Effective ARC capacity is 3; `maxRunners: 4` guarantees one pod pending on
+memory. The `arc-runners.yaml` comment "≈2 dind runners per metal node" is arithmetic that no
+longer holds. `e2e` on ci-runner-01 (449 s p50) is bound by nothing measurable: guest PSI since
+boot 0.8 % CPU / 0.5 % IO — it is sequencing (kind bring-up, image loads, readiness waits).
