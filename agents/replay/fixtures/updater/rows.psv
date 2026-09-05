@@ -1,7 +1,7 @@
 # updater — the decision table (family contract in fixture.yaml; legs 1-3).
 # id                  | world | patch (relpath @ patches/*.jq)          | env | expect        | params
 armed-only-noop       | board |                                         |     | noop          |
-fifo-pick             | board | gh/pr-list.json @ patches/add-two-behind.jq |  | picks         | n=101 oid=abc123def456
+fifo-pick             | board | gh/pr-list.json @ patches/add-two-behind-ready.jq |  | picks   | n=101 oid=abc123def456
 unstrand-yes          | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-yes  | n=120 oid=jkl012mno345
 unstrand-no           | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-no   | n=120
 unstrand-unreadable   | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-hold | n=120
@@ -10,6 +10,11 @@ conflict-clear        | board | gh/pr-list.json @ patches/label-conflict-90.jq |
 update-fail           | board | gh/pr-list.json @ patches/conflict-101.jq  | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | update-fail |
 park-skip             | board | gh/pr-list.json @ patches/add-park-skip.jq       |     | noop          |
 human-approved-pick   | board | gh/pr-list.json @ patches/add-human-approved.jq  |     | picks         | n=131 oid=human131oid456
-null-author-no-crash   | board | gh/pr-list.json @ patches/add-null-author.jq      |     | picks         | n=133 oid=nullauth133oid
+null-author-no-crash   | board | gh/pr-list.json @ patches/add-null-author.jq      |     | noop          |
 two-lanes-two-updates | board | gh/pr-list.json @ patches/add-two-lanes.jq          |     | picks-two     | n1=110 oid1=goal110oid789 n2=101 oid2=abc123def456
 same-lane-one-update  | board | gh/pr-list.json @ patches/add-two-same-goal-lane.jq |     | picks         | n=110 oid=goal110oid789
+# ── #1452: leg 1 updates only MERGE-READY PRs (the platform-native merge queue) ─────────────────
+unreviewed-behind-no-update | board | gh/pr-list.json @ patches/add-two-behind.jq         |                             | noop  |
+bot-approved-head-update    | board | gh/pr-list.json @ patches/add-bot-approved-head.jq  |                             | picks | n=141 oid=ready141oid123
+stale-approval-no-update    | board | gh/pr-list.json @ patches/add-bot-approved-stale.jq |                             | noop  |
+merge-ready-only-off-legacy-pick | board | gh/pr-list.json @ patches/add-two-behind.jq    | UPDATER_MERGE_READY_ONLY=0  | picks | n=101 oid=abc123def456
