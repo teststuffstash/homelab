@@ -245,8 +245,11 @@ since homelab is the platform's own `-iac`).
 `argocd-validate-pins` alone — it proves a pinned OCI chart renders and looks at nothing else, so a
 hand-written Deployment with a typo passed. `kubeconform -strict` over `argocd/resources/*` and
 `tofu fmt` landed with the tiers; the honest residue is that **most resources are SKIPPED** for
-want of a local CRD schema (Applications, AgentStacks, CiliumNetworkPolicies — PrometheusRules
-left this class 2026-08-11: `prometheus-rules-lint`/promtool parses every expr in `ci`, FU-158;
+want of a local CRD schema (Applications, AgentStacks — PrometheusRules left this class 2026-08-11:
+`prometheus-rules-lint`/promtool parses every expr in `ci`, FU-158; CiliumNetworkPolicy/
+CiliumClusterwideNetworkPolicy left it 2026-09-05: `manifest-lint` schema-validates them from a
+vendored CRD schema, homelab#1200 — a live DNS-nesting defect the API alone had been catching
+invoked the "vendor only where a kind needs form-checking the policies don't give" exception below;
 behaviour tests still open) —
 `manifest-lint` prints that every run and fails if it ever validates nothing.
 
