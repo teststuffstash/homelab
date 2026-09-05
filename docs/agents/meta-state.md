@@ -10,43 +10,44 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ S8 IN FLIGHT (head sitting 2026-09-05 11:00–~15:00Z, corpus session — stint #1418,
-  Size 3; pins on the parent):** LANDED: #1393 (S5 original 5, PR#1433 — S5's tree is EMPTY,
-  #979 closes at a later sweep, ≥72h quiet) · **#741 S7 CLOSED** · originals filed #1430 (1a
-  parser) #1431 (1b readers) #1419 (2 dispositions) #1432 (3 JOIN) #1420 (4 card) #1421 (5 ADR
-  pair) #1422 (6 lanes) #1423 (7 themes, HELD on the wave-2 readout) #1424 (8 currency) + sprout
-  #1439 (goal-findings.sh bare `--paginate` → `--slurp` + fold the two goal-lane comment reads).
-  **PRs at wind-down — check each first thing (the 5h window hit 80 % at ~15:00Z 2026-09-05, so the FU-088 latch holds every reviewer dispatch until the window resets ~18:00Z; nothing merges before then, and a hand-dispatched reviewer is gated the same way):** PR#1425 (ADR-125/126, seat — bot round-1 fix
-  pushed, awaiting re-review) · PR#1434 (#1432 JOIN, subagent — round 2 pushed) · PR#1437
-  (#1419 dispositions, subagent — codeowner read DONE, in-diff `--slurp` fix landed, **never
-  reviewed: the reflex skips BEHIND PRs for a FIRST review and master moved 7× in its window** —
-  if still unreviewed once current + green, `bash agents/reviewer-session.sh homelab 1437` is
-  the sanctioned hand-dispatch; design input recorded on #1422) · #1430 (1a parser, subagent
-  opus — PR not yet open at the last check). Next originals: 1b #1431 (after 1a), then #1420;
-  #1422 needs ADR-125's per-base pick + the BEHIND-first-review finding; #1423 stays held
-  until the wave-2 readout is recorded on #1162. Codeowner reads this sitting: #1416 #1398
-  #1404 #1399 #1401 merged; or-op#64 approved, or-op#65 approved after a one-line in-diff fix
-  (`has_openrouter_key` required, not defaulted True). Residual from the S7 read: two
-  `update-pr-branch-cron` runs exit 128 (09-04 12:45Z, 09-05 10:30Z) — read the next one's Loki
-  lines (tenant `agent-coordinator`) before calling it transient. Loop-filed today, untriaged:
-  #1427 (a `blocked-on: human` comment does not hold the changes-requested clause — needs
-  `agent/blocked`), #1428/#1429 (registry-cache probes/debug port).
-- **⚑ NEXT SESSION (seat wind-down 2026-09-05 ~09:45Z, ctx 794k — the stint's machine tail
-  was still running; nothing here needs the corpus unless marked):** (1) **#1404** (PyPI cache,
-  loop PR for #1300): the seat REQUESTED CHANGES 09:41Z — `/simple/` must `sub_filter` the
-  absolute `files.pythonhosted.org` links to `$scheme://$http_host` or the `/packages/` cache is
-  never hit (the PR's docs sentence claims the opposite); the CR clause dispatches the fix round,
-  then a codeowner read on `argocd/platform/pypi-cache.yaml` (light). #1413 (consumer wiring:
-  launcher env + VIP egress leg) is queued behind it via blockedBy. (2) Seat PRs **#1399 #1401
-  #1402** were green and awaiting bot verdicts — they MERGE on the bot approval alone (sole-
-  codeowner waiver); if they still sit unreviewed, the exporter edge is dark (#1405) and
-  `bash agents/reviewer-session.sh homelab <pr>` is the sanctioned hand-dispatch once green +
-  current. (3) **#1386** carried bot + codeowner approval at 09:26Z, waiting on CI → auto-merge;
-  when merged, close or narrow **#1069** (homelab half resolved by the prefetch's required-read
-  deferral; the finalize half is agent-runtime's). (4) **#1308 leg-1 APPLY on ci-runner-01**
-  (buildkitd.toml + the `homelab-mirrors` builder; PR#1402 body carries the tofu-replace vs SSH
-  recommendation) — operator/infra sitting. (5) FU-215: capture Unbound state during the next
-  `github.com` SERVFAIL window. (6) #1393 heat trims (corpus).**
+- **⚑ S8 IN FLIGHT (second sitting 2026-09-05 15:45–~17:30Z, corpus session, ctx ~700k at
+  wind-down — stint #1418, Size 3):** LANDED this sitting: **#1421** (ADR-125/126, PR#1425),
+  **#1419** (dispositions on the container, PR#1437 — r3 fail-closed fix by a sonnet round),
+  **#1432** (`agent/queued` the one valve, PR#1434 — round-2 footprint finding resolved
+  dispatch-side: Touches widened + stale CR dismissed). **OPEN at exit — check each first:**
+  PR#1436 (1a parser; codeowner read APPROVED as a comment; seat round-2 fix c6fb0d7f = the
+  per-child meter ref; master merged 7ba271bf after a comment-only conflict; awaiting re-review)
+  · PR#1446 (6a reflex+updater per-lane + the BEHIND first-review admission — codeowner-approved;
+  `dirty-skips` dropped per the replay README escape (a) after the pin-vacuity red, **re-land it
+  fixture-only once merged**) · PR#1449 (6b scan per-lane walk + #829 aging + `base` gauges —
+  went CI-red on pin-vacuity (`assembly-cr-emit`, `assembly-cr-themed-emit`,
+  `footprint-hold-goal-exempt`, `goal`, …) AND DIRTY vs master; the opus subagent holds the
+  routing directive (revert non-behavioural fixture edits / escape (a); merge master); if no
+  push lands, do it by hand in a clone of its branch). **Next originals:** 1b #1431 (after 1a;
+  carries the fail-CLOSED-on-exit-2 input + `GB_REF` per issue, recorded on #1431) → #1420 (card
+  to three acts) → #1424 (currency; folds the goal-ancestor stop-condition nit). #1423 HELD.
+  Sprouts: **#1452** (updater updates only MERGE-READY PRs — the platform-native merge queue,
+  operator: a GitHub merge queue on homelab is "correct but unfair"; blocked on #1422) · #1439
+  (goal-findings `--slurp` fold, HOLD until 6b lands — same file) · loop-filed #1450/#1451
+  (checkpoint trigger (b) retiring edge for themes; single-repo descendant walk) — dispose at
+  closeout 1. #1422 closes when 6a+6b both merge (seat closes; neither PR carries Fixes).
+  Loop-filed issues this sitting: QUEUED #1438 #1440 (PR#1448) #1428 #1429 (merged PR#1447)
+  #1413 (re-queued after PR#1435 closed as a conflict); #1427 + #1444 queued behind
+  `blockedBy #1422`; #1441 fixed DIRECT (5739f5f2: both lint steps diff against
+  `pull_request.base.sha`); #1417 closed → FU-215; #1442 stays inert (wave-2 mint).
+- **⚑ OPERATOR (physical / decisions), from this sitting:** (1) **wk-metal-04 SATA cable swap**
+  — the Garage data volume's 150 ms/write is that disk's degraded link (3.0 of 6.0 Gb/s, 1,867
+  CRC errors, 23 resets; SMART health fine) — `storage-ledger.md` §2026-09-05; verify `sata_spd`
+  = 6.0 after. Same node's PSI kills (cilium/longhorn-manager 16:42Z) = FU-155 class, same cause.
+  (2) **CI starvation**: one org-wide ARC set of 3 slots (FU-218); homelab ≥300 runs today
+  starved oracle (queue p90 22–40 min). Levers ruled/filed: #1452 (fair, platform-native);
+  per-stack runner scale sets as the fairness knob (not filed — say so if wanted); wk-metal-04's
+  16 GB as capacity after the cable (kata reservation = operator call). App-side: oracle-fleet
+  #466/#467 (resume + bundle the 248k PUTs). (3) #1308 leg-1 APPLY on ci-runner-01 (unchanged).
+  (4) FU-215 Unbound capture (unchanged). (5) Loop health: `AgentRunPhaseSlow` deferred by the
+  responder 17:02Z and never re-triaged (DEFERRED-STUCK — the FU-113(b) retry chain); read the
+  respond workflow retries. (6) Seat miss to remember: a zsh `set -- $var` classifier cancelled
+  six LIVE CI runs (all re-run) — the card's no-word-split gotcha bites the seat too.
 - **⚑ BOARD (09-05 ~09:45Z — see NEXT for the four open seat/loop PRs; earlier read follows):** in review #1386 (re-review after the seat's fix push) ·
   riding #1378 #1392 (r1, deepseek — dispatched before the haiku flip); #1384 #518 completed r1
   → PRs in review · queued this morning by the seat: **or-op#60** (item-2 root; coordinator pod
