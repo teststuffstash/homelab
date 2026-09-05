@@ -86,3 +86,14 @@ COPY --chown=runner:runner warm/sleep-tracking/ /tmp/warm/sleep-tracking/
 RUN warm-one sleep-tracking
 COPY --chown=runner:runner warm/homelab/ /tmp/warm/homelab/
 RUN warm-one homelab && rm -rf /tmp/warm
+
+# Phase 3 (FU-015 / #518): warm the GitHub Actions archive cache so Set-up-job resolves
+# actions from the local tarballs instead of downloading from GitHub on every job.
+# The ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE env var (set by the operator in
+# argocd/platform/arc-runners.yaml — pin-only-guarded, operator-direct) points the runner
+# at /home/runner/_actions/_cache. Actions are SHA-pinned org-wide
+# (helpers:pinGitHubActionDigests in renovate-global.json), so cache keys are stable
+# between renovate bumps. Rebuild this image when renovate bumps an action pin.
+COPY --chown=runner:runner warm-actions.sh /usr/local/bin/warm-actions
+RUN mkdir -p /home/runner/_actions/_cache && chown -R runner:runner /home/runner/_actions
+RUN warm-actions /home/runner/_actions/_cache
