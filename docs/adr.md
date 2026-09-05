@@ -1914,3 +1914,57 @@ phase 1 = hand-written platform map + renderer + self-test (CI); phase 2 = the p
 published on the PublicRoute XR status so the app renders against what is live (cloudflare.md
 completion table). Stacks own their map + rendered picture; the oracle example in-tree is a
 template, not the oracle's record.
+
+### ADR-125 — The serialization unit is (repo, base): the reviewer pick, the updater pick and the scan's clause walk run per lane (2026-09-05)
+
+**Status:** Accepted (operator direction 2026-08-26 — the #829 reframe, TICK-LOG same day; drafted
+at the S8 head sitting 2026-09-05; build = homelab#1422, stint #1418). **Decision:** (1) the review
+reflex picks the oldest reviewable PR per **(repo, base)**, not per repo; (2) the updater's main leg
+updates one armed+BEHIND PR per (repo, base) per pass; (3) the scan's clause priority walk runs per
+lane, and a WITHIN-lane aging predicate escalates a unit that has lost N consecutive passes — the
+count derived from GitHub state (the unit's dispatch marker + timestamps), never held in-process;
+(4) caps stay per-base (homelab#849, FU-199's cap split), the subscription semaphore stays the
+fleet-wide ceiling, and the assembly PR rides the master lane (base = master). **Considered:** the
+priority-list tweak alone (#829's original ask — fixes within-lane starvation only, and would be
+reshaped by this); a native merge queue (rejected again: Enterprise-only on private repos, and a
+split process); per-lane semaphores (rejected: the semaphore protects the subscription pool, not a
+lane — per-lane slots would let lanes starve the review safety net). **Why:** the serializer
+exists to avoid the merge→behind→dismiss-approval chain, which only runs between PRs sharing a
+base; a repo-level boundary serialized master-lane and goal-lane work that cannot invalidate each
+other — goal #278's 361 starved minutes, the v1.1 dispatcher-bound queue, #818's decompose losing
+~45 min to a changes-requested stream (2026-08-23). It is also the enabler for theme branches
+(ADR-126): N themes per Goal are N lanes. Bound recorded at the reframe: the win is ~2× and
+goal-time only. **Consequences:** three serializers change (reflex, updater, scan) with replay rows
+per lane; MP-T02/MP-T03 guards re-anchor; per-lane famine gauges (a `base` label on
+`agent_item_class`, cron-woken counted per lane) make the parallelism measurable before the dogfood
+Goal; #829 closes with the build. Mechanism home: `docs/agents/merge-path.md` §Why
+update-before-review.
+
+### ADR-126 — Theme-branch decomposition: on a deploy-to-test stack the Goal's batching unit is a THEME, adopted behind the wave-2 gate (2026-09-05)
+
+**Status:** Accepted as design (operator direction 2026-08-23, banked → refined 2026-09-01 from the
+#1162 manual pilot → promoted at the S8 head sitting). **Build HELD** on the v1.3.1 adoption gate
+(homelab#1423). **Decision:** on a stack where merge is deploy (homelab = its own `-iac`) a Goal
+batches by **theme** — the largest change one is willing to deploy-and-soak as one roll: a level-2
+theme issue (direct child of the Goal, unqueued container) owns `goal/<goal-n>-<theme>`; level-3
+children carry `Base:` onto it and flow bot-gated; the theme assembly is an ordinary
+`goal/<n>-<theme> → master` PR with `Fixes #<level-2>` (no `Assembly-for:`, IL-T18 untouched);
+themes build only on master, ordered by native blockedBy between level-2s; a theme earns a branch
+at ≥2 children sharing a surface, singletons go straight to master; minor sprouts theme by default
+and the master lane is hotfix-class only (the 2026-08-31 drainage ruling, clause 1); membership =
+`Touches` ⊆ the theme's fix-surface with the pin-surface allowance + live-deliverable +
+servable-lane clauses; theme FORMATION is the goal-checkpoint's (deterministic nomination via the
+footprint predicate, judged membership, mint + branch + re-base + queue under the Goal's own
+authorization), opt-in per Goal. **Considered:** flat per-child-to-master (G-A: five gate reads in
+one session — the Goal degenerates into a stint); one `goal/**` assembly (defers the live soak the
+acceptance is made of); the 2026-08-31 banked alternative, batch-queue + serial parks (re-opens
+only if wave 2's overrun comes from NEW defect classes). **Why:** the #1162 pilot measured the tax —
+2 owned merge reads + 1 verdict for 13 landed children vs a ~9-park counterfactual — and its ~4:1
+intervention overrun decomposed into one-time pilot costs and orthogonal loop defects
+(FU-199/200/201), since landed; the codeowner stops being load-bearing for loop throughput.
+**Consequences:** Goal card rule 2 softens (a themed Goal legitimately declares `Base: master`);
+the rule-7 depth guard re-keys for level-3; the per-branch master-refresh hop is documented;
+adoption gate = wave 2 reading ≤5 interventions / 0 out-of-sitting summonses / 1 owned read —
+the build waits for it; the dogfood is the first post-S8 platform Goal, outside the stint;
+`Origin:` + the typed defer/release are ADR-122's (subsumed). Design home:
+`docs/agents/issue-authoring.md` §Theme-branch decomposition.
