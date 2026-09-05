@@ -235,76 +235,69 @@ never harder posture on quiet ones.
   mechanism in [`iac-lane.md`](iac-lane.md) §"one root cause, N alert issues". This replaced
   the per-issue `selfQueue` knob (cb4ae5a, which dispatched same-cause issues in parallel).
   **Graduation dial BUILT 2026-08-24 (goal#818):** a claim-gated `responder:` block on the
-  AgentStack XRD renders a scoped Role + RoleBinding per stack namespace (the loop ns + every
-  fixer-enabled repo ns), granting exactly the declared verb/resource pairs to the responder
-  identity (agentstack-loop SA). Default OFF — absent block = nothing rendered, the responder
-  keeps its report-only breakers ("no kubectl mutations", one-issue-max, inert labels).
-  Enabling the dial does not by itself make the responder mutate anything; a consumer must be
-  wired to read the grant and act on it (goal #818 §assembly — this PR ships NO consumer;
-  report-only remains the default posture). The escalation-check mirror lives in
-  `argocd/resources/agentstack/rbac.yaml` under `crossplane-agentstack-composed`.
+  AgentStack XRD renders a scoped Role + RoleBinding per stack namespace, granting exactly the
+  declared verb/resource pairs to the responder identity. **Default OFF, and enabling it does not
+  by itself make the responder mutate anything** — a consumer must be wired to read the grant;
+  report-only remains the posture, with every breaker intact. Escalation-check mirror:
+  `argocd/resources/agentstack/rbac.yaml`.
   **Three lane gaps, all evidenced by the 27-issue corpus (2026-08-04 audit, FU-133):** the lane
   files one issue per *fingerprint* and correlates nothing (~19 of 27 issues were 5 root causes;
-  one PVC produced 8 across 8 days); it has no state after "issue filed" (`send_resolved = false`
-  on the responder receiver — the resolve event is never delivered, so a cleared alert leaves an
-  open issue); and **ownership vs the -iac observation window is undefined** (IAC-G10 —
-  [`iac-lane.md`](iac-lane.md) §Who owns a symptom).
+  one PVC produced 8 across 8 days); it has no state after "issue filed" (`send_resolved = false`,
+  so a cleared alert leaves an open issue); and **ownership vs the -iac observation window is
+  undefined** (IAC-G10 — [`iac-lane.md`](iac-lane.md) §Who owns a symptom).
   **Self-referential gate BUILT 2026-08-04** (`responder-argo.yaml`, deterministic — the alert
-  label `platform_machinery: "true"` ∨ namespace ∈ {kube-system, argocd, longhorn-system,
-  registry-cache, arc-runners, agent-coordinator, agent-egress, *-agents} ∨ alertname `Agent*`):
-  those alerts cap the outcome at report-only and stamp `self-referential: true` on the issue,
-  because the alerts most likely to want a fixer are the ones that disable it — the pod, the pull,
-  the PVC attach, the git token or the CI runners it needs are the broken thing. The future
-  `selfQueue` knob reads the marker instead of re-deriving it. Verified against 11 alert shapes
-  from the corpus (7 self, 4 dispatchable).
-  **The label key added 2026-08-11 (homelab#239), and it is the primary one:** the other two
-  *infer* machinery from something else, so an alert derived from a **pushgateway** metric matches
-  neither — `RetroReportOverdue` (no meaningful namespace, name not `Agent*`) passed the gate, took
-  a `fix` verdict, was debounce-queued, and put a worker on the retro belt, which only the
-  jail/operator lane can act on; it latched `agent/error` (homelab#237). A rule AUTHOR knows the
-  machinery fact and declares it at the rule site, exactly as with `triage: none` — the two are
-  different caps and compose: `triage: none` means *do not investigate*, `platform_machinery` means
-  *investigate, but a human merges the fix*. Stamped only where it is load-bearing (an alert the
-  namespace/`Agent*` belt already catches would gain nothing and would change its own Alertmanager
-  fingerprint); the live pairing is asserted in `agents/coordinator/responder-behaviour-test.sh`
-  §#239 against the real `PrometheusRule`s, which is the only place a dropped stamp can fail —
-  `manifest-lint` SKIPs both kinds involved.
+  label `platform_machinery: "true"` ∨ a platform namespace ∨ alertname `Agent*`): those alerts
+  cap the outcome at report-only and stamp `self-referential: true` on the issue, **because the
+  alerts most likely to want a fixer are the ones that disable it** — the pod, the pull, the PVC
+  attach, the git token or the CI runners it needs are the broken thing. Verified against 11 alert
+  shapes from the corpus (7 self, 4 dispatchable).
+  ⚠ **The LABEL key is the primary one** (homelab#239, 2026-08-11): the other two *infer*
+  machinery from something else, so an alert derived from a **pushgateway** metric matches
+  neither — `RetroReportOverdue` (no meaningful namespace, name not `Agent*`) passed the gate,
+  took a `fix` verdict, was debounce-queued, and put a worker on the retro belt, which only the
+  jail/operator lane can act on. **A rule AUTHOR knows the machinery fact and declares it at the
+  rule site**, exactly as with `triage: none` — and the two compose: `triage: none` means *do not
+  investigate*, `platform_machinery` means *investigate, but a human merges the fix*. Stamped only
+  where load-bearing (an alert the namespace/`Agent*` belt already catches gains nothing and would
+  change its own Alertmanager fingerprint); the pairing is asserted in
+  `agents/coordinator/responder-behaviour-test.sh` §#239 against the real `PrometheusRule`s — the
+  only place a dropped stamp can fail, since `manifest-lint` SKIPs both kinds involved.
 
-  **POLICY_DENIED runbook — BUILT 2026-08-08 (homelab#125).** Before this, the lane faulted sessions
-  for not following a runbook that was written down nowhere and whose only named tool
-  (`devbox run hubble`) is a *jail* recipe: the `agent-coordinator` image carries no `hubble` and no
-  `cilium` binary, and `agent-read-infra` grants no `pods/portforward`. So a triage reported "cannot
-  name the FQDN" three hours after a sibling session had named it. The reads that actually work from
-  the responder pod, cheapest first — both verified from an agent pod under the enforced egress
-  profile:
-  1. **Prometheus, and it is usually the whole answer.** The drop metric already resolves names —
-     `tofu/cilium.tf` sets `drop:sourceContext=namespace;destinationContext=dns|ip`, so `destination`
-     *is* the FQDN whenever the DNS proxy knew it. `hubble` was never needed to answer "which
-     destination was denied".
+  **POLICY_DENIED runbook — BUILT 2026-08-08 (homelab#125).** Before this, the lane faulted
+  sessions for not following a runbook written down nowhere, whose only named tool
+  (`devbox run hubble`) is a *jail* recipe — the `agent-coordinator` image carries no `hubble`,
+  and `agent-read-infra` grants no `pods/portforward`. So a triage reported "cannot name the FQDN"
+  three hours after a sibling session had named it. The two reads that actually work from the
+  responder pod, both verified there under the enforced egress profile, cheapest first:
+
+  1. **Prometheus, and it is usually the whole answer.** The drop metric already resolves names
+     (`tofu/cilium.tf` sets `drop:sourceContext=namespace;destinationContext=dns|ip`), so
+     `destination` *is* the FQDN whenever the DNS proxy knew it — hubble was never needed to
+     answer "which destination was denied".
      `curl -sG http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query --data-urlencode 'query=topk(10, sum by (source,destination,protocol) (increase(hubble_drop_total{reason="POLICY_DENIED",source="<ns>"}[6h])) > 0)'`
-     — in-cluster service DNS, **not** the `192.168.40.13` LAN VIP: an LB IP is a `world` destination
-     and only reaches Prometheus because pod→VIP is DNAT'd before policy evaluation
-     ([`agentstack.md`](agentstack.md) §egress). Widen `[6h]`→`[24h]`/`[7d]` before concluding
+     — in-cluster service DNS, **not** the LAN VIP (an LB IP is a `world` destination and only
+     reaches Prometheus because pod→VIP is DNAT'd before policy evaluation,
+     [`agentstack.md`](agentstack.md) §egress). Widen `[6h]`→`[24h]`/`[7d]` before concluding
      nothing is there; a bare-IP `destination` means the DNS proxy saw no name for it, which is a
      finding, not a dead end.
-  2. **Hubble, for per-flow detail only** (port, timing, the exact pod). No binary in the image and
-     no port-forward verb, so exec it in a cilium agent, which does carry it:
+  2. **Hubble, for per-flow detail only** (port, timing, the exact pod) — exec it in a cilium
+     agent, which carries the binary:
      `kubectl exec -n kube-system ds/cilium -- hubble observe --namespace <ns> --verdict DROPPED`
-     (`pods/exec` is already granted by the `agent-coordinator` ClusterRole). ⚠ That is **one node's
-     ring buffer** — an absence is not evidence of no drops. Add
-     `--server <hubble-relay clusterIP>:80` for the fleet, or name the node you sampled.
-     Same blind spot `scripts/hubble-observe.sh` port-forwards around for jail sessions.
+     (`pods/exec` is already granted). ⚠ That is **one node's ring buffer** — an absence is not
+     evidence of no drops. Add `--server <hubble-relay clusterIP>:80` for the fleet, or name the
+     node you sampled.
+
   RBAC moved once, narrowly: `cilium.io` `ciliumnetworkpolicies` +
-  `ciliumclusterwidenetworkpolicies` get/list on `agent-read-infra` — the lane was asked to diagnose
-  a deny without reading the policy that produced it. `pods/portforward` and `services/proxy` were
-  asked for and **declined** (rationale in `agent-read-rbac.yaml`): the first is useless without
-  shipping the CLI, the second buys a route that already exists.
+  `ciliumclusterwidenetworkpolicies` get/list on `agent-read-infra` — the lane was asked to
+  diagnose a deny without reading the policy that produced it. `pods/portforward` and
+  `services/proxy` were asked for and **declined** (rationale in `agent-read-rbac.yaml`): the
+  first is useless without shipping the CLI, the second buys a route that already exists.
   Two brief rules landed with it, both from the same night: **on a subject/fingerprint dedup hit,
-  read the prior thread before re-deriving** — a predecessor's triage is evidence, and the session
-  must cite its verdict or say why it is wrong; and **compose issue bodies with `--body-file`, never
-  an interpolated `"$(…)"`** — that authoring bug spliced 360 lines of flow logs into #125's own
-  body and ate every inline code span, deleting exactly the identifiers a fixer needs.
-  Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPS both
+  read the prior thread before re-deriving** (a predecessor's triage is evidence — cite its
+  verdict or say why it is wrong), and **compose issue bodies with `--body-file`, never an
+  interpolated `"$(…)"`** — that authoring bug spliced 360 lines of flow logs into #125's own body
+  and ate every inline code span, deleting exactly the identifiers a fixer needs.
+  Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPs both
   resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
   none of this shell).
 - **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (a human-queued
@@ -363,68 +356,33 @@ only dynamic facts and `cat`s the ground-rules file. Every FU-117 leg is BUILT (
 meta-state eviction); the residual is the fleet CLAUDE.md slim-down, inventoried + tiered on
 the claude-jail#1 thread.
 
-**Root finding (2026-07-28, kept as the section's evidence): two delivery channels carry
-different context.**
+**The findings the map was built from** (2026-07-28 → 2026-08-07; the refactor that resolved them
+is the closing paragraph of this section):
 
-| Channel | Reaches | Carries |
-|---|---|---|
-| **Claude-Code auto-load** (CLAUDE.md + skills + memory) | the meta-coordinator, and claude-harness rides (coordinator / reviewer / researcher — they run `claude -p`, clone homelab, get its CLAUDE.md) | the universal ground rules |
-| **Recipe + launcher-spliced env card** | the **goose** worker/fixer rides | per-ride facts + task rules |
-
-**Goose is not Claude Code, so it never loads CLAUDE.md.** The universal ground rules that live
-there — grep SERVICES.md, devbox-for-everything, prior-art-before-creating — therefore never reach
-the goose worker. Concrete cost already paid: #71-r1 downloaded a kind binary into a read-only nix
-profile; the #48 rounds never configured the registry mirror. Both are CLAUDE.md-rule gaps. The env
-card became the smuggling route, which *is* the spread.
-
-**Sighting 2026-08-07 — the JAIL is a third context, and it has no env-card mechanism at all.**
-Operator direction: [`teststuffstash/claude-jail`](https://github.com/teststuffstash/claude-jail)
-needs one so its `CLAUDE.md` can be *clean of instructions*. Today the jail's ground rules live
-inline in `/workspace/CLAUDE.md` (container permissions, devbox-not-apt, the scratchpad) and
-homelab's own `CLAUDE.md` mixes jail-session procedure ("work directly on `master`") with
-repo-universal facts. Two costs already visible:
-
-- **Wrong-context instructions are READ AS APPLICABLE.** homelab has a live fixer lane, so agents
-  ride this repo — and `## How changes land (jail sessions)` used to tell the reader to push to
-  master, the opposite of a worker's contract (softened 2026-08-12: the jail default is now
-  PR-lane too; only the bookkeeping class stays direct). Structurally the ruleset rejects such a push, so
-  the cost is confusion rather than damage — but the doc is the wrong place to be relying on
-  branch protection to correct.
-- **The duplication now runs three ways, not two** *(superseded by #763 — the card no longer
-  restates anything; kept as the sighting that sized the map)*: `render_env_card()` restated
-  CLAUDE.md rules for goose; the jail restated a third set for the meta-session. The map
-  therefore has THREE contexts (jail meta-session / claude-harness ride / goose ride), and the
-  jail was the only one with no delivery mechanism to refactor *into*.
-
-⚑ Interim guard only (2026-08-07): a banner at that section scoping it to the jail. It reaches
-Claude-Code readers and NOT goose rides — belt, not fix, and precisely the spread this item exists
-to remove.
-
-**A boundary the model must respect (sighting 2026-07-28).** The ride clones ONLY `/work/repo` —
-the project repo, never homelab — so a worker **cannot** grep SERVICES.md. And it shouldn't:
-**service context** (endpoints, buckets, existing-secret refs) is the **issue author's /
-coordinator's** job to inject into the issue; the worker executes with it. Meta-15 briefly added a
-"grep SERVICES.md" env-card bullet and then removed it — exactly the flip-flop-to-worker the
-operator flagged.
-
-So the map has at least **three context classes**:
-
-1. **Environment** — how your box works. Owner: the env card
-   ([`fixer-context.md`](fixer-context.md) L1).
-2. **Task + service facts** — what THIS task needs. Owner: the **issue**, injected by the
-   author/coordinator.
-3. **Universal ground rules** — CLAUDE.md today, and unreachable by goose.
-
-**Interim (2026-07-28, meta-15 — RETIRED by #763):** the key CLAUDE.md rules were duplicated
-into `render_env_card()`; the dedup into `agents/ground-rules.md` removed the duplication
-(map above).
-
-**Sighting 2026-08-03 (circles FU-126 A/B):** recipe text carried egress FOLKLORE ("WebFetch will
-mostly be blocked") while the truth is per-HARNESS capability — claude rides have server-side
-WebSearch (unaffected by pod egress), goose rides have no web tool at all (kimi's spec arm could
-only disclaim "reasoned from training knowledge"). Capability truth moved into the env card (a
-harness-conditional "Web research:" line); recipes should stop asserting it. Class-1 context that
-recipes were squatting on.
+- **Two delivery channels carry different context, and one harness sees only one of them.**
+  Claude-Code auto-load (CLAUDE.md + skills + memory) reaches the meta-coordinator and every
+  claude-harness ride; the recipe + launcher-spliced env card reaches the **goose** rides. **Goose
+  is not Claude Code, so it never loads CLAUDE.md** — the universal ground rules that lived there
+  never reached the goose worker, and the cost was already paid (a ride downloading a kind binary
+  into a read-only nix profile; rounds that never configured the registry mirror). The env card
+  became the smuggling route, which *is* the spread. `agents/ground-rules.md` is the answer: one
+  authored source, launcher-injected, no restatement.
+- **The JAIL is a third context** (2026-08-07), and it had no env-card mechanism at all — which is
+  why the map has THREE (jail meta-session / claude-harness ride / goose ride) rather than two.
+  ⚠ The lesson that outlives the fix: **wrong-context instructions are READ AS APPLICABLE.**
+  homelab has a live fixer lane, so agents ride this repo — and a section telling the reader to
+  push to master was the opposite of a worker's contract. The ruleset rejects such a push, so the
+  cost was confusion rather than damage; **relying on branch protection to correct a doc is not a
+  design.**
+- **A boundary the model must respect:** the ride clones ONLY `/work/repo`, never homelab — so a
+  worker **cannot** grep SERVICES.md, and it shouldn't. **Service context (endpoints, buckets,
+  existing-secret refs) is the issue author's / coordinator's job to inject into the issue**; the
+  worker executes with it. An env-card bullet saying "grep SERVICES.md" was added once and removed
+  — exactly the flip-flop-to-worker that started this section.
+- **Recipes were squatting on class-1 context** (circles FU-126 A/B, 2026-08-03): recipe text
+  carried egress FOLKLORE ("WebFetch will mostly be blocked") while the truth is per-HARNESS
+  capability — claude rides have server-side WebSearch, unaffected by pod egress; goose rides had
+  no web tool at all. Capability truth belongs in the env card; recipes assert none of it.
 
 **⚖ Ruling 2026-08-04 — advertising the difference is not enough; remove it.** A harness-conditional
 env-card line makes the platform HONEST about capability, and honest is where we stopped. But it
