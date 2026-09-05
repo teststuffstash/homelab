@@ -5,8 +5,8 @@
 # malformed (oracle-fleet#326: no goal branch, children without a task/* class, no ordering
 # edges) — so the mistakes are caught at the surface the author touches, before anything is
 # queued, instead of one ride later. Pure `gh` REST reads — bash + gh + jq + python3 (the ONE
-# body parser, ADR-122 (3); python3 is in the jail image beside the other three), so it needs NO
-# devbox:
+# body parser, ADR-122 (3) — REQUIRED, the PROBE-FAIL below says so; the ADR-122 (4) disposition
+# overlay rides the same interpreter), so it needs NO devbox:
 #   homelab jail:  devbox run goal-lint -- <owner/repo> <goal-number>
 #   stack jail:    bash /workspace/homelab/scripts/goal-lint.sh <owner/repo> <goal-number>
 # (never `devbox run` in a stack jail's homelab clone — that materializes homelab's whole
@@ -25,6 +25,8 @@
 #   exit 1  — at least one FAIL: fix the issue, never the machinery
 #   exit 2  — probe failure (unreadable goal/tree) — say so, never report clean
 set -uo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 slug="${1:-}"; goal="${2:-}"
 [ -n "$slug" ] && [ -n "$goal" ] || { echo "usage: goal-lint.sh <owner/repo> <goal-number>" >&2; exit 2; }
@@ -124,6 +126,10 @@ has_label agent/error && fail "agent/error on the goal — human-first breaker; 
 # ── the tree ────────────────────────────────────────────────────────────────────────────────
 leaves=0; containers=0; edges=0; closed=0
 declare -a LEAF_NUMS=()
+# Every OPEN descendant the walk sees, bucket excluded — the set the CONTAINER must have a
+# disposition for (ADR-122 (4)). Collected here rather than re-walked: the tree read is expensive
+# and the disposition report is a view over the same members the rest of this lint already judged.
+declare -a MEMBER_NUMS=()
 walk() {  # walk <issue-number> <depth>
   local n="$1" d="$2" kids ij t b l par
   # An unreadable read here is a PROBE FAILURE, not a lint verdict: the walk continues (report
@@ -156,12 +162,18 @@ walk() {  # walk <issue-number> <depth>
     if printf '%s' "$t" | grep -qiE '^(post-launch|theme|stint|retro-batch):'; then is_named_container=1; else is_named_container=0; fi
     if { [ "$par" -gt 0 ] || [ "$is_named_container" -eq 1 ]; } && [ "$is_work" -eq 0 ]; then
       containers=$((containers+1))
+      # The post-launch BUCKET is out of scope by construction (it carries a `deferred by=bucket`
+      # row from its own create, IL-T17), so it is not a member to report. Every OTHER container
+      # — a theme, a stint — is an ordinary tree member the container must rule. Tested on the
+      # CLASSIFICATION, never on the title alone: homelab#1334 is a work item whose title starts
+      # `post-launch:` and a title-only test dropped exactly the member worth reporting.
+      printf '%s' "$t" | grep -qiE '^post-launch:' || MEMBER_NUMS+=("$k")
       # a post-launch bucket's children base master by design (ADR-102) — no Base: expected
       if [ -z "$cb" ] && ! printf '%s' "$t" | grep -qiE '^post-launch:'; then warn "#$k (container, depth $d) has no \`Base:\` — its children inherit nothing"; fi
       printf ' %s ' "$l" | grep -qE ' agent/(queued|in-progress) ' && fail "#$k is a container (sub-issues, no agent-fix) but carries a dispatch label — containers stay label-inert"
       [ "$d" -lt 3 ] && walk "$k" $((d+1))
     else
-      leaves=$((leaves+1)); LEAF_NUMS+=("$k")
+      leaves=$((leaves+1)); LEAF_NUMS+=("$k"); MEMBER_NUMS+=("$k")
       [ -n "$cb" ] || fail "#$k (work item) has no \`Base:\` — it will fork from master and its diff will swallow the goal branch"
       printf '%s\n' "$b" | grep -qE '^[[:space:]]*Touches:' || warn "#$k has no \`Touches:\` — footprint is EXCLUSIVE (serial with every sibling)"
       ctouches="$(line "$b" Touches "$slug#$k")"
@@ -195,6 +207,34 @@ EOF_CGUARD
   done
 }
 walk "$goal" 1
+
+# ── dispositions (ADR-122 (4), homelab#1419) ────────────────────────────────────────────────
+# WARN, never FAIL: an undispositioned member is not an authoring mistake — it is work the
+# CONTAINER has not ruled yet, and ruling it is the checkpoint's/closeout's act, not the
+# author's. The scan wakes that act (trigger (c)); this lint only makes the state visible to a
+# human reading the tree. A `deferred` member is reported for the same reason: it is IN the tree
+# and OUT of scope, which is exactly the fact a reader of a goal-lint run wants surfaced.
+if [ "${#MEMBER_NUMS[@]}" -gt 0 ]; then
+  if ! command -v python3 >/dev/null 2>&1; then
+    warn "dispositions not read — python3 is absent (agents/epic_dispositions.py); every member reads as undispositioned to a human until it runs"
+  else
+    disp_json="$(python3 "$ROOT_DIR/agents/epic_dispositions.py" read "$slug" "$goal" 2>/dev/null)" && disp_rc=0 || disp_rc=$?
+    if [ "${disp_rc:-2}" -ne 0 ] || [ -z "${disp_json:-}" ]; then
+      # A probe failure here is NOT the exit-2 class: the tree walk is complete, only the
+      # advisory overlay is missing. One WARN, the walk's verdict stands.
+      warn "dispositions on #$goal are UNREADABLE — the member report below is omitted (the tree verdict above is unaffected)"
+    else
+      for m in "${MEMBER_NUMS[@]}"; do
+        d="$(printf '%s' "$disp_json" | jq -r --arg k "$m" '.[$k].disposition // "undispositioned"' 2>/dev/null || echo "undispositioned")"
+        case "$d" in
+          adopted) ;;
+          deferred) warn "#$m is \`deferred\` — in the tree, out of scope; the container may move it (it does not count toward completion)" ;;
+          *)        warn "#$m is \`undispositioned\` — the container's to dispose at its next checkpoint/closeout (it wakes one; it never blocks the assembly ruling)" ;;
+        esac
+      done
+    fi
+  fi
+fi
 
 if [ "$leaves" -eq 0 ] && [ "$containers" -eq 0 ]; then
   ok "no children yet — the decompose clause authors them when the goal is queued (agent-fix + agent/queued on the GOAL)"

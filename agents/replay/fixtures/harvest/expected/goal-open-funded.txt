@@ -6,6 +6,8 @@ CALL gh api repos/teststuffstash/circles/issues/29/sub_issues
 CALL gh issue create --repo teststuffstash/circles --title post-launch: Goal: P0 complete — bake, page, evidence chain --body <bucket body — see agents/coordinator-scan.sh>
 CALL gh api repos/teststuffstash/circles/issues/77
 CALL gh api -X POST repos/teststuffstash/circles/issues/29/sub_issues -F sub_issue_id=9900077
+CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate --slurp
+CALL gh api -X POST repos/teststuffstash/circles/issues/29/comments -f body=<!-- epic-dispositions v1 -->\n#77 deferred <ts> by=bucket
 OUT   harvest disposition (ADR-106): circles issue-35 → goal #29, bucket 77, harvest store — v1.2: findings APPEND to the store; minting is the checkpoint's, budget-gated there (ADR-106 (3))
 OUT ITEM repo=circles item=issue-35 clause=merged-closeout goal=29 bucket=77 harvest=store
 OUT REACHED: end

@@ -1,0 +1,23 @@
+# epic-dispositions — the ADR-122 (4) tree-member disposition STORE's own contract
+# (homelab#1419, S8 original 2).
+#
+# mode: suite — the subject is a SHAPE contract (parse / serialize / upsert / the closed
+# vocabularies / the three-way read split), not an action stream. The store's readers are
+# pinned as action streams in the `goal` table (rows undispositioned-wakes, deferred-excluded,
+# adopted-by-label, dispositions-unreadable); this fixture pins the format they all read.
+#
+# The one assertion class that matters most here is the UNREADABLE path: a writer that treats a
+# blind comments read as "store absent" mints a SECOND store comment and breaks the
+# one-machine-comment invariant (ADR-103) — the same failure agents/goal-findings.sh's
+# _gf_find 0/1/2 split exists to prevent, one level up. The self-test drives it through the
+# real fetch seam rather than re-implementing find().
+#
+# hermeticity contract (homelab#329): needs `python3` (the module executes under it).
+name: epic-dispositions
+mode: suite
+source: agents/epic_dispositions.py
+entrypoint: agents/epic-dispositions-test.sh
+pins:
+  - IL-T12
+requires:
+  - python3

@@ -13,8 +13,8 @@
 #      — is how the next contradiction ships, and it would show up here as a missing edit.
 #   2. The verdict half then re-applies `agent-fix` and rings `/fix-verdict`, off the body line it
 #      just read — exactly what it does for an issue filed today. `agent-fix` alone is INERT by the
-#      scan's own predicate (dispatch needs `agent-fix ∧ agent/queued`, coordinator-scan.sh:8); the
-#      other half of the queue pair is the debouncer's to apply after its set-pass, which is why
+#      scan's own predicate (dispatch's ONE precondition is `agent/queued` alone, coordinator-scan.sh:8,
+#      ADR-122 (2), #1432); the debouncer's queueing act is the other half of the pair, which is why
 #      no `agent/queued` write appears here and must not.
 #   3. So the label churn within one run is deliberate and asserted: three labels off, one back on.
 #      The thread ends inert-but-nominated instead of arriving pre-queued on merged work.

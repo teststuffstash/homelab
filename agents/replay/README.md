@@ -220,6 +220,7 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-machine-markers/env-card-machine-markers-capture` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-mcp-present` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-mcp-present/opencode` | actions | - | `agents/agent-session.sh` | - |
+| `epic-dispositions` | suite | - | `agents/epic_dispositions.py` | IL-T12 |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `fleet-strike-reader` | actions | - | `agents/coordinator-scan.sh` | IL-T30 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
@@ -281,6 +282,7 @@ is stale, so it cannot drift the way the prose register did.
 | `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |
 | `queued-classification/held` | actions | - | `agents/coordinator-scan.sh` | - |
 | `queued-classification/ready` | actions | - | `agents/coordinator-scan.sh` | - |
+| `queued-derivation/no-agent-fix` | actions | - | `agents/coordinator-scan.sh` | - |
 | `rail-degrade/rail-degrade` | suite | - | `-` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
