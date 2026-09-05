@@ -1,3 +1,4 @@
 [
-  {"number":456,"labels":[],"reviewDecision":"CHANGES_REQUESTED","author":{"login":"app/homelab-agents-1234"},"headRefName":"fix/blocked-test","body":"A fix attempt"}
+  {"number":456,"labels":[],"reviewDecision":"CHANGES_REQUESTED","author":{"login":"app/homelab-agents-1234"},"headRefName":"fix/blocked-test","body":"A fix attempt"},
+  {"number":457,"labels":[],"reviewDecision":"CHANGES_REQUESTED","author":{"login":"app/homelab-agents-1234"},"headRefName":"fix/resolved-test","body":"A fix attempt"}
 ]
