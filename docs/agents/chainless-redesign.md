@@ -149,7 +149,14 @@ as **native sub-issues**. Three rules carry the whole design:
   docs-cleanup over the touched surfaces, the FU sweep (file genuine leftovers, archive resolved),
   a built-vs-left-behind analysis as ONE parent comment (shipped / dropped / still open), and
   disposes every open sprout (do-now · keep as stint children · release to ordinary backlog with
-  links · drop with a reason). The release and close semantics are the lineage contract's
+  links · drop with a reason). **The disposition is WRITTEN, not just decided** (ADR-122 (4)): the
+  four outcomes map onto the two stored states — do-now and keep are `adopted`, release and drop
+  are `deferred` — and each lands as a row in the stint parent's own store,
+  `python3 agents/epic_dispositions.py set <owner/repo> <stint-n> <member-n> adopted|deferred
+  --by closeout`. Kind-general by design: the stint parent carries the same
+  `<!-- epic-dispositions v1 -->` comment a Goal does, so `goal-lint` and the board read one
+  shape. A member left unwritten stays `undispositioned` and the next sitting re-rules it.
+  The release and close semantics are the lineage contract's
   ([issue-authoring.md](issue-authoring.md) §The lineage contract, rules 4 and 6 — defects in
   the stint's deliverables never release; the parent closes only when the tree is empty), not
   restated here. Later closeouts repeat per sprout batch. Mixed execution is fine: a stint

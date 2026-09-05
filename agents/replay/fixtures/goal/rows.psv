@@ -33,11 +33,47 @@
 # bare-member-counted-not-queued
 #                         = the same machine-doable member (#301) AND an issue-list overlay that
 #                           makes it a real OPEN descendant. The CONTAINER counts it: burn-down
-#                           1 open / 2 closed of 3 → 2 open / 2 closed of 4 (store PATCHed) and
-#                           trigger (b) correctly stops firing (child set no longer complete),
+#                           1 open / 2 closed of 3 → 2 open / 2 closed of 4 (store PATCHed),
 #                           while nothing queues it. This is the POSITIVE half of the pin — a
 #                           pure-absence contract cannot red on any base (workflow.md §"What the
-#                           pin-vacuity gate proves"). Disposing that member is S8's checkpoint.
+#                           pin-vacuity gate proves").
+#                           ⚠ CHANGED BY S8 original 2 (ADR-122 (4), homelab#1419). It used to
+#                           pin "trigger (b) correctly stops firing", because the completion
+#                           predicate counted EVERY open member — the #1315 shape that held G-G's
+#                           assembly ~10.5h. The member is now UNDISPOSITIONED: the burn-down
+#                           still counts it (2 open / 2 closed of 4 — unchanged, that half was
+#                           always right), but it no longer counts toward `gopen_n_ckpt`, so (b)
+#                           fires AND trigger (c) wakes the checkpoint to RULE it. The expected
+#                           stream's `gck` therefore reads `findings 5 undispositioned +
+#                           child-set complete pre-launch + members 1 undispositioned`.
+#
+# ── ADR-122 (4), homelab#1419: DISPOSITION IS THE CONTAINER'S — the four reader rows ───────────
+# The store is one machine comment on the container (agents/epic_dispositions.py). These rows pin
+# the goal lane's half: the completion predicate counts ADOPTED-OPEN members only, and an
+# undispositioned member WAKES the checkpoint without ever blocking it.
+#
+# undispositioned-wakes   = trigger (c) ISOLATED. Same tree as bare-member-counted-not-queued
+#                           (open inert member #301) but with a 6/6 findings store, so trigger
+#                           (a) cannot fire and mask it: the unit's reason is exactly
+#                           `child-set complete pre-launch + members 1 undispositioned`. The
+#                           member does not count toward completion, which is why (b) still fires
+#                           — the container is asked to RULE it, never to wait on it.
+# deferred-excluded       = the same tree with `#301 deferred … by=checkpoint` in the store
+#                           comment. A deferred member keeps its lineage and leaves scope: (b)
+#                           fires, and there is NO `members … undispositioned` text. This is what
+#                           #933's `post-launch:` title exception dissolves into.
+# adopted-by-label        = the same member carrying `agent/queued` and no row. A lifecycle label
+#                           means an authoring moment or a human already released it, so it reads
+#                           ADOPTED-open with no backfill: the child set is NOT complete, so NO
+#                           checkpoint unit is emitted at all (the burn-down still writes).
+# dispositions-unreadable = the comments read FAILS (per-call injection). ⚠ The two stores are
+#                           different markers on the SAME comments payload, so one injection
+#                           fails BOTH reads — that is honest, not a fixture compromise: there is
+#                           one API call. With an inert member present, trigger (c) stays SILENT
+#                           (rule #6 — never wake a checkpoint off a blind read), one ⚠ line is
+#                           printed, and (b) still fires INDEPENDENT of store readability. The
+#                           findings store reads 0/0 and its burn-down write is skipped, exactly
+#                           as it already does on an unreadable comments fetch.
 # two-goal-inert          = two open goals (#29, #123), bare member #303 under the SECOND. The
 #                           lane still walks both goals (goal #123's assembly probe is the extra
 #                           positive line) and neither queues #303. Was `two-goal-bare-member`,
@@ -47,6 +83,10 @@
 bare-members-inert             | open-pre | openall.json @ patches/add-bare-members.jq        | IN_SLUG=teststuffstash/circles IN_REPO=circles | checkpoint-due
 bare-member-counted-not-queued | open-pre | openall.json @ patches/add-bare-member-counted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-counted-not-queued
 two-goal-inert                 | open-pre | openall.json @ patches/add-second-goal.jq         | IN_SLUG=teststuffstash/circles IN_REPO=circles | two-goal-inert
+undispositioned-wakes          | open-pre | openall.json @ patches/add-bare-member-counted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | undispositioned-wakes
+deferred-excluded              | open-pre | openall.json @ patches/add-bare-member-counted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | deferred-excluded
+adopted-by-label               | open-pre | openall.json @ patches/add-member-queued.jq       | IN_SLUG=teststuffstash/circles IN_REPO=circles | adopted-by-label
+dispositions-unreadable        | open-pre | openall.json @ patches/add-bare-member-counted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles STUB_GH_api_repos_teststuffstash_circles_issues_29_comments_per_page_100=fail | dispositions-unreadable
 base-master-pass   | open-pre | openall.json @ patches/base-master-pass.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles QCLASS=goal QNUM=301 QBASE_RAW=master QPIN=- | base-master-pass
 base-required      | open-pre | openall.json @ patches/base-required.jq    | IN_SLUG=teststuffstash/circles IN_REPO=circles QCLASS=goal QNUM=300 QBASE_RAW=- QPIN=- | base-required
 abandoned          | terminal | openall.json @ patches/verdict-abandoned.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | abandoned

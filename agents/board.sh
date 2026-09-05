@@ -330,6 +330,29 @@ if [ "$machine" = 1 ]; then
     [.who, .class, .repo, .item, (.since_seconds | format_elapsed)] | @tsv
   ' 2>/dev/null || true)"
 
+  # ── tree-member dispositions, in GOAL SCOPE only (ADR-122 (4), homelab#1419) ──────────────
+  # The board renders the container's ruling, it never derives one (the one-computer rule): a
+  # `disposition=` token per tree-member row, read ONCE per scope from the goal's own store. Out
+  # of goal scope there is no container to ask, so nothing is added and no call is made.
+  # An unreadable store leaves the token off entirely rather than printing a guess — a board that
+  # says `disposition=undispositioned` on an API blip would send the operator to rule a member
+  # the container already ruled.
+  disp_json=""
+  if [ -n "$scope_label" ] && [[ "$scope" == goal:* ]] && command -v python3 >/dev/null 2>&1; then
+    # The repo comes from the series itself — a goal's members live in the goal's repo, and the
+    # scope filter has already narrowed `raw` to them.
+    disp_repo="$(printf '%s' "$raw" | jq -r '[.[] | .metric.repo // ""] | map(select(. != "")) | first // ""' 2>/dev/null || true)"
+    if [ -n "$disp_repo" ]; then
+      disp_json="$(python3 "$HERE/epic_dispositions.py" read "$ORG/$disp_repo" "${scope#goal:}" 2>/dev/null || true)"
+    fi
+  fi
+  disp_token() {   # disp_token <item> → " disposition=<state>" or "" (no store / not goal scope)
+    [ -n "$disp_json" ] || return 0
+    case "$1" in ''|*[!0-9]*) return 0 ;; esac   # `aggregate` is not a tree member
+    printf ' disposition=%s' \
+      "$(printf '%s' "$disp_json" | jq -r --arg k "$1" '.[$k].disposition // "undispositioned"' 2>/dev/null || echo undispositioned)"
+  }
+
   # Build machine output rows
   # Stable sort: who, class, repo, item
   printf 'board v1 scope=stack:%s ts=%s sources=labels:live pods:live derived:tick@%s\n' \
@@ -340,26 +363,27 @@ if [ "$machine" = 1 ]; then
   while IFS=$'\t' read -r who class repo item elapsed; do
     [ -n "$item" ] || continue
     id="${repo}#${item}"
+    dtok="$(disp_token "$item")"
     # Map to board display format
     case "$class" in
-      riding)                  echo "who=machine  class=riding id=${id} age=${elapsed}" ;;
-      phantom)                 echo "who=operator class=phantom id=${id} since=${elapsed} note=\"agent/in-progress with no live pod — reconcile pending\"" ;;
-      strike-held)             echo "who=operator class=strike-held id=${id} pod=none since=${elapsed} next=\"verify goal branch, then close or re-queue\"" ;;
-      footprint-held)          echo "who=operator class=footprint-held id=${id} since=${elapsed} note=\"held by in-progress issue's Touches\"" ;;
-      cap-held)                echo "who=operator class=cap-held id=${id} since=${elapsed} note=\"held by PR budget cap\"" ;;
-      blockpark)               echo "who=operator class=blockpark id=${id} since=${elapsed} note=\"held by codeowner-parked PR budget\"" ;;
-      parked-blocked)          echo "who=operator class=parked-blocked id=${id} since=${elapsed} note=\"human-gated — agent/blocked\"" ;;
-      parked-infeasible)       echo "who=operator class=parked-infeasible id=${id} since=${elapsed} note=\"AGENT_INFEASIBLE — re-scope needed\"" ;;
-      arbitrate-standing)      echo "who=operator class=arbitrate-standing id=${id} since=${elapsed} note=\"escalated to human — agent/arbitrate\"" ;;
-      queued-held)             echo "who=machine  class=queued-held id=${id} since=${elapsed} note=\"held by in-progress footprint\"" ;;
-      queued-held-by-ghost)    echo "who=operator class=queued-held-by-ghost id=${id} since=${elapsed} note=\"held by phantom/infeasible blocker\"" ;;
-      queued-ready)            echo "who=machine  class=queued-ready id=${id} since=${elapsed} note=\"dispatchable — next tick\"" ;;
-      deferred-capacity)       echo "who=machine  class=deferred-capacity id=${id} since=${elapsed} note=\"held by WIP ceiling\"" ;;
-      guarded-path)            echo "who=operator class=guarded-path id=${id} since=${elapsed} note=\"pin-only guarded path — operator push needed\"" ;;
-      orphan-unarmed)          echo "who=operator class=orphan-unarmed id=${id} since=${elapsed} note=\"open PR not on merge path — arm or park\"" ;;
-      container)               echo "who=none     class=container id=${id} note=\"post-launch bucket, container\"" ;;
+      riding)                  echo "who=machine  class=riding id=${id} age=${elapsed}${dtok}" ;;
+      phantom)                 echo "who=operator class=phantom id=${id} since=${elapsed} note=\"agent/in-progress with no live pod — reconcile pending\"${dtok}" ;;
+      strike-held)             echo "who=operator class=strike-held id=${id} pod=none since=${elapsed} next=\"verify goal branch, then close or re-queue\"${dtok}" ;;
+      footprint-held)          echo "who=operator class=footprint-held id=${id} since=${elapsed} note=\"held by in-progress issue's Touches\"${dtok}" ;;
+      cap-held)                echo "who=operator class=cap-held id=${id} since=${elapsed} note=\"held by PR budget cap\"${dtok}" ;;
+      blockpark)               echo "who=operator class=blockpark id=${id} since=${elapsed} note=\"held by codeowner-parked PR budget\"${dtok}" ;;
+      parked-blocked)          echo "who=operator class=parked-blocked id=${id} since=${elapsed} note=\"human-gated — agent/blocked\"${dtok}" ;;
+      parked-infeasible)       echo "who=operator class=parked-infeasible id=${id} since=${elapsed} note=\"AGENT_INFEASIBLE — re-scope needed\"${dtok}" ;;
+      arbitrate-standing)      echo "who=operator class=arbitrate-standing id=${id} since=${elapsed} note=\"escalated to human — agent/arbitrate\"${dtok}" ;;
+      queued-held)             echo "who=machine  class=queued-held id=${id} since=${elapsed} note=\"held by in-progress footprint\"${dtok}" ;;
+      queued-held-by-ghost)    echo "who=operator class=queued-held-by-ghost id=${id} since=${elapsed} note=\"held by phantom/infeasible blocker\"${dtok}" ;;
+      queued-ready)            echo "who=machine  class=queued-ready id=${id} since=${elapsed} note=\"dispatchable — next tick\"${dtok}" ;;
+      deferred-capacity)       echo "who=machine  class=deferred-capacity id=${id} since=${elapsed} note=\"held by WIP ceiling\"${dtok}" ;;
+      guarded-path)            echo "who=operator class=guarded-path id=${id} since=${elapsed} note=\"pin-only guarded path — operator push needed\"${dtok}" ;;
+      orphan-unarmed)          echo "who=operator class=orphan-unarmed id=${id} since=${elapsed} note=\"open PR not on merge path — arm or park\"${dtok}" ;;
+      container)               echo "who=none     class=container id=${id} note=\"post-launch bucket, container\"${dtok}" ;;
       backlog-aggregate)       echo "who=operator class=backlog-aggregate id=${repo}/aggregate note=\"suitable-unqueued backlog\"" ;;
-      *)                       echo "who=${who} class=${class} id=${id} since=${elapsed}" ;;
+      *)                       echo "who=${who} class=${class} id=${id} since=${elapsed}${dtok}" ;;
     esac
     had_rows=1
   done <<< "$rows"

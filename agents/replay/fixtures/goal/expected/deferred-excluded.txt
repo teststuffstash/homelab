@@ -2,6 +2,7 @@ CALL gh issue list --repo teststuffstash/circles --state all --limit 300 --json 
 CALL gh pr list --repo teststuffstash/circles --state merged --limit 30 --json number,headRefName,body,mergedAt
 CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate
 CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate
+CALL gh api -X PATCH repos/teststuffstash/circles/issues/comments/424242 -f body=<!-- goal-findings v1 -->\ndispositioned-through: 6\nburn-down: 2 open / 2 closed of 4 descendants\n1. origin=#71 surface=render class=child — finding 1\n2. origin=#72 surface=render class=child — finding 2\n3. origin=#73 surface=render class=child — finding 3\n4. origin=#74 surface=render class=child — finding 4\n5. origin=#75 surface=render class=child — finding 5\n6. origin=#76 surface=render class=child — finding 6
 OUT   [circles] goal #29: CHECKPOINT due (child-set complete pre-launch; store 6 total / 6 dispositioned)
 OUT GACTED <none>
 OUT UNITS goal-checkpoint|circles|issue-29 
