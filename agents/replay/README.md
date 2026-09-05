@@ -815,7 +815,7 @@ second PR adding only the fixture.
 
 Escape **(c)** — a `vacuity-exempt: <reason>` key in `fixture.yaml` that the gate honors — is
 a deliberate ruling for the operator, not part of this deliverable. It lives in
-`.github/workflows/ci.yml` (an operator-lane path a worker cannot touch), and it is not
+`.github/workflows/ci.yaml` (an operator-lane path a worker cannot touch), and it is not
 obviously needed if (b) is documented and (a) is available.
 
 ### Who this rule is for
