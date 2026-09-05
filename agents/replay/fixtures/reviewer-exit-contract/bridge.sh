@@ -12,6 +12,11 @@ PR_NUMBER="${PR_NUMBER:-42}"
 REPO_SLUG="${REPO_SLUG:-teststuffstash/test-project}"
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"
 
+# Set up the silent dedup record if needed (homelab#1438)
+if [ "${SILENT_DEDUP:-0}" = "1" ]; then
+  echo "SILENT_DEDUP_ASIDE: checks-pending at 0c2be42f" > /tmp/silent_dedup_record
+fi
+
 gh() {
   {
     printf 'CALL gh'
