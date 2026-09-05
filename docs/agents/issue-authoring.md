@@ -629,7 +629,7 @@ oracle-fleet#326 — a jail-authored Goal that tripped all three):
    fails at clone without it (the #326 miss). **Choosing `master` is a smell to justify**: a Goal whose children all land
    directly on master is more likely a stint — say why it's a Goal anyway, or run it as one.
    (Softens at v1.3 theme adoption, S8: a themed Goal legitimately declares `master` while its
-   level-2 themes carry their own `goal/<n>-<theme>` branches — see §⚖ BANKED below.)
+   level-2 themes carry their own `goal/<n>-<theme>` branches — see §Theme-branch decomposition for deploy-to-test stacks below (ADR-126).)
 3. Children are **native sub-issues** and bind at filing — never floating issues that mention
    the Goal.
 4. Decompose and checkpoint sittings load the stack's design corpus first (e.g. oracle-fleet:
@@ -803,9 +803,13 @@ Add the row in the same commit as the superseding decision.
 | **v1** | 2026-08-05..08 — circles#17→#29, oracle-fleet goal-174 | FU-090 leg (c) + `Base: goal/**` branches; close = "goal met" ruling | machine-ruled "met" 100 min before operator refutation (#17); 19-sprout tree growing 3 generations 34h post-close (goal-174); `Base:` rot + self-queue outliving the goal (the 2026-08-09 census) | ADR-102 |
 | **v1.1** | 2026-08-11..12 — homelab#278 (the FU-165 pilot) | ADR-102: budget-funded container, post-launch bucket, midpoint merge, human verdict terminals | bucket flattens the derivation DAG (2 vs 5 generations); worker-findings inflow ungated (52 edges, all worker/ride-authored); per-event cadence (21 rulings, 46 singleton mints); `Touches:` fence ~7× against small folds; dispatcher-bound throughput (queue 3,550 min vs pod 605, 361 min starvation); no consumer for goal-thread operator directives — all in [`../spikes/goal-lane-v1.1-fu165-pilot.md`](../spikes/goal-lane-v1.1-fu165-pilot.md) | ADR-106 |
 | **v1.4** | design ACCEPTED 2026-09-03 (ADR-122); build = S8, re-headed | filing inert (the bare-tree-member walk retired); one release valve (`agent/queued`, `agent-fix` off the JOIN); one machine block + one parser for the body grammars, `Origin:` included; tree-member disposition `undispositioned / adopted / deferred` written by the container, read by trigger (b) and the completion predicate | evidence: #1338 correctly authored, walk-queued 86s later → ride + false SOLVE row; #1334 walk livelock ×2 (#1249); #1315's undispositioned binding held G-G's assembly ~10.5h; #390 half-minted on #175 with no reader | — |
+| **v1.3** | design ACCEPTED 2026-09-05 (ADR-126, with ADR-125's per-base lanes underneath); build = S8 originals 6–7 (#1422, #1423 — held on the wave-2 gate) | theme = the batching unit on a deploy-to-test stack: level-2 theme issue + `goal/<n>-<theme>` branch, ordinary `Fixes #<level-2>` assembly, ≥2-shared-surface membership, checkpoint theme-formation, hotfix-only master lane | evidence: the #1162 manual pilot — 2 owned reads + 1 verdict for 13 children vs ~9 parks; G-A's 5 gate reads in one session | — |
 | **v1.2** | design ACCEPTED 2026-08-12 (ADR-106); build = Bucket A4/A2 + the next platform Goal | FU-168 (ADR-094 concurrency + ADR-097 fence, numbers decide) · #295 bucket semantics · typed findings disposition · §M10 checkpoints · FU-166(b) · **stack-scoped goals** (operator, 2026-08-12: the tree spans the claim's repos incl. `-iac` — a Goal belongs to a STACK; v1.1 proved cross-repo lineage/budget/ride on ONE agent-runtime child, but sibling repos have no merge doorbell and `-iac` descendants were never exercised, so "done means deployed" stops at the app-repo merge everywhere homelab isn't its own -iac) | — | — |
 
-### ⚖ BANKED (2026-08-23, operator direction from the G-A day-1 retro — NOT adopted; a v1.3 candidate row): theme-branch decomposition for deploy-to-test stacks
+### Theme-branch decomposition for deploy-to-test stacks — v1.3 (ADR-126, design accepted 2026-09-05; build = S8 #1423, HELD on the adoption gate below)
+
+> Banked 2026-08-23 from the G-A day-1 retro, promoted at the S8 head sitting. The decision record
+> is ADR-126; this section is its design home.
 
 On a stack where **merge is deploy** (homelab = its own `-iac`), a Goal cannot batch as one
 `goal/**` assembly (it defers the live soak its acceptance is made of) — but flat
@@ -833,7 +837,7 @@ document the per-branch master-refresh hop. **G-A itself continues per-child-to-
 (operator, 2026-08-23: no process change mid-goal); first user = the next platform Goal launch,
 authored from the work map.**
 
-### ⚖ v1.3.1 (BANKED 2026-09-01, operator — the #1162 wave-1 pilot readout; adoption gated on wave 2)
+### v1.3.1 — the #1162 wave-1 pilot's refinements (ADR-126; adoption gated on wave 2)
 
 The manual pilot (Goal #1162, 2026-09-01) delivered the tax number the shape was banked for —
 **2 owned merge reads + 1 verdict for 13 landed children vs a ~9-park counterfactual** (store
