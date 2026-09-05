@@ -604,7 +604,7 @@ S5 heat pass; the per-instance prose is in git and in the cited PRs):
   command substitutions — `$(…)` captures stdout alone, so every stream is byte-identical and
   the change only lets the latch's diagnostic stderr reach pod logs), **homelab#1035 / PR#1078**
   (two rationale comments restored inside `>>>REPLAY:config-defaults>>>` in
-  `agents/coordinator-scan.sh`).
+  `agents/coordinator-scan.sh`), **homelab#1403 / PR#1409** (reviewer STEP-0's anomaly arm: the update-branch re-point NOTE at `agents/reviewer-session.sh:511`, in the gap between the `lens-posture-handling` close at 493 and the `reviewer-touches-check` open at 571).
 - **Class C — the retro lane's STANDING fixture debt** (observable diffs, no family to extend at
   the time). The **FU-058 belt** (2026-08-10, one appended `printf | curl` in `retro-argo.yaml`'s
   harvest step — the RetroReportOverdue success-timestamp push), three more jail-lane clause
