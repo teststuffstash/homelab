@@ -237,3 +237,25 @@ spec:
           annotations:
             summary: "Registry mirror probe failing: {{ $labels.instance }}"
             description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). The mirror is returning 5xx or not answering at all. ⚠ Since homelab#1282 the expr reads a 5m range, so this means at least one failed probe in every 5m window across those ten minutes, and up to 5m may have passed since the last one — check probe_success{instance=\"{{ $labels.instance }}\"} before concluding it is still down. Remedy: bounce the mirror Deployment — kubectl -n registry-cache rollout restart deploy/mirror-<name> (see docs/runbook.md §Registry cache)."
+        # Per-blob 5xx detection via registry debug metrics (homelab#1297). The /v2/ probe
+        # (RegistryMirrorProbeFailing) misses the poison signature: a mirror whose /v2/ answers
+        # 200 all along while ONE committed blob 500s on every HEAD/ranged-GET. The registry's
+        # debug endpoint (REGISTRY_HTTP_DEBUG_ADDR=:5001 on each mirror) exposes
+        # registry_http_requests_total with handler="blob" for blob-layer requests. A sustained
+        # non-zero 5xx rate on the blob handler means a specific blob is consistently failing.
+        #
+        # ── THE RESTART-GAP TEST ────────────────────────────────────────────────────────────────
+        # Same class as RegistryMirrorProbeFailing: each mirror is `replicas: 1`, and a roll
+        # gaps the registry's own metrics series. The [5m] range on rate() bridges the gap
+        # (rate looks back 5m and uses whatever samples it finds; a gap shorter than 5m still
+        # has samples in the range). `for: 10m` ensures the condition is sustained.
+        # CEILING: a hole wider than 5m (crash-loop, cold image pull, node drain) still resets
+        # the window. Accepted, as in #313/#349.
+        - alert: RegistryMirrorBlob5xxRate
+          expr: rate(registry_http_requests_total{handler="blob", code=~"5.."}[5m]) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Registry mirror {{ $labels.instance }} has sustained 5xx on blob requests"
+            description: "{{ $labels.instance }} has had a non-zero 5xx rate on blob (layer) requests for 10m. This is the per-blob poison signature #1282 documents — a specific blob is consistently failing while /v2/ may still answer 200. Check which blob codes are 5xx-ing: increase(registry_http_requests_total{instance=\"{{ $labels.instance }}\",handler=\"blob\",code=~\"5..\"}[10m]). Remedy: bounce the mirror Deployment — kubectl -n registry-cache rollout restart deploy/mirror-<name> (see docs/runbook.md §Registry cache)."
