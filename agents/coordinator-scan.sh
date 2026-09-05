@@ -2691,7 +2691,11 @@ EOF_GOVERNANCE
         #   (a) ≥ GOAL_CHECKPOINT_N undispositioned store findings (count-keyed marker), or
         #   (b) the child-set completing PRE-launch — the operator's 2026-08-05 deadlock backstop
         #       ("it will deadlock too much when only child traffic causes the goal to move"),
-        #       carried over from the retired clause and INDEPENDENT of store readability.
+        #       carried over from the retired clause and INDEPENDENT of store readability, or
+        #   (c) ≥1 UNDISPOSITIONED tree member (ADR-122 (4), homelab#1419) — a member the
+        #       container has never ruled. It WAKES the checkpoint and never counts toward the
+        #       completion predicate, so it can never block (b): #1315 held G-G's assembly ~10.5h
+        #       precisely because the old predicate counted it.
         # Budget-fraction + pre-verdict triggers are ADR-106's later legs, not built here.
         # An absent/unreadable store reads as counts 0 0 (the comments API swallows both shapes)
         # — trigger (a) simply cannot arm, which is rule #6's direction (never fail INTO a
@@ -2706,16 +2710,80 @@ EOF_GOVERNANCE
         # valid-looking "3" and fail later as a swallowed arithmetic error (bot review, PR#398).
         case "$gopen_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
         case "$gclosed_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
+        # ── TREE-MEMBER DISPOSITIONS, read from the CONTAINER (ADR-122 (4), homelab#1419) ────
+        # The completion predicate used to count every open descendant, so ONE inert member
+        # bound into the tree held the whole assembly ruling — #1315 held G-G ~10.5h. Disposition
+        # is the container's, never the filer's: the store is one machine comment on THIS issue
+        # (agents/epic_dispositions.py, `<!-- epic-dispositions v1 -->`), written only by the
+        # goal-checkpoint play, the stint closeout act and the bucket create below.
+        # ⚠ FU-084 (API pool): this is a SECOND GET of the same comments ENDPOINT `_gf_find`
+        # fetches below — the two stores are different markers on the same issue, and folding
+        # them into one fetch means reshaping goal-findings.sh's read, which #1419 held out of
+        # scope. One extra GET per OPEN goal per tick; fold at the S8 closeout. Note the two
+        # reads do NOT pass the same flags: this one is `--paginate --slurp` (see
+        # epic_dispositions.py §_parse_comments_payload — bare `--paginate` emits back-to-back
+        # JSON documents and is unparseable past 100 comments), while goal-findings.sh still
+        # reads bare. Folding them has to settle that first.
+        gdisp_json="$(python3 "${HERE}/epic_dispositions.py" read "$slug" "$g" 2>/dev/null)" && gdisp_rc=0 || gdisp_rc=$?
+        if [ "${gdisp_rc:-2}" -ne 0 ] || [ -z "$gdisp_json" ]; then
+          # rule #6, never fail INTO a dispatch: an unreadable store counts as "no rows" for the
+          # COMPLETION predicate (which only ever shrinks the count, so it cannot invent a
+          # completion), but trigger (c) below does NOT arm — waking a checkpoint off a blind
+          # read is the one direction that costs a ride. The next scan retries.
+          gdisp_json='{}'; gdisp_ok=0
+          echo "  [$repo] ⚠ goal #${g}: dispositions unreadable — the undispositioned wake (trigger c) is HELD this pass"
+        else
+          gdisp_ok=1
+        fi
+        gdisp_ad="$(printf '%s' "$gdisp_json" | jq -r '[to_entries[] | select(.value.disposition == "adopted") | .key] | join(" ")' 2>/dev/null || echo "")"
+        gdisp_df="$(printf '%s' "$gdisp_json" | jq -r '[to_entries[] | select(.value.disposition == "deferred") | .key] | join(" ")' 2>/dev/null || echo "")"
         # FU-069 / homelab#933: the post-launch bucket (title starts with "post-launch:") is
         # created at the first harvest/closeout while the goal is still pre-assembly (IL-T17).
         # It is an OPEN descendant, so trigger (b) below would never see gopen_n=0 and the
-        # goal would wedge at originals-done forever. Exclude the bucket from the open count
-        # used by the child-set-complete predicate — same title convention the harvest-disposition
-        # site and the dispatch block use (sprout-report-skips-buckets, IL-T17).
-        gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
-           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
+        # goal would wedge at originals-done forever. The bucket now carries a `deferred
+        # by=bucket` ROW (written at its create, below), so the disposition test already
+        # excludes it — the TITLE test stays as the belt for every bucket created before that
+        # row existed (same convention the harvest-disposition site and the dispatch block use,
+        # sprout-report-skips-buckets, IL-T17).
+        # ADOPTED-OPEN = an open non-bucket descendant that carries an `adopted` row, OR carries
+        # an `agent/*` LIFECYCLE label and no `deferred` row. The label half is deliberate: a
+        # lifecycle label means an authoring moment or a human already released the member, so
+        # pre-S8 goals need no backfill of rows to keep counting correctly.
+        # rule #6 (bot review, PR#1437 r3): an unreadable store forces $AD=[] and $DF=[], which
+        # collapses the ADOPTED-OPEN test below to "has a lifecycle label" — an open, unlabeled,
+        # UNRULED member (the #1315 shape) would then read as excluded rather than open, turning
+        # a transient read failure into a fabricated completion signal. Gate on $gdisp_ok instead:
+        # only apply the disposition filter when the store actually read; otherwise fall back to
+        # the pre-PR plain open-non-bucket count, so a blind read can only ever look MORE open,
+        # never less.
+        if [ "$gdisp_ok" = 1 ]; then
+          gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
+            '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+             | ($ad | split(" ") | map(select(. != ""))) as $AD
+             | ($df | split(" ") | map(select(. != ""))) as $DF
+             | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
+             | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
+                    | select((.number | tostring) as $k
+                             | ($AD | index($k)) != null
+                               or (($DF | index($k)) == null
+                                   and (((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null))))] | length' 2>/dev/null || echo "")"
+        else
+          gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
+            '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+             | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
+        fi
         case "$gopen_n_ckpt" in ''|*[!0-9]*) gopen_n_ckpt="$gopen_n";; esac
+        # UNDISPOSITIONED = open, not the bucket, no row, no `agent/*` lifecycle label — the
+        # #1315 shape (an inert issue bound into the tree with nobody's judgment on it).
+        gundisp_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
+          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+           | ($ad | split(" ") | map(select(. != ""))) as $AD
+           | ($df | split(" ") | map(select(. != ""))) as $DF
+           | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
+           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
+                  | select((.number | tostring) as $k | ($AD | index($k)) == null and ($DF | index($k)) == null)
+                  | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)] | length' 2>/dev/null || echo "")"
+        case "$gundisp_n" in ''|*[!0-9]*) gundisp_n=0;; esac
         set -- $gdesc; gtotal_n=$#
         _gf_find "$slug" "$g" && gf_rc=0 || gf_rc=$?
         gfbody="$GF_BODY"
@@ -2734,6 +2802,12 @@ EOF_GOVERNANCE
         [ "$gundisp" -ge "${GOAL_CHECKPOINT_N:-5}" ] && gck="findings ${gundisp} undispositioned"
         if [ "$gopen_n_ckpt" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ]; then
           gck="${gck:+${gck} + }child-set complete pre-launch"
+        fi
+        # Trigger (c) — ADR-122 (4): an undispositioned member WAKES the checkpoint and never
+        # blocks it. It is deliberately NOT part of gopen_n_ckpt, so (b) still fires alongside
+        # it: the container is asked to RULE the member, not to wait on it.
+        if [ "$gdisp_ok" = 1 ] && [ "$gundisp_n" -gt 0 ]; then
+          gck="${gck:+${gck} + }members ${gundisp_n} undispositioned"
         fi
         if [ -n "$gck" ]; then
           echo "  [$repo] goal #${g}: CHECKPOINT due (${gck}; store ${gtot} total / ${gdisp} dispositioned)"
@@ -4618,6 +4692,14 @@ EOF
                 # goal's descendant walk and spend money the budget gate cannot see.
                 echo "  ⚠ harvest: bucket #${hbucket} created but NOT linked under goal #${hgoal} (${hslug}) — its children would escape the budget walk; link it by hand" >&2
                 hbucket=""
+              else
+                # ADR-122 (4): the bucket is a CONTAINER, permanently out of the goal's
+                # completion scope — so it is dispositioned `deferred` at birth, by the only
+                # non-session writer of the store (`by=bucket`). This is what dissolves #933's
+                # `post-launch:` TITLE exception into an ordinary disposition; the title test in
+                # the goal lane survives only as the belt for buckets created before this line.
+                python3 "${HERE}/epic_dispositions.py" set "$hslug" "$hgoal" "$hbucket" deferred --by bucket >/dev/null 2>&1 \
+                  || echo "  ⚠ harvest: bucket #${hbucket} could not be dispositioned on goal #${hgoal} (${hslug}) — the goal lane's post-launch: title belt still excludes it; the next checkpoint can rule it" >&2
               fi
             fi
           fi

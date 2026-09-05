@@ -186,6 +186,7 @@ is stale, so it cannot drift the way the prose register did.
 | `ci-red-rounds-two-channels/ci-red-rerun-wake` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `clause-replay-pairing/clause-replay-pairing` | table | - | `agents/coordinator-scan.sh` | - |
+| `context-prefetch-nolabels` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/ci-red-unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/ci-red` | actions | - | `agents/agent-session.sh` | - |
@@ -219,6 +220,7 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-machine-markers/env-card-machine-markers-capture` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-mcp-present` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-mcp-present/opencode` | actions | - | `agents/agent-session.sh` | - |
+| `epic-dispositions` | suite | - | `agents/epic_dispositions.py` | IL-T12 |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `fleet-strike-reader` | actions | - | `agents/coordinator-scan.sh` | IL-T30 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |

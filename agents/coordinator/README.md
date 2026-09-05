@@ -480,6 +480,9 @@ job, in order (re-read live state first, exit clean if someone already closed it
    blocking count) put it in front of the human who queues.
    Dedup before filing: skip a bullet whose substance already has an open issue (search by the
    spec ID or key phrase); say which you skipped and why in the closing comment.
+   **A sprout bound into an OPEN goal lands `undispositioned`** (ADR-122 (4)): binding is dumb,
+   and this play does not rule scope — the goal's next `goal-checkpoint` adopts or defers it, and
+   the arrival is what wakes that checkpoint (trigger (c)). Do NOT write a disposition row here.
    **Then LINK each harvested issue as a native sub-issue** (FU-090 sprout index, 2026-08-02 —
    lineage as structure, not prose; the budget walk and the sprout-RATE gauge key off this tree):
    ```sh
@@ -610,6 +613,12 @@ author child issues, each of which a single ride can finish:
   deterministic, never honored by you. If your decomposition does not fit, that IS the finding:
   say so on the parent and stop. Do not shave scope silently to fit a number.
 
+- **Each child is `adopted` at authoring** (ADR-122 (4)) — the authoring moment IS the ruling, so
+  write the row in the same act:
+  `python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <child-n> adopted
+  --by checkpoint`. One line per child; the store is one machine comment on the GOAL. Skip it and
+  the children read `undispositioned`, which wakes a checkpoint to re-rule what you just decided.
+
 Then put the parent in the **non-dispatchable tracking state** (operator ruling 2026-08-05) so
 at-least-once dispatch cannot re-decompose it: remove `agent/queued`, leave `agent-fix`, add
 `agent/blocked` with a comment listing the children. Queue the children (`agent-fix` +
@@ -639,10 +648,38 @@ acceptance is unmet, say so loudly in your report — that is the signal the gua
 You are here because judgment is actually DUE — not because a child closed. The per-closure tick
 (goal #278: 21 ruling sessions, 13 re-deriving "not complete") is now a deterministic burn-down
 line the scan writes into the goal's findings store; no session, no model. This clause fires on:
-(a) **≥ 5 undispositioned findings** in the store (`GOAL_CHECKPOINT_N`), or (b) **the child-set
-completing pre-launch** — the deadlock backstop the old clause carried (operator, 2026-08-05).
+(a) **≥ 5 undispositioned findings** in the store (`GOAL_CHECKPOINT_N`), (b) **the child-set
+completing pre-launch** — the deadlock backstop the old clause carried (operator, 2026-08-05) —
+or (c) **≥ 1 undispositioned tree MEMBER** (ADR-122 (4)): a bound child nobody has ruled. (c)
+WAKES this clause and never blocks it — an undispositioned member does not count toward the
+completion predicate, so (b) can fire in the same tick (#1315 held G-G's assembly ~10.5h under
+the old predicate, which counted every open member).
 
-**FIRST, dispose the store** (this is what retires trigger (a) — leaving the marker unmoved
+**FIRST, dispose the MEMBERS** (ADR-122 (4) — this is what retires trigger (c); an
+undispositioned member re-wakes this clause every tick until you rule it). Walk the goal's OPEN
+descendants and rule each one that has no row yet — exactly one of:
+
+- **adopted** — it is in scope for this goal. Queue it under the goal's existing authorization
+  the same way a `mint` is queued (`agent-fix`+`agent/queued` ONLY while the goal is OPEN and
+  `Budget:` has room — the same goal_budget arithmetic; over budget = adopted but UNLABELLED,
+  and say so).
+- **deferred** — real work, out of THIS goal's scope. Lineage is kept (it stays a sub-issue, so
+  the tree remains readable history) and it stays unqueued; the container may re-parent it
+  later. `deferred` is not a close and not a rejection — it is "not this goal".
+
+Write each ruling with
+`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <member-n>
+adopted|deferred --by checkpoint`. The store is ONE machine comment on the GOAL
+(`<!-- epic-dispositions v1 -->`), edited in place — never a label on the member, never a
+comment per ruling. A member carrying an `agent/*` lifecycle label already reads as adopted, so
+do not backfill rows for live work; rule the INERT ones. A store you cannot read is a loud line
+on the goal, not a guess — the same rule as the findings store below.
+Two other moments write the same store, and both are one line each: `goal-decompose` and this
+play's `mint` write `adopted --by checkpoint` for every child THEY author (the authoring moment
+IS the ruling), and the scan writes `deferred --by bucket` for the `post-launch:` bucket it
+creates.
+
+**THEN, dispose the store** (this is what retires trigger (a) — leaving the marker unmoved
 re-fires the clause forever). Read the goal's findings-store comment; for every entry beyond
 `dispositioned-through:`, rule exactly one of — **fold** (the work belongs in an existing OPEN
 child: comment the fold target on the goal; the child's next round picks it up), **mint** (a
@@ -660,9 +697,12 @@ arithmetic above) — the edge adds the un-park, not a lane change.
 
 **THEN, when trigger (b) or the burn-down says the tree is done**, re-read the goal's acceptance
 criteria in full and look at what actually shipped in the closed children — the merged diffs, not
-the issue titles. **The completion predicate walks the OPEN DESCENDANT set** (the IL-T12 fixpoint
+the issue titles. **The completion predicate walks the ADOPTED-OPEN descendant set** (the IL-T12 fixpoint
 walk the burn-down already uses — the scan's goal lane walks the full descendant tree via `kidsall`,
-not only direct children), excluding the post-launch bucket subtree (#933's exclusion, kept). An
+not only direct children): an open descendant counts only if it carries an `adopted` row or an
+`agent/*` lifecycle label with no `deferred` row (ADR-122 (4)). `deferred` members and the
+post-launch bucket are excluded — #933's title exclusion is now the bucket's own `deferred
+by=bucket` row, with the title test surviving only as the belt for buckets that predate it. An
 open descendant at any depth either blocks the assembly ruling or is ruled EXPLICITLY in the
 coverage map (fold-to-branch / defer-to-named-issue with a stated reason) — the play's own "any
 child still open is a scope question, not a formality" line, made mechanical for depth ≥2.

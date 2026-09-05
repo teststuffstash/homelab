@@ -265,6 +265,8 @@ present "machine: riding row (who=machine) with computed age" "who=machine  clas
 present "machine: container row (who=none)" "who=none     class=container id=homelab#840" "$BOARD_OUT"
 present "machine: item absent from timestamp series renders unknown" "since=unknown" "$BOARD_OUT"
 absent "machine: no § REVIEW section" "§ " "$BOARD_OUT"
+absent "machine: UNSCOPED board carries no disposition token (no container to ask)" "disposition=" "$BOARD_OUT"
+absent "machine: UNSCOPED board makes no store read" "issues/775/comments" "$(cat "$TMP/machine.actions")"
 absent "machine: no totals line" "totals —" "$BOARD_OUT"
 # ── platform-request rows in machine mode (ADR-119) ────────────────────────────────────────────
 present "machine: platform-request row" "who=operator class=platform-request" "$BOARD_OUT"
@@ -288,6 +290,15 @@ present "scope-eq: in-scope item 833 present" "id=homelab#833" "$BOARD_OUT"
 present "scope-eq: in-scope item 834 present" "id=homelab#834" "$BOARD_OUT"
 absent  "scope-eq: out-of-scope item 889 absent" "id=homelab#889" "$BOARD_OUT"
 absent  "scope-eq: out-of-scope item 840 absent" "id=homelab#840" "$BOARD_OUT"
+# ── dispositions in goal scope (ADR-122 (4), homelab#1419) ─────────────────────────────────
+# The recorded store on goal 775 carries `#833 adopted` and `#834 deferred` (world/gh/
+# api-repos-teststuffstash-homelab-issues-775-comments-per-page-100.json), so the two in-scope
+# rows must render the CONTAINER's ruling verbatim. The board never derives one — the
+# one-computer rule — so these tokens can only come from the store.
+present "scope-eq: member 833 carries its adopted disposition" \
+  "id=homelab#833 pod=none since=7h30m next=\"verify goal branch, then close or re-queue\" disposition=adopted" "$BOARD_OUT"
+present "scope-eq: member 834 carries its deferred disposition" "disposition=deferred" "$BOARD_OUT"
+absent  "scope-eq: no member is reported undispositioned (both carry rows)" "disposition=undispositioned" "$BOARD_OUT"
 
 # --scope goal:775 (space form) — the form that was actually broken in round 3
 board "$TMP/scope-sp.actions" "$TMP/scope-sp.err" "PROMETHEUS_URL=http://stub BOARD_NOW=$NOW" --machine --scope goal:775 platform 2>/dev/null || true
@@ -296,5 +307,7 @@ present "scope-sp: in-scope item 833 present" "id=homelab#833" "$BOARD_OUT"
 present "scope-sp: in-scope item 834 present" "id=homelab#834" "$BOARD_OUT"
 absent  "scope-sp: out-of-scope item 889 absent" "id=homelab#889" "$BOARD_OUT"
 absent  "scope-sp: out-of-scope item 840 absent" "id=homelab#840" "$BOARD_OUT"
+present "scope-sp: member 833 carries its adopted disposition" "id=homelab#833" "$BOARD_OUT"
+present "scope-sp: dispositions ride the space form of --scope too" "disposition=adopted" "$BOARD_OUT"
 
 [ "$FAIL" -eq 0 ] || exit 1
