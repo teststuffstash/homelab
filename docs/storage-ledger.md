@@ -170,8 +170,16 @@ The
 board (`INTEL X99-P4`) exposes SATA ports physically but they are disabled in firmware. The x16
 slot is permanently occupied: the box **refuses to POST without the GPU** (a GeForce 9600 GT with
 `driver=none`, so it idles at full clocks heating the M.2 beneath it — NVMe sensor 1 reads ~69°C).
-So growth means **replacing the 500G NVMe with a larger one**, or freeing the x1 slot by swapping
-the GPU for a single-slot card.
+**Re-read 2026-09-05 (`lspci -tv` + root-port `LnkSta`), correcting the slot picture above:** the
+GPU occupies the x16 slot on root port `00:03.0`, but a **second x16 CPU root port (`00:02.0`,
+Slot 6) and an x4 CPU root port (`00:01.0`, Slot 1) are electrically present and EMPTY** (plus one
+chipset x1) — the NVMe rides `00:01.1`. A passive PCIe→M.2 adapter in either free slot gives a
+second full-speed NVMe with only a shutdown, no firmware change (a data disk needs no boot support).
+So growth has three shapes, cheapest first: **(a) a second NVMe on an adapter → new PV, extend the
+VG/pool** (no migration, ~€10 + the drive); (b) replace the 500 G NVMe with a larger one (a
+migration); (c) the SATA BIOS session. Wear is not the constraint: the WD Blue SN580 (DRAM-less
+consumer TLC) reads 4 % used at 40 TB written over 2,474 power-on hours — ~390 GB/day, roughly
+seven years to its 300 TBW rating at that rate.
 
 ### History — where the physical bytes were (2026-08-04, post-raise; SUPERSEDED by the table at the top — kept as the pre-fence record)
 
@@ -320,7 +328,7 @@ improvement. Status lives with the pointer (FU/issue), not here.
 
 | requirement | size | why (evidence) | class | pointer |
 |---|---|---|---|---|
-| **pve thin pool honest** — promised ≤ pool, or the pool grows | today **488 GB promised on a 353.84 GB pool** (`lvs`: <353.84g after the 09-03 +1 GB extend) (wk-02 240, ci-runner-01 80, wk-01 80, cp-01 40, wk-03 40, LXC 8 — 408 only while ci-runner-01 was destroyed, 09-03/04); a 1 TB NVMe replaces the 500 GB, or wk-02's 240 GB disk leaves the pool | four 100 % fills in a month, the fourth took the control plane down 8 min; twice-daily fstrim + the meter are belts, not capacity | need | FU-093, ADR-114 (new box, not more disks in pve) |
+| **pve thin pool honest** — promised ≤ pool, or the pool grows | today **488 GB promised on a 353.84 GB pool** (`lvs`: <353.84g after the 09-03 +1 GB extend) (wk-02 240, ci-runner-01 80, wk-01 80, cp-01 40, wk-03 40, LXC 8 — 408 only while ci-runner-01 was destroyed, 09-03/04); a second NVMe on pve's free x4/x16 slot extends the pool (cheapest — see §hypervisor), a 1 TB NVMe replaces the 500 GB, or wk-02's 240 GB disk leaves the pool | four 100 % fills in a month, the fourth took the control plane down 8 min; twice-daily fstrim + the meter are belts, not capacity | need | FU-093, ADR-114 (new box, not more disks in pve) |
 | **bulk scratch for 5 concurrent docker rides per stack** | 100Gi × 3 stacks = 300Gi worst case, replica-1 on 453 GiB free | 60Gi wedged the fourth dispatch inside an hour (homelab#1321) | need | #1321 (done 2026-09-04) |
 | **a third PHYSICAL zone for Garage rf=3** | one disk ≥ Garage's data share in a third box (hp-01's second 128 G SSD is `std`; the interim third zone is `proxmox`/wk-02 — the pool above) | ADR-114's redundancy story ends on a VM that pauses when the pool fills; meta rf=1 on wk-02 since 08-25 (FU-137) | need | FU-137, ADR-114 |
 | **Longhorn in-volume reclaim** | ~41 GiB one-off on wk-02 (Prometheus 12, loki 10, garage-meta 8), then the volumes' own churn | node fstrim cannot reach blocks inside replica sparse files; measured 2026-09-04 | want | FU-093 next act (`filesystem-trim` RecurringJob) |
