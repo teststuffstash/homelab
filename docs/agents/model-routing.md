@@ -125,52 +125,31 @@ there since M1a), then demote the GitHub comment to one appended line on the `ag
 index. Replay-first, per the A⁗ channel table's own "stores move later" clause; pick it up when
 the storage-engine question settles, not before.
 
-### M1a. ⛔ THE TAXONOMY DRIFTED — strikes are recorded almost never (found 2026-08-07)
+### M1a. ⛔ THE TAXONOMY DRIFTED — strikes were recorded almost never (found 2026-08-07)
 
-**`router_strikes_total = 1` across the whole store**, against three `harness-death` rides on
-2026-08-06/07 alone (circles#32 r1+r3, circles#19 r1). The routing built on top of strikes is fine;
-it is starved of input.
+`router_strikes_total = 1` across the whole store, against three `harness-death` rides in two
+days. The routing built on top of strikes was fine; it was **starved of input**, and the cause is
+the reusable part:
 
-`router.py:record_report()` does `err = d.get("error_class")` and tests it against
-`STRIKE_CLASSES = {harness-death, auth-storm, timeout, provider-5xx, no-pr, unknown}`. But the
-launcher (`agent-session.sh`, the `/report` body) sends **two** fields:
+**The launcher sends two fields and the recorder tested the wrong one.** `outcome` carried the
+COARSE class the strike set was built for (`harness-death`); `error_class` carried a finer
+sub-type (`goose-32602-truncation`) the set had never learned — and `error_class` is what was
+tested, so `striked = False`, silently. Two of the set's own members were `outcome` vocabulary, so
+the set was never coherent with the field it was compared against. **Consequence:** a chainless
+stack filters candidates on an empty strike table and re-picks a model that just died (observed
+live; retry succeeded, so the cost was waste, not a stall).
 
-| field | value on a goose death | in STRIKE_CLASSES? |
-|---|---|---|
-| `error_class` | `goose-32602-truncation` | ❌ no — the tested field |
-| `outcome` | `harness-death` (= `stats.exit_status` when no PR) | ✅ yes — the untested one |
+⚠ **The self-test could never have caught it** — its fixture put `harness-death` in `error_class`,
+the taxonomy's own vocabulary, a shape the launcher never sends. **A fixture built to match the
+code instead of the caller asserts nothing** (the same trap as FU-115b). A row carrying the REAL
+producer shape is now in `self_test()`, and it fails without the fix.
 
-So the coarse class the set was built for arrives in `outcome`, and the field actually tested
-carries a finer sub-type the set never learned. `striked = False`, silently. Note two of the set's
-own members (`harness-death`, `no-pr`) are `outcome` vocabulary, so it was never coherent with the
-field it is compared against.
-
-**The table above is the proof of intent**: it names *"`harness-death` (goose `-32602`)"* as one
-thing. The sub-type was always meant to strike.
-
-**Consequence:** a chainless stack (`circles`: `workerModel: null` → `routerMode: authoritative`)
-draws candidates from the rotation pool and filters them on strikes/cooldowns — with an empty
-strike table, so it re-picks a model that just died. Observed: `deepseek-v4-flash` re-picked for
-circles#19 r2 immediately after r1's harness death. ⚠ Retry works (r2 succeeded), so this is waste,
-not a stall — 3 deaths vs 3 clean runs on lg work.
-
-**SHIPPED 2026-08-07 — recording fixed, enforcement deliberately OFF** (operator ruling). The
-predicate now matches EITHER field, and `route()` consumes strikes only when `STRIKE_ENFORCE`
-(env `ROUTER_STRIKE_ENFORCE`, default `0`). Proven both ways before deploy: off → the struck model
-stays eligible (`skipped-for-strike: []`), on → it is filtered. Routing is exactly the behaviour
-the loop already had — the difference is that it is now a **decision** rather than an accident.
-
-⚠ **Why enforcement is NOT on, and this is the interesting part.** The bug was *lucky*. Under the
-design, circles#19 r1's harness death would have struck `deepseek-v4-flash` for that task — and r2
-on **the same model completed the same task**. Running tally on `lg` work: **3 deaths vs 3 clean
-runs**, so "N strikes and you're out" is not supported by the evidence; a strike would have bought
-a pricier chain entry for a failure a ~$0.04 retry fixes.
-
-**Open question, not decided (operator, 2026-08-07):** for a model this cheap and this flaky,
-**fan out N parallel workers and keep the first survivor** may beat both retry-serially and falling
-through the chain — N × $0.04 against one attempt on a costlier model, with wall-clock the real
-win. That is a policy question the strike DATA now exists to answer; it is why we record before we
-act.
+**SHIPPED 2026-08-07 — recording fixed, enforcement deliberately OFF** (operator ruling): the
+predicate matches EITHER field, proven both ways before deploy. The behaviour the loop already
+had, but as a **decision** rather than an accident — because the bug had been *lucky*: on `lg`
+work the running tally was **3 deaths vs 3 clean runs on the same cheap model**, so "N strikes and
+you're out" was not supported, and a strike would have bought a pricier chain entry for a failure
+a ~$0.04 retry fixes.
 
 **RULED 2026-08-23 (operator, G-A child homelab#783): `ROUTER_STRIKE_ENFORCE` is RETIRED as a
 blacklist knob.** The 16-day store read (the #783 memo): six strikes total, five of them one
@@ -561,17 +540,14 @@ clean). Relates ADR-096 (the /route contract), homelab#158 (the emergency degrad
 
 #### M11a. The shadow leg as built (homelab#159) — what to read during the soak
 
-All three pieces live in `router.py` and run on every `/route` call; **the served walk is byte-for-byte
-the one above it** — the ladder is computed from the same filtered candidates and the same capacity
-gates, attached to the response as `decision.shadow`, and written to the store. The launcher reads
+All three pieces (subscription-as-a-candidate, urgency, the per-cell start tier) live in
+`router.py` and run on every `/route` call; **the served walk is byte-for-byte the one above it**
+— the ladder is computed from the same filtered candidates and the same capacity gates, attached
+to the response as `decision.shadow`, and written to the store. The launcher reads
 `.decision/.model/.reason/.basis/.half_open/.retry_after_s` and nothing else, so the extra key is
-inert by construction.
-
-| piece | where | what the soak reads |
-|---|---|---|
-| subscription as a candidate | `_shadow_ladder()` — priced `0.0` when `subscription_ok(tier)` passes, **unpickable** otherwise; a synthetic `ladder.subscription_model` (`claude/haiku`) enters the ordering when the chain names no `claude/*` | `router_shadow_decisions_total{rail,tier,urgency,agrees}`, `router_shadow_subscription_blocked_total{reason}` |
-| urgency | `resolve_urgency()` + `urgency_map` in `model-classes.json` | the `urgency`/`urgency_source` columns of `shadow_decisions` |
-| per-cell start tier | `cell_start_tier` table, fed by `fold_outcome_into_cell()` from the EXISTING `POST /report` feed | `router_shadow_start_tier{class,urgency}`, `/router-status` → `ladder_cells`, `shadow_24h` |
+inert by construction. What the soak reads is the `router_shadow_*` metric family plus
+`/router-status` → `ladder_cells` / `shadow_24h`; the emitters are named at their sites in
+`router.py`.
 
 Three readings had to be pinned down to build it; they are the things to re-argue at the flip:
 

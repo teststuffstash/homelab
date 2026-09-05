@@ -38,32 +38,28 @@ The irreplaceable artifact is the transcript. Everything else (dashboards, retro
 
 ## Prior art (searched 2026-07-08) — what the field converged on
 
-- **OTel GenAI semantic conventions are the industry rail.** Claude Code itself exports
-  metrics/logs via OTLP (traces in beta); Copilot/VS Code emit GenAI spans; Daytona v0.190.0
-  ships an `otel-collector` app + audit logs + log streaming as its whole observability story.
-  Standard spans/metrics land in any backend — for us, the existing Grafana stack.
-- **Session replay is a product category** (AgentOps time-travel replay; Laminar transcript view +
-  SQL-over-traces; **Langfuse** = the leading MIT self-hosted option: sessions, traces, scores,
-  evals). Considered and **deliberately not adopted now**: self-hosted Langfuse needs
-  Postgres + ClickHouse + Redis. Postgres is a non-issue (CNPG is LIVE — a per-app `Cluster` CR,
-  SERVICES.md/ADR-046), but **ClickHouse + Redis are two new stateful platform services** for a
-  one-person fleet, and transcripts' durable home should stay git+S3 (ADR-080). Bucket + viewer +
-  Grafana covers the need; revisit only if analysis outgrows Grafana.
-- **Turnstone** (self-hosted orchestration, Apache-2.0; assessed 2026-07-09): philosophical cousin
-  (data-local, audit-in-own-DB). Adopted ideas: (1) **graduated autonomy** — advisory verdicts with
-  auto-action only above a confidence threshold (their `smart_approvals`, 0.95 default) → the P3
-  autonomous-merge flip becomes a dial (reviewer emits recommendation+confidence; auto-merge ≥
-  threshold, low-confidence approvals route to the human); (2) **verdicts as persisted structured
-  objects** stamped with the final human decision (their `intent_verdicts`) → the FU-057 ledger
-  schema, incl. `llm_fallback`-style "failed judge still emits a marked verdict"; (3) their
-  critical/high **heuristic rule pack** as a PreToolUse hook for bypassPermissions contexts
-  (coordinator + meta-sessions), NOT workers (pod scope is the boundary). Rejected: judge-is-the-
-  session-model self-consistency (weaker than our decorrelated reviewer); HRW workstream routing
-  (track labels already assign deterministically, with semantics).
-- **Devin productized exactly our Part B**: *Session Insights* (analyzes completed sessions →
-  actionable recommendations) + *Knowledge* (org-wide lessons, **user-approved before they
-  persist**) + *Playbooks* (successful sessions distilled into reusable procedures). Their
-  approval flow = our PR-gate; their playbook idea is adopted below (B2.5).
+The survey is history; the four decisions it produced are not:
+
+- **OTel GenAI semantic conventions are the industry rail** — Claude Code exports metrics/logs
+  over OTLP natively, so standard spans land in the existing Grafana stack for free. That is why
+  A0 below is "turn on the standard rail", not "build one".
+- **Session replay is a product category, and we deliberately did not adopt one.** Langfuse is
+  the leading MIT self-hosted option, but it needs Postgres **+ ClickHouse + Redis** — two new
+  stateful platform services for a one-person fleet — and transcripts' durable home should stay
+  git + S3 (ADR-080). Bucket + viewer + Grafana covers the need; revisit only if analysis
+  outgrows Grafana.
+- **Turnstone** (self-hosted orchestration, Apache-2.0) contributed three adopted ideas:
+  **graduated autonomy** (advisory verdicts with auto-action only above a confidence threshold —
+  which is what makes the autonomous-merge flip a *dial* rather than a switch), **verdicts as
+  persisted structured objects** stamped with the final human decision (the FU-057 ledger schema,
+  including "a failed judge still emits a marked verdict"), and a critical/high **heuristic rule
+  pack** as a PreToolUse hook for bypassPermissions contexts — coordinator and meta-sessions
+  only, never workers, because the pod scope is the boundary. Rejected from it:
+  judge-is-the-session-model self-consistency (weaker than a decorrelated reviewer) and
+  workstream routing (track labels already assign deterministically, with semantics).
+- **Devin productized exactly Part B** — Session Insights, org-wide Knowledge that is
+  user-approved before it persists (our PR gate), and Playbooks distilled from successful
+  sessions (adopted below as B2.5).
 
 ## Part A — one durable session store + a browser
 
@@ -129,43 +125,26 @@ Hook points (all existing seams, small diffs):
 
 ## Part A′ — what actually took time (measured from the first oracle runs, 2026-07-09)
 
-Before optimizing, measured issue #1's ~4 wall-clock hours (Loki timestamps + AGENT_RUN_STATS +
-pod lifetimes). **The assumed bottleneck — docker/nix cold-start — was NOT it**: `/nix` is
-bind-mounted and warm on the node, so clone + `devbox install` was **~6s** every round after the
-first. Ranked reality:
+**One-line takeaway: the loop wasn't slow because of infrastructure — it was slow because it was
+*invisible* (stalls) and *dispatched to a weak model*.** Measuring issue #1's ~4 wall-clock hours
+put the assumed bottleneck last: `/nix` is bind-mounted and warm on the node, so clone +
+`devbox install` was **~6 s** every round after the first, and cold-start contributed ~0. The
+ranking was **broken reflexes stalling invisibly ~2h23m** (nothing visibly happened — which is why
+monitoring IS the speed fix, and why FU-057 outranked caching), **orchestration latency ~50 min**
+(now near-instant on the ADR-093 edge, `*/15` backstop — machinery home: [`roles.md`](roles.md)
+§reviewer), and **~48 min of pod compute on a cheap-but-slow model** that died to
+truncation/retry-storms in 2 of 4 rounds.
 
-1. **Broken reflexes stalling invisibly — ~2h23m** (reviewer blocked 07:13→09:36 by the
-   sleep-hardcoded repo list + reviewer-token scope, both fixed live). The single biggest sink,
-   and the reason the loop was un-followable — *nothing visibly happened*. **This is why monitoring
-   IS the speed fix**: a "reviewer idle N min with a green PR waiting" panel turns a 2.5h silent
-   stall into a glance. Highest-leverage speed work = FU-057, not caching.
-2. **Orchestration latency — ~50 min** (then a 5-min review-reflex cron + manual meta-ticks + CI
-   cycles). The documented levers apply: hot-tick + CI-green→coordinator ping + webhook edge-trigger
-   ([workflow.md](workflow.md) §Triggers). Since ADR-093 the review path is **event-driven**
-   (near-instant edge + `*/15` backstop — machinery home: [`roles.md`](roles.md) §reviewer /
-   [`merge-path-fsm.md`](merge-path-fsm.md)). Real but second-order.
-3. **The model — ~48 min of pod compute** (deepseek-v4-flash: 400–1170s LLM loops, and 2 of 4
-   rounds *died* to truncation/retry-storms). Cheap per token but slow (many round-trips) and
-   error-prone → slow AND wasteful per *successful* issue. The model-health dashboard (below) makes
-   the blacklist call data-driven; FU-021 (retry hard-stop) stops the storms.
-4. **Cold-start — ~0** (warm nix). The docker-image caching backlog item would not have helped
-   these runs; deprioritize it relative to 1–3.
-
-**One-line takeaway:** the loop wasn't slow because of infrastructure — it was slow because it was
-*invisible* (stalls) and *dispatched to a weak model*. Both are monitoring/model problems, not
-caching problems.
-
-**Both measurements above are ARCHAEOLOGY**, reconstructed after the fact from Loki timestamps and
-pod lifetimes, and the second one ([`spikes/ride-latency-breakdown.md`](../spikes/ride-latency-breakdown.md),
-2026-08-09) hit the wall that shape always hits: its most useful question — was that pod's image
-node-cached? — was unanswerable, because the events had aged out. Since 2026-08-11 the launcher
-emits `agent_run_phase_seconds{phase=dispatch-gates|pod-spinup}` per ride to the
-same pushgateway as `agent_run_*` (FU-160, homelab#287), and `agent-finalize` adds the ride's
-interior to the same metric under `source="in-pod"` (agent-runtime#66), with a breakdown panel on
-the `agent-issue` dashboard and the `AgentRunPhaseSlow` deviation alert behind it. The launcher's
-list ends at pod-Ready because the launcher itself usually does not outlive the ride (homelab#324).
-Phase list, what each one covers and what it deliberately does not live in the spike; this
-paragraph is the pointer.
+**Both measurements were ARCHAEOLOGY**, reconstructed from Loki timestamps and pod lifetimes, and
+the second ([`spikes/ride-latency-breakdown.md`](../spikes/ride-latency-breakdown.md), 2026-08-09)
+hit the wall that shape always hits: its most useful question — was that pod's image node-cached?
+— was unanswerable, because the events had aged out. **So the phases are emitted now, not
+reconstructed:** the launcher pushes `agent_run_phase_seconds{phase=dispatch-gates|pod-spinup}`
+per ride (FU-160, homelab#287) and `agent-finalize` adds the ride's interior under
+`source="in-pod"`, with a breakdown panel on the `agent-issue` dashboard and the
+`AgentRunPhaseSlow` deviation alert behind it. The launcher's list ends at pod-Ready because the
+launcher usually does not outlive the ride (homelab#324). The phase list and its deliberate
+omissions live in the spike; this paragraph is the pointer.
 
 ## Part A″ — the goal-lane ledger: WORK vs PLATFORM WAIT (circles#29, 2026-08-06)
 
@@ -240,48 +219,36 @@ worker or a reviewer is ⚙ no matter how quiet the logs are — the ⏳ column 
 - **`devbox run coordinate-now` does not wake a graduated stack** (FU-144, third dead edge). The
   documented mono-jail remedy for exactly this transition was stale. Use
   `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`.
-- **`AgentCoordinateScanWedged` measures the wrong thing** (FU-145 points here). It keys on scan-pod
-  LIFETIME, but the pod blocks on the item session it dispatched, which STREAMS THE RIDE
-  SYNCHRONOUSLY: verified live inside `coordinator-081840`, **PID 512 = `kubectl -n circles logs -f
-  agent-circles-issue-30-r1`** (the session's own log: *"the dispatch call itself streams the full
-  worker run synchronously"*). Measured: scan pod 18m32s, session 18m03s, alert at 15m.
-  So it fires on any dispatch whose ride runs >15m, on every stack — seen twice in one hour (the
-  decompose, then #30's ride), both healthy, both self-resolving.
-  ⚠ Say "streams the ride", not "waits for the whole ride": `coordinator-081840` EXITED at 08:36:44
-  with `agent-circles-issue-30-r1` still Running (~16m of ride left). The session rings its doorbell
-  on ITS OWN completion, so nothing is orphaned — but it means the alert's duration tracks the
-  session's stream, not the ride, and the two are not the same. Why the stream ends early is still
-  open; it did no harm here because the ride finished, the PR opened, and the reviewer's own
-  doorbell carried the chain forward.
-  **A pod-lifetime probe cannot measure a phase that blocks on downstream work** — Part A′ finding
-  #1's class again: an alert whose subject is not the thing it names.
-  **Fix:** key it on the deterministic scan phase. ⚠ Not by raising the threshold (blinds ordinary
-  ticks) and ⚠ not by special-casing `goal-decompose` — that was the first diagnosis here, made
-  from the pod's lifetime before the blocking `logs -f` was found, and it is wrong: the cause is
-  lane-independent. ⚠ The p99=302s / 1-in-2474 calibration behind `fc7e9fb` measured lifetimes
-  from before the alert existed; it is not evidence that long scans are rare.
-  **SHIPPED 2026-08-11 (homelab#283).** `coordinator-scan.sh` publishes the phase it is in —
-  `scan_phase dispatch` immediately before each `coordinator-session.sh` call and
-  `scan_phase deterministic` on the way back — as two pushgateway gauges
-  (`agent_scan_phase_start_timestamp`, `agent_scan_in_deterministic`; job `agent_scan_phase`,
-  grouped by NAMESPACE with the pod as a metric label, so a group cannot leak per scan and the
-  `coordinator-scan` mutex is what keeps one writer per namespace). The alert became two branches:
-  no marker → pod lifetime, which is still exactly right *because* the phase has not ended yet and
-  is the branch that catches a wedge dying before the script runs (the 2026-08-05 clone shape);
-  marker saying deterministic → the clock restarts at the phase, never at the pod. The threshold
-  stays 900s — the subject moved, not the calibration. Behaviour is pinned as an executed replay
-  (`agents/scan-wedge-alert-test.sh` + `agents/replay/fixtures/scan-{wedge-alert,phase-marker}`),
-  which reds on the pre-#283 expr; the two remedies above stayed ruled out.
-  **Second symptom of the SAME cause, and the more consequential one (2026-08-06):** the
+- **`AgentCoordinateScanWedged` measured the wrong thing** (FU-145). It keyed on scan-pod
+  LIFETIME, but the pod blocks on the item session it dispatched, which **streams the ride
+  synchronously** — so it fired on any dispatch whose ride ran >15 min, on every stack (seen twice
+  in one hour, both healthy, both self-resolving; scan pod 18m32s vs an 18m03s session against a
+  15m alert). The generalization is Part A′ finding #1's class again: **a pod-lifetime probe
+  cannot measure a phase that blocks on downstream work — an alert whose subject is not the thing
+  it names.** ⚠ Say "streams the ride", not "waits for the whole ride": the scan pod exits with
+  the ride still Running, and the session rings its own doorbell on ITS completion, so nothing is
+  orphaned — but the alert's duration tracked the stream, not the ride, and the two differ.
+  **Fixed by keying on the deterministic scan phase** (SHIPPED 2026-08-11, homelab#283): the scan
+  publishes the phase it is in as two pushgateway gauges, and the alert branches — no marker → pod
+  lifetime (still exactly right, and the branch that catches a wedge dying before the script runs);
+  marker saying deterministic → the clock restarts at the phase. The threshold stayed 900s: **the
+  subject moved, not the calibration.** Mechanism + the metric/group keying live in
+  `agents/coordinator-scan.sh`; the behaviour is pinned by
+  `agents/replay/fixtures/scan-{wedge-alert,phase-marker}`, which red on the pre-#283 expr. Both
+  tempting remedies stayed ruled out: ⚠ raising the threshold blinds ordinary ticks, and ⚠
+  special-casing `goal-decompose` is wrong because the cause is lane-independent (that was the
+  first diagnosis, made from the pod's lifetime before the blocking `logs -f` was found).
+  ⚠ The p99 calibration behind the original threshold measured lifetimes from before the alert
+  existed; it is not evidence that long scans are rare.
+  **Second symptom of the SAME cause, still open and the more consequential one:** the
   `coordinate-<stack>` CronWorkflow is `concurrencyPolicy: Forbid`, so a long-lived scan pod
-  SUPPRESSES the cron tick. Measured: `lastScheduled=09:00:00Z` produced no pod, because
-  `coordinate-perstack-9sltw` had been Running since 08:59:37. **The level-triggered backstop is
-  therefore disabled exactly while a ride is in flight** — i.e. whenever a doorbell failing would
-  actually cost something. Edges have been reliable so far, so nothing is broken today; but this is
-  what would turn ONE missed doorbell into an indefinite stall instead of a ≤30-minute one, and it
-  is the same silent-in-three-directions shape as FU-143. Fixing the alert's key (scan phase, not
-  pod lifetime) does NOT fix this half — the pod really is alive; the dispatch would have to stop
-  holding the scan pod open, or the cron stop being `Forbid`.
+  SUPPRESSES the cron tick (measured: a `lastScheduled` that produced no pod because the previous
+  scan was still Running). **The level-triggered backstop is therefore disabled exactly while a
+  ride is in flight** — i.e. whenever a doorbell failing would actually cost something. Edges have
+  been reliable, so nothing is broken today; but this is what turns ONE missed doorbell into an
+  indefinite stall instead of a ≤30-minute one. Fixing the alert's key does NOT fix this half —
+  the pod really is alive; either the dispatch stops holding the scan pod open, or the cron stops
+  being `Forbid`.
 - ⚠ **Do not "optimise" the 18m decompose.** It read 15 spec pages, a 52-entry ⚖ register and 91
   requirement ids, and produced a coverage map with three explicit deferrals. That is the work.
   The measurable waste is in the ⏳ rows.
@@ -574,17 +541,15 @@ DELIVERED platform r1 2026-08-25 (PR#918; batch #927–#932) — the clean unatt
 is the Mon 2026-08-31 cron (FU-058). Remaining FU-058 legs: ledger emitter gaps (brief-v2(b) +
 r4's three blind spots), MCP transcript slices, stack retros second (§The split point 2).
 
-#### The multi-model pilot — runs 1+2 (2026-07-25) and what they taught
+#### The multi-model pilot — what runs 1–3 taught
 
-The retro was chosen as the **first multi-large-model tryout** (operator direction 2026-07-25):
-N models over the SAME worst-K ledger slice in parallel, then a **cross-review** round where each
+The retro was chosen as the **first multi-large-model tryout** (operator direction 2026-07-25): N
+models over the SAME worst-K ledger slice in parallel, then a **cross-review** round where each
 critiques the others' reports and the human reads the critiques. It is the safest arena for it —
-read-only inputs, human-gated outputs — and the task shape is the FU-095 reasoning/audit tier,
-where dual-model spend is ruled worth it. v1 needed **no MCP transcript tools**: ledger + issue/PR
-stats + strike comments sufficed, reusing model-scout's ephemeral capped-key mint.
-
-**Runs 1+2 are done** (`retros/2026-07-25-*`): mechanism proven, 9 models compared repo-verified,
-cross-review landed with a deepseek-v4-pro critic. Routing data harvested for FU-095:
+read-only inputs, human-gated outputs — and the task shape is the FU-095 reasoning/audit tier.
+Runs 1+2 are in [`retros/`](retros/); the brief they produced is
+[`retros/BRIEF.md`](retros/BRIEF.md) + [`retros/CROSS-REVIEW.md`](retros/CROSS-REVIEW.md), driven
+by `agents/retro-session.sh`. The routing evidence harvested for FU-095:
 
 | Cell | Verdict |
 |---|---|
@@ -592,47 +557,32 @@ cross-review landed with a deepseek-v4-pro critic. Routing data harvested for FU
 | kimi | useful **wide-net second reader** |
 | gpt-oss-120b, nemotron-super | **fabricators** on evidence work — do not use for audit |
 
-**Brief v2, from runs 1+2 evidence:**
+Three lessons that still bind the brief:
 
-- **(a) ✅ done 2026-07-25** — run-1's brief was recovered verbatim from the transcript bucket and
-  committed as [`retros/BRIEF.md`](retros/BRIEF.md) (v3 template: ledger-blind-spots block,
-  harness-source excerpts, task-granularity / wins / predecessor-score sections), plus
-  [`retros/CROSS-REVIEW.md`](retros/CROSS-REVIEW.md) and `agents/retro-session.sh` (assembles
-  per-cell, delegates to `agent-session.sh --harness/--model`).
-- **(b)** The cross-run "could not verify" items are mostly **ledger gaps, not access gaps** —
-  `reviewer_rounds=0` despite real review rounds, `wall_time_s` not decomposed active/idle
-  (contradicted by PR lifetimes), `retry_storms` taxonomy undefined, haiku cost $0.00-vs-untracked
-  ambiguity. **Fix the emitter before adding tools.**
-- **(c)** Give the retro **read access to the harness source it is asked to improve**
-  (`coordinator-scan.sh`, `estimate_budget.py` excerpts in the brief, or a homelab checkout): 6/9
-  models flagged naming-targets-they-cannot-read, and the fabricators invented APIs exactly there.
-- **(d)** Add a **task-granularity** section to the report contract: *"which of these worst-K tasks
-  should have been ONE bigger-model task (or a subagent fan-out) instead of chunks; which chunks
-  needed rework at integration."* Operator hypothesis to test either way: a large model + subagents
-  might one-shot a project this size in ~48h.
+- **Fix the emitter before adding tools.** The cross-run "could not verify" items were mostly
+  **ledger gaps, not access gaps** (`reviewer_rounds=0` despite real rounds, `wall_time_s` not
+  decomposed active/idle, an undefined `retry_storms` taxonomy, $0.00-vs-untracked cost
+  ambiguity). Prometheus/Grafana access was never the blocker — no report was blocked on metrics.
+- **Give the retro read access to the harness source it is asked to improve.** 6/9 models flagged
+  naming targets they could not read, and the fabricators invented APIs exactly there.
+- **Ask about task GRANULARITY** — which worst-K tasks should have been ONE bigger-model task (or
+  a subagent fan-out) instead of chunks, and which chunks needed rework at integration.
 
-Prometheus/Grafana access is **not** needed yet — no report was blocked on metrics.
-
-**Run-3 shape (operator direction, composition-axes frame — AS DESIGNED; as-run 2026-08-11 only
-cell A executed, homelab#248):** two retro rides off the SAME
-agent-base image and the SAME committed `BRIEF.md` — **A** = claude harness + opus (subscription
-via the ADR-081 proxy, FU-088-gated), **B** = goose harness + deepseek-v4-pro (ephemeral capped
-key, provider-pinned) — then cross-review with the **cells swapped** (A reviews B's report, B
-reviews A's). Tooling parity is already structural: agent-base ships `claude-code@latest` alongside
-goose/opencode plus the full toolkit (gh/git/jq/python/uv/kubectl/s5cmd), so retro-er and reviewer
-are freely mixable. Rotating cells run-over-run separates **harness effect from model effect** on
-the FU-057 ledger axes — which doubles as FU-095(b) evidence. Repo scope for the retro token = the
-stack jail's REPOS boundary (`tools/stack-jail.sh`: oracle-fleet, oracle-iac,
-allure-behavior-snippets), read-only, App-minted. Standing guardrails: outside the fixer ns / WIP
-slot (the P3 constraint), `GOOSE_MAX_TOKENS=16384`, reports land in `docs/agents/retros/` via PR,
-and **each OpenRouter cell rides an ephemeral key it mints itself** — `retro-session.sh` applies an
+**The run-3 shape is the standing design** (composition-axes frame; as-run 2026-08-11 only cell A
+executed, homelab#248): two rides off the SAME agent-base image and the SAME committed `BRIEF.md`
+— one claude-harness subscription cell, one goose-harness OpenRouter cell — then cross-review with
+the **cells swapped**, so rotating them run-over-run separates **harness effect from model effect**
+on the FU-057 ledger axes (which doubles as FU-095(b) evidence). Tooling parity is structural:
+agent-base ships every harness plus the full toolkit, so retro-er and reviewer are freely mixable.
+Standing guardrails: outside the fixer namespace and WIP slot, bounded output tokens, reports land
+in `docs/agents/retros/` via PR, the retro token is the stack jail's read-only REPOS boundary, and
+**each OpenRouter cell rides an ephemeral key it mints itself** — `retro-session.sh` applies an
 `xs`/$0.25 `OpenRouterKey` per (run, cell) and refuses the ride if the operator does not stamp it
-(homelab#270). The cap is the lane's own measurement (an audit-tier cell costs $0.02–0.08, table
-above) × the estimator's ×2.0 buffer, not `estimate_budget.py`'s band — that band models a fixer
-round and sizes a retro brief at ~$0.54/tier `lg`, which would cap nothing. The `$0.05 key floor`
-run 1 taught is subsumed: $0.25 is the smallest tier there is. Before #270 the key was an operator
-step with a warning behind it, and the ride fell back to the stack FIXER's standing budget key —
-which is what run 3's dead cell-b spent 8 seconds of a provider retry against (homelab#248).
+(homelab#270). The cap is the lane's own measurement (an audit cell costs $0.02–0.08) × the
+estimator's ×2.0 buffer, NOT `estimate_budget.py`'s band — that band models a fixer round and would
+cap nothing at ~$0.54. Before #270 the key was an operator step with a warning behind it, and the
+ride fell back to the stack FIXER's standing budget key — which is what run 3's dead cell-b spent
+a provider retry against.
 
 ## Part C — the attention layer v1: derived-class export, board --machine, standing belt (#892)
 
