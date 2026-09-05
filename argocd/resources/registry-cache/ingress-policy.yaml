@@ -1,0 +1,46 @@
+# CiliumNetworkPolicy to restrict debug port :5001 to monitoring scrapers (homelab#1429).
+# The debug server binds all interfaces and exposes /metrics + /debug/pprof/* + /debug/vars.
+# This policy:
+# 1. Allows :5001 ingress ONLY from Prometheus in the monitoring namespace (ServiceMonitor scraper)
+# 2. Explicitly allows :5000 ingress from all (preserve today's image-pull behavior)
+# 3. Applies enableDefaultDeny: ingress to block any other ingress to the mirrors
+#
+# Rationale for explicit :5000 allow:
+# In Cilium, a policy selecting an endpoint with ANY ingress rule enables default-deny for that
+# endpoint. The mirrors' :5000 is the image-pull path for the cluster and LAN, so we must
+# explicitly re-allow it to avoid a fleet-wide pull outage (homelab#1297 context, ADR-091).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: registry-mirror-ingress
+  namespace: registry-cache
+spec:
+  endpointSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - mirror-docker-io
+          - mirror-ghcr
+          - mirror-mcr
+  enableDefaultDeny:
+    ingress: true
+  ingress:
+    # Allow :5000 from all (preserved: LAN image pulls + in-cluster pulls via VIP/pod IP).
+    # Both off-cluster (Cilium world/remote-node) and in-cluster pod egress arrive here.
+    - fromEntities:
+        - all
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+    # Allow :5001 from Prometheus scrapers only (monitoring namespace).
+    # ServiceMonitor mirror-debug scrapes pod IP directly on port name 'debug' (5001).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "5001"
+              protocol: TCP
