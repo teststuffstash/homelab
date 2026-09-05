@@ -309,6 +309,17 @@ six OVERSIZE items pointer-ized into
       planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
       `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on
       public repos), applied outside the jail. `oracle-iac` stays private permanently.
+- [ ] **FU-215** — **Unbound SERVFAILs `github.com` (only that zone), twice in one hour, root
+      cause unknown.** 2026-09-05 08:15–08:19Z (self-cleared; `dig +cd` answered → validation
+      path bogus) and 09:17–09:23Z (`+cd` SERVFAILed too → infra/bogus cache; cleared by
+      `POST /api/unbound/service/restart`, wallet `opnsense-api-key`/`-secret`). Authoritative
+      nsone answered from the jail both times; `UnboundGithubServfail` reached pending only
+      (`for: 3m`). Cost: the seat's `gh`, the exporter poll, a reviewer pod and in-cluster
+      clones all fail for the window. **Next:** capture `unbound-control lookup github.com` +
+      `dump_infra` DURING the next window (an OPNsense `raw` API read, `action: post`), and
+      decide the belt: shorten the alert `for:` + a documented restart runbook step, or an
+      Unbound `domain-insecure`/forward-zone for `github.com` if validation is the cause.
+
 
 ## CI & dependency automation
 

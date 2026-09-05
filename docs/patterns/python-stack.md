@@ -62,9 +62,17 @@ resolve with it, existing git/ghcr tags untouched.
 
 dockerd's `registry-mirrors` is **Hub-only** — a `FROM ghcr.io/...` in your Dockerfile pulls
 direct WAN on every layer-cache miss, whatever the mirror family covers for containerd. Don't
-absorb that with per-repo retry loops or `ARG`-parameterized FROMs: the fleet fix is BuildKit
-per-registry mirrors in the runner's `buildkitd.toml` (homelab#1308). Until it lands, know the
-flake class exists.
+absorb that with per-repo retry loops or `ARG`-parameterized FROMs: the fix is BuildKit
+per-registry mirrors via a `buildkitd.toml` + a **docker-container** builder (homelab#1308) —
+the default `docker` driver builds inside dockerd and never sees the file. Both docker-capable
+runner classes carry it: ci-runner-01's cloud-init creates a `homelab-mirrors` builder for the
+`runner` user at boot; a docker-mode agent ride gets the config written to
+`$BUILDKITD_TOML` (`/docker-run/buildkitd.toml`) by its dind sidecar and must create its own
+builder before a `docker build` with a non-Hub `FROM` — `docker buildx create --driver
+docker-container --driver-opt default-load=true --config $BUILDKITD_TOML --use --bootstrap`
+(the env card states this). `--driver-opt default-load=true` (buildx ≥0.14) is what keeps
+`docker build && docker run`/`kind load docker-image` working unmodified — without it a
+docker-container builder's result never reaches the local image store.
 
 ## S3 publishing against Garage
 

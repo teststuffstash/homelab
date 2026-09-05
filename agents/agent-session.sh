@@ -682,7 +682,7 @@ render_env_card() {
     # WHY: docker-client-in-devbox.json = FU-119; the kind-node-hangs-on-missing-mirror trap =
     # sleep-tracking#67; the reference kind_mirror() impl is oracle-fleet scripts/e2e-kind.sh (and
     # each docker stack's own scripts/test-integration.sh after #71). Card keeps the actionable HOW.
-    printf '%s\n' "- **Docker: YES.** A real daemon is live at \`\$DOCKER_HOST\` (\`docker info\` succeeds). The \`docker\`/\`kind\` CLIs come from your \`devbox.json\` (\`docker-client\`+\`kind\`) — if \`docker\` is 'command not found', add \`docker-client\` there (never download). Run \`kind\`/\`k3d\` here for e2e gates. **CRITICAL:** a kind/k3d NODE's own image pulls go to docker.io/ghcr.io and are egress-DENIED → the node never goes Ready and \`create\` times out (looks like 'docker is broken' — it's the MISSING MIRROR). Point the node's containerd at the mirrors BEFORE it starts — kind: \`docker exec <node> tee /etc/containerd/certs.d/<reg>/hosts.toml\` pointing at \`\$REGISTRY_MIRROR_DOCKER_IO\`/\`\$REGISTRY_MIRROR_GHCR\`; k3d: \`--registry-config\`."
+    printf '%s\n' "- **Docker: YES.** A real daemon is live at \`\$DOCKER_HOST\` (\`docker info\` succeeds). The \`docker\`/\`kind\` CLIs come from your \`devbox.json\` (\`docker-client\`+\`kind\`) — if \`docker\` is 'command not found', add \`docker-client\` there (never download). Run \`kind\`/\`k3d\` here for e2e gates. **CRITICAL:** a kind/k3d NODE's own image pulls go to docker.io/ghcr.io and are egress-DENIED → the node never goes Ready and \`create\` times out (looks like 'docker is broken' — it's the MISSING MIRROR). Point the node's containerd at the mirrors BEFORE it starts — kind: \`docker exec <node> tee /etc/containerd/certs.d/<reg>/hosts.toml\` pointing at \`\$REGISTRY_MIRROR_DOCKER_IO\`/\`\$REGISTRY_MIRROR_GHCR\`; k3d: \`--registry-config\`. For a non-Hub \`FROM\` in \`docker build\` (daemon.json's own mirror is Hub-only), create the mirror builder first — \`docker buildx create --driver docker-container --driver-opt default-load=true --config \$BUILDKITD_TOML --use --bootstrap\` — and if \`docker buildx\` is 'command not found', add \`docker-buildx\` to your \`devbox.json\` (never download)."
   else
     printf '%s\n' "- **Docker: NO.** No daemon in this ride — docker-backed e2e gates run in GitHub CI, not here; don't try to start clusters."
   fi
@@ -1770,7 +1770,12 @@ if [ -n "$DOCKER" ]; then
   # without it a docker ride's `devbox install` fell back to cache.nixos.org over the WAN (~4 min
   # cold, measured 2026-07-14), and that is the failure this line exists to prevent.
   NIX_CACHE_VIP="${AGENT_NIX_CACHE_URL-http://192.168.40.23}"
-  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"\n        - name: REGISTRY_MIRROR_MCR\n          value: "'"$MIRROR_MCR"$'"'
+  # BUILDKITD_TOML (homelab#1308): the dind sidecar (below) writes the per-registry-mirror
+  # config to the shared /docker-run emptyDir; a `docker build` with a non-Hub FROM needs a
+  # docker-container builder pointed at it — `docker buildx create --config $BUILDKITD_TOML
+  # --driver-opt default-load=true --use --bootstrap` (see the env card's Docker: YES bullet).
+  # daemon.json's registry-mirrors is Hub-only, which is all it can ever cover (dockerd design).
+  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: BUILDKITD_TOML\n          value: "/docker-run/buildkitd.toml"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"\n        - name: REGISTRY_MIRROR_MCR\n          value: "'"$MIRROR_MCR"$'"'
   DOCKER_MOUNT=$'\n        - { name: docker-run, mountPath: /docker-run }'
   DOCKER_VOLUMES=$'\n    - name: docker-run\n      emptyDir: {}\n    - name: docker-lib\n      ephemeral:\n        volumeClaimTemplate:\n          spec:\n            accessModes: ["ReadWriteOnce"]\n            volumeMode: Block\n            storageClassName: longhorn-scratch\n            resources: { requests: { storage: 20Gi } }'
   # NATIVE SIDECAR (initContainers + restartPolicy Always): the kubelet terminates it when the
@@ -1795,7 +1800,31 @@ if [ -n "$DOCKER" ]; then
           mount /dev/docker-scratch /var/lib/docker 2>/dev/null \
             || { mkfs.ext4 -q /dev/docker-scratch && mount /dev/docker-scratch /var/lib/docker; } \
             || { echo "FATAL: scratch block volume mount failed"; exit 1; }
-          mkdir -p /etc/docker && echo '{"mtu": 1350, "storage-driver": "overlay2", "registry-mirrors": ["__MIRROR_DOCKER_IO__"], "insecure-registries": ["__MIRROR_HOST__"]}' > /etc/docker/daemon.json
+          mkdir -p /etc/docker && echo '{"mtu": 1350, "storage-driver": "overlay2", "registry-mirrors": ["__MIRROR_DOCKER_IO__"], "insecure-registries": ["__MIRROR_HOST__", "__MIRROR_GHCR_HOST__", "__MIRROR_MCR_HOST__"]}' > /etc/docker/daemon.json
+          # BuildKit per-registry mirrors (homelab#1308): daemon.json's registry-mirrors above is
+          # Hub-only (dockerd design) — a non-Hub FROM (ghcr.io, mcr.microsoft.com) in a
+          # `docker build` still pulls direct WAN on every layer-cache miss. Written to the
+          # shared /docker-run emptyDir so the ride's client-side `docker buildx create --config
+          # $BUILDKITD_TOML --driver-opt default-load=true --use --bootstrap` (env card) can read
+          # it from outside this sidecar. default-load keeps `docker build && docker run`/`kind
+          # load docker-image` working without a --push/--output rewrite.
+          printf '%s\n' \
+            '[registry."docker.io"]' \
+            '  mirrors = ["__MIRROR_HOST__"]' \
+            '[registry."ghcr.io"]' \
+            '  mirrors = ["__MIRROR_GHCR_HOST__"]' \
+            '[registry."mcr.microsoft.com"]' \
+            '  mirrors = ["__MIRROR_MCR_HOST__"]' \
+            '[registry."__MIRROR_HOST__"]' \
+            '  http = true' \
+            '  insecure = true' \
+            '[registry."__MIRROR_GHCR_HOST__"]' \
+            '  http = true' \
+            '  insecure = true' \
+            '[registry."__MIRROR_MCR_HOST__"]' \
+            '  http = true' \
+            '  insecure = true' \
+            > /docker-run/buildkitd.toml
           exec dockerd-entrypoint.sh dockerd --host=unix:///run/docker.sock --group=1000
       volumeMounts:
         - { name: docker-run, mountPath: /run }
@@ -1808,7 +1837,12 @@ DIND
 )"
   DIND_CONTAINER="${DIND_CONTAINER/__DIND_IMAGE__/${AGENT_DIND_IMAGE:-ghcr.io/k3d-io/k3d:5-dind}}"
   DIND_CONTAINER="${DIND_CONTAINER/__MIRROR_DOCKER_IO__/${MIRROR_DOCKER_IO}}"
-  DIND_CONTAINER="${DIND_CONTAINER/__MIRROR_HOST__/${MIRROR_DOCKER_IO#http://}}"
+  # //: each of these now appears more than once (the buildkitd.toml write, homelab#1308) —
+  # the single-slash form used here pre-#1308 only ever matched one occurrence and would now
+  # silently leave later placeholders unsubstituted in the rendered manifest.
+  DIND_CONTAINER="${DIND_CONTAINER//__MIRROR_HOST__/${MIRROR_DOCKER_IO#http://}}"
+  DIND_CONTAINER="${DIND_CONTAINER//__MIRROR_GHCR_HOST__/${MIRROR_GHCR#http://}}"
+  DIND_CONTAINER="${DIND_CONTAINER//__MIRROR_MCR_HOST__/${MIRROR_MCR#http://}}"
 fi
 
 # >>>REPLAY:fu088-gates>>>
