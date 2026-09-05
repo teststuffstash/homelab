@@ -6,5 +6,5 @@ CALL gh api repos/teststuffstash/circles/issues/29/sub_issues
 OUT   harvest disposition (ADR-106): circles issue-35 → goal #29, bucket 77, harvest inert — goal #29 is CLOSED — findings from a dead goal land inert (ADR-102 terminals)
 OUT ITEM repo=circles item=issue-35 clause=merged-closeout goal=29 bucket=77 harvest=inert
 OUT REACHED: end
-ERR LEGACY-GRAMMAR Budget -
+ERR LEGACY-GRAMMAR Budget teststuffstash/circles#29
 RC 0

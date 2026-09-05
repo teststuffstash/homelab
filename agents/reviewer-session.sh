@@ -51,6 +51,24 @@
 # No new in-cluster RBAC (the pod spawns nothing and mints nothing; default SA is enough).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+
+# ── the ONE body parser (ADR-122 (3), homelab#1430/#1431) ───────────────────────────────────────
+# The reviewer's two body-grammar reads (`alert-fp:` here, `Touches:` in the pod-side TOUCHESPART
+# below) go through agents/issue_body.py: machine block first, the legacy line-anchored form as
+# the transition-window fallback, one `LEGACY-GRAMMAR <key> <repo>#<n>` line to stderr per
+# fall-through (the migration meter — never suppressed). Fail-soft, unlike the launcher's
+# pre-flight: this session REVIEWS, it does not gate dispatch, and its stated degrade for every
+# unreadable input is already "no signal" rather than "clean".
+# >>>REPLAY:reviewer-body-parser>>>
+rv_ib_get() {   # <key> <ref>  — body on stdin
+  if ! command -v python3 >/dev/null 2>&1 || [ ! -f "$HERE/issue_body.py" ]; then
+    echo "WARN reviewer: cannot reach the ONE body parser (python3 + $HERE/issue_body.py) — \`$1:\` reads as absent" >&2
+    cat >/dev/null
+    return 0
+  fi
+  python3 "$HERE/issue_body.py" get "$1" --ref "$2" || true
+}
+# <<<REPLAY:reviewer-body-parser<<<
 if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"; else KUBE=""; fi
 KUBECTL="$(command -v kubectl || true)"
 [ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
@@ -334,7 +352,13 @@ DEPTH RULE (this PR closes issue #$issue, which sits at follow-up depth $sprout_
   case "$issue_title" in
     🚨*) issue_is_hotfix=true;;
   esac
-  if printf '%s' "$issue_body" | grep -qE '^alert-fp:'; then
+  # ⚠ ONE deliberate narrowing, called out rather than hidden: the old test was `grep -qE
+  # '^alert-fp:'`, a PRESENCE test that a bare `alert-fp:` with no fingerprint satisfied. The
+  # parser (like every other reader in the platform) treats an empty value as absent, so an empty
+  # marker no longer classifies a depth-≥4 issue as hotfix. That is the direction ADR-122 collapses
+  # toward — a fingerprint nobody wrote is not a fingerprint — and the responder only ever writes
+  # the line WITH one (responder-argo.yaml).
+  if [ -n "$(printf '%s' "$issue_body" | rv_ib_get alert-fp "${REPO_SLUG:-?}#${issue}")" ]; then
     issue_is_hotfix=true
   fi
 
@@ -584,7 +608,11 @@ else
   _tc_ok=1
   _tc_dir="$(mktemp -d)" || _tc_ok=0
   if [ "$_tc_ok" = "1" ]; then
-    for _tc_f in touches-check.sh footprint.sh; do
+    # issue_body.py rides the SAME fetch as the touches helpers (ADR-122 (3)): the declared
+    # footprint is read by the ONE parser, so the module has to be here. If any of the three
+    # cannot be fetched the whole belt degrades to `unavailable` — which the prompt below already
+    # defines as NO SIGNAL, not clean.
+    for _tc_f in touches-check.sh footprint.sh issue_body.py; do
       curl -fsS --max-time 10 "$TOUCHES_BASE/$_tc_f" -o "$_tc_dir/$_tc_f" || { _tc_ok=0; break; }
     done
   fi
@@ -596,7 +624,23 @@ else
     # UNION of every Touches: line (S6 sprout, #716: a later line supersedes/widens the original
     # footprint — head -1 ran the check against the stale first line and self-reported false
     # escapes on PR#759; the scan's jq `scan(...) | join(",")` has always been the union).
-    DECLARED_TOUCHES=$(printf '%s' "$ISSUE_BODY" | grep -iE '^[ \t]*touches:[ \t]*' | sed -E 's/^[ \t]*touches:[ \t]*//i' | tr -d '\r' | paste -sd, -)
+    # The UNION is the parser's (LEGACY["Touches"] is `all_matches` joined with "," — the same
+    # union this line hand-rolled, restated once beside the twelve other grammars), and the
+    # machine block wins over it. A MALFORMED block is not an empty footprint: it degrades the
+    # belt to `unavailable` (NO SIGNAL) rather than reporting `none`, which would read as clean.
+    _ib_rc=0
+    if ! command -v python3 >/dev/null 2>&1; then
+      echo "WARN: python3 unavailable in the review pod — the ONE body parser cannot run (ADR-122 (3))"
+      _tc_ok=0
+    else
+      DECLARED_TOUCHES=$(printf '%s' "$ISSUE_BODY" | python3 "$_tc_dir/issue_body.py" get Touches --ref "$REPO_SLUG#$ISSUE") || _ib_rc=$?
+      if [ "$_ib_rc" -ne 0 ]; then
+        echo "WARN: issue #$ISSUE carries a MALFORMED machine block — the declared footprint is unreadable (ADR-122 (3)); TOUCHES-ESCAPES degrades to unavailable"
+        _tc_ok=0
+      fi
+    fi
+  fi
+  if [ "$_tc_ok" = "1" ]; then
     # #944 / ADR-097 addendum 3: files whose whole delta is REPLAY sentinel markers are a
     # compelled counterpart (extract() cannot pin a block without them) — CONTENT-verified from
     # the diff, never path-keyed. An unavailable diff yields the empty set: the exemption just

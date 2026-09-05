@@ -3,4 +3,5 @@ OUT row_b=none
 OUT row_c=container-findings
 OUT row_d=none
 OUT depth_lane_split_executed=1
+ERR LEGACY-GRAMMAR alert-fp teststuffstash/test-project#1
 RC 0
