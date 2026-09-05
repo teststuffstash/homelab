@@ -1,0 +1,16 @@
+# responder-touches-classify (homelab#1207, #1102 leg 1's sequenced half) — the responder's
+# STEP 3(c) filing brief gains a classify-before-you-file instruction: source
+# `agents/footprint.sh`, call `classify_touches()` on the `Touches:` footprint the session just
+# wrote, and — on a `codeowner-author` verdict or a hit on `scripts/pin-only-lint.sh`'s GUARDED
+# set — say so in the body as one plain sentence, since no worker can ever land such a footprint
+# as a PR and the scan log alone was the only place that verdict used to land (#1056's cost).
+#
+# mode: suite — same shape as agents/responder-remediation-would-replay.sh (#1274): the subject
+# is a prose instruction inside the embedded shell's brief, not an action stream, so the
+# entrypoint extracts the script from the YAML and greps it for the expected text. No network,
+# no cluster, no credentials.
+name: responder-touches-classify
+mode: suite
+entrypoint: agents/responder-touches-classify-replay.sh
+requires:
+  - yq
