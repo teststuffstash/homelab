@@ -553,6 +553,28 @@ spec:
             summary: "github-exporter polls are failing"
             description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
 
+        # homelab#1405: GraphQL walk returns partial data (resource-limit or PAT permission issues)
+        # and the entire `github_pull_request_*` series family goes missing from the exposition while
+        # `github_exporter_last_success_timestamp` stays fresh. The review edge, codeowner-park
+        # watcher, and behind-edge all go dark (FU-108 class — a read succeeds with no data in it).
+        # Counter increments per error occurrence; a 15m window catches transient resource-limit
+        # spikes against GitHub's node/query-cost ceiling when the universe is busy (5 seat PRs
+        # re-merged, agent runs, bot activity). The symptom is absence of the PR series, which is
+        # unrecoverable within one poll, so the alert fires when partial data has occurred + the PR
+        # series is absent in the latest scrape (impossible without partial data, since these queries
+        # ride the same walk). A reset requires the exporter to successfully ingest a FULL set of
+        # rows for the PR series families — either a retry within the 15m window or a new poll.
+        - alert: GithubExporterPartialData
+          expr: >-
+            (max by (job) (increase(github_exporter_graphql_partial_total[15m])) > 0)
+            and (count by (job) (github_pull_request_open) == 0 or absent(github_pull_request_open))
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "github-exporter: GraphQL partial data — PR series missing"
+            description: "GraphQL walk returned partial data ({{ $labels.class }}) in the last 15m and the entire `github_pull_request_*` series family is absent from Prometheus (count=0). The review edge, codeowner-park watcher, and behind-dispatcher are dark (FU-108 class). Symptom: GitHub's resource-limit on deeply-nested queries when the org is busy (many open agent PRs, concurrent bot activity). Mitigation: (1) Check githubstatus.com / GithubVendorOutage to rule out GitHub-side issues; (2) Reduce nesting in the PR query (reviews/commits `first:` parameters, github-exporter.py §_PR_QUERY) or paginate per-repo; (3) The */15 reflex/coordinate CronJob backstop own any re-reviews/CI-reds while the poller recovers."
+
         # FU-091: queued work + a fully idle loop for 2h = a wedged dispatcher (the 2026-07-21
         # finding: a sidecar zombie held project-WIP for 3 days; every scan said so in logs
         # nobody reads). Different code + token than the scan — fires even when the scan IS the
