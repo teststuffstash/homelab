@@ -8,3 +8,9 @@
 PF_SLUG="$IN_SLUG"
 PF_PR="$IN_PR"
 PF_PR_REF="fix/issue-1413-pypi-cache-env"
+
+# Defined above the extracted block in agents/agent-session.sh:1282-1283 — the fixture composes
+# only block:ci-failure-run-select, so the bridge supplies them.
+PF_CI_FAILURE_MD=""
+PF_INDEX=""
+PF_INDEX_ITEM() { PF_INDEX="${PF_INDEX}${1}  ${2}${3:+  ${3}}"$'\n'; }
