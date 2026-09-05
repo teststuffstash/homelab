@@ -16,7 +16,7 @@ never the session's arc — that is TICK-LOG's.)
   parser) #1431 (1b readers) #1419 (2 dispositions) #1432 (3 JOIN) #1420 (4 card) #1421 (5 ADR
   pair) #1422 (6 lanes) #1423 (7 themes, HELD on the wave-2 readout) #1424 (8 currency) + sprout
   #1439 (goal-findings.sh bare `--paginate` → `--slurp` + fold the two goal-lane comment reads).
-  **PRs at wind-down — check each first thing:** PR#1425 (ADR-125/126, seat — bot round-1 fix
+  **PRs at wind-down — check each first thing (the 5h window hit 80 % at ~15:00Z 2026-09-05, so the FU-088 latch holds every reviewer dispatch until the window resets ~18:00Z; nothing merges before then, and a hand-dispatched reviewer is gated the same way):** PR#1425 (ADR-125/126, seat — bot round-1 fix
   pushed, awaiting re-review) · PR#1434 (#1432 JOIN, subagent — round 2 pushed) · PR#1437
   (#1419 dispositions, subagent — codeowner read DONE, in-diff `--slurp` fix landed, **never
   reviewed: the reflex skips BEHIND PRs for a FIRST review and master moved 7× in its window** —

@@ -7032,3 +7032,13 @@ first live ADR-110 maintenance session before the ADR existed.
 - Seat process notes: `set -e` + `rm -rf` in a compound clone command was rejected by the
   operator — split into plain steps; `echo ====` breaks zsh (`=cmd` expansion); a `git clone
   --local` of a SHALLOW repo silently ignores `--local` (fine — plain clone).
+- **Wind-down ~15:00Z (operator: 5h window at 80 % — the latch holds reviews ~3h).** Landed in
+  the sitting's second half: #1433 merged (S5 tree empty), **#741 CLOSED**, #1401/#1399/#1398/
+  #1404 merged after the reads, or-op#64/#65 approved (#65 with a one-line in-diff fix pushed by
+  the codeowner: `has_openrouter_key` required, never defaulted True). Open at exit, all waiting
+  on the window: PR#1425 (bot round-1 pointers fixed), PR#1434 (round 2: four more docs stated
+  the retired JOIN), PR#1437 (codeowner read done; `--slurp` fix in; never first-reviewed —
+  the reflex's BEHIND skip on a 7-move master, recorded on #1422 as a design input: approvals
+  survive update-branch merges, so the skip may be obsolete), the #1430 parser chunk (subagent
+  still building). Sprout #1439 filed (goal-findings.sh's bare `--paginate`). Ledger rows for
+  the four chunks written; next session = 1b (#1431) after 1a lands, then #1420.
