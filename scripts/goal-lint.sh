@@ -54,7 +54,7 @@ api() { gh api "$@" 2>/dev/null; }
 IB="$(cd "$(dirname "$0")/.." && pwd)/agents/issue_body.py"
 [ -f "$IB" ] || { echo "PROBE-FAIL: $IB is missing — the body grammar has ONE parser and it is not here" >&2; exit 2; }
 command -v python3 >/dev/null 2>&1 || { echo "PROBE-FAIL: python3 not on PATH — agents/issue_body.py is the body parser (ADR-122 (3))" >&2; exit 2; }
-line() { printf '%s\n' "$1" | python3 "$IB" get "$2" --legacy goal-lint --ref "$slug#$goal" || true; }
+line() { local ref="${3:-$slug#$goal}"; printf '%s\n' "$1" | python3 "$IB" get "$2" --legacy goal-lint --ref "$ref" || true; }
 count_lines() { printf '%s\n' "$1" | grep -cE "^[[:space:]]*$2:" || true; }
 branch_exists() { api "repos/$slug/branches/$(printf '%s' "$1" | sed 's|/|%2F|g')" --jq .name >/dev/null; }
 
@@ -142,7 +142,7 @@ walk() {  # walk <issue-number> <depth>
     # COUNT would otherwise default par=0, misclassify a container as a leaf AND skip the
     # recursion into its subtree — a whole unwalked branch reported clean.
     par="$(api "repos/$slug/issues/$k/sub_issues?per_page=1" --jq 'length')" || { warn "#$k: sub-issue count unreadable"; incomplete=1; par=0; }; par="${par:-0}"
-    cb="$(line "$b" Base)"
+    cb="$(line "$b" Base "$slug#$k")"
     if [ -n "$cb" ]; then
       if [ "$cb" = "$gbase" ]; then :; elif printf '%s' "$cb" | grep -qE "^goal/${goal}-" && branch_exists "$cb"; then :;
       else fail "#$k Base: '$cb' — must equal the goal's Base ($gbase) or name an EXISTING goal/${goal}-<theme> branch"; fi
@@ -164,7 +164,7 @@ walk() {  # walk <issue-number> <depth>
       leaves=$((leaves+1)); LEAF_NUMS+=("$k")
       [ -n "$cb" ] || fail "#$k (work item) has no \`Base:\` — it will fork from master and its diff will swallow the goal branch"
       printf '%s\n' "$b" | grep -qE '^[[:space:]]*Touches:' || warn "#$k has no \`Touches:\` — footprint is EXCLUSIVE (serial with every sibling)"
-      ctouches="$(line "$b" Touches)"
+      ctouches="$(line "$b" Touches "$slug#$k")"
       if [ -n "$ctouches" ]; then
         if [ "$(classify_touches "$ctouches")" = "codeowner-author" ]; then
           fail "#$k Touches lands in the operator-author set ($ctouches) — no worker can deliver it; split that half out or hand it to the seat (iac-lane.md §The platform lane)"
