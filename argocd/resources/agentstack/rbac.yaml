@@ -107,9 +107,11 @@ rules:
   - apiGroups: [""]
     resources: [pods, pods/log, pods/status]
     verbs: [get, list, watch, patch, delete]
+  # #1205: context-prefetch's agentstack-loop Role now CREATEs a per-pod configmaps — mirrored here
+  # so the compose can grant that verb (escalation-check, see header).
   - apiGroups: [""]
     resources: [configmaps, endpoints, events, persistentvolumeclaims, persistentvolumeclaims/status, services]
-    verbs: [get, list, watch, patch, delete]
+    verbs: [get, list, watch, create, patch, delete]
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get, list, watch]

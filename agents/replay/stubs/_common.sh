@@ -16,11 +16,13 @@
 #   WRITE → record and return success. Mutations are the OUTPUT under test; serving them would be
 #           replaying the world's reply to an action instead of asserting the action.
 #
-# Per-call failure injection (homelab#740): STUB_GH_<slugged-world-key>=fail|empty|body404|garbage
-# overrides the run-global $STUB_GH for ONE named call, evaluated for BOTH reads and writes.
-# The slug is the same bare-words slug _rp_serve uses (e.g. `STUB_GH_api_repos_foo_issues_1` for
-# `gh api repos/foo/issues/1`). Run-global $STUB_GH keeps today's semantics — a per-call var
-# only affects its one call, everything else falls through to the global.
+# Per-call failure injection (homelab#740, generalized to any stub tool homelab#1386): STUB_<TOOL>_
+# <slugged-world-key>=fail|empty|body404|garbage overrides the tool's run-global $STUB_<TOOL> for
+# ONE named call, evaluated for BOTH reads and writes. The slug is the same bare-words slug
+# _rp_serve uses (e.g. `STUB_GH_api_repos_foo_issues_1` for `gh api repos/foo/issues/1`, or
+# `STUB_KUBECTL_create` for a `kubectl create ...` write). The prefix is $_RP_TOOL uppercased, so
+# each stub gets its own namespace for free. Run-global $STUB_<TOOL> keeps today's semantics — a
+# per-call var only affects its one call, everything else falls through to the global.
 set -u
 
 _rp_die() {   # _rp_die <message...> — exit 9, the "the fixture is wrong" code the runner reports
@@ -70,7 +72,7 @@ _rp_slug() {   # "pr view 234" → "pr-view-234"
 # Returns 0 with the mode in stdout if a per-call override is set, 1 if none.
 # NOTE: slug hyphens are converted to underscores because env var names cannot contain hyphens.
 _rp_per_call_override() {   # _rp_per_call_override <slug>
-  _rp_var="STUB_GH_$(printf '%s' "$1" | tr '-' '_')"
+  _rp_var="STUB_$(printf '%s' "$_RP_TOOL" | tr 'a-z' 'A-Z')_$(printf '%s' "$1" | tr '-' '_')"
   eval '_rp_val="${'"$_rp_var"':-}"'
   [ -n "$_rp_val" ] || return 1
   printf '%s' "$_rp_val"

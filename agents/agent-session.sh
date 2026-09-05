@@ -1536,13 +1536,22 @@ $(printf '%s' "$PF_CI_FAILURE_MD" | sed 's/^/    /')"
       else
         echo "→ context pre-fetch: ConfigMap creation failed — falling back to argv delivery" >&2
         PF_CM_CREATED=""
-        # Fall back to argv delivery (base64-encode and prepend to RUN_CMD)
-        PF_BUNDLE_B64="$(printf '%s' "index.txt:
-${PF_INDEX}
----
-issue.md:
-${PF_ISSUE_MD}" | base64 -w0)"
-        PF_CONTEXT_PRELUDE="mkdir -p /work/context; printf '%s' '${PF_BUNDLE_B64}' | base64 -d > /work/context/bundle.txt; "
+        # Fall back to argv delivery: TWO files (base64-encode each, prepend to RUN_CMD) — the
+        # env card (render_env_card) tells the ride to read index.txt then issue.md FIRST, so the
+        # fallback must land those two names, not a single concatenated blob (homelab#1205 codeowner
+        # read, #1386). Optional items (pr.md, reviews.md, arbitration.md, ci-failure.md) are not
+        # written on this path (argv size) — any that fetched OK are downgraded to a MISSING line
+        # here so the index never silently claims an item that isn't there ("degrade LOUDLY").
+        PF_FALLBACK_INDEX="$(printf '%s\n' "$PF_INDEX" | awk -F'  ' '{
+          if (($1=="pr.md" || $1=="reviews.md" || $1=="arbitration.md" || $1=="ci-failure.md") && $2=="OK") {
+            print $1"  MISSING  argv fallback (ConfigMap create refused)"
+          } else {
+            print
+          }
+        }')"
+        PF_INDEX_B64="$(printf '%s' "$PF_FALLBACK_INDEX" | base64 -w0)"
+        PF_ISSUE_B64="$(printf '%s' "$PF_ISSUE_MD" | base64 -w0)"
+        PF_CONTEXT_PRELUDE="mkdir -p /work/context; printf '%s' '${PF_INDEX_B64}' | base64 -d > /work/context/index.txt; printf '%s' '${PF_ISSUE_B64}' | base64 -d > /work/context/issue.md; "
       fi
 
       # Prepend the context prelude to RUN_CMD
