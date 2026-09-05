@@ -1,0 +1,28 @@
+# homelab#1440 — select the failing run, not the newest run on branch
+#
+# CONDITION UNDER REPLAY. A PR with CI failures where the newest run on the branch is `skipped`
+# (e.g., from a `renovate-approve` workflow), while an older run is `failure` (e.g., from the main
+# `ci` workflow). The prefetch should select the failing run, not the newest one.
+#
+# WHY THIS FIXTURE EXISTS. Before homelab#1440, `gh run list --limit 1` selected the newest run
+# regardless of status. On a branch where the newest run is skipped/success while an older run
+# failed, the log tail fetch would return empty, causing permanent deferral. The fix adds
+# `--status failure` to select the failing run instead.
+#
+# THE CONTRACT:
+#   1. The failing run (conclusion=failure) is selected, not the skipped run
+#   2. The log tail from the failing run is retrieved and included in ci-failure.md
+#   3. ci-failure.md status is OK (not PARTIAL or MISSING)
+pins:
+  - MP-T12
+name: ci-failure-run-select
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:ci-failure-run-select
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_PR=1435

@@ -1,0 +1,9 @@
+{
+  "check_runs": [
+    {
+      "name": "ci",
+      "conclusion": "failure",
+      "html_url": "https://github.com/teststuffstash/homelab/runs/33965268108"
+    }
+  ]
+}

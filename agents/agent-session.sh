@@ -1447,17 +1447,18 @@ ${PF_ARB_BODY}"
 | ${PF_CK_NAME} | ${PF_CK_CONCLUSION} | ${PF_CK_URL} |"
             done <<< "$(printf '%s' "$PF_CHECKS" | jq -c '.[]')"
             # Fetch log tail via gh run list + view (bounded to last 200 lines per failing step)
-            # REQUIRED: the log must be readable — unreadable defers (homelab#1205)
+            # >>>REPLAY:ci-failure-run-select>>>
+            # Select the failing run (--status failure), not the newest one on the branch.
+            # If log is unreadable, dispatch PARTIAL (worker has check names/URLs, not blind).
             PF_LOG_TAIL=""
-            PF_RUN_ID="$(gh run list --repo "${PF_SLUG}" --branch "${PF_PR_REF}" --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || PF_RUN_ID=""
+            PF_RUN_ID="$(gh run list --repo "${PF_SLUG}" --branch "${PF_PR_REF}" --status failure --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || PF_RUN_ID=""
             if [ -z "$PF_RUN_ID" ] || [ "$PF_RUN_ID" = "null" ]; then
               echo "→ dispatch deferred — directive unreadable (CI run log for PR #${PF_PR} branch ${PF_PR_REF}; required for ci-red round) — the next pass retries (homelab#1205)" >&2
               exit 0
             else
               PF_LOG_TAIL="$(gh run view "${PF_RUN_ID}" --repo "${PF_SLUG}" --log-failed 2>/dev/null | tail -200)" || PF_LOG_TAIL=""
               if [ -z "$PF_LOG_TAIL" ]; then
-                echo "→ dispatch deferred — directive unreadable (CI run log empty for PR #${PF_PR} run ${PF_RUN_ID}; required for ci-red round) — the next pass retries (homelab#1205)" >&2
-                exit 0
+                PF_INDEX_ITEM "ci-failure.md" "PARTIAL" "Log tail unavailable for run ${PF_RUN_ID}"
               else
                 PF_CI_FAILURE_MD="${PF_CI_FAILURE_MD}
 
@@ -1468,6 +1469,7 @@ ${PF_LOG_TAIL}
                 PF_INDEX_ITEM "ci-failure.md" "OK"
               fi
             fi
+            # <<<REPLAY:ci-failure-run-select<<<
           else
             PF_INDEX_ITEM "ci-failure.md" "MISSING" "No failing check runs found"
           fi
