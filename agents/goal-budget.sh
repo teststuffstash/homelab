@@ -83,9 +83,28 @@ gb_add() { python3 -c "import sys;print(round(float(sys.argv[1])+float(sys.argv[
 # the estimator prices in USD (cap_usd) because OpenRouter does, so a `Budget: €5` funds $5, not €5.
 # A deliberate, stated approximation — the alternative is an FX rate this platform has no business
 # carrying. Write the number you mean in dollars.
+#
+# ONE HOME, ONE LEVEL UP (ADR-122 (3), homelab#1430): the regex itself now lives in
+# agents/issue_body.py beside the other twelve body grammars — this stays the goal lane's named
+# seam (the replay fixtures and both callers speak `gb_budget_line`), but the parsing is the
+# shared module's. It reads the `---`-fenced MACHINE BLOCK first and falls back to the legacy
+# `^[Bb]udget:` line, printing one `LEGACY-GRAMMAR Budget <ref>` line to stderr on the fall-through
+# — the migration meter; NEVER suppressed, the window closes at S8 closeout 2. `GB_REF` (optional)
+# is what that line names, e.g. `homelab#278`.
+#
+# DEGRADES LOUDLY, never silently: this file is SOURCED by agent-session.sh (the enforcing
+# pre-flight) and coordinator-scan.sh, both in pods where `python3` is on PATH by contract
+# (agents/coordinator/README.md §Runtime; gb_cap already depends on it for estimate_budget.py).
+# If the interpreter or the module is missing, say so on stderr and report NO budget line — which
+# is the input each caller already has a stated degrade for (launcher: gate off; harvest: no
+# self-queue right). Never a guessed number.
 gb_budget_line() {
-  sed -n 's/^[Bb]udget:[[:space:]]*//p' | head -1 | sed 's/^[^0-9]*//' | tr -d '[:space:]' \
-    | grep -E '^[0-9]+(\.[0-9]+)?$' || true
+  if ! command -v python3 >/dev/null 2>&1 || [ ! -f "$GB_HERE/issue_body.py" ]; then
+    echo "goal-budget.sh: cannot reach the ONE body parser (python3 + $GB_HERE/issue_body.py, ADR-122 (3)) — reporting NO \`Budget:\` line; each caller's stated degrade applies" >&2
+    cat >/dev/null   # drain the piped body so the caller does not take a SIGPIPE
+    return 0
+  fi
+  python3 "$GB_HERE/issue_body.py" get Budget --ref "${GB_REF:--}" || true
 }
 
 # ── WHICH issue is the goal — the question the sum is asked ABOUT (homelab#367) ──────────────────

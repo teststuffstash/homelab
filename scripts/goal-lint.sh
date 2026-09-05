@@ -4,9 +4,9 @@
 # 2026-09-01: Goals are authored from JAILS (not the in-cluster decompose play) and still arrive
 # malformed (oracle-fleet#326: no goal branch, children without a task/* class, no ordering
 # edges) — so the mistakes are caught at the surface the author touches, before anything is
-# queued, instead of one ride later. Pure `gh` REST reads — bash + gh + jq, all three in the jail
-# image, so it needs NO devbox. `python3` joins them for the ADR-122 (4) disposition overlay only
-# and is OPTIONAL: absent, the lint says so in one WARN and every other verdict stands.
+# queued, instead of one ride later. Pure `gh` REST reads — bash + gh + jq + python3 (the ONE
+# body parser, ADR-122 (3) — REQUIRED, the PROBE-FAIL below says so; the ADR-122 (4) disposition
+# overlay rides the same interpreter), so it needs NO devbox:
 #   homelab jail:  devbox run goal-lint -- <owner/repo> <goal-number>
 #   stack jail:    bash /workspace/homelab/scripts/goal-lint.sh <owner/repo> <goal-number>
 # (never `devbox run` in a stack jail's homelab clone — that materializes homelab's whole
@@ -42,7 +42,21 @@ warn() { echo "WARN: $*"; warns=$((warns+1)); }
 ok()   { echo "ok:   $*"; }
 
 api() { gh api "$@" 2>/dev/null; }
-line() { printf '%s\n' "$1" | grep -m1 -E "^[[:space:]]*$2:[[:space:]]*" | sed -E "s/^[[:space:]]*$2:[[:space:]]*//; s/[[:space:]]+$//"; }
+
+# ── the body grammar: ONE parser (ADR-122 (3), homelab#1430) ────────────────────────────────
+# `line()` was this script's own regex over the body until #1430; it is now a thin call into
+# agents/issue_body.py, which reads the `---`-fenced MACHINE BLOCK first and falls back to the
+# legacy line-anchored form, printing one `LEGACY-GRAMMAR <key> <ref>` line to stderr per
+# fall-through (the migration meter — do not suppress it; the transition window closes at S8
+# closeout 2). `--legacy goal-lint` selects the variant that restates THIS helper's historical
+# semantics exactly — case-sensitive key, leading whitespace allowed, first match, trailing trim,
+# no value normalization — so a body carrying no block lints byte-identically to before.
+# `count_lines` stays local on purpose: it is a lint about the BODY's SHAPE ("exactly one machine
+# line", #29's €12-in-prose trap), not a value read, and the parser exposes no duplicate count.
+IB="$(cd "$(dirname "$0")/.." && pwd)/agents/issue_body.py"
+[ -f "$IB" ] || { echo "PROBE-FAIL: $IB is missing — the body grammar has ONE parser and it is not here" >&2; exit 2; }
+command -v python3 >/dev/null 2>&1 || { echo "PROBE-FAIL: python3 not on PATH — agents/issue_body.py is the body parser (ADR-122 (3))" >&2; exit 2; }
+line() { local ref="${3:-$slug#$goal}"; printf '%s\n' "$1" | python3 "$IB" get "$2" --legacy goal-lint --ref "$ref" || true; }
 count_lines() { printf '%s\n' "$1" | grep -cE "^[[:space:]]*$2:" || true; }
 branch_exists() { api "repos/$slug/branches/$(printf '%s' "$1" | sed 's|/|%2F|g')" --jq .name >/dev/null; }
 
@@ -134,7 +148,7 @@ walk() {  # walk <issue-number> <depth>
     # COUNT would otherwise default par=0, misclassify a container as a leaf AND skip the
     # recursion into its subtree — a whole unwalked branch reported clean.
     par="$(api "repos/$slug/issues/$k/sub_issues?per_page=1" --jq 'length')" || { warn "#$k: sub-issue count unreadable"; incomplete=1; par=0; }; par="${par:-0}"
-    cb="$(line "$b" Base)"
+    cb="$(line "$b" Base "$slug#$k")"
     if [ -n "$cb" ]; then
       if [ "$cb" = "$gbase" ]; then :; elif printf '%s' "$cb" | grep -qE "^goal/${goal}-" && branch_exists "$cb"; then :;
       else fail "#$k Base: '$cb' — must equal the goal's Base ($gbase) or name an EXISTING goal/${goal}-<theme> branch"; fi
@@ -162,7 +176,7 @@ walk() {  # walk <issue-number> <depth>
       leaves=$((leaves+1)); LEAF_NUMS+=("$k"); MEMBER_NUMS+=("$k")
       [ -n "$cb" ] || fail "#$k (work item) has no \`Base:\` — it will fork from master and its diff will swallow the goal branch"
       printf '%s\n' "$b" | grep -qE '^[[:space:]]*Touches:' || warn "#$k has no \`Touches:\` — footprint is EXCLUSIVE (serial with every sibling)"
-      ctouches="$(line "$b" Touches)"
+      ctouches="$(line "$b" Touches "$slug#$k")"
       if [ -n "$ctouches" ]; then
         if [ "$(classify_touches "$ctouches")" = "codeowner-author" ]; then
           fail "#$k Touches lands in the operator-author set ($ctouches) — no worker can deliver it; split that half out or hand it to the seat (iac-lane.md §The platform lane)"

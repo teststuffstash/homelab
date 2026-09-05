@@ -13,4 +13,5 @@ OUT CARD |
 OUT CARD | ## Acceptance
 OUT CARD | 
 OUT CARD | - the gate is required on the repo's ruleset
+ERR LEGACY-GRAMMAR Budget -
 RC 0
