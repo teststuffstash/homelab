@@ -766,11 +766,12 @@ the block needs pruning, not more headings.
       parser + static report, `devbox run doc-heat`) and the serving plan:
       [`docs/spikes/doc-heat.md`](spikes/doc-heat.md). **PROMOTED 2026-08-30** (operator —
       settle bar met by run 1): standing docs-cleanup input, wired into the skill's comb step.
-      **Next: the first post-S5 heat read, due ~2026-09-06** (a week's fresh transcripts —
-      pre-S5 heat describes text the comb rewrote); then the v1 cluster leg
-      (`s3://agent-transcripts`, path normalization, jail/cluster separate + combined views —
-      operator requirement), which also delivers context-repos.md's overdue measurement sweep.
-      Relates FU-058.
+      **Post-S5 heat read DONE 2026-09-05** (settle-test run 2 in the spike: windowed to the
+      37 transcripts since 08-31, 72 % of corpus lines never targeted; the corpus load itself
+      measured 300–350k tokens) → the trims are S5's fifth original, homelab#1393.
+      **Next: the v1 cluster leg** (`s3://agent-transcripts`, path normalization,
+      jail/cluster separate + combined views — operator requirement), which also delivers
+      context-repos.md's overdue measurement sweep. Relates FU-058.
 
 - [ ] **FU-058** — **Retro P3: POINTER.** The 08-24 fire FAILED (529 storm + #861, fixed
       PR#864); **the re-fire DELIVERED 2026-08-25** — platform r1 landed (PR#918), its batch

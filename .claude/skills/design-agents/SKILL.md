@@ -19,7 +19,7 @@ Why it exists (operator ruling, 2026-08-10): the agents subsystem is so tightly 
 major change requires the full context anyway — selective closure kept under-reading (the FSM
 `replay:` fields, `model-routing.md` §M1a: both misses were claims about files not read), and the
 per-file grounding list had grown into an audit burden the operator had to verify by memory.
-Fixed cost beats itemized honesty here: ~110k tokens, pre-authorized, paid ONCE per session
+Fixed cost beats itemized honesty here: **~300–350k tokens measured** (session-ctx `--big` on the 2026-09-03/04 corpus loads; the "~110k" this line carried since the 2026-08-18 trim was never re-measured), pre-authorized, paid ONCE per session
 (prompt caching amortizes every follow-up question).
 
 ## The read plan
@@ -31,7 +31,7 @@ Fixed cost beats itemized honesty here: ~110k tokens, pre-authorized, paid ONCE 
      `unreplayed:` fields and the gap registers — the exact miss that once justified reading the
      sources. The YAMLs add only code anchors (file+regex); read one on demand when EDITING a
      guard/transition, never for a design sitting.
-   - `agents/README.md` (launcher) + `agents/coordinator/README.md` (the brief — ~23k tokens and
+   - `agents/README.md` (launcher) + `agents/coordinator/README.md` (the brief — ~30k tokens (107 KB) and
      load-bearing; a docs/agents glob misses it)
    - `agents/replay/README.md` **through the generated index only** (doctrine + cleanup contract
      + index, ≈ the first third). The per-family essays below the index are touch-time reference
