@@ -1,7 +1,0 @@
-{
-  "labels": [
-    {"name": "task/goal"},
-    {"name": "agent/blocked"}
-  ],
-  "body": "The P0 slice, end to end.\n\nBudget: 12\nVerdict-authority: human\nProduction-leg: circles prod deploy + the p0 dashboard is green for 48h\n"
-}
