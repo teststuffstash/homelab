@@ -1,0 +1,126 @@
+# Behaviour fixture for GithubExporterPartialData (homelab#1405) — validates both directions:
+#   (A) counter increments in the window AND `github_pull_request_open` absent → alert FIRES
+#   (B) counter increments while the PR family is PRESENT → NO alert
+#
+# The broken expression in round 1 had TWO defects (homelab#1405's arbitration comment):
+#   1. `by (job)` dropped the `class` label from the result, so {{ $labels.class }} was empty
+#   2. The RHS `(count by (job) (github_pull_request_open) == 0 or absent(github_pull_request_open))`
+#      never matched:
+#        • `count` over an absent series returns empty vector (never 0)
+#        • `absent()` returns labelless vector, cannot match against `job` in the `and` join
+#
+# This fixture confirms the FIXED expression:
+#   (max by (job, class) (increase(github_exporter_graphql_partial_total[15m])) > 0)
+#   and on() absent(github_pull_request_open)
+# …fires when the counter increments and PR series is absent, and stays silent otherwise.
+#
+# The metric classes tested here are resource-limit (the transient case) and not-accessible
+# (the PAT permission issue case).
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/partial-data.promtool-test
+#
+rule_files:
+  - partial-data.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ─ Shape A1 — resource-limit class, PR family absent, counter increments ─────────────────────
+  # The transient resource-limit case: GitHub's nested query hits the node-cost limit when the
+  # org is busy (seat PRs re-merged, agent runs). Partial data is returned, the PR series is
+  # dropped, the counter increments. Alert should fire after `for: 5m`.
+  # Using the shorthand "0+0x4 1+0x11" means: 0 for 5 samples (times 0-4m), then 1 for 12 samples
+  # (times 5-16m). The `increase()` function at eval_time 10m sees the counter rise from 0 to 1
+  # in the [15m] window, which is > 0. The `for: 5m` is satisfied at eval_time 10m (condition
+  # true for 5m: from 5m to 10m).
+  - interval: 1m
+    name: "resource-limit + absent PR family fires after 5m"
+    input_series:
+      - series: 'github_exporter_graphql_partial_total{job="github-exporter",class="resource-limit"}'
+        values: "0+0x4 1+0x11"  # 0 for times 0-4m, then 1 for times 5-16m (increment at 5m)
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: GithubExporterPartialData
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: GithubExporterPartialData
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: GithubExporterPartialData
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: GithubExporterPartialData
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: github-exporter
+              class: resource-limit
+            exp_annotations:
+              summary: "github-exporter: GraphQL partial data — PR series missing"
+              description: "GraphQL walk returned partial data (class: resource-limit) in the last 15m and the entire `github_pull_request_*` series family is absent from Prometheus. The review edge, codeowner-park watcher and behind-dispatcher are dark (FU-108 class — the read succeeds with nothing in it). Check: the `class` label says which path to follow — `resource-limit` → the walk's nested `first:` fan-out against GitHub's query-cost ceiling, see github-exporter.py; `not-accessible` → the exporter PAT's repo access (scripts/github-exporter-pat-bootstrap.sh, docs/github-setup.md §Tokens); `other` → the pod log's field errors. githubstatus.com rules out a GitHub-side outage. The */15 reflex + coordinate CronWorkflow backstops own re-reviews and CI-reds meanwhile."
+
+  # ─ Shape A2 — not-accessible class, PR family absent, counter increments ───────────────────
+  # The PAT permission issue case: the exporter token cannot read some repo/field in the org
+  # universe. Partial data is returned, the PR series is dropped, the counter increments with
+  # class=not-accessible. Alert should fire after `for: 5m`, with the class label present on
+  # the firing instance (round 1 finding 1: `by (job)` was dropping the class label).
+  - interval: 1m
+    name: "not-accessible + absent PR family fires after 5m with class label"
+    input_series:
+      - series: 'github_exporter_graphql_partial_total{job="github-exporter",class="not-accessible"}'
+        values: "0+0x4 1+0x11"  # 0 for times 0-4m, then 1 for times 5-16m (increment at 5m)
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: GithubExporterPartialData
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: GithubExporterPartialData
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: github-exporter
+              class: not-accessible
+            exp_annotations:
+              summary: "github-exporter: GraphQL partial data — PR series missing"
+              description: "GraphQL walk returned partial data (class: not-accessible) in the last 15m and the entire `github_pull_request_*` series family is absent from Prometheus. The review edge, codeowner-park watcher and behind-dispatcher are dark (FU-108 class — the read succeeds with nothing in it). Check: the `class` label says which path to follow — `resource-limit` → the walk's nested `first:` fan-out against GitHub's query-cost ceiling, see github-exporter.py; `not-accessible` → the exporter PAT's repo access (scripts/github-exporter-pat-bootstrap.sh, docs/github-setup.md §Tokens); `other` → the pod log's field errors. githubstatus.com rules out a GitHub-side outage. The */15 reflex + coordinate CronWorkflow backstops own re-reviews and CI-reds meanwhile."
+
+  # ─ Guard B1 — counter increments, but PR family is PRESENT ─────────────────────────────────
+  # Partial data occurred (counter incremented) but the exporter recovered and re-sent the full
+  # PR series. Since the PR family is present, the `and on() absent(github_pull_request_open)`
+  # side is false and the alert must NOT fire.
+  - interval: 1m
+    name: "counter incremented but PR family present stays silent"
+    input_series:
+      - series: 'github_exporter_graphql_partial_total{job="github-exporter",class="resource-limit"}'
+        values: "0+0x2 1+0x9"  # 0 for times 0-2m, then 1 for times 3-11m (increment at 3m)
+      - series: 'github_pull_request_open{job="github-exporter",repo="homelab",state="open"}'
+        values: "5+0x11"  # PR family is present at all times (the query returned full data)
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: GithubExporterPartialData
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: GithubExporterPartialData
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: GithubExporterPartialData
+        exp_alerts: []
+
+  # ─ Guard B2 — counter has NOT incremented in the 15m window ───────────────────────────────
+  # No partial-data errors in the last 15 minutes. Even if the PR family is absent (unrelated
+  # reason), the counter side of the `and` is false and the alert must NOT fire.
+  - interval: 1m
+    name: "no counter increments (healthy) stays silent even if PR family absent"
+    input_series:
+      - series: 'github_exporter_graphql_partial_total{job="github-exporter",class="resource-limit"}'
+        values: "0+0x15"  # constant at 0 for all 16 samples (0-15m; no increments in the 15m window)
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: GithubExporterPartialData
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: GithubExporterPartialData
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: GithubExporterPartialData
+        exp_alerts: []
