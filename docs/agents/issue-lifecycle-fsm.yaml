@@ -81,7 +81,7 @@ events:
   authored: "a play files an issue (harvest bullet / janitor draft / responder alert / goal decompose)"
   fix_verdict: "an alert-triage session ends its issue with `fix-verdict: fix` — the responder shell applies agent-fix (INERT) and rings /fix-verdict"
   debounce_elapsed: "the debounce suspend expires (or the backstop cron fires) and one `decide` re-derives the pending SET live"
-  human_triage: "a human applies agent-fix + agent/queued (or closes as noise)"
+  human_triage: "a human applies agent/queued, agent-fix optional (or closes as noise) — ADR-122 (2), #1432"
   dispatched: "the scan emits a unit; the launcher opens a ride (WIP=1, pod-name key)"
   pr_merged_master: "the ride's PR merges into master — GitHub closing keyword fires"
   pr_merged_goal: "the ride's PR merges into its declared goal/** base — keyword INERT"

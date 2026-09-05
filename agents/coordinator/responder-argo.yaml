@@ -29,8 +29,9 @@
 #   breakers   = one issue max per session (brief + the fp belts); no agent labels on filed
 #                issues (inert, breaker #1); loop-smell → report-only stop
 #   dispatch   = SPLIT from triage (FU-133 dispatch half, 2026-08-07): the session's issue
-#                carries a 'fix-verdict:' line, the shell applies agent-fix (inert — the scan
-#                needs agent-fix ∧ agent/queued) and rings /fix-verdict; the fix-debounce
+#                carries a 'fix-verdict:' line, the shell applies agent-fix (inert — the scan's
+#                dispatch precondition is agent/queued alone, ADR-122 (2), #1432) and rings
+#                /fix-verdict; the fix-debounce
 #                workflow (fix-debounce-argo.yaml) judges the whole pending SET before any
 #                issue gets agent/queued. Replaces selfQueue (cb4ae5a).
 #   routing    = the owner of the FIX, not the owner of the symptom (#124, operator amendment
@@ -748,8 +749,9 @@ spec:
               # so dispatched same-cause issues in parallel (iac-lane.md §"one root cause, N alert
               # issues"). Split: the session's issue carries 'fix-verdict: fix|report-only' (a
               # DIAGNOSIS — breaker #1 still keeps labels out of the session's hands); this shell
-              # applies agent-fix, which is INERT by the scan's own predicate (dispatch requires
-              # agent-fix ∧ agent/queued, coordinator-scan.sh:8); QUEUEING belongs to the
+              # applies agent-fix, which is INERT by the scan's own predicate (dispatch's ONE
+              # precondition is agent/queued alone, coordinator-scan.sh:8, ADR-122 (2), #1432);
+              # QUEUEING belongs to the
               # fix-debounce workflow (fix-debounce-argo.yaml), rung here via /fix-verdict.
               # REST reads, not `gh search` — the search index lags a just-filed issue; and REST
               # keeps this lane off the GraphQL pool the reflex drained on 2026-07-17 (FU-084).
