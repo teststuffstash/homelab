@@ -81,7 +81,7 @@ events:
   authored: "a play files an issue (harvest bullet / janitor draft / responder alert / goal decompose)"
   fix_verdict: "an alert-triage session ends its issue with `fix-verdict: fix` — the responder shell applies agent-fix (INERT) and rings /fix-verdict"
   debounce_elapsed: "the debounce suspend expires (or the backstop cron fires) and one `decide` re-derives the pending SET live"
-  human_triage: "a human applies agent-fix + agent/queued (or closes as noise)"
+  human_triage: "a human applies agent/queued, agent-fix optional (or closes as noise) — ADR-122 (2), #1432"
   dispatched: "the scan emits a unit; the launcher opens a ride (WIP=1, pod-name key)"
   pr_merged_master: "the ride's PR merges into master — GitHub closing keyword fires"
   pr_merged_goal: "the ride's PR merges into its declared goal/** base — keyword INERT"
@@ -111,7 +111,7 @@ transitions:
   - id: IL-T02
     name: human adoption
     owner: the operator
-    when: "human labels agent-fix + agent/queued, or closes as noise — the master lane's ONLY human gate"
+    when: "human labels agent/queued (agent-fix optional, ADR-109 backlog marker), or closes as noise — the master lane's ONLY human gate (ADR-122 (2), S8 #1432)"
     status: report-only
 
   - id: IL-T03
@@ -232,7 +232,7 @@ transitions:
   - id: IL-T05
     name: queued-dispatch
     owner: scan (schedules ONE unit) → coordinator item session (judges) → launcher (opens the ride)
-    when: "agent-fix ∧ agent/queued ∧ ¬direction-change ∧ ¬agent/error ∧ nothing held"
+    when: "agent/queued ∧ ¬direction-change ∧ ¬agent/error ∧ nothing held (ADR-122 (2), S8 #1432 — agent-fix dropped off the JOIN)"
     status: guarded
     unreplayed: "scan priority + pod-name key (kubectl-create semantics) — backfill by fix-density"
     unreplayed: "scan priority + pod-name key (kubectl-create semantics) — backfill by fix-density"

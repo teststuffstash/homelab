@@ -149,16 +149,8 @@ for repo in $repos; do
       | "\($repo)#\(.number) \(.title) (\(age))" ] | unique | .[]')"
   [ -n "$tline" ] && sec_triage="${sec_triage}${tline}"$'\n'
 
-  # ⚠ half-labeled: `agent/queued` WITHOUT `agent-fix` — every dispatch clause needs the pair,
-  # and no other surface lists this state (BACKLOG needs agent-fix, the block above excludes
-  # agent/* labels), so it is invisible until the coarse throughput belt notices the cork.
-  # Live case: oracle-fleet#260, hand-queued 2026-08-12 with one label of the pair, 7 days
-  # undispatchable (2026-08-19 heartbeat catch). The human decides which half was meant:
-  # add agent-fix, or de-queue.
-  hline="$(printf '%s' "$issues" | jq -r --arg repo "$repo" "$JQ"'[
-      .[] | select(haslab("agent/queued") and (haslab("agent-fix") | not))
-      | "⚠ \($repo)#\(.number) \(.title) (\(age)) — agent/queued WITHOUT agent-fix: invisible to every dispatch clause" ] | unique | .[]')"
-  [ -n "$hline" ] && sec_triage="${sec_triage}${hline}"$'\n'
+  # `agent/queued` WITHOUT `agent-fix` retired as an anti-pattern here: it is now a legal,
+  # dispatchable state (ADR-122 (2), S8 #1432) — agent/queued alone is the release valve.
 
   # § VERDICT DUE — goals past assembly-complete (ADR-102) awaiting a post-launch verdict.
   vline="$(printf '%s' "$issues" | jq -r --arg repo "$repo" "$JQ"'[

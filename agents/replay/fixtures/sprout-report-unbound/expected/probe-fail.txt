@@ -1,5 +1,5 @@
 CALL gh issue list --repo teststuffstash/circles --state open --limit 200 --json number,title,author,labels,createdAt,blockedBy
-OUT ORPHAN [circles] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):
+OUT ORPHAN [circles] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent/queued to adopt (ADR-122 (2), #1432)):
 OUT ORPHAN   issue #90 — unbound sprout with cue (by homelab-agents-1234)
 OUT ORPHAN   issue #91 — bound sprout with cue (by homelab-agents-1234)
 OUT ORPHAN [circles] ⚠ PROBE-FAILED (openall / inert) — unbound-sprout belt skipped this tick (rule #6)
