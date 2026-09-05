@@ -11,15 +11,27 @@
 # (docs/agents/iac-lane.md §The platform lane).
 #
 # HONESTY REQUIREMENT: kubeconform cannot check CRs whose CRD schema it doesn't have (ArgoCD
-# Applications, AgentStacks, CiliumNetworkPolicies, Prometheus rules...). Those are SKIPPED, not
-# validated — and a check that reports success while skipping most of its input is the FU-125 /
-# FU-108 / FU-131 failure class this platform keeps paying for. So the skip count is printed loudly
-# every run, and a run where NOTHING was validated fails.
+# Applications, AgentStacks, Prometheus rules...). Those are SKIPPED, not validated — and a check
+# that reports success while skipping most of its input is the FU-125 / FU-108 / FU-131 failure
+# class this platform keeps paying for. So the skip count is printed loudly every run, and a run
+# where NOTHING was validated fails. CiliumNetworkPolicy/CiliumClusterwideNetworkPolicy left this
+# class 2026-09-05 (homelab#1200): schema-validated below via a VENDORED CRD schema, not fetched —
+# see scripts/schemas/README.md for why (offline CI, FU-197) and how to re-generate it on a Cilium
+# bump. That schema only covers the CNPs that exist as literal top-level manifests; the CNPs
+# rendered inside argocd/resources/agentstack/composition.yaml are go-templated strings inside a
+# Crossplane Composition — kubeconform never sees them as a document, so this gate has no opinion
+# on them (they stay hand-reviewed, same as the Composition's other embedded kinds).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DIRS="${*:-argocd/resources argocd/platform}"
 K8S_VERSION="${K8S_VERSION:-1.36.1}"
+
+# scripts/schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json is kubeconform's own
+# CRD-schema layout (lowercase kind); `default` keeps the upstream fetch as the fallback for every
+# built-in kind. Order matters: the local vendor is tried first so a CNP never round-trips to the
+# network.
+SCHEMA_LOCATIONS="-schema-location scripts/schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json -schema-location default"
 
 # YAML under these paths is INPUT to something else, never applied: helm values consumed by an
 # Application, and kustomize configMapGenerator sources. Listed explicitly rather than auto-skipping
@@ -37,7 +49,7 @@ files=$(find $DIRS -name '*.yaml' -o -name '*.yml' 2>/dev/null | grep -Ev "$NOT_
 # -ignore-missing-schemas: skip unknown CRs rather than fail (we do not vendor every CRD schema).
 # -strict: reject unknown fields in the kinds we DO know — that is the typo class this exists for.
 out="$(printf '%s\n' "$files" | xargs kubeconform \
-  -kubernetes-version "$K8S_VERSION" -strict -ignore-missing-schemas -summary 2>&1)" || rc=$?
+  -kubernetes-version "$K8S_VERSION" -strict -ignore-missing-schemas -summary $SCHEMA_LOCATIONS 2>&1)" || rc=$?
 echo "$out"
 
 # Summary line shape: "Summary: N resources found in M files - Valid: V, Invalid: I, Errors: E, Skipped: S"
@@ -55,8 +67,9 @@ if [ "$valid" -eq 0 ]; then
   exit 1
 fi
 echo "manifest-lint: OK — ${valid} validated, ${skipped} SKIPPED (no local CRD schema: Applications,"
-echo "  AgentStacks, CiliumNetworkPolicies, PrometheusRules…). Skipped resources are NOT checked —"
-echo "  vendoring those CRD schemas is what would close the gap."
+echo "  AgentStacks, PrometheusRules…). Skipped resources are NOT checked — vendoring those CRD"
+echo "  schemas is what would close the gap (CiliumNetworkPolicy/CiliumClusterwideNetworkPolicy"
+echo "  left this class 2026-09-05, homelab#1200 — see scripts/schemas/README.md)."
 
 # ── kustomization completeness (homelab#694, 2026-08-20) ─────────────────────────────────────
 # The agent-coordinator app is kustomize-rendered (FU-152): a manifest present in the directory
