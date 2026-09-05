@@ -19,7 +19,7 @@ if [ -n "$PF_PAYLOAD" ]; then
   fi
   # Assert blank line between ## <title> and body: look for "## <title>" followed by
   # an empty line (two consecutive newlines). Use awk to check the pattern.
-  if printf '%s' "$PF_DECODED" | awk '/^## /{getline line; if(length(line)==0) {found=1; exit 0}} END{exit !found+0}'; then
+  if printf '%s' "$PF_DECODED" | awk '/^## /{getline line; ok=(length(line)==0); exit !ok} END{exit !ok}'; then
     echo "→ prelude blank-line verified: blank line present between title and body"
   else
     echo "→ prelude blank-line MISSING: no blank line between title and body"
