@@ -273,7 +273,14 @@ def _report_legacy(key, ref):
 
 # ── the block ───────────────────────────────────────────────────────────────────────────────────
 
-_FENCE_RE = re.compile(r"^[ \t]*---[ \t]*$")
+# ⚠ `[ \t\r]` on the fence, not `[ \t]`: a body authored through the GitHub WEB UI comes back
+# with CRLF line endings, so the fence line is `---\r`. Without the `\r` the block would simply
+# not be SEEN on those bodies — the whole block silently invisible, every unknown key inside it
+# silently skipped, which is the exact failure mode this grammar's loudness exists to prevent.
+# The scan's own awk normalizers strip `\r` for the same reason (coordinator-scan.sh:2350).
+# Key lines need no such treatment: `_KEY_RE`'s value capture is `.rstrip()`ed, and every legacy
+# normalizer below already deletes or trims `\r`.
+_FENCE_RE = re.compile(r"^[ \t]*---[ \t\r]*$")
 _KEY_RE = re.compile(r"^([A-Za-z][A-Za-z0-9._-]*):[ \t]*(.*)$")
 
 
@@ -588,6 +595,14 @@ def _self_test():
     # Leading blank lines before the fence are tolerated — "at the TOP" means first CONTENT.
     check("block: leading blank lines still count as the top",
           parse_block("\n\n---\nBudget: 7\n---\n"), {"Budget": "7"})
+    # CRLF: GitHub's web UI submits bodies with \r\n. The fence, the values and the blank-line
+    # skip must all survive it — otherwise the block is invisible on exactly the bodies a human
+    # typed, and its refusals never fire.
+    check("block: a CRLF body parses (the web UI's line endings)",
+          parse_block("---\r\nBudget: 30\r\nBase: goal/9-x\r\n\r\n---\r\n\r\n## Why\r\n"),
+          {"Budget": "30", "Base": "goal/9-x"})
+    raises("refusal: an unknown key in a CRLF block is still loud",
+           lambda: parse_block("---\r\nNope: 1\r\n---\r\n"), "unknown key")
 
     # ── loud refusals ────────────────────────────────────────────────────────────────────────
     # Contract: "an unknown key, a nested/bulleted line, a duplicate key is a LOUD parse error,
