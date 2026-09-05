@@ -148,7 +148,9 @@ never the session's arc — that is TICK-LOG's.)
     EPHEMERAL (resets on garage-0 restart) · FU-073/084/089/098 stale-archive entries, 41d old (next
     docs-cleanup).
 - **⚑ WATCH-NOISE candidates (next meta-events touch):** FAMINE emits per count-delta not
-  threshold-crossing; "unlabeled >24h" false-flags containers (wants the
+  threshold-crossing — AND counts `iac-sentinel-edge` convoys (09-05 08:01Z: 10 Pending on the
+  sentinel mutex after a 5-PR push burst, 1 subscription pod running — a queue, not a famine;
+  exclude sentinel-edge or count per kind); "unlabeled >24h" false-flags containers (wants the
   sprout-report-skips-buckets exclusion); gh `--jq` takes NO `--arg`; reviewDecision never
   changes across CR→CR re-verdicts (key on newest-verdict timestamp); reviewer STEP-0 false
   anomaly on update-branch re-pointed review commit_ids — **FILED homelab#1403 (queued) at the
