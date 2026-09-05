@@ -1,0 +1,9 @@
+# homelab#1205 — CI-red round context pre-fetch: ci-failure.md materialized via ConfigMap.
+# WORK_BRANCH is set (fix round), PF_PR is set, and the PR head has failing CI checks.
+name: context-prefetch/ci-red
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh

@@ -1,0 +1,77 @@
+CALL gh api repos/teststuffstash/test-project/issues/1175 --jq {title, body, labels: [.labels[].name]}
+CALL gh api repos/teststuffstash/test-project/issues/1175/comments --paginate
+CALL gh api repos/teststuffstash/test-project/pulls/42 --jq {title, body, headRefName, baseRefName}
+CALL gh api repos/teststuffstash/test-project/compare/master...fix/issue-1175-test --jq .commits[] | "\(.sha[0:8]) \(.commit.message | split("\n")[0])"
+CALL gh api repos/teststuffstash/test-project/pulls/42/reviews --paginate
+CALL gh api repos/teststuffstash/test-project/pulls/42/comments --paginate
+CALL gh api repos/teststuffstash/test-project/pulls/42 --jq {ref: .head.ref, sha: .head.sha}
+CALL gh api repos/teststuffstash/test-project/commits/abc123def456/check-runs
+CALL kubectl create -f -
+STDIN apiVersion: v1
+STDIN kind: ConfigMap
+STDIN metadata:
+STDIN   name: agent-test-project-issue-1175-r1-context
+STDIN   namespace: agent-runs
+STDIN data:
+STDIN   index.txt: |
+STDIN     index.txt  OK
+STDIN     issue.md  OK
+STDIN     pr.md  OK
+STDIN     reviews.md  OK
+STDIN     ci-failure.md  MISSING  No failing check runs found
+STDIN   issue.md: |
+STDIN     # Issue #1175
+STDIN     ## launcher context-PREFETCH stage: gather every deterministic read into /work/context/
+STDIN     
+STDIN     **Labels:** agent-fix, task/fix
+STDIN     
+STDIN     Touches: agents/agent-session.sh, agents/replay/**
+STDIN     
+STDIN     The MECHANISM half of #1069 (operator direction, 2026-09-01). Pre-read the directive channel via REST and materialize into /work/issue.md.
+STDIN     
+STDIN     ## Comments
+STDIN     
+STDIN     ### homelab-agents-1234 (2026-09-01T07:19:57Z)
+STDIN     
+STDIN     <!-- agent-summary -->
+STDIN     🤖 **Agent activity** — one machine comment per timeline.
+STDIN     
+STDIN     - `2026-09-01T07:19:56Z` · **picking this up (round 1)** — dispatching a fix-class worker. <!-- agent-event kind=dispatch ts=2026-09-01T07:19:56Z -->
+STDIN     
+STDIN     ### RasmusSoot (2026-09-01T07:21:28Z)
+STDIN     
+STDIN     **Scope note for the ride and the reviewer (seat, 2026-09-01):** round 1 was dispatched on the original narrow scope (`issue.md` pre-read + defer) minutes before the operator widened this into the full context-PREFETCH stage.
+STDIN   pr.md: |
+STDIN     # PR #42: Fix: context prefetch rows 2-4
+STDIN     
+STDIN     Fixes #1175
+STDIN     
+STDIN     Builds the remaining rows of the context-PREFETCH stage.
+STDIN     
+STDIN     ## Commits (master...fix/issue-1175-test)
+STDIN     abc123de feat: add context prefetch rows 2-4
+STDIN     fgh456ij fix: address review comments
+STDIN   reviews.md: |
+STDIN     ## Reviews (newest first)
+STDIN     
+STDIN     ### reviewer-bot — APPROVED (2026-09-02T12:00:00Z)
+STDIN     
+STDIN     LGTM, changes addressed.
+STDIN     
+STDIN     ### reviewer-bot — CHANGES_REQUESTED (2026-09-02T10:00:00Z)
+STDIN     
+STDIN     Please add tests for the new prefetch logic.
+STDIN     
+STDIN     ## Inline comments (file:line)
+STDIN     
+STDIN     - **reviewer-bot** at agents/agent-session.sh:1280 (2026-09-02T10:05:00Z)
+STDIN       Consider adding error handling for the ConfigMap creation fallback.OUT → context pre-fetch: issue #1175 + comments materialized (homelab#1175, #1205)
+OUT → prelude prepend verified: RUN_CMD starts with mkdir -p /work/context
+OUT → fallback writes /work/context/index.txt
+OUT → fallback writes /work/context/issue.md
+OUT → index downgrades pr.md to MISSING/argv-fallback
+OUT → index downgrades reviews.md to MISSING/argv-fallback
+OUT → index leaves ci-failure.md's pre-existing MISSING reason untouched
+OUT → issue.md content verified
+ERR → context pre-fetch: ConfigMap creation failed — falling back to argv delivery
+RC 0

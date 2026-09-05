@@ -1,0 +1,10 @@
+[
+  {
+    "id": 200,
+    "user": {"login": "reviewer-bot"},
+    "path": "agents/agent-session.sh",
+    "line": 1280,
+    "body": "Consider adding error handling for the ConfigMap creation fallback.",
+    "created_at": "2026-09-02T10:05:00Z"
+  }
+]
