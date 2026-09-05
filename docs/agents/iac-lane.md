@@ -179,18 +179,13 @@ set-judged debouncer:
   live case arrived pre-queued on already-merged work and the FU-069 breaker caught the
   contradiction — which is a belt doing a guard's job at the wrong end of the lane.
 - **First live ≥2-pending set-pass (2026-08-07): independence RIGHT, queueing WRONG — and the
-  coordinator caught it.** The set was homelab#68 + #118; the verdict "independent root causes"
-  was correct. But #68 was queued off its BODY — a 07-28 diagnosis whose scope ceiling
-  (`longhornManager.resources`) had ALREADY shipped (FU-112(b)/FU-139; zero BestEffort pods
-  live) — and `agent/queued` landed 11 minutes AFTER the responder's resolve leg recorded the
-  alert clearing (#68 was human-engaged, so the resolve leg could not close it, and it sat
-  ripe in the pending set). The 21:00Z platform coordinator refused the unit and parked it
-  `agent/blocked` with the full refutation. **Lesson: the set-pass reads bodies, not current
-  state — the queue gate needs a CURRENCY check (FU-133 leg c — QUEUED as homelab#253,
-  blocked-by #244): skip when the alert has
-  resolved, and treat a body older than its subject's last state change as suspect.** The
-  reopening kill was `Error`-137 shared-fate (the PSI-stall class, FU-139 archive), not a
-  values problem — #63/#65 are the same collateral, not riders on any longhorn-values fix.
+  coordinator caught it.** The verdict ("independent root causes") was correct, but one of the two
+  issues was queued off its BODY — a diagnosis whose scope ceiling had already shipped — and
+  `agent/queued` landed 11 minutes AFTER the responder's resolve leg recorded the alert clearing.
+  The platform coordinator refused the unit and parked it `agent/blocked` with the refutation.
+  **Lesson: the set-pass reads bodies, not current state — the queue gate needs a CURRENCY check**
+  (FU-133 leg c → homelab#253): skip when the alert has resolved, and treat a body older than its
+  subject's last state change as suspect.
 
 **The line is "does it take effect before a human approves?" — not "is it governance"** (operator
 correction, 2026-08-07). The old rule put all six prefixes in ❌ on the reasoning that *"an agent
@@ -227,23 +222,24 @@ governor is not gated at all**, whatever the ruleset says.
 
 **Both preconditions landed 2026-08-04** (FU-068): the repo-root `CODEOWNERS` encodes the tiers
 above, and `tofu/github` flipped homelab to `require_approval = true, require_code_owner_review =
-true` — applied, ruleset `required_approval["homelab"]` created. Ordering mattered and was not
-cosmetic: `require_approval` is repo-WIDE while only code-owner review is path-scoped, and
-`review-reflex.sh` derives its scan set from the AgentStack claims, so flipping before homelab
-joined a claim would have stalled every armed PR on an approval nothing could give (an
-App/Integration bypass cannot waive required-approval — only an OrganizationAdmin can, ADR-084).
+true`. **Ordering mattered and was not cosmetic:** `require_approval` is repo-WIDE while only
+code-owner review is path-scoped, and `review-reflex.sh` derives its scan set from the AgentStack
+claims — so flipping before homelab joined a claim would have stalled every armed PR on an approval
+nothing could give (an App/Integration bypass cannot waive required-approval; only an
+OrganizationAdmin can, ADR-084).
 
-**The lane became dispatchable 2026-08-05** (`c5db520`, FU-142 archived): `.agents/fix.yaml` +
-`.agents/review.md` ship the recipe `--recipe` needs (launcher-owned, ADR-094 — without it the
-launcher refuses before a pod exists, which is what held homelab#97 at `agent/blocked`). The recipe
-is the fixer's own governor, so it sits in the deny row's spirit — operator-authored, never
-agent-authored. Three homelab-specific departures from the sleep-iac donor it was adapted from:
-scope is a **PATH tier ceiling over the issue's `Touches:`** (a `Touches:` line may narrow the
-tiers, never widen them); with no `devbox run ci` here the recipe names the lints **per path** and
-makes the PR state which ran; and the PR must reference its issue or the scan re-dispatches
-(agent-runtime#32). The GATE question settled by adding `raw.githubusercontent.com` to the fixer's
-`extraFQDNs` — `manifest-lint` shells to kubeconform, which fetches schemas there, and under
-`enforce: true` the gate would otherwise fail on a network drop rather than on the manifest.
+**The lane became dispatchable 2026-08-05** (FU-142, archived) once `.agents/fix.yaml` +
+`.agents/review.md` shipped the recipe `--recipe` needs — launcher-owned per ADR-094, and without
+it the launcher refuses before a pod exists. **The recipe is the fixer's own governor, so it sits
+in the deny row's spirit: operator-authored, never agent-authored.** Three homelab-specific
+departures from the sleep-iac donor it was adapted from, all still binding: scope is a **PATH tier
+ceiling over the issue's `Touches:`** (a `Touches:` line may narrow the tiers, never widen them);
+with no `devbox run ci` here the recipe names the lints **per path** and makes the PR state which
+ran; and the PR must reference its issue or the scan re-dispatches. The fixer block landed the
+same day (`agents/fixer/openrouter-operator/agentstack.yaml`: budget $5/week, `guardrail: none` —
+the stack chain is a paid model, `claudeTier: false` per the FU-134 ruling, egress `none`+enforced),
+which is what creates the per-repo namespace its worker RoleBinding needs (`agent-read-infra`,
+since homelab is the platform's own `-iac`).
 
 **Automerge safety is a function of check coverage, not of the path.** `ci` was
 `argocd-validate-pins` alone — it proves a pinned OCI chart renders and looks at nothing else, so a
@@ -273,12 +269,8 @@ just schema); the Sensors/EventSources remain the sentinel's. The same PR closed
 of this class: the PublicRoute Composition's **templated Terraform** (a string no schema gate
 reads) is rendered + `tofu validate`d by `devbox run publicroute-tf-validate`.
 
-**The fixer block landed the same day** (`agents/fixer/openrouter-operator/agentstack.yaml`:
-budget $5/week, `guardrail: none` — the stack chain is a paid model, `claudeTier: false` per the
-FU-134 ruling, egress `none`+enforced), which is what creates the per-repo namespace its worker
-RoleBinding needs (`agent-read-infra`, since homelab is the platform's own `-iac`). **The one thing
-still outstanding** is the IAC-G04 sentinel covering homelab so tier 1 can go back to being
-unowned — a FU-106 next-action. Until then tier 1 is owned as a scaffold and says so.
+**The one thing still outstanding** is the IAC-G04 sentinel covering homelab so tier 1 can go back
+to being unowned — a FU-106 next-action. Until then tier 1 is owned as a scaffold and says so.
 
 ### ⚖ Auto-revert does NOT generalize to the platform (operator ruling, 2026-08-04)
 
@@ -362,14 +354,12 @@ and evolves via `infra_enrich`.
 predicate) and "sleep-iac excluded, CI-only deploy repo" — via a *distinct dispatch class*, not by
 silently flipping them.
 
-**Built 2026-07-27:** `agents/infra-schema-diff.sh` (the typed delta + `enrichment_needed` bit,
-verified); the scan's `ci-red-stale` probe routes a RED `deploy/*` bump PR in a `*-iac` repo to the
-distinct `infra-enrich` class — the item session helm-pulls both chart versions, runs the diff, and
-enriches **the same PR** (brief §infra-enrich). The sleep-iac exclusion was re-opened deliberately
-via a reviewed claim diff (sleep-iac#24: fixer block, stack-declared fixer ns, `-iac` fix.yaml +
-PROD-SERVING rubric). First live dispatch 2026-07-27 (#22 → PR#28, merged, deliverables verified by
-the C6 closeout) — **and that dispatch is what exposed IAC-G01**, below. The **oracle-iac twin
-went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merged clean).
+**BUILT and live on both `-iac` twins** (sleep-iac 2026-07-27, oracle-iac 2026-08-02):
+`agents/infra-schema-diff.sh` emits the typed delta + an `enrichment_needed` bit, and the scan's
+`ci-red-stale` probe routes a RED `deploy/*` bump PR in a `*-iac` repo to the distinct
+`infra-enrich` class — the item session helm-pulls both chart versions, runs the diff, and enriches
+**the same PR** (brief §infra-enrich). Each standing exclusion was re-opened through a reviewed
+claim diff, never a silent flip. ⚠ **The first live dispatch is what exposed IAC-G01** (below).
 
 ## Assurance layers (what catches what)
 
@@ -424,12 +414,10 @@ went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merg
   also puts `policy/iac/exceptions/*` in the CODEOWNERS / `.github/workflows/**` class: self-gating
   is impossible, so it is operator-direct by necessity, not convenience. Seen live on homelab#1008
   (ADR-118's read door, three names), fixed by `105f6db3` landing the baseline separately.
-  **Measured overhead (2026-08-03, both -iac repos at master):** fetch ~0.7–1.0s · collect
-  ~0.2s · kyverno ~0.7–0.8s (5 policies × 17–25 docs) · gitleaks ~0.14s · **total ~1.8–2.1s
-  serial per PR head**. Parallelizing engines saves <1s while ARC job overhead is ~10–30s and
-  the poll tick is 15min — **parallel steps start paying only when serial engine time reaches
-  the job-overhead scale (~10s+)**, i.e. after the v2 render pass (helm templating per chart is
-  the expensive step) or ~10× policy growth; revisit against `iac_sentinel_engine_seconds` then.
+  **Engines run SERIAL, deliberately** (~2s total per PR head, measured 2026-08-03): parallelizing
+  saves <1s against ~10–30s of job overhead and a poll tick in minutes — **parallel steps start
+  paying only when serial engine time reaches the job-overhead scale (~10s+)**, i.e. after the v2
+  render pass or ~10× policy growth. Revisit against `iac_sentinel_engine_seconds`, not by taste.
   **Sentinel freshness keys on `iac_sentinel_last_run_timestamp_seconds`** (per-tick heartbeat,
   pushed on every tick incl. zero-PR ones — FU-176: the pushgateway replaces the whole group per
   push, so engine rows legitimately vanish on quiet ticks and are NOT a health signal;
