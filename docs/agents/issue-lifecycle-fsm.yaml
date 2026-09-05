@@ -486,12 +486,16 @@ transitions:
     owner: scan goal lane (burn-down, zero tokens) → coordinator goal-checkpoint session (reasoning tier)
     when: "descendant state changed → the scan writes the burn-down line into the findings store
       (compare-then-write, no session). A `goal-checkpoint` unit fires ONLY on: ≥ GOAL_CHECKPOINT_N
-      undispositioned store findings, or the child-set completing pre-launch (the 2026-08-05
-      deadlock backstop, carried from the retired per-closure clause). Keeps working after IL-T18:
-      the goal is still open and still shipping."
+      undispositioned store findings, the child-set completing pre-launch (the 2026-08-05
+      deadlock backstop, carried from the retired per-closure clause), or (ADR-122 (4)) >= 1
+      UNDISPOSITIONED tree MEMBER — a bound child the container has never ruled, which WAKES the
+      checkpoint and never blocks it (it is excluded from the completion predicate, so trigger
+      (b) fires in the same tick). Keeps working after IL-T18: the goal is still open and still
+      shipping."
     status: guarded
     replay:
-      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row checkpoint-due (the positive trigger, findings ≥ N) / row nonassembly-merge-inert (burn-down written, NO per-closure unit) / row assembly-complete (…and none for a goal the lifecycle just acted on)
+      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row checkpoint-due (the positive trigger, findings >= N) / row nonassembly-merge-inert (burn-down written, NO per-closure unit) / row assembly-complete (…and none for a goal the lifecycle just acted on) / the ADR-122 (4) reader rows undispositioned-wakes (trigger c isolated), deferred-excluded, adopted-by-label (no unit: the member counts), dispositions-unreadable (c held, b unchanged)
+      - agents/replay/fixtures/epic-dispositions   # the STORE's own shape contract (parse/serialize/upsert, the closed vocabularies, the three-way read split)
     guards:
       - desc: "descendant fixpoint walk (the budget-gate bug-shape, fixed here too)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 6: DESCENDANTS" }
@@ -501,6 +505,12 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "is DONE for this pass" }
       - desc: "the post-launch leg of the play: burn-down report, retarget stranded Base: children, recommend a verdict — never apply one"
         anchor: { file: agents/coordinator/README.md, pattern: "Your job in post-launch" }
+      - desc: "ADR-122 (4): the completion predicate counts ADOPTED-OPEN members only, and the UNDISPOSITIONED predicate is what arms trigger (c) — the #1315 shape (replay: goal/undispositioned-wakes, goal/adopted-by-label)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "UNDISPOSITIONED = open, not the bucket" }
+      - desc: "the store is the CONTAINER's, one machine comment, three writers — and an unreadable read never fails INTO a wake (rule #6)"
+        anchor: { file: agents/epic_dispositions.py, pattern: "FAIL-CLOSED EVERYWHERE" }
+      - desc: "the play disposes the MEMBERS before it disposes the store; decompose/mint write adopted at authoring"
+        anchor: { file: agents/coordinator/README.md, pattern: "FIRST, dispose the MEMBERS" }
 
   - id: IL-T13
     name: assembly-complete → assembly PR opened ARMED
@@ -671,6 +681,8 @@ transitions:
         anchor: { file: agents/coordinator/README.md, pattern: "NOT yours to create" }
       - desc: "a bucket is a CONTAINER, not a sprout — excluded from the 🌱 triage slice, whose printed instruction would otherwise dispatch a worker at it (replay: sprout-report-skips-buckets)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "A POST-LAUNCH BUCKET IS NOT A SPROUT" }
+      - desc: "ADR-122 (4): the bucket's exclusion from the goal's completion count is now an ORDINARY disposition — the create writes `deferred by=bucket` on the container's store (replay: harvest/goal-open-funded, harvest/deep-sprout, arbitrate/goal-child). The `post-launch:` TITLE test survives only as the belt for buckets created before that row existed (#933)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "dispositioned .deferred. at birth" }
 
 gaps:
   - id: IL-G02

@@ -146,8 +146,16 @@ The epic rules:
    the #1338/#1334 walk re-queues (#1249) are the evidence. **The walk that broke this retired
    2026-09-05** (the bare-tree-member walk, #1153 → PR#1242 → PR#1400, ADR-122 (1)): filing is
    inert by construction now, so the interim #1249 damper (`agent-fix` without `agent/queued` on
-   a member that must stay inert) is no longer needed — an unqueued member simply sits. The
-   disposition STATE itself is still S8's to build.
+   a member that must stay inert) is no longer needed — an unqueued member simply sits.
+   **The carrier (built 2026-09-05, homelab#1419):** one machine comment on the CONTAINER —
+   `<!-- epic-dispositions v1 -->`, one `#<n> adopted|deferred <iso> by=<writer>` row per member,
+   edited in place by [`agents/epic_dispositions.py`](../../agents/epic_dispositions.py) — written
+   by exactly three acts (the Goal `goal-checkpoint` play incl. its `mint`/`decompose` children,
+   the stint closeout act, and the scan's `post-launch:` bucket create, which defers its own
+   bucket) and read by exactly four (the scan's completion predicate + checkpoint trigger (c),
+   `scripts/goal-lint.sh`, and `agents/board.sh` in goal scope). **An `agent/*` lifecycle label
+   means adopted** with no row: an authoring moment or a human already released that member, so
+   pre-S8 trees need no backfill.
 
 ⚠ **`task/goal`-keyed machinery is GOAL-kind machinery by definition** (operator caution,
 2026-08-19): the scan's goal clauses, budget walks and terminals key on that label, and a rule
