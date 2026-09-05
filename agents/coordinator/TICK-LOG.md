@@ -7171,3 +7171,14 @@ first live ADR-110 maintenance session before the ADR existed.
   conflict-merge taking master's launcher (the PR's launcher diff is now empty).
 - Churn note: master moved 3× in 25 min (#1454, #1455 deploy, the quickfix) → every open PR
   re-cycled through the updater, ~15 CI runs for 6 PRs — the L-scenario shape, expected.
+- **Second sweep 19:15–20:20Z (operator: "look at open PRs again, fix the red one, get the list
+  down so CI can keep up").** Open set had shrunk to 4 with an empty ARC queue; the one red was
+  #1453 (three `reviewer-exit-contract` rows). #1448 had gone green on its own — the loop's
+  round c829beed rode once the blocked-on marker cleared — codeowner-read + approved (fixture-only),
+  merged 20:07Z, #1440 closed. #1453: executed the coordinator's round-2 directive by hand in a
+  clone (TERMINAL 4 ahead of the standing-aside terminal; `SILENT_DEDUP_RECORD` session-scoped,
+  exported, rm'd at start; bridge clears before its conditional write; the two no-terminal
+  templates take the extended NO TERMINAL wording — the one deliberate template change), family
+  10/10, CI green → codeowner-approved 20:15Z, auto-merging. #1449 merged 20:08Z. Remaining
+  #1446/#1436: green, codeowner reads on record, no bot approval (latch); asked the operator —
+  **wait for the bot, no admin merge** (the PR lane's review on S8 machinery outweighs 40 min).
