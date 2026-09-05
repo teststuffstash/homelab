@@ -78,14 +78,23 @@ transitions:
   - id: MP-T02
     name: updater brings a behind PR current
     owner: in-cluster updater (ADR-111 — exporter edge + */15 Argo CronWorkflow → agents/update-pr-branch.sh, homelab-merge App via ESO; hosted reusable retired 2026-08-26, homelab#745)
-    when: "behind ∧ green ∧ armed ∧ ¬conflicted ∧ ¬changes_requested — oldest first, ONE per run"
+    when: "behind ∧ green ∧ armed ∧ ¬conflicted ∧ ¬changes_requested — oldest first WITHIN a
+      (repo, base) LANE, ONE update per lane per run (ADR-125 (2); it was one per REPO until
+      homelab#1422)"
     emits: branch_updated
     status: guarded
     replay:
       - agents/replay/fixtures/updater
     guards:
-      - desc: "FIFO + one-per-run + armed-only"
+      - desc: "per-lane FIFO + one-per-(repo, base)-per-run + armed-only. The unit is the LANE
+          because the merge -> behind -> dismiss-approval chain this leg paces only ever runs
+          between PRs sharing a base (ADR-125); legs 2 (unstrand) and 3 (DIRTY labeler) are
+          per-PR sweeps and are unaffected"
         anchor: { file: agents/update-pr-branch.sh, pattern: "oldest armed\\+BEHIND, FIFO" }
+      - desc: "the lane grouping itself: group_by(.baseRefName) before the FIFO take, replayed by
+          the `two-lanes-two-updates` (two bases ⇒ two update calls in one pass) and
+          `same-lane-one-update` (two PRs on one goal/** base ⇒ one call, the older) rows"
+        anchor: { file: agents/update-pr-branch.sh, pattern: "group_by\\(\\.baseRefName" }
       - desc: "burst serialization: ONE mutex across edge + cron submissions (Cron Forbid cannot
           see Sensor submissions), so push bursts serialize instead of racing (the
           cancel-in-progress: false rationale of the hosted era, carried by the mutex now).
@@ -106,12 +115,28 @@ transitions:
   - id: MP-T03
     name: review dispatch
     owner: exporter edge (POST → Sensor → review WorkflowTemplate) + */15 CronWorkflow backstop
-    when: "green ∧ current ∧ armed ∧ bot_review_at_head=none ∧ ¬automerge-lane ∧ ¬agent_error ∧ reviewer.enabled ∧ capacity"
+    when: "green ∧ ¬conflicted ∧ armed ∧ bot_review_at_head=none ∧ ¬automerge-lane ∧
+      ¬agent_error ∧ reviewer.enabled ∧ capacity — ONE dispatch per (repo, base) LANE per tick
+      (ADR-125 (1)). CURRENCY IS NOT A PRECONDITION (homelab#1422, 2026-09-05): a BEHIND-but-green
+      PR that has never been reviewed is admitted to its FIRST review. Re-review on a BEHIND branch
+      was already allowed — MP-T04"
     status: guarded
     replay:
       - agents/reviewer-optout-replay.sh
       - agents/replay/fixtures/reviewer-exit-contract
+      - agents/replay/fixtures/review-pick/two-lanes-two-picks
+      - agents/replay/fixtures/review-pick/same-lane-oldest
+      - agents/replay/fixtures/review-pick/behind-cr-no-content-held
+      - agents/replay/fixtures/review-pick/behind-first-review-admitted
+      - agents/replay/fixtures/reviewer-currency/behind-proceeds
     guards:
+      - desc: "ONE pick per (repo, base) LANE, oldest first within the lane (ADR-125 (1),
+          homelab#1422) — group_by(.baseRefName) over the SAME filtered candidate set. Master-lane
+          and goal-lane PRs cannot stale each other approvals (dismiss-on-push only reaches PRs
+          sharing a base), so serializing them together bought nothing and cost goal #278 361
+          starved minutes. K (REVIEW_CONCURRENCY) and the FU-088 subscription latch are unchanged
+          and stay the fleet-wide ceiling"
+        anchor: { file: agents/review-reflex.sh, pattern: "group_by\\(\\.baseRefName" }
       - desc: "bot-approval-at-head over NON-MERGE commits (branch_updated ≠ content_pushed)"
         anchor: { file: agents/review-reflex.sh, pattern: "UPDATER MERGE COMMITS ARE NOT NEW CONTENT" }
       - desc: "bot login normalized (REST 'x[bot]' vs GraphQL 'x')"
@@ -168,6 +193,15 @@ transitions:
           history irreconcilable with the commit history, contradictory labels; an agent/error already
           present still means touch nothing and stop silently"
         anchor: { file: agents/reviewer-session.sh, pattern: "GENUINE ANOMALY" }
+      - desc: "BEHIND is NOT a skip on either half of the dispatch (homelab#1422, 2026-09-05).
+          The reflex predicate dropped `(mergeStateStatus != BEHIND) or reviewable_again`, and the
+          launcher currency gate narrowed from BEHIND|DIRTY to DIRTY — leaving the latter would
+          have turned every admitted pick into a dispatch that dies at spawn. Evidence: an
+          update-branch merge does not dismiss a verdict (GitHub re-points the review commit_id;
+          PR#1386 survived 4 updater merges 07:06-07:37Z, #1388/#1389 the same day), while the
+          skip starved first reviews (PR#1437: 7 master moves, 3 updater merges, no first review).
+          DIRTY still skips — an UNMODIFIED arm, so its pin (`reviewer-currency/dirty-skips`) re-lands as a fixture-only follow-up per the replay README §Pin-vacuity routing rule, escape (a); until then it is unreplayed on its own leg"
+        anchor: { file: agents/reviewer-session.sh, pattern: "NARROWED to DIRTY" }
       - desc: "in-band breaker: impossible verdict counts trip agent/error"
         anchor: { file: agents/review-reflex.sh, pattern: "CIRCUIT-BREAKER TELEMETRY" }
       - desc: "out-of-band: AgentReviewLoop / AgentErrorFlagged alerts (different code+token)"

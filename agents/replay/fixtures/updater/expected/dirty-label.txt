@@ -1,4 +1,4 @@
-CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews
+CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName
 CALL gh label create merge-conflict --repo teststuffstash/testrepo --color e11d21 --description PR branch conflicts with master — updater can't auto-resolve --force
 CALL gh pr edit {{n}} --repo teststuffstash/testrepo --add-label merge-conflict
 OUT updater[teststuffstash/testrepo]: no armed+BEHIND PR to update

@@ -1,4 +1,4 @@
-CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews
+CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName
 CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/101/update-branch -f expected_head_sha=abc123def456
 OUT updater[teststuffstash/testrepo]: updating #101 (oldest armed+BEHIND, FIFO)
 OUT updater[teststuffstash/testrepo]: update of #101 failed (422) — skipping; next pass retries
