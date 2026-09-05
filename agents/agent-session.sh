@@ -1896,7 +1896,9 @@ fi
 # AGENT_NIX_CACHE_URL pattern); fallback is upstream pypi.org + files.pythonhosted.org.
 PYTHON_ENV=""
 if [ "${EGRESS_PROFILE:-}" = "python" ]; then
-  PYTHON_ENV=$'        - name: UV_DEFAULT_INDEX\n          value: "http://192.168.40.34/simple/"\n        - name: PIP_INDEX_URL\n          value: "http://192.168.40.34/simple/"\n        - name: PIP_TRUSTED_HOST\n          value: "192.168.40.34"'
+  PYPI_CACHE_URL="${AGENT_PYPI_CACHE_URL-http://192.168.40.34/simple/}"
+  PYPI_CACHE_HOST="$(printf '%s' "$PYPI_CACHE_URL" | sed -e 's|^[a-z][a-z]*://||' -e 's|[:/].*$||')"
+  PYTHON_ENV=$'        - name: UV_DEFAULT_INDEX\n          value: "'"$PYPI_CACHE_URL"$'"\n        - name: PIP_INDEX_URL\n          value: "'"$PYPI_CACHE_URL"$'"\n        - name: PIP_TRUSTED_HOST\n          value: "'"$PYPI_CACHE_HOST"$'"'
 fi
 
 # FU-096: the stack's CI-published devbox cache (eval seed + file:// store), mounted read-only
