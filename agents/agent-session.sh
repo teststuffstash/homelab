@@ -1448,8 +1448,13 @@ ${PF_ARB_BODY}"
             done <<< "$(printf '%s' "$PF_CHECKS" | jq -c '.[]')"
             # Fetch log tail via gh run list + view (bounded to last 200 lines per failing step)
             # REQUIRED: the log must be readable — unreadable defers (homelab#1205)
+            # >>>REPLAY:ci-failure-run-select>>>
+            # Select the FAILING run (--status failure), never the newest run on the branch: a
+            # `renovate-approve` skip sharing the CI run's createdAt sorted first and the log read
+            # came back empty on every tick — a permanent defer (homelab#1440; the flag landed as a
+            # seat quickfix 2026-09-05, PR#1448 carries the fixture).
             PF_LOG_TAIL=""
-            PF_RUN_ID="$(gh run list --repo "${PF_SLUG}" --branch "${PF_PR_REF}" --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || PF_RUN_ID=""
+            PF_RUN_ID="$(gh run list --repo "${PF_SLUG}" --branch "${PF_PR_REF}" --status failure --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || PF_RUN_ID=""
             if [ -z "$PF_RUN_ID" ] || [ "$PF_RUN_ID" = "null" ]; then
               echo "→ dispatch deferred — directive unreadable (CI run log for PR #${PF_PR} branch ${PF_PR_REF}; required for ci-red round) — the next pass retries (homelab#1205)" >&2
               exit 0
@@ -1468,6 +1473,7 @@ ${PF_LOG_TAIL}
                 PF_INDEX_ITEM "ci-failure.md" "OK"
               fi
             fi
+            # <<<REPLAY:ci-failure-run-select<<<
           else
             PF_INDEX_ITEM "ci-failure.md" "MISSING" "No failing check runs found"
           fi
