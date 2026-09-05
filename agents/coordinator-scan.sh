@@ -2764,6 +2764,18 @@ EOF_GOVERNANCE
         # only apply the disposition filter when the store actually read; otherwise fall back to
         # the pre-PR plain open-non-bucket count, so a blind read can only ever look MORE open,
         # never less.
+        # FU-084 (API pool): both dispositions and findings stores live on the same issue; fold
+        # one comments GET into both reads (#1439). Fetch once, pass to both parsers.
+        gcomments="$(_gf_comments "$slug" "$g" 2>/dev/null)" || gcomments=""
+        gdisp_json="$(EPIC_DISPOSITIONS_COMMENTS="$gcomments" python3 "${HERE}/epic_dispositions.py" read "$slug" "$g" 2>/dev/null)" && gdisp_rc=0 || gdisp_rc=$?
+        if [ "${gdisp_rc:-2}" -ne 0 ] || [ -z "$gdisp_json" ]; then
+          gdisp_json='{}'; gdisp_ok=0
+          echo "  [$repo] ⚠ goal #${g}: dispositions unreadable — the undispositioned wake (trigger c) is HELD this pass"
+        else
+          gdisp_ok=1
+        fi
+        gdisp_ad="$(printf '%s' "$gdisp_json" | jq -r '[to_entries[] | select(.value.disposition == "adopted") | .key] | join(" ")' 2>/dev/null || echo "")"
+        gdisp_df="$(printf '%s' "$gdisp_json" | jq -r '[to_entries[] | select(.value.disposition == "deferred") | .key] | join(" ")' 2>/dev/null || echo "")"
         if [ "$gdisp_ok" = 1 ]; then
           gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
             '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
@@ -2793,7 +2805,7 @@ EOF_GOVERNANCE
                   | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)] | length' 2>/dev/null || echo "")"
         case "$gundisp_n" in ''|*[!0-9]*) gundisp_n=0;; esac
         set -- $gdesc; gtotal_n=$#
-        _gf_find "$slug" "$g" && gf_rc=0 || gf_rc=$?
+        _gf_find "$slug" "$g" "$gcomments" && gf_rc=0 || gf_rc=$?
         gfbody="$GF_BODY"
         gbd="${gopen_n} open / ${gclosed_n} closed of ${gtotal_n} descendants"
         gcur="$(printf '%s\n' "$gfbody" | awk '/^burn-down:/{sub(/^burn-down: /,""); print; exit}')"

@@ -32,15 +32,17 @@ _gf_comments() {   # $1 slug, $2 issue → full comments json (id+body) or ""
 }
 
 GF_ID=""; GF_BODY=""
-_gf_find() {   # $1 slug, $2 issue → 0 = found (GF_ID/GF_BODY set); 1 = confirmed ABSENT (read ok,
-  # no store comment); 2 = UNREADABLE. The 1-vs-2 split is load-bearing (bot review, PR#398 r2):
-  # a writer that treats a blind read as "absent" CREATES a second store comment on a transient
-  # API failure — the exact ONE-machine-comment invariant (ADR-103) this file exists to hold.
+_gf_find() {   # $1 slug, $2 issue [, $3 pre-fetched comments json] → 0 = found (GF_ID/GF_BODY set);
+  # 1 = confirmed ABSENT (read ok, no store comment); 2 = UNREADABLE. The 1-vs-2 split is
+  # load-bearing (bot review, PR#398 r2): a writer that treats a blind read as "absent"
+  # CREATES a second store comment on a transient API failure — the exact ONE-machine-comment
+  # invariant (ADR-103) this file exists to hold. $3 allows the goal lane to pass comments
+  # already fetched for epic_dispositions, folding two reads into one (FU-084, #1439).
   # Two jq passes over one fetch, NOT @tsv: tsv escapes embedded newlines to literal \n, which
   # flattened every real multi-line store into one unparseable line — counts read 0/0 and the
   # burn-down compare always missed (caught by the goal-checkpoint-due fixture, 2026-08-12).
   GF_ID=""; GF_BODY=""
-  local js; js="$(_gf_comments "$1" "$2")" || js=""
+  local js; js="${3:-}"; [ -n "$js" ] || js="$(_gf_comments "$1" "$2")" || js=""
   [ -n "$js" ] || return 2
   jq -e 'type == "array"' >/dev/null 2>&1 <<<"${js:-null}" || return 2
   GF_ID="$(printf '%s' "$js" | jq -r --arg m "$MARK" \
