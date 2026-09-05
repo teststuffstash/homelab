@@ -27,14 +27,29 @@
 #     harmless: strict checks re-run and still gate the merge.
 #   - armed-only (require_auto_merge_enabled): only PRs actually queued to land — arming is the
 #     boundary between the reflex plane and the coordinator's un-armed lanes (major/, drafts).
+#   - MERGE-READY-ONLY (2026-09-05, homelab#1452): "update before review" is retired. Leg 1 now
+#     brings current ONLY a PR that has nothing but currency + CI left before auto-merge — the
+#     platform's own merge queue, built where a GitHub merge queue could not go (private stack
+#     repos copy this repo, so the fix must be platform-native). See the leg-1 comment below.
 set -euo pipefail
 
 REPO="${1:?usage: update-pr-branch.sh <owner/repo>}"
 
+# The reviewer bot's login, normalized: GitHub's REST surface says `homelab-reviewer[bot]` where
+# GraphQL says `homelab-reviewer` (the [bot]-suffix mismatch, review-reflex.sh). Compare stripped.
+REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"
+
+# UPDATER_MERGE_READY_ONLY=1 (default) = the #1452 merge-queue predicate; =0 = the pre-#1452 pick
+# (armed ∧ BEHIND, no approval needed). The knob exists so the L-scenario comparison the issue
+# asks for is one env flip, not a revert.
+if [ "${UPDATER_MERGE_READY_ONLY:-1}" = "0" ]; then MERGE_READY_ONLY=false; else MERGE_READY_ONLY=true; fi
+
 # One list serves all three legs — the snapshot is per-pass by design (level-triggered; anything
-# it misses, the next pass sees).
+# it misses, the next pass sees). `commits` + `reviews` ride along for the merge-ready predicate:
+# "approved at head" is a commit-vs-review-timestamp question and the picker must answer it from
+# the SAME snapshot (a per-candidate `gh pr view` would cost one API call per armed PR per pass).
 PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
-  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName)"
+  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,commits,reviews)"
 
 # Defensive: `gh pr edit --add-label` FAILS on a missing label, so create it idempotently first
 # (the AgentStack claim provisions it via IssueLabels, but this survives a not-yet-claimed repo or
@@ -67,12 +82,50 @@ label_conflict() {
 # At human approval reviewDecision flips to APPROVED and the next pass refreshes (one CI cycle).
 # Measured: PR#1347/#1352/#1354, 47 master moves, 36/32/27 merge commits each, 39/41 CI runs
 # each — ≈3.5h runner time on three PRs whose content never changed (homelab#887, 2026-09-04).
-picks="$(jq -r '[.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
-                              and .reviewDecision != "CHANGES_REQUESTED"
-                              and (.reviewDecision != "REVIEW_REQUIRED" or
-                                   ([((.latestReviews // [])[] | select(((.author.login // "")
-                                     | startswith("homelab-reviewer")) and .state == "APPROVED"))]
-                                    | length) == 0))]
+# ⚠ MERGE-READY ONLY (homelab#1452, 2026-09-05) — THE PLATFORM-NATIVE MERGE QUEUE. Until now this
+# leg updated EVERY armed+BEHIND PR on every master move: with N armed PRs and M master moves,
+# ~N×M CI runs (measured 2026-09-05: ≥300 workflow runs on homelab in one day, 62 cancelled
+# mid-flight, org-wide job queue wait 22-40 min on ONE 3-slot ARC scale set — homelab's churn
+# starves every other stack, FU-218). The ordering it served ("update before review") lost its
+# premise when PR#1446 admitted BEHIND-but-green PRs to their first review: update-branch merges
+# do NOT dismiss a verdict (GitHub re-points commit_id; PR#1386 survived four). Currency is
+# therefore needed at exactly ONE moment — merge — which is a merge queue's whole insight, and a
+# GitHub merge queue is the wrong shape here (homelab is the public source-of-truth repo every
+# private stack repo copies; the fix must be platform-native so they all get it).
+# So: update only what is MERGE-READY — nothing but currency + CI left before auto-merge fires.
+#   * reviewDecision == APPROVED — GitHub's own gate is satisfied (dismiss_stale_reviews_on_push
+#     means APPROVED already implies "at the current content"), or
+#   * bot_approved_head on a repo whose ruleset requires no approval (reviewDecision "").
+# Everything else stays BEHIND and costs nothing: an unreviewed PR is reviewed BEHIND (PR#1446), a
+# changes-requested PR gets its fix round pushed BEHIND (CI runs on the content), a codeowner park
+# waits for its human — the #887 skip is now just a special case of "not merge-ready".
+# NOT IMPLEMENTED, deliberately: the sole-codeowner waiver arm (author is the repo's only
+# codeowner ⇒ REVIEW_REQUIRED is waivable). CODEOWNERS ownership is not readable from the picker's
+# `gh pr list` snapshot, and this leg fails toward NOT updating: a park costs a pass, a wasted CI
+# run is exactly what #1452 measures. This is behaviourally identical to the #887 park skip, which
+# has been live since 2026-09-04 without stranding a homelab PR.
+# `bot_approved_head` is review-reflex.sh's definition, restated (that script is a reflex loop, not
+# a sourceable library): the newest bot APPROVED submittedAt must post-date the newest NON-MERGE
+# commit — updater merge commits are not content, or this leg would invalidate its own approvals
+# (the nine-review loop, oracle-fleet#57).
+picks="$(jq -r --arg bot "$REVIEWER_LOGIN" --argjson ready "$MERGE_READY_ONLY" '
+  def newest_commit_at:
+    ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
+       | .committedDate ] | max) // "";
+  def bot_approved_head:
+    ([ .reviews[]?
+       | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
+       | select(.state == "APPROVED")
+       | .submittedAt ] | max // "") > newest_commit_at;
+  def merge_ready:
+    (.reviewDecision == "APPROVED") or bot_approved_head;
+  [.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
+                and .reviewDecision != "CHANGES_REQUESTED"
+                and (.reviewDecision != "REVIEW_REQUIRED" or
+                     ([((.latestReviews // [])[] | select(((.author.login // "")
+                       | startswith("homelab-reviewer")) and .state == "APPROVED"))]
+                      | length) == 0)
+                and (($ready | not) or merge_ready))]
                 | group_by(.baseRefName // "")
                 | map(sort_by(.createdAt) | .[0])
                 | .[] | "\(.number) \(.headRefOid // "-")"' <<<"$PRS")"
