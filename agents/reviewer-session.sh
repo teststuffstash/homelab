@@ -179,6 +179,11 @@ REVIEWER_GIT="${REVIEWER_GIT:-reviewer-git}"   # Secret w/ the review-bot App to
 # reviews[].author.login, and matching it would silently stop the guard recognising its own verdicts
 # (worse than the loud 403). Same value + same default as review-reflex.sh's REVIEWER_LOGIN.
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot identity, as it appears in reviews[].author.login
+# The silent-dedup record (homelab#1438) is SESSION-scoped and starts absent: a fixed shared path
+# leaked across sessions and false-greened the exit contract (the round-2 ruling on PR#1453).
+SILENT_DEDUP_RECORD="${SILENT_DEDUP_RECORD:-${TMPDIR:-/tmp}/silent_dedup_record.$$}"
+export SILENT_DEDUP_RECORD
+rm -f "$SILENT_DEDUP_RECORD"
 # FU-092 (merge-path MP-G02): the pod name IS the (repo, pr, head-sha8) idempotency key — the
 # same atomic-create test-and-set workers got 2026-07-21. A new push mints a new name (a
 # legitimate re-review); event redelivery / edge+backstop races collide on the SAME name and the
@@ -507,7 +512,7 @@ STEP 0 — SELF-GUARD (you are the LAST line of defense against automation loops
     • the linked issue could not be read (403/NOT_FOUND) — ISSUE_UNREADABLE. When the OWN credential of the reviewer cannot read the issue this PR claims to fix, the session must NOT emit a content verdict from that premise. The Touches: footprint, sprout depth, and issue body are all unavailable; a verdict built without them is unreliable (homelab#1038: four false CHANGES_REQUESTED on sleep-tracking#137). Post a standing-aside comment with pre=issue-unreadable, emit a TOOL_GAP line naming the issue read failure, and stop. On reproduction (a second session hitting the same unreadable issue), escalate via the platform-intake filing contract (coordinator README, "Cross-boundary filing") — do NOT keep standing aside.
   IDEMPOTENT ASIDE — the aside is keyed by (content commit, precondition), NOT by pass and NOT by the branch tip. Before posting, read the existing comments — the  comments  field of the STEP 0 call above already have them, no second call needed: if one of YOUR asides (author.login  ${REVIEWER_LOGIN} ) already carries a marker naming the newest NON-MERGE commit AND this same precondition, post NOTHING, emit a SILENT_DEDUP_ASIDE record to a marker file, and exit silently. Several passes can hit one precondition while the queue drains, and a pile of near-identical bot comments is itself an anomaly signal — never manufacture the thing this guard watches for. The dedup key is a MACHINE MARKER (ADR-103 channel-separation precedent: match on the marker, never on prose — two asides for the same precondition whose only difference is the prose tail never match; the PR#547 asides landed at efc90c5a and at fd2efc80 for one content commit), first line exactly:
     STANDING ASIDE: <precondition> at <content-commit-sha8> — no verdict; the level-triggered review path re-dispatches when this settles. <!-- standing-aside head=<content-commit-sha8> pre=<precondition-slug> -->
-  When silently exiting due to idempotent dedup, emit a record with  echo "SILENT_DEDUP_ASIDE: <precondition> at <content-commit-sha8>" > /tmp/silent_dedup_record  so the exit contract can count the dispatches that reused an existing aside rather than posting a new one (homelab#1438).
+  When silently exiting due to idempotent dedup, emit a record with  echo "SILENT_DEDUP_ASIDE: <precondition> at <content-commit-sha8>" > ${SILENT_DEDUP_RECORD}  so the exit contract can count the dispatches that reused an existing aside rather than posting a new one (homelab#1438).
   The marker  head  field is the newest NON-MERGE commit — the content the review is about — NOT the branch tip, which moves on every  Merge branch master  no-op (an update-branch push is not new content). The  pre  slug is exactly one of  merge-state | checks-pending | own-verdict-at-head | issue-unreadable. A later pass must produce the SAME marker for the same content commit + same precondition, or the dedup never matches and the guard manufactures the pile it watches for.
   (b) GENUINE ANOMALY — a state the machinery CANNOT resolve by dispatching again later. Trip the breaker: run  gh pr edit ${PR} --add-label agent/error  (your token has issues:write since 2026-07-16 — homelab FU-069 b) and post exactly ONE comment starting with AGENT_ERROR: stating what you saw, then stop. This terminal keeps every state it already owned: MORE THAN ONE LIVE (non-DISMISSED) verdict from your identity at the current head, or a pile of near-identical bot reviews or comments (that is the dispatcher loop this breaker was built for — oracle-fleet#57 burned nine sessions before it tripped); a review naming a commit that is NOT an ancestor of the head, or contradictory labels; a PR that plainly should not have reached you. Unchanged too: an agent/error label ALREADY present means someone tripped it before you — add nothing, touch nothing, stop silently (no aside either). NOTE on update-branch re-points: GitHub re-points the commit_id of a review to the new head when the branch is updated via update-branch (merging master into the PR). This re-pointed review will show a commit_id resolving to a 2-parent merge commit, and the committer_date of that commit will post-date the submitted_at of the review — this is NOT anomalous, it is the ordinary signature of a parked PR kept current. When checking review history against commit history, use the newest NON-MERGE commit as the anchor for "submitted at or after the content" filtering; a review whose commit_id resolves to a merge commit or whose timestamp pattern matches an update-branch re-point is never anomalous.
   THE TEST, when you cannot tell which class you are in: will this state look different if the reflex dispatches me again in fifteen minutes? Yes → precondition: aside, no label, stop. No → anomaly: label, one AGENT_ERROR: comment, stop. A burned session that stands aside is a GOOD outcome, and so is one that files a single anomaly report; a duplicate verdict is neither.
@@ -773,9 +778,16 @@ assert_review_terminal() {
   # silently reused rather than posting a new comment (homelab#1438). This makes the consumed
   # dispatch visible instead of invisible in the exit contract.
   silent_dedup="0"
-  [ -f "/tmp/silent_dedup_record" ] && silent_dedup="1"
+  [ -f "${SILENT_DEDUP_RECORD:-${TMPDIR:-/tmp}/silent_dedup_record.$$}" ] && silent_dedup="1"
   if [ "${verdict:-0}" -gt 0 ]; then
     echo "exit-contract: terminal OK — live ${REVIEWER_LOGIN} verdict at this head"
+    return 0
+  fi
+  # TERMINAL 4 is tested BEFORE the standing-aside terminal: the #1438 scenario has an aside at the
+  # content commit BY CONSTRUCTION (that is the bug being made visible), so an aside-first order
+  # made this terminal unreachable — a record written by THIS session is the more specific fact.
+  if [ "${silent_dedup}" = "1" ]; then
+    echo "exit-contract: terminal OK — ${REVIEWER_LOGIN} silent-dedup-aside recorded (idempotent aside reused, homelab#1438)"
     return 0
   fi
   if [ "${aside:-0}" -gt 0 ]; then
@@ -784,10 +796,6 @@ assert_review_terminal() {
   fi
   if [ "${error_label:-0}" -gt 0 ]; then
     echo "exit-contract: terminal OK — agent/error already present (breaker tripped; silent stop is the terminal)"
-    return 0
-  fi
-  if [ "${silent_dedup}" = "1" ]; then
-    echo "exit-contract: terminal OK — ${REVIEWER_LOGIN} silent-dedup-aside recorded (idempotent aside reused, homelab#1438)"
     return 0
   fi
   echo "exit-contract: NO TERMINAL — no ${REVIEWER_LOGIN} verdict, no standing-aside, no agent/error, no silent-dedup at head ${newest_sha8:-unknown} (verdict=$verdict aside=$aside error=$error_label silent_dedup=$silent_dedup); a green here would mask a dead review plane" >&2
