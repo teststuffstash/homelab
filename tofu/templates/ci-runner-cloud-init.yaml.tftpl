@@ -37,7 +37,35 @@ write_files:
     permissions: '0644'
     owner: root:root
     content: |
-      {"registry-mirrors": ["http://192.168.40.20"], "insecure-registries": ["192.168.40.20", "192.168.40.31"]}
+      {"registry-mirrors": ["http://192.168.40.20"], "insecure-registries": ["192.168.40.20", "192.168.40.21", "192.168.40.31"]}
+  # BuildKit per-registry mirrors (homelab#1308): the daemon.json mirror above is Hub-only by
+  # dockerd design (SERVICES.md's own row says so) — a non-Hub `FROM` (ghcr.io/astral-sh/uv:...,
+  # mcr.microsoft.com/playwright) in a `docker build` still pulls direct WAN on every
+  # layer-cache miss. BuildKit itself honors a per-registry mirror for ANY registry, but ONLY
+  # for a docker-container (or remote) builder — the default `docker` driver builds inside
+  # dockerd and reads daemon.json only, which is what this file's mirror covers and no more.
+  # One block per mirror host: the `[registry."<mirror-ip>"]` blocks mark the mirror itself as
+  # plain-HTTP (it's the BGP VIP registry:3 proxy, not a real registry with a cert) — without
+  # them BuildKit tries HTTPS against the mirror IP and fails closed.
+  - path: /etc/buildkit/buildkitd.toml
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [registry."docker.io"]
+        mirrors = ["192.168.40.20"]
+      [registry."ghcr.io"]
+        mirrors = ["192.168.40.21"]
+      [registry."mcr.microsoft.com"]
+        mirrors = ["192.168.40.31"]
+      [registry."192.168.40.20"]
+        http = true
+        insecure = true
+      [registry."192.168.40.21"]
+        http = true
+        insecure = true
+      [registry."192.168.40.31"]
+        http = true
+        insecure = true
   # kind exhausts the Debian-default 128 inotify instances once ≥3 clusters coexist (two runner
   # slots + one leaked cluster is enough): the freshest cluster's CoreDNS starves and every DNS
   # lookup fails Errno -3 while pod/node status stays green (measured 116/128 with two leaked
@@ -102,6 +130,14 @@ runcmd:
   - mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nStorage=persistent\n' > /etc/systemd/journald.conf.d/persistent.conf && systemctl restart systemd-journald
   - curl -fsSL https://get.docker.com | sh
   - systemctl enable --now docker
+  # BuildKit mirror builder (homelab#1308, see the buildkitd.toml write above for the design
+  # note): `--driver-opt default-load=true` (buildx ≥0.14; get.docker.com's bundled buildx is
+  # 0.37.0, live-verified 2026-09-05) makes the docker-container builder auto-`docker load` its
+  # result, so existing `docker build && docker run`/`kind load docker-image` flows keep working
+  # unmodified. Created for the `runner` user — the actions-runner systemd service's account
+  # (`./svc.sh install runner` below) — because buildx state (`~/.docker/buildx`) is per-user;
+  # both runner slots share it (same $HOME, live-verified: uid 1001, groups runner+docker).
+  - su - runner -c 'docker buildx create --name homelab-mirrors --driver docker-container --driver-opt default-load=true --config /etc/buildkit/buildkitd.toml --use --bootstrap'
   - systemctl enable --now kind-janitor.timer
   # FU-015/ADR-082 parity: nix + devbox so the stacks' devbox-based gates (sleep `devbox run
   # test-integration`, oracle `e2e-kind`) run REPRODUCIBLY on this VM, not just the ARC runner —
