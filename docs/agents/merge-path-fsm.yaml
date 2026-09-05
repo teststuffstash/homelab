@@ -78,9 +78,10 @@ transitions:
   - id: MP-T02
     name: updater brings a behind PR current
     owner: in-cluster updater (ADR-111 — exporter edge + */15 Argo CronWorkflow → agents/update-pr-branch.sh, homelab-merge App via ESO; hosted reusable retired 2026-08-26, homelab#745)
-    when: "behind ∧ green ∧ armed ∧ ¬conflicted ∧ ¬changes_requested — oldest first WITHIN a
-      (repo, base) LANE, ONE update per lane per run (ADR-125 (2); it was one per REPO until
-      homelab#1422)"
+    when: "behind ∧ armed ∧ ¬conflicted ∧ MERGE-READY (bot-approved at head / reviewDecision
+      APPROVED — homelab#1452, so ¬changes_requested and the #887 codeowner park fall out of the
+      predicate) — oldest first WITHIN a (repo, base) LANE, ONE update per lane per run
+      (ADR-125 (2); it was one per REPO until homelab#1422)"
     emits: branch_updated
     status: guarded
     replay:
@@ -91,6 +92,16 @@ transitions:
           between PRs sharing a base (ADR-125); legs 2 (unstrand) and 3 (DIRTY labeler) are
           per-PR sweeps and are unaffected"
         anchor: { file: agents/update-pr-branch.sh, pattern: "oldest armed\\+BEHIND, FIFO" }
+      - desc: "MERGE-READY ONLY (homelab#1452): the leg brings current only a PR with nothing but
+          currency + CI left before auto-merge — reviewDecision APPROVED, or the reviewer bot's
+          APPROVED post-dating the newest NON-MERGE commit (`bot_approved_head`, review-reflex.sh's
+          definition, [bot]-suffix normalized). Unreviewed / changes-requested / codeowner-parked
+          PRs stay BEHIND and cost no CI; this is the platform-native merge queue (a GitHub merge
+          queue is unavailable to the private stack repos that copy this repo). Replayed by
+          `unreviewed-behind-no-update` (no approval ⇒ no update — the pin), `bot-approved-head-update`,
+          `stale-approval-no-update` (content after the verdict ⇒ no update) and
+          `merge-ready-only-off-legacy-pick` (UPDATER_MERGE_READY_ONLY=0 restores the old pick)"
+        anchor: { file: agents/update-pr-branch.sh, pattern: "def merge_ready" }
       - desc: "the lane grouping itself: group_by(.baseRefName) before the FIFO take, replayed by
           the `two-lanes-two-updates` (two bases ⇒ two update calls in one pass) and
           `same-lane-one-update` (two PRs on one goal/** base ⇒ one call, the older) rows"

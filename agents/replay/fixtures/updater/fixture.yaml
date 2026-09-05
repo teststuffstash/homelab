@@ -2,10 +2,18 @@
 # adRise-action replacement, MP-T02/MP-T06's first executed replay).
 #
 # THE CONTRACT: per pass over one `gh pr list` snapshot, three legs —
-#   1. main pick: armed ∧ BEHIND ∧ ¬CHANGES_REQUESTED, oldest first (FIFO), ONE update per
+#   1. main pick: armed ∧ BEHIND ∧ MERGE-READY, oldest first (FIFO), ONE update per
 #      (repo, base) LANE per pass — ADR-125 (2)/homelab#1422; before that it was one per REPO,
 #      which serialized a goal lane behind master traffic that cannot stale its approvals.
 #      NO green requirement (2026-07-10: requiring checks wedges base-side CI fixes out of PRs).
+#      MERGE-READY (homelab#1452, the platform-native merge queue) = nothing but currency + CI
+#      stands between the PR and auto-merge: reviewDecision APPROVED, or the reviewer bot's
+#      APPROVED post-dating the newest NON-MERGE commit. ¬CHANGES_REQUESTED and the #887
+#      codeowner-park skip are now special cases of it. `unreviewed-behind-no-update` is the pin
+#      (same world as the pre-#1452 fifo row, minus the approvals ⇒ no update);
+#      `merge-ready-only-off-legacy-pick` holds UPDATER_MERGE_READY_ONLY=0 (the old pick) for the
+#      L-scenario comparison. The FIFO/lane rows carry bot approvals now so their subject stays
+#      the ORDERING, not the predicate.
 #   2. unstrand (the CR∧BEHIND crack, narrowed 2026-08-17): armed ∧ BEHIND ∧ CHANGES_REQUESTED,
 #      breaker labels excluded, updated ONLY when the newest NON-merge commit post-dates the
 #      newest homelab-reviewer verdict; unreadable commit/review data HOLDS (rule #6).
