@@ -76,12 +76,19 @@ spec:
             # Blob-descriptor cache OFF — the 46-hour-lie class (homelab#240); the full
             # rationale is mirror-ghcr.yaml's. "" is the off value; never redis.
             - { name: REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR, value: "" }
+            # Debug/metrics server on :5001 (homelab#1297). Binds ALL interfaces (not
+            # 127.0.0.1) because there is NO nginx front on this pod — the ServiceMonitor
+            # scrapes this port directly. The ADR-121 registry.yaml precedent binds
+            # 127.0.0.1:5002 because that pod HAS an nginx front on :5001; here :5001 is
+            # free and the debug server is the only listener on it.
+            - { name: REGISTRY_HTTP_DEBUG_ADDR, value: ":5001" }
             # Upload-debris reaping at 1h (homelab#80) — one env var holding the whole map,
             # per-key vars panic the registry; rationale in mirror-ghcr.yaml.
             - name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING
               value: "{enabled: true, age: 1h, interval: 15m, dryrun: false}"
           ports:
             - { name: http, containerPort: 5000 }
+            - { name: debug, containerPort: 5001 }
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
@@ -119,3 +126,4 @@ spec:
   selector: { app: mirror-mcr }
   ports:
     - { name: http, port: 80, targetPort: 5000 }
+    - { name: debug, port: 5001, targetPort: 5001 }
