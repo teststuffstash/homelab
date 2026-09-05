@@ -1,0 +1,18 @@
+[
+    {
+        "id": 1,
+        "user": {
+            "login": "homelab-agents-1234"
+        },
+        "body": "<!-- agent-summary -->\n\n🤖 **Agent activity** — one machine comment per timeline.\n\n- `2026-09-01T07:19:56Z` · **picking this up (round 1)** — dispatching a fix-class worker. <!-- agent-event kind=dispatch ts=2026-09-01T07:19:56Z -->",
+        "created_at": "2026-09-01T07:19:57Z"
+    },
+    {
+        "id": 2,
+        "user": {
+            "login": "RasmusSoot"
+        },
+        "body": "**Scope note for the ride and the reviewer (seat, 2026-09-01):** round 1 was dispatched on the original narrow scope (`issue.md` pre-read + defer) minutes before the operator widened this into the full context-PREFETCH stage.",
+        "created_at": "2026-09-01T07:21:28Z"
+    }
+]
