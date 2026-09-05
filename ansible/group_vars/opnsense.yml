@@ -166,3 +166,12 @@ unbound_hosts:
   - { hostname: ubiquiti, domain: teststuff.net, value: 192.168.40.12, description: "UniFi Network Application (controller VIP)" }
   - { hostname: argo, domain: teststuff.net, value: 192.168.3.24, description: "Argo Workflows UI (HAProxy VIP; backend LB 40.24)" }
   - { hostname: apps, domain: teststuff.net, value: 192.168.3.25, description: "GitHub Apps declared-vs-live page (HAProxy VIP; backend LB 40.25, github-exporter)" }
+
+# Unbound "Advanced" settings we pin (Services → Unbound DNS → Advanced). Keys are the
+# `unbound.advanced.<key>` field names of `unbound/settings/get`; values are the API's
+# string booleans. `logservfail` = Unbound `log-servfail: yes` — one log line per SERVFAIL
+# naming the reason ("all servers for this domain failed", "upstream server timeout", …),
+# the diagnostic FU-215 lacked on 2026-09-05 (four github.com SERVFAIL windows, log silent
+# at verbosity 1). Cheap: nothing is logged unless a query actually fails.
+unbound_advanced:
+  logservfail: "1"
