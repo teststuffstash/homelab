@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-214** (the counter lagged a FIFTH time — it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-219** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -566,6 +566,16 @@ the block needs pruning, not more headings.
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 
+- [ ] **FU-218** — **ARC's honest capacity is 3, `maxRunners: 4` keeps one pod pending forever.**
+      A runner pod requests 2.5 Gi; an 8 GB laptop has ~6.2 Gi allocatable minus ~1.3 Gi DaemonSets
+      → one runner per node, and only wk-03/wk-metal-01/-02 carry the `homelab.io/ephemeral=true`
+      label (metal-03/-04 are kata-reserved by decision, `tofu/talos.tf`). Measured 2026-09-05:
+      24 h queue p90 ~10 min over 1,103 jobs while the cap was hit 0–2 % of the time — the queue is
+      memory placement, not slots. `arc-runners.yaml`'s "≈2 dind runners per metal node" is stale.
+      **Next:** `maxRunners: 3` + fix the comment (one-line PR, makes the panel truthful; does not
+      shorten the queue) — real capacity is RAM on the compute tier, see the spike's §CI side.
+      Relates FU-208, ADR-082.
+
 - [ ] **FU-197** — **manifest-lint fetches every kubeconform schema from raw.githubusercontent.com
       on each CI run — uncached, so a GitHub-raw hiccup reds the required check.** Bit PR#1099
       (2026-08-31): the runner got HTTP 400 on a schema fetch (a guaranteed-404 kustomization
@@ -816,6 +826,23 @@ the block needs pruning, not more headings.
       sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
 
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
+
+- [ ] **FU-216** — **Rides' test IO rides virtiofs onto the shared laptop disk — try a memory-backed
+      `/tmp`.** The 2026-09-05 specimen (oracle-fleet#370 r2): 24 of 30 min were `devbox run ci`,
+      pytest 641 s in-pod vs 381–430 s on ARC, node IO pressure-stall 82–91 % the whole ride — a
+      Longhorn neighbour on the same partition; the pod has NO volume for `/work`/`/tmp`, both are
+      rootfs over virtiofs. Findings + envelope math + kata-ci-gate precedent (3 Gi tmpfs guest-OOMed):
+      [`spikes/ride-latency-breakdown.md`](spikes/ride-latency-breakdown.md) §Second specimen.
+      **Next:** one measurement ride on `wk-metal-04` with `emptyDir: {medium: Memory}` at `/tmp`
+      (+ `TMPDIR`) and `du -sh /tmp /work/repo/.venv` at exit → that number sets `sizeLimit`; then
+      the launcher flag. Operator: pick up on a slow day, AFTER oracle's own ci/e2e big wins.
+- [ ] **FU-217** — **Goose's 600 s shell-tool timeout is shorter than oracle-fleet's suite — rides
+      re-run or die on it.** #370 r1 looped 300→600→500 s and died exit 255 (no transcript, no
+      strike); r2 lost a full 600 s run, then wrapped the second in a 900 s poll. Not a named strike
+      class (model-routing.md's `timeout` is the provider one). Evidence: the same spike section.
+      **Next:** either raise the worker recipe's tool timeout above the measured suite (or make it
+      per-project), or teach the recipe scoped pytest (touched paths / `-x -q`) — decide once
+      oracle's suite is optimised, since that may shrink under 600 s on its own. Relates FU-216.
 
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
       IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel
