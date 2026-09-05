@@ -5,7 +5,8 @@
 # No subscription tokens are ever spent to discover "nothing to do".
 #
 # Actionability predicate (MUST track agents/coordinator/README.md §State machine — keep in sync):
-#   issue: open ∧ `agent-fix` ∧ `agent/queued`                        (ready to dispatch)
+#   issue: open ∧ `agent/queued`                                      (ready to dispatch — the
+#          ONE dispatch precondition, ADR-122 (2), S8 #1432; `agent-fix` is never re-tested here)
 #   PR:    open ∧ ¬`major/awaiting-human` ∧ (`major` ∨ `merge-conflict` ∨ reviewDecision=CHANGES_REQUESTED)
 #   v2:    issue open ∧ `agent-fix` ∧ `agent/in-progress` ∧ no Running worker pod ∧ no open PR
 #          referencing it (C4/C5 — a worker went terminal and nothing re-ticked; pod read via
@@ -1360,9 +1361,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     if [ "$(printf '%s' "$openall" | jq 'length' 2>/dev/null || echo 0)" -ge "$ISSUE_LIST_LIMIT" ]; then
       echo "[$repo] ⚠ TRUNCATED: open-issue fetch filled ISSUE_LIST_LIMIT=$ISSUE_LIST_LIMIT — the oldest open issues are INVISIBLE to this scan; raise the limit"
     fi
+    # >>>REPLAY:queued-derivation>>>
     queued="$(printf '%s' "$openall" \
-      | jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
+      | jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"${queued:-null}" || queued='[]'
+    # <<<REPLAY:queued-derivation<<<
     # In-progress issues once per repo — the C4/C5 clause below AND the ADR-097 footprint
     # predicate (declared `Touches:` body lines; no line = exclusive `*`) read it.
     # NB agent/error stays IN this fetch (an error-flagged in-progress issue still holds its
@@ -1689,7 +1692,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # ⚠ A POST-LAUNCH BUCKET IS NOT A SPROUT (ADR-102, homelab#207). It is bot-authored and carries
     # no `agent-fix`, so it matches this slice exactly — and it is a CONTAINER, not work. Left in,
     # every goal would add a permanent line to a report whose whole purpose is "these are rotting,
-    # triage them", and the report's own instruction (label agent-fix[+queued] to adopt) would
+    # triage them", and the report's own instruction (label agent/queued to adopt (ADR-122 (2), #1432)) would
     # dispatch a worker against an issue with nothing to build. Its children are the work, and they
     # appear here on their own when they land inert.
     # ── UNBLOCKED-UNLABELED rides the SAME fetch (homelab#226) ────────────────────────────────
@@ -1736,7 +1739,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     jq -e . >/dev/null 2>&1 <<<"${unb:-null}" || unb='[]'
     unblines="$(printf '%s' "$unb" | jq -r '.[]
       | "  issue #\(.number) — \(.title) (by \(.author.login // "?"); blockers all closed: \([(.blockedBy.nodes // [])[] | "#\(.number)"] | join(", ")))"' 2>/dev/null)" || unblines=""
-    [ -n "$unblines" ] && orphans="${orphans}[$repo] 🔓 UNBLOCKED-UNLABELED — every blocked-by edge is closed and the issue is still unlabelled >24h (FU-090 gate stands: label agent-fix[+queued] to adopt, or close it):\n${unblines}\n"
+    [ -n "$unblines" ] && orphans="${orphans}[$repo] 🔓 UNBLOCKED-UNLABELED — every blocked-by edge is closed and the issue is still unlabelled >24h (FU-090 gate stands: label agent/queued to adopt (ADR-122 (2), #1432), or close it):\n${unblines}\n"
     unbnums="$(printf '%s' "$unb" | jq -c '[.[].number]' 2>/dev/null)" || unbnums='[]'
     # The backlog inventory (homelab#405 → ADR-109): `agent-fix` without any `agent/*` state is
     # ORDINARY BACKLOG — suitable, deliberately unreleased — not an anomaly. The state's real
@@ -1763,12 +1766,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # ⚠ A POST-LAUNCH BUCKET IS NOT A SPROUT (ADR-102, homelab#207). It is bot-authored and carries
     # no `agent-fix`, so it matches this slice exactly — and it is a CONTAINER, not work. Left in,
     # every goal would add a permanent line to a report whose whole purpose is "these are rotting,
-    # triage them", and the report's own instruction (label agent-fix[+queued] to adopt) would
+    # triage them", and the report's own instruction (label agent/queued to adopt (ADR-122 (2), #1432)) would
     # dispatch a worker against an issue with nothing to build. Its children are the work, and they
     # appear here on their own when they land inert.
     sprouts="$(printf '%s' "$inert" \
       | jq -r --argjson skip "$unbnums" '[.[]|select((.author.is_bot == true) and (((.labels|map(.name))|index("agent-fix"))|not) and ((.title|startswith("post-launch:"))|not) and (.number as $n | ($skip|index($n)) == null))|"  issue #\(.number) — \(.title) (by \(.author.login))"]|.[]' 2>/dev/null || true)"
-    [ -n "$sprouts" ] && orphans="${orphans}[$repo] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):\n${sprouts}\n"
+    [ -n "$sprouts" ] && orphans="${orphans}[$repo] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent/queued to adopt (ADR-122 (2), #1432)):\n${sprouts}\n"
     # ── UNBOUND SPROUT BELT (S6 child 4) ──────────────────────────────────────────────────────
     # Report-only class: an OPEN issue that (a) was authored by the loop identity OR carries a
     # line-anchored lineage cue at body head, AND (b) has NO native parent (issue.parent null).

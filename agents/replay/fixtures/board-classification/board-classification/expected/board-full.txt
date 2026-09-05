@@ -18,7 +18,6 @@ circles#209 seat pr merge conflict (2d)
 § TRIAGE
 circles#104 bot sprout issue (16d)
 circles#105 stray zero-label issue (17d)
-⚠ circles#114 half labeled queued (17d) — agent/queued WITHOUT agent-fix: invisible to every dispatch clause
 
 § VERDICT DUE
 circles#107 goal verdict pending (17d)
@@ -35,4 +34,4 @@ public-edge.abuse-fairness
   circles#117 circles edge fairness (8d)
   — 1 stacks, oldest 17d
 
-totals — review: 2 · fix: 2 · solve: 5 · triage: 3 · verdict-due: 1 · backlog: 3 · demand: 1
+totals — review: 2 · fix: 2 · solve: 5 · triage: 2 · verdict-due: 1 · backlog: 3 · demand: 1

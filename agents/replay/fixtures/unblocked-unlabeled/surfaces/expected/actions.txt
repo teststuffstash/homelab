@@ -1,9 +1,9 @@
 CALL gh issue list --repo teststuffstash/oracle-fleet --state open --limit 200 --json number,title,author,labels,createdAt,blockedBy
-OUT ORPHAN [oracle-fleet] 🔓 UNBLOCKED-UNLABELED — every blocked-by edge is closed and the issue is still unlabelled >24h (FU-090 gate stands: label agent-fix[+queued] to adopt, or close it):
+OUT ORPHAN [oracle-fleet] 🔓 UNBLOCKED-UNLABELED — every blocked-by edge is closed and the issue is still unlabelled >24h (FU-090 gate stands: label agent/queued to adopt (ADR-122 (2), #1432), or close it):
 OUT ORPHAN   issue #90 — delta job: land the manifest + the fleet wiring (by RasmusSoot; blockers all closed: #215)
 OUT ORPHAN   issue #91 — harvested: the delta path needs a cold-start fixture (by homelab-agents-1234; blockers all closed: #215, #216)
 OUT ORPHAN   issue #95 — carries a taxonomy label, but no agent* label (by homelab-agents-1234; blockers all closed: #216)
-OUT ORPHAN [oracle-fleet] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):
+OUT ORPHAN [oracle-fleet] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent/queued to adopt (ADR-122 (2), #1432)):
 OUT ORPHAN   issue #92 — harvested minutes ago, blocker already closed (by homelab-agents-1234)
 OUT ORPHAN   issue #93 — an ordinary inert sprout — never had a blocker (by homelab-agents-1234)
 OUT ORPHAN [oracle-fleet] ⚠ PROBE-FAILED (openall / inert) — unbound-sprout belt skipped this tick (rule #6)

@@ -827,15 +827,16 @@ def maybe_dispatch_merged(repo, vanished):
 
 def queued_dispatchable(labels):
     """The scan's queued-dispatch clause (coordinator-scan.sh, the `queued` derivation), label for
-    label: agent-fix ∧ agent/queued ∧ ¬direction-change ∧ ¬agent/error. The doorbell mirrors it so
+    label: agent/queued ∧ ¬direction-change ∧ ¬agent/error. The doorbell mirrors it so
     a wake the scan then ignores as out-of-predicate is pure waste (#459) — the same doctrine
-    maybe_dispatch_conflict documents for its clause."""
-    return ("agent-fix" in labels and "agent/queued" in labels
+    maybe_dispatch_conflict documents for its clause. `agent-fix` is no longer part of the JOIN
+    (ADR-122 (2), S8 #1432) — changed together with coordinator-scan.sh's `queued` derivation."""
+    return ("agent/queued" in labels
             and "direction-change" not in labels and "agent/error" not in labels)
 
 
 def maybe_dispatch_queued(repo, currently):
-    """#459 label-transition doorbell: an issue newly carrying `agent-fix`+`agent/queued` is the
+    """#459 label-transition doorbell: an issue newly carrying `agent/queued` is the
     ONE loop transition with no emitter. The ⚑ ALL EVENTS HAVE DOORBELLS table promised an
     "exporter piggyback" for "issue gains agent/queued" and never built one, so a human directly
     applying the labels (sleep-tracking#121; homelab#478/479/491) sat unrung until the */30
@@ -2693,12 +2694,16 @@ def self_test():
     # cron. Same seam as the conflict edge (recorded urlopen), so the predicate, the diff
     # semantics, the payload and the failed-POST retry are pinned without a socket.
     assert queued_dispatchable({"agent-fix", "agent/queued"})
-    assert not queued_dispatchable({"agent/queued"}), "agent-fix is the fixer opt-in"
-    assert not queued_dispatchable({"agent-fix"}), "agent/queued is the ready-to-dispatch state"
+    assert queued_dispatchable({"agent/queued"}), \
+        "agent/queued alone is the ONE dispatch precondition (ADR-122 (2), S8 #1432)"
+    assert not queued_dispatchable({"agent-fix"}), \
+        "agent-fix is the backlog/opt-in marker (ADR-109) — never re-tested at dispatch"
     assert not queued_dispatchable({"agent-fix", "agent/queued", "direction-change"}), \
         "the scan's direction-change exclusion"
     assert not queued_dispatchable({"agent-fix", "agent/queued", "agent/error"}), \
         "the scan's circuit-breaker exclusion"
+    assert not queued_dispatchable({"agent/queued", "agent/error"}), \
+        "agent/error excludes regardless of agent-fix (#1432)"
     assert queued_dispatchable({"agent-fix", "agent/queued", "task/fix"}), \
         "other labels (task/fix) do not block dispatch"
 
