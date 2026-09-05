@@ -360,6 +360,7 @@ is stale, so it cannot drift the way the prose register did.
 | `scan-governance/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-guarded/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-guarded/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
+| `scan-lane-walk` | table | - | `agents/coordinator-scan.sh` | IL-T05 |
 | `scan-phase-marker/scan-phase-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-touches-footprint-hold/scan-touches-footprint-hold` | actions | - | `agents/touches-check.sh` | - |
 | `scan-wedge-alert/scan-wedge-alert` | suite | - | `-` | - |

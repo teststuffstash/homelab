@@ -23,5 +23,6 @@ mode: actions
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
+  - block:unit-lane
   - block:fu146-dispatch-loop
   - file:cases.sh

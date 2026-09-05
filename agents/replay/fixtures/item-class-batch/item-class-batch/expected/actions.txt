@@ -7,16 +7,16 @@ STDIN # TYPE agent_item_class gauge
 STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
 STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
 STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-STDIN agent_item_class{repo="homelab",item="833",class="held-merged-unlinked",who="operator"} 1
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="833",class="held-merged-unlinked",who="operator"} 1786465900
-STDIN agent_item_class{repo="homelab",item="834",class="queued-held-by-ghost",who="operator"} 1
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="834",class="queued-held-by-ghost",who="operator"} 1786465900
-STDIN agent_item_class{repo="homelab",item="889",class="riding",who="machine"} 1
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="889",class="riding",who="machine"} 1786465900
-STDIN agent_item_class{repo="homelab",item="840",class="container",who="none"} 1
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="840",class="container",who="none"} 1786465900
-STDIN agent_item_class{repo="homelab",item="aggregate",class="backlog-aggregate",who="operator"} 1
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="aggregate",class="backlog-aggregate",who="operator"} 1786465900
+STDIN agent_item_class{repo="homelab",item="833",class="held-merged-unlinked",who="operator",base="master"} 1
+STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="833",class="held-merged-unlinked",who="operator",base="master"} 1786465900
+STDIN agent_item_class{repo="homelab",item="834",class="queued-held-by-ghost",who="operator",base="master"} 1
+STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="834",class="queued-held-by-ghost",who="operator",base="master"} 1786465900
+STDIN agent_item_class{repo="homelab",item="889",class="riding",who="machine",base="master"} 1
+STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="889",class="riding",who="machine",base="master"} 1786465900
+STDIN agent_item_class{repo="homelab",item="840",class="container",who="none",base="master"} 1
+STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="840",class="container",who="none",base="master"} 1786465900
+STDIN agent_item_class{repo="homelab",item="aggregate",class="backlog-aggregate",who="operator",base="master"} 1
+STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="aggregate",class="backlog-aggregate",who="operator",base="master"} 1786465900
 FLUSH_DONE 0
 === scenario 2: timestamp carry-over for unchanged items ===
 ACCUMULATED 2
@@ -27,10 +27,20 @@ STDIN # TYPE agent_item_class gauge
 STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
 STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
 STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
-STDIN agent_item_class{repo="homelab",item="833",class="held-merged-unlinked",who="operator"} 1
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="833",class="held-merged-unlinked",who="operator"} 1786000000
-STDIN agent_item_class{repo="homelab",item="835",class="riding",who="machine"} 1
-STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="835",class="riding",who="machine"} 1786465900
+STDIN agent_item_class{repo="homelab",item="833",class="held-merged-unlinked",who="operator",base="master"} 1
+STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="833",class="held-merged-unlinked",who="operator",base="master"} 1786000000
+STDIN agent_item_class{repo="homelab",item="835",class="riding",who="machine",base="master"} 1
+STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="835",class="riding",who="machine",base="master"} 1786465900
+FLUSH_DONE 0
+=== scenario 3: a lane change re-stamps (carry-over matches on base) ===
+CALL curl -fsS --max-time 5 http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics?job=agent_board&namespace=homelab-agents
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_board/namespace/homelab-agents
+STDIN # TYPE agent_item_class gauge
+STDIN # HELP agent_item_class 1 = the scan classified this item in this class this tick.
+STDIN # TYPE agent_item_class_since_timestamp_seconds gauge
+STDIN # HELP agent_item_class_since_timestamp_seconds Unix epoch at which this item was classified into this class.
+STDIN agent_item_class{repo="homelab",item="833",class="held-merged-unlinked",who="operator",base="goal/278"} 1
+STDIN agent_item_class_since_timestamp_seconds{repo="homelab",item="833",class="held-merged-unlinked",who="operator",base="goal/278"} 1786465900
 FLUSH_DONE 0
 === end ===
 RC 0
