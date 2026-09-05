@@ -89,9 +89,16 @@ spec:
   # sleep flipped to 0731 only 2026-08-19 and has not ridden since). REVERT to claude/haiku
   # primary ~2026-09-03, at fixup-wave end, or at OR depletion — whichever first (meta-state
   # soak line tracks it; the Go re-flip stays FU-181's, separate).
+  # HAIKU PRIMARY RESTORED 2026-09-05 (operator: "put homelab back on claude/haiku — we have
+  # credits to burn for today"): the 2026-08-20 fixup window's own REVERT clause (~09-03 / wave
+  # end / OR depletion) had lapsed unexecuted; this is that revert, back to the 2026-08-19
+  # posture — subscription primary, NO OpenRouter entry (no-new-money), a latched window defers
+  # via FU-088 rather than switching rails. The deny line stays (its REVISIT condition is still
+  # unmet). Re-flip to flash is a one-line claim edit when the subscription pool is the one
+  # under pressure again.
   modelDeny: [deepseek/deepseek-v4-flash-0731]
-  workerModel: deepseek/deepseek-v4-flash
-  workerModelFallbacks: [claude/haiku]
+  workerModel: claude/haiku
+  workerModelFallbacks: []
   repos:
     # agent-runtime: FIXER ENABLED 2026-08-08 — the 2026-07-16 "No fixer: these build the
     # agent images" ruling (kept for agent-coordinator below) was superseded for THIS repo by
