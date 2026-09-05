@@ -6901,3 +6901,24 @@ first live ADR-110 maintenance session before the ADR existed.
   `cb_session` None; direct-key rides collapse to `direct:<key-hash>` = the hardcoded-id trap)
   went to `docs/agents/chainless-redesign.md` §The `x-opencode-session` header; FU-213 is the
   pointer.
+
+## 2026-09-05 (06:3x–07:1xZ) — the corpus-cost sitting: measure, prune, file the fifth S5 original
+
+- **Condition:** operator asked (`/design-agents`) how much context the skill's read plan takes
+  and whether another slimming stint is due. Corpus NOT loaded for the answer — measured instead.
+- **Measured:** one corpus load = **299k / 346k cache-creation tokens** (session-ctx `--big` on
+  the 09-03 and 09-04 corpus sessions) against the "~110k" the skill carried since the 08-18
+  trim (never re-measured). Read plan ~820 KB / 9,900 lines; docs/agents 516→645 KB since
+  08-19, 45 % of the growth meta-state.md (17→75 KB — "tiny, transient" by its own header).
+  Ten corpus loads in the six days since 08-31; the last three corpus sessions ended at
+  670k/779k/868k ctx, all past the ≥500k rule. Post-S5 windowed doc-heat (37 transcripts,
+  `DOC_HEAT_SRC` symlink dir): 72 % of read-plan lines never targeted.
+- **Command (operator: "do the 3 suggestions"):** (1) skill cost line → the measured figure
+  (`43f9f387`); (2) **meta-state pruned 872→~200 lines** to its contract — every kept item
+  live-verified by REST reads first (G-A/G-F validated+closed, park queue empty, #994/#1102/
+  #887/#459 closed → dropped; two design inputs kept because they have NO other home: the
+  08-31 drainage ruling is ADR-shaped and unrecorded, the stack→platform instances 3+4);
+  (3) **homelab#1393 filed + bound as #979's fifth original** (post-S5 heat-cited trims,
+  #983's method, eight files ranked by longest cold run) — S5 stays open past its quiet
+  window by design; FU-164's due read closed as settle-test run 2 in the spike, next = the
+  v1 cluster leg. All direct-lane bookkeeping, batched for the wind-down push.
