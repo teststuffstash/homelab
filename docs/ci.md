@@ -223,6 +223,8 @@ pinned `docker:dind` + `--registry-mirror` → the ADR-091 docker.io pull-throug
 per-job apt and cold-start are gone (numbers above). The **Proxmox VM runner** (ADR-082,
 `tofu/ci-runner.tf`) carries the jobs a container can't (binfmt/arm64, full-VM kind gates; its
 dockerd also rides the docker.io mirror via cloud-init `daemon.json`, ADR-091 /
-`argocd/resources/registry-cache/`); `ubuntu-latest`
+`argocd/resources/registry-cache/`; a `docker build` with a non-Hub `FROM` instead needs the
+cloud-init-created `homelab-mirrors` buildx builder — per-registry mirrors via `buildkitd.toml`,
+homelab#1308, `docs/patterns/python-stack.md`); `ubuntu-latest`
 remains the zero-infra escape hatch — and deliberately builds the runner image itself
 (bootstrap: the image must not depend on the fleet it provisions).
