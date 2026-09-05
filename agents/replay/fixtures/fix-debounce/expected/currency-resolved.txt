@@ -1,6 +1,8 @@
 CALL gh api repos/teststuffstash/homelab/issues?labels=agent-fix&state=open&per_page=50 --jq .[] | select(.pull_request | not) | select(.body // "" | test("(^|\n)alert-fp:")) | select([.labels[].name] | any(startswith("agent/")) | not) | {repo: "teststuffstash/homelab", number: .number, title: .title, body: (.body // "")}
 CALL gh api repos/teststuffstash/homelab/issues/237 --jq .body // ""
 CALL alertmanager GET /api/v2/alerts (currency probe)
+CALL gh api repos/teststuffstash/homelab/issues/237/comments --paginate
+CALL gh api repos/teststuffstash/homelab/issues/237/comments --paginate
 CALL gh api --method POST repos/teststuffstash/homelab/issues/237/comments -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-11T14:00:00Z` · **not queued — queue-time currency gate** (FU-133 leg c): alert-fp:9c41d70e5ab28f13 is not firing — it resolved, and the body is all a fixer would have to work from. Nothing was closed and no label moved: alert-state is not defect-state. If the defect outlives its alert, say so here and queue it by hand. <!-- agent-event kind=currency-skip ts=2026-08-11T14:00:00Z -->
 OUT self-referential, left for a human to queue:
 OUT   teststuffstash/homelab#226 ResponderSelfReferential: the alert lane's own namespace is degraded

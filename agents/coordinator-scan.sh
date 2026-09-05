@@ -2724,15 +2724,11 @@ EOF_GOVERNANCE
         # is the container's, never the filer's: the store is one machine comment on THIS issue
         # (agents/epic_dispositions.py, `<!-- epic-dispositions v1 -->`), written only by the
         # goal-checkpoint play, the stint closeout act and the bucket create below.
-        # ⚠ FU-084 (API pool): this is a SECOND GET of the same comments ENDPOINT `_gf_find`
-        # fetches below — the two stores are different markers on the same issue, and folding
-        # them into one fetch means reshaping goal-findings.sh's read, which #1419 held out of
-        # scope. One extra GET per OPEN goal per tick; fold at the S8 closeout. Note the two
-        # reads do NOT pass the same flags: this one is `--paginate --slurp` (see
-        # epic_dispositions.py §_parse_comments_payload — bare `--paginate` emits back-to-back
-        # JSON documents and is unparseable past 100 comments), while goal-findings.sh still
-        # reads bare. Folding them has to settle that first.
-        gdisp_json="$(python3 "${HERE}/epic_dispositions.py" read "$slug" "$g" 2>/dev/null)" && gdisp_rc=0 || gdisp_rc=$?
+        # ⚠ FU-084 (API pool): both dispositions and findings stores live on the same issue.
+        # They share one comments fetch, both take `--paginate --slurp`, and `_gf_find` receives
+        # the pre-fetched payload as $3 (#1439). One GET per OPEN goal per tick.
+        gcomments="$(_gf_comments "$slug" "$g" 2>/dev/null)" || gcomments=""
+        gdisp_json="$(EPIC_DISPOSITIONS_COMMENTS="$gcomments" python3 "${HERE}/epic_dispositions.py" read "$slug" "$g" 2>/dev/null)" && gdisp_rc=0 || gdisp_rc=$?
         if [ "${gdisp_rc:-2}" -ne 0 ] || [ -z "$gdisp_json" ]; then
           # rule #6, never fail INTO a dispatch: an unreadable store counts as "no rows" for the
           # COMPLETION predicate (which only ever shrinks the count, so it cannot invent a
@@ -2764,18 +2760,6 @@ EOF_GOVERNANCE
         # only apply the disposition filter when the store actually read; otherwise fall back to
         # the pre-PR plain open-non-bucket count, so a blind read can only ever look MORE open,
         # never less.
-        # FU-084 (API pool): both dispositions and findings stores live on the same issue; fold
-        # one comments GET into both reads (#1439). Fetch once, pass to both parsers.
-        gcomments="$(_gf_comments "$slug" "$g" 2>/dev/null)" || gcomments=""
-        gdisp_json="$(EPIC_DISPOSITIONS_COMMENTS="$gcomments" python3 "${HERE}/epic_dispositions.py" read "$slug" "$g" 2>/dev/null)" && gdisp_rc=0 || gdisp_rc=$?
-        if [ "${gdisp_rc:-2}" -ne 0 ] || [ -z "$gdisp_json" ]; then
-          gdisp_json='{}'; gdisp_ok=0
-          echo "  [$repo] ⚠ goal #${g}: dispositions unreadable — the undispositioned wake (trigger c) is HELD this pass"
-        else
-          gdisp_ok=1
-        fi
-        gdisp_ad="$(printf '%s' "$gdisp_json" | jq -r '[to_entries[] | select(.value.disposition == "adopted") | .key] | join(" ")' 2>/dev/null || echo "")"
-        gdisp_df="$(printf '%s' "$gdisp_json" | jq -r '[to_entries[] | select(.value.disposition == "deferred") | .key] | join(" ")' 2>/dev/null || echo "")"
         if [ "$gdisp_ok" = 1 ]; then
           gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
             '(($d | split(" ") | map(select(. != "") | tonumber))) as $D

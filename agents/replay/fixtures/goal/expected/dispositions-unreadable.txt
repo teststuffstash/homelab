@@ -4,7 +4,6 @@ CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --pagin
 CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate --slurp
 CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate --slurp
 OUT   [circles] ⚠ goal #29: dispositions unreadable — the undispositioned wake (trigger c) is HELD this pass
-OUT   [circles] ⚠ goal #29: dispositions unreadable — the undispositioned wake (trigger c) is HELD this pass
 OUT GACTED <none>
 OUT UNITS <none>
 OUT ORPHANS <none>
