@@ -93,7 +93,7 @@ STRIKE_RE = re.compile(r"^AGENT_STRIKE: model=(\S+) error_class=(\S+) round=(\d+
 # ci-cause marker — mandatory on every ci-red and arbitrate ruling comment (homelab#1286).
 # Format: ci-cause: <job>/<step> class=<class> basis=<basis>
 # The marker is DATA only — no behavioral read of class/basis exists outside the emitter.
-CI_CAUSE_RE = re.compile(r"^ci-cause: (\S+) class=(\S+) basis=(\S+)")
+CI_CAUSE_RE = re.compile(r"^ci-cause: (\S+) class=(\S+) basis=(\S+)", re.MULTILINE)
 
 # ── Rail vocabulary (homelab#795 — G-A, one taxonomy across ledger + proxy + rules) ────────────
 # The launcher (agent-runtime's agent-session.sh, AGENT_RAIL) emits FOUR values:
@@ -226,7 +226,7 @@ def strike_rounds(org, project, issue):
 
 
 def ci_causes(org, project, issue):
-    """Parse ci-cause markers from issue comments → [{job_step, class, basis, ts}].
+    """Parse ci-cause markers from issue comments → [{job_step, class, basis}].
 
     Reads the same comment surface as strike_rounds() — the issue's own timeline. ci-red and
     arbitrate rulings are posted on the PR, not the issue, so this function covers the case
