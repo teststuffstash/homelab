@@ -1,3 +1,6 @@
+# post-#1452: both PRs are MERGE-READY (bot approval newer than the newest non-merge commit) —
+# leg 1 no longer updates unapproved PRs, and this row's subject is the LANE split, not the
+# predicate. The un-approved variant is `unreviewed-behind-no-update`.
 # two-lanes-two-updates (ADR-125 (2), homelab#1422): one armed+BEHIND PR on the DEFAULT lane and
 # one on a goal lane. Before the per-lane pick these two competed for the single per-repo slot and
 # the goal PR waited a whole pass (or many) behind master traffic it can never invalidate — an
@@ -8,8 +11,14 @@
 . + [
   { number: 101, createdAt: "2026-08-19T09:00:00Z", mergeStateStatus: "BEHIND",
     autoMergeRequest: { enabledAt: "2026-08-19T09:01:00Z" }, reviewDecision: "",
-    baseRefName: "master", labels: [], headRefOid: "abc123def456" },
+    baseRefName: "master", labels: [], headRefOid: "abc123def456",
+    commits: [ { messageHeadline: "fix: master lane", committedDate: "2026-08-19T09:00:00Z" } ],
+    reviews: [ { author: { login: "homelab-reviewer[bot]" }, state: "APPROVED",
+                 submittedAt: "2026-08-19T09:30:00Z" } ] },
   { number: 110, createdAt: "2026-08-19T10:00:00Z", mergeStateStatus: "BEHIND",
     autoMergeRequest: { enabledAt: "2026-08-19T10:01:00Z" }, reviewDecision: "",
-    baseRefName: "goal/x", labels: [], headRefOid: "goal110oid789" }
+    baseRefName: "goal/x", labels: [], headRefOid: "goal110oid789",
+    commits: [ { messageHeadline: "feat: goal lane", committedDate: "2026-08-19T10:00:00Z" } ],
+    reviews: [ { author: { login: "homelab-reviewer[bot]" }, state: "APPROVED",
+                 submittedAt: "2026-08-19T10:30:00Z" } ] }
 ]
