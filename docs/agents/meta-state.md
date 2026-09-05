@@ -36,7 +36,16 @@ never the session's arc — that is TICK-LOG's.)
   session-scoped `SILENT_DEDUP_RECORD`, bridge clears first; family 10/10) → codeowner-APPROVED
   20:15Z, CLEAN, auto-merging · #1446 + #1436 green, **operator chose to WAIT for the bot**
   (latch ~20:50Z) over an admin merge — their merge + the `dirty-skips` re-land are the next
-  session's first act if the bot has landed them. **Next originals:** 1b #1431 (after 1a;
+  session's first act if the bot has landed them.
+  **⚑ BUDGET WINDOW FOR THE NEXT SESSION (operator, 2026-09-05 20:22Z): the 5h window resets
+  ~20:35Z and the WEEKLY window resets ~21:55Z — burn THIS week's remainder, not next week's.**
+  Run it as a corpus session with WIDE subagent fan-out (width 4+, opus chunks — the S8 build
+  mode) from bootstrap, aimed at 1b #1431 (+ #1420/#1424 if the chunks allow), and WIND DOWN
+  BEFORE ~21:55Z regardless of in-flight work — a chunk that has not pushed by then parks on
+  its branch for the session after. The bot reviews of #1446/#1436 resume at the 5h reset, so
+  #1422 (6a+6b) and #1430 (1a) should be closable at bootstrap; re-land `dirty-skips` and
+  queue #1439 first (both ≤5 min). Codeowner reads on incoming loop PRs ride the SEATPR/park
+  sources under ADR-110 (merge the small, park the big — never admin-merge). **Next originals:** 1b #1431 (after 1a;
   carries the fail-CLOSED-on-exit-2 input + `GB_REF` per issue, recorded on #1431) → #1420 (card
   to three acts) → #1424 (currency; folds the goal-ancestor stop-condition nit). #1423 HELD.
   Sprouts: **#1452** (updater updates only MERGE-READY PRs — the platform-native merge queue,
