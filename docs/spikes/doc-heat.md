@@ -86,7 +86,7 @@ block); issue-authoring's FU-143 implementation contract + soak forensics (88 co
 shipped-and-archived history → the invariant + two lessons + FSM pointers); issue-authoring's
 two-hop cascade (40 cold lines — where heat ALSO caught a staleness no lint could see: the
 section still described the ADR-111-retired hosted updater). Every line cut here was paid on
-every ~110k-token design-agents corpus load.
+every design-agents corpus load (then believed ~110k tokens; measured 300–350k in run 2).
 
 **Candidates correctly REJECTED on class excuse (the doctrine working):**
 `tofu/cloudflare/README.md` (0 heat since 07-13 — root-README/recovery class, rare-read
@@ -99,6 +99,33 @@ them measurable.
 **Verdict input:** heat changed decisions — the ≥3 bar is met, and the line-level channel
 found both trim mass and a staleness class the lints structurally miss. The promote-vs-close
 call (serve the report; wire it into docs-cleanup as a standing input) is the operator's.
+
+## Settle test — run 2 (2026-09-05, the post-S5 read — FU-164's scheduled follow-up)
+
+Two runs from one sitting: all-time (218 sessions, 106/143 files) and a **windowed** run
+(`DOC_HEAT_SRC` = a symlink dir of the 37 transcripts modified since 2026-08-31 — the
+generator takes the source dir from the environment, so a window costs nothing to build).
+The window is the one that matters post-S5: pre-S5 heat describes text the #984 comb rewrote.
+
+**The load itself, measured for the first time** (`scripts/session-ctx.sh --big` on the
+2026-09-03 and 2026-09-04 corpus sessions): **299k and 346k cache-creation tokens** per
+design-agents corpus load — not the ~110k the skill had carried since the 2026-08-18 trim.
+The read plan is ~820 KB / 9,900 lines; docs/agents grew 516→645 KB between 08-19 and 09-05,
+45 % of it meta-state.md (17→75 KB, pruned to its contract the same day). Ten loads in the
+six windowed days.
+
+**Windowed heat over the design-agents read plan:** 72 % of its 9,900 lines were never
+targeted by a ranged read or grep — whole-loaded only. Longest never-targeted runs:
+replay README 385 (below the index — already grep-only by the read plan), merge-path 370,
+observability-and-retro 331, issue-authoring 328, iac-lane 277, chainless-redesign 271,
+roles 218, model-routing 171. The coordinator brief shows 0 % cold because its whole reads
+arrive as ranged chunks — an instrument artifact, so it is unmeasured rather than clean
+(the v1 cluster leg is also what would measure it from the consumer side).
+
+**Decisions:** none cut in this run — it is the measurement that files the trims as the S5
+stint's fifth original (homelab#1393, #983's method), so the accepted decisions land as
+run 3 there. What run 2 settles: the windowing recipe (environment-driven source dir), and
+that the corpus cost line in the skill is a measured figure from now on.
 
 ## Links
 
