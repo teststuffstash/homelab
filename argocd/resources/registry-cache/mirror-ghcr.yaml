@@ -137,6 +137,13 @@ spec:
             # Do NOT substitute redis: it relocates the skew instead of removing it (a 2026
             # advisory covers stale-blob resurrection via the repo-scoped redis cache).
             - { name: REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR, value: "" }
+            # Debug/metrics server on :5001 (homelab#1297). Binds ALL interfaces (not
+            # 127.0.0.1) because there is NO nginx front on this pod — the ServiceMonitor
+            # scrapes this port directly. The ADR-121 registry.yaml precedent binds
+            # 127.0.0.1:5002 because that pod HAS an nginx front on :5001; here :5001 is
+            # free and the debug server is the only listener on it.
+            - { name: REGISTRY_HTTP_DEBUG_ADDR, value: ":5001" }
+            - { name: REGISTRY_HTTP_DEBUG_PROMETHEUS_ENABLED, value: "true" }
             # Upload-debris reaping (#80, 2026-08-03): concurrent cold pulls of a fat image
             # (arc-runner, ~2.7G layer × N ARC pods) each stream into their own _uploads/ dir;
             # an ENOSPC truncation abandons them, and the DEFAULT purge age of 168h left 9.8G
@@ -149,6 +156,7 @@ spec:
               value: "{enabled: true, age: 1h, interval: 15m, dryrun: false}"
           ports:
             - { name: http, containerPort: 5000 }
+            - { name: debug, containerPort: 5001 }
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
@@ -186,3 +194,4 @@ spec:
   selector: { app: mirror-ghcr }
   ports:
     - { name: http, port: 80, targetPort: 5000 }
+    - { name: debug, port: 5001, targetPort: 5001 }
