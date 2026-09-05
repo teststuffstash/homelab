@@ -1,0 +1,18 @@
+# homelab#1205/#1386 (codeowner read) — fix round, ConfigMap create REFUSED: the fallback path
+# must land TWO files (index.txt, issue.md — matching render_env_card's "read index.txt for the
+# bundle index, then issue.md FIRST"), not one concatenated bundle.txt, and must downgrade any
+# optional item that fetched OK (pr.md, reviews.md) to a MISSING line naming the argv fallback so
+# the index never silently claims an item that isn't there.
+#
+# STUB_KUBECTL_create=fail (per-call override, agents/replay/stubs/_common.sh) refuses the
+# `kubectl create -f -` for the context ConfigMap; every other kubectl/gh call in this world
+# still succeeds, same as ../fix-round.
+name: context-prefetch/fix-round-cm-refused
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
+env:
+  - STUB_KUBECTL_create=fail
