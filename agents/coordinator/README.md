@@ -765,12 +765,19 @@ Read the diff + the whole review thread, then rule — exactly one of:
   round that comes back unchanged.
 - **Rule the finding follow-up-class**: the blocking finding is real, but it does not have to
   land in THIS PR (the step-7 policy test — pre-prod repo, PR better than master, findings are
-  edge semantics / spec ambiguity / new-code corners). File the fix as its own issue, comment
-  the ruling — **and LINK the filed issue as a native sub-issue of the issue whose PR was arbitrated**
-  (lineage contract rule 3; use the same `sub_issues` POST as the merged-closeout harvest, bind at
-  filing regardless of door). **blockedBy filing-edge (homelab#1152)**: when the filed defect wedges live work
-  (the PR's issue is stuck on it), wire the native `blockedBy` edge FROM the stuck issue in the
-  same act (`gh api -X POST repos/<slug>/issues/<STUCK>/dependencies/blocked_by -F
+  edge semantics / spec ambiguity / new-code corners).
+  **When the unit carries `harvest=store`** (the scan resolved a goal ancestor and the goal is
+  OPEN): **APPEND the finding to the goal's findings store** instead of filing an issue —
+  `bash /work/homelab/agents/goal-findings.sh append <owner/repo> <goal-n>
+  "origin=#<pr-n> surface=<path> class=child — <one-line substance>"`. The checkpoint is the
+  minting moment and queues under the goal grant; the finding is not lost, it is batched.
+  **When the unit carries `harvest=inert` or no `goal=` field**: file the fix as its own issue
+  (today's inert filing, unchanged — master lane, breaker #1). Comment the ruling — **and LINK
+  the filed issue as a native sub-issue of the issue whose PR was arbitrated** (lineage contract
+  rule 3; use the same `sub_issues` POST as the merged-closeout harvest, bind at filing regardless
+  of door). **blockedBy filing-edge (homelab#1152)**: when the filed defect wedges live work (the
+  PR's issue is stuck on it), wire the native `blockedBy` edge FROM the stuck issue in the same
+  act (`gh api -X POST repos/<slug>/issues/<STUCK>/dependencies/blocked_by -F
   issue_id=<FILED's numeric .id>`) and say BLOCKING in the ruling comment. The filed issue's
   labels follow this play's existing rules (`agent-fix` + track, NOT `agent/queued`) — the edge
   un-parks via the FU-087 gate; queue authority stays where it is.
