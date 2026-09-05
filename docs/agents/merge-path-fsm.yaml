@@ -129,7 +129,6 @@ transitions:
       - agents/replay/fixtures/review-pick/behind-cr-no-content-held
       - agents/replay/fixtures/review-pick/behind-first-review-admitted
       - agents/replay/fixtures/reviewer-currency/behind-proceeds
-      - agents/replay/fixtures/reviewer-currency/dirty-skips
     guards:
       - desc: "ONE pick per (repo, base) LANE, oldest first within the lane (ADR-125 (1),
           homelab#1422) — group_by(.baseRefName) over the SAME filtered candidate set. Master-lane
@@ -201,7 +200,7 @@ transitions:
           update-branch merge does not dismiss a verdict (GitHub re-points the review commit_id;
           PR#1386 survived 4 updater merges 07:06-07:37Z, #1388/#1389 the same day), while the
           skip starved first reviews (PR#1437: 7 master moves, 3 updater merges, no first review).
-          DIRTY still skips — that arm is now pinned by fixtures/reviewer-currency/dirty-skips"
+          DIRTY still skips — an UNMODIFIED arm, so its pin (`reviewer-currency/dirty-skips`) re-lands as a fixture-only follow-up per the replay README §Pin-vacuity routing rule, escape (a); until then it is unreplayed on its own leg"
         anchor: { file: agents/reviewer-session.sh, pattern: "NARROWED to DIRTY" }
       - desc: "in-band breaker: impossible verdict counts trip agent/error"
         anchor: { file: agents/review-reflex.sh, pattern: "CIRCUIT-BREAKER TELEMETRY" }

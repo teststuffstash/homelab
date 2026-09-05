@@ -1,3 +1,0 @@
-CALL gh pr view 42 --repo teststuffstash/test-project --json headRefOid,state,mergeStateStatus
-OUT → review of teststuffstash/test-project#42 skipped — head is DIRTY at spawn time (currency gate: the level-triggered path re-picks when current; was a STANDING-ASIDE pod burn before)
-RC 0
