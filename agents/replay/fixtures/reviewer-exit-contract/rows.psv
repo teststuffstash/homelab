@@ -17,4 +17,5 @@ no-terminal-claude-crashed                  | clean |                           
 state-read-fails                            | clean |                                                         | RC=0 STUB_GH_FAIL=1 | state-read-fails    |
 conflict-merge-aside-at-content-sha         | clean | gh/pr-view-42.json @ patches/conflict-merge-aside.jq    | RC=0                | standing-aside      |
 conflict-merge-verdict-between-content-merge| clean | gh/pr-view-42.json @ patches/conflict-merge-verdict.jq  | RC=0                | live-verdict        |
+update-branch-repoint-verdict               | clean | gh/pr-view-42.json @ patches/update-branch-repoint.jq  | RC=0                | live-verdict        |
 issue-unreadable-standing-aside             | clean | gh/pr-view-42.json @ patches/add-issue-unreadable.jq   | RC=0                | standing-aside      |
