@@ -7076,3 +7076,16 @@ first live ADR-110 maintenance session before the ADR existed.
 - Stale subagent reports arrived from the S8 sitting: PR#1436 (1a parser) OPEN green, never
   reviewed; PR#1434 round-2 pushed, green — both wait on the FU-088 latch (~18:00Z). #1436's
   author flags `body.md` tracked at the repo root since 0825b983 (#1386) — looks accidental, check.
+- **Storage + CI + ride-performance readout (same sitting, ~13:20–14:10Z, operator questions):**
+  buy order re-grounded in `storage-ledger.md` §Requirements + ADR-114/FU-137 (Garage still rf=1
+  single node, CNPG still 2 instances on Longhorn rf=2, forgejo-pg both in the proxmox zone);
+  **ledger corrected** — pve has a FREE x16 (Slot 6) + x4 (Slot 1) CPU root port (`lspci`), so a
+  second NVMe on an adapter is the cheapest pool growth (no BIOS session); SN580 wear 4 % at 40 TB.
+  ARC queue: exporter counts COMPLETED jobs only (24 h window), p90 ~10 min over 1,103 jobs, cap hit
+  0–2 % — one 2.5 Gi runner fits per 8 GB node and only 3 nodes carry the label (metal-03/-04 are
+  kata-reserved by decision) → FU-218. Ride transcript read (oracle-fleet#370 r2): 24/30 min =
+  `devbox run ci` ×2 (600 s goose timeout killed the first; 641 s pytest vs ~400 s on ARC), node IO
+  PSI 82–91 % from a Longhorn neighbour, `/work`+`/tmp` are rootfs-over-virtiofs → spike
+  `ride-latency-breakdown.md` §Second specimen + FU-216 (memory-backed /tmp) + FU-217 (tool
+  timeout). Inventory fix: wk-metal-03 cpu_cores 2→4 (logical). Operator: oracle's own ci/e2e
+  optimisation comes first; the FUs are the slow-day pickup.
