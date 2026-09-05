@@ -2599,16 +2599,29 @@ EOF_GOVERNANCE
         # an `agent/*` LIFECYCLE label and no `deferred` row. The label half is deliberate: a
         # lifecycle label means an authoring moment or a human already released the member, so
         # pre-S8 goals need no backfill of rows to keep counting correctly.
-        gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
-          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
-           | ($ad | split(" ") | map(select(. != ""))) as $AD
-           | ($df | split(" ") | map(select(. != ""))) as $DF
-           | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
-           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
-                  | select((.number | tostring) as $k
-                           | ($AD | index($k)) != null
-                             or (($DF | index($k)) == null
-                                 and (((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null))))] | length' 2>/dev/null || echo "")"
+        # rule #6 (bot review, PR#1437 r3): an unreadable store forces $AD=[] and $DF=[], which
+        # collapses the ADOPTED-OPEN test below to "has a lifecycle label" — an open, unlabeled,
+        # UNRULED member (the #1315 shape) would then read as excluded rather than open, turning
+        # a transient read failure into a fabricated completion signal. Gate on $gdisp_ok instead:
+        # only apply the disposition filter when the store actually read; otherwise fall back to
+        # the pre-PR plain open-non-bucket count, so a blind read can only ever look MORE open,
+        # never less.
+        if [ "$gdisp_ok" = 1 ]; then
+          gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
+            '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+             | ($ad | split(" ") | map(select(. != ""))) as $AD
+             | ($df | split(" ") | map(select(. != ""))) as $DF
+             | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
+             | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
+                    | select((.number | tostring) as $k
+                             | ($AD | index($k)) != null
+                               or (($DF | index($k)) == null
+                                   and (((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null))))] | length' 2>/dev/null || echo "")"
+        else
+          gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
+            '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+             | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
+        fi
         case "$gopen_n_ckpt" in ''|*[!0-9]*) gopen_n_ckpt="$gopen_n";; esac
         # UNDISPOSITIONED = open, not the bucket, no row, no `agent/*` lifecycle label — the
         # #1315 shape (an inert issue bound into the tree with nobody's judgment on it).

@@ -71,9 +71,14 @@
 #                           fails BOTH reads — that is honest, not a fixture compromise: there is
 #                           one API call. With an inert member present, trigger (c) stays SILENT
 #                           (rule #6 — never wake a checkpoint off a blind read), one ⚠ line is
-#                           printed, and (b) still fires INDEPENDENT of store readability. The
-#                           findings store reads 0/0 and its burn-down write is skipped, exactly
-#                           as it already does on an unreadable comments fetch.
+#                           printed, and `gopen_n_ckpt` falls back to the pre-PR plain
+#                           open-non-bucket count (bot review, PR#1437 r3) rather than the
+#                           disposition-filtered one — an unruled open member (#301) still counts
+#                           as open on a blind read, so (b) does NOT fire from missing data alone
+#                           (it fired here before the fix, which was itself the bug: a transient
+#                           read failure fabricating a completion signal). NO checkpoint unit is
+#                           emitted. The findings store reads 0/0 and its burn-down write is
+#                           skipped, exactly as it already does on an unreadable comments fetch.
 # two-goal-inert          = two open goals (#29, #123), bare member #303 under the SECOND. The
 #                           lane still walks both goals (goal #123's assembly probe is the extra
 #                           positive line) and neither queues #303. Was `two-goal-bare-member`,

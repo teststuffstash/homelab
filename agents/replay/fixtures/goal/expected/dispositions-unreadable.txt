@@ -3,9 +3,8 @@ CALL gh pr list --repo teststuffstash/circles --state merged --limit 30 --json n
 CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate --slurp
 CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate
 OUT   [circles] ⚠ goal #29: dispositions unreadable — the undispositioned wake (trigger c) is HELD this pass
-OUT   [circles] goal #29: CHECKPOINT due (child-set complete pre-launch; store 0 total / 0 dispositioned)
 OUT GACTED <none>
-OUT UNITS goal-checkpoint|circles|issue-29 
+OUT UNITS <none>
 OUT ORPHANS <none>
 OUT REACHED: end
 RC 0
