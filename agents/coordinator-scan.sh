@@ -333,7 +333,12 @@ item_class_push() {   # accumulate one item class row for batch push
   local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}" base="${5:-}"
   # ADR-125 per-lane famine gauge: every row carries the item's LANE base, so a starved lane is a
   # query (`agent_item_class{class="queued-ready"} by (base)`) instead of an anecdote. The base is
-  # OPTIONAL at the call site on purpose — `unit_lane_of` is the ONE resolution home (record at
+  # OPTIONAL at the call site on purpose, and every caller passes it as `${var:-}` for a second
+  # reason: a replay composition runs ONE extracted block without the per-repo pass that assigns
+  # `default_branch`/`qbase`, and a bare `$var` there is an unbound-variable death under `set -u`.
+  # Guarding at the call site keeps the fixtures' bridges free of scaffolding they would otherwise
+  # have to declare (and which the ADR-103 pin-vacuity gate would then read as a pin claim). In
+  # production both variables are always assigned before these lines, so the guard never degrades — `unit_lane_of` is the ONE resolution home (record at
   # emission, fall back to the repo default branch, then `master`), so a caller only passes it
   # explicitly where it holds a better answer than the map: the queued clause's own `$qbase`, and
   # the aggregate/container rows, which are not one item's lane and take the default branch.
@@ -1907,7 +1912,7 @@ EOF
         | "\(length) suitable-unqueued (oldest #\($old.number) since \(($old.createdAt // "unknown")[0:10]))"' 2>/dev/null || true)"
     if [ -n "$adopted" ]; then
       orphans="${orphans}[$repo] ⏸ backlog: ${adopted} — agent-fix without a state label; ordinary backlog (ADR-109), expand: devbox run board -- <stack> --full\n"
-      item_class_push "$repo" "aggregate" "backlog-aggregate" "operator" "$default_branch"
+      item_class_push "$repo" "aggregate" "backlog-aggregate" "operator" "${default_branch:-}"
     fi
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
     # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so
@@ -2125,7 +2130,7 @@ EOF
       done
       if [ -n "$blocked" ]; then
         qblocked="${qblocked}  issue #${qnum} — ${qtitle} (waiting${blocked})\n"
-        item_class_push "$repo" "issue-${qnum}" "parked-blocked" "operator" "$qbase"
+        item_class_push "$repo" "issue-${qnum}" "parked-blocked" "operator" "${qbase:-}"
         continue
       fi
       # ── HOLD-CHAIN PROPAGATION (queued-held-by-ghost, #833) ────────────────────────────────
@@ -2148,7 +2153,7 @@ EOF
       done
       if [ -n "$ghost_held" ]; then
         orphans="${orphans}[$repo] ⏳ queued-held-by-ghost — dependency closed but its own blocker still open (hold-chain propagation, #833):\n  issue #${qnum} — ${qtitle} (${ghost_held})\n"
-        item_class_push "$repo" "issue-${qnum}" "queued-held-by-ghost" "operator" "$qbase"
+        item_class_push "$repo" "issue-${qnum}" "queued-held-by-ghost" "operator" "${qbase:-}"
         continue
       fi
       # ADR-094 scheduling predicates (deterministic — the LLM never picks):
@@ -2200,7 +2205,7 @@ EOF_GUARDED
         fi
         if [ -n "$ghit" ]; then
           orphans="${orphans}[$repo] ⛔ pin-only GUARDED path — NOT dispatched (a PR may write only a pin line there, so \`ci\` is structurally red; the route is an operator push to master — CODEOWNERS §Carve-outs). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches} → guarded:${ghit})\n"
-          item_class_push "$repo" "issue-${qnum}" "guarded-path" "operator" "$qbase"
+          item_class_push "$repo" "issue-${qnum}" "guarded-path" "operator" "${qbase:-}"
           continue
         fi
       fi
@@ -2291,7 +2296,7 @@ EOF_GOVERNANCE
       # issues; disjoint declared footprints dispatch in parallel (launcher limit rides wipmap).
       elif fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
         orphans="${orphans}[$repo] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
-        item_class_push "$repo" "issue-${qnum}" "footprint-held" "operator" "$qbase"
+        item_class_push "$repo" "issue-${qnum}" "footprint-held" "operator" "${qbase:-}"
         continue
       fi
       # <<<REPLAY:footprint-hold<<<
@@ -2320,14 +2325,14 @@ EOF_GOVERNANCE
       qbase_armed="$(printf '%s' "$per_base_armed" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
       if [ "${qbase_armed:-0}" -ge "$REPO_PR_CAP" ]; then
         orphans="${orphans}[$repo] ⏳ PR budget (${qbase_armed} machine-flowing PRs against ${qbase} ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
-        item_class_push "$repo" "issue-${qnum}" "cap-held" "operator" "$qbase"
+        item_class_push "$repo" "issue-${qnum}" "cap-held" "operator" "${qbase:-}"
         continue
       fi
       # FU-199 / #1240 CAP SPLIT: codeowner-parked PRs have their own larger bound.
       qbase_blockpark="$(printf '%s' "$per_base_blockpark" | awk -F'|' -v b="$qbase" '$1 == b {print $2; exit}' || echo 0)"
       if [ "${qbase_blockpark:-0}" -ge "$REPO_BLOCKPARK_CAP" ]; then
         orphans="${orphans}[$repo] ⏳ BLOCKPARK budget (${qbase_blockpark} codeowner-parked PRs against ${qbase} ≥ cap ${REPO_BLOCKPARK_CAP} — FU-199):\n  issue #${qnum} — ${qtitle}\n"
-        item_class_push "$repo" "issue-${qnum}" "blockpark" "operator" "$qbase"
+        item_class_push "$repo" "issue-${qnum}" "blockpark" "operator" "${qbase:-}"
         continue
       fi
       # <<<REPLAY:pr-cap-per-base<<<
@@ -2392,7 +2397,7 @@ EOF_GOVERNANCE
         else
           units="${units}goal-decompose|${repo}|issue-${qnum}\n"
         fi
-        item_class_push "$repo" "issue-${qnum}" "container" "machine" "$default_branch"
+        item_class_push "$repo" "issue-${qnum}" "container" "machine" "${default_branch:-}"
         continue
       fi
       # <<<REPLAY:goal-decompose<<<
@@ -2412,7 +2417,7 @@ EOF_GOVERNANCE
       else
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       fi
-      item_class_push "$repo" "issue-${qnum}" "$qclass_item" "machine" "$qbase"
+      item_class_push "$repo" "issue-${qnum}" "$qclass_item" "machine" "${qbase:-}"
       # <<<REPLAY:queued-classification<<<
     done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
             | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), (((.parent.number // "") | tostring) | if . == "" then "-" else . end), (([.body // "" | scan("(?mi)^[ \\t]*base:[ \\t]*(.+)$")] | flatten | first // "" | if . == "" then "-" else . end)) ] | @tsv')
@@ -2815,7 +2820,7 @@ EOF_GOVERNANCE
         if [ -n "$gck" ]; then
           echo "  [$repo] goal #${g}: CHECKPOINT due (${gck}; store ${gtot} total / ${gdisp} dispositioned)"
           units="${units}goal-checkpoint|${repo}|issue-${g}\n"
-          item_class_push "$repo" "issue-${g}" "container" "machine" "$default_branch"
+          item_class_push "$repo" "issue-${g}" "container" "machine" "${default_branch:-}"
         fi
       done
     fi
@@ -2914,7 +2919,7 @@ EOF_GOVERNANCE
       # Emit a goal-checkpoint unit for the goal (trigger=assembly-cr).
       echo "  [$repo] ASSEMBLY PR #${u} has changes-requested (FU-143) — emitting goal-checkpoint for goal #${g} (trigger=assembly-cr)"
       units="${units}goal-checkpoint|${repo}|issue-${g}\n"
-      item_class_push "$repo" "issue-${g}" "container" "machine" "$default_branch"
+      item_class_push "$repo" "issue-${g}" "container" "machine" "${default_branch:-}"
       # Carry the assembly PR number to the dispatch site via a side map (not the unit tuple,
       # whose 4th field is uclass and 5th is uparent). Written at emission, consumed at the
       # confirmed-dispatch site (>>>REPLAY:dispatch-marker>>>) where the state-fp marker is
