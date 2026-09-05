@@ -1,0 +1,11 @@
+# homelab#1205 — CI-red unreadable: CI log fetch fails → defer (required log).
+# STUB_GH makes the gh run list call return empty, triggering the required-unreadable deferral.
+name: context-prefetch/ci-red-unreadable
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
+env:
+  - STUB_GH_run_list=empty

@@ -1,0 +1,10 @@
+# homelab#1205 — fix round context pre-fetch: pr.md + reviews.md materialized via ConfigMap.
+# WORK_BRANCH is set (fix round), PF_PR is set (open PR number).
+# The bridge sets both so the block fetches PR data + reviews + inline comments.
+name: context-prefetch/fix-round
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
