@@ -1,0 +1,59 @@
+# Single nginx replica (RWO cache PVC). Infrastructure/cattle — like the CI runner VM, a long-running
+# cache does not violate "only prod is long-running" (the environment-under-test is still ephemeral).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pypi-cache
+  namespace: pypi-cache
+  labels: { app: pypi-cache }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }            # RWO volume — don't run two pods at once
+  selector:
+    matchLabels: { app: pypi-cache }
+  template:
+    metadata:
+      labels: { app: pypi-cache }
+      # checksum/config pins the pod to its ConfigMap (issue #519): the nginx.conf mount is subPath,
+      # so kubelet never live-refreshes it and only a new pod spec rolls. Editing configmap.yaml
+      # REQUIRES recomputing this hash in the same commit:
+      #   sha256sum argocd/resources/pypi-cache/configmap.yaml
+      annotations:
+        checksum/config: b66b21b6ca9587bc68fcd5eec3368438ff9e406b4d5a370dbbbffc4c49a68cd5
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101                     # nginx-unprivileged uid
+        runAsGroup: 101
+        fsGroup: 101                       # so the cache PVC is writable
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: nginx
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          ports:
+            - { name: http, containerPort: 8080 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf, readOnly: true }
+            - { name: cache,  mountPath: /var/cache/nginx }
+            - { name: tmp,    mountPath: /tmp }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "100m", memory: "64Mi" }
+            limits:   { cpu: "2",    memory: "512Mi" }
+      volumes:
+        - name: config
+          configMap: { name: pypi-cache-nginx }
+        - name: cache
+          persistentVolumeClaim: { claimName: pypi-cache-data }
+        - name: tmp
+          emptyDir: {}

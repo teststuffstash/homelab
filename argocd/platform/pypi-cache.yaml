@@ -1,0 +1,28 @@
+# PyPI pull-through cache (wave 1, no deps): an nginx mirror of pypi.org/simple/ +
+# files.pythonhosted.org on a Longhorn PVC, so agent-worker sandbox pods stop re-pulling the same
+# wheels from the WAN on every cold run. Raw manifests in argocd/resources/pypi-cache/.
+# Consumed by agent-worker sandboxes via UV_DEFAULT_INDEX (launcher env plumbing).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pypi-cache
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/pypi-cache
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pypi-cache
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

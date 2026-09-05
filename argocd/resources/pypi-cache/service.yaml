@@ -1,0 +1,21 @@
+# In-cluster consumers reach it at http://pypi-cache.pypi-cache.svc.cluster.local (the ClusterIP a
+# LoadBalancer Service still carries). The BGP VIP exists for KATA worker rides (FU-073e): kata
+# guests can't reach ClusterIP service VIPs (FU-072), so agent-worker sandboxes get
+# UV_DEFAULT_INDEX=http://192.168.40.34 from the launcher — same pattern as the registry mirrors
+# (.40.20/.21, ADR-091) and nix-cache (.40.23). Without it a kata ride's `uv sync` fell back to
+# pypi.org over the WAN (~30-60s per sync, measured).
+apiVersion: v1
+kind: Service
+metadata:
+  name: pypi-cache
+  namespace: pypi-cache
+  labels:
+    app: pypi-cache
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.34"
+spec:
+  type: LoadBalancer
+  selector: { app: pypi-cache }
+  ports:
+    - { name: http, port: 80, targetPort: 8080 }

@@ -1,0 +1,15 @@
+# Cache storage. Pure regenerable cache (anything lost is re-fetched from upstream), so size is a
+# cost/throughput knob, not durability — the default replicated Longhorn SC is fine at this size.
+# Must stay comfortably above the nginx max_size in configmap.yaml: the /packages/ zone runs at
+# max_size=16g, so 20Gi leaves headroom.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pypi-cache-data
+  namespace: pypi-cache
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi

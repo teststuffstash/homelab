@@ -1,0 +1,84 @@
+# nginx as a transparent PULL-THROUGH cache for PyPI (pypi.org/simple/ + files.pythonhosted.org).
+# Agent-worker sandbox pods set UV_DEFAULT_INDEX to this proxy; the first miss fetches upstream
+# and caches to the Longhorn PVC, every run after is LAN-speed. Bodies pass through byte-for-byte.
+#
+# Two locations:
+#   /simple/  → pypi.org/simple/   (index pages change — short TTL ~5m)
+#   /packages/ → files.pythonhosted.org (immutable artifacts — long TTL)
+#
+# ⚠ MAINTENANCE CONTRACT (issue #519): deployment.yaml mounts this file via subPath, so kubelet never
+# live-refreshes it — only a new pod spec rolls. Editing this file requires recomputing the
+# Deployment's `checksum/config` annotation in the SAME commit (`sha256sum
+# argocd/resources/pypi-cache/configmap.yaml`), else the old config keeps running with git and the
+# cluster both green (the #500 inert-fix failure mode).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pypi-cache-nginx
+  namespace: pypi-cache
+data:
+  nginx.conf: |
+    worker_processes auto;
+    pid /tmp/nginx.pid;
+    events { worker_connections 1024; }
+    http {
+      # /packages/ — immutable artifacts (wheels, sdists, source tarballs). Big cache, long retention.
+      proxy_cache_path /var/cache/nginx/pypi_packages levels=1:2 keys_zone=pypi_packages:50m
+                       max_size=16g inactive=30d use_temp_path=off;
+      # /simple/ — index pages (package listings, metadata). Small cache, short retention.
+      proxy_cache_path /var/cache/nginx/pypi_simple levels=1:2 keys_zone=pypi_simple:10m
+                       max_size=1g inactive=1h use_temp_path=off;
+      proxy_temp_path /tmp/proxy_temp;
+      access_log off;
+      # Both upstreams publish AAAA records but the pod net is IPv4-only — runtime resolver + ipv6=off
+      # (same shape as nix-cache and cf-api-proxy); valid=30s re-resolves per-TTL.
+      resolver 10.96.0.10 valid=30s ipv6=off;
+      server {
+        listen 8080;
+        # readiness — cheap, no upstream dependency.
+        location = /healthz { return 200 "ok\n"; }
+
+        # /simple/ — index pages (package listings, metadata). Short TTL: index pages change when
+        # new releases are published, and uv fetches them on every sync to resolve dependencies.
+        location /simple/ {
+          set $pypi_upstream https://pypi.org;
+          proxy_pass $pypi_upstream;                   # variable → runtime-resolved via resolver above
+          proxy_set_header Host pypi.org;
+          proxy_ssl_server_name on;
+          proxy_ssl_name pypi.org;                     # explicit — variable proxy_pass must not lose SNI
+          proxy_http_version 1.1;
+          proxy_set_header Connection "";
+
+          proxy_cache pypi_simple;
+          proxy_cache_key "$request_uri";
+          proxy_cache_valid 200 5m;                    # index pages change — short TTL
+          proxy_cache_valid 404 1m;                    # don't pin 404s
+          proxy_cache_lock on;                         # collapse concurrent identical pulls
+          proxy_cache_revalidate on;
+          proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+          add_header X-Cache-Status $upstream_cache_status always;
+        }
+
+        # /packages/ — immutable artifacts (wheels, sdists). Long TTL: content-addressed, never
+        # changes once published. This is the bulk of the cache volume.
+        location /packages/ {
+          set $pypi_packages_upstream https://files.pythonhosted.org;
+          proxy_pass $pypi_packages_upstream;          # variable → runtime-resolved via resolver above
+          proxy_set_header Host files.pythonhosted.org;
+          proxy_ssl_server_name on;
+          proxy_ssl_name files.pythonhosted.org;       # explicit — variable proxy_pass must not lose SNI
+          proxy_http_version 1.1;
+          proxy_set_header Connection "";
+
+          proxy_cache pypi_packages;
+          proxy_cache_key "$request_uri";
+          proxy_cache_valid 200 30d;                   # immutable artifacts — long TTL
+          proxy_cache_valid 404 1m;                    # don't pin 404s
+          proxy_cache_lock on;                         # collapse concurrent identical pulls
+          proxy_cache_revalidate on;
+          proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+          proxy_max_temp_file_size 8192m;              # large wheels/sdists
+          add_header X-Cache-Status $upstream_cache_status always;
+        }
+      }
+    }
