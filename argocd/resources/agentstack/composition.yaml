@@ -1524,6 +1524,13 @@ spec:
                 - toEndpoints: # pushgateway run metrics (FU-057)
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: monitoring
+                {{- if eq $profile "python" }}
+                - toCIDR:
+                    - 192.168.40.34/32 # PyPI cache VIP (FU-1413) — python-profile rides fetch wheels via it
+                  toPorts:
+                    - ports:
+                        - { port: "80", protocol: TCP }
+                {{- end }}
                 - toFQDNs:
                     # baseline: git over TLS + nix upstream fallback. NO openrouter.ai — direct LLM
                     # egress is the thing this policy forbids.
