@@ -14,4 +14,8 @@ currency-refired-inert   | lifecycle |                                          
 # no LEGACY-GRAMMAR meter line for itself), and a block carrying a key outside the grammar must
 # fail CLOSED — one loud line naming the issue, nobody queued.
 block-authored-queues    | anchoring |                                                                                             | FC_NOW=1786456800                            | queues-block-authored  | issue=249
-block-malformed-inert    | anchoring |                                                                                             |                                              | inert-block-malformed  |
+block-malformed-inert    | anchoring |                                                                                             |                                              | inert-block-malformed  |# S8 1b residue (#1460): the footprint gate itself now reads through the parser — a
+# body whose `Touches` lives in the BLOCK queues exactly like its legacy twin above, with no
+# LEGACY-GRAMMAR Touches line. The `fix-debounce` legacy VARIANT keeps the legacy twin
+# byte-identical (column 0, `[Tt]` only, empty fields kept) rather than widening a queue gate.
+block-authored-touches-queues | anchoring |                                                                                             | FC_NOW=1786456800                            | queues-block-authored-touches | issue=249

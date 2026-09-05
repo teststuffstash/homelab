@@ -372,7 +372,14 @@ spec:
               # UNION of every Touches: line (S6 sprout, #716 — the reviewer-side twin): head -1
               # read only the FIRST line, so a deny-listed path on a later superseding line slipped
               # the queue-time gate (fail-open). The scan's footprint read is a join over all lines.
-              touches="$(printf '%s' "$body" | sed -n 's/^[Tt]ouches:[[:space:]]*//p' | paste -sd, -)"
+              # Read through the ONE parser (ADR-122 (3), homelab#1460): the machine block's
+              # `Touches` if the body carries one, else `--legacy fix-debounce` — the named
+              # variant restating THIS pipeline byte-for-byte (column 0, `[Tt]` only, every
+              # match joined with `,`, empty fields kept). A named variant, not the canonical
+              # union, because this is a QUEUE-TIME gate: widening it by fiat would change which
+              # issues an agent may pick up before a human has approved anything.
+              touches="$(printf '%s' "$body" | ib get Touches --ref "$1#$2" --legacy fix-debounce)" || {
+                echo "machine block MALFORMED (issue_body.py exit 2) — footprint unreadable, NOT queued (fail-closed)"; return 1; }
               [ -n "$touches" ] || { echo "no Touches: line (undeclared = exclusive, waits for a human)"; return 1; }
               # classify_touches() returns "codeowner-author" for the ❌ operator-author set
               # (paths that take effect BEFORE a human approves). The `*` sentinel (no Touches:

@@ -8,4 +8,5 @@ OUT inert teststuffstash/homelab#{{issue}} — footprint takes effect pre-merge:
 ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#{{issue}}
 ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#226
 ERR LEGACY-GRAMMAR self-referential teststuffstash/homelab#226
+ERR LEGACY-GRAMMAR Touches teststuffstash/homelab#{{issue}}
 RC 0
