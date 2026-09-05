@@ -1,0 +1,6 @@
+# scan-lane-walk — the decision table (family contract in fixture.yaml; ADR-125 (3), homelab#829).
+# id                | world | patch | env                       | expect            | params
+two-lanes           |       |       | ROW=two-lanes             | two-lanes         |
+aged                |       |       | ROW=aged                  | aged              |
+not-yet             |       |       | ROW=not-yet               | not-yet           |
+probe-unreadable    |       |       | ROW=probe-unreadable      | probe-unreadable  |

@@ -1,0 +1,26 @@
+# AgentDispatchCronWoken, lifted VERBATIM out of prometheusrule.yaml (annotations stripped — the
+# manifest is their one home) — the rules file dispatch-cron-woken.promtool-test loads. Not a
+# manifest and applied to nothing: `promtool test rules` needs upstream-format rules (top-level
+# `groups:`) and a PrometheusRule keeps them under `.spec`, so the CR cannot be loaded directly.
+# Named .promtool-rules, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+# ITS OWN FILE rather than a fifth entry in agent-runs.promtool-rules: that copy's header names
+# the alerts it deliberately omits and states the two-homes-and-one-rots rule this directory keeps
+# (RetroReportOverdue moved out for exactly that reason, homelab#591). This alert is about the
+# ADR-125 lane split, not about agent-run accounting, so it gets its own pair beside the others.
+#
+# DRIFT-PINNED, both directions, by `devbox run prometheus-rules-lint` (homelab#337/#375): expr and
+# `for` must equal the CR's for every shared alert name. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [{"name": "dispatch-cron-woken", "rules": [.spec.groups[].rules[] | select(.alert == "AgentDispatchCronWoken") | del(.annotations)]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+#
+# ONE LINE on purpose — yq 4.x's lexer rejects a newline inside the expression (the constraint
+# agent-runs.promtool-rules' header states, homelab#344).
+groups:
+  - name: dispatch-cron-woken
+    rules:
+      - alert: AgentDispatchCronWoken
+        expr: sum by (project, base) (changes(agent_dispatch_cron_woken_timestamp[24h])) >= 2
+        labels:
+          severity: warning
+          platform_machinery: "true"

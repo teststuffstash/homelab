@@ -47,12 +47,23 @@ bash() {
   fi
 }
 
-# Mock gh for the FU-121 fresh-state probe: issue-77 reads CLOSED (the raced close), anything
-# else is a fixture bug and fails loudly rather than serving an invented answer.
+# Mock gh for two probes, and nothing else — anything unlisted is a fixture bug and fails loudly
+# rather than serving an invented answer.
+#   1. the FU-121 fresh-state probe: issue-77 reads CLOSED (the raced close)
+#   2. the ADR-125 aging probes (#829). Both units sit in ONE lane (homelab@master, no `Base:`
+#      recorded), and the lane holds a recovery clause, so the aging predicate evaluates the
+#      queued candidate: issue-100 was queued at 12:00Z and the lane's other in-flight item
+#      (issue-77) carries ZERO dispatch markers newer than that. lost = 0 < N (3), so NO
+#      escalation and NO report line — the ordinary walk, asserted by the absence below. This is
+#      the non-regression half of #829 riding the exit-3 fixture for free.
 gh() {
   if [ "$1" = "issue" ] && [ "$2" = "view" ] && [ "$3" = "77" ]; then
     printf 'CLOSED\n'; return 0
   fi
+  case "$*" in
+    *"issues/100/events"*)   printf '2026-08-23T12:00:00Z\n'; return 0 ;;
+    *"issues/77/comments"*)  return 0 ;;   # no agent-summary comment at all → zero markers
+  esac
   echo "UNEXPECTED gh call in fixture: $*" >&2; return 1
 }
 

@@ -269,14 +269,21 @@ spec:
             summary: "iac-sentinel heartbeat silent >30m — the required -iac merge gate is not evaluating"
             description: "SYMPTOM ONLY — no iac_sentinel_last_run_timestamp_seconds push for >30m (the sentinel CronWorkflow ticks every few minutes; scripts/iac-sentinel.sh pushes the heartbeat on every tick, zero-PR ticks included, FU-176). While silent, open -iac PRs wait on a required `iac-sentinel` commit status nobody posts — merges stall rather than bypass (fail-closed). Look at the `iac-sentinel` CronWorkflow runs in ns agent-coordinator (argo.teststuff.net or `kubectl -n agent-coordinator get workflows`), then the newest run's logs; a wedged/suspended cron, an image pull failure, or a pushgateway outage are the observed-plausible causes to check in that order."
         # platform_machinery for the homelab#239 reason.
+        # ADR-125: counted PER LANE. `agent_dispatch_cron_woken_timestamp` carries the lane base in
+        # its pushgateway grouping key since the per-lane walk shipped, so a project's dispatches
+        # are now several series rather than one. Summing across bases would keep the old
+        # whole-stack number and hide the case this split exists to expose — a doorbell that is
+        # dead for the goal lane only while the master lane's edges keep the total healthy. Rows
+        # pushed before the split carry no `base` label and land in the `base=""` group; each is a
+        # frozen gauge, so `changes()` over it is 0 and it can never fire on its own.
         - alert: AgentDispatchCronWoken
-          expr: sum by (project) (changes(agent_dispatch_cron_woken_timestamp[24h])) >= 2
+          expr: sum by (project, base) (changes(agent_dispatch_cron_woken_timestamp[24h])) >= 2
           labels:
             severity: warning
             platform_machinery: "true"
           annotations:
-            summary: "{{ $value }} cron-woken coordinator dispatches on stack {{ $labels.project }} in 24h — a doorbell edge is dead"
-            description: "SYMPTOM ONLY — real work reached dispatch via the level-triggered cron sweep instead of an edge, at least twice in 24h. Some transition that should ring /coordinate is not ringing (dead emitter, mis-routed payload, latched-then-forgotten ring, or a collapse/fan-out defect — agents/coordinator-scan.sh §doorbell-collapse/§doorbell-fanout). WHICH stack: `agent_dispatch_cron_woken_timestamp` carries the pushgateway group's project label — `changes(agent_dispatch_cron_woken_timestamp[24h]) > 0` names it. Then reconstruct what the dispatch was from that stack's coordinate workflow logs (Loki, ns <stack>-agents) and walk the emitter inventory in docs/agents/workflow.md §Triggers for the transition that produced it. The tolerated single race: a ring landing mid-scan after the re-list point is absorbed nowhere and falls to the cron once — one event in isolation is that race, recurrence is a defect (017790c)."
+            summary: "{{ $value }} cron-woken coordinator dispatches on stack {{ $labels.project }} lane {{ $labels.base }} in 24h — a doorbell edge is dead"
+            description: "SYMPTOM ONLY — real work reached dispatch via the level-triggered cron sweep instead of an edge, at least twice in 24h, on ONE LANE (repo, base — ADR-125). Some transition that should ring /coordinate is not ringing (dead emitter, mis-routed payload, latched-then-forgotten ring, or a collapse/fan-out defect — agents/coordinator-scan.sh §doorbell-collapse/§doorbell-fanout). WHICH stack and lane: the labels above; `changes(agent_dispatch_cron_woken_timestamp[24h]) > 0` enumerates them. A single firing lane beside healthy siblings points at that lane's emitters (a goal-branch PR's events, the assembly path) rather than at the doorbell as a whole. Then reconstruct what the dispatch was from that stack's coordinate workflow logs (Loki, ns <stack>-agents) and walk the emitter inventory in docs/agents/workflow.md §Triggers for the transition that produced it. The tolerated single race: a ring landing mid-scan after the re-list point is absorbed nowhere and falls to the cron once — one event in isolation is that race, recurrence is a defect (017790c)."
         # (devbox install against a blocked FQDN — the nix-cache finding), which the run classifier
         # only names `timeout` much later. This alert names the CAUSE within minutes. `source` is
         # the namespace (hubble drop metric runs sourceContext=namespace, tofu/cilium.tf); scoped to
