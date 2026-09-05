@@ -551,9 +551,9 @@ state_fp_for_clause() {
   fi
   # Fall back to old format: state-fp:<hash> (backwards compatibility)
   hash="$(printf '%s' "$fp_probe" | jq -r \
-    '([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}")) ]
+    '([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-z:-]*[0-9a-f]{6,64}")) ]
       | sort_by(.createdAt) | last // {})
-     | (((.body // "") | [ scan("state-fp:([0-9a-f]{6,64})") ] | last) // "")' 2>/dev/null)" || hash=""
+     | (((.body // "") | [ scan("state-fp:[0-9a-z:-]*([0-9a-f]{6,64})") ] | last) // "")' 2>/dev/null)" || hash=""
   printf '%s' "$hash"
   return 0
 }
@@ -3985,7 +3985,7 @@ EOF_GOVERNANCE
         # consecutive no-op is a terminal-ride finding → escalate" must be able to fire.
         # Inline stats_ts jq (same shape as STATS_TS_DEF in the round-evidence block) so this
         # check works in extracted replay blocks that do not carry that variable.
-        afp_marker_ts="$(printf '%s' "$pr_json_ab" | jq -r '[.comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}"))] | sort_by(.createdAt) | last | .createdAt // ""' 2>/dev/null)" || afp_marker_ts=''
+        afp_marker_ts="$(printf '%s' "$pr_json_ab" | jq -r '[.comments[]? | select((.body // "") | test("state-fp:[0-9a-z:-]*[0-9a-f]{6,64}"))] | sort_by(.createdAt) | last | .createdAt // ""' 2>/dev/null)" || afp_marker_ts=''
         afp_stats_ts="$(printf '%s' "$pr_json_ab" | jq -r '
           def stats_ts: [ .comments[]? | (.body // "") as $b
             | if ($b | startswith("<!-- agent-summary -->"))
@@ -4198,7 +4198,7 @@ EOF_GOVERNANCE
             # the marker is stale — re-arm the gate so the clause re-evaluates.
             # Inline stats_ts jq (same shape as STATS_TS_DEF in the round-evidence block) so this
             # check works in extracted replay blocks that do not carry that variable.
-            rfp_marker_ts="$(printf '%s' "$pr_json_cr" | jq -r '[.comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}"))] | sort_by(.createdAt) | last | .createdAt // ""' 2>/dev/null)" || rfp_marker_ts=''
+            rfp_marker_ts="$(printf '%s' "$pr_json_cr" | jq -r '[.comments[]? | select((.body // "") | test("state-fp:[0-9a-z:-]*[0-9a-f]{6,64}"))] | sort_by(.createdAt) | last | .createdAt // ""' 2>/dev/null)" || rfp_marker_ts=''
             rfp_stats_ts="$(printf '%s' "$pr_json_cr" | jq -r '
               def stats_ts: [ .comments[]? | (.body // "") as $b
                 | if ($b | startswith("<!-- agent-summary -->"))
