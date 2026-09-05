@@ -3,19 +3,33 @@
 # THE CONTRACT: the model-id-resolution block in agent-session.sh consumes
 # `.decision.resolved` from the router response when present, avoiding a re-parse
 # through model_id.py. When absent (mixed-deploy window: proxy and launcher deploy
-# independently), it falls back to the canonical model_id.py parser. Three rows:
+# independently), it falls back to the canonical model_id.py parser. Six rows:
 #
-#   carrier-present   — _decision holds .resolved={rail,harness,model} complete AND
-#                        _router_adopted=1 (router decision was adopted into MODEL);
-#                        model_id.py is NOT called (the absent call is the probe).
-#   decision-unset    — _decision is entirely absent (set -u guard); falls back to
-#                        model_id.py --shell parse, no unbound-variable death.
-#   model-empty       — carrier present but resolved.model is empty; falls back to
-#                        model_id.py rather than assigning an empty MODEL.
-#   shadow-divergent  — AGENT_ROUTER=shadow, _router_adopted NOT set, carrier's
-#                        resolved.model DIFFERS from MODEL; falls back to model_id.py
-#                        parse, MODEL unchanged (shadow mode does not adopt the router
-#                        pick).
+#   carrier-present     — _decision holds .resolved={rail,harness,model} complete AND
+#                          _router_adopted=1 (router decision was adopted into MODEL);
+#                          model_id.py is NOT called (the absent call is the probe).
+#   decision-unset      — _decision is entirely absent (set -u guard); falls back to
+#                          model_id.py --shell parse, no unbound-variable death.
+#   model-empty         — carrier present but resolved.model is empty; falls back to
+#                          model_id.py rather than assigning an empty MODEL.
+#   shadow-divergent    — AGENT_ROUTER=shadow, _router_adopted NOT set, carrier's
+#                          resolved.model DIFFERS from MODEL; falls back to model_id.py
+#                          parse, MODEL unchanged (shadow mode does not adopt the router
+#                          pick).
+#   router-adopted-bare — _router_adopted=1 but _decision carries no .resolved carrier
+#                          (the router's raw answer had the bare model id without a
+#                          structured resolved block); falls back to model_id.py --shell
+#                          parse, which returns rail=openrouter, model=deepseek/deepseek-
+#                          v4-flash; OPENCODE_MODEL composition then prepends the
+#                          openrouter/ prefix so opencode's -m receives the full id.
+#   router-adopted-cloaked — same shape as router-adopted-bare, but the router's bare
+#                          answer is a cloaked codename whose OpenRouter id lives in
+#                          OpenRouter's own namespace (openrouter/<codename>);
+#                          model_id.py keeps that id whole (rail=openrouter,
+#                          model=openrouter/sonoma-sky-alpha); opencode's -m still needs
+#                          the rail prefix in front — openrouter/openrouter/sonoma-sky-
+#                          alpha — because opencode splits provider from model at the
+#                          first slash.
 #
 # Not FSM-pinned (no docs/agents/*-fsm.yaml replay: list references model-id-carrier).
 name: model-id-carrier
