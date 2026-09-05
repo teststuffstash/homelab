@@ -1,0 +1,10 @@
+{
+  "number": 249,
+  "state": "open",
+  "labels": [
+    {
+      "name": "agent-fix"
+    }
+  ],
+  "body": "---\nTouches: agents/coordinator/fix-debounce-argo.yaml, agents/replay/\nalert-fp: 1f0a9c73d5b2e846\nfix-verdict: fix\n---\n## Defect\n\nThe SAME issue as `block-authored-queues`, with the FOOTPRINT moved into the block\ntoo (S8 1b residue, homelab#1460): the body carries no bare `Touches:` line at all, so the\nqueue-time footprint gate must read `Touches` out of the block and reach the identical\nverdict as its legacy twin \u2014 and emit no LEGACY-GRAMMAR meter line for it.\n"
+}

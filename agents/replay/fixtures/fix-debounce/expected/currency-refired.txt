@@ -13,5 +13,6 @@ OUT noted the currency skip on teststuffstash/homelab#237
 ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#237
 ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#226
 ERR LEGACY-GRAMMAR self-referential teststuffstash/homelab#226
+ERR LEGACY-GRAMMAR Touches teststuffstash/homelab#237
 ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#237
 RC 0
