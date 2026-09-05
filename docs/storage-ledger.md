@@ -349,3 +349,29 @@ that predicate is aspirational.
 
 Related: oracle-iac#40 closing comment, oracle-iac#95, TICK-LOG §scratch-pool, FU-116 (the PVC
 leak that feeds the Longhorn side).
+
+## 2026-09-05 — where a 9-hour Garage write job spends its time (the ERT parse, FU-137 sighting)
+
+Measured over the job's 8 h window (Prometheus: Garage's `api_s3_*`, Longhorn volume latencies,
+node_exporter per-write latency), when the operator asked whether "meta on the wrong node" was
+the cause:
+
+| | value |
+|---|---|
+| PutObject calls / avg server time | 248,482 / 220 ms (85 % of all S3 server time) |
+| parse pod CPU | 0.39 cores avg — the job WAITS on Garage |
+| `data-garage-0` (Longhorn rf=2: wk-metal-01 + wk-metal-04) write latency | **150 ms** per write |
+| wk-metal-04 `sda` physical write latency | **185 ms** at 33 % util (HDD-class; wk-metal-01: 7.5 ms) |
+| `meta-garage-0` (rf=1 on wk-02, attached from wk-01) write latency | 2.9 ms, ~1,750 write IOPS |
+
+Reading: rf=2 means every data write waits for the SLOWEST replica, and that is wk-metal-04's
+disk — the 150 ms term dominates a PUT; the metadata network hop is ~15–25 % on top (the
+`NodeMemoryMajorPagesFaults` on wk-01 during the job is LMDB's mmap faulting over Longhorn).
+Levers, in order of win: (1) the APP writes ~250k tiny objects — batching them is hours→minutes
+on any layout (oracle-fleet#466 is the resume half); (2) **ADR-114** (Garage rf=3 on node-local
+XFS, Garage's own 2-of-3 write quorum) takes the slowest node off the critical path — FU-137's
+overdue build-out; (3) pinning `garage-0` to wk-02 with meta `dataLocality: best-effort` removes
+only the meta hop (~1–1.5 h of a 9 h job). Not done: an interim rf=1 data volume (reopens the
+2026-08-24 class). Open question before ADR-114 places a zone on it: is wk-metal-04's disk a
+spinning one or a failing SSD (SMART read).
+
