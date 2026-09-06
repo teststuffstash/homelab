@@ -7422,3 +7422,25 @@ first live ADR-110 maintenance session before the ADR existed.
   PR `fix/agent-running-queued-why` (seat, armed) joins it in (label_replace item→number +
   merge): columns `why (scan class)` / `who acts` / `base`; live: oracle-fleet#361
   `queued-held-by-ghost/operator`. Operator: targeted tofu apply of the dashboard after merge.
+- **15:0x–15:5xZ (operator-pointed, post-wind-down):** **#1450 ruled (B)** — a jail subagent (opus,
+  local clone) built it: **PR#1481 MERGED 15:46Z** (`goal_enter_post_launch()` — one writer, two
+  keys: assembly PR merged, or tree-empty on a `Base: master` Goal; malformed block HOLDS; three
+  goal-family rows incl. the second-pass row; IL-T18 guard rows); #1450 CLOSED; PR#1470 closed
+  superseded. Side benefit: `board.sh` §VERDICT DUE now surfaces a themed Goal at tree-empty.
+  **Merged meanwhile:** #1459 (1b, 15:19Z), #1462 (15:13Z), #1479 (#1424 half 2, 15:00Z).
+  **PR#1480** (queued-panel join) drew a correct CR — `parked-blocked` + `container` were outside
+  the class alternation — fixed (`2ea46a57`), re-review pending. **PR#1478** (C6 hold) drew the
+  SAME footprint-formality block as #1466 this morning: the loop-filed issue (#1472, the
+  `agent/error` path) had no `Touches:`; declared on the issue, verdict dismissed, re-pick pending
+  — second sighting today of the ledger's "widen the ISSUE first" rule (spikes/
+  subagent-handover-misses.md), now on loop-FILED issues too: the harvest play writes `Touches:`,
+  the `agent/error`/ADR-119 filing paths do not. **Subagent lesson (ledger):** a prompt fact true
+  on master today (`ib_get`/`IB_PY`) was false at the branch point — #1459 landed mid-ride.
+- **16:0xZ operator ask #2 — "PRs waiting panel: sleep-tracking 145/146 in reflex queue for a
+  while, no column why":** both are the operator's own un-armed seat PRs from 09-05 21:27Z —
+  invisible to the reflex/updater/auto-merge by design (FU-079); the exporter's `reflex_wait`
+  predicate never tested arming. **PR#1482** (exporter, armed): `armed` + `merge_state` labels on
+  `reflex_wait`/`codeowner_park` (same GraphQL walk, zero extra calls; consumers aggregate by
+  repo/number — additive). **PR#1480** gained the panel columns + a description naming the two
+  reasons (armed=false → arm or park; dirty → skipped). #145/#146 themselves: arm or close is the
+  sleep sitting's call — not touched.
