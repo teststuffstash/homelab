@@ -555,12 +555,18 @@ transitions:
   - id: IL-T18
     name: assembly-complete → POST-LAUNCH (merge is a midpoint, the goal stays OPEN)
     owner: coordinator-scan goal lane (deterministic; no LLM in the path)
-    when: "an open task/goal without `goal/post-launch` ∧ a MERGED PR with a `goal/**` HEAD whose body
-      carries a line-anchored `Assembly-for: #<goal>` trailer → add `goal/post-launch`, comment
-      assembly-complete (naming the bucket and the three verdict labels), and LEAVE THE GOAL OPEN."
+    when: "TWO KEYS, one writer. (1) ASSEMBLY-PR: an open task/goal without `goal/post-launch` ∧ a
+      MERGED PR with a `goal/**` HEAD whose body carries a line-anchored `Assembly-for: #<goal>`
+      trailer. (2) TREE-EMPTY (homelab#1450): the same goal declaring `Base: master` — the THEMED
+      shape (ADR-126) batches in its level-2 theme branches, so it has no assembly PR and
+      deliberately no trailer, and key (1) can never fire for it — at the moment its adopted-open
+      descendant set empties with children closed (the IL-T12 trigger-(b) predicate), which is
+      exactly ADR-102's midpoint. Either key → add `goal/post-launch`, comment assembly-complete
+      (naming the bucket and the three verdict labels), and LEAVE THE GOAL OPEN. Key (2) also sets
+      `gpl` for the pass, which is what finally RETIRES trigger (b) for a themed goal."
     status: guarded
     replay:
-      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row assembly-complete (merged assembly → label + comment, no close) / row nonassembly-merge-inert (a goal CHILD's merge moves nothing)
+      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row assembly-complete (merged assembly → label + comment, no close) / row nonassembly-merge-inert (a goal CHILD's merge moves nothing) / rows master-goal-tree-empty + master-goal-post-launch-quiet + goal-branch-tree-empty-unchanged (the #1450 second key: it fires, it fires once, and the `goal/**` shape is untouched)
     guards:
       - desc: "the goal is never closed here — assembly-complete measures 'built as specified', and only production knows the rest (replay: goal-assembly-complete asserts the ABSENCE of a close call)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ASSEMBLY-COMPLETE → POST-LAUNCH" }
@@ -572,8 +578,13 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "LABEL FIRST, COMMENT SECOND" }
       - desc: "the play must not open a second assembly PR or self-apply the label in post-launch"
         anchor: { file: agents/coordinator/README.md, pattern: "already carries .goal/post-launch." }
+      - desc: "key (2), the tree-empty key for a `Base: master` goal — one writer shared with key (1), so the label/comment ORDER and the failure lines cannot drift between them (replay: goal rows master-goal-tree-empty / goal-branch-tree-empty-unchanged)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "THE TREE-EMPTY KEY into post-launch" }
+      - desc: "the `Base:` read is the ONE parser (ADR-122 (3)) and an UNREADABLE one HOLDS — a malformed block is never read as `master`, because this key writes a state-machine transition (rule #6)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "the tree-empty post-launch transition is HELD" }
     incidents:
       - "2026-08-05 circles#17: machine-ruled 'goal met' and closed 100 minutes before the operator refuted it — nothing at merge time can know whether production agrees, which is why this transition closes nothing"
+      - "2026-09-05 homelab#1162: a THEMED goal (ADR-126) reached tree-empty with no assembly PR, so key (1) never fired, `goal/post-launch` was never applied, and IL-T12's trigger (b) re-summoned a reasoning session every tick — 13 rides, 11 of which ruled nothing. homelab#1450 added key (2) as the retiring edge (a state-fingerprint debounce, PR#1470, was the rejected alternative)"
 
   - id: IL-T19
     name: "terminal — goal/validated: closed met + the close sweep"
