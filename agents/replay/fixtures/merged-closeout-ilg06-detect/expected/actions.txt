@@ -1,9 +1,12 @@
-CALL gh pr list --repo teststuffstash/homelab --state merged --limit 40 --json number,body,baseRefName
+CALL gh pr list --repo teststuffstash/homelab --state merged --limit 40 --json number,body,baseRefName,mergedAt
 CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json body --jq [.[].body // ""]
+CALL gh api repos/teststuffstash/homelab/issues/91/events --paginate
+CALL gh api repos/teststuffstash/homelab/issues/93/events --paginate
 CALL gh issue list --repo teststuffstash/homelab --state closed --label agent-fix --limit 30 --json number,title,labels,updatedAt
 OUT UNIT merged-closeout|homelab|issue-91
 OUT ITEM [homelab] issue #91 — merged-closeout (IL-G06: default-branch PR merged with strong link, keyword inert)
 OUT ORPHAN [homelab] ⛔ issue #92 — a merged PR into master MENTIONS it but does not IMPLEMENT/CLOSE it (sibling-seam citation, not a closeout). Held: verify by hand, then hand-close.
+OUT ORPHAN [homelab] ⏳ issue #93 — merged strong-link PR already CLAIMED since the merge (agent/in-progress at 2026-09-06T07:03:59Z > merged 2026-09-06T06:40:31Z): the closeout for that merge is spent and the current round is the ride's / C4-C5's — no merged-closeout unit (homelab#1472)
 OUT REACHED: end
 ERR item_class_push: homelab issue-91 riding machine
 RC 0

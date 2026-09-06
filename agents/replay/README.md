@@ -264,7 +264,7 @@ is stale, so it cannot drift the way the prose register did.
 | `merge-conflict/null-author` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/source-issue-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `merged-closeout-default-branch` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
-| `merged-closeout-ilg06-detect` | actions | - | `agents/coordinator-scan.sh` | - |
+| `merged-closeout-ilg06-detect` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
 | `model-id-carrier` | table | - | `agents/agent-session.sh` | - |
 | `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
 | `opencode-hostaliases/default-profile` | actions | - | `agents/agent-session.sh` | - |
