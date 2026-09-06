@@ -1,0 +1,20 @@
+# goal-checkpoint-trigger-b-debounce (homelab#1450) — trigger (b) debounces when completion
+# state is unchanged (adopted-open set empty, no goal/post-launch, goal labels stable).
+# This pins the *second* ride: the first ride fires correctly (completion ruling); the second
+# ride against byte-identical state must not dispatch another unit (ADR-106 (3) debt / homelab#1450).
+#
+# THE CONTRACT:
+#   1. On the second ride with byte-identical completion state, no goal-checkpoint unit is emitted.
+#   2. An orphan line is produced reporting the debounce ("DEBOUNCED").
+#   3. Trigger (b) re-arms when the completion state changes (new open member, verdict applied, etc).
+name: goal-checkpoint-trigger-b-debounce
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - file:bridge.sh
+  - block:goal-lane
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab

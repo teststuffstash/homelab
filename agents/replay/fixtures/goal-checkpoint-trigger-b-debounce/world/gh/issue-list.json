@@ -1,0 +1,43 @@
+[
+  {
+    "number": 1450,
+    "title": "scan: goal-checkpoint trigger (b) has no retiring edge for a v1.3-themed Goal",
+    "state": "OPEN",
+    "labels": [
+      {"name": "task/goal"}
+    ],
+    "closedAt": null,
+    "comments": [
+      {
+        "body": "findings-store:\nentry: 31\nkey: #1450\n31 total / 31 dispositioned\nburn-down: 0 open / 2 closed of 2 descendants",
+        "createdAt": "2026-09-05T12:00:00Z"
+      },
+      {
+        "body": "🤖 `state-fp:` — deterministic scan dispatching a `goal-checkpoint` unit at 2026-09-05T12:48:00Z.",
+        "createdAt": "2026-09-05T12:48:00Z"
+      },
+      {
+        "body": "Completion ruling: all findings dispositioned, adopted-open set empty, production soak confirmed.",
+        "createdAt": "2026-09-05T13:00:00Z"
+      }
+    ]
+  },
+  {
+    "number": 1449,
+    "title": "Member of goal 1450 (closed)",
+    "state": "CLOSED",
+    "labels": [
+      {"name": "agent/done"}
+    ],
+    "closedAt": "2026-09-05T11:00:00Z"
+  },
+  {
+    "number": 1448,
+    "title": "Member of goal 1450 (closed)",
+    "state": "CLOSED",
+    "labels": [
+      {"name": "agent/done"}
+    ],
+    "closedAt": "2026-09-05T10:00:00Z"
+  }
+]

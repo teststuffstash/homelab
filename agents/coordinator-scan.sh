@@ -2808,8 +2808,31 @@ EOF_GOVERNANCE
         gundisp=$(( gtot - gdisp ))
         gck=""
         [ "$gundisp" -ge "${GOAL_CHECKPOINT_N:-5}" ] && gck="findings ${gundisp} undispositioned"
+        # Trigger (b) debounce (homelab#1450): for v1.3-themed Goals with no assembly PR (and thus
+        # no goal/post-launch transition), trigger (b) stays armed forever. Debounce on goal labels
+        # (which change when verdict/post-launch applied) — dispatch only once per state change.
+        # Triggers (a) and (c) are unaffected by this debounce — they have independent conditions.
         if [ "$gopen_n_ckpt" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ]; then
-          gck="${gck:+${gck} + }child-set complete pre-launch"
+          # Trigger (b) would fire. Check the debounce: has the goal label state changed since
+          # the last dispatch? Keying on goal labels is sufficient because:
+          # - verdict/{validated,reverted,abandoned} applied → goal closes
+          # - goal/post-launch applied → trigger (b) is suppressed by gpl=0 predicate changing
+          # - gopen_n_ckpt/gclosed_n changes are reported to the checkpoint for other reasons
+          #   (adopted member disposal, new member adoption), so the lack of a label-only
+          #   fingerprint does not stall discovery — rather, a label-based fingerprint ensures
+          #   we do not duplicate dispatches while those other paths are being actioned.
+          gfp_cur="$(printf '%s' "$openall" | jq -r --argjson n "$g" \
+            '[.[] | select(.number == $n) | (.labels // []) | map(select(.name | startswith("goal/")) | .name) | sort | join("|")]' 2>/dev/null || echo "")"
+          # Read the previous fingerprint from the most recent state-fp: marker in goal comments.
+          gfp_prev="$(printf '%s' "$openall" | jq -r --argjson n "$g" \
+            '[.[] | select(.number == $n) | .comments[]? | select((.body // "") | test("state-fp:"))]
+             | sort_by(.createdAt) | last | (((.body // "") | [ scan("state-fp:([^ ]+)") ] | last) // "")' 2>/dev/null || echo "")"
+          if [ -n "$gfp_cur" ] && [ -n "$gfp_prev" ] && [ "$gfp_cur" = "$gfp_prev" ]; then
+            # Debounce holds — suppress this trigger (b) dispatch, report instead
+            orphans="${orphans}[$repo] ⏳ goal-checkpoint DEBOUNCED — goal #${g}: adopted-open set empty, no goal/post-launch, and goal labels unchanged since last dispatch (\`state-fp:${gfp_cur}\`, homelab#1450).\n"
+          else
+            gck="${gck:+${gck} + }child-set complete pre-launch"
+          fi
         fi
         # Trigger (c) — ADR-122 (4): an undispositioned member WAKES the checkpoint and never
         # blocks it. It is deliberately NOT part of gopen_n_ckpt, so (b) still fires alongside
@@ -4569,13 +4592,11 @@ EOF
         fi
         ;;
       goal-checkpoint:issue-*)
-        # homelab#1150: an assembly-cr goal-checkpoint unit carries a PR number in the side map
-        # (assembly_cr_prs). Look up the dispatched unit's (repo, item) pair; when found, write
-        # the state-fp marker on the assembly PR (not the goal issue). No lookup hit ⇒ do nothing
-        # (an ordinary threshold-fired goal-checkpoint has no assembly PR and must not get a
-        # marker). Match the existing arm's failure semantics: empty fingerprint or refused write
-        # WARNS to stderr and dispatches anyway — a refused write only costs the debounce, and
-        # it must never block the ride it annotates.
+        # homelab#1150 + homelab#1450: goal-checkpoint units can fire from two triggers:
+        # (1) assembly-cr (an assembly PR with changes-requested) — marker goes on the PR.
+        # (2) ordinary (thresholds a/b/c) — marker goes on the goal issue (homelab#1450).
+        # For assembly-cr, look up the dispatched unit's (repo, item) pair in the side map
+        # (assembly_cr_prs). For ordinary dispatch, compute and write the marker to the goal issue.
         apr=""
         for entry in $assembly_cr_prs; do
           if [[ "$entry" == "${urepo}:${uitem}:"* ]]; then
@@ -4584,6 +4605,7 @@ EOF
           fi
         done
         if [ -n "$apr" ]; then
+          # Assembly-cr case: write marker on the assembly PR
           dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "$apr" assembly-cr)"; dfp="${dfp%%|*}"
           if [ -z "$dfp" ]; then
             echo "  WARN: state fingerprint unreadable for ${urepo} PR #${apr} — dispatching anyway; the assembly-cr debounce cannot arm this pass (homelab#198)" >&2
@@ -4592,6 +4614,21 @@ EOF
                 "" \
                 "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the PR state — head sha, \`reviewDecision\`, and the newest verdict's timestamp. While the hash is unchanged this clause emits a report line instead of another unit, so an assembly PR waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
             echo "  WARN: could not record state-fp on ${urepo} PR #${apr} (gh write refused?) — dispatching anyway; the assembly-cr clause will re-emit on unchanged state (homelab#198)" >&2
+          fi
+        else
+          # Ordinary threshold-fired case (homelab#1450): write marker on the goal issue
+          # to enable debounce of trigger (b) for v1.3-themed Goals with no assembly PR.
+          # The fingerprint captures the goal's labels (goal/* only), which change when a
+          # verdict or post-launch status is applied.
+          issue_num="${uitem#issue-}"
+          dfp="$(gh api "repos/${ORG}/${urepo}/issues/${issue_num}" --jq '[.labels[]? | select(.name | startswith("goal/")) | .name] | sort | join("|")' 2>/dev/null)" || dfp=""
+          if [ -z "$dfp" ]; then
+            echo "  WARN: goal labels unreadable for ${urepo} goal #${issue_num} — dispatching anyway; the goal-checkpoint debounce cannot arm this pass (homelab#1450)" >&2
+          elif ! gh issue comment "$issue_num" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
+                "🤖 \`state-fp:${dfp}\` — deterministic scan dispatching a \`goal-checkpoint\` unit at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+                "" \
+                "Machine-readable debounce marker (homelab#1450). Trigger (b) debounces while goal labels remain unchanged, preventing re-derivation of an already-recorded ruling. Changes (verdict applied, post-launch applied, or other state changes triggering checkpoint) update the label set and re-arm the gate." )" >/dev/null 2>&1; then
+            echo "  WARN: could not record state-fp on ${urepo} goal #${issue_num} (gh write refused?) — dispatching anyway; the goal-checkpoint clause will re-emit on unchanged state (homelab#1450)" >&2
           fi
         fi
         ;;
