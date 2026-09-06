@@ -396,7 +396,7 @@
       "id": 14,
       "type": "table",
       "title": "Queued issues — click through",
-      "description": "Issues wearing agent/queued (the exporter's label gauge — a CLAIM) joined to the scan's derived hold class (agent_item_class, homelab#892 — the STATE): queued-ready = dispatchable next tick; footprint-held / cap-held / blockpark / queued-held(-by-ghost) / guarded-path / deferred-capacity / queued-held-malformed-block = why it is not picked up, `who` = whose move it is. An empty class means the scan has not classified it this tick (quiet stack, or the item class group was replaced) — read the scan log, not the label.",
+      "description": "Issues wearing agent/queued (the exporter's label gauge — a CLAIM) joined to the scan's derived hold class (agent_item_class, homelab#892 — the STATE): queued-ready = dispatchable next tick; parked-blocked (waiting on an open dependency — the everyday answer) / footprint-held / cap-held / blockpark / queued-held(-by-ghost) / guarded-path / deferred-capacity / queued-held-malformed-block = why it is not picked up; container = a queued Goal awaiting goal-decompose (who=none), `who` = whose move it is. An empty class means the scan has not classified it this tick (quiet stack, or the item class group was replaced) — read the scan log, not the label.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -423,7 +423,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace(max by (repo, item, class, who, base) (agent_item_class{class=~\"queued.*|footprint-held|cap-held|blockpark|guarded-path|deferred-capacity\"}), \"number\", \"$1\", \"item\", \"issue-(.*)\")",
+          "expr": "label_replace(max by (repo, item, class, who, base) (agent_item_class{class=~\"queued.*|parked-blocked|footprint-held|cap-held|blockpark|guarded-path|deferred-capacity|container\"}), \"number\", \"$1\", \"item\", \"issue-(.*)\")",
           "format": "table",
           "instant": true,
           "refId": "B"
