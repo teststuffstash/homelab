@@ -230,18 +230,20 @@ six OVERSIZE items pointer-ized into
       ArgoCD prune deletes the OLD hashed CM the moment the name rolls — a rollback then
       references a pruned CM (Brian Grant, itnext.io/…-1431398c0866, bookmarked). Relates ADR-083.
 
-- [ ] **FU-137** — **Garage durability: POINTER.** The risk fired 2026-08-24 — meta LMDB wiped
-      in the pve thin-pool incident, Aug-4 backup restored same day
+- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** The risk fired
+      2026-08-24 — meta LMDB wiped in the pve thin-pool incident
       ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884).
-      **ADR-114** (2026-08-24) answers it: rf=3 across physical zones, engines-replicate/
-      storage-stores-singles, backup = logical-deletion CronJob — design, grounding links,
-      history: [`docs/garage.md`](garage.md) §Durability + §Target architecture.
-      **Next (oracle-prod-deadline-bound, ~2026-08-31):** the build-out — garage rf=3 migration
-      (local XFS, wk-metal-01/04 + wk-02 interim), CNPG replica-1 + required zone anti-affinity,
-      backup CronJob. Offsite stays parked behind oracle/idp prod. Relates FU-013, FU-012, ADR-031.
-      ⚠ meta volume is **1 replica (wk-02)**; the "no `std` disk fits a 2nd" blocker LIFTED 08-25 — the rebuild left it at 6%.
-      **Sighting 2026-09-05:** the 9 h ERT parse is gated by wk-metal-04's 185 ms/write disk through
-      the rf=2 data volume — measured in [`storage-ledger.md`](storage-ledger.md) §2026-09-05; the build-out is the fix.
+      **ADR-114** + its 2026-09-06 addendum answer both halves — rf=3 across physical zones, and
+      reclamation as zone-by-zone `delete + garage repair tables` rotation (impossible at rf=1:
+      LMDB has no in-place compaction). Design/evidence/arming preconditions:
+      [`docs/garage.md`](garage.md) §Target architecture + §Metadata reclamation.
+      **Next (~2026-08-31 deadline PAST):** the build-out — rf=3 migration, CNPG replica-1 +
+      required zone anti-affinity, backup CronJob; then measure a full-table resync before arming
+      rotation. Blocked on a third PHYSICAL zone ([ledger](storage-ledger.md) §Requirements, *need*).
+      ⚠ meta is **1 replica (wk-02)**, hit **80%** on 2026-09-06 (84% leaked pages); operator takes
+      the interim attended swap 2026-09-07. **Operator intent: metadata maintenance must be
+      unattended.** Relates FU-013, FU-012, FU-093, ADR-031.
+
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
