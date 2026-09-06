@@ -61,3 +61,4 @@ the same exemption the TICK-LOG and ADRs carry.
 | 2026-08-11 | [wk-metal-02 lost its IPv4 default route; fleet-wide "WAN class" reds + runner starvation](2026-08-11-wk-metal-02-default-route-loss.md) | FU-150 |
 | 2026-08-24 | [pve thin pool 100% (third fill) — wk-01 froze twice, Garage metadata wiped](2026-08-24-pve-thin-pool-garage-meta-wipe.md) | FU-093, FU-137 |
 | 2026-09-03 | [pve thin pool 100% (FOURTH fill) — cp-01/wk-01/wk-02 paused on io-error, API down ~8 min; triggered by the runner-image pre-puller](2026-09-03-pve-thin-pool-fourth-fill-prepull.md) | FU-093, FU-207, FU-208 |
+| 2026-09-06 | [The switchboard OOMKilled 153 times in a row (doorbell-collapse listed the whole retained workflow history), and nothing alerted](2026-09-06-switchboard-oom-silent-failures.md) | FU-188, FU-219 |
