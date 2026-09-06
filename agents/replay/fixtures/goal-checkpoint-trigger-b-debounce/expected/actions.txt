@@ -1,0 +1,5 @@
+CALL gh issue list --repo teststuffstash/homelab --state all --limit 300 --json number,title,state,closedAt,parent,labels
+CALL gh pr list --repo teststuffstash/homelab --state merged --limit 30 --json number,headRefName,body,mergedAt
+OUT units: 0
+OUT orphans_debounced: 0
+RC 0

@@ -2822,11 +2822,11 @@ EOF_GOVERNANCE
           #   fingerprint does not stall discovery — rather, a label-based fingerprint ensures
           #   we do not duplicate dispatches while those other paths are being actioned.
           gfp_cur="$(printf '%s' "$openall" | jq -r --argjson n "$g" \
-            '[.[] | select(.number == $n) | (.labels // []) | map(select(.name | startswith("goal/")) | .name) | sort | join("|")]' 2>/dev/null || echo "")"
+            '.[] | select(.number == $n) | (.labels // []) | map(select(.name | startswith("goal/")) | .name) | sort | join("|")' 2>/dev/null || echo "")"
           # Read the previous fingerprint from the most recent state-fp: marker in goal comments.
           gfp_prev="$(printf '%s' "$openall" | jq -r --argjson n "$g" \
             '[.[] | select(.number == $n) | .comments[]? | select((.body // "") | test("state-fp:"))]
-             | sort_by(.createdAt) | last | (((.body // "") | [ scan("state-fp:([^ ]+)") ] | last) // "")' 2>/dev/null || echo "")"
+             | sort_by(.createdAt) | last | (((.body // "") | [ scan("state-fp:([^ `]+)") ] | last | .[0]) // "")' 2>/dev/null || echo "")"
           if [ -n "$gfp_cur" ] && [ -n "$gfp_prev" ] && [ "$gfp_cur" = "$gfp_prev" ]; then
             # Debounce holds — suppress this trigger (b) dispatch, report instead
             orphans="${orphans}[$repo] ⏳ goal-checkpoint DEBOUNCED — goal #${g}: adopted-open set empty, no goal/post-launch, and goal labels unchanged since last dispatch (\`state-fp:${gfp_cur}\`, homelab#1450).\n"

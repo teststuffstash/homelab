@@ -4,7 +4,8 @@
     "title": "scan: goal-checkpoint trigger (b) has no retiring edge for a v1.3-themed Goal",
     "state": "OPEN",
     "labels": [
-      {"name": "task/goal"}
+      {"name": "task/goal"},
+      {"name": "goal/test"}
     ],
     "closedAt": null,
     "comments": [
@@ -13,7 +14,7 @@
         "createdAt": "2026-09-05T12:00:00Z"
       },
       {
-        "body": "🤖 `state-fp:` — deterministic scan dispatching a `goal-checkpoint` unit at 2026-09-05T12:48:00Z.",
+        "body": "🤖 `state-fp:goal/test` — a `goal-checkpoint` unit was dispatched at 2026-09-05T12:48:00Z.",
         "createdAt": "2026-09-05T12:48:00Z"
       },
       {

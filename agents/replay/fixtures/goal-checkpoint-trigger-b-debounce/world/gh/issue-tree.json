@@ -4,7 +4,8 @@
     "title": "scan: goal-checkpoint trigger (b) has no retiring edge for a v1.3-themed Goal",
     "state": "OPEN",
     "labels": [
-      {"name": "task/goal"}
+      {"name": "task/goal"},
+      {"name": "goal/test"}
     ],
     "parent": null
   },
