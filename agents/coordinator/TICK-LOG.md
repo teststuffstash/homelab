@@ -7416,3 +7416,9 @@ first live ADR-110 maintenance session before the ADR existed.
 - **Seat misses:** zsh ate three one-liners (`?` in a URL, `====` as `=cmd`, `$ref:agents` as a
   history modifier) — quote, and put probes in script files (the card's rule, paid again); a
   first-run capture of a fixture stream included the runner's trailer lines.
+- **14:4xZ operator mid-turn ask — "the agent-running dashboard's Queued issues panel does not show
+  WHY a queued issue is not picked up":** it reads the exporter's `agent/queued` label gauge (a
+  claim); the state has been `agent_item_class{repo,item,class,who,base}` since homelab#892.
+  PR `fix/agent-running-queued-why` (seat, armed) joins it in (label_replace item→number +
+  merge): columns `why (scan class)` / `who acts` / `base`; live: oracle-fleet#361
+  `queued-held-by-ghost/operator`. Operator: targeted tofu apply of the dashboard after merge.
