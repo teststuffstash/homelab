@@ -12,13 +12,22 @@ jointly blow the tier — which is exactly what happened.
 > **A tier's committed capacity is the sum of every cap charged against it, across every repo, and
 > exactly one ledger owns that sum.** A claim that doesn't appear in the ledger doesn't exist.
 
-## Current shape (2026-08-25)
+## Current shape (2026-09-06; the 2026-08-25 read in parentheses)
 
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
-| `std` | hp-01 **×2 disks**, thinkcentre, **wk-02** | 581.7G | 501.6G | 305.0G (61%) | 243.3G (42%) |
-| `bulk` | wk-metal-01, **wk-metal-04** | 908.1G | 658.1G | 580.0G (88%) | 619.9G (68%) |
-| `fast` | thinkcentre Optane ×2 | 26.7G | 26.7G | 5.0G | 1.4G |
+| `std` | hp-01 **×2 disks**, thinkcentre, **wk-02** | 624G | 538G | 385G (71%) *(was 305G, 61%)* | 388G (62%) *(was 243G, 42%)* |
+| `bulk` | wk-metal-01, **wk-metal-04** | 975G | 706G | 816G (115%) ⚠ *rebuild-day figure — see below (was 580G, 88%)* | 498G (51%) *(was 620G, 68%)* |
+| `fast` | thinkcentre Optane ×2 | 28G | 28G | 5G | 1G |
+
+Read from the Longhorn node CRs (`storageMaximum`/`storageReserved`/`storageScheduled`/
+`storageAvailable` summed per tag; allocatable = max − reserved, committed = scheduled). The
+**bulk 115 %** is the wk-metal-04 maintenance window's transient: the mirror volumes rebuilt a
+second replica onto wk-metal-01 while the node was down and Longhorn is now placing a third on the
+returned disk before trimming — re-read after the rebuilds settle. **std grew 80 G committed in 12
+days** — 40 G of it is the PyPI cache's 2 × 20Gi (below), the rest platform volumes; `wk-02`'s std
+disk is UNSCHEDULABLE for new replicas (47 G free < its 25 % floor of 63 G), so new std placements
+have three disks, two of them in the hp-01 zone.
 
 **`fast` eligibility (operator ruling 2026-08-11, FU-159):** SCRATCH for disk-write-heavy pods
 (CI builds and the like) — single-node replica-1 Optane of modest speed; NEVER load-bearing
@@ -240,6 +249,30 @@ day. That is what spends `bulk`'s nominal headroom down to 90% — a deliberate 
 correctness with capacity, affordable only because wk-metal-04 joined the tier. If wipes ever start
 happening, `RegistryMirrorWipedRepeatedly` says the fix is a **bigger PVC, never a lower
 threshold**.
+
+### The PyPI cache is in the mirror family but not on the mirror tier (2026-09-06)
+
+`pypi-cache` (homelab#1300 → #1404, consumers wired by #1457) is the fourth pull-through cache,
+and its **valve is different**: nginx `proxy_cache_path max_size` (16g packages + 1g index) LRU-
+evicts inside the volume, so there is no 90 % wipe threshold and no `RegistryMirrorWiped*` alert
+to inherit — the bound is the config, on a 20Gi PVC (19.5 G usable, ~2.5 G above the two zones'
+combined cap; `proxy_max_temp_file_size 8192m` with `use_temp_path=off` means a burst of large
+wheels can transiently exceed `max_size` before the cache manager trims, and ENOSPC there is a
+failed download, not data loss). Empty at wiring time (56 K used).
+
+**Tier:** the seat pinned it to the default `longhorn` (std) class on 2026-09-05, following the
+nix-cache shape — but ADR-091 put the registry mirrors' cache PVCs on **`longhorn-bulk`**
+("re-warmable"), and the ledger's own reading is that `std` is the tight tier. What a warm cache
+costs on `std`: up to ~17 G physical on each of its two replica disks, one of which is
+`thinkcentre/default-disk` — **49 G free against a 29 G floor, i.e. 20 G of growth headroom for
+every std replica on that node**. A full PyPI cache alone nearly spends it, after which thinkcentre
+joins wk-02 as unschedulable and new std volumes can only place on hp-01's two disks (one zone).
+On `bulk` the same cache is noise (190 G / 288 G free on the two disks; wk-metal-04's 161 G
+reservation already protects its image store). The cheapest moment to move it is while it is empty
+— a `storageClassName: longhorn-bulk` PVC recreate (the field is immutable) costs nothing today
+and a day of re-warm later. Not done in the PR that wired the consumers (#1457 does not touch the
+PVC); operator call, since the 09-05 pin was operator-approved. Requirement-register shape:
+*want* — "caches on the re-warmable tier", pointer this section.
 
 ## Build
 
