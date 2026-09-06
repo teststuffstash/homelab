@@ -25,9 +25,9 @@ state_fp_for_clause() {
   fi
   # Fall back to old format: state-fp:<hash> (backwards compatibility)
   hash="$(printf '%s' "$fp_probe" | jq -r \
-    '([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-z:-]*[0-9a-f]{6,64}")) ]
+    '([ .comments[]? | select((.body // "") | test("state-fp:[a-z-]*[0-9a-f]{6,64}")) ]
       | sort_by(.createdAt) | last // {})
-     | (((.body // "") | [ scan("state-fp:[0-9a-z:-]*([0-9a-f]{6,64})") ] | last) // "")' 2>/dev/null)" || hash=""
+     | (((.body // "") | [ scan("state-fp:[a-z-]*([0-9a-f]{6,64})") ] | last) // "")' 2>/dev/null)" || hash=""
   printf '%s' "$hash"
 }
 # ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),

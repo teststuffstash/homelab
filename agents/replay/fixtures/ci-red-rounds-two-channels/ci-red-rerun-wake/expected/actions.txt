@@ -5,7 +5,7 @@ OUT ATTEMPTS 1
 OUT NOOP <none>
 OUT RED_ROUNDS 1
 OUT RED_ROUNDS_KEY PR #43
-OUT ORPHANS [circles] ⏳ ci-red DEBOUNCED — PR #43: still red at aaaaaaaa with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (`state-fp:b123683ec476`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n
-OUT UNITS 
+OUT ORPHANS [circles] ⏳ ci-red DEBOUNCED — PR #43: still red at aaaaaaaa with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (`state-fp:ci-red:b123683ec476`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n
+OUT UNITS
 OUT REACHED: end
 RC 0
