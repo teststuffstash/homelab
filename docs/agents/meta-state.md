@@ -10,16 +10,21 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ S8 IN FLIGHT (fourth sitting 2026-09-05 20:41–~21:50Z, the budget-window corpus session
-  — stint #1418, Size 3):** **#1436 (1a) MERGED 20:56Z (#1430 closed) · #1446 (6a) MERGED 21:06Z → #1422 CLOSED.** **1b #1431 built by a 4-chunk opus fan-out on clones, integrated into ONE branch
-  `fix/s8-1b-one-parser-readers`** — chunk D (authoring plays write the block; in-pod
-  `--self-test` PASSED on a live oracle coordinator pod, 73/73) + A (scan — new `body-block-malformed` family, `queued-held-malformed-block` class) + B (launcher/reviewer — `PREFLIGHT REFUSED`, `GB_MALFORMED`, `GB_REF` per hop, a new `agent-session` LEGACY variant) + C (fix-debounce/responder shell legs — the responder's first touch upserts the block, both forms emitted). PR: **PR#1459 (armed 21:17Z, BEHIND-but-MERGEABLE against 6a, awaits its FIRST bot review)**; residue = **sprout #1460** bound under #1431 (#1431 closes when #1460 lands — do NOT close it at #1459's merge).
-  **OPEN at exit (bot-waits, all armed, codeowner reads on record — merge the small):** **PR#1459** (1b; head 92ea364b after the pin-vacuity fix — the six support-only fixture edits dropped, IB_PY resolved in the clause) · **PR#1465** (#1452 merge-ready-only updater; the sole-codeowner waiver arm dropped — say so if wanted). PR#1461 + PR#1458 MERGED 21:4xZ. **PARKED branches on origin (stacked on 1b — rebase + open PRs once #1459 merges):** `fix/s8-1420-consumer-card-three-acts` (#1420, docs, green) · `fix/s8-1460-parser-residue` (#1460 legs 1/2/4/5, legs 2+1 DONE (fix-debounce `Touches` LEGACY variant w/ `keep_empty`, c4c5 `Class` precedence, 407/407); legs 4 (scan/scout writers) + 5 (sentinels) + 6 (`requires: python3` fixture-only) NOT started. ⚠ stacked on the OLD 1b tip 17834acb: rebase onto #1459's merge and DROP its five bridge `IB_PY=` seam lines (the pin-vacuity trap PR#1459 just paid; IB_PY resolves in the clause since 92ea364b)). **#1439 QUEUED** (loop rides it). **#1456 filed inert** (coordinate cron exit
-  141 — the loop-health item 9 read; operator queues if wanted). Sprout from chunk D: the
-  scan's bucket-create + `model-scout.sh` canary filings still hand-roll bodies (writers not in
-  #1431's list) — = #1460 leg 4. **PR#1461** = #1424 half 1 (per-base doc currency; armed; left-behind on #1424: workflow.md:13/:63 per-repo prose + merge-path item 3's retired "up-to-date" predicate — one-line edits, fold into #1424's second half). **PR#1458** dirty-skips re-land armed (6a merged → pushed). oracle-fleet PR#471 ARMED 21:07Z (was an un-armed seat PR — FU-079). Next originals: #1420 (card → three acts; needs 1b merged) →
-  #1424 (currency; after 6a) — neither pre-drafted this sitting (both overlap in-flight
-  branches). #1423 HELD. #1452 blocked on #1422.
+- **⚑ S8 IN FLIGHT (fifth sitting 2026-09-06 14:15–14:5xZ, corpus session; stint #1418, Size 3):**
+  originals 1a/2/3/5/6 + sprout #1452 DONE. **OPEN at exit (all armed, bot-gated, land unattended
+  — codeowner reads on record):** **PR#1459** (1b — the bot's blocking finding fixed at
+  `0967b572`, re-review pending; #1431 closes when sprout #1460 lands, NOT at #1459's merge) ·
+  **PR#1479** (#1424 half 2, docs) · **PR#1478** (#1472 — the C6 claim-after-merge hold; when it
+  MERGES: clear `agent/error` on oracle-fleet#397, do NOT re-queue — the r6 salvage branch
+  `agent/20260906-070522` is the operator's delete-first call) · **PR#1462** (APPROVED, cycling) ·
+  **PR#1468** (#1444 — seat landed the three edits; APPROVE as codeowner once the bot approves if
+  this session did not). **PARKED branches (rebase after #1459 merges):**
+  `fix/s8-1460-parser-residue` (legs 2+1 done, 407/407; legs 4/5/6 NOT started; ⚠ stacked on the
+  OLD 1b tip `17834acb` — rebase onto #1459's merge and DROP its five bridge `IB_PY=` seam lines) ·
+  `fix/s8-1420-consumer-card-three-acts` (#1420, docs, green — open once 1b is in). #1423 HELD.
+  **DECISION for the operator: #1450/PR#1470** — (A) option-1 fingerprint + side map (the 04:39Z
+  directive) vs (B) `Base: master` Goal enters post-launch at tree-empty (IL-T18 second key,
+  ADR-126 delta) — seat recommends (B), recorded on #1450; PR#1470 stays parked either way.
 - **⚑ PICKUP from the 2026-09-06 wk-metal-04 window (seat, 12:40–14:15Z; TICK-LOG has the arc):**
   (1) Garage `data-garage-0` replica REBUILDING onto wk-metal-04 — 28 % at 14:13Z, ~0.75 %/min
   (the SA400 writes 26 MB/s at 486 ms — the ledger §2026-09-05 benchmark); expect healthy ~15:50Z,
@@ -29,7 +34,11 @@ never the session's arc — that is TICK-LOG's.)
   re-read after — weekly metal blocks by PR only if it helped. (3) wk-metal-04 WoL unverified from
   S5 (needed the button after the AC cut — expected; a clean `talosctl shutdown` → WoL test is
   the open question, not urgent).
-- **⚑ OPERATOR (physical / decisions), from this sitting:** (1) **CI starvation**: one org-wide ARC set of 3 slots (FU-218); homelab ≥300 runs today
+- **⚑ OPERATOR (from the 2026-09-06 corpus session):** (0) **`tofu apply` targeted at the
+  `agent-running` grafana_dashboard** once the queued-panel PR (fix/agent-running-queued-why —
+  the scan hold-class join answering "why is a queued issue not picked up") merges; dashboards
+  are tofu-applied, not ArgoCD-synced. (0b) the #1450/PR#1470 fork above (A vs B).
+- **⚑ OPERATOR (physical / decisions), from the 09-05 sitting:** (1) **CI starvation**: one org-wide ARC set of 3 slots (FU-218); homelab ≥300 runs today
   starved oracle (queue p90 22–40 min). Levers ruled/filed: #1452 (fair, platform-native);
   per-stack runner scale sets as the fairness knob (not filed — say so if wanted); wk-metal-04's
   16 GB as capacity after the cable (kata reservation = operator call). App-side: oracle-fleet
