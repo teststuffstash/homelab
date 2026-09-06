@@ -103,7 +103,7 @@
 #                           #77 exactly as the assembly-PR key's does — ONE writer, two keys.
 #                           The `ERR LEGACY-GRAMMAR Base` line is the ADR-122 (3) migration meter,
 #                           deliberately not suppressed: the Base read is the ONE parser
-#                           (agents/issue_body.py), and this goal declares Base as a legacy line.
+#                           (this file's `ib_get`, homelab#1431), and this goal declares Base as a legacy line.
 # master-goal-post-launch-quiet
 #                         = THE SECOND RIDE, one tick later, on the state the row above produces:
 #                           same goal, now wearing `goal/post-launch`. Everything goes quiet — no

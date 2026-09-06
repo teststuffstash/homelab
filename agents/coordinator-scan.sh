@@ -3012,12 +3012,13 @@ EOF_GOVERNANCE
         # sprout still gets its ride. The recommendation channel is the post-launch play's own
         # "say when a verdict looks due" leg, and `agents/board.sh` §VERDICT DUE now surfaces the
         # goal to the human, which the pre-launch state never did.
-        # THE BASE READ IS THE ONE PARSER (ADR-122 (3), agents/issue_body.py) — block first,
-        # legacy `Base:` line second, and the LEGACY-GRAMMAR meter on stderr is deliberately not
-        # suppressed. Three outcomes, and the difference between them is the whole safety story:
-        #   • the parser FAILED (a malformed machine block, or python3/the parser unreachable) →
-        #     HOLD and report. An unreadable Base is not "master": rule #6, never fail INTO a
-        #     write, and this write is a state-machine transition on someone's Goal.
+        # THE BASE READ IS THE ONE PARSER (ADR-122 (3), homelab#1431) via this file's own `ib_get`
+        # — block first, legacy `Base:` line second, and the LEGACY-GRAMMAR meter on stderr is
+        # deliberately not suppressed. Three outcomes, and the difference between them is the
+        # whole safety story:
+        #   • ib_get FAILED — exit 2, the body's machine block is MALFORMED (or the parser is
+        #     unreachable) → HOLD and report. An unreadable Base is not "master": rule #6, never
+        #     fail INTO a write, and this write is a state-machine transition on someone's Goal.
         #   • no `Base:` at all → NOT malformed, just a pre-#1053 body. Nothing is written and the
         #     behaviour is exactly what it was: (b) fires. The place that demands the line is the
         #     decompose gate (homelab#1053), which refuses at queue time; retro-fitting that
@@ -3029,8 +3030,7 @@ EOF_GOVERNANCE
         # this leg WRITES, and a future edit to the terminal legs must not be able to make a
         # midpoint land on a goal a human has just ruled.
         if [ "$gopen_n_ckpt" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ] && [ -z "$gverdict" ]; then
-          gbase_g="$(printf '%s' "$gbody" | python3 "${HERE}/issue_body.py" get Base --ref homelab#1450)" && gbase_rc=0 || gbase_rc=$?
-          if [ "${gbase_rc:-2}" -ne 0 ]; then
+          if ! gbase_g="$(ib_get Base "${repo:-}#${g}" "$gbody")"; then
             orphans="${orphans}[$repo] ⛔ goal #${g}: its \`Base:\` line is UNREADABLE (malformed machine block, or agents/issue_body.py is unreachable) — the tree-empty post-launch transition is HELD (rule #6: never fail INTO a write). Fix the block, or label the goal by hand.\n"
           else
             # the unit_lane_record trim idiom: leading + trailing whitespace, nothing else.
