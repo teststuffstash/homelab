@@ -626,7 +626,7 @@ fi
 # (deterministic awk-insert, no YAML dependency) so the worker cannot skip reading it.
 # >>>REPLAY:render_env_card>>>
 render_env_card() {
-  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}"
+  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}" pypi_cache="${AGENT_PYPI_CACHE_URL-http://192.168.40.34/simple/}"
   # ═══ MAINTAINER NOTE — read before editing (this comment is NOT sent to the agent) ═══
   # Everything printf'd below is injected VERBATIM into the stack agent's prompt. Keep that text
   # MINIMAL and stack-agnostic: the rule + the value it needs to ACT, nothing else. All homelab-
@@ -666,7 +666,7 @@ render_env_card() {
   else
     pkg_why="upstream is reachable today (egress monitor mode) but WILL be blocked at enforcement — use the proxies anyway so the ride stays reproducible"
   fi
-  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against pypi.org + files.pythonhosted.org (open on the python egress profile). **Pod-only caveat:** these vars exist ONLY inside agent pods; a repo script that consumes them MUST supply a default (\`\${REGISTRY_MIRROR_DOCKER_IO:-${mdio}}\`, \`\${REGISTRY_MIRROR_GHCR:-${mghcr}}\`, \`\${REGISTRY_MIRROR_MCR:-${mmcr}}\`), because the same script runs in CI/dev environments without them. **Scheme caveat:** the values carry \`http://\` (correct for containerd/k3d \`endpoint =\` config), but a bare image ref cannot carry a scheme — use \`\${VAR#*://}\` to strip it."
+  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against \`\$UV_DEFAULT_INDEX\`/\`\$PIP_INDEX_URL\` (${pypi_cache}, on python-profile rides) or upstream pypi.org + files.pythonhosted.org (open on the python egress profile — fallback if cache unavailable). **Pod-only caveat:** these vars exist ONLY inside agent pods; a repo script that consumes them MUST supply a default (\`\${REGISTRY_MIRROR_DOCKER_IO:-${mdio}}\`, \`\${REGISTRY_MIRROR_GHCR:-${mghcr}}\`, \`\${REGISTRY_MIRROR_MCR:-${mmcr}}\`), because the same script runs in CI/dev environments without them. **Scheme caveat:** the values carry \`http://\` (correct for containerd/k3d \`endpoint =\` config), but a bare image ref cannot carry a scheme — use \`\${VAR#*://}\` to strip it."
 
   # WHY: docs/spikes/context-repos.md pilot (circles-only today). Read-only reference clones; the
   # spike's measurement is whether transcripts ever show /work/context reads, so the card ADVERTISES
@@ -1890,6 +1890,18 @@ if "$KUBECTL" $KUBE -n "$NS" get pvc agent-uv-cache >/dev/null 2>&1; then
   UV_ENV=$'        - name: UV_CACHE_DIR\n          value: "/uv-cache"'
 fi
 
+# python profile: UV_DEFAULT_INDEX + PIP_INDEX_URL for the PyPI pull-through cache (FU-048 half 1),
+# only on python-profile rides (claim-selected). PIP_TRUSTED_HOST allows plain HTTP. The cache
+# address rides an AGENT_PYPI_CACHE_URL LAUNCHER-side override (read at dispatch, mirroring
+# AGENT_NIX_CACHE_URL) — it is NOT injected into the pod: a ride sees only the three vars below,
+# which is why the env card names those. Fallback is upstream pypi.org + files.pythonhosted.org.
+PYTHON_ENV=""
+if [ "${EGRESS_PROFILE:-}" = "python" ]; then
+  PYPI_CACHE_URL="${AGENT_PYPI_CACHE_URL-http://192.168.40.34/simple/}"
+  PYPI_CACHE_HOST="$(printf '%s' "$PYPI_CACHE_URL" | sed -e 's|^[a-z][a-z]*://||' -e 's|[:/].*$||')"
+  PYTHON_ENV=$'        - name: UV_DEFAULT_INDEX\n          value: "'"$PYPI_CACHE_URL"$'"\n        - name: PIP_INDEX_URL\n          value: "'"$PYPI_CACHE_URL"$'"\n        - name: PIP_TRUSTED_HOST\n          value: "'"$PYPI_CACHE_HOST"$'"'
+fi
+
 # FU-096: the stack's CI-published devbox cache (eval seed + file:// store), mounted read-only
 # via a k8s ImageVolume (verified on-cluster, oracle-fleet#106) — the entrypoint seeds ~/.cache
 # and adds the substituter so the per-pod `devbox install` skips the eval tax. Mount ONLY when
@@ -2473,6 +2485,8 @@ ${OC_ENV}
         # Persistent uv wheel cache: env emitted ONLY when the agent-uv-cache PVC is mounted (UV_ENV),
         # so an unmounted /uv-cache never gets set as the cache dir. See the UV_ENV note above.
 ${UV_ENV}
+        # python profile: PyPI cache pull-through (FU-048 half 1). Emitted ONLY on python-profile rides.
+${PYTHON_ENV}
         # Auto-approve tool calls: a headless --run recipe has no TTY to confirm at, so without this
         # goose blocks forever. The pod is the isolation boundary, so autonomy here is the point.
         - name: GOOSE_MODE
