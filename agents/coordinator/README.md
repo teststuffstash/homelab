@@ -729,8 +729,8 @@ Rule exactly one of:
   > write `Fixes` and you have restored the bug this replaced.
   Comment on the goal naming which child satisfied which criterion. Do NOT close
   the goal issue by hand, and do not label it `goal/post-launch` yourself — the scan does that
-  deterministically when the assembly PR actually merges, and posts the assembly-complete audit
-  comment with it. The armed PR is SAFE by construction:
+  deterministically (at assembly merge, or at tree-empty for a `Base: master` Goal — ADR-126,
+  homelab#1450), and posts the assembly-complete audit comment with it. The armed PR is SAFE by construction:
   the reviewer bot's approval satisfies the approval rule (rubric `.agents/review-goal.md`,
   model `reviewer.goalModel` on the claim), but master's codeowner gate (/specs/ is always in
   the assembly diff) blocks auto-merge on a human — the operator merges via OrgAdmin override

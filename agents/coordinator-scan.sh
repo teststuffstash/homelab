@@ -2447,6 +2447,65 @@ EOF_GOVERNANCE
     # unit, and that a repo with no `task/goal` at all makes zero API calls. Extracting a leg on its
     # own would let each of those regress with every fixture still green.
     # >>>REPLAY:goal-lane>>>
+    # ── ENTERING POST-LAUNCH — ONE writer, TWO KEYS (the ADR-102 midpoint) ──────────────────
+    # The midpoint means "built as specified, shipping to production, awaiting a verdict", and
+    # two different facts can establish it:
+    #   • the ASSEMBLY-PR key (IL-T18 as shipped) — a merged PR with a `goal/**` HEAD carrying a
+    #     line-anchored `Assembly-for: #<goal>` trailer. The ordinary Goal.
+    #   • the TREE-EMPTY key (homelab#1450) — a THEMED Goal (`Base: master`, ADR-126) batches in
+    #     its level-2 theme branches, so it has no assembly PR and deliberately no trailer: the
+    #     first key can NEVER fire for it, `goal/post-launch` was never applied, and trigger (b)
+    #     below re-summoned a reasoning session every tick after its tree emptied (13 rides on
+    #     Goal #1162). For that shape the midpoint is true the moment the adopted-open descendant
+    #     set empties with children closed — so the scan writes it, deterministically, instead of
+    #     paying a session to re-derive a completion ruling already on record.
+    # ONE function, because both keys write the SAME two acts in the SAME order and two copies
+    # would drift: LABEL FIRST, COMMENT SECOND, and the comment only on a label that stuck. The
+    # write is not atomic and both legs are level-triggered: a landed comment with a failed label
+    # re-comments every tick (the duplicate-bot-comment anomaly the FU-069 breaker watches for),
+    # while a landed label with a failed comment costs one audit line and stops. Same
+    # ORDER-IS-LOAD-BEARING reasoning as the IL-T16 phantom belt.
+    # Returns 0 when the LABEL stuck (the caller's state moves), 1 when it did not (reported —
+    # the next scan retries). Appends to `orphans` and echoes in the caller's scope, as the
+    # inline code did.
+    goal_enter_post_launch() {   # <slug> <repo> <goal> <lede> <echo-tail> <hold-why> <comment-name>
+      local _slug="$1" _repo="$2" _g="$3" _lede="$4" _tail="$5" _why="$6" _cname="$7" _buck _bucktxt
+      # The bucket already exists in the ordinary case — `harvest-disposition` creates it at
+      # the first closeout/review, deliberately earlier than this moment (IL-T17). Named here
+      # so the comment tells a human where post-launch work goes; absence is not fatal.
+      _buck="$(gh api "repos/${_slug}/issues/${_g}/sub_issues" 2>/dev/null \
+        | jq -r '[.[] | select(.title | startswith("post-launch:")) | .number] | first // ""' 2>/dev/null || true)"
+      case "$_buck" in ''|*[!0-9]*) _buck="" ;; esac
+      # Rendered here, not inline in the body below: `${x:+A}${x:-B}` reads like an if/else
+      # and is not one — when x is SET the second expansion yields x itself, so the sentence
+      # came out "sub-issue #7777". Two branches, one variable.
+      if [ -n "$_buck" ]; then
+        _bucktxt="sub-issue #${_buck}"
+      else
+        _bucktxt="the \`post-launch:\` bucket, which the next closeout or review creates under this goal"
+      fi
+      if gh issue edit "$_g" --repo "$_slug" --add-label "goal/post-launch" >/dev/null 2>&1; then
+        gh issue comment "$_g" --repo "$_slug" --body "$(printf '%s\n' \
+          "$_lede" \
+          "" \
+          "**That is a MIDPOINT, not a verdict** (ADR-102). Assembly-complete measures \"built as specified\"; it says nothing about whether the idea works — circles#17 was machine-ruled met 100 minutes before the operator refuted it, which is why this transition no longer closes anything. The goal is now \`goal/post-launch\` and STAYS OPEN, shipping to production at its own pace against the same \`Budget:\` line." \
+          "" \
+          "**Where post-launch work goes:** ${_bucktxt}. Children there base \`master\` and carry NO \`Base:\` line — the goal branch dies at the assembly squash, and goal identity is this issue plus its budget, never the branch. Open descendants still carrying a \`Base: goal/**\` line need retargeting to master at the next \`goal-checkpoint\`." \
+          "" \
+          "**It closes only on a VERDICT**, applied here as a label by this goal's verdict authority (\`Verdict-authority:\`, default \`human\`):" \
+          "" \
+          "- \`goal/validated\` — production confirms the idea → closed met, and the close sweep lists every surviving descendant with a proposed disposition (report-first; a human confirms the batch)." \
+          "- \`goal/reverted\` — production refutes it → closed successfully-refuted, every open descendant closed with it. Roll back FIRST (the assembly squash is the revert unit) and declare the pointer as a \`Revert:\` line on this issue, or the audit record lands incomplete." \
+          "- \`goal/abandoned\` — budget out before a verdict → closed not-planned; open descendants stay open but go inert." \
+          "" \
+          "Written by \`agents/coordinator-scan.sh\` (deterministic — no session judged this, and none can: the judgment is production's, or yours)." )" >/dev/null 2>&1 \
+          || orphans="${orphans}[$_repo] ⚠ goal #${_g}: labelled goal/post-launch but the ${_cname} comment did not land (gh write refused?) — the transition HELD, the audit line is missing; add it by hand\n"
+        echo "  [$_repo] ADR-102 midpoint: goal #${_g} → ${_tail}, labelled goal/post-launch, left OPEN${_buck:+ (bucket #${_buck})}"
+        return 0
+      fi
+      orphans="${orphans}[$_repo] ⚠ goal #${_g}: ${_why} but \`goal/post-launch\` could not be applied (label missing from the claim taxonomy? gh write refused?) — the goal is stuck pre-launch; the next scan retries\n"
+      return 1
+    }
     goals="$(printf '%s' "$openall" | jq -r '[.[] | select((.labels|map(.name)|index("task/goal")))] | .[].number' 2>/dev/null || true)"
     if [ -n "$goals" ]; then
       # one call for the whole repo's issues incl. closed — reused for every goal below.
@@ -2650,45 +2709,15 @@ EOF_GOVERNANCE
             case "$gasm_m" in ''|*[!0-9]*) gasm_m=0 ;; esac
             [ "$gasm_m" -gt 0 ] && orphans="${orphans}[$repo] ⛔ goal #${g}: a merged goal/** PR MENTIONS it but carries no line-anchored \`Assembly-for: #${g}\` trailer — the post-launch transition is HELD (a mention is not an assembly claim). Add the trailer to the PR body, or label the goal by hand.\n"
           else
-            # The bucket already exists in the ordinary case — `harvest-disposition` creates it at
-            # the first closeout/review, deliberately earlier than this moment (IL-T17). Named here
-            # so the comment tells a human where post-launch work goes; absence is not fatal.
-            gbuck="$(gh api "repos/${slug}/issues/${g}/sub_issues" 2>/dev/null \
-              | jq -r '[.[] | select(.title | startswith("post-launch:")) | .number] | first // ""' 2>/dev/null || true)"
-            case "$gbuck" in ''|*[!0-9]*) gbuck="" ;; esac
-            # Rendered here, not inline in the body below: `${x:+A}${x:-B}` reads like an if/else
-            # and is not one — when x is SET the second expansion yields x itself, so the sentence
-            # came out "sub-issue #7777". Two branches, one variable.
-            if [ -n "$gbuck" ]; then
-              gbucktxt="sub-issue #${gbuck}"
-            else
-              gbucktxt="the \`post-launch:\` bucket, which the next closeout or review creates under this goal"
-            fi
-            # LABEL FIRST, COMMENT SECOND, and the comment only on a label that stuck. The write is
-            # not atomic and this leg is level-triggered: a landed comment with a failed label
-            # re-comments every tick (the duplicate-bot-comment anomaly the FU-069 breaker watches
-            # for), while a landed label with a failed comment costs one audit line and stops. Same
-            # ORDER-IS-LOAD-BEARING reasoning as the IL-T16 phantom belt.
-            if gh issue edit "$g" --repo "$slug" --add-label "goal/post-launch" >/dev/null 2>&1; then
-              gh issue comment "$g" --repo "$slug" --body "$(printf '%s\n' \
-                "🤖 **assembly-complete** — assembly PR #${gasm} merged. This goal is built as specified." \
-                "" \
-                "**That is a MIDPOINT, not a verdict** (ADR-102). Assembly-complete measures \"built as specified\"; it says nothing about whether the idea works — circles#17 was machine-ruled met 100 minutes before the operator refuted it, which is why this transition no longer closes anything. The goal is now \`goal/post-launch\` and STAYS OPEN, shipping to production at its own pace against the same \`Budget:\` line." \
-                "" \
-                "**Where post-launch work goes:** ${gbucktxt}. Children there base \`master\` and carry NO \`Base:\` line — the goal branch dies at the assembly squash, and goal identity is this issue plus its budget, never the branch. Open descendants still carrying a \`Base: goal/**\` line need retargeting to master at the next \`goal-checkpoint\`." \
-                "" \
-                "**It closes only on a VERDICT**, applied here as a label by this goal's verdict authority (\`Verdict-authority:\`, default \`human\`):" \
-                "" \
-                "- \`goal/validated\` — production confirms the idea → closed met, and the close sweep lists every surviving descendant with a proposed disposition (report-first; a human confirms the batch)." \
-                "- \`goal/reverted\` — production refutes it → closed successfully-refuted, every open descendant closed with it. Roll back FIRST (the assembly squash is the revert unit) and declare the pointer as a \`Revert:\` line on this issue, or the audit record lands incomplete." \
-                "- \`goal/abandoned\` — budget out before a verdict → closed not-planned; open descendants stay open but go inert." \
-                "" \
-                "Written by \`agents/coordinator-scan.sh\` (deterministic — no session judged this, and none can: the judgment is production's, or yours)." )" >/dev/null 2>&1 \
-                || orphans="${orphans}[$repo] ⚠ goal #${g}: labelled goal/post-launch but the assembly-complete comment did not land (gh write refused?) — the transition HELD, the audit line is missing; add it by hand\n"
-              echo "  [$repo] ADR-102 midpoint: goal #${g} → assembly-complete via PR #${gasm}, labelled goal/post-launch, left OPEN${gbuck:+ (bucket #${gbuck})}"
+            # The two acts, the bucket lookup and every failure line live in
+            # `goal_enter_post_launch` above — this arm supplies only what is specific to the
+            # ASSEMBLY-PR key: which PR merged.
+            if goal_enter_post_launch "$slug" "$repo" "$g" \
+                 "🤖 **assembly-complete** — assembly PR #${gasm} merged. This goal is built as specified." \
+                 "assembly-complete via PR #${gasm}" \
+                 "assembly PR #${gasm} merged" \
+                 "assembly-complete"; then
               gacted="post-launch"
-            else
-              orphans="${orphans}[$repo] ⚠ goal #${g}: assembly PR #${gasm} merged but \`goal/post-launch\` could not be applied (label missing from the claim taxonomy? gh write refused?) — the goal is stuck pre-launch; the next scan retries\n"
             fi
           fi
         fi
@@ -2815,6 +2844,61 @@ EOF_GOVERNANCE
         gcounts="$(printf '%s\n' "$gfbody" | gf_parse_counts)"
         gtot="${gcounts% *}"; gdisp="${gcounts#* }"
         gundisp=$(( gtot - gdisp ))
+        # ── THE TREE-EMPTY KEY into post-launch — a `Base: master` GOAL (homelab#1450) ────────
+        # Runs BEFORE trigger (b) below and is the RETIRING EDGE (b) never had for a themed Goal.
+        # (b) is the operator's 2026-08-05 deadlock backstop and it must keep firing when a ruling
+        # is genuinely due; what it lacked was a way to STOP. An ordinary Goal retires it through
+        # `gpl` at assembly merge; a `Base: master` Goal (ADR-126 — batching lives in the level-2
+        # theme branches, so there is no assembly PR and deliberately no `Assembly-for:` trailer)
+        # had no such edge, and (b) re-summoned a reasoning session every tick from tree-empty
+        # until a human applied the verdict — 13 rides on Goal #1162, 11 of them ruling nothing.
+        # ADR-102's midpoint is TRUE at this moment ("shipping to production, awaiting a verdict"),
+        # so the scan writes it deterministically instead of paying a session to re-derive it.
+        # What this does NOT change: the goal stays OPEN, the three verdict terminals are
+        # untouched (they are read above, before and independent of `gpl`), and triggers (a)/(c)
+        # keep waking the checkpoint post-launch — a new store finding or a new undispositioned
+        # sprout still gets its ride. The recommendation channel is the post-launch play's own
+        # "say when a verdict looks due" leg, and `agents/board.sh` §VERDICT DUE now surfaces the
+        # goal to the human, which the pre-launch state never did.
+        # THE BASE READ IS THE ONE PARSER (ADR-122 (3), agents/issue_body.py) — block first,
+        # legacy `Base:` line second, and the LEGACY-GRAMMAR meter on stderr is deliberately not
+        # suppressed. Three outcomes, and the difference between them is the whole safety story:
+        #   • the parser FAILED (a malformed machine block, or python3/the parser unreachable) →
+        #     HOLD and report. An unreadable Base is not "master": rule #6, never fail INTO a
+        #     write, and this write is a state-machine transition on someone's Goal.
+        #   • no `Base:` at all → NOT malformed, just a pre-#1053 body. Nothing is written and the
+        #     behaviour is exactly what it was: (b) fires. The place that demands the line is the
+        #     decompose gate (homelab#1053), which refuses at queue time; retro-fitting that
+        #     refusal here would relabel every legacy goal's report surface for no new safety.
+        #   • `Base:` = the repo's default branch → the themed shape. Transition.
+        # Anything else (`goal/**`) keeps the assembly-PR key and is untouched, byte for byte.
+        # The `-z "$gverdict"` conjunct is a BELT, not a live branch: every verdict path above
+        # sets `gacted` and `continue`s, so it is already empty here. It is written anyway because
+        # this leg WRITES, and a future edit to the terminal legs must not be able to make a
+        # midpoint land on a goal a human has just ruled.
+        if [ "$gopen_n_ckpt" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ] && [ -z "$gverdict" ]; then
+          gbase_g="$(printf '%s' "$gbody" | python3 "${HERE}/issue_body.py" get Base --ref homelab#1450)" && gbase_rc=0 || gbase_rc=$?
+          if [ "${gbase_rc:-2}" -ne 0 ]; then
+            orphans="${orphans}[$repo] ⛔ goal #${g}: its \`Base:\` line is UNREADABLE (malformed machine block, or agents/issue_body.py is unreachable) — the tree-empty post-launch transition is HELD (rule #6: never fail INTO a write). Fix the block, or label the goal by hand.\n"
+          else
+            # the unit_lane_record trim idiom: leading + trailing whitespace, nothing else.
+            gbase_g="${gbase_g#"${gbase_g%%[![:space:]]*}"}"; gbase_g="${gbase_g%"${gbase_g##*[![:space:]]}"}"
+            if [ -n "$gbase_g" ] && [ "$gbase_g" = "${default_branch:-master}" ]; then
+              if goal_enter_post_launch "$slug" "$repo" "$g" \
+                   "🤖 **assembly-complete** — every child of this goal is closed and its adopted-open descendant set is EMPTY. This goal declares \`Base: ${gbase_g}\`, so it is a THEMED goal (ADR-126): its batching value landed in the level-2 theme branches, there is no assembly PR and deliberately no \`Assembly-for:\` trailer. The tree emptying IS its assembly-complete moment, so this transition is written here rather than at a merge (homelab#1450)." \
+                   "assembly-complete at tree-empty (Base: ${gbase_g} — themed goal, no assembly PR)" \
+                   "the descendant tree completed with \`Base: ${gbase_g}\`" \
+                   "post-launch"; then
+                # `gpl` is what trigger (b) reads: setting it retires (b) in THIS pass too, so the
+                # transition and the redundant summons never both happen on the same tick.
+                # `gacted` is past its `continue` here and is set only as the pass's own record of
+                # what the lane did — deliberately NOT a skip: (a)/(c) below still get to fire.
+                gpl=1
+                gacted="post-launch"
+              fi
+            fi
+          fi
+        fi
         gck=""
         [ "$gundisp" -ge "${GOAL_CHECKPOINT_N:-5}" ] && gck="findings ${gundisp} undispositioned"
         if [ "$gopen_n_ckpt" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ]; then

@@ -1,0 +1,14 @@
+CALL gh issue list --repo teststuffstash/circles --state all --limit 300 --json number,title,state,closedAt,parent,labels
+CALL gh pr list --repo teststuffstash/circles --state merged --limit 30 --json number,headRefName,body,mergedAt
+CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate --slurp
+CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate
+CALL gh api repos/teststuffstash/circles/issues/29/sub_issues
+CALL gh issue edit 29 --repo teststuffstash/circles --add-label goal/post-launch
+CALL gh issue comment 29 --repo teststuffstash/circles --body <assembly-complete comment — see agents/coordinator-scan.sh> **Where post-launch work goes:** sub-issue #77. Children there base `master` and carry NO `Base:` line — the goal branch dies at the assembly squash, and goal identity is this issue plus its budget, never the branch. Open descendants still carrying a `Base: goal/**` line need retargeting to master at the next `goal-checkpoint`.
+OUT   [circles] ADR-102 midpoint: goal #29 → assembly-complete at tree-empty (Base: master — themed goal, no assembly PR), labelled goal/post-launch, left OPEN (bucket #77)
+OUT GACTED post-launch
+OUT UNITS <none>
+OUT ORPHANS <none>
+OUT REACHED: end
+ERR LEGACY-GRAMMAR Base homelab#1450
+RC 0
