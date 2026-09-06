@@ -312,7 +312,7 @@ current truth if this table and the code ever disagree:
 | `goal-decompose` trigger | `coordinator-scan.sh` — emitted instead of `queued-dispatch`, before recipe selection |
 | both plays | `agents/coordinator/README.md` §`goal-decompose`, §`goal-review` |
 | `task/goal` label | the claim taxonomy (Composition). ⚠ GitHub caps label descriptions at **100 chars** and `IssueLabels` is authoritative — one over-long description freezes the taxonomy for every claim-owned repo |
-| which ancestor IS the goal | `goal_resolve_ancestor` in `agents/goal-budget.sh` — ONE walk, both callers, bound 6, stopping at a `task/goal` label **or** a machine-readable `Budget:` line (homelab#367, pinned by the `goal-ancestor-*` replay family) |
+| which ancestor IS the goal | `goal_resolve_ancestor` in `agents/goal-budget.sh` — ONE walk, both callers, bound 6, stopping at a `task/goal` label, or at a machine-readable `Budget:` line ONLY when the issue has no native parent to climb past (homelab#367; narrowed by PR#1398 — an ordinary work item carrying its own `Budget:` under a Goal is not the Goal; pinned by the `goal-ancestor-*` replay family) |
 | bounded goal context · parent on child units | `agent-session.sh` injects **Goal + Acceptance only**; the scan's 5th unit field carries `parent=<n>` |
 | Σ(child caps) ≤ `Budget:` | `agent-session.sh` pre-flight, over open AND closed children, summing `cap_usd` (what the key ALLOWS, not what it forecasts) |
 | `goal-review` | `coordinator-scan.sh`, stateless: a child closed after the loop's newest comment on the goal |
