@@ -1677,6 +1677,30 @@ Longhorn footprint from the same metal disks.
 **Consequences:** layout ops get a version-disciplined script (apply-once-per-version, single
 RPC host); `docs/garage.md` §Target architecture carries the mechanism; FU-137 tracks
 delivery; SERVICES.md unchanged (endpoints stay).
+**Addendum (2026-09-06): metadata reclamation is a CONSEQUENCE of rf ≥ 2 — rotation, not
+compaction.** LMDB never returns pages to the filesystem, and its only compaction
+(`mdb_env_copy2(MDB_CP_COMPACT)`, what `garage meta snapshot` calls) writes a **new** file — so
+reclamation is always copy-then-swap, which at rf=1 means stopping the store. **Zero-downtime
+reclamation is therefore impossible at rf=1 by construction, whatever the automation.** At
+rf ≥ 2 the decision above already names the primitive — corruption on one node becomes `delete +
+garage repair tables` (resync from peers), not an incident — and a *deliberate* delete is the
+same operation: drop one zone's metadata, let it resync from the other two, move on. Quorum
+(2/3) serves throughout and the rebuilt env is fresh, so leaked pages go by construction; you
+never compact, you discard. This ADR framed that as incident recovery — running it as a
+**scheduled, condition-triggered maintenance loop** is the new part, and it needs three things
+this decision does not carry: (a) a **measured** full-table resync cost (nothing in the corpus
+has one; the 2026-08-24 incident's ~20.3 KB/object figure is the S3-API restore path, not a
+Merkle sync, and does not transfer); (b) a trigger off `GarageDiskFillingUp` rather than a cron,
+so cadence follows whatever churn the workload produces; (c) a health gate that refuses to
+rotate while another zone is degraded or resyncing. **Not armed while the third zone is
+`proxmox`/wk-02** — rotating metadata against a thin-pool VM that has hit 100% four times
+reopens the 2026-08-24 class, so the third PHYSICAL zone (`storage-ledger.md` §Requirements,
+class *need*) gates it. Standing intent recorded with it: **metadata maintenance must be
+unattended** (operator, 2026-09-06) — which is what makes that disk a purchase, not a
+preference. What forced it: on 2026-09-06 the live LMDB was **25.36 GB against a 3.95 GB
+compacted snapshot of the same data** — 84% of the meta volume leaked pages, ratcheting
+~2.6 GB/day while real metadata grew ~50 MB/day. Mechanism: `docs/garage.md` §Metadata
+reclamation. FU-137 carries delivery.
 
 ### ADR-116 — FU ids are stable coordinates: provenance refs never scrub (the name-anchor ruling)
 
