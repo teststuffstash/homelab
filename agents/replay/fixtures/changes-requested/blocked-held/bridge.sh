@@ -10,6 +10,13 @@ repo="$IN_REPO"
 prsjson="$(cat "$REPLAY_WORLD/gh/pr-list.json")"
 orphans=""
 units=""
+# ── stubs ── variables and functions the changes-requested clause reads from the enclosing scope.
+# The FU-146 per-item hold (live worker pod check) and the BLOCKED-SOURCE hold both key on the
+# PR's linked issue; this PR has no `Fixes #N` link, so both fall through. The WIP gate is clear.
+# The blocked-on probe runs against the recorded pr-view world.
+WIPPODS_JSON='{"items":[]}'
+wip_busy=""
+sess_holds() { return 1; }
 # ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
 # so a harness running one extracted block has no flush to assert on.
 item_class_push() { :; }
