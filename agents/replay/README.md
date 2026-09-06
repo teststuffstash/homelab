@@ -519,7 +519,7 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   issue, no output changed, only the reads moved. Its `post.sh` prints `GATE SUBJECT: #<n>`, the
   value the next clause consumes, which is how a resolution fixture asserts on enforcement it does
   not run; and `goal-ancestor-unlabelled-budget` exists purely to keep the walk's stop condition
-  (a `task/goal` label OR a `Budget:` line) from decaying into an AND — a CONSTRUCTED world, and
+  (a `task/goal` label, OR a `Budget:` line on a PARENTLESS issue — PR#1398 narrowed the line half) from decaying into an AND — a CONSTRUCTED world, and
   it says so, because a mis-authored goal is exactly what you cannot count on finding live.
 
 ## When the clause lives inside a manifest
