@@ -7324,3 +7324,47 @@ first live ADR-110 maintenance session before the ADR existed.
   PENDING on today's history (value 61 > 40; fires 12:07Z, ~15 min after load) — the belt
   proves itself on the incident that built it. Meta-state bullet closed. Bookkeeping pushed.
 
+## 2026-09-06 12:40–14:00Z — wk-metal-04 SATA-cable window (operator at the box; not a loop tick)
+
+- **Ask:** "is there a deterministic script for cordon → drain → shutdown with Longhorn/Garage
+  checks?" There wasn't (only `devbox run cordon/uncordon`, the WoL recipe, the Proxmox full-stop
+  window). **PR#1474 (MERGED 13:00Z):** `scripts/node-maintenance.sh {preflight|down|up}` +
+  `devbox run node-maintenance` + runbook §Storage section. Preflight on wk-metal-04: green — 4
+  bulk replicas here (Garage data + 3 registry mirrors) each with a running sibling on wk-metal-01,
+  nothing attached, only a 2-replica cloudflared pod as non-DaemonSet workload; `down` drained +
+  `talosctl shutdown` 12:46Z (cloudflared back 2/2).
+- **`up` 13:11Z:** WoL from pve did NOT wake the box — it had been UNPLUGGED for the swap (NIC
+  unarmed after an AC cut); operator pressed the button; Ready 13:19Z (~470 s), uncordoned.
+  **SATA: 6.0 Gbps, 0 ATA errors since boot** (was 3.0 Gb/s + 1,867 CRC errors — the
+  storage-ledger §2026-09-05 diagnosis; meta-state OPERATOR (1) closed).
+- **Longhorn after return:** the window outlasted `replica-replenishment-wait-interval` (600 s) →
+  replicas rebuilt elsewhere (mirrors doubled up on wk-metal-01), old dirs came back as 4
+  `orphans.longhorn.io` still counting as used space; the 141G stale Garage copy pushed the disk
+  under the 25 % min-free rule → Garage's own rebuild onto wk-metal-04 failed "insufficient
+  storage". Root cause of the orphans staying: **tofu's `orphanAutoDeletion = true` is a dead key
+  since Longhorn 1.9's rename** (not even rendered into `longhorn-default-setting`). Deleted the 3
+  mirror orphans by hand → Garage replica scheduled on wk-metal-04 within 20 s, rebuilding.
+  **PR#1475 (fix lane, armed):** `orphanResourceAutoDeletion = "replica-data"` + `up` reports
+  orphans (`DELETE_ORPHANS=1`) + the 120-s "press the button" WoL hint + runbook lessons; targeted
+  plan = 1 in-place change (values key only); apply after merge.
+- **Seat misses:** `$K="devbox run -- kubectl"` unsplit under zsh (the card's no-word-split gotcha,
+  again); orphan deletes by a jq-truncated name (`.[0:40]`) → NotFound; ran `up` from master before
+  #1474 was pulled (devbox script not found).
+- **13:40–14:00Z, operator-pointed:** codeowner read of **PR#1457** (PyPI cache consumers: launcher
+  env on python-profile rides + `.40.34` baseline VIP leg + identity leg; bot APPROVED after 5
+  rounds) — approve-worthy, one wording nit (the card's "fallback" is manual, not automatic); the
+  gate itself NOT executed (ADR-110: this session is not corpus-loaded — operator approves or asks
+  for the load). The storage read behind it: the cache PVC sat on `std` (the 09-05 pin, nix-cache
+  shape) while ADR-091 puts mirror caches on `longhorn-bulk`; a warm 17 G replica would spend most
+  of thinkcentre's 20 G scheduling headroom (wk-02's std disk already below its floor).
+  **Operator: move it now while empty → PR#1477 MERGED**, live PVC delete + ArgoCD recreate at
+  52 K used: new volume `pvc-14edd706` on bulk (wk-metal-01 + wk-metal-04), pod rolled, VIP
+  `/healthz` 200, `/simple/requests/` 200 MISS, old volume reclaimed, app Synced/Healthy.
+  **PR#1476 (armed):** ledger tier-table refresh (std 61→71 % committed in 12 d) + the PyPI
+  entry + the cable-swap confirmation + **the rebuild-as-benchmark finding: wk-metal-04's SA400
+  writes 26 MB/s at 486 ms latency / 76 % util (source 7 ms, NIC 22 %, 0 ATA errors) — the cable
+  was a fault but not the only one; rf=2 Garage still waits on this disk** (levers: FU-137 rf=3,
+  a first-ever TRIM of the never-trimmed drive, replace). Operator asked whether the fstrim
+  CronJob covers metal: no (pve-VM scope by design) — a fifth `nodeName` block reuses it; test
+  as a one-off AFTER the Garage rebuild (~15:30Z), weekly cadence if kept (not filed; FU-093
+  extension if pursued).

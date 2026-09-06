@@ -20,18 +20,14 @@ never the session's arc — that is TICK-LOG's.)
   #1431's list) — = #1460 leg 4. **PR#1461** = #1424 half 1 (per-base doc currency; armed; left-behind on #1424: workflow.md:13/:63 per-repo prose + merge-path item 3's retired "up-to-date" predicate — one-line edits, fold into #1424's second half). **PR#1458** dirty-skips re-land armed (6a merged → pushed). oracle-fleet PR#471 ARMED 21:07Z (was an un-armed seat PR — FU-079). Next originals: #1420 (card → three acts; needs 1b merged) →
   #1424 (currency; after 6a) — neither pre-drafted this sitting (both overlap in-flight
   branches). #1423 HELD. #1452 blocked on #1422.
-- **⚑ OPERATOR (physical / decisions), from this sitting:** (1) **wk-metal-04 SATA cable swap**
-  — the Garage data volume's 150 ms/write is that disk's degraded link (3.0 of 6.0 Gb/s, 1,867
-  CRC errors, 23 resets; SMART health fine) — `storage-ledger.md` §2026-09-05; verify `sata_spd`
-  = 6.0 after. Same node's PSI kills (cilium/longhorn-manager 16:42Z) = FU-155 class, same cause.
-  (2) **CI starvation**: one org-wide ARC set of 3 slots (FU-218); homelab ≥300 runs today
+- **⚑ OPERATOR (physical / decisions), from this sitting:** (1) **CI starvation**: one org-wide ARC set of 3 slots (FU-218); homelab ≥300 runs today
   starved oracle (queue p90 22–40 min). Levers ruled/filed: #1452 (fair, platform-native);
   per-stack runner scale sets as the fairness knob (not filed — say so if wanted); wk-metal-04's
   16 GB as capacity after the cable (kata reservation = operator call). App-side: oracle-fleet
-  #466/#467 (resume + bundle the 248k PUTs). (3) #1308 leg-1 APPLY on ci-runner-01 (unchanged).
-  (4) FU-215 Unbound capture (unchanged). (5) Loop health: `AgentRunPhaseSlow` deferred by the
+  #466/#467 (resume + bundle the 248k PUTs). (2) #1308 leg-1 APPLY on ci-runner-01 (unchanged).
+  (3) FU-215 Unbound capture (unchanged). (4) Loop health: `AgentRunPhaseSlow` deferred by the
   responder 17:02Z and never re-triaged (DEFERRED-STUCK — the FU-113(b) retry chain); read the
-  respond workflow retries. (6) Seat miss to remember: a zsh `set -- $var` classifier cancelled
+  respond workflow retries. (5) Seat miss to remember: a zsh `set -- $var` classifier cancelled
   six LIVE CI runs (all re-run) — the card's no-word-split gotcha bites the seat too.
 - **⚑ BOARD (09-05 ~09:45Z — see NEXT for the four open seat/loop PRs; earlier read follows):** in review #1386 (re-review after the seat's fix push) ·
   **18:20–19:00Z sweep:** **#1409 codeowner-APPROVED 18:23Z** (the #1403 fix; auto-merges on
