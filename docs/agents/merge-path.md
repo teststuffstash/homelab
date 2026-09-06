@@ -125,8 +125,9 @@ Four deterministic pieces around the existing gates:
    WorkflowTemplate → `reviewer-session.sh <repo> <pr>` for that exact PR, near-instant. A `*/15`
    **CronWorkflow backstop** (the old `*/5` reflex, generalized) re-lists as a level-triggered
    catch-all for anything the edge missed: across the agent repos, list open PRs; filter
-   **green AND up-to-date AND auto-merge-armed AND
-   unapproved AND no changes-requested** (*unapproved* = the reviewer bot has no approval at the
+   **green AND auto-merge-armed AND
+   unapproved AND no changes-requested** (up-to-date is NOT a precondition since ADR-125 —
+   BEHIND-but-green is admitted for a first review, DIRTY still skips; §Why update-before-review) (*unapproved* = the reviewer bot has no approval at the
    current head — NOT GitHub's `reviewDecision`, which on code-owner-gated repos stays
    `REVIEW_REQUIRED` until the human owner approves; see the edge case below); pick the oldest
    **one per (repo, base) lane** (ADR-125 — within a lane, reviews
