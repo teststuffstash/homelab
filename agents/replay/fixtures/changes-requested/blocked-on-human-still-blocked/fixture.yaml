@@ -1,0 +1,28 @@
+# changes-requested clause with a `blocked-on: human` marker — both directions
+# (homelab#1427)
+#
+# CONDITION UNDER REPLAY. Pins two directions:
+# - PR #456 has reviewDecision=CHANGES_REQUESTED and a terminal ruling with `blocked-on: human`.
+#   No human comment has appeared since; the clause must report "BLOCKED-ON" instead of dispatch.
+# - PR #457 also has `blocked-on: human`, but a human comment appears after the marker,
+#   resolving it. The clause must clear the hold and proceed to dispatch.
+#
+# THE CONTRACT:
+#   1. `pr_blocked_on_check` is called with the fetched PR JSON.
+#   2. For PR #456: No UNIT is emitted; one ORPHAN line reports the blocked state.
+#   3. For PR #457: The check clears, allowing dispatch; one UNIT is emitted.
+name: changes-requested-blocked-on-human-still-blocked
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab

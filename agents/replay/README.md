@@ -177,6 +177,7 @@ is stale, so it cannot drift the way the prose register did.
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `changes-requested/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-failure-run-select/ci-failure-run-select` | actions | - | `agents/agent-session.sh` | MP-T12 |

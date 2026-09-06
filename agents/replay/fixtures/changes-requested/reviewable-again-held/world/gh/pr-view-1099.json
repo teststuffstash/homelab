@@ -1,0 +1,18 @@
+{
+  "headRefOid": "bbbbbbbb22222222222222222222222222222222",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "statusCheckRollup": [
+    {"__typename":"CheckRun","name":"e2e","status":"COMPLETED","conclusion":"FAILURE"},
+    {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"}
+  ],
+  "reviews": [
+    {"author":{"login":"homelab-reviewer"},"state":"CHANGES_REQUESTED","submittedAt":"2026-09-04T10:00:00Z"}
+  ],
+  "comments": [
+    {"author":{"login":"homelab-agents-1234"},"body":"the fix round completed with findings","createdAt":"2026-09-04T11:00:00Z"},
+    {"author":{"login":"homelab-agents-1234"},"body":"blocked-on: human","createdAt":"2026-09-04T12:00:00Z"}
+  ],
+  "commits": [
+    {"oid":"bbbbbbbb22222222222222222222222222222222","messageHeadline":"fix: attempt to resolve findings"}
+  ]
+}
