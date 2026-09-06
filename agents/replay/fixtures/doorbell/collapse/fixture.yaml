@@ -21,6 +21,11 @@
 #                     (today's behavior — the failure mode is latency, never a lost edge).
 #   jail-inert        no workflow identity (DOORBELL_WF_SELF empty) or no real namespace —
 #                     nothing to absorb against, nothing touched.
+#
+# The live list is label-scoped (`-l workflows.argoproj.io/completed!=true`, the 2026-09-06
+# switchboard OOM) — the kubectl stub drops `-l <value>` from its world key, so the recorded
+# `get-workflows.json` keeps its Succeeded twin: the jq phase filter is asserted as the belt
+# behind the selector, not made redundant by it.
 name: doorbell-collapse
 mode: actions
 source: agents/coordinator-scan.sh
