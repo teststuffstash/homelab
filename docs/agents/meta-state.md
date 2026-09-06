@@ -34,7 +34,12 @@ never the session's arc — that is TICK-LOG's.)
   per-stack runner scale sets as the fairness knob (not filed — say so if wanted); wk-metal-04's
   16 GB as capacity after the cable (kata reservation = operator call). App-side: oracle-fleet
   #466/#467 (resume + bundle the 248k PUTs). (2) #1308 leg-1 APPLY on ci-runner-01 (unchanged).
-  (3) FU-215 Unbound capture (unchanged). (4) Loop health: `AgentRunPhaseSlow` deferred by the
+  (3) FU-215 Unbound capture (unchanged). (3b) **BUY — wk-metal-04's SA400 is the Garage write
+  bottleneck and the cable did NOT fix it** (rebuild on the healthy link: 2 h 10 min flat at
+  24–32 MB/s = <5 % of the link; MX500 A/B = 0.6–18 ms — `storage-ledger.md` §2026-09-06, PR#1484).
+  Replace with a **DRAM-equipped** drive; buying criterion for ANY Garage/Longhorn data disk is
+  DRAM cache, not €/GB. Pairs with the FU-137 third-zone box (shortlist +
+  prices: `uploads/hinnavaatlus-shortlist.md`, gitignored) — likely TWO drives. (4) Loop health: `AgentRunPhaseSlow` deferred by the
   responder 17:02Z and never re-triaged (DEFERRED-STUCK — the FU-113(b) retry chain); read the
   respond workflow retries. (5) Seat miss to remember: a zsh `set -- $var` classifier cancelled
   six LIVE CI runs (all re-run) — the card's no-word-split gotcha bites the seat too.
@@ -102,7 +107,12 @@ never the session's arc — that is TICK-LOG's.)
   re-adopt the live snippet or accept the replace at a quiet moment; apply TARGETED until
   then · Garage: delete `backups/garage-meta-20260825-prerebuild/` (20 GB) +
   `garage-meta-forensics/` (due since ~09-01); meta volume rides rf=1 on wk-02 (FU-137's
-  ~08-31 deadline PAST — an infra sitting); the 3 ERT giants STAY (docs/garage.md
+  ~08-31 deadline PAST — an infra sitting). **⚑ 2026-09-07 OPERATOR-OWNED: meta is at 80 % and
+  it is NOT growth** — 25.36 GB live LMDB vs a 3.95 GB compacted snapshot, 84 % leaked pages,
+  ~57 h runway at the 09-06 rate. Attended snapshot-swap (fresh `garage meta snapshot` → stop →
+  swap → start; §Durability recipe, never a stale/in-progress snapshot). **While the store is
+  down, MEASURE a full-table `garage repair tables` resync** — nobody has that number and it
+  gates whether the ADR-114 rotation loop can be armed (garage.md §Metadata reclamation); the 3 ERT giants STAY (docs/garage.md
   §Durability).
 - **⚑ GOALS — verdicts are the operator's, the seat recommends:**
   - **#818 G-B — HELD with a posted 4-clause verdict condition** (teeth drills deferred to
