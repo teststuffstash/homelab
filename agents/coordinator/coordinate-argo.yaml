@@ -215,6 +215,10 @@ spec:
 # already-routed ring (#994), finish the capacity fan-out, or resolve a repo-dumb ring to its
 # stack's doorbell — and exits before any GitHub listing. No mutex, no subscription semaphore
 # (nothing here scans or spawns), and the memory limit is sized for a clone + jq, not a board sweep.
+# That sizing assumes the scan preamble's doorbell-collapse lists only NON-TERMINAL workflows
+# (label-scoped since 2026-09-06) — an unscoped list of this namespace's retained history is
+# ~50 MB of JSON and OOMKilled 153 runs in a row at 512 Mi, silently
+# (docs/incidents/2026-09-06-switchboard-oom-silent-failures.md).
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:

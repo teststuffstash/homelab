@@ -1,7 +1,7 @@
-CALL kubectl -n circles-agents get workflows -o json
+CALL kubectl -n circles-agents get workflows -l workflows.argoproj.io/completed!=true -o json
 CALL kubectl -n circles-agents delete workflow coordinate-perstack-abc12 --ignore-not-found
 CALL kubectl -n circles-agents delete workflow coordinate-xyz99 --ignore-not-found
-CALL kubectl -n circles-agents get workflows -o json
+CALL kubectl -n circles-agents get workflows -l workflows.argoproj.io/completed!=true -o json
 OUT REACHED: full scan absorbs pending siblings (and only them)
 OUT doorbell-collapse: absorbed pending ring circles-agents/coordinate-perstack-abc12 — this scan's re-list covers it
 OUT doorbell-collapse: absorbed pending ring circles-agents/coordinate-xyz99 — this scan's re-list covers it
