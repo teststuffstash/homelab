@@ -21,8 +21,9 @@ never the session's arc — that is TICK-LOG's.)
   (ROADMAP S8 row, FSM rows for #1481's second key); #1423 HELD. **Bot-waits at exit, all
   armed, land unattended:** **PR#1478** (#1472 C6 hold — CR dismissed after declaring the
   footprint on #1472; when it MERGES clear `agent/error` on oracle-fleet#397, do NOT re-queue —
-  the r6 salvage branch is the operator's delete-first call) · **PR#1480** (queued-panel join —
-  CR fixed, re-review pending; then the operator's targeted tofu apply) · **PR#1468** (#1444 —
+  the r6 salvage branch is the operator's delete-first call) · **PR#1480** (queued-panel join + the PRs-waiting armed/merge_state columns —
+  CR fixed, re-review pending; then the operator's targeted tofu apply) · **PR#1482** (exporter
+  armed/merge_state labels — ArgoCD syncs on merge; the panel columns fill after it) · **PR#1468** (#1444 —
   seat-approved, CI on the refreshed head, bot verdict pending).
 - **⚑ OPERATOR (from the 2026-09-06 corpus session):** (0) **`tofu apply` targeted at the
   `agent-running` grafana_dashboard** once the queued-panel PR (fix/agent-running-queued-why —

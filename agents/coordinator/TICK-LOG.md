@@ -7436,3 +7436,11 @@ first live ADR-110 maintenance session before the ADR existed.
   subagent-handover-misses.md), now on loop-FILED issues too: the harvest play writes `Touches:`,
   the `agent/error`/ADR-119 filing paths do not. **Subagent lesson (ledger):** a prompt fact true
   on master today (`ib_get`/`IB_PY`) was false at the branch point — #1459 landed mid-ride.
+- **16:0xZ operator ask #2 — "PRs waiting panel: sleep-tracking 145/146 in reflex queue for a
+  while, no column why":** both are the operator's own un-armed seat PRs from 09-05 21:27Z —
+  invisible to the reflex/updater/auto-merge by design (FU-079); the exporter's `reflex_wait`
+  predicate never tested arming. **PR#1482** (exporter, armed): `armed` + `merge_state` labels on
+  `reflex_wait`/`codeowner_park` (same GraphQL walk, zero extra calls; consumers aggregate by
+  repo/number — additive). **PR#1480** gained the panel columns + a description naming the two
+  reasons (armed=false → arm or park; dirty → skipped). #145/#146 themselves: arm or close is the
+  sleep sitting's call — not touched.
