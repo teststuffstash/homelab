@@ -163,3 +163,16 @@ everything derivable once the transcript link exists. The rules that keep it che
   file the body names or the brief will need, and widen the ISSUE first — the reviewer's escape
   check reads the issue, never the dispatch prompt. Same check goal-lint now runs for Goal children
   (PR#1401 itself) — the seat is the one author surface without it.
+- **2026-09-06 (#1450 option-B chunk, PR#1481):** the dispatch prompt named helpers (`ib_get`,
+  `IB_PY`) that existed on MASTER at dispatch time but not at the subagent's BRANCH POINT — PR#1459
+  merged mid-ride and the updater's refresh then broke the first commit. Cost: one red CI cycle,
+  one re-record. RULE (seat, dispatch-side): a code-anchor claim in a chunk prompt is a claim about
+  the branch point — say "on origin/master as of <sha>" and tell the chunk to re-verify anchors
+  after any updater refresh; the chunk did the right thing by re-basing its read on the shared
+  contract. **RESIGHT of the 2026-09-05 "widen the ISSUE first" rule, twice on 2026-09-06 (#1427 →
+  PR#1466, #1472 → PR#1478):** both issues were LOOP-filed (an arbitrate ruling, the `agent/error`
+  filing path) with no `Touches:`, and the seat opened/landed PRs from them without reconciling the
+  declaration — one bot round + one dismissal each. The harvest play writes `Touches:`; the
+  `agent/error` and ADR-119 filing paths do not — a filing-surface gap to weigh at the next
+  design-agents sitting (subtraction first: does the reviewer's escape belt need a declaration at
+  all on a loop-filed issue whose PR is seat-authored and codeowner-gated?).
