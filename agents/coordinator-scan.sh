@@ -2761,15 +2761,21 @@ EOF_GOVERNANCE
         # is the container's, never the filer's: the store is one machine comment on THIS issue
         # (agents/epic_dispositions.py, `<!-- epic-dispositions v1 -->`), written only by the
         # goal-checkpoint play, the stint closeout act and the bucket create below.
-        # ⚠ FU-084 (API pool): this is a SECOND GET of the same comments ENDPOINT `_gf_find`
-        # fetches below — the two stores are different markers on the same issue, and folding
-        # them into one fetch means reshaping goal-findings.sh's read, which #1419 held out of
-        # scope. One extra GET per OPEN goal per tick; fold at the S8 closeout. Note the two
-        # reads do NOT pass the same flags: this one is `--paginate --slurp` (see
-        # epic_dispositions.py §_parse_comments_payload — bare `--paginate` emits back-to-back
-        # JSON documents and is unparseable past 100 comments), while goal-findings.sh still
-        # reads bare. Folding them has to settle that first.
-        gdisp_json="$(python3 "${HERE}/epic_dispositions.py" read "$slug" "$g" 2>/dev/null)" && gdisp_rc=0 || gdisp_rc=$?
+        # ⚠ FU-084 (API pool): both dispositions and findings stores live on the same issue.
+        # They share one comments fetch, both take `--paginate --slurp`, and `_gf_find` receives
+        # the pre-fetched payload as $3 (#1439). One GET per OPEN goal per tick.
+        gcomments="$(_gf_comments "$slug" "$g" 2>/dev/null)" || gcomments=""
+        if [ -z "$gcomments" ]; then
+          # The PREFETCH failed — a goal with no comments serves "[]", which is non-empty, so
+          # empty here means the GET (or its jq) failed, never "no comments". Both consumers
+          # read an empty payload as "no cache given" and re-fetch live, which would turn one
+          # failed GET into three against an endpoint that is already failing — the FU-084
+          # metric this fold exists to cut, inverted exactly when it matters (bot review,
+          # PR#1462). Report unreadable off the one failure instead of retrying twice.
+          gdisp_rc=2; gdisp_json=""
+        else
+          gdisp_json="$(EPIC_DISPOSITIONS_COMMENTS="$gcomments" python3 "${HERE}/epic_dispositions.py" read "$slug" "$g" 2>/dev/null)" && gdisp_rc=0 || gdisp_rc=$?
+        fi
         if [ "${gdisp_rc:-2}" -ne 0 ] || [ -z "$gdisp_json" ]; then
           # rule #6, never fail INTO a dispatch: an unreadable store counts as "no rows" for the
           # COMPLETION predicate (which only ever shrinks the count, so it cannot invent a
@@ -2830,7 +2836,14 @@ EOF_GOVERNANCE
                   | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)] | length' 2>/dev/null || echo "")"
         case "$gundisp_n" in ''|*[!0-9]*) gundisp_n=0;; esac
         set -- $gdesc; gtotal_n=$#
-        _gf_find "$slug" "$g" && gf_rc=0 || gf_rc=$?
+        if [ -n "$gcomments" ]; then
+          _gf_find "$slug" "$g" "$gcomments" && gf_rc=0 || gf_rc=$?
+        else
+          # Same failed prefetch as above — 2 = UNREADABLE, which the burn-down write below
+          # already gates on. Clearing GF_ID/GF_BODY is load-bearing: they are globals and would
+          # otherwise carry the PREVIOUS goal's store into this iteration.
+          GF_ID=""; GF_BODY=""; gf_rc=2
+        fi
         gfbody="$GF_BODY"
         gbd="${gopen_n} open / ${gclosed_n} closed of ${gtotal_n} descendants"
         gcur="$(printf '%s\n' "$gfbody" | awk '/^burn-down:/{sub(/^burn-down: /,""); print; exit}')"

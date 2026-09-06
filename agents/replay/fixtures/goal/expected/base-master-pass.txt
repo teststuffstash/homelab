@@ -2,7 +2,6 @@ CALL gh api repos/teststuffstash/circles/issues/301/events --paginate --jq [.[] 
 CALL gh issue list --repo teststuffstash/circles --state all --limit 300 --json number,title,state,closedAt,parent,labels
 CALL gh pr list --repo teststuffstash/circles --state merged --limit 30 --json number,headRefName,body,mergedAt
 CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate --slurp
-CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate
 CALL gh pr list --repo teststuffstash/circles --state merged --limit 30 --json number,headRefName,body,mergedAt
 OUT   [circles] goal #29: CHECKPOINT due (findings 5 undispositioned + child-set complete pre-launch; store 6 total / 1 dispositioned)
 OUT GACTED <none>
