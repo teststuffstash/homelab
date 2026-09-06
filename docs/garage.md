@@ -112,10 +112,13 @@ sharp edge is the **meta volume** — LMDB on `longhorn`, tiny next to the data,
 the ~60 GB of blocks unreadable. **30Gi with `numberOfReplicas: 1` (wk-02) since 2026-08-25**: it
 was 10Gi/2 replicas until the Tier-3 restore filled it, and the `std` tier had no disk that could
 take a second grown replica (hp-01 sits below Longhorn's 25% floor), so redundancy was traded for
-the headroom to finish. Both halves come back with the ADR-114 build-out — **FU-137**, whose
-options widened on 2026-08-25: the env rebuild below took the DB from 18.1 GiB to 1.6 GiB, so the
-volume now sits at 6% and a second replica no longer needs a disk that can hold 30Gi of mostly
-leaked pages.
+the headroom to finish. Both halves come back with the ADR-114 build-out — **FU-137**. The
+2026-08-25 env rebuild below took the DB from 18.1 GiB to 1.6 GiB (6% of the volume), which
+briefly widened FU-137's options — a second replica would not have needed a disk able to hold
+30Gi of mostly leaked pages. ⚠ **That window has closed: the volume was back at 80% by
+2026-09-06** (25.36 GB live against a 3.95 GB compacted snapshot — 84% leaked pages again), so
+size the second replica against the live figure, not the post-rebuild one. Why it recurs and
+what actually ends it: §Metadata reclamation below.
 
 Two consequences worth holding:
 
