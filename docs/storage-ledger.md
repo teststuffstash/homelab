@@ -270,9 +270,9 @@ joins wk-02 as unschedulable and new std volumes can only place on hp-01's two d
 On `bulk` the same cache is noise (190 G / 288 G free on the two disks; wk-metal-04's 161 G
 reservation already protects its image store). The cheapest moment to move it is while it is empty
 — a `storageClassName: longhorn-bulk` PVC recreate (the field is immutable) costs nothing today
-and a day of re-warm later. Not done in the PR that wired the consumers (#1457 does not touch the
-PVC); operator call, since the 09-05 pin was operator-approved. Requirement-register shape:
-*want* — "caches on the re-warmable tier", pointer this section.
+and a day of re-warm later. **Moved the same day (operator-directed, 2026-09-06):** `storageClassName: longhorn-bulk` via the
+PVC delete + ArgoCD recreate, at 56 K used — nothing to re-warm. The std-tier numbers above are
+what it would have cost.
 
 ## Build
 
