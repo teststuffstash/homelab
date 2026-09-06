@@ -1483,6 +1483,7 @@ spec:
                     - 192.168.40.20/32 # docker.io mirror VIP
                     - 192.168.40.21/32 # ghcr mirror VIP
                     - 192.168.40.31/32 # mcr.microsoft.com mirror VIP (2026-08-26, the Playwright image)
+                    - 192.168.40.34/32 # pypi.org mirror VIP (FU-048) — belt; identity leg below
                   toPorts:
                     - ports:
                         - { port: "80", protocol: TCP }
@@ -1518,6 +1519,10 @@ spec:
                 - toEndpoints: # `devbox add` resolves via the search proxy (FU-118b)
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: devbox-search
+                - toEndpoints: # PyPI pull-through cache (FU-048) — the DNAT'd primary match for the
+                    # .40.34 VIP belt above. Its own namespace, not registry-cache.
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: pypi-cache
                 - toEndpoints: # transcript uploads (agent-finalize)
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: garage
