@@ -112,10 +112,13 @@ sharp edge is the **meta volume** — LMDB on `longhorn`, tiny next to the data,
 the ~60 GB of blocks unreadable. **30Gi with `numberOfReplicas: 1` (wk-02) since 2026-08-25**: it
 was 10Gi/2 replicas until the Tier-3 restore filled it, and the `std` tier had no disk that could
 take a second grown replica (hp-01 sits below Longhorn's 25% floor), so redundancy was traded for
-the headroom to finish. Both halves come back with the ADR-114 build-out — **FU-137**, whose
-options widened on 2026-08-25: the env rebuild below took the DB from 18.1 GiB to 1.6 GiB, so the
-volume now sits at 6% and a second replica no longer needs a disk that can hold 30Gi of mostly
-leaked pages.
+the headroom to finish. Both halves come back with the ADR-114 build-out — **FU-137**. The
+2026-08-25 env rebuild below took the DB from 18.1 GiB to 1.6 GiB (6% of the volume), which
+briefly widened FU-137's options — a second replica would not have needed a disk able to hold
+30Gi of mostly leaked pages. ⚠ **That window has closed: the volume was back at 80% by
+2026-09-06** (25.36 GB live against a 3.95 GB compacted snapshot — 84% leaked pages again), so
+size the second replica against the live figure, not the post-rebuild one. Why it recurs and
+what actually ends it: §Metadata reclamation below.
 
 Two consequences worth holding:
 
@@ -272,6 +275,52 @@ field → `topology.kubernetes.io/zone`: physical box = zone, every pve-pool VM 
   write key can delete irreversibly and replication propagates it): in-cluster CronJob syncing
   objects to a std-tier Longhorn PVC (not the Garage zones), pushgateway-alerted. No manual
   step, no external creds. Offsite stays parked (FU-137).
+
+### Metadata reclamation — rotation, not compaction (ADR-114 addendum, 2026-09-06)
+
+**There is no in-place compaction for LMDB, and there never will be.** The only reclamation
+upstream offers is `mdb_env_copy2(…, MDB_CP_COMPACT)` — what `garage meta snapshot` calls — and
+it writes a *new* file; it cannot shrink the live one. Every reclamation is therefore
+copy-then-swap, and with one copy of the metadata that means stopping the store. This is why
+`GarageDiskFillingUp` has been something to react to: at rf=1 there is no other move.
+
+The file is a **high-water mark**: freed pages are reused but never returned, so any sustained
+write churn ratchets it upward regardless of how little data is live. Measured 2026-09-06 —
+live `data.mdb` **25.36 GB**, that day's compacted snapshot of the same data **3.95 GB**: 84% of
+the volume was leaked pages, growing ~2.6 GB/day while the compacted size grew ~50 MB/day. It is
+the FU-184 class recurring in its mild form: `MDB_CP_COMPACT` *succeeds* here (snapshots landed
+06:11Z and 12:45Z), unlike 2026-08-24 where it refused outright, so the env is healthy and
+nothing needs `lmdb-rebuild.py`.
+
+**At rf ≥ 2 the problem dissolves rather than gets solved.** The target architecture above already
+names the primitive for a corrupt node — `delete + garage repair tables`, resync from peers — and
+a *deliberate* delete is the same operation:
+
+> drop one zone's metadata → let it re-sync from the other two → next zone.
+
+Quorum (2/3) serves reads and writes throughout, so there is no window, and the re-synced env is
+written fresh, so the leaked pages are gone by construction. `garage repair tables` ("do a full
+sync of metadata tables") is a supported upstream operation, not a bespoke script.
+
+Three things the rotation loop needs before it is armed, none of which ADR-114 carried:
+
+- **A measured full-table resync cost.** Unknown today, and nothing in the corpus has it — the
+  2026-08-24 incident's ~20.3 KB/object random-insert figure is the *S3-API* restore path, not a
+  Merkle table sync, and does not transfer. This number bounds the rotation cadence and decides
+  whether the loop is safe to automate; measure it on the first rf=3 node.
+- **A trigger, not a cron.** `GarageDiskFillingUp` already exists and already fires; rotating on
+  the fill threshold makes the cadence follow whatever churn the workload happens to produce.
+- **A health gate that refuses.** Never rotate while another zone is degraded or re-syncing;
+  refuse if quorum would drop — the same discipline the layout ops already carry.
+
+⚠ **Not armed while the interim third zone is `proxmox`/wk-02.** Rotating metadata against a VM
+on a thin pool that has hit 100% four times reopens the 2026-08-24 class. The third *physical*
+zone ([`storage-ledger.md`](storage-ledger.md) §Requirements, class *need*) is what gates this.
+
+**Interim, at rf=1:** snapshot → stop → swap the compacted copy in → start, ~1–2 min of downtime
+per cycle (the §Durability recovery recipe, with a *fresh* snapshot — never a stale or in-progress
+one). Automatable, but not zero-downtime; worth building only if the third zone is weeks away
+rather than days.
 
 ## Static-website serving (3902, live 2026-07-14)
 
