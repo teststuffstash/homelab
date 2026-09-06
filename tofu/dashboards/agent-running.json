@@ -396,7 +396,7 @@
       "id": 14,
       "type": "table",
       "title": "Queued issues — click through",
-      "description": "One row per agent/queued issue (exporter FU-108 walk). The number column links to GitHub — the Goal-run cockpit's issue list.",
+      "description": "Issues wearing agent/queued (the exporter's label gauge — a CLAIM) joined to the scan's derived hold class (agent_item_class, homelab#892 — the STATE): queued-ready = dispatchable next tick; footprint-held / cap-held / blockpark / queued-held(-by-ghost) / guarded-path / deferred-capacity / queued-held-malformed-block = why it is not picked up, `who` = whose move it is. An empty class means the scan has not classified it this tick (quiet stack, or the item class group was replaced) — read the scan log, not the label.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -417,15 +417,31 @@
           "format": "table",
           "instant": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_replace(max by (repo, item, class, who, base) (agent_item_class{class=~\"queued.*|footprint-held|cap-held|blockpark|guarded-path|deferred-capacity\"}), \"number\", \"$1\", \"item\", \"issue-(.*)\")",
+          "format": "table",
+          "instant": true,
+          "refId": "B"
         }
       ],
       "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true,
               "Value": true,
+              "Value #A": true,
+              "Value #B": true,
               "__name__": true,
               "owner": true,
               "instance": true,
@@ -434,12 +450,20 @@
               "endpoint": true,
               "namespace": true,
               "pod": true,
-              "service": true
+              "service": true,
+              "item": true
             },
             "indexByName": {
               "repo": 0,
               "number": 1,
-              "label": 2
+              "class": 2,
+              "who": 3,
+              "base": 4,
+              "label": 5
+            },
+            "renameByName": {
+              "class": "why (scan class)",
+              "who": "who acts"
             }
           }
         }
