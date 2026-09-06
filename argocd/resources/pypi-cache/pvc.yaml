@@ -1,5 +1,10 @@
 # Cache storage. Pure regenerable cache (anything lost is re-fetched from upstream), so size is a
-# cost/throughput knob, not durability — the default replicated Longhorn SC is fine at this size.
+# cost/throughput knob, not durability. Tier: `longhorn-bulk` like the other pull-through caches
+# (ADR-091 — re-warmable data belongs on the re-warmable tier). It was born on the default `std`
+# class (the nix-cache shape, 2026-09-05) and moved 2026-09-06 while still empty: a warm 17 G
+# replica on thinkcentre's std disk would have spent most of that disk's 20 G scheduling headroom
+# (docs/storage-ledger.md §PyPI cache). storageClassName is immutable — a tier change is a PVC
+# delete + ArgoCD recreate (cache re-warms from upstream).
 # Must stay comfortably above the nginx max_size in configmap.yaml: the /packages/ zone runs at
 # max_size=16g, so 20Gi leaves headroom.
 apiVersion: v1
@@ -9,7 +14,7 @@ metadata:
   namespace: pypi-cache
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: longhorn
+  storageClassName: longhorn-bulk
   resources:
     requests:
       storage: 20Gi
