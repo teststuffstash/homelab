@@ -10,8 +10,7 @@
 #   2. The PR appears as a report line in orphans
 #   3. No gh pr view call is made to fetch state-fp data
 #
-pins:
-  - FU-1444a
+pins: []
 name: merge-conflict-source-issue-blocked
 mode: actions
 source: agents/coordinator-scan.sh
