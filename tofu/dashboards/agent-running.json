@@ -396,7 +396,7 @@
       "id": 14,
       "type": "table",
       "title": "Queued issues — click through",
-      "description": "One row per agent/queued issue (exporter FU-108 walk). The number column links to GitHub — the Goal-run cockpit's issue list.",
+      "description": "Issues wearing agent/queued (the exporter's label gauge — a CLAIM) joined to the scan's derived hold class (agent_item_class, homelab#892 — the STATE): queued-ready = dispatchable next tick; parked-blocked (waiting on an open dependency — the everyday answer) / footprint-held / cap-held / blockpark / queued-held(-by-ghost) / guarded-path / deferred-capacity / queued-held-malformed-block = why it is not picked up; container = a queued Goal awaiting goal-decompose (who=none), `who` = whose move it is. An empty class means the scan has not classified it this tick (quiet stack, or the item class group was replaced) — read the scan log, not the label.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -417,15 +417,31 @@
           "format": "table",
           "instant": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_replace(max by (repo, item, class, who, base) (agent_item_class{class=~\"queued.*|parked-blocked|footprint-held|cap-held|blockpark|guarded-path|deferred-capacity|container\"}), \"number\", \"$1\", \"item\", \"issue-(.*)\")",
+          "format": "table",
+          "instant": true,
+          "refId": "B"
         }
       ],
       "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true,
               "Value": true,
+              "Value #A": true,
+              "Value #B": true,
               "__name__": true,
               "owner": true,
               "instance": true,
@@ -434,12 +450,20 @@
               "endpoint": true,
               "namespace": true,
               "pod": true,
-              "service": true
+              "service": true,
+              "item": true
             },
             "indexByName": {
               "repo": 0,
               "number": 1,
-              "label": 2
+              "class": 2,
+              "who": 3,
+              "base": 4,
+              "label": 5
+            },
+            "renameByName": {
+              "class": "why (scan class)",
+              "who": "who acts"
             }
           }
         }
@@ -476,7 +500,7 @@
       "id": 15,
       "type": "table",
       "title": "PRs waiting — reflex queue + codeowner park",
-      "description": "Value 1 = reflex queue (green, unreviewed); value 2 = CODEOWNER PARK (bot-approved, needs the human read). number links to GitHub.",
+      "description": "Value 1 = reflex queue (green, REVIEW_REQUIRED, no bot approval yet); value 2 = CODEOWNER PARK (bot-approved, needs the human read). WHY a value-1 row does not progress: armed=false — the review reflex reviews ARMED PRs only, so an un-armed PR is invisible to the reflex, the updater and auto-merge (FU-079: arm it with `gh pr merge --auto --squash`, or park it with an owning lane label); merge_state=dirty — the reflex skips conflicted PRs (a fix round or hand rebase is the next mover); behind is admitted for a first review since ADR-125. Columns come from the exporter's labels (github-exporter.py); number links to GitHub.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -519,7 +543,13 @@
             "indexByName": {
               "repo": 0,
               "number": 1,
-              "Value": 2
+              "Value": 2,
+              "armed": 3,
+              "merge_state": 4
+            },
+            "renameByName": {
+              "Value": "state (1 reflex / 2 park)",
+              "merge_state": "merge state"
             }
           }
         }
