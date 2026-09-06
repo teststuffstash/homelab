@@ -21,3 +21,9 @@ WIN=""                  # no ArgoCD observation window open, so the doorbell is 
 # vocabulary instead of two. Returns 0: the clause's `&& echo rang … || echo bell failed` must take
 # the ring branch, because a bell that failed is a different fixture.
 curl() { printf 'CALL curl %s\n' "$*" >> "$REPLAY_ACTIONS"; }
+
+# The ONE body-grammar parser (ADR-122 (3), homelab#1431). responder-argo.yaml defines `ib()` just
+# after its homelab clone, pointing at /work/homelab; the fixture shadows only the PATH, so the REAL
+# agents/issue_body.py out of the checkout is what reads the verdict and writes the machine block —
+# the `curl` seam above, and machine-comment.sh in fix-debounce, verbatim.
+ib() { python3 "$REPLAY_ROOT/agents/issue_body.py" "$@"; }

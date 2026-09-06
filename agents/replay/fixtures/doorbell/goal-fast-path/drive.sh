@@ -19,4 +19,12 @@ echo "REACHED: valueless Base: on decompose leg — refuses"
 fast_unit_dispatch "goal-decompose|circles|issue-9"
 printf 'RETURN %s\n' "$?"
 
+echo "REACHED: block-authored Base: twin of #5 — dispatches, no legacy meter"
+fast_unit_dispatch "goal-decompose|circles|issue-10"
+printf 'RETURN %s\n' "$?"
+
+echo "REACHED: malformed machine block — refuses"
+fast_unit_dispatch "goal-decompose|circles|issue-11"
+printf 'RETURN %s\n' "$?"
+
 echo "REACHED: end"

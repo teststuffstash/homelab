@@ -9,5 +9,5 @@ OUT CARD |
 OUT CARD | - Each child: its FU's **Next** action shipped through the full lane, the child's own gate green against the live cluster, the FU advanced or archived in the same arc.
 OUT CARD | - Goal: all launched children closed + the closing sweep (jail seat) re-probes each shipped belt once — alerts fire/clear on synthetic cause where testable, panels render, fixtures hold. Then the burn-down report goes to the operator for the `goal/validated` verdict.
 OUT CARD | - The pilot's second deliverable is the machinery findings themselves: goal-budget's subscription blind spot (gap (a)), the phase/model checkpoint question (§M10 ⚖), and whatever else the lane surfaces — each routed per the routing table, none silently absorbed.
-ERR LEGACY-GRAMMAR Budget -
+ERR LEGACY-GRAMMAR Budget teststuffstash/homelab#278
 RC 0

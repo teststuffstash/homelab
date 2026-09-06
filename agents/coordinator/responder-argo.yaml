@@ -335,6 +335,19 @@ spec:
             _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
             git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
 
+            # ── the ONE body-grammar parser (ADR-122 (3), homelab#1430/#1431) ─────────────────
+            # The machine block at the top of an issue body WINS; the legacy line-anchored forms
+            # stay readable through the transition window and each legacy read prints one
+            # `LEGACY-GRAMMAR <key> <ref>` line to stderr (the migration meter). Defined here,
+            # OUTSIDE every replay block, so a fixture shadows the PATH via $REPLAY_ROOT
+            # (agents/replay/README.md §sourced helpers); a definition inside a block would
+            # override the bridge's instead of the other way round. python3 is in the image
+            # (reflexes-argo.yaml runs ledger.py in it) and /work/homelab is the clone above.
+            # ⚠ THE RESOLVE LEG ABOVE CANNOT USE THIS — it runs BEFORE this clone exists, so its
+            # `^fix-verdict:`/`^alert-fp:` greps stay legacy until the clone moves (homelab#1431
+            # closeout; moving it would clone on every resolve-only payload, a separate call).
+            ib() { python3 /work/homelab/agents/issue_body.py "$@"; }
+
             TODAY="$(date -u +%Y-%m-%d)"
             # FU-113(a): every non-triaging outcome writes a LEDGER MARKER (value forms that do
             # NOT satisfy the triage dedup or consume the cap) — a silent defer/skip was
@@ -789,7 +802,47 @@ spec:
                 echo "→ verdict: no open issue carries alert-fp:$FP (report-only triage or quick-fix PR) — nothing to label"
               else
                 VBODY="$(gh api "repos/$VREPO/issues/$VHIT" --jq '.body // ""' 2>/dev/null || true)"
-                if printf '%s' "$VBODY" | grep -qi '^fix-verdict:[[:space:]]*fix[[:space:]]*$'; then
+                # ── the machine block gets WRITTEN here (ADR-122 (3), #1431) ──────────────────
+                # The SESSION authors the body in the legacy line form (breaker #1: the prompt
+                # pins the exact lines, the model never assembles machine state), so this shell —
+                # the platform's first touch of the filed issue — is where that state is normalized
+                # into the ONE block at the top. `issue_body.py set` upserts the fence and leaves
+                # every other byte of the body untouched, so the LEGACY LINES STAY: this is the
+                # transition window, and the readers not yet on the parser would otherwise go
+                # blind on a block-only body. Named, and each one is a closeout-2 deletion:
+                #   · this file's own resolve leg (pre-clone, above)
+                #   · fix-debounce-argo.yaml's `Touches:` gate (sed, column-0 `[Tt]ouches`)
+                #   · agents/reviewer-session.sh (`^alert-fp:`), agents/meta-needs-attention.sh
+                #   · agents/coordinator-scan.sh's footprint/verdict reads, agents/board.sh
+                # Best-effort by design: a failed edit changes nothing about the verdict below,
+                # which still reads the body it already has.
+                printf '%s' "$VBODY" > /tmp/vbody.orig
+                cp /tmp/vbody.orig /tmp/vbody.md
+                IBOK=1
+                for ibk in alert-fp self-referential fix-verdict Touches; do
+                  ibv="$(ib get "$ibk" --ref "$VREPO#$VHIT" < /tmp/vbody.md)" || { IBOK=0; break; }
+                  [ -n "$ibv" ] || continue
+                  ib set "$ibk=$ibv" < /tmp/vbody.md > /tmp/vbody.next || { IBOK=0; break; }
+                  mv /tmp/vbody.next /tmp/vbody.md
+                done
+                if [ "$IBOK" = 0 ]; then
+                  echo "→ block: $VREPO#$VHIT body has a MALFORMED machine block (issue_body.py exit 2) — left untouched"
+                elif cmp -s /tmp/vbody.orig /tmp/vbody.md; then
+                  echo "→ block: $VREPO#$VHIT already carries its machine block (nothing to write)"
+                else
+                  gh issue edit "$VHIT" --repo "$VREPO" --body-file /tmp/vbody.md >/dev/null 2>&1 \
+                    && { VBODY="$(cat /tmp/vbody.md)"; echo "→ block: $VREPO#$VHIT machine block written (legacy lines kept — transition window)"; } \
+                    || echo "→ block: writing the machine block on $VREPO#$VHIT failed (non-fatal — the legacy lines are still the truth)"
+                fi
+                # The verdict, through the parser. `agents/issue_body.py`'s LEGACY entry for
+                # `fix-verdict` cites this file's own writer line; the value test below is the
+                # tail of the grep it replaces (`fix` with trailing space allowed — `_rstrip`),
+                # lowercased because that grep was `-i`. ⚠ The `-i` also made the KEY
+                # case-insensitive and the parser's is not: a body spelling `Fix-Verdict:` would
+                # have matched before and does not now. Deliberate — the block has exactly one
+                # spelling and the prompt above pins the lowercase line.
+                VVERD="$(ib get fix-verdict --ref "$VREPO#$VHIT" < /tmp/vbody.md 2>/dev/null || true)"
+                if [ "$(printf '%s' "$VVERD" | tr 'A-Z' 'a-z')" = "fix" ]; then
                   gh api -X POST "repos/$VREPO/issues/$VHIT/labels" -f "labels[]=agent-fix" >/dev/null 2>&1 \
                     && echo "→ verdict: $VREPO#$VHIT labelled agent-fix (inert — queueing is the debouncer's)" \
                     || echo "→ verdict: labelling $VREPO#$VHIT failed (non-fatal) — stays unlabelled, backstop re-derives"

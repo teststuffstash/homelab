@@ -6,4 +6,5 @@ OUT GACTED terminal
 OUT UNITS <none>
 OUT ORPHANS [circles] 📋 close sweep for VALIDATED goal #29 (ADR-102 — REPORT-first, the batch action stays operator-confirmed until the goal registry panel exists):     #77 — post-launch: Goal: P0 complete — bake, page, evidence chain → CONTAINER: close with the goal     #95 — p0 sprout: page dedup window is wrong → LIVE: let it finish, or re-home it into another goal (batch re-homing is legal at this sweep) 
 OUT REACHED: end
+ERR LEGACY-GRAMMAR Verdict-authority circles#29
 RC 0

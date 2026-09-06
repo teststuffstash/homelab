@@ -8,4 +8,6 @@ OUT GACTED terminal
 OUT UNITS <none>
 OUT ORPHANS <none>
 OUT REACHED: end
+ERR LEGACY-GRAMMAR Verdict-authority circles#29
+ERR LEGACY-GRAMMAR Revert circles#29
 RC 0
