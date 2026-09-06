@@ -138,7 +138,15 @@ resource "helm_release" "longhorn" {
       # the Longhorn per-disk alert is still an unbuilt item in docs/storage-ledger.md — that is
       # now a prerequisite, not a nice-to-have.
       storageOverProvisioningPercentage = 200
-      orphanAutoDeletion                = true
+      # Longhorn ≥1.9 renamed the boolean `orphanAutoDeletion` to this semicolon list
+      # (`replica-data`, `instance`); the old key was silently dropped from the rendered
+      # default-setting ConfigMap, so auto-deletion was OFF while tofu said `true`. Found
+      # 2026-09-06: wk-metal-04's maintenance window left four orphaned replica dirs on its
+      # bulk disk, and the 141G stale Garage copy blocked the Garage volume's own rebuild
+      # onto that disk ("insufficient storage") until the orphans were deleted by hand
+      # (scripts/node-maintenance.sh `up` now reports them). Grace period stays at the
+      # 300 s default. Orphans on nodes that are down/unknown are never auto-deleted.
+      orphanResourceAutoDeletion = "replica-data"
       # Let Longhorn read the Metrics Server (argocd/platform/metrics-server.yaml) so it populates the
       # longhorn_*_cpu/memory_* metrics behind the dashboard's "CPU & Memory" panels.
       kubernetesMetricsServerMetricsEnabled = true
