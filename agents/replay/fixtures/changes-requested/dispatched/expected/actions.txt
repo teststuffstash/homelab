@@ -1,4 +1,6 @@
 CALL gh pr view 1095 --repo teststuffstash/homelab --json comments,commits,reviews
+CALL gh pr view 1098 --repo teststuffstash/homelab --json comments,commits,reviews
 OUT UNIT changes-requested|homelab|pr-1095
+OUT ORPHAN [homelab] ⏳ changes-requested BLOCKED-ON — PR #1098: a terminal ruling recorded `blocked-on: human` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.
 OUT REACHED: end
 RC 0
