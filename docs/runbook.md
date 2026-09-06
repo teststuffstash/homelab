@@ -196,6 +196,24 @@ formatted+mounted via the ThinkCentre entry's `longhorn_disks` field in `machine
   (NB: a plain `talosctl reboot` keeps the node powered → it returns on its own; WoL is only for an
   S5/powered-off node.)
 
+### Single worker maintenance window (cordon → drain → shutdown → wake)
+
+For one WORKER at a time (metal or VM) — a SATA cable, a RAM swap, a BIOS change — the
+deterministic path is **`devbox run node-maintenance {preflight|down|up} <node>`**
+(`scripts/node-maintenance.sh`; first run: wk-metal-04, 2026-09-06). `preflight` is read-only and
+computes "safe to pull the plug": node Ready + Talos API reachable; **no degraded attached Longhorn
+volume anywhere**; every Longhorn replica on the node has a running sibling elsewhere (else the
+`block-if-contains-last-replica` drain policy would block — the script names the volume up front);
+no volume attached on the node; then the workload read — StatefulSet pods, Argo/agent ride pods
+and single-replica Deployments are WARNs (`FORCE=1` accepts them). `down` runs preflight, cordons,
+drains (DaemonSets ignored), confirms Longhorn's node view, then `talosctl shutdown` and waits for
+NotReady. `up` sends WoL from pve for a metal node (MAC from `opnsense/dnsmasq-dhcp.py`), waits
+Ready, uncordons, then waits until the Longhorn node is Schedulable and every attached volume is
+healthy again. Replicas on the node go degraded for the window; Longhorn starts rebuilding them
+elsewhere after `replica-replenishment-wait-interval` (600 s) — a longer window just means a
+re-sync when the node returns. cp-01 is out of scope (only control plane → §Proxmox host
+maintenance window).
+
 ### Re-imaging a metal node (change install extensions, e.g. drop qemu-guest-agent)
 Metal nodes **upgrade fine** (unlike nocloud VMs). To switch a metal node to a new install image
 WITHOUT a reset/reinstall: `talosctl -n <ip> -e <ip> upgrade --image <factory installer>` then
