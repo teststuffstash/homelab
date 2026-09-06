@@ -66,7 +66,9 @@ rv_ib_get() {   # <key> <ref>  — body on stdin
     cat >/dev/null
     return 0
   fi
-  python3 "$HERE/issue_body.py" get "$1" --ref "$2" || true
+  # The parser's exit code is the caller's to read: 2 = MALFORMED block, which is NO SIGNAL,
+  # never "absent" (bot review, PR#1459 — the TOUCHES-ESCAPES site below already does this).
+  python3 "$HERE/issue_body.py" get "$1" --ref "$2"
 }
 # <<<REPLAY:reviewer-body-parser<<<
 if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"; else KUBE=""; fi
@@ -367,7 +369,17 @@ DEPTH RULE (this PR closes issue #$issue, which sits at follow-up depth $sprout_
   # marker no longer classifies a depth-≥4 issue as hotfix. That is the direction ADR-122 collapses
   # toward — a fingerprint nobody wrote is not a fingerprint — and the responder only ever writes
   # the line WITH one (responder-argo.yaml).
-  if [ -n "$(printf '%s' "$issue_body" | rv_ib_get alert-fp "${REPO_SLUG:-?}#${issue}")" ]; then
+  local _afp _afp_rc=0
+  _afp="$(printf '%s' "$issue_body" | rv_ib_get alert-fp "${REPO_SLUG:-?}#${issue}")" || _afp_rc=$?
+  if [ "$_afp_rc" -ne 0 ]; then
+    # A MALFORMED block is NO SIGNAL, not "not hotfix": narrowing a depth-≥4 issue to
+    # Container-findings on an unreadable body would silence a genuine hotfix's Follow-ups
+    # (rule #6 — never fail INTO a write). Same degrade as the TOUCHES-ESCAPES site: say so,
+    # append no rule, keep the ordinary Follow-ups channel.
+    echo "WARN reviewer: issue #${issue} carries a MALFORMED machine block (rc=${_afp_rc}) — hotfix class unreadable, depth rule NOT applied (ADR-122 (3))" >&2
+    return 1
+  fi
+  if [ -n "$_afp" ]; then
     issue_is_hotfix=true
   fi
 

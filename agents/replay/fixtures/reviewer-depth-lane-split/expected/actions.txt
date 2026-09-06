@@ -2,6 +2,9 @@ OUT row_a=suppress
 OUT row_b=none
 OUT row_c=container-findings
 OUT row_d=none
+OUT row_e=none
 OUT depth_lane_split_executed=1
 ERR LEGACY-GRAMMAR alert-fp teststuffstash/test-project#1
+ERR issue_body: machine block line 3 is not a `key: value` line ('bogus line') — bullets, headings, prose and multi-line values are not in the grammar
+ERR WARN reviewer: issue #1 carries a MALFORMED machine block (rc=2) — hotfix class unreadable, depth rule NOT applied (ADR-122 (3))
 RC 0
