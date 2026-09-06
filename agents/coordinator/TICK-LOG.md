@@ -7371,3 +7371,48 @@ first live ADR-110 maintenance session before the ADR existed.
 - **14:00–14:15Z wind-down:** **#1457 MERGED (operator approved) · #1475, #1476 MERGED**; PyPI
   cache on bulk (PR#1477) live-verified; FU-093 (b) filed (metal fstrim). Garage rebuild 28 % at
   14:13Z, monitor stopped with the session — pickup bullet in meta-state. Bookkeeping pushed once.
+
+## 2026-09-06 14:15–14:5xZ — corpus session (design-agents): open PRs, codeowner reads, S8, the #397 debounce night
+
+- **Ask:** "open pr-s, codeowner read and s8 sting; oracle-fleet#397 was angry about debounce during
+  the night." Corpus loaded (~590k cache-creation — the coordinator brief read in full + the PR
+  threads; over the 300–350k norm, wind-down at 615k).
+- **#397 / homelab#1472 read:** the storm is the IL-G06 arm of C6 (homelab#1149): OPEN
+  in-progress/review issue ∧ merged default-branch strong-link PR ∧ no OPEN PR referencing it —
+  TRUE on every tick after every merge for a multi-round `Implements #N` tracking issue, including
+  while the next round rides with no PR yet (8 closeout sessions 07:45–08:33Z against a live r6
+  pod; the 02:08Z session even ran C4/C5's reconcile-and-resume under the C6 clause name). Not a
+  missing marker: a missing CLAIM test. **PR#1478 (seat, armed):** the arm holds when the issue's
+  newest `agent/in-progress` labeled event post-dates the newest strong-link merge (GitHub state
+  each tick, the #829 shape; no marker written on stack threads — the #1472 suggestion would add
+  ADR-103 residue); unreadable events/mergedAt HOLD (rule #6); `agent/error` was already excluded.
+  Fixture `merged-closeout-ilg06-detect` +#93 (claim after merge → HELD) +#94 (no strong link → no
+  events read); IL-T09 guard row; suite 412/412 after the index regen. #397 stays `agent/error`
+  (the 13:52Z seat comment's condition) until #1478 lands — then clear the breaker; the r6
+  salvage branch `agent/20260906-070522` (a hostPath fallback in the production chart) is the
+  operator's delete-before-requeue call, unchanged.
+- **Codeowner reads (ADR-110, corpus-loaded):** **#1466 MERGED 14:37Z** — the bot's block was a
+  footprint formality (issue #1427 had no `Touches:`, the escape belt reads undeclared as
+  all-escapes); fixed at the surface the belt reads (machine block on #1427), bot verdict dismissed
+  with the audit message, approved · **#1462 APPROVED** (one GET per open goal; the failed-prefetch
+  short-circuit verified) — cycling behind master moves, lands unattended · **#1468 (#1444):**
+  the 01:34Z escalation's option 1 taken — the seat landed F1/F2/F3 (`dc03a982`; the ruling's
+  verbatim jq needed `| .[0]` — `scan()` with a capture yields arrays and printed a JSON array;
+  master's own `STATE_FP_LAST_JQ` never had this because it scans without a group);
+  `state-fp-replay` + both families green, labels un-parked, bot review pending · **#1470 (#1450):
+  left parked** — a design fork underneath it, recorded on #1450: (A) option-1 fingerprint + side
+  map vs **(B) a `Base: master` Goal enters post-launch at tree-empty** (IL-T18 gains a second
+  key; no fingerprint, no label) — seat recommends (B), operator's call (ADR-126 delta).
+- **S8:** **PR#1459 (1b)** — the bot's one blocking finding fixed (`rv_ib_get` propagated the
+  parser's exit; a malformed block is NO SIGNAL, the depth rule appends nothing; fixture row (e))
+  — re-review pending · **PR#1479 (#1424 half 2, docs)** opened + armed: workflow.md per-repo →
+  per-lane, merge-path item 3's retired up-to-date precondition, the PR#1398 goal-ancestor stop
+  condition (the #1433 read's nit) · originals: 1a/2/3/5/6 + sprout #1452 done; 1b in review; 4
+  (#1420) + 1b residue (#1460) parked on branches behind #1459; 7 HELD; 8 half-landed.
+- **Stack PRs (report only, not the seat's):** oracle-fleet #480/#481 seat PRs un-armed and
+  touching `specs/` (the operator's read, by design); circles#92 APPROVED+armed but DIRTY (a
+  seat conflict — the seat's own push); sleep-tracking#143 CR held on #141 `agent/blocked`;
+  sleep-tracking #145/#146 seat PRs un-armed; sleep-iac#80 DIRTY; sleep#142 major awaiting-human.
+- **Seat misses:** zsh ate three one-liners (`?` in a URL, `====` as `=cmd`, `$ref:agents` as a
+  history modifier) — quote, and put probes in script files (the card's rule, paid again); a
+  first-run capture of a fixture stream included the runner's trailer lines.
