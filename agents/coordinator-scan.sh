@@ -552,10 +552,35 @@ STATE_FP_JQ_ARBITRATE='[ "head=" + ([ .commits[]? | select((.messageHeadline // 
                     | .submittedAt ] | max // "")
   ] | join("|")'
 # Newest recorded marker, by comment createdAt — `last` on the raw list would trust gh ordering.
-STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}")) ]
+# Supports BOTH old format (state-fp:<hash>) and new format (state-fp:<clause>:<hash>) for backwards compatibility.
+STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:([a-z-]+:)?[0-9a-f]{6,64}")) ]
   | sort_by(.createdAt) | last // {})
-  | (((.body // "") | [ scan("state-fp:[0-9a-f]{6,64}") ] | last) // "")
-  | sub("^state-fp:"; "")'
+  | (((.body // "") | scan("state-fp:(?:[a-z-]+:)?([0-9a-f]{6,64})") | .[0]) // "")'
+
+# Clause-scoped state-fp reader: helper to extract clause-scoped state-fp markers.
+# Takes a clause name as an argument and returns the hash from state-fp:<clause>:<hash>,
+# falling back to state-fp:<hash> (old format) if no clause-scoped marker exists.
+# Called from pr_state_fp_pair when a clause is specified.
+state_fp_for_clause() {
+  local clause="${1:?}" fp_probe="${2:?}"
+  local clause_marker hash
+  # Try to find clause-scoped marker first: state-fp:<clause>:<hash>
+  clause_marker="$(printf '%s' "$fp_probe" | jq -r --arg c "$clause" \
+    '([ .comments[]? | select((.body // "") | test("state-fp:" + $c + ":[0-9a-f]{6,64}")) ]
+      | sort_by(.createdAt) | last // {})
+     | (((.body // "") | scan("state-fp:" + $c + ":([0-9a-f]{6,64})") | .[0]) // "")' 2>/dev/null)" || clause_marker=""
+  if [ -n "$clause_marker" ]; then
+    printf '%s' "$clause_marker"
+    return 0
+  fi
+  # Fall back to old format: state-fp:<hash> (backwards compatibility)
+  hash="$(printf '%s' "$fp_probe" | jq -r \
+    '([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}")) ]
+      | sort_by(.createdAt) | last // {})
+     | (((.body // "") | [ scan("state-fp:([0-9a-f]{6,64})") ] | last | .[0]) // "")' 2>/dev/null)" || hash=""
+  printf '%s' "$hash"
+  return 0
+}
 # <<<REPLAY:state-fp-jq<<<
 
 # pr_state_fp_pair <slug> <pr> [clause] → "<current>|<recorded>", either side empty when unknown.
@@ -569,7 +594,7 @@ STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-
 pr_state_fp_pair() {
   # Declared on their own line, never `local x="$(cmd)"` — that form makes `local` the command
   # whose status is tested, so the `|| fallback` and `set -e` both read the wrong exit code.
-  local fp_probe fp_raw fp_prev fp_cur fp_jq pr_json
+  local fp_probe fp_raw fp_prev fp_cur fp_jq pr_json clause
   # Use pre-fetched JSON if provided and valid. When the 4th argument IS provided (even if
   # empty — the hoisted fetch failed), treat it as the probe result rather than falling back
   # to a second fetch (homelab#1211). When it is NOT provided, fetch independently.
@@ -585,13 +610,19 @@ pr_state_fp_pair() {
         --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || fp_probe=''
   fi
   if ! jq -e . >/dev/null 2>&1 <<<"${fp_probe:-null}"; then printf '%s|%s\n' '' ''; return 0; fi
-  case "${3:-}" in
+  clause="${3:-}"
+  case "$clause" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
     arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
   fp_raw="$(printf '%s' "$fp_probe" | jq -r "$fp_jq" 2>/dev/null)" || fp_raw=''
-  fp_prev="$(printf '%s' "$fp_probe" | jq -r "$STATE_FP_LAST_JQ" 2>/dev/null)" || fp_prev=''
+  # Clause-scoped state-fp read: if a clause is provided, use the clause-scoped reader
+  if [ -n "$clause" ]; then
+    fp_prev="$(state_fp_for_clause "$clause" "$fp_probe")" || fp_prev=''
+  else
+    fp_prev="$(printf '%s' "$fp_probe" | jq -r "$STATE_FP_LAST_JQ" 2>/dev/null)" || fp_prev=''
+  fi
   fp_cur=''
   # `sha256sum` is coreutils, which this script already requires (`date -u -d`), but a missing
   # hasher must degrade to "no fingerprint" rather than abort the stack's whole scan.
@@ -3186,7 +3217,7 @@ EOF_GOVERNANCE
       # state-fp debounce: one ride per verdict state (homelab#198).
       afp="$(pr_state_fp_pair "$slug" "$u" assembly-cr)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
-        orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} changes-requested DEBOUNCED — state unchanged since the last goal-checkpoint emit for goal #${g} (\`state-fp:${afp_cur}\`, homelab#198). The assembly PR still has CHANGES_REQUESTED and the goal-checkpoint unit was already emitted; a human (or new content) is the next mover.\n"
+        orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} changes-requested DEBOUNCED — state unchanged since the last goal-checkpoint emit for goal #${g} (\`state-fp:assembly-cr:${afp_cur}\`, homelab#198). The assembly PR still has CHANGES_REQUESTED and the goal-checkpoint unit was already emitted; a human (or new content) is the next mover.\n"
         continue
       fi
       # Emit a goal-checkpoint unit for the goal (trigger=assembly-cr).
@@ -3318,10 +3349,39 @@ EOF_GOVERNANCE
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author == null))|.number'); do
       orphans="${orphans}[$repo] ⚠ merge-conflict PR #${u} has a NULL author (deleted/suspended GitHub account) — the account's lane is unknowable, so no machine fix-round is dispatched; a human owns the next mover (homelab#602)\n"
     done
+    # Fetch PR JSON ONCE for merge-conflict clause to share between pr_blocked_on_check and pr_state_fp_pair (homelab#1211).
+    mfp_prjson="$(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author.login==$wa)) | @json' | head -1)" || mfp_prjson=''
     for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author.login==$wa))|.number'); do
-      mfp="$(pr_state_fp_pair "$slug" "$u")"; mfp_prev="${mfp#*|}"; mfp_cur="${mfp%%|*}"
+      # Fetch PR JSON for this specific PR with all needed fields for state-fp and blocked-on checks
+      pr_json_mf="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_mf=''
+      # FU-146 PER-ITEM hold: same as ci-red — check if a worker pod is already riding this PR's source issue
+      mf_issue="$(printf '%s' "$pr_json_mf" | jq -r '(.body // "")
+          | (capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || mf_issue=""
+      if [ -n "$mf_issue" ] && [ -n "$WIPPODS_JSON" ] \
+         && printf '%s' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${mf_issue}-" \
+              '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict held — a worker is already riding issue #${mf_issue} (FU-146 per-item):\n  PR #${u}\n"
+        continue
+      fi
+      # BLOCKED-SOURCE hold: check if the source issue is agent/blocked (human-gated)
+      if [ -n "$mf_issue" ] \
+         && printf '%s' "${openall:-null}" | jq -e --argjson n "$mf_issue" \
+              '[.[] | select(.number == $n) | .labels[].name] | index("agent/blocked") != null' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict held — source issue #${mf_issue} is agent/blocked (human-gated):\n  PR #${u}\n"
+        continue
+      fi
+      # BLOCKED-ON hold: check if the PR has a blocked-on marker
+      mf_boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_mf")"
+      case "$mf_boc" in
+        blocked*)
+          reason="${mf_boc#blocked|}"
+          orphans="${orphans}[$repo] ⏳ merge-conflict held — PR #${u} is blocked-on: ${reason}\n"
+          continue
+          ;;
+      esac
+      mfp="$(pr_state_fp_pair "$slug" "$u" "merge-conflict" "$pr_json_mf")"; mfp_prev="${mfp#*|}"; mfp_cur="${mfp%%|*}"
       if [ -n "$mfp_cur" ] && [ "$mfp_cur" = "$mfp_prev" ]; then
-        orphans="${orphans}[$repo] ⏳ merge-conflict DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last merge-conflict dispatch (\`state-fp:${mfp_cur}\`, homelab#198). The conflict stands and a round was already dispatched at this exact input — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
+        orphans="${orphans}[$repo] ⏳ merge-conflict DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last merge-conflict dispatch (\`state-fp:merge-conflict:${mfp_cur}\`, homelab#198). The conflict stands and a round was already dispatched at this exact input — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
         continue
       fi
       units="${units}merge-conflict|${repo}|pr-${u}\n"
@@ -4206,7 +4266,7 @@ EOF_GOVERNANCE
         # consecutive no-op is a terminal-ride finding → escalate" must be able to fire.
         # Inline stats_ts jq (same shape as STATS_TS_DEF in the round-evidence block) so this
         # check works in extracted replay blocks that do not carry that variable.
-        afp_marker_ts="$(printf '%s' "$pr_json_ab" | jq -r '[.comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}"))] | sort_by(.createdAt) | last | .createdAt // ""' 2>/dev/null)" || afp_marker_ts=''
+        afp_marker_ts="$(printf '%s' "$pr_json_ab" | jq -r '[.comments[]? | select((.body // "") | test("state-fp:(?:[a-z-]+:)?[0-9a-f]{6,64}"))] | sort_by(.createdAt) | last | .createdAt // ""' 2>/dev/null)" || afp_marker_ts=''
         afp_stats_ts="$(printf '%s' "$pr_json_ab" | jq -r '
           def stats_ts: [ .comments[]? | (.body // "") as $b
             | if ($b | startswith("<!-- agent-summary -->"))
@@ -4220,7 +4280,7 @@ EOF_GOVERNANCE
         else
           # No round completed since the marker — debounce holds, but report as who=operator
           # so the board shows it (FU-199)
-          orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
+          orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:arbitrate:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
           item_class_push "$repo" "pr-${u}" "arbitrate-standing" "operator"
           continue
         fi
@@ -4419,7 +4479,7 @@ EOF_GOVERNANCE
             # the marker is stale — re-arm the gate so the clause re-evaluates.
             # Inline stats_ts jq (same shape as STATS_TS_DEF in the round-evidence block) so this
             # check works in extracted replay blocks that do not carry that variable.
-            rfp_marker_ts="$(printf '%s' "$pr_json_cr" | jq -r '[.comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}"))] | sort_by(.createdAt) | last | .createdAt // ""' 2>/dev/null)" || rfp_marker_ts=''
+            rfp_marker_ts="$(printf '%s' "$pr_json_cr" | jq -r '[.comments[]? | select((.body // "") | test("state-fp:(?:[a-z-]+:)?[0-9a-f]{6,64}"))] | sort_by(.createdAt) | last | .createdAt // ""' 2>/dev/null)" || rfp_marker_ts=''
             rfp_stats_ts="$(printf '%s' "$pr_json_cr" | jq -r '
               def stats_ts: [ .comments[]? | (.body // "") as $b
                 | if ($b | startswith("<!-- agent-summary -->"))
@@ -4429,7 +4489,7 @@ EOF_GOVERNANCE
               stats_ts | max // ""' 2>/dev/null)" || rfp_stats_ts=''
             if [ -n "$rfp_marker_ts" ] && [ -n "$rfp_stats_ts" ] && [[ "$rfp_stats_ts" > "$rfp_marker_ts" ]] 2>/dev/null; then
               # A round completed since the marker — debounce holds normally
-              orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
+              orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:ci-red:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
               continue
             fi
             # No round completed since the marker — re-arm the gate (don't debounce).
@@ -4844,7 +4904,7 @@ EOF
         if [ -z "$dfp" ]; then
           echo "  WARN: state fingerprint unreadable for ${urepo} ${uitem} — dispatching anyway; the ${uclause} debounce cannot arm this pass (homelab#198)" >&2
         elif ! gh pr comment "${uitem#pr-}" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
-              "🤖 \`state-fp:${dfp}\` — deterministic scan dispatching a \`${uclause}\` unit at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+              "🤖 \`state-fp:${uclause}:${dfp}\` — deterministic scan dispatching a \`${uclause}\` unit at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
               "" \
               "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. For arbitrate clauses (homelab#1011) per-check conclusions are dropped and head narrows to the newest non-merge commit, so CI churn and updater merges do not re-arm arbitration. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
           echo "  WARN: could not record state-fp on ${urepo} ${uitem} (gh write refused?) — dispatching anyway; the ${uclause} clause will re-emit on unchanged state (homelab#198)" >&2
@@ -4870,7 +4930,7 @@ EOF
           if [ -z "$dfp" ]; then
             echo "  WARN: state fingerprint unreadable for ${urepo} PR #${apr} — dispatching anyway; the assembly-cr debounce cannot arm this pass (homelab#198)" >&2
           elif ! gh pr comment "$apr" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
-                "🤖 \`state-fp:${dfp}\` — deterministic scan dispatching a \`goal-checkpoint\` unit (trigger=assembly-cr) for goal ${uitem#issue-} at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+                "🤖 \`state-fp:assembly-cr:${dfp}\` — deterministic scan dispatching a \`goal-checkpoint\` unit (trigger=assembly-cr) for goal ${uitem#issue-} at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
                 "" \
                 "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the PR state — head sha, \`reviewDecision\`, and the newest verdict's timestamp. While the hash is unchanged this clause emits a report line instead of another unit, so an assembly PR waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
             echo "  WARN: could not record state-fp on ${urepo} PR #${apr} (gh write refused?) — dispatching anyway; the assembly-cr clause will re-emit on unchanged state (homelab#198)" >&2
