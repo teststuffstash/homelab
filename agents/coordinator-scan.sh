@@ -3017,6 +3017,15 @@ EOF_GOVERNANCE
       # above ran first), so a running round is never mistaken for a finished one.
       # Also carries the reviewable_again probe (homelab#975): reviews added to the same fetch.
       cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits,reviews 2>/dev/null)" || cr_probe=''
+      # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
+      # still unresolved, report instead of dispatch (homelab#1427).
+      cr_boc="$(pr_blocked_on_check "$slug" "$u" "$cr_probe")"
+      case "$cr_boc" in
+        blocked|blocked\|*)
+          orphans="${orphans}[$repo] ⏳ changes-requested BLOCKED-ON — PR #${u}: a terminal ruling recorded \`blocked-on: ${cr_boc#blocked|}\` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.\n"
+          continue
+          ;;
+      esac
       # reviewable_again hold (homelab#975): a fix round that pushed a new commit is the
       # reviewer's work item, not the coordinator's — the next bot verdict retires the clause.
       # Same predicate as review-reflex.sh:279 (newest non-merge commit > newest

@@ -1376,6 +1376,18 @@ blocker should write a `blocked-on:` marker. The scan's ci-red clause checks for
 before dispatching a fix round: if the marker is present and the blocker is still unresolved,
 the clause emits a report line instead of a unit.
 
+### §changes-requested — when to write it
+
+A changes-requested terminal ruling that concludes "waiting on X" should write a `blocked-on:`
+marker on the PR. The scan's changes-requested clause checks for this marker before dispatching
+a fix round: if the marker is present and the blocker is still unresolved, the clause emits a
+report line instead of a unit (homelab#1427).
+
+Example:
+- `blocked-on: human` — the ruling determined a human must act (e.g., respond to review findings,
+  approve the PR with feedback). The scan checks whether any new human review or comment has
+  appeared since the marker; if not, re-dispatch is suppressed.
+
 ### Resolution
 
 The blocker is considered resolved when:
