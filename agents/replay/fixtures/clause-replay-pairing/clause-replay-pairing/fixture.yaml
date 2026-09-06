@@ -42,3 +42,6 @@ parts:
   - block:clause-replay-pairing
   - file:post.sh
 rows: rows.psv
+# hermeticity contract (homelab#329): the clause reads issue bodies through agents/issue_body.py.
+requires:
+  - python3

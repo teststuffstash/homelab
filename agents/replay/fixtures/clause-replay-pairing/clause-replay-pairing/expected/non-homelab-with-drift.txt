@@ -2,4 +2,8 @@ OUT ORPHAN [oracle-fleet] ⚠️ CLAUSE-REPLAY pairing: issue touches a ratchet 
 OUT ORPHAN   issue #701 — touches clause `agents/coordinator-scan.sh` but `Touches:` (`agents/coordinator-scan.sh`) does not reach `agents/replay/**`
 OUT ORPHAN   issue #703 — touches clause `agents/coordinator/reflexes-argo.yaml` but `Touches:` (`agents/coordinator/`) does not reach `agents/replay/**`
 OUT REACHED: end
+ERR LEGACY-GRAMMAR Touches oracle-fleet#701
+ERR LEGACY-GRAMMAR Touches oracle-fleet#702
+ERR LEGACY-GRAMMAR Touches oracle-fleet#703
+ERR LEGACY-GRAMMAR Touches oracle-fleet#704
 RC 0

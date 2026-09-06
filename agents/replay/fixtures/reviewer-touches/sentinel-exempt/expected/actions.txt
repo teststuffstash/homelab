@@ -1,4 +1,5 @@
 CALL gh api repos/teststuffstash/homelab/issues/123 --jq .body // ""
 CALL gh pr diff 123
 OUT → TOUCHES: no escapes (all paths covered by declared footprint)
+ERR LEGACY-GRAMMAR Touches teststuffstash/homelab#123
 RC 0

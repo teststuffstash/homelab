@@ -29,3 +29,6 @@ parts:
 env:
   - IN_SLUG=teststuffstash/homelab
   - IN_REPO=homelab
+# hermeticity contract (homelab#329): the clause reads issue bodies through agents/issue_body.py.
+requires:
+  - python3

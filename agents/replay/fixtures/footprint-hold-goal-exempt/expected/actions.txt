@@ -5,4 +5,5 @@ OUT CLASS homelab|issue-822b|footprint-held|operator|...
 OUT ORPHAN [homelab] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):
 OUT ORPHAN   issue #822b — a fix with no Touches line (declared: *)
 OUT REACHED: end
+ERR LEGACY-GRAMMAR Touches #999
 RC 0

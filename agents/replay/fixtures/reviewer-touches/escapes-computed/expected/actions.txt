@@ -2,4 +2,5 @@ CALL gh api repos/teststuffstash/homelab/issues/123 --jq .body // ""
 CALL gh pr diff 123
 OUT → TOUCHES: escapes detected (ADR-097 footprint check — homelab#379):
 OUT   [GOVERNANCE] agents/touches-check.sh
+ERR LEGACY-GRAMMAR Touches teststuffstash/homelab#123
 RC 0

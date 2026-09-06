@@ -1,0 +1,10 @@
+OUT ORPHAN [homelab] ⛔ BODY-BLOCK MALFORMED: the machine block does not parse, so the issue is HELD — never dispatched, never read half-way (ADR-122 (3), fail-closed). Fix the block (`agents/issue_body.py` names the line and the grammar):
+OUT ORPHAN   ⛔ issue #503 — issue_body: machine block line 2: unknown key 'Touchez' — the grammar is exactly: Touches, Base, Budget, Verdict-authority, Production-leg, Revert, Origin, Size, Capability, alert-fp, self-referential, fix-verdict, Class
+OUT FOOTPRINT agents/foo.sh
+OUT FOOTPRINT agents/foo.sh
+OUT FOOTPRINT *
+OUT FOOTPRINT *
+OUT REACHED: end
+ERR LEGACY-GRAMMAR Touches homelab#501
+ERR issue_body: machine block line 2: unknown key 'Touchez' — the grammar is exactly: Touches, Base, Budget, Verdict-authority, Production-leg, Revert, Origin, Size, Capability, alert-fp, self-referential, fix-verdict, Class
+RC 0

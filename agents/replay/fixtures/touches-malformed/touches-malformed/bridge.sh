@@ -33,3 +33,7 @@ openall='[
   { "number": 407, "title": "Touches wildcard",
     "body": "## Deliverable\nAdd `agents/foo.sh`.\n\nTouches: *\n" }
 ]'
+
+# ── seam (ADR-122 (3), homelab#1431) ── the ONE issue-body parser. The scan resolves it beside
+# itself; a composition sees config-defaults BEFORE this bridge, so the path is set here.
+IB_PY="$REPLAY_ROOT/agents/issue_body.py"

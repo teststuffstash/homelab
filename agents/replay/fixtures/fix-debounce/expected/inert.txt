@@ -1,6 +1,8 @@
-CALL gh api repos/teststuffstash/homelab/issues?labels=agent-fix&state=open&per_page=50 --jq .[] | select(.pull_request | not) | select(.body // "" | test("(^|\n)alert-fp:")) | select([.labels[].name] | any(startswith("agent/")) | not) | {repo: "teststuffstash/homelab", number: .number, title: .title, body: (.body // "")}
+CALL gh api repos/teststuffstash/homelab/issues?labels=agent-fix&state=open&per_page=50 --jq .[] | select(.pull_request | not) | select([.labels[].name] | any(startswith("agent/")) | not) | {repo: "teststuffstash/homelab", number: .number, title: .title, body: (.body // "")}
 OUT self-referential, left for a human to queue:
 OUT   teststuffstash/homelab#226 ResponderSelfReferential: the alert lane's own namespace is degraded
 OUT pending set: 0 issue(s)
 OUT nothing to decide
+ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#226
+ERR LEGACY-GRAMMAR self-referential teststuffstash/homelab#226
 RC 0
