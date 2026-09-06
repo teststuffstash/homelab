@@ -5,8 +5,12 @@
 # and ONE all-issues fetch (`kidsall` = issue-list): the LLM never picks what a predicate can
 # decide, and the JUDGMENT stays outside the loop entirely — a human (later the KPI unit) applies
 # a verdict label, this block only reacts to it. Six rows, six dispositions of the same tree:
-#   ASSEMBLY-COMPLETE (IL-T18)  a merged PR with a `goal/**` HEAD + a line-anchored
-#     `Assembly-for: #<goal>` trailer → the goal is labelled `goal/post-launch` and STAYS OPEN.
+#   ASSEMBLY-COMPLETE (IL-T18)  TWO KEYS into the same midpoint, ONE writer
+#     (`goal_enter_post_launch`): (1) a merged PR with a `goal/**` HEAD + a line-anchored
+#     `Assembly-for: #<goal>` trailer — the ordinary goal; (2) tree-empty on a goal declaring
+#     `Base: master` — the THEMED shape (ADR-126), which has no assembly PR and deliberately no
+#     trailer, so key (1) can never fire for it and trigger (b) below had no retiring edge
+#     (homelab#1450). Either way: label `goal/post-launch`, comment, LEAVE THE GOAL OPEN.
 #     The absence of any `gh issue close 29` is the most load-bearing line in the stream — this
 #     is where the old `Fixes #29` closed circles#17 100 minutes before the operator refuted it.
 #   CHECKPOINT (IL-T12)          the demoted goal-review: a deterministic burn-down line inside
@@ -44,7 +48,8 @@
 #             issue-list is SHARED across all three — the descendant walk reads number/state/
 #             parent/labels of DESCENDANTS, never the goal's own verdict label.
 #   open-pre  the PRE-LAUNCH open goal shared by the assembly-complete / checkpoint-due /
-#             nonassembly-merge-inert / bare-member / base-* rows: goal #29 OPEN with no verdict
+#             nonassembly-merge-inert / bare-member / base-* / #1450 tree-empty rows (the last
+#             three jq-patch a `Base:` line onto the goal, which is what selects the key): goal #29 OPEN with no verdict
 #             label, closed children #30/#31, bucket #77, unrelated #240. The checkpoint-due
 #             shape is the base (its findings-store comment with 6 undispositioned findings);
 #             assembly-complete overlays

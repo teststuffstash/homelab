@@ -85,6 +85,41 @@
 #                           which pinned the walk's own newline-vs-substring goals match — code
 #                           that no longer exists; the world stays because a multi-goal repo is
 #                           where the #1249 misfires actually happened.
+#
+# ── homelab#1450: IL-T18 gains a SECOND KEY — tree-empty on a `Base: master` goal ──────────────
+# Trigger (b) ("child-set complete pre-launch") is the operator's 2026-08-05 deadlock backstop and
+# it had no retiring edge for a THEMED goal (ADR-126): the batching value lives in the level-2
+# theme branches, so the goal has no assembly PR and deliberately no `Assembly-for:` trailer, the
+# assembly-PR key can never fire, `gpl` stays 0 — and (b) re-summoned a reasoning session every
+# tick from tree-empty until a human applied the verdict (13 rides on Goal #1162, 11 ruling
+# nothing). The scan now writes the ADR-102 midpoint itself at that moment. The three rows below
+# are the whole contract: it fires, it fires ONCE, and it does not touch the ordinary shape.
+#
+# master-goal-tree-empty  = `Base: master` + tree empty (children #30/#31 closed, bucket #77
+#                           excluded, store 6/6 so trigger (a) cannot mask anything) → the label
+#                           CALL then ONE comment CALL, in that order, and NO `goal-checkpoint`
+#                           unit: the session that used to be summoned here is what this saves.
+#                           `gh api …/sub_issues` resolves the bucket, so the audit comment names
+#                           #77 exactly as the assembly-PR key's does — ONE writer, two keys.
+#                           The `ERR LEGACY-GRAMMAR Base` line is the ADR-122 (3) migration meter,
+#                           deliberately not suppressed: the Base read is the ONE parser
+#                           (this file's `ib_get`, homelab#1431), and this goal declares Base as a legacy line.
+# master-goal-post-launch-quiet
+#                         = THE SECOND RIDE, one tick later, on the state the row above produces:
+#                           same goal, now wearing `goal/post-launch`. Everything goes quiet — no
+#                           assembly probe (`gh pr list` is not even called), no label, no comment,
+#                           no unit. This is the row #1450 asked for ("pin the second ride, not the
+#                           first"): the defect was never that (b) fires, it is that nothing
+#                           retired it. It passes on the pre-fix source BY CONSTRUCTION — that is
+#                           the state the operator's hand-applied label already produced — so it is
+#                           the regression guard for the fix, and the dir's vacuity comes from the
+#                           two rows around it.
+# goal-branch-tree-empty-unchanged
+#                         = the CONTROL: the same tree-empty moment on an ORDINARY goal declaring
+#                           `Base: goal/29-p0-slice`. Byte-identical to child-set-complete plus the
+#                           legacy-grammar meter line — still a `goal-checkpoint` unit, no label,
+#                           no comment. The assembly-PR key stays the only writer for that shape,
+#                           and (b) stays its backstop.
 bare-members-inert             | open-pre | openall.json @ patches/add-bare-members.jq        | IN_SLUG=teststuffstash/circles IN_REPO=circles | checkpoint-due
 bare-member-counted-not-queued | open-pre | openall.json @ patches/add-bare-member-counted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-counted-not-queued
 two-goal-inert                 | open-pre | openall.json @ patches/add-second-goal.jq         | IN_SLUG=teststuffstash/circles IN_REPO=circles | two-goal-inert
@@ -101,3 +136,6 @@ child-set-complete | open-pre |                                            | IN_
 nonassembly-merge-inert | open-pre |                                       | IN_SLUG=teststuffstash/circles IN_REPO=circles | nonassembly-merge-inert
 reverted           | terminal | openall.json @ patches/verdict-reverted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | reverted
 validated          | terminal |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | validated
+master-goal-tree-empty          | open-pre | openall.json @ patches/base-master-tree-empty.jq      | IN_SLUG=teststuffstash/circles IN_REPO=circles | master-goal-tree-empty
+master-goal-post-launch-quiet   | open-pre | openall.json @ patches/base-master-post-launch.jq     | IN_SLUG=teststuffstash/circles IN_REPO=circles | master-goal-post-launch-quiet
+goal-branch-tree-empty-unchanged | open-pre | openall.json @ patches/base-goal-branch-tree-empty.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-branch-tree-empty-unchanged
