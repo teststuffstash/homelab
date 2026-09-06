@@ -39,7 +39,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       # Every build fetches ALL repos' lockfiles live, so any same-day build already served the
       # Monday cron's purpose (other repos' lock drift). Skip the scheduled rebake when today's
       # pin proves a build already ran (2026-08-03: the drifted cron was the 4th build that day).
@@ -55,7 +55,7 @@ jobs:
       # devbox-update.yaml pattern); this job's own GITHUB_TOKEN is homelab-scoped.
       # ⚠ The list below is the homelab-renovate App INSTALLATION set, not the wishlist:
       # minting for an uninstalled repo 422s the whole step (the exporter /apps page has the live matrix).
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
         if: steps.guard.outputs.skip != '1'
         id: app
         with:
@@ -82,7 +82,7 @@ jobs:
             done
           done
           echo "closures staged: $(ls docker/arc-runner/warm/)"
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         if: steps.guard.outputs.skip != '1'
         with:
           registry: ghcr.io
@@ -92,7 +92,7 @@ jobs:
         if: steps.guard.outputs.skip != '1'
         id: tag
         run: echo "tag=$(date +%Y.%-m.%-d)-g$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
         if: steps.guard.outputs.skip != '1'
       - name: Build and push
         if: steps.guard.outputs.skip != '1'
