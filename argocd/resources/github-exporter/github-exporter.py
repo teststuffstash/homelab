@@ -1052,6 +1052,7 @@ def collect_open_prs(lines):
     runs — FU-063a). If the PAT lacks Pull requests:read the GraphQL call raises and this collector
     is skipped (the poll's try/except isolates it — billing + workflow-runs keep flowing,
     github_exporter_errors_total ticks). Grant it via scripts/github-exporter-pat-bootstrap.sh."""
+    global _errors
     lines += [
         "# TYPE github_pull_request_codeowner_park gauge",
         "# HELP github_pull_request_codeowner_park One row per green undrafted PR the bot APPROVED while GitHub still says REVIEW_REQUIRED — only the delegated codeowner read moves it (FU-166(a): the needs-meta clause-4 predicate on the one-poller; reviews[], never latestReviews[] — the PR#235 aside trap).",
@@ -1256,13 +1257,13 @@ def collect_open_prs(lines):
                         # few, so the pool cost is ~0). Absent-when-unreadable (the FU-108 rule):
                         # a failed read emits NO series, never a fake zero.
                         try:
-                            pr_detail = gh(f"/repos/{repo['name']}/pulls/{pr['number']}")
+                            pr_detail = gh(f"/repos/{ORG}/{repo['name']}/pulls/{pr['number']}")
                             body = pr_detail.get("body") or ""
                             # Parse "Fixes #N" or "Closes #N" (GitHub's closing keywords)
                             closing_issue = _parse_closing_issue(body)
                             if closing_issue is not None:
                                 blocking = gh(
-                                    f"/repos/{repo['name']}/issues/{closing_issue}/dependencies/blocking?per_page=100")
+                                    f"/repos/{ORG}/{repo['name']}/issues/{closing_issue}/dependencies/blocking?per_page=100")
                                 blocking_count = len(blocking) if isinstance(blocking, list) else 0
                                 block_labels = {"owner": ORG, "repo": repo["name"],
                                                 "pr": str(pr["number"]),
@@ -1270,7 +1271,7 @@ def collect_open_prs(lines):
                                 # Check if the closing issue title starts with 🚨 (hotfix)
                                 try:
                                     issue_data = gh(
-                                        f"/repos/{repo['name']}/issues/{closing_issue}")
+                                        f"/repos/{ORG}/{repo['name']}/issues/{closing_issue}")
                                     if (issue_data.get("title") or "").startswith("\U0001f6a8"):
                                         block_labels["hotfix"] = "true"
                                 except Exception:
@@ -1279,7 +1280,7 @@ def collect_open_prs(lines):
                                     "github_pull_request_park_blocking_count",
                                     block_labels, blocking_count))
                         except Exception:
-                            pass  # absent-when-unreadable — emit nothing on failure
+                            _errors += 1  # park-blocking read failure — make it visible
                     else:
                         lines.append(metric("github_pull_request_reflex_wait", ident, 1))
                 # Trailing-1h window, NOT reviews-since-head-commit: the commit OBJECT is
@@ -3147,6 +3148,9 @@ def self_test():
     def _mock_gh_park_blocking(path, token=None):
         """Mock gh() for park blocking test: record calls and return appropriate responses."""
         gh_calls.append(path)
+        # Assert full path format to catch org-less URL regressions (FU-108, #1469)
+        assert path.startswith(f"/repos/{ORG}/"), \
+            f"All /repos/ paths must include org segment; got: {path}"
         if "/pulls/" in path and "/dependencies" not in path and "/issues/" not in path:
             return {"body": "This PR fixes #456"}
         if "/dependencies/blocking" in path:
