@@ -212,7 +212,18 @@ Ready, uncordons, then waits until the Longhorn node is Schedulable and every at
 healthy again. Replicas on the node go degraded for the window; Longhorn starts rebuilding them
 elsewhere after `replica-replenishment-wait-interval` (600 s) — a longer window just means a
 re-sync when the node returns. cp-01 is out of scope (only control plane → §Proxmox host
-maintenance window).
+maintenance window). Two lessons from the first run:
+
+- **WoL does not survive an AC cut.** The NIC is armed by the previous boot and only on standby
+  power — a box that was unplugged for the work needs the button once. `up` says so after 120 s
+  without a ping and keeps waiting.
+- **Replaced replicas leave orphans on the returning disk.** During a window longer than
+  `replica-replenishment-wait-interval` Longhorn rebuilds the node's replicas elsewhere and the
+  old directories come back as `orphans.longhorn.io` — still counting as used space. wk-metal-04's
+  141G stale Garage copy pushed the disk under the 25 % minimum-free rule and blocked the Garage
+  volume's own rebuild onto it ("insufficient storage") until the orphans were deleted.
+  `orphan-resource-auto-deletion=replica-data` (tofu/longhorn.tf) now removes them after 300 s;
+  `up` lists whatever is left and `DELETE_ORPHANS=1` removes them once every volume is healthy.
 
 ### Re-imaging a metal node (change install extensions, e.g. drop qemu-guest-agent)
 Metal nodes **upgrade fine** (unlike nocloud VMs). To switch a metal node to a new install image
