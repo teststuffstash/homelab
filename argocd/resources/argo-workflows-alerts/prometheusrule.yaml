@@ -37,3 +37,25 @@ spec:
           annotations:
             summary: "argo-workflows controller at {{ $value | humanizePercentage }} of its memory limit"
             description: "The argo-workflows controller has sat at {{ $value | humanizePercentage }} of its 1Gi limit for 15m — the early warning before a #449-class OOM, not the after-the-fact PodSigkilled. The controller's memory is its informer cache, sized by the COUNT of retained Workflow objects, not by load, so diagnose the COUNT, not the pod: `kubectl get workflows -A --no-headers | wc -l` against the ~7d TTL bound (workflowDefaults, #510) of ~590 (measured 2026-08-18) — a reading well above that, or with OLD non-terminal (Running/Pending) workflows (`kubectl get workflows -A` shows age; TTL fires only after completion), is a retention leak: clear the stuck non-terminals / fix the submitter whose spec-level ttlStrategy bypasses the controller default. Legit volume growth instead means RAISE the limit (requests/limits in argocd/platform/argo-workflows.yaml, last raised to 512Mi/1Gi by #487). A restart only buys minutes — it re-lists everything and refills within minutes."
+    # Workflow-outcome belt (FU-188 (d), the 2026-08-26 belt audit: "zero PrometheusRules read
+    # `argo_workflows_*`, so red workflows have no alert consumer"). Third silent instance
+    # 2026-09-05/06: 153 consecutive switchboard OOMKills over 17h, dashboard-visible only
+    # (docs/incidents/2026-09-06-switchboard-oom-silent-failures.md). The controller exports one
+    # fleet-wide counter per phase (`argo_workflows_total_count` — its `namespace` label is the
+    # controller's scrape namespace, not the workflow's), so this is a FLEET belt: the description
+    # carries the per-namespace/per-template split as a kubectl read. Window/threshold calibrated on
+    # the 14d history (2026-09-06): quiet days peak at 18–35 per 6h (a review re-run or a stack's
+    # own DAG failing), every incident day at 54–133 — the 08-26 reviewer 404-loop, the 08-31 and
+    # 09-02/03 anonymous-git throttle outages, and this one — so 40/6h fires on each of those and
+    # none of the quiet days. `for: 15m` rides out a single burst that stops on its own.
+    - name: argo-workflows-outcomes
+      rules:
+        - alert: ArgoWorkflowsFailing
+          expr: sum(increase(argo_workflows_total_count{phase=~"Failed|Error"}[6h])) > 40
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $value | humanize }} Argo workflows reached Failed/Error in the last 6h (fleet-wide)"
+            description: "More than 40 Argo workflows across the cluster ended Failed or Error in the last 6h ({{ $value | humanize }}) — the fleet belt behind the per-lane agent alerts, because a workflow that dies before its own bookkeeping (an OOMKilled pod, a clone that never finished, a controller RBAC refusal) leaves NO ledger entry, issue, or verdict; only this counter and the argo-workflows-by-phase panel on the agents-running dashboard see it. SYMPTOM ONLY: find the class first — `kubectl get workflows -A -o json | jq -r '.items[] | select(.status.phase==\"Failed\" or .status.phase==\"Error\") | [.metadata.namespace, (.metadata.generateName // .metadata.name), (.status.message // \"-\")] | @tsv' | sort | uniq -c | sort -rn` — one namespace + generateName + message dominating (e.g. `switchboard-` / `main: OOMKilled (exit code 137)`) is a broken template; many templates with git/gh errors is the anonymous-git throttle class (docs/incidents/2026-09-02-anonymous-git-throttle-loop-outage.md); reviewer runs reddening with api_error terminals is the FU-188 rail class. Then read ONE run's main-container log in Loki (`{namespace=\"<ns>\", container=\"main\", pod=~\"<generateName>.*\"}`) — the last line before the death names the step. Known silent shapes: OOMKilled = the template's memory limit vs what its script actually lists (agents/coordinator/*-argo.yaml `resources.limits`; the scan's doorbell-collapse listed a 53 MB workflow history into 512 Mi, 2026-09-06); exit 141 = a pipeline SIGPIPE under `set -o pipefail` (a writer killed by an early-exiting reader); `Pod was active on the node longer than the specified deadline` = activeDeadlineSeconds, look at what hung. A stack's OWN DAG failing (oracle-fleet `ert-*` etc.) counts here too — read the template's namespace before assuming the agent loop."
+
