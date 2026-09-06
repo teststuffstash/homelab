@@ -8,13 +8,14 @@
       {"name": "goal/test"}
     ],
     "closedAt": null,
+    "parent": null,
     "comments": [
       {
         "body": "findings-store:\nentry: 31\nkey: #1450\n31 total / 31 dispositioned\nburn-down: 0 open / 2 closed of 2 descendants",
         "createdAt": "2026-09-05T12:00:00Z"
       },
       {
-        "body": "🤖 `state-fp:goal/test` — a `goal-checkpoint` unit was dispatched at 2026-09-05T12:48:00Z.",
+        "body": "🤖 `state-fp:2eb7f839f59c` — a `goal-checkpoint` unit was dispatched at 2026-09-05T12:48:00Z.",
         "createdAt": "2026-09-05T12:48:00Z"
       },
       {
@@ -30,7 +31,10 @@
     "labels": [
       {"name": "agent/done"}
     ],
-    "closedAt": "2026-09-05T11:00:00Z"
+    "closedAt": "2026-09-05T11:00:00Z",
+    "parent": {
+      "number": 1450
+    }
   },
   {
     "number": 1448,
@@ -39,6 +43,9 @@
     "labels": [
       {"name": "agent/done"}
     ],
-    "closedAt": "2026-09-05T10:00:00Z"
+    "closedAt": "2026-09-05T10:00:00Z",
+    "parent": {
+      "number": 1450
+    }
   }
 ]

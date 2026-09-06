@@ -1,5 +1,7 @@
 CALL gh issue list --repo teststuffstash/homelab --state all --limit 300 --json number,title,state,closedAt,parent,labels
 CALL gh pr list --repo teststuffstash/homelab --state merged --limit 30 --json number,headRefName,body,mergedAt
+CALL gh api repos/teststuffstash/homelab/issues/1450/comments?per_page=100 --paginate
+CALL gh issue view 1450 --repo teststuffstash/homelab --json comments --jq [.comments[]? | select((.body // "") | test("state-fp:"))] | sort_by(.createdAt) | last | (((.body // "") | [ scan("state-fp:([^ `]+)") ] | last | .[0]) // "")
 OUT units: 0
-OUT orphans_debounced: 0
+OUT orphans_debounced: 1
 RC 0

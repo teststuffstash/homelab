@@ -1,0 +1,17 @@
+{
+  "number": 1450,
+  "comments": [
+    {
+      "body": "findings-store:\nentry: 31\nkey: #1450\n31 total / 31 dispositioned\nburn-down: 0 open / 2 closed of 2 descendants",
+      "createdAt": "2026-09-05T12:00:00Z"
+    },
+    {
+      "body": "🤖 `state-fp:2eb7f839f59c` — a `goal-checkpoint` unit was dispatched at 2026-09-05T12:48:00Z.",
+      "createdAt": "2026-09-05T12:48:00Z"
+    },
+    {
+      "body": "Completion ruling: all findings dispositioned, adopted-open set empty, production soak confirmed.",
+      "createdAt": "2026-09-05T13:00:00Z"
+    }
+  ]
+}
