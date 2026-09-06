@@ -411,9 +411,47 @@ is a KINGSTON SA400S37480G (SATA SSD, 5 % endurance used, health PASSED, not nea
 transitions / COMRESETs lifetime, one logged `ICRC, ABRT` on a WRITE DMA EXT** (wk-metal-01's
 link: 6.0 Gb/s, flat 0.6–18 ms). Latency over 7 d alternates ~1 ms ↔ 50–215 ms in lockstep with
 write size (NCQ retries after CRC errors stall the queue on large transfers). Same signature as
-the thinkcentre NIC-cable precedent. **Remedy = replace the SATA data cable / reseat (operator at
-the box, ~10 min), then confirm `sata_spd` reads 6.0 Gbps and the CRC counter stops climbing.**
+the thinkcentre NIC-cable precedent. ~~**Remedy = replace the SATA data cable / reseat**~~ —
+**DONE 2026-09-06, and it was NOT the constraint. See §2026-09-06 below before acting on this
+paragraph.**
 Fleet gotcha recorded: Kingston SA400's vendor attribute 231 `SSD_Life_Left` reads 6 while the
 standardized `Percentage Used Endurance Indicator` reads 5 % — trust the standardized field.
 Also confirmed: Talos never trims ANY node (the fstrim CronJob is pve-VM-only by design).
+
+## 2026-09-06 — the cable was a fault, not the constraint: the SA400 is the bottleneck
+
+The cable was swapped (operator at the box, 12:40–14:00Z window, `scripts/node-maintenance.sh`).
+**Link confirmed healthy: 6.0 Gbps, 0 ATA errors since boot** — the §2026-09-05 diagnosis above was
+correct about the fault and wrong about the ceiling.
+
+The Longhorn replica rebuild that followed is a clean benchmark of the drive on a healthy link:
+
+| | value |
+|---|---|
+| rebuild window (`data-garage-0` replica onto wk-metal-04) | **13:25Z → ~15:35Z ≈ 2 h 10 min** |
+| sustained write throughput, whole window | **24–32 MB/s, flat** (node_exporter `sda`) |
+| write latency / util at the time | **486 ms / 76 %** (source disk 7 ms, NIC 22 %) |
+| link it had | 6.0 Gbps = 600 MB/s |
+
+**The arithmetic that settles it:** the drive delivers **under 5 % of its healthy link** — and under
+10 % of the *degraded* 3.0 Gbps one. A cable was never capable of being the limit. The flat ceiling
+across 2 h is the signature of a **DRAM-less** SSD past its SLC cache: no room to hold the FTL
+mapping table, so sustained small random writes — Garage's exact shape — collapse.
+
+The fleet's own controlled A/B, same rebuild traffic, same cluster:
+
+| node | drive | cache | sustained write |
+|---|---|---|---|
+| wk-metal-01 | Crucial MX500 | DRAM | flat **0.6–18 ms** |
+| wk-metal-04 | Kingston SA400 | **DRAM-less** | **486 ms @ 26 MB/s** |
+
+**Remedy = replace the DRIVE with a DRAM-equipped one** (the MX500 in wk-metal-01 is the known-good
+reference in this fleet). Not the cable, not TRIM alone. ⚠ **Buying criterion for any Garage/Longhorn
+data disk from here: DRAM cache, not €/GB** — the cheap DRAM-less tier reproduces this fault exactly.
+Interim levers, unchanged: FU-137 rf=3 (2-of-3 quorum takes the slowest node off the write path —
+mitigates, does not fix this node) and the never-run TRIM (FU-093 (b)).
+
+Operator reports this as a repeat — hours-long rebuilds on this drive have happened before (the
+earlier occurrence is not recorded here; this entry is the first with numbers). Cost is not theoretical — [oracle-fleet#467](https://github.com/teststuffstash/oracle-fleet/issues/467)
+measures 248k PUTs × 220 ms ≈ 5.8 h of a single ERT parse run waiting on this path.
 
