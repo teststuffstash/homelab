@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-219** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-220** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -578,6 +578,18 @@ the block needs pruning, not more headings.
       shorten the queue) — real capacity is RAM on the compute tier, see the spike's §CI side.
       Relates FU-208, ADR-082.
 
+- [ ] **FU-219** — **`coordinate-perstack-*` runs die with exit 141 (SIGPIPE), intermittently.**
+      8 runs on 2026-09-05/06 (platform-agents ×6, oracle-agents ×2), ~60 s in, last Loki line
+      the doorbell-collapse absorbs or the `coordinate(perstack): stack=…` banner; sibling runs
+      of the same template succeed. A pipeline writer killed by an early-exiting reader under
+      `set -o pipefail` in the scan preamble — the three `| grep -q` sites feed small variables,
+      so the site is not named; suspects are a `gh … | head`/`| grep -q` over a large listing
+      without `|| true`. Surfaced by the [switchboard](glossary.md) OOM read,
+      [`incidents/2026-09-06-switchboard-oom-silent-failures.md`](incidents/2026-09-06-switchboard-oom-silent-failures.md).
+      **Next:** on the next 141, pull the run's Loki tail with `container="main"` and bisect the
+      preamble between the last printed line and the first GitHub listing; fix = `>/dev/null`
+      over `-q` (the reader drains) or `|| true` on the writer.
+
 - [ ] **FU-197** — **manifest-lint fetches every kubeconform schema from raw.githubusercontent.com
       on each CI run — uncached, so a GitHub-raw hiccup reds the required check.** Bit PR#1099
       (2026-08-31): the runner got HTTP 400 on a schema fetch (a guaranteed-404 kustomization
@@ -779,9 +791,12 @@ the block needs pruning, not more headings.
       `works | not-yet | disabled(reason→link)` — strike-out-to-disable replaces bash literals);
       router filters on it + the request's capability vector; launcher derives from it. Legs:
       (a) rideable-rails adoption (b) router refusal + empty-rail skip row (c) reviewer
-      api_error → `/report` ⇒ strike (d) zero-output belt. **Pin LIVE** (reviewer
-      authoritative→shadow, grep FU-188); out with (a)+(b). Absorbs PR#991's literal + the
-      AVX2 pin as rows at build. Next: schema design pass, then issue tree.
+      api_error → `/report` ⇒ strike (d) zero-output belt — **its `argo_workflows_*` failure
+      half SHIPPED 2026-09-06** (`ArgoWorkflowsFailing`, fleet-wide Failed/Error counter >40/6h;
+      [`incidents/2026-09-06-switchboard-oom-silent-failures.md`](incidents/2026-09-06-switchboard-oom-silent-failures.md),
+      the belt's third silent instance); the verdict-throughput half stays open. **Pin LIVE**
+      (reviewer authoritative→shadow, grep FU-188); out with (a)+(b). Absorbs PR#991's literal +
+      the AVX2 pin as rows at build. Next: schema design pass, then issue tree.
 
 - [ ] **FU-164** — **doc-heat: transcript-derived read heat over repo markdown — POINTER.**
       Question, heat doctrine (heat × class × age; blind spots; approximate lines), v0 (jail
@@ -927,8 +942,8 @@ the block needs pruning, not more headings.
       responder declares a `synchronization.semaphores` configMapKeyRef). An Errored responder is
       silent: no ledger entry, no issue, no notification. **Next:** reproduce against v4.0.7 to name
       the write, then add it to the rendered Role (Composition + the coordinator's own manifest);
-      until then an alert on `argo_workflows_error_count` / Errored respond-* would at least make it
-      visible. Relates FU-210 (the other half of "a responder run that leaves no record").
+      until then `ArgoWorkflowsFailing` (2026-09-06, fleet Failed/Error >40/6h) shows a BURST, not
+      four scattered Errors — a per-template belt still wants the RBAC fix. Relates FU-210.
 
 - [ ] **FU-213** — **opencode.ai is PARKED: our client sends no `x-opencode-session` header**
       (operator mail, 2026-09-04 — "may error" from 09-06). Parked same-day at the egress proxy:
