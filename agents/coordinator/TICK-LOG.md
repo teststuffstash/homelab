@@ -7368,3 +7368,6 @@ first live ADR-110 maintenance session before the ADR existed.
   CronJob covers metal: no (pve-VM scope by design) — a fifth `nodeName` block reuses it; test
   as a one-off AFTER the Garage rebuild (~15:30Z), weekly cadence if kept (not filed; FU-093
   extension if pursued).
+- **14:00–14:15Z wind-down:** **#1457 MERGED (operator approved) · #1475, #1476 MERGED**; PyPI
+  cache on bulk (PR#1477) live-verified; FU-093 (b) filed (metal fstrim). Garage rebuild 28 % at
+  14:13Z, monitor stopped with the session — pickup bullet in meta-state. Bookkeeping pushed once.

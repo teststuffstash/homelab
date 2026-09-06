@@ -20,6 +20,15 @@ never the session's arc — that is TICK-LOG's.)
   #1431's list) — = #1460 leg 4. **PR#1461** = #1424 half 1 (per-base doc currency; armed; left-behind on #1424: workflow.md:13/:63 per-repo prose + merge-path item 3's retired "up-to-date" predicate — one-line edits, fold into #1424's second half). **PR#1458** dirty-skips re-land armed (6a merged → pushed). oracle-fleet PR#471 ARMED 21:07Z (was an un-armed seat PR — FU-079). Next originals: #1420 (card → three acts; needs 1b merged) →
   #1424 (currency; after 6a) — neither pre-drafted this sitting (both overlap in-flight
   branches). #1423 HELD. #1452 blocked on #1422.
+- **⚑ PICKUP from the 2026-09-06 wk-metal-04 window (seat, 12:40–14:15Z; TICK-LOG has the arc):**
+  (1) Garage `data-garage-0` replica REBUILDING onto wk-metal-04 — 28 % at 14:13Z, ~0.75 %/min
+  (the SA400 writes 26 MB/s at 486 ms — the ledger §2026-09-05 benchmark); expect healthy ~15:50Z,
+  nothing to do unless `LonghornVolume*` alerts say otherwise. (2) AFTER it is healthy: re-measure
+  `data-garage-0` write latency (rebuild traffic confounded it), then the **FU-093 (b) one-off
+  fstrim on wk-metal-04** (the `node-fstrim` pod spec with `nodeName: wk-metal-04`), latency
+  re-read after — weekly metal blocks by PR only if it helped. (3) wk-metal-04 WoL unverified from
+  S5 (needed the button after the AC cut — expected; a clean `talosctl shutdown` → WoL test is
+  the open question, not urgent).
 - **⚑ OPERATOR (physical / decisions), from this sitting:** (1) **CI starvation**: one org-wide ARC set of 3 slots (FU-218); homelab ≥300 runs today
   starved oracle (queue p90 22–40 min). Levers ruled/filed: #1452 (fair, platform-native);
   per-stack runner scale sets as the fairness knob (not filed — say so if wanted); wk-metal-04's
