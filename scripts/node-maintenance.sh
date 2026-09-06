@@ -153,7 +153,13 @@ up() {
       fi
     fi
     log "waiting for Ready (≤${READY_TIMEOUT}s)"
-    local t=0; until [ "$(node_ready)" = True ]; do sleep 10; t=$((t+10)); [ $t -ge "$READY_TIMEOUT" ] && { log "TIMEOUT: $NODE not Ready after ${READY_TIMEOUT}s"; return 1; }; done
+    local t=0; until [ "$(node_ready)" = True ]; do
+      sleep 10; t=$((t+10))
+      # WoL only works from S5 on standby power: a box that was UNPLUGGED (cable swap, RAM…) has
+      # no armed NIC until it has booted once — 2026-09-06, wk-metal-04 needed the button.
+      [ $t -eq 120 ] && ! ping -c1 -W1 "$ip" >/dev/null 2>&1 && log "no ping after 120s — if the box lost AC power, WoL cannot wake it: press the power button (the wait continues)"
+      [ $t -ge "$READY_TIMEOUT" ] && { log "TIMEOUT: $NODE not Ready after ${READY_TIMEOUT}s"; return 1; }
+    done
     log "$NODE Ready after ~${t}s"
   fi
   log "uncordon $NODE"; kubectl uncordon "$NODE"
@@ -167,6 +173,24 @@ up() {
   done
   log "Longhorn: $NODE schedulable, 0 degraded attached volumes. Window closed."
   kubectl get node "$NODE" -o wide
+  # Replicas that failed during the window get REPLACED (rebuilt elsewhere after
+  # replica-replenishment-wait-interval); their directories stay on the returning disk as
+  # orphans and still count as used space — 2026-09-06 a 141G stale Garage copy blocked the
+  # Garage volume's own rebuild onto this very disk. `orphan-resource-auto-deletion` removes
+  # them after a grace period when set (tofu/longhorn.tf); list them here regardless, and
+  # delete with DELETE_ORPHANS=1 (safe now: every attached volume is healthy again).
+  local orphans
+  orphans="$(kubectl -n longhorn-system get orphans.longhorn.io -o json | jq -r --arg n "$NODE" '.items[]|select(.spec.nodeID==$n)|"\(.metadata.name) \(.spec.parameters.DataName)"')"
+  if [ -n "$orphans" ]; then
+    log "orphaned replica dir(s) left on $NODE:"; awk '{print "  "$2}' <<<"$orphans" >&2
+    if [ "${DELETE_ORPHANS:-0}" = 1 ]; then
+      awk '{print $1}' <<<"$orphans" | xargs -r -n1 kubectl -n longhorn-system delete orphans.longhorn.io
+    else
+      log "left in place — Longhorn auto-deletes them after its grace period if orphan-resource-auto-deletion is on; DELETE_ORPHANS=1 $0 up $NODE removes them now"
+    fi
+  else
+    log "no orphaned replica dirs on $NODE"
+  fi
 }
 
 case "$cmd" in
