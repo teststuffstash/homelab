@@ -500,7 +500,7 @@
       "id": 15,
       "type": "table",
       "title": "PRs waiting — reflex queue + codeowner park",
-      "description": "Value 1 = reflex queue (green, unreviewed); value 2 = CODEOWNER PARK (bot-approved, needs the human read). number links to GitHub.",
+      "description": "Value 1 = reflex queue (green, REVIEW_REQUIRED, no bot approval yet); value 2 = CODEOWNER PARK (bot-approved, needs the human read). WHY a value-1 row does not progress: armed=false — the review reflex reviews ARMED PRs only, so an un-armed PR is invisible to the reflex, the updater and auto-merge (FU-079: arm it with `gh pr merge --auto --squash`, or park it with an owning lane label); merge_state=dirty — the reflex skips conflicted PRs (a fix round or hand rebase is the next mover); behind is admitted for a first review since ADR-125. Columns come from the exporter's labels (github-exporter.py); number links to GitHub.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -543,7 +543,13 @@
             "indexByName": {
               "repo": 0,
               "number": 1,
-              "Value": 2
+              "Value": 2,
+              "armed": 3,
+              "merge_state": 4
+            },
+            "renameByName": {
+              "Value": "state (1 reflex / 2 park)",
+              "merge_state": "merge state"
             }
           }
         }
