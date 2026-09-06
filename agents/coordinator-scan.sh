@@ -528,10 +528,9 @@ STATE_FP_JQ_ARBITRATE='[ "head=" + ([ .commits[]? | select((.messageHeadline // 
   ] | join("|")'
 # Newest recorded marker, by comment createdAt — `last` on the raw list would trust gh ordering.
 # Supports BOTH old format (state-fp:<hash>) and new format (state-fp:<clause>:<hash>) for backwards compatibility.
-STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-z:-]*[0-9a-f]{6,64}")) ]
+STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:([a-z-]+:)?[0-9a-f]{6,64}")) ]
   | sort_by(.createdAt) | last // {})
-  | (((.body // "") | [ scan("state-fp:[0-9a-z:-]*[0-9a-f]{6,64}") ] | last) // "")
-  | sub("^state-fp:"; "")'
+  | (((.body // "") | scan("state-fp:(?:[a-z-]+:)?([0-9a-f]{6,64})") | .[0]) // "")'
 
 # Clause-scoped state-fp reader: helper to extract clause-scoped state-fp markers.
 # Takes a clause name as an argument and returns the hash from state-fp:<clause>:<hash>,
@@ -544,7 +543,7 @@ state_fp_for_clause() {
   clause_marker="$(printf '%s' "$fp_probe" | jq -r --arg c "$clause" \
     '([ .comments[]? | select((.body // "") | test("state-fp:" + $c + ":[0-9a-f]{6,64}")) ]
       | sort_by(.createdAt) | last // {})
-     | (((.body // "") | [ scan("state-fp:" + $c + ":([0-9a-f]{6,64})") ] | .[0]) // "")' 2>/dev/null)" || clause_marker=""
+     | (((.body // "") | scan("state-fp:" + $c + ":([0-9a-f]{6,64})") | .[0]) // "")' 2>/dev/null)" || clause_marker=""
   if [ -n "$clause_marker" ]; then
     printf '%s' "$clause_marker"
     return 0
@@ -2945,7 +2944,7 @@ EOF_GOVERNANCE
       # state-fp debounce: one ride per verdict state (homelab#198).
       afp="$(pr_state_fp_pair "$slug" "$u" assembly-cr)"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
-        orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} changes-requested DEBOUNCED — state unchanged since the last goal-checkpoint emit for goal #${g} (\`state-fp:${afp_cur}\`, homelab#198). The assembly PR still has CHANGES_REQUESTED and the goal-checkpoint unit was already emitted; a human (or new content) is the next mover.\n"
+        orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} changes-requested DEBOUNCED — state unchanged since the last goal-checkpoint emit for goal #${g} (\`state-fp:assembly-cr:${afp_cur}\`, homelab#198). The assembly PR still has CHANGES_REQUESTED and the goal-checkpoint unit was already emitted; a human (or new content) is the next mover.\n"
         continue
       fi
       # Emit a goal-checkpoint unit for the goal (trigger=assembly-cr).
@@ -3100,7 +3099,7 @@ EOF_GOVERNANCE
       esac
       mfp="$(pr_state_fp_pair "$slug" "$u" "merge-conflict" "$pr_json_mf")"; mfp_prev="${mfp#*|}"; mfp_cur="${mfp%%|*}"
       if [ -n "$mfp_cur" ] && [ "$mfp_cur" = "$mfp_prev" ]; then
-        orphans="${orphans}[$repo] ⏳ merge-conflict DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last merge-conflict dispatch (\`state-fp:${mfp_cur}\`, homelab#198). The conflict stands and a round was already dispatched at this exact input — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
+        orphans="${orphans}[$repo] ⏳ merge-conflict DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last merge-conflict dispatch (\`state-fp:merge-conflict:${mfp_cur}\`, homelab#198). The conflict stands and a round was already dispatched at this exact input — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
         continue
       fi
       units="${units}merge-conflict|${repo}|pr-${u}\n"
@@ -3999,7 +3998,7 @@ EOF_GOVERNANCE
         else
           # No round completed since the marker — debounce holds, but report as who=operator
           # so the board shows it (FU-199)
-          orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
+          orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:arbitrate:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
           item_class_push "$repo" "pr-${u}" "arbitrate-standing" "operator"
           continue
         fi
@@ -4208,7 +4207,7 @@ EOF_GOVERNANCE
               stats_ts | max // ""' 2>/dev/null)" || rfp_stats_ts=''
             if [ -n "$rfp_marker_ts" ] && [ -n "$rfp_stats_ts" ] && [[ "$rfp_stats_ts" > "$rfp_marker_ts" ]] 2>/dev/null; then
               # A round completed since the marker — debounce holds normally
-              orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
+              orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:ci-red:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
               continue
             fi
             # No round completed since the marker — re-arm the gate (don't debounce).
