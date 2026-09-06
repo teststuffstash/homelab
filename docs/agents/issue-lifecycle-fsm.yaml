@@ -444,10 +444,13 @@ transitions:
     status: guarded
     replay:
       - agents/replay/fixtures/merged-closeout-default-branch
-    unreplayed: "LLM play — the play layer is outside the harness by design. IL-G06 detection semantics (regex, strong-link vs bare-mention split, dref exclusion) are guarded but unreplayed due to replay stub limitations (cannot differentiate `--state merged` vs `--state open`)."
+      - agents/replay/fixtures/merged-closeout-ilg06-detect
+    unreplayed: "LLM play — the play layer is outside the harness by design. The IL-G06 detection semantics (strong-link vs bare-mention, dref exclusion, the claim-after-merge hold) are replayed by merged-closeout-ilg06-detect since homelab#1199/#1472."
     guards:
       - desc: "scan emits merged-closeout units (goal children first, shared cap 3/repo/scan)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merged-closeout\|' }
+      - desc: "IL-G06 fires ONCE per merge, never once per tick (homelab#1472): an OPEN default-branch issue whose newest `agent/in-progress` labeled event post-dates the newest strong-link merge has already been re-queued and re-claimed — the closeout for that merge is spent, the current round is the ride's / C4-C5's (IL-T29), and the arm reports instead of emitting. Derived from GitHub state each tick, no marker written; an unreadable events probe or merge time HOLDS (rule #6). oracle-fleet#397: 8 closeout sessions in 40 min against a live r6 pod"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'already CLAIMED since the merge' }
       - desc: "goal children verify against the GOAL branch, not master/ArgoCD"
         anchor: { file: agents/coordinator/README.md, pattern: "Verify against the GOAL BRANCH" }
       - desc: "goal closeout retargets surviving sprouts to master (their base dies with the branch)"
@@ -726,7 +729,9 @@ gaps:
       the detection code parses and runs without error. Bare mentions still hold (the circles#36 asymmetry
       stands). The positive-path detection semantics (regex match, strong-link vs bare-mention split,
       dref exclusion) are guarded but unreplayed due to stub limitations in differentiating `--state merged`
-      vs `--state open` — see IL-T09."
+      vs `--state open` — see IL-T09. **Replayed since homelab#1199** (state-keyed worlds), and the arm
+      gained the claim-after-merge hold in homelab#1472 (fire once per merge — a re-claimed
+      multi-round issue is C4/C5's, not C6's)."
 
   - id: IL-G07
     name: "the belt treats the symptom; the missing finalize is the cause"
