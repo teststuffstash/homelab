@@ -6,7 +6,7 @@ CALL gh api repos/teststuffstash/agent-runtime/issues/81/sub_issues
 CALL gh api repos/teststuffstash/agent-runtime/issues/85/sub_issues
 CALL gh api repos/teststuffstash/homelab/issues/278/comments --paginate
 CALL gh api --method POST repos/teststuffstash/homelab/issues/278/comments -f body=<!-- agent-budget-refusal -->\nAGENT_BUDGET_REFUSED: Σ(spend + reservations) $8.0 > Budget $5\n\nThe launcher refused to dispatch a child of this goal — deterministic pre-flight, not a model judgement (FU-090 leg (c)).\n\nPer-child caps:\n\n    teststuffstash/agent-runtime#81 → $2.0000 (cap (walk degraded))\n    teststuffstash/agent-runtime#85 → $2.0000 (cap (walk degraded))\n    teststuffstash/homelab#1001 → $2.0000 (cap (walk degraded))\n    teststuffstash/homelab#1002 → $2.0000 (cap (walk degraded))\n\nThis is a human decision either way: **re-scope the children** so their caps fit, or **raise the `Budget:` line** on this issue. Until one of those happens the refusal repeats every scan and no child of this goal dispatches.\n\nThe sum is ACTUAL spend for settled children (the per-row notes name each charge) plus cap reservations for live keys and this dispatch; a ridden child with no ledger entry is charged its cap, conservatively.\n\n_Level-triggered: this is ONE comment, re-edited as the numbers move (ADR-103 rule 2) — not one comment per refusal._
-ERR LEGACY-GRAMMAR Budget -
+ERR LEGACY-GRAMMAR Budget teststuffstash/homelab#278
 ERR → Goal budget: descendant walk degraded (fetch failure in tree) — falling back to CAP-sum (conservative)
 ERR → Goal budget: refusal posted to #278
 ERR PREFLIGHT REFUSED: the decomposition of goal #278 overruns its Budget.

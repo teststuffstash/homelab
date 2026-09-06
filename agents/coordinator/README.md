@@ -411,6 +411,61 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 8. **Clean up.** Delete the ephemeral `OpenRouterKey` CR (its `expiresAt` is the backstop) — an
    OpenRouter-primary round only; a `claude/` ride minted none, so there is nothing to clean up.
 
+## Authoring an issue body — the machine block goes through the writer (ADR-122 (3), homelab#1431)
+
+Four of your plays AUTHOR issue bodies: the `merged-closeout` harvest, `goal-decompose`, the
+`goal-checkpoint` `mint`, and the cross-boundary filing contract. In all four, the body's
+machine-readable keys are **one `---`-fenced block at the TOP of the body, composed by the ONE
+parser's writer** — [`agents/issue_body.py`](../../agents/issue_body.py), grammar and rationale in
+[`docs/agents/issue-authoring.md`](../../docs/agents/issue-authoring.md) §The machine block. You
+never hand-type `Touches:`/`Base:`/`Origin:` lines into prose again: ADR-122 (3) measured 13
+line-anchored grammars whose readers disagreed with each other, and an author who guessed the
+spelling (`**Touches:**`, an indented `Budget:`) declared nothing while believing otherwise.
+
+```sh
+# 1. the PROSE body to a file — no machine lines in it, the writer owns those.
+#    Compose with a heredoc or --body-file; never inline "$(…)" interpolation.
+cat > /tmp/body.md <<'EOF'
+<the bullet verbatim / the child's one deliverable + acceptance / the evidence grammar>
+EOF
+
+# 2. stamp the machine block (inserted at the top; merged in place if one already exists)
+python3 /work/homelab/agents/issue_body.py set \
+    "Touches=agents/foo.sh, docs/bar.md" \
+    "Base=goal/12-slug" \
+    "Origin=<owner/repo>#<n>" \
+    < /tmp/body.md > /tmp/body.final.md
+
+# 3. THE GATE — the writer must be able to re-read what you are about to post
+python3 /work/homelab/agents/issue_body.py json < /tmp/body.final.md
+
+# 4. only on exit 0
+gh issue create --repo <owner/repo> --title "…" --body-file /tmp/body.final.md
+```
+
+Rules that bind every authoring play below:
+
+- **Step 3 is not optional. A body the writer cannot re-parse is NEVER posted.** `json` exits 2
+  with one stderr line on an unknown key, an indented or bulleted line inside the fences, a
+  duplicate key or an unterminated fence. Exit 2 ⇒ fix the block and re-run; never post and never
+  "fix it in a follow-up comment" — an unparsable block is a footprint/base/budget the loop cannot
+  read, which is the failure this collapse exists to end.
+- **Read inherited values through the same parser**, never a grep:
+  `python3 /work/homelab/agents/issue_body.py get Touches --ref <owner/repo>#<parent>
+  < /tmp/parent-body.md` (`gh issue view <parent> --json body -q .body > /tmp/parent-body.md`
+  first). The block wins; a value that came from a legacy line prints one `LEGACY-GRAMMAR <key>
+  <ref>` line on stderr — that is the migration meter, never suppress it.
+- **Keep the prose free of machine lines.** The writer does NOT strip a legacy `Touches:` line
+  already sitting in a body, so a hand-typed one survives beside the block and misleads every
+  human who reads it (the block still wins for machines). Provenance sentences stay prose.
+- **`Origin: <owner/repo>#<n>` on every issue you author** — the issue or PR the filing came from.
+  It is BLOCK-ONLY with **no reader today** (`BLOCK_ONLY` in the parser, alongside `Class` and
+  `Size`): you stamp it so lineage is machine truth when the reader lands, and it does not replace
+  the native sub-issue edge or the human-readable provenance line.
+- **Only the keys your play owns.** `Class:` maps from the `task/*` label (a body parser cannot see
+  labels), `Budget:` is the goal author's, and labels still route while the block only
+  parameterises — do not invent keys to carry a decision a label already carries.
+
 ## The `merged-closeout` clause (C6 — FU-090a / merge-path MP-G03, built 2026-07-27)
 
 The scan dispatches this unit for an issue **closed by its merged PR but still labelled
@@ -451,11 +506,14 @@ job, in order (re-read live state first, exit clean if someone already closed it
    issue on the SAME repo — title from the bullet, body = the bullet verbatim + provenance
    (`Harvested from PR #N review (issue #M)`), any `track/*` label inherited from the source
    issue (reporting decor only since ADR-097 — the scheduler no longer reads it).
-   **The body carries two machine-readable lines (both unbulleted — a markdown bullet slips
-   the scan regex):**
-   - **`Touches:`** (ADR-097, docs/agents/issue-authoring.md §Touches) — your judged write
+   **The body's machine keys are the machine block, composed by the writer** (§Authoring an
+   issue body above — `issue_body.py set …` then the `json` re-parse gate before `gh issue
+   create`; a body the writer cannot re-parse is never posted). This harvest stamps two keys —
+   plus a dependency that is an EDGE, not a line:
+   - **`Touches=<…>`** (ADR-097, docs/agents/issue-authoring.md §Touches) — your judged write
      surface for the fix, as comma-separated path prefixes/globs, STARTING from the parent
-     issue's own `Touches:` narrowed to what this follow-up actually needs. Judge it from the
+     issue's own `Touches:` (read it with `issue_body.py get Touches --ref <slug>#<parent>`, not
+     a grep) narrowed to what this follow-up actually needs. Judge it from the
      merged diff + the bullet; when honestly unsure, OMIT the line — omitted means exclusive
      (safe, just serial), a wrong narrow line risks two workers in one file. **Classify the
      footprint before you file it** (`agents/footprint.sh`'s `classify_touches()`, the same
@@ -463,6 +521,9 @@ job, in order (re-read live state first, exit clean if someone already closed it
      ❌ set) or a hit on `scripts/pin-only-lint.sh`'s `GUARDED` set means no worker can ever land
      this follow-up as a PR — say so in the body as a plain sentence naming the classifier
      (never a new body line) rather than leaving it for the scan log alone (homelab#1207).
+   - **`Origin=<slug>#<the originating issue>`** — block-only, no reader today; the machine
+     half of the provenance whose prose half (`Harvested from PR #N review (issue #M)`) stays in
+     the body text.
    - **A dependency** only if the bullet states one — create the native edge (FU-111:
      `gh api -X POST repos/<slug>/issues/<harvested-N>/dependencies/blocked_by
      -F issue_id=<the BLOCKER's numeric .id>`). No `Depends-on:` body line — the reader retired
@@ -597,16 +658,28 @@ circles#17 did exactly that twice — and **no cap was near binding** (25 turns 
 tokens into a 262k window). The lane was wrong, not the budget. Do not "fix" a goal by raising a
 cap.
 
-Read the goal in full — its acceptance criteria, its explicit non-goals, its `Budget:` line. Then
-author child issues, each of which a single ride can finish:
+Read the goal in full — its acceptance criteria, its explicit non-goals, its `Budget:` line —
+reading each through the parser (`issue_body.py get <key> --ref <slug>#<goal>`), not a grep. Then
+author child issues, each of which a single ride can finish; every child's body carries its
+machine block, written by `issue_body.py set` and re-read by `issue_body.py json` before you post
+it (§Authoring an issue body above — the gate is not optional):
 
 - **Every child cites the parent as a NATIVE sub-issue** (`gh api -X POST
   repos/<slug>/issues/<parent>/sub_issues -F sub_issue_id=<child-id>`) — the same call the
   merged-closeout harvest makes. Prose provenance is not enough; the lineage is read by machinery.
-- **Each child carries its own `Touches:`**, narrowed from the parent's — never the parent's whole
-  footprint, or the children serialise behind one another on the footprint hold.
-- **`Base:` is inherited verbatim** when the parent declares one. A child that forgets it forks
-  from master and its diff swallows the base branch.
+- **Each child carries its own `Touches=<…>`**, narrowed from the parent's — never the parent's
+  whole footprint, or the children serialise behind one another on the footprint hold.
+- **`Base:` is inherited verbatim** when the parent declares one — read the goal's value with
+  `issue_body.py get Base --ref <slug>#<goal>` and pass that exact string back as `Base=<…>` in
+  the child's `set` call; never retype it. A child that forgets it forks from master and its diff
+  swallows the base branch.
+- **`Origin=<slug>#<goal>` on every child** — block-only, no reader today; it records which
+  filing cut this child, alongside (never instead of) the native sub-issue edge above.
+- The three go in ONE `set` call per child:
+  `python3 /work/homelab/agents/issue_body.py set "Touches=<narrowed>" "Base=<inherited>"
+  "Origin=<slug>#<goal>" < /tmp/child.md > /tmp/child.final.md`, then
+  `python3 /work/homelab/agents/issue_body.py json < /tmp/child.final.md` (exit 2 ⇒ fix the
+  block, never post), then `gh issue create --body-file /tmp/child.final.md`.
 - **Each child names ONE deliverable with its own acceptance.** "Implement the spec" is not a
   child; "the bake produces the fixture artifact with these seven lights" is.
 - **Σ(child estimator budgets) ≤ the parent's `Budget:`** — enforced in the launcher pre-flight,
@@ -684,7 +757,10 @@ re-fires the clause forever). Read the goal's findings-store comment; for every 
 `dispositioned-through:`, rule exactly one of — **fold** (the work belongs in an existing OPEN
 child: comment the fold target on the goal; the child's next round picks it up), **mint** (a
 REAL new child: native sub-issue of the finding's ORIGIN issue — `origin=#N` in the entry, ADR-106
-(2); never the bucket pre-launch — label `agent-fix`+`agent/queued` ONLY while the goal is OPEN
+(2); never the bucket pre-launch — body authored exactly as `goal-decompose` authors a child
+(`issue_body.py set "Touches=<narrowed>" "Base=<the goal's own, verbatim>" "Origin=<slug>#<the
+finding's origin issue>"`, then the `json` re-parse gate before `gh issue create` — §Authoring an
+issue body); label `agent-fix`+`agent/queued` ONLY while the goal is OPEN
 and `Budget:` has room — the same goal_budget arithmetic the launcher pre-flight enforces; over
 budget = mint UNLABELLED and say so), or **drop** (one reason line in your goal comment). Then
 advance the marker: `bash /work/homelab/agents/goal-findings.sh advance <owner/repo> <goal-n>
@@ -749,7 +825,8 @@ Rule exactly one of:
   outstanding and which child owns it. Leave the goal in its tracking state. This is the ordinary
   case.
 - **Not yet assembly-complete, and NOTHING open covers the gap** → author the missing child (same rules as
-  `goal-decompose`: native sub-issue, narrowed `Touches:`, inherited `Base:`, one deliverable)
+  `goal-decompose`: native sub-issue, narrowed `Touches:`, inherited `Base:`, `Origin:`, one
+  deliverable — all through `issue_body.py set` + the `json` gate)
   and say why the original decomposition missed it. Watch the budget — the launcher enforces
   Σ(child caps) ≤ the goal's `Budget:` and will REFUSE the dispatch, which is a re-scope
   conversation for a human, not something to work around.
@@ -1108,7 +1185,13 @@ alone. You FILE the fault where its owner's intake runs, under this contract:
    Breaker #1 is the damage ceiling — a filed issue is noise until a human acts on it.
 4. **Evidence grammar, one issue per cause**: the failing read/error lines VERBATIM (your
    `TOOL_GAP:` marker's content), any differential (what your token read vs what another
-   identity read), the reproduction count, links to the stack issue/PR. **Asks are claims** —
+   identity read), the reproduction count, links to the stack issue/PR. The body's machine half
+   is the block, written by the parser (§Authoring an issue body): `python3
+   /work/homelab/agents/issue_body.py set "Origin=<stack-slug>#<the stuck issue or PR>"` — the
+   filed fault's provenance as machine truth — plus `Touches=<…>` ONLY if you can honestly judge
+   the platform-side write surface (you usually cannot: attribution is the intake's job per
+   step 1, and omitted means exclusive, which is safe). Run `issue_body.py json < body` before
+   `gh issue create`; exit 2 ⇒ fix the block, never post. **Asks are claims** —
    before demanding an operator action, check the domain's declared record and cite it
    (ground-rules; the #1038 lesson: the "missing App grant" was a mint field two files away).
 5. **Wire the un-park**: a native `blockedBy` edge from the stuck STACK issue to the filed

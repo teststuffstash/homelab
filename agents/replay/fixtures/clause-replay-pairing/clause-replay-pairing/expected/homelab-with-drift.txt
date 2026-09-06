@@ -4,4 +4,8 @@ OUT ORPHAN [homelab] ⚠️ CLAUSE-REPLAY pairing: issue touches a ratchet claus
 OUT ORPHAN   issue #701 — touches clause `agents/coordinator-scan.sh` but `Touches:` (`agents/coordinator-scan.sh`) does not reach `agents/replay/**`
 OUT ORPHAN   issue #703 — touches clause `agents/coordinator/reflexes-argo.yaml` but `Touches:` (`agents/coordinator/`) does not reach `agents/replay/**`
 OUT REACHED: end
+ERR LEGACY-GRAMMAR Touches homelab#701
+ERR LEGACY-GRAMMAR Touches homelab#702
+ERR LEGACY-GRAMMAR Touches homelab#703
+ERR LEGACY-GRAMMAR Touches homelab#704
 RC 0

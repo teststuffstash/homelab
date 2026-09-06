@@ -19,6 +19,10 @@
 # marker + #226). Currency rows overlay their alert-store/comment state on lifecycle (rows/<id>/).
 # The touches-multiline-deny row (S6 sprout, #716) pins the UNION read of multi-line Touches:
 # bodies — a deny-listed path on a later superseding line must gate (head -1 was fail-open).
+# The two block-* rows (ADR-122 (3), #1431) pin the SAME two decisions read through the ONE
+# parser (agents/issue_body.py, seamed as `ib()` in bridge.sh): a body whose machine truth is the
+# fenced block queues exactly like its legacy twin and meters nothing, and a block carrying a key
+# outside the grammar is a LOUD refusal that queues nobody — never a silent "no marker".
 pins:
   - IL-T23
   - IL-T24

@@ -1,4 +1,4 @@
-CALL gh api repos/teststuffstash/homelab/issues?labels=agent-fix&state=open&per_page=50 --jq .[] | select(.pull_request | not) | select(.body // "" | test("(^|\n)alert-fp:")) | select([.labels[].name] | any(startswith("agent/")) | not) | {repo: "teststuffstash/homelab", number: .number, title: .title, body: (.body // "")}
+CALL gh api repos/teststuffstash/homelab/issues?labels=agent-fix&state=open&per_page=50 --jq .[] | select(.pull_request | not) | select([.labels[].name] | any(startswith("agent/")) | not) | {repo: "teststuffstash/homelab", number: .number, title: .title, body: (.body // "")}
 CALL gh api repos/teststuffstash/homelab/issues/237 --jq .body // ""
 CALL alertmanager GET /api/v2/alerts (currency probe)
 CALL gh api repos/teststuffstash/homelab/issues/237/comments --paginate
@@ -8,4 +8,8 @@ OUT pending set: 1 issue(s)
 OUT single pending issue — deterministic fast path
 OUT inert teststuffstash/homelab#237 — alert-fp:9c41d70e5ab28f13 is not firing — it resolved, and the body is all a fixer would have to work from
 OUT currency note already on teststuffstash/homelab#237 — not repeating
+ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#237
+ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#226
+ERR LEGACY-GRAMMAR self-referential teststuffstash/homelab#226
+ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#237
 RC 0

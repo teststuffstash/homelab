@@ -1,7 +1,6 @@
 CALL gh issue list --repo teststuffstash/circles --state all --limit 300 --json number,title,state,closedAt,parent,labels
 CALL gh pr list --repo teststuffstash/circles --state merged --limit 30 --json number,headRefName,body,mergedAt
 CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate --slurp
-CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --paginate
 OUT   [circles] goal #29: CHECKPOINT due (child-set complete pre-launch; store 6 total / 6 dispositioned)
 OUT GACTED <none>
 OUT UNITS goal-checkpoint|circles|issue-29 

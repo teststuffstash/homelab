@@ -171,6 +171,7 @@ is stale, so it cannot drift the way the prose register did.
 | `base-arm-research-master` | actions | - | `agents/agent-session.sh` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
+| `body-block-malformed/body-block-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `body-footprint-mismatch/body-footprint-mismatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `c4c5-ambig-decidable-cross-repo` | actions | - | `agents/coordinator-scan.sh` | - |
 | `c4c5-ambig-decidable` | table | - | `agents/coordinator-scan.sh` | IL-T29 |
@@ -282,6 +283,7 @@ is stale, so it cannot drift the way the prose register did.
 | `pr-cap-per-base/collision` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/counts` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |
+| `preflight-malformed-block` | actions | - | `agents/agent-session.sh` | - |
 | `queued-classification/held` | actions | - | `agents/coordinator-scan.sh` | - |
 | `queued-classification/ready` | actions | - | `agents/coordinator-scan.sh` | - |
 | `queued-derivation/no-agent-fix` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -519,7 +521,7 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   issue, no output changed, only the reads moved. Its `post.sh` prints `GATE SUBJECT: #<n>`, the
   value the next clause consumes, which is how a resolution fixture asserts on enforcement it does
   not run; and `goal-ancestor-unlabelled-budget` exists purely to keep the walk's stop condition
-  (a `task/goal` label OR a `Budget:` line) from decaying into an AND — a CONSTRUCTED world, and
+  (a `task/goal` label, OR a `Budget:` line on a PARENTLESS issue — PR#1398 narrowed the line half) from decaying into an AND — a CONSTRUCTED world, and
   it says so, because a mis-authored goal is exactly what you cannot count on finding live.
 
 ## When the clause lives inside a manifest

@@ -157,6 +157,14 @@ def _budget_norm(v):
     return v if re.match(r"^[0-9]+(\.[0-9]+)?$", v) else ""
 
 
+def _squash_ws(v):
+    """`agents/agent-session.sh`'s `Base:` tail, verbatim: `tr -d '[:space:]'` — DELETE every
+    whitespace character in the value (not a trim). A branch name carries none, so the two
+    readings coincide on every real declaration; the difference is what a malformed one becomes,
+    and preserving it is what makes the launcher's migration a no-op on its own inputs."""
+    return re.sub(r"\s", "", v)
+
+
 def _verdict_norm(v):
     """`agents/coordinator-scan.sh` ~2350: `gsub(/[ \\t\\r]/, "", v); print tolower(v)`."""
     return re.sub(r"[ \t\r]", "", v).lower()
@@ -223,7 +231,17 @@ LEGACY = {
 # canonical readers above for `Budget` (which is column-0-only and currency-stripping) and for
 # `Verdict-authority` (which lowercases). Preserved as a named variant so goal-lint keeps
 # byte-identical behaviour rather than silently inheriting a money gate's widening.
+# `agents/agent-session.sh`'s `Base:` read (the launcher pre-flight, ~line 791) is the OTHER
+# divergent form: `sed -n 's/^[Bb]ase:[[:space:]]*//p' | head -1 | tr -d '[:space:]'` — COLUMN 0
+# only (no leading whitespace), `Base:`/`base:` only (not the canonical reader's full
+# case-insensitivity), first match, and all whitespace deleted from the value. It gates ARMING
+# (a declared base un-arms auto-merge), so widening it by fiat would change what merges itself;
+# named as a variant instead, exactly like goal-lint's money read. S8 original 1b, homelab#1431.
 VARIANTS = {
+    "agent-session": {
+        "Base": _Legacy(r"(?m)^[Bb]ase:[ \t]*(.*)$", "agents/agent-session.sh:791",
+                        normalize=_squash_ws),
+    },
     "goal-lint": dict(
         (k, _Legacy(r"(?m)^[ \t]*" + re.escape(k) + r":[ \t]*(.*)$", "scripts/goal-lint.sh:37 line()",
                     normalize=_rstrip))
@@ -784,6 +802,29 @@ def _self_test():
           upsert_block(withblock, {"Budget": None}), "---\nClass: fix\n---\n\n## Why\n\nprose\n")
     raises("upsert_block: refuses an unknown key", lambda: upsert_block("x", {"Nope": "1"}),
            "unknown key")
+
+    # `--legacy agent-session` restates the launcher's `Base:` read (issue_body.py's VARIANTS
+    # comment cites agent-session.sh:791: `sed -n 's/^[Bb]ase:...//p' | head -1 | tr -d
+    # '[:space:]'`). Derived from that pipeline, NOT from running it:
+    #   "  Base: goal/9-x"      → the sed anchor is `^[Bb]ase:` at column 0, so an INDENTED line
+    #                             does not match at all ⇒ nothing (the canonical reader, which
+    #                             allows leading whitespace, DOES match it — that is the divergence).
+    #   "BASE: goal/9-x"        → `[Bb]ase` matches only `Base`/`base` ⇒ nothing.
+    #   "Base: goal /9 x"       → `tr -d '[:space:]'` deletes every space ⇒ "goal/9x".
+    check("legacy agent-session: an indented Base: is invisible to the launcher's reader",
+          get("  Base: goal/9-x", "Base", variant="agent-session"), None)
+    check("legacy agent-session: BASE: is invisible to the launcher's reader",
+          get("BASE: goal/9-x", "Base", variant="agent-session"), None)
+    check("legacy agent-session: the value has every space DELETED, not trimmed",
+          get("Base: goal /9 x", "Base", variant="agent-session"), "goal/9x")
+    # the canonical reader (coordinator-scan.sh:1084) is the one that differs — pinned so the
+    # divergence itself is a checked fact, not a comment.
+    check("legacy default: the canonical Base: reader DOES see an indented line",
+          get("  Base: goal/9-x", "Base"), "goal/9-x")
+    # the block wins over both, and a block value is never whitespace-squashed.
+    check("block Base beats the agent-session legacy form",
+          get("---\nBase: goal/9-x\n---\nBase: goal/other", "Base", variant="agent-session"),
+          "goal/9-x")
 
     sys.stdout.write("issue_body self-test: %d checks, %d failed\n" % (checked[0], len(fails)))
     if fails:

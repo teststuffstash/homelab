@@ -25,6 +25,49 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # summary comment. Shared with the coordinator brief's dispatch notice — one implementation, so the
 # fallback stats emitter below cannot drift from what the rest of the loop writes.
 . "${HERE}/machine-comment.sh"
+
+# ── the ONE body parser (ADR-122 (3), homelab#1430/#1431) ───────────────────────────────────────
+# Every body-grammar read in this launcher goes through agents/issue_body.py: the `---`-fenced
+# MACHINE BLOCK first, the legacy line-anchored form as the transition-window fallback (one
+# `LEGACY-GRAMMAR <key> <ref>` line to stderr per fall-through — the migration meter; NEVER
+# suppressed, and `--ref <repo>#<n>` is what makes it countable PER ISSUE rather than per ride).
+#
+# FAIL CLOSED ON A MALFORMED BLOCK (exit 2). An unknown key, an indented line, a duplicate key or
+# an unterminated fence is NOT "no declaration": it is an author who believes they declared one.
+# Read as absent, a malformed `Base:` block forks the ride from master while the body says
+# `goal/12-x` — a diff that cannot mean what it appears to mean — and a malformed `Budget:` block
+# waves it through the money gate. Both are the silent skip the ONE parser exists to end, so the
+# PRE-FLIGHT REFUSES: one line, before a pod, a branch or a key exists. `ib_get` cannot do the
+# refusing itself — it is called inside `$( )`, where `exit` leaves only the subshell (fail-OPEN,
+# the exact inversion) — so it RETURNS the parser's status and `ib_refuse_malformed` (in the main
+# shell) is what exits.
+#
+# Degrade: an unreachable parser (no python3 / no module) is loud and non-fatal, matching
+# goal-budget.sh's stated degrade — a missing interpreter is an environment fault, not an
+# authoring error, and it is the one case where "no value" is the honest answer.
+# >>>REPLAY:preflight-body-parser>>>
+ib_get() {   # <key> <ref> [legacy-variant]  — body on stdin; exit 2 ⇒ malformed block
+  _ib_key="$1"; _ib_ref="$2"; _ib_var="${3:-}"
+  if ! command -v python3 >/dev/null 2>&1 || [ ! -f "$HERE/issue_body.py" ]; then
+    echo "WARN agent-session: cannot reach the ONE body parser (python3 + $HERE/issue_body.py, ADR-122 (3)) — \`${_ib_key}:\` reads as absent" >&2
+    cat >/dev/null   # drain the piped body so the caller does not take a SIGPIPE
+    return 0
+  fi
+  if [ -n "$_ib_var" ]; then
+    python3 "$HERE/issue_body.py" get "$_ib_key" --ref "$_ib_ref" --legacy "$_ib_var"
+  else
+    python3 "$HERE/issue_body.py" get "$_ib_key" --ref "$_ib_ref"
+  fi
+}
+
+# The refusal, in the main shell so `exit` is real. ONE line to stderr (the #1315-class shape: a
+# pre-flight that refuses says so once, in the run a human reads, and does not also mint a comment
+# — there is no branch, no head SHA and often no goal thread to hang one on at this point).
+ib_refuse_malformed() {   # <key> <ref>
+  printf 'PREFLIGHT REFUSED: malformed machine block on %s — the `%s:` read failed to parse (ADR-122 (3), agents/issue_body.py); fix the `---` block on the issue. No pod, no key, no dispatch.\n' "$2" "$1" >&2
+  exit 1
+}
+# <<<REPLAY:preflight-body-parser<<<
 # The 128KiB per-argv-element ceiling the base64 recipe carry rides into (homelab#242). Shared with
 # retro-session.sh, whose brief travels the same channel one hop earlier — measured just before the
 # pod command is frozen into `args:` below.
@@ -786,8 +829,18 @@ if [ -n "${RECIPE:-}" ]; then
     # against it, (3) NEVER arm auto-merge: stacked work on an unmerged base is human-gated by
     # construction — landing it automatically is precisely what the operator is holding back.
     # `--ref` still wins (an explicit operator override beats a declaration).
-    ISSUE_BASE="$(gh issue view "$ISSUE_N" --repo "${ORG:-teststuffstash}/${PROJECT}" --json body \
-      --jq '.body' 2>/dev/null | sed -n 's/^[Bb]ase:[[:space:]]*//p' | head -1 | tr -d '[:space:]' || true)"
+    # THE GRAMMAR IS THE ONE PARSER'S (ADR-122 (3), #1431). `--legacy agent-session` is the
+    # variant that restates THIS reader's historical form byte-identically (column 0, `Base:`/
+    # `base:` only, first match, every space deleted from the value) — a body carrying no machine
+    # block therefore arms exactly as it did before. The body is captured BEFORE the parse so a
+    # `gh` failure stays the pre-existing fail-soft (absent ⇒ master) and only the PARSER's exit 2
+    # can mean "malformed".
+    _ib_ref="${ORG:-teststuffstash}/${PROJECT}#${ISSUE_N}"
+    _ib_body="$(gh issue view "$ISSUE_N" --repo "${ORG:-teststuffstash}/${PROJECT}" --json body \
+      --jq '.body' 2>/dev/null || true)"
+    _ib_rc=0
+    ISSUE_BASE="$(printf '%s' "$_ib_body" | ib_get Base "$_ib_ref" agent-session)" || _ib_rc=$?
+    [ "$_ib_rc" -eq 0 ] || ib_refuse_malformed Base "$_ib_ref"
     if [ -n "$ISSUE_BASE" ]; then
       if [ "$BASE_REF" != "master" ]; then
         echo "→ Base: ${ISSUE_BASE} declared on #${ISSUE_N} but --ref ${BASE_REF} was passed — the explicit flag wins"
@@ -861,6 +914,9 @@ if [ -n "${RECIPE:-}" ]; then
     case "$_gp_direct" in ''|*[!0-9]*) _gp_direct="";; esac
     if [ -n "$_gp_direct" ]; then
       goal_resolve_ancestor "${ORG:-teststuffstash}/${PROJECT}" "$_gp_direct"
+      # A malformed block ANYWHERE on the walk refuses: the walk reads `Budget:` at every hop, and
+      # an ancestor whose block will not parse is an ancestor whose funding is unknown.
+      [ -z "${GB_MALFORMED:-}" ] || ib_refuse_malformed Budget "$GB_MALFORMED"
       if [ -n "$GB_GOAL" ]; then
         GOAL_PARENT="$GB_GOAL"
         if [ "$GB_HOPS" -gt 0 ]; then
@@ -911,6 +967,7 @@ if [ -n "${RECIPE:-}" ]; then
     if [ -n "$GOAL_PARENT" ]; then
       # >>>REPLAY:goal-budget-gate>>>
       goal_budget_read "${ORG:-teststuffstash}/${PROJECT}" "$GOAL_PARENT" "$MODEL" "${ISSUE_N:-}"
+      [ -z "${GB_MALFORMED:-}" ] || ib_refuse_malformed Budget "$GB_MALFORMED"
       if [ "$GB_VERDICT" = "exhausted" ]; then
         # >>>REPLAY:goal-budget-refusal>>>
         # SAY IT WHERE A HUMAN LOOKS. Exiting 1 puts the reason in a failed tool call, and whether
