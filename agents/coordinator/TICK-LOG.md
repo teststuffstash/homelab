@@ -7444,3 +7444,49 @@ first live ADR-110 maintenance session before the ADR existed.
   repo/number — additive). **PR#1480** gained the panel columns + a description naming the two
   reasons (armed=false → arm or park; dirty → skipped). #145/#146 themselves: arm or close is the
   sleep sitting's call — not touched.
+
+## 2026-09-06 17:1x–18:4xZ — Garage meta at 80 %: the leak is not growth; the SA400 is not the cable
+
+- **Alert `GarageDiskFillingUp` (80 % on `metadata`) — diagnosed, NOT capacity.** Live LMDB
+  `data.mdb` **25.36 GB** against that day's compacted snapshot of the same data **3.95 GB**: 84 %
+  leaked pages, +2.6 GB/day while real metadata grows ~50 MB/day. ~57 h of runway at the 24 h rate.
+  The FU-184 class recurring in its MILD form — `MDB_CP_COMPACT` succeeds here (snapshots 06:11Z,
+  12:45Z), so the env is healthy and no `lmdb-rebuild.py` is needed. **PR#1483 MERGED**: ADR-114
+  addendum + `garage.md` §Metadata reclamation + FU-137. **The ruling: LMDB has no in-place
+  compaction, so zero-downtime reclamation is impossible at rf=1 BY CONSTRUCTION** — at rf ≥ 2 it is
+  `delete + garage repair tables` rotated zone-by-zone, i.e. ADR-114 delivery, not a new mechanism.
+  Three preconditions recorded (a MEASURED full-table resync cost — nobody has one; trigger off the
+  alert not a cron; a health gate that refuses). Operator intent recorded: **metadata maintenance
+  must be unattended**. Operator takes the interim attended snapshot-swap 2026-09-07.
+- **Reviewer caught a real miss on round 1:** the PR corrected the stale post-rebuild "6 %" in
+  FU-137 but left the identical claim in `garage.md` §Durability four lines above the new section
+  contradicting it. Fixed in-PR; APPROVED + merged 17:54:48Z.
+- **The input side → oracle-fleet#499** (inert, `track/chassis`, sibling of #467): `allure-reports`
+  + `oracle-specs` are **972,894 objects = 66 % of every object in Garage for 8.9 GB = 8.4 % of its
+  bytes**. Both publish steps are `if: always()`, 121 CI runs on 09-06 / 79 on 09-05. One measured
+  burst: 3,664 PUTs to the two buckets in 30 min with object counts BYTE-IDENTICAL before and after
+  (17:14Z/17:39Z/17:45Z) — 100 % overwrite, ~85k PUTs/day, ~765 MB/day rewritten, ≥255k metadata
+  row-writes/day carrying no new information. Operator: the PUTs are a symptom, not the fix.
+- **⚠ The cable was a fault but never the constraint — PR#1484 (armed).** `storage-ledger.md`
+  §2026-09-05 still ended on "Remedy = replace the SATA data cable", reading as untried, and THIS
+  session reasoned from it (recommended cheap DRAM-less SATA SSDs — another copy of the failing
+  part). TICK-LOG had claimed PR#1476 landed the benchmark in the ledger; it did not (`29cdb070`
+  carried only the tier table + PyPI). Measured from node_exporter: the post-swap rebuild ran
+  **13:25Z → ~15:35Z ≈ 2 h 10 min pinned flat at 24–32 MB/s, 486 ms / 76 % util, on a confirmed
+  6.0 Gbps / 0-ATA-error link** — **under 5 % of the link**, so a cable could never have been the
+  limit. Flat multi-hour ceiling = DRAM-less SSD past its SLC cache. Fleet A/B on the same traffic:
+  wk-metal-01 MX500 (DRAM) 0.6–18 ms vs wk-metal-04 SA400 (DRAM-less) 486 ms. **Remedy = replace the
+  DRIVE; buying criterion for any Garage/Longhorn data disk is DRAM cache, not €/GB.**
+- **Meta-state hygiene miss (not this session's):** the 14:15Z wind-down wrote a Garage-rebuild
+  pickup bullet (`f62bcd72`, "28 % at 14:13Z"); `d4290984` deleted it without recording the outcome,
+  and the durable half never reached the ledger. The rebuild's duration existed nowhere until the
+  operator asked. Transient-by-design is right; deleting before the finding has a durable home is not.
+- **Hardware shortlist (operator-directed, gitignored):** `uploads/hinnavaatlus-shortlist.md` — all
+  4 pages of hinnavaatlus f=3, ~185 topics → ~55 in 9 categories. Pick for the FU-137 third zone:
+  HP EliteDesk 800 G3 SFF w/ 256 GB NVMe, OK 100 € (`t=873376`) + a DRAM-equipped 500 GB.
+  Rejected with reasons: 990 PRO 2 TB (500 €), Exos X18 18 TB (280/300 € — bytes are not the
+  constraint; live bulk read 489 G free, ~50 % used), A400 500 GB (100 €).
+- **Seat lesson → memory `no-prices-from-training-data`:** stated a "~35 € 500 GB SSD" from training
+  data; operator corrected (cheapest drive of ANY kind = 27.35 €, cheapest 500 GB = 66 €). It was
+  LOAD-BEARING — "drives are nearly free" produced "buy the diskless box"; the real floor inverts it
+  to the bundled-NVMe box. Never assert a price or "cheapest available" from memory; say the unknown.
