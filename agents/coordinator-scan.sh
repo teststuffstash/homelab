@@ -764,6 +764,15 @@ fi
 #     `janitor-*` — those are different functions, not rings.
 #   - Fail-open, loudly: an unreadable list or refused delete absorbs nothing and the extra
 #     workflow just runs behind the mutex — today's behavior, never a lost edge.
+#   - The list is LABEL-SCOPED to non-terminal workflows (`workflows.argoproj.io/completed!=true`
+#     — the controller stamps `completed=true` on every Succeeded/Failed/Error workflow; a ring
+#     the controller has not touched yet carries no label at all and `!=true` matches it too).
+#     An unscoped `get workflows -o json` returns the namespace's whole RETAINED history — in
+#     agent-coordinator that is ~1,000 review/respond runs under the 7d TTL, 53 MB of JSON
+#     held in a bash variable and then parsed by jq: 450–500 Mi resident, over the switchboard
+#     pod's 512 Mi limit. 153 consecutive switchboard runs OOMKilled 2026-09-05/06 on exactly
+#     this line, silently (docs/incidents/2026-09-06-switchboard-oom-silent-failures.md). The
+#     jq phase filter below stays as the belt — the replay stub drops the selector from its key.
 # >>>REPLAY:doorbell-collapse>>>
 DOORBELL_WF_SELF="${DOORBELL_WF_SELF:-${HOSTNAME:-}}"
 absorb_pending_rings() {
@@ -773,7 +782,7 @@ absorb_pending_rings() {
   local ns raw names n
   ns="${SCAN_PHASE_NS:-}"
   { [ -n "$ns" ] && [ "$ns" != "unknown" ]; } || return 0   # jail/manual run — no workflow world
-  if ! raw="$("$KUBECTL" $KUBE -n "$ns" get workflows -o json 2>/dev/null)" \
+  if ! raw="$("$KUBECTL" $KUBE -n "$ns" get workflows -l 'workflows.argoproj.io/completed!=true' -o json 2>/dev/null)" \
      || ! jq -e . >/dev/null 2>&1 <<<"${raw:-null}"; then
     echo "doorbell-collapse: workflow list PROBE-FAILED in ${ns} — absorbing nothing (extra wakes just queue)" >&2
     return 0
