@@ -417,3 +417,25 @@ Fleet gotcha recorded: Kingston SA400's vendor attribute 231 `SSD_Life_Left` rea
 standardized `Percentage Used Endurance Indicator` reads 5 % — trust the standardized field.
 Also confirmed: Talos never trims ANY node (the fstrim CronJob is pve-VM-only by design).
 
+**Cable swapped 2026-09-06 (operator at the box; window run with the new `scripts/node-maintenance.sh`,
+runbook §Storage):** the link came back **6.0 Gbps** (`ata1: SATA link up 6.0 Gbps`), **0 ATA
+exceptions/resets in dmesg since boot** (CRC lifetime counter not re-read — a SMART read needs the
+privileged-pod recipe again; dmesg is the live proxy). Side-finding of the window: tofu's
+`orphanAutoDeletion = true` had been a dead key since the Longhorn 1.9 rename — orphan replica dirs
+left by the window blocked the Garage volume's rebuild onto the disk (PR#1475).
+
+**The rebuild onto the swapped-cable disk is the benchmark the swap needed (13:30–13:46Z, 15-min
+node_exporter averages, two concurrent replica rebuilds landing on it):** wk-metal-04 `sda` **writes
+26 MB/s at 76 % utilisation with a 486 ms average write latency, node iowait 71 %**; the source
+(wk-metal-01 `mx500`) reads the same 26 MB/s at 7 % util / 7 ms; the 1 GbE link carries 28 MB/s
+(22 % of line rate); 0 ATA errors. So the cable WAS a fault (3.0 → 6.0 Gb/s, CRC errors gone) but
+not the only one: **the SA400 itself sustains ~25 MB/s of writes with half-second latencies once
+its SLC cache is spent** — DRAM-less, 51 % full, and never TRIMmed (Talos trims no node; FU-093's
+in-volume reclaim is the pve-VM side only), i.e. steady-state write amplification on a budget
+drive. For Garage this means the 2026-09-05 reading stands with the cause moved one layer down:
+rf=2 still waits for this disk on every write. Levers unchanged — ADR-114's rf=3 quorum (FU-137)
+takes the slowest node off the critical path; a TRIM of this disk (`fstrim` from a privileged pod
+against the Longhorn mount, or `blkdiscard` of free space at reprovision time) is the cheap test of
+the amplification theory; replacing the drive is the honest fix. Re-measure `data-garage-0` write
+latency after the rebuild completes (rebuild traffic confounds it now).
+
