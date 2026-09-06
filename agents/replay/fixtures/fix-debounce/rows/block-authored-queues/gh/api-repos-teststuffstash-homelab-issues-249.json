@@ -1,0 +1,10 @@
+{
+  "number": 249,
+  "state": "open",
+  "labels": [
+    {
+      "name": "agent-fix"
+    }
+  ],
+  "body": "---\nalert-fp: 1f0a9c73d5b2e846\nfix-verdict: fix\n---\n## Defect\n\nThe SAME issue as `anchored-marker-queues`, authored the ADR-122 (3) way: the machine\ntruth is the fenced block at the TOP, and the body carries NO bare `alert-fp:` line for\nthe legacy reader to find. Everything the debouncer decides with must come out of the\nblock — lane membership, the self-referential split, the currency fingerprint.\n\nTouches: agents/coordinator/fix-debounce-argo.yaml, agents/replay/\n\n(The `Touches:` line is deliberately still legacy: fix-debounce's footprint read is the\none grammar in this file NOT yet on the parser — its `^[Tt]ouches:` column-0 form has no\nentry in issue_body.py's LEGACY table, so migrating it would silently WIDEN a gate.)\n"
+}

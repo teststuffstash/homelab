@@ -15,5 +15,5 @@ OUT CARD |
 OUT CARD | ## Acceptance
 OUT CARD | 
 OUT CARD | - the gate is required on the repo's ruleset
-ERR LEGACY-GRAMMAR Budget -
+ERR LEGACY-GRAMMAR Budget teststuffstash/circles#91
 RC 0

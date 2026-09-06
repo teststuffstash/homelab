@@ -4,7 +4,7 @@ CALL gh api repos/teststuffstash/homelab/issues/1001/sub_issues
 CALL gh api repos/teststuffstash/homelab/issues/1002/sub_issues
 CALL gh api repos/teststuffstash/homelab/issues/278/comments --paginate
 CALL gh api --method POST repos/teststuffstash/homelab/issues/278/comments -f body=<!-- agent-budget-refusal -->\nAGENT_BUDGET_REFUSED: Σ(spend + reservations) $4.0 > Budget $1\n\nThe launcher refused to dispatch a child of this goal — deterministic pre-flight, not a model judgement (FU-090 leg (c)).\n\nPer-child caps:\n\n    teststuffstash/homelab#1001 → $2.0000 (cap (no ledger))\n    teststuffstash/homelab#1002 → $2.0000 (cap (no ledger))\n\nThis is a human decision either way: **re-scope the children** so their caps fit, or **raise the `Budget:` line** on this issue. Until one of those happens the refusal repeats every scan and no child of this goal dispatches.\n\nThe sum is a cap-sum estimate because the spend ledger was unreachable — every child was charged its full cap rather than its actual spend. This is the conservative fallback; once the ledger is reachable again the refusal will re-evaluate against real spend.\n\n_Level-triggered: this is ONE comment, re-edited as the numbers move (ADR-103 rule 2) — not one comment per refusal._
-ERR LEGACY-GRAMMAR Budget -
+ERR LEGACY-GRAMMAR Budget teststuffstash/homelab#278
 ERR → Goal budget: spend ledger unreachable — falling back to CAP-sum (conservative)
 ERR → Goal budget: refusal posted to #278
 ERR PREFLIGHT REFUSED: the decomposition of goal #278 overruns its Budget.

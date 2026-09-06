@@ -6,5 +6,5 @@ CALL gh api repos/teststuffstash/agent-runtime/issues/81/sub_issues
 CALL gh api repos/teststuffstash/agent-runtime/issues/85/sub_issues
 OUT → Goal budget: Σ(spend + reservations) $4.5 ≤ Budget $5 on #278 — within funding
 OUT REACHED: the dispatch continued past the pre-flight
-ERR LEGACY-GRAMMAR Budget -
+ERR LEGACY-GRAMMAR Budget teststuffstash/homelab#278
 RC 0

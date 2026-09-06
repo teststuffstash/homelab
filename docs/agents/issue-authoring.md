@@ -312,7 +312,7 @@ current truth if this table and the code ever disagree:
 | `goal-decompose` trigger | `coordinator-scan.sh` — emitted instead of `queued-dispatch`, before recipe selection |
 | both plays | `agents/coordinator/README.md` §`goal-decompose`, §`goal-review` |
 | `task/goal` label | the claim taxonomy (Composition). ⚠ GitHub caps label descriptions at **100 chars** and `IssueLabels` is authoritative — one over-long description freezes the taxonomy for every claim-owned repo |
-| which ancestor IS the goal | `goal_resolve_ancestor` in `agents/goal-budget.sh` — ONE walk, both callers, bound 6, stopping at a `task/goal` label **or** a machine-readable `Budget:` line (homelab#367, pinned by the `goal-ancestor-*` replay family) |
+| which ancestor IS the goal | `goal_resolve_ancestor` in `agents/goal-budget.sh` — ONE walk, both callers, bound 6, stopping at a `task/goal` label, or at a machine-readable `Budget:` line ONLY when the issue has no native parent to climb past (homelab#367; narrowed by PR#1398 — an ordinary work item carrying its own `Budget:` under a Goal is not the Goal; pinned by the `goal-ancestor-*` replay family) |
 | bounded goal context · parent on child units | `agent-session.sh` injects **Goal + Acceptance only**; the scan's 5th unit field carries `parent=<n>` |
 | Σ(child caps) ≤ `Budget:` | `agent-session.sh` pre-flight, over open AND closed children, summing `cap_usd` (what the key ALLOWS, not what it forecasts) |
 | `goal-review` | `coordinator-scan.sh`, stateless: a child closed after the loop's newest comment on the goal |
@@ -393,6 +393,13 @@ Flat `key: value` lines, keys exactly as spelled in the sections below (`Touches
 `alert-fp`, `self-referential`, `fix-verdict`, `Class`), lists comma-separated. No nesting, no
 bullets, no duplicates, no multi-line values — anything else inside the fences is a **loud parse
 error**, never a silent skip. A body with no block is legal.
+
+**Authors never type the block by hand** — it is composed by the parser's own writer and re-read
+before the issue is posted: `python3 agents/issue_body.py set "Touches=…" "Base=…" "Origin=…"
+< body.md > body.final.md`, then `python3 agents/issue_body.py json < body.final.md` (exit 2 ⇒ fix
+the block, never post), then `gh issue create --body-file body.final.md`. The coordinator's
+authoring plays carry the in-pod form of this in
+[`agents/coordinator/README.md`](../../agents/coordinator/README.md) §Authoring an issue body.
 
 The legacy line-anchored forms are still READ for the transition window and metered: each
 fall-through prints `LEGACY-GRAMMAR <key> <ref>` on stderr. Writers switch at S8 original 1b

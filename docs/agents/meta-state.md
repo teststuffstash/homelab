@@ -34,7 +34,11 @@ never the session's arc — that is TICK-LOG's.)
   re-read after — weekly metal blocks by PR only if it helped. (3) wk-metal-04 WoL unverified from
   S5 (needed the button after the AC cut — expected; a clean `talosctl shutdown` → WoL test is
   the open question, not urgent).
-- **⚑ OPERATOR (physical / decisions), from this sitting:** (1) **CI starvation**: one org-wide ARC set of 3 slots (FU-218); homelab ≥300 runs today
+- **⚑ OPERATOR (from the 2026-09-06 corpus session):** (0) **`tofu apply` targeted at the
+  `agent-running` grafana_dashboard** once the queued-panel PR (fix/agent-running-queued-why —
+  the scan hold-class join answering "why is a queued issue not picked up") merges; dashboards
+  are tofu-applied, not ArgoCD-synced. (0b) the #1450/PR#1470 fork above (A vs B).
+- **⚑ OPERATOR (physical / decisions), from the 09-05 sitting:** (1) **CI starvation**: one org-wide ARC set of 3 slots (FU-218); homelab ≥300 runs today
   starved oracle (queue p90 22–40 min). Levers ruled/filed: #1452 (fair, platform-native);
   per-stack runner scale sets as the fairness knob (not filed — say so if wanted); wk-metal-04's
   16 GB as capacity after the cable (kata reservation = operator call). App-side: oracle-fleet

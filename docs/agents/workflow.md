@@ -10,9 +10,9 @@ The end-to-end target (from [`README.md`](README.md)): a triaged issue becomes a
 fix. This doc is the *control flow* that gets it there — who runs the agent, when, and how review and
 CI feed back. The last leg — how an approved green PR deterministically lands on master (branch
 updates, review dispatch, auto-merge; no LLM in the mechanics) — is designed **and built** separately
-in [`merge-path.md`](merge-path.md) (FU-041): a per-repo updater workflow keeps the head-of-line PR
-current, and the **review reflex** auto-dispatches the reviewer when a PR is green + current +
-unapproved — so the mechanical "trigger the reviewer" step below is now a reflex, not a coordinator turn.
+in [`merge-path.md`](merge-path.md) (FU-041): the in-cluster updater keeps the head-of-line PR of
+each (repo, base) lane current (ADR-125), and the **review reflex** auto-dispatches the reviewer
+when a PR is green + armed + unapproved (BEHIND is admitted for a first review since ADR-125) — so the mechanical "trigger the reviewer" step below is now a reflex, not a coordinator turn.
 Since 2026-07-17 (ADR-093) that dispatch is **event-driven**: the github-exporter POSTs the reviewable
 PR to an Argo Events webhook → Sensor → `review` WorkflowTemplate (the reflexes are Argo CronWorkflows
 now, not k8s CronJobs, with a `*/15` backstop) — near-instant instead of a poll.
@@ -60,7 +60,7 @@ same session, so the terminal verification runs with warm context of *why* the f
 instead of a fresh tick re-deriving it. Two hard rules keep it an optimization instead of a second
 architecture: (1) **watch and nudge, never dispatch** — the hot session may edge-trigger the
 reflexes (wake the review cron early, poke the updater) but never runs mechanics itself, or the
-per-repo review serialization breaks ([`merge-path.md`](merge-path.md)); (2) **correctness never
+per-lane review serialization breaks ([`merge-path.md`](merge-path.md), ADR-125); (2) **correctness never
 depends on the session surviving** — everything it does lands in durable state, so if it dies or
 times out, the next level-triggered tick finishes identically. Waiting is cheap (a blocking watch
 burns no tokens between wakeups); the real floor is CI (~8–20 min), not the worker or the review.

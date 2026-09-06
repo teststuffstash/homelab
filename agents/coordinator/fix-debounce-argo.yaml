@@ -229,8 +229,20 @@ spec:
               || CLAIMS="$(jq '{items: [.stacks[] | {metadata: {name: .name}, spec: {loop: {graduated: (.graduated // false)}, repos: [.repos[] | {name: .}]}}]}' /work/homelab/agents/stacks.json)"
             printf '%s' "$CLAIMS" | jq -r '.items[] | .metadata.name as $s | ((.spec.loop.graduated // false) | if . then $s + "-agents" else "" end) as $ns | .spec.repos[].name | [., $s, $ns] | @tsv' > /tmp/stackmap.tsv
             { cut -f1 /tmp/stackmap.tsv; echo homelab; } | sort -u | grep -v '^$' > /tmp/repos.txt
+            # ── the ONE parser (ADR-122 (3), homelab#1430/#1431) ─────────────────────────────
+            # Every body-grammar read below goes through agents/issue_body.py: the machine block
+            # at the top of the body WINS, the legacy line-anchored form is still read during the
+            # transition window, and each legacy read prints one `LEGACY-GRAMMAR <key> <ref>` line
+            # to stderr — the migration meter. Defined OUTSIDE the replay blocks so a fixture
+            # shadows the PATH via $REPLAY_ROOT (the machine-comment.sh / footprint.sh pattern in
+            # this same file); a definition inside a block would override the bridge's, not the
+            # other way round. The image ships python3 (reflexes-argo.yaml runs ledger.py in it)
+            # and /work/homelab is the clone made 20 lines above — both are hard preconditions of
+            # this step, and a missing one is a crash, not a silent legacy fallback.
+            ib() { python3 /work/homelab/agents/issue_body.py "$@"; }
+
             # >>>REPLAY:fix-debounce-pending-set>>>
-            : > /tmp/pending.jsonl
+            : > /tmp/cand.jsonl
             while read -r r; do
               # ⚠ ALERT-LANE ONLY (`alert-fp:` in body) — found by the 2026-08-07 dry run: stack
               # loops use agent-fix-without-queued for their OWN deliberate holds (ADR-097
@@ -278,13 +290,52 @@ spec:
               # re-queue was never load-bearing for either — it was the bug. The scan holds the
               # same rule on its side (coordinator-scan.sh:17 — the LLM never wakes for these).
               gh api "repos/$ORG/$r/issues?labels=agent-fix&state=open&per_page=50" \
-                --jq ".[] | select(.pull_request | not) | select(.body // \"\" | test(\"(^|\\n)alert-fp:\")) | select([.labels[].name] | any(startswith(\"agent/\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
-                2>/dev/null >> /tmp/pending.jsonl || true
+                --jq ".[] | select(.pull_request | not) | select([.labels[].name] | any(startswith(\"agent/\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
+                2>/dev/null >> /tmp/cand.jsonl || true
             done < /tmp/repos.txt
 
-            # self-referential = human-queued only (marker written by the responder session)
-            jq -c 'select(.body | contains("self-referential: true") | not)' /tmp/pending.jsonl > /tmp/set.jsonl || true
-            SELFREF="$(jq -c 'select(.body | contains("self-referential: true"))' /tmp/pending.jsonl | jq -r '"  \(.repo)#\(.number) \(.title)"' || true)"
+            # The LANE TEST itself now runs through the parser rather than as a jq `test()` inside
+            # the list query: `alert-fp` present ⇒ ours. The parser reads the machine block first
+            # and falls back to the same line-anchored legacy form the jq predicate spelled
+            # (`(?m)^alert-fp:`), so a body authored either way lands in the same set — which is
+            # the whole point of #1431. Anchoring is UNCHANGED (homelab#249 stands: a body quoting
+            # the marker mid-line is not lane membership).
+            # FAIL CLOSED, loudly: a MALFORMED machine block (issue_body.py exit 2) means the
+            # issue's machine truth is unreadable, and this leg decides membership of a set that
+            # gets DISPATCHED. An unreadable body is never quietly treated as "no marker" and
+            # never quietly queued — it is skipped with a line naming the issue (rule #6).
+            # `gh --jq` prints objects PRETTY (multi-line), so the raw append is not NDJSON —
+            # normalize to one compact object per line before the per-issue loop below (the old
+            # code re-parsed the whole file with jq and never had to care).
+            jq -c . /tmp/cand.jsonl > /tmp/cand.ndjson 2>/dev/null || : > /tmp/cand.ndjson
+            : > /tmp/pending.jsonl
+            while IFS= read -r cand; do
+              [ -n "$cand" ] || continue
+              cref="$(printf '%s' "$cand" | jq -r '"\(.repo)#\(.number)"')"
+              cfp="$(printf '%s' "$cand" | jq -r '.body // ""' | ib get alert-fp --ref "$cref")" || {
+                echo "→ $cref: machine block MALFORMED (issue_body.py exit 2) — NOT in the pending set (fail-closed)"; continue; }
+              [ -n "$cfp" ] || continue
+              printf '%s\n' "$cand" >> /tmp/pending.jsonl
+            done < /tmp/cand.ndjson
+
+            # self-referential = human-queued only (marker written by the responder session).
+            # Read through the parser: `_selfref_probe` in agents/issue_body.py restates THIS
+            # line's substring test verbatim (present ⇒ true, absent ⇒ nothing), so a legacy body
+            # splits exactly as before while a block-authored `self-referential: true` now splits
+            # too. Same fail-closed rule as the lane test: an unreadable block is never queued.
+            : > /tmp/set.jsonl; : > /tmp/selfref.txt
+            while IFS= read -r pend; do
+              [ -n "$pend" ] || continue
+              sref="$(printf '%s' "$pend" | jq -r '"\(.repo)#\(.number)"')"
+              sval="$(printf '%s' "$pend" | jq -r '.body // ""' | ib get self-referential --ref "$sref")" || {
+                echo "→ $sref: machine block MALFORMED (issue_body.py exit 2) — NOT queued (fail-closed)"; continue; }
+              if [ "$sval" = "true" ]; then
+                printf '  %s %s\n' "$sref" "$(printf '%s' "$pend" | jq -r '.title')" >> /tmp/selfref.txt
+              else
+                printf '%s\n' "$pend" >> /tmp/set.jsonl
+              fi
+            done < /tmp/pending.jsonl
+            SELFREF="$(cat /tmp/selfref.txt)"
             [ -n "$SELFREF" ] && printf 'self-referential, left for a human to queue:\n%s\n' "$SELFREF"
             N="$(wc -l < /tmp/set.jsonl | tr -d ' ')"
             echo "pending set: $N issue(s)"
@@ -339,7 +390,8 @@ spec:
               # The marker is read LINE-ANCHORED, the same way the pending set's lane test and the
               # responder's own resolve leg (`^alert-fp:`) read it — an unanchored read made
               # "mentions the alert lane" mean "belongs to it" once already (homelab#249).
-              fp="$(printf '%s' "$body" | sed -n 's/^alert-fp:[[:space:]]*//p' | head -1)"
+              fp="$(printf '%s' "$body" | ib get alert-fp --ref "$1#$2")" || {
+                echo "machine block MALFORMED (issue_body.py exit 2) — currency unjudgeable, INERT (fail-closed)"; return 1; }
               [ -n "$fp" ] || { echo "no alert-fp: marker — currency unjudgeable (the pending set's own lane test requires one, so this is a contradiction, not a stale body)"; return 1; }
               alerts="$(fc_am_alerts)" || alerts=""
               printf '%s' "$alerts" | jq -e 'type == "array"' >/dev/null 2>&1 \

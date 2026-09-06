@@ -1,7 +1,10 @@
 # Bridge for s6-child-1-depth-rule block extraction and testing.
 # Sets up minimal pod variables and mocks gh for the block execution.
 #
-HERE="$REPLAY_FIXTURE"
+# `HERE` is what the reviewer's `rv_ib_get` resolves agents/issue_body.py against, so it must be
+# the REAL agents/ directory: the hotfix probe below runs the actual parser on the actual body,
+# never a restatement of it (a stub here would test the stub — jail-subagent-card §Tests).
+HERE="$(cd "$REPLAY_FIXTURE/../../../.." && pwd)/agents"
 PR_NUMBER="${PR_NUMBER:-42}"
 REPO_SLUG="${REPO_SLUG:-teststuffstash/test-project}"
 ISSUE="${ISSUE:-1}"

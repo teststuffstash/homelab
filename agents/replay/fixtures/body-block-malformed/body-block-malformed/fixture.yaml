@@ -1,0 +1,32 @@
+# S8 original 1b (homelab#1431, ADR-122 (3)) — the scan reads issue bodies through the ONE parser.
+#
+# CONDITION UNDER REPLAY. Four open, in-progress issues that differ ONLY in how their footprint is
+# written, plus the new fail-CLOSED gate that stands behind all of them:
+#   501 — the LEGACY form (`Touches: agents/foo.sh` as a body line)
+#   502 — the BLOCK form (the same footprint inside the `---` machine block) — the legacy twin
+#   503 — a MALFORMED block (`Touchez:`, a key outside the grammar)
+#   504 — no declaration at all
+#
+# THE CONTRACT:
+#   1. 501 and 502 produce the SAME footprint. The transition is a spelling change, not a
+#      semantics change — that is the whole claim of ADR-122 (3), and this row is what pins it.
+#   2. Only 501 emits `LEGACY-GRAMMAR Touches homelab#501` — the migration meter fires for the
+#      legacy spelling and is SILENT for the block. The meter is the transition's only progress
+#      signal, so a change that suppressed it would go unnoticed without this assertion.
+#   3. 503's block does not parse. It is REPORTED loudly by the BODY-BLOCK MALFORMED clause with
+#      the parser's own message, and its footprint reads `*` — EXCLUSIVE, the conservative value,
+#      never "no footprint declared, dispatch freely" (rule #6: never fail INTO a write). The
+#      queued clause holds the same issue outright off the same exit 2.
+#   4. 504 keeps the ADR-097 `*` sentinel for an undeclared footprint — unchanged by the move.
+#
+# hermeticity contract (homelab#329): the clause reads issue bodies through agents/issue_body.py.
+name: body-block-malformed
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:body-block-malformed
+  - block:busy-fps
+  - file:post.sh
+requires:
+  - python3

@@ -161,7 +161,15 @@ def _parse_comments_payload(stdout: str) -> list:
 
 
 def _gh_comments_raw(slug: str, issue: int) -> str:
-    """The subprocess seam: one paginated GET, raw stdout. Raises Unreadable on ANY doubt."""
+    """The subprocess seam: one paginated GET, raw stdout. Raises Unreadable on ANY doubt.
+
+    May be overridden by EPIC_DISPOSITIONS_COMMENTS env var (the goal lane folds two reads
+    into one; it passes pre-fetched comments to avoid duplicate API calls, FU-084 / #1439).
+    """
+    import os
+    cached = os.environ.get("EPIC_DISPOSITIONS_COMMENTS", "")
+    if cached:
+        return cached
     try:
         p = subprocess.run(
             ["gh", "api", f"repos/{slug}/issues/{issue}/comments?per_page=100",
