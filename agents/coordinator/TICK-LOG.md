@@ -7289,3 +7289,38 @@ first live ADR-110 maintenance session before the ADR existed.
   sessions' worth of parallel suites: the family's currency probe is the suspect.
 - **Wind-down 21:5xZ:** bookkeeping pushed; watch already down; jail-transcripts synced.
   Open bot-waits at exit: PR#1459 (1b), PR#1465 (#1452). Parked: #1420, #1460 branches.
+
+## 2026-09-06 — operator-pointed: "argo workflows — some OOMKilled, some exit 1; 179 failed on the dashboard, no alerts"
+
+- **Read 11:15–11:35Z:** the 179 is one class plus noise. 154 `switchboard-*` in agent-coordinator,
+  0 Succeeded, 153 `main: OOMKilled (exit code 137)` from 09-05 ~17:00Z through 09-06 ~10:10Z at
+  10–19/h — pod working set 450–504 Mi vs the 512 Mi limit, dying 20–73 s in, Loki tail = the
+  `switchboard: ring scope=…` banner then nothing. Cause: the scan preamble's doorbell-collapse
+  listed the namespace's whole retained workflow history (`get workflows -o json` — 1,041 objects,
+  53 MB) into a bash variable + jq; the 09-05 fan-out day pushed the fleet count ~660→~1,100 over
+  the line, and each failed switchboard (24h TTL) grew the next one's list. The clone is 4.7 MB —
+  the "sized for a clone + jq" limit was right about the clone. Noise: 8 `coordinate-perstack-*`
+  exit 141 (SIGPIPE, intermittent, site unnamed → FU-219), 3 `review-*` exit 1 at 09-05 22:45Z
+  (oracle + sleep same minute) / 09-06 00:45Z, 1 review-perstack deadline, oracle-fleet's own
+  `ert-*` DAG failures 08-31/09-01. Why silent: zero rules read `argo_workflows_*` (the FU-188 (d)
+  gap from the 08-26 postmortem — third instance), PodSigkilled keys on restarts, the agent belts
+  watch outputs a dead resolver never emits. Impact: global rings unresolved 17h, per-stack crons
+  re-derived at cron latency; nothing lost.
+- **PR#1473 (fix lane):** doorbell-collapse lists `-l workflows.argoproj.io/completed!=true`
+  (0 live objects vs 1,041; unreconciled rings have no label and still match; jq filter stays as
+  belt; replay `doorbell/collapse` green with its recorded world — stub drops `-l <value>`, CALL
+  line updated). `ArgoWorkflowsFailing` fleet belt: `sum(increase(argo_workflows_total_count
+  {phase=~"Failed|Error"}[6h])) > 40` for 15m — 14d calibration: quiet days 18–35/6h, incident
+  days 54–133 (08-26, 08-31, 09-02/03, this). Postmortem
+  `docs/incidents/2026-09-06-switchboard-oom-silent-failures.md`; FU-188 (d) failure half
+  shipped, FU-212 clause updated, FU-219 filed. Stale on arrival, noted not fixed: the
+  controller-memory rule's "~590 retained" figure (now ~1,100; controller at 25% of 1 Gi).
+- **Seat misses:** filed the new item as FU-220 off the max-id grep — the header's "Next free
+  id" is the counter, and FU-219 was free (renumbered before commit); a first-draft python edit
+  landed the block under the header paragraph (moved after FU-218).
+- **PR#1473 MERGED 11:50Z (bot-approved, ~15 min open→merged).** Post-merge, isolated:
+  `switchboard-{cv99h,xgsth,dc9k6}` Succeeded 11:50–11:56Z — the first successes in the
+  namespace's retained window (154 Failed before). `ArgoWorkflowsFailing` loaded by 11:52Z and
+  PENDING on today's history (value 61 > 40; fires 12:07Z, ~15 min after load) — the belt
+  proves itself on the incident that built it. Meta-state bullet closed. Bookkeeping pushed.
+
