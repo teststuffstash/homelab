@@ -856,7 +856,11 @@ one roll — a THEME**, expressed as a 3-level tree:
 - **The theme assembly is an ordinary PR** — `goal/<n>-<theme> → master`, body
   `Fixes #<level-2>`. Deliberately NO `Assembly-for:` and no goal mention: the merge closes the
   level-2 like any master-lane PR, the burn-down moves on the child close, and IL-T18's
-  one-shot transition is never touched. Near-zero new machinery.
+  assembly-PR key is never touched. Near-zero new machinery.
+- **How a themed Goal enters post-launch:** it has no assembly PR, so the scan applies
+  `goal/post-launch` itself at TREE-EMPTY — IL-T18's second key, keyed on the Goal's
+  `Base: master` line (homelab#1450). That is what retires the goal-checkpoint's child-set-complete
+  trigger for this shape; the verdict stays the human's.
 - **Themes build only on MASTER** (merged themes); ordering = native blockedBy between level-2s.
   A theme earns a branch at **≥2 children sharing a surface**; singletons go straight to master.
 - G-A evidence for the cut: the wiring trio (#780/#781/#782) re-touches one surface through
