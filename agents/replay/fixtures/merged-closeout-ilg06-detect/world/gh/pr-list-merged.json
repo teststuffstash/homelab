@@ -1,5 +1,6 @@
 [
-  {"number": 200, "body": "Fixes #90", "baseRefName": "master"},
-  {"number": 201, "body": "Implements #91", "baseRefName": "master"},
-  {"number": 202, "body": "Related to #92", "baseRefName": "master"}
+  {"number": 200, "body": "Fixes #90", "baseRefName": "master", "mergedAt": "2026-09-06T06:40:31Z"},
+  {"number": 201, "body": "Implements #91", "baseRefName": "master", "mergedAt": "2026-09-06T06:40:31Z"},
+  {"number": 202, "body": "Related to #92", "baseRefName": "master", "mergedAt": "2026-09-06T06:40:31Z"},
+  {"number": 203, "body": "Implements #93", "baseRefName": "master", "mergedAt": "2026-09-06T06:40:31Z"}
 ]

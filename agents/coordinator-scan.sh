@@ -1732,7 +1732,7 @@ EOF_GOALBASED
 $(ib_rows "$(printf '%s' "$goalcand" | jq '[.[] | select(((.labels|map(.name))|index("agent/error"))|not)]' 2>/dev/null || echo '[]')")
 EOF_DBCAND
     if [ -n "$dbcand" ]; then
-      dbmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || dbmerged='X'
+      dbmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName,mergedAt 2>/dev/null)" || dbmerged='X'
       dbopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body // ""]' 2>/dev/null)" || dbopen='X'
       if jq -e . >/dev/null 2>&1 <<<"${dbmerged:-null}" && jq -e . >/dev/null 2>&1 <<<"${dbopen:-null}"; then
         for dn in $dbcand; do
@@ -1753,7 +1753,35 @@ EOF_DBCAND
           # merged PR into the default branch cites the issue AND no OPEN PR still references it
           # (an open follow-up round means live work — not closeable yet)
           if [ "${dhit:-0}" -gt 0 ] && [ "${dref:-0}" -eq 0 ]; then
-            c6db="${c6db}${dn}\n"; c6db_nums="${c6db_nums}${dn} "
+            # homelab#1472: fire ONCE per merge, not once per tick. A multi-round tracking
+            # issue (`Implements #N`, deliberately non-closing) stays OPEN and in-progress/review
+            # for its whole life, so "merged strong link ∧ no open PR" is TRUE on every tick after
+            # every merge — including while the NEXT round is already riding (no PR yet). The
+            # oracle-fleet#397 night: 8 near-identical closeout sessions in 40 min against a live
+            # r6 pod. The tell that somebody already acted on the merge is a CLAIM newer than it:
+            # the newest `agent/in-progress` labeled event post-dates the newest strong-link
+            # merge ⇒ the closeout play (or the human) already re-queued and a round re-claimed.
+            # That state is the ride's / C4-C5's (IL-T29 resume on a strike), not C6's. Derived
+            # from GitHub state per tick (the #829 aging shape) — no marker written, no reader
+            # added to the authoring surface. Unreadable probe ⇒ HOLD + report (rule #6): a
+            # legitimate closeout waits one tick; a redundant ride is the write we refuse.
+            dmerged_at="$(jq -r --argjson n "$dn" --arg default_branch "$default_branch" \
+              '[.[] | select(.baseRefName == $default_branch)
+                    | select((((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
+                          or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))
+                    | .mergedAt // empty] | sort | last // ""' <<<"$dbmerged")" || dmerged_at=""
+            dclaim_rc=0; dclaim_raw="$(gh api "repos/${slug}/issues/${dn}/events" --paginate 2>/dev/null)" || dclaim_rc=$?
+            dclaim=""
+            if [ "$dclaim_rc" -eq 0 ]; then
+              dclaim="$(jq -r '[.[]? | select(.event == "labeled" and (.label.name // "") == "agent/in-progress") | .created_at] | sort | last // ""' <<<"${dclaim_raw:-null}" 2>/dev/null)" || dclaim_rc=1
+            fi
+            if [ "$dclaim_rc" -ne 0 ] || [ -z "$dmerged_at" ]; then
+              orphans="${orphans}[$repo] ⏳ issue #${dn} — IL-G06 merged-closeout HELD this tick: the merge time or the issue's label events are unreadable (rule #6 — a closeout waits, a redundant ride is never dispatched blind; homelab#1472)\n"
+            elif [ -n "$dclaim" ] && [ "$(jq -rn --arg a "$dclaim" --arg b "$dmerged_at" '$a > $b')" = "true" ]; then
+              orphans="${orphans}[$repo] ⏳ issue #${dn} — merged strong-link PR already CLAIMED since the merge (agent/in-progress at ${dclaim} > merged ${dmerged_at}): the closeout for that merge is spent and the current round is the ride's / C4-C5's — no merged-closeout unit (homelab#1472)\n"
+            else
+              c6db="${c6db}${dn}\n"; c6db_nums="${c6db_nums}${dn} "
+            fi
           elif [ "${dmention:-0}" -gt 0 ] && [ "${dhit:-0}" -eq 0 ]; then
             orphans="${orphans}[$repo] ⛔ issue #${dn} — a merged PR into ${default_branch} MENTIONS it but does not IMPLEMENT/CLOSE it (sibling-seam citation, not a closeout). Held: verify by hand, then hand-close.\n"
           fi

@@ -472,6 +472,10 @@ The scan dispatches this unit for an issue **closed by its merged PR but still l
 `agent/in-progress`** — the loop's last leg that used to be manual meta work every time. Your
 job, in order (re-read live state first, exit clean if someone already closed it out):
 
+   **A unit you get for an OPEN issue arrives at most once per merge** (homelab#1472): the scan
+   holds the IL-G06 arm once a newer `agent/in-progress` claim post-dates the merge, so if you find
+   a live round riding the next `Implements` PR, that is the ride's state, not a stale one — say so
+   and exit clean; do not relabel.
 1. **Verify the outcome holds.** Find the merged PR (`gh pr list --state merged
    --search "<issue> in:body"` or the issue timeline). Confirm it merged and master's `ci` on
    the merge commit is green (`gh run list --commit <sha>`). If the outcome looks WRONG (merged

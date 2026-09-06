@@ -7,6 +7,12 @@
 #   - #90: merged PR #200 has `Fixes #90` (strong link) BUT open PR #300 mentions #90 → dref > 0 → NOT detected
 #   - #91: merged PR #201 has `Implements #91` (strong link) AND no open PR mentions #91 → dref = 0 → DETECTED
 #   - #92: merged PR #202 has `Related to #92` (bare mention, not strong link) → dhit = 0 → orphan message
+#   - #93: merged PR #203 `Implements #93`, no open PR — BUT the issue's newest agent/in-progress
+#          labeled event (07:03:59Z) post-dates the merge (06:40:31Z): the closeout for that merge
+#          was already spent (re-queued + re-claimed, the oracle-fleet#397 r6 shape) → HELD with a
+#          report line, no unit (homelab#1472). Events world: issues-93-events.json.
+#   - #94: merged PR? none strong-links #94 (dhit = 0, dmention = 0) → silent; its events world
+#          exists so a regression that probes events BEFORE the strong-link test shows up as a CALL.
 #
 # The state-keyed world files (pr-list-merged, pr-list-open) are served distinctly by the stub
 # after homelab#1199 fixed _rp_words to keep --state values in the world key.
@@ -25,7 +31,9 @@ c6g_nums=""
 goalcand='[
   {"number": 90, "title": "test issue 90", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/in-progress"}]},
   {"number": 91, "title": "test issue 91", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/review"}]},
-  {"number": 92, "title": "test issue 92", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/in-progress"}]}
+  {"number": 92, "title": "test issue 92", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/in-progress"}]},
+  {"number": 93, "title": "test issue 93", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/in-progress"}]},
+  {"number": 94, "title": "test issue 94", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/review"}]}
 ]'
 # dbmerged and dbopen are fetched by the IL-G06 detection block from the replay world.
 # world/gh/pr-list-merged.json has the merged PRs (state-keyed).
