@@ -15,5 +15,10 @@ mode: actions
 source: agents/reviewer-session.sh
 parts:
   - file:bridge.sh
+  - block:reviewer-body-parser
   - block:s6-child-1-depth-rule
   - file:post.sh
+# hermeticity contract (homelab#329): the hotfix probe reads `alert-fp:` through the ONE parser
+# (ADR-122 (3), agents/issue_body.py), so the fixture needs `python3` — present under devbox.
+requires:
+  - python3

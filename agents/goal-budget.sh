@@ -98,13 +98,31 @@ gb_add() { python3 -c "import sys;print(round(float(sys.argv[1])+float(sys.argv[
 # If the interpreter or the module is missing, say so on stderr and report NO budget line — which
 # is the input each caller already has a stated degrade for (launcher: gate off; harvest: no
 # self-queue right). Never a guessed number.
+#
+# EXIT 2 IS NOT "NO LINE" (S8 original 1b, homelab#1431). The parser exits 2 on a MALFORMED
+# machine block — an unknown key, an indented line, a duplicate key, an unterminated fence — and
+# `|| true` flattened that into the same empty output an unfunded issue produces. The two must
+# not look alike: an author who wrote a block believes they declared a budget, and swallowing the
+# error funds the ride at $∞ while the body says $30. So the malformed case RETURNS 2, and
+# because this function is called through a pipe (its globals would die in the subshell) the
+# WALKERS below translate that status into `GB_MALFORMED` — the launcher pre-flight refuses on it.
 gb_budget_line() {
   if ! command -v python3 >/dev/null 2>&1 || [ ! -f "$GB_HERE/issue_body.py" ]; then
     echo "goal-budget.sh: cannot reach the ONE body parser (python3 + $GB_HERE/issue_body.py, ADR-122 (3)) — reporting NO \`Budget:\` line; each caller's stated degrade applies" >&2
     cat >/dev/null   # drain the piped body so the caller does not take a SIGPIPE
     return 0
   fi
-  python3 "$GB_HERE/issue_body.py" get Budget --ref "${GB_REF:--}" || true
+  _gbl_rc=0
+  _gbl_out="$(python3 "$GB_HERE/issue_body.py" get Budget --ref "${GB_REF:--}")" || _gbl_rc=$?
+  if [ "$_gbl_rc" -eq 2 ]; then
+    echo "goal-budget.sh: MALFORMED machine block on ${GB_REF:--} — the ONE parser refused the body (ADR-122 (3)); this is NOT \`no Budget: line\`, and the caller is told so (exit 2)" >&2
+    return 2
+  fi
+  if [ "$_gbl_rc" -ne 0 ]; then
+    return 0   # any OTHER non-zero keeps the pre-existing fail-soft: no line, ride proceeds
+  fi
+  if [ -n "$_gbl_out" ]; then printf '%s\n' "$_gbl_out"; fi
+  return 0
 }
 
 # ── WHICH issue is the goal — the question the sum is asked ABOUT (homelab#367) ──────────────────
@@ -148,12 +166,20 @@ gb_budget_line() {
 # lane, and what lets a replay fixture record the actual API payload rather than a post-jq scalar.
 goal_resolve_ancestor() {   # <slug> <issue> [max-hops]
   _gr_slug="$1"; _gr_cur="$2"; _gr_max="${3:-6}"
-  GB_GOAL=""; GB_HOPS=0
+  GB_GOAL=""; GB_HOPS=0; GB_MALFORMED=""
   case "$_gr_cur" in ''|*[!0-9]*) return 0 ;; esac
   while [ -n "$_gr_cur" ] && [ "$GB_HOPS" -lt "$_gr_max" ]; do
     _gr_view="$(gh issue view "$_gr_cur" --repo "$_gr_slug" --json labels,body 2>/dev/null || true)"
     _gr_lbl="$(printf '%s' "$_gr_view" | jq -r '[.labels[].name]|index("task/goal")!=null' 2>/dev/null || echo false)"
-    _gr_bud="$(printf '%s' "$_gr_view" | jq -r '.body // ""' 2>/dev/null | gb_budget_line)"
+    # `--ref` per ISSUE (homelab#1431): the migration meter's `LEGACY-GRAMMAR Budget <ref>` line
+    # is only countable if it names WHICH issue still carries a legacy line — `-` counts rides.
+    GB_REF="${_gr_slug}#${_gr_cur}"
+    _gr_body="$(printf '%s' "$_gr_view" | jq -r '.body // ""' 2>/dev/null || true)"
+    _gr_rc=0
+    _gr_bud="$(printf '%s' "$_gr_body" | gb_budget_line)" || _gr_rc=$?
+    # The body is captured BEFORE the pipe on purpose: jq also exits 2 (on unparseable JSON from
+    # a degraded `gh`), and a gh hiccup must never be read as a malformed machine block.
+    if [ "$_gr_rc" -eq 2 ]; then GB_MALFORMED="${_gr_slug}#${_gr_cur}"; return 0; fi
     # `task/goal` label stops unconditionally (homelab#367).
     if [ "$_gr_lbl" = "true" ]; then GB_GOAL="$_gr_cur"; return 0; fi
     # `Budget:` line stops only when the issue has NO native parent to climb past
@@ -170,7 +196,7 @@ goal_resolve_ancestor() {   # <slug> <issue> [max-hops]
 
 goal_budget_read() {   # <slug> <goal-issue> <model> [dispatch-issue]
   _gb_slug="$1"; _gb_goal="$2"; _gb_model="$3"; _gb_dispatch="${4:-}"
-  GB_BUDGET=""; GB_SUM=0; GB_ROWS=""; GB_VERDICT="no-budget"
+  GB_BUDGET=""; GB_SUM=0; GB_ROWS=""; GB_VERDICT="no-budget"; GB_MALFORMED=""
 
   # ONE view answers two questions now: the `Budget:` line (the grammar is `gb_budget_line` above —
   # ONE home, shared with the ancestor walk; currency stripping, USD, and why a € sign once disabled
@@ -197,7 +223,11 @@ goal_budget_read() {   # <slug> <goal-issue> <model> [dispatch-issue]
     return 0
   fi
 
-  GB_BUDGET="$(printf '%s' "$_gb_view" | jq -r '.body // ""' 2>/dev/null | gb_budget_line)"
+  GB_REF="${_gb_slug}#${_gb_goal}"   # the meter names the GOAL whose body still carries the line
+  _gb_body="$(printf '%s' "$_gb_view" | jq -r '.body // ""' 2>/dev/null || true)"
+  _gb_rc=0
+  GB_BUDGET="$(printf '%s' "$_gb_body" | gb_budget_line)" || _gb_rc=$?
+  if [ "$_gb_rc" -eq 2 ]; then GB_MALFORMED="${_gb_slug}#${_gb_goal}"; return 0; fi
   [ -n "$GB_BUDGET" ] || return 0
 
   # DESCENDANTS, not direct children (2026-08-05). A goal that overruns does it by sprouting

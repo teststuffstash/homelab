@@ -52,3 +52,8 @@ fc_now() { printf '%s\n' "${FC_NOW:?this fixture reaches the currency gate and m
 # classify_touches() reads CODEOWNERS at runtime. Point it at the real file in the checkout.
 CLASSIFY_CODEOWNERS="$REPLAY_ROOT/CODEOWNERS"
 mc_now() { printf '%s\n' "${MC_NOW:-2026-08-11T14:00:00Z}"; }
+# The ONE body-grammar parser (ADR-122 (3), homelab#1431). The manifest defines `ib()` just above
+# its first replay block, pointing at /work/homelab (the pod's clone); the fixture shadows only the
+# PATH, so the REAL agents/issue_body.py out of the checkout is what decides lane membership and
+# the self-referential split — the machine-comment.sh / footprint.sh pattern above, verbatim.
+ib() { python3 "$REPLAY_ROOT/agents/issue_body.py" "$@"; }

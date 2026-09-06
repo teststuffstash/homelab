@@ -10,6 +10,12 @@ CALL kubectl -n circles get pods -l app=agent-session,project=circles --field-se
 CALL kubectl -n circles-agents get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
 CALL gh issue view 9 --repo teststuffstash/circles --json state,labels,body
 CALL gh api repos/teststuffstash/circles/issues/9/events --paginate --jq [.[] | select(.event=="labeled" and .label.name=="agent/queued")] | last | .actor.type // ""
+CALL gh issue view 10 --repo teststuffstash/circles --json state,labels,body
+CALL gh api repos/teststuffstash/circles/issues/10/events --paginate --jq [.[] | select(.event=="labeled" and .label.name=="agent/queued")] | last | .actor.type // ""
+CALL kubectl -n circles get pods -l app=agent-session,project=circles --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL kubectl -n circles-agents get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL gh issue view 11 --repo teststuffstash/circles --json state,labels,body
+CALL gh api repos/teststuffstash/circles/issues/11/events --paginate --jq [.[] | select(.event=="labeled" and .label.name=="agent/queued")] | last | .actor.type // ""
 OUT REACHED: legitimate goal-decompose unit — dispatches
 OUT → unit fast-path dispatch for circles: circles issue-5 (goal-decompose, model sonnet, wip 1)
 OUT RETURN 0
@@ -25,5 +31,13 @@ OUT RETURN 0
 OUT REACHED: valueless Base: on decompose leg — refuses
 OUT unit fast-path: goal #9 has no Base: body line — refusing to dispatch
 OUT RETURN 0
+OUT REACHED: block-authored Base: twin of #5 — dispatches, no legacy meter
+OUT → unit fast-path dispatch for circles: circles issue-10 (goal-decompose, model sonnet, wip 1)
+OUT RETURN 0
+OUT REACHED: malformed machine block — refuses
+OUT unit fast-path: goal #11 has a MALFORMED machine block — refusing to dispatch (fail-closed, ADR-122 (3): a body the parser refuses is never read half-way into a dispatch)
+OUT RETURN 0
 OUT REACHED: end
+ERR LEGACY-GRAMMAR Base circles#5
+ERR issue_body: machine block line 3: unknown key 'Touchez' — the grammar is exactly: Touches, Base, Budget, Verdict-authority, Production-leg, Revert, Origin, Size, Capability, alert-fp, self-referential, fix-verdict, Class
 RC 0

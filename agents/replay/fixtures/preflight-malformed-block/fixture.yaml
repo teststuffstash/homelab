@@ -1,0 +1,29 @@
+# S8 original 1b (homelab#1431, ADR-122 (3)) — the launcher pre-flight FAILS CLOSED on a malformed
+# machine block.
+#
+# THE CONTRACT (derived from agents/issue_body.py's docstring — "an unknown key … is a LOUD parse
+# error (exit 2 + one stderr line in the CLI), never a silent skip" — and from #1431's fail-closed
+# directive, NOT from running the code):
+#   1. A well-formed block: `ib_get Base` returns the block's value, and NOTHING is printed to
+#      stderr — the block path is not the legacy path, so no `LEGACY-GRAMMAR` meter line.
+#   2. A body with no block but a legacy `Base:` line: the value still comes back, plus exactly one
+#      `LEGACY-GRAMMAR Base <repo>#<n>` meter line naming the ISSUE (the per-issue count 1b buys).
+#   3. A MALFORMED block (`Nope:` is not one of the 13 grammar keys): `ib_get` exits 2 and the
+#      pre-flight REFUSES — one `PREFLIGHT REFUSED: malformed machine block` line and exit 1, with
+#      NOTHING after it. That the run STOPS is the whole point: read as "no declaration", the ride
+#      would fork from master while the body declares a goal base.
+#
+# The refusal must happen in the MAIN shell: `exit` inside `$( )` leaves only the subshell, which
+# would be fail-OPEN. post.sh therefore calls ib_get in a substitution and ib_refuse_malformed
+# outside one — the same shape the launcher uses, so this fixture pins that shape too.
+#
+# hermeticity contract (homelab#329): needs `python3` (the ONE parser is Python — ADR-113).
+name: preflight-malformed-block
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:preflight-body-parser
+  - file:post.sh
+requires:
+  - python3

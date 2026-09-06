@@ -20,6 +20,14 @@
 #                     is NOT a breaker for checkpoint, and agent/queued is NOT required.
 #   valueless-base    goal-decompose|circles|issue-9 with a Base: line that has no content
 #                     after the colon — the fast path REFUSES (homelab#828 r2 finding 2).
+#   block-base        goal-decompose|circles|issue-10, #5's body re-authored as the ADR-122 (3)
+#                     machine block — dispatches IDENTICALLY, and emits NO `LEGACY-GRAMMAR Base`
+#                     line (that meter fires for #5 and only #5). The legacy/block pair is the
+#                     transition's whole claim: a spelling change, not a semantics change.
+#   malformed-block   goal-decompose|circles|issue-11 carries `Touchez:` inside the block — a key
+#                     outside the grammar. The parser REFUSES the body (exit 2) and the fast path
+#                     refuses the dispatch: rule #6, never fail INTO a write, so an unreadable
+#                     body is never read half-way into a goal decomposition.
 name: doorbell-goal-fast-path
 mode: actions
 source: agents/coordinator-scan.sh
@@ -30,3 +38,6 @@ parts:
 env:
   - ORG=teststuffstash
   - SCAN_STACK=circles
+# hermeticity contract (homelab#329): the clause reads issue bodies through agents/issue_body.py.
+requires:
+  - python3

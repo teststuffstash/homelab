@@ -80,3 +80,6 @@ scrub:
   # The assembly-complete comment keeps the bucket sentence verbatim (`\1` = the sub-issue name).
   - s|--body 🤖 \*\*assembly-complete\*\*.*\(\*\*Where post-launch work goes:\*\* [^\\]*\)\\n.*|--body <assembly-complete comment — see agents/coordinator-scan.sh> \1|
 rows: rows.psv
+# hermeticity contract (homelab#329): the clause reads issue bodies through agents/issue_body.py.
+requires:
+  - python3

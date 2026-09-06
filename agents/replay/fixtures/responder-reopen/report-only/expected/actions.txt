@@ -5,10 +5,14 @@ CALL gh issue edit 103 --repo teststuffstash/homelab --remove-label agent/queued
 CALL gh api repos/teststuffstash/homelab/issues/77 --jq .state + "|" + ([.labels[]?.name] | join(","))
 CALL gh api repos/teststuffstash/homelab/issues?state=open&sort=updated&direction=desc&per_page=20 --jq [.[] | select((.body // "") | contains("alert-fp:1f3a9c72b0d45e86"))] | first | .number // empty
 CALL gh api repos/teststuffstash/homelab/issues/103 --jq .body // ""
+CALL gh issue edit 103 --repo teststuffstash/homelab --body-file /tmp/vbody.md
 OUT → NodeDiskIOSaturation (1f3a9c72b0d45e86): closed thread(s) a reopen could restore: teststuffstash/homelab#103 teststuffstash/homelab#77
 OUT -- session (stubbed): reopened teststuffstash/homelab#103 on the FU-133 subject belt
 OUT → reopened teststuffstash/homelab#103: stripped stale lifecycle labels (agent/queued,agent/done,agent-fix) — a RECORD again; only a fresh verdict may re-queue it
+OUT → block: teststuffstash/homelab#103 machine block written (legacy lines kept — transition window)
 OUT → verdict: teststuffstash/homelab#103 carries no 'fix-verdict: fix' — stays inert (report-only diagnosis)
 OUT PRECLOSED teststuffstash/homelab#103 teststuffstash/homelab#77
 OUT REACHED: end
+ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#103
+ERR LEGACY-GRAMMAR fix-verdict teststuffstash/homelab#103
 RC 0
