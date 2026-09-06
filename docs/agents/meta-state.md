@@ -10,30 +10,21 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ S8 IN FLIGHT (fifth sitting 2026-09-06 14:15–14:5xZ, corpus session; stint #1418, Size 3):**
-  originals 1a/2/3/5/6 + sprout #1452 DONE. **OPEN at exit (all armed, bot-gated, land unattended
-  — codeowner reads on record):** **PR#1459** (1b — the bot's blocking finding fixed at
-  `0967b572`, re-review pending; #1431 closes when sprout #1460 lands, NOT at #1459's merge) ·
-  **PR#1479** (#1424 half 2, docs) · **PR#1478** (#1472 — the C6 claim-after-merge hold; when it
-  MERGES: clear `agent/error` on oracle-fleet#397, do NOT re-queue — the r6 salvage branch
-  `agent/20260906-070522` is the operator's delete-first call) · **PR#1462** (APPROVED, cycling) ·
-  **PR#1468** (#1444 — seat landed the three edits; APPROVE as codeowner once the bot approves if
-  this session did not). **PARKED branches (rebase after #1459 merges):**
-  `fix/s8-1460-parser-residue` (legs 2+1 done, 407/407; legs 4/5/6 NOT started; ⚠ stacked on the
-  OLD 1b tip `17834acb` — rebase onto #1459's merge and DROP its five bridge `IB_PY=` seam lines) ·
-  `fix/s8-1420-consumer-card-three-acts` (#1420, docs, green — open once 1b is in). #1423 HELD.
-  **DECISION for the operator: #1450/PR#1470** — (A) option-1 fingerprint + side map (the 04:39Z
-  directive) vs (B) `Base: master` Goal enters post-launch at tree-empty (IL-T18 second key,
-  ADR-126 delta) — seat recommends (B), recorded on #1450; PR#1470 stays parked either way.
-- **⚑ PICKUP from the 2026-09-06 wk-metal-04 window (seat, 12:40–14:15Z; TICK-LOG has the arc):**
-  (1) Garage `data-garage-0` replica REBUILDING onto wk-metal-04 — 28 % at 14:13Z, ~0.75 %/min
-  (the SA400 writes 26 MB/s at 486 ms — the ledger §2026-09-05 benchmark); expect healthy ~15:50Z,
-  nothing to do unless `LonghornVolume*` alerts say otherwise. (2) AFTER it is healthy: re-measure
-  `data-garage-0` write latency (rebuild traffic confounded it), then the **FU-093 (b) one-off
-  fstrim on wk-metal-04** (the `node-fstrim` pod spec with `nodeName: wk-metal-04`), latency
-  re-read after — weekly metal blocks by PR only if it helped. (3) wk-metal-04 WoL unverified from
-  S5 (needed the button after the AC cut — expected; a clean `talosctl shutdown` → WoL test is
-  the open question, not urgent).
+- **⚑ S8 IN FLIGHT (fifth sitting 2026-09-06, corpus session; stint #1418, Size 3):** originals
+  1a/2/3/5/6 + sprout #1452 DONE; **1b MERGED (PR#1459, 15:19Z) — #1431 stays OPEN until sprout
+  #1460 lands**; #1424 half 2 MERGED (PR#1479); #1439 MERGED (PR#1462); **#1450 DONE via (B),
+  PR#1481** (not S8, but it re-keys IL-T18 — #1424's closeout FSM read covers it). **NEXT (fresh
+  session):** (1) rebase `fix/s8-1460-parser-residue` onto master (stacked on the OLD 1b tip
+  `17834acb`; DROP its five bridge `IB_PY=` seam lines — 1b resolves IB_PY in the clause), then
+  legs 4 (scan/scout writers) + 5 (sentinels) + 6 (`requires: python3`) → PR → #1431 closes;
+  (2) rebase + open `fix/s8-1420-consumer-card-three-acts` (#1420, docs); (3) #1424 closeout leg
+  (ROADMAP S8 row, FSM rows for #1481's second key); #1423 HELD. **Bot-waits at exit, all
+  armed, land unattended:** **PR#1478** (#1472 C6 hold — CR dismissed after declaring the
+  footprint on #1472; when it MERGES clear `agent/error` on oracle-fleet#397, do NOT re-queue —
+  the r6 salvage branch is the operator's delete-first call) · **PR#1480** (queued-panel join + the PRs-waiting armed/merge_state columns —
+  CR fixed, re-review pending; then the operator's targeted tofu apply) · **PR#1482** (exporter
+  armed/merge_state labels — ArgoCD syncs on merge; the panel columns fill after it) · **PR#1468** (#1444 —
+  seat-approved, CI on the refreshed head, bot verdict pending).
 - **⚑ OPERATOR (from the 2026-09-06 corpus session):** (0) **`tofu apply` targeted at the
   `agent-running` grafana_dashboard** once the queued-panel PR (fix/agent-running-queued-why —
   the scan hold-class join answering "why is a queued issue not picked up") merges; dashboards
