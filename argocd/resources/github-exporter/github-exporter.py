@@ -1057,7 +1057,7 @@ def collect_open_prs(lines):
         "# TYPE github_pull_request_codeowner_park gauge",
         "# HELP github_pull_request_codeowner_park One row per green undrafted PR the bot APPROVED while GitHub still says REVIEW_REQUIRED — only the delegated codeowner read moves it (FU-166(a): the needs-meta clause-4 predicate on the one-poller; reviews[], never latestReviews[] — the PR#235 aside trap).",
         "# TYPE github_pull_request_reflex_wait gauge",
-        "# HELP github_pull_request_reflex_wait One row per green undrafted REVIEW_REQUIRED PR with NO bot approval yet — the review reflex's own queue (the dashboard split's other half).",
+        "# HELP github_pull_request_reflex_wait One row per green undrafted REVIEW_REQUIRED PR with NO bot approval yet — the review reflex's own queue (the dashboard split's other half). Labels armed/merge_state say WHY a row is not progressing: armed=false is invisible to the reflex (FU-079), merge_state=dirty is skipped.",
         "# TYPE github_pull_request_open gauge",
         "# HELP github_pull_request_open 1 per open PR; review_decision (approved|changes_requested|"
         "review_required|none) + ci_state (success|failure|pending|error|none) + draft ride as labels.",
@@ -1250,8 +1250,16 @@ def collect_open_prs(lines):
                 # consumer needs no run-state annotation at all.
                 if (pr["reviewDecision"] or "") == "REVIEW_REQUIRED" and not pr["isDraft"] \
                         and ci_state in ("success", "none"):
+                    # WHY a reflex-queue row does not progress (operator ask, 2026-09-06 — two
+                    # un-armed seat PRs sat in the panel a day with no column saying so): the
+                    # reflex reviews ARMED PRs only (FU-079) and skips DIRTY ones (ADR-125 admits
+                    # BEHIND). Both facts ride the same GraphQL walk — zero extra API calls. Added
+                    # labels only; every consumer aggregates by (owner, repo, number) or counts.
+                    why = dict(ident,
+                               armed="true" if pr.get("autoMergeRequest") is not None else "false",
+                               merge_state=(pr.get("mergeStateStatus") or "unknown").lower())
                     if bot_approved_at:
-                        lines.append(metric("github_pull_request_codeowner_park", ident, 1))
+                        lines.append(metric("github_pull_request_codeowner_park", why, 1))
                         # #1115: blocking-edge read for PARKED PRs only — resolve the closing issue
                         # and read its blocking dependencies. One REST call per parked PR (parks are
                         # few, so the pool cost is ~0). Absent-when-unreadable (the FU-108 rule):
@@ -1282,7 +1290,7 @@ def collect_open_prs(lines):
                         except Exception:
                             _errors += 1  # park-blocking read failure — make it visible
                     else:
-                        lines.append(metric("github_pull_request_reflex_wait", ident, 1))
+                        lines.append(metric("github_pull_request_reflex_wait", why, 1))
                 # Trailing-1h window, NOT reviews-since-head-commit: the commit OBJECT is
                 # forbidden to this PAT (needs Contents:read — found live 2026-07-12, the whole
                 # commits node nulls regardless of which sub-fields are selected), and a dispatch
