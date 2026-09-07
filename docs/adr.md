@@ -1701,6 +1701,16 @@ preference. What forced it: on 2026-09-06 the live LMDB was **25.36 GB against a
 compacted snapshot of the same data** — 84% of the meta volume leaked pages, ratcheting
 ~2.6 GB/day while real metadata grew ~50 MB/day. Mechanism: `docs/garage.md` §Metadata
 reclamation. FU-137 carries delivery.
+**Amendment (2026-09-07, operator ruling): what stands here is `replication_factor = 3` across
+physical zones, and that STORAGE IS NOT THE REPLICATION LAYER. The backing is no longer this
+ADR's to decide.** "Node-local XFS — Longhorn drops out of the Garage data path entirely" was
+over-specified: "engines replicate, storage stores singles" is satisfied by any **replica-1**
+volume (three replica-1 classes already run here), and the ext4-inode argument was against a
+*filesystem*, not against Longhorn — a StorageClass takes `fsType: xfs`. Measured 2026-09-07 and
+taken on maintainability grounds, Garage runs on **Longhorn replica-1**. Placement is now a
+per-workload, measured call recorded in [`storage-ledger.md`](storage-ledger.md), with the
+mechanism in [`garage.md`](garage.md) §Target architecture — **do not read the storage sentences
+above as current.**
 
 ### ADR-116 — FU ids are stable coordinates: provenance refs never scrub (the name-anchor ruling)
 
