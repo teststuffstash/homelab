@@ -7633,3 +7633,15 @@ gained `$RUNNER_NAME` after PR#310/#311. Now names both valid shapes and the unk
   the buying criterion is DRAM cache + measured latency.
 - **Unchanged and still the live question:** R1 (FU-137's third physical Garage zone) is blocked on
   *which NVMe is in the ThinkCentre M70s*, not on money — ask the seller for the model string.
+- **Same day, later — the box is bought.** Operator ordered the **ThinkCentre M70s SFF (≈150 €, €15
+  under a shop's 165 € list) + 2 × Gembird PEX-M2-01** M.2→PCIe x4 adapters. The adapters retire the
+  open question that was gating the pick (*is the OEM 512 GB NVMe DRAM-cached?*): verified
+  single-M.2 x4, **low-profile bracket included**, no bifurcation — so Garage data goes on its own
+  disk in the M70s's x16 LP slot and the OEM drive keeps only Talos + the image store. **FU-137's
+  third physical zone is now an onboarding job, not a purchase.** Evaluated but not yet bid: Intel
+  SSD **Pro 7600p** 256 GB ×6 at 25 € (the vPro/OEM SKU of the 760p — SM2262, 2 × 256 MB DDR4
+  **DRAM**, 3D TLC, 144 TBW): two units would finish the third zone AND extend pve's thin pool
+  353.84 → ~610 GB against 488 promised (**FU-093** option (a) for 25 € + adapter). ⚠ Does NOT
+  replace wk-metal-04's 480 GB SA400 — 256 GB shrinks a bulk tier at 816 G committed / 706 G
+  allocatable. Full read + the ask-the-seller list (SMART **media wear** not power-on hours; Opal
+  PSID state) in `teststuff/hardware` → `market/2026-09-07-intel-7600p-tartu.md`.
