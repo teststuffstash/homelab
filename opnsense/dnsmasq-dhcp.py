@@ -53,6 +53,11 @@ HOSTS = [  # static reservations preserved from ISC
     {"host": "thinkcentre", "hwaddr": "8c:89:a5:23:49:da", "ip": "192.168.2.53"},
     # HP desktop — bare-metal Talos worker (storage-tier candidate).
     {"host": "hp-01", "hwaddr": "b4:b5:2f:df:01:bc", "ip": "192.168.2.54"},
+    # Lenovo ThinkCentre M70s SFF — bare-metal Talos worker, the third PHYSICAL Garage zone
+    # (FU-137 / ADR-114). Storage tier, always-on, so it takes a .5x cluster-node address
+    # (docs/ip-plan.md: .51-.99) rather than the .18x laptop/ephemeral block. maintenance IP
+    # == node IP, same pinning as the others.
+    {"host": "m70s", "hwaddr": "e0:be:03:3d:8a:d1", "ip": "192.168.2.56"},
     # Droplet ESP32 plant-waterer — pin its canonical .245 (was a bare dynamic lease
     # under ISC; drifted to .19 after the dnsmasq migration, which broke HA's ESPHome
     # integration that's addressed at .245). Any HA/integration device referenced by a
