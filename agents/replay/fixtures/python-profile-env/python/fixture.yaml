@@ -1,0 +1,16 @@
+# The PyPI-cache consumer env for a python-profile ride (#1413/PR#1457) — and the UV_FROZEN
+# coupling the oracle handoff (2026-09-07) added to it. uv records the resolving index INSIDE
+# uv.lock, so UV_DEFAULT_INDEX without UV_FROZEN rewrites every committed lock to the LAN VIP
+# (oracle-fleet PR#504: 137 URL-only lines, blocked by the reviewer). The two vars are one
+# decision — this row asserts they are emitted TOGETHER, so a later edit cannot drop the frozen
+# half and re-open the class. `uv sync --frozen` in a repo's ci.sh does NOT substitute: a plain
+# `uv run` afterwards re-locks and rewrites (measured, uv 0.12.10 — oracle-fleet's ci.sh already
+# ran --frozen and was hit anyway), which is why the knob is the ENV and lives here.
+name: python-profile-env-python
+mode: actions
+source: agents/agent-session.sh
+env:
+  - EGRESS_PROFILE=python
+parts:
+  - block:python-profile-env
+  - file:post.sh
