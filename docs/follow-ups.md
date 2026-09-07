@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-224** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-225** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -163,6 +163,16 @@ six OVERSIZE items pointer-ized into
       Garage metadata rides Longhorn. No prior FU/ADR covers Longhorn fsync semantics (grepped
       `fsync|durability|Longhorn` 2026-09-07). Link: ADR-114, FU-137.
 
+- [ ] **FU-224** — **`longhorn-manager` throttles at its 150m CPU limit.** Grafana's throttling
+      panel (operator, 2026-09-07) shows 4–14 % of CFS periods throttled per manager pod over an
+      hour (`longhorn-manager-fxr4s` 13.9 %), cilium agents 4–13 %. Not a data-path contamination of
+      the ledger's engine measurement — `instance-manager` carries the I/O and has NO CPU limit — but
+      the manager IS the attach/rebuild/scheduling plane, and the 150m req==limit came from the
+      FU-112(b) Guaranteed-QoS ruling, sized for memory not CPU. **Next:** raise the manager CPU
+      limit (300m, keep req==limit) in `tofu/longhorn.tf` on a quiet day — it rolls the DaemonSet,
+      so not mid-migration; re-read the panel a week later. No FU/ADR matched `throttl` (grepped
+      2026-09-07). Link: ADR-089, FU-112.
+
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 — a 10.01 GB corpus layer over the 20Gi bucket, refused by Garage
       at commit 49 min in and surfaced to the pusher as an opaque **500**. Cap raised to **32Gi**;
@@ -245,21 +255,19 @@ six OVERSIZE items pointer-ized into
 
 - [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** The risk fired
       2026-08-24 — meta LMDB wiped in the pve thin-pool incident
-      ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884).
-      **ADR-114** + its 2026-09-06 addendum answer both halves — rf=3 across physical zones, and
-      reclamation as zone-by-zone `delete + garage repair tables` rotation (impossible at rf=1:
-      LMDB has no in-place compaction). Design/evidence/arming preconditions:
-      [`docs/garage.md`](garage.md) §Target architecture + §Metadata reclamation.
-      **Next (~2026-08-31 deadline PAST):** the build-out — rf=3 migration, CNPG replica-1 +
-      required zone anti-affinity, backup CronJob; then measure a full-table resync before arming
-      rotation. Blocked on a third PHYSICAL zone ([ledger](storage-ledger.md) §Requirements, *need*).
-      ⚠ meta is **1 replica (wk-02)**, 82.4% / 5.57 GB free (84% leaked pages). **The interim
-      attended swap is SUBSUMED by the build-out** (operator, 2026-09-07): the two new zones sync
-      their metadata fresh, so they carry no leaked pages by construction, and the original is
-      reclaimed by the same rotation — at quorum, with no downtime, instead of the swap's 1–2 min
-      stop. Keep it only as a FALLBACK if the build-out slips past the runway: 5.57 GB free at the
-      last-24h rate (0.74 GB/day) is ~7 days; at the 09-06 rate (2.6 GB/day) ~2. **Operator intent: metadata maintenance must be
-      unattended.** Relates FU-013, FU-012, FU-093, ADR-031.
+      ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884). **ADR-114**
+      (+ addendum, + the 2026-09-07 amendment) answers both halves. **rf=3 across three physical
+      zones is LIVE since 2026-09-07** (wk-metal-01 / wk-metal-04 / m70s, each pod on its own
+      `longhorn-local-xfs` volumes; PR#1498 + [`garage.md`](garage.md) §The build-out as run;
+      numbers in the [ledger](storage-ledger.md) §The rf=3 build-out as run). Reclamation = the
+      zone-by-zone rotation, first executed on garage-0 as the build-out's last step (its native
+      resync from the two peers was still running at the 2026-09-07 wind-down — verify convergence
+      first, `garage stats -a` + `block list-errors`). **Next:** arm the
+      rotation loop — trigger off `GarageDiskFillingUp`, health gate (refuse while a zone is degraded
+      or resyncing), and the cadence input is "seed from the latest finished snapshot" (minutes), not
+      the Garage-native resync (unmeasured on the target topology — measure it on the first loop
+      run). Then CNPG replica-1 + required zone anti-affinity, and the backup CronJob. **Operator
+      intent: metadata maintenance must be unattended.** Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
 
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the

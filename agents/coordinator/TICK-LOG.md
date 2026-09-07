@@ -7698,3 +7698,54 @@ the incoming drives are for.
 **Not started, deliberately:** the rf=3 build-out. At 460k ctx it is a fresh-session job — 77.5 GB
 of live data, a meta volume at 82%, and an unresearched question (can `replicationFactor` go 1→3
 live on Garage v2.3.0?). Pickup block in `docs/agents/meta-state.md`.
+
+## 2026-09-07 evening — the Garage rf=3 build-out (FU-137/ADR-114), seat session
+
+**Research first, as the pickup demanded.** Upstream (configuration reference, `replication_factor`):
+changing rf on a live cluster is *"technically possible … not officially supported … delete the
+`cluster_layout` files … restart … create a new layout … data might temporarily appear unavailable"*.
+No layout-history net exists for this step (rf lives in the layout), and a read-quorum merge means an
+empty new pod answering first can 404 an existing object — so the S3 VIP was pinned to garage-0 for
+the window. Prep applied and verified before anything touched Garage: StorageClass
+`longhorn-local-xfs` (replica-1, xfs, strict-local, WFFC, no diskSelector — the pod's zone affinity is
+the fence), m70s's default disk registered (untagged, 100Gi reserved), kubelet imageGC 60/50 widened
+to non-kata Longhorn-on-EPHEMERAL nodes (`longhorn_default_disk`), PR#1498 merged 20:31Z.
+
+**The flip took 2 min 34 s of downtime** (20:32:42 → 20:35:16Z): same-node helper pod removed
+`cluster_layout` (kept a `.rf1.bak`), `delete sts --cascade=orphan`, delete pod, ArgoCD re-created the
+StatefulSet from the new values, three pods landed one-per-zone, `layout apply --version 1`. garage-0
+kept its node identity; the two new PVCs per pod came up XFS with node affinity pinned — WFFC +
+strict-local behaves exactly as designed.
+
+**Then the Garage-native resync was measured and found hopeless FROM THIS SOURCE**: ~3,000 table
+items/min and 0.5–12 blocks/s, because garage-0 still rode its pre-build-out volumes and its 26 GB
+leaked LMDB was network-attached (pod wk-metal-04, replica wk-02) — every Merkle descent a scattered
+page fault over the wire; 8 workers page-fault no faster than one. Switched to seeding, both shapes
+upstream-sanctioned: the finished 19:01Z compacted snapshot (4.1 GB) streamed pod-to-pod over `nc`
+into each new pod's meta volume (38 s; `kubectl exec -i` broke at the API server on a 4 GB stdin),
+then the block files `tar | nc` from a read-only same-node mount of `data-garage-0` (~28 MB/s off the
+SA400). Tables converged at 21:29Z (1,618,063 objects on all three). ⚠ The 20:21Z snapshot was 2.3 GB
+— killed mid-copy by the flip's restart — and would have been a corrupt seed; "finished" = size of the
+previous finished one + old mtime.
+
+**Operator, mid-run:** Grafana shows `longhorn-manager` throttling 4–14 % at its 150m limit (cilium
+4–13 %). Checked: `instance-manager` (the I/O path) has no CPU limit, so the ledger's engine
+measurement stands; the manager plane is FU-224. Operator to bed 21:30Z — "wind down once everything
+is finished".
+
+**Rotation of the original, run for real (22:21Z):** VIP unpinned via targeted tofu apply (three
+endpoints), then garage-0's pod + both old PVCs deleted — quorum served from the two seeded zones
+throughout. One self-inflicted stall: the read-only source helper still held `data-garage-0`, so
+pvc-protection kept it Terminating and the StatefulSet would not re-create the pod until the helper
+went (6 min). New garage-0 = node `a79a04a7` on wk-metal-04, both volumes `longhorn-local-xfs`;
+layout v2 applied 22:33:43Z, dead id skipped (`skip-dead-nodes --version 2`, then
+`--allow-missing-data` after verifying both peers held everything) — `layout history` shows one live
+version. Its native resync from two healthy local-volume peers measured ~27k table items/min (10× the
+network-attached source; ~2 h for 3.2M items) but only ~14 blocks/s onto the SA400 — ~11 h, the
+rotation cadence is the slowest zone's disk — left running unattended, the next session verifies
+convergence. The only blocks no node can serve are two Loki chunks that exist on the original volume
+solely as zero-byte `.corrupted` files dated Sep 4 (the pve thin-pool incident) — pre-existing, not
+migration damage. FU-137 rewritten to the live state; FU-224 filed (manager throttling); the recipe
+as run and the ledger rows went in a docs PR; memory updated. Old 150Gi×2 bulk + 30Gi std volumes are
+gone — that is the reclaimed footprint ADR-114 promised.
+
