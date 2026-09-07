@@ -236,6 +236,16 @@ Its first instruction is the one with a deadline: **freeze the evidence and do n
 
 ## Target architecture — rf=3 across physical zones (ADR-114, build-out in progress)
 
+> ⚠ **Amended 2026-09-07 — the STORAGE BACKING below is retired; everything else stands.**
+> `replication_factor = 3` across physical zones, and "storage is not the replication layer", are
+> current. **"Node-local XFS — Longhorn drops out of the Garage data path entirely" is NOT** —
+> Garage runs on **Longhorn replica-1** (measured; the engine tax is ~10× in ratio and one to two
+> orders of magnitude under what this workload pulls). Placement is a per-workload measured call
+> now, not a decree: [`storage-ledger.md`](storage-ledger.md) §2026-09-07 carries the numbers and
+> the ruling. Practical consequence: **wk-metal-01 and wk-metal-04 need no reinstall.** The
+> build-out is still pending — the live plan and its preconditions are the pickup block in
+> [`agents/meta-state.md`](agents/meta-state.md).
+
 **Grounding** — the upstream pages this design was read against (2026-08-24; before any
 substantial change here, read them all — they are what changed the outcome):
 
@@ -256,13 +266,14 @@ substantial change here, read them all — they are what changed the outcome):
   algorithm minimizes movement, capacity values steer distribution.
 
 The single-node posture above is being retired: **`replication_factor = 3`, one Garage instance
-per physical failure domain, node-local XFS storage — Longhorn drops out of the Garage data
-path entirely** (engines replicate; storage stores singles — the same ruling moves CNPG to
+per physical failure domain,** ~~node-local XFS storage — Longhorn drops out of the Garage data
+path entirely~~ **on Longhorn replica-1** (see the amendment banner at the top of this section —
+engines replicate; storage stores singles — the same ruling moves CNPG to
 replica-1 storage + *required* zone anti-affinity). Zones come from `machines.yaml`'s `zone`
 field → `topology.kubernetes.io/zone`: physical box = zone, every pve-pool VM = `proxmox`.
 
-- **Layout:** `wk-metal-01` (500G MX500), `wk-metal-04` (500G SATA), and interim third zone
-  `proxmox` (wk-02) — losing the whole pve zone keeps quorum (2/3, reads+writes continue).
+- **Layout:** `wk-metal-01` (500G MX500), `wk-metal-04` (500G SATA), and — since 2026-09-07 —
+  **`m70s`** as the real third zone, replacing the interim `proxmox` (wk-02) — losing the whole pve zone keeps quorum (2/3, reads+writes continue).
   Planned upgrade: a disk in hp-01 replaces wk-02 (`garage layout assign` + rebalance, no
   downtime). Capacity ~100G/zone balanced (usable = smallest zone); fits by reclaiming Garage's
   own 150Gi×2 Longhorn footprint from the same disks.
