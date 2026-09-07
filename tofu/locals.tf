@@ -36,6 +36,8 @@ locals {
       longhorn_disks = tolist(try(m.longhorn_disks, []))
       pin_hostname   = try(m.pin_hostname, true) != false # HostnameConfig patch; default true
       kata           = try(m.kata, false) == true         # metal_kata install image + homelab.io/kata label
+      # Longhorn on the EPHEMERAL partition (default disk) — the kubelet imageGC floor patch.
+      longhorn_default_disk = try(m.longhorn_default_disk, false) == true
       # Install-disk partitioning (INSTALL-TIME ONLY — Talos never re-partitions a provisioned
       # volume, and XFS cannot shrink, so changing either needs a wipe + reinstall).
       ephemeral_max_size = try(m.ephemeral_max_size, null) # cap /var so user volumes get space
