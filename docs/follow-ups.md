@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-221** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-222** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -579,6 +579,39 @@ the block needs pruning, not more headings.
       **Next:** `maxRunners: 3` + fix the comment (one-line PR, makes the panel truthful; does not
       shorten the queue) — real capacity is RAM on the compute tier, see the spike's §CI side.
       Relates FU-208, ADR-082.
+
+- [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
+      content.** Its documented pick has no green requirement on purpose (2026-07-10: *"a
+      base-side CI fix can only reach a PR through an update"*) — true for a CONTENT red, false
+      for a gate whose verdict is a function of (PR diff × base), which a catch-up merge cannot
+      move. Measured on PR#1468: **26 catch-up merges, ~26 CI cycles, never green**, on a pool
+      already starved (FU-218, queue p90 22–40 min). Cheapest candidate: skip the pick when the
+      PR's newest CI failure is the ADR-103 ratchet step (a named, stable step id — the
+      fleet-fault rule's own identifier discipline), report-only. **Next:** decide with #1489 —
+      if the gate stops producing this class the belt may not be worth building. Relates
+      merge-path.md MP-T02, ADR-111.
+
+- [ ] **FU-220** — **Locked python rides no longer use the PyPI cache; recovering it needs a
+      TRANSPARENT cache, which is a trust decision.** `UV_FROZEN=1` (2026-09-07, PR#1485) stops uv
+      rewriting committed locks to the LAN index, at the price of `--frozen` installs fetching
+      files.pythonhosted.org over the WAN — all three python-profile repos commit a lock, so the
+      `/packages/` zone is fed only by unlocked paths now. Mechanism, the measured uv behaviour
+      and the two named costs of the transparent shape (forged certs for public hostnames in
+      sandbox pods; hostAliases delete the upstream fallback) live in
+      [`patterns/python-stack.md`](patterns/python-stack.md) §caches. **Next:** measure what the
+      bypass costs (wheel bytes/ride × rides/week) before spending anything — operator decision.
+      Relates homelab#1300/#1413.
+
+- [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
+      content.** Its documented pick has no green requirement on purpose (2026-07-10: *"a
+      base-side CI fix can only reach a PR through an update"*) — true for a CONTENT red, false
+      for a gate whose verdict is a function of (PR diff × base), which a catch-up merge cannot
+      move. Measured on PR#1468: **26 catch-up merges, ~26 CI cycles, never green**, on a pool
+      already starved (FU-218, queue p90 22–40 min). Cheapest candidate: skip the pick when the
+      PR's newest CI failure is the ADR-103 ratchet step (a named, stable step id — the
+      fleet-fault rule's own identifier discipline), report-only. **Next:** decide with #1489 —
+      if the gate stops producing this class the belt may not be worth building. Relates
+      merge-path.md MP-T02, ADR-111.
 
 - [ ] **FU-220** — **Locked python rides no longer use the PyPI cache: recovering it needs a
       TRANSPARENT cache (DNS + TLS), which is a trust decision.** `UV_FROZEN=1` (2026-09-07, the

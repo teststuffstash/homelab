@@ -7563,3 +7563,42 @@ because its claim entry has no `fixer` block; (2) the runner-class table still d
 **pre-2026-08-31** venv key (`sha256(devbox.lock)` alone) — ci-runner-01 has two slots and the key
 gained `$RUNNER_NAME` after PR#310/#311. Now names both valid shapes and the unkeyed middle that
 "looks warm and behaves like a shared mutable global".
+
+### PR#1468: the pin-vacuity gate's fourth face — a deadlock, not a stale branch (operator question)
+
+- **Condition:** operator asked why PR#1468 had not healed from master. **It never could.** It has
+  been red since its first CI run (2026-09-06 01:18Z), took **26 catch-up merges / ~26 CI cycles**,
+  and is APPROVED + armed the whole time. The failing step is the ADR-103 ratchet's **pin-vacuity**
+  gate on `agents/replay/fixtures/merge-conflict/clause`; everything else on its tree is green (423
+  replay fixtures, merge-path-lint).
+- **The deadlock, both halves reproduced locally, not inferred:** the PR makes `merge-conflict-gate`
+  call `pr_blocked_on_check`, so the fixture must compose `block:blocked-on-jq`/`-check` — DROP them
+  and the fixture dies `RC 127`; KEEP them and it passes against an `origin/master` worktree (the
+  sentinels already exist on master from #1466, and the world has no `blocked-on:` marker, so the
+  check is a no-op in both trees) ⇒ vacuous ⇒ hard red. **`dc03a982`, the seat's 14:38Z fix ordered
+  by the 01:34Z arbitration ruling, is what traded one red for the other** — before it the failing
+  step was *Clause replays*. The routing rule exists to stop directives like that and does not
+  cover this face.
+- **A merge cannot move a relational verdict.** The gate compares (PR diff × base); the updater has
+  no green requirement by design — *"a base-side CI fix can only reach a PR through an update"* —
+  which is true for a CONTENT red and false here. 26 cycles on a pool the board already reports
+  starved. **FU-221.**
+- **History (asked for, and it is uniform): every prior face was an operator-direct push to
+  `ci.yaml`.** `b4921eb1` the gate (09-01) → `33c6f547` mode:suite (09-01 23:27Z, PR#1248) →
+  `326ce6e7` faces 1+2 (09-02 07:17Z, PR#1213/#1216), both subject-tagged *"governance-class,
+  operator-direct"* and both preceded by an inert operator-lane issue (#1215, #1225). Other shapes
+  in the family: PR#1217 (a whole PR restoring one fixture byte-exact to defuse), `12249396`+PR#1448
+  (clause direct, fixture-only follow-up), PR#1208 (fold), `07396948` (direct push into
+  `agents/replay/` to un-red the fleet). **Four false-positive events in the gate's first six days.**
+- **Correction I had to make mid-analysis:** my first proposal ("exempt parts-only fixture diffs")
+  REVERSES #1215, which ruled in as many words that a `parts:` change IS a pin claim. What survives
+  is keyed on the discriminator #1215 lacked — `parts:` changed AND `expected/` untouched ⇒ the
+  fixture asserts what it always did ⇒ not a pin claim. Simulated against the real diff: exempts
+  exactly `merge-conflict/clause`, leaves `debounced` and `source-issue-blocked` judged.
+- **Parked deliberately.** Operator: *"pretty unfamiliar with agents/replay as it stands, will need
+  to take time to think this over."* Wrote **homelab#1489** (inert, operator-lane) carrying the
+  background for a reader new to the harness, both reproductions, the full prior-face history, three
+  options and a one-command repro; meta-state points at it. **Do not improvise a carve-out.**
+- Also recorded there: the PR adds a blocked-on hold with **no fixture pinning it** —
+  `source-issue-blocked` pins the source-issue hold, `debounced` the marker, nothing exercises
+  `pr_blocked_on_check` firing. That is the coverage the vacuous `parts:` edit reached for.
