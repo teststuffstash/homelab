@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-220** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-221** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -579,6 +579,21 @@ the block needs pruning, not more headings.
       **Next:** `maxRunners: 3` + fix the comment (one-line PR, makes the panel truthful; does not
       shorten the queue) — real capacity is RAM on the compute tier, see the spike's §CI side.
       Relates FU-208, ADR-082.
+
+- [ ] **FU-220** — **Locked python rides no longer use the PyPI cache: recovering it needs a
+      TRANSPARENT cache (DNS + TLS), which is a trust decision.** `UV_FROZEN=1` (2026-09-07, the
+      oracle handoff) stops uv rewriting committed locks to the LAN index, at the price of
+      `--frozen` installs fetching `files.pythonhosted.org` over the WAN — i.e. the `/packages/`
+      zone stops being fed by the three python-profile repos that all commit a lock. The only
+      shape that keeps BOTH is making the cache invisible: pod `hostAliases` for pypi.org +
+      files.pythonhosted.org, TLS on `pypi-cache`, and either a CA in the ride's trust store or
+      `UV_INSECURE_HOST`/`PIP_TRUSTED_HOST`. **Operator decision, two named costs:** it forges
+      certs for public hostnames inside sandbox pods, and hostAliases delete the upstream
+      fallback — a single-replica cache becomes a hard dependency for every python ride.
+      **Next:** measure what the bypass actually costs (wheel bytes/ride × rides/week from the
+      `/packages/` zone) before spending anything; mechanism +
+      the measured uv behaviour live in [`patterns/python-stack.md`](patterns/python-stack.md)
+      §caches. Relates homelab#1300/#1413, FU-048 (archived).
 
 - [ ] **FU-219** — **`coordinate-perstack-*` runs die with exit 141 (SIGPIPE), intermittently.**
       8 runs on 2026-09-05/06 (platform-agents ×6, oracle-agents ×2), ~60 s in, last Loki line
