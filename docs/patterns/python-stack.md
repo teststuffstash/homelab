@@ -11,6 +11,43 @@
 **The one-line rule: devbox owns the interpreter, uv owns the venv, and neither ever writes into
 the other's territory.**
 
+**⚠ homelab is NOT an example of this pattern** — it has no `pyproject.toml`, no `uv.lock` and no
+`uv` in `devbox.json` (bare `python3` for scripts), and its AgentStack claim carries
+`egress.profile: none`. The reference implementation is **oracle-fleet** (the first Python stack —
+it paid for every lesson below); **sleep-tracking** is the smallest complete one and the better
+donor to copy. Read a claim before citing it: `kubectl get agentstacks -o json`.
+
+## Ownership — platform vs stack
+
+| Piece | Owner | Where |
+|---|---|---|
+| the interpreter pin + `uv` | **stack** | its `devbox.json` |
+| the project venv (`.venv`) and `uv.lock` | **stack** — committed, canonical, PyPI URLs | its repo |
+| `ci.sh` / the CI job shape | **stack** | its repo |
+| the shared wheel cache on the TRUSTED CI lane | **platform** | `arc-uv-cache` PVC + `UV_CACHE_DIR=/uv-cache`, mounted into every ARC runner pod (homelab#1299) |
+| the PyPI pull-through proxy | **platform** | `pypi-cache` (VIP `192.168.40.34`), [`../../SERVICES.md`](../../SERVICES.md) |
+| the ride env that consumes it (`UV_DEFAULT_INDEX` + `UV_FROZEN` + `PIP_*`) | **platform** — rendered by the launcher from the claim | `agents/agent-session.sh`, keyed on `fixer.egress.profile: python` |
+| the pypi/pythonhosted egress legs | **platform** — rendered from the claim | `argocd/resources/agentstack/composition.yaml` |
+
+## What a Python stack must do (the whole list)
+
+1. **`devbox.json`: `python@<pin>` + `uv@latest`** — §devbox.json shape below.
+2. **Commit `uv.lock`.** Not optional on this platform: a python-profile ride runs with
+   `UV_FROZEN=1`, so a repo without a committed lock fails at `uv sync` (§the proxy caveat).
+3. **Install from the lock — `uv sync --frozen` in `ci.sh`.** Bare `uv sync` lets a stale lock
+   update silently instead of failing the build, which is the whole point of committing one.
+4. **`export UV_PROJECT_ENVIRONMENT=.venv`** in any script that runs `uv` *outside* `devbox run`
+   — §the `UV_PROJECT_ENVIRONMENT` rule.
+5. **Key the venv by `sha256(devbox.lock)`** if the stack uses the long-lived VM runner —
+   §Venvs and caches, by runner class.
+6. **Declare `fixer.egress.profile: python`** on the AgentStack claim. That one field is what
+   earns the proxy env AND its egress legs; the stack sets nothing else.
+7. **Never hard-code the LAN index in the repo.** `UV_DEFAULT_INDEX`/`PIP_INDEX_URL` exist only
+   inside agent pods — a repo script that reads one MUST supply a default, because the same
+   script runs in GitHub CI and on a laptop (the env card's pod-only caveat).
+
+Everything below is the *why* behind those seven, plus the publishing/CI shapes.
+
 ## devbox.json shape
 
 - `python@<pin>` + `uv@latest`. Node only ever as repo *tooling* (lint, docs), never as the
@@ -126,3 +163,15 @@ docker-container builder's result never reaches the local image store.
 Gate (fast, ephemeral) **in parallel with** artifact/e2e (long-lived runner); evidence/report
 publishing in a trailing non-required job. The merge-blocking wall is `max(gate, e2e)`, never the
 sum. If the e2e half runs **kind**, its own contract is [`kind-ci.md`](kind-ci.md).
+
+## What this page does not promise
+
+- **Nothing here is rendered from your claim except items 6's consequences.** The platform does
+  not lint your `devbox.json`, does not check that you committed a lock, and does not run
+  `uv sync` for you — the first four items are yours, and their failure mode is your CI.
+- **The proxy is a speed/WAN-independence optimization, never a correctness dependency.** Every
+  path it serves also works straight from PyPI on the `python` egress profile; a stack must never
+  ship a lock, a script or a Dockerfile that only resolves on this LAN.
+- **Retention and sizing of the shared caches are platform capacity, not a stack contract** — a
+  stack that needs more asks through the capability-request lane
+  ([`../agents/platform-and-stacks.md`](../agents/platform-and-stacks.md) §Cross-stack demand).
