@@ -7602,3 +7602,46 @@ gained `$RUNNER_NAME` after PR#310/#311. Now names both valid shapes and the unk
 - Also recorded there: the PR adds a blocked-on hold with **no fixture pinning it** —
   `source-issue-blocked` pins the source-issue hold, `debounced` the marker, nothing exercises
   `pr_blocked_on_check` firing. That is the coverage the vacuous `parts:` edit reached for.
+
+## 2026-09-07 — the hardware detail gets a repo of its own (`teststuff/hardware`)
+
+- **Condition:** the 2026-09-06 hinnavaatlus read + price work lived in `uploads/hinnavaatlus-shortlist.md`
+  — **gitignored**, i.e. one tidy from deleting a session's worth of reasoning, and the operator was
+  re-deriving it. Operator framing: *homelab is public and the exact hardware is not that interesting
+  to the platform; homelab gives the hardware side its DEMANDS ("DRAM SSDs ≥ 256 GB, latency, speed"),
+  and the hardware side decides what is cheap on the market this month.* Same shape as *"we need more
+  ARC nodes"*.
+- **Command:** created **`teststuff/hardware`** (private) on the homelab Forgejo. The wallet's
+  `forgejo-api-token` has no `write:organization` scope, so the repo was created with a temporary
+  scoped token minted via `POST /users/rasmus/tokens` under basic auth and **revoked (204) immediately
+  after** — the wallet is unchanged, push rides the existing `homelab-forgejo` SSH key.
+- **Contents:** `requirements.md` (R1–R6 mirrored from `storage-ledger.md` §Requirements as spec
+  ENVELOPES + pointer, plus R7 = FU-034's Zigbee coordinator, plus "what is explicitly NOT a
+  requirement"), `inventory.md` (boxes/drives with the measured MX500-vs-SA400 A/B, `?` on every
+  field not actually known, empty spares table), `purchases.md`, `market/` (one dated file per read,
+  never edited to stay current; the 2026-09-06 read moved in verbatim apart from cross-repo links),
+  `docs/deal-watching.md` (watcher design space — Forgejo Actions the likely host, four pieces, four
+  open questions; explicitly NOT the fixer lane's job), `docs/buy-vs-rent.md` (the operator position:
+  cloud burst's setup cost — transit, identity, security — beats a 90–150 € used SFF box's sticker),
+  `CLAUDE.md` (9 hard rules, #1 = never a price from memory), STATE/LOG.
+- **Homelab side:** `meta-state.md` §3b now points at the new repo instead of the gitignored path;
+  `storage-ledger.md` §Requirements gains one paragraph naming the demand/supply split (the register
+  stays the demand side, nothing there becomes load-bearing on a private repo);
+  `uploads/hinnavaatlus-shortlist.md` deleted after the push verified.
+- **Filed FU-222** — no recipe exists for reading a fleet disk's identity/health; the 2026-09-05 SA400
+  diagnosis was an ad-hoc privileged pod and only its RESULT is written down. Now load-bearing, since
+  the buying criterion is DRAM cache + measured latency.
+- **Unchanged and still the live question:** R1 (FU-137's third physical Garage zone) is blocked on
+  *which NVMe is in the ThinkCentre M70s*, not on money — ask the seller for the model string.
+- **Same day, later — the box is bought.** Operator ordered the **ThinkCentre M70s SFF (≈150 €, €15
+  under a shop's 165 € list) + 2 × Gembird PEX-M2-01** M.2→PCIe x4 adapters. The adapters retire the
+  open question that was gating the pick (*is the OEM 512 GB NVMe DRAM-cached?*): verified
+  single-M.2 x4, **low-profile bracket included**, no bifurcation — so Garage data goes on its own
+  disk in the M70s's x16 LP slot and the OEM drive keeps only Talos + the image store. **FU-137's
+  third physical zone is now an onboarding job, not a purchase.** Evaluated but not yet bid: Intel
+  SSD **Pro 7600p** 256 GB ×6 at 25 € (the vPro/OEM SKU of the 760p — SM2262, 2 × 256 MB DDR4
+  **DRAM**, 3D TLC, 144 TBW): two units would finish the third zone AND extend pve's thin pool
+  353.84 → ~610 GB against 488 promised (**FU-093** option (a) for 25 € + adapter). ⚠ Does NOT
+  replace wk-metal-04's 480 GB SA400 — 256 GB shrinks a bulk tier at 816 G committed / 706 G
+  allocatable. Full read + the ask-the-seller list (SMART **media wear** not power-on hours; Opal
+  PSID state) in `teststuff/hardware` → `market/2026-09-07-intel-7600p-tartu.md`.

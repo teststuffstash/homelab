@@ -359,6 +359,12 @@ their own storage"). This section is that register. One row per requirement, siz
 evidence allows; **need** = a failure has already happened without it, **want** = it buys a known
 improvement. Status lives with the pointer (FU/issue), not here.
 
+**This register is the DEMAND side only.** Which box, from which seller, for how much — and the
+inventory of what the fleet already owns down to drive models and health — live in the private
+`teststuff/hardware` repo on the homelab Forgejo (created 2026-09-07), which mirrors the rows
+below as spec envelopes and answers them from the second-hand market. Nothing there is load-bearing
+for this document: keep stating the need and its evidence here, and let the supply side shop.
+
 | requirement | size | why (evidence) | class | pointer |
 |---|---|---|---|---|
 | **pve thin pool honest** — promised ≤ pool, or the pool grows | today **488 GB promised on a 353.84 GB pool** (`lvs`: <353.84g after the 09-03 +1 GB extend) (wk-02 240, ci-runner-01 80, wk-01 80, cp-01 40, wk-03 40, LXC 8 — 408 only while ci-runner-01 was destroyed, 09-03/04); a second NVMe on pve's free x4/x16 slot extends the pool (cheapest — see §hypervisor), a 1 TB NVMe replaces the 500 GB, or wk-02's 240 GB disk leaves the pool | four 100 % fills in a month, the fourth took the control plane down 8 min; twice-daily fstrim + the meter are belts, not capacity | need | FU-093, ADR-114 (new box, not more disks in pve) |

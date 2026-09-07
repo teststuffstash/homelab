@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-222** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-223** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -1037,6 +1037,15 @@ the block needs pruning, not more headings.
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
+- [ ] **FU-222** — **No recipe for reading a fleet disk's identity/health.** The 2026-09-05 SA400
+      diagnosis (model string, endurance, SATA link speed, interface CRC count) came from an
+      ad-hoc privileged pod; `docs/storage-ledger.md` §2026-09-05 records the *result*, nothing
+      records the *how* — so the next disk question re-improvises it. Now load-bearing: the
+      buying criterion for any Garage/Longhorn data disk is DRAM cache + measured write latency
+      (§Requirements, and the supply side in `teststuff/hardware`), which starts with identifying
+      what is already fitted. **Next:** capture the working probe as a runbook recipe (or a
+      `scripts/` one-shot) the next time a disk is read — verify against a live node, don't
+      reconstruct.
 
 ## One-time ops
 
