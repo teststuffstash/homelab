@@ -54,9 +54,13 @@ never the session's arc — that is TICK-LOG's.)
   24–32 MB/s = <5 % of the link; MX500 A/B = 0.6–18 ms — `storage-ledger.md` §2026-09-06, PR#1484).
   Replace with a **DRAM-equipped** drive; buying criterion for ANY Garage/Longhorn data disk is
   DRAM cache, not €/GB. Pairs with the FU-137 third-zone box, and
-  **the box is BOUGHT (2026-09-07): ThinkCentre M70s SFF ≈150 €, arriving, + 2 × M.2→PCIe x4
+  **the box is BOUGHT and OPENED (2026-09-07): ThinkCentre M70s SFF ≈150 €, + 2 × M.2→PCIe x4
   adapters** — so FU-137's third PHYSICAL zone now needs onboarding (`machines.yaml` entry with its
-  own `zone:`), not shopping. Supply side, incl. a specced 25 € DRAM-cached NVMe candidate that
+  own `zone:`), not shopping. **Its OEM NVMe reads `MTFDHBA512TDV-1AZ15ABLA` = Micron 2300 512 GB,
+  LPDDR4-DRAM + 96L TLC** (not the DRAM-less QLC 2400 the part number resembles) — it meets the
+  buying criterion, so the zone can stand up on the box as delivered and is not blocked on a drive
+  purchase. Board also has 3 SATA + a second PCIe **x4** (sheet said x1), i.e. it can carry a `std`
+  Longhorn slice too. Unread on that drive: power-on hours, % used, Opal/PSID. Supply side, incl. a specced 25 € DRAM-cached NVMe candidate that
   would also close FU-093's pool gap: private **`teststuff/hardware`** repo on Forgejo (`STATE.md`).
   wk-metal-04's replacement is still open and still wants ≥500 GB — a 256 GB drive would shrink
   the bulk tier. (4) Loop health: `AgentRunPhaseSlow` deferred by the
