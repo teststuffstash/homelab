@@ -32,14 +32,21 @@ donor to copy. Read a claim before citing it: `kubectl get agentstacks -o json`.
 ## What a Python stack must do (the whole list)
 
 1. **`devbox.json`: `python@<pin>` + `uv@latest`** — §devbox.json shape below.
-2. **Commit `uv.lock`.** Not optional on this platform: a python-profile ride runs with
-   `UV_FROZEN=1`, so a repo without a committed lock fails at `uv sync` (§the proxy caveat).
+2. **Commit `uv.lock` — libraries included.** Not optional on this platform: a python-profile
+   ride runs with `UV_FROZEN=1`, so a repo without a committed lock fails at `uv sync` (§the
+   proxy caveat). *"We publish a wheel, we don't lock"* is the objection to pre-empt and it is
+   wrong here: `uv.lock` pins the **development** environment, while a consumer of your wheel is
+   constrained by `pyproject.toml`'s ranges — publishing is unaffected. (The live case:
+   `allure-behavior-snippets` has a `pyproject.toml` and no lock. It is not exposed **today**
+   only because its claim entry carries no `fixer` block, so it never rides — the day it gains
+   one, every ride fails at `uv sync` until a lock is committed.)
 3. **Install from the lock — `uv sync --frozen` in `ci.sh`.** Bare `uv sync` lets a stale lock
    update silently instead of failing the build, which is the whole point of committing one.
 4. **`export UV_PROJECT_ENVIRONMENT=.venv`** in any script that runs `uv` *outside* `devbox run`
    — §the `UV_PROJECT_ENVIRONMENT` rule.
-5. **Key the venv by `sha256(devbox.lock)`** if the stack uses the long-lived VM runner —
-   §Venvs and caches, by runner class.
+5. **Give the long-lived VM runner a venv it cannot share by accident** — either key
+   `VENV_DIR` (lock hash **+ runner slot**) or keep the venv repo-local. §Venvs and caches, by
+   runner class.
 6. **Declare `fixer.egress.profile: python`** on the AgentStack claim. That one field is what
    earns the proxy env AND its egress legs; the stack sets nothing else.
 7. **Never hard-code the LAN index in the repo.** `UV_DEFAULT_INDEX`/`PIP_INDEX_URL` exist only
@@ -67,8 +74,28 @@ interpreter, always. (Three fixes to learn this: fleet#314 → #315 → #316 fou
 
 | Runner class | Venv | Wheel cache |
 |---|---|---|
-| **Long-lived** (proxmox VM) | keyed by `sha256(devbox.lock)` — `VENV_SUFFIX`, fleet#314 — with warmup self-heal (fleet#315) | local, persists naturally |
+| **Long-lived** (proxmox VM) | **two valid shapes, and the choice is not cosmetic** — see below | local, persists naturally |
 | **Ephemeral** (ARC `homelab-ephemeral`) | rebuilt EVERY job — **persist wheels, never venvs** (a persisted venv on ephemeral pods reimports exactly the staleness class #314 keyed away) | `UV_CACHE_DIR=/uv-cache`, a shared Longhorn RWX PVC (`arc-uv-cache`, 20Gi, `argocd/resources/github-runner/uv-cache-pvc.yaml`) mounted by every runner pod (homelab#1299, LIVE); uv's cache is lock-guarded + content-addressed, concurrent pods are supported |
+
+**The long-lived row, spelled out (corrected 2026-09-07 — the fleet sweep found the short
+version misleading).** ci-runner-01 has **two slots**, so two of a repo's PR jobs can run at once.
+What matters is whether they can reach the same venv directory:
+
+- **Repo-local venv** — `export UV_PROJECT_ENVIRONMENT=.venv` (circles' `scripts/test-system.sh`).
+  Each runner slot has its own workspace and `actions/checkout` runs `git clean -ffdx`, so the
+  venv is per-slot AND rebuilt every job: no collision, no staleness, at the price of never being
+  warm.
+- **Keyed shared venv** — a `VENV_DIR` under `$HOME/.cache` is *outside* the workspace, so
+  checkout never wipes it and every job on the VM shares it. That directory MUST be keyed by
+  **`sha256(devbox.lock)` AND the runner slot** (`$RUNNER_NAME`) — oracle-fleet's
+  `.github/workflows/ci.yaml` is the donor. The lock half alone is not enough: PR#310 vs PR#311's
+  `devbox-update` e2e jobs corrupted each other on 2026-08-31 (ensurepip died mid-recreate), which
+  is what added the slot half. Pair it with oracle-fleet's **warmup self-heal** step — a venv can
+  break with no lock change (nix GC, a run cancelled mid-create), and devbox then prompts
+  `overwrite? (y/n)`, which a non-tty CI answers by dying at exit 1.
+
+The trap is the unkeyed middle: a `$HOME/.cache` venv with no suffix, which looks like the warm
+option and behaves like a shared mutable global.
 
 Placement note (#1299): the ephemeral pool's nodes are the same kata laptops whose bulk/scratch
 partition already shares with the image store (the PR#1193 disk-floor class), so the cache PVC is
