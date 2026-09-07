@@ -7490,3 +7490,115 @@ first live ADR-110 maintenance session before the ADR existed.
   data; operator corrected (cheapest drive of ANY kind = 27.35 €, cheapest 500 GB = 66 €). It was
   LOAD-BEARING — "drives are nearly free" produced "buy the diskless box"; the real floor inverts it
   to the bundled-NVMe box. Never assert a price or "cheapest available" from memory; say the unknown.
+
+## 2026-09-07 — the PyPI cache was rewriting committed uv.locks (oracle handoff → PR#1485/#1486)
+
+- **Condition:** the oracle jail filed a handoff — oracle-fleet PR#504 blocked by the reviewer on a
+  `uv.lock` whose 532 packages had all been re-sourced to `http://192.168.40.34/…` (same versions,
+  same hashes, URL-only). Cause: `UV_DEFAULT_INDEX` (shipped for #1413 in PR#1457) — **uv records
+  the resolving index INSIDE uv.lock**, so every python-profile ride rewrote any committed lock to
+  a LAN address unusable off this network (CONTEXT.md #1c/#2/#6 at once). All three python-profile
+  uv repos commit a lock, so it recurred on every python PR from a ride.
+- **The measurement that chose the fix** (uv 0.12.10, against the live cache VIP): `uv sync
+  --frozen` protects the lock **for that command only** — a plain `uv run` afterwards re-locks and
+  rewrites all 137 lines. **oracle-fleet's `ci.sh:33` already ran `--frozen`** and was hit anyway
+  (`uv run pytest`, line 56, was the rewriter). So the filer's own option 1 would not have fixed
+  it, and no per-command repo change closes this. `--locked` hard-errors; a named
+  `[[tool.uv.index]]` records the URL not the name. **`UV_FROZEN=1` covers every project entry
+  point** — sync/run install from the lock, `lock` no-ops with a warning, the lock is never
+  written. Shipped coupled to `UV_DEFAULT_INDEX` and pinned together by a new replay family, so a
+  later edit cannot drop the frozen half.
+- **The cost, stated rather than hidden:** `--frozen` fetches the lock's own URLs, so locked
+  installs now go to files.pythonhosted.org over the WAN and the `/packages/` zone is fed only by
+  unlocked paths (`uv pip install`, `uvx`, `uv run --with`, pip — all verified still hitting the
+  VIP). Recovering it needs a transparent cache (hostAliases + TLS interception) — forges certs for
+  public hostnames in sandbox pods AND deletes the upstream fallback, so it is the operator's call:
+  **FU-220**, not built.
+- **Doc gap the operator's read surfaced:** `patterns/python-stack.md` is titled "you are the next
+  Python stack" but was organized by LESSON, not by consumer action — unlike its own named siblings
+  (`observability.md`, `app-owned-resources.md`), which lead with an ownership table + a numbered
+  contract. Added both, plus the exemplar line the page lacked: **homelab is not an example of this
+  pattern** (no pyproject.toml/uv.lock/uv, claim `egress.profile: none`) — oracle-fleet is the
+  reference, sleep-tracking the smaller donor. `agentstack.md` §egress dial also stopped calling
+  the python legs a "fallback": under UV_FROZEN they are the primary path for locked installs, and
+  that table is the declared audit surface.
+- **Seat lesson — the post-merge-push hazard bit the SEAT** (`merge-path.md` §Post-merge-push
+  hazard documents it for worker pods only): PR#1485 auto-merged at 06:40:17Z while this session
+  was pushing a second commit to the same branch; the commit landed nowhere and every surface read
+  clean (PR merged, green, approved). Caught by comparing the pr-wait exit against my own push,
+  not by any belt. Recovered by cherry-picking onto fresh master (PR#1486) + deleting the stale
+  branch. **Rule for the seat: after arming auto-merge, treat the branch as gone — a follow-up
+  commit branches from master, never from the armed branch.**
+- **Nothing to clean up:** `uv.lock` on master is clean on all four repos and no open PR carries a
+  cache URL; the oracle goal branch was the only casualty and the stack jail restored it. The
+  rewrite is byte-for-byte reversible (verified) — the two sed expressions are in python-stack.md.
+- **Open, not filed (operator's call):** `openrouter-operator/scripts/ci.sh` runs bare `uv sync`
+  where oracle-fleet and sleep-tracking use `--frozen`; it is a platform-claim repo, so it is in
+  seat triage scope.
+
+### Fleet rollout of the Python-stack contract (same day, operator-directed)
+
+Swept all 16 org repos for python packaging, then checked each against the seven-item contract
+PR#1486 wrote down. Result — three gaps, three different lanes:
+
+| repo | gap | action |
+|---|---|---|
+| openrouter-operator | the only python stack whose CI ran a **bare `uv sync`** (oracle-fleet/sleep-tracking use `--frozen`, circles uses `uv run --frozen` at every site) — a committed lock its CI never enforced | **PR#66 MERGED** (auto-armed, operator-ordered) |
+| circles (claim, in circles-iac) | `egress.profile: none` with the rationale *"static page + helm gate … (no pypi)"* — **stale**: circles gained `pyproject.toml` + `uv.lock`, and its ride Gate A runs `uv run --frozen` → files.pythonhosted.org. Works only because `enforce: false`; flipping enforce would HANG every ride at its first uv call | **circles-iac PR#108, deliberately UN-ARMED** — a policy line with a written rationale is the stack's read, not the seat's |
+| sleep-tracking | `VENV_DIR=$HOME/.cache/devbox-venv/sleep-tracking`, **unkeyed**, on the 2-slot proxmox-vm integration job — outside the workspace, so checkout never wipes it: oracle-fleet's PR#310-vs-#311 corruption class | **issue#147** (unlabelled by design — `.github/workflows/**` is worker-forbidden, so it is not `agent-fix`/machine-doable) |
+
+**Reported as NOT needing a change, with the reason** (the half that stops the next sweep
+re-deriving it): oracle-fleet compliant on all seven · **circles the REPO is safe** — its
+`test-system.sh` exports `UV_PROJECT_ENVIRONMENT=.venv`, a repo-local venv that `git clean -ffdx`
+wipes per checkout, so the shared-VM-venv class cannot reach it (filing it would have been noise)
+· snore-recorder is a **pip** project (device venv + `requirements.txt`), never runs uv, so
+`UV_FROZEN` is inert and `profile: python` is correct for its pip installs · agent-runtime has a
+`pyproject.toml` but no uv (pytest from devbox) · the nine remaining repos have no python
+packaging.
+
+**Two doc defects the sweep found (homelab PR#1487):** (1) "commit `uv.lock`" had no answer for
+the library objection — it applies (the lock pins the DEV env; consumers are bound by pyproject's
+ranges), and `allure-behavior-snippets` is the live pyproject-without-lock repo, unexposed only
+because its claim entry has no `fixer` block; (2) the runner-class table still described the
+**pre-2026-08-31** venv key (`sha256(devbox.lock)` alone) — ci-runner-01 has two slots and the key
+gained `$RUNNER_NAME` after PR#310/#311. Now names both valid shapes and the unkeyed middle that
+"looks warm and behaves like a shared mutable global".
+
+### PR#1468: the pin-vacuity gate's fourth face — a deadlock, not a stale branch (operator question)
+
+- **Condition:** operator asked why PR#1468 had not healed from master. **It never could.** It has
+  been red since its first CI run (2026-09-06 01:18Z), took **26 catch-up merges / ~26 CI cycles**,
+  and is APPROVED + armed the whole time. The failing step is the ADR-103 ratchet's **pin-vacuity**
+  gate on `agents/replay/fixtures/merge-conflict/clause`; everything else on its tree is green (423
+  replay fixtures, merge-path-lint).
+- **The deadlock, both halves reproduced locally, not inferred:** the PR makes `merge-conflict-gate`
+  call `pr_blocked_on_check`, so the fixture must compose `block:blocked-on-jq`/`-check` — DROP them
+  and the fixture dies `RC 127`; KEEP them and it passes against an `origin/master` worktree (the
+  sentinels already exist on master from #1466, and the world has no `blocked-on:` marker, so the
+  check is a no-op in both trees) ⇒ vacuous ⇒ hard red. **`dc03a982`, the seat's 14:38Z fix ordered
+  by the 01:34Z arbitration ruling, is what traded one red for the other** — before it the failing
+  step was *Clause replays*. The routing rule exists to stop directives like that and does not
+  cover this face.
+- **A merge cannot move a relational verdict.** The gate compares (PR diff × base); the updater has
+  no green requirement by design — *"a base-side CI fix can only reach a PR through an update"* —
+  which is true for a CONTENT red and false here. 26 cycles on a pool the board already reports
+  starved. **FU-221.**
+- **History (asked for, and it is uniform): every prior face was an operator-direct push to
+  `ci.yaml`.** `b4921eb1` the gate (09-01) → `33c6f547` mode:suite (09-01 23:27Z, PR#1248) →
+  `326ce6e7` faces 1+2 (09-02 07:17Z, PR#1213/#1216), both subject-tagged *"governance-class,
+  operator-direct"* and both preceded by an inert operator-lane issue (#1215, #1225). Other shapes
+  in the family: PR#1217 (a whole PR restoring one fixture byte-exact to defuse), `12249396`+PR#1448
+  (clause direct, fixture-only follow-up), PR#1208 (fold), `07396948` (direct push into
+  `agents/replay/` to un-red the fleet). **Four false-positive events in the gate's first six days.**
+- **Correction I had to make mid-analysis:** my first proposal ("exempt parts-only fixture diffs")
+  REVERSES #1215, which ruled in as many words that a `parts:` change IS a pin claim. What survives
+  is keyed on the discriminator #1215 lacked — `parts:` changed AND `expected/` untouched ⇒ the
+  fixture asserts what it always did ⇒ not a pin claim. Simulated against the real diff: exempts
+  exactly `merge-conflict/clause`, leaves `debounced` and `source-issue-blocked` judged.
+- **Parked deliberately.** Operator: *"pretty unfamiliar with agents/replay as it stands, will need
+  to take time to think this over."* Wrote **homelab#1489** (inert, operator-lane) carrying the
+  background for a reader new to the harness, both reproductions, the full prior-face history, three
+  options and a one-command repro; meta-state points at it. **Do not improvise a carve-out.**
+- Also recorded there: the PR adds a blocked-on hold with **no fixture pinning it** —
+  `source-issue-blocked` pins the source-issue hold, `debounced` the marker, nothing exercises
+  `pr_blocked_on_check` firing. That is the coverage the vacuous `parts:` edit reached for.

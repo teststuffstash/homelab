@@ -25,6 +25,21 @@ never the session's arc — that is TICK-LOG's.)
   CR fixed, re-review pending; then the operator's targeted tofu apply) · **PR#1482** (exporter
   armed/merge_state labels — ArgoCD syncs on merge; the panel columns fill after it) · **PR#1468** (#1444 —
   seat-approved, CI on the refreshed head, bot verdict pending).
+- **⚑ OPERATOR — DECISION OWED, PR#1468 is deadlocked meanwhile (2026-09-07):** the ADR-103
+  pin-vacuity gate has a **fourth** false-positive face — a clause that gains a dependency FORCES
+  a fixture's `parts:` edit, which is neither droppable (`RC 127` without it) nor a pin claim
+  (passes on base), so both gates cannot be satisfied at once. PR#1468 (approved, armed, 26
+  catch-up merges, ~26 CI cycles, never green since 09-06 01:18Z) is the live victim.
+  **Everything a decision needs — background for a reader new to `agents/replay/`, the two
+  verified reproductions, all prior faces and how each was fixed, three options with the #1215
+  ruling that constrains them, and a one-command repro — is homelab#1489** (inert, operator-lane).
+  The operator was unfamiliar with the harness and parked it deliberately; do NOT improvise a
+  carve-out. Related: FU-221 (the updater burning CI on a relational red), #1224 (parts-COVERAGE,
+  a different leg), and the missing blocked-on fixture named in #1489.
+- **⚑ OPERATOR — circles-iac PR#108 is UN-ARMED and waiting on you (2026-09-07):** circles' claim
+  `egress.profile: none → python`. Its rationale ("static page + helm gate … no pypi") went stale
+  when circles gained a uv chassis; flipping `enforce` with `none` would HANG every ride at its
+  first uv call. Additive and inert to land (circles already passes `--frozen` everywhere).
 - **⚑ OPERATOR (from the 2026-09-06 corpus session):** (0) **`tofu apply` targeted at the
   `agent-running` grafana_dashboard** once the queued-panel PR (fix/agent-running-queued-why —
   the scan hold-class join answering "why is a queued issue not picked up") merges; dashboards
