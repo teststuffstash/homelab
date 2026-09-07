@@ -101,6 +101,23 @@ data "talos_machine_configuration" "metal" {
         }
       }
     })] : [],
+    # The same image-GC floor for a NON-kata node whose Longhorn disk is the default one on
+    # EPHEMERAL (machines.yaml `longhorn_default_disk`). The 2026-09-01 collision is a property of
+    # the shared partition, not of kata: m70s (the ADR-114 Garage zone, storage tier, deliberately
+    # not kata) runs runner-image-prepull and would fill the image store past Longhorn's 25% floor
+    # exactly like the laptops did. Kata nodes already carry the floor in the block above, so this
+    # is fenced to `!kata` — no node gets the keys twice. Only these two keys: the kata block's
+    # memory reservations are kata math and stay kata-only.
+    each.value.longhorn_default_disk && !each.value.kata ? [yamlencode({
+      machine = {
+        kubelet = {
+          extraConfig = {
+            imageGCHighThresholdPercent = 60
+            imageGCLowThresholdPercent  = 50
+          }
+        }
+      }
+    })] : [],
     # AVX2 node label (boot-from-git, replaces the imperative `kubectl label`). The Haswell/Broadwell
     # ThinkPads have AVX2; hp-01 + thinkcentre do not. Talos applies machine.nodeLabels live.
     contains(local.avx2_nodes, each.key) ? [yamlencode({
