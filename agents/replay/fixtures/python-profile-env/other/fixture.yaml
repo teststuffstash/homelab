@@ -1,0 +1,10 @@
+# Sibling of ../python: a ride on any other egress profile gets NO pypi-cache env at all — the
+# fragment stays empty, so no non-python ride inherits UV_FROZEN (a repo with no committed
+# uv.lock would hard-fail `uv sync` under it) and none is pointed at the LAN index.
+name: python-profile-env-other
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:python-profile-env
+  - file:post.sh

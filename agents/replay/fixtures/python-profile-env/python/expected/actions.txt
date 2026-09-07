@@ -1,0 +1,10 @@
+OUT PYTHON_ENV (non-empty):
+OUT         - name: UV_DEFAULT_INDEX
+OUT           value: "http://192.168.40.34/simple/"
+OUT         - name: PIP_INDEX_URL
+OUT           value: "http://192.168.40.34/simple/"
+OUT         - name: PIP_TRUSTED_HOST
+OUT           value: "192.168.40.34"
+OUT         - name: UV_FROZEN
+OUT           value: "1"
+RC 0
