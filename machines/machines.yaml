@@ -267,7 +267,9 @@ machines:
     # WHOLE DISK to EPHEMERAL, deliberately. The 2026-09-07 middle state carved a 241GB
     # node-local XFS user volume here for a raw-XFS Garage zone (ADR-114 as written); the operator
     # then took Longhorn instead — placement is a measured per-workload call now, recorded in
-    # docs/storage-ledger.md §2026-09-07, not an ADR decree. A user volume mounts at
+    # docs/storage-ledger.md §"2026-09-07 — what the Longhorn engine actually costs, and why
+    # placement stops being an ADR" (merged as #1495; it carries the measured engine overhead and
+    # the operator ruling), not an ADR decree. A user volume mounts at
     # /var/mnt/<name>, which longhorn-manager CANNOT see (it host-mounts only /var/lib/longhorn),
     # so on a ONE-DISK box a Longhorn disk must be the default one on EPHEMERAL — the carved
     # partition would have stranded half the drive. Reverted while the node still held nothing.
