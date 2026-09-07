@@ -63,13 +63,47 @@ never the session's arc — that is TICK-LOG's.)
   LPDDR4-DRAM + 96L TLC** (not the DRAM-less QLC 2400 the part number resembles) — it meets the
   buying criterion, so the zone can stand up on the box as delivered and is not blocked on a drive
   purchase. Board also has 3 SATA + a second PCIe **x4** (sheet said x1), i.e. it can carry a `std`
-  Longhorn slice too. Unread on that drive: power-on hours, % used, Opal/PSID. Supply side, incl. a specced 25 € DRAM-cached NVMe candidate that
+  Longhorn slice too. Disk read via the new privileged-pod recipe (`docs/runbook.md` §Reading a
+  fleet disk's identity and health — FU-222 archived): **2% used, 3051 h, 0 media errors,
+  PCIe 3.0 ×4**, near-new. Supply side, incl. a specced 25 € DRAM-cached NVMe candidate that
   would also close FU-093's pool gap: private **`teststuff/hardware`** repo on Forgejo (`STATE.md`).
   wk-metal-04's replacement is still open and still wants ≥500 GB — a 256 GB drive would shrink
   the bulk tier. (4) Loop health: `AgentRunPhaseSlow` deferred by the
   responder 17:02Z and never re-triaged (DEFERRED-STUCK — the FU-113(b) retry chain); read the
   respond workflow retries. (5) Seat miss to remember: a zsh `set -- $var` classifier cancelled
   six LIVE CI runs (all re-run) — the card's no-word-split gotcha bites the seat too.
+- **⚑ NEXT SESSION PICKS UP HERE — the Garage rf=3 build-out (FU-137/ADR-114).** Everything
+  upstream is done; the build-out is untouched and is deliberately a FRESH-SESSION job (not started
+  at 460k ctx). Operator rulings, all 2026-09-07:
+  - **Zones = `wk-metal-01`, `wk-metal-04`, `m70s`.** wk-metal-04's SA400 stays for now — 2-of-3
+    write quorum routes around the slowest node, which is the point of rf=3.
+  - **Longhorn, NOT raw node-local XFS.** Placement is a measured per-workload call recorded in
+    [`storage-ledger.md`](../storage-ledger.md) §2026-09-07 — **that IS the ADR-114 amendment:
+    placement left the ADR layer.** rf=3-across-zones stands. Consequence: **wk-metal-01 and
+    wk-metal-04 need NO reinstall** — the expensive half of ADR-114 evaporated.
+  - **Needs an XFS StorageClass** (`numberOfReplicas: 1`, `fsType: xfs`): all six current classes
+    are ext4, and `fsType` cannot change on an existing volume — the three instances get NEW PVCs
+    and `data-garage-0` (150Gi `longhorn-bulk`, ext4) is a MIGRATION SOURCE.
+  - **m70s was reinstalled twice; now whole-disk EPHEMERAL (510 GB), Ready, zone label + BGP
+    verified. It has NO Longhorn disk yet (`spec.disks={}`)** — registering it is step 1.
+    ⚠ When registering, **widen the kubelet imageGC gate in `tofu/metal.tf`** (today
+    `each.value.kata`): Garage data will share EPHEMERAL with the containerd image store — the
+    2026-09-01 collision — and m70s runs `runner-image-prepull` while not being a kata node.
+  - **RESEARCH FIRST, unanswered:** can `replicationFactor` go 1 → 3 on a LIVE Garage v2.3.0, or
+    does it need a rebuild? `argocd/platform/garage.yaml` pins `"1"` and its header says read
+    `docs/garage.md` §Target architecture before any replication change. The 1→3 layout-assign +
+    rebalance sequence is also unresearched.
+  - ⏱ **Clock:** `meta-garage-0` **82.4% (26.1 of 31.67 GB, 5.55 GB free)**, rf=1, +0.74 GB/24h at
+    last read (2.6 GB/day on 09-06). FU-137's interim attended swap (snapshot → stop → swap the
+    compacted copy in → start, ~1–2 min) was due 09-07 and **has not happened**. Compacted 3.95 GB
+    vs 25.36 GB live = 84% leaked pages.
+  - **FU-223 (new)** — Longhorn showed 1.9× raw-XFS IOPS with fsync-every-write on the same
+    device, impossible for a truly flushed write. Settle whether Longhorn honours fsync end-to-end
+    BEFORE Garage metadata rides it: ADR-114 set `metadata_fsync = true` precisely because
+    `MDB_NOSYNC` was the 2026-08-24 wipe mechanism.
+  - Oracle handoff `20260907-1335-lan-registry-500…` is ANSWERED and in `done/` (registry cap live
+    at 32Gi, oracle green-lit to re-dispatch). Three OLDER items still sit in the oracle inbox.
+
 - **⚑ BOARD (09-05 ~09:45Z — see NEXT for the four open seat/loop PRs; earlier read follows):** in review #1386 (re-review after the seat's fix push) ·
   **18:20–19:00Z sweep:** **#1409 codeowner-APPROVED 18:23Z** (the #1403 fix; auto-merges on
   green) · **#1440's launcher fix landed DIRECT as a quickfix (`12249396`)** — PR#1448 is

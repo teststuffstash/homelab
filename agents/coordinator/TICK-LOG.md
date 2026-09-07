@@ -7645,3 +7645,56 @@ gained `$RUNNER_NAME` after PR#310/#311. Now names both valid shapes and the unk
   replace wk-metal-04's 480 GB SA400 — 256 GB shrinks a bulk tier at 816 G committed / 706 G
   allocatable. Full read + the ask-the-seller list (SMART **media wear** not power-on hours; Opal
   PSID state) in `teststuff/hardware` → `market/2026-09-07-intel-7600p-tartu.md`.
+
+## 2026-09-07 (evening) — the M70s stint: a box onboarded twice, a registry unblocked, and ADR-114 loses half its ruling
+
+**Hardware → cluster.** Operator opened the ThinkCentre M70s. Its OEM NVMe reads
+`MTFDHBA512TDV-1AZ15ABLA` = **Micron 2300** (LPDDR4 DRAM + 96L TLC), *not* the DRAM-less QLC 2400
+the part number resembles — so the box arrived with a data-class drive and FU-137's third zone was
+never drive-blocked. Board also carries a second PCIe **x4** (vendor sheet said x1) and 3 SATA.
+Onboarded as `m70s` @ .56, `zone: m70s`, BGP established (homelab#77d72c67, #6f488cba).
+
+**The onboarding doc got its round of improvement (#1492).** Two misses, and they are ONE class:
+wk-metal-04 joined with no BGP neighbour (2026-07-28), m70s joined with no zone label (today) —
+both invisible because **the node reports `Ready` either way**. `zone:` in machines.yaml is a
+SEPARATE tofu resource (`kubernetes_labels.node_zone`), not part of the machine config. Two dates
+⇒ promoted rather than patched again: the skill now has a *"Post-install registrations — the steps
+`Ready` does not gate"* section with a standing instruction to extend it each round, a table of the
+per-node doc rows nothing lints, and a disk-read step. Step 1's credentials were also a month stale
+(`tofu/provisioning` moved to the encrypted Garage S3 backend 2026-08-04). GAPS: onboard-G1, -G2.
+**FU-222 archived** — the privileged-pod disk probe is now a runbook recipe, captured from the live
+run that read the M70s disk (2% used, 3051 h).
+
+**The oracle's blocked release was the bucket quota, and the registry lied about it.** Garage
+returned `403 AccessDenied: Bucket size quota is reached … 21474836480`; the registry mapped it to
+an opaque **500** and `api_s3_error_counter` does not move for a quota rejection, so the oracle
+checked the right metric and saw nothing. Cap 20Gi → **32Gi** (#1493, live-verified), not 48Gi
+because at rf=3 every zone holds a full copy against a ~100G/zone plan. FU-203 became a pointer and
+gained the **ADR-085 ownership split**: homelab owns the prune MECHANISM (only it can run
+`garbage-collect` in ns `registry`), oracle-iac owns the KEEP-SET (its own spec claims retention,
+and only it knows the served digest). Quota alert PARKED — **Garage exposes no per-bucket size
+metric**, so no PrometheusRule can watch a quota. Handoff answered and closed.
+
+**Then the operator took half of ADR-114 apart, correctly.** ADR-114 bundled *"engines replicate;
+storage stores singles"* (true, and satisfied by a **replica-1** Longhorn volume — three replica-1
+classes already run here) with *"not Longhorn; ext4 inode limits"* (an argument against **ext4**,
+not Longhorn — a StorageClass takes `fsType: xfs`; every class here is ext4 **by configuration**).
+Measured it anyway (#1495, m70s, N=2, same disk): the engine costs **~10× on concurrent small
+writes, ~7.7× on streaming, 8–14× on latency** — and is **not binding**, since Garage runs at
+~150–220 ms/PUT and the registry push managed 3.4 MB/s, one to two orders under Longhorn's floor.
+**Ruling: storage PLACEMENT leaves the ADR layer and lives in the storage ledger** — with ~10 disks
+arriving the mix will be deliberately mixed, per-workload, after profiling. rf=3-across-zones stands.
+**FU-223 filed** on the one result that must not be quoted as a win: Longhorn showed 1.9× raw-XFS
+IOPS with fsync-every-write on the same device, which a flushed write cannot do — and ADR-114 set
+`metadata_fsync = true` *because* `MDB_NOSYNC` caused the 2026-08-24 wipe.
+
+**m70s was installed three times in one evening** and that was the cheap order: default install →
+capped EPHEMERAL + a 241 GB node-local XFS user volume (#1494) → whole-disk EPHEMERAL (#1496) once
+Longhorn won, because a user volume mounts at `/var/mnt/<name>` which **longhorn-manager cannot
+see**. Every cycle was console-free — the operator's PXE-first BIOS choice paid for itself the same
+day. The tofu capability (`ephemeral_max_size`, `user_volumes`) stays for the multi-disk profiling
+the incoming drives are for.
+
+**Not started, deliberately:** the rf=3 build-out. At 460k ctx it is a fresh-session job — 77.5 GB
+of live data, a meta volume at 82%, and an unresearched question (can `replicationFactor` go 1→3
+live on Garage v2.3.0?). Pickup block in `docs/agents/meta-state.md`.
