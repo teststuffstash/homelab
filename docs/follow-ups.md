@@ -152,6 +152,17 @@ six OVERSIZE items pointer-ized into
       `docs/incidents/2026-09-02-anonymous-git-throttle-loop-outage.md` §Residuals; the clause:
       `agents/coordinator-scan.sh` C4/C5.
 
+- [ ] **FU-224** — **Does Longhorn honour `fsync` end-to-end?** The 2026-09-07 A/B measured a
+      Longhorn replica-1 volume at **1.9× the IOPS of raw XFS on the same physical device** with
+      fsync after every write ([storage-ledger](storage-ledger.md) §2026-09-07). That is not
+      physically possible for a flushed write, so the engine is plausibly acking a flush it has not
+      pushed to the device. Load-bearing, not academic: ADR-114 set `metadata_fsync = true` because
+      LMDB's `MDB_NOSYNC` default WAS the 2026-08-24 wipe mechanism — on a Longhorn-backed meta
+      volume that setting may not mean what it says. **Next:** power-cut or `sync`-semantics test
+      (write with fsync → hard-stop the replica → verify the last acked writes survived), before
+      Garage metadata rides Longhorn. No prior FU/ADR covers Longhorn fsync semantics (grepped
+      `fsync|durability|Longhorn` 2026-09-07). Link: ADR-114, FU-137.
+
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 — a 10.01 GB corpus layer over the 20Gi bucket, refused by Garage
       at commit 49 min in and surfaced to the pusher as an opaque **500**. Cap raised to **32Gi**;
