@@ -50,6 +50,20 @@
 #                     node that has NOT yet been reinstalled with the pinned config — otherwise a
 #                     plain `tofu apply` would push the hostname change to the *running* node and
 #                     ghost it (install-time only; see the ⚠ in tofu/metal.tf).
+#   ephemeral_max_size  cap the EPHEMERAL (/var) volume so USER VOLUMES fit on the same install
+#                     disk. Talos provisions system volumes BEFORE user volumes and grows the
+#                     grow:true ones last, so an uncapped EPHEMERAL takes the whole disk and the
+#                     user volume never provisions (siderolabs/talos discussion #12713 — this cap
+#                     IS the maintainer's answer). ⚠ INSTALL-TIME ONLY: Talos applies volume
+#                     config only to an UNPROVISIONED volume and XFS cannot shrink, so changing
+#                     this on a live node is a no-op — it needs a wipe + reinstall.
+#   user_volumes      [{name, min_size, grow}] — node-local XFS partitions, auto-mounted at
+#                     /var/mnt/<name> (partition label u-<name>), selected onto the system disk.
+#                     Distinct from longhorn_disks: those are WHOLE extra devices handed to
+#                     Longhorn; these are partitions of the install disk for a workload that
+#                     wants node-local storage rather than replicated storage (ADR-114: Garage
+#                     engines replicate, so storage must store singles). Same install-time-only
+#                     rule as above.
 #   kata              install the metal_kata image (Kata Containers runtime — SLSA Phase-3 /
 #                     agent-CI microVMs, tofu/image.tf) and label the node kata-capable (the
 #                     `kata` RuntimeClass in kata.tf selects on it). Requires VT-x in BIOS.
@@ -250,6 +264,13 @@ machines:
     # but it is storage tier and stays untainted/non-kata on purpose.
     talos_metal_node: true
     install_disk: /dev/nvme0n1
+    # Install-disk layout for the ADR-114 Garage zone. The 2026-09-07 first install took Talos's
+    # default (EPHEMERAL grew to 510GB of the 512GB disk, zero free space), so the box was
+    # reinstalled the same day — while it still held nothing — with EPHEMERAL bounded and the
+    # remainder handed to a node-local XFS user volume at /var/mnt/garage.
+    ephemeral_max_size: 250GiB
+    user_volumes:
+      - { name: garage, min_size: 200GiB, grow: true }
     notes: Third physical Garage zone (FU-137/ADR-114). Storage tier, always-on — deliberately NOT ephemeral/kata. Two free low-profile PCIe slots for the Garage data disk.
 
   - name: wk-metal-01
