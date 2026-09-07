@@ -512,7 +512,7 @@ reading is that the engine acknowledges the flush without pushing it to the devi
 does. That is load-bearing here, because ADR-114 set `metadata_fsync = true` precisely because
 LMDB's default `MDB_NOSYNC` was the mechanism of the 2026-08-24 wipe. **Whether Longhorn honours
 fsync end-to-end must be settled before `metadata_fsync = true` on a Longhorn-backed meta volume is
-trusted to mean what it says** — FU-224.
+trusted to mean what it says** — FU-223.
 
 **Caveats, so the ratios are not over-read:** 2 GB working set over 45 s, so the A arm's 2.7 GB/s and
 155k IOPS are SLC-cache burst, not sustained — the ratios are the finding, the absolute A figures are

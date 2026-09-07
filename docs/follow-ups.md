@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-223** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-224** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -152,7 +152,7 @@ six OVERSIZE items pointer-ized into
       `docs/incidents/2026-09-02-anonymous-git-throttle-loop-outage.md` §Residuals; the clause:
       `agents/coordinator-scan.sh` C4/C5.
 
-- [ ] **FU-224** — **Does Longhorn honour `fsync` end-to-end?** The 2026-09-07 A/B measured a
+- [ ] **FU-223** — **Does Longhorn honour `fsync` end-to-end?** The 2026-09-07 A/B measured a
       Longhorn replica-1 volume at **1.9× the IOPS of raw XFS on the same physical device** with
       fsync after every write ([storage-ledger](storage-ledger.md) §2026-09-07). That is not
       physically possible for a flushed write, so the engine is plausibly acking a flush it has not
