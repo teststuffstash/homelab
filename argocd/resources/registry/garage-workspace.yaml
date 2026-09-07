@@ -3,12 +3,40 @@
 # registry namespace (no Infisical round-trip; the htpasswd push credential is the one that
 # rides Infisical, see htpasswd-externalsecret.yaml).
 #
-# Sizing (ADR-089: every bucket claim states max_size): 20Gi ≈ 3 co-resident corpus releases
-# (the 6.4GB layer dominates; successive releases share almost nothing — the delta REBUILDS the
-# corpus). The ert delta cron is suspended (releases are manual, oracle-iac
-# cronworkflow-ert-delta.yaml), so manual pruning covers the gap until tag-aware retention
-# lands (FU-203 — "keep 2 latest prod + latest built", the policy a pull-through cache could
-# never express and the reason this registry exists).
+# Sizing (ADR-089: every bucket claim states max_size) — 32Gi, raised from 20Gi on 2026-09-07.
+# WHY IT MOVED: the corpus layer grew 6.4GB -> 10.01GB (oracle-fleet goal #418 added lõige rows
+# + a lemmatized search column), so release 2026-07-12 pushed 12.47GB(held) + 10.01GB = 22.48GB
+# against a 20Gi cap and Garage refused the object AT COMMIT, 49 minutes in:
+#   AccessDenied: Bucket size quota is reached, maximum total size ... 21474836480
+# The registry surfaced that 403 to skopeo as an opaque **500 Internal Server Error** with no
+# detail, and Garage's `api_s3_error_counter` does not move for a quota rejection — so from the
+# consumer's side the failure was indistinguishable from a timeout. Two contract gaps worth
+# remembering rather than re-deriving:
+#   - ADR-089 promises an over-cap PUT "fails fast with a legible error at CREATE time". On the
+#     multipart/registry path it does not: it fails slow, at commit, illegibly.
+#   - There is NO per-bucket size metric in Garage (the whole family is garage_local_disk_avail
+#     /_total, garage_replication_factor, garage_build_info), so no PrometheusRule can watch a
+#     quota. GarageDiskFillingUp cannot see this: the DISK was fine, the CAP was the limit.
+#     A real alert needs the admin API (bucket info -> size vs max_size). Parked on FU-203.
+#
+# WHY 32Gi AND NOT MORE: 32Gi = 3 co-resident releases at 10GB (successive releases share almost
+# nothing — the delta REBUILDS the corpus). 48Gi was affordable on today's single node but would
+# pre-commit the ADR-114 rf=3 sizing: at rf=3 EVERY zone holds a full copy and the plan is ~100G
+# per zone with "usable = smallest zone". Garage holds 77.5GB of data today, so a 48Gi registry
+# ceiling would put ~116GB in every zone, over the plan. Revisit only alongside zone sizing.
+#
+# RETENTION OWNERSHIP (ADR-085 split: mechanism = platform, policy = IaC) — FU-203:
+#   - homelab owns the MECHANISM. Only it can run the prune: `registry garbage-collect` executes
+#     in ns `registry` (the oracle SA cannot even read that tenant), needs DELETE_ENABLED and the
+#     push credential, and the Garage admin API is the platform's provisioning seam only.
+#   - oracle-iac owns the POLICY (the keep-set). Its own spec claims it —
+#     oracle-fleet/specs/ingestion/riigiteataja.md: "The registry, repository path, retention,
+#     schedule ... are the oracle-iac policy layer (ADR-085 split)" — and only it knows which
+#     digest is actually served (the corpus.repository pin). A prune job that decides "prod" from
+#     tag names alone would eventually delete a served image: the #240 "served lie" class that
+#     already keeps the blob-descriptor cache off in registry.yaml.
+#   ⚠ ADR-121 also states the policy ("keep 2 latest prod + latest built"), so that string has two
+#     homes today. FU-203 carries the resolution; do not grow a third copy here.
 apiVersion: tf.upbound.io/v1beta1
 kind: Workspace
 metadata:
@@ -22,7 +50,7 @@ spec:
     module: |
       resource "garage_bucket" "registry" {
         global_alias = "registry"
-        max_size     = 21474836480 # 20Gi — sizing note above (ADR-089 cap)
+        max_size     = 34359738368 # 32Gi — sizing note above (ADR-089 cap; raised 2026-09-07)
       }
       resource "garage_key" "registry" { name = "registry" }
       resource "garage_bucket_permission" "registry_rw" {

@@ -152,14 +152,16 @@ six OVERSIZE items pointer-ized into
       `docs/incidents/2026-09-02-anonymous-git-throttle-loop-outage.md` §Residuals; the clause:
       `agents/coordinator-scan.sh` C4/C5.
 
-- [ ] **FU-203** — **The first-party registry has no retention** (2026-09-02, born with ADR-121 —
-      the "keep 2 latest prod releases + latest built" policy is the reason v1 exists, but v1
-      ships without it). Bucket `registry` capped 20Gi ≈ 3 corpus releases; the ert delta cron is
-      suspended so manual releases + manual pruning hold, but the cap is load-bearing the week
-      the weekly cadence un-suspends. Next: a tag-aware prune job (list tags → keep policy set →
-      DELETE manifests + `registry garbage-collect` — deletes work here, it's not a proxy) as a
-      CronJob in `argocd/resources/registry/`; wire `devbox run storage-ledger` to count the
-      bucket. Link: ADR-121, FU-196.
+- [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
+      The cap fired 2026-09-07 — a 10.01 GB corpus layer over the 20Gi bucket, refused by Garage
+      at commit 49 min in and surfaced to the pusher as an opaque **500**. Cap raised to **32Gi**;
+      sizing, the two contract gaps it exposed, and the ownership split now live in
+      [`argocd/resources/registry/garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml)'s
+      header. **Split (ADR-085, mechanism=platform/policy=IaC):** homelab ships the prune+GC
+      CronJob in `argocd/resources/registry/`; **oracle-iac owns the keep-set** (its spec claims
+      retention; only it knows the served digest). **Next:** that CronJob, keep-set-driven; the
+      quota alert is PARKED — Garage has no per-bucket size metric, it needs the admin API.
+      ⚠ ADR-121 states the policy too — one home wins here. Link: ADR-121, ADR-089, ADR-085.
 
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
