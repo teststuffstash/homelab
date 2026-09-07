@@ -243,8 +243,8 @@ Its first instruction is the one with a deadline: **freeze the evidence and do n
 > orders of magnitude under what this workload pulls). Placement is a per-workload measured call
 > now, not a decree: [`storage-ledger.md`](storage-ledger.md) §2026-09-07 carries the numbers and
 > the ruling. Practical consequence: **wk-metal-01 and wk-metal-04 need no reinstall.** The
-> build-out is still pending — the live plan and its preconditions are the pickup block in
-> [`agents/meta-state.md`](agents/meta-state.md).
+> build-out was executed 2026-09-07 — §The build-out below is the recipe as run; the measured
+> numbers (resync cost, the FU-137 rotation input) are in the ledger §2026-09-07.
 
 **Grounding** — the upstream pages this design was read against (2026-08-24; before any
 substantial change here, read them all — they are what changed the outcome):
@@ -273,10 +273,17 @@ replica-1 storage + *required* zone anti-affinity). Zones come from `machines.ya
 field → `topology.kubernetes.io/zone`: physical box = zone, every pve-pool VM = `proxmox`.
 
 - **Layout:** `wk-metal-01` (500G MX500), `wk-metal-04` (500G SATA), and — since 2026-09-07 —
-  **`m70s`** as the real third zone, replacing the interim `proxmox` (wk-02) — losing the whole pve zone keeps quorum (2/3, reads+writes continue).
-  Planned upgrade: a disk in hp-01 replaces wk-02 (`garage layout assign` + rebalance, no
-  downtime). Capacity ~100G/zone balanced (usable = smallest zone); fits by reclaiming Garage's
-  own 150Gi×2 Longhorn footprint from the same disks.
+  **`m70s`** (512G Micron 2300) as the real third zone; the interim `proxmox`/wk-02 zone was never
+  built. Losing any one zone keeps quorum (2/3, reads+writes continue). Capacity 140G/zone,
+  balanced (usable = smallest zone); the reclaimed footprint is Garage's own old
+  `longhorn-bulk` 150Gi×2 + the 30Gi std meta volume, freed when the last pre-build-out pod
+  rotated onto the new class.
+- **Storage:** each pod's two PVCs on **`longhorn-local-xfs`** (`tofu/longhorn.tf`: replica 1,
+  `fsType: xfs`, `strict-local`, `WaitForFirstConsumer`, no diskSelector — the pod's zone
+  affinity in [`argocd/platform/garage.yaml`](../argocd/platform/garage.yaml) is the fence; m70s's
+  disk is untagged so nothing else lands there). One pod per zone by required anti-affinity on
+  `topology.kubernetes.io/zone`; a pod whose node is down stays Pending rather than following a
+  reschedule into another zone, which is what keeps `layout assign -z` true.
 - **Layout ops discipline** (garagehq layout doc): stage assigns, review `layout show`, ONE
   `layout apply --version N` against ONE RPC host; never reuse a version number.
 - **Engine:** LMDB stays — upstream recommends it for rf ≥ 2; metadata corruption on one node
@@ -286,6 +293,64 @@ field → `topology.kubernetes.io/zone`: physical box = zone, every pve-pool VM 
   write key can delete irreversibly and replication propagates it): in-cluster CronJob syncing
   objects to a std-tier Longhorn PVC (not the Garage zones), pushgateway-alerted. No manual
   step, no external creds. Offsite stays parked (FU-137).
+
+### The build-out — rf 1 → 3 on a live single node (executed 2026-09-07)
+
+Upstream's own words ([configuration reference](https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/),
+`replication_factor`): *"technically possible … a dangerous operation that is not officially
+supported … shut down your cluster entirely, delete the `cluster_layout` files in the meta
+directories of all your nodes, update all your configuration files with the new
+`replication_factor`, restart your cluster, and then create a new layout with all the nodes you
+want to keep … data might temporarily appear unavailable … recommended to shut down public
+access while rebalancing is in progress."* There is no layout-history safety net for this
+step (v1's "serve from the old layout until the new one is synced" needs an old layout, and rf
+lives in it), so the recipe below is that paragraph made concrete for one node → three, plus the
+two things upstream leaves to you: what the StatefulSet does, and where reads go while the new
+nodes are empty.
+
+**Why reads need pinning.** In `consistent` mode a table read asks the three replica nodes,
+takes the first two answers (local node first, then by ping) and CRDT-merges them. A request that
+lands on an empty new pod and whose second answer is the *other* empty pod returns not-found for
+an object that exists on the original — a transient 404, not a loss. Block reads are safe (a miss
+falls through to the next holder). So until `repair tables` has converged, the S3 VIP selects the
+original pod only.
+
+1. **Prep, all reversible:** register the zone disks (`scripts/longhorn-tag-disks.sh`), create the
+   class (`tofu apply -target=kubernetes_storage_class.longhorn_local_xfs`), widen the kubelet
+   imageGC floor on the non-kata zone node (`machines.yaml longhorn_default_disk`, metal.tf).
+2. **Fresh belt:** `garage meta snapshot` (verify a finished snapshot, carved — §Durability).
+   Re-read the meta volume's free bytes; the original must not hit 100 % mid-migration.
+3. **Pin reads to the original:** `kubectl -n garage patch svc garage-s3 -p
+   '{"spec":{"selector":{"statefulset.kubernetes.io/pod-name":"garage-0"}}}'` (tofu-owned; the
+   drift is deliberate and reverted in step 9). In-cluster consumers use the chart's ClusterIP
+   `garage`, which ArgoCD self-heals — its window is accepted: every in-cluster consumer retries
+   (Loki, Argo artifacts, transcripts-sync, the registry's pulls).
+4. **Merge the values** ([`garage.yaml`](../argocd/platform/garage.yaml): rf 3, replicas 3, new
+   templates, affinity/tolerations). ArgoCD's sync updates the ConfigMap and **fails on the
+   StatefulSet** (immutable templates) — expected; the running pod reads config only at start.
+5. **Delete the layout file, then the StatefulSet, then the pod — in that order:** a helper pod on
+   the SAME node (Longhorn RWO admits a second pod per node) `rm /meta/cluster_layout`
+   (`node_key*`, `db.lmdb`, `data_layout` stay); `kubectl delete sts garage --cascade=orphan`;
+   `kubectl delete pod garage-0`. Downtime starts here. ArgoCD's selfHeal sees the missing
+   StatefulSet and re-creates it from the new values: garage-0 comes back with rf=3 and no layout
+   (old PVCs adopted), then garage-1, garage-2 on fresh XFS volumes. Order matters: a pod that
+   starts with rf=3 while the old one still gossips an rf=1 layout gets a layout it must refuse.
+6. **New layout, one RPC host:** on garage-0, `layout assign <id> -z <zone> -c 140G` ×3 (zone =
+   the node each pod actually landed on — `kubectl get pod -o wide`), `layout show`, ONE
+   `layout apply --version 1`. Serving resumes.
+7. **Sync:** `garage repair -a --yes tables` then `repair -a --yes blocks`; converge = `garage
+   stats -a` item counts equal across nodes and the resync queue drained. **Time it** — this is
+   the full-table resync cost the rotation loop needs (ledger §2026-09-07).
+8. **Rotate the original onto the new class** (= the first rotation, run for real): delete
+   `pod/garage-0` + `pvc/meta-garage-0` + `pvc/data-garage-0`; the StatefulSet re-creates all
+   three on `longhorn-local-xfs`. The node identity is gone with the meta volume, so it is a new
+   node id: `layout assign <new> -z <zone> -c 140G`, `layout remove <old>`, `apply --version 2`,
+   `layout skip-dead-nodes --version 2` (the old id never acks), then `repair tables/blocks` again.
+9. **Unpin:** `tofu apply -target=kubernetes_service.garage_s3_lb` restores the selector.
+10. **Verify** end to end from the LAN (`aws s3 ls`, a PUT+GET), `garage status`/`layout show`
+    (3 nodes, 3 zones, `Zone redundancy: maximum`), Crossplane buckets still Ready, and every
+    prior-key consumer still authenticating — the §Durability grant sweep does not apply (no
+    metadata was restored, it moved).
 
 ### Metadata reclamation — rotation, not compaction (ADR-114 addendum, 2026-09-06)
 
@@ -324,14 +389,9 @@ Three things the rotation loop needs before it is armed, none of which ADR-114 c
 - **A health gate that refuses.** Never rotate while another zone is degraded or re-syncing;
   refuse if quorum would drop — the same discipline the layout ops already carry.
 
-⚠ **Not armed while the interim third zone is `proxmox`/wk-02.** Rotating metadata against a VM
-on a thin pool that has hit 100% four times reopens the 2026-08-24 class. The third *physical*
-zone ([`storage-ledger.md`](storage-ledger.md) §Requirements, class *need*) is what gates this.
-
-**Interim, at rf=1:** snapshot → stop → swap the compacted copy in → start, ~1–2 min of downtime
-per cycle (the §Durability recovery recipe, with a *fresh* snapshot — never a stale or in-progress
-one). Automatable, but not zero-downtime; worth building only if the third zone is weeks away
-rather than days.
+**The zone gate cleared 2026-09-07** — the third physical zone is `m70s`, and step 8 of §The
+build-out was the first rotation run for real (measured in the ledger). What remains before the
+loop is armed is the trigger and the health gate above; the rf=1 interim swap is history.
 
 ## Static-website serving (3902, live 2026-07-14)
 

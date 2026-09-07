@@ -291,3 +291,31 @@ resource "kubernetes_storage_class" "longhorn_scratch" {
   }
   depends_on = [helm_release.longhorn]
 }
+
+# ---- Node-local XFS singles (ADR-114 as amended 2026-09-07) ---------------------------
+# For engines that replicate THEMSELVES (Garage rf=3, CNPG replica-1 + zone anti-affinity):
+# storage stores singles. replica=1 + strict-local = the volume lives on the disk of the node
+# the consumer pod runs on, full stop — a pod that lands elsewhere fails to attach instead of
+# quietly reading over the network (the zone pin must stay true or the engine's failure-domain
+# math is wrong). XFS because every other class here is ext4 by configuration, and ext4's inode
+# limits were the one real argument in ADR-114 (loki/ert object counts); fsType cannot change on
+# an existing volume, so this is a NEW class and consumers migrate by PVC recreation. Binding
+# WAITS for the consumer: with Immediate, Longhorn would place the replica before the scheduler
+# picked a node, and strict-local would then pin the pod to wherever Longhorn guessed. No
+# diskSelector on purpose — the consumer's node affinity is the fence (one disk per zone node),
+# and m70s's disk carries no tier tag (longhorn-tag-disks.sh). Placement rulings + measured
+# engine overhead: docs/storage-ledger.md §2026-09-07.
+resource "kubernetes_storage_class" "longhorn_local_xfs" {
+  metadata { name = "longhorn-local-xfs" }
+  storage_provisioner    = "driver.longhorn.io"
+  reclaim_policy         = "Delete"
+  allow_volume_expansion = true
+  volume_binding_mode    = "WaitForFirstConsumer"
+  parameters = {
+    numberOfReplicas    = "1"
+    dataLocality        = "strict-local"
+    staleReplicaTimeout = "30"
+    fsType              = "xfs"
+  }
+  depends_on = [helm_release.longhorn]
+}

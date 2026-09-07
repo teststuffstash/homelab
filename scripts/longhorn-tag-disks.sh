@@ -139,6 +139,28 @@ kubectl -n longhorn-system patch nodes.longhorn.io wk-metal-04 --type=merge -p '
 echo "  wk-metal-04/sata500 registered (bulk, 150Gi reserved)"
 fi
 
+# m70s: the ADR-114 third PHYSICAL Garage zone (2026-09-07). Whole-disk EPHEMERAL on a 512G
+# Micron 2300 (DRAM-cached — it clears the data-disk criterion), so the Longhorn disk is the
+# default one, shared with the containerd image store like the laptops. NO tier tag on purpose:
+# the only class meant to land here is `longhorn-local-xfs` (selector-less, replica-1,
+# strict-local — tofu/longhorn.tf), placed by the consumer's zone affinity; a std/bulk tag would
+# invite platform replicas and per-ride scratch onto the disk the zone exists for. 100Gi reserved
+# (the wk-metal-01 figure): runner-image-prepull's working set + the kubelet's 10% nodefs floor
+# (51G), with the imageGC 60/50 floor (metal.tf, longhorn_default_disk) keeping the rest honest.
+if kubectl -n longhorn-system get nodes.longhorn.io m70s -o jsonpath='{.spec.disks.nvme.path}' 2>/dev/null | grep -q .; then
+  echo "  m70s/nvme already registered — skip"
+else
+kubectl -n longhorn-system patch nodes.longhorn.io m70s --type=merge -p '{
+  "spec": {
+    "allowScheduling": true,
+    "disks": {
+      "nvme": {"path":"/var/lib/longhorn","allowScheduling":true,"evictionRequested":false,"storageReserved":107374182400,"tags":[],"diskType":"filesystem"}
+    }
+  }
+}' >/dev/null
+echo "  m70s/nvme registered (untagged, 100Gi reserved)"
+fi
+
 echo "disk status:"
 kubectl -n longhorn-system get nodes.longhorn.io -o json | python3 -c '
 import sys,json
