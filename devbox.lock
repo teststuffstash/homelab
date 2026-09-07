@@ -236,8 +236,8 @@
       }
     },
     "bind@latest": {
-      "last_modified": "2026-08-27T07:16:00Z",
-      "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#bind",
+      "last_modified": "2026-08-28T08:26:42Z",
+      "resolved": "github:NixOS/nixpkgs/0e7911a191ea0fb9d6e8e771d24736d3618f8b1f#bind",
       "source": "devbox-search",
       "version": "9.20.26",
       "systems": {
@@ -259,16 +259,16 @@
               "default": true
             },
             {
+              "name": "dev",
+              "path": "/nix/store/v42fcbvr6ll3gsf16bnckg4v3v467m4w-bind-9.20.26-dev"
+            },
+            {
               "name": "lib",
               "path": "/nix/store/0ppaimacxah8kdqr2rgw864ciqsfmpp2-bind-9.20.26-lib"
             },
             {
               "name": "man",
               "path": "/nix/store/43h8g4qp1rynk1fac308y2i68fsn58px-bind-9.20.26-man"
-            },
-            {
-              "name": "dev",
-              "path": "/nix/store/v42fcbvr6ll3gsf16bnckg4v3v467m4w-bind-9.20.26-dev"
             }
           ],
           "store_path": "/nix/store/7jc5np728cyf88il5pfcpmr2sjmp6pv4-bind-9.20.26"
@@ -323,16 +323,16 @@
               "default": true
             },
             {
-              "name": "dev",
-              "path": "/nix/store/rrjr6g71b9bvlnjcd918y4rqja7fv8zy-bind-9.20.26-dev"
-            },
-            {
               "name": "lib",
               "path": "/nix/store/9gw5588qsr45kg2ssl81bywgpss712dn-bind-9.20.26-lib"
             },
             {
               "name": "man",
               "path": "/nix/store/6ykf2v31w9mcafrfl503nvpcfh4b9n9x-bind-9.20.26-man"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/rrjr6g71b9bvlnjcd918y4rqja7fv8zy-bind-9.20.26-dev"
             }
           ],
           "store_path": "/nix/store/0fxykxkl92gxzq5d10243vdllyfl6ngx-bind-9.20.26"
@@ -616,8 +616,8 @@
       }
     },
     "github:NixOS/nixpkgs/nixpkgs-unstable": {
-      "last_modified": "2026-08-29T00:50:12Z",
-      "resolved": "github:NixOS/nixpkgs/e8be7818e19ada32105a8af937a6a473b38167ca?lastModified=1787964612&narHash=sha256-0N9nghg3nwzX6b6qc77EzjR9cu%2FZ%2BUR66FlfsCqiURs%3D"
+      "last_modified": "2026-09-04T19:23:59Z",
+      "resolved": "github:NixOS/nixpkgs/17de0b976395537756f30a3e78f2f06e5cec89ed?lastModified=1788549839&narHash=sha256-kOrCcSIA6w9J1hX5DqHy2k9pDTJymExTsbV74U9UtCA%3D"
     },
     "gitleaks@latest": {
       "last_modified": "2026-08-27T07:16:00Z",
@@ -772,16 +772,16 @@
               "default": true
             },
             {
+              "name": "out",
+              "path": "/nix/store/bpfcs06n720irpzril2mh6z59ddafhzx-jq-1.8.2"
+            },
+            {
               "name": "dev",
               "path": "/nix/store/mf170p9ynrn0g7s5i8kw655i1q4dxl6y-jq-1.8.2-dev"
             },
             {
               "name": "doc",
               "path": "/nix/store/bhalwqvdympjhs6gj584d29bga0l8q3s-jq-1.8.2-doc"
-            },
-            {
-              "name": "out",
-              "path": "/nix/store/bpfcs06n720irpzril2mh6z59ddafhzx-jq-1.8.2"
             }
           ],
           "store_path": "/nix/store/d01nk4ck93bwlzwbnnb1qf1kv4d94a09-jq-1.8.2-bin"
@@ -1524,8 +1524,8 @@
       }
     },
     "qrencode@latest": {
-      "last_modified": "2026-08-27T07:16:00Z",
-      "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#qrencode",
+      "last_modified": "2026-08-27T23:47:58Z",
+      "resolved": "github:NixOS/nixpkgs/7d1a7c21a4c00ea653fc7ed5c083d261340f185f#qrencode",
       "source": "devbox-search",
       "version": "4.1.1",
       "systems": {
@@ -1565,12 +1565,12 @@
               "default": true
             },
             {
-              "name": "dev",
-              "path": "/nix/store/s0yk6i06ygwnc08wh8svbyc0lwq4qqhv-qrencode-4.1.1-dev"
-            },
-            {
               "name": "out",
               "path": "/nix/store/kd3fp5n8qb076vgggxyc2gwnh12yqy75-qrencode-4.1.1"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/s0yk6i06ygwnc08wh8svbyc0lwq4qqhv-qrencode-4.1.1-dev"
             }
           ],
           "store_path": "/nix/store/m0ny06hi3czl1jqzywyww568n07nngd4-qrencode-4.1.1-bin"
@@ -1611,12 +1611,12 @@
               "default": true
             },
             {
-              "name": "dev",
-              "path": "/nix/store/2vyq340f7szwi6ngq6b14g7rd3jljh83-qrencode-4.1.1-dev"
-            },
-            {
               "name": "out",
               "path": "/nix/store/c6lcjhvgz0cg6w2xxki1gvdz2lsf4i8s-qrencode-4.1.1"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/2vyq340f7szwi6ngq6b14g7rd3jljh83-qrencode-4.1.1-dev"
             }
           ],
           "store_path": "/nix/store/8ifgl0mq56c2xfva9krd0f7yhpd6w4yx-qrencode-4.1.1-bin"
