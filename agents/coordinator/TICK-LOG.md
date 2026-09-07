@@ -7490,3 +7490,48 @@ first live ADR-110 maintenance session before the ADR existed.
   data; operator corrected (cheapest drive of ANY kind = 27.35 €, cheapest 500 GB = 66 €). It was
   LOAD-BEARING — "drives are nearly free" produced "buy the diskless box"; the real floor inverts it
   to the bundled-NVMe box. Never assert a price or "cheapest available" from memory; say the unknown.
+
+## 2026-09-07 — the PyPI cache was rewriting committed uv.locks (oracle handoff → PR#1485/#1486)
+
+- **Condition:** the oracle jail filed a handoff — oracle-fleet PR#504 blocked by the reviewer on a
+  `uv.lock` whose 532 packages had all been re-sourced to `http://192.168.40.34/…` (same versions,
+  same hashes, URL-only). Cause: `UV_DEFAULT_INDEX` (shipped for #1413 in PR#1457) — **uv records
+  the resolving index INSIDE uv.lock**, so every python-profile ride rewrote any committed lock to
+  a LAN address unusable off this network (CONTEXT.md #1c/#2/#6 at once). All three python-profile
+  uv repos commit a lock, so it recurred on every python PR from a ride.
+- **The measurement that chose the fix** (uv 0.12.10, against the live cache VIP): `uv sync
+  --frozen` protects the lock **for that command only** — a plain `uv run` afterwards re-locks and
+  rewrites all 137 lines. **oracle-fleet's `ci.sh:33` already ran `--frozen`** and was hit anyway
+  (`uv run pytest`, line 56, was the rewriter). So the filer's own option 1 would not have fixed
+  it, and no per-command repo change closes this. `--locked` hard-errors; a named
+  `[[tool.uv.index]]` records the URL not the name. **`UV_FROZEN=1` covers every project entry
+  point** — sync/run install from the lock, `lock` no-ops with a warning, the lock is never
+  written. Shipped coupled to `UV_DEFAULT_INDEX` and pinned together by a new replay family, so a
+  later edit cannot drop the frozen half.
+- **The cost, stated rather than hidden:** `--frozen` fetches the lock's own URLs, so locked
+  installs now go to files.pythonhosted.org over the WAN and the `/packages/` zone is fed only by
+  unlocked paths (`uv pip install`, `uvx`, `uv run --with`, pip — all verified still hitting the
+  VIP). Recovering it needs a transparent cache (hostAliases + TLS interception) — forges certs for
+  public hostnames in sandbox pods AND deletes the upstream fallback, so it is the operator's call:
+  **FU-220**, not built.
+- **Doc gap the operator's read surfaced:** `patterns/python-stack.md` is titled "you are the next
+  Python stack" but was organized by LESSON, not by consumer action — unlike its own named siblings
+  (`observability.md`, `app-owned-resources.md`), which lead with an ownership table + a numbered
+  contract. Added both, plus the exemplar line the page lacked: **homelab is not an example of this
+  pattern** (no pyproject.toml/uv.lock/uv, claim `egress.profile: none`) — oracle-fleet is the
+  reference, sleep-tracking the smaller donor. `agentstack.md` §egress dial also stopped calling
+  the python legs a "fallback": under UV_FROZEN they are the primary path for locked installs, and
+  that table is the declared audit surface.
+- **Seat lesson — the post-merge-push hazard bit the SEAT** (`merge-path.md` §Post-merge-push
+  hazard documents it for worker pods only): PR#1485 auto-merged at 06:40:17Z while this session
+  was pushing a second commit to the same branch; the commit landed nowhere and every surface read
+  clean (PR merged, green, approved). Caught by comparing the pr-wait exit against my own push,
+  not by any belt. Recovered by cherry-picking onto fresh master (PR#1486) + deleting the stale
+  branch. **Rule for the seat: after arming auto-merge, treat the branch as gone — a follow-up
+  commit branches from master, never from the armed branch.**
+- **Nothing to clean up:** `uv.lock` on master is clean on all four repos and no open PR carries a
+  cache URL; the oracle goal branch was the only casualty and the stack jail restored it. The
+  rewrite is byte-for-byte reversible (verified) — the two sed expressions are in python-stack.md.
+- **Open, not filed (operator's call):** `openrouter-operator/scripts/ci.sh` runs bare `uv sync`
+  where oracle-fleet and sleep-tracking use `--frozen`; it is a platform-claim repo, so it is in
+  seat triage scope.
