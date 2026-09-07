@@ -264,13 +264,18 @@ machines:
     # but it is storage tier and stays untainted/non-kata on purpose.
     talos_metal_node: true
     install_disk: /dev/nvme0n1
-    # Install-disk layout for the ADR-114 Garage zone. The 2026-09-07 first install took Talos's
-    # default (EPHEMERAL grew to 510GB of the 512GB disk, zero free space), so the box was
-    # reinstalled the same day — while it still held nothing — with EPHEMERAL bounded and the
-    # remainder handed to a node-local XFS user volume at /var/mnt/garage.
-    ephemeral_max_size: 250GiB
-    user_volumes:
-      - { name: garage, min_size: 200GiB, grow: true }
+    # WHOLE DISK to EPHEMERAL, deliberately. The 2026-09-07 middle state carved a 241GB
+    # node-local XFS user volume here for a raw-XFS Garage zone (ADR-114 as written); the operator
+    # then took Longhorn instead — placement is a measured per-workload call now, recorded in
+    # docs/storage-ledger.md §2026-09-07, not an ADR decree. A user volume mounts at
+    # /var/mnt/<name>, which longhorn-manager CANNOT see (it host-mounts only /var/lib/longhorn),
+    # so on a ONE-DISK box a Longhorn disk must be the default one on EPHEMERAL — the carved
+    # partition would have stranded half the drive. Reverted while the node still held nothing.
+    # ⚠ Consequence carried in the ledger: Garage data then shares this partition with the
+    # containerd image store (the 2026-09-01 collision). The kubelet imageGC floor in metal.tf is
+    # gated on `kata` and must widen when this node is registered as a Longhorn storage node.
+    # The ephemeral_max_size / user_volumes fields stay SUPPORTED (metal.tf) for the multi-disk
+    # profiling the incoming drives are for — they are simply not used here.
     notes: Third physical Garage zone (FU-137/ADR-114). Storage tier, always-on — deliberately NOT ephemeral/kata. Two free low-profile PCIe slots for the Garage data disk.
 
   - name: wk-metal-01
