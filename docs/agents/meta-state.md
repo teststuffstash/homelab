@@ -93,10 +93,17 @@ never the session's arc — that is TICK-LOG's.)
     does it need a rebuild? `argocd/platform/garage.yaml` pins `"1"` and its header says read
     `docs/garage.md` §Target architecture before any replication change. The 1→3 layout-assign +
     rebalance sequence is also unresearched.
-  - ⏱ **Clock:** `meta-garage-0` **82.4% (26.1 of 31.67 GB, 5.55 GB free)**, rf=1, +0.74 GB/24h at
-    last read (2.6 GB/day on 09-06). FU-137's interim attended swap (snapshot → stop → swap the
-    compacted copy in → start, ~1–2 min) was due 09-07 and **has not happened**. Compacted 3.95 GB
-    vs 25.36 GB live = 84% leaked pages.
+  - ⏱ **Clock:** `meta-garage-0` **82.4% (26.1 of 31.67 GB, 5.57 GB free)**, rf=1, +0.74 GB/24h at
+    last read (2.6 GB/day on 09-06), 84% leaked pages. **Do NOT do FU-137's interim attended swap
+    first — the build-out subsumes it** (operator, 2026-09-07): the two new zones sync metadata
+    fresh so they carry no leaked pages by construction, and the original is reclaimed by the same
+    rotation, at quorum, with none of the swap's 1–2 min downtime. The swap is now only a FALLBACK
+    if the build-out slips past the runway (~7 days at the last-24h rate, ~2 at the 09-06 rate).
+    ⚠ The corollary is a REAL build-out risk: the original meta volume must not hit 100% *during*
+    the migration — that is the 2026-08-24 class (Garage goes read-only). Re-read the free bytes
+    before starting, and if the window looks tight, grow the PVC (the `longhorn` class has
+    `allowVolumeExpansion`; meta went 10Gi → 30Gi that way on 2026-08-25) rather than doing the
+    swap.
   - **FU-223 (new)** — Longhorn showed 1.9× raw-XFS IOPS with fsync-every-write on the same
     device, impossible for a truly flushed write. Settle whether Longhorn honours fsync end-to-end
     BEFORE Garage metadata rides it: ADR-114 set `metadata_fsync = true` precisely because

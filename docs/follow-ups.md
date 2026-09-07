@@ -253,8 +253,12 @@ six OVERSIZE items pointer-ized into
       **Next (~2026-08-31 deadline PAST):** the build-out — rf=3 migration, CNPG replica-1 +
       required zone anti-affinity, backup CronJob; then measure a full-table resync before arming
       rotation. Blocked on a third PHYSICAL zone ([ledger](storage-ledger.md) §Requirements, *need*).
-      ⚠ meta is **1 replica (wk-02)**, hit **80%** on 2026-09-06 (84% leaked pages); operator takes
-      the interim attended swap 2026-09-07. **Operator intent: metadata maintenance must be
+      ⚠ meta is **1 replica (wk-02)**, 82.4% / 5.57 GB free (84% leaked pages). **The interim
+      attended swap is SUBSUMED by the build-out** (operator, 2026-09-07): the two new zones sync
+      their metadata fresh, so they carry no leaked pages by construction, and the original is
+      reclaimed by the same rotation — at quorum, with no downtime, instead of the swap's 1–2 min
+      stop. Keep it only as a FALLBACK if the build-out slips past the runway: 5.57 GB free at the
+      last-24h rate (0.74 GB/day) is ~7 days; at the 09-06 rate (2.6 GB/day) ~2. **Operator intent: metadata maintenance must be
       unattended.** Relates FU-013, FU-012, FU-093, ADR-031.
 
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
