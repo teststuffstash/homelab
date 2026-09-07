@@ -338,14 +338,50 @@ original pod only.
 6. **New layout, one RPC host:** on garage-0, `layout assign <id> -z <zone> -c 140G` ×3 (zone =
    the node each pod actually landed on — `kubectl get pod -o wide`), `layout show`, ONE
    `layout apply --version 1`. Serving resumes.
-7. **Sync:** `garage repair -a --yes tables` then `repair -a --yes blocks`; converge = `garage
-   stats -a` item counts equal across nodes and the resync queue drained. **Time it** — this is
-   the full-table resync cost the rotation loop needs (ledger §2026-09-07).
-8. **Rotate the original onto the new class** (= the first rotation, run for real): delete
-   `pod/garage-0` + `pvc/meta-garage-0` + `pvc/data-garage-0`; the StatefulSet re-creates all
-   three on `longhorn-local-xfs`. The node identity is gone with the meta volume, so it is a new
-   node id: `layout assign <new> -z <zone> -c 140G`, `layout remove <old>`, `apply --version 2`,
-   `layout skip-dead-nodes --version 2` (the old id never acks), then `repair tables/blocks` again.
+7. **Sync — and what the Garage-native path actually did here.** `garage repair -a --yes tables`
+   + `repair -a --yes blocks` is the supported shape, and it was started. Measured against THIS
+   source it was hopeless: garage-0 still rode its pre-build-out volumes, so its 26 GB leaked LMDB
+   was a **network-attached** Longhorn volume (pod on wk-metal-04, replica on wk-02) and every
+   Merkle walk and refcount lookup was a scattered 4 KiB page fault over the wire — ~3,000 table
+   items/min (35 h for 3.2M items × 2 peers) and block pushes at 0.5–12/s (days at that pace). Raising
+   `resync-worker-count` to 8 / `resync-tranquility` 0 (`garage worker set -a …`) did not move it:
+   the ceiling was garage-0's page faults, not worker count. **What worked, and is the recipe now
+   (both shapes are upstream-sanctioned):**
+   - *Metadata:* seed each new pod's meta volume from garage-0's latest **finished** compacted
+     snapshot — the Scenario-3 restore, aimed at a peer instead of the same node (cordon the zone
+     node, delete the pod so it parks Pending, same-node helper pod streams `db.lmdb/data.mdb` in
+     over `nc` pod-to-pod — 4.1 GB in 38 s; `kubectl exec -i` broke at the API server on a 4 GB
+     stdin — verify md5, uncordon). The node starts with the full tables; the Merkle sync then
+     reconciles only the ~1.5 h delta, in seconds. **A snapshot is finished when its `db.lmdb` is
+     the size of the previous finished one and its mtime is old** — the 20:21Z one was 2.3 GB, killed
+     by the flip's restart, and would have been a corrupt seed.
+   - *Blocks:* blocks are content-addressed files, so stream the data dir (`tar | nc`, excluding
+     `meta_snapshots/`, `lost+found`, `garage-marker`) from a read-only same-node mount of the
+     source volume into the new pod's data volume **while the new pod runs** — Garage's resync
+     finds the files present, verifies, and drains its queue at ~250 blocks/s instead of fetching.
+     Torn or wrong files are caught by the hash check on read and re-fetched. 68 GB / 558k files in
+     37 min ≈ 31 MB/s average here off the SA400 source (an early 3-minute sample read 28 MB/s). Throttle the SOURCE node's own push first (`worker set resync-worker-count 1`,
+     `resync-tranquility 10` on garage-0) — its pushes were what starved its RPC handling.
+   - **The block seed is a one-time bootstrap, not the loop's mechanism:** it was needed for the
+     FIRST new zone only, because the only source was the network-attached original. Once garage-1
+     was complete (local meta + blocks), garage-2 synced from it **natively** at ~155 blocks/s
+     (~19 MB/s, 559k blocks in ~1 h) with no helper — which is the resync figure the rotation loop
+     runs on (ledger). A rotated zone therefore just gets `repair tables` + `repair blocks` and
+     pulls from its two healthy peers.
+   - The `repair tables/blocks` launch stays: it is what makes a seeded node verify itself.
+   Converge = `garage stats -a` item counts equal across nodes and every resync queue at 0.
+8. **Rotate the original onto the new class** (= the first rotation, run for real, 22:21Z): unpin
+   the VIP FIRST (step 9 — the pinned pod is the one about to be wiped), then delete `pod/garage-0`
+   + `pvc/meta-garage-0` + `pvc/data-garage-0`; the StatefulSet re-creates all three on
+   `longhorn-local-xfs` — **after every helper pod holding the old PVC is gone** (pvc-protection
+   held `data-garage-0` Terminating for 6 min behind the read-only source helper, and the
+   StatefulSet will not create the pod while its claim is terminating). Quorum served throughout
+   (2/3). The node identity is gone with the meta volume, so it is a new node id: `layout assign
+   <new> -z <zone> -c 140G`, `layout remove <old>`, `apply --version 2`, then
+   `layout skip-dead-nodes --version 2` and, once the two live peers' own v2 sync is done,
+   `--allow-missing-data` for the dead id (its data was verified present on both peers first);
+   `layout history` then shows one live version. `repair tables` + `repair blocks` on the new pod
+   resync it from its two peers natively — the ledger has the rate.
 9. **Unpin:** `tofu apply -target=kubernetes_service.garage_s3_lb` restores the selector.
 10. **Verify** end to end from the LAN (`aws s3 ls`, a PUT+GET), `garage status`/`layout show`
     (3 nodes, 3 zones, `Zone redundancy: maximum`), Crossplane buckets still Ready, and every

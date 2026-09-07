@@ -529,3 +529,37 @@ that wedged every `docker:true` worker on 2026-09-01 (§the ADR-089 addendum). T
 — kubelet `imageGCHighThresholdPercent: 60` / `Low: 50` in `tofu/metal.tf` — is currently gated on
 `kata`, so a non-kata storage node does not get it. Any single-disk node that becomes a Longhorn
 storage node needs that gate widened.
+
+### The rf=3 build-out as run (2026-09-07 evening) — what a resync costs, and from where
+
+The FU-137 question was "what does a full-table resync cost?", because the rotation loop's cadence
+hangs on it. The answer has two halves and the first is a warning: **it depends on where the source
+node's metadata lives, by two orders of magnitude.**
+
+| leg | mechanism | source | measured |
+|---|---|---|---|
+| downtime of the rf 1→3 flip | delete `cluster_layout` → orphan-delete STS → pod → 3 pods → `layout apply` | — | **2 min 34 s** (20:32:42 → 20:35:16Z) |
+| table sync, Garage-native | `repair tables`, Merkle walk on garage-0 | garage-0's 26 GB leaked LMDB, **network-attached** (pod wk-metal-04, replica wk-02) | **~3,000 items/min** → 35 h for 3.2M items × 2 peers |
+| block push, Garage-native | `repair blocks` on garage-0, 8 workers, tranquility 0 | same node | **0.5–12 blocks/s** (workers Busy on page faults, not on I/O) |
+| metadata seed | compacted snapshot streamed pod-to-pod (`nc`) | 4.1 GB finished snapshot | **38 s** (~108 MB/s); delta sync after: seconds |
+| block seed (first peer) | `tar \| nc` of the data dir into the running pod's volume | ro same-node mount of `data-garage-0` on wk-metal-04 (SA400) | **68 GB / 558k files in 37 min ≈ 31 MB/s** |
+| resync drain on a seeded node | `repair blocks` verifying present files | local XFS | **~255 blocks/s** |
+| **block resync, Garage-native, from a HEALTHY peer** | garage-2's `repair blocks` fetching from garage-1 (seeded, local meta + data) | garage-1 on m70s (NVMe) → wk-metal-01 (MX500), 8 workers, tranquility 0 | **~155 blocks/s ≈ 19 MB/s** — the FU-137 number |
+| **rotation of a zone, Garage-native (step 8)** | new garage-0 (`repair tables` + `repair blocks`) from two healthy peers, local volumes | onto wk-metal-04's **SA400** (the known write bottleneck), tables and blocks sharing the disk | tables **~27k items/min** (435k in 16 min → ~2 h for 3.2M); blocks **~14/s ≈ 1.7 MB/s** → ~11 h — left running at wind-down |
+
+**Reading:** the Garage-native resync is not slow — a node whose LMDB page faults across the network
+is. Every refcount lookup and Merkle descent on garage-0 was a scattered 4 KiB read on a volume
+whose replica sat on another box, the exact pathology §Durability already recorded for the forensic
+rebuild (~0.3 MB/s scattered vs ~100 MB/s sequential). `resync-worker-count` did not help because
+eight workers page-faulting are still page-faulting. So the number the rotation loop needs is the
+LAST row: once ONE peer was seeded (local meta, local blocks), the second new node synced from it
+natively at ~155 blocks/s — 559k blocks in ~1 h, no helpers — and the step-8 rotation of garage-0 is
+the third data point — same shape on the table side (~27k items/min from healthy peers), but the
+block side landed at 14/s on the SA400 zone against 155/s on the MX500 zone: the rotation cadence is
+set by the slowest zone's disk, and that disk is the one already on the buy list. The block seed was needed exactly once, to break the
+network-attached-source pathology; after that the supported path is fast enough on its own.
+
+Also observed while measuring (operator, Grafana "top pods by CPU throttling ratio"): `longhorn-manager`
+pods throttle 4–14 % of CFS periods at their 150m req==limit, cilium agents 4–13 %. `instance-manager`
+— the I/O path — has no CPU limit, so §The measurement above is not a throttling artefact; the manager
+is the attach/rebuild plane and that is FU-224.
