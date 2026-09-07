@@ -7535,3 +7535,31 @@ first live ADR-110 maintenance session before the ADR existed.
 - **Open, not filed (operator's call):** `openrouter-operator/scripts/ci.sh` runs bare `uv sync`
   where oracle-fleet and sleep-tracking use `--frozen`; it is a platform-claim repo, so it is in
   seat triage scope.
+
+### Fleet rollout of the Python-stack contract (same day, operator-directed)
+
+Swept all 16 org repos for python packaging, then checked each against the seven-item contract
+PR#1486 wrote down. Result — three gaps, three different lanes:
+
+| repo | gap | action |
+|---|---|---|
+| openrouter-operator | the only python stack whose CI ran a **bare `uv sync`** (oracle-fleet/sleep-tracking use `--frozen`, circles uses `uv run --frozen` at every site) — a committed lock its CI never enforced | **PR#66 MERGED** (auto-armed, operator-ordered) |
+| circles (claim, in circles-iac) | `egress.profile: none` with the rationale *"static page + helm gate … (no pypi)"* — **stale**: circles gained `pyproject.toml` + `uv.lock`, and its ride Gate A runs `uv run --frozen` → files.pythonhosted.org. Works only because `enforce: false`; flipping enforce would HANG every ride at its first uv call | **circles-iac PR#108, deliberately UN-ARMED** — a policy line with a written rationale is the stack's read, not the seat's |
+| sleep-tracking | `VENV_DIR=$HOME/.cache/devbox-venv/sleep-tracking`, **unkeyed**, on the 2-slot proxmox-vm integration job — outside the workspace, so checkout never wipes it: oracle-fleet's PR#310-vs-#311 corruption class | **issue#147** (unlabelled by design — `.github/workflows/**` is worker-forbidden, so it is not `agent-fix`/machine-doable) |
+
+**Reported as NOT needing a change, with the reason** (the half that stops the next sweep
+re-deriving it): oracle-fleet compliant on all seven · **circles the REPO is safe** — its
+`test-system.sh` exports `UV_PROJECT_ENVIRONMENT=.venv`, a repo-local venv that `git clean -ffdx`
+wipes per checkout, so the shared-VM-venv class cannot reach it (filing it would have been noise)
+· snore-recorder is a **pip** project (device venv + `requirements.txt`), never runs uv, so
+`UV_FROZEN` is inert and `profile: python` is correct for its pip installs · agent-runtime has a
+`pyproject.toml` but no uv (pytest from devbox) · the nine remaining repos have no python
+packaging.
+
+**Two doc defects the sweep found (homelab PR#1487):** (1) "commit `uv.lock`" had no answer for
+the library objection — it applies (the lock pins the DEV env; consumers are bound by pyproject's
+ranges), and `allure-behavior-snippets` is the live pyproject-without-lock repo, unexposed only
+because its claim entry has no `fixer` block; (2) the runner-class table still described the
+**pre-2026-08-31** venv key (`sha256(devbox.lock)` alone) — ci-runner-01 has two slots and the key
+gained `$RUNNER_NAME` after PR#310/#311. Now names both valid shapes and the unkeyed middle that
+"looks warm and behaves like a shared mutable global".
