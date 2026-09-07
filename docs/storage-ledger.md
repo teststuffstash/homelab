@@ -461,3 +461,71 @@ Operator reports this as a repeat — hours-long rebuilds on this drive have hap
 earlier occurrence is not recorded here; this entry is the first with numbers). Cost is not theoretical — [oracle-fleet#467](https://github.com/teststuffstash/oracle-fleet/issues/467)
 measures 248k PUTs × 220 ms ≈ 5.8 h of a single ERT parse run waiting on this path.
 
+## 2026-09-07 — what the Longhorn engine actually costs, and why placement stops being an ADR
+
+**Operator ruling, same day: storage PLACEMENT is not ADR material any more — it lives here.**
+ADR-114 decreed one answer for the whole platform ("node-local XFS — Longhorn drops out of the
+Garage data path entirely"). That does not survive contact with a fleet that is about to get ~10
+more disks: the right backing for a workload is a *measured, per-workload* choice, and the mix will
+be genuinely messy (some raw, some Longhorn, decided after profiling). ADRs record forks with
+alternatives rejected; this is a rolling measurement register, and it belongs in the ledger. **The
+ADR-114 amendment is exactly that: placement moves here.** Nothing supersedes ADR-114's *other*
+half — rf=3 across physical zones, engines replicate and storage stores singles — which stands.
+
+**And ADR-114's stated reason was half wrong.** It bundled two claims: *"engines replicate; storage
+stores singles"* (true, and satisfied by a **replica-1** Longhorn volume — this cluster already runs
+`longhorn-fast`, `longhorn-scratch` and `longhorn-single` at `numberOfReplicas: 1`) and *"not
+Longhorn; ext4 inode limits bite"* (an argument against **ext4**, not against Longhorn — a
+StorageClass takes `fsType: xfs`; every class here is ext4 **by configuration, not by constraint**).
+Only the first claim was ever load-bearing.
+
+### The measurement (m70s, 2026-09-07, N=2)
+
+Same node, same physical Micron 2300, two partitions of it: **A** = raw node-local XFS
+(`/var/mnt/garage`, the Talos user volume), **B** = a Longhorn volume, `numberOfReplicas: 1`,
+`fsType: xfs`, replica fenced onto m70s by a throwaway `abtest` disk tag. `fio` in a pod pinned to
+the node; the rig was torn down after (disk removed, `spec.disks={}`).
+
+| job | metric | A raw XFS | B Longhorn r1 |
+|---|---|---|---|
+| 4k randwrite, depth 1, **fsync every write** | IOPS | 968 · 970 | 1840 · 1853 |
+| | fsync p50 / p99 | 954 / 1761 µs | 514 / 1036 µs |
+| 4k randwrite, O_DIRECT, depth 32 | IOPS | 154 985 · 154 584 | 15 026 · 12 855 |
+| | bandwidth | 605 · 604 MiB/s | **58.7 · 50.2 MiB/s** |
+| | clat p50 / p99 | 152 / 913 µs | 2007 / 4177 µs |
+| 1M seq write, O_DIRECT, depth 4 | bandwidth | 2753 · 2622 MiB/s | **354 · 342 MiB/s** |
+| | clat p50 | 1286 µs | 10 813 · 11 206 µs |
+
+**The engine costs ~10× on concurrent small writes, ~7.7× on streaming, and 8–14× on latency.** It
+also adds variance: the raw arm repeats to within 0.3 %, the Longhorn arm spreads 14 % on IOPS and
+86 % on p99.
+
+**But it is not the binding constraint for Garage.** Longhorn replica-1's floor here is 50–59 MiB/s
+small-object and 342–354 MiB/s streaming, against a workload measured at ~150–220 ms per PUT
+(§2026-09-05) and a LAN registry push that managed 3.4 MB/s end to end. The tax is one to two orders
+of magnitude above what this workload pulls, which is why the operator took Longhorn on
+maintainability grounds and the numbers agree rather than decide.
+
+⚠ **One number that must not be quoted as a win: Longhorn is NOT 1.9× faster at durable writes.**
+Same physical device — a flushed write cannot be twice as fast through an extra layer. The plausible
+reading is that the engine acknowledges the flush without pushing it to the device the way raw XFS
+does. That is load-bearing here, because ADR-114 set `metadata_fsync = true` precisely because
+LMDB's default `MDB_NOSYNC` was the mechanism of the 2026-08-24 wipe. **Whether Longhorn honours
+fsync end-to-end must be settled before `metadata_fsync = true` on a Longhorn-backed meta volume is
+trusted to mean what it says** — FU-223.
+
+**Caveats, so the ratios are not over-read:** 2 GB working set over 45 s, so the A arm's 2.7 GB/s and
+155k IOPS are SLC-cache burst, not sustained — the ratios are the finding, the absolute A figures are
+optimistic. Replica-1 on one node means no cross-node traffic, so this is the **floor** of engine
+overhead, not what replica-2 costs.
+
+### Consequence for the single-disk nodes
+
+A one-disk box has nowhere to put a *dedicated* Longhorn disk: `machine.disks` partitions a whole
+device, and a Talos **user volume mounts at `/var/mnt/<name>`, which longhorn-manager cannot see**
+(it host-mounts only `/var/lib/longhorn`). So Longhorn's disk there is the default one, on the Talos
+EPHEMERAL partition — **shared with the containerd image store**, which is precisely the collision
+that wedged every `docker:true` worker on 2026-09-01 (§the ADR-089 addendum). The existing mitigation
+— kubelet `imageGCHighThresholdPercent: 60` / `Low: 50` in `tofu/metal.tf` — is currently gated on
+`kata`, so a non-kata storage node does not get it. Any single-disk node that becomes a Longhorn
+storage node needs that gate widened.
