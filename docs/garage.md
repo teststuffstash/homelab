@@ -343,7 +343,7 @@ original pod only.
    source it was hopeless: garage-0 still rode its pre-build-out volumes, so its 26 GB leaked LMDB
    was a **network-attached** Longhorn volume (pod on wk-metal-04, replica on wk-02) and every
    Merkle walk and refcount lookup was a scattered 4 KiB page fault over the wire — ~3,000 table
-   items/min (35 h for 3.2M items × 2 peers) and block pushes at 0.5–1/s (days). Raising
+   items/min (35 h for 3.2M items × 2 peers) and block pushes at 0.5–12/s (days at that pace). Raising
    `resync-worker-count` to 8 / `resync-tranquility` 0 (`garage worker set -a …`) did not move it:
    the ceiling was garage-0's page faults, not worker count. **What worked, and is the recipe now
    (both shapes are upstream-sanctioned):**
@@ -359,8 +359,8 @@ original pod only.
      `meta_snapshots/`, `lost+found`, `garage-marker`) from a read-only same-node mount of the
      source volume into the new pod's data volume **while the new pod runs** — Garage's resync
      finds the files present, verifies, and drains its queue at ~250 blocks/s instead of fetching.
-     Torn or wrong files are caught by the hash check on read and re-fetched. ~28 MB/s here from
-     the SA400 source. Throttle the SOURCE node's own push first (`worker set resync-worker-count 1`,
+     Torn or wrong files are caught by the hash check on read and re-fetched. 68 GB / 558k files in
+     37 min ≈ 31 MB/s average here off the SA400 source (an early 3-minute sample read 28 MB/s). Throttle the SOURCE node's own push first (`worker set resync-worker-count 1`,
      `resync-tranquility 10` on garage-0) — its pushes were what starved its RPC handling.
    - **The block seed is a one-time bootstrap, not the loop's mechanism:** it was needed for the
      FIRST new zone only, because the only source was the network-attached original. Once garage-1
