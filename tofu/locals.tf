@@ -36,6 +36,10 @@ locals {
       longhorn_disks = tolist(try(m.longhorn_disks, []))
       pin_hostname   = try(m.pin_hostname, true) != false # HostnameConfig patch; default true
       kata           = try(m.kata, false) == true         # metal_kata install image + homelab.io/kata label
+      # Install-disk partitioning (INSTALL-TIME ONLY — Talos never re-partitions a provisioned
+      # volume, and XFS cannot shrink, so changing either needs a wipe + reinstall).
+      ephemeral_max_size = try(m.ephemeral_max_size, null) # cap /var so user volumes get space
+      user_volumes       = tolist(try(m.user_volumes, [])) # [{name, min_size, grow}] → /var/mnt/<name>
     } if try(m.talos_metal_node, false) == true
   }
 

@@ -126,7 +126,40 @@ data "talos_machine_configuration" "metal" {
           partitions = [{ mountpoint = "/var/lib/longhorn/${d.name}" }]
         }]
       }
-    })] : []
+    })] : [],
+    # Cap EPHEMERAL (/var) so a USER VOLUME on the same disk has room. Talos provisions SYSTEM
+    # volumes before user volumes and grows the `grow: true` ones last, so an uncapped EPHEMERAL
+    # takes the whole install disk and the user volume never provisions — siderolabs/talos
+    # discussion #12713, whose maintainer answer IS this cap. Default install behaviour (no cap)
+    # is what m70s got on 2026-09-07: EPHEMERAL 510GB of a 512GB disk, zero free space, and the
+    # ADR-114 Garage zone had nowhere to live.
+    # ⚠ INSTALL-TIME ONLY: "the volume configuration is only applied when the volume has not been
+    # provisioned yet". Changing this on a running node does nothing; XFS cannot shrink. Wipe +
+    # reinstall (docs/provisioning.md) is the only path, which is why it is cheapest on a new box.
+    each.value.ephemeral_max_size != null ? [yamlencode({
+      apiVersion   = "v1alpha1"
+      kind         = "VolumeConfig"
+      name         = "EPHEMERAL"
+      provisioning = { maxSize = each.value.ephemeral_max_size }
+    })] : [],
+    # User volumes — node-local XFS partitions mounted at /var/mnt/<name> (partition label u-<name>).
+    # ADR-114 wants Garage on node-local XFS, NOT Longhorn (engines replicate, storage stores
+    # singles), and a DEDICATED partition rather than a hostPath into /var: sharing the Talos
+    # ephemeral partition is exactly how the kata laptops' image store starved the bulk tier
+    # (ADR-089 addendum, 2026-09-01). `grow: true` here is the other half of #12713's answer —
+    # EPHEMERAL is bounded, so this one absorbs the remainder of the disk.
+    [for v in each.value.user_volumes : yamlencode(merge({
+      apiVersion = "v1alpha1"
+      kind       = "UserVolumeConfig"
+      name       = v.name
+      provisioning = merge({
+        diskSelector = { match = "system_disk" }
+        },
+        try(v.min_size, null) != null ? { minSize = v.min_size } : {},
+        try(v.grow, null) != null ? { grow = v.grow } : {},
+      )
+      filesystem = { type = "xfs" }
+    }))]
   )
 }
 
