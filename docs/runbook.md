@@ -192,9 +192,66 @@ formatted+mounted via the ThinkCentre entry's `longhorn_disks` field in `machine
      s.sendto(p,(\"255.255.255.255\",9))"'
   ```
   Physical NIC MACs (from `opnsense/dnsmasq-dhcp.py` reservations): hp-01 `b4:b5:2f:df:01:bc`,
-  thinkcentre `8c:89:a5:23:49:da`, wk-metal-01 `50:7b:9d:01:b3:54`, wk-metal-02 `68:f7:28:80:84:09`.
+  thinkcentre `8c:89:a5:23:49:da`, wk-metal-01 `50:7b:9d:01:b3:54`, wk-metal-02 `68:f7:28:80:84:09`,
+  m70s `e0:be:03:3d:8a:d1` (⚠ WoL **untested** on this box; its BIOS is PXE-first, so a wake that
+  does reach it netboots — which is the console-free reinstall path, not a fault).
   (NB: a plain `talosctl reboot` keeps the node powered → it returns on its own; WoL is only for an
   S5/powered-off node.)
+
+### Reading a fleet disk's identity and health (SMART, link, wear)
+
+Talos gives no shell, so a disk question on a cluster node is answered by an **ephemeral privileged
+pod pinned to that node**. This is the probe that identified wk-metal-04's SA400 and its degraded
+SATA link (`docs/storage-ledger.md` §2026-09-05) and read the M70s's OEM NVMe at onboarding — it
+was re-improvised both times before being written down here (FU-222).
+
+```bash
+SP=<your scratchpad>
+cat > $SP/diskprobe.yaml <<'EOF'
+apiVersion: v1
+kind: Pod
+metadata: { name: diskprobe, namespace: kata-spike }
+spec:
+  nodeName: <NODE>                 # pins the probe; without it you read some other box
+  restartPolicy: Never
+  hostPID: true
+  tolerations: [{ operator: Exists }]     # so it lands on tainted/ephemeral nodes too
+  containers:
+    - name: probe
+      image: alpine:3.20
+      command: ["sh","-c","apk add --no-cache nvme-cli smartmontools >/dev/null 2>&1;
+        nvme smart-log /dev/nvme0n1 | grep -iE 'critical_warning|percentage_used|available_spare|power_on_hours|power_cycles|unsafe_shutdowns|media_errors|^temperature';
+        nvme id-ctrl /dev/nvme0n1 -H | grep -iE '^fr |^mn |^sn |oacs';
+        cat /sys/class/nvme/nvme0/device/current_link_speed /sys/class/nvme/nvme0/device/current_link_width;
+        smartctl -a /dev/sda | grep -iE 'Device Model|Percentage Used|Power_On_Hours|CRC_Error|SATA Version|Wear'"]
+      securityContext: { privileged: true }
+      volumeMounts: [{ name: dev, mountPath: /dev }, { name: sys, mountPath: /sys }]
+  volumes:
+    - name: dev
+      hostPath: { path: /dev, type: Directory }
+    - name: sys
+      hostPath: { path: /sys, type: Directory }
+EOF
+devbox run -- kubectl --kubeconfig tofu/kubeconfig apply -f $SP/diskprobe.yaml
+devbox run -- kubectl --kubeconfig tofu/kubeconfig -n kata-spike wait --for=condition=Ready pod/diskprobe --timeout=120s
+devbox run -- kubectl --kubeconfig tofu/kubeconfig -n kata-spike logs diskprobe      # apk install takes ~20s; re-read if short
+devbox run -- kubectl --kubeconfig tofu/kubeconfig -n kata-spike delete pod diskprobe
+```
+
+Which fields actually decide something:
+
+- **`percentage_used`** (NVMe) / **`Percentage Used Endurance Indicator`** (SATA) — the standardized
+  wear figure, and the one to trust. ⚠ Kingston SA400's vendor attribute 231 `SSD_Life_Left` reads
+  a *different* number for the same drive (6 vs 5 %); prefer the standardized field.
+- **`current_link_speed` / `current_link_width`** (NVMe) or `SATA Version ... current:` — a drive
+  negotiating below its rating is the wk-metal-04 signature. Pair with the SATA
+  `UDMA_CRC_Error_Count`: a climbing CRC counter means the **cable**, not the drive.
+- **`oacs` bit 0 "Security Send and Receive Supported"** says the drive *has* TCG/Opal, not that it
+  is locked — an Opal-locked drive does not present a usable namespace at all.
+- **`unsafe_shutdowns` vs `power_cycles`** — context for an ex-office pull, not a fault on its own.
+
+`nodeName` + `tolerations: Exists` are the two lines people drop; without them the pod schedules
+somewhere else or refuses to land on the tainted node you wanted to read.
 
 ### Single worker maintenance window (cordon → drain → shutdown → wake)
 

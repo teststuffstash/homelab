@@ -1037,15 +1037,6 @@ the block needs pruning, not more headings.
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
-- [ ] **FU-222** — **No recipe for reading a fleet disk's identity/health.** The 2026-09-05 SA400
-      diagnosis (model string, endurance, SATA link speed, interface CRC count) came from an
-      ad-hoc privileged pod; `docs/storage-ledger.md` §2026-09-05 records the *result*, nothing
-      records the *how* — so the next disk question re-improvises it. Now load-bearing: the
-      buying criterion for any Garage/Longhorn data disk is DRAM cache + measured write latency
-      (§Requirements, and the supply side in `teststuff/hardware`), which starts with identifying
-      what is already fitted. **Next:** capture the working probe as a runbook recipe (or a
-      `scripts/` one-shot) the next time a disk is read — verify against a live node, don't
-      reconstruct.
 
 ## One-time ops
 

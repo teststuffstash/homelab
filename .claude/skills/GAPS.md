@@ -29,6 +29,27 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       approve posted on the summary alone; no finding lost, by luck). Rule widened same commit:
       the read is the body AND every review's FULL body, no truncated slices.
 
+## onboard-metal-node
+
+- [x] onboard-G1 — **a whole CLASS: post-install registrations that `Ready` does not gate.** The
+      skill listed them as ordinary numbered steps, so a miss looks identical to a success — the
+      node is `Ready`, nothing alerts. Sighted 2026-07-28 (wk-metal-04 joined with **no BGP
+      neighbour**; fixed by adding step 8 — a one-off, the class was not named).
+      **RESIGHT 2026-09-07 (m70s)** — same shape, different step: `zone:` in `machines.yaml` is a
+      SEPARATE tofu resource (`kubernetes_labels.node_zone`, `tofu/longhorn.tf`), not part of the
+      machine config, so the documented recipe leaves the node **unlabelled** — on the very box
+      bought to be ADR-114's third failure zone. Two dates ⇒ promoted, not patched again:
+      **the steps are now one "Post-install registrations — the steps `Ready` does not gate"
+      section with a standing instruction to add to it each round**, plus step 9's table of
+      per-node doc rows and step 10's disk read. Closed in the same commit.
+- [x] onboard-G2 — step 1's credential line was **stale by a month**: `tofu/provisioning` moved to
+      the encrypted Garage S3 backend on 2026-08-04 (`docs/tofu-state.md`) and there is no `tf.sh`
+      wrapper for that root, so `keepass-env.sh` alone dies with *"No valid credential sources
+      found"*. Sighted 2026-09-07 (hit live). Fixed in the same commit — the step now sources
+      `tofu-state-env.sh` with `TOFU_STATE_ROOT_DIR`. Lesson worth more than the fix: **a skill
+      that touches a tofu root inherits that root's state config, which changes without the skill
+      being edited.**
+
 ## design-agents
 
 - [x] design-agents-G1 — a STATUS read from `meta-state.md`/tracker was repeated in the answer

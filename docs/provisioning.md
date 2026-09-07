@@ -54,6 +54,14 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
    (`tofu -chdir=tofu/provisioning destroy -target=matchbox_group.<x>`) so the reboot boots from
    disk and doesn't loop back into maintenance/reinstall. The committed `matchbox.tf` holds **no
    per-node group** on purpose — flags are transient.
+6b. **Apply the zone label** — `zone:` in `machines.yaml` is NOT part of the machine config; it is a
+   separate tofu resource in `tofu/longhorn.tf`, so the install leaves the node unlabelled:
+   `devbox run tf-apply '-target=kubernetes_labels.node_zone["<name>"]'` (or `longhorn_storage` /
+   `longhorn_bulk_zone` when the node carries Longhorn disks — the `node_zone` `for_each` excludes
+   those two sets). Then read the label back off the node.
+   ⚠ Nothing fails without it. The node goes `Ready` either way, and ADR-114's zone-spread simply
+   cannot distinguish an unlabelled node — which is how replicas quietly land in one failure
+   domain. Missed on m70s (2026-09-07), the box bought to BE a third zone.
 7. **Taint laptop/compute-tier nodes** ephemeral so Longhorn/stateful workloads don't schedule
    there — set `ephemeral: true` on its YAML entry (`local.ephemeral_nodes` →
    `kubernetes_node_taint.ephemeral["<name>"]`, `homelab.io/ephemeral`). Apply this **after** the
@@ -80,6 +88,14 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
   AVX2, so goose rides schedule here but opencode SIGILLs) — see the comment on its
   `machines/machines.yaml` entry, and `local.avx2_nodes` in `tofu/locals.tf`.
 - `hp-01` — .54, `/dev/sda`, Longhorn, WoL-capable.
+- `m70s` — Lenovo ThinkCentre M70s SFF, .56, **`/dev/nvme0n1`** (the first NVMe install disk in the
+  fleet — every earlier metal node installs to `/dev/sdX`), storage tier: **not** ephemeral, **not**
+  kata, `zone: m70s`. Onboarded 2026-09-07 as ADR-114's third PHYSICAL Garage zone. UEFI PXE
+  (`ipxe.efi`), and PXE-first in BIOS by operator choice so a wipe+reinstall needs no console —
+  safe because an unflagged MAC 404s at Matchbox and chains to disk. No AVX2 (Pentium Gold G6400),
+  `vmx` present. Its OEM disk arrived carrying a Windows GPT; the installer repartitioned it
+  without a manual `talosctl wipe disk` (that step is for `longhorn_disks` entries, not the
+  install disk).
 - `thinkcentre` — .53, `/dev/sdb` (120GB Kingston), Longhorn + 2×Optane fast tier. Originally
   onboarded via **USB ISO** (`devbox run talos-usb`) when PXE appeared broken — the culprit was a
   **bad NIC cable** (100Mbps + link flapping), replaced 2026-06-11; it PXE-onboards fine now.

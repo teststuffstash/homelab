@@ -8,7 +8,8 @@ Garage, Forgejo, ArgoCD + its bootstrap seeds. Grew out of ROADMAP.md Phases 1�
 > **Status: APPLIED & LIVE.** Talos `v1.13.2` / Kubernetes `v1.36.1`, Cilium `1.19.1`
 > (kube-proxy-free). Nodes: VMs cp-01 `.51` / wk-01 `.61` / wk-02 `.62` / wk-03 `.63` **+ bare-metal**
 > thinkcentre `.53`, hp-01 `.54`, wk-metal-01 `.182` (X240), wk-metal-02 `.183` (X250),
-> wk-metal-03 `.184`, wk-metal-04 `.186` (kata) — all
+> wk-metal-03 `.184`, wk-metal-04 `.186` (kata), m70s `.56` (ThinkCentre M70s SFF, third
+> physical Garage zone) — all
 > `Ready`. **Longhorn** is the storage; Home Assistant, the **UniFi controller**, and the
 > monitoring stack run in-cluster on BGP VIPs (`192.168.40.0/24`). State is local
 > (`terraform.tfstate`, gitignored). Always `tofu plan` and review before any `apply`.
