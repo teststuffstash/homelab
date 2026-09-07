@@ -72,44 +72,28 @@ never the session's arc — that is TICK-LOG's.)
   responder 17:02Z and never re-triaged (DEFERRED-STUCK — the FU-113(b) retry chain); read the
   respond workflow retries. (5) Seat miss to remember: a zsh `set -- $var` classifier cancelled
   six LIVE CI runs (all re-run) — the card's no-word-split gotcha bites the seat too.
-- **⚑ NEXT SESSION PICKS UP HERE — the Garage rf=3 build-out (FU-137/ADR-114).** Everything
-  upstream is done; the build-out is untouched and is deliberately a FRESH-SESSION job (not started
-  at 460k ctx). Operator rulings, all 2026-09-07:
-  - **Zones = `wk-metal-01`, `wk-metal-04`, `m70s`.** wk-metal-04's SA400 stays for now — 2-of-3
-    write quorum routes around the slowest node, which is the point of rf=3.
-  - **Longhorn, NOT raw node-local XFS.** Placement is a measured per-workload call recorded in
-    [`storage-ledger.md`](../storage-ledger.md) §2026-09-07 — **that IS the ADR-114 amendment:
-    placement left the ADR layer.** rf=3-across-zones stands. Consequence: **wk-metal-01 and
-    wk-metal-04 need NO reinstall** — the expensive half of ADR-114 evaporated.
-  - **Needs an XFS StorageClass** (`numberOfReplicas: 1`, `fsType: xfs`): all six current classes
-    are ext4, and `fsType` cannot change on an existing volume — the three instances get NEW PVCs
-    and `data-garage-0` (150Gi `longhorn-bulk`, ext4) is a MIGRATION SOURCE.
-  - **m70s was reinstalled twice; now whole-disk EPHEMERAL (510 GB), Ready, zone label + BGP
-    verified. It has NO Longhorn disk yet (`spec.disks={}`)** — registering it is step 1.
-    ⚠ When registering, **widen the kubelet imageGC gate in `tofu/metal.tf`** (today
-    `each.value.kata`): Garage data will share EPHEMERAL with the containerd image store — the
-    2026-09-01 collision — and m70s runs `runner-image-prepull` while not being a kata node.
-  - **RESEARCH FIRST, unanswered:** can `replicationFactor` go 1 → 3 on a LIVE Garage v2.3.0, or
-    does it need a rebuild? `argocd/platform/garage.yaml` pins `"1"` and its header says read
-    `docs/garage.md` §Target architecture before any replication change. The 1→3 layout-assign +
-    rebalance sequence is also unresearched.
-  - ⏱ **Clock:** `meta-garage-0` **82.4% (26.1 of 31.67 GB, 5.57 GB free)**, rf=1, +0.74 GB/24h at
-    last read (2.6 GB/day on 09-06), 84% leaked pages. **Do NOT do FU-137's interim attended swap
-    first — the build-out subsumes it** (operator, 2026-09-07): the two new zones sync metadata
-    fresh so they carry no leaked pages by construction, and the original is reclaimed by the same
-    rotation, at quorum, with none of the swap's 1–2 min downtime. The swap is now only a FALLBACK
-    if the build-out slips past the runway (~7 days at the last-24h rate, ~2 at the 09-06 rate).
-    ⚠ The corollary is a REAL build-out risk: the original meta volume must not hit 100% *during*
-    the migration — that is the 2026-08-24 class (Garage goes read-only). Re-read the free bytes
-    before starting, and if the window looks tight, grow the PVC (the `longhorn` class has
-    `allowVolumeExpansion`; meta went 10Gi → 30Gi that way on 2026-08-25) rather than doing the
-    swap.
-  - **FU-223 (new)** — Longhorn showed 1.9× raw-XFS IOPS with fsync-every-write on the same
-    device, impossible for a truly flushed write. Settle whether Longhorn honours fsync end-to-end
-    BEFORE Garage metadata rides it: ADR-114 set `metadata_fsync = true` precisely because
-    `MDB_NOSYNC` was the 2026-08-24 wipe mechanism.
-  - Oracle handoff `20260907-1335-lan-registry-500…` is ANSWERED and in `done/` (registry cap live
-    at 32Gi, oracle green-lit to re-dispatch). Three OLDER items still sit in the oracle inbox.
+- **✅ Garage rf=3 across three physical zones — LIVE 2026-09-07 (FU-137/ADR-114), executed by the
+  evening seat session.** wk-metal-01 / wk-metal-04 / m70s, one pod each on `longhorn-local-xfs`
+  (replica-1, XFS, strict-local, WaitForFirstConsumer); layout v2, `Zone redundancy: maximum`;
+  garage-0 rotated onto the new class at 22:21Z (the first rotation, run for real; new id
+  `a79a04a7`, layout v2 single live version) and **its native resync from the two peers was left
+  running unattended at wind-down (~27k table items/min from healthy peers ≈ 2 h for the tables;
+  blocks ~14/s onto the SA400 ≈ 11 h — expected to still be draining next morning) — FIRST ACT of the next session: `garage stats -a` counts equal on all
+  three + resync queues ≈ 0 + `block list-errors` shows only the two Sep-4 `.corrupted` Loki
+  chunks, then reset `worker set resync-worker-count 1` / `resync-tranquility 2` on all nodes.**
+  Old bulk/std volumes gone. Recipe as run: `docs/garage.md` §The build-out; numbers: `storage-ledger.md` §The rf=3
+  build-out as run; PR#1498 + the follow-up docs PR. **What a fresh session should know:**
+  (a) the S3 VIP pin was reverted by `tofu apply -target=kubernetes_service.garage_s3_lb` — a full
+  `tofu plan` should show no garage drift; (b) `garage worker` resync settings were changed live
+  (8 workers / tranquility 0 on all nodes, garage-0 throttled to 1/10 during the seed and reset
+  after) — they are node-persisted, not in git, and the defaults (1 / 2) are fine to restore if
+  scrub or PUT latency looks worse; (c) meta snapshots now land on EACH pod's data volume
+  (`/mnt/data/meta_snapshots`), 6h cadence, so the "latest finished snapshot" for a seed is per
+  node; (d) **FU-223 (does Longhorn honour fsync end-to-end) is now load-bearing for all three
+  meta volumes** — the power-cut test is the next storage-ledger experiment; (e) FU-224 filed:
+  `longhorn-manager` CPU-throttles at 150m — raise on a quiet day, it rolls the DaemonSet.
+  **Operator-lane leftovers:** wk-metal-04's SA400 replacement (still the slowest zone: the block
+  seed read at ~28 MB/s from it), and the rotation-loop arming (trigger + health gate) per FU-137.
 
 - **⚑ BOARD (09-05 ~09:45Z — see NEXT for the four open seat/loop PRs; earlier read follows):** in review #1386 (re-review after the seat's fix push) ·
   **18:20–19:00Z sweep:** **#1409 codeowner-APPROVED 18:23Z** (the #1403 fix; auto-merges on
