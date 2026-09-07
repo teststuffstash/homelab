@@ -6,6 +6,7 @@ service exposure / BGP rationale: [`adr.md`](adr.md) ADR-021._
 
 Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; re-captured
 2026-08-12 (operator cabling + live guest-agent reads: the wk-metal fleet, hp-01, ci-runner-01).
+⚠ **Stale since 2026-09-07** — `m70s` (.56) was onboarded after that capture and is missing below.
 
 ```
                          Internet (fibre)
@@ -42,6 +43,11 @@ Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; 
 
 ## Notes relevant to PXE / provisioning
 
+- ⚠ **`m70s` (.56) is NOT on the map — uncaptured.** Onboarded 2026-09-07; which switch it hangs
+  off was never recorded, and this file is the only place that would say. It PXE-booted and peers
+  BGP, so it is somewhere in the flat L2 below — but "somewhere" is exactly what this document
+  exists to replace. **Needs the operator at the cabling**; add it to both the ASCII tree and the
+  mermaid graph in the same edit, and move this bullet's content into them.
 - **Everything above is ONE flat L2 domain** (every switch unmanaged or L2-only; no VLANs), so
   DHCP/PXE broadcasts reach Matchbox (LXC on Proxmox `vmbr0`) from EVERY port — including
   wk-metal-03/-04 two switch hops away in the office. Verified in practice: all four wk-metal
