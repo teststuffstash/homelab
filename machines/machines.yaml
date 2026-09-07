@@ -223,6 +223,35 @@ machines:
       - { device: /dev/disk/by-id/wwn-0x500080db1007e129, name: hg5d, tags: [std] }
     notes: On the hp plug (ex-konditsioneer NOUS A1, renamed 2026-08-18) — power measurable as sensor.plug_hp_power; switch.tuyalocal_hp can cycle it, but AC-restore is flaky so WoL is the recovery path.
 
+  - name: m70s
+    kind: metal
+    zone: m70s
+    label: "`m70s` (Lenovo ThinkCentre M70s SFF, PXE)"
+    role: k8s worker + Longhorn (third physical Garage zone — ADR-114)
+    hardware: Lenovo ThinkCentre M70s SFF
+    cpu_cores: 4         # 2C / 4T — Pentium Gold G6400 @ 4.00GHz (talosctl get processors)
+    memory_gb: 16
+    ip: 192.168.2.56
+    plug: null
+    idle_w: null
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    remote_power: PXE-first in BIOS by operator choice — a network wipe+reinstall needs no console. WoL untested; no smart plug yet.
+    # Bought 2026-09-07 (≈150 €) to be FU-137's third PHYSICAL Garage zone: ADR-114 puts Garage at
+    # rf=3, one instance per physical zone, and the interim third zone was a VM on the pve thin pool
+    # that has hit 100 % four times. Supply-side detail: teststuff/hardware (private).
+    # OEM disk is a Micron 2300 512GB (MTFDHBA512TDV, LPDDR4 DRAM + 96L TLC — it clears the
+    # DRAM-cache filter, so it is data-class, not just a boot drive). Arrived with a Windows GPT.
+    # 4 DIMM slots, ONE filled (SK Hynix HMA82GU6DJR8N-WM 16GiB, ChannelA-DIMM1) — a matched second
+    # stick makes it 32GB dual-channel. 3 SATA ports, all empty. PCIe x16 LP + x4 LP, both free.
+    # avx2 deliberately unset — /proc/cpuinfo on the installed node has NO avx/avx2 (Intel disables
+    # them on Pentium Gold SKUs), same shape as wk-metal-04. `vmx` IS present, so it could host kata,
+    # but it is storage tier and stays untainted/non-kata on purpose.
+    talos_metal_node: true
+    install_disk: /dev/nvme0n1
+    notes: Third physical Garage zone (FU-137/ADR-114). Storage tier, always-on — deliberately NOT ephemeral/kata. Two free low-profile PCIe slots for the Garage data disk.
+
   - name: wk-metal-01
     kind: metal
     zone: wk-metal-01

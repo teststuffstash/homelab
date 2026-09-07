@@ -222,6 +222,8 @@ Notes:
   draw at full load with a charged battery.
 - **Plug identification (bonus):** stressing the X240 made `laptop3` jump while `laptop4` stayed
   flat → `laptop3` = X240 (wk-metal-01), `laptop4` = X250 (wk-metal-02).
-- Not measured: `hp-01` (has `sensor.plug_hp_*` since the 2026-08-18 rename — a plug exists now,
+- Not measured: `m70s` (onboarded 2026-09-07 — **no smart plug on it at all**, so not even an idle
+  figure exists; a 65 W-class SFF meant to be always-on is worth a plug);
+  `hp-01` (has `sensor.plug_hp_*` since the 2026-08-18 rename — a plug exists now,
   a stress run just never happened); `pve` / `opnsense` (didn't want to stress the
   hypervisor / router) — idle draws from the dashboard are ~127 W / ~57 W.

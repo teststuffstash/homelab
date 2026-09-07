@@ -10,6 +10,15 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-222** *(archived 2026-09-07)* — **the fleet-disk probe is a recipe now**:
+  `docs/runbook.md` §"Reading a fleet disk's identity and health" — an ephemeral privileged pod
+  (`nodeName` + `tolerations: Exists` + `/dev` and `/sys` hostPaths, alpine + nvme-cli/smartmontools),
+  with the fields that actually decide something (standardized `percentage_used` over Kingston's
+  `SSD_Life_Left`; link speed/width + CRC count = cable, not drive; `oacs` says Opal-capable, not
+  Opal-locked). Captured **from a live run, not reconstructed** — read the M70s's OEM Micron 2300 at
+  its 2026-09-07 onboarding: 2 % used, 3 051 h, 0 media errors, PCIe 3.0 ×4. The onboarding skill now
+  calls it as step 10, so the next disk is read at onboarding rather than when it is already suspect.
+
 - **FU-207** *(archived 2026-09-04)* — **ci-runner-01 recreated from tofu** (`tofu apply`: the
   cloud-init snippet replaced + VM 9001 created, 1m57s), after FU-093's pool meter existed and the
   pool had ~120 GB headroom (66 %). Cloud-init re-registered both runner slots (`--replace`, "√
