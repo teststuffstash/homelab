@@ -385,10 +385,13 @@ Touches: agents/foo.sh, docs/bar.md
 Base: goal/12-slug
 Budget: 30
 Class: build
+
 ---
 ```
 
-Flat `key: value` lines, keys exactly as spelled in the sections below (`Touches`, `Base`,
+The blank line before the closing fence is part of the shape — without it CommonMark reads the
+key lines as a setext H2 and GitHub paints them as one bold heading (the 2026-09-06 oracle
+handoff); the writer emits it, the parser skips blank lines. Flat `key: value` lines, keys exactly as spelled in the sections below (`Touches`, `Base`,
 `Budget`, `Verdict-authority`, `Production-leg`, `Revert`, `Origin`, `Size`, `Capability`,
 `alert-fp`, `self-referential`, `fix-verdict`, `Class`), lists comma-separated. No nesting, no
 bullets, no duplicates, no multi-line values — anything else inside the fences is a **loud parse
