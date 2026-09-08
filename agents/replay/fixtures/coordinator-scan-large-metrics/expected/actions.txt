@@ -1,0 +1,7 @@
+=== scenario: large metrics payload with multiple matching timestamps ===
+=== push: large metrics payload scenario ===
+RETURN 0
+=== push: no matching metrics in large payload ===
+RETURN 0
+=== end ===
+RC 0
