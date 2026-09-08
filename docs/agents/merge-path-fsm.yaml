@@ -398,6 +398,7 @@ transitions:
     status: guarded
     replay:
       - agents/replay/fixtures/ci-red-stale-sha-hold
+      - agents/replay/fixtures/ci-red-stale-sha-escalates
     guards:
       - desc: "scan labels agent/arbitrate + comments when red attempts hit the cap; the existing arbitrate clause + coordinator tie-break take over (re-dispatch stronger / close / escalate)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red → agent/arbitrate" }
