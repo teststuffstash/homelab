@@ -62,8 +62,9 @@ DISPOSITIONS = ("adopted", "deferred")
 # closeout act, `bucket` = the scan's deterministic post-launch-bucket create (IL-T17).
 BY_VALUES = ("checkpoint", "closeout", "bucket")
 
+# FIX #1451: accept both bare issue numbers (#1234) and qualified cross-repo keys (#repo#1234)
 _ROW_RE = re.compile(
-    r"^#(?P<member>[0-9]+)[ \t]+(?P<disposition>[a-z]+)[ \t]+(?P<at>\S+)[ \t]+by=(?P<by>[a-z]+)[ \t]*$"
+    r"^#(?P<member>(?:[a-z][a-z0-9-]*#)?[0-9]+)[ \t]+(?P<disposition>[a-z]+)[ \t]+(?P<at>\S+)[ \t]+by=(?P<by>[a-z]+)[ \t]*$"
 )
 
 
@@ -115,6 +116,9 @@ def upsert(body: str, member: str, disposition: str, at: str, by: str) -> str:
     Replace-in-place (not append-and-shadow) is what keeps the store a SET of members rather
     than a timeline: a re-ruled member has one row, and every reader can key on member number
     without caring about order. The container may re-rule as often as it likes.
+
+    FIX #1451: member can now be a bare issue number (e.g., "1234") or a qualified key for
+    cross-repo members (e.g., "repo#1234" where repo is a valid repo name).
     """
     if disposition not in DISPOSITIONS:
         raise Refused(
@@ -122,8 +126,9 @@ def upsert(body: str, member: str, disposition: str, at: str, by: str) -> str:
             "(`undispositioned` is the ABSENCE of a row — it is never written)")
     if by not in BY_VALUES:
         raise Refused(f"by={by!r} is not one of {'/'.join(BY_VALUES)}")
-    if not re.fullmatch(r"[0-9]+", str(member)):
-        raise Refused(f"member {member!r} is not an issue number")
+    # FIX #1451: accept both bare issue numbers and qualified keys (repo#number)
+    if not re.fullmatch(r"(?:[a-z][a-z0-9-]*#)?[0-9]+", str(member)):
+        raise Refused(f"member {member!r} is not a valid issue number or qualified key (repo#number)")
     rows = parse(body)
     rows[str(member)] = {"disposition": disposition, "at": at, "by": by}
     return serialize(rows)
@@ -296,6 +301,21 @@ def self_test() -> int:
             print(f"  ✓ upsert REFUSES {desc}")
         else:
             raise AssertionError(f"upsert accepted {desc} — the vocabulary is not closed")
+
+    # ── qualified keys (FIX #1451) — cross-repo members ──
+    # A qualified key is repo#number, e.g., "agent-runtime#115" for a member in agent-runtime repo.
+    qbody = upsert(MARK + "\n", "agent-runtime#115", "deferred", "2026-09-08T00:00:00Z", "checkpoint")
+    check("upsert: qualified key (repo#number) is accepted",
+          parse(qbody),
+          {"agent-runtime#115": {"disposition": "deferred", "at": "2026-09-08T00:00:00Z", "by": "checkpoint"}})
+    # Mixed store with bare and qualified keys
+    mixed_q = upsert(qbody, "1234", "adopted", "2026-09-08T01:00:00Z", "bucket")
+    check("upsert: qualified and bare members coexist",
+          list(parse(mixed_q).keys()), ["agent-runtime#115", "1234"])
+    check("parse: qualified key and bare number are both readable",
+          parse(mixed_q),
+          {"agent-runtime#115": {"disposition": "deferred", "at": "2026-09-08T00:00:00Z", "by": "checkpoint"},
+           "1234": {"disposition": "adopted", "at": "2026-09-08T01:00:00Z", "by": "bucket"}})
 
     # ── the malformed row ── loud, excluded, NOT fatal: the well-formed sibling still parses.
     mixed = MARK + "\n#1315 deferred 2026-09-05T12:00:00Z by=checkpoint\nthis is not a row\n"

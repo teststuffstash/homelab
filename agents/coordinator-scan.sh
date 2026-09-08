@@ -1540,6 +1540,18 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
+  # FIX #1451: pre-fetch kidsall from all repos in the stack (once, before the repo loop)
+  # so the goal lane can see cross-repo tree members. Each issue gets a repo field
+  # for qualified key construction (e.g., "homelab#1234", "agent-runtime#115").
+  _kidsall_stack='[]'
+  for _kr in $repos; do
+    _kr_slug="$ORG/$_kr"
+    _kr_issues="$(gh issue list --repo "$_kr_slug" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
+    jq -e . >/dev/null 2>&1 <<<"${_kr_issues:-null}" || _kr_issues='[]'
+    _kr_issues="$(jq --arg r "$_kr" '[.[] | . + {repo: $r}]' <<<"$_kr_issues")"
+    _kidsall_stack="$(jq -s 'add' <<<"$_kidsall_stack"$'\n'"$_kr_issues")"
+  done
+  jq -e . >/dev/null 2>&1 <<<"${_kidsall_stack:-null}" || _kidsall_stack='[]'
   for repo in $repos; do
     slug="$ORG/$repo"
     case " $fixer_repos" in *" __ALL__ "*|*" $repo "*) dispatchable=1;; *) dispatchable="";; esac
@@ -2708,12 +2720,16 @@ EOF_GOVERNANCE
     }
     goals="$(printf '%s' "$openall" | jq -r '[.[] | select((.labels|map(.name)|index("task/goal")))] | .[].number' 2>/dev/null || true)"
     if [ -n "$goals" ]; then
-      # one call for the whole repo's issues incl. closed — reused for every goal below.
-      # `title,labels` ride along for the ADR-102 terminal legs (homelab#208): the close sweep
-      # names what survives and the abandoned leg compares-then-writes on `agent/queued`. Extra
-      # --json fields are free here (same request) and buying them with a second call would not be.
-      kidsall="$(gh issue list --repo "$slug" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
-      jq -e . >/dev/null 2>&1 <<<"${kidsall:-null}" || kidsall='[]'
+      # FIX #1451: use stack-wide kidsall (pre-fetched before the repo loop) to find cross-repo
+      # tree members. Each issue has a repo field for qualified key construction (e.g., "homelab#1234").
+      # Fallback for replay tests that extract only this block: fetch from current repo if not set.
+      if [ -z "${_kidsall_stack+x}" ]; then
+        # Replay test isolation: fetch from current repo only (kidsall with repo field added)
+        _kidsall_stack="$(gh issue list --repo "$slug" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
+        jq -e . >/dev/null 2>&1 <<<"${_kidsall_stack:-null}" || _kidsall_stack='[]'
+        _kidsall_stack="$(jq --arg r "$repo" '[.[] | . + {repo: $r}]' <<<"$_kidsall_stack")"
+      fi
+      kidsall="$_kidsall_stack"
       for g in $goals; do
         # FU-143 point 6: DESCENDANTS, not direct children — a sprout harvested from a child sits
         # at depth 2 (sub-issue of the CHILD), so a direct-children read neither re-fires this
@@ -2721,14 +2737,19 @@ EOF_GOVERNANCE
         # budget gate already fixed in agent-session.sh (direct children [14,15] vs actual
         # descendants [14,15,17,18,21]). Fixpoint over the ONE kidsall fetch; the seen-set makes
         # it cycle-safe; depth is bounded (~3) by the reviewer emitting no Follow-ups at ≥2.
-        gdesc=""; gfront="$g"
+        # FIX #1451: qualify the initial goal with its repo (e.g., "homelab#1234")
+        gdesc=""; gfront="${repo}#${g}"
         while [ -n "$gfront" ]; do
+          # FIX #1451: parse qualified frontier keys (e.g., "homelab#1234") and match cross-repo parents.
+          # Frontier contains qualified keys from current repo (initial $g) or qualified keys from descendants.
+          # For each issue in kidsall, check if its parent (by number) exists in the frontier (by number,
+          # in any repo). Once found, emit the issue's qualified key (repo#number).
           gnext="$(printf '%s' "$kidsall" | jq -r --arg f "$gfront" \
-            '(($f | split(" ") | map(select(. != "") | tonumber))) as $F
-             | [.[] | select(((.parent.number // 0)) as $p | $F | index($p)) | .number] | .[]' 2>/dev/null | tr '\n' ' ')" || gnext=""
+            '(($f | split(" ") | map(select(. != "") | split("#") | {repo: .[0], num: (.[1] | tonumber)}))) as $F
+             | [.[] | select(((.parent.number // 0)) as $p | $F | map(.num) | index($p)) | "\(.repo)#\(.number)"] | .[]' 2>/dev/null | tr '\n' ' ')" || gnext=""
           gnew=""
           for x in $gnext; do
-            case " ${gdesc# } $g " in *" $x "*) ;; *) gnew="$gnew $x";; esac
+            case " ${gdesc# } ${repo}#${g} " in *" $x "*) ;; *) gnew="$gnew $x";; esac
           done
           gfront="${gnew# }"; gdesc="$gdesc$gnew"
         done
@@ -2856,7 +2877,7 @@ EOF_GOVERNANCE
                   esac ;;
               esac
             done <<<"$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-              '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+              '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
                | [.[] | select(.number as $n | $D | index($n))] | sort_by(.number) | .[]
                | [(.number | tostring), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
             if [ "$gleft" -gt 0 ]; then
@@ -2954,11 +2975,12 @@ EOF_GOVERNANCE
         # An absent/unreadable store reads as counts 0 0 (the comments API swallows both shapes)
         # — trigger (a) simply cannot arm, which is rule #6's direction (never fail INTO a
         # dispatch), while (b) still fires; the next scan retries the read.
+        # FIX #1451: parse qualified keys from gdesc (e.g., "homelab#1234")
         gopen_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+          '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
            | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN")] | length' 2>/dev/null || echo "")"
         gclosed_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+          '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
            | [.[] | select(.number as $n | $D | index($n)) | select(.state == "CLOSED")] | length' 2>/dev/null || echo "")"
         # Each count validated on its own — concatenation would let ("", "3") read as the
         # valid-looking "3" and fail later as a swallowed arithmetic error (bot review, PR#398).
@@ -3016,9 +3038,10 @@ EOF_GOVERNANCE
         # only apply the disposition filter when the store actually read; otherwise fall back to
         # the pre-PR plain open-non-bucket count, so a blind read can only ever look MORE open,
         # never less.
+        # FIX #1451: parse qualified keys from gdesc (e.g., "homelab#1234")
         if [ "$gdisp_ok" = 1 ]; then
           gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
-            '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+            '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
              | ($ad | split(" ") | map(select(. != ""))) as $AD
              | ($df | split(" ") | map(select(. != ""))) as $DF
              | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
@@ -3029,14 +3052,15 @@ EOF_GOVERNANCE
                                    and (((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null))))] | length' 2>/dev/null || echo "")"
         else
           gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-            '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+            '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
              | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
         fi
         case "$gopen_n_ckpt" in ''|*[!0-9]*) gopen_n_ckpt="$gopen_n";; esac
         # UNDISPOSITIONED = open, not the bucket, no row, no `agent/*` lifecycle label — the
         # #1315 shape (an inert issue bound into the tree with nobody's judgment on it).
+        # FIX #1451: parse qualified keys from gdesc (e.g., "homelab#1234")
         gundisp_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
-          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+          '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
            | ($ad | split(" ") | map(select(. != ""))) as $AD
            | ($df | split(" ") | map(select(. != ""))) as $DF
            | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
