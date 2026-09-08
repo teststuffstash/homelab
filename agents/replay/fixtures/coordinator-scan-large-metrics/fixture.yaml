@@ -21,7 +21,7 @@ parts:
   - block:unit-lane
   - block:item-class
   - file:bridge.sh
-entrypoint: entrypoint.sh
+entrypoint: agents/replay/fixtures/coordinator-scan-large-metrics/entrypoint.sh
 env:
   - AGENT_PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
   - SCAN_PHASE_PGW=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091

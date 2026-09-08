@@ -202,6 +202,7 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/fix-round-unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
+| `coordinator-scan-large-metrics` | suite | - | `agents/coordinator-scan.sh` | - |
 | `decorrelate-resolution/empty-report` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/malformed-json` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/no-model` | actions | - | `agents/review-reflex.sh` | - |
