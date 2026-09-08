@@ -19,7 +19,7 @@
 #   4. ORPHANS line is emitted: "ci-red EXHAUSTED held — red sha does not match current head..."
 #   5. No gh pr edit (no label added).
 pins:
-  - FU-1529
+  - MP-T13
 name: ci-red-stale-sha-hold
 mode: actions
 source: agents/coordinator-scan.sh
