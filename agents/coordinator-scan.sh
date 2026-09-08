@@ -405,12 +405,9 @@ item_class_flush() {   # batch-push all accumulated rows, carrying first-transit
       # ⚠ The carry-over must match on the FULL label set the row is pushed with — `base` included.
       # A since-timestamp looked up on four of five labels would survive a lane change and report
       # the item as having been in its new lane since before it moved (ADR-125 per-lane rows).
-      # FU-1456: capture full pipeline output to avoid SIGPIPE from head -1 when processing large
-      # metric payloads (busy board days with many items); read full output first, then select first.
       ts_line="$(printf '%s' "$metrics_before" | grep -F "agent_item_class_since_timestamp_seconds" \
         | grep "repo=\"${repo}\"" | grep "item=\"${item}\"" | grep "class=\"${class}\"" \
-        | grep "who=\"${who}\"" | grep "base=\"${base}\"" | sed 's/.*} //')" || ts_line=""
-      ts_line="${ts_line%%$'\n'*}"
+        | grep "who=\"${who}\"" | grep "base=\"${base}\"" | sed 's/.*} //' | head -1 || true)"
     else
       ts_line=""
     fi

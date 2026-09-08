@@ -1,0 +1,19 @@
+# AgentLoopWorkflowsFailing, lifted VERBATIM out of prometheusrule.yaml (annotations stripped — the
+# manifest is their one home) — the rules file loop-workflows-failing.promtool-test loads. Not a
+# manifest and applied to nothing: `promtool test rules` needs upstream-format rules (top-level
+# `groups:`) and a PrometheusRule keeps them under `.spec`. Named .promtool-rules, not .yaml:
+# manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+# DRIFT-PINNED, both directions, by `devbox run prometheus-rules-lint` (homelab#337/#375): expr and
+# `for` must equal the CR's for every shared alert name. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [{"name": "argo-workflows-outcomes", "rules": [.spec.groups[].rules[] | select(.alert == "AgentLoopWorkflowsFailing") | del(.annotations)]}]}' argocd/resources/argo-workflows-alerts/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: argo-workflows-outcomes
+    rules:
+      - alert: AgentLoopWorkflowsFailing
+        expr: sum by (exported_namespace) (increase(argo_workflows_total_count{phase=~"Failed|Error", exported_namespace=~"agent-coordinator|.*-agents"}[1h])) >= 3
+        for: 10m
+        labels:
+          severity: warning
+          platform_machinery: "true"
