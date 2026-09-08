@@ -609,3 +609,43 @@ incident detail are TICK-LOG's.
   `WORKER_AUTHOR`-scoped by design. The covering surfaces are `devbox run board` (review queue
   + codeowner parks) and `meta-needs-attention.sh` clause 4; a stalled human PR is found by a
   board sweep, never by the loop.
+
+## Registry (first-party, push-mode) — prune + garbage-collect
+
+The `registry.teststuff.net` registry (ns `registry`, `registry:3` on the Garage bucket `registry`,
+ADR-121) has a 32Gi bucket cap and **no automatic retention** (FU-203). Ownership is the ADR-085
+split: the stack's IaC decides the keep-set (oracle-iac#664 — the pinned digest + the newest date
+tag + the previous pin) and untags/deletes what it no longer wants with its push credential
+(`DELETE /v2/<repo>/manifests/<digest>` — `REGISTRY_STORAGE_DELETE_ENABLED=true`); homelab runs the
+collector, which is the only step that needs the `registry` namespace.
+
+**Symptom of a full bucket:** the pusher sees an opaque **500** on a blob PATCH/PUT (Garage's
+`403 Bucket size quota is reached` is swallowed by the registry), `api_s3_error_counter` does not
+move, and the failed upload's bytes stay counted until purged (`UPLOADPURGING age: 1h`).
+
+**Recipe (first run 2026-09-08, oracle handoff):**
+
+```bash
+K="devbox run -- kubectl --kubeconfig tofu/kubeconfig"
+# 0. before: what the bucket holds
+$K -n garage exec garage-0 -c garage -- ./garage bucket info registry | grep -E '^Size|^Objects'
+# 1. dry run — lists the manifests/blobs it would remove; --delete-untagged removes manifests
+#    no tag points at (a re-pointed tag leaves its old manifest behind exactly like this)
+$K -n registry exec deploy/registry -c registry -- \
+  registry garbage-collect --dry-run --delete-untagged /etc/distribution/config.yml
+# 2. read it: every "marking manifest" line must be a digest a tag still serves
+#    (HEAD /v2/<repo>/manifests/<tag> → Docker-Content-Digest); every "eligible" one must not be.
+# 3. for real — same command without --dry-run. Do it in a window with no push in flight
+#    (the oracle release is Tuesdays 07:17Z); it does not need the registry stopped.
+# 4. verify: served tags still HEAD 200 with the same digest, the served layer HEAD 200 with its
+#    full content-length, the deleted digest 404, and the bucket size dropped.
+```
+
+⚠ `--delete-untagged` is correct HERE and wrong on the pull-through mirrors — a mirror caches
+digest-pinned pulls as untagged manifests, and that flag deletes exactly the images the pinning
+convention produces (homelab#116; the mirrors' `store-maintenance.yaml` runs GC without it).
+
+Measured 2026-09-08: dry run + real run ~1 min each on a 3-manifest repo; bucket 30.3 → 15.3 GiB.
+The Garage "Size" counter before the run read ~8 GB above the sum of the listed objects — the
+object listing (`aws s3 ls --recursive` with the registry's own key) is the number to trust when
+they disagree.
