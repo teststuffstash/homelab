@@ -1475,10 +1475,10 @@ ${PF_RV_BODY}"
         PF_PR_ISSUE_COMMENTS=""
         PF_PR_ISSUE_COMMENTS="$(gh api "repos/${PF_SLUG}/issues/${PF_PR}/comments" --paginate 2>/dev/null)" || PF_PR_ISSUE_COMMENTS=""
         # Search issue comments first for line-anchored ARBITRATE marker (word boundary, not colon)
-        PF_ARB_COMMENT="$(printf '%s' "$PF_COMMENTS_RAW" | jq -c '[.[] | select(.body | test("^ARBITRATE\\b"))] | last' 2>/dev/null)" || PF_ARB_COMMENT=""
+        PF_ARB_COMMENT="$(printf '%s' "$PF_COMMENTS_RAW" | jq -s -c '[.[][] | select(.body | test("^ARBITRATE\\b"))] | last' 2>/dev/null)" || PF_ARB_COMMENT=""
         # If not found on issue, search PR conversation comments
         if [ -z "$PF_ARB_COMMENT" ] || [ "$PF_ARB_COMMENT" = "null" ]; then
-          PF_ARB_COMMENT="$(printf '%s' "$PF_PR_ISSUE_COMMENTS" | jq -c '[.[] | select(.body | test("^ARBITRATE\\b"))] | last' 2>/dev/null)" || PF_ARB_COMMENT=""
+          PF_ARB_COMMENT="$(printf '%s' "$PF_PR_ISSUE_COMMENTS" | jq -s -c '[.[][] | select(.body | test("^ARBITRATE\\b"))] | last' 2>/dev/null)" || PF_ARB_COMMENT=""
         fi
         if [ -n "$PF_ARB_COMMENT" ] && [ "$PF_ARB_COMMENT" != "null" ]; then
           PF_ARB_AUTHOR="$(printf '%s' "$PF_ARB_COMMENT" | jq -r '.user.login // ""')"
