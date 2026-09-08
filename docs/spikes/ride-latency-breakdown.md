@@ -204,3 +204,18 @@ selects on (`wk-metal-03/-04` carry the taint only — reserved for kata rides B
 memory. The `arc-runners.yaml` comment "≈2 dind runners per metal node" is arithmetic that no
 longer holds. `e2e` on ci-runner-01 (449 s p50) is bound by nothing measurable: guest PSI since
 boot 0.8 % CPU / 0.5 % IO — it is sequencing (kind bring-up, image loads, readiness waits).
+
+**Re-read 2026-09-08 (operator: "3 runners is not enough for the bursts I cause while working"),
+7 d of `github_ci_job_queue_seconds` / `github_workflow_run_queued_since_timestamp`:** the ARC
+pool served ~10,000 jobs/week (homelab 6,012, oracle-fleet 2,097, oracle-iac 823, circles-iac 407,
+circles 394). **Fan-out per oracle-fleet push: `ci` (ARC, 378 s p50) ∥ `e2e` (proxmox-vm, 449 s)
+→ `evidence` (ARC, 172 s), plus `route` (ARC, 32 s) on PRs** — two ARC slots at once, a third
+right after, so **two concurrent oracle-fleet PRs saturate the pool by themselves**. Queue p90 on
+ARC: oracle-fleet `ci` 402 s (max 22 min), `evidence` 399 s, `route` 511 s for a 32-second job;
+circles p50 is already 140 s, p90 17 min. Peak simultaneous queued runs: **27** (homelab 15,
+oracle-fleet 10, circles/circles-iac 8 each). The queue is diurnal — 07–09 UTC and 17–19 UTC
+average ~9 queued runs vs ~4 overnight — i.e. it peaks exactly when the operator is at the
+keyboard, which is why the daily-mean "capacity fine" read (2026-09-05, above) measured the wrong
+thing: the cost is operator minutes, not runner utilisation. Sizing follows: a burst of ~10 runs ×
+2 ARC slots wants **~10 slots, not 3** → wk-03 to 32 GB on pve (FU-225, RAM lot being bought;
+FU-218 for the label stopgap).
