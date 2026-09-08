@@ -8034,4 +8034,16 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   checkpoint filed it standalone as "out of scope" — a lineage-contract violation (rules 3/9);
   repaired (bound under #1231, `deferred --by checkpoint`) and the brief's mint clause now names
   the case (direct quickfix, pushed).
+- **19:4x–20:0xZ (operator asks, second tail):** #1451's harvest economics answered — inert
+  filing was the consequence of the escape, not the harvest design: a goal-lane harvest appends
+  to the store, the checkpoint mints QUEUED under the grant and (since tonight) themes ≥2 sharing
+  a surface into one read; two gaps named for the closeout's design input — theme nomination keys
+  on the Goal's `Base: master` (post-launch sprouts of a `goal/**` Goal never theme) and the store
+  trigger waits for ≥5 findings (a `surface=` match across ≥2 store findings is a cheaper
+  nomination). **oracle-fleet#523 fleet fault**: the ≥2-in-24h rule asked once but latched
+  `agent/error` on four green PRs (#520/#521/#522/#524) with nothing to un-latch them after the
+  cause closed — cleared by hand, oracle review reflex rung once, **#1539 filed + queued** (a
+  marker-keyed un-latch for the fleet class only; prior-art grep negative). **#1537** (blocked-on
+  predicate fails closed on an unreadable blocker, #1528) gate-read + approved. Wind-down: this
+  push; ctx ≈ 830k.
 
