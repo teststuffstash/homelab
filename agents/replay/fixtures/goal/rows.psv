@@ -139,3 +139,48 @@ validated          | terminal |                                            | IN_
 master-goal-tree-empty          | open-pre | openall.json @ patches/base-master-tree-empty.jq      | IN_SLUG=teststuffstash/circles IN_REPO=circles | master-goal-tree-empty
 master-goal-post-launch-quiet   | open-pre | openall.json @ patches/base-master-post-launch.jq     | IN_SLUG=teststuffstash/circles IN_REPO=circles | master-goal-post-launch-quiet
 goal-branch-tree-empty-unchanged | open-pre | openall.json @ patches/base-goal-branch-tree-empty.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-branch-tree-empty-unchanged
+#
+# ── ADR-126 v1.3.1 delta 4, homelab#1423 leg A: THEME NOMINATION + trigger (e) — deterministic ──
+# The SHELL nominates, the checkpoint session judges and mints (ADR-094): the lane reads each open
+# work-item candidate's body ONCE (`gh issue view … --json body`, recorded per row), feeds
+# `<n>|<Touches>` to `fp_theme_groups` (agents/footprint.sh) and prints one line per group of ≥ 2
+# sprouts sharing a surface. It writes NOTHING — the nomination reaches the checkpoint as the
+# `themes=` side value on the `--item` string (`THEMES` in the stream is post.sh's view of that
+# map). Only a `Base: master` goal nominates. There is NO nomination trigger: it rides along on a
+# checkpoint that fires for (a)/(b)/(c). All four rows write the goal's `Base:` as the ADR-122
+# machine BLOCK, so the legacy meter stays silent and the rows are about themes, not grammar.
+#
+# theme-nominated         = `Base: master` goal, two open unlabelled sprouts #301/#302 whose Touches
+#                           share `agents/coordinator/**` (#301 `agents/coordinator/scan-helpers.sh`;
+#                           #302 `agents/coordinator/**, docs/agents/coordinator-belts.md`). #301
+#                           carries an `adopted` store row (so it counts as OPEN: no tree-empty
+#                           transition, no (b)); #302 is undispositioned, so trigger (c) wakes the
+#                           checkpoint and the nomination rides on it. Surface = the shortest prefix
+#                           conflicting with BOTH lists: `docs/agents/coordinator-belts.md` (#302
+#                           only) loses to `agents/coordinator`. Stream: two body reads, the OUT
+#                           nomination line, the unit, and `THEMES circles:issue-29:themes=
+#                           agents/coordinator:301+302` — the side value the session will read.
+# theme-singleton         = the SAME world with #302 declaring NO `Touches` (the `*` sentinel):
+#                           undeclared is exclusive and is EXCLUDED before grouping — otherwise it
+#                           would swallow every group. One nominable sprout is a singleton → no
+#                           nomination line, `THEMES <none>`; everything else is byte-identical to
+#                           theme-nominated (#302 still wakes trigger (c), both bodies are still
+#                           read). The delta between the two rows IS the nomination.
+# theme-complete          = trigger (e): `Base: master` goal with an OPEN `theme:` container #310
+#                           (adopted row, so it counts as open and (b) stays silent) whose two
+#                           children #311/#312 are CLOSED, whose body names `Base:
+#                           goal/29-coordinator-belts`, and whose branch has NO PR (`gh pr list
+#                           --head … --state all` recorded EMPTY — `pr-list-all.json`, the stub
+#                           keys on bare words so `--head` is not in the key). The assembly PR
+#                           `goal/29-coordinator-belts → master` is due: ONE goal-checkpoint unit
+#                           (reason `theme #310 complete`), the OUT line, `THEMES
+#                           circles:issue-29:theme-complete=310`. No nomination: the only open
+#                           descendant is a container by title, never a candidate.
+# theme-complete-pr-exists = the SAME world with ONE PR recorded for the branch (#90, any state):
+#                           trigger (e) has retired by itself — no unit, no line, `THEMES <none>`.
+#                           This is the row that keeps (e) from becoming another #1450 (a summons
+#                           with no retiring edge): the PR's existence is the edge.
+theme-nominated          | open-pre | openall.json @ patches/theme-sprouts.jq   | IN_SLUG=teststuffstash/circles IN_REPO=circles | theme-nominated
+theme-singleton          | open-pre | openall.json @ patches/theme-sprouts.jq   | IN_SLUG=teststuffstash/circles IN_REPO=circles | theme-singleton
+theme-complete           | open-pre | openall.json @ patches/theme-complete.jq  | IN_SLUG=teststuffstash/circles IN_REPO=circles | theme-complete
+theme-complete-pr-exists | open-pre | openall.json @ patches/theme-complete.jq  | IN_SLUG=teststuffstash/circles IN_REPO=circles | theme-complete-pr-exists

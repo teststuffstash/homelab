@@ -6,6 +6,7 @@ CALL gh issue close 29 --repo teststuffstash/circles --reason completed --commen
 OUT   [circles] ADR-102 terminal: goal #29 → reverted, closed (completed); 2 descendant(s) actioned
 OUT GACTED terminal
 OUT UNITS <none>
+OUT THEMES <none>
 OUT ORPHANS <none>
 OUT REACHED: end
 ERR LEGACY-GRAMMAR Verdict-authority circles#29
