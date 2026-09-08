@@ -4337,7 +4337,7 @@ EOF_GOVERNANCE
         continue
       }
       # Find newest agent/arbitrate labeled event
-      events_json="$(gh api repos/"$slug"/issues/"$u"/events 2>/dev/null)" || events_json=''
+      events_json="$(gh api --paginate repos/"$slug"/issues/"$u"/events 2>/dev/null)" || events_json=''
       if [ -z "$events_json" ]; then
         orphans="${orphans}[$repo] ⏳ arbitrate belt probe HOLD — PR #${u}: could not read PR events (homelab#1507, rule #6). No label write; next tick.\n"
         continue
