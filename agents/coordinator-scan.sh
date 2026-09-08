@@ -3859,11 +3859,17 @@ EOF_GOVERNANCE
                 # Same precedence as the loop above: the block's `Class` wins over the label.
                 ad_body="$(printf '%s' "$inprog" | jq -r --arg n "$ad_n" '
                   .[] | select(.number == ($n|tonumber)) | (.body // "")')"
-                ad_cv="$(ib_get Class "${repo:-}#${ad_n}" "$ad_body")" || ad_cv=""
-                [ -n "$ad_cv" ] && ad_class="$ad_cv"
-                units="${units}c4c5-redispatch|${repo}|issue-${ad_n}|${ad_class}\n"
-                item_class_push "$repo" "issue-${ad_n}" "phantom" "machine"
-                orphans="${orphans}[$repo] ✓ issue #${ad_n} — AGENT_STRIKE + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
+                # A body the parser REFUSES holds here too (rule #6) — the decidable-resumable
+                # path is a SIBLING of the loop above, not an exception to it (PR#1503 review).
+                if ad_cv="$(ib_get Class "${repo:-}#${ad_n}" "$ad_body")"; then
+                  [ -n "$ad_cv" ] && ad_class="$ad_cv"
+                  units="${units}c4c5-redispatch|${repo}|issue-${ad_n}|${ad_class}\n"
+                  item_class_push "$repo" "issue-${ad_n}" "phantom" "machine"
+                  orphans="${orphans}[$repo] ✓ issue #${ad_n} — AGENT_STRIKE + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
+                else
+                  orphans="${orphans}[$repo] ⛔ issue #${ad_n} — machine block MALFORMED (issue_body.py exit 2); C4/C5 resumable redispatch HELD (rule #6 — a body the parser refuses never dispatches, resumable branch or not).\n"
+                  item_class_push "$repo" "issue-${ad_n}" "strike-held" "machine"
+                fi
               done
             fi
             # <<<REPLAY:c4c5-derivations<<<

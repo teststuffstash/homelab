@@ -9,3 +9,8 @@
 strike-resumable | strike-resumable |       |      | strike-resumable
 no-strike        | no-strike        |       |      | no-strike
 block-class-wins | strike-resumable |       |      | block-class-wins
+# block-class-malformed = the SAME strike-resumable world, with #329's (the decidable goal child's) body
+#                     carrying a block the parser REFUSES (`Nope: x`): the resumable path HOLDS — no
+#                     unit, a ⛔ orphan line, a strike-held class row (rule #6; PR#1503's review found
+#                     this sibling loop dispatching on the label instead). #330 keeps its ordinary unit.
+block-class-malformed | strike-resumable |       |      | block-class-malformed
