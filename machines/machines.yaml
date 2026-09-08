@@ -343,9 +343,9 @@ machines:
   - name: wk-metal-03
     kind: metal
     zone: wk-metal-03
-    label: "`wk-metal-03` (laptop i5-6200U, PXE)"
+    label: "`wk-metal-03` (ThinkPad X260, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node)
-    hardware: laptop, i5-6200U (Skylake, VT-x/KVM + AVX2)
+    hardware: Lenovo ThinkPad X260 (20F600A2MS), i5-6200U (Skylake, VT-x/KVM + AVX2)
     cpu_cores: 4         # 2C / 4T (the column is LOGICAL cpus — `talosctl get cpu`: 2 cores, 4 threads)
     memory_gb: 8
     ip: 192.168.2.184
