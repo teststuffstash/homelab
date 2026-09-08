@@ -1,0 +1,19 @@
+# CONDITION UNDER REPLAY. oracle-fleet PR #234 carries `agent/arbitrate` and has a terminal ruling
+# that wrote `blocked-on: pr=525` — the ruling determined a PR must be resolved before dispatch. The
+# blocker PR #525's state CANNOT BE READ (transient API failure, rate limit, etc.). The contract is
+# that the clause reports "BLOCKED-ON" instead of dispatching — the fix for homelab#1528 makes the
+# blocker-state probe fail-closed (treat unreadable as blocked) rather than fail-open (clear on error).
+name: arbitrate-blocked-on-pr-unreadable
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
