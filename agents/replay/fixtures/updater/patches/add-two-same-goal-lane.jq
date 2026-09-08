@@ -11,13 +11,11 @@
   { number: 110, createdAt: "2026-08-19T09:00:00Z", mergeStateStatus: "BEHIND",
     autoMergeRequest: { enabledAt: "2026-08-19T09:01:00Z" }, reviewDecision: "",
     baseRefName: "goal/x", labels: [], headRefOid: "goal110oid789",
-    commits: [ { messageHeadline: "feat: goal one", committedDate: "2026-08-19T09:00:00Z" } ],
     reviews: [ { author: { login: "homelab-reviewer[bot]" }, state: "APPROVED",
                  submittedAt: "2026-08-19T09:30:00Z" } ] },
   { number: 111, createdAt: "2026-08-19T10:00:00Z", mergeStateStatus: "BEHIND",
     autoMergeRequest: { enabledAt: "2026-08-19T10:01:00Z" }, reviewDecision: "",
     baseRefName: "goal/x", labels: [], headRefOid: "goal111oid012",
-    commits: [ { messageHeadline: "feat: goal two", committedDate: "2026-08-19T10:00:00Z" } ],
     reviews: [ { author: { login: "homelab-reviewer[bot]" }, state: "APPROVED",
                  submittedAt: "2026-08-19T10:30:00Z" } ] }
 ]
