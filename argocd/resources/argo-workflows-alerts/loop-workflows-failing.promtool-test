@@ -1,0 +1,92 @@
+# Behaviour fixture for AgentLoopWorkflowsFailing (homelab#1456 deliverable 3 / FU-227 gap 1).
+#
+#   devbox run -- promtool test rules argocd/resources/argo-workflows-alerts/loop-workflows-failing.promtool-test
+#
+# `devbox run prometheus-rules-lint` runs this in CI over every *.promtool-test under argocd/;
+# manifest-lint has no PrometheusRule schema and SKIPS the CR edit, so this file is the gate.
+#
+# WHAT IS BEING PINNED:
+#   1. THE UNIT IS THE LOOP NAMESPACE (`exported_namespace`), not the controller's `namespace="argo"`
+#      and not the fleet: three Failed in one hour in ONE loop home fires ON that home (case 1),
+#      and the result carries `exported_namespace` so the page names the loop that lost its tick.
+#   2. QUIET UNDER THE THRESHOLD, and no cross-namespace summing: one Failed in each of three loop
+#      homes is three fleet-wide but never three anywhere (case 2) — that is the fleet belt's
+#      question, not this one's.
+#   3. THE SCOPE REGEX: a stack's OWN DAG namespace (oracle-fleet's ert-* workflows) failing five
+#      times is out of scope here — it is a product DAG, and the fleet belt still counts it (case 3).
+#   4. `Error` counts beside `Failed` (case 4): a controller-side Error (RBAC refusal, a template
+#      that never admitted) is the same dark sensor as a Failed exit.
+#
+# CLOCK: promtool starts at 0, one sample per minute. `increase()[1h]` over a counter that steps
+# 0→3 inside the first ten minutes reads ≈3.1 (half-interval extrapolation), so the threshold
+# holds from ~10m on and `for: 10m` fires it at ~20m; eval at 30m is past both.
+rule_files:
+  - loop-workflows-failing.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1. THE FIRE ARM — three Failed in one loop namespace inside an hour ──────────────────────
+  - interval: 1m
+    name: "three Failed ticks in one loop namespace fire on that namespace"
+    input_series:
+      - series: 'argo_workflows_total_count{job="argo-workflows-controller-metrics",namespace="argo",exported_namespace="platform-agents",phase="Failed"}'
+        values: "0 0 0 1 1 1 2 2 2 3 3+0x60"
+      - series: 'argo_workflows_total_count{job="argo-workflows-controller-metrics",namespace="argo",exported_namespace="platform-agents",phase="Succeeded"}'
+        values: "10+1x70"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: AgentLoopWorkflowsFailing
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: AgentLoopWorkflowsFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              exported_namespace: platform-agents
+            exp_annotations: {}
+
+  # ── 2. QUIET — one Failed per loop home, three homes: three fleet-wide, never three in one ────
+  - interval: 1m
+    name: "one failure in each of three loop namespaces stays quiet"
+    input_series:
+      - series: 'argo_workflows_total_count{job="argo-workflows-controller-metrics",namespace="argo",exported_namespace="platform-agents",phase="Failed"}'
+        values: "0 0 1+0x70"
+      - series: 'argo_workflows_total_count{job="argo-workflows-controller-metrics",namespace="argo",exported_namespace="oracle-agents",phase="Failed"}'
+        values: "0 0 1+0x70"
+      - series: 'argo_workflows_total_count{job="argo-workflows-controller-metrics",namespace="argo",exported_namespace="agent-coordinator",phase="Failed"}'
+        values: "0 0 1+0x70"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AgentLoopWorkflowsFailing
+        exp_alerts: []
+
+  # ── 3. SCOPE — a stack's own DAG namespace is not a loop home ────────────────────────────────
+  - interval: 1m
+    name: "a product DAG namespace failing five times is out of scope"
+    input_series:
+      - series: 'argo_workflows_total_count{job="argo-workflows-controller-metrics",namespace="argo",exported_namespace="oracle-fleet",phase="Failed"}'
+        values: "0 1 2 3 4 5+0x70"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AgentLoopWorkflowsFailing
+        exp_alerts: []
+
+  # ── 4. Error counts beside Failed ────────────────────────────────────────────────────────────
+  - interval: 1m
+    name: "Failed and Error in one loop namespace sum to the threshold"
+    input_series:
+      - series: 'argo_workflows_total_count{job="argo-workflows-controller-metrics",namespace="argo",exported_namespace="agent-coordinator",phase="Failed"}'
+        values: "0 0 1 1 2 2+0x70"
+      - series: 'argo_workflows_total_count{job="argo-workflows-controller-metrics",namespace="argo",exported_namespace="agent-coordinator",phase="Error"}'
+        values: "0 0 0 1 1 1+0x70"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AgentLoopWorkflowsFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              exported_namespace: agent-coordinator
+            exp_annotations: {}
