@@ -85,6 +85,9 @@ _rp_per_call_override() {   # _rp_per_call_override <slug>
 # world/gh/pr-view-234.json → world/gh/pr-view.json → world/gh/pr.json. So a fixture records once
 # per call SHAPE and only pins a positional when it needs two different answers for it.
 #
+# With pagination support: if <paginate> is "paginate", look for -page-1.json, -page-2.json, etc.
+# files and concatenate them (for `gh api --paginate` which outputs multiple JSON arrays).
+#
 # `_rp_serve <key> optional` returns 1 instead of dying when nothing is recorded — the WRITE path.
 # The stubs always documented a missing write-recording as fine ("its absence is fine, unlike a
 # read's") and it was not: `exit 9` from inside a function kills the whole stub process, so the
@@ -93,8 +96,30 @@ _rp_per_call_override() {   # _rp_per_call_override <slug>
 # the happy one — found by homelab#208's goal-terminal fixtures, the first to write without reading
 # back (`gh issue edit --add-label`, `gh issue close`). A read with no recording still DIES: that
 # one is load-bearing, because an empty payload usually parses and the clause then asserts nothing.
-_rp_serve() {   # _rp_serve <key> [optional]
-  _rp_k="$1"; _rp_orig="$1"; _rp_tried=""
+_rp_serve() {   # _rp_serve <key> [optional|paginate]
+  _rp_k="$1"; _rp_orig="$1"; _rp_tried=""; _rp_paginate="$2"
+
+  # Try paginated files first if pagination is requested
+  if [ "${_rp_paginate:-}" = paginate ]; then
+    _rp_slug_base="$(_rp_slug "$_rp_k")"
+    _rp_page=1
+    _rp_found_any=0
+    while true; do
+      _rp_f="$REPLAY_WORLD/$_RP_TOOL/${_rp_slug_base}-page-${_rp_page}.json"
+      if [ -f "$_rp_f" ]; then
+        _rp_found_any=1
+        cat "$_rp_f"
+        _rp_page=$((_rp_page + 1))
+      else
+        break
+      fi
+    done
+    if [ "$_rp_found_any" = 1 ]; then
+      return 0
+    fi
+    # Fall through to non-paginated lookup
+  fi
+
   while [ -n "$_rp_k" ]; do
     for _rp_ext in .json .txt ''; do
       _rp_f="$REPLAY_WORLD/$_RP_TOOL/$(_rp_slug "$_rp_k")$_rp_ext"
@@ -104,7 +129,7 @@ _rp_serve() {   # _rp_serve <key> [optional]
     done
     case "$_rp_k" in *' '*) _rp_k="${_rp_k% *}" ;; *) _rp_k="" ;; esac
   done
-  [ "${2:-}" = optional ] && return 1
+  [ "${_rp_paginate:-}" = optional ] && return 1
   printf 'replay-stub[%s]: no recorded world file for this READ.\n' "$_RP_TOOL" >&2
   printf '  call:  %s %s\n' "$_RP_TOOL" "$_rp_orig" >&2
   printf '  tried:\n%s' "$_rp_tried" >&2

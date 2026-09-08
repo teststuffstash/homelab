@@ -1,0 +1,1 @@
+CALL gh api repos/foo/bar/pulls/1/reviews --paginate
