@@ -4767,7 +4767,7 @@ EOF_GTHEMES_OPEN
           # ARBITRATE: red rounds EXHAUSTED. Reuse the review path's MP-T11 machinery — label
           # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
           # a stronger model / park / close) take over. This is the Red→arbitrate edge the FSM lacked.
-          # Apply the same sha/human-hold checks as the noop case (FU-1529).
+          # Apply the same sha check as the noop case (FU-1529).
           if [ "$ci_red_should_arbitrate" = 1 ]; then
             gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
               && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
