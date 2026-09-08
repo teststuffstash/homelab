@@ -507,6 +507,8 @@ spec:
             # Log which rail we're on (Go rail only when Anthropic is latched)
             case "$rail" in opencode-go/*) echo "→ Anthropic latched — serving set-pass on the Go rail ($rail)";; esac
             jq -c 'del(.body)' /tmp/set.jsonl > /tmp/set-brief.json
+            # The routed answer is rail-prefixed (`claude/sonnet`); the claude CLI takes the BARE alias — parsed through
+            # model_id.py like the responder and coordinator-session.sh (FU-127; PR#1522 — the responder died on this for a week).
             claude -p "You are the FIX-DEBOUNCE SET-PASS (homelab docs/agents/iac-lane.md, section 'one root cause, N alert issues'): several alert-triage issues carry a fix verdict and await dispatch. Your job is to decide queueing for the SET — the trap you exist to prevent is several fixers attacking symptoms of ONE root cause in parallel (e.g. a node-pressure alert and an OOM-kill alert that are the same memory problem).
 
             THE PENDING SET (one JSON object per line): $(cat /tmp/set-brief.json)
@@ -520,7 +522,7 @@ spec:
             {\"queue\": [{\"repo\": \"owner/name\", \"number\": 1, \"why\": \"...\"}], \"link\": [{\"repo\": \"owner/name\", \"number\": 2, \"cause_repo\": \"owner/name\", \"cause_number\": 1, \"why\": \"...\"}], \"unsure\": [{\"repo\": \"owner/name\", \"number\": 3, \"why\": \"...\"}]}
             \`\`\`
             HARD RULES: do NOT label, comment, edit, file, close or reopen anything — the shell applies your JSON deterministically (ADR-094). No kubectl mutations. Every issue in the set appears in exactly one of queue/link/unsure." \
-              --model "$(case "$rail" in opencode-go/*) echo "$rail";; *) bash /work/homelab/agents/resolve-model.sh --role dispatch-unit --fallback sonnet;; esac)" --permission-mode bypassPermissions --max-turns 25 </dev/null \
+              --model "$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash /work/homelab/agents/resolve-model.sh --role dispatch-unit --fallback sonnet)"; eval "$(python3 /work/homelab/agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)" --permission-mode bypassPermissions --max-turns 25 </dev/null \
               > /tmp/setpass.out 2>&1 || { echo "WARN: set-pass session failed — set stays pending"; tail -5 /tmp/setpass.out; exit 0; }
 
             awk '/^```json[[:space:]]*$/{f=1;buf="";next} /^```[[:space:]]*$/{if(f){last=buf};f=0;next} f{buf=buf $0 "\n"} END{printf "%s", last}' /tmp/setpass.out > /tmp/decision.json
