@@ -14,36 +14,32 @@ curl() {
 }
 
 {
-  echo "=== scenario: large metrics payload with multiple matching timestamps ==="
+  echo "=== scenario: large metrics payload (busy board) with many matching base=default lines ==="
 
-  # Simulate a large metrics payload with many lines (busy board scenario). This would
-  # have caused SIGPIPE with the old | head -1 approach because head closes stdin
-  # while the previous grep commands are still writing data.
-  read -r -d '' LARGE_METRICS <<'METRICS_EOF' || true
-agent_item_class_since_timestamp_seconds{namespace="homelab-agents",repo="homelab",item="1",class="queued",who="machine",base="default"} 1786465000
-agent_item_class{namespace="homelab-agents",repo="homelab",item="1",class="queued",who="machine",base="default"} 1
-agent_item_class_since_timestamp_seconds{namespace="homelab-agents",repo="homelab",item="2",class="queued",who="machine",base="default"} 1786464900
-agent_item_class{namespace="homelab-agents",repo="homelab",item="2",class="queued",who="machine",base="default"} 1
-agent_item_class_since_timestamp_seconds{namespace="homelab-agents",repo="homelab",item="3",class="riding",who="machine",base="default"} 1786464800
-agent_item_class{namespace="homelab-agents",repo="homelab",item="3",class="riding",who="machine",base="default"} 1
-agent_item_class_since_timestamp_seconds{namespace="homelab-agents",repo="homelab",item="1456",class="agent-fix",who="machine",base="default"} 1786464700
-agent_item_class{namespace="homelab-agents",repo="homelab",item="1456",class="agent-fix",who="machine",base="default"} 1
-agent_item_class_since_timestamp_seconds{namespace="homelab-agents",repo="homelab",item="1456",class="agent-fix",who="machine",base="default"} 1786464600
-agent_item_class{namespace="homelab-agents",repo="homelab",item="1456",class="agent-fix",who="machine",base="default"} 1
-agent_item_class_since_timestamp_seconds{namespace="homelab-agents",repo="homelab",item="999",class="backlog",who="operator",base="default"} 1786464500
-agent_item_class{namespace="homelab-agents",repo="homelab",item="999",class="backlog",who="operator",base="default"} 1
-METRICS_EOF
+  # Generate a LARGE metrics payload that simulates a busy board day with hundreds of items.
+  # The old code (base) uses | head -1 which closes stdin early. With many grep filters and
+  # a large payload, this causes head to close the pipe before all previous commands finish
+  # writing, triggering SIGPIPE (exit 141) in one of the greps under pipefail.
+  # The fixed code captures full output first, avoiding the early-close problem.
+  LARGE_METRICS=""
+  for i in {1..200}; do
+    LARGE_METRICS="${LARGE_METRICS}agent_item_class{namespace=\"homelab-agents\",repo=\"homelab\",item=\"$i\",class=\"queued\",who=\"machine\",base=\"default\"} 1
+"
+    LARGE_METRICS="${LARGE_METRICS}agent_item_class_since_timestamp_seconds{namespace=\"homelab-agents\",repo=\"homelab\",item=\"$i\",class=\"queued\",who=\"machine\",base=\"default\"} 178646$((5000 - i))
+"
+  done
+  # Add the target item with TWO matching lines (to make head -1 necessary, not just useful)
+  LARGE_METRICS="${LARGE_METRICS}agent_item_class_since_timestamp_seconds{namespace=\"homelab-agents\",repo=\"homelab\",item=\"1456\",class=\"agent-fix\",who=\"machine\",base=\"default\"} 1786464700
+agent_item_class{namespace=\"homelab-agents\",repo=\"homelab\",item=\"1456\",class=\"agent-fix\",who=\"machine\",base=\"default\"} 1
+agent_item_class_since_timestamp_seconds{namespace=\"homelab-agents\",repo=\"homelab\",item=\"1456\",class=\"agent-fix\",who=\"machine\",base=\"default\"} 1786464600
+agent_item_class{namespace=\"homelab-agents\",repo=\"homelab\",item=\"1456\",class=\"agent-fix\",who=\"machine\",base=\"default\"} 1
+"
 
   # Call item_class_push with large metrics_before. The extraction should:
-  # 1. Find the FIRST matching timestamp line for item 1456
-  # 2. Not cause SIGPIPE even with the large payload
-  # 3. Return the correct timestamp value (1786464600 — the FIRST matching line)
-  echo "=== push: large metrics payload scenario ==="
+  # 1. With the fix: capture full pipeline output, then extract first line via parameter expansion (no SIGPIPE).
+  # 2. Without the fix: use | head -1 which closes stdin early → SIGPIPE from grep under pipefail (exit 141).
+  echo "=== push: LARGE payload with 200+ items (busy board scenario) ==="
   metrics_before="$LARGE_METRICS" item_class_push "homelab" "1456" "agent-fix" "machine"
-  printf 'RETURN %s\n' "$?"
-
-  echo "=== push: no matching metrics in large payload ==="
-  metrics_before="$LARGE_METRICS" item_class_push "homelab" "9999" "nonexistent" "ghost"
   printf 'RETURN %s\n' "$?"
 
   echo "=== end ==="

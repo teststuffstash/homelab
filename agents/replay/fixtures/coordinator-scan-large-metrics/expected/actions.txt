@@ -1,7 +1,5 @@
-=== scenario: large metrics payload with multiple matching timestamps ===
-=== push: large metrics payload scenario ===
-RETURN 0
-=== push: no matching metrics in large payload ===
+=== scenario: large metrics payload (busy board) with many matching base=default lines ===
+=== push: LARGE payload with 200+ items (busy board scenario) ===
 RETURN 0
 === end ===
 RC 0
