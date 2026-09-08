@@ -5,3 +5,7 @@
 PF_SLUG="foo/bar"
 PF_PR="1"
 WORK_BRANCH="fix/test"
+
+# Define PF_INDEX_ITEM function (used by the fetch-reviews block)
+PF_INDEX=""
+PF_INDEX_ITEM() { PF_INDEX="${PF_INDEX}${1}  ${2}${3:+  ${3}}"$'\n'; }

@@ -97,7 +97,7 @@ _rp_per_call_override() {   # _rp_per_call_override <slug>
 # back (`gh issue edit --add-label`, `gh issue close`). A read with no recording still DIES: that
 # one is load-bearing, because an empty payload usually parses and the clause then asserts nothing.
 _rp_serve() {   # _rp_serve <key> [optional|paginate]
-  _rp_k="$1"; _rp_orig="$1"; _rp_tried=""; _rp_paginate="$2"
+  _rp_k="$1"; _rp_orig="$1"; _rp_tried=""; _rp_paginate="${2:-}"
 
   # Try paginated files first if pagination is requested
   if [ "${_rp_paginate:-}" = paginate ]; then

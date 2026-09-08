@@ -1,1 +1,6 @@
 CALL gh api repos/foo/bar/pulls/1/reviews --paginate
+CALL gh api repos/foo/bar/pulls/1/comments --paginate
+OUT → VERIFIED: PF_NEWEST_VERDICT picked the globally newest review (2026-09-08T12:00:00Z)
+OUT → VERIFIED: reviews.md lists reviewer3 before reviewer2 (correct newest-first order)
+OUT REACHED: end
+RC 0
