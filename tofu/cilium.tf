@@ -85,7 +85,10 @@ resource "helm_release" "cilium" {
     # (mem 2× the ~261Mi observed peak; cpu 2.5× the ~100m peak) so self-cgroup-OOM/throttle is
     # unlikely, while keeping the per-node reservation small enough that a ~5.1Gi kata ride still fits
     # on the 7.1Gi kata nodes (the reservation-vs-self-OOM tension on the 8GB tier — kept modest).
-    resources = { requests = { cpu = "250m", memory = "512Mi" }, limits = { cpu = "250m", memory = "512Mi" } }
+    # FU-224 (2026-09-08): cpu 250m → 500m — the agents on the slow-CPU boxes (wk-metal-03, hp-01,
+    # m70s) throttled 11–17 % of CFS periods at 250m; laptops carry 25–31 % CPU requested, so the
+    # extra 250m reservation still leaves room. Memory unchanged (the kata-fit tension above).
+    resources = { requests = { cpu = "500m", memory = "512Mi" }, limits = { cpu = "500m", memory = "512Mi" } }
     # single operator is plenty for a homelab; default 2 (High Availability, anti-affinity) just
     # leaves a second replica stuck when a node hasn't cached the image yet.
     operator = {
