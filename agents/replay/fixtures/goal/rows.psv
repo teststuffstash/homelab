@@ -139,3 +139,4 @@ validated          | terminal |                                            | IN_
 master-goal-tree-empty          | open-pre | openall.json @ patches/base-master-tree-empty.jq      | IN_SLUG=teststuffstash/circles IN_REPO=circles | master-goal-tree-empty
 master-goal-post-launch-quiet   | open-pre | openall.json @ patches/base-master-post-launch.jq     | IN_SLUG=teststuffstash/circles IN_REPO=circles | master-goal-post-launch-quiet
 goal-branch-tree-empty-unchanged | open-pre | openall.json @ patches/base-goal-branch-tree-empty.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-branch-tree-empty-unchanged
+cross-repo-open-held  | open-pre | openall.json @ patches/add-cross-repo-member.jq  | IN_SLUG=teststuffstash/circles IN_REPO=circles CROSS_REPO_TEST=1 | cross-repo-open-held
