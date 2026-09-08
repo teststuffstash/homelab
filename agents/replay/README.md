@@ -169,6 +169,7 @@ is stale, so it cannot drift the way the prose register did.
 | `assembly-cr-no-trailer` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-themed-emit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `asvs` | suite | - | `-` | - |
+| `base-arm-authoring` | table | - | `agents/agent-session.sh` | - |
 | `base-arm-master` | actions | - | `agents/agent-session.sh` | - |
 | `base-arm-nonprotected` | actions | - | `agents/agent-session.sh` | - |
 | `base-arm-research-goal` | actions | - | `agents/agent-session.sh` | - |
@@ -291,6 +292,7 @@ is stale, so it cannot drift the way the prose register did.
 | `preflight-malformed-block` | actions | - | `agents/agent-session.sh` | - |
 | `python-profile-env/other` | actions | - | `agents/agent-session.sh` | - |
 | `python-profile-env/python` | actions | - | `agents/agent-session.sh` | - |
+| `queued-body-tsv` | table | - | `agents/coordinator-scan.sh` | - |
 | `queued-classification/held` | actions | - | `agents/coordinator-scan.sh` | - |
 | `queued-classification/ready` | actions | - | `agents/coordinator-scan.sh` | - |
 | `queued-derivation/no-agent-fix` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -358,6 +360,8 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-absent` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-adopted` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-touches/block-authored` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-touches/block-malformed` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-computed` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-none` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/multiline-union` | actions | - | `agents/reviewer-session.sh` | - |

@@ -7899,3 +7899,4 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   wind-down, all red locally on 09-08. Fixed direct (`_RECENT_CLOSE` = now−5d), PRs brought current.
   Lesson for the fixture class: a recorded date that a window compares against NOW is a time bomb;
   `retro-rank-snapshot-exclusion`/ledger fixtures with hard dates deserve the same read.
+- **10:4xZ: PR#1510 MERGED (S8 legs 4–6) after one bot footprint-escape finding** — the two survivor files sat outside #1460's `Touches`; the codeowner amended the issue's block (the issue's own acceptance sweep surfaced them) and dismissed the stale verdict per the follow-up-class play; fresh read APPROVED. **#1460 + #1431 CLOSED — S8 original 1b is done.** Remaining S8: #1424 (closeout leg), #1423 (HELD).

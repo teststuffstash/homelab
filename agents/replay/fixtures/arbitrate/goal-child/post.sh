@@ -4,3 +4,9 @@
 printf "ITEM repo=%s item=%s clause=%s%s\n" "$urepo" "$uitem" "$uclause" "$uharvest"
 # The clause must run to completion under `set -euo pipefail`, not merely produce the right lines.
 echo "REACHED: end"
+# The bucket body is composed by the ONE parser's WRITER and posted with `--body-file` since
+# homelab#1460 leg 4, so the CALL line no longer carries it — re-read what was written, through
+# the same writer. `hbbody` is set only on the create path.
+if [ -n "${hbbody:-}" ] && [ -f "$hbbody" ]; then
+  printf 'BUCKET-BLOCK %s\n' "$(python3 "$IB_PY" json < "$hbbody")"
+fi

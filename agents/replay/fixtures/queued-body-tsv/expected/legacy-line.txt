@@ -1,0 +1,4 @@
+OUT 1460	residue legs 4, 5, 6	agents/**, docs/**	-	-	build	-	goal/12-slug
+ERR LEGACY-GRAMMAR Touches homelab#1460
+ERR LEGACY-GRAMMAR Base homelab#1460
+RC 0

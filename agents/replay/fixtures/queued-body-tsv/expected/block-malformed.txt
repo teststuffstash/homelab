@@ -1,0 +1,3 @@
+OUT 1460	residue legs 4, 5, 6	!	-	-	build	-	-
+ERR issue_body: machine block line 3: unknown key 'Nope' — the grammar is exactly: Touches, Base, Budget, Verdict-authority, Production-leg, Revert, Origin, Size, Capability, alert-fp, self-referential, fix-verdict, Class
+RC 0

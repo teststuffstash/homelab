@@ -631,8 +631,32 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
           + "\"` (argocd/resources/openrouter-proxy/model-classes.json — merging rolls the proxy)")
          | join("\n"))
     ' "$WORK/ranked.json")${SUPPRESSED_LINE}${CANARY_BLOCK}"
-    log "→ posting digest issue on ${ORG}/${DIGEST_REPO}"
-    gh issue create --repo "${ORG}/${DIGEST_REPO}" --title "$TITLE" --body "$BODY"
+    # ── the filing, through the writer recipe (ADR-122 (3), homelab#1460 leg 4) ────────────────
+    # Every authoring surface composes its body into a FILE and re-reads it through the ONE parser
+    # before posting (agents/coordinator/README.md §Authoring an issue body, step 3). Two notes:
+    #   • `--body-file`, never an interpolated `--body "$(…)"` argument — the responder's 2026-08-08
+    #     lesson, and this body is jq-rendered markdown full of backticks and `|`.
+    #   • NO machine-block key is stamped, deliberately. `Origin:` wants the issue or PR the filing
+    #     came from and a cron tick has none — inventing one would be a fabrication in the one
+    #     grammar the platform is collapsing onto — and `Class:`/`Size:` say nothing true about a
+    #     report-only digest. So the parser runs as the VALIDITY GATE alone: a body with no block
+    #     is legal and parses to `{}`, while a rendered table that accidentally opens a `---` fence
+    #     at the top exits 2, which is exactly the corruption a human's graduation read must not
+    #     get. Never fail INTO a write: exit 2 skips the create, loudly, and the snapshot still
+    #     advances (point 5) — the withheld ids are in the log above.
+    # PATH SEAM, mirroring coordinator-scan.sh's: an explicit $SCOUT_IB_PY (a bridge seam) > $HERE
+    # (the real script dir) > $REPLAY_ROOT/agents (a replay composition, which has no $HERE).
+    SCOUT_IB_PY="${SCOUT_IB_PY:-${HERE:-${REPLAY_ROOT:+$REPLAY_ROOT/agents}}}"
+    case "$SCOUT_IB_PY" in "") SCOUT_IB_PY=agents;; esac
+    case "$SCOUT_IB_PY" in *.py) ;; *) SCOUT_IB_PY="$SCOUT_IB_PY/issue_body.py";; esac
+    DIGEST_BODY_FILE="${WORK}/digest-body.md"
+    printf '%s\n' "$BODY" > "$DIGEST_BODY_FILE"
+    if python3 "$SCOUT_IB_PY" json < "$DIGEST_BODY_FILE" >/dev/null 2>&1; then
+      log "→ posting digest issue on ${ORG}/${DIGEST_REPO}"
+      gh issue create --repo "${ORG}/${DIGEST_REPO}" --title "$TITLE" --body-file "$DIGEST_BODY_FILE"
+    else
+      log "scout: digest NOT posted — the rendered body does not survive its own re-read (agents/issue_body.py exit 2, ADR-122 (3)); the ranked ids are in the lines above and the next tick re-derives them"
+    fi
   fi
   # <<<REPLAY:scout-digest<<<
 fi

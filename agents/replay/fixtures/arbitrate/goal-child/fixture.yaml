@@ -11,9 +11,14 @@ parts:
   - file:bridge.sh
   - block:harvest-disposition
   - file:post.sh
+# The block's bucket body is composed by `agents/issue_body.py` (homelab#1460 leg 4) and the goal
+# walk reads `Budget:` through it too — declared, per the hermeticity contract (cleanup move 6).
+requires:
+  - python3
 scrub:
-  # The bucket body is prose the block owns; pin its provenance sentence, not its paragraphs.
-  - s|--body Post-launch bucket for goal #29 .*|--body <bucket body — see agents/coordinator-scan.sh>|
+  # The body no longer rides the CALL line (`--body-file` since homelab#1460 leg 4). Only the
+  # directory half of `$TMPDIR` is scrubbed; the filename carries the repo and goal and stays asserted.
+  - s|--body-file [^ ]*/post-launch-bucket-|--body-file <tmp>/post-launch-bucket-|
   # The bucket's `deferred by=bucket` disposition row (ADR-122 (4)) carries a wall-clock stamp —
   # the STATE is the contract, the instant is not.
   - s|\(-f body=<!-- epic-dispositions v1 -->..#[0-9]* deferred \)[0-9T:Z-]*\( by=bucket\)|\1<ts>\2|

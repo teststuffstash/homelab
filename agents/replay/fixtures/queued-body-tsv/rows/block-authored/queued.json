@@ -1,0 +1,23 @@
+[
+  {
+    "number": 1460,
+    "title": "residue legs 4, 5, 6",
+    "blockedBy": {
+      "nodes": []
+    },
+    "isPinned": false,
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/queued"
+      },
+      {
+        "name": "task/fix"
+      }
+    ],
+    "parent": null,
+    "body": "---\nTouches: agents/**, docs/**\nBase: goal/12-slug\nClass: build\n---\n\n## Why\n\nProse carries no machine lines.\n"
+  }
+]
