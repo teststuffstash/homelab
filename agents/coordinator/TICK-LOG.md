@@ -7929,3 +7929,24 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   recorded for the pickup: the second hypervisor (4U) is the operator's answer to pve
   concentration — ADR pending on the buy. Wind-down: bookkeeping pushed once (this push).
 
+
+## 2026-09-08 — evening seat (operator ask: "the failing argo workflows in agent-coordinator")
+
+- **15:4x–16:4xZ:** 21 Failed workflows in the namespace, 19 of them `update-pr-*`. Loki: **every
+  updater pass on every repo red since 2026-09-05 22:30** — the first cron tick after PR#1465 —
+  on `GraphQL: … 1,000,000 possible nodes … exceeds the maximum limit of 500,000` (`--json commits`
+  at `--limit 100`; `--limit 50` = 505,050; `reviews` alone lists fine). Fix = **PR#1521**: commits
+  probed per bot-approved candidate via `gh pr view`, updater family 17/17, live-run clean on
+  homelab + oracle-fleet; MP-T02's anchor moved with the code (`def merge_ready` → the `$a > $c`
+  comparison). Second read (operator): **`retro-session-1788757200`** — both cells died on
+  `PF_CM_MOUNT: unbound variable` (PR#1386 initialized the bundle vars inside the issue-* arm
+  only) → **PR#1523**. Third (operator: "what has the responder done?"): **every responder triage
+  session since Loki's horizon (09-01 19:24) died at launch** — `claude --model claude/sonnet`
+  (the routed id passed verbatim; the coordinator's FU-127 bug, un-fixed at the responder's call
+  site); 156 dead sessions in 7 days, today's 8/12 spawns included `ArgoWorkflowsFailing` and
+  `RetroReportOverdue` — nothing was investigated; last responder-filed issue homelab#1013
+  (08-29) → **PR#1522** (model_id.py parse). All three PRs armed; ADR-103 ratchet dispositions
+  (Class B) recorded for #1522/#1523. Postmortem
+  `docs/incidents/2026-09-05-updater-node-cap-responder-dead-triage.md`; belt gaps → **FU-227**
+  (100 %-red template under the fleet line; dead ride inside a green workflow).
+  `RouterRunModelUnverifiable` (firing since 08-30) is an OpenRouter-ride belt, unrelated.
