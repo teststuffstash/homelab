@@ -130,15 +130,20 @@ class IssueBodyError(Exception):
 
 
 class _Legacy(object):
-    __slots__ = ("pattern", "source", "normalize", "all_matches", "join", "probe")
+    __slots__ = ("pattern", "source", "normalize", "all_matches", "join", "probe", "keep_empty")
 
-    def __init__(self, pattern, source, normalize=None, all_matches=False, join=",", probe=None):
+    def __init__(self, pattern, source, normalize=None, all_matches=False, join=",", probe=None,
+                 keep_empty=False):
         self.pattern = re.compile(pattern) if pattern else None
         self.source = source
         self.normalize = normalize
         self.all_matches = all_matches
         self.join = join
         self.probe = probe  # a callable(body) -> str|None, for forms that are not regex-shaped
+        # `all_matches` readers that DROP empty values before joining are the norm (a bare key is
+        # not a declaration). `paste -sd, -` does not drop them — it emits an empty FIELD — so a
+        # reader restated from that pipeline sets this and keeps `a,,b` intact.
+        self.keep_empty = keep_empty
 
 
 def _rstrip(v):
@@ -237,7 +242,21 @@ LEGACY = {
 # case-insensitivity), first match, and all whitespace deleted from the value. It gates ARMING
 # (a declared base un-arms auto-merge), so widening it by fiat would change what merges itself;
 # named as a variant instead, exactly like goal-lint's money read. S8 original 1b, homelab#1431.
+# `agents/coordinator/fix-debounce-argo.yaml`'s queue-time footprint read (~line 375) is the
+# THIRD divergent form: `sed -n 's/^[Tt]ouches:[[:space:]]*//p' | paste -sd, -` — COLUMN 0 only
+# (no leading whitespace), `Touches:`/`touches:` only (not the canonical reader's full
+# case-insensitivity), NO trailing trim, and — the difference that actually bites — `paste`
+# joins EVERY printed line including the empty ones, so a bare `Touches:` among real ones
+# survives as an empty FIELD (`a.sh,,b.md`) where the canonical union drops it. It gates
+# QUEUEING against the ❌ codeowner-author path table, so widening it by fiat would change which
+# issues an agent may pick up before a human has approved anything; named as a variant instead,
+# exactly like goal-lint's money read and the launcher's arming read. S8 1b residue, homelab#1460.
 VARIANTS = {
+    "fix-debounce": {
+        "Touches": _Legacy(r"(?m)^[Tt]ouches:[ \t]*(.*)$",
+                           "agents/coordinator/fix-debounce-argo.yaml:375",
+                           all_matches=True, keep_empty=True),
+    },
     "agent-session": {
         "Base": _Legacy(r"(?m)^[Bb]ase:[ \t]*(.*)$", "agents/agent-session.sh:791",
                         normalize=_squash_ws),
@@ -276,7 +295,8 @@ def _legacy_read(body, key, variant=None):
         return None
     if spec.all_matches:
         vals = [spec.normalize(m) if spec.normalize else m for m in matches]
-        vals = [v for v in vals if v != ""]
+        if not spec.keep_empty:
+            vals = [v for v in vals if v != ""]
         value = spec.join.join(vals)
     else:
         value = matches[0]
@@ -764,6 +784,39 @@ def _self_test():
     check("variant goal-lint: the block still wins",
           quiet(lambda: get("---\nBudget: 9\n---\n  Budget: 30\n", "Budget",
                             variant="goal-lint"))[0], "9")
+
+    # ── the fix-debounce variant ─────────────────────────────────────────────────────────────
+    # Derived from the shell pipeline it restates, agents/coordinator/fix-debounce-argo.yaml:375:
+    #     sed -n 's/^[Tt]ouches:[[:space:]]*//p' | paste -sd, -
+    # column 0, `[Tt]` only, EVERY match printed, whitespace after the colon eaten, no trailing
+    # trim, and `paste` joining every printed line — empty ones included.
+    check("variant fix-debounce: every matching line is joined with `,` (paste -sd,)",
+          quiet(lambda: get("Touches: a/**\ntouches: b.md\n", "Touches",
+                            variant="fix-debounce"))[0], "a/**,b.md")
+    check("variant fix-debounce: an INDENTED Touches is invisible (sed anchors at column 0)",
+          quiet(lambda: get("  Touches: a/**\n", "Touches", variant="fix-debounce"))[0], None)
+    check("variant fix-debounce: `TOUCHES:` is not one of the two spellings sed matches",
+          quiet(lambda: get("TOUCHES: a/**\n", "Touches", variant="fix-debounce"))[0], None)
+    # ⚠ THE divergence from the canonical `Touches` entry, and the reason this is a variant and
+    # not a widening: the canonical union DROPS an empty value, `paste` keeps it as an empty
+    # FIELD. `printf 'a\n\nb\n' | paste -sd, -` is `a,,b`, verified against the pipeline.
+    check("variant fix-debounce: a bare `Touches:` among real ones survives as an EMPTY FIELD",
+          quiet(lambda: get("Touches: a.sh\nTouches:\nTouches: b.md\n", "Touches",
+                            variant="fix-debounce"))[0], "a.sh,,b.md")
+    check("canonical Touches DROPS that empty line — the divergence this variant exists for",
+          quiet(lambda: get("Touches: a.sh\nTouches:\nTouches: b.md\n", "Touches"))[0],
+          "a.sh,b.md")
+    check("variant fix-debounce: a lone bare `Touches:` yields nothing (paste emits one empty "
+          "line, the gate's `-n` test then fails — undeclared = exclusive)",
+          quiet(lambda: get("Touches:\n", "Touches", variant="fix-debounce"))[0], None)
+    check("variant fix-debounce: the canonical form's leading whitespace is NOT inherited",
+          quiet(lambda: get("\tTouches: a/**\n", "Touches", variant="fix-debounce"))[0], None)
+    check("variant fix-debounce: the block still wins, with no meter line",
+          quiet(lambda: get("---\nTouches: block.sh\n---\nTouches: legacy.sh\n", "Touches",
+                            variant="fix-debounce"))[0], "block.sh")
+    check("variant fix-debounce: a legacy read still prints the meter",
+          quiet(lambda: get("Touches: a.sh\n", "Touches", ref="homelab#249",
+                            variant="fix-debounce"))[1], "LEGACY-GRAMMAR Touches homelab#249\n")
 
     # ── render_block / upsert_block ──────────────────────────────────────────────────────────
     # Render order is GRAMMAR order (docstring), regardless of the dict's insertion order.
