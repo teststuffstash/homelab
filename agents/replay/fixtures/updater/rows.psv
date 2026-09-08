@@ -1,7 +1,10 @@
 # updater — the decision table (family contract in fixture.yaml; legs 1-3).
 # id                  | world | patch (relpath @ patches/*.jq)          | env | expect        | params
+# The *-probeN templates carry leg 1's per-candidate `gh pr view --json commits` (p1, p2 in list
+# order) — the commits live in rows/<id>/gh/pr-view-<n>.json, never in pr-list.json (the field
+# is not listable at --limit 100: GitHub's 500k-node cap, 2026-09-08).
 armed-only-noop       | board |                                         |     | noop          |
-fifo-pick             | board | gh/pr-list.json @ patches/add-two-behind-ready.jq |  | picks   | n=101 oid=abc123def456
+fifo-pick             | board | gh/pr-list.json @ patches/add-two-behind-ready.jq |  | picks-probe2 | p1=101 p2=102 n=101 oid=abc123def456
 unstrand-yes          | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-yes  | n=120 oid=jkl012mno345
 unstrand-no           | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-no   | n=120
 unstrand-unreadable   | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-hold | n=120
@@ -11,10 +14,11 @@ update-fail           | board | gh/pr-list.json @ patches/conflict-101.jq  | STU
 park-skip             | board | gh/pr-list.json @ patches/add-park-skip.jq       |     | noop          |
 human-approved-pick   | board | gh/pr-list.json @ patches/add-human-approved.jq  |     | picks         | n=131 oid=human131oid456
 null-author-no-crash   | board | gh/pr-list.json @ patches/add-null-author.jq      |     | noop          |
-two-lanes-two-updates | board | gh/pr-list.json @ patches/add-two-lanes.jq          |     | picks-two     | n1=110 oid1=goal110oid789 n2=101 oid2=abc123def456
-same-lane-one-update  | board | gh/pr-list.json @ patches/add-two-same-goal-lane.jq |     | picks         | n=110 oid=goal110oid789
+two-lanes-two-updates | board | gh/pr-list.json @ patches/add-two-lanes.jq          |     | picks-two-probe2 | p1=101 p2=110 n1=110 oid1=goal110oid789 n2=101 oid2=abc123def456
+same-lane-one-update  | board | gh/pr-list.json @ patches/add-two-same-goal-lane.jq |     | picks-probe2  | p1=110 p2=111 n=110 oid=goal110oid789
 # ── #1452: leg 1 updates only MERGE-READY PRs (the platform-native merge queue) ─────────────────
 unreviewed-behind-no-update | board | gh/pr-list.json @ patches/add-two-behind.jq         |                             | noop  |
-bot-approved-head-update    | board | gh/pr-list.json @ patches/add-bot-approved-head.jq  |                             | picks | n=141 oid=ready141oid123
-stale-approval-no-update    | board | gh/pr-list.json @ patches/add-bot-approved-stale.jq |                             | noop  |
+bot-approved-head-update    | board | gh/pr-list.json @ patches/add-bot-approved-head.jq  |                             | picks-probe1 | p1=141 n=141 oid=ready141oid123
+stale-approval-no-update    | board | gh/pr-list.json @ patches/add-bot-approved-stale.jq |                             | noop-probe1 | p1=142
+probe-unreadable            | board | gh/pr-list.json @ patches/add-bot-approved-head.jq  |                             | noop-probe-hold | p1=141
 merge-ready-only-off-legacy-pick | board | gh/pr-list.json @ patches/add-two-behind.jq    | UPDATER_MERGE_READY_ONLY=0  | picks | n=101 oid=abc123def456
