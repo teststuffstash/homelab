@@ -1,0 +1,23 @@
+[
+  {
+    "number": 1460,
+    "title": "residue legs 4, 5, 6",
+    "blockedBy": {
+      "nodes": []
+    },
+    "isPinned": false,
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/queued"
+      },
+      {
+        "name": "task/build"
+      }
+    ],
+    "parent": null,
+    "body": "---\nTouches: agents/**, docs/**\nNope: 1\n---\n\n## Why\n\nThe block is refused as a whole.\n"
+  }
+]

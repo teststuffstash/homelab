@@ -1,0 +1,8 @@
+# queued-body-tsv — the decision table (family contract in fixture.yaml; per-row intent below).
+# id              | world | patch | env | expect
+# block-authored  = the machine block declares Touches/Base/Class; Class beats the task/fix label
+# legacy-line     = the same declaration in the legacy line form → the SAME row + two meter lines
+# block-malformed = an unknown key inside the fences → `!` in the touches column, base falls to `-`
+block-authored  |       |       |     | block-authored
+legacy-line     |       |       |     | legacy-line
+block-malformed |       |       |     | block-malformed

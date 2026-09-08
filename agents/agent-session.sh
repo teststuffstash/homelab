@@ -835,6 +835,12 @@ if [ -n "${RECIPE:-}" ]; then
     # block therefore arms exactly as it did before. The body is captured BEFORE the parse so a
     # `gh` failure stays the pre-existing fail-soft (absent ⇒ master) and only the PARSER's exit 2
     # can mean "malformed".
+    # >>>REPLAY:base-declared-read>>>
+    # SENTINELLED (homelab#1460 leg 5): the helper above was replayable but this — the FETCH, the
+    # parse, the refusal and the arming decision as ONE stream — was not, so `base-arm-*` could
+    # only ever pin the guard with `BASE_REF` pre-set by a bridge. A block-authored body and its
+    # legacy-line twin arming identically is a claim about THIS region; it is not checkable in the
+    # helper alone (`base-arm-authoring`).
     _ib_ref="${ORG:-teststuffstash}/${PROJECT}#${ISSUE_N}"
     _ib_body="$(gh issue view "$ISSUE_N" --repo "${ORG:-teststuffstash}/${PROJECT}" --json body \
       --jq '.body' 2>/dev/null || true)"
@@ -866,6 +872,7 @@ if [ -n "${RECIPE:-}" ]; then
         # <<<REPLAY:base-arm-guard<<<
       fi
     fi
+    # <<<REPLAY:base-declared-read<<<
     # RESEARCH RIDES ARM INTO A GOAL (operator ruling 2026-09-04, the oracle-fleet#418 read). A
     # research recipe's PR is human-gated BY DESIGN (FU-105) — but that gate is the human WEAVE
     # at the DEFAULT branch, not the fix→goal hop ("feature→goal is fine to automate; goal→master

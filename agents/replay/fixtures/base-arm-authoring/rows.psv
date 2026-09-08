@@ -1,0 +1,8 @@
+# base-arm-authoring — the decision table (family contract in fixture.yaml; per-row intent below).
+# id              | world | patch | env | expect
+# block-authored  = the `---` machine block declares Base: goal/12-slug → armed, NO meter line
+# legacy-line     = the same value in the column-0 legacy form → the SAME stream + one meter line
+# block-malformed = an unknown key inside the fences → ib_get exit 2 → PREFLIGHT REFUSED, RC 1
+block-authored  |       |       |     | armed
+legacy-line     |       |       |     | armed-legacy
+block-malformed |       |       |     | refused

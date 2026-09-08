@@ -1,0 +1,4 @@
+CALL gh issue view 1460 --repo teststuffstash/homelab --json body --jq .body
+ERR issue_body: machine block line 3: unknown key 'Nope' — the grammar is exactly: Touches, Base, Budget, Verdict-authority, Production-leg, Revert, Origin, Size, Capability, alert-fp, self-referential, fix-verdict, Class
+ERR PREFLIGHT REFUSED: malformed machine block on teststuffstash/homelab#1460 — the `Base:` read failed to parse (ADR-122 (3), agents/issue_body.py); fix the `---` block on the issue. No pod, no key, no dispatch.
+RC 1

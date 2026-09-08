@@ -1,0 +1,27 @@
+# homelab#1460 leg 5 — a MALFORMED machine block degrades the belt to NO SIGNAL, never to `none`.
+#
+# CONDITION UNDER REPLAY. ../block-authored's world with one character of authoring damage: the
+# block carries `Nope:`, which is not one of the 13 grammar keys, so `issue_body.py get Touches`
+# exits 2 (its docstring: an unknown key inside the fences is a LOUD parse error, never a silent
+# skip).
+#
+# THE CONTRACT — the fail-closed HALF of the transition, and the reason the reviewer reads the
+# parser's exit code rather than only its stdout (bot review, PR#1459):
+#   1. The read is abandoned: no `gh pr diff`, no `touches_check` — a footprint that cannot be
+#      read cannot be checked against.
+#   2. TOUCHES-ESCAPES ends `unavailable` (which the prompt defines as NO SIGNAL), not `none`.
+#      `none` is the string that reads as CLEAN to the reviewing model, so a parser exit 2
+#      silently mapped to the empty footprint would turn an authoring error into a green
+#      footprint check — the exact inversion ADR-122 (3) exists to end.
+#   3. It is LOUD twice: the parser's own stderr line naming the offending key, and the WARN that
+#      says the belt degraded. A quiet degrade is a belt nobody knows stopped holding.
+#
+# Parts: bridge.sh (seams: ISSUE, CHANGED, gh) + block:reviewer-touches-check
+name: reviewer-touches-block-malformed
+mode: actions
+source: agents/reviewer-session.sh
+requires:
+  - python3
+parts:
+  - file:bridge.sh
+  - block:reviewer-touches-check

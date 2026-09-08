@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/homelab/issues/123 --jq .body // ""
+OUT WARN: issue #123 carries a MALFORMED machine block — the declared footprint is unreadable (ADR-122 (3)); TOUCHES-ESCAPES degrades to unavailable
+OUT WARN: touches-check helpers unavailable (fetch/source/compute failed) — TOUCHES-ESCAPES: unavailable; the review proceeds (the belt fails open)
+ERR issue_body: machine block line 3: unknown key 'Nope' — the grammar is exactly: Touches, Base, Budget, Verdict-authority, Production-leg, Revert, Origin, Size, Capability, alert-fp, self-referential, fix-verdict, Class
+RC 0

@@ -2598,7 +2598,15 @@ EOF_GOVERNANCE
       fi
       item_class_push "$repo" "issue-${qnum}" "$qclass_item" "machine" "${qbase:-}"
       # <<<REPLAY:queued-classification<<<
-    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
+    done < <(
+            # >>>REPLAY:queued-body-tsv>>>
+            # The queued lane's body READ, sentinelled (homelab#1460 leg 5). Everything the loop
+            # above decides on — footprint, base, class — arrives through this one pipeline, and
+            # until now it was checkable only by an isolated smoke: the `queued-*` fixtures pin
+            # what the loop DOES with the TSV, never how the TSV came to say it. Extracted it is a
+            # complete pipeline (`$queued` in, TSV out), so a body-authoring change is pinnable
+            # here rather than inferred two blocks downstream.
+            printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
             | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), (((.parent.number // "") | tostring) | if . == "" then "-" else . end), (.body // "" | @base64) ] | @tsv' \
             | while IFS="$(printf '\t')" read -r _qn _qt _qd _qp _qlabelclass _qpar _qb64; do
                 # ADR-122 (3): the three body grammars this row carried — `Touches:`, `Base:` and
@@ -2619,7 +2627,9 @@ EOF_GOVERNANCE
                   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_qn" "$_qt" \
                     "!" "$_qd" "$_qp" "$_qlabelclass" "$_qpar" "-"
                 fi
-              done)
+              done
+            # <<<REPLAY:queued-body-tsv<<<
+            )
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     # ── the goal lane (FU-090 leg (c) 2026-08-05; per-closure session DEMOTED by ADR-106 (3) 2026-08-12) ───────────────────────────────────────────────
     # The forest/trees rule's third leg: a goal must be RE-EVALUATED, not merely survive its
