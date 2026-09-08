@@ -1,0 +1,10 @@
+# fleet-fault-unlatch case 3: no fleet-fault marker ⇒ agent/error HELD (human-first)
+name: fleet-fault-unlatch-no-marker
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:fleet-fault-unlatch
+  - file:post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
