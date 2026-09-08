@@ -172,8 +172,16 @@ six OVERSIZE items pointer-ized into
       the manager IS the attach/rebuild/scheduling plane, and the 150m req==limit came from the
       FU-112(b) Guaranteed-QoS ruling, sized for memory not CPU. **Next:** raise the manager CPU
       limit (300m, keep req==limit) in `tofu/longhorn.tf` on a quiet day — it rolls the DaemonSet,
-      so not mid-migration; re-read the panel a week later. No FU/ADR matched `throttl` (grepped
-      2026-09-07). Link: ADR-089, FU-112.
+      so not mid-migration; re-read the panel a week later. **Re-sighted 2026-09-08 (operator, the
+      panel): `cilium-rzv4p` at 30 %** — that one was wk-03's post-resize restart (53 % at 13:11Z,
+      2 % five minutes later: agent start-up at its 250m limit, transient). The steady-state
+      picture is the FU's: cilium agents 11–17 % on the slow-CPU boxes (wk-metal-03, hp-01, m70s),
+      longhorn-manager 9–21 %, and `transcripts-viewer` 55 % at a 1-CPU limit on hp-01 (all of it
+      the bucket-sync container, 62 %). **DONE 2026-09-08 (operator: "run all of it"), PR#1519:
+      manager 150m→300m, cilium agent 250m→500m, bucket-sync 1→2** — both DaemonSets rolled with
+      the oracle delta job running, volumes healthy throughout. **Next:** re-read the throttling
+      panel ≈2026-09-15; if manager/cilium sit under ~5 % and the sync burst under ~20 %, archive.
+      No FU/ADR matched `throttl` (grepped 2026-09-07). Link: ADR-089, FU-112.
 
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 — a 10.01 GB corpus layer over the 20Gi bucket, refused by Garage
@@ -614,9 +622,12 @@ the block needs pruning, not more headings.
       shorten the queue) — real capacity is RAM on the compute tier, see the spike's §CI side.
       **2026-09-08 (operator): 3 slots is not enough for the bursts the operator causes while
       working — his queue time is the cost, the daily mean measured the wrong thing.** Two levers:
-      (1) pve RAM → wk-03 at 32 GB ≈ +8 slots (FU-225, lot being bought); (2) zero-cost stopgap
-      today: add the `ephemeral=true` label to wk-metal-04 (16 GB, taint-only, kata-reserved by
-      decision in `tofu/talos.tf`) ≈ +3–4 slots shared with kata rides — operator call.
+      **Done 2026-09-08 on pve as-is (PR#1518 + 09b81dd9): wk-03 8→16Gi/12c funded by ci-runner-01
+      16→12Gi, `maxRunners` 4→6** — the overcommit ceiling (no balloon in Talos; KSM ~10Gi shared);
+      "all out" waits on a second disk (thin pool) or the second hypervisor (ROADMAP §HA model,
+      operator direction 2026-09-08). Still open: (a) label wk-metal-04 ephemeral ≈ +3–4 slots
+      shared with kata (operator call); (b) re-read queue p90 at operator hours after a week.
+      **Next:** the week's re-read; close if p90 at 07–09/17–19 UTC drops under ~2 min.
       Relates FU-208, ADR-082.
 
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
@@ -1035,24 +1046,6 @@ the block needs pruning, not more headings.
       [[service-discovery]], ADR-076 (app-owned resources via Crossplane).
 
 ## Hardware & nodes
-
-- [ ] **FU-225** — **pve host RAM is the hypervisor's binding resource: 84 % used on average,
-      94 % at peak (7 d to 2026-09-08), 53 of 62 GiB in use** — while CPU sits at 18–23 % (p95
-      36 %). Cause is allocation as much as demand: ballooning is off on every VM, so the host
-      commits the full 60 GB of allocations while guests average 30–71 % of theirs (wk-03 30 % of
-      8 GB, wk-01 41 % of 16 GB). Board (`X99-P4`, E5-2680 v4) runs 4 × 16 GB Micron
-      `36ASF2G72PZ-2G1A2` DDR4-2133 ECC **RDIMM** (EDAC: two channels, two DIMMs each; SMBIOS lies
-      — count the free slots physically; **counted 2026-09-08: 4 slots, ALL populated — no free
-      slot, so "add DIMMs" is really "replace 64 GB with 128 GB", which the operator calls a waste**).
-      **Next:** (a) right-size the VM allocations in `tofu/variables.tf` (reboot per VM) — free,
-      and the gap is allocation not demand; (b) only if demand then still binds: the 4 × 32 GB
-      `MTA36ASF4G72PZ-2G3B1` lot (private hardware repo, R8, read 2026-09-08) as a full swap, or
-      2 × 32 GB replacing one DIMM per channel (96 GB, channels stay balanced) — supply side is the
-      hardware repo's, not this tracker's. **Re-ruled 2026-09-08 (operator): the RAM IS the buy** —
-      the demand is ARC burst capacity (FU-218: a slot ≈ 2.5–3 GB on an ephemeral node, only wk-03
-      can grow), so once fitted: wk-03 8→32 GB / 8→16 vCPU in `tofu/variables.tf`, `maxRunners`
-      4→~10, and wk-03's thin-pool disk needs FU-093's headroom first. No FU/ADR matched
-      `pve.*(ram|memory)|rdimm` (grepped 2026-09-08). Relates FU-093, ROADMAP §HA model.
 
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
