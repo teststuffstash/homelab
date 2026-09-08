@@ -5042,7 +5042,14 @@ EOF
             | jq -r '[.[] | select(.title | startswith("post-launch:")) | .number] | first // ""' 2>/dev/null || true)"
           case "$hbucket" in ''|*[!0-9]*) hbucket="";; esac
           if [ -z "$hbucket" ] && [ -n "$hgtitle" ]; then
-            hburl="$(gh issue create --repo "$hslug" --title "post-launch: ${hgtitle}" --body "$(printf '%s\n' \
+            # ADR-122 (3) / homelab#1460 leg 4: this is an AUTHORING surface, so it follows the
+            # in-pod writer recipe (agents/coordinator/README.md §Authoring an issue body) rather
+            # than hand-typing machine lines into prose — PROSE to a file, the machine block
+            # stamped by the ONE parser's writer, the writer's own re-read as the gate, then
+            # `--body-file`. `Origin` is the goal this container was cut from (block-only, no
+            # reader today); no other key is honest for a container the scan mints itself.
+            hbbody="${TMPDIR:-/tmp}/post-launch-bucket-${urepo}-${hgoal}.md"
+            printf '%s\n' \
               "Post-launch bucket for goal #${hgoal} — created by \`agents/coordinator-scan.sh\`, not by a session (ADR-102, homelab#207)." \
               "" \
               "**What lands here.** Every sprout harvested from a review of a PR descended from this goal. Assembly merge is a MIDPOINT, not the end: the goal keeps shipping to production at its own pace, and this issue is the one container that work hangs off — so the burn-down is a query, not archaeology." \
@@ -5051,7 +5058,18 @@ EOF
               "" \
               "**They spend the goal's money.** This bucket is a sub-issue of the goal, so its children are goal DESCENDANTS and the launcher pre-flight already counts them against the goal's \`Budget:\` (\`agents/goal-budget.sh\`). A sprout self-queues only while the goal is OPEN and that sum still fits; otherwise it lands here inert for human triage." \
               "" \
-              "Closing this issue does not close the goal, and closing the goal kills this tree with it (ADR-102 terminals).")" 2>/dev/null || true)"
+              "Closing this issue does not close the goal, and closing the goal kills this tree with it (ADR-102 terminals)." \
+              > "${hbbody}.prose" 2>/dev/null || true
+            hburl=""
+            # THE GATE (README step 3): a body the writer cannot re-read is NEVER posted. `set`
+            # exit 2 or `json` exit 2 ⇒ no create — rule #6, never fail INTO a write; the goal is
+            # simply bucket-less for this tick and the next scan retries.
+            if python3 "$IB_PY" set "Origin=${hslug}#${hgoal}" < "${hbbody}.prose" > "$hbbody" 2>/dev/null \
+               && python3 "$IB_PY" json < "$hbbody" >/dev/null 2>&1; then
+              hburl="$(gh issue create --repo "$hslug" --title "post-launch: ${hgtitle}" --body-file "$hbbody" 2>/dev/null || true)"
+            else
+              echo "  ⚠ harvest: the post-launch bucket body for goal #${hgoal} (${hslug}) does not survive its own re-read (agents/issue_body.py) — NOT posted; the next scan retries" >&2
+            fi
             hbucket="${hburl##*/}"
             case "$hbucket" in ''|*[!0-9]*) hbucket="";; esac
             if [ -n "$hbucket" ]; then
