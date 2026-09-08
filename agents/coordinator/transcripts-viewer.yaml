@@ -138,7 +138,9 @@ spec:
             # Growth fix (homelab#110, 2026-08-30): the bash loop now prunes /mirror + /data
             # older than 7 days each tick, so the working set is bounded by the retention window
             # rather than growing unboundedly. The 2Gi ceiling stays as a safety net.
-            limits:   { cpu: "1", memory: "2Gi" }
+            # cpu 1 → 2 (FU-224, 2026-09-08): the sync burst still spent 62 % of its CFS periods
+            # throttled at 1 CPU (the viewer container itself: 0 %).
+            limits:   { cpu: "2", memory: "2Gi" }
       volumes:
         - name: claude-data
           emptyDir: {}
