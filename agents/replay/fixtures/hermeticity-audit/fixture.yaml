@@ -1,0 +1,34 @@
+# homelab#1442 — hermeticity audit: ambient env variables must not leak from pod to fixtures.
+#
+# CONDITION UNDER REPLAY. The run.sh choke point (line 42) unsets all AGENT_* variables and
+# other pod-wide configuration (PROJECT, GH_TOKEN, OPENROUTER_API_KEY) so they don't leak into
+# fixture assertions. A fixture running in a worker pod with these variables exported must still
+# read UNSET when using defaults, never the pod's value.
+#
+# Two rows:
+#   1. unset: all ambient variables use their defaults → they read as UNSET, proving no leak
+#   2. pinned: a fixture explicitly sets PINNED_VAR → it reads as the pinned value, proving
+#      that the env: field can override the choke point when a fixture genuinely needs it.
+#
+# THE CONTRACT:
+#   1. Ambient AGENT_* variables, PROJECT, GH_TOKEN, OPENROUTER_API_KEY are UNSET at the choke
+#      point before any fixture block runs, even in a pod where they're exported.
+#   2. A fixture declaring `env: - VAR=value` can override the unset and make VAR available to
+#      its block (the env: applies AFTER the choke point).
+#   3. Running `bash agents/replay/run.sh` with a bare env (env -i) and with a populated env
+#      (AGENT_RAIL=homelab PROJECT=circles GH_TOKEN=secret bash agents/replay/run.sh) produces
+#      IDENTICAL output — no leaks, no surprises.
+#
+# If a fixture ever reverts to reading an ambient variable without explicitly pinning it,
+# this row fails, catching the regression immediately (ADR-103 ratchet).
+#
+name: hermeticity-audit
+mode: table
+source: ~
+parts:
+  - file:bridge.sh
+rows: rows.psv
+env:
+  # These are the COMMON env: lines, applied to every row before the row-specific ones.
+  # We deliberately DON'T add AGENT_* or PROJECT here, so the unset choke point is tested.
+  # They stay unset across the bridge invocation.
