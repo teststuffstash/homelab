@@ -7,10 +7,12 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-226** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-227** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
+  **FU-226 burned** — minted 2026-09-08 for a pve GPU swap, retracted the same hour: a hardware
+  want, not a platform loose end — it lives in the private hardware repo (R9), homelab has no stake.
   **FU-141 burned** — filed 2026-08-05 for un-reaped ephemeral OpenRouterKey CRs, retracted the
   same day: already **openrouter-operator#10**, and a fixer-enabled repo's own issue is where that
   belongs (routing table) — the prior-art grep covered this tracker but not the repo's issues.
@@ -610,6 +612,11 @@ the block needs pruning, not more headings.
       memory placement, not slots. `arc-runners.yaml`'s "≈2 dind runners per metal node" is stale.
       **Next:** `maxRunners: 3` + fix the comment (one-line PR, makes the panel truthful; does not
       shorten the queue) — real capacity is RAM on the compute tier, see the spike's §CI side.
+      **2026-09-08 (operator): 3 slots is not enough for the bursts the operator causes while
+      working — his queue time is the cost, the daily mean measured the wrong thing.** Two levers:
+      (1) pve RAM → wk-03 at 32 GB ≈ +8 slots (FU-225, lot being bought); (2) zero-cost stopgap
+      today: add the `ephemeral=true` label to wk-metal-04 (16 GB, taint-only, kata-reserved by
+      decision in `tofu/talos.tf`) ≈ +3–4 slots shared with kata rides — operator call.
       Relates FU-208, ADR-082.
 
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
@@ -1035,10 +1042,18 @@ the block needs pruning, not more headings.
       commits the full 60 GB of allocations while guests average 30–71 % of theirs (wk-03 30 % of
       8 GB, wk-01 41 % of 16 GB). Board (`X99-P4`, E5-2680 v4) runs 4 × 16 GB Micron
       `36ASF2G72PZ-2G1A2` DDR4-2133 ECC **RDIMM** (EDAC: two channels, two DIMMs each; SMBIOS lies
-      — count the free slots physically). **Next:** (a) RDIMM into the free slots — supply side
-      is the private hardware repo (R8; a 4 × 32 GB `MTA36ASF4G72PZ-2G3B1` lot was read 2026-09-08);
-      (b) right-size the VM allocations in `tofu/variables.tf` (reboot per VM). No FU/ADR matched
+      — count the free slots physically; **counted 2026-09-08: 4 slots, ALL populated — no free
+      slot, so "add DIMMs" is really "replace 64 GB with 128 GB", which the operator calls a waste**).
+      **Next:** (a) right-size the VM allocations in `tofu/variables.tf` (reboot per VM) — free,
+      and the gap is allocation not demand; (b) only if demand then still binds: the 4 × 32 GB
+      `MTA36ASF4G72PZ-2G3B1` lot (private hardware repo, R8, read 2026-09-08) as a full swap, or
+      2 × 32 GB replacing one DIMM per channel (96 GB, channels stay balanced) — supply side is the
+      hardware repo's, not this tracker's. **Re-ruled 2026-09-08 (operator): the RAM IS the buy** —
+      the demand is ARC burst capacity (FU-218: a slot ≈ 2.5–3 GB on an ephemeral node, only wk-03
+      can grow), so once fitted: wk-03 8→32 GB / 8→16 vCPU in `tofu/variables.tf`, `maxRunners`
+      4→~10, and wk-03's thin-pool disk needs FU-093's headroom first. No FU/ADR matched
       `pve.*(ram|memory)|rdimm` (grepped 2026-09-08). Relates FU-093, ROADMAP §HA model.
+
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
       wk-metal-02's flaky wired link. **2026-08-07 (homelab#117): wk-metal-02 had a 4.5h NIC
