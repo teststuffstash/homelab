@@ -1,0 +1,14 @@
+{
+  "headRefOid": "dddddddd44444444444444444444444444444444",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "statusCheckRollup": [
+    {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"FAILURE"}
+  ],
+  "reviews": [],
+  "comments": [
+    {"author":{"login":"homelab-agents-1234"},"body":"blocked-on: issue=489","createdAt":"2026-09-08T17:59:05Z"}
+  ],
+  "commits": [
+    {"oid":"dddddddd44444444444444444444444444444444","messageHeadline":"fix: something"}
+  ]
+}
