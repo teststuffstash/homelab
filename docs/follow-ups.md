@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-227** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-228** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -1044,6 +1044,18 @@ the block needs pruning, not more headings.
       `kubectl get agentstacks` (plus `agents/stacks.json` itself — the original mirror problem).
       Design: [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md) §2, ADR-085. Relates
       [[service-discovery]], ADR-076 (app-owned resources via Crossplane).
+
+- [ ] **FU-227** — **Two silent-failure shapes the workflow belts cannot see (the 2026-09-08 read).**
+      (a) a template failing 100 % of its runs stays under `ArgoWorkflowsFailing`'s fleet-wide
+      40/6h line — the updater was red on every repo for 65 h at ~4–6 failures per 6 h; (b) a
+      responder triage session that dies at launch lives inside a **Succeeded** workflow
+      (`claude … || echo WARN`), counts as a spawn in the budget ledger, and is indistinguishable
+      from a ride that investigated — 156 dead sessions in 7 days, "8/12 spawned today".
+      Postmortem: [`incidents/2026-09-05-updater-node-cap-responder-dead-triage.md`](incidents/2026-09-05-updater-node-cap-responder-dead-triage.md);
+      the belt home is FU-188 (d). **Next:** (b) first — push `responder_triage_sessions_failed`
+      beside the budget gauges in `responder-budget.sh`'s pushgateway shape and alert on
+      failed ≥ 3 in 24 h; (a) needs a per-template source (`argo_workflows_total_count` has no
+      template label) — a kube-state-metrics-style read of Workflow CRs or the exporter.
 
 ## Hardware & nodes
 

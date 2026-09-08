@@ -21,6 +21,10 @@ never the session's arc — that is TICK-LOG's.)
   snapshot discovery under seat creds, `agents/re-review.sh --shadow` over ~3 merged platform PRs).
   (5) the oracle pin ping-pong / FU-203's CronJob (now riding as #1505) /
   23 stale archive entries → `/docs-cleanup` — unchanged from the 09-08 morning pickup.
+- **⚑ PICKUP (2026-09-08 evening seat — the failing-workflows read): DONE, nothing to pick up.**
+  Updater (PR#1521), responder model (PR#1522), agent-session bundle vars (PR#1523) merged and
+  verified live (16:30 cron green on 12 repos; retro PR#1524 harvested; `respond-wm2cf` ran a real
+  triage). Open residue only: **FU-227** (belt gaps) and retro PR#1524 in the reviewer lane.
 - **⚑ PICKUP (2026-09-08 afternoon seat, ~14:4xZ wind-down — the pve capacity thread):** all
   applied and merged (PR#1518/#1519/#1520 + 09b81dd9): wk-03 16Gi/12c, ci-runner-01 12Gi,
   `maxRunners` 6; FU-224 limits raised; FU-225 archived (belt `PveHostMemoryLow` live). **Open
