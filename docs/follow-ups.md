@@ -178,10 +178,15 @@ six OVERSIZE items pointer-ized into
       at commit 49 min in and surfaced to the pusher as an opaque **500**. Cap raised to **32Gi**;
       sizing, the two contract gaps it exposed, and the ownership split now live in
       [`argocd/resources/registry/garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml)'s
-      header. **Split (ADR-085, mechanism=platform/policy=IaC):** homelab ships the prune+GC
-      CronJob in `argocd/resources/registry/`; **oracle-iac owns the keep-set** (its spec claims
-      retention; only it knows the served digest). **Next:** that CronJob, keep-set-driven; the
-      quota alert is PARKED — Garage has no per-bucket size metric, it needs the admin API.
+      header. **Split (ADR-085, mechanism=platform/policy=IaC):** oracle-iac owns the keep-set
+      (proposed derived-not-declared in **oracle-iac#664**: pinned digest + newest date tag +
+      previous pin) and untags with its push cred; homelab runs the collector. **Mechanism ran
+      for the first time 2026-09-08** (oracle handoff): `registry garbage-collect
+      --delete-untagged` in-pod, dry-run first — bucket 30.3 → 15.3 GiB; recipe in
+      [`runbook.md`](runbook.md) §Registry (first-party) (PR#1501). Cap arithmetic: ~10 GB/week
+      unattended from 09-15, so the collector must run weekly. **Next:** the GC CronJob in
+      `argocd/resources/registry/` (weekly, off the Tuesday release window); the quota alert
+      is PARKED — Garage has no per-bucket size metric, it needs the admin API.
       ⚠ ADR-121 states the policy too — one home wins here. Link: ADR-121, ADR-089, ADR-085.
 
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
