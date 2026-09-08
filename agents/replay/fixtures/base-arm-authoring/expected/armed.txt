@@ -1,0 +1,5 @@
+CALL gh issue view 1460 --repo teststuffstash/homelab --json body --jq .body
+OUT → Base: goal/12-slug (declared on #1460) — forking from it, PR opens against it, auto-merge ARMED (protected integration branch)
+OUT BASE_REF=goal/12-slug NO_ARM=<empty>
+OUT REACHED: end
+RC 0

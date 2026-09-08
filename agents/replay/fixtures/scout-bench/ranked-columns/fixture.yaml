@@ -52,7 +52,15 @@ env:
 # The digest title carries `date -u +%F`; the run date is not the subject of any assertion here.
 # Anchored on the title's parentheses so the PROSE dates in the body (which are content, and have
 # gone stale before) stay asserted.
+# The digest filing re-reads its own body through `agents/issue_body.py` before posting
+# (homelab#1460 leg 4) — the interpreter is DECLARED, per the hermeticity contract (cleanup move 6).
+requires:
+  - python3
 scrub:
+  # The digest body moved off the CALL line onto `--body-file` (homelab#1460 leg 4); `$WORK` is
+  # the tick's own mktemp scratch dir, so only the directory half is scrubbed. The body itself is
+  # asserted verbatim by the `DIGEST-BODY` line the observation point emits.
+  - s|--body-file [^ ]*/digest-body.md|--body-file <work>/digest-body.md|
   - s/(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9])/(<today>)/
 parts:
   - block:scout-seams

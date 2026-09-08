@@ -1,0 +1,38 @@
+# base-arm-authoring — how a `Base:` DECLARATION reaches the arming decision (homelab#1460 leg 5).
+#
+# WHY THIS FAMILY EXISTS. `base-arm-master` / `-nonprotected` / `-research-*` pin the arming GUARD
+# with `BASE_REF` already set by their bridges, and `preflight-malformed-block` pins the parser
+# HELPER by calling it from an observation point. Neither can say anything about the launcher's
+# actual read: the fetch, the parse, the refusal and the arming choice were unsentinelled text
+# between them (#1460 leg 5). `>>>REPLAY:base-declared-read>>>` closes that gap, and this table is
+# what the sentinel buys.
+#
+# THE CONTRACT — one issue, one changed byte per row:
+#   • block-authored   the `Base:` comes from the `---` machine block. It arms exactly as the
+#                      legacy twin does, and prints NO `LEGACY-GRAMMAR` line — the meter is the
+#                      migration's only progress signal (issue_body.py §The legacy read), so a
+#                      block-authored body that still metered would report the migration undone.
+#   • legacy-line      the same value in the historical column-0 form the `agent-session` legacy
+#                      VARIANT restates byte-identically. Same OUT line, same BASE_REF, same
+#                      NO_ARM — diff the two expected templates and the ERR meter is the whole
+#                      delta. That equivalence is the transition window's whole promise.
+#   • block-malformed  `Nope:` is not one of the 13 grammar keys, so `ib_get` exits 2 and the
+#                      pre-flight REFUSES: one line, RC 1, and post.sh never runs. Its absence
+#                      from the expected stream is the assertion that the refusal really exits —
+#                      read as "no declaration", this ride would fork from master while the body
+#                      declares a goal base.
+#
+# The `Base:` value is `goal/12-slug`, i.e. the ARMED arm, deliberately: the pre-existing family
+# already pins the un-armed arms, and a twin that never arms could not tell "read the value" from
+# "read nothing" (both fall through to master).
+name: base-arm-authoring
+mode: table
+source: agents/agent-session.sh
+requires:
+  - python3
+parts:
+  - block:preflight-body-parser
+  - file:bridge.sh
+  - block:base-declared-read
+  - file:post.sh
+rows: rows.psv

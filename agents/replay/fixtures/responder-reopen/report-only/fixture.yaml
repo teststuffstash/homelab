@@ -27,6 +27,11 @@ pins:
 name: responder-reopen-report-only
 mode: actions
 source: agents/coordinator/responder-argo.yaml
+# Its composition reaches `agents/issue_body.py` — the ONE body parser is Python (ADR-113),
+# so the interpreter is DECLARED rather than discovered as a mystery red (homelab#1460 leg 6;
+# the hermeticity contract, agents/replay/README.md cleanup-contract move 6).
+requires:
+  - python3
 parts:
   - file:bridge.sh
   - block:responder-reopen-presnap

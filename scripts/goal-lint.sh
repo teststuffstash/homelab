@@ -175,8 +175,10 @@ walk() {  # walk <issue-number> <depth>
     else
       leaves=$((leaves+1)); LEAF_NUMS+=("$k"); MEMBER_NUMS+=("$k")
       [ -n "$cb" ] || fail "#$k (work item) has no \`Base:\` — it will fork from master and its diff will swallow the goal branch"
-      printf '%s\n' "$b" | grep -qE '^[[:space:]]*Touches:' || warn "#$k has no \`Touches:\` — footprint is EXCLUSIVE (serial with every sibling)"
+      # Presence through the ONE parser too (homelab#1460 leg 5's survivor): the old column-0
+      # grep matched a block-authored body only because render_block writes keys at column 0.
       ctouches="$(line "$b" Touches "$slug#$k")"
+      [ -n "$ctouches" ] || warn "#$k has no \`Touches\` — footprint is EXCLUSIVE (serial with every sibling)"
       if [ -n "$ctouches" ]; then
         if [ "$(classify_touches "$ctouches")" = "codeowner-author" ]; then
           fail "#$k Touches lands in the operator-author set ($ctouches) — no worker can deliver it; split that half out or hand it to the seat (iac-lane.md §The platform lane)"

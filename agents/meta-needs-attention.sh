@@ -167,6 +167,8 @@ while true; do
               '.[] | select([.labels[].name | select(startswith("agent"))] | length == 0)
                    | select(.createdAt < $cutoff)
                    | select(.title != "Dependency Dashboard")
+                   # a SET EXCLUSION, not a grammar read (jail tooling, homelab#1460): the
+                   # column-0 test matches the legacy line AND the machine block's key line.
                    | select(.body // "" | test("(^|\\n)alert-fp:") | not)
                    | select(.title | startswith("stint:") | not)
                    # CONTAINERS are label-inert BY DESIGN and legitimately long-lived — flagging

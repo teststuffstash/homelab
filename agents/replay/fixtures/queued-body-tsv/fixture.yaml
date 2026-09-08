@@ -1,0 +1,36 @@
+# queued-body-tsv — the queued lane's BODY READ, as one decision table (homelab#1460 leg 5).
+#
+# WHY THIS FAMILY EXISTS. Every queued-lane decision downstream — the footprint hold, the per-base
+# PR cap, the class the launcher is handed, the `Base:` a child forks from — turns on eight
+# tab-separated fields this one pipeline emits, and the pipeline lived inside a `done < <(…)` that
+# no sentinel enclosed: the `queued-*` families pin what the loop DOES with the TSV and are blind
+# to how the TSV came to say it (verified by an isolated smoke, never by the harness). #1460 leg 5
+# sentinels it; this table is what the sentinel buys.
+#
+# THE CONTRACT — one issue, one authoring form per row, everything else held constant:
+#   • block-authored   the `---` machine block carries Touches/Base/Class. `Class: build` WINS
+#                      over the `task/fix` LABEL — the ADR-122 (2) precedence, and the reason the
+#                      class column cannot be read out of the jq above (a body parser cannot see
+#                      labels, so the label is passed in beside the body and loses).
+#   • legacy-line      the SAME footprint and base in the historical line-anchored form, with
+#                      `task/build` as the label since `Class` has no legacy body form. The TSV
+#                      row is byte-identical to the block twin's; the delta is two
+#                      `LEGACY-GRAMMAR` meter lines on stderr, which is the migration's only
+#                      progress signal (issue_body.py §The legacy read).
+#   • block-malformed  an unknown key inside the fences. The touches column is `!`, the base
+#                      column falls back to `-`, and the class comes from the label — the `!` is
+#                      what the loop above HOLDS on (rule #6: a body the parser refuses never
+#                      dispatches). Emitting `-` here instead would read as "no footprint
+#                      declared", i.e. exclusive, i.e. dispatchable — the fail-OPEN inversion.
+#
+# The `-` placeholders in the untouched columns are not cosmetic: they are the tab-collapse guard
+# the read loop undoes, and an empty middle field would shift every later field left.
+name: queued-body-tsv
+mode: table
+source: agents/coordinator-scan.sh
+requires:
+  - python3
+parts:
+  - file:bridge.sh
+  - block:queued-body-tsv
+rows: rows.psv

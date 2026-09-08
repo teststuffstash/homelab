@@ -1,0 +1,28 @@
+# homelab#1460 leg 5 — the BLOCK-AUTHORED twin of ../multiline-union: a machine-block footprint
+# and a legacy-line footprint reach the same verdict through the same reader.
+#
+# CONDITION UNDER REPLAY. Byte-for-byte ../multiline-union's world — same issue #123, same two
+# changed paths (`argocd/resources/test.yaml`, `docs/test.md`), same empty PR diff — with ONE
+# difference: the footprint is declared in the `---` machine block at the top of the body
+# (`Touches: argocd/**, docs/**`) instead of two line-anchored `Touches:` paragraphs.
+#
+# THE CONTRACT — the transition-window claim ADR-122 (3) rests on, and the one thing the helper
+# fixtures (`preflight-malformed-block`, `touches-malformed`) cannot say, because they drive the
+# parser directly rather than through the reviewer's own read:
+#   1. The verdict is IDENTICAL to the legacy twin's — `no escapes`, same two `gh` calls in the
+#      same order. Migrating an author's spelling must not move a review's outcome.
+#   2. The block path prints NO `LEGACY-GRAMMAR` line. That absence is the assertion: the meter
+#      is the migration's only progress signal (issue_body.py §The legacy read), so a block-
+#      authored body that still meters would be reporting the migration undone. Diff this
+#      expected file against ../multiline-union/expected/actions.txt — the ERR line is the whole
+#      delta, and that is the "block twin ≡ legacy" claim in its executable form.
+#
+# Parts: bridge.sh (seams: ISSUE, CHANGED, gh) + block:reviewer-touches-check
+name: reviewer-touches-block-authored
+mode: actions
+source: agents/reviewer-session.sh
+requires:
+  - python3
+parts:
+  - file:bridge.sh
+  - block:reviewer-touches-check
