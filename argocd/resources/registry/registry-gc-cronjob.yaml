@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: registry-garbage-collect
+  namespace: registry
+spec:
+  # Sunday 03:00 UTC — outside the Tuesday 07:17Z oracle release window (Touches: oracle-iac#664)
+  schedule: "0 3 * * 0"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          serviceAccountName: default
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: registry-gc
+              image: registry:3.0.0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "=== DRY RUN ===" && \
+                  registry garbage-collect --dry-run --delete-untagged /etc/distribution/config.yml && \
+                  echo "=== ACTUAL RUN ===" && \
+                  registry garbage-collect --delete-untagged /etc/distribution/config.yml
+              env:
+                - { name: REGISTRY_STORAGE, value: "s3" }
+                - { name: REGISTRY_STORAGE_S3_REGIONENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+                - { name: REGISTRY_STORAGE_S3_REGION, value: "garage" }
+                - { name: REGISTRY_STORAGE_S3_BUCKET, value: "registry" }
+                - { name: REGISTRY_STORAGE_S3_FORCEPATHSTYLE, value: "true" }
+                - { name: REGISTRY_STORAGE_S3_ENCRYPT, value: "false" }
+                - { name: REGISTRY_STORAGE_REDIRECT_DISABLE, value: "true" }
+                - name: REGISTRY_STORAGE_S3_ACCESSKEY
+                  valueFrom:
+                    secretKeyRef: { name: registry-garage-s3, key: access_key_id }
+                - name: REGISTRY_STORAGE_S3_SECRETKEY
+                  valueFrom:
+                    secretKeyRef: { name: registry-garage-s3, key: secret_access_key }
+                - { name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true" }
+                - { name: REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR, value: "" }
+                - name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING
+                  value: "{enabled: true, age: 1h, interval: 15m, dryrun: false}"
+                - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
+                - { name: REGISTRY_HTTP_RELATIVEURLS, value: "true" }
+                - { name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:5002" }
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+              resources:
+                requests: { cpu: "100m", memory: "256Mi" }
+                limits:   { cpu: "2",    memory: "1Gi" }
+          restartPolicy: Never
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
