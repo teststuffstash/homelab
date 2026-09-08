@@ -1537,7 +1537,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""
+  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   # #1451: the stack-wide sub-issue tree is fetched LAZILY — by the first repo in this stack that
@@ -3134,12 +3134,20 @@ EOF_GOVERNANCE
         # sets `gacted` and `continue`s, so it is already empty here. It is written anyway because
         # this leg WRITES, and a future edit to the terminal legs must not be able to make a
         # midpoint land on a goal a human has just ruled.
+        # ONE read per goal (homelab#1423): the tree-empty key below and the theme nomination
+        # after it both turn on this value, and each `ib_get` prints the LEGACY-GRAMMAR meter
+        # once — two reads would double-count the migration meter for every legacy-line goal.
+        if gbase_g="$(ib_get Base "${repo:-}#${g}" "$gbody")"; then
+          gbase_ok=1
+          # the unit_lane_record trim idiom: leading + trailing whitespace, nothing else.
+          gbase_g="${gbase_g#"${gbase_g%%[![:space:]]*}"}"; gbase_g="${gbase_g%"${gbase_g##*[![:space:]]}"}"
+        else
+          gbase_ok=0; gbase_g=""
+        fi
         if [ "$gopen_n_ckpt" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ] && [ -z "$gverdict" ]; then
-          if ! gbase_g="$(ib_get Base "${repo:-}#${g}" "$gbody")"; then
+          if [ "$gbase_ok" != 1 ]; then
             orphans="${orphans}[$repo] ⛔ goal #${g}: its \`Base:\` line is UNREADABLE (malformed machine block, or agents/issue_body.py is unreachable) — the tree-empty post-launch transition is HELD (rule #6: never fail INTO a write). Fix the block, or label the goal by hand.\n"
           else
-            # the unit_lane_record trim idiom: leading + trailing whitespace, nothing else.
-            gbase_g="${gbase_g#"${gbase_g%%[![:space:]]*}"}"; gbase_g="${gbase_g%"${gbase_g##*[![:space:]]}"}"
             if [ -n "$gbase_g" ] && [ "$gbase_g" = "${default_branch:-master}" ]; then
               if goal_enter_post_launch "$slug" "$repo" "$g" \
                    "🤖 **assembly-complete** — every child of this goal is closed and its adopted-open descendant set is EMPTY. This goal declares \`Base: ${gbase_g}\`, so it is a THEMED goal (ADR-126): its batching value landed in the level-2 theme branches, there is no assembly PR and deliberately no \`Assembly-for:\` trailer. The tree emptying IS its assembly-complete moment, so this transition is written here rather than at a merge (homelab#1450)." \
@@ -3156,6 +3164,108 @@ EOF_GOVERNANCE
             fi
           fi
         fi
+        # ── THEME NOMINATION + trigger (e), the deterministic half of ADR-126 v1.3.1 delta 4
+        # (homelab#1423 leg A). ADR-094: the SHELL nominates, the goal-checkpoint session judges
+        # membership (topic / live deliverable / servable lane / ¬hotfix) and mints the level-2 —
+        # nothing here writes a label, a comment or an issue. Only a THEMED goal (`Base:` = the
+        # repo default branch) nominates; a `goal/**` goal batches in its own assembly and is
+        # untouched. NO trigger of its own: a nomination rides along on a checkpoint that fires
+        # for (a)/(b)/(c) — a new sprout is undispositioned and wakes the checkpoint anyway, so a
+        # declined nomination needs no marker and nothing re-fires forever (the #1450 class).
+        # Everything reaches the session through the `--item` side value (`themes=`,
+        # `theme-complete=`), carried by `goal_theme_side` exactly like `assembly_cr_prs`.
+        gthemes=""; gtheme_done=""
+        if [ "$gbase_ok" != 1 ]; then
+          echo "  [$repo] ⚠ goal #${g}: \`Base:\` unreadable (malformed machine block, or agents/issue_body.py unreachable) — theme nomination skipped this pass"
+        elif [ -n "$gbase_g" ] && [ "$gbase_g" = "${default_branch:-master}" ]; then
+          # CANDIDATES = open descendants that are WORK items: not a container by title (the same
+          # regex scripts/goal-lint.sh uses), carrying none of the in-flight/terminal lifecycle
+          # labels (a queued-but-undispatched sprout IS a candidate — re-homing it is free), and
+          # whose own body reads `Base:` absent or = the default branch (a member already on a
+          # `goal/<g>-…` branch is themed; skip). The body read is ONE `gh issue view` per
+          # candidate — `kidsall` carries no bodies and there are few candidates per goal.
+          # #1451: `kidsall` is the STACK's list and `gdesc` holds `<repo>#<n>` keys. Candidates are
+          # the GOAL's-repo members only: a footprint is a repo-relative path (the same path in two
+          # repos is not a shared surface), the theme branch + its assembly PR live in the goal's
+          # repo, and the `themes=` side value carries bare numbers — so a cross-repo member is
+          # never nominated. `.repo` rides along so the body read names the candidate's own repo.
+          gcands="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg GREPO "$repo" \
+            '(($d | split(" ") | map(select(. != "")))) as $D
+             | ["agent/in-progress","agent/review","agent/done","agent/error","agent/blocked"] as $LC
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.repo == $GREPO)
+                    | select(.state == "OPEN")
+                    | select((.title // "") | test("^(post-launch|theme|stint|retro-batch):"; "i") | not)
+                    | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)]
+             | sort_by(.number) | .[] | "\(.repo) \(.number)"' 2>/dev/null || true)"
+          gfeed=""
+          while read -r crepo cn; do
+            [ -n "$cn" ] || continue
+            if ! cbody="$(gh issue view "$cn" --repo "${ORG}/${crepo}" --json body 2>/dev/null | jq -r '.body // ""' 2>/dev/null)"; then
+              echo "  [$repo] ⚠ goal #${g}: body of #${cn} unreadable — not a theme candidate this pass"; continue
+            fi
+            if ! cbase="$(ib_get Base "${repo:-}#${cn}" "$cbody")"; then
+              echo "  [$repo] ⚠ goal #${g}: #${cn} has a malformed machine block — not a theme candidate this pass"; continue
+            fi
+            cbase="${cbase#"${cbase%%[![:space:]]*}"}"; cbase="${cbase%"${cbase##*[![:space:]]}"}"
+            [ -z "$cbase" ] || [ "$cbase" = "${default_branch:-master}" ] || continue
+            ctouch="$(ib_get Touches "${repo:-}#${cn}" "$cbody")" || ctouch=""
+            gfeed="${gfeed}${cn}|${ctouch}\n"
+          done <<EOF_GCANDS
+$gcands
+EOF_GCANDS
+          ggroups="$(printf '%b' "$gfeed" | fp_theme_groups)"
+          while IFS='|' read -r gsurf gmem; do
+            [ -n "$gsurf" ] && [ -n "$gmem" ] || continue
+            echo "  [$repo] goal #${g}: THEME nominated ${gsurf} ← $(printf '%s' "$gmem" | sed 's/\([0-9][0-9]*\)/#\1/g')"
+            gthemes="${gthemes:+${gthemes};}${gsurf}:$(printf '%s' "$gmem" | tr ' ' '+')"
+          done <<EOF_GTHEMES
+$ggroups
+EOF_GTHEMES
+          [ -n "$gthemes" ] && goal_theme_side="${goal_theme_side:-} ${repo}:issue-${g}:themes=${gthemes}"
+          # ── trigger (e): a THEME whose tree is done and whose branch has no PR yet — the
+          # assembly PR `goal/<g>-<slug> → master` (body `Fixes #<theme>`) is DUE, and opening it
+          # is the checkpoint's act. The trigger retires by itself the moment ANY PR exists for
+          # the branch (`--state all`: a closed one counts — re-opening is a human's call, not a
+          # re-summons). rule #6: an unreadable body or PR probe HOLDS (no unit from (e), one ⚠).
+          # Same repo scope as the candidates (#1451): a theme is a level-2 of the goal in the
+          # goal's repo — its branch and assembly PR live there, and `theme-complete=` carries
+          # bare numbers. The theme's OWN descendants may sit in any repo (`parentKey` walk).
+          gthemes_open="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg GREPO "$repo" \
+            '(($d | split(" ") | map(select(. != "")))) as $D
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.repo == $GREPO)
+                    | select(.state == "OPEN") | select((.title // "") | test("^theme:"; "i"))]
+             | sort_by(.number) | .[] | "\(.repo) \(.number)"' 2>/dev/null || true)"
+          while read -r trepo tn; do
+            [ -n "$tn" ] || continue
+            # the theme's OWN descendants (walked by qualified parentKey, depth-bounded like gdesc): ≥ 1, all closed
+            tstate="$(printf '%s' "$kidsall" | jq -r --arg p "${trepo}#${tn}" '
+              . as $all
+              | def kids($x): [$all[] | select(.parentKey == $x) | "\(.repo)#\(.number)"];
+                def desc($x; $depth): if $depth > 6 then [] else (kids($x) as $k | $k + ([$k[] | desc(.; $depth + 1)] | add // [])) end;
+              (desc($p; 0) | unique) as $T
+              | [$all[] | select(("\(.repo)#\(.number)") as $k | ($T | index($k)) != null)]
+              | if length == 0 then "none" elif all(.state == "CLOSED") then "closed" else "open" end' 2>/dev/null || echo "unreadable")"
+            [ "$tstate" = "closed" ] || continue
+            if ! tbody="$(gh issue view "$tn" --repo "${ORG}/${trepo}" --json body 2>/dev/null | jq -r '.body // ""' 2>/dev/null)"; then
+              echo "  [$repo] ⚠ goal #${g}: theme #${tn} body unreadable — its assembly check is HELD this pass"; continue
+            fi
+            if ! tbase="$(ib_get Base "${repo:-}#${tn}" "$tbody")"; then
+              echo "  [$repo] ⚠ goal #${g}: theme #${tn} has a malformed machine block — its assembly check is HELD this pass"; continue
+            fi
+            tbase="${tbase#"${tbase%%[![:space:]]*}"}"; tbase="${tbase%"${tbase##*[![:space:]]}"}"
+            case "$tbase" in "goal/${g}-"?*) ;; *) continue ;; esac
+            if ! tprs="$(gh pr list --repo "${ORG}/${trepo}" --head "$tbase" --state all --json number 2>/dev/null | jq -r 'length' 2>/dev/null)"; then
+              echo "  [$repo] ⚠ goal #${g}: PR probe for theme #${tn} (${tbase}) unreadable — its assembly check is HELD this pass"; continue
+            fi
+            case "$tprs" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: PR probe for theme #${tn} (${tbase}) unreadable — its assembly check is HELD this pass"; continue ;; esac
+            [ "$tprs" -eq 0 ] || continue
+            echo "  [$repo] goal #${g}: THEME #${tn} complete (${tbase}) — assembly PR due"
+            gtheme_done="${gtheme_done:+${gtheme_done}+}${tn}"
+          done <<EOF_GTHEMES_OPEN
+$gthemes_open
+EOF_GTHEMES_OPEN
+          [ -n "$gtheme_done" ] && goal_theme_side="${goal_theme_side:-} ${repo}:issue-${g}:theme-complete=${gtheme_done}"
+        fi
         gck=""
         [ "$gundisp" -ge "${GOAL_CHECKPOINT_N:-5}" ] && gck="findings ${gundisp} undispositioned"
         if [ "$gopen_n_ckpt" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ]; then
@@ -3166,6 +3276,11 @@ EOF_GOVERNANCE
         # it: the container is asked to RULE the member, not to wait on it.
         if [ "$gdisp_ok" = 1 ] && [ "$gundisp_n" -gt 0 ]; then
           gck="${gck:+${gck} + }members ${gundisp_n} undispositioned"
+        fi
+        # Trigger (e) — ADR-126 v1.3.1: a theme's tree is done and its branch has no PR. Folded
+        # into the ONE emit below, so a goal gets one unit per pass whatever fired.
+        if [ -n "$gtheme_done" ]; then
+          gck="${gck:+${gck} + }theme #$(printf '%s' "$gtheme_done" | sed 's/+/ #/g') complete"
         fi
         if [ -n "$gck" ]; then
           echo "  [$repo] goal #${g}: CHECKPOINT due (${gck}; store ${gtot} total / ${gdisp} dispositioned)"
@@ -5247,10 +5362,20 @@ EOF
         done
       fi
       # <<<REPLAY:fu146-resumable-match<<<
+      # ADR-126 v1.3.1 (homelab#1423): a goal-checkpoint unit carries the goal lane's theme
+      # nominations (`themes=<surface>:a+b;…`) and completed themes (`theme-complete=n+m`) from
+      # the `goal_theme_side` map, the way `uharvest` carries the harvest disposition — read at
+      # the confirmed-dispatch site, keyed on (repo, item), appended to the `--item` string.
+      uthemes=""
+      if [ "$uclause" = "goal-checkpoint" ]; then
+        for entry in ${goal_theme_side:-}; do
+          case "$entry" in "${urepo}:${uitem}:"*) uthemes="${uthemes} ${entry#"${urepo}:${uitem}:"}" ;; esac
+        done
+      fi
       dispatch_rc=0
       bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
         --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
-        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uworkbranch}${uharvest}" \
+        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uworkbranch}${uharvest}${uthemes}" \
         || dispatch_rc=$?
       if [ $dispatch_rc -eq 3 ]; then
         echo "  FU-146: exit 3 — ${name}/${urepo}/${uitem} taken by racing dispatcher; trying next unit"

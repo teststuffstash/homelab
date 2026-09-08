@@ -6,6 +6,7 @@ CALL gh issue comment 29 --repo teststuffstash/circles --body <assembly-complete
 OUT   [circles] ADR-102 midpoint: goal #29 → assembly-complete via PR #88, labelled goal/post-launch, left OPEN (bucket #77)
 OUT GACTED post-launch
 OUT UNITS <none>
+OUT THEMES <none>
 OUT ORPHANS <none>
 OUT REACHED: end
 RC 0

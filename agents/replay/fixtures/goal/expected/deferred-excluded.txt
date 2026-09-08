@@ -5,6 +5,7 @@ CALL gh api -X PATCH repos/teststuffstash/circles/issues/comments/424242 -f body
 OUT   [circles] goal #29: CHECKPOINT due (child-set complete pre-launch; store 6 total / 6 dispositioned)
 OUT GACTED <none>
 OUT UNITS goal-checkpoint|circles|issue-29 
+OUT THEMES <none>
 OUT ORPHANS <none>
 OUT REACHED: end
 RC 0

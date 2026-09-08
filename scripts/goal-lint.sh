@@ -106,7 +106,8 @@ gbase="$(line "$body" Base)"
 if [ -z "$gbase" ]; then
   fail "no \`Base:\` line — children inherit nothing and dispatch against master silently (oracle-fleet#281); the decompose clause refuses it (#1053)"
 elif [ "$gbase" = master ]; then
-  warn "Base: master — legitimate only with a stated reason; a direct-master Goal is more likely a stint (or a v1.3 themed Goal whose level-2 themes carry goal/<n>-<theme> branches)"
+  : # ruled AFTER the walk (homelab#1423): `ok` when ≥ 1 `theme:` container carries an existing
+    # goal/<goal>-<slug> branch (the ADR-126 themed shape), today's warn otherwise
 elif printf '%s' "$gbase" | grep -qE "^goal/${goal}-[a-z0-9][a-z0-9.-]*$"; then
   if branch_exists "$gbase"; then ok "Base: $gbase (branch exists)"; else
     fail "Base: $gbase — the branch does NOT exist. IL-G02: the AUTHOR cuts it from master before queueing anything; nothing in the machinery creates it (the first child ride fails at clone otherwise)"; fi
@@ -125,13 +126,20 @@ has_label agent/error && fail "agent/error on the goal — human-first breaker; 
 
 # ── the tree ────────────────────────────────────────────────────────────────────────────────
 leaves=0; containers=0; edges=0; closed=0
+# ADR-126 themes (homelab#1423): level-2 `theme:` containers whose `Base:` names an EXISTING
+# goal/<goal>-<slug> branch — what turns the goal's `Base: master` from a warn into an ok.
+themed_ok=0
 declare -a LEAF_NUMS=()
 # Every OPEN descendant the walk sees, bucket excluded — the set the CONTAINER must have a
 # disposition for (ADR-122 (4)). Collected here rather than re-walked: the tree read is expensive
 # and the disposition report is a view over the same members the rest of this lint already judged.
 declare -a MEMBER_NUMS=()
-walk() {  # walk <issue-number> <depth>
-  local n="$1" d="$2" kids ij t b l par
+walk() {  # walk <issue-number> <depth> [<theme-base> <theme-touches> <theme-number>]
+  # The last three carry the ENCLOSING theme down the recursion (ADR-126, homelab#1423): a
+  # theme's child must base the theme's branch (parent-relative — equal to the goal's `master`
+  # or to ANOTHER theme's branch is a fail) and its `Touches` must sit inside the theme's
+  # fix-surface (`fp_theme_member`, agents/footprint.sh — v1.3.1 delta 2's mechanical half).
+  local n="$1" d="$2" tbase="${3:-}" ttouches="${4:-}" tnum="${5:-}" kids ij t b l par is_theme
   # An unreadable read here is a PROBE FAILURE, not a lint verdict: the walk continues (report
   # everything else it CAN see) but the run may never report clean — the exit-code contract
   # (line 16) says exit 2, and `incomplete` is what carries that to the exit block. walk() runs
@@ -149,7 +157,29 @@ walk() {  # walk <issue-number> <depth>
     # recursion into its subtree — a whole unwalked branch reported clean.
     par="$(api "repos/$slug/issues/$k/sub_issues?per_page=1" --jq 'length')" || { warn "#$k: sub-issue count unreadable"; incomplete=1; par=0; }; par="${par:-0}"
     cb="$(line "$b" Base "$slug#$k")"
-    if [ -n "$cb" ]; then
+    ctouches="$(line "$b" Touches "$slug#$k")"
+    if printf '%s' "$t" | grep -qiE '^theme:'; then is_theme=1; else is_theme=0; fi
+    if [ "$is_theme" -eq 1 ]; then
+      # A THEME owns a branch (ADR-126): `Base: goal/<goal>-<slug>`, cut from master by the
+      # goal-checkpoint at theme formation (a hand-authored theme's author does the same — IL-G02's
+      # operator step is the GOAL's own branch only), and a `Touches` fix-surface its children
+      # must fit inside (v1.3.1 delta 2).
+      if [ -z "$cb" ]; then
+        fail "#$k (theme) has no \`Base:\` — a theme owns a goal/${goal}-<slug> branch: the checkpoint cuts it at theme formation (a hand-authored theme's author does the same); nothing else creates it. Without it its children base nothing and the assembly PR has no head"
+      elif ! printf '%s' "$cb" | grep -qE "^goal/${goal}-[a-z0-9][a-z0-9.-]*$"; then
+        fail "#$k (theme) Base: '$cb' — must name goal/${goal}-<slug> (this goal's own number; \`master\` is the GOAL's base, never a theme's)"
+      elif ! branch_exists "$cb"; then
+        fail "#$k (theme) Base: $cb — the branch does NOT exist. The checkpoint cuts it at theme formation (a hand-authored theme's author does the same); nothing else creates it — cut it from master before queueing anything under the theme"
+      else
+        themed_ok=$((themed_ok+1))
+      fi
+      [ -n "$ctouches" ] || warn "#$k (theme) has no \`Touches\` — no fix-surface, so membership of its children cannot be checked (v1.3.1 delta 2)"
+    elif [ -n "$tbase" ]; then
+      # inside theme #$tnum: parent-relative — the child bases the THEME's branch, nothing else
+      if [ -n "$cb" ] && [ "$cb" != "$tbase" ]; then
+        fail "#$k Base: '$cb' — a child of theme #$tnum must base the theme's branch ($tbase); '$cb' is $([ "$cb" = "$gbase" ] && echo "the GOAL's base" || echo "another branch") and its diff would land outside the theme's roll"
+      fi
+    elif [ -n "$cb" ]; then
       if [ "$cb" = "$gbase" ]; then :; elif printf '%s' "$cb" | grep -qE "^goal/${goal}-" && branch_exists "$cb"; then :;
       else fail "#$k Base: '$cb' — must equal the goal's Base ($gbase) or name an EXISTING goal/${goal}-<theme> branch"; fi
     fi
@@ -171,14 +201,32 @@ walk() {  # walk <issue-number> <depth>
       # a post-launch bucket's children base master by design (ADR-102) — no Base: expected
       if [ -z "$cb" ] && ! printf '%s' "$t" | grep -qiE '^post-launch:'; then warn "#$k (container, depth $d) has no \`Base:\` — its children inherit nothing"; fi
       printf ' %s ' "$l" | grep -qE ' agent/(queued|in-progress) ' && fail "#$k is a container (sub-issues, no agent-fix) but carries a dispatch label — containers stay label-inert"
-      [ "$d" -lt 3 ] && walk "$k" $((d+1))
+      if [ "$is_theme" -eq 1 ]; then
+        [ "$d" -lt 3 ] && walk "$k" $((d+1)) "$cb" "$ctouches" "$k"
+      else
+        [ "$d" -lt 3 ] && walk "$k" $((d+1)) "$tbase" "$ttouches" "$tnum"
+      fi
     else
       leaves=$((leaves+1)); LEAF_NUMS+=("$k"); MEMBER_NUMS+=("$k")
       [ -n "$cb" ] || fail "#$k (work item) has no \`Base:\` — it will fork from master and its diff will swallow the goal branch"
       # Presence through the ONE parser too (homelab#1460 leg 5's survivor): the old column-0
       # grep matched a block-authored body only because render_block writes keys at column 0.
-      ctouches="$(line "$b" Touches "$slug#$k")"
+      # (`ctouches` is read once, above the container/leaf split — the theme rule needs it too.)
       [ -n "$ctouches" ] || warn "#$k has no \`Touches\` — footprint is EXCLUSIVE (serial with every sibling)"
+      if [ -n "$ctouches" ] && [ -n "$tbase" ] && [ -n "$ttouches" ]; then
+        # MEMBERSHIP (v1.3.1 delta 2, mechanical half): every non-exempt entry of the child's
+        # footprint sits inside the theme's fix-surface; agents/replay/** + suite pins + FSM
+        # files are the implicit pin-surface allowance. Named per escaping entry, so the author
+        # knows which half to split out.
+        if ! fp_theme_member "$ctouches" "$ttouches"; then
+          esc=""
+          for te in $(printf '%s' "$ctouches" | tr ',' ' '); do
+            [ -n "$te" ] || continue
+            fp_theme_member "$te" "$ttouches" || esc="${esc} ${te}"
+          done
+          fail "#$k Touches escapes theme #$tnum's fix-surface ($ttouches):${esc:- (undeclared or leading-glob footprint)} — a theme member's footprint is ⊆ the theme's Touches (pin surfaces exempt); split that half out or widen the theme"
+        fi
+      fi
       if [ -n "$ctouches" ]; then
         if [ "$(classify_touches "$ctouches")" = "codeowner-author" ]; then
           fail "#$k Touches lands in the operator-author set ($ctouches) — no worker can deliver it; split that half out or hand it to the seat (iac-lane.md §The platform lane)"
@@ -204,11 +252,20 @@ EOF_CGUARD
       fi
       printf '%s\n' "$b" | grep -qiE 'acceptance|deliverable|done when|expected' || warn "#$k states no acceptance/deliverable anywhere in its body — one deliverable with its own acceptance"
       e="$(api "repos/$slug/issues/$k/dependencies/blocked_by?per_page=50" --jq 'length')"; edges=$((edges + ${e:-0}))
-      [ "$par" -gt 0 ] && [ "$d" -lt 3 ] && walk "$k" $((d+1))
+      [ "$par" -gt 0 ] && [ "$d" -lt 3 ] && walk "$k" $((d+1)) "$tbase" "$ttouches" "$tnum"
     fi
   done
 }
 walk "$goal" 1
+
+# ── the goal's `Base: master`, ruled with the tree in hand (ADR-126, homelab#1423) ───────────
+if [ "$gbase" = master ]; then
+  if [ "$themed_ok" -ge 1 ]; then
+    ok "Base: master — a THEMED Goal (ADR-126): $themed_ok \`theme:\` container(s) carry an existing goal/${goal}-<slug> branch; the batching lives there, merge-is-deploy on master"
+  else
+    warn "Base: master — legitimate only with a stated reason; a direct-master Goal is more likely a stint (or a v1.3 themed Goal whose level-2 themes carry goal/<n>-<theme> branches — none found in this tree)"
+  fi
+fi
 
 # ── dispositions (ADR-122 (4), homelab#1419) ────────────────────────────────────────────────
 # WARN, never FAIL: an undispositioned member is not an authoring mistake — it is work the
