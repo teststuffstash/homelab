@@ -7909,3 +7909,23 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   directive never reaches the worker), #1456 (SIGPIPE producer hunt + Failed-tick belt — code-diffable
   per its own body), #1451 (cross-repo descendant walk), #1442 (hermeticity audit beyond GH_TOKEN);
   three of them share the scan/launcher footprint and serialize. Doorbell rung.
+- **12:0x–13:3xZ (operator, hardware thread → pve capacity):** the ARC pool is the operator's binding
+  cost (3 slots; oracle-fleet fans out 2 ARC + 1 proxmox-vm per push; 7 d: peak 27 queued runs, ~9 at
+  07–09/17–19 UTC — spike §CI side re-read). Direction settled by the operator: NOT more RAM in pve
+  (concentration risk) — a second hypervisor (the dual-Xeon 4U; hardware repo carries the read, ADR
+  pending here). Interim on pve as-is: **wk-03 8→16Gi/12c funded by ci-runner-01 16→12Gi** (tofu
+  applied, both VMs rebooted, wk-03 Ready at 13.8Gi allocatable — PR#1518, auto-merge armed) and
+  **`maxRunners` 4→6 direct to master** (09b81dd9 — pin-only-lint refuses real edits to
+  arc-runners.yaml via PR, ADR-100 escape hatch); ARS live at max 6. While there: **PveThinPoolFillingUp
+  firing at 82.3 %** (24 h min 66.8 — untrimmed deletions: wk-01 held 66 G allocated for 35 G used)
+  → fstrim jobs triggered on wk-01/02/03 + in-guest on ci-runner-01 → **66.1 %**. Note: `devbox run
+  tf-apply` returned exit 127 AFTER "Apply complete!" (state verified correct) — GAPS sighting.
+- **13:3x–14:4xZ (operator, same thread → wind-down):** PR#1518 merged 13:23Z. **FU-224 "run all of
+  it"**: longhorn-manager 150m→300m, cilium agent 250m→500m, viewer bucket-sync 1→2 — tofu applied,
+  both DaemonSets rolled with oracle's delta job running (volumes healthy throughout), PR#1519
+  merged, viewer rolled via ArgoCD. **FU-225 rewritten** (three re-rulings had made it unreadable)
+  to its one remaining action, then done: `PveHostMemoryLow` (MemAvailable < 3GiB for 15m) with a
+  behaviour fixture, PR#1520 merged, rule loaded 14:31Z inactive/ok; **FU-225 ARCHIVED**. Direction
+  recorded for the pickup: the second hypervisor (4U) is the operator's answer to pve
+  concentration — ADR pending on the buy. Wind-down: bookkeeping pushed once (this push).
+
