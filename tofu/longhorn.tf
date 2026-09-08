@@ -185,7 +185,10 @@ resource "helm_release" "longhorn" {
     # ~352Mi, csi small). ⚠ VERIFY post-apply the pods actually gained the resources — if the chart
     # ignores these keys, instance-manager/engine-image also stay BestEffort (Longhorn-managed; a
     # residual needing a Longhorn setting/patch — see FU-116).
-    longhornManager = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }], resources = { requests = { cpu = "150m", memory = "512Mi" }, limits = { cpu = "150m", memory = "512Mi" } } }
+    # FU-224 (2026-09-08): manager cpu 150m → 300m (req==limit kept, Guaranteed QoS per FU-112b) — the
+    # 150m was sized for memory, and the throttling panel read 9–21 % of CFS periods throttled per
+    # manager pod (attach/rebuild/scheduling plane, not the data path — instance-manager is unlimited).
+    longhornManager = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }], resources = { requests = { cpu = "300m", memory = "512Mi" }, limits = { cpu = "300m", memory = "512Mi" } } }
     longhornDriver  = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }], resources = { requests = { cpu = "100m", memory = "256Mi" }, limits = { cpu = "100m", memory = "256Mi" } } }
     # Prometheus ServiceMonitor for longhorn-manager (:9500 longhorn_* metrics: volume
     # robustness/state, node storage, replica counts). Scraped via the relaxed selector
