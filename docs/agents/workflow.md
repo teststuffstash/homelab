@@ -418,15 +418,19 @@ replay harness** — a play's output is judgment, not an action stream, so its g
 lint (the lint greps play passages), ADR-094's launcher-owned orders shrinking the judgment
 surface, and the one-ride-per-state debounces bounding a bad judgment's cost.
 
-**What the pin-vacuity gate proves — and does not (homelab#1107, refined #1215/#1225,
-2026-09-02).** It proves red-on-base for actions-mode fixtures on default-branch PRs. It
-deliberately does NOT judge: `mode: suite` fixtures (self-asserting — they resolve the PR's own
-sources), comment/blank-only diffs to commentable fixture files (documentation, not a pin claim
-— #1215), or PRs onto **stacked bases** (`goal/**`: the fix may predate the PR there; those get
-a "cannot prove vacuity" warning, never a verdict). And a **pure-absence contract** cannot red
-on any base — author such fixtures to pin a positive instead (the exactly-one-CALL pattern,
-PR#1272's repair). Whether the fixture REACHES the changed lines is #1224's parts-coverage leg,
-not this gate.
+**What the pin-vacuity gate proves — and does not (homelab#1107, refined #1215/#1225, unit
+re-keyed to the PR 2026-09-08 — ADR-103 addendum, homelab#1489).** It proves that the PR
+carries **at least one** changed actions-mode fixture that reds on the default-branch base tree.
+Changed fixtures that pass on base beside that pin are listed as a `::notice`, never a verdict —
+a clause PR legitimately touches fixtures for reasons that are not pins (a `parts:` list forced
+by a clause gaining a dependency, a header cross-reference, restored coverage of an unmodified
+arm, a pure-absence twin beside its positive), and judging each of those per fixture produced
+four false-positive faces in six days. It deliberately does NOT judge: `mode: suite` fixtures
+(self-asserting — they resolve the PR's own sources) or PRs onto **stacked bases** (`goal/**`:
+the fix may predate the PR there; those get a "cannot prove vacuity" warning, never a verdict).
+A PR whose ONLY fixture touch is a comment edit reds — no fixture reds on base, which is the
+#1028 cosmetic-edit workaround the gate exists to refuse. Whether the pinning fixture REACHES
+the changed lines is #1224's parts-coverage leg, not this gate.
 
 ### Hazards to bake in from day one
 

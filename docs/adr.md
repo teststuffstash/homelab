@@ -1574,6 +1574,22 @@ the debounce's comment-store moves last (load-bearing, replay-first); mechanism 
 docs/agents/workflow.md (replay ratchet), observability-and-retro.md (channels); the weekly KPI
 spec lives in docs/agents/retros/BRIEF.md (pointer fixed 2026-08-10 — it never lived in
 observability-and-retro.md).
+**Addendum (2026-09-08, homelab#1489 — the pin-vacuity gate's unit is the PR):** rule 1's
+pin-vacuity gate (homelab#1107) asserts that the PR carries **at least one** changed fixture that
+reds on the base tree; changed fixtures that pass on base beside it are reported (`::notice`),
+never a verdict. **Considered:** the per-fixture quantifier as shipped (every changed fixture
+must red) plus carve-outs per non-pin reason — rejected: four false-positive faces in six days
+(#1215/#1225/#1489), each an operator-direct governance commit, and PR#1468 deadlocked 26 CI
+cycles on a `parts:` edit that was neither droppable nor a pin; a `vacuity-exempt:` fixture key —
+rejected: a free-text opt-out on an authoring surface (ADR-122: subtract readers, do not add
+one). **Why:** #1107 asked whether a PR's pin reproduces its bug; per-fixture asked whether every
+fixture touch is a pin, which no honest clause PR can promise (composition edits, header
+cross-references, restored coverage, absence twins). **Consequences:** the comment-only
+carve-out (#1215) is deleted — a comment-only fixture touch beside a clause change reds again
+(the #1028 cosmetic-edit hole it had reopened); escape (b) of the routing rule generalizes to
+"one real pin in the PR", escape (a) survives only for PRs with no observable clause change; the
+rubric's per-fixture vacuous-pin bullet stays the human-side read; the gate's self-pin still
+awaits its extraction into a script (#1224's territory).
 
 ### ADR-104 — Research routing: deterministic slot draws on curated pools; resilience from shape, not rules
 
