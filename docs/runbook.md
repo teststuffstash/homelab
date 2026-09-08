@@ -617,7 +617,7 @@ ADR-121) has a 32Gi bucket cap and **no automatic retention** (FU-203). Ownershi
 split: the stack's IaC decides the keep-set (oracle-iac#664 — the pinned digest + the newest date
 tag + the previous pin) and untags/deletes what it no longer wants with its push credential
 (`DELETE /v2/<repo>/manifests/<digest>` — `REGISTRY_STORAGE_DELETE_ENABLED=true`); homelab runs the
-collector, which is the only step that needs the `registry` namespace.
+collector, which is the only step that needs the `registry` namespace. The standing collector is the `registry-garbage-collect` CronJob (runs Sundays 03:00 UTC; see `argocd/resources/registry/registry-gc-cronjob.yaml`); the recipe below is the ad-hoc path if needed between runs.
 
 **Symptom of a full bucket:** the pusher sees an opaque **500** on a blob PATCH/PUT (Garage's
 `403 Bucket size quota is reached` is swallowed by the registry), `api_s3_error_counter` does not
