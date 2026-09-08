@@ -10,33 +10,32 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-08 late corpus session, ~19:xxZ wind-down — the five-PR read + S8 fan-out):**
-  (1) **S8 #1423 is BUILDING as three subagent PRs** (legs A scan/footprint/goal-lint
-  `fix/s8-7a-theme-nominate`, B reviewer depth re-key `fix/s8-7b-depth-rekey`, D checkpoint play
-  + docs `fix/s8-7d-theme-play-docs`; bodies say `Part of #1423`, the seat closes #1423) — the
-  briefs' design pins are in TICK-LOG 2026-09-08 (nominations ride the checkpoint unit as
-  `themes=`, trigger (e) `theme-complete=`, opt-in = `Base: master`, depth guard subtracts
-  `theme:` hops). NEXT: codeowner-read each PR (agents/** parks), then **#1424** (FSM + doc
-  currency; the theme rows + trigger (e) go in issue-lifecycle-fsm.yaml, the new fixtures in
-  `replay:`), then **closeout 1** (docs-cleanup over S8's surfaces, the FU sweep: FU-168 fence
-  half, FU-199 board faces, FU-201/FU-174 cross-refs; built-vs-left comment on #1418;
-  `epic_dispositions.py` rows; ROADMAP S8 row). (2) **Retro r3 batch container NOT yet
-  authored** (PR#1524 merged 18:04Z; the opus report's five findings + the deepseek cell's six —
-  F1 carrier = PR#1514 shipped; F3 churn evidence held today: the updater merged master into
-  #1513/#1515 four times each while un-reviewed — #1452's merge-ready-only skip is NOT holding,
-  read `agents/update-pr-branch.sh` before filing) — a corpus sitting: `retro-batch: platform-r3`
-  parent + children per finding, bind-at-filing. (3) **#1527** (the reflex/scan `ARBITRATE`
-  escalation notices are picked as the fix round's directive after PR#1514) is filed inert under
-  #1467 — the subtraction (notices onto the agent-summary comment) is corpus work. (4) Loop
-  finding — ANSWERED and recorded on FU-199: both 13:1xZ arbitrate sessions died on an
-  Anthropic 522 (`coordinator-homelab-pr-1513` exit 1 at 13:14:28Z) after posting the ruling and
-  before dispatching round 4; the arbitrate clause has no "ruled, no round" re-arm (ci-red has
-  it). Also seen: the 18:16Z arbitrate session on #1515 correctly ruled the escalation stale, and
-  noted the ci-red re-label at 18:10 was applied against a sha that had stopped being head 100s
-  earlier (a scan racing the seat's push). #1532 (minted by #1162's checkpoint, riding) carries
-  NO `Base` — the mint play skipped the inherited `Base=master`; goal-lint FAILs it. (5) Handoff
-  inbox: the circles ADR request (real-content seam; operator decision) — unchanged. (6) #946 A5
-  evidence seed, the oracle pin ping-pong, 23 stale archive entries → `/docs-cleanup` — unchanged.
+- **⚑ PICKUP (2026-09-08 late corpus session, ~19:1xZ wind-down — the five-PR read + S8 #1423 BUILT):**
+  (1) **S8 #1423 is DONE** — PR#1535 (scan nomination + trigger (e) + footprint predicates +
+  goal-lint), PR#1531 (reviewer depth re-key), PR#1530 (checkpoint theme play + docs); closed with
+  the built-vs-left comment (themes form within the Goal's own repo by decision; the pre-assembly
+  theme-branch refresh is a seat push — stated as inference, verify on the first live theme).
+  NEXT corpus session: **#1424** (FSM + doc currency: `issue-lifecycle-fsm.yaml` gains the theme
+  rows — nomination side value, trigger (e) — with `replay:` on the four new `goal/theme-*` rows
+  and `reviewer-sprout-depth`; merge-path FSM per-lane guards from #1422; chainless-redesign
+  §The jail stint closeout act; README doc table; ROADMAP S8 row → DONE + dogfood pointer), then
+  **closeout 1** (docs-cleanup over S8's surfaces, the FU sweep: FU-168 fence half, FU-199 board
+  faces, FU-201/FU-174 cross-refs; built-vs-left comment on #1418; `epic_dispositions.py` rows;
+  the ≥72h quiet window arms the close). (2) **Retro r3 batch container NOT yet authored**
+  (PR#1524 merged 18:04Z; opus F1 carrier = PR#1514 shipped; F3 churn held today — the updater
+  merged master into un-reviewed #1513/#1515/#1530/#1535 repeatedly: #1452's merge-ready-only
+  skip is NOT holding, read `agents/update-pr-branch.sh` before filing) — `retro-batch:
+  platform-r3` parent + children per finding, bind-at-filing. (3) **#1527** (reflex/scan
+  `ARBITRATE` notices served as the fix round's directive after PR#1514) filed inert under #1467 —
+  the subtraction (notices onto the agent-summary comment) is corpus work. (4) Loop findings
+  recorded on FU-199 (ruled-but-never-dispatched face: the 13:14Z Anthropic 522 killed both
+  arbitrate sessions after their ruling) and here: #1532 (minted by #1162's checkpoint, riding)
+  carries NO `Base` — the mint play skipped the inherited `Base=master`; the ci-red re-label on
+  #1515 at 18:10 was applied against a sha 100s dead (a scan racing a seat push). Subagent card
+  fact: no shellcheck gate exists in devbox.json/ci.yaml despite FU-185's "shellcheck-gated".
+  (5) Handoff inbox: the circles ADR request (real-content seam; operator decision) — unchanged.
+  (6) #946 A5 evidence seed, the oracle pin ping-pong, 23 stale archive entries → `/docs-cleanup`
+  — unchanged.
 - **⚑ PICKUP (2026-09-08 evening seat — the failing-workflows read): DONE, nothing to pick up.**
   Updater (PR#1521), responder model (PR#1522), agent-session bundle vars (PR#1523) merged and
   verified live (16:30 cron green on 12 repos; retro PR#1524 harvested; `respond-wm2cf` ran a real

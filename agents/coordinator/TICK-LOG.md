@@ -8011,4 +8011,17 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   (Goal→theme→child = 1, its sprout = 2). Leg C (goal-lint) folded into A (shares the predicate).
   Session ctx at fan-out: 609k — trailing work only after the three terminals; #1424 + closeout
   1 + the r3 batch are the next session's (pickup written).
+- **18:2x–19:1xZ S8 #1423 LANDED** — three subagent PRs, PR flow granted, each bot-approved
+  (author == sole codeowner ⇒ the waiver: the seat's diff read IS the gate; `gh pr review
+  --approve` on one's own PR is refused): **PR#1531** (leg B, 444/444) → **PR#1535** (leg A,
+  448/448 after a content rebase onto PR#1513's qualified-key goal lane — the seat named the
+  three jq reads to adapt; theme candidates/containers scoped to the goal's own repo by decision)
+  → **PR#1530** (leg D; held un-armed until A/B were in, then re-armed; the reviewer had stood
+  aside on a checks-pending head and re-picked on its own). #1423 closed with the built-vs-left
+  comment; #1418's only open original is #1424. Answered en route: the operator's
+  `ert-delta-attended-vr4kw` question — NOT bound on the SA400 or Garage (S3 ~3 req/s, block
+  writes ~3 KB/s), single-threaded CPU-bound (0.96 of 1 core, no throttling) in its populate
+  phase with per-artifact cost growing (rate/s 6312→1438 over 2h) — an oracle-fleet ingester
+  fact; the SA400 still shows 90–145 ms write latency but is out of this job's path. Bookkeeping
+  pushed once at wind-down (this push); ctx ≈ 770k at exit.
 
