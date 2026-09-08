@@ -4519,6 +4519,59 @@ EOF_GTHEMES_OPEN
     done
     # <<<REPLAY:arbitrate-ordinary-path-belt<<<
 
+    # fleet-fault un-latch (FU-069, homelab#1539): when a PR carries `agent/error` from a fleet fault
+    # and the cited cause issue is CLOSED with green CI, remove the label and post one line. Rule #6
+    # holds all unreadable probes. Human-applied latches (no marker) and anomaly latches (STEP-0,
+    # verdict-count) are untouched — those are human-first cases that stay human-first.
+    # The marker format: `<!-- fleet-fault cause=<owner/repo>#<n> prs=520,521,522,524 -->`
+    # >>>REPLAY:fleet-fault-unlatch>>>
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|.number' 2>/dev/null); do
+      # Fetch PR comments to find the fleet-fault marker
+      pr_json_ff="$(gh pr view "$u" --repo "$slug" --json comments,statusCheckRollup 2>/dev/null)" || pr_json_ff=''
+      if [ -z "$pr_json_ff" ]; then
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read PR state (rule #6). No label write; next tick.\n"
+        continue
+      fi
+      # Find the newest AGENT_ERROR: comment with fleet-fault marker
+      ff_data="$(printf '%s' "$pr_json_ff" | jq -r '[.comments[]? | select((.body // "") | test("AGENT_ERROR:") and test("fleet-fault cause="))] | sort_by(.createdAt) | last | {body: (.body // ""), exists: true} // {exists: false}' 2>/dev/null || echo '{exists: false}')"
+      if ! printf '%s' "$ff_data" | jq -e '.exists' >/dev/null 2>&1; then
+        # No fleet-fault marker — this is a human-applied or anomaly latch, hold it
+        continue
+      fi
+      # Extract cause repo and issue from fleet-fault marker
+      cause_repo="$(printf '%s' "$ff_data" | jq -r '.body | match("fleet-fault cause=([^#]+)#([0-9]+)"; "g") | .captures[0].string' 2>/dev/null)" || cause_repo=''
+      cause_issue="$(printf '%s' "$ff_data" | jq -r '.body | match("fleet-fault cause=([^#]+)#([0-9]+)"; "g") | .captures[1].string' 2>/dev/null)" || cause_issue=''
+      if [ -z "$cause_repo" ] || [ -z "$cause_issue" ]; then
+        # Marker format error — hold it
+        continue
+      fi
+      # Check if the cause issue is CLOSED
+      if ! cause_state="$(gh issue view "$cause_issue" --repo "$cause_repo" --json state 2>/dev/null | jq -r '.state' 2>/dev/null)"; then
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read cause issue ${cause_repo}#${cause_issue} (rule #6). No label write; next tick.\n"
+        continue
+      fi
+      if [ "$cause_state" != "CLOSED" ]; then
+        # Cause is still open — hold the latch
+        continue
+      fi
+      # Check if CI is green at the PR head
+      ff_ci="$(printf '%s' "$pr_json_ff" | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
+      case "$ff_ci" in ''|*[!0-9]*)
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read CI state (rule #6). No label write; next tick.\n"
+        continue
+      ;;esac
+      if [ "$ff_ci" -ne 0 ]; then
+        # CI is still red — hold the latch
+        continue
+      fi
+      # All conditions met: remove agent/error label and post a removal comment
+      gh pr edit "$u" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 \
+        && gh pr comment "$u" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
+        && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: PR #${u} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
+        || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on PR #${u} — human check\n"
+    done
+    # <<<REPLAY:fleet-fault-unlatch<<<
+
     # ci-red (FU-115 / MP-T12, CONTENT-BASED rewrite of the old ci-red-stale time-gate): an ARMED
     # red PR is invisible to the whole merge path (updater + reviewer both skip red). The OLD trigger
     # was "quiet > RED_STALE_HOURS(4h)" — a coarse LAST-ACTIVITY timer that a no-op fix round's OWN

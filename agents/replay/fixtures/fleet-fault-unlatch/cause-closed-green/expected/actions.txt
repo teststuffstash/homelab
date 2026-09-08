@@ -1,0 +1,4 @@
+CALL gh pr view 10 --repo teststuffstash/homelab --json comments,statusCheckRollup
+CALL gh issue view 1000 --repo teststuffstash/homelab --json state
+CALL gh pr edit 10 --repo teststuffstash/homelab --remove-label agent/error
+CALL gh pr comment 10 --repo teststuffstash/homelab --body un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (teststuffstash/homelab#1000) is now CLOSED and CI is green — `agent/error` cleared, dispatch re-enabled.

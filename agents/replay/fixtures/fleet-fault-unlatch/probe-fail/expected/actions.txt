@@ -1,0 +1,1 @@
+CALL gh pr view 13 --repo teststuffstash/homelab --json comments,statusCheckRollup

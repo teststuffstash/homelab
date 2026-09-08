@@ -1,0 +1,39 @@
+# fleet-fault-unlatch — FU-069, homelab#1539: scan-side un-latch of agent/error labels from fleet faults.
+#
+# THE CONTRACT (homelab#1539). When a PR carries `agent/error` from a fleet fault, and:
+#   - The AGENT_ERROR: comment has a fleet-fault marker: `<!-- fleet-fault cause=<owner/repo>#<n> prs=... -->`
+#   - The cited cause issue is CLOSED
+#   - CI is green at the PR head
+# Then remove the `agent/error` label and post one line.
+#
+# FOUR CASES under replay:
+#   1. cause-closed-green: marker + cause CLOSED + green CI ⇒ agent/error REMOVED
+#   2. cause-open: marker + cause still OPEN + green CI ⇒ agent/error HELD
+#   3. no-marker: agent/error without fleet-fault marker ⇒ agent/error HELD (human-first)
+#   4. probe-fail: cannot read PR state or cause issue ⇒ agent/error HELD (rule #6)
+#
+# Load-bearing properties:
+#   • MARKER format: `<!-- fleet-fault cause=<owner/repo>#<n> prs=520,521,522,524 -->`
+#   • ANCHORED in an AGENT_ERROR: comment
+#   • NO-MARKER holds untouched (human-applied latches, anomaly latches)
+#   • PROBE failures hold untouched (rule #6 fail-safe)
+
+pins: []
+name: fleet-fault-unlatch
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:cause-closed-green/bridge.sh
+  - block:fleet-fault-unlatch
+  - file:cause-closed-green/post.sh
+  - file:cause-open/bridge.sh
+  - block:fleet-fault-unlatch
+  - file:cause-open/post.sh
+  - file:no-marker/bridge.sh
+  - block:fleet-fault-unlatch
+  - file:no-marker/post.sh
+  - file:probe-fail/bridge.sh
+  - block:fleet-fault-unlatch
+  - file:probe-fail/post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
