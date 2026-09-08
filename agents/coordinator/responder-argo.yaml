@@ -664,6 +664,12 @@ spec:
               # <<<REPLAY:responder-reopen-presnap<<<
 
               echo "── triaging $NAME ($FP) — route default: stack=$ROUTE_STACK repo=$ROUTE_REPO (the named fix surface may move it)"
+              # The routed answer is a rail-prefixed id (`claude/sonnet`); the claude CLI takes the BARE
+              # alias — parse through the ONE parser (model_id.py), coordinator-session.sh's exact move
+              # (FU-127, PR#813). Passed verbatim, EVERY triage session since 2026-09-01 19:24 died at
+              # model selection ("There's an issue with the selected model (claude/sonnet)") while the
+              # workflow still Succeeded — 8/12 of the daily budget spent on sessions that never ran,
+              # 156 in the 7 days Loki holds, and no alert consumer sees a WARN inside a green run.
               claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
 
             THE ALERT (JSON): $(cat /tmp/alert-one.json)
@@ -705,7 +711,7 @@ spec:
               REMEDIATION-WOULD: <verb> <namespace>/<kind>/<name> — <one-clause reason>
             For example: 'REMEDIATION-WOULD: delete oracle-fleet/pod/ert-mock-7f9c4-x2v1b — CrashLoopBackOff on a config already fixed on master; a delete lets the ReplicaSet re-pull.'
             At most one per distinct remediation per session. Do NOT emit this line when your verdict is report-only or when no mechanical remediation applies." \
-                --model "$(case "$rail" in opencode-go/*) echo "$rail";; *) bash /work/homelab/agents/resolve-model.sh --role responder --fallback sonnet;; esac)" --permission-mode bypassPermissions --max-turns 40 </dev/null \
+                --model "$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash /work/homelab/agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 /work/homelab/agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)" --permission-mode bypassPermissions --max-turns 40 </dev/null \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
 
               # ── #228 (b): A REOPEN RESTORES A RECORD, NEVER A QUEUE ─────────────────────────
