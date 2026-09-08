@@ -7832,3 +7832,49 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   newest date tag, not lineage. Told the operator; oracle's call.
 - Tracker hygiene: six archive entries expired (FU-086/098/108/112/113/115); the lint lists **23 more**
   past 35 d — a docs-cleanup pass, not done here.
+
+## 2026-09-08 mid-morning — corpus session: PR#1468 un-deadlocked by re-keying the pin-vacuity gate to the PR, S8 residue integrated, board fed
+
+- **#1489 decided + landed (`6cea3a9b`, governance-direct — the operator pointed the session at it):**
+  neither option 1 (fourth carve-out) nor 2 (`vacuity-exempt:` key) — the gate's UNIT was wrong. #1107
+  asked "does this PR's pin reproduce its bug"; the shipped quantifier asked "is every fixture this PR
+  touches a pin", which no honest clause PR can promise (composition `parts:` edits, header
+  cross-references, restored coverage, absence twins) — four faces in six days were that mismatch
+  wearing new file types. As landed: ≥1 changed fixture must red on base; the rest are a `::notice`;
+  all-vacuous PRs still red. The #1215 comment-only carve-out went with the quantifier (it had reopened
+  the #1028 cosmetic-edit hole). Verified by hand-repro before the change (`clause` passes on base,
+  `debounced` + `source-issue-blocked` red on base) and by the outcome: **PR#1468 merged 09:1xZ on the
+  first run under the new gate, no PR edit** (28 catch-up merges in total). Record: ADR-103 addendum,
+  workflow.md §What the gate proves, replay README §Pin-vacuity routing rule (escape (b) generalizes,
+  (a) survives only for unobservable clause changes, (c) rejected — ADR-122 subtract readers); FU-221
+  re-keyed (belt deferred to a second sighting). Same commit: FU-220/FU-221 each held two divergent
+  copies (the bot filed #1500 on it minutes after I found it) — one entry each, FU-220 in the
+  link-don't-restate shape with the transparent-cache knobs moved to patterns/python-stack.md, and
+  `follow-ups-lint` gained `DUP-ITEM`.
+- **S8 (#1418) from the pickup:** `fix/s8-1460-parser-residue` rebased `--onto` master past the old 1b
+  tip (2 residue commits replayed clean), the five bridge `IB_PY=` seam lines dropped (the
+  config-defaults block resolves it since f5e8ebc0; 424/424 without them) → **PR#1503** (legs 1–2,
+  armed). Legs 4–6 dispatched to an opus subagent on a local clone (`clone-1460`) — outcome below.
+  `fix/s8-1420-consumer-card-three-acts` rebased → **PR#1502** (armed); the card's scratch-Goal
+  acceptance RUN (#1504 authored from the card alone, `goal/1504-scratch` cut, `goal-lint` 0 FAIL /
+  0 WARN, closed + branch deleted inside two minutes, transcript on the PR) surfaced one wording
+  catch — act 3 said "never the Goal" while a childless Goal is queued itself to summon the
+  decomposer; fixed on the branch. `fix/s8-1424-per-base-doc-currency` was already on master
+  (half 1 = PR#1461); #1424's residue is the closeout leg only. #1423 HELD.
+- **Oracle handoff 09-06 (issue_body block renders as a setext H2)** → **PR#1506** (armed): blank line
+  before the closing fence, five self-test pins re-pinned, doc example updated; 42 parser-touching
+  fixtures unchanged. Two older oracle handoffs (09-03 ci-red data point; 09-03 in-pod kind
+  unrunnable) answered → `done/`: the kind faults live in `docs/spikes/kata-ci-gate.md` §In-pod kind
+  (FU-072 points there), FU-217 gained the "gate not observed" half, and the data point's addendum
+  became **homelab#1507** (queued): an ordinary-path arbitrate ruling leaves `agent/arbitrate` on the
+  PR and the reflex refuses it forever (oracle PR#392 sat green until a hand relabel). The circles
+  ADR handoff (real-content seam) is still in the inbox — a design sitting.
+- **Board fed / cleared:** **#1505** queued (FU-203's weekly registry GC CronJob, off the Tuesday
+  window; r1 riding 09:2xZ); **agent-runtime#128** → PR#131 (opus subagent paste of `.agents/build.yaml`
+  from homelab's donor × that repo's fix.yaml; seat gate-read, one provenance line corrected, admin-merged
+  — #128 closes); #1069 closed (prefetch #1175 + PR#1386 resolve it); oracle-fleet#397's `agent/error`
+  cleared per the 09-06 pickup (PR#1478 merged; NOT re-queued). Left as they were: #946 (A5 evidence
+  seed — needs S3 snapshot discovery under seat creds, a sitting), #1224 (operator-lane design), #857,
+  #1456 (inert — queue if wanted).
+- Watch set armed (meta-events + 2700 s heartbeat); PveThinPoolFillingUp still FIRING at 80.5 % —
+  the operator-owed Garage forensic-backup deletion is the lever (unchanged from the 09-08 pickup).
