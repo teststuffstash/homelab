@@ -7791,3 +7791,44 @@ the disk; new disk 5 %). Re-plan: *No changes*. #1308 leg-1 is now live on the V
 already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` command strings
 (`ssh` wrapper went "no such file" twice, ~10 min lost) — use a script file; and this Proxmox is
 `qm guest exec`, not `qm agent exec`.
+
+## 2026-09-08 late morning — hardware requirements walked, the GC handoff, a resource read under oracle's reap
+
+- **Hardware, register + supply (all in `teststuff/hardware`, pushed):** R1's NEED is MET (m70s zone
+  live; residual = a dedicated Garage disk, a want on the 7600p lot). Five listings read the same day:
+  dual-Xeon Z10PE-D8 WS 4U at 200 € → **no** (no open requirement; idle draw; "second pve" is ROADMAP
+  §HA model layers 1+2 = an ADR + three low-idle nodes, and the no-new-host first step for router HA is a
+  physical+VM OPNsense CARP pair on the existing pve); 2 × ECC UDIMM at 100/150 → **no** (UDIMM cannot
+  enter RDIMM-populated pve; one module = one M70s); ten consumer UDIMM OK prices → reference read,
+  ~85–90 €/16 GB, "ECC is cheaper" fails on UDIMM; **4 × Micron MTA36ASF4G72PZ 32 GB DDR4-2400 ECC RDIMM
+  at 196 € → BUY** — pve's own module family, 24.5 €/16 GB, answers the measured gap (**FU-225 filed:**
+  pve host RAM 84 % avg / 94 % peak, CPU 18–23 %, ballooning off, guests at 30–71 % of allocations;
+  R8 in the hardware repo; conditions: count pve's slots physically — SMBIOS lies — + label photo);
+  SO-DIMM thread → **buy one for wk-metal-03**, which Talos identifies as a **ThinkPad X260** (20F600A2MS;
+  machines.yaml corrected, tables regenerated) — a 20F6 X260 is reported running 32 GB, so the seat's
+  "32 GB sticks don't work on Skylake-U" was RETRACTED (remembered, not measured): 32 GB Lexar at 85 €
+  if returnable, else 16 GB at 35 €. Talos `memorymodules` closed every RAM `?`: X240/X250 = DDR3L
+  single-slot, `thinkcentre` = **Edge71**, 2 × 2 GB DDR3 with two slots free at 79/89 % memory → the
+  operator's drawer 2 GB DDR3 sticks go there; `hp-01` = **Elite 8300 SFF**, no pressure, leave; no DDR1/2
+  anywhere. pve's pool NVMe read as **WD Blue SN580, DRAM-less, HMB 32 MiB granted of 50 asked** (HMB
+  explained: map cache for reads, nothing for sustained writes; SATA has none) — one more point for R3(c).
+- **Handoff (oracle, 09-08 07:37) DONE → `done/`:** `registry garbage-collect --delete-untagged` in-pod,
+  dry-run then real; the re-pointed tag's orphan (`35960a21…` + 6.05 GB layer) removed, both tagged
+  manifests kept, served digests/blobs verified 200, orphan 404; **bucket 30.3 → 15.3 GiB** (Garage's
+  Size counter had read ~8 GB above the object listing — trust `s3 ls`). Keep-set: yes to oracle-iac#664
+  derive-don't-declare; oracle untags with its push cred, homelab collects. Recipe → runbook §Registry
+  (first-party) **PR#1501 MERGED 08:26Z**; FU-203 next = weekly GC CronJob off the Tuesday window.
+  Three older oracle inbox files + the circles ADR request remain unclaimed.
+- **Resource read under oracle's 228k-object reap (2 workers; 5 timed out):** Garage pods ~0.15 core each;
+  the cost is Longhorn's engine (1.5 / 1.1 / 0.8 cores on wk-metal-01 / m70s / wk-metal-04) and fsync
+  IOPS — 3.2–4.7k writes/s per zone at ~20 MB/s. Latency MX500 0.08 ms / Micron 0.34 / **SA400 0.9–4.2 ms
+  at 46–49 % busy, node iowait 23–35 % vs 3–5 %** — wk-metal-04 sets the pace; RPC p99 7–8 s on the two
+  peers waiting on it, DeleteObjects p99 at the 100 s bucket = the 5-worker timeouts. Deferred cost queued
+  (table GC todo ~150k/140k/117k, resync queue 6.1k). Advice given: stay at 2 workers, smaller batches;
+  the structural fix is R2 (SA400 demote). NOT written to the ledger — a dated row if wanted.
+- **Oracle pin ping-pong flagged (stack-side, untouched):** the 08:23Z "idempotency" `release-corpus` run
+  pushed nothing but rolled oracle-iac **#667** (serve 2026-09-01 @ `cb735ff1`, a delta built on the OLD
+  base) over **#663** (07:18Z, "serve the fixed-parser 2026-07-12 base" @ `c3892498`) — the pin picks
+  newest date tag, not lineage. Told the operator; oracle's call.
+- Tracker hygiene: six archive entries expired (FU-086/098/108/112/113/115); the lint lists **23 more**
+  past 35 d — a docs-cleanup pass, not done here.
