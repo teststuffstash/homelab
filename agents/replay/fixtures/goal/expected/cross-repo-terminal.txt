@@ -4,7 +4,7 @@ OUT   [circles] ADR-102 terminal: goal #29 → validated, closed (completed); 0 
 OUT GACTED terminal
 OUT UNITS <none>
 OUT THEMES <none>
-OUT ORPHANS [circles] 📋 close sweep for VALIDATED goal #29 (ADR-102 — REPORT-first, the batch action stays operator-confirmed until the goal registry panel exists):     agent-runtime#115 —  → INERT: close as superseded, or re-home     #77 —  → INERT: close as superseded, or re-home
+OUT ORPHANS [circles] 📋 close sweep for VALIDATED goal #29 (ADR-102 — REPORT-first, the batch action stays operator-confirmed until the goal registry panel exists):     agent-runtime#115 —  → INERT: close as superseded, or re-home     #77 —  → INERT: close as superseded, or re-home 
 OUT REACHED: end
 ERR LEGACY-GRAMMAR Verdict-authority circles#29
 RC 0
