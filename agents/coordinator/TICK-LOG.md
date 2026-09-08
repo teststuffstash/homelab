@@ -7950,3 +7950,14 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   `docs/incidents/2026-09-05-updater-node-cap-responder-dead-triage.md`; belt gaps → **FU-227**
   (100 %-red template under the fleet line; dead ride inside a green workflow).
   `RouterRunModelUnverifiable` (firing since 08-30) is an OpenRouter-ride belt, unrelated.
+- **16:0x–17:2xZ (verification, same seat):** all three merged — PR#1523 16:07, PR#1522 16:18 (bot
+  finding: the identical unparsed `--model` in `fix-debounce-argo.yaml`'s set-pass — fixed in-PR),
+  PR#1521 16:23 (bot finding: no replay pin for the probe-unreadable HOLD — added `probe-unreadable`
+  row; while adding it, a non-JSON probe body was a silent skip, now HOLDs; 18/18). #1521's branch
+  brought current BY HAND twice (the updater it fixes was the thing that would have done it).
+  **End-state:** `update-pr-branch-cron-1788885000` (16:30) **Succeeded on all 12 repos** — first green
+  pass since 09-05 22:15; `retro-session-l4htc` (resubmitted from the cronwf) **Succeeded** guard →
+  cell-a → cell-b → harvest, report PR#1524 (2 reports), **RetroReportOverdue cleared**;
+  `respond-wm2cf` (AgentErrorFlagged, 17:18, unprompted) ran a REAL session — diagnosed, reopened
+  homelab#114 with a re-fire comment, verdict posted — the first responder investigation in ≥7 days;
+  `responder-behaviour-test.sh` with `AGENT_MODEL=claude/sonnet` 117/117 on the merged script.
