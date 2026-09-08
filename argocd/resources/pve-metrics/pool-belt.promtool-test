@@ -140,3 +140,41 @@ tests:
                 fires, and the runner-image-prepull gate holds pool-VM pulls (fail closed). Check
                 `curl 192.168.2.3:9100/metrics | grep pve_lvm` from the LAN, then the ScrapeConfig
                 (`kubectl -n monitoring get scrapeconfig pve-node`) and Prometheus targets.
+
+  # Host memory: 12GiB available, then a KSM collapse to 2GiB. Warning only after 15m under
+  # 3GiB; clears when it comes back. The pool alerts stay quiet on a calm 60% throughout.
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{job="pve-node",instance="192.168.2.3:9100"}'
+        values: '12884901888x10 2147483648x20 12884901888x10'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",vg="pve",lv="data"}'
+        values: '60x40'
+      - series: 'pve_lvm_thin_pool_metadata_percent{job="pve-node",vg="pve",lv="data"}'
+        values: '3x40'
+      - series: 'node_textfile_mtime_seconds{job="pve-node",file="/var/lib/prometheus/node-exporter/pve.prom"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PveHostMemoryLow
+        exp_alerts: []          # under 3GiB since t=11m: 9m in, `for: 15m` not yet met
+      - eval_time: 27m
+        alertname: PveHostMemoryLow
+        exp_alerts:
+          - exp_labels: { severity: warning, job: pve-node, instance: "192.168.2.3:9100" }
+            exp_annotations:
+              summary: "pve host memory available 2GiB — below 3GiB"
+              description: >-
+                The hypervisor commits more VM RAM than it has (65GB of allocations on 62.7GiB since
+                2026-09-08, FU-225) and lives on KSM (~11GB shared); the Talos guests have no
+                virtio_balloon, so when KSM sharing collapses or a guest grows, the host swaps and
+                then OOM-kills a VM. On pve: `free -m`, `cat /sys/kernel/mm/ksm/pages_sharing`, the
+                per-VM RSS (`ps -o rss= -p $(cat /var/run/qemu-server/<vmid>.pid)`); relief is a
+                smaller allocation in `tofu/variables.tf` (reboots that VM) — never a RAM buy for
+                this box (operator direction: the second hypervisor).
+      - eval_time: 27m
+        alertname: PveThinPoolFillingUp
+        exp_alerts: []
+      - eval_time: 36m
+        alertname: PveHostMemoryLow
+        exp_alerts: []
+
