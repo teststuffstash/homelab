@@ -38,14 +38,15 @@ item_class_push() { :; }
 if [ "${CROSS_REPO_TEST:-}" = 1 ]; then
   # Manually construct kidsall with repo-qualified keys for all descendants
   # Goal #29's tree: #30, #31 (closed, circles), #77 (open post-launch, circles), #115 (open, agent-runtime)
-  # Plus #240 (unrelated, circles)
+  # Plus #240 (unrelated, circles), and collision case: agent-runtime#30 (same number, different repo/parent)
   _kidsall_stack='[
-    {"number": 29, "state": "OPEN", "closedAt": null, "parent": null, "labels": [], "repo": "circles"},
-    {"number": 30, "state": "CLOSED", "closedAt": "2026-08-08T12:00:00Z", "parent": {"number": 29}, "labels": [{"name": "agent-fix"}, {"name": "agent/done"}], "repo": "circles"},
-    {"number": 31, "state": "CLOSED", "closedAt": "2026-08-09T09:10:00Z", "parent": {"number": 29}, "labels": [{"name": "agent-fix"}, {"name": "agent/done"}], "repo": "circles"},
-    {"number": 77, "state": "OPEN", "closedAt": null, "parent": {"number": 29}, "labels": [], "repo": "circles"},
-    {"number": 240, "state": "OPEN", "closedAt": null, "parent": null, "labels": [{"name": "agent-fix"}, {"name": "agent/queued"}], "repo": "circles"},
-    {"number": 115, "state": "OPEN", "closedAt": null, "parent": {"number": 29}, "labels": [], "repo": "agent-runtime"}
+    {"number": 29, "state": "OPEN", "closedAt": null, "parent": null, "labels": [], "repo": "circles", "parentKey": null},
+    {"number": 30, "state": "CLOSED", "closedAt": "2026-08-08T12:00:00Z", "parent": {"number": 29}, "labels": [{"name": "agent-fix"}, {"name": "agent/done"}], "repo": "circles", "parentKey": "circles#29"},
+    {"number": 31, "state": "CLOSED", "closedAt": "2026-08-09T09:10:00Z", "parent": {"number": 29}, "labels": [{"name": "agent-fix"}, {"name": "agent/done"}], "repo": "circles", "parentKey": "circles#29"},
+    {"number": 77, "state": "OPEN", "closedAt": null, "parent": {"number": 29}, "labels": [], "repo": "circles", "parentKey": "circles#29"},
+    {"number": 240, "state": "OPEN", "closedAt": null, "parent": null, "labels": [{"name": "agent-fix"}, {"name": "agent/queued"}], "repo": "circles", "parentKey": null},
+    {"number": 115, "state": "OPEN", "closedAt": null, "parent": {"number": 29}, "labels": [], "repo": "agent-runtime", "parentKey": "circles#29"},
+    {"number": 30, "state": "CLOSED", "closedAt": "2026-08-08T12:00:00Z", "parent": {"number": 99}, "labels": [], "repo": "agent-runtime", "parentKey": "agent-runtime#99"}
   ]'
 fi
 

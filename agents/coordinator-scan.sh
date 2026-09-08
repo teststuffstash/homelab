@@ -1548,7 +1548,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     _kr_slug="$ORG/$_kr"
     _kr_issues="$(gh issue list --repo "$_kr_slug" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${_kr_issues:-null}" || _kr_issues='[]'
-    _kr_issues="$(jq --arg r "$_kr" '[.[] | . + {repo: $r}]' <<<"$_kr_issues")"
+    _kr_issues="$(jq --arg r "$_kr" '[.[] | . + {repo: $r,
+  parentKey: (if .parent == null then null
+              else ((.parent.url // "" | split("/") | if length >= 7 then .[4] else $r end)
+                    + "#" + (.parent.number | tostring)) end)}]' <<<"$_kr_issues")"
     _kidsall_stack="$(jq -s 'add' <<<"$_kidsall_stack"$'\n'"$_kr_issues")"
   done
   jq -e . >/dev/null 2>&1 <<<"${_kidsall_stack:-null}" || _kidsall_stack='[]'
@@ -2724,10 +2727,13 @@ EOF_GOVERNANCE
       # tree members. Each issue has a repo field for qualified key construction (e.g., "homelab#1234").
       # Fallback for replay tests that extract only this block: fetch from current repo if not set.
       if [ -z "${_kidsall_stack+x}" ]; then
-        # Replay test isolation: fetch from current repo only (kidsall with repo field added)
+        # Replay test isolation: fetch from current repo only (kidsall with repo field and parentKey added)
         _kidsall_stack="$(gh issue list --repo "$slug" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
         jq -e . >/dev/null 2>&1 <<<"${_kidsall_stack:-null}" || _kidsall_stack='[]'
-        _kidsall_stack="$(jq --arg r "$repo" '[.[] | . + {repo: $r}]' <<<"$_kidsall_stack")"
+        _kidsall_stack="$(jq --arg r "$repo" '[.[] | . + {repo: $r,
+  parentKey: (if .parent == null then null
+              else ((.parent.url // "" | split("/") | if length >= 7 then .[4] else $r end)
+                    + "#" + (.parent.number | tostring)) end)}]' <<<"$_kidsall_stack")"
       fi
       kidsall="$_kidsall_stack"
       for g in $goals; do
@@ -2745,8 +2751,8 @@ EOF_GOVERNANCE
           # For each issue in kidsall, check if its parent (by number) exists in the frontier (by number,
           # in any repo). Once found, emit the issue's qualified key (repo#number).
           gnext="$(printf '%s' "$kidsall" | jq -r --arg f "$gfront" \
-            '(($f | split(" ") | map(select(. != "") | split("#") | {repo: .[0], num: (.[1] | tonumber)}))) as $F
-             | [.[] | select(((.parent.number // 0)) as $p | $F | map(.num) | index($p)) | "\(.repo)#\(.number)"] | .[]' 2>/dev/null | tr '\n' ' ')" || gnext=""
+            '(($f | split(" ") | map(select(. != "")))) as $F
+             | [.[] | select(.parentKey != null and ($F | index(.parentKey)) != null) | "\(.repo)#\(.number)"] | .[]' 2>/dev/null | tr '\n' ' ')" || gnext=""
           gnew=""
           for x in $gnext; do
             case " ${gdesc# } ${repo}#${g} " in *" $x "*) ;; *) gnew="$gnew $x";; esac
@@ -2877,9 +2883,9 @@ EOF_GOVERNANCE
                   esac ;;
               esac
             done <<<"$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-              '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
-               | [.[] | select(.number as $n | $D | index($n))] | sort_by(.number) | .[]
-               | [(.number | tostring), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
+              '(($d | split(" ") | map(select(. != "")))) as $D
+               | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null)] | sort_by(.number) | .[]
+               | [("\(.repo)#\(.number)"), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
             if [ "$gleft" -gt 0 ]; then
               # The goal is NOT closed while work remains — see the resumability contract above.
               orphans="${orphans}[$repo] ⏳ goal #${g} goal/${gverdict}: ${gdone} descendant(s) actioned, ${gleft} still to go (cap ${gcap}/scan) — the goal stays OPEN until the tree is done; the next scan continues\n"
@@ -2977,11 +2983,11 @@ EOF_GOVERNANCE
         # dispatch), while (b) still fires; the next scan retries the read.
         # FIX #1451: parse qualified keys from gdesc (e.g., "homelab#1234")
         gopen_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-          '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
-           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN")] | length' 2>/dev/null || echo "")"
+          '(($d | split(" ") | map(select(. != "")))) as $D
+           | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN")] | length' 2>/dev/null || echo "")"
         gclosed_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-          '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
-           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "CLOSED")] | length' 2>/dev/null || echo "")"
+          '(($d | split(" ") | map(select(. != "")))) as $D
+           | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "CLOSED")] | length' 2>/dev/null || echo "")"
         # Each count validated on its own — concatenation would let ("", "3") read as the
         # valid-looking "3" and fail later as a swallowed arithmetic error (bot review, PR#398).
         case "$gopen_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
@@ -3040,32 +3046,36 @@ EOF_GOVERNANCE
         # never less.
         # FIX #1451: parse qualified keys from gdesc (e.g., "homelab#1234")
         if [ "$gdisp_ok" = 1 ]; then
-          gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
-            '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
+          gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" --arg GREPO "$repo" \
+            '(($d | split(" ") | map(select(. != "")))) as $D
              | ($ad | split(" ") | map(select(. != ""))) as $AD
              | ($df | split(" ") | map(select(. != ""))) as $DF
              | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
-             | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
-                    | select((.number | tostring) as $k
-                             | ($AD | index($k)) != null
-                               or (($DF | index($k)) == null
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
+                    | select(("\(.repo)#\(.number)") as $qk
+                             | (if .repo == $GREPO then (.number | tostring) else null end) as $bk
+                             | ($AD | index($qk)) != null or ($bk != null and ($AD | index($bk)) != null)
+                               or ((($DF | index($qk)) == null and ($bk == null or ($DF | index($bk)) == null))
                                    and (((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null))))] | length' 2>/dev/null || echo "")"
         else
           gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-            '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
-             | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
+            '(($d | split(" ") | map(select(. != "")))) as $D
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
         fi
         case "$gopen_n_ckpt" in ''|*[!0-9]*) gopen_n_ckpt="$gopen_n";; esac
         # UNDISPOSITIONED = open, not the bucket, no row, no `agent/*` lifecycle label — the
         # #1315 shape (an inert issue bound into the tree with nobody's judgment on it).
         # FIX #1451: parse qualified keys from gdesc (e.g., "homelab#1234")
-        gundisp_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
-          '(($d | split(" ") | map(select(. != "") | split("#") | .[1] | tonumber))) as $D
+        gundisp_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" --arg GREPO "$repo" \
+          '(($d | split(" ") | map(select(. != "")))) as $D
            | ($ad | split(" ") | map(select(. != ""))) as $AD
            | ($df | split(" ") | map(select(. != ""))) as $DF
            | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
-           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
-                  | select((.number | tostring) as $k | ($AD | index($k)) == null and ($DF | index($k)) == null)
+           | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
+                  | select(("\(.repo)#\(.number)") as $qk
+                           | (if .repo == $GREPO then (.number | tostring) else null end) as $bk
+                           | ($AD | index($qk)) == null and ($bk == null or ($AD | index($bk)) == null)
+                             and (($DF | index($qk)) == null and ($bk == null or ($DF | index($bk)) == null)))
                   | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)] | length' 2>/dev/null || echo "")"
         case "$gundisp_n" in ''|*[!0-9]*) gundisp_n=0;; esac
         set -- $gdesc; gtotal_n=$#
