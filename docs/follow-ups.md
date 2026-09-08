@@ -612,6 +612,11 @@ the block needs pruning, not more headings.
       memory placement, not slots. `arc-runners.yaml`'s "≈2 dind runners per metal node" is stale.
       **Next:** `maxRunners: 3` + fix the comment (one-line PR, makes the panel truthful; does not
       shorten the queue) — real capacity is RAM on the compute tier, see the spike's §CI side.
+      **2026-09-08 (operator): 3 slots is not enough for the bursts the operator causes while
+      working — his queue time is the cost, the daily mean measured the wrong thing.** Two levers:
+      (1) pve RAM → wk-03 at 32 GB ≈ +8 slots (FU-225, lot being bought); (2) zero-cost stopgap
+      today: add the `ephemeral=true` label to wk-metal-04 (16 GB, taint-only, kata-reserved by
+      decision in `tofu/talos.tf`) ≈ +3–4 slots shared with kata rides — operator call.
       Relates FU-208, ADR-082.
 
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
@@ -1043,7 +1048,10 @@ the block needs pruning, not more headings.
       and the gap is allocation not demand; (b) only if demand then still binds: the 4 × 32 GB
       `MTA36ASF4G72PZ-2G3B1` lot (private hardware repo, R8, read 2026-09-08) as a full swap, or
       2 × 32 GB replacing one DIMM per channel (96 GB, channels stay balanced) — supply side is the
-      hardware repo's, not this tracker's. No FU/ADR matched
+      hardware repo's, not this tracker's. **Re-ruled 2026-09-08 (operator): the RAM IS the buy** —
+      the demand is ARC burst capacity (FU-218: a slot ≈ 2.5–3 GB on an ephemeral node, only wk-03
+      can grow), so once fitted: wk-03 8→32 GB / 8→16 vCPU in `tofu/variables.tf`, `maxRunners`
+      4→~10, and wk-03's thin-pool disk needs FU-093's headroom first. No FU/ADR matched
       `pve.*(ram|memory)|rdimm` (grepped 2026-09-08). Relates FU-093, ROADMAP §HA model.
 
 
