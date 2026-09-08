@@ -50,6 +50,29 @@ spec:
     # none of the quiet days. `for: 15m` rides out a single burst that stops on its own.
     - name: argo-workflows-outcomes
       rules:
+        # Per-LOOP-NAMESPACE sibling of the fleet belt above (homelab#1456 deliverable 3, FU-227 gap 1:
+        # "a 100%-red template under the fleet line"). The coordinate-<stack> cron tick is the loop's
+        # level-triggered FAILURE DETECTOR (workflow.md §Triggers), so a tick that itself dies — exit
+        # 141 (a pipeline SIGPIPE under `set -o pipefail`), a bash `set -e` kill, activeDeadlineSeconds
+        # — is the sensor going dark, and the fleet belt's 40/6h never sees a single template failing
+        # every tick (the 2026-09-05→08 updater outage ran 19 Failed passes under it; the
+        # coordinate-* exit-141 showers 2026-09-04/05 were 4 in two days). The counter carries the
+        # workflow's namespace as `exported_namespace` (the controller's own is `namespace="argo"`)
+        # and NO template name, so the unit is the loop home: `<stack>-agents` for the per-stack
+        # coordinate/review/janitor/probe crons, `agent-coordinator` for the switchboard, updater,
+        # responder, retro and sentinel. Calibrated on the 7d ending 2026-09-08 (incident week — the
+        # updater cap + the dead responder sessions): per stack loop, hours at >=2 were 7–12, at >=3
+        # were 3–6 (each a real dead-session class); agent-coordinator sat >=3 for 74 hours — the
+        # outage this belt would have named on its first hour. `for: 10m` rides out one burst.
+        - alert: AgentLoopWorkflowsFailing
+          expr: sum by (exported_namespace) (increase(argo_workflows_total_count{phase=~"Failed|Error", exported_namespace=~"agent-coordinator|.*-agents"}[1h])) >= 3
+          for: 10m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "{{ $value | humanize }} agent-loop workflows in {{ $labels.exported_namespace }} ended Failed/Error in the last hour"
+            description: "Three or more Argo workflows in the loop namespace {{ $labels.exported_namespace }} reached Failed/Error inside one hour — a template failing on every tick hides under the fleet-wide ArgoWorkflowsFailing line (40/6h) for days, and if the failing one is a coordinate-<stack> cron the loop has lost its level-triggered backstop (homelab#1456). SYMPTOM ONLY: the counter carries no template name. STEP 1 — which template: `kubectl -n {{ $labels.exported_namespace }} get wf --sort-by=.metadata.creationTimestamp -o json | jq -r '.items[] | select(.status.phase==\"Failed\" or .status.phase==\"Error\") | [(.metadata.generateName // .metadata.name), (.status.message // \"-\")] | @tsv' | sort | uniq -c | sort -rn`. STEP 2 — the exit class from ONE run's main container in Loki (`{namespace=\"{{ $labels.exported_namespace }}\", container=\"main\", pod=~\"<generateName>.*\"}`, tenant = the namespace): `exit status 141` right after the homelab clone with no scan output is the homelab#1456/#1517 SIGPIPE class (an early-exiting reader under pipefail — the producer hunt is #1517's); a reviewer run ending FINAL=10 is the exit contract deliberately reddening a session that posted no terminal (merge-path-fsm MP-T03 — read the launcher log, not the reviewer); `Pod was active on the node longer than the specified deadline` = activeDeadlineSeconds, look at what hung; a Sensor-submitted workflow dying at spawn with an unparsed `--model` is the FU-127 model_id class (PR#1522). A cron whose every tick is red is not transient: fix the template, never suspend the schedule (`suspend: true` is state that rots — workflow.md §Capacity gates)."
         - alert: ArgoWorkflowsFailing
           expr: sum(increase(argo_workflows_total_count{phase=~"Failed|Error"}[6h])) > 40
           for: 15m
