@@ -38,9 +38,11 @@ variable "ci_runner_cores" {
 
 variable "ci_runner_memory_mb" {
   type    = number
-  default = 16384 # 2 concurrent kind e2es (runner slots 1+2, operator 2026-08-08) — one run's
+  default = 12288 # 2 concurrent kind e2es (runner slots 1+2, operator 2026-08-08) — one run's
   # true working set is ~2G + docker/kind cache; 12G was mostly page cache (9.9G available
-  # measured mid-run). 6 cores at 17–26% were wasted on a single slot.
+  # measured mid-run). 6 cores at 17–26% were wasted on a single slot. 16G→12G 2026-09-08:
+  # idle read 1.5G used / 8.7G cache / 14.4G available — the 4G funds wk-03's ARC headroom
+  # (variables.tf); the e2e p50 is sequencing-bound (PSI ~0), not memory-bound.
 }
 
 variable "ci_runner_disk_gb" {
