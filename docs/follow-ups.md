@@ -1047,23 +1047,19 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
-- [ ] **FU-225** — **pve host RAM is the hypervisor's binding resource: 84 % used on average,
-      94 % at peak (7 d to 2026-09-08), 53 of 62 GiB in use** — while CPU sits at 18–23 % (p95
-      36 %). Cause is allocation as much as demand: ballooning is off on every VM, so the host
-      commits the full 60 GB of allocations while guests average 30–71 % of theirs (wk-03 30 % of
-      8 GB, wk-01 41 % of 16 GB). Board (`X99-P4`, E5-2680 v4) runs 4 × 16 GB Micron
-      `36ASF2G72PZ-2G1A2` DDR4-2133 ECC **RDIMM** (EDAC: two channels, two DIMMs each; SMBIOS lies
-      — count the free slots physically; **counted 2026-09-08: 4 slots, ALL populated — no free
-      slot, so "add DIMMs" is really "replace 64 GB with 128 GB", which the operator calls a waste**).
-      **Next:** (a) right-size the VM allocations in `tofu/variables.tf` (reboot per VM) — free,
-      and the gap is allocation not demand; (b) only if demand then still binds: the 4 × 32 GB
-      `MTA36ASF4G72PZ-2G3B1` lot (private hardware repo, R8, read 2026-09-08) as a full swap, or
-      2 × 32 GB replacing one DIMM per channel (96 GB, channels stay balanced) — supply side is the
-      hardware repo's, not this tracker's. **Re-ruled twice 2026-09-08 (operator): the demand is
-      ARC burst capacity (FU-218), but NOT more RAM in this box** — too much of homelab is
-      concentrated on pve; direction = a second hypervisor (ROADMAP §HA model, ADR pending).
-      Interim applied: wk-03 16Gi funded by ci-runner-01 12Gi (PR#1518). No FU/ADR matched
-      `pve.*(ram|memory)|rdimm` (grepped 2026-09-08). Relates FU-093, ROADMAP §HA model.
+- [ ] **FU-225** — **pve host RAM is overcommitted with no balloon and no belt.** After the
+      2026-09-08 resizes the host commits 65 GB of VM allocations on 62.7 GiB and lives on KSM
+      (~11 GB shared, 12 GB available warm; 7 d minimum 3.8 GiB). Settled the same day, so none of
+      these is open: **no RAM buy for this box** (operator: too much of homelab is on it — the
+      answer is a second hypervisor, ROADMAP §HA model, ADR pending; the hardware repo carries the
+      supply side); **ballooning is impossible** for the Talos VMs (no `virtio_balloon` in the Talos
+      kernel — verified on wk-03; only ci-runner-01 could); **right-sizing is done** as far as it
+      goes (ci-runner-01 16→12 GB; wk-01/wk-02/cp-01 stay — Longhorn/etcd page cache is not waste).
+      **Next (the one action left): a host-memory belt** — pve's node_exporter already exports
+      `node_memory_MemAvailable_bytes{job="pve-node"}` and the pve rule file has no memory rule; add
+      `PveHostMemoryLow` (available < 3 GiB for 15 m, warning) to `argocd/resources/pve-metrics/`
+      with its promtool test, so a KSM collapse or a fat VM shows up before the host OOM-kills a
+      guest. Then archive. Relates FU-218 (the demand), FU-093 (the pool belt this mirrors).
 
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
