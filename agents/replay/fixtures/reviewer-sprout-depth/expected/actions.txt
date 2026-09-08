@@ -1,0 +1,45 @@
+CALL gh api repos/teststuffstash/test-project/issues/11/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/10 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/10/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/21/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/20 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/20/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/10 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/10/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/22/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/21 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/21/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/20 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/20/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/10 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/10/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/12/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/11 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/11/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/10 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/10/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/21/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/20 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/20/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/10 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/10/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/31/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/30 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/30/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/10 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/10/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/41/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/40 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/40/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/10 --jq .title
+CALL gh api repos/teststuffstash/test-project/issues/10/parent --jq .number
+OUT chain_a goal>child depth=1
+OUT chain_b goal>theme>child depth=1
+OUT chain_c goal>theme>child>sprout depth=2
+OUT chain_d goal>child>sprout depth=2
+OUT chain_e goal>theme(title unreadable)>child depth=2
+OUT chain_f goal>THEME-caps-space>child depth=1
+OUT chain_g goal>post-launch>child depth=2
+OUT sprout_depth_walk_executed=1
+ERR WARN reviewer: sprout-depth walk could not read the title of parent #20 (teststuffstash/test-project) — counting the hop (theme containers are not subtracted without a title)
+RC 0
