@@ -635,56 +635,46 @@ S5 heat pass; the per-instance prose is in git and in the cited PRs):
 
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.
 
-## Pin-vacuity routing rule for coverage of unmodified behavior (ADR-103, 2026-09-05)
+## Pin-vacuity routing rule (ADR-103; the gate's unit is the PR since 2026-09-08)
 
-ADR-103's pin-vacuity gate (homelab#1107) rejects changed fixtures that pass against the
-pre-fix tree. This is the right default — a fixture that passes on base adds no regression
-coverage. But it has no opt-out, so in a clause-changing PR two requirements can be
-simultaneously mandatory and unsatisfiable:
+ADR-103's pin-vacuity gate (homelab#1107) runs every changed fixture dir of a clause-changing PR
+against the pre-fix tree and requires that **at least one of them reds there** (ADR-103
+addendum 2026-09-08, homelab#1489). A fixture that passes on base adds no regression coverage on
+its own — but a PR touches fixtures for reasons that are not pins, and those are fine BESIDE a
+real pin: the gate lists them as a `::notice` and moves on. Until 2026-09-08 the gate judged
+every changed fixture separately, which made these ordinary edits unlandable:
 
-- the review rubric says *restore the regression coverage your PR dropped*, and
-- the gate says *your changed fixtures must red on base*
+- a `parts:` list edit forced by the clause gaining a dependency — neither droppable (`RC 127`)
+  nor a pin (PR#1468, 26 CI cycles deadlocked);
+- restoring coverage for an arm the PR leaves **unmodified** — the review rubric demands it, and
+  such a fixture passes on base by definition (homelab#1151 a full round, homelab#1379 a round
+  plus an arbitration);
+- a pure-ABSENCE contract composed of pre-existing sentinels (PR#1228), a header cross-reference
+  to a sibling fixture (PR#1168).
 
-— and a fixture pinning a branch the PR leaves **unmodified** necessarily passes on base.
-That collision cost homelab#1151 a full round and homelab#1379 a round plus an arbitration.
+### The rule
 
-### The two escapes
+**Ship one fixture that reds on base in the same PR.** Then add whatever other fixture edits the
+change needs. The escapes this section used to carry collapse into that sentence:
 
-When a PR must add coverage for behavior it does **not** modify (e.g. restoring a fixture
-dropped by a prior clause change, or adding coverage for an arm the PR leaves untouched),
-use one of these routes:
-
-**(b) Fold into a fixture that already reds on base** (preferred). If an existing fixture
-whose world already exercises the arm you need fails on base for its own reasons, add your
-assertion there and name why in the fixture header comment. The added assertion is not
-vacuous (the fixture already reds), so the gate is satisfied honestly. No second PR, no
-coverage loss.
-
-- Worked example: homelab#1208 (PR #1208) put governance probe-fail cases inside
-  `agents/replay/fixtures/scan-governance/set-unreadable/`, which fails on base for its own
-  (operator-lane) reasons. The reasoning is written into that fixture's header comment.
-- **Limitation**: (b) requires an existing fixture whose world already exercises the arm you
-  need. The replay harness is one-world-one-arm (`fixture.yaml` → one world, one arm), so if
-  the arm you need has no fixture whose world covers it, (b) does not apply.
-- Counter-example: homelab#1379 (PR #1379) needed coverage for the **no-labels** arm of the
-  context-prefetch clause. The `context-prefetch/` fixture's world carries labels, so the
-  no-labels arm had nowhere to fold. The fixture was dropped from the clause-changing PR and
-  re-landed via escape (a) as homelab#1384.
-
-**(a) Fixture-only follow-up PR** (fallback). Pin-vacuity only runs when clause files ALSO
-changed (`if [ -n "$clause" ] && [ -n "$replay" ]` in the CI workflow), so a fixture-only PR
-is never vacuity-checked. Land the clause-changing PR without the fixture, then open a
-second PR adding only the fixture.
-
-- Costs a second PR and a second round, but is always available.
-- Worked example: homelab#1384 (PR #1384), the fixture-only follow-up to homelab#1379.
+- **(b) fold into a fixture that reds on base** is no longer a routing question — it is what any
+  real pin in the PR already does. homelab#1208 (governance probe-fail cases inside
+  `scan-governance/set-unreadable/`) and PR#1272's exactly-one-CALL repair of the absence twin
+  remain good SHAPES (a positive assertion beside the absence one), not requirements.
+- **(a) a fixture-only follow-up PR** survives for exactly one case: a clause-file change with
+  **no observable action-stream delta** (the register classes A/B above) that also wants a
+  restored/added fixture — nothing in that PR can red on base, so the fixture lands alone
+  (pin-vacuity only runs when clause files ALSO changed). Worked example: homelab#1384, the
+  fixture-only follow-up to homelab#1379 — under the PR-level unit #1379 itself would have
+  passed, since it carried its own pin.
 
 ### What this rule is not
 
-Escape **(c)** — a `vacuity-exempt: <reason>` key in `fixture.yaml` that the gate honors — is
-a deliberate ruling for the operator, not part of this deliverable. It lives in
-`.github/workflows/ci.yaml` (an operator-lane path a worker cannot touch), and it is not
-obviously needed if (b) is documented and (a) is available.
+Escape **(c)** — a `vacuity-exempt: <reason>` key in `fixture.yaml` — was banked by #1225 and
+**rejected** at the 2026-09-08 sitting: a free-text opt-out on an authoring surface is one more
+reader (ADR-122), and the PR-level unit removes its cases. The gate lives in
+`.github/workflows/ci.yaml` (operator-lane); its self-pin awaits extraction into a script
+(#1224's territory).
 
 ### Who this rule is for
 

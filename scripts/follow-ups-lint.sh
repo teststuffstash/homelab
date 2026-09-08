@@ -61,6 +61,17 @@ referenced=$( { git grep -h -o 'FU-[0-9][0-9][0-9]' -- ":(exclude)$TRACKER" ":(e
 
 status=0
 
+# One entry per id (homelab#1500, 2026-09-08): the tracker held two divergent copies each of
+# FU-220 and FU-221 — an appended pair landed twice — and `sort -u` above hid it from every
+# other check. The routing table's one-home rule applies inside the tracker itself.
+dup_defs=$( (grep -oE '^- \[[ x]\] \*\*FU-[0-9]{3}\*\*' "$TRACKER"
+             [ -f "$ARCHIVE" ] && grep -oE '^- \*\*FU-[0-9]{3}\*\*' "$ARCHIVE"
+            ) | grep -o 'FU-[0-9][0-9][0-9]' | sort | uniq -d)
+for id in $dup_defs; do
+  echo "DUP-ITEM $id — defined more than once across the tracker + archive: merge the copies into ONE entry (one home per fact)"
+  status=1
+done
+
 # The one-ID-namespace counter: ids at/past it never existed, so any reference is a typo.
 # Ids below it are stable coordinates forever (name-anchor ruling, header) — a bare reference
 # to a below-counter id that has expired out of the archive is LEGAL provenance.

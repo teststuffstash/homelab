@@ -141,8 +141,12 @@ What that costs and what it keeps:
 - **Locked installs bypass the proxy.** `--frozen` fetches the URLs the lock carries, i.e.
   `files.pythonhosted.org` over the WAN (allowed by the `python` egress profile). The cache still
   serves every *unlocked* path — `uv pip install`, `uvx`, `uv run --with`, pip — verified against
-  the live VIP. Recovering the locked path needs a transparent cache (DNS + TLS interception);
-  that is **FU-220**, not this wiring.
+  the live VIP. Recovering the locked path needs a transparent cache (DNS + TLS interception):
+  pod `hostAliases` for `pypi.org` + `files.pythonhosted.org` pointing at `pypi-cache`, TLS on
+  the cache, and either a CA in the ride's trust store or `UV_INSECURE_HOST`/`PIP_TRUSTED_HOST`.
+  Two named costs make it an operator decision: it forges certs for public hostnames inside
+  sandbox pods, and hostAliases delete the upstream fallback (a single-replica cache becomes a
+  hard dependency for every python ride). That is **FU-220**, not this wiring.
 - **A python-profile repo with no committed `uv.lock` fails loudly** (`Unable to find lockfile …
   but UV_FROZEN=1 was provided`) rather than silently poisoning one. Commit a lock.
 - **`uv add` in a ride edits `pyproject.toml`, leaves the lock stale and exits 0** — the venv then

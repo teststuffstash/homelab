@@ -286,31 +286,27 @@ jobs:
           # that also PASSES against the PRE-FIX source pins nothing (PR#1074 claimed the bar and
           # shipped a pin that no longer reproduced its bug; 4 blocking verdicts in one retro
           # window). When a clause changed AND fixtures changed, each changed fixture dir is run
-          # by the BASE tree's harness (base sources, base worlds) — it must NOT pass there.
+          # by the BASE tree's harness (base sources, base worlds).
+          # THE UNIT IS THE PR, NOT THE FIXTURE (ADR-103 addendum 2026-09-08, homelab#1489): the
+          # PR must carry AT LEAST ONE changed fixture that reds on base. Fixtures that pass on
+          # base beside a real pin are reported, never a verdict — a PR legitimately touches
+          # fixtures for reasons that are not pins (a `parts:` edit forced by a clause gaining a
+          # dependency, PR#1468; a header cross-reference, PR#1168; restored coverage of an
+          # unmodified arm, PR#1379; a pure-absence twin beside its positive, PR#1228), and the
+          # per-fixture quantifier turned each of those into a carve-out (4 faces in 6 days, the
+          # #1215/#1225 series). The comment-only carve-out went WITH the quantifier: a PR whose
+          # only fixture touch is a comment edit now reds again (no fixture reds on base) — the
+          # #1028 cosmetic-edit hole the carve-out had quietly reopened.
           # Proven on PR#1157's ci-red-rerun-wake: rc=1 against af79feac, rc=0 on HEAD.
           # Caveat, stated: a fixture whose PR also re-records its WORLD may fail on base for the
           # world's sake rather than the source's — the gate then reads "not vacuous" (false-OK,
           # the safe direction); suite-entrypoint fixtures are self-asserting and not run here.
+          # Whether a pinning fixture REACHES every changed clause line is #1224's leg, not this.
           if [ -n "$clause" ] && [ -n "$replay" ]; then
             fxdirs=""
             while IFS= read -r f; do
               [ -n "$f" ] || continue
               case "$f" in agents/replay/fixtures/*) ;; *) continue ;; esac
-              # homelab#1215 / #1225 face 1: a COMMENT-ONLY diff to a commentable fixture file is
-              # not a pin claim — a well-behaved PR cross-references a sibling fixture in header
-              # comments, and attributing that as "this dir pins my fix" steers diffs AWAY from
-              # documentation (PR#1168's neighbour fixture). Only commentable types get the
-              # exemption; worlds/expected/psv count as behavioral on ANY diff, and an
-              # unreadable/empty patch counts as behavioral (fail toward checking).
-              case "$f" in
-                *.yaml|*.yml|*.sh|*.md)
-                  fpatch=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq ".[] | select(.filename==\"$f\") | .patch // \"\"")
-                  fsubst=$(printf '%s\n' "$fpatch" | grep -E '^[-+][^-+]' | grep -vE '^[-+][[:space:]]*(#|$)' || true)
-                  if [ -n "$fpatch" ] && [ -z "$fsubst" ]; then
-                    echo "ratchet: pin-vacuity — $f is comment/blank-only (not a pin claim, homelab#1215)"
-                    continue
-                  fi ;;
-              esac
               d=$(dirname "$f")
               while [ "$d" != "agents/replay/fixtures" ] && [ "$d" != "." ] && [ ! -f "$d/fixture.yaml" ]; do d=$(dirname "$d"); done
               [ -f "$d/fixture.yaml" ] || continue
@@ -329,12 +325,13 @@ jobs:
             if [ -n "$fxdirs" ]; then
               git fetch -q --no-tags --depth=1 origin "$GITHUB_BASE_REF"
               rm -rf /tmp/ratchet-base; git worktree add -q /tmp/ratchet-base FETCH_HEAD
-              vacuous=""
+              vacuous=""; pinned=""
               while IFS= read -r d; do
                 [ -n "$d" ] || continue
                 if ( source /tmp/devbox-env.sh && bash /tmp/ratchet-base/agents/replay/run.sh "$PWD/$d" ) > /tmp/ratchet-base.log 2>&1; then
                   vacuous="${vacuous}${d}"$'\n'
                 else
+                  pinned="${pinned}${d}"$'\n'
                   echo "ratchet: pin-vacuity — $d fails against the pre-fix source (pins something)"
                 fi
               done <<< "$fxdirs"
@@ -347,10 +344,16 @@ jobs:
                 if [ "$GITHUB_BASE_REF" != "master" ]; then
                   echo "::warning::ADR-103 pin-vacuity: cannot prove vacuity against stacked base '$GITHUB_BASE_REF' — the fix may predate this PR there (homelab#1225 face 2). Unproven, not vacuous:"
                   printf '  %s\n' $vacuous
-                else
-                  echo "::error::ADR-103 pin-vacuity (homelab#1107): these changed fixtures PASS against the PRE-FIX source — a pin that passes without the fix pins nothing:"
+                elif [ -n "$pinned" ]; then
+                  # The PR pins (a changed fixture reds on base); the rest are touched for
+                  # non-pin reasons and are listed so the reviewer sees them — the rubric's
+                  # per-fixture vacuous-pin bullet stays the human-side read (homelab#1489).
+                  echo "::notice::ADR-103 pin-vacuity: the PR pins via the fixture(s) above; these changed fixtures pass on base and are NOT this PR's pin (composition / cross-reference / restored coverage — homelab#1489):"
                   printf '  %s\n' $vacuous
-                  echo "Re-record the world or tighten expected/actions.txt so the fixture reds on the base tree and greens on this PR."
+                else
+                  echo "::error::ADR-103 pin-vacuity (homelab#1107): NO changed fixture reds against the PRE-FIX source — a pin that passes without the fix pins nothing. Changed fixtures, all vacuous:"
+                  printf '  %s\n' $vacuous
+                  echo "Add or extend a fixture whose world exercises this PR's change so it reds on the base tree and greens on this PR (a fixture touched for another reason is fine beside it)."
                   exit 1
                 fi
               fi

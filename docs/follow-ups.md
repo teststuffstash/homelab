@@ -618,9 +618,10 @@ the block needs pruning, not more headings.
       move. Measured on PR#1468: **26 catch-up merges, ~26 CI cycles, never green**, on a pool
       already starved (FU-218, queue p90 22–40 min). Cheapest candidate: skip the pick when the
       PR's newest CI failure is the ADR-103 ratchet step (a named, stable step id — the
-      fleet-fault rule's own identifier discipline), report-only. **Next:** decide with #1489 —
-      if the gate stops producing this class the belt may not be worth building. Relates
-      merge-path.md MP-T02, ADR-111.
+      fleet-fault rule's own identifier discipline), report-only. #1489 decided 2026-09-08
+      (the gate's unit is the PR — ADR-103 addendum): the class shrinks to all-vacuous PRs, so the
+      belt stays deferred. **Next:** build only on a second sighting of a PR red on the ratchet
+      step through ≥3 catch-up merges. Relates merge-path.md MP-T02, ADR-111.
 
 - [ ] **FU-220** — **Locked python rides no longer use the PyPI cache; recovering it needs a
       TRANSPARENT cache, which is a trust decision.** `UV_FROZEN=1` (2026-09-07, PR#1485) stops uv
@@ -632,32 +633,6 @@ the block needs pruning, not more headings.
       [`patterns/python-stack.md`](patterns/python-stack.md) §caches. **Next:** measure what the
       bypass costs (wheel bytes/ride × rides/week) before spending anything — operator decision.
       Relates homelab#1300/#1413.
-
-- [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
-      content.** Its documented pick has no green requirement on purpose (2026-07-10: *"a
-      base-side CI fix can only reach a PR through an update"*) — true for a CONTENT red, false
-      for a gate whose verdict is a function of (PR diff × base), which a catch-up merge cannot
-      move. Measured on PR#1468: **26 catch-up merges, ~26 CI cycles, never green**, on a pool
-      already starved (FU-218, queue p90 22–40 min). Cheapest candidate: skip the pick when the
-      PR's newest CI failure is the ADR-103 ratchet step (a named, stable step id — the
-      fleet-fault rule's own identifier discipline), report-only. **Next:** decide with #1489 —
-      if the gate stops producing this class the belt may not be worth building. Relates
-      merge-path.md MP-T02, ADR-111.
-
-- [ ] **FU-220** — **Locked python rides no longer use the PyPI cache: recovering it needs a
-      TRANSPARENT cache (DNS + TLS), which is a trust decision.** `UV_FROZEN=1` (2026-09-07, the
-      oracle handoff) stops uv rewriting committed locks to the LAN index, at the price of
-      `--frozen` installs fetching `files.pythonhosted.org` over the WAN — i.e. the `/packages/`
-      zone stops being fed by the three python-profile repos that all commit a lock. The only
-      shape that keeps BOTH is making the cache invisible: pod `hostAliases` for pypi.org +
-      files.pythonhosted.org, TLS on `pypi-cache`, and either a CA in the ride's trust store or
-      `UV_INSECURE_HOST`/`PIP_TRUSTED_HOST`. **Operator decision, two named costs:** it forges
-      certs for public hostnames inside sandbox pods, and hostAliases delete the upstream
-      fallback — a single-replica cache becomes a hard dependency for every python ride.
-      **Next:** measure what the bypass actually costs (wheel bytes/ride × rides/week from the
-      `/packages/` zone) before spending anything; mechanism +
-      the measured uv behaviour live in [`patterns/python-stack.md`](patterns/python-stack.md)
-      §caches. Relates homelab#1300/#1413, FU-048 (archived).
 
 - [ ] **FU-219** — **`coordinate-perstack-*` runs die with exit 141 (SIGPIPE), intermittently.**
       8 runs on 2026-09-05/06 (platform-agents ×6, oracle-agents ×2), ~60 s in, last Loki line
