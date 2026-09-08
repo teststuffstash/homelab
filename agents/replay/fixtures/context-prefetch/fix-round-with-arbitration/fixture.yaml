@@ -1,0 +1,12 @@
+# homelab#1205 — fix round context pre-fetch with arbitration directive found on PR conversation.
+# Tests that an ARBITRATE marker posted on the PR (not issue) is discovered by the widened search
+# and materialized as arbitration.md OK (homelab#1467).
+# WORK_BRANCH is set (fix round), PF_PR is set (open PR number).
+# The bridge sets both so the block fetches PR data + reviews + inline comments + issue comments.
+name: context-prefetch/fix-round-with-arbitration
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
