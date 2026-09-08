@@ -260,9 +260,10 @@ six OVERSIZE items pointer-ized into
       zones is LIVE since 2026-09-07** (wk-metal-01 / wk-metal-04 / m70s, each pod on its own
       `longhorn-local-xfs` volumes; PR#1498 + [`garage.md`](garage.md) §The build-out as run;
       numbers in the [ledger](storage-ledger.md) §The rf=3 build-out as run). Reclamation = the
-      zone-by-zone rotation, first executed on garage-0 as the build-out's last step (its native
-      resync from the two peers was still running at the 2026-09-07 wind-down — verify convergence
-      first, `garage stats -a` + `block list-errors`). **Next:** arm the
+      zone-by-zone rotation, first executed on garage-0 as the build-out's last step — **converged
+      2026-09-08 ~05:00Z** (identical tables on all three nodes; the native resync onto the SA400
+      took ~6.5 h for 3.2 M items / 559 k blocks; only 3 pre-existing corrupted Loki chunks error).
+      **Next:** arm the
       rotation loop — trigger off `GarageDiskFillingUp`, health gate (refuse while a zone is degraded
       or resyncing), and the cadence input is "seed from the latest finished snapshot" (minutes), not
       the Garage-native resync (unmeasured on the target topology — measure it on the first loop
