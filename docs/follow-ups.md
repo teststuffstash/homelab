@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-226** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-227** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -1042,6 +1042,16 @@ the block needs pruning, not more headings.
       `MTA36ASF4G72PZ-2G3B1` lot (private hardware repo, R8, read 2026-09-08) as a full swap, or
       2 × 32 GB replacing one DIMM per channel (96 GB, channels stay balanced). No FU/ADR matched
       `pve.*(ram|memory)|rdimm` (grepped 2026-09-08). Relates FU-093, ROADMAP §HA model.
+
+- [ ] **FU-226** — **Replace pve's GeForce 9600 GT (2008, G94) with a more power-efficient GPU**
+      (operator, 2026-09-08). The board refuses to POST without a GPU and has ONE physical x16
+      slot, so the card is permanent and the swap is like-for-like in the same slot. The 9600 GT
+      measured only ≈6–7 W idle once bound (`docs/power-measurements.md` §The pve GPU) and it
+      heats the M.2 beneath it (NVMe sensor ≈69 °C before binding) — a modern low-idle card
+      removes both. Needs a pve shutdown (full-cluster outage: every VM + the Matchbox LXC), so
+      batch it with the next planned pve downtime (FU-225 right-sizing reboots are per-VM, not
+      host). No FU/ADR matched `gpu|9600|x16` (grepped 2026-09-08). Relates FU-225,
+      `docs/storage-ledger.md` §pve slots.
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
       wk-metal-02's flaky wired link. **2026-08-07 (homelab#117): wk-metal-02 had a 4.5h NIC

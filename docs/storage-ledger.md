@@ -179,14 +179,17 @@ The
 board (`INTEL X99-P4`) exposes SATA ports physically but they are disabled in firmware. The x16
 slot is permanently occupied: the box **refuses to POST without the GPU** (a GeForce 9600 GT with
 `driver=none`, so it idles at full clocks heating the M.2 beneath it — NVMe sensor 1 reads ~69°C).
-**Re-read 2026-09-05 (`lspci -tv` + root-port `LnkSta`), correcting the slot picture above:** the
-GPU occupies the x16 slot on root port `00:03.0`, but a **second x16 CPU root port (`00:02.0`,
-Slot 6) and an x4 CPU root port (`00:01.0`, Slot 1) are electrically present and EMPTY** (plus one
-chipset x1) — the NVMe rides `00:01.1`. A passive PCIe→M.2 adapter in either free slot gives a
-second full-speed NVMe with only a shutdown, no firmware change (a data disk needs no boot support).
-So growth has three shapes, cheapest first: **(a) a second NVMe on an adapter → new PV, extend the
-VG/pool** (no migration, ~€10 + the drive); (b) replace the 500 G NVMe with a larger one (a
-migration); (c) the SATA BIOS session. Wear is not the constraint: the WD Blue SN580 (DRAM-less
+**Re-read 2026-09-05 (`lspci -tv` + root-port `LnkSta`), then corrected by a physical count
+2026-09-08:** `lspci` shows a second x16 CPU root port (`00:02.0`, "Slot 6") and an x4 CPU root
+port (`00:01.0`, "Slot 1") as electrically present and empty (plus one chipset x1), the NVMe riding
+`00:01.1` — but **the board has ONE physical x16 slot, and the GPU is in it** (operator, counted
+2026-09-08). The root ports are silicon on the CPU, not connectors; the AliExpress board does not
+break them all out. Whether the x4 or x1 root port reaches a physical slot is unverified — count
+before buying an adapter. So growth has three shapes, cheapest first: **(a) a second NVMe on a
+passive PCIe→M.2 adapter → new PV, extend the VG/pool** (no migration, no firmware change — a data
+disk needs no boot support — but ONLY if a physical x4/x1 slot exists; the x16 is taken by the
+GPU, which stays, FU-226); (b) replace the 500 G NVMe with a larger one (a migration); (c) the
+SATA BIOS session. Wear is not the constraint: the WD Blue SN580 (DRAM-less
 consumer TLC) reads 4 % used at 40 TB written over 2,474 power-on hours — ~390 GB/day, roughly
 seven years to its 300 TBW rating at that rate.
 
