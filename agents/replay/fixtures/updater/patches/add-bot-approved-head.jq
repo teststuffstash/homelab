@@ -8,8 +8,6 @@
   { number: 141, createdAt: "2026-09-05T09:00:00Z", mergeStateStatus: "BEHIND",
     autoMergeRequest: { enabledAt: "2026-09-05T09:01:00Z" }, reviewDecision: "", baseRefName: "master", labels: [],
     headRefOid: "ready141oid123",
-    commits: [ { messageHeadline: "feat: content", committedDate: "2026-09-05T09:10:00Z" },
-               { messageHeadline: "Merge branch 'master' into fix/ready", committedDate: "2026-09-05T11:00:00Z" } ],
     reviews: [ { author: { login: "homelab-reviewer[bot]" }, state: "APPROVED",
                  submittedAt: "2026-09-05T09:30:00Z" } ] }
 ]

@@ -45,11 +45,14 @@ REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"
 if [ "${UPDATER_MERGE_READY_ONLY:-1}" = "0" ]; then MERGE_READY_ONLY=false; else MERGE_READY_ONLY=true; fi
 
 # One list serves all three legs — the snapshot is per-pass by design (level-triggered; anything
-# it misses, the next pass sees). `commits` + `reviews` ride along for the merge-ready predicate:
-# "approved at head" is a commit-vs-review-timestamp question and the picker must answer it from
-# the SAME snapshot (a per-candidate `gh pr view` would cost one API call per armed PR per pass).
+# it misses, the next pass sees). `reviews` rides along for the merge-ready predicate; `commits`
+# deliberately does NOT: gh expands it to commits(first:100){authors(first:100)}, and at
+# --limit 100 the query asks for 1,000,000 possible nodes against GitHub's 500,000 cap — the whole
+# list is REJECTED before a single PR is read (every pass on every repo red for 65h, 2026-09-05
+# 22:30 → 09-08, the first cron tick after homelab#1465 shipped the field; --limit 50 still lands
+# at 505,050). The commit half of "approved at head" is probed per candidate in leg 1 instead.
 PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
-  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,commits,reviews)"
+  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews)"
 
 # Defensive: `gh pr edit --add-label` FAILS on a missing label, so create it idempotently first
 # (the AgentStack claim provisions it via IssueLabels, but this survives a not-yet-claimed repo or
@@ -108,27 +111,47 @@ label_conflict() {
 # a sourceable library): the newest bot APPROVED submittedAt must post-date the newest NON-MERGE
 # commit — updater merge commits are not content, or this leg would invalidate its own approvals
 # (the nine-review loop, oracle-fleet#57).
-picks="$(jq -r --arg bot "$REVIEWER_LOGIN" --argjson ready "$MERGE_READY_ONLY" '
-  def newest_commit_at:
-    ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
-       | .committedDate ] | max) // "";
-  def bot_approved_head:
-    ([ .reviews[]?
-       | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
-       | select(.state == "APPROVED")
-       | .submittedAt ] | max // "") > newest_commit_at;
-  def merge_ready:
-    (.reviewDecision == "APPROVED") or bot_approved_head;
-  [.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
+# The commit half is NOT in the snapshot (the node-cap note at the list call): it is probed per
+# candidate with `gh pr view --json commits`, and only for a candidate whose snapshot `reviews`
+# carry a bot APPROVED at all — without one the predicate is false with no call, which keeps the
+# common BEHIND population (unreviewed, waiting for its first review) at zero API cost. An
+# APPROVED reviewDecision is ready on the snapshot alone. An unreadable probe HOLDS with a line
+# (rule #6 — this leg fails toward NOT updating; the */15 cron retries).
+cands="$(jq -c '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
                 and .reviewDecision != "CHANGES_REQUESTED"
                 and (.reviewDecision != "REVIEW_REQUIRED" or
                      ([((.latestReviews // [])[] | select(((.author.login // "")
                        | startswith("homelab-reviewer")) and .state == "APPROVED"))]
-                      | length) == 0)
-                and (($ready | not) or merge_ready))]
-                | group_by(.baseRefName // "")
-                | map(sort_by(.createdAt) | .[0])
-                | .[] | "\(.number) \(.headRefOid // "-")"' <<<"$PRS")"
+                      | length) == 0))' <<<"$PRS")"
+ready="[]"
+while read -r pr; do
+  [ -n "$pr" ] || continue
+  n="$(jq -r '.number' <<<"$pr")"
+  if [ "$MERGE_READY_ONLY" = false ] || [ "$(jq -r '.reviewDecision' <<<"$pr")" = APPROVED ]; then
+    ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"; continue
+  fi
+  approved_at="$(jq -r --arg bot "$REVIEWER_LOGIN" '
+    [ .reviews[]? | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
+      | select(.state == "APPROVED") | .submittedAt ] | max // ""' <<<"$pr")"
+  [ -n "$approved_at" ] || continue
+  # Unreadable = the call failed OR the body is not the JSON asked for (a 200 that is not JSON is
+  # the `garbage` stub mode, and the shape a proxy error takes live) — both HOLD, never a silent skip.
+  cj="$(gh pr view "$n" --repo "$REPO" --json commits 2>/dev/null)" && jq -e '.commits' <<<"$cj" >/dev/null 2>&1 || cj=""
+  if [ -z "$cj" ]; then
+    echo "updater[$REPO]: #$n commit probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)"
+    continue
+  fi
+  if jq -e --arg a "$approved_at" '
+       ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
+          | .committedDate ] | max // "") as $c | $a > $c' <<<"$cj" >/dev/null 2>&1; then
+    ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"
+  fi
+done <<<"$cands"
+picks="$(jq -r --argjson ready "$ready" '
+  [.[] | select(.number as $n | $ready | index($n) != null)]
+  | group_by(.baseRefName // "")
+  | map(sort_by(.createdAt) | .[0])
+  | .[] | "\(.number) \(.headRefOid // "-")"' <<<"$PRS")"
 if [ -n "$picks" ]; then
   # One update per lane. `while read` over a here-string: a pipe would run the body in a subshell,
   # which costs nothing today but is the shape that silently loses state the moment this leg keeps
