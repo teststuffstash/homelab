@@ -10,17 +10,32 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-08 corpus session, ~09:40Z wind-down):** (1) **S8 legs 4–6 of #1460 = PR#1510** (armed; bot review
-  pending at wind-down) — when it merges #1460 + #1431 close; if the bot requests changes, the
-  fix is the seat's (the subagent clone is gone with the session). (2) **#1423 build (un-held) then #1424 closeout leg** = the S8 closeout-1 sitting
-  (originals 1a/1b/2/3/4/5/6 DONE; #1431 closed 10:5xZ): docs-cleanup over the touched
-  surfaces, the FU sweep (FU-168 fence half, FU-199 board faces, FU-201/FU-174 cross-refs), the
-  built-vs-left comment on #1418, dispositions written via `epic_dispositions.py`, ROADMAP S8 row.
-  (3) **Handoff inbox**: only the circles ADR request remains (real-content seam — a design sitting +
-  one Infisical secret; operator decision). (4) **#946** A5 evidence seed — a seat sitting (S3
-  snapshot discovery under seat creds, `agents/re-review.sh --shadow` over ~3 merged platform PRs).
-  (5) the oracle pin ping-pong / FU-203's CronJob (now riding as #1505) /
-  23 stale archive entries → `/docs-cleanup` — unchanged from the 09-08 morning pickup.
+- **⚑ PICKUP (2026-09-08 late corpus session, ~19:1xZ wind-down — the five-PR read + S8 #1423 BUILT):**
+  (1) **S8 #1423 is DONE** — PR#1535 (scan nomination + trigger (e) + footprint predicates +
+  goal-lint), PR#1531 (reviewer depth re-key), PR#1530 (checkpoint theme play + docs); closed with
+  the built-vs-left comment (themes form within the Goal's own repo by decision; the pre-assembly
+  theme-branch refresh is a seat push — stated as inference, verify on the first live theme).
+  NEXT corpus session: **#1424** (FSM + doc currency: `issue-lifecycle-fsm.yaml` gains the theme
+  rows — nomination side value, trigger (e) — with `replay:` on the four new `goal/theme-*` rows
+  and `reviewer-sprout-depth`; merge-path FSM per-lane guards from #1422; chainless-redesign
+  §The jail stint closeout act; README doc table; ROADMAP S8 row → DONE + dogfood pointer), then
+  **closeout 1** (docs-cleanup over S8's surfaces, the FU sweep: FU-168 fence half, FU-199 board
+  faces, FU-201/FU-174 cross-refs; built-vs-left comment on #1418; `epic_dispositions.py` rows;
+  the ≥72h quiet window arms the close). (2) **Retro r3 batch container NOT yet authored**
+  (PR#1524 merged 18:04Z; opus F1 carrier = PR#1514 shipped; F3 churn held today — the updater
+  merged master into un-reviewed #1513/#1515/#1530/#1535 repeatedly: #1452's merge-ready-only
+  skip is NOT holding, read `agents/update-pr-branch.sh` before filing) — `retro-batch:
+  platform-r3` parent + children per finding, bind-at-filing. (3) **#1527** (reflex/scan
+  `ARBITRATE` notices served as the fix round's directive after PR#1514) filed inert under #1467 —
+  the subtraction (notices onto the agent-summary comment) is corpus work. (4) Loop findings
+  recorded on FU-199 (ruled-but-never-dispatched face: the 13:14Z Anthropic 522 killed both
+  arbitrate sessions after their ruling) and here: #1532 (minted by #1162's checkpoint, riding)
+  carries NO `Base` — the mint play skipped the inherited `Base=master`; the ci-red re-label on
+  #1515 at 18:10 was applied against a sha 100s dead (a scan racing a seat push). Subagent card
+  fact: no shellcheck gate exists in devbox.json/ci.yaml despite FU-185's "shellcheck-gated".
+  (5) Handoff inbox: the circles ADR request (real-content seam; operator decision) — unchanged.
+  (6) #946 A5 evidence seed, the oracle pin ping-pong, 23 stale archive entries → `/docs-cleanup`
+  — unchanged.
 - **⚑ PICKUP (2026-09-08 evening seat — the failing-workflows read): DONE, nothing to pick up.**
   Updater (PR#1521), responder model (PR#1522), agent-session bundle vars (PR#1523) merged and
   verified live (16:30 cron green on 12 repos; retro PR#1524 harvested; `respond-wm2cf` ran a real

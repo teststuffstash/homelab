@@ -594,7 +594,14 @@ the block needs pruning, not more headings.
       the next mover" is reported and no human is told. **2026-09-04:** the fingerprint faces
       FIXED (#1345 → PR#1352); the CAP SPLIT is complete — updater park-skip (#887 → PR#1375,
       measured 39/41 CI runs on unchanged parks before it) + parks counted BLOCKED|BEHIND
-      (PR#1376). **Next:** honest strike-held rows + hold-chain propagation (the remaining
+      (PR#1376). **+2026-09-08: the RULED-BUT-NEVER-DISPATCHED face** — both arbitrate sessions
+      on PR#1513/#1515 posted their re-dispatch ruling, removed `agent/arbitrate`, then died on an
+      Anthropic-side 522 at 13:14Z (`coordinator-homelab-pr-1513` exit 1) before the round-4
+      `agent-session.sh` call; the ci-red cap re-labelled both at 13:20Z and the arbitrate
+      fingerprint then read "ruled" for 5h (the seat executed both by hand). The ci-red clause
+      has the FU-199 (2) re-arm ("no stats newer than the marker ⇒ stale"); the ARBITRATE
+      clause has none for a ruling with no round behind it — that re-arm, or the play ordering
+      dispatch BEFORE the comment, is the fix. **Next:** honest strike-held rows + hold-chain propagation (the remaining
       board faces); the C4/C5 goal-child limbo with NO strike evidence (oracle#432 today —
       FU-072's dead IP ate the strike post) is FU-204's. Relates FU-187, FU-143, FU-147.
 
@@ -1054,8 +1061,11 @@ the block needs pruning, not more headings.
       Postmortem: [`incidents/2026-09-05-updater-node-cap-responder-dead-triage.md`](incidents/2026-09-05-updater-node-cap-responder-dead-triage.md);
       the belt home is FU-188 (d). **Next:** (b) first — push `responder_triage_sessions_failed`
       beside the budget gauges in `responder-budget.sh`'s pushgateway shape and alert on
-      failed ≥ 3 in 24 h; (a) needs a per-template source (`argo_workflows_total_count` has no
-      template label) — a kube-state-metrics-style read of Workflow CRs or the exporter.
+      failed ≥ 3 in 24 h; (a) PARTIAL 2026-09-08 — `AgentLoopWorkflowsFailing` (PR#1515, the
+      #1456 belt) fires per loop NAMESPACE at ≥3 Failed/Error in 1h (would have named the
+      updater outage on its first hour); the per-TEMPLATE source (`argo_workflows_total_count`
+      has no template label — a kube-state-metrics-style read of Workflow CRs or the exporter)
+      stays the residue.
 
 ## Hardware & nodes
 

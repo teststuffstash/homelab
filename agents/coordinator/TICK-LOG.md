@@ -7961,3 +7961,67 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   `respond-wm2cf` (AgentErrorFlagged, 17:18, unprompted) ran a REAL session — diagnosed, reopened
   homelab#114 with a re-fire comment, verdict posted — the first responder investigation in ≥7 days;
   `responder-behaviour-test.sh` with `AGENT_MODEL=claude/sonnet` 117/117 on the merged script.
+
+## 2026-09-08 — late corpus session (operator: "the 5 open PRs, then S8")
+
+- **17:5x–18:2xZ (codeowner reads, ADR-110):** #1512 (hermeticity audit — the run.sh unset choke
+  point over 27 `AGENT_*` + credentials, a weak-but-honest table fixture) APPROVED → merged after
+  the updater; #1514 (arbitrate directive reaches the worker from PR comments, line-anchored
+  marker) APPROVED → merged 17:59Z — with one residual filed: **#1527** (the scan/reflex
+  `ARBITRATE …` escalation NOTICES on the PR now win the newest-`^ARBITRATE` pick whenever the
+  ruling lacks the marker or a notice post-dates it — both true on #1513/#1515 today; fix =
+  subtraction, the notices move onto the agent-summary comment, readers `arb_ts` + state-fp
+  rows 6b/9 move with them); #1524 (retro r3, 2 reports) APPROVED → merged 18:04Z.
+- **#1513 + #1515 were WEDGED by the F1 class the r3 opus report names:** the coordinator's
+  arbitrate sessions (13:11Z / 13:13Z) each ruled "re-dispatch round 4" with the literal edits,
+  no round 4 ever ran (no pod, no stats — only updater merges after the last content commit),
+  the scan's ci-red cap re-labelled `agent/arbitrate` at 13:20Z, the state-fp debounce held both
+  for 5h. Seat executed both rulings (ADR-110 unwedge; the carrier fix is PR#1514):
+  **#1513** — Defect A (`$F | index(.parentKey)` evaluates `.parentKey` against `$F`; now
+  `IN($F[])`), Defect B (the ADR-102 terminal legs received `circles#77` as an issue number
+  against the goal's slug; repo/number split, close/de-queue in the member's own repo), plus the
+  reviewer's follow-up folded in (the stack-wide 300-issue prefetch per repo per tick → lazy,
+  first goal-carrying repo, memoized per stack); goal family 20/20, full replay 440/440.
+  **#1515** — the three-command directive executed (scan hunk + vacuous fixture reverted;
+  producer hunt = #1517) AND the gate read caught the alert as authored keying on
+  `argo_workflow_info{workflow=~…}` — a metric that does not exist here; rebuilt as
+  **`AgentLoopWorkflowsFailing`** on `argo_workflows_total_count{exported_namespace}` (per loop
+  ns, ≥3 Failed|Error in 1h, `for: 10m`, `platform_machinery`), calibrated on the 7d: stack
+  loops ≥3/h for 3–6 h/week, agent-coordinator 74 h (the updater outage the fleet line missed)
+  — FU-227 (a) PARTIAL; four-row promtool fixture, drift-pinned. Both pushes rejected once:
+  the updater merged master into both un-reviewed PRs at 18:03 and 18:07 (twice more by 18:12)
+  — #1452's merge-ready-only skip is not holding (retro r3 F3's live evidence; unfiled, pickup).
+  `agent/arbitrate` removed by hand; the scan re-labelled #1515 at 18:10 (CI in flight) and the
+  #1507 belt cleared it again at 18:17 — self-healing as designed.
+- **18:3xZ S8 #1423 FAN-OUT** (operator: build it inside S8): three clone subagents, PR flow
+  granted, `Part of #1423`. Design pins settled at dispatch (the seat's read of ADR-126 +
+  v1.3.1 + the scan/reviewer/goal-lint code): **opt-in = `Base: master`** (no 14th block key —
+  ADR-122 pin 1; a themed Goal is by definition a deploy-to-test Goal, IL-T18 key (2));
+  **nominations are deterministic** (`fp_theme_groups` over open unlabelled/queued work-item
+  descendants' `Touches`, ≥2 sharing a surface, `*`-sentinel excluded) and ride the
+  goal-checkpoint unit as `themes=<surface>:a+b;…` — NO new trigger and NO decline marker
+  (a new sprout is undispositioned → trigger (c) wakes the checkpoint anyway; the #1450
+  re-fire class avoided by construction); **trigger (e) `theme-complete=<n>`** (all theme
+  children closed, no PR on the branch — self-retiring once the PR exists) wakes the checkpoint
+  to open the ordinary `goal/<n>-<slug> → master` PR with `Fixes #<theme>`; **membership** =
+  `fp_theme_member` (every non-exempt `Touches` entry under the fix-surface; replay/FSM =
+  pin allowance) + the play's four judgment clauses (topic / live deliverable / servable lane /
+  ¬hotfix); **the checkpoint cuts the theme branch** (IL-G02's operator step is the Goal's own
+  branch only); **rule-7 re-key** = subtract hops whose parent is a `theme:` container
+  (Goal→theme→child = 1, its sprout = 2). Leg C (goal-lint) folded into A (shares the predicate).
+  Session ctx at fan-out: 609k — trailing work only after the three terminals; #1424 + closeout
+  1 + the r3 batch are the next session's (pickup written).
+- **18:2x–19:1xZ S8 #1423 LANDED** — three subagent PRs, PR flow granted, each bot-approved
+  (author == sole codeowner ⇒ the waiver: the seat's diff read IS the gate; `gh pr review
+  --approve` on one's own PR is refused): **PR#1531** (leg B, 444/444) → **PR#1535** (leg A,
+  448/448 after a content rebase onto PR#1513's qualified-key goal lane — the seat named the
+  three jq reads to adapt; theme candidates/containers scoped to the goal's own repo by decision)
+  → **PR#1530** (leg D; held un-armed until A/B were in, then re-armed; the reviewer had stood
+  aside on a checks-pending head and re-picked on its own). #1423 closed with the built-vs-left
+  comment; #1418's only open original is #1424. Answered en route: the operator's
+  `ert-delta-attended-vr4kw` question — NOT bound on the SA400 or Garage (S3 ~3 req/s, block
+  writes ~3 KB/s), single-threaded CPU-bound (0.96 of 1 core, no throttling) in its populate
+  phase with per-artifact cost growing (rate/s 6312→1438 over 2h) — an oracle-fleet ingester
+  fact; the SA400 still shows 90–145 ms write latency but is out of this job's path. Bookkeeping
+  pushed once at wind-down (this push); ctx ≈ 770k at exit.
+
