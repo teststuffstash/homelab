@@ -871,6 +871,15 @@ worker↔reviewer loop that will not converge unaided. This is YOUR tie-break du
 doctrine, merge-path.md escalation table). Re-read live state first (a human may have ruled).
 Read the diff + the whole review thread, then rule — exactly one of:
 
+> **ARBITRATE marker contract** (homelab#1467): when you post a ruling comment to order a
+> fix round, it MUST begin with a line-anchored `ARBITRATE` word (e.g., `ARBITRATE: re-run
+> with the fix below` or `ARBITRATE (context): ...`) — never a bare heading or substring that
+> merely discusses arbitration. The marker may be followed by an optional `(<context>)` and a
+> colon, but the first word must be `ARBITRATE` at line start. The fix round's launcher searches
+> both the issue comments AND the PR's conversation comments for this marker; a comment without
+> it is invisible to the worker. The directive may be posted on **either** surface. The marker is
+> a **documented contract**, not implicit — always begin your arbitration ruling with it.
+
 - **Re-dispatch with clarified instructions**: the loop is stuck on a misunderstanding you can
   name. Remove `agent/arbitrate`, comment your ruling + the clarification, dispatch the fix
   round yourself (agent-session `--work-branch` on the PR's branch) with the clarification fed
@@ -1083,6 +1092,11 @@ names the same failing step a `ci-red` ride already ruled environmental on a DIF
 24h, stop parking per PR** — emit ONE `AGENT_ERROR: infra-class CI red on N PRs — <check>/<step>`
 listing the PRs (the fleet trigger in the `agent/error` row), and say on each other affected PR
 that it is covered by that one signal instead of giving each its own `agent/blocked` + human ask.
+
+> **ARBITRATE marker contract (homelab#1467) also applies to ci-red** — when you post a re-dispatch
+> ruling on a red PR, it MUST begin with a line-anchored `ARBITRATE` word (§arbitrate above).
+> CI-red rulings are conventionally posted on the PR and the worker's launcher searches both issue
+> and PR conversation comments; without the marker your directive is invisible to the worker.
 The `agent/error` LABEL still goes on each affected PR — it is the reflex-side breaker and the
 breaker is per item — but the *comment*, and therefore the human ask, is one. circles#19 is the
 receipt: four `ci-red` dispatches and three human interventions over ~4h across PRs #50/#51, all of
