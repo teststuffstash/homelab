@@ -7920,4 +7920,12 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   firing at 82.3 %** (24 h min 66.8 — untrimmed deletions: wk-01 held 66 G allocated for 35 G used)
   → fstrim jobs triggered on wk-01/02/03 + in-guest on ci-runner-01 → **66.1 %**. Note: `devbox run
   tf-apply` returned exit 127 AFTER "Apply complete!" (state verified correct) — GAPS sighting.
+- **13:3x–14:4xZ (operator, same thread → wind-down):** PR#1518 merged 13:23Z. **FU-224 "run all of
+  it"**: longhorn-manager 150m→300m, cilium agent 250m→500m, viewer bucket-sync 1→2 — tofu applied,
+  both DaemonSets rolled with oracle's delta job running (volumes healthy throughout), PR#1519
+  merged, viewer rolled via ArgoCD. **FU-225 rewritten** (three re-rulings had made it unreadable)
+  to its one remaining action, then done: `PveHostMemoryLow` (MemAvailable < 3GiB for 15m) with a
+  behaviour fixture, PR#1520 merged, rule loaded 14:31Z inactive/ok; **FU-225 ARCHIVED**. Direction
+  recorded for the pickup: the second hypervisor (4U) is the operator's answer to pve
+  concentration — ADR pending on the buy. Wind-down: bookkeeping pushed once (this push).
 
