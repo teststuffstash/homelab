@@ -372,6 +372,10 @@ def render_block(fields):
         if value == "":
             continue
         out.append("%s: %s" % (key, value))
+    # A blank line before the closing fence: in CommonMark a paragraph immediately followed by a
+    # `---` line is a SETEXT H2, so without it GitHub renders every key line as one bold heading
+    # (oracle-fleet#491/#492/#493, the 2026-09-06 oracle handoff). The parser skips blank lines.
+    out.append("")
     out.append("---")
     return "\n".join(out)
 
@@ -769,9 +773,9 @@ def _self_test():
     # Render order is GRAMMAR order (docstring), regardless of the dict's insertion order.
     check("render_block: GRAMMAR order, fenced, no trailing newline",
           render_block({"Class": "build", "Touches": "a.sh", "Budget": "30"}),
-          "---\nTouches: a.sh\nBudget: 30\nClass: build\n---")
+          "---\nTouches: a.sh\nBudget: 30\nClass: build\n\n---")
     check("render_block: an empty value is omitted rather than written as a bare key",
-          render_block({"Base": "", "Budget": "30"}), "---\nBudget: 30\n---")
+          render_block({"Base": "", "Budget": "30"}), "---\nBudget: 30\n\n---")
     raises("render_block: refuses an unknown key", lambda: render_block({"Nope": "x"}),
            "unknown key")
     raises("render_block: refuses a multi-line value",
@@ -785,9 +789,9 @@ def _self_test():
     plain = "## Why\n\nprose\n\nTouches: legacy.sh\n"
     out = upsert_block(plain, {"Base": "goal/9-x"})
     check("upsert_block: inserts at the top of a blockless body",
-          out, "---\nBase: goal/9-x\n---\n" + plain)
+          out, "---\nBase: goal/9-x\n\n---\n" + plain)
     check("upsert_block: the rest of a blockless body is byte-identical",
-          out[len("---\nBase: goal/9-x\n---\n"):], plain)
+          out[len("---\nBase: goal/9-x\n\n---\n"):], plain)
     check("upsert_block: a legacy line for the written key is LEFT IN PLACE (1b removes them)",
           "Touches: legacy.sh" in out, True)
 
@@ -795,11 +799,11 @@ def _self_test():
     withblock = "---\nBudget: 30\nClass: fix\n---\n\n## Why\n\nprose\n"
     out = upsert_block(withblock, {"Base": "goal/9-x", "Class": "build"})
     check("upsert_block: merges into an existing block, in GRAMMAR order",
-          out, "---\nBase: goal/9-x\nBudget: 30\nClass: build\n---\n\n## Why\n\nprose\n")
+          out, "---\nBase: goal/9-x\nBudget: 30\nClass: build\n\n---\n\n## Why\n\nprose\n")
     check("upsert_block: the body after the block is byte-identical",
           out.split("---\n", 2)[2], "\n## Why\n\nprose\n")
     check("upsert_block: None removes a key",
-          upsert_block(withblock, {"Budget": None}), "---\nClass: fix\n---\n\n## Why\n\nprose\n")
+          upsert_block(withblock, {"Budget": None}), "---\nClass: fix\n\n---\n\n## Why\n\nprose\n")
     raises("upsert_block: refuses an unknown key", lambda: upsert_block("x", {"Nope": "1"}),
            "unknown key")
 
