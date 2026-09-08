@@ -10,17 +10,31 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-08 corpus session, ~09:40Z wind-down):** (1) **S8 legs 4–6 of #1460 = PR#1510** (armed; bot review
-  pending at wind-down) — when it merges #1460 + #1431 close; if the bot requests changes, the
-  fix is the seat's (the subagent clone is gone with the session). (2) **#1423 build (un-held) then #1424 closeout leg** = the S8 closeout-1 sitting
-  (originals 1a/1b/2/3/4/5/6 DONE; #1431 closed 10:5xZ): docs-cleanup over the touched
-  surfaces, the FU sweep (FU-168 fence half, FU-199 board faces, FU-201/FU-174 cross-refs), the
-  built-vs-left comment on #1418, dispositions written via `epic_dispositions.py`, ROADMAP S8 row.
-  (3) **Handoff inbox**: only the circles ADR request remains (real-content seam — a design sitting +
-  one Infisical secret; operator decision). (4) **#946** A5 evidence seed — a seat sitting (S3
-  snapshot discovery under seat creds, `agents/re-review.sh --shadow` over ~3 merged platform PRs).
-  (5) the oracle pin ping-pong / FU-203's CronJob (now riding as #1505) /
-  23 stale archive entries → `/docs-cleanup` — unchanged from the 09-08 morning pickup.
+- **⚑ PICKUP (2026-09-08 late corpus session, ~19:xxZ wind-down — the five-PR read + S8 fan-out):**
+  (1) **S8 #1423 is BUILDING as three subagent PRs** (legs A scan/footprint/goal-lint
+  `fix/s8-7a-theme-nominate`, B reviewer depth re-key `fix/s8-7b-depth-rekey`, D checkpoint play
+  + docs `fix/s8-7d-theme-play-docs`; bodies say `Part of #1423`, the seat closes #1423) — the
+  briefs' design pins are in TICK-LOG 2026-09-08 (nominations ride the checkpoint unit as
+  `themes=`, trigger (e) `theme-complete=`, opt-in = `Base: master`, depth guard subtracts
+  `theme:` hops). NEXT: codeowner-read each PR (agents/** parks), then **#1424** (FSM + doc
+  currency; the theme rows + trigger (e) go in issue-lifecycle-fsm.yaml, the new fixtures in
+  `replay:`), then **closeout 1** (docs-cleanup over S8's surfaces, the FU sweep: FU-168 fence
+  half, FU-199 board faces, FU-201/FU-174 cross-refs; built-vs-left comment on #1418;
+  `epic_dispositions.py` rows; ROADMAP S8 row). (2) **Retro r3 batch container NOT yet
+  authored** (PR#1524 merged 18:04Z; the opus report's five findings + the deepseek cell's six —
+  F1 carrier = PR#1514 shipped; F3 churn evidence held today: the updater merged master into
+  #1513/#1515 four times each while un-reviewed — #1452's merge-ready-only skip is NOT holding,
+  read `agents/update-pr-branch.sh` before filing) — a corpus sitting: `retro-batch: platform-r3`
+  parent + children per finding, bind-at-filing. (3) **#1527** (the reflex/scan `ARBITRATE`
+  escalation notices are picked as the fix round's directive after PR#1514) is filed inert under
+  #1467 — the subtraction (notices onto the agent-summary comment) is corpus work. (4) Loop
+  finding, unfiled: BOTH 13:1xZ arbitrate sessions ruled re-dispatch and NO round 4 was
+  dispatched (no r4 pod, no stats); the seat executed both rulings by hand (PR#1513/#1515 —
+  retro F1's exact shape). Read the two `coordinator-homelab-pr-151[35]` transcripts in
+  `s3://agent-transcripts/homelab/` to see whether the launcher refused or the play stopped at
+  the comment; the transcript is the only record (pod logs are empty by design). (5) Handoff
+  inbox: the circles ADR request (real-content seam; operator decision) — unchanged. (6) #946 A5
+  evidence seed, the oracle pin ping-pong, 23 stale archive entries → `/docs-cleanup` — unchanged.
 - **⚑ PICKUP (2026-09-08 evening seat — the failing-workflows read): DONE, nothing to pick up.**
   Updater (PR#1521), responder model (PR#1522), agent-session bundle vars (PR#1523) merged and
   verified live (16:30 cron green on 12 repos; retro PR#1524 harvested; `respond-wm2cf` ran a real

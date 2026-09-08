@@ -1054,8 +1054,11 @@ the block needs pruning, not more headings.
       Postmortem: [`incidents/2026-09-05-updater-node-cap-responder-dead-triage.md`](incidents/2026-09-05-updater-node-cap-responder-dead-triage.md);
       the belt home is FU-188 (d). **Next:** (b) first — push `responder_triage_sessions_failed`
       beside the budget gauges in `responder-budget.sh`'s pushgateway shape and alert on
-      failed ≥ 3 in 24 h; (a) needs a per-template source (`argo_workflows_total_count` has no
-      template label) — a kube-state-metrics-style read of Workflow CRs or the exporter.
+      failed ≥ 3 in 24 h; (a) PARTIAL 2026-09-08 — `AgentLoopWorkflowsFailing` (PR#1515, the
+      #1456 belt) fires per loop NAMESPACE at ≥3 Failed/Error in 1h (would have named the
+      updater outage on its first hour); the per-TEMPLATE source (`argo_workflows_total_count`
+      has no template label — a kube-state-metrics-style read of Workflow CRs or the exporter)
+      stays the residue.
 
 ## Hardware & nodes
 
