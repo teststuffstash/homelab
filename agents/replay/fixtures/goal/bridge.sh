@@ -31,6 +31,24 @@ qpin="${QPIN:-}"
 # so a harness running one extracted block has no flush to assert on.
 item_class_push() { :; }
 
+# ── FIX #1451: cross-repo goal member fixture ──
+# For the cross-repo test, manually construct _kidsall_stack with issues from the goal's tree
+# across multiple repos. The code will then see the cross-repo member and count it.
+# This simulates what the union-across-repos code path (post-fix) produces.
+if [ "${CROSS_REPO_TEST:-}" = 1 ]; then
+  # Manually construct kidsall with repo-qualified keys for all descendants
+  # Goal #29's tree: #30, #31 (closed, circles), #77 (open post-launch, circles), #115 (open, agent-runtime)
+  # Plus #240 (unrelated, circles)
+  _kidsall_stack='[
+    {"number": 29, "state": "OPEN", "closedAt": null, "parent": null, "labels": [], "repo": "circles"},
+    {"number": 30, "state": "CLOSED", "closedAt": "2026-08-08T12:00:00Z", "parent": {"number": 29}, "labels": [{"name": "agent-fix"}, {"name": "agent/done"}], "repo": "circles"},
+    {"number": 31, "state": "CLOSED", "closedAt": "2026-08-09T09:10:00Z", "parent": {"number": 29}, "labels": [{"name": "agent-fix"}, {"name": "agent/done"}], "repo": "circles"},
+    {"number": 77, "state": "OPEN", "closedAt": null, "parent": {"number": 29}, "labels": [], "repo": "circles"},
+    {"number": 240, "state": "OPEN", "closedAt": null, "parent": null, "labels": [{"name": "agent-fix"}, {"name": "agent/queued"}], "repo": "circles"},
+    {"number": 115, "state": "OPEN", "closedAt": null, "parent": {"number": 29}, "labels": [], "repo": "agent-runtime"}
+  ]'
+fi
+
 # ── seam (ADR-122 (3), homelab#1431) ── the ONE issue-body parser. The scan resolves it beside
 # itself; a composition sees config-defaults BEFORE this bridge, so the path is set here.
 IB_PY="$REPLAY_ROOT/agents/issue_body.py"
