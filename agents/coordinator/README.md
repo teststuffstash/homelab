@@ -870,7 +870,12 @@ REAL new child: native sub-issue of the finding's ORIGIN issue — `origin=#N` i
 finding's origin issue>"`, then the `json` re-parse gate before `gh issue create` — §Authoring an
 issue body); label `agent-fix`+`agent/queued` ONLY while the goal is OPEN
 and `Budget:` has room — the same goal_budget arithmetic the launcher pre-flight enforces; over
-budget = mint UNLABELLED and say so), or **drop** (one reason line in your goal comment). Then
+budget = mint UNLABELLED and say so), or **drop** (one reason line in your goal comment). **A finding that is REAL WORK but outside
+THIS Goal's scope is still a `mint` — bound to its origin as a native sub-issue, written
+`deferred --by checkpoint` on the store, UNQUEUED — never filed standalone** (lineage contract
+rule 3: bind at filing regardless of door; rule 9: binding is dumb, the container rules scope).
+homelab#1451 was filed standalone from Goal #1231's checkpoint as "out of scope" and sat inert
+for three days with no container to adopt it (2026-09-08). Then
 advance the marker: `bash /work/homelab/agents/goal-findings.sh advance <owner/repo> <goal-n>
 <total>`. A store you cannot read is a loud line on the goal, not a guess.
 **blockedBy filing-edge (homelab#1152)**: when a minted child wedges live work (a sibling or

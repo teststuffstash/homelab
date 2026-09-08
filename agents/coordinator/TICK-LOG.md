@@ -8024,4 +8024,14 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   phase with per-artifact cost growing (rate/s 6312→1438 over 2h) — an oracle-fleet ingester
   fact; the SA400 still shows 90–145 ms write latency but is out of this job's path. Bookkeeping
   pushed once at wind-down (this push); ctx ≈ 770k at exit.
+- **19:2x–19:4xZ (operator asks, post wind-down):** #1536 gate-read + approved (mirror sync);
+  six of the ≥#1525 slice queued (#1525 #1527 #1528 #1529 #1533 #1534 — footprints declared
+  where missing, #1526 folded into #1527 as the harvest's duplicate), doorbell rung. Operator
+  question answered: every one of them came through an inert-by-ruling door (harvest breaker #1,
+  the ADR-119 filing contract, the seat) — only #1532 had a funded container (#1162) and rode
+  unqueued-by-human; standalone maintenance work has no decider by construction (ADR-122 (1)),
+  so the lever is a container, not a reader. **#1451 ESCAPED #1231** (operator catch): the
+  checkpoint filed it standalone as "out of scope" — a lineage-contract violation (rules 3/9);
+  repaired (bound under #1231, `deferred --by checkpoint`) and the brief's mint clause now names
+  the case (direct quickfix, pushed).
 
