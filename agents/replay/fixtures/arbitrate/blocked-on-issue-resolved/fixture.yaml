@@ -1,0 +1,18 @@
+# CONDITION UNDER REPLAY. oracle-fleet PR #234 carries `agent/arbitrate` and has a terminal ruling
+# that wrote `blocked-on: issue=489` — the ruling determined an issue must be resolved before dispatch. The
+# blocker issue #489 is now CLOSED. The contract is that the clause clears the block and dispatches the
+# unit normally — the blocked-on predicate (homelab#1188) permits dispatch when the named blocker is resolved.
+name: arbitrate-blocked-on-issue-resolved
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

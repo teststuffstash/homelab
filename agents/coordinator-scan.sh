@@ -656,8 +656,9 @@ BLOCKED_ON_JQ='([ .comments[]? | select((.body // "") | test("^blocked-on: (huma
 # <<<REPLAY:blocked-on-jq<<<
 
 # pr_blocked_on_check <slug> <pr> [pr_json] → "blocked|<reason>" or "clear".
-# ONE probe reads the marker and checks the blocker state. Fail-open throughout: an unreadable
-# probe or missing marker yields "clear" (pre-#1188 behaviour — dispatch proceeds).
+# ONE probe reads the marker and checks the blocker state. Fail-closed for blocker-state reads
+# (homelab#1528): when checking a blocker's resolution (PR/issue state), an unreadable probe is
+# treated as blocked, not clear. Missing marker yields "clear" (dispatch proceeds if no block).
 # When a 3rd argument (pre-fetched PR JSON) is provided, it is used instead of fetching — the
 # caller has already fetched the superset for pr_state_fp_pair (homelab#1211).
 # >>>REPLAY:blocked-on-check>>>
@@ -716,21 +717,23 @@ pr_blocked_on_check() {
       return 0
       ;;
     issue)
-      # Check if the issue is still open
+      # Check if the issue is still open. Fail-closed on transient read failure (homelab#1528).
       local state
       state="$(gh issue view "$ref" --repo "$slug" --json state --jq '.state' 2>/dev/null)" || state=''
       case "$state" in
         OPEN) printf 'blocked|issue=%s\n' "$ref";;
+        '')   printf 'blocked|issue=%s\n' "$ref";;
         *)    printf 'clear\n';;
       esac
       return 0
       ;;
     pr)
-      # Check if the PR is still open
+      # Check if the PR is still open. Fail-closed on transient read failure (homelab#1528).
       local pr_state
       pr_state="$(gh pr view "$ref" --repo "$slug" --json state --jq '.state' 2>/dev/null)" || pr_state=''
       case "$pr_state" in
         OPEN) printf 'blocked|pr=%s\n' "$ref";;
+        '')   printf 'blocked|pr=%s\n' "$ref";;
         *)    printf 'clear\n';;
       esac
       return 0
