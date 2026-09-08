@@ -558,9 +558,12 @@ at the merge boundary.
 
 ```
 master
- └── goal/<issue>-<slug>        PR: goal → master      draft, NEVER armed
-       ├── fix/<slug>           PR: fix  → goal        armed
-       └── fix/<slug>           PR: fix  → goal        armed
+ ├── goal/<issue>-<slug>        PR: goal → master      draft, NEVER armed        (the Goal's own branch)
+ │     ├── fix/<slug>           PR: fix  → goal        armed
+ │     └── fix/<slug>           PR: fix  → goal        armed
+ └── goal/<goal-n>-<theme>      PR: theme → master     ordinary, ARMED at open   (a theme, ADR-126)
+       ├── fix/<slug>           PR: fix  → theme       armed
+       └── fix/<slug>           PR: fix  → theme       armed
 ```
 
 **A commit on master does not reach the children** — it makes only the *goal → master* PR
@@ -575,6 +578,19 @@ BASE). The **bottom hop is automatic**: the in-cluster updater (ADR-111,
 branch pattern is only real if the workflow producing it TRIGGERS on that pattern** —
 requiring `ci` on `goal/**` while the workflow said `branches: [master]` left an approved,
 armed PR permanently BLOCKED on a check that could never report.
+
+**The theme's master-refresh hop (S8 #1423, 2026-09-08).** A theme's assembly PR
+`goal/<goal-n>-<slug> → master` is an ORDINARY armed PR, not the draft above — so the in-cluster
+updater does bring it current, but only once it is MERGE-READY (bot-approved at head; the
+updater skips a human-waiting park by design, homelab#1452 / #887). Before that point a master
+fix the theme's children need is pulled into the branch by the same call as the Goal's top hop,
+`gh api -X PUT repos/<slug>/pulls/<assembly-pr>/update-branch` — owned by the checkpoint's
+**"assemble a complete theme" step at PR-open, before arming**
+([`../../agents/coordinator/README.md`](../../agents/coordinator/README.md) §The
+`goal-checkpoint` clause), and by the seat if a child needs it earlier (a PR does not exist
+before assembly, so the pre-assembly form is a plain `git merge master` push to the theme
+branch — protected base, so it is the seat's act, not a worker's). The children `fix →
+goal/<goal-n>-<slug>` ride the updater like any PR.
 
 ## Dependencies: native `blockedBy` is the only reader (FU-111 — retired the body line 2026-08-07)
 
@@ -653,8 +669,11 @@ Class: goal
 
 `Base:` is a forced choice, never a default: `goal/<n>-<slug>` (children stack on the assembly branch;
 one codeowner read of the net swap) or an explicit `master` (children land piecewise, no assembly read
-— a smell to justify, see the table). Fill `<n>` after filing and **cut the branch yourself from
-master** (IL-G02): nothing in the machinery creates it. `Budget` is the only money truth; prose points.
+— a smell to justify, see the table; on a deploy-to-test stack it is the THEMED shape, §Theme-branch
+decomposition). Fill `<n>` after filing and **cut the Goal's own branch yourself from master** (IL-G02):
+nothing in the machinery creates THAT one. A **theme's** `goal/<n>-<slug>` is the exception since S8
+#1423 — the goal-checkpoint cuts it when it forms the theme, one API call under the `goal/**` ruleset.
+`Budget` is the only money truth; prose points.
 
 **Act 2 — bind every child as a native sub-issue** (`sub_issues` POST) at filing, never a floating issue that mentions the Goal. Each child carries its own block:
 `Base` inherited verbatim from the Goal (the decompose play does this), `Touches`, and `Class: build | fix` — mirrored by the matching `task/*` LABEL until the label read retires (ADR-122 (2)):
@@ -673,8 +692,8 @@ duplicate `Budget:` lines, a `€12`/`$16` prose split, a mis-spelled or indente
 
 | symptom | it means |
 |---|---|
-| `Base:` names a branch that does not exist | the author never cut it (IL-G02) — the first child ride dies at clone; `goal-lint` fails on it (oracle-fleet#326) |
-| `Base: master` | legitimate only with a stated reason — a direct-master Goal is more likely a **stint** (operator, 2026-08-30); if no reason survives writing it down, it isn't a Goal |
+| `Base:` names a branch that does not exist | the author never cut it (IL-G02 — for a Goal's own branch; a theme's is cut by the checkpoint) — the first child ride dies at clone; `goal-lint` fails on it (oracle-fleet#326) |
+| `Base: master` | legitimate only with a stated reason — a direct-master Goal is more likely a **stint** (operator, 2026-08-30); if no reason survives writing it down, it isn't a Goal. On a deploy-to-test stack the reason is themes: `goal-lint` reads it `ok` once the Goal carries ≥ 1 theme (S8 #1423) |
 | children filed without sub-issue binding | an orphan tree nothing owns (goal-174: 19 sprouts, 3 generations, still growing 34h after close) |
 | children with no `Class` and no `blockedBy` edges | they ride the wrong recipe, in arbitrary order — act 2 (oracle-fleet#326) |
 | `agent/queued` on a Goal whose children already exist | the decomposer re-decomposes — act 3 |
@@ -801,10 +820,10 @@ Add the row in the same commit as the superseding decision.
 | **v1** | 2026-08-05..08 — circles#17→#29, oracle-fleet goal-174 | FU-090 leg (c) + `Base: goal/**` branches; close = "goal met" ruling | machine-ruled "met" 100 min before operator refutation (#17); 19-sprout tree growing 3 generations 34h post-close (goal-174); `Base:` rot + self-queue outliving the goal (the 2026-08-09 census) | ADR-102 |
 | **v1.1** | 2026-08-11..12 — homelab#278 (the FU-165 pilot) | ADR-102: budget-funded container, post-launch bucket, midpoint merge, human verdict terminals | bucket flattens the derivation DAG (2 vs 5 generations); worker-findings inflow ungated (52 edges, all worker/ride-authored); per-event cadence (21 rulings, 46 singleton mints); `Touches:` fence ~7× against small folds; dispatcher-bound throughput (queue 3,550 min vs pod 605, 361 min starvation); no consumer for goal-thread operator directives — all in [`../spikes/goal-lane-v1.1-fu165-pilot.md`](../spikes/goal-lane-v1.1-fu165-pilot.md) | ADR-106 |
 | **v1.4** | design ACCEPTED 2026-09-03 (ADR-122); build = S8, re-headed | filing inert (the bare-tree-member walk retired); one release valve (`agent/queued`, `agent-fix` off the JOIN); one machine block + one parser for the body grammars, `Origin:` included; tree-member disposition `undispositioned / adopted / deferred` written by the container, read by trigger (b) and the completion predicate | evidence: #1338 correctly authored, walk-queued 86s later → ride + false SOLVE row; #1334 walk livelock ×2 (#1249); #1315's undispositioned binding held G-G's assembly ~10.5h; #390 half-minted on #175 with no reader | — |
-| **v1.3** | design ACCEPTED 2026-09-05 (ADR-126, with ADR-125's per-base lanes underneath); build = S8 originals 6–7 (#1422, #1423 — held on the wave-2 gate) | theme = the batching unit on a deploy-to-test stack: level-2 theme issue + `goal/<n>-<theme>` branch, ordinary `Fixes #<level-2>` assembly, ≥2-shared-surface membership, checkpoint theme-formation, hotfix-only master lane | evidence: the #1162 manual pilot — 2 owned reads + 1 verdict for 13 children vs ~9 parks; G-A's 5 gate reads in one session | — |
+| **v1.3** | design ACCEPTED 2026-09-05 (ADR-126, with ADR-125's per-base lanes underneath); mechanism BUILT 2026-09-08 (S8 originals 6–7, #1422, #1423); adoption per Goal, wave-2 gate | theme = the batching unit on a deploy-to-test stack: level-2 theme issue + `goal/<n>-<theme>` branch, ordinary `Fixes #<level-2>` assembly, ≥2-shared-surface membership, checkpoint theme-formation, hotfix-only master lane | evidence: the #1162 manual pilot — 2 owned reads + 1 verdict for 13 children vs ~9 parks; G-A's 5 gate reads in one session | — |
 | **v1.2** | design ACCEPTED 2026-08-12 (ADR-106); build = Bucket A4/A2 + the next platform Goal | FU-168 (ADR-094 concurrency + ADR-097 fence, numbers decide) · #295 bucket semantics · typed findings disposition · §M10 checkpoints · FU-166(b) · **stack-scoped goals** (operator, 2026-08-12: the tree spans the claim's repos incl. `-iac` — a Goal belongs to a STACK; v1.1 proved cross-repo lineage/budget/ride on ONE agent-runtime child, but sibling repos have no merge doorbell and `-iac` descendants were never exercised, so "done means deployed" stops at the app-repo merge everywhere homelab isn't its own -iac) | — | — |
 
-### Theme-branch decomposition for deploy-to-test stacks — v1.3 (ADR-126, design accepted 2026-09-05; build = S8 #1423, HELD on the adoption gate below)
+### Theme-branch decomposition for deploy-to-test stacks — v1.3 (ADR-126, design accepted 2026-09-05; mechanism BUILT S8 #1423, 2026-09-08 — adoption per Goal, gated below)
 
 > Banked 2026-08-23 from the G-A day-1 retro, promoted at the S8 head sitting. The decision record
 > is ADR-126; this section is its design home.
@@ -833,9 +852,11 @@ one roll — a THEME**, expressed as a 3-level tree:
   three rolls; the #795 taxonomy divergence shipped live where a theme would have caught it
   pre-deploy.
 
-Build items AT ADOPTION (not before): re-key the rule-7 depth guard (level-3 reviews currently
-lose their `Follow-ups:` channel — it was calibrated for sprout tails, not deliberate trees);
-document the per-branch master-refresh hop. **G-A itself continues per-child-to-master
+**Built (S8 #1423, 2026-09-08):** the rule-7 depth guard is re-keyed — the reviewer subtracts
+hops whose parent is a `theme:` container, so `Goal → theme → child` reads depth 1 (`Follow-ups:`
+flow) and `Goal → theme → child → sprout` reads 2 (suppressed); the per-branch master-refresh hop
+is documented in §Who updates what when a branch moves (the theme row); formation itself is the
+goal-checkpoint's theme step (v1.3.1 delta 4 below). **G-A itself continued per-child-to-master
 (operator, 2026-08-23: no process change mid-goal); first user = the next platform Goal launch,
 authored from the work map.**
 
@@ -860,6 +881,12 @@ throughput** — the human's whole contact with a Goal is N assembly reads + one
    clause (store rows 5/10, entry 19: the file-glob `Surface:` over-admits and
    under-describes at once); acceptance member lists follow the TREE, never a hand-written
    topic list (the #459 drift consumed ~half the store's bookkeeping).
+   **BUILT (S8 #1423, 2026-09-08):** the predicate is `fp_theme_member "<child Touches>"
+   "<theme Touches>"` in `agents/footprint.sh` (the pin-surface allowance is the predicate's
+   exemption list); `scripts/goal-lint.sh` holds it on every theme child; the judgment clauses
+   (topic / live deliverable / servable lane / ¬hotfix) are the checkpoint's to rule
+   ([`../../agents/coordinator/README.md`](../../agents/coordinator/README.md) §The
+   `goal-checkpoint` clause, "form themes").
 3. **Lineage** — mint-to-origin STANDS (wave-born sprouts stayed under origin 5/5); every
    filing carries an `Origin: #N` body line so a later container move is lossless; a TYPED
    defer/release disposition the completion walk skips (4 of wave 1's 7 parent moves were
@@ -875,6 +902,16 @@ throughput** — the human's whole contact with a Goal is N assembly reads + one
    automatically — IL-G02's revisit condition has now fired twice: oracle-fleet#326 and this
    pilot), reparents + stamps `Base:` + queues under the goal's existing authorization
    (breaker #1 moved up, IL-T15). **Opt-in per Goal**; intake still closes at assembly-open.
+   **BUILT (S8 #1423, 2026-09-08):** nomination = `fp_theme_groups` in `agents/footprint.sh`,
+   consumed by the scan's goal lane in `agents/coordinator-scan.sh` (rides an existing
+   checkpoint as `themes=<surface>:<n1>+<n2>;…` — no new trigger — plus the new trigger (e)
+   `theme-complete=<theme-n>` for a closed-out theme with no assembly PR yet); the play =
+   the goal-checkpoint's "form themes" and "assemble a complete theme" steps
+   ([`../../agents/coordinator/README.md`](../../agents/coordinator/README.md) §The
+   `goal-checkpoint` clause: nominate → judge → mint → branch → re-parent → stamp `Base` →
+   queue); `scripts/goal-lint.sh` reads `Base: master` as `ok` on a Goal with ≥ 1 theme and
+   requires an existing branch + `Touches` on the theme; the reviewer's rule-7 depth guard
+   is re-keyed to subtract `theme:` hops.
 5. **Routing default** — minor sprouts theme by default; the master lane is hotfix-class only
    (🚨 / live blocking edge — the 2026-08-31 drainage ruling's clause 1).
 

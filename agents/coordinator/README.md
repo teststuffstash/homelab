@@ -413,8 +413,8 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 
 ## Authoring an issue body — the machine block goes through the writer (ADR-122 (3), homelab#1431)
 
-Four of your plays AUTHOR issue bodies: the `merged-closeout` harvest, `goal-decompose`, the
-`goal-checkpoint` `mint`, and the cross-boundary filing contract. In all four, the body's
+Five of your plays AUTHOR issue bodies: the `merged-closeout` harvest, `goal-decompose`, the
+`goal-checkpoint` `mint` and its theme formation, and the cross-boundary filing contract. In all five, the body's
 machine-readable keys are **one `---`-fenced block at the TOP of the body, composed by the ONE
 parser's writer** — [`agents/issue_body.py`](../../agents/issue_body.py), grammar and rationale in
 [`docs/agents/issue-authoring.md`](../../docs/agents/issue-authoring.md) §The machine block. You
@@ -755,6 +755,110 @@ Two other moments write the same store, and both are one line each: `goal-decomp
 play's `mint` write `adopted --by checkpoint` for every child THEY author (the authoring moment
 IS the ruling), and the scan writes `deferred --by bucket` for the `post-launch:` bucket it
 creates.
+
+**THEN, form themes (v1.3.1 delta 4 — ONLY when your unit carries `themes=`; S8 #1423,
+2026-09-08).** On a Goal whose `Base` is the repo's default branch, the scan's goal lane
+NOMINATES themes and rides them on a checkpoint that fired for (a)/(b)/(c) — there is no new
+trigger. The unit's `themes=<surface>:<n1>+<n2>;<surface2>:<n3>+<n4>` parameter (groups
+`;`-separated, members `+`-separated) is the deterministic half: open, unlabelled/queued WORK-item
+descendants (not riding, not containers, not already themed) whose `Touches` share a surface
+(footprint prefix-intersection ≥ 2 — `fp_theme_groups` in `agents/footprint.sh`; the membership
+predicate is `fp_theme_member "<child Touches>" "<theme Touches>"`: every non-exempt `Touches`
+entry under the theme's fix-surface, with `agents/replay/**` and the FSM files as the implicit
+pin-surface allowance). The JUDGMENT half is yours
+([`docs/agents/issue-authoring.md`](../../docs/agents/issue-authoring.md) §v1.3.1 delta 2 — the
+four clauses): for each nominated group rule every member on
+
+- **one topic** — the members are one change, not two that happen to touch one directory;
+- **a live deliverable** — the theme ships something that deploys/soaks as ONE roll (the batching
+  unit is the largest change you would deploy-and-soak together, ADR-126);
+- **a servable lane** — every member can flow bot-gated to the theme branch (no member needs a
+  human read it would not get on `goal/**`);
+- **¬hotfix** — a member with an `alert-fp:` block key or a 🚨 title stays on master (the
+  2026-08-31 drainage ruling, clause 1: the master lane is hotfix-class only).
+
+Drop the members that fail; **decline the whole group if fewer than 2 remain** — say so on the
+Goal in one line and do nothing else (nothing records a decline; the next checkpoint may
+re-nominate the same pair, and that is fine). For an ACCEPTED group the play is, in this order,
+with the commands written out:
+
+1. **Author the level-2 theme issue through the writer** (§Authoring an issue body). Title
+   `theme: <slug>` — `<slug>` lowercase `[a-z0-9-]`, ≤ 30 chars, derived from the shared surface
+   (`agents/replay` → `replay-fixtures`, not a prose topic). Prose body = the member list
+   (each `#n` + one line), the shared surface, and ONE sentence of why they roll together. Machine
+   block: `Base=goal/<goal-n>-<slug>`, `Touches=<the fix-surface, comma-separated>`,
+   `Origin=<slug>#<goal-n>` — **NO `Class`, NO labels** (a container is label-inert: it never
+   rides, so `agent-fix`/`agent/queued` on it would summon a worker at a branch holder).
+   ```sh
+   cat > /tmp/theme.md <<'EOF2'
+   <member list / shared surface / one sentence of why>
+   EOF2
+   python3 /work/homelab/agents/issue_body.py set \
+       "Base=goal/<goal-n>-<slug>" \
+       "Touches=<fix-surface, comma-separated>" \
+       "Origin=<owner/repo>#<goal-n>" \
+       < /tmp/theme.md > /tmp/theme.final.md
+   python3 /work/homelab/agents/issue_body.py json < /tmp/theme.final.md   # exit 2 ⇒ fix, never post
+   gh issue create --repo <owner/repo> --title "theme: <slug>" --body-file /tmp/theme.final.md
+   ```
+2. **Bind it as a native sub-issue of the GOAL** — the same `sub_issues` POST the decompose
+   play uses: `gh api -X POST repos/<slug>/issues/<goal-n>/sub_issues -F sub_issue_id=<theme's
+   numeric .id>`.
+3. **Create the branch from master** — the checkpoint cuts it; **IL-G02's operator step does NOT
+   apply to themes** (the Goal's own branch stays the operator's; a theme branch is one API call
+   and the `goal/**` ruleset pattern protects it automatically):
+   ```sh
+   master_sha=$(gh api repos/<slug>/git/ref/heads/master --jq .object.sha)
+   gh api -X POST repos/<slug>/git/refs -f ref=refs/heads/goal/<goal-n>-<slug> -f sha=$master_sha
+   ```
+4. **Re-parent each member under the theme** (GitHub single-parent — the theme replaces the
+   member's current parent, lineage stays inside the Goal's tree):
+   `gh api -X POST repos/<slug>/issues/<theme-n>/sub_issues -F sub_issue_id=<member's numeric
+   .id> -F replace_parent=true`.
+5. **Stamp each member's `Base`** through the writer, never by pasting a line:
+   `gh issue view <member-n> --repo <slug> --json body -q .body > /tmp/m.md` →
+   `python3 /work/homelab/agents/issue_body.py set "Base=goal/<goal-n>-<slug>" < /tmp/m.md >
+   /tmp/m.final.md` → `python3 /work/homelab/agents/issue_body.py json < /tmp/m.final.md` (the
+   gate) → `gh issue edit <member-n> --repo <slug> --body-file /tmp/m.final.md`.
+6. **Write the disposition on the GOAL's store**: the theme is `adopted --by checkpoint`
+   (`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <theme-n>
+   adopted --by checkpoint`); the members keep their existing rows — re-parenting moves nothing
+   in the store, and a member that had no row was ruled in the FIRST step above.
+7. **Queue the members that are not yet queued** (`agent-fix` + `agent/queued`) under the
+   Goal's existing grant — the same `Budget:` arithmetic as `mint`; over budget = re-based but
+   UNQUEUED, and say so on the Goal. Compare-then-write before every label mutation, per the
+   standing discipline (re-read the member's labels immediately before editing them).
+
+`scripts/goal-lint.sh` holds the shape afterwards: `Base: master` is `ok` on a Goal with ≥ 1
+theme; a theme carries `Base: goal/<n>-<slug>` (the branch must exist) + `Touches`; a theme's
+children carry the theme's `Base`; membership holds. The reviewer's rule-7 depth guard subtracts
+hops whose parent is a `theme:` container, so `Goal → theme → child` reads depth 1 (`Follow-ups:`
+allowed) and `Goal → theme → child → sprout` reads 2 (suppressed).
+
+**THEN, assemble a complete theme (trigger (e) — ONLY when your unit carries
+`theme-complete=<theme-n>`).** The scan emits this for an open `theme:` container whose
+descendants are all closed and whose branch `goal/<goal-n>-<slug>` (its `Base`) has NO PR yet;
+the trigger retires once a PR for the branch exists. Re-read live state first: **if a PR for the
+branch already exists, exit clean** — the trigger is stale (a sibling session or the seat got
+there first). Otherwise verify every member is CLOSED (re-list the theme's descendants) and that
+`ci` is green at the branch head (`gh run list --repo <slug> --branch goal/<goal-n>-<slug>`); a
+red or missing run is a loud line on the theme, not an open. Then, before arming, pull master
+into the branch if it is behind (the theme's master-refresh hop — the in-cluster updater only
+brings a master-bound PR current once it is merge-ready, homelab#1452, so the assemble step
+owns this hop at PR-open: `gh api -X PUT repos/<slug>/pulls/<assembly-pr>/update-branch` right
+after the create below, re-checking `ci` if it moved). Open the assembly PR:
+`gh pr create --repo <slug> --base master --head goal/<goal-n>-<slug>` **non-draft**, body = the
+member list (each `#n` + one line) and the literal line `Fixes #<theme-n>`.
+> ⚠ **`Fixes #<theme-n>` — NOT `Assembly-for:`, and NOT the Goal's number as a closing keyword.**
+> A theme assembly is an ordinary master PR (ADR-126): the merge closes the LEVEL-2 like any
+> master-lane PR, the Goal's burn-down moves on that child close, and IL-T18's assembly-PR key
+> is never touched. `Assembly-for:` here would fire the Goal's post-launch transition off a
+> theme; `Fixes #<goal>` would close the Goal at a midpoint (the bug the Goal ruling below
+> exists to prevent).
+Then ARM it (`gh pr merge <n> --repo <slug> --auto --squash`). Codeowner-owned paths in the diff
+park it for the human as any master PR does — that is the one tax per theme, and it is the
+whole point of batching (the #1162 pilot: 2 owned reads for 13 children). Comment on the theme
+naming the PR.
 
 **THEN, dispose the store** (this is what retires trigger (a) — leaving the marker unmoved
 re-fires the clause forever). Read the goal's findings-store comment; for every entry beyond
@@ -1514,7 +1618,9 @@ the parser is what everyone reads); the legacy line-anchored `Base:` is still re
 transition window and metered as `LEGACY-GRAMMAR Base <ref>` on stderr, so an old Goal keeps working
 while nothing new should be authored that way. `Base: master` is legal and explicit — but a
 direct-master Goal is more likely a stint; confirm it earns `task/goal` before cutting children.
-Softens at v1.3 theme adoption (S8). Children inherit the Goal's `Base` verbatim: the decompose and
+Softened at v1.3 theme adoption (S8 #1423, 2026-09-08): `Base: master` is `ok` to `goal-lint` on a Goal with
+≥ 1 theme, and the checkpoint's theme-formation step re-bases a theme's members onto `goal/<n>-<slug>`
+(§The `goal-checkpoint` clause). Children otherwise inherit the Goal's `Base` verbatim: the decompose and
 checkpoint plays stamp it through the writer, never by pasting a prose line.
 
 ## See also
