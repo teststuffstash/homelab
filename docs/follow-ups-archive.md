@@ -309,43 +309,6 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   `argocd/charts/garage` first. Detail: [`docs/dependency-upgrades.md`](dependency-upgrades.md)
   §"Executing the lever". Relates FU-097, FU-137.
 
-- **FU-086** *(archived 2026-08-03)* — **Item-scoped dispatch COMPLETE — all four knobs.** Core
-  2026-07-17 (units + `--spawn` single-item); (2) cron `*/10→*/30` 2026-08-02; (3) **ADR-097
-  footprint dispatch** 2026-08-03 (`Touches:` intersection supersedes lane labels; wipmap→
-  `--wip`→`AGENT_WIP_LIMIT`; undeclared=exclusive; PR-cap + REPO_MAX_WIP; `footprint-test` ci
-  belt — first run caught the `*` glob-expansion bug); (1) **FU-085 compound** 2026-08-03
-  (reviewer verdict carries `unit`, Sensor passes through, scan fast-path re-validates scoped +
-  dispatches; "-" = full scan; live-verified chain exit on stale verdict); (4) **janitor tick**
-  2026-08-03 (daily report-only `janitor-<stack>` cron → `--janitor` session, 5-sweep brief in
-  coordinator README; starvation sweep runs on quiet stacks by design). Residuals live
-  elsewhere: reviewer Touches-escape rubric + native-edge soak (FU-111), fast-path whitelist
-  growth = only if edge volume demands. Mechanism: ADR-094/ADR-097, workflow.md.
-- **FU-108** *(archived 2026-08-03)* — **Exporter queue-liveness private-repo fix DONE**: code
-  shipped 2026-08-02 (`agent/*` counts ride the PR GraphQL walk, REST Search dropped); operator
-  granted the PAT Issues:read 2026-08-03. Acceptance: walk replayed with the in-cluster token —
-  `agentIssues` returns real lists on ALL repos incl. private oracle-fleet/sleep-tracking (was
-  FORBIDDEN/NULL); no series emitted only because zero open issues carry `agent/*` labels (loop
-  drained — absent ≠ zero, honest). Gotcha: the exporter's per-poll "partial data (6 field
-  errors)" log line is the KNOWN FU-063a gap (private-repo `statusCheckRollup`; Actions-fallback
-  covers CI state) — not an Issues:read failure.
-- **FU-113** *(archived 2026-08-02)* — **Responder outcome markers + self-requeue + incident cap
-  BUILT** (all three legs): (a) every non-triaging outcome writes a ledger marker
-  (`deferred-`/`cap-`/`none-` values that satisfy neither the triage dedup nor the cap); (b) a
-  latch defer exits 1 into an Argo retryStrategy (15m→2h ×6) — the edge is never trusted to
-  refire; (c) the daily cap counts INCIDENTS (alertname/namespace), 12/day, not raw fingerprints.
-  meta-alert-crosscheck understands markers (DEFERRED-STUCK vs UNTRIAGED). Postmortem:
-  docs/incidents/2026-07-27-responder-silent-defer.md.
-- **FU-112** *(archived 2026-08-02)* — **Platform-pod OOM posture: residual RESOLVED upstream.**
-  Both cascade legs were already fixed (launcher requests=limits; kata-node kubelet reservation);
-  the engine-image DaemonSet residual verified live: ALL longhorn-system DS (engine-image,
-  csi-plugin, manager) carry `priorityClassName: longhorn-critical` (1e9) via the Longhorn
-  `priority-class` setting, `applied:true` — declarative, not drift. Postmortem:
-  docs/incidents/2026-07-27-kata-ride-oom-cascade.md.
-- **FU-115** *(archived 2026-08-02)* — **Immediate no-op detection on the red merge path BUILT,
-  marker-free**: the ci-red clause compares the newest `Agent run stats` comment timestamp vs the
-  newest NON-merge commit — stats newer = the round pushed nothing → `agent/arbitrate` NOW (skips
-  the remaining RED_ROUNDS_MAX budget). Merge commits excluded (nine-review-loop lesson).
-  Synthetic-tested both verdicts. The edge + exhaustion cap shipped 2026-07-28 (MP-T12/T13).
 - **FU-124** *(archived 2026-08-02)* — **Armed-BEHIND updater nudge built into the scan**: per
   repo, any armed PR with mergeStateStatus=BEHIND gets a direct `PUT /pulls/N/update-branch`
   (idempotent, self-limiting, FAIL-LOUD on 403 — cron sweeper stays the backstop). The meta-watch
@@ -565,12 +528,3 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   out-of-scope: the arc/runner-registrar pools — their keys are deliberately not in Infisical
   (KeePass/in-cluster only) and their sole consumers are the runner controllers, whose
   exhaustion surfaces directly as registration/scale failures. Cron-relax leg lives in FU-086.
-- **FU-098** *(archived 2026-07-26)* — **GitHub App permissions: declared state + drift
-  verification, COMPLETE.** `docs/github-apps.yaml` = the single source (per-permission why,
-  decided absences, all app_ids filled); ONE creation script (`github-app-bootstrap.sh <slug>`,
-  manifest from the yaml, all six secrets/verify flows ported, legacy scripts deleted); the
-  ⊆-invariant lint in ci (mint-request ⊆ declaration — the fleet#134 422 class); the exporter
-  drift belt + `GithubAppPermissionDrift` alert (change flow: PR the yaml → alert rings →
-  operator clicks → clears; proven on the workflows:write grant AND it caught the reviewer's
-  forgotten grants same day); the human view SERVED at **apps.teststuff.net** (/apps,
-  never committed — CI-auto-commit rejected: GITHUB_TOKEN pushes trigger no workflows).

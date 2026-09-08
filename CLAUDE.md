@@ -50,7 +50,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `m70s` (Lenovo ThinkCentre M70s SFF, PXE) | 192.168.2.56 | k8s worker + Longhorn (third physical Garage zone — ADR-114) |
 | `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier |
 | `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) |
-| `wk-metal-03` (laptop i5-6200U, PXE) | 192.168.2.184 | k8s worker, ephemeral/compute tier (tainted; kata node) |
+| `wk-metal-03` (ThinkPad X260, PXE) | 192.168.2.184 | k8s worker, ephemeral/compute tier (tainted; kata node) |
 | `wk-metal-04` (desktop i5-3570K 16GB, PXE) | 192.168.2.186 | k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier |
 | `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
