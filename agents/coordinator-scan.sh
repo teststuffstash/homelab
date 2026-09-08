@@ -37,6 +37,7 @@
 #   bash agents/coordinator-scan.sh --spawn    # for each stack with work, spawn a headless coordinator tick
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "${HERE}/machine-comment.sh"
 # >>>REPLAY:config-defaults>>>
 # Config defaults that extracted clause blocks depend on. The replay harness (run.sh)
 # prepends this block to every composition sourced from coordinator-scan.sh, so a
@@ -475,13 +476,13 @@ STATS_TS_DEF='def stats_ts: [ .comments[]? | (.body // "") as $b
 # re-fire on PR#862 re-read "stats without commits" minutes after the 12:15 arbitration had
 # already ruled that same round a strike — the predicate had no notion of an arbitration event
 # newer than the evidence it was built on. So the no-op predicate now also requires that the
-# newest no-op stats marker POST-DATES the newest arbitration event (an "ARBITRATE" comment).
-# An arbitration event newer than the stats marker means the ruling already covered this round;
-# re-labelling would re-dispatch the same escalation the ruling just resolved.
+# newest no-op stats marker POST-DATES the newest arbitration event (an "ARBITRATE" comment or
+# machine event). An arbitration event newer than the stats marker means the ruling already covered
+# this round; re-labelling would re-dispatch the same escalation the ruling just resolved.
 NOOP_ROUND_JQ="${STATS_TS_DEF}"'
   ([.commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
   | ([ stats_ts[] | select($head == "" or . > $head) ] | length) as $after
-  | ([ .comments[]? | select((.body // "") | startswith("ARBITRATE")) | .createdAt ] | max // "") as $arb_ts
+  | ([ .comments[]? | select((.body // "") | startswith("ARBITRATE")) | .createdAt ] + [ .comments[]? | select((.body // "") | startswith("<!-- agent-summary -->")) | (.body | [scan("kind=arbitrate ts=([^ >]+)")][] | .[0] // empty) ] | map(select(. != "")) | max // "") as $arb_ts
   | ([ stats_ts[] | select($head == "" or . > $head) ] | max // "") as $newest_noop_ts
   | if $after >= 2 and ($arb_ts == "" or $newest_noop_ts > $arb_ts) then "1" else "" end'
 # <<<REPLAY:round-evidence<<<
@@ -3479,7 +3480,7 @@ EOF_GTHEMES_OPEN
       fi
       if [ -n "$cr_noop" ]; then
         gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
-          && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (changes-requested no-op round, FU-147): the last completed fix round posted its run stats without pushing a commit, so the reviewer findings are untouched and another identical round cannot converge. The coordinator arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
+          && mc_event "$slug" "$u" arbitrate "ARBITRATE (changes-requested no-op round, FU-147): the last completed fix round posted its run stats without pushing a commit, so the reviewer findings are untouched and another identical round cannot converge. The coordinator arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
           && orphans="${orphans}[$repo] ⚠ changes-requested NO-OP round → agent/arbitrate: PR #${u} (a completed round pushed nothing)\n" \
           || orphans="${orphans}[$repo] ⚠ changes-requested no-op arbitrate FAILED to label PR #${u} — human check\n"
         continue
@@ -4671,7 +4672,7 @@ EOF_GTHEMES_OPEN
         # <<<REPLAY:ci-red-rounds<<<
         if [ -n "$noop_round" ]; then
           gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
-            && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
+            && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
             && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
             || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
         elif [ "$red_rounds" -lt "$RED_MAX" ]; then
@@ -4741,7 +4742,7 @@ EOF_GTHEMES_OPEN
           # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
           # a stronger model / park / close) take over. This is the Red→arbitrate edge the FSM lacked.
           gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
-            && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
+            && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
             && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
             || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
         fi
