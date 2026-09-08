@@ -1,0 +1,24 @@
+# Escalate ruling keeps label (FU-1507). A PR with agent/arbitrate has a coordinator ruling
+# comment that DOES contain "blocked-on:" — an escalate ruling that should KEEP the label.
+# The belt fetches the PR, reads the comments, checks the newest coordinator comment, and if it has
+# a blocked-on marker, does NOT remove the label.
+#
+# PR #235 has agent/arbitrate, is APPROVED, and has a coordinator comment with "blocked-on: human".
+# The belt should NOT remove the label (no gh pr edit call), and should not emit an ORPHAN line.
+name: arbitrate-escalate-keeps-label
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - block:arbitrate-ordinary-path-belt
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+pins:
+  - MP-T11

@@ -4290,6 +4290,28 @@ EOF_GOVERNANCE
     done
     # <<<REPLAY:arbitrate-gate<<<
 
+    # arbitrate belt: ordinary-path ruling removal (FU-1507, homelab#1507). When a PR armed + green
+    # wears agent/arbitrate but the newest coordinator ruling has NO blocked-on marker (ordinary-path:
+    # re-dispatch, follow-up-class after dismissal, or "nothing to do"), the label must be dropped so
+    # the reflex picks it normally. Label-first-then-verify discipline (IL-T16).
+    # >>>REPLAY:arbitrate-ordinary-path-belt>>>
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")) and (.autoMergeRequest!=null) and (.reviewDecision=="APPROVED" or .reviewDecision=="CHANGES_REQUESTED"))|.number' 2>/dev/null); do
+      # Fetch PR to check for coordinator ruling comments
+      pr_json_belt="$(gh pr view "$u" --repo "$slug" \
+          --json comments 2>/dev/null)" || pr_json_belt=''
+      [ -z "$pr_json_belt" ] && continue
+      # Find newest coordinator ruling comment by our identity
+      ruling_body="$(printf '%s' "$pr_json_belt" | jq -r '.comments[]? | select(.author.login == "homelab-agents-1234") | .body' 2>/dev/null | tail -1)"
+      [ -z "$ruling_body" ] && continue
+      # If the newest ruling has no blocked-on marker, it's ordinary-path — remove the label
+      if ! printf '%s' "$ruling_body" | grep -qE 'blocked-on:|agent/blocked'; then
+        gh pr edit "$u" --repo "$slug" --remove-label agent/arbitrate >/dev/null 2>&1 \
+          && orphans="${orphans}[$repo] ✓ arbitrate ordinary-path: PR #${u} — removed agent/arbitrate (ruling returned to ordinary path, reflex will pick it)\n" \
+          || orphans="${orphans}[$repo] ⚠ arbitrate ordinary-path label FAILED on PR #${u} — human check\n"
+      fi
+    done
+    # <<<REPLAY:arbitrate-ordinary-path-belt<<<
+
     # ci-red (FU-115 / MP-T12, CONTENT-BASED rewrite of the old ci-red-stale time-gate): an ARMED
     # red PR is invisible to the whole merge path (updater + reviewer both skip red). The OLD trigger
     # was "quiet > RED_STALE_HOURS(4h)" — a coarse LAST-ACTIVITY timer that a no-op fix round's OWN

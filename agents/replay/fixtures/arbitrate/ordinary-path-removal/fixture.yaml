@@ -1,0 +1,25 @@
+# Ordinary-path ruling removal (FU-1507). A PR with agent/arbitrate has a coordinator ruling
+# comment that does NOT contain "blocked-on:" — an ordinary-path ruling that should remove the label.
+# The belt fetches the PR, reads the comments, checks the newest coordinator comment, and if it has
+# no blocked-on marker, removes agent/arbitrate so the reflex can pick the PR normally.
+#
+# PR #234 has agent/arbitrate, is APPROVED (or CHANGES_REQUESTED), and has a coordinator comment
+# "Arbitration ruled: re-dispatch with clarification..." (no blocked-on:). The belt should remove
+# the label and emit an ORPHAN line naming the removal.
+name: arbitrate-ordinary-path-removal
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - block:arbitrate-ordinary-path-belt
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+pins:
+  - MP-T11

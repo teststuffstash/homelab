@@ -1,0 +1,5 @@
+CALL gh pr view 234 --repo teststuffstash/oracle-fleet --json comments
+CALL gh pr edit 234 --repo teststuffstash/oracle-fleet --remove-label agent/arbitrate
+OUT ORPHAN [oracle-fleet] ✓ arbitrate ordinary-path: PR #234 — removed agent/arbitrate (ruling returned to ordinary path, reflex will pick it)
+OUT REACHED: end
+RC 0

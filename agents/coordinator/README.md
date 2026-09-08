@@ -916,6 +916,8 @@ Read the diff + the whole review thread, then rule — exactly one of:
 - **Escalate**: genuinely ambiguous / policy-level → `agent/blocked` + one comment framing the
   decision for the human. Leave `agent/arbitrate` in place (the label pair records the path).
 
+Any ruling that returns the PR to the ordinary path — re-dispatch, follow-up-class after the dismissal, or nothing to do — **removes `agent/arbitrate`** so the reflex picks the PR normally; only `escalate` keeps the label.
+
 **A round that posts stats without moving HEAD is a no-op round, not a consumed logic round**
 (retro r3 win-2). The scan hands you these already labelled — `ARBITRATE (changes-requested no-op
 round, FU-147)`, and the FU-115b equivalent on the red path — a completed round whose stats comment
