@@ -28,11 +28,13 @@ never the session's arc — that is TICK-LOG's.)
   parent + children per finding, bind-at-filing. (3) **#1527** (the reflex/scan `ARBITRATE`
   escalation notices are picked as the fix round's directive after PR#1514) is filed inert under
   #1467 — the subtraction (notices onto the agent-summary comment) is corpus work. (4) Loop
-  finding, unfiled: BOTH 13:1xZ arbitrate sessions ruled re-dispatch and NO round 4 was
-  dispatched (no r4 pod, no stats); the seat executed both rulings by hand (PR#1513/#1515 —
-  retro F1's exact shape). Read the two `coordinator-homelab-pr-151[35]` transcripts in
-  `s3://agent-transcripts/homelab/` to see whether the launcher refused or the play stopped at
-  the comment; the transcript is the only record (pod logs are empty by design). (5) Handoff
+  finding — ANSWERED and recorded on FU-199: both 13:1xZ arbitrate sessions died on an
+  Anthropic 522 (`coordinator-homelab-pr-1513` exit 1 at 13:14:28Z) after posting the ruling and
+  before dispatching round 4; the arbitrate clause has no "ruled, no round" re-arm (ci-red has
+  it). Also seen: the 18:16Z arbitrate session on #1515 correctly ruled the escalation stale, and
+  noted the ci-red re-label at 18:10 was applied against a sha that had stopped being head 100s
+  earlier (a scan racing the seat's push). #1532 (minted by #1162's checkpoint, riding) carries
+  NO `Base` — the mint play skipped the inherited `Base=master`; goal-lint FAILs it. (5) Handoff
   inbox: the circles ADR request (real-content seam; operator decision) — unchanged. (6) #946 A5
   evidence seed, the oracle pin ping-pong, 23 stale archive entries → `/docs-cleanup` — unchanged.
 - **⚑ PICKUP (2026-09-08 evening seat — the failing-workflows read): DONE, nothing to pick up.**
