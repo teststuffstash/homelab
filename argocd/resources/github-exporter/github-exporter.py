@@ -1999,6 +1999,10 @@ class Handler(BaseHTTPRequestHandler):
 # The fixture is the two shapes ADR-102 was validated against: oracle-fleet goal-174 (a tree that
 # kept sprouting 3 generations deep after close) and circles#17 (a goal closed on a machine
 # "goal met" that production refuted).
+# The reverted goal's close date is RELATIVE to now: closed goals age out of the panel after ~30d
+# (collect_goals), and a fixed "2026-08-08" crossed that window on 2026-09-08 — the self-test lost
+# its verdict="reverted" sample on every tree at once, reddening every open PR (the #953 class).
+_RECENT_CLOSE = (datetime.utcnow() - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
 _FIXTURE = {
     "name": "oracle-fleet",
     "goalIssues": {"nodes": [
@@ -2007,7 +2011,7 @@ _FIXTURE = {
          "body": "Some prose about a €99 idea.\n\nBudget: $12.50\nVerdict-authority: kpi\n",
          "labels": {"nodes": [{"name": "task/goal"}]}},
         {"number": 17, "title": "circles P0 MVP", "state": "CLOSED",
-         "stateReason": "COMPLETED", "closedAt": "2026-08-08T10:00:00Z",
+         "stateReason": "COMPLETED", "closedAt": _RECENT_CLOSE,
          "body": "Budget: 16\n", "labels": {"nodes": [{"name": "task/goal"},
                                                       {"name": "goal/reverted"}]}},
         {"number": 3, "title": "ancient goal", "state": "CLOSED", "stateReason": "NOT_PLANNED",
