@@ -108,3 +108,28 @@ Consumers, all pointed at the mirrors instead of the internet:
 
 `devbox run ci` contract (the STACK repo's task — homelab has none): the gate script detects the mirror endpoints via env (set by the
 runner/pod), falls back to direct pulls only outside the platform (laptops).
+
+## In-pod kind on a kata ride — two open faults (oracle handoff, 2026-09-03; recorded 2026-09-08)
+
+Ride `agent-oracle-fleet-issue-399-r1` (ns `oracle-fleet`, kata, 2026-09-03 16:42Z; transcripts
+`s3://agent-transcripts/oracle-fleet/issue-399/`) was the first `task/build` ride to run
+`devbox run e2e` in-pod, and it could not — the FU-072 dind/kind soak leg is still UNEXERCISED
+because of it. From the worker's own shell output, unverified platform-side:
+
+1. **`kindest/node:v1.36.1` (kind v0.32's default) segfaults in `systemd-machine-id-setup` inside
+   the kata pod's dind.** The worker pinned `kindest/node:v1.32.0` to get any cluster — a repo
+   change for a pod-side defect (force-reset out of oracle-fleet#404). Either the kata runtime
+   lacks what that node image's systemd expects (the `/dev/kmsg` / cgroup-nesting family above is
+   the neighbourhood), or the build card must state the node image a pod can run.
+2. **With v1.32.0 the kind node's `docker.io` pulls went to `registry-1.docker.io` directly**
+   (dial i/o timeout → ImagePullBackOff) although `REGISTRY_MIRROR_DOCKER_IO` /
+   `REGISTRY_MIRROR_GHCR` were exported in the pod. The worker created clusters by hand and skipped
+   the `kind_mirror` hosts.toml step in oracle's `scripts/e2e-kind.sh`, so "the mirror does not
+   work from kind" is its conclusion, not a proven one — the first thing to re-test.
+
+Net: the build card's "the kind e2e gate runs HERE, in-pod" was not true on this ride on either
+node image, and the worker spent ~80 min + 3 commits editing the harness around it (one with a
+LAN IP into the repo). What settles it: a seat-driven kata pod reproducing (1) with the default
+node image and the pod's transcripts in hand; until then the card should either name a runnable
+node image or declare in-pod kind not-available. Both faults are `infra`-class for the ci-red
+taxonomy; the worker's reaction (harness edits outside `Touches:`) is the loop-shape finding.
