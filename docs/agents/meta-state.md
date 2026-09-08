@@ -10,43 +10,26 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-08 seat, wind-down):** (1) **FU-225 pve RAM buy** — hardware repo STATE item 0:
-  the 4 × 32 GB Micron RDIMM auction lot; operator must count pve's DIMM slots + get a label photo
-  before paying; then right-size the ballooning-off VMs (`tofu/variables.tf`). (2) **Oracle pin
-  ping-pong** — oracle-iac#667 (08:26Z, 2026-09-01 @ cb735ff1) replaced #663's fixed-parser base; if
-  the operator says it is wrong it is a stack-side revert + a lineage rule in `corpus-pin.sh`, not
-  ours. (3) **Handoff inbox still holds** oracle 09-03 ×2 (ci-red data point; in-pod kind unrunnable)
-  + 09-06 (issue_body render_block blank line — ≤5 min, homelab-side) + circles 09-05 (real-content
-  seam ADR). (4) FU-203 next = weekly registry GC CronJob. (5) 23 archive entries past 35 d →
-  `/docs-cleanup`. (6) The deletion-load measurement (TICK-LOG 09-08 late morning) is not in the
-  storage ledger yet.
-
-- **⚑ S8 IN FLIGHT (fifth sitting 2026-09-06, corpus session; stint #1418, Size 3):** originals
-  1a/2/3/5/6 + sprout #1452 DONE; **1b MERGED (PR#1459, 15:19Z) — #1431 stays OPEN until sprout
-  #1460 lands**; #1424 half 2 MERGED (PR#1479); #1439 MERGED (PR#1462); **#1450 DONE via (B),
-  PR#1481** (not S8, but it re-keys IL-T18 — #1424's closeout FSM read covers it). **NEXT (fresh
-  session):** (1) rebase `fix/s8-1460-parser-residue` onto master (stacked on the OLD 1b tip
-  `17834acb`; DROP its five bridge `IB_PY=` seam lines — 1b resolves IB_PY in the clause), then
-  legs 4 (scan/scout writers) + 5 (sentinels) + 6 (`requires: python3`) → PR → #1431 closes;
-  (2) rebase + open `fix/s8-1420-consumer-card-three-acts` (#1420, docs); (3) #1424 closeout leg
-  (ROADMAP S8 row, FSM rows for #1481's second key); #1423 HELD. **Bot-waits at exit, all
-  armed, land unattended:** **PR#1478** (#1472 C6 hold — CR dismissed after declaring the
-  footprint on #1472; when it MERGES clear `agent/error` on oracle-fleet#397, do NOT re-queue —
-  the r6 salvage branch is the operator's delete-first call) · **PR#1480** (queued-panel join + the PRs-waiting armed/merge_state columns —
-  CR fixed, re-review pending; then the operator's targeted tofu apply) · **PR#1482** (exporter
-  armed/merge_state labels — ArgoCD syncs on merge; the panel columns fill after it) · **PR#1468** (#1444 —
-  seat-approved, CI on the refreshed head, bot verdict pending).
-- **⚑ OPERATOR — DECISION OWED, PR#1468 is deadlocked meanwhile (2026-09-07):** the ADR-103
-  pin-vacuity gate has a **fourth** false-positive face — a clause that gains a dependency FORCES
-  a fixture's `parts:` edit, which is neither droppable (`RC 127` without it) nor a pin claim
-  (passes on base), so both gates cannot be satisfied at once. PR#1468 (approved, armed, 26
-  catch-up merges, ~26 CI cycles, never green since 09-06 01:18Z) is the live victim.
-  **Everything a decision needs — background for a reader new to `agents/replay/`, the two
-  verified reproductions, all prior faces and how each was fixed, three options with the #1215
-  ruling that constrains them, and a one-command repro — is homelab#1489** (inert, operator-lane).
-  The operator was unfamiliar with the harness and parked it deliberately; do NOT improvise a
-  carve-out. Related: FU-221 (the updater burning CI on a relational red), #1224 (parts-COVERAGE,
-  a different leg), and the missing blocked-on fixture named in #1489.
+- **⚑ PICKUP (2026-09-08 corpus session, ~09:40Z wind-down):** (1) **S8 legs 4–6 of #1460 = PR#1510** (armed; bot review
+  pending at wind-down) — when it merges #1460 + #1431 close; if the bot requests changes, the
+  fix is the seat's (the subagent clone is gone with the session). (2) **#1424 closeout leg** = the S8 closeout-1 sitting
+  (originals 1a/1b/2/3/4/5/6 done once #1431 closes; #1423 HELD): docs-cleanup over the touched
+  surfaces, the FU sweep (FU-168 fence half, FU-199 board faces, FU-201/FU-174 cross-refs), the
+  built-vs-left comment on #1418, dispositions written via `epic_dispositions.py`, ROADMAP S8 row.
+  (3) **Handoff inbox**: only the circles ADR request remains (real-content seam — a design sitting +
+  one Infisical secret; operator decision). (4) **#946** A5 evidence seed — a seat sitting (S3
+  snapshot discovery under seat creds, `agents/re-review.sh --shadow` over ~3 merged platform PRs).
+  (5) FU-225 pve RAM buy / the oracle pin ping-pong / FU-203's CronJob (now riding as #1505) /
+  23 stale archive entries → `/docs-cleanup` — unchanged from the 09-08 morning pickup.
+- **⚑ S8 IN FLIGHT (sixth sitting 2026-09-08, corpus session; stint #1418, Size 3):** originals
+  1a/2/3/5/6 + sprout #1452 DONE; **#1420 DONE (PR#1502, 09:27Z — card = three acts, scratch-Goal
+  lint 0/0 recorded on the PR)**; 1b = PR#1459 merged + residue #1460: legs 1–2 in **PR#1503**
+  (armed; bot CR at 09:30Z fixed in-PR — the resumable-goal-child loop now holds on a malformed
+  block, row `block-class-malformed`), legs 4–6 = **PR#1510** (armed, bot review pending). #1424 half 1+2 merged
+  (PR#1461/#1479); its residue is the closeout leg. #1423 HELD on the wave-2 readout. Bot-waits at
+  exit: PR#1510, PR#1506 (approved, armed — the issue_body setext-fence
+  fix), the loop's PR#1508 (#1505, seat-approved — verify one triggered GC run post-merge if
+  this session did not) and PR#1509 (#1507 — needs the codeowner read: agents/** + FSM).
 - **⚑ OPERATOR — circles-iac PR#108 is UN-ARMED and waiting on you (2026-09-07):** circles' claim
   `egress.profile: none → python`. Its rationale ("static page + helm gate … no pypi") went stale
   when circles gained a uv chassis; flipping `enforce` with `none` would HANG every ride at its
