@@ -7749,3 +7749,45 @@ migration damage. FU-137 rewritten to the live state; FU-224 filed (manager thro
 as run and the ledger rows went in a docs PR; memory updated. Old 150Gi×2 bulk + 30Gi std volumes are
 gone — that is the reclaimed footprint ADR-114 promised.
 
+
+## 2026-09-08 morning — Garage converged, oracle re-released on ARC, the main root's drift applied
+
+**Garage rf=3 resync: FINISHED ~05:00Z** (the unattended tail from the 09-07 rotation). All three
+nodes hold identical tables (1,611,736 objects / 687,070 versions / 832,372 block_refs); RC entries
+within ~100 of each other; resync queue idle at ~30. The only resync errors are **3 Loki chunks** in
+the loki bucket whose originals were zero-byte `.corrupted` files from Sep 4 — unrecoverable,
+pre-existing. wk-metal-04's SA400 (`sda`) ran 40–60 % busy at 20–40 MB/s from 23:00Z to 05:00Z, then
+<1 % — free for oracle's push. Watch, not act: garage-0's meta volume is at 46 % free vs 83 % on
+the two seeded peers (its LMDB was rebuilt by resync, not seeded from the compacted snapshot).
+
+**Oracle's 09-07 12:41Z `release-corpus` failure re-read:** the 500 at 13:30Z was the 20 GiB bucket
+quota hitting 9.3 GiB into the layer PATCH (the evening's #1493 raised it to 32 GiB; bucket at
+11.6 GiB with 5 zero-byte multipart stubs, ~20 GiB headroom). Registry pod healthy (its last restart,
+20:34Z, was the rf-flip window). Oracle re-dispatched at 06:52Z — on **ARC** (`homelab-ephemeral`
+pod on wk-03), not the VM runner: the operator had assumed the VM, which mattered for the next item.
+
+**ARC-as-bottleneck, measured (exporter, per-24 h):** 09-06 ~5,900 ARC jobs, p90 queue ~10 min, max
+~40 min, at the 3-runner cap 30–60 % of the day; last 24 h ~600 jobs, p90 ~5 min, cap 0 %. homelab
+was 3,600 of the 5,900 (updater N×M — #1452 merged since); the limit when it binds is RAM placement
+(one 2.5 Gi runner per 8 GB laptop, three labelled nodes), FU-218. **m70s is NOT a candidate**:
+no kata (plain metal image, no `homelab.io/kata`), no ephemeral taint (garage-1's strict-local XFS
+volumes pin it; a taint would strand the pod after any restart), and a label-only join would put
+dind churn on the Garage zone's NVMe. Levers stay as ruled: wk-metal-04's 16 GB post-kata call, or
+an ADR-082 VM runner.
+
+**Main-root drift APPLIED (operator: "let's fix tofu drift"):** plan = 3 items, nothing else.
+(1) `agent_dashboards["agent-running"]` in-place (PR#1480's queued-panel hold-class join — the
+parked OPERATOR item 0). (2)+(3) `ci_runner_cloud_init` + VM 9001 **replaced** — the snippet drift
+was three merged-but-never-applied template commits (bd7a5c0a ghcr insecure-registry, aac9aa78
+kind-janitor systemd timer, 25361e08 #1308 BuildKit per-registry mirrors), NOT a shutdown: the
+premise "ci-runner got shut down for pool space" was stale — Proxmox showed the VM running 4 days
+(since the FU-207 recreate), agent answering; only ICMP is blocked from the jail. Pre-checks: VM
+runner pool busy=0, no in-progress run on its labels, pool 77.45 % with vm-9001 at 49 % of 80 G.
+Apply 1m39s (destroy 7 s, create 1m29s); cloud-init `done` 07:05:36Z; both runner slots
+`Successfully replaced`, `docker` 29.8 / `kind-janitor.timer` / `fstrim.timer` active,
+`/etc/buildkit/buildkitd.toml` present, buildx `homelab-mirrors` (docker-container, BuildKit
+v0.32.2) bootstrapped and default. **Pool 77.45 → 67.48 %** (the old 39 GB image cache went with
+the disk; new disk 5 %). Re-plan: *No changes*. #1308 leg-1 is now live on the VM lane (issue
+already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` command strings
+(`ssh` wrapper went "no such file" twice, ~10 min lost) — use a script file; and this Proxmox is
+`qm guest exec`, not `qm agent exec`.

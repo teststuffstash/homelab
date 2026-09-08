@@ -40,16 +40,14 @@ never the session's arc — that is TICK-LOG's.)
   `egress.profile: none → python`. Its rationale ("static page + helm gate … no pypi") went stale
   when circles gained a uv chassis; flipping `enforce` with `none` would HANG every ride at its
   first uv call. Additive and inert to land (circles already passes `--frozen` everywhere).
-- **⚑ OPERATOR (from the 2026-09-06 corpus session):** (0) **`tofu apply` targeted at the
-  `agent-running` grafana_dashboard** once the queued-panel PR (fix/agent-running-queued-why —
-  the scan hold-class join answering "why is a queued issue not picked up") merges; dashboards
-  are tofu-applied, not ArgoCD-synced. (0b) the #1450/PR#1470 fork above (A vs B).
+- **⚑ OPERATOR (from the 2026-09-06 corpus session):** the #1450/PR#1470 fork above (A vs B).
+  (The `agent-running` dashboard apply for PR#1480 landed 2026-09-08 — main root plans clean.)
 - **⚑ OPERATOR (physical / decisions), from the 09-05 sitting:** (1) **CI starvation**: one org-wide ARC set of 3 slots (FU-218); homelab ≥300 runs today
   starved oracle (queue p90 22–40 min). Levers ruled/filed: #1452 (fair, platform-native);
   per-stack runner scale sets as the fairness knob (not filed — say so if wanted); wk-metal-04's
   16 GB as capacity after the cable (kata reservation = operator call). App-side: oracle-fleet
-  #466/#467 (resume + bundle the 248k PUTs). (2) #1308 leg-1 APPLY on ci-runner-01 (unchanged).
-  (3) FU-215 Unbound capture (unchanged). (3b) **BUY — wk-metal-04's SA400 is the Garage write
+  #466/#467 (resume + bundle the 248k PUTs). (2) ~~#1308 leg-1 APPLY on ci-runner-01~~ DONE
+  2026-09-08 (VM replaced from tofu, buildx `homelab-mirrors` builder live). (3) FU-215 Unbound capture (unchanged). (3b) **BUY — wk-metal-04's SA400 is the Garage write
   bottleneck and the cable did NOT fix it** (rebuild on the healthy link: 2 h 10 min flat at
   24–32 MB/s = <5 % of the link; MX500 A/B = 0.6–18 ms — `storage-ledger.md` §2026-09-06, PR#1484).
   Replace with a **DRAM-equipped** drive; buying criterion for ANY Garage/Longhorn data disk is
@@ -147,17 +145,12 @@ never the session's arc — that is TICK-LOG's.)
      Failed ticks are exit 141 (SIGPIPE) ~70 s after the homelab clone with zero scan output
      (Loki); the producer hunt + a Failed-tick belt are the issue's deliverables. Queue it if wanted.
 - **⚑ OPERATOR-OWED (one list):** (#1200 → PR#1399, #1249 → seat PR, both 09-05; residual
-  from #1200: no ArgoCD sync-failed/OutOfSync alert exists — a belt to add) · **#1308 leg-1
-  APPLY on ci-runner-01** (NEXT SESSION item 4) · #1370
+  from #1200: no ArgoCD sync-failed/OutOfSync alert exists — a belt to add) · #1370
   (FU-171 resight) · or-op#34 (needs a real 429) · seat sittings #946 (A5 seed) / #1224
   (parts-coverage) / #1237 (E1) / #1238 (E2) · #1308 (BuildKit mirrors queue call) · FU-205
   design pass (WAN accounting) · #1280 held-for-evidence (kind-timing distribution first) ·
   Cloudflare: mint `Cache Purge` onto tofu-apply, or rely on oracle-fleet#414's
-  Cache-Control (decision open) · `REGISTRY_PUSH_TOKEN` repo Actions secret on oracle-fleet
-  (console step, value in Infisical; until set, release-corpus dual-push loud-skips) ·
-  `tofu plan` (main root) shows ci-runner-01 "must be replaced" (cloud-init snippet drift) —
-  re-adopt the live snippet or accept the replace at a quiet moment; apply TARGETED until
-  then · Garage: delete `backups/garage-meta-20260825-prerebuild/` (20 GB) +
+  Cache-Control (decision open) · Garage: delete `backups/garage-meta-20260825-prerebuild/` (20 GB) +
   `garage-meta-forensics/` (due since ~09-01); meta volume rides rf=1 on wk-02 (FU-137's
   ~08-31 deadline PAST — an infra sitting). **⚑ 2026-09-07 OPERATOR-OWNED: meta is at 80 % and
   it is NOT growth** — 25.36 GB live LMDB vs a 3.95 GB compacted snapshot, 84 % leaked pages,
