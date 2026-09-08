@@ -1047,20 +1047,6 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
-- [ ] **FU-225** — **pve host RAM is overcommitted with no balloon and no belt.** After the
-      2026-09-08 resizes the host commits 65 GB of VM allocations on 62.7 GiB and lives on KSM
-      (~11 GB shared, 12 GB available warm; 7 d minimum 3.8 GiB). Settled the same day, so none of
-      these is open: **no RAM buy for this box** (operator: too much of homelab is on it — the
-      answer is a second hypervisor, ROADMAP §HA model, ADR pending; the hardware repo carries the
-      supply side); **ballooning is impossible** for the Talos VMs (no `virtio_balloon` in the Talos
-      kernel — verified on wk-03; only ci-runner-01 could); **right-sizing is done** as far as it
-      goes (ci-runner-01 16→12 GB; wk-01/wk-02/cp-01 stay — Longhorn/etcd page cache is not waste).
-      **Next (the one action left): a host-memory belt** — pve's node_exporter already exports
-      `node_memory_MemAvailable_bytes{job="pve-node"}` and the pve rule file has no memory rule; add
-      `PveHostMemoryLow` (available < 3 GiB for 15 m, warning) to `argocd/resources/pve-metrics/`
-      with its promtool test, so a KSM collapse or a fat VM shows up before the host OOM-kills a
-      guest. Then archive. Relates FU-218 (the demand), FU-093 (the pool belt this mirrors).
-
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
       wk-metal-02's flaky wired link. **2026-08-07 (homelab#117): wk-metal-02 had a 4.5h NIC
