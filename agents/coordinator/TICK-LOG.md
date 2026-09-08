@@ -7879,7 +7879,13 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
 - **Board fed / cleared:** **#1505** queued (FU-203's weekly registry GC CronJob, off the Tuesday
   window) → the loop's **PR#1508** in ~25 min, bot-approved, seat codeowner-approved 09:51Z (the
   post-merge triggered run is the acceptance — result in the next entry if this session saw it);
-  **#1507** → the loop's **PR#1509** (arbitrate belt + brief + FSM + 3 fixtures), gate-read pending; **agent-runtime#128** → PR#131 (opus subagent paste of `.agents/build.yaml`
+  **#1507** → the loop's **PR#1509** (arbitrate belt + brief + FSM + 3 fixtures) — codeowner read
+  REQUESTED CHANGES 09:55Z: the belt keyed on the newest coordinator COMMENT of any kind (a `state-fp:`
+  marker after a crashed ruling would strip the label from an escalated PR and re-open the re-trip
+  loop) — anchor on the ruling (`ci-cause:` line) post-dating the label event, hold on probe failure;
+  and `FU-1507` is not an id. The loop's fix round owns it. At wind-down (~10:00Z) PR#1506/#1508/#1510
+  were all APPROVED-or-pending and BLOCKED on the CI queue only; the PR#1508 post-merge GC run is the
+  next session's (meta-state); **agent-runtime#128** → PR#131 (opus subagent paste of `.agents/build.yaml`
   from homelab's donor × that repo's fix.yaml; seat gate-read, one provenance line corrected, admin-merged
   — #128 closes); #1069 closed (prefetch #1175 + PR#1386 resolve it); oracle-fleet#397's `agent/error`
   cleared per the 09-06 pickup (PR#1478 merged; NOT re-queued). Left as they were: #946 (A5 evidence
