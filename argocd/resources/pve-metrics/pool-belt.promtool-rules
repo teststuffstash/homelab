@@ -42,6 +42,14 @@ groups:
         annotations:
           summary: pve guest {{ $labels.name }} (vmid {{ $labels.vmid }}) is paused on io-error
           description: 'The guest hit a failed write and QEMU paused it — the 2026-09-03 signature (thin pool at 100%). `qm list` still says running; the Talos API is "no route to host". On pve: `lvs -o lv_name,data_percent pve`, free pool space, then `qm resume {{ $labels.vmid }}`.'
+      - alert: PveHostMemoryLow
+        expr: node_memory_MemAvailable_bytes{job="pve-node"} < 3 * 1024 * 1024 * 1024
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: pve host memory available {{ $value | humanize1024 }}B — below 3GiB
+          description: 'The hypervisor commits more VM RAM than it has (65GB of allocations on 62.7GiB since 2026-09-08, FU-225) and lives on KSM (~11GB shared); the Talos guests have no virtio_balloon, so when KSM sharing collapses or a guest grows, the host swaps and then OOM-kills a VM. On pve: `free -m`, `cat /sys/kernel/mm/ksm/pages_sharing`, the per-VM RSS (`ps -o rss= -p $(cat /var/run/qemu-server/<vmid>.pid)`); relief is a smaller allocation in `tofu/variables.tf` (reboots that VM) — never a RAM buy for this box (operator direction: the second hypervisor).'
       - alert: PveMetricsStale
         expr: time() - node_textfile_mtime_seconds{job="pve-node", file=~".*/pve.prom"} > 600
         for: 5m
