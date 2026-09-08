@@ -1468,9 +1468,15 @@ ${PF_RV_BODY}"
           fi
           PF_INDEX_ITEM "reviews.md" "OK"
 
-        # Coordinator's ruling/arbitration comment (search issue comments for ARBITRATE)
+        # Coordinator's ruling/arbitration comment (search issue + PR comments for ARBITRATE:)
         PF_ARB_MD=""
-        PF_ARB_COMMENT="$(printf '%s' "$PF_COMMENTS_RAW" | jq -c '[.[] | select(.body | test("ARBITRATE"))] | last' 2>/dev/null)" || PF_ARB_COMMENT=""
+        PF_ARB_COMMENT=""
+        # Search issue comments first for line-anchored ARBITRATE: marker
+        PF_ARB_COMMENT="$(printf '%s' "$PF_COMMENTS_RAW" | jq -c '[.[] | select(.body | test("^ARBITRATE:"))] | last' 2>/dev/null)" || PF_ARB_COMMENT=""
+        # If not found on issue, search PR review comments (includes review verdicts)
+        if [ -z "$PF_ARB_COMMENT" ] || [ "$PF_ARB_COMMENT" = "null" ]; then
+          PF_ARB_COMMENT="$(printf '%s' "$PF_REVIEWS_RAW" | jq -c '[.[] | select(.body | test("^ARBITRATE:"))] | last' 2>/dev/null)" || PF_ARB_COMMENT=""
+        fi
         if [ -n "$PF_ARB_COMMENT" ] && [ "$PF_ARB_COMMENT" != "null" ]; then
           PF_ARB_AUTHOR="$(printf '%s' "$PF_ARB_COMMENT" | jq -r '.user.login // ""')"
           PF_ARB_BODY="$(printf '%s' "$PF_ARB_COMMENT" | jq -r '.body // ""')"
@@ -1479,6 +1485,8 @@ ${PF_RV_BODY}"
 
 ${PF_ARB_BODY}"
           PF_INDEX_ITEM "arbitration.md" "OK"
+        else
+          PF_INDEX_ITEM "arbitration.md" "MISSING" "No ARBITRATE: marker found on issue or PR comments"
         fi
       fi
 
