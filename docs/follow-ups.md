@@ -293,7 +293,8 @@ six OVERSIZE items pointer-ized into
       CNP): LLM loop + `/report` through the proxy svc name, phase metrics to the pushgateway svc
       name, transcripts uploaded to garage → PR#434 in ~10 min, zero drops; (2) the dind/kind leg —
       UNEXERCISED: only a `task/build` ride runs `devbox run e2e` in-pod (`devbox run ci` starts no
-      kind), and in-pod kind has its own open fault (the #399-r1 segfault, oracle handoff inbox).
+      kind), and in-pod kind has its own open fault (the #399-r1 node-image segfault + the mirror-bypass question —
+      [`spikes/kata-ci-gate.md`](spikes/kata-ci-gate.md) §In-pod kind on a kata ride).
       Next:** watch the first in-pod `devbox run e2e` under kube-dns (the only thing the change
       touches for kind: `dnsPolicy: None` → kube-dns). The regression signature stays
       `AgentWorkerEgressDropped` carrying a BARE POD IP as its Hubble destination;
@@ -915,7 +916,10 @@ the block needs pruning, not more headings.
       class (model-routing.md's `timeout` is the provider one). Evidence: the same spike section.
       **Next:** either raise the worker recipe's tool timeout above the measured suite (or make it
       per-project), or teach the recipe scoped pytest (touched paths / `-x -q`) — decide once
-      oracle's suite is optimised, since that may shrink under 600 s on its own. Relates FU-216.
+      oracle's suite is optimised, since that may shrink under 600 s on its own. Second half
+      (oracle handoff 2026-09-03, #355 r5): a round that dies on its OWN tool timeout is a
+      "gate not observed" outcome — the ride stats/verdict must distinguish it from "gate
+      observed red" so it never counts as a fix round or feeds a ci-red hypothesis. Relates FU-216.
 
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
       IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel
