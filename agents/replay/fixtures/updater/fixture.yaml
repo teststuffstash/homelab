@@ -1,7 +1,10 @@
 # updater — agents/update-pr-branch.sh as one decision table (ADR-111 / homelab#742; the
 # adRise-action replacement, MP-T02/MP-T06's first executed replay).
 #
-# THE CONTRACT: per pass over one `gh pr list` snapshot, three legs —
+# THE CONTRACT: per pass over one `gh pr list` snapshot, three legs — plus leg 1's per-candidate
+# `gh pr view --json commits` probe (2026-09-08: `commits` is NOT listable at --limit 100 —
+# GitHub's 500k-node cap rejected every pass for 65h; a row's probe answers live in
+# rows/<id>/gh/pr-view-<n>.json, and only bot-approved candidates are probed) —
 #   1. main pick: armed ∧ BEHIND ∧ MERGE-READY, oldest first (FIFO), ONE update per
 #      (repo, base) LANE per pass — ADR-125 (2)/homelab#1422; before that it was one per REPO,
 #      which serialized a goal lane behind master traffic that cannot stale its approvals.

@@ -13,7 +13,6 @@
       { author: null, state: "APPROVED",
         submittedAt: "2026-09-03T14:30:00Z" }
     ],
-    commits: [ { messageHeadline: "fix: content", committedDate: "2026-09-03T14:00:00Z" } ],
     reviews: [
       { author: null, state: "APPROVED",
         submittedAt: "2026-09-03T14:30:00Z" }

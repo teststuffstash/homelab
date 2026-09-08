@@ -10,14 +10,11 @@
   { number: 101, createdAt: "2026-08-19T09:00:00Z", mergeStateStatus: "BEHIND",
     autoMergeRequest: { enabledAt: "2026-08-19T09:01:00Z" }, reviewDecision: "", baseRefName: "master", labels: [],
     headRefOid: "abc123def456",
-    commits: [ { messageHeadline: "fix: the thing", committedDate: "2026-08-19T09:00:00Z" },
-               { messageHeadline: "Merge branch 'master' into fix/x", committedDate: "2026-08-19T12:00:00Z" } ],
     reviews: [ { author: { login: "homelab-reviewer" }, state: "APPROVED",
                  submittedAt: "2026-08-19T09:30:00Z" } ] },
   { number: 102, createdAt: "2026-08-19T10:00:00Z", mergeStateStatus: "BEHIND",
     autoMergeRequest: { enabledAt: "2026-08-19T10:01:00Z" }, reviewDecision: "", baseRefName: "master", labels: [],
     headRefOid: "789012ghi345",
-    commits: [ { messageHeadline: "fix: the other thing", committedDate: "2026-08-19T10:00:00Z" } ],
     reviews: [ { author: { login: "homelab-reviewer[bot]" }, state: "APPROVED",
                  submittedAt: "2026-08-19T10:30:00Z" } ] }
 ]
