@@ -658,8 +658,7 @@ master** (IL-G02): nothing in the machinery creates it. `Budget` is the only mon
 the recipe pick and `goal-lint` still read the label, and build-shaped work read as a fix gets a bug-hunter's brief (the sleep#48 trap).
 Ordering between children is a native `blockedBy` edge; overlapping footprints otherwise serialize in arbitrary order.
 
-**Act 3 — `agent/queued` on the CHILDREN, never the Goal.** `task/goal` alone makes it a goal to the machinery (burn-down, checkpoint, terminals); `agent/queued` on the Goal
-summons the decomposer against children you already wrote — breaker #1 is the human's. Lint before you queue: `devbox run goal-lint -- <owner/repo> <n>` in the homelab jail,
+**Act 3 — `agent/queued` on the CHILDREN you authored; on the Goal only to summon the decomposer.** `task/goal` alone makes it a goal to the machinery (burn-down, checkpoint, terminals). A Goal with NO children is queued itself (`agent-fix` + `agent/queued`) and the `goal-decompose` clause authors + queues them; a Goal whose children you already wrote stays unqueued — `agent/queued` there would re-decompose against them. Either way breaker #1 is the human's. Lint before you queue: `devbox run goal-lint -- <owner/repo> <n>` in the homelab jail,
 or `bash /workspace/homelab/scripts/goal-lint.sh <owner/repo> <n>` from a stack jail (bash + gh + jq only). A FAIL is fixed on the issue, never in the machinery.
 
 Three standing rules the acts do not encode: decompose and checkpoint sittings **load the stack's design corpus first**; **merge is a midpoint** (assembly opens the post-launch
