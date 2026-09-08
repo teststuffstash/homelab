@@ -18,6 +18,7 @@ STDIN     index.txt  OK
 STDIN     issue.md  OK
 STDIN     pr.md  OK
 STDIN     reviews.md  OK
+STDIN     arbitration.md  MISSING  No ARBITRATE: marker found on issue or PR comments
 STDIN     ci-failure.md  MISSING  No failing check runs found
 STDIN   issue.md: |
 STDIN     # Issue #1175
