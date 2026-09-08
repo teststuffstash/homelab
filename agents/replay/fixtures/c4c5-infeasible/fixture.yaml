@@ -43,6 +43,11 @@ pins:
 name: c4c5-infeasible
 mode: table
 source: agents/coordinator-scan.sh
+# Its composition reaches `agents/issue_body.py` — the ONE body parser is Python (ADR-113),
+# so the interpreter is DECLARED rather than discovered as a mystery red (homelab#1460 leg 6;
+# the hermeticity contract, agents/replay/README.md cleanup-contract move 6).
+requires:
+  - python3
 parts:
   - block:c4c5-selector
   - file:bridge.sh
