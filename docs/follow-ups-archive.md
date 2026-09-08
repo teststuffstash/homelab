@@ -565,12 +565,3 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   out-of-scope: the arc/runner-registrar pools — their keys are deliberately not in Infisical
   (KeePass/in-cluster only) and their sole consumers are the runner controllers, whose
   exhaustion surfaces directly as registration/scale failures. Cron-relax leg lives in FU-086.
-- **FU-098** *(archived 2026-07-26)* — **GitHub App permissions: declared state + drift
-  verification, COMPLETE.** `docs/github-apps.yaml` = the single source (per-permission why,
-  decided absences, all app_ids filled); ONE creation script (`github-app-bootstrap.sh <slug>`,
-  manifest from the yaml, all six secrets/verify flows ported, legacy scripts deleted); the
-  ⊆-invariant lint in ci (mint-request ⊆ declaration — the fleet#134 422 class); the exporter
-  drift belt + `GithubAppPermissionDrift` alert (change flow: PR the yaml → alert rings →
-  operator clicks → clears; proven on the workflows:write grant AND it caught the reviewer's
-  forgotten grants same day); the human view SERVED at **apps.teststuff.net** (/apps,
-  never committed — CI-auto-commit rejected: GITHUB_TOKEN pushes trigger no workflows).
