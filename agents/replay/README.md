@@ -150,6 +150,10 @@ is stale, so it cannot drift the way the prose register did.
 | `arbitrate/blocked-on-human-resolved` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/blocked-on-human-review-only` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-issue-resolved` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-issue-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-pr-resolved` | actions | - | `agents/coordinator-scan.sh` | - |
+| `arbitrate/blocked-on-pr-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/crashed-ruling-keeps-label` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/escalate-keeps-label` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/first-tick` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
