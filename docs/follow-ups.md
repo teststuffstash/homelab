@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-225** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-226** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -1044,6 +1044,17 @@ the block needs pruning, not more headings.
       [[service-discovery]], ADR-076 (app-owned resources via Crossplane).
 
 ## Hardware & nodes
+
+- [ ] **FU-225** — **pve host RAM is the hypervisor's binding resource: 84 % used on average,
+      94 % at peak (7 d to 2026-09-08), 53 of 62 GiB in use** — while CPU sits at 18–23 % (p95
+      36 %). Cause is allocation as much as demand: ballooning is off on every VM, so the host
+      commits the full 60 GB of allocations while guests average 30–71 % of theirs (wk-03 30 % of
+      8 GB, wk-01 41 % of 16 GB). Board (`X99-P4`, E5-2680 v4) runs 4 × 16 GB Micron
+      `36ASF2G72PZ-2G1A2` DDR4-2133 ECC **RDIMM** (EDAC: two channels, two DIMMs each; SMBIOS lies
+      — count the free slots physically). **Next:** (a) RDIMM into the free slots — supply side
+      is the private hardware repo (R8; a 4 × 32 GB `MTA36ASF4G72PZ-2G3B1` lot was read 2026-09-08);
+      (b) right-size the VM allocations in `tofu/variables.tf` (reboot per VM). No FU/ADR matched
+      `pve.*(ram|memory)|rdimm` (grepped 2026-09-08). Relates FU-093, ROADMAP §HA model.
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
       wk-metal-02's flaky wired link. **2026-08-07 (homelab#117): wk-metal-02 had a 4.5h NIC
