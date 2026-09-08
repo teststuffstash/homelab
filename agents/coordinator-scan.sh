@@ -1540,6 +1540,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
+  # #1451: the stack-wide sub-issue tree is fetched LAZILY — by the first repo in this stack that
+  # carries a task/goal (below), memoized here for the stack's remaining repos. Reset per stack.
+  unset _kidsall_stack
   for repo in $repos; do
     slug="$ORG/$repo"
     case " $fixer_repos" in *" __ALL__ "*|*" $repo "*) dispatchable=1;; *) dispatchable="";; esac
@@ -2708,12 +2711,29 @@ EOF_GOVERNANCE
     }
     goals="$(printf '%s' "$openall" | jq -r '[.[] | select((.labels|map(.name)|index("task/goal")))] | .[].number' 2>/dev/null || true)"
     if [ -n "$goals" ]; then
-      # one call for the whole repo's issues incl. closed — reused for every goal below.
-      # `title,labels` ride along for the ADR-102 terminal legs (homelab#208): the close sweep
-      # names what survives and the abandoned leg compares-then-writes on `agent/queued`. Extra
-      # --json fields are free here (same request) and buying them with a second call would not be.
-      kidsall="$(gh issue list --repo "$slug" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
-      jq -e . >/dev/null 2>&1 <<<"${kidsall:-null}" || kidsall='[]'
+      # #1451: the descendant walk needs the STACK's issues, not this repo's — native sub-issue edges
+      # cross repos (agent-runtime#115 under homelab#1234), so a single-repo `kidsall` made every
+      # cross-repo member (and its subtree) invisible to the burn-down AND the completion predicate.
+      # Fetched once per stack by the first goal-carrying repo, memoized in `_kidsall_stack` for the
+      # rest of the stack's repo loop (a stack with no open goals pays nothing — the reviewer's
+      # per-tick-cost finding on PR#1513). Each issue gains `repo` and a repo-QUALIFIED `parentKey`
+      # (`<repo>#<n>`, the parent's repo read off `.parent.url`) so the walk keys on (repo, number)
+      # — bare numbers collide across repos. `title,labels` ride along for the ADR-102 terminal legs
+      # (homelab#208). In replay the stack list is absent, so the loop degrades to this one repo.
+      if [ -z "${_kidsall_stack+x}" ]; then
+        _kidsall_stack='[]'
+        for _kr in ${repos:-$repo}; do
+          _kr_issues="$(gh issue list --repo "$ORG/$_kr" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
+          jq -e . >/dev/null 2>&1 <<<"${_kr_issues:-null}" || _kr_issues='[]'
+          _kr_issues="$(jq --arg r "$_kr" '[.[] | . + {repo: $r,
+  parentKey: (if .parent == null then null
+              else ((.parent.url // "" | split("/") | if length >= 7 then .[4] else $r end)
+                    + "#" + (.parent.number | tostring)) end)}]' <<<"$_kr_issues")"
+          _kidsall_stack="$(jq -s 'add' <<<"$_kidsall_stack"$'\n'"$_kr_issues")"
+        done
+        jq -e . >/dev/null 2>&1 <<<"${_kidsall_stack:-null}" || _kidsall_stack='[]'
+      fi
+      kidsall="$_kidsall_stack"
       for g in $goals; do
         # FU-143 point 6: DESCENDANTS, not direct children — a sprout harvested from a child sits
         # at depth 2 (sub-issue of the CHILD), so a direct-children read neither re-fires this
@@ -2721,14 +2741,19 @@ EOF_GOVERNANCE
         # budget gate already fixed in agent-session.sh (direct children [14,15] vs actual
         # descendants [14,15,17,18,21]). Fixpoint over the ONE kidsall fetch; the seen-set makes
         # it cycle-safe; depth is bounded (~3) by the reviewer emitting no Follow-ups at ≥2.
-        gdesc=""; gfront="$g"
+        # FIX #1451: qualify the initial goal with its repo (e.g., "homelab#1234")
+        gdesc=""; gfront="${repo}#${g}"
         while [ -n "$gfront" ]; do
+          # FIX #1451: parse qualified frontier keys (e.g., "homelab#1234") and match cross-repo parents.
+          # Frontier contains qualified keys from current repo (initial $g) or qualified keys from descendants.
+          # For each issue in kidsall, check if its parent (by number) exists in the frontier (by number,
+          # in any repo). Once found, emit the issue's qualified key (repo#number).
           gnext="$(printf '%s' "$kidsall" | jq -r --arg f "$gfront" \
-            '(($f | split(" ") | map(select(. != "") | tonumber))) as $F
-             | [.[] | select(((.parent.number // 0)) as $p | $F | index($p)) | .number] | .[]' 2>/dev/null | tr '\n' ' ')" || gnext=""
+            '(($f | split(" ") | map(select(. != "")))) as $F
+             | [.[] | select(.parentKey != null and (.parentKey | IN($F[]))) | "\(.repo)#\(.number)"] | .[]' 2>/dev/null | tr '\n' ' ')" || gnext=""
           gnew=""
           for x in $gnext; do
-            case " ${gdesc# } $g " in *" $x "*) ;; *) gnew="$gnew $x";; esac
+            case " ${gdesc# } ${repo}#${g} " in *" $x "*) ;; *) gnew="$gnew $x";; esac
           done
           gfront="${gnew# }"; gdesc="$gdesc$gnew"
         done
@@ -2801,20 +2826,24 @@ EOF_GOVERNANCE
             # into the final variable, so a title containing a pipe (they do) can only widen the
             # column that already absorbs the rest. Any other position would shift `dlabels` and
             # silently mis-read the `agent/queued` test one leg down.
-            while IFS='|' read -r dn dstate dlabels dtitle; do
+            # #1451: `drepo` is the member's OWN repo — a cross-repo descendant is closed/de-queued
+            # THERE, never against the goal's slug; `dref` renders `#n` for same-repo members (the
+            # pinned fixture shape) and `<repo>#n` for cross-repo ones.
+            while IFS='|' read -r drepo dn dstate dlabels dtitle; do
               [ -n "$dn" ] || continue
               [ "$dstate" = "OPEN" ] || continue
+              dslug="$ORG/${drepo:-$repo}"; dref="#${dn}"; [ "${drepo:-$repo}" = "$repo" ] || dref="${drepo}#${dn}"
               case "$gverdict" in
                 reverted)
                   # "the tree stays readable history" (ADR-102): CLOSE with an audit comment, never
                   # delete, and `not planned` because the work is not going to happen — the premise
                   # died with the goal. The scan's own stale-dep flag reads that reason downstream.
                   if [ "$gdone" -lt "$gcap" ]; then
-                    if gh issue close "$dn" --repo "$slug" --reason "not planned" --comment "🤖 closed with goal #${g}, which was REVERTED (ADR-102 terminal, applied by a human as \`goal/reverted\`). The idea this work served was refuted in production, so its descendants die with it — this is successful refutation, not failure, and the issue stays as readable history. Reopen only if a new goal adopts the premise. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
+                    if gh issue close "$dn" --repo "$dslug" --reason "not planned" --comment "🤖 closed with goal #${g}, which was REVERTED (ADR-102 terminal, applied by a human as \`goal/reverted\`). The idea this work served was refuted in production, so its descendants die with it — this is successful refutation, not failure, and the issue stays as readable history. Reopen only if a new goal adopts the premise. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
                       gdone=$((gdone+1))
                     else
                       gleft=$((gleft+1))
-                      orphans="${orphans}[$repo] ⚠ goal #${g} revert: could not close descendant #${dn} (gh write refused?) — the goal stays OPEN so the next scan retries\n"
+                      orphans="${orphans}[$repo] ⚠ goal #${g} revert: could not close descendant ${dref} (gh write refused?) — the goal stays OPEN so the next scan retries\n"
                     fi
                   else
                     gleft=$((gleft+1))
@@ -2828,12 +2857,12 @@ EOF_GOVERNANCE
                   case " $dlabels " in
                     *" agent/queued "*)
                       if [ "$gdone" -lt "$gcap" ]; then
-                        if gh issue edit "$dn" --repo "$slug" --remove-label "agent/queued" >/dev/null 2>&1 \
-                           && gh issue comment "$dn" --repo "$slug" --body "🤖 de-queued: goal #${g} was ABANDONED (ADR-102 terminal — budget exhausted before a verdict). The issue is left OPEN and inert on purpose; the work may still be worth doing, but it may not spend a budget that is gone. Re-queue it under a refilled or different goal. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
+                        if gh issue edit "$dn" --repo "$dslug" --remove-label "agent/queued" >/dev/null 2>&1 \
+                           && gh issue comment "$dn" --repo "$dslug" --body "🤖 de-queued: goal #${g} was ABANDONED (ADR-102 terminal — budget exhausted before a verdict). The issue is left OPEN and inert on purpose; the work may still be worth doing, but it may not spend a budget that is gone. Re-queue it under a refilled or different goal. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
                           gdone=$((gdone+1))
                         else
                           gleft=$((gleft+1))
-                          orphans="${orphans}[$repo] ⚠ goal #${g} abandon: could not de-queue descendant #${dn} (gh write refused?) — the goal stays OPEN so the next scan retries\n"
+                          orphans="${orphans}[$repo] ⚠ goal #${g} abandon: could not de-queue descendant ${dref} (gh write refused?) — the goal stays OPEN so the next scan retries\n"
                         fi
                       else
                         gleft=$((gleft+1))
@@ -2847,18 +2876,18 @@ EOF_GOVERNANCE
                   # at all on this leg. List what survives, propose a disposition per item from the
                   # labels already in hand, and let the operator confirm.
                   case "$dtitle" in
-                    post-launch:*) gswept="${gswept}    #${dn} — ${dtitle} → CONTAINER: close with the goal\n" ;;
+                    post-launch:*) gswept="${gswept}    ${dref} — ${dtitle} → CONTAINER: close with the goal\n" ;;
                     *) case " $dlabels " in
                          *" agent/queued "*|*" agent/in-progress "*|*" agent/review "*)
-                           gswept="${gswept}    #${dn} — ${dtitle} → LIVE: let it finish, or re-home it into another goal (batch re-homing is legal at this sweep)\n" ;;
-                         *) gswept="${gswept}    #${dn} — ${dtitle} → INERT: close as superseded, or re-home\n" ;;
+                           gswept="${gswept}    ${dref} — ${dtitle} → LIVE: let it finish, or re-home it into another goal (batch re-homing is legal at this sweep)\n" ;;
+                         *) gswept="${gswept}    ${dref} — ${dtitle} → INERT: close as superseded, or re-home\n" ;;
                        esac ;;
                   esac ;;
               esac
             done <<<"$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-              '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
-               | [.[] | select(.number as $n | $D | index($n))] | sort_by(.number) | .[]
-               | [(.number | tostring), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
+              '(($d | split(" ") | map(select(. != "")))) as $D
+               | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null)] | sort_by(.number) | .[]
+               | [.repo, (.number | tostring), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
             if [ "$gleft" -gt 0 ]; then
               # The goal is NOT closed while work remains — see the resumability contract above.
               orphans="${orphans}[$repo] ⏳ goal #${g} goal/${gverdict}: ${gdone} descendant(s) actioned, ${gleft} still to go (cap ${gcap}/scan) — the goal stays OPEN until the tree is done; the next scan continues\n"
@@ -2954,12 +2983,13 @@ EOF_GOVERNANCE
         # An absent/unreadable store reads as counts 0 0 (the comments API swallows both shapes)
         # — trigger (a) simply cannot arm, which is rule #6's direction (never fail INTO a
         # dispatch), while (b) still fires; the next scan retries the read.
+        # FIX #1451: parse qualified keys from gdesc (e.g., "homelab#1234")
         gopen_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
-           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN")] | length' 2>/dev/null || echo "")"
+          '(($d | split(" ") | map(select(. != "")))) as $D
+           | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN")] | length' 2>/dev/null || echo "")"
         gclosed_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
-           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "CLOSED")] | length' 2>/dev/null || echo "")"
+          '(($d | split(" ") | map(select(. != "")))) as $D
+           | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "CLOSED")] | length' 2>/dev/null || echo "")"
         # Each count validated on its own — concatenation would let ("", "3") read as the
         # valid-looking "3" and fail later as a swallowed arithmetic error (bot review, PR#398).
         case "$gopen_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
@@ -3016,32 +3046,38 @@ EOF_GOVERNANCE
         # only apply the disposition filter when the store actually read; otherwise fall back to
         # the pre-PR plain open-non-bucket count, so a blind read can only ever look MORE open,
         # never less.
+        # FIX #1451: parse qualified keys from gdesc (e.g., "homelab#1234")
         if [ "$gdisp_ok" = 1 ]; then
-          gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
-            '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+          gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" --arg GREPO "$repo" \
+            '(($d | split(" ") | map(select(. != "")))) as $D
              | ($ad | split(" ") | map(select(. != ""))) as $AD
              | ($df | split(" ") | map(select(. != ""))) as $DF
              | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
-             | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
-                    | select((.number | tostring) as $k
-                             | ($AD | index($k)) != null
-                               or (($DF | index($k)) == null
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
+                    | select(("\(.repo)#\(.number)") as $qk
+                             | (if .repo == $GREPO then (.number | tostring) else null end) as $bk
+                             | ($AD | index($qk)) != null or ($bk != null and ($AD | index($bk)) != null)
+                               or ((($DF | index($qk)) == null and ($bk == null or ($DF | index($bk)) == null))
                                    and (((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null))))] | length' 2>/dev/null || echo "")"
         else
           gopen_n_ckpt="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-            '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
-             | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
+            '(($d | split(" ") | map(select(. != "")))) as $D
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)] | length' 2>/dev/null || echo "")"
         fi
         case "$gopen_n_ckpt" in ''|*[!0-9]*) gopen_n_ckpt="$gopen_n";; esac
         # UNDISPOSITIONED = open, not the bucket, no row, no `agent/*` lifecycle label — the
         # #1315 shape (an inert issue bound into the tree with nobody's judgment on it).
-        gundisp_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" \
-          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+        # FIX #1451: parse qualified keys from gdesc (e.g., "homelab#1234")
+        gundisp_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" --arg GREPO "$repo" \
+          '(($d | split(" ") | map(select(. != "")))) as $D
            | ($ad | split(" ") | map(select(. != ""))) as $AD
            | ($df | split(" ") | map(select(. != ""))) as $DF
            | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
-           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
-                  | select((.number | tostring) as $k | ($AD | index($k)) == null and ($DF | index($k)) == null)
+           | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN") | select(.title | startswith("post-launch:") | not)
+                  | select(("\(.repo)#\(.number)") as $qk
+                           | (if .repo == $GREPO then (.number | tostring) else null end) as $bk
+                           | ($AD | index($qk)) == null and ($bk == null or ($AD | index($bk)) == null)
+                             and (($DF | index($qk)) == null and ($bk == null or ($DF | index($bk)) == null)))
                   | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)] | length' 2>/dev/null || echo "")"
         case "$gundisp_n" in ''|*[!0-9]*) gundisp_n=0;; esac
         set -- $gdesc; gtotal_n=$#
@@ -3148,16 +3184,23 @@ EOF_GOVERNANCE
           # whose own body reads `Base:` absent or = the default branch (a member already on a
           # `goal/<g>-…` branch is themed; skip). The body read is ONE `gh issue view` per
           # candidate — `kidsall` carries no bodies and there are few candidates per goal.
-          gcands="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-            '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+          # #1451: `kidsall` is the STACK's list and `gdesc` holds `<repo>#<n>` keys. Candidates are
+          # the GOAL's-repo members only: a footprint is a repo-relative path (the same path in two
+          # repos is not a shared surface), the theme branch + its assembly PR live in the goal's
+          # repo, and the `themes=` side value carries bare numbers — so a cross-repo member is
+          # never nominated. `.repo` rides along so the body read names the candidate's own repo.
+          gcands="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg GREPO "$repo" \
+            '(($d | split(" ") | map(select(. != "")))) as $D
              | ["agent/in-progress","agent/review","agent/done","agent/error","agent/blocked"] as $LC
-             | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN")
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.repo == $GREPO)
+                    | select(.state == "OPEN")
                     | select((.title // "") | test("^(post-launch|theme|stint|retro-batch):"; "i") | not)
-                    | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)
-                    | .number] | sort | .[]' 2>/dev/null || true)"
+                    | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)]
+             | sort_by(.number) | .[] | "\(.repo) \(.number)"' 2>/dev/null || true)"
           gfeed=""
-          for cn in $gcands; do
-            if ! cbody="$(gh issue view "$cn" --repo "$slug" --json body 2>/dev/null | jq -r '.body // ""' 2>/dev/null)"; then
+          while read -r crepo cn; do
+            [ -n "$cn" ] || continue
+            if ! cbody="$(gh issue view "$cn" --repo "${ORG}/${crepo}" --json body 2>/dev/null | jq -r '.body // ""' 2>/dev/null)"; then
               echo "  [$repo] ⚠ goal #${g}: body of #${cn} unreadable — not a theme candidate this pass"; continue
             fi
             if ! cbase="$(ib_get Base "${repo:-}#${cn}" "$cbody")"; then
@@ -3167,7 +3210,9 @@ EOF_GOVERNANCE
             [ -z "$cbase" ] || [ "$cbase" = "${default_branch:-master}" ] || continue
             ctouch="$(ib_get Touches "${repo:-}#${cn}" "$cbody")" || ctouch=""
             gfeed="${gfeed}${cn}|${ctouch}\n"
-          done
+          done <<EOF_GCANDS
+$gcands
+EOF_GCANDS
           ggroups="$(printf '%b' "$gfeed" | fp_theme_groups)"
           while IFS='|' read -r gsurf gmem; do
             [ -n "$gsurf" ] && [ -n "$gmem" ] || continue
@@ -3182,21 +3227,26 @@ EOF_GTHEMES
           # is the checkpoint's act. The trigger retires by itself the moment ANY PR exists for
           # the branch (`--state all`: a closed one counts — re-opening is a human's call, not a
           # re-summons). rule #6: an unreadable body or PR probe HOLDS (no unit from (e), one ⚠).
-          gthemes_open="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
-            '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
-             | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN")
-                    | select((.title // "") | test("^theme:"; "i")) | .number] | sort | .[]' 2>/dev/null || true)"
-          for tn in $gthemes_open; do
-            # the theme's OWN descendants (walked by parent, depth-bounded like gdesc): ≥ 1, all closed
-            tstate="$(printf '%s' "$kidsall" | jq -r --argjson p "$tn" '
+          # Same repo scope as the candidates (#1451): a theme is a level-2 of the goal in the
+          # goal's repo — its branch and assembly PR live there, and `theme-complete=` carries
+          # bare numbers. The theme's OWN descendants may sit in any repo (`parentKey` walk).
+          gthemes_open="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg GREPO "$repo" \
+            '(($d | split(" ") | map(select(. != "")))) as $D
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.repo == $GREPO)
+                    | select(.state == "OPEN") | select((.title // "") | test("^theme:"; "i"))]
+             | sort_by(.number) | .[] | "\(.repo) \(.number)"' 2>/dev/null || true)"
+          while read -r trepo tn; do
+            [ -n "$tn" ] || continue
+            # the theme's OWN descendants (walked by qualified parentKey, depth-bounded like gdesc): ≥ 1, all closed
+            tstate="$(printf '%s' "$kidsall" | jq -r --arg p "${trepo}#${tn}" '
               . as $all
-              | def kids($x): [$all[] | select((.parent.number // 0) == $x) | .number];
+              | def kids($x): [$all[] | select(.parentKey == $x) | "\(.repo)#\(.number)"];
                 def desc($x; $depth): if $depth > 6 then [] else (kids($x) as $k | $k + ([$k[] | desc(.; $depth + 1)] | add // [])) end;
               (desc($p; 0) | unique) as $T
-              | [$all[] | select(.number as $n | $T | index($n))]
+              | [$all[] | select(("\(.repo)#\(.number)") as $k | ($T | index($k)) != null)]
               | if length == 0 then "none" elif all(.state == "CLOSED") then "closed" else "open" end' 2>/dev/null || echo "unreadable")"
             [ "$tstate" = "closed" ] || continue
-            if ! tbody="$(gh issue view "$tn" --repo "$slug" --json body 2>/dev/null | jq -r '.body // ""' 2>/dev/null)"; then
+            if ! tbody="$(gh issue view "$tn" --repo "${ORG}/${trepo}" --json body 2>/dev/null | jq -r '.body // ""' 2>/dev/null)"; then
               echo "  [$repo] ⚠ goal #${g}: theme #${tn} body unreadable — its assembly check is HELD this pass"; continue
             fi
             if ! tbase="$(ib_get Base "${repo:-}#${tn}" "$tbody")"; then
@@ -3204,14 +3254,16 @@ EOF_GTHEMES
             fi
             tbase="${tbase#"${tbase%%[![:space:]]*}"}"; tbase="${tbase%"${tbase##*[![:space:]]}"}"
             case "$tbase" in "goal/${g}-"?*) ;; *) continue ;; esac
-            if ! tprs="$(gh pr list --repo "$slug" --head "$tbase" --state all --json number 2>/dev/null | jq -r 'length' 2>/dev/null)"; then
+            if ! tprs="$(gh pr list --repo "${ORG}/${trepo}" --head "$tbase" --state all --json number 2>/dev/null | jq -r 'length' 2>/dev/null)"; then
               echo "  [$repo] ⚠ goal #${g}: PR probe for theme #${tn} (${tbase}) unreadable — its assembly check is HELD this pass"; continue
             fi
             case "$tprs" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: PR probe for theme #${tn} (${tbase}) unreadable — its assembly check is HELD this pass"; continue ;; esac
             [ "$tprs" -eq 0 ] || continue
             echo "  [$repo] goal #${g}: THEME #${tn} complete (${tbase}) — assembly PR due"
             gtheme_done="${gtheme_done:+${gtheme_done}+}${tn}"
-          done
+          done <<EOF_GTHEMES_OPEN
+$gthemes_open
+EOF_GTHEMES_OPEN
           [ -n "$gtheme_done" ] && goal_theme_side="${goal_theme_side:-} ${repo}:issue-${g}:theme-complete=${gtheme_done}"
         fi
         gck=""

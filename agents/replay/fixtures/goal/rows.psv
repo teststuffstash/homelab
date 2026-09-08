@@ -139,6 +139,7 @@ validated          | terminal |                                            | IN_
 master-goal-tree-empty          | open-pre | openall.json @ patches/base-master-tree-empty.jq      | IN_SLUG=teststuffstash/circles IN_REPO=circles | master-goal-tree-empty
 master-goal-post-launch-quiet   | open-pre | openall.json @ patches/base-master-post-launch.jq     | IN_SLUG=teststuffstash/circles IN_REPO=circles | master-goal-post-launch-quiet
 goal-branch-tree-empty-unchanged | open-pre | openall.json @ patches/base-goal-branch-tree-empty.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-branch-tree-empty-unchanged
+cross-repo-open-held  | open-pre | openall.json @ patches/add-cross-repo-member.jq  | IN_SLUG=teststuffstash/circles IN_REPO=circles CROSS_REPO_TEST=1 | cross-repo-open-held
 #
 # ── ADR-126 v1.3.1 delta 4, homelab#1423 leg A: THEME NOMINATION + trigger (e) — deterministic ──
 # The SHELL nominates, the checkpoint session judges and mints (ADR-094): the lane reads each open

@@ -160,15 +160,16 @@ walk() {  # walk <issue-number> <depth> [<theme-base> <theme-touches> <theme-num
     ctouches="$(line "$b" Touches "$slug#$k")"
     if printf '%s' "$t" | grep -qiE '^theme:'; then is_theme=1; else is_theme=0; fi
     if [ "$is_theme" -eq 1 ]; then
-      # A THEME owns a branch (ADR-126): `Base: goal/<goal>-<slug>`, cut by the author from
-      # master before anything is queued (IL-G02 — nothing in the machinery creates it), and a
-      # `Touches` fix-surface its children must fit inside (v1.3.1 delta 2).
+      # A THEME owns a branch (ADR-126): `Base: goal/<goal>-<slug>`, cut from master by the
+      # goal-checkpoint at theme formation (a hand-authored theme's author does the same — IL-G02's
+      # operator step is the GOAL's own branch only), and a `Touches` fix-surface its children
+      # must fit inside (v1.3.1 delta 2).
       if [ -z "$cb" ]; then
-        fail "#$k (theme) has no \`Base:\` — a theme owns a goal/${goal}-<slug> branch; without it its children base nothing and the assembly PR has no head"
+        fail "#$k (theme) has no \`Base:\` — a theme owns a goal/${goal}-<slug> branch: the checkpoint cuts it at theme formation (a hand-authored theme's author does the same); nothing else creates it. Without it its children base nothing and the assembly PR has no head"
       elif ! printf '%s' "$cb" | grep -qE "^goal/${goal}-[a-z0-9][a-z0-9.-]*$"; then
         fail "#$k (theme) Base: '$cb' — must name goal/${goal}-<slug> (this goal's own number; \`master\` is the GOAL's base, never a theme's)"
       elif ! branch_exists "$cb"; then
-        fail "#$k (theme) Base: $cb — the branch does NOT exist. IL-G02: the AUTHOR cuts it from master before queueing anything under the theme"
+        fail "#$k (theme) Base: $cb — the branch does NOT exist. The checkpoint cuts it at theme formation (a hand-authored theme's author does the same); nothing else creates it — cut it from master before queueing anything under the theme"
       else
         themed_ok=$((themed_ok+1))
       fi
