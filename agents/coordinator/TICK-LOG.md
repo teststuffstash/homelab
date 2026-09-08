@@ -7893,3 +7893,9 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   #1456 (inert — queue if wanted).
 - Watch set armed (meta-events + 2700 s heartbeat); PveThinPoolFillingUp still FIRING at 80.5 % —
   the operator-owed Garage forensic-backup deletion is the lever (unchanged from the 09-08 pickup).
+- **10:1xZ, post-wind-down (operator ping): every open PR red on `exporter-self-test`.** Not a landing: the
+  self-test fixture's reverted goal (circles#17) carried a FIXED `closedAt` of 2026-08-08, which crossed
+  `collect_goals`'s 30-day age-out today — bisected across six commits back to yesterday's green
+  wind-down, all red locally on 09-08. Fixed direct (`_RECENT_CLOSE` = now−5d), PRs brought current.
+  Lesson for the fixture class: a recorded date that a window compares against NOW is a time bomb;
+  `retro-rank-snapshot-exclusion`/ledger fixtures with hard dates deserve the same read.
