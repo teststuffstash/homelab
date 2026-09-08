@@ -1,5 +1,5 @@
 {
   "comments": [
-    {"author":{"login":"homelab-agents-1234"},"body":"Arbitration ruled: escalate. This is genuinely ambiguous and needs a human decision.\nblocked-on: human"}
+    {"author":{"login":"homelab-agents-1234"},"body":"Arbitration ruled: escalate. This is genuinely ambiguous and needs a human decision.\nci-cause: policy-ambiguity\nblocked-on: human","createdAt":"2026-09-08T10:00:00Z"}
   ]
 }

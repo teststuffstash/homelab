@@ -1,0 +1,14 @@
+{
+  "comments": [
+    {
+      "author":{"login":"homelab-agents-1234"},
+      "body":"Arbitration ruled: escalate to human. This PR needs operator judgment.\nci-cause: policy-ambiguity\nblocked-on: human",
+      "createdAt":"2026-09-08T10:00:00Z"
+    },
+    {
+      "author":{"login":"homelab-agents-1234"},
+      "body":"state-fp:arbitrate:abc123def456",
+      "createdAt":"2026-09-08T10:01:00Z"
+    }
+  ]
+}

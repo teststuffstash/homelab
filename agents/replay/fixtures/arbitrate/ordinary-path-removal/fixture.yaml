@@ -1,4 +1,4 @@
-# Ordinary-path ruling removal (FU-1507). A PR with agent/arbitrate has a coordinator ruling
+# Ordinary-path ruling removal (homelab#1507). A PR with agent/arbitrate has a coordinator ruling
 # comment that does NOT contain "blocked-on:" — an ordinary-path ruling that should remove the label.
 # The belt fetches the PR, reads the comments, checks the newest coordinator comment, and if it has
 # no blocked-on marker, removes agent/arbitrate so the reflex can pick the PR normally.

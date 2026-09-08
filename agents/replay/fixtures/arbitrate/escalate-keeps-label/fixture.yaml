@@ -1,4 +1,4 @@
-# Escalate ruling keeps label (FU-1507). A PR with agent/arbitrate has a coordinator ruling
+# Escalate ruling keeps label (homelab#1507). A PR with agent/arbitrate has a coordinator ruling
 # comment that DOES contain "blocked-on:" — an escalate ruling that should KEEP the label.
 # The belt fetches the PR, reads the comments, checks the newest coordinator comment, and if it has
 # a blocked-on marker, does NOT remove the label.

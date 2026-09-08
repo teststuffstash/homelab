@@ -1,3 +1,7 @@
-CALL gh pr view 236 --repo teststuffstash/oracle-fleet --json comments
+CALL gh pr view 236 --repo teststuffstash/oracle-fleet --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+CALL gh pr view 236 --repo teststuffstash/oracle-fleet --json comments,createdAt
+CALL gh api repos/teststuffstash/oracle-fleet/issues/236/events
+OUT UNIT arbitrate|oracle-fleet|pr-236
+OUT ORPHAN [oracle-fleet] ⏳ arbitrate belt — PR #236: no ruling comment found (homelab#1507). No label write.
 OUT REACHED: end
 RC 0

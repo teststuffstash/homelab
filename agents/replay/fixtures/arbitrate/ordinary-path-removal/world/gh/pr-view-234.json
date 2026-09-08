@@ -1,5 +1,5 @@
 {
   "comments": [
-    {"author":{"login":"homelab-agents-1234"},"body":"Arbitration ruled: re-dispatch with clarified instructions. The loop is stuck on a misunderstanding. Clarification: improve error handling in the retry logic.\nci-cause: retry-exhaustion"}
+    {"author":{"login":"homelab-agents-1234"},"body":"Arbitration ruled: re-dispatch with clarified instructions. The loop is stuck on a misunderstanding. Clarification: improve error handling in the retry logic.\nci-cause: retry-exhaustion","createdAt":"2026-09-08T10:00:00Z"}
   ]
 }
