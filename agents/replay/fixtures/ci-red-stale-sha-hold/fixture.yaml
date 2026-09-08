@@ -1,4 +1,4 @@
-# FU-1529 sub-defects 1 & 2 — stale-sha red and human-ruling hold, pinned.
+# FU-1529 stale-sha red — pinned.
 #
 # CONDITION UNDER REPLAY. A red armed PR (#1515, branch fix/issue-1515-something) that has
 # completed RED_ROUNDS_MAX attempts. The statusCheckRollup still reports FAILURE (stale from
@@ -9,14 +9,14 @@
 # WHY THIS FIXTURE EXISTS. Before FU-1529, the ci-red clause checked statusCheckRollup without
 # asserting the sha, so a push that fixes red was invisible for ~1 minute while the rollup still
 # reported the previous commit's failures. During that window, an exhausted-rounds escalation would
-# re-apply agent/arbitrate, overriding a human's label removal if they had intervened. This fixture
-# pins that the new per-sha query blocks escalation on stale shas.
+# re-apply agent/arbitrate. This fixture pins that the new per-sha query blocks escalation on
+# stale shas.
 #
 # THE CONTRACT:
 #   1. red_rounds >= RED_MAX — the exhausted-rounds case is reached.
 #   2. The per-sha check-runs query for the current head returns no completed red checks.
 #   3. ci_red_should_arbitrate = 0 — the escalation is held.
-#   4. ORPHANS line is emitted: "ci-red EXHAUSTED held — red sha does not match current head..."
+#   4. ORPHANS line is emitted: "ci-red EXHAUSTED held — no completed red run on current head..."
 #   5. No gh pr edit (no label added).
 pins:
   - MP-T13
@@ -28,7 +28,7 @@ parts:
   - block:state-fp-pair
   - block:round-evidence
   - file:bridge.sh
-  - block:ci-red-stale-sha-and-human-hold
+  - block:ci-red-stale-sha
   - file:post.sh
 env:
   - IN_SLUG=teststuffstash/oracle-fleet

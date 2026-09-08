@@ -401,11 +401,9 @@ transitions:
     guards:
       - desc: "scan labels agent/arbitrate + comments when red attempts hit the cap; the existing arbitrate clause + coordinator tie-break take over (re-dispatch stronger / close / escalate)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red → agent/arbitrate" }
-      - desc: "stale-sha assertion: per-sha check-runs query verifies conclusion.head_sha == headRefOid before escalation (FU-1529 sub-defect 1), so a push that fixes red is not invisible during the ~1min statusCheckRollup eventual-consistency window"
+      - desc: "stale-sha assertion: per-sha check-runs query verifies conclusion.head_sha == headRefOid before escalation (FU-1529 stale-sha), so a push that fixes red is not invisible during the ~1min statusCheckRollup eventual-consistency window"
         anchor: { file: agents/coordinator-scan.sh, pattern: "gh api repos.*check-runs" }
-      - desc: "human-ruling hold: events probe for unlabeled actions by non-bot actors on agent/arbitrate honours a human's removal ruling (FU-1529 sub-defect 2); unreadable probe holds (safe default)"
-        anchor: { file: agents/coordinator-scan.sh, pattern: "arbitrate_unlabeled" }
-    incidents: ["FU-115: the red loop livelocked forever (no exhaustion edge); this is MP-T11 ported to the CI-red side", "FU-1529: stale-sha re-escalation and human-ruling hold on ci-red→arbitrate edge"]
+    incidents: ["FU-115: the red loop livelocked forever (no exhaustion edge); this is MP-T11 ported to the CI-red side", "FU-1529: stale-sha re-escalation on the ci-red→arbitrate edge (human-ruling hold split to #1544)"]
 
   - id: MP-T14
     name: issue → review at PR-open, footprint releases
