@@ -19,8 +19,17 @@ never the session's arc — that is TICK-LOG's.)
   (3) **Handoff inbox**: only the circles ADR request remains (real-content seam — a design sitting +
   one Infisical secret; operator decision). (4) **#946** A5 evidence seed — a seat sitting (S3
   snapshot discovery under seat creds, `agents/re-review.sh --shadow` over ~3 merged platform PRs).
-  (5) FU-225 pve RAM buy / the oracle pin ping-pong / FU-203's CronJob (now riding as #1505) /
+  (5) the oracle pin ping-pong / FU-203's CronJob (now riding as #1505) /
   23 stale archive entries → `/docs-cleanup` — unchanged from the 09-08 morning pickup.
+- **⚑ PICKUP (2026-09-08 afternoon seat, ~14:4xZ wind-down — the pve capacity thread):** all
+  applied and merged (PR#1518/#1519/#1520 + 09b81dd9): wk-03 16Gi/12c, ci-runner-01 12Gi,
+  `maxRunners` 6; FU-224 limits raised; FU-225 archived (belt `PveHostMemoryLow` live). **Open
+  for a fresh session:** (a) **ADR pending — the second hypervisor** (operator direction: the
+  dual-Xeon 4U as an independent Proxmox host, three k8s control planes, k8s-layer HA, no
+  corosync/Ceph; pulls ROADMAP §HA model forward; the read + pre-bid questions live in the
+  hardware repo) — write it only once the operator says the box is bought; (b) FU-218 re-read
+  of ARC queue p90 at 07–09/17–19 UTC after ~09-15; (c) FU-224 throttling-panel re-read ~09-15
+  → archive; (d) GAPS tofu-apply-G1 (tf-apply exit 127 after a successful apply) is unchased.
 - **⚑ S8 IN FLIGHT (sixth sitting 2026-09-08, corpus session; stint #1418, Size 3):** originals
   1a/2/3/5/6 + sprout #1452 DONE; **#1420 DONE (PR#1502, 09:27Z — card = three acts, scratch-Goal
   lint 0/0 recorded on the PR)**; 1b = PR#1459 merged + residue #1460: legs 1–2 in **PR#1503**
@@ -42,7 +51,8 @@ never the session's arc — that is TICK-LOG's.)
 - **⚑ OPERATOR (physical / decisions), from the 09-05 sitting:** (1) **CI starvation**: one org-wide ARC set of 3 slots (FU-218); homelab ≥300 runs today
   starved oracle (queue p90 22–40 min). Levers ruled/filed: #1452 (fair, platform-native);
   per-stack runner scale sets as the fairness knob (not filed — say so if wanted); wk-metal-04's
-  16 GB as capacity after the cable (kata reservation = operator call). App-side: oracle-fleet
+  16 GB as capacity after the cable (kata reservation = operator call). **09-08 afternoon: ARC
+  is 6 slots now (wk-03 16Gi) — the pve-as-is ceiling; more = the second hypervisor.** App-side: oracle-fleet
   #466/#467 (resume + bundle the 248k PUTs). (2) ~~#1308 leg-1 APPLY on ci-runner-01~~ DONE
   2026-09-08 (VM replaced from tofu, buildx `homelab-mirrors` builder live). (3) FU-215 Unbound capture (unchanged). (3b) **BUY — wk-metal-04's SA400 is the Garage write
   bottleneck and the cable did NOT fix it** (rebuild on the healthy link: 2 h 10 min flat at
