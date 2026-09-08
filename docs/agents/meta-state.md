@@ -10,11 +10,9 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-08 corpus session, ~09:40Z wind-down):** (1) **S8 legs 4–6 of #1460** — an
-  opus subagent's branch in its clone (`fix/s8-1460-legs-4-6`, based on `71069936`); if it reported
-  before wind-down its outcome is in TICK-LOG, else fetch from the clone path, rebase onto PR#1503's
-  branch (`fix/s8-1460-parser-residue`, one in-PR fix landed after the bot's CR) and open the
-  follow-on PR — #1431 closes when both land. (2) **#1424 closeout leg** = the S8 closeout-1 sitting
+- **⚑ PICKUP (2026-09-08 corpus session, ~09:40Z wind-down):** (1) **S8 legs 4–6 of #1460 = PR#1510** (armed; bot review
+  pending at wind-down) — when it merges #1460 + #1431 close; if the bot requests changes, the
+  fix is the seat's (the subagent clone is gone with the session). (2) **#1424 closeout leg** = the S8 closeout-1 sitting
   (originals 1a/1b/2/3/4/5/6 done once #1431 closes; #1423 HELD): docs-cleanup over the touched
   surfaces, the FU sweep (FU-168 fence half, FU-199 board faces, FU-201/FU-174 cross-refs), the
   built-vs-left comment on #1418, dispositions written via `epic_dispositions.py`, ROADMAP S8 row.
@@ -27,10 +25,11 @@ never the session's arc — that is TICK-LOG's.)
   1a/2/3/5/6 + sprout #1452 DONE; **#1420 DONE (PR#1502, 09:27Z — card = three acts, scratch-Goal
   lint 0/0 recorded on the PR)**; 1b = PR#1459 merged + residue #1460: legs 1–2 in **PR#1503**
   (armed; bot CR at 09:30Z fixed in-PR — the resumable-goal-child loop now holds on a malformed
-  block, row `block-class-malformed`), legs 4–6 with the subagent (PICKUP 1). #1424 half 1+2 merged
+  block, row `block-class-malformed`), legs 4–6 = **PR#1510** (armed, bot review pending). #1424 half 1+2 merged
   (PR#1461/#1479); its residue is the closeout leg. #1423 HELD on the wave-2 readout. Bot-waits at
-  exit: PR#1503 (re-review after the fix push), PR#1506 (approved, armed — the issue_body setext-fence
-  fix), #1505 r1 riding (FU-203 CronJob), #1507 queued (arbitrate-label residue).
+  exit: PR#1510, PR#1506 (approved, armed — the issue_body setext-fence
+  fix), the loop's PR#1508 (#1505, seat-approved — verify one triggered GC run post-merge if
+  this session did not) and PR#1509 (#1507 — needs the codeowner read: agents/** + FSM).
 - **⚑ OPERATOR — circles-iac PR#108 is UN-ARMED and waiting on you (2026-09-07):** circles' claim
   `egress.profile: none → python`. Its rationale ("static page + helm gate … no pypi") went stale
   when circles gained a uv chassis; flipping `enforce` with `none` would HANG every ride at its

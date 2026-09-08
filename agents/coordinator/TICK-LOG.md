@@ -7855,7 +7855,14 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   tip (2 residue commits replayed clean), the five bridge `IB_PY=` seam lines dropped (the
   config-defaults block resolves it since f5e8ebc0; 424/424 without them) → **PR#1503** (legs 1–2,
   armed). Legs 4–6 dispatched to an opus subagent on a local clone (`clone-1460`) — outcome below.
-  `fix/s8-1420-consumer-card-three-acts` rebased → **PR#1502** (armed); the card's scratch-Goal
+  **Legs 4–6 landed as PR#1510** (opus subagent, 302k tok / 34 min: the bucket-create + scout-digest
+  writers stamp through the parser (the digest deliberately stamps NO key — a cron tick has no honest
+  `Origin`), `queued-body-tsv` + `base-declared-read` sentinels + eight pins, `requires: python3` on
+  25 fixtures by the static rule; the seat resolved its two flagged survivors — goal-lint's presence
+  grep now reads through the parser, meta-needs-attention's jq test annotated as a set exclusion);
+  #1431 closes with it. PR#1503 drew one bot CR (the resumable-goal-child loop dispatched on the
+  label when the block was malformed — fixed in-PR, row `block-class-malformed`) and merged 09:48Z.
+  `fix/s8-1420-consumer-card-three-acts` rebased → **PR#1502** (armed, merged 09:27Z); the card's scratch-Goal
   acceptance RUN (#1504 authored from the card alone, `goal/1504-scratch` cut, `goal-lint` 0 FAIL /
   0 WARN, closed + branch deleted inside two minutes, transcript on the PR) surfaced one wording
   catch — act 3 said "never the Goal" while a childless Goal is queued itself to summon the
@@ -7870,7 +7877,9 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   PR and the reflex refuses it forever (oracle PR#392 sat green until a hand relabel). The circles
   ADR handoff (real-content seam) is still in the inbox — a design sitting.
 - **Board fed / cleared:** **#1505** queued (FU-203's weekly registry GC CronJob, off the Tuesday
-  window; r1 riding 09:2xZ); **agent-runtime#128** → PR#131 (opus subagent paste of `.agents/build.yaml`
+  window) → the loop's **PR#1508** in ~25 min, bot-approved, seat codeowner-approved 09:51Z (the
+  post-merge triggered run is the acceptance — result in the next entry if this session saw it);
+  **#1507** → the loop's **PR#1509** (arbitrate belt + brief + FSM + 3 fixtures), gate-read pending; **agent-runtime#128** → PR#131 (opus subagent paste of `.agents/build.yaml`
   from homelab's donor × that repo's fix.yaml; seat gate-read, one provenance line corrected, admin-merged
   — #128 closes); #1069 closed (prefetch #1175 + PR#1386 resolve it); oracle-fleet#397's `agent/error`
   cleared per the 09-06 pickup (PR#1478 merged; NOT re-queued). Left as they were: #946 (A5 evidence
