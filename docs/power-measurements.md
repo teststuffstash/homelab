@@ -169,6 +169,12 @@ Worth recording that the **prediction was wrong**: "tens of watts" was the expec
 evidently not at full clocks after all. The thermal win (−5–6 °C on the NVMe) is the better
 justification for keeping it bound; ~7 W ≈ €8/year is a rounding error by comparison.
 
+>  **Correction (operator, 2026-09-08): the ≈7 W is the D3hot *delta*, not the card's draw.** D3hot
+> leaves fan, VRM, memory refresh and the PCIe link powered; that baseline was never measured (the
+> board will not POST without the card) and a 65 nm G94 idles at **≥30–35 W by spec**. So "rounding
+> error" is wrong — the card is pve's largest idle consumer after the CPU package. Whether to swap
+> it is a hardware want, not a platform concern (private hardware repo, R9).
+
 ## Method
 
 Talos nodes have no shell, so "prime95" is a **stress-ng pod pinned to the node** (`nodeName`,
