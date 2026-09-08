@@ -1,0 +1,5 @@
+CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews
+CALL gh pr view {{p1}} --repo teststuffstash/testrepo --json commits
+OUT updater[teststuffstash/testrepo]: #{{p1}} commit probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)
+OUT updater[teststuffstash/testrepo]: no armed+BEHIND PR to update
+RC 0

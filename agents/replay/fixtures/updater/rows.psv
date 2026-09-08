@@ -20,4 +20,5 @@ same-lane-one-update  | board | gh/pr-list.json @ patches/add-two-same-goal-lane
 unreviewed-behind-no-update | board | gh/pr-list.json @ patches/add-two-behind.jq         |                             | noop  |
 bot-approved-head-update    | board | gh/pr-list.json @ patches/add-bot-approved-head.jq  |                             | picks-probe1 | p1=141 n=141 oid=ready141oid123
 stale-approval-no-update    | board | gh/pr-list.json @ patches/add-bot-approved-stale.jq |                             | noop-probe1 | p1=142
+probe-unreadable            | board | gh/pr-list.json @ patches/add-bot-approved-head.jq  |                             | noop-probe-hold | p1=141
 merge-ready-only-off-legacy-pick | board | gh/pr-list.json @ patches/add-two-behind.jq    | UPDATER_MERGE_READY_ONLY=0  | picks | n=101 oid=abc123def456

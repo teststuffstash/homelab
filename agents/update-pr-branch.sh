@@ -134,7 +134,9 @@ while read -r pr; do
     [ .reviews[]? | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
       | select(.state == "APPROVED") | .submittedAt ] | max // ""' <<<"$pr")"
   [ -n "$approved_at" ] || continue
-  cj="$(gh pr view "$n" --repo "$REPO" --json commits 2>/dev/null)" || cj=""
+  # Unreadable = the call failed OR the body is not the JSON asked for (a 200 that is not JSON is
+  # the `garbage` stub mode, and the shape a proxy error takes live) — both HOLD, never a silent skip.
+  cj="$(gh pr view "$n" --repo "$REPO" --json commits 2>/dev/null)" && jq -e '.commits' <<<"$cj" >/dev/null 2>&1 || cj=""
   if [ -z "$cj" ]; then
     echo "updater[$REPO]: #$n commit probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)"
     continue
