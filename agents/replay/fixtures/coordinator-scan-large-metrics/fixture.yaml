@@ -15,13 +15,12 @@
 #   2. The extraction completes without SIGPIPE (exit 0), even with large payloads.
 #   3. The variable is empty when no lines match (graceful fallback).
 name: coordinator-scan-large-metrics
-mode: suite
+mode: actions
 source: agents/coordinator-scan.sh
 parts:
   - block:unit-lane
   - block:item-class
   - file:bridge.sh
-entrypoint: agents/replay/fixtures/coordinator-scan-large-metrics/entrypoint.sh
 env:
   - AGENT_PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
   - SCAN_PHASE_PGW=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
