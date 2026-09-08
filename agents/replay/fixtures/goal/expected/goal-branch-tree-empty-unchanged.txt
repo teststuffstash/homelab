@@ -4,6 +4,7 @@ CALL gh api repos/teststuffstash/circles/issues/29/comments?per_page=100 --pagin
 OUT   [circles] goal #29: CHECKPOINT due (child-set complete pre-launch; store 6 total / 6 dispositioned)
 OUT GACTED <none>
 OUT UNITS goal-checkpoint|circles|issue-29 
+OUT THEMES <none>
 OUT ORPHANS <none>
 OUT REACHED: end
 ERR LEGACY-GRAMMAR Base circles#29

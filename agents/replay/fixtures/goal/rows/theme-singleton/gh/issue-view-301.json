@@ -1,0 +1,1 @@
+{"body": "---\nTouches: agents/coordinator/scan-helpers.sh\n---\nSplit the scan's helper functions out of the lane.\n\nAcceptance: the lane sources the helper.\n"}

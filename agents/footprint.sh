@@ -225,3 +225,149 @@ $2
 EOF_FP
   return 1
 }
+
+# ── THEME predicates (ADR-126 v1.3.1 delta 4 / delta 2, homelab#1423 leg A) ──────────────────
+# The goal lane's theme NOMINATION is deterministic footprint arithmetic over a goal's open
+# sprouts (issue-authoring.md §v1.3.1 delta 4: "prefix-intersection over open sprouts, ≥2 sharing
+# a surface — the existing footprint.sh predicate, new consumer"), and goal-lint's membership
+# rule is delta 2's mechanical half. Both live HERE so the scan, the lint and the suite share one
+# definition — a second copy of the path-boundary rule would drift exactly like the 13 body
+# grammars ADR-122 collapsed. ADR-094: these NOMINATE and TEST; nothing here writes.
+
+# fp_theme_groups — stdin: lines `<issue-number>|<touches-list>`; stdout: one line per group
+# `<surface>|<n1> <n2> …` — the connected components (size ≥ 2) of the "lists conflict" graph
+# (edges = fp_conflict, so replay-exempt entries never join anything).
+#   • A line whose list is EMPTY or the `*` sentinel is dropped BEFORE grouping: undeclared is
+#     exclusive (ADR-097) and would otherwise swallow every group into one — a sprout with no
+#     footprint is never themed, it is serialised.
+#   • <surface> = the SHORTEST fp_norm_entry among the group's non-exempt entries that conflicts
+#     with EVERY member's list; if none does, the shortest non-exempt entry in the group. An
+#     entry that normalises to "" (leading glob) is never a surface — it names nothing; when the
+#     chosen entry's prefix is empty the raw entry is printed so the field is never blank.
+#   • Members ascending numeric, groups sorted by surface, byte-identical output for identical
+#     input (the scan's report line and the checkpoint's side value are diffed by the replay).
+fp_theme_groups() (
+  set -f
+  _tg_members=""
+  while IFS='|' read -r _tg_n _tg_l; do
+    _tg_n="$(printf '%s' "$_tg_n" | tr -d ' \t')"
+    case "$_tg_n" in ''|*[!0-9]*) continue ;; esac
+    _tg_l="$(printf '%s' "$_tg_l" | tr -d ' \t\r')"
+    [ -n "$_tg_l" ] || continue
+    [ "$_tg_l" != "*" ] || continue
+    _tg_members="${_tg_members}${_tg_n}|${_tg_l}
+"
+  done
+  [ -n "$_tg_members" ] || return 0
+  # edges: every conflicting pair, once (a < b by input order)
+  _tg_edges=""
+  _tg_i=0
+  while IFS='|' read -r _tg_a _tg_la; do
+    [ -n "$_tg_a" ] || continue
+    _tg_i=$((_tg_i + 1)); _tg_j=0
+    while IFS='|' read -r _tg_b _tg_lb; do
+      [ -n "$_tg_b" ] || continue
+      _tg_j=$((_tg_j + 1))
+      [ "$_tg_j" -gt "$_tg_i" ] || continue
+      fp_conflict "$_tg_la" "$_tg_lb" && _tg_edges="${_tg_edges}${_tg_a} ${_tg_b}
+"
+    done <<EOF_TG_B
+$_tg_members
+EOF_TG_B
+  done <<EOF_TG_A
+$_tg_members
+EOF_TG_A
+  [ -n "$_tg_edges" ] || return 0
+  # components: union-find over the edge list; one line per component, members ascending
+  _tg_groups="$(printf '%s' "$_tg_edges" | awk '
+    function find(x) { while (p[x] != x) { p[x] = p[p[x]]; x = p[x] }; return x }
+    { if (!($1 in p)) p[$1] = $1; if (!($2 in p)) p[$2] = $2
+      ra = find($1); rb = find($2); if (ra != rb) { if (ra < rb) p[rb] = ra; else p[ra] = rb } }
+    END {
+      for (x in p) { r = find(x); mem[r] = mem[r] " " x }
+      for (r in mem) {
+        n = split(substr(mem[r], 2), a, " ")
+        for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++) if (a[i] + 0 > a[j] + 0) { t = a[i]; a[i] = a[j]; a[j] = t }
+        line = a[1]; for (i = 2; i <= n; i++) line = line " " a[i]
+        print line
+      }
+    }')"
+  _tg_out=""
+  while IFS= read -r _tg_grp; do
+    [ -n "$_tg_grp" ] || continue
+    # the group's member lists, and its candidate surfaces (non-exempt, non-empty prefix), deduped
+    _tg_lists=""; _tg_cands=""
+    for _tg_m in $_tg_grp; do
+      _tg_ml="$(printf '%s' "$_tg_members" | awk -F'|' -v n="$_tg_m" '$1 == n { print $2; exit }')"
+      _tg_lists="${_tg_lists}${_tg_ml}
+"
+      for _tg_e in $(printf '%s' "$_tg_ml" | tr ',' ' '); do
+        [ -n "$_tg_e" ] || continue
+        fp_replay_exempt "$_tg_e" && continue
+        _tg_ne="$(fp_norm_entry "$_tg_e")"
+        _tg_cands="${_tg_cands}${#_tg_ne} ${_tg_ne}|${_tg_e}
+"
+      done
+    done
+    # shortest prefix first (then lexicographic — determinism, not preference); "" sorts first
+    # and is skipped as a surface, falling to the raw-entry rule only if nothing else exists.
+    _tg_cands="$(printf '%s' "$_tg_cands" | LC_ALL=C sort -u | LC_ALL=C sort -n -k1,1 -s)"
+    _tg_surface=""; _tg_first=""
+    while IFS='|' read -r _tg_c _tg_raw; do
+      [ -n "$_tg_c" ] || continue
+      _tg_ne="${_tg_c#* }"
+      if [ -z "$_tg_first" ]; then
+        [ -n "$_tg_ne" ] && _tg_first="$_tg_ne" || _tg_first="$_tg_raw"
+      fi
+      [ -n "$_tg_ne" ] || continue
+      _tg_all=1
+      while IFS= read -r _tg_ml; do
+        [ -n "$_tg_ml" ] || continue
+        fp_conflict "$_tg_ne" "$_tg_ml" || { _tg_all=0; break; }
+      done <<EOF_TG_L
+$_tg_lists
+EOF_TG_L
+      [ "$_tg_all" = 1 ] && { _tg_surface="$_tg_ne"; break; }
+    done <<EOF_TG_C
+$_tg_cands
+EOF_TG_C
+    [ -n "$_tg_surface" ] || _tg_surface="$_tg_first"
+    _tg_out="${_tg_out}${_tg_surface}|${_tg_grp}
+"
+  done <<EOF_TG_G
+$_tg_groups
+EOF_TG_G
+  printf '%s' "$_tg_out" | LC_ALL=C sort -t'|' -k1,1 -k2,2n
+)
+
+# fp_theme_member <touches-list> <fix-surface-list> → 0 iff EVERY non-exempt entry of the first
+# list is equal to or under (path boundary) some entry of the second — v1.3.1 delta 2's
+# "intake = Touches: ⊆ fix-surface with an implicit PIN-surface allowance": replay-exempt
+# entries (`fp_replay_exempt` — agents/replay/**, top-level suite pins, FSM models) are the
+# allowance and are skipped, so a list made ONLY of them is a member of any surface (vacuously —
+# a pin-only sprout fits every theme). An EMPTY list or the `*` sentinel returns 1: undeclared is
+# exclusive, never themed. An entry with an empty prefix (leading glob) is under nothing → 1; a
+# surface entry with an empty prefix covers nothing (a theme whose surface is "everything" is
+# not a surface) → it is ignored.
+fp_theme_member() (
+  set -f
+  _tm_la="$(printf '%s' "$1" | tr ',' '\n' | tr -d ' \t\r')"
+  _tm_lb="$(printf '%s' "$2" | tr ',' '\n' | tr -d ' \t\r')"
+  [ -n "$_tm_la" ] || return 1
+  [ "$_tm_la" != "*" ] || return 1
+  for _tm_a in $_tm_la; do
+    [ -n "$_tm_a" ] || continue
+    fp_replay_exempt "$_tm_a" && continue
+    _tm_na="$(fp_norm_entry "$_tm_a")"
+    [ -n "$_tm_na" ] || return 1
+    _tm_ok=0
+    for _tm_b in $_tm_lb; do
+      [ -n "$_tm_b" ] || continue
+      _tm_nb="$(fp_norm_entry "$_tm_b")"
+      [ -n "$_tm_nb" ] || continue
+      case "$_tm_na" in "$_tm_nb" | "$_tm_nb"/*) _tm_ok=1; break ;; esac
+    done
+    [ "$_tm_ok" = 1 ] || return 1
+  done
+  return 0
+)
