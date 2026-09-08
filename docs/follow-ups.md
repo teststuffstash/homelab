@@ -176,9 +176,12 @@ six OVERSIZE items pointer-ized into
       panel): `cilium-rzv4p` at 30 %** — that one was wk-03's post-resize restart (53 % at 13:11Z,
       2 % five minutes later: agent start-up at its 250m limit, transient). The steady-state
       picture is the FU's: cilium agents 11–17 % on the slow-CPU boxes (wk-metal-03, hp-01, m70s),
-      longhorn-manager 9–21 %, and `transcripts-viewer` 55 % at a 1-CPU limit on hp-01. Same fix
-      class: raise limits (cilium agent 250m → 500m alongside the manager). No FU/ADR matched
-      `throttl` (grepped 2026-09-07). Link: ADR-089, FU-112.
+      longhorn-manager 9–21 %, and `transcripts-viewer` 55 % at a 1-CPU limit on hp-01 (all of it
+      the bucket-sync container, 62 %). **DONE 2026-09-08 (operator: "run all of it"), PR#1519:
+      manager 150m→300m, cilium agent 250m→500m, bucket-sync 1→2** — both DaemonSets rolled with
+      the oracle delta job running, volumes healthy throughout. **Next:** re-read the throttling
+      panel ≈2026-09-15; if manager/cilium sit under ~5 % and the sync burst under ~20 %, archive.
+      No FU/ADR matched `throttl` (grepped 2026-09-07). Link: ADR-089, FU-112.
 
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 — a 10.01 GB corpus layer over the 20Gi bucket, refused by Garage
