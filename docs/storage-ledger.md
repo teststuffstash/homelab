@@ -183,13 +183,13 @@ slot is permanently occupied: the box **refuses to POST without the GPU** (a GeF
 2026-09-08:** `lspci` shows a second x16 CPU root port (`00:02.0`, "Slot 6") and an x4 CPU root
 port (`00:01.0`, "Slot 1") as electrically present and empty (plus one chipset x1), the NVMe riding
 `00:01.1` — but **the board has ONE physical x16 slot, and the GPU is in it** (operator, counted
-2026-09-08). The root ports are silicon on the CPU, not connectors; the AliExpress board does not
-break them all out. Whether the x4 or x1 root port reaches a physical slot is unverified — count
-before buying an adapter. So growth has three shapes, cheapest first: **(a) a second NVMe on a
-passive PCIe→M.2 adapter → new PV, extend the VG/pool** (no migration, no firmware change — a data
-disk needs no boot support — but ONLY if a physical x4/x1 slot exists; the x16 is taken by the
-GPU, which stays, FU-226); (b) replace the 500 G NVMe with a larger one (a migration); (c) the
-SATA BIOS session. Wear is not the constraint: the WD Blue SN580 (DRAM-less
+2026-09-08). The second x16 root port is CPU silicon the AliExpress board does not break out.
+**The x4 slot IS physical — and the dual-slot 9600 GT sits over it**, so it is blocked until the
+card is swapped for a single-slot one (FU-226). So growth has three shapes, cheapest first:
+**(a) a second NVMe on a passive PCIe→M.2 adapter in the x4 slot → new PV, extend the VG/pool**
+(no migration, no firmware change — a data disk needs no boot support — gated on the GPU swap
+freeing the slot, one shutdown for both); (b) replace the 500 G NVMe with a larger one (a
+migration); (c) the SATA BIOS session. Wear is not the constraint: the WD Blue SN580 (DRAM-less
 consumer TLC) reads 4 % used at 40 TB written over 2,474 power-on hours — ~390 GB/day, roughly
 seven years to its 300 TBW rating at that rate.
 

@@ -1045,13 +1045,13 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-226** — **Replace pve's GeForce 9600 GT (2008, G94) with a more power-efficient GPU**
       (operator, 2026-09-08). The board refuses to POST without a GPU and has ONE physical x16
-      slot, so the card is permanent and the swap is like-for-like in the same slot. The 9600 GT
-      measured only ≈6–7 W idle once bound (`docs/power-measurements.md` §The pve GPU) and it
-      heats the M.2 beneath it (NVMe sensor ≈69 °C before binding) — a modern low-idle card
-      removes both. Needs a pve shutdown (full-cluster outage: every VM + the Matchbox LXC), so
-      batch it with the next planned pve downtime (FU-225 right-sizing reboots are per-VM, not
-      host). No FU/ADR matched `gpu|9600|x16` (grepped 2026-09-08). Relates FU-225,
-      `docs/storage-ledger.md` §pve slots.
+      slot, so a GPU is permanent; a **single-slot** card is required — the dual-slot 9600 GT
+      shadows the physical x4 slot, which the swap frees for the second-NVMe adapter (storage
+      growth (a), `docs/storage-ledger.md` §pve slots). Power: the card idles at **≥30–35 W by
+      spec**; the ≈7 W in `docs/power-measurements.md` §The pve GPU was the D3hot *delta*, not the
+      draw (corrected there 2026-09-08). It also heats the M.2 beneath it. Needs a pve shutdown
+      (full-cluster outage: every VM + the Matchbox LXC) — do the GPU + the M.2 adapter in one
+      window. No FU/ADR matched `gpu|9600|x16` (grepped 2026-09-08). Relates FU-225.
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
       wk-metal-02's flaky wired link. **2026-08-07 (homelab#117): wk-metal-02 had a 4.5h NIC
