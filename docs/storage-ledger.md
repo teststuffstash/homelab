@@ -185,11 +185,11 @@ port (`00:01.0`, "Slot 1") as electrically present and empty (plus one chipset x
 `00:01.1` — but **the board has ONE physical x16 slot, and the GPU is in it** (operator, counted
 2026-09-08). The second x16 root port is CPU silicon the AliExpress board does not break out.
 **The x4 slot IS physical — and the dual-slot 9600 GT sits over it**, so it is blocked until the
-card is swapped for a single-slot one (FU-226). So growth has three shapes, cheapest first:
-**(a) a second NVMe on a passive PCIe→M.2 adapter in the x4 slot → new PV, extend the VG/pool**
-(no migration, no firmware change — a data disk needs no boot support — gated on the GPU swap
-freeing the slot, one shutdown for both); (b) replace the 500 G NVMe with a larger one (a
-migration); (c) the SATA BIOS session. Wear is not the constraint: the WD Blue SN580 (DRAM-less
+card is swapped for a single-slot one (a hardware want, private hardware repo R9 — not tracked
+here). So growth has three shapes, cheapest first: **(a) a second NVMe on a passive PCIe→M.2
+adapter in the x4 slot → new PV, extend the VG/pool** (no migration, no firmware change — a data
+disk needs no boot support — gated on the GPU swap freeing the slot, one shutdown for both);
+(b) replace the 500 G NVMe with a larger one (a migration); (c) the SATA BIOS session. Wear is not the constraint: the WD Blue SN580 (DRAM-less
 consumer TLC) reads 4 % used at 40 TB written over 2,474 power-on hours — ~390 GB/day, roughly
 seven years to its 300 TBW rating at that rate.
 

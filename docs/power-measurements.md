@@ -169,14 +169,11 @@ Worth recording that the **prediction was wrong**: "tens of watts" was the expec
 evidently not at full clocks after all. The thermal win (−5–6 °C on the NVMe) is the better
 justification for keeping it bound; ~7 W ≈ €8/year is a rounding error by comparison.
 
-> **Correction (operator, 2026-09-08): the paragraph above conflates the delta with the draw.**
-> The A/B/A measured what D3hot *removes* — ≈7 W — not what the card *costs*. D3hot does not
-> switch off the card's fan, VRM, memory refresh or the PCIe link; that baseline was never
-> measured, because the only way to measure it (pull the card) is the one thing this board does
-> not allow. A 65 nm G94 idles at **≥30–35 W by its own spec**, and nothing here contradicts
-> that. So the card is not a rounding error — it is the single largest idle consumer on pve
-> after the CPU package, and the D3hot tuning (deliberately not persisted) recovers a fifth of it
-> at best. The answer is replacing the card with a low-idle one: **FU-226**.
+>  **Correction (operator, 2026-09-08): the ≈7 W is the D3hot *delta*, not the card's draw.** D3hot
+> leaves fan, VRM, memory refresh and the PCIe link powered; that baseline was never measured (the
+> board will not POST without the card) and a 65 nm G94 idles at **≥30–35 W by spec**. So "rounding
+> error" is wrong — the card is pve's largest idle consumer after the CPU package. Whether to swap
+> it is a hardware want, not a platform concern (private hardware repo, R9).
 
 ## Method
 

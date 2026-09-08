@@ -11,6 +11,8 @@ tracker.
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
+  **FU-226 burned** — minted 2026-09-08 for a pve GPU swap, retracted the same hour: a hardware
+  want, not a platform loose end — it lives in the private hardware repo (R9), homelab has no stake.
   **FU-141 burned** — filed 2026-08-05 for un-reaped ephemeral OpenRouterKey CRs, retracted the
   same day: already **openrouter-operator#10**, and a fixer-enabled repo's own issue is where that
   belongs (routing table) — the prior-art grep covered this tracker but not the repo's issues.
@@ -1040,18 +1042,10 @@ the block needs pruning, not more headings.
       **Next:** (a) right-size the VM allocations in `tofu/variables.tf` (reboot per VM) — free,
       and the gap is allocation not demand; (b) only if demand then still binds: the 4 × 32 GB
       `MTA36ASF4G72PZ-2G3B1` lot (private hardware repo, R8, read 2026-09-08) as a full swap, or
-      2 × 32 GB replacing one DIMM per channel (96 GB, channels stay balanced). No FU/ADR matched
+      2 × 32 GB replacing one DIMM per channel (96 GB, channels stay balanced) — supply side is the
+      hardware repo's, not this tracker's. No FU/ADR matched
       `pve.*(ram|memory)|rdimm` (grepped 2026-09-08). Relates FU-093, ROADMAP §HA model.
 
-- [ ] **FU-226** — **Replace pve's GeForce 9600 GT (2008, G94) with a more power-efficient GPU**
-      (operator, 2026-09-08). The board refuses to POST without a GPU and has ONE physical x16
-      slot, so a GPU is permanent; a **single-slot** card is required — the dual-slot 9600 GT
-      shadows the physical x4 slot, which the swap frees for the second-NVMe adapter (storage
-      growth (a), `docs/storage-ledger.md` §pve slots). Power: the card idles at **≥30–35 W by
-      spec**; the ≈7 W in `docs/power-measurements.md` §The pve GPU was the D3hot *delta*, not the
-      draw (corrected there 2026-09-08). It also heats the M.2 beneath it. Needs a pve shutdown
-      (full-cluster outage: every VM + the Matchbox LXC) — do the GPU + the M.2 adapter in one
-      window. No FU/ADR matched `gpu|9600|x16` (grepped 2026-09-08). Relates FU-225.
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
       wk-metal-02's flaky wired link. **2026-08-07 (homelab#117): wk-metal-02 had a 4.5h NIC
