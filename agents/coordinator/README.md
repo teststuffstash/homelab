@@ -1201,6 +1201,13 @@ names the same failing step a `ci-red` ride already ruled environmental on a DIF
 24h, stop parking per PR** — emit ONE `AGENT_ERROR: infra-class CI red on N PRs — <check>/<step>`
 listing the PRs (the fleet trigger in the `agent/error` row), and say on each other affected PR
 that it is covered by that one signal instead of giving each its own `agent/blocked` + human ask.
+**That same comment MUST also carry the un-latch marker**, on a line of its own:
+`<!-- fleet-fault cause=<owner/repo>#<n> prs=<comma-separated PR numbers> -->` — `cause=` is the ONE
+issue you filed for this fault, `prs=` the PRs you latched. The scan's fleet-fault un-latch clause
+(homelab#1539, `agent/error` row above) parses exactly that marker and clears `agent/error` once the
+cited cause is CLOSED with `ci` green at the PR head. A fleet `AGENT_ERROR:` written WITHOUT the
+marker stays human-first forever — the oracle-fleet#523 shape, four PRs parked until a human
+cleared them by hand.
 
 > **ARBITRATE marker contract (homelab#1467) also applies to ci-red** — when you post a re-dispatch
 > ruling on a red PR, it MUST begin with a line-anchored `ARBITRATE` word (§arbitrate above).
@@ -1234,8 +1241,13 @@ the same `error_class=` appears in `AGENT_STRIKE:` comments on **≥2 distinct I
 24h** (match on the structured `error_class=` field of the comment, never on log excerpts),
 stop swapping the chain per item — emit ONE `AGENT_ERROR: infra-class strike on N issues —
 error_class=<c>` comment listing the issues, apply the `agent/error` label per affected item
-(the breaker stays per-item), and make the human ask ONCE. The ≥2-in-24h threshold is
-inherited from the ci-red rule's shape, not measured optimal — same caveat as there.
+(the breaker stays per-item), and make the human ask ONCE. **That comment carries the same
+un-latch marker as the ci-red sibling** — `<!-- fleet-fault cause=<owner/repo>#<n> prs=<items> -->`
+on a line of its own, `cause=` the one issue you filed — so the fleet latch has a machine-readable
+route out instead of waiting on a human who has to notice. (The un-latch clause reads open PRs
+today; the marker on this channel records the same contract for the items it latches.) The
+≥2-in-24h threshold is inherited from the ci-red rule's shape, not measured optimal — same caveat
+as there.
 
 ## The infeasible terminal — `AGENT_INFEASIBLE` (retro r3 F4, homelab#257)
 
