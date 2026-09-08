@@ -15,7 +15,7 @@
 #   2. The extraction completes without SIGPIPE (exit 0), even with large payloads.
 #   3. The variable is empty when no lines match (graceful fallback).
 name: coordinator-scan-large-metrics
-mode: actions
+mode: suite
 source: agents/coordinator-scan.sh
 parts:
   - block:unit-lane
