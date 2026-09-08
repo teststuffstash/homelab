@@ -1,0 +1,5 @@
+CALL gh pr view 234 --repo teststuffstash/oracle-fleet --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+CALL gh issue view 489 --repo teststuffstash/oracle-fleet --json state --jq .state
+OUT ORPHAN [oracle-fleet] ⏳ arbitrate BLOCKED-ON — PR #234: a terminal ruling recorded `blocked-on: issue=489` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.
+OUT REACHED: end
+RC 0
