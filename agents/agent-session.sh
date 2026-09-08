@@ -1426,6 +1426,7 @@ ${PF_GIT_LOG:-_(no commits or compare failed)_}"
         fi
 
         # Fetch reviews (verdicts newest-first, inline comments with file:line)
+        # >>>REPLAY:fetch-reviews>>>
         # REQUIRED: the newest review verdict must be readable — unreadable defers (homelab#1205)
         PF_REVIEWS_RAW=""
         PF_REVIEWS_RAW="$(gh api "repos/${PF_SLUG}/pulls/${PF_PR}/reviews" --paginate 2>/dev/null)" || PF_REVIEWS_RAW=""
@@ -1473,6 +1474,7 @@ ${PF_RV_BODY}"
             done <<< "$(printf '%s' "$PF_PR_COMMENTS" | jq -c '.[]')"
           fi
           PF_INDEX_ITEM "reviews.md" "OK"
+        # <<<REPLAY:fetch-reviews<<<
 
         # Coordinator's ruling/arbitration comment (search issue + PR comments for ARBITRATE)
         PF_ARB_MD=""
