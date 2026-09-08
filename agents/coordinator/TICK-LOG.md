@@ -7901,3 +7901,11 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   `retro-rank-snapshot-exclusion`/ledger fixtures with hard dates deserve the same read.
 - **10:4xZ: PR#1510 MERGED (S8 legs 4–6) after one bot footprint-escape finding** — the two survivor files sat outside #1460's `Touches`; the codeowner amended the issue's block (the issue's own acceptance sweep surfaced them) and dismissed the stale verdict per the follow-up-class play; fresh read APPROVED. **#1460 + #1431 CLOSED — S8 original 1b is done.** Remaining S8: #1424 (closeout leg), #1423 (HELD).
 - **11:0xZ (operator pointed at PR#1509):** the loop's rounds 2–3 answered both codeowner findings (ruling anchored on `ci-cause:` post-dating the label event, `^blocked-on:`, probe holds, `crashed-ruling-keeps-label` row, `FU-1507` renamed); bot APPROVED 10:55Z but the seat's own 09:52Z changes-requested still blocked the merge — a human CR is not the loop's to dismiss. Seat re-read + approved; merged. **#1507 closed.** Lesson: a codeowner changes-requested on a loop PR needs the codeowner back for the re-read — record the return trip in the pickup when winding down with one standing.
+- **11:2xZ (operator): S8 verdict + the queue call.** Assessed: no evidence needs to accumulate — wave 2
+  (#1239, closed 09-02) already met the v1.3.1 adoption gate (1 owned read PR#1272 / 0 summonses / 2–3
+  interventions); the readout had simply never been written on #1423. Written now, hold LIFTED (title
+  edited); **operator chose option 2: build #1423 inside S8** (next corpus session, subagent fan-out),
+  then #1424 + closeout 1. Queued before wind-down: #1511 (GC CronJob automount off), #1467 (arbitrate
+  directive never reaches the worker), #1456 (SIGPIPE producer hunt + Failed-tick belt — code-diffable
+  per its own body), #1451 (cross-repo descendant walk), #1442 (hermeticity audit beyond GH_TOKEN);
+  three of them share the scan/launcher footprint and serialize. Doorbell rung.

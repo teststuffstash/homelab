@@ -12,8 +12,8 @@ never the session's arc — that is TICK-LOG's.)
 
 - **⚑ PICKUP (2026-09-08 corpus session, ~09:40Z wind-down):** (1) **S8 legs 4–6 of #1460 = PR#1510** (armed; bot review
   pending at wind-down) — when it merges #1460 + #1431 close; if the bot requests changes, the
-  fix is the seat's (the subagent clone is gone with the session). (2) **#1424 closeout leg** = the S8 closeout-1 sitting
-  (originals 1a/1b/2/3/4/5/6 done once #1431 closes; #1423 HELD): docs-cleanup over the touched
+  fix is the seat's (the subagent clone is gone with the session). (2) **#1423 build (un-held) then #1424 closeout leg** = the S8 closeout-1 sitting
+  (originals 1a/1b/2/3/4/5/6 DONE; #1431 closed 10:5xZ): docs-cleanup over the touched
   surfaces, the FU sweep (FU-168 fence half, FU-199 board faces, FU-201/FU-174 cross-refs), the
   built-vs-left comment on #1418, dispositions written via `epic_dispositions.py`, ROADMAP S8 row.
   (3) **Handoff inbox**: only the circles ADR request remains (real-content seam — a design sitting +
@@ -26,7 +26,10 @@ never the session's arc — that is TICK-LOG's.)
   lint 0/0 recorded on the PR)**; 1b = PR#1459 merged + residue #1460: legs 1–2 in **PR#1503**
   (armed; bot CR at 09:30Z fixed in-PR — the resumable-goal-child loop now holds on a malformed
   block, row `block-class-malformed`), legs 4–6 = **PR#1510** (armed, bot review pending). #1424 half 1+2 merged
-  (PR#1461/#1479); its residue is the closeout leg. #1423 HELD on the wave-2 readout. Bot-waits at
+  (PR#1461/#1479); its residue is the closeout leg. **#1423 UN-HELD 2026-09-08 (wave-2 gate PASSED — readout on the issue; operator chose option 2: build it
+  inside S8)** — NEXT corpus session: fan the build to subagents (scan nomination predicate + rows ·
+  checkpoint theme-formation play · membership test · rule-7 re-key · master-refresh hop doc), then
+  #1424's closeout leg + closeout 1. Bot-waits at
   exit: PR#1510, PR#1506 (approved, armed — the issue_body setext-fence
   fix), the loop's PR#1508 (#1505, seat-approved — verify one triggered GC run post-merge if
   this session did not) and PR#1509 (#1507 — needs the codeowner read: agents/** + FSM).
