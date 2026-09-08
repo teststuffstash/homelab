@@ -1,0 +1,12 @@
+{
+  "commits": [
+    {
+      "messageHeadline": "feat: content",
+      "committedDate": "2026-09-05T09:10:00Z"
+    },
+    {
+      "messageHeadline": "Merge branch 'master' into fix/ready",
+      "committedDate": "2026-09-05T11:00:00Z"
+    }
+  ]
+}

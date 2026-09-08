@@ -1,4 +1,6 @@
 CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews
+CALL gh pr view {{p1}} --repo teststuffstash/testrepo --json commits
+CALL gh pr view {{p2}} --repo teststuffstash/testrepo --json commits
 CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/{{n1}}/update-branch -f expected_head_sha={{oid1}}
 CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/{{n2}}/update-branch -f expected_head_sha={{oid2}}
 OUT updater[teststuffstash/testrepo]: updating #{{n1}} (oldest armed+BEHIND, FIFO)
