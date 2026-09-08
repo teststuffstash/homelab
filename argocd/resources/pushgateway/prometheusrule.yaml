@@ -566,3 +566,25 @@ spec:
           annotations:
             summary: "coordinate scan {{ $labels.pod }} has been in its DETERMINISTIC phase >15m in {{ $labels.namespace }} (p99 of a whole scan is 5m)"
             description: "{{ $labels.pod }} has spent over 15 minutes in the deterministic pass — the cheap gh/kubectl half that should finish in seconds. SYMPTOM ONLY; this says nothing about any ride the pod may have dispatched (that phase is excluded by construction — FU-145). STEP 1, the pod's own log: near-zero bytes and stuck before/inside the `git clone` is the known wedge (homelab#103, 2026-08-05). STEP 2, `kubectl -n {{ $labels.namespace }} get wf` — a wedged scan holds the `coordinator-scan` mutex with twins Pending behind it, which is what makes ONE stuck pod stop the whole loop from dispatching. Containment: delete the workflow + its queued twins so the next cron tick takes the lock; the 1800s activeDeadlineSeconds is the belt behind that. `unit=-` with duplicate submissions → look upstream at the Sensor (AgentEventInfraSpinning, homelab#103). If the pod is instead streaming a dispatched session this alert is silent by design — read `agent_scan_in_deterministic{pod=\"{{ $labels.pod }}\"}` on the pushgateway to see which phase it reported last. If that marker is MISSING, check `time() - process_start_time_seconds{job=\"prometheus-pushgateway\"}` before concluding anything: a gateway younger than the pod means its emptyDir store was destroyed with its last pod, so the markers for pods older than it are gone and this alert is deliberately degraded for them until they end (homelab#353)."
+        # Coordinator scan or switchboard cron tick died abnormally (homelab#1456 — the level-triggered
+        # failure detector; the cron is the backstop that would catch a dead doorbell, so a cron tick
+        # that fails is exactly the sensor it is meant to be). Non-clean exits are the failure class:
+        # exit 141 (SIGPIPE — pipeline failure, usually from an early-close consumer on large inputs),
+        # exit 1 (bash `set -e` kill), exit 124 (activeDeadlineSeconds timeout), others (container
+        # death, OOM). Each carries a symptom: SIGPIPE points to a pipe with early-exit consumers
+        # (grep|head), timeouts point to a slow read (large board, throttled API), timeouts on the
+        # same pod generation identify infrastructure; new generations on each cron are healthy.
+        # A single failed tick is a transient unless it RECURS inside an hour (two ticks from the
+        # same cron, or two across the global and per-stack loops within an hour).
+        # `argo_workflow_info{phase="Failed"}` is keyed by namespace — a global coordinate on its own
+        # and a per-stack coordinate on its own — so the expr joins on namespace to distinguish.
+        - alert: AgentCoordinateScanFailed
+          expr: |
+            count by (namespace) (
+                increase(argo_workflow_info{phase="Failed", workflow=~"coordinate-.*"}[1h])
+            ) >= 2
+          labels:
+            severity: warning
+          annotations:
+            summary: "2+ Failed coordinate cron ticks in 1h on stack {{ $labels.namespace }}"
+            description: "SYMPTOM ONLY — the coordinate-* cron (level-triggered failure detector) exited non-zero. This is the backstop that catches dead doorbells, so a cron that fails is what it is meant to detect. STEP 1, check the newest Failed workflow's log (`kubectl -n {{ $labels.namespace }} logs <pod>` or Loki {{namespace=\"{{ $labels.namespace }}\", pod=~\"coordinate-.*\"}}): exit code names the class (141=SIGPIPE/pipeline, 1=bash error, 124=timeout, others=infra). STEP 2, search the log for the SYMPTOM signature: zero log bytes in 60s+ = wedge in git clone (check pod age vs node; a new generation per tick is healthy); SIGPIPE line = a pipeline with early-exit consumer (`head|grep -q`) on large input (busy board days); slow API = GitHub/kubectl throttling (check API metrics on the dashboard). Exit 141 specifically: agents/coordinator-scan.sh now fixes it with FU-1456 (read-to-EOF before extracting first match instead of `| head`), so if this fires post-merge the cause is NEW, not regressed. Context: the 2026-09-04/05 SIGPIPE shower (homelab#1456) fired on busy board days with many metrics."
