@@ -6,6 +6,7 @@ CALL gh issue close 29 --repo teststuffstash/circles --reason not planned --comm
 OUT   [circles] ADR-102 terminal: goal #29 → abandoned, closed (not planned); 1 descendant(s) actioned
 OUT GACTED terminal
 OUT UNITS <none>
+OUT THEMES <none>
 OUT ORPHANS <none>
 OUT REACHED: end
 ERR LEGACY-GRAMMAR Verdict-authority circles#29

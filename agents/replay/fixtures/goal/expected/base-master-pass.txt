@@ -6,6 +6,7 @@ CALL gh pr list --repo teststuffstash/circles --state merged --limit 30 --json n
 OUT   [circles] goal #29: CHECKPOINT due (findings 5 undispositioned + child-set complete pre-launch; store 6 total / 1 dispositioned)
 OUT GACTED <none>
 OUT UNITS goal-decompose|circles|issue-301 goal-checkpoint|circles|issue-29 
+OUT THEMES <none>
 OUT ORPHANS <none>
 OUT REACHED: end
 RC 0
