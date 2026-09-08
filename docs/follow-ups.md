@@ -172,8 +172,13 @@ six OVERSIZE items pointer-ized into
       the manager IS the attach/rebuild/scheduling plane, and the 150m req==limit came from the
       FU-112(b) Guaranteed-QoS ruling, sized for memory not CPU. **Next:** raise the manager CPU
       limit (300m, keep req==limit) in `tofu/longhorn.tf` on a quiet day — it rolls the DaemonSet,
-      so not mid-migration; re-read the panel a week later. No FU/ADR matched `throttl` (grepped
-      2026-09-07). Link: ADR-089, FU-112.
+      so not mid-migration; re-read the panel a week later. **Re-sighted 2026-09-08 (operator, the
+      panel): `cilium-rzv4p` at 30 %** — that one was wk-03's post-resize restart (53 % at 13:11Z,
+      2 % five minutes later: agent start-up at its 250m limit, transient). The steady-state
+      picture is the FU's: cilium agents 11–17 % on the slow-CPU boxes (wk-metal-03, hp-01, m70s),
+      longhorn-manager 9–21 %, and `transcripts-viewer` 55 % at a 1-CPU limit on hp-01. Same fix
+      class: raise limits (cilium agent 250m → 500m alongside the manager). No FU/ADR matched
+      `throttl` (grepped 2026-09-07). Link: ADR-089, FU-112.
 
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 — a 10.01 GB corpus layer over the 20Gi bucket, refused by Garage
