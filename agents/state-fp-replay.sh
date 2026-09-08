@@ -291,7 +291,7 @@ wantrc()  { [ "$RC" = "$2" ] && ok "$1" || bad "$1" "exit $RC, wanted $2 (stderr
 survives(){ printf '%s' "$OUT" | grep -qF "REACHED: end" && [ "$RC" = 0 ] \
               && ok "$1: runs to completion under set -euo pipefail" \
               || bad "$1: runs to completion under set -euo pipefail" "rc=$RC, stderr: $(printf '%s' "$ERR" | tail -1)"; }
-markers() { jq '[.comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}"))] | length' "$FIX"; }
+markers() { jq '[.comments[]? | select((.body // "") | test("state-fp:([a-z-]+:)?[0-9a-f]{6,64}"))] | length' "$FIX"; }
 newest()  { jq -r '.comments[-1].body // ""' "$FIX"; }   # what the last write actually put on the thread
 wantnew() { newest | grep -qF -- "$2" && ok "$1" || bad "$1" "the newest comment body lacks: $2"; }
 
@@ -400,7 +400,7 @@ eq       "T1: dispatch records exactly one marker"                   "$(markers)
 fx '.comments += [{"body":"ARBITRATE ruling: state unchanged, the escalation stands.","createdAt":"2026-08-09T05:00:00Z"}]'
 _go arbitrate
 want     "T2: tick 2 DEBOUNCES on unchanged state"                   "arbitrate DEBOUNCED"
-want     "T2: the report line quotes the hash"                       "state-fp:${BASE_ARB}"
+want     "T2: the report line quotes the hash"                       "state-fp:arbitrate:${BASE_ARB}"
 want     "T2: and says a human is the next mover"                    "a human (or new content) is the next mover"
 wantnot  "T2: NO unit is emitted"                                    "UNITS arbitrate|"
 survives "T2"
@@ -457,7 +457,7 @@ fx '.comments += [{"body":"🤖 Agent run stats — round 1 completed","createdA
 _go cired
 want     "R2: an identical red state DEBOUNCES (round completed)"    "ci-red DEBOUNCED"
 want     "R2: the line names the head it is still red at"            "still red at ${HEAD8}"
-want     "R2: and the hash"                                          "state-fp:${BASE_CIRED}"
+want     "R2: and the hash"                                          "state-fp:ci-red:${BASE_CIRED}"
 wantnot  "R2: the dispatch is skipped entirely (continue)"           "DISPATCH ci-red|"
 want     "R2: it names the terminal-ride finding, not more rounds"   "the ride went terminal"
 survives "R2"

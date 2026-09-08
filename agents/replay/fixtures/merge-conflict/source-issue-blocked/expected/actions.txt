@@ -1,0 +1,5 @@
+CALL gh pr view 700 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+OUT ORPHAN [homelab] ⏳ merge-conflict held — source issue #1410 is agent/blocked (human-gated):
+OUT ORPHAN   PR #700
+OUT REACHED: end
+RC 0

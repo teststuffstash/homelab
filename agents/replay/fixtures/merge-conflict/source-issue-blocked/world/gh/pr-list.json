@@ -1,0 +1,3 @@
+[
+  {"number":700,"title":"fix: merge conflict with agent/blocked issue","labels":[{"name":"merge-conflict"}],"reviewDecision":"REVIEW_REQUIRED","author":{"login":"app/homelab-agents-1234"},"body":"Fixes #1410\n\nThis PR resolves the issue."}
+]
