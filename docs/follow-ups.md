@@ -1035,9 +1035,12 @@ the block needs pruning, not more headings.
       commits the full 60 GB of allocations while guests average 30–71 % of theirs (wk-03 30 % of
       8 GB, wk-01 41 % of 16 GB). Board (`X99-P4`, E5-2680 v4) runs 4 × 16 GB Micron
       `36ASF2G72PZ-2G1A2` DDR4-2133 ECC **RDIMM** (EDAC: two channels, two DIMMs each; SMBIOS lies
-      — count the free slots physically). **Next:** (a) RDIMM into the free slots — supply side
-      is the private hardware repo (R8; a 4 × 32 GB `MTA36ASF4G72PZ-2G3B1` lot was read 2026-09-08);
-      (b) right-size the VM allocations in `tofu/variables.tf` (reboot per VM). No FU/ADR matched
+      — count the free slots physically; **counted 2026-09-08: 4 slots, ALL populated — no free
+      slot, so "add DIMMs" is really "replace 64 GB with 128 GB", which the operator calls a waste**).
+      **Next:** (a) right-size the VM allocations in `tofu/variables.tf` (reboot per VM) — free,
+      and the gap is allocation not demand; (b) only if demand then still binds: the 4 × 32 GB
+      `MTA36ASF4G72PZ-2G3B1` lot (private hardware repo, R8, read 2026-09-08) as a full swap, or
+      2 × 32 GB replacing one DIMM per channel (96 GB, channels stay balanced). No FU/ADR matched
       `pve.*(ram|memory)|rdimm` (grepped 2026-09-08). Relates FU-093, ROADMAP §HA model.
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
