@@ -3,3 +3,5 @@
 unset | | | | no-leak |
 # Test that a fixture can override the unset by explicitly pinning a variable in env:
 pinned | | | PINNED_VAR=pinned-value | pinned-override |
+# Test that Garage credentials can be pinned when a fixture genuinely needs them (homelab#1442)
+credential-pinned | | | AGENT_TS_ACCESS_KEY_ID=garage-key AGENT_TS_SECRET_ACCESS_KEY=garage-secret | credential-pinned |
