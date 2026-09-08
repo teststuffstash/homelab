@@ -1,0 +1,35 @@
+# Reviewer sprout-depth walk: theme hops do not count (ADR-126 themes, S8 #1423 leg B)
+#
+# THE CONTRACT. `sprout-depth-walk <issue> <repo_slug>` prints the depth the rule-7 guard
+# (reviewer-depth-lane-split) consumes: the number of native parent hops (≤6) MINUS the hops
+# whose PARENT is a theme container — title `^theme:`, case-insensitive, leading whitespace
+# tolerated. A level-2 theme sits between a Goal and its deliberate work items (issue-authoring.md
+# §Theme-branch decomposition), and before this walk such a child read depth 2 on a goal/** base
+# and LOST its Follow-ups: channel — the guard was calibrated for sprout tails, not trees.
+#
+# ONE constructed world (teststuffstash/test-project has no such issues), every chain hanging off
+# Goal #10; the rows differ only in their entry issue, which post.sh passes explicitly:
+#   #10 Goal ─┬─ #11 child ─── #12 sprout
+#             ├─ #20 theme: ── #21 child ─── #22 sprout
+#             ├─ #30 "  THEME:" (caps + leading space) ── #31 child
+#             └─ #40 post-launch: ── #41 child
+# Every `/parent` read is recorded INCLUDING the Goal's `null` (the real parentless shape) — the
+# stub shortens an unrecorded `…-issues-10-parent` key to `…-issues-10` and would serve the issue
+# itself as its own parent. Depths, computed from the tree + the contract (hops − theme hops):
+#   a  #11  Goal→child                      1 hop,  0 theme → 1   (unchanged)
+#   b  #21  Goal→theme→child                2 hops, 1 theme → 1   THE RE-KEY (was 2: reds on master)
+#   c  #22  Goal→theme→child→sprout         3 hops, 1 theme → 2   (suppressed on goal/**, as today's d)
+#   d  #12  Goal→child→sprout               2 hops, 0 theme → 2   (unchanged)
+#   e  #21  as b, but #20's title read FAILS (per-call STUB_GH_… override) → the hop counts:
+#           2 hops, 0 subtracted → 2, plus ONE WARN on stderr — fails toward today's behaviour.
+#   f  #31  Goal→"  THEME:"→child           2 hops, 1 theme → 1   (case + whitespace tolerance)
+#   g  #41  Goal→post-launch:→child         2 hops, 0 theme → 2   (only theme: is subtracted)
+# The hop SEQUENCE is asserted too: one `/parent` read per hop plus one title read per found
+# parent, and the walk stops at the Goal's null parent.
+name: reviewer-sprout-depth
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:sprout-depth-walk
+  - file:post.sh
