@@ -1,0 +1,6 @@
+CALL gh api repos/teststuffstash/oracle-fleet/commits/5b353fe9abcdef0123456789abcdef0123456789/check-runs --jq [.check_runs[]? | select(.status == "completed") | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length > 0
+OUT ORPHANS [oracle-fleet] ⏳ ci-red EXHAUSTED held — red sha does not match current head or human removed label (FU-1529): PR #1515\n
+OUT UNITS 
+OUT ci_red_should_arbitrate 0
+OUT REACHED: end
+RC 0
