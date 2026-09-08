@@ -4323,6 +4323,48 @@ EOF_GOVERNANCE
     done
     # <<<REPLAY:arbitrate-gate<<<
 
+    # arbitrate belt: ordinary-path ruling removal (homelab#1507). When a PR armed + green
+    # wears agent/arbitrate but the newest coordinator ruling has NO blocked-on marker (ordinary-path:
+    # re-dispatch, follow-up-class after dismissal, or "nothing to do"), the label must be dropped so
+    # the reflex picks it normally. Label-first-then-verify discipline (IL-T16).
+    # >>>REPLAY:arbitrate-ordinary-path-belt>>>
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")) and (.autoMergeRequest!=null) and (.reviewDecision=="APPROVED" or .reviewDecision=="CHANGES_REQUESTED"))|.number' 2>/dev/null); do
+      # Fetch PR comments AND events to check ruling and labeled event timestamps
+      pr_json_belt="$(gh pr view "$u" --repo "$slug" \
+          --json comments,createdAt 2>/dev/null)" || pr_json_belt=''
+      [ -z "$pr_json_belt" ] && {
+        orphans="${orphans}[$repo] ⏳ arbitrate belt probe HOLD — PR #${u}: could not read PR comments (homelab#1507, rule #6). No label write; next tick.\n"
+        continue
+      }
+      # Find newest agent/arbitrate labeled event
+      events_json="$(gh api --paginate repos/"$slug"/issues/"$u"/events 2>/dev/null)" || events_json=''
+      if [ -z "$events_json" ]; then
+        orphans="${orphans}[$repo] ⏳ arbitrate belt probe HOLD — PR #${u}: could not read PR events (homelab#1507, rule #6). No label write; next tick.\n"
+        continue
+      fi
+      label_event_ts="$(printf '%s' "$events_json" | jq -r '[.[] | select(.event=="labeled" and (.label.name // "") == "agent/arbitrate") | .created_at] | max // ""' 2>/dev/null)"
+      # Find newest coordinator ruling comment (one carrying a line-anchored ci-cause: line)
+      ruling_json="$(printf '%s' "$pr_json_belt" | jq -r '[.comments[]? | select(.author.login == "homelab-agents-1234" and ((.body // "") | split("\n") | any(startswith("ci-cause:"))))] | sort_by(.createdAt) | last // empty' 2>/dev/null)"
+      ruling_body="$(printf '%s' "$ruling_json" | jq -r '.body // ""' 2>/dev/null)"
+      ruling_ts="$(printf '%s' "$ruling_json" | jq -r '.createdAt // ""' 2>/dev/null)"
+      # Require the ruling to post-date the labeled event
+      if [ -z "$ruling_body" ] || [ -z "$ruling_ts" ] || [ -z "$label_event_ts" ]; then
+        [ -z "$ruling_body" ] && orphans="${orphans}[$repo] ⏳ arbitrate belt — PR #${u}: no ruling comment found (homelab#1507). No label write.\n"
+        continue
+      fi
+      if ! [[ "$ruling_ts" > "$label_event_ts" ]] 2>/dev/null; then
+        orphans="${orphans}[$repo] ⏳ arbitrate belt — PR #${u}: ruling predates label event (homelab#1507). No label write.\n"
+        continue
+      fi
+      # If the ruling has no line-anchored blocked-on marker, it's ordinary-path — remove the label
+      if ! printf '%s' "$ruling_body" | grep -qE '^blocked-on:'; then
+        gh pr edit "$u" --repo "$slug" --remove-label agent/arbitrate >/dev/null 2>&1 \
+          && orphans="${orphans}[$repo] ✓ arbitrate ordinary-path: PR #${u} — removed agent/arbitrate (ruling returned to ordinary path, reflex will pick it)\n" \
+          || orphans="${orphans}[$repo] ⚠ arbitrate ordinary-path label FAILED on PR #${u} — human check\n"
+      fi
+    done
+    # <<<REPLAY:arbitrate-ordinary-path-belt<<<
+
     # ci-red (FU-115 / MP-T12, CONTENT-BASED rewrite of the old ci-red-stale time-gate): an ARMED
     # red PR is invisible to the whole merge path (updater + reviewer both skip red). The OLD trigger
     # was "quiet > RED_STALE_HOURS(4h)" — a coarse LAST-ACTIVITY timer that a no-op fix round's OWN

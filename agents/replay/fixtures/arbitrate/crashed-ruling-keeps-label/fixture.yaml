@@ -1,0 +1,27 @@
+# Crashed-ruling case (homelab#1507). A PR with agent/arbitrate has an older coordinator ruling
+# comment carrying "blocked-on: human", followed by a newer state-fp marker. The belt should anchor
+# on the ruling (filtering by line-anchored ci-cause:), find the blocked-on marker, and NOT remove
+# the label. This is the case where a session posts a ruling, then crashes/completes and the scan
+# writes a state-fp marker — the belt should look past the marker to the actual ruling.
+#
+# PR #237 has agent/arbitrate, is APPROVED, and has two coordinator comments:
+# 1. An older ruling with "blocked-on: human" and "ci-cause: ..."
+# 2. A newer state-fp marker (no ci-cause:, just a state-fp line)
+# The belt should NOT remove the label (no gh pr edit call), and should not emit an ORPHAN line.
+name: arbitrate-crashed-ruling-keeps-label
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - block:arbitrate-ordinary-path-belt
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+pins:
+  - MP-T11

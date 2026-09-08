@@ -1,0 +1,22 @@
+# Probe failure in arbitrate belt (homelab#1507). A PR with agent/arbitrate exists, but when the belt
+# tries to fetch its details, the gh pr view call fails or returns empty. Per rule #6 (unreadable
+# probe HOLDS), the belt should skip that PR without making any label changes.
+#
+# The belt should silently continue without emitting ORPHAN lines for failed probes.
+name: arbitrate-belt-probe-fail
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - block:arbitrate-ordinary-path-belt
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+pins:
+  - MP-T11

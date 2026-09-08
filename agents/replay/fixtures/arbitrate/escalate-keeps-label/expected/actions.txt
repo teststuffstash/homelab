@@ -1,0 +1,4 @@
+CALL gh pr view 235 --repo teststuffstash/oracle-fleet --json comments,createdAt
+CALL gh api --paginate repos/teststuffstash/oracle-fleet/issues/235/events
+OUT REACHED: end
+RC 0

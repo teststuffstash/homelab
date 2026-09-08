@@ -334,6 +334,10 @@ transitions:
       - agents/replay/fixtures/arbitrate/landing-sequence
       - agents/replay/fixtures/arbitrate/fu147-refire-blocked
       - agents/replay/fixtures/arbitrate/no-op-after-directive
+      - agents/replay/fixtures/arbitrate/ordinary-path-removal
+      - agents/replay/fixtures/arbitrate/escalate-keeps-label
+      - agents/replay/fixtures/arbitrate/belt-probe-fail
+      - agents/replay/fixtures/arbitrate/crashed-ruling-keeps-label
       - agents/replay/fixtures/state-fp/state-fp
       - agents/replay/fixtures/changes-requested/blocked-held
       - agents/replay/fixtures/changes-requested/dispatched
@@ -355,6 +359,9 @@ transitions:
         anchor: { file: agents/coordinator/README.md, pattern: "arbitrate. clause" }
       - desc: "changes-requested clause holds when newest non-merge commit post-dates the newest review — the pushed fix round is already in flight and the next bot verdict retires the clause (homelab#975)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "reviewable_again" }
+    belts:
+      - desc: "ordinary-path ruling removal (homelab#1507): when a PR armed + green wears agent/arbitrate but the newest coordinator ruling carries NO blocked-on marker (ordinary-path: re-dispatch, follow-up-class, or nothing-to-do), the belt removes the label so the reflex picks it normally (label-first-then-verify, IL-T16)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "arbitrate-ordinary-path-belt" }
     incidents: ["MP-G04 origin: tie-break rows existed only as breaker counts — the coordinator never got the structured dispatch"]
 
   - id: MP-T12
