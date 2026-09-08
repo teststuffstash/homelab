@@ -614,9 +614,12 @@ the block needs pruning, not more headings.
       shorten the queue) — real capacity is RAM on the compute tier, see the spike's §CI side.
       **2026-09-08 (operator): 3 slots is not enough for the bursts the operator causes while
       working — his queue time is the cost, the daily mean measured the wrong thing.** Two levers:
-      (1) pve RAM → wk-03 at 32 GB ≈ +8 slots (FU-225, lot being bought); (2) zero-cost stopgap
-      today: add the `ephemeral=true` label to wk-metal-04 (16 GB, taint-only, kata-reserved by
-      decision in `tofu/talos.tf`) ≈ +3–4 slots shared with kata rides — operator call.
+      **Done 2026-09-08 on pve as-is (PR#1518 + 09b81dd9): wk-03 8→16Gi/12c funded by ci-runner-01
+      16→12Gi, `maxRunners` 4→6** — the overcommit ceiling (no balloon in Talos; KSM ~10Gi shared);
+      "all out" waits on a second disk (thin pool) or the second hypervisor (ROADMAP §HA model,
+      operator direction 2026-09-08). Still open: (a) label wk-metal-04 ephemeral ≈ +3–4 slots
+      shared with kata (operator call); (b) re-read queue p90 at operator hours after a week.
+      **Next:** the week's re-read; close if p90 at 07–09/17–19 UTC drops under ~2 min.
       Relates FU-208, ADR-082.
 
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
@@ -1048,10 +1051,10 @@ the block needs pruning, not more headings.
       and the gap is allocation not demand; (b) only if demand then still binds: the 4 × 32 GB
       `MTA36ASF4G72PZ-2G3B1` lot (private hardware repo, R8, read 2026-09-08) as a full swap, or
       2 × 32 GB replacing one DIMM per channel (96 GB, channels stay balanced) — supply side is the
-      hardware repo's, not this tracker's. **Re-ruled 2026-09-08 (operator): the RAM IS the buy** —
-      the demand is ARC burst capacity (FU-218: a slot ≈ 2.5–3 GB on an ephemeral node, only wk-03
-      can grow), so once fitted: wk-03 8→32 GB / 8→16 vCPU in `tofu/variables.tf`, `maxRunners`
-      4→~10, and wk-03's thin-pool disk needs FU-093's headroom first. No FU/ADR matched
+      hardware repo's, not this tracker's. **Re-ruled twice 2026-09-08 (operator): the demand is
+      ARC burst capacity (FU-218), but NOT more RAM in this box** — too much of homelab is
+      concentrated on pve; direction = a second hypervisor (ROADMAP §HA model, ADR pending).
+      Interim applied: wk-03 16Gi funded by ci-runner-01 12Gi (PR#1518). No FU/ADR matched
       `pve.*(ram|memory)|rdimm` (grepped 2026-09-08). Relates FU-093, ROADMAP §HA model.
 
 
