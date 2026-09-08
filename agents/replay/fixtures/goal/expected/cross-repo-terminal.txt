@@ -1,0 +1,10 @@
+CALL gh api repos/teststuffstash/circles/issues/29/events --paginate
+CALL gh issue close 29 --repo teststuffstash/circles --reason completed --comment <goal terminal comment — see agents/coordinator-scan.sh>
+OUT   [circles] ADR-102 terminal: goal #29 → validated, closed (completed); 0 descendant(s) actioned
+OUT GACTED terminal
+OUT UNITS <none>
+OUT THEMES <none>
+OUT ORPHANS [circles] 📋 close sweep for VALIDATED goal #29 (ADR-102 — REPORT-first, the batch action stays operator-confirmed until the goal registry panel exists):     agent-runtime#115 —  → INERT: close as superseded, or re-home     #77 —  → INERT: close as superseded, or re-home
+OUT REACHED: end
+ERR LEGACY-GRAMMAR Verdict-authority circles#29
+RC 0
