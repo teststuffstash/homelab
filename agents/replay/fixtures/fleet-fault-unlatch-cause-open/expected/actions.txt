@@ -1,2 +1,5 @@
 CALL gh pr view 11 --repo teststuffstash/homelab --json comments,statusCheckRollup
 CALL gh issue view 1001 --repo teststuffstash/homelab --json state
+OUT REACHED: case 2 — fleet-fault marker + cause still OPEN ⇒ label held
+OUT Case 2 complete: agent/error label should be HELD on PR #11 (cause still open)
+RC 0

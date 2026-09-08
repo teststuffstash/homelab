@@ -1,1 +1,4 @@
 CALL gh pr view 12 --repo teststuffstash/homelab --json comments,statusCheckRollup
+OUT REACHED: case 3 — no fleet-fault marker ⇒ label held (human-first)
+OUT Case 3 complete: agent/error label should be HELD on PR #12 (no marker)
+RC 0
