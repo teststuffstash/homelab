@@ -1,0 +1,8 @@
+[
+  {
+    "id": 201,
+    "user": {"login": "reviewer-bot"},
+    "body": "ARBITRATE (changes-requested no-op round, FU-147): re-run with fix below",
+    "created_at": "2026-09-02T11:00:00Z"
+  }
+]
