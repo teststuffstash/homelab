@@ -394,6 +394,41 @@ DEPTH RULE (this PR closes issue #$issue, which sits at follow-up depth $sprout_
 }
 # <<<REPLAY:s6-child-1-depth-rule<<<
 
+# S8 #1423 leg B (ADR-126 themes): the sprout-depth WALK, extracted from the PREP heredoc on the
+# depth-rule-append precedent — defined here unescaped so the replay extracts and runs it verbatim,
+# injected into the pod script via $(declare -f) below. The re-key: a hop whose PARENT is a theme
+# container (title `theme:`, case-insensitive, leading whitespace tolerated) does NOT count, so a
+# level-3 work item under `Goal → theme:` reads depth 1 exactly like `Goal → child` and keeps its
+# Follow-ups: channel — the guard was calibrated for sprout tails, not deliberate trees
+# (docs/agents/issue-authoring.md §Theme-branch decomposition). Only `theme:` is subtracted:
+# post-launch:/stint:/retro-batch: children base master and already ride the organic lane.
+# >>>REPLAY:sprout-depth-walk>>>
+sprout-depth-walk() {
+  # Args: ISSUE REPO_SLUG
+  # Prints: the sprout depth — parent hops (≤6) minus the hops whose parent is a `theme:`
+  #         container; 0 = not a sprout. Advisory, never blocking: an unreadable parent ends the
+  #         walk, an unreadable parent TITLE counts the hop (today's behaviour) with one WARN.
+  local issue="$1" repo_slug="$2" _cur _par _title _depth=0 _hop
+  _cur="$issue"
+  for _hop in 1 2 3 4 5 6; do
+    _par=$(gh api "repos/${repo_slug}/issues/${_cur}/parent" --jq '.number' 2>/dev/null || true)
+    case "$_par" in ''|*[!0-9]*) break;; esac
+    if _title=$(gh api "repos/${repo_slug}/issues/${_par}" --jq '.title' 2>/dev/null) && [ -n "$_title" ]; then
+      _title="${_title#"${_title%%[![:space:]]*}"}"   # tolerate leading whitespace
+      case "$_title" in
+        [Tt][Hh][Ee][Mm][Ee]:*) ;;                     # theme container: the hop does not count
+        *) _depth=$((_depth + 1));;
+      esac
+    else
+      echo "WARN reviewer: sprout-depth walk could not read the title of parent #${_par} (${repo_slug}) — counting the hop (theme containers are not subtracted without a title)" >&2
+      _depth=$((_depth + 1))
+    fi
+    _cur="$_par"
+  done
+  printf '%s\n' "$_depth"
+}
+# <<<REPLAY:sprout-depth-walk<<<
+
 # FU-101 lens posture: read the per-stack lenses→posture map from the SAME single claim read
 # that feeds the optout gate (reviewer-optout.sh). This costs zero extra cluster calls and
 # cannot straddle a claim edit the way two reads can. Fail-closed: unreadable → empty map
@@ -476,14 +511,13 @@ echo "→ transcript task key: \$TASK_KEY (fixes issue \${ISSUE:-none})"
 # this PR" is no longer an option. Rung 2's rule ("deep → fix-in-PR and collapse the tail") is a
 # REVIEWER decision, so the depth has to arrive here, before the Follow-ups: bullets are written.
 # Walks the native parent chain; 0 = not a sprout. Failure leaves it 0 (advisory, never blocking).
+# The walk itself is sprout-depth-walk (S8 #1423 leg B: theme hops do not count), defined at top
+# level beside depth-rule-append and injected here at generation time (declare -f).
+$(declare -f sprout-depth-walk)
 SPROUT_DEPTH=0
 if [ -n "\$ISSUE" ]; then
-  _cur="\$ISSUE"
-  for _hop in 1 2 3 4 5 6; do
-    _par=\$(gh api "repos/${REPO_SLUG}/issues/\$_cur/parent" --jq '.number' 2>/dev/null || true)
-    case "\$_par" in ''|*[!0-9]*) break;; esac
-    SPROUT_DEPTH=\$_hop; _cur="\$_par"
-  done
+  SPROUT_DEPTH=\$(sprout-depth-walk "\$ISSUE" "\${REPO_SLUG}") || SPROUT_DEPTH=0
+  case "\$SPROUT_DEPTH" in ''|*[!0-9]*) SPROUT_DEPTH=0;; esac
 fi
 export SPROUT_DEPTH
 echo "→ sprout depth: \$SPROUT_DEPTH (0 = not a follow-up of a follow-up)"
