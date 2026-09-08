@@ -1540,21 +1540,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
-  # FIX #1451: pre-fetch kidsall from all repos in the stack (once, before the repo loop)
-  # so the goal lane can see cross-repo tree members. Each issue gets a repo field
-  # for qualified key construction (e.g., "homelab#1234", "agent-runtime#115").
-  _kidsall_stack='[]'
-  for _kr in $repos; do
-    _kr_slug="$ORG/$_kr"
-    _kr_issues="$(gh issue list --repo "$_kr_slug" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
-    jq -e . >/dev/null 2>&1 <<<"${_kr_issues:-null}" || _kr_issues='[]'
-    _kr_issues="$(jq --arg r "$_kr" '[.[] | . + {repo: $r,
-  parentKey: (if .parent == null then null
-              else ((.parent.url // "" | split("/") | if length >= 7 then .[4] else $r end)
-                    + "#" + (.parent.number | tostring)) end)}]' <<<"$_kr_issues")"
-    _kidsall_stack="$(jq -s 'add' <<<"$_kidsall_stack"$'\n'"$_kr_issues")"
-  done
-  jq -e . >/dev/null 2>&1 <<<"${_kidsall_stack:-null}" || _kidsall_stack='[]'
+  # #1451: the stack-wide sub-issue tree is fetched LAZILY — by the first repo in this stack that
+  # carries a task/goal (below), memoized here for the stack's remaining repos. Reset per stack.
+  unset _kidsall_stack
   for repo in $repos; do
     slug="$ORG/$repo"
     case " $fixer_repos" in *" __ALL__ "*|*" $repo "*) dispatchable=1;; *) dispatchable="";; esac
@@ -2723,17 +2711,27 @@ EOF_GOVERNANCE
     }
     goals="$(printf '%s' "$openall" | jq -r '[.[] | select((.labels|map(.name)|index("task/goal")))] | .[].number' 2>/dev/null || true)"
     if [ -n "$goals" ]; then
-      # FIX #1451: use stack-wide kidsall (pre-fetched before the repo loop) to find cross-repo
-      # tree members. Each issue has a repo field for qualified key construction (e.g., "homelab#1234").
-      # Fallback for replay tests that extract only this block: fetch from current repo if not set.
+      # #1451: the descendant walk needs the STACK's issues, not this repo's — native sub-issue edges
+      # cross repos (agent-runtime#115 under homelab#1234), so a single-repo `kidsall` made every
+      # cross-repo member (and its subtree) invisible to the burn-down AND the completion predicate.
+      # Fetched once per stack by the first goal-carrying repo, memoized in `_kidsall_stack` for the
+      # rest of the stack's repo loop (a stack with no open goals pays nothing — the reviewer's
+      # per-tick-cost finding on PR#1513). Each issue gains `repo` and a repo-QUALIFIED `parentKey`
+      # (`<repo>#<n>`, the parent's repo read off `.parent.url`) so the walk keys on (repo, number)
+      # — bare numbers collide across repos. `title,labels` ride along for the ADR-102 terminal legs
+      # (homelab#208). In replay the stack list is absent, so the loop degrades to this one repo.
       if [ -z "${_kidsall_stack+x}" ]; then
-        # Replay test isolation: fetch from current repo only (kidsall with repo field and parentKey added)
-        _kidsall_stack="$(gh issue list --repo "$slug" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
-        jq -e . >/dev/null 2>&1 <<<"${_kidsall_stack:-null}" || _kidsall_stack='[]'
-        _kidsall_stack="$(jq --arg r "$repo" '[.[] | . + {repo: $r,
+        _kidsall_stack='[]'
+        for _kr in ${repos:-$repo}; do
+          _kr_issues="$(gh issue list --repo "$ORG/$_kr" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
+          jq -e . >/dev/null 2>&1 <<<"${_kr_issues:-null}" || _kr_issues='[]'
+          _kr_issues="$(jq --arg r "$_kr" '[.[] | . + {repo: $r,
   parentKey: (if .parent == null then null
               else ((.parent.url // "" | split("/") | if length >= 7 then .[4] else $r end)
-                    + "#" + (.parent.number | tostring)) end)}]' <<<"$_kidsall_stack")"
+                    + "#" + (.parent.number | tostring)) end)}]' <<<"$_kr_issues")"
+          _kidsall_stack="$(jq -s 'add' <<<"$_kidsall_stack"$'\n'"$_kr_issues")"
+        done
+        jq -e . >/dev/null 2>&1 <<<"${_kidsall_stack:-null}" || _kidsall_stack='[]'
       fi
       kidsall="$_kidsall_stack"
       for g in $goals; do
@@ -2752,7 +2750,7 @@ EOF_GOVERNANCE
           # in any repo). Once found, emit the issue's qualified key (repo#number).
           gnext="$(printf '%s' "$kidsall" | jq -r --arg f "$gfront" \
             '(($f | split(" ") | map(select(. != "")))) as $F
-             | [.[] | select(.parentKey != null and ($F | index(.parentKey)) != null) | "\(.repo)#\(.number)"] | .[]' 2>/dev/null | tr '\n' ' ')" || gnext=""
+             | [.[] | select(.parentKey != null and (.parentKey | IN($F[]))) | "\(.repo)#\(.number)"] | .[]' 2>/dev/null | tr '\n' ' ')" || gnext=""
           gnew=""
           for x in $gnext; do
             case " ${gdesc# } ${repo}#${g} " in *" $x "*) ;; *) gnew="$gnew $x";; esac
@@ -2828,20 +2826,24 @@ EOF_GOVERNANCE
             # into the final variable, so a title containing a pipe (they do) can only widen the
             # column that already absorbs the rest. Any other position would shift `dlabels` and
             # silently mis-read the `agent/queued` test one leg down.
-            while IFS='|' read -r dn dstate dlabels dtitle; do
+            # #1451: `drepo` is the member's OWN repo — a cross-repo descendant is closed/de-queued
+            # THERE, never against the goal's slug; `dref` renders `#n` for same-repo members (the
+            # pinned fixture shape) and `<repo>#n` for cross-repo ones.
+            while IFS='|' read -r drepo dn dstate dlabels dtitle; do
               [ -n "$dn" ] || continue
               [ "$dstate" = "OPEN" ] || continue
+              dslug="$ORG/${drepo:-$repo}"; dref="#${dn}"; [ "${drepo:-$repo}" = "$repo" ] || dref="${drepo}#${dn}"
               case "$gverdict" in
                 reverted)
                   # "the tree stays readable history" (ADR-102): CLOSE with an audit comment, never
                   # delete, and `not planned` because the work is not going to happen — the premise
                   # died with the goal. The scan's own stale-dep flag reads that reason downstream.
                   if [ "$gdone" -lt "$gcap" ]; then
-                    if gh issue close "$dn" --repo "$slug" --reason "not planned" --comment "🤖 closed with goal #${g}, which was REVERTED (ADR-102 terminal, applied by a human as \`goal/reverted\`). The idea this work served was refuted in production, so its descendants die with it — this is successful refutation, not failure, and the issue stays as readable history. Reopen only if a new goal adopts the premise. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
+                    if gh issue close "$dn" --repo "$dslug" --reason "not planned" --comment "🤖 closed with goal #${g}, which was REVERTED (ADR-102 terminal, applied by a human as \`goal/reverted\`). The idea this work served was refuted in production, so its descendants die with it — this is successful refutation, not failure, and the issue stays as readable history. Reopen only if a new goal adopts the premise. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
                       gdone=$((gdone+1))
                     else
                       gleft=$((gleft+1))
-                      orphans="${orphans}[$repo] ⚠ goal #${g} revert: could not close descendant #${dn} (gh write refused?) — the goal stays OPEN so the next scan retries\n"
+                      orphans="${orphans}[$repo] ⚠ goal #${g} revert: could not close descendant ${dref} (gh write refused?) — the goal stays OPEN so the next scan retries\n"
                     fi
                   else
                     gleft=$((gleft+1))
@@ -2855,12 +2857,12 @@ EOF_GOVERNANCE
                   case " $dlabels " in
                     *" agent/queued "*)
                       if [ "$gdone" -lt "$gcap" ]; then
-                        if gh issue edit "$dn" --repo "$slug" --remove-label "agent/queued" >/dev/null 2>&1 \
-                           && gh issue comment "$dn" --repo "$slug" --body "🤖 de-queued: goal #${g} was ABANDONED (ADR-102 terminal — budget exhausted before a verdict). The issue is left OPEN and inert on purpose; the work may still be worth doing, but it may not spend a budget that is gone. Re-queue it under a refilled or different goal. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
+                        if gh issue edit "$dn" --repo "$dslug" --remove-label "agent/queued" >/dev/null 2>&1 \
+                           && gh issue comment "$dn" --repo "$dslug" --body "🤖 de-queued: goal #${g} was ABANDONED (ADR-102 terminal — budget exhausted before a verdict). The issue is left OPEN and inert on purpose; the work may still be worth doing, but it may not spend a budget that is gone. Re-queue it under a refilled or different goal. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
                           gdone=$((gdone+1))
                         else
                           gleft=$((gleft+1))
-                          orphans="${orphans}[$repo] ⚠ goal #${g} abandon: could not de-queue descendant #${dn} (gh write refused?) — the goal stays OPEN so the next scan retries\n"
+                          orphans="${orphans}[$repo] ⚠ goal #${g} abandon: could not de-queue descendant ${dref} (gh write refused?) — the goal stays OPEN so the next scan retries\n"
                         fi
                       else
                         gleft=$((gleft+1))
@@ -2874,18 +2876,18 @@ EOF_GOVERNANCE
                   # at all on this leg. List what survives, propose a disposition per item from the
                   # labels already in hand, and let the operator confirm.
                   case "$dtitle" in
-                    post-launch:*) gswept="${gswept}    #${dn} — ${dtitle} → CONTAINER: close with the goal\n" ;;
+                    post-launch:*) gswept="${gswept}    ${dref} — ${dtitle} → CONTAINER: close with the goal\n" ;;
                     *) case " $dlabels " in
                          *" agent/queued "*|*" agent/in-progress "*|*" agent/review "*)
-                           gswept="${gswept}    #${dn} — ${dtitle} → LIVE: let it finish, or re-home it into another goal (batch re-homing is legal at this sweep)\n" ;;
-                         *) gswept="${gswept}    #${dn} — ${dtitle} → INERT: close as superseded, or re-home\n" ;;
+                           gswept="${gswept}    ${dref} — ${dtitle} → LIVE: let it finish, or re-home it into another goal (batch re-homing is legal at this sweep)\n" ;;
+                         *) gswept="${gswept}    ${dref} — ${dtitle} → INERT: close as superseded, or re-home\n" ;;
                        esac ;;
                   esac ;;
               esac
             done <<<"$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
               '(($d | split(" ") | map(select(. != "")))) as $D
                | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null)] | sort_by(.number) | .[]
-               | [("\(.repo)#\(.number)"), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
+               | [.repo, (.number | tostring), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
             if [ "$gleft" -gt 0 ]; then
               # The goal is NOT closed while work remains — see the resumability contract above.
               orphans="${orphans}[$repo] ⏳ goal #${g} goal/${gverdict}: ${gdone} descendant(s) actioned, ${gleft} still to go (cap ${gcap}/scan) — the goal stays OPEN until the tree is done; the next scan continues\n"
