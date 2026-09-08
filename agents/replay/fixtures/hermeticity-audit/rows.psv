@@ -1,0 +1,5 @@
+# id | world | patch | env | expect | params
+# Test that ambient variables are unset even if they were exported in the pod environment.
+unset | | | | no-leak |
+# Test that a fixture can override the unset by explicitly pinning a variable in env:
+pinned | | | PINNED_VAR=pinned-value | pinned-override |

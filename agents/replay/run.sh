@@ -39,7 +39,18 @@ done
 # choke point every child (composed clauses, bridges, suite entrypoints, stubs) inherits from.
 # A fixture that genuinely needs one of these sets it via its own `env:` field, which applies
 # AFTER this line. Add newly-evidenced leaky vars here, not per-bridge.
-unset PROJECT AGENT_RAIL GH_TOKEN
+# All AGENT_* variables are pod-wide configuration; GH_TOKEN is a credential. PROJECT is a
+# repo identifier. These should never leak from the pod's environment into fixture assertions.
+# OPENROUTER_API_KEY is also a credential. Any fixture that genuinely needs these must explicitly
+# pin them via `env:` in its fixture.yaml (homelab#1442, ADR-103 ratchet).
+unset PROJECT AGENT_RAIL AGENT_BASE_IMAGE AGENT_BUDGET_REFUSED AGENT_CREDIT_GATE \
+      AGENT_CRED_INJECT AGENT_DEVBOX_SEARCH_HOST AGENT_EGRESS_PROXY AGENT_ERROR \
+      AGENT_INFEASIBLE AGENT_LOOP_WEBHOOK AGENT_MIRROR_DOCKER_IO AGENT_MIRROR_GHCR \
+      AGENT_MIRROR_MCR AGENT_MODEL AGENT_NIX_CACHE_URL AGENT_OPENROUTER_PROXY \
+      AGENT_PREFLIGHT AGENT_PUSHGATEWAY_URL AGENT_PYPI_CACHE_URL AGENT_ROUTER \
+      AGENT_RUN_STATS AGENT_SEARCH_URL AGENT_STRIKE AGENT_SUBSCRIPTION_FALLBACK \
+      AGENT_SUBSCRIPTION_FALLBACK_MODEL AGENT_TASK AGENT_TS_READER_ID AGENT_TS_READER_SECRET \
+      AGENT_TS_WRITER_ID AGENT_TS_WRITER_SECRET AGENT_WIP_LIMIT GH_TOKEN OPENROUTER_API_KEY
 
 # ── fixture.yaml ────────────────────────────────────────────────────────────────────────────────
 # A deliberately tiny YAML subset — `key: value` and `key:` followed by `- item` lines, no nesting.
