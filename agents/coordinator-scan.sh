@@ -2889,7 +2889,7 @@ EOF_GOVERNANCE
               esac
             done <<<"$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
               '(($d | split(" ") | map(select(. != "")))) as $D
-               | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null)] | sort_by(.number) | .[]
+               | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null)] | sort_by((.repo, .number)) | .[]
                | [.repo, (.number | tostring), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
             if [ "$gleft" -gt 0 ]; then
               # The goal is NOT closed while work remains — see the resumability contract above.
