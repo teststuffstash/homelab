@@ -135,14 +135,19 @@ variable "nodes" {
     wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 12288, disk_gb = 240, longhorn = true }
     # Ephemeral CI/runner tier VM (2026-08-18): 8 cores is deliberate CPU overprovision (host was
     # 20/28 vCPU allocated at load ~4; CI is burst work, throttling is safe) — memory is the
-    # careful number (host had ~12Gi free; 8Gi leaves ~4Gi buffer). No longhorn flag = plain
+    # careful number (host had ~12Gi free; 8Gi leaves ~4Gi buffer). 2026-09-08: 8→16Gi + 8→12
+    # cores for ARC burst capacity (a dind runner requests 2.5Gi; 8Gi fit ONE runner, 16Gi fits
+    # ~5) — funded by ci-runner-01 16→12Gi, so the host's allocation grows +4Gi against ~9Gi
+    # available + KSM (~10Gi shared); Talos guests have no virtio_balloon, so this is the
+    # overcommit ceiling until the second hypervisor. Disk stays 40G: the thin pool is the
+    # binding constraint (81% on 2026-09-08). No longhorn flag = plain
     # image, nothing stateful; removable via drain + destroy when the RAM is needed elsewhere.
     # longhorn=true added same day (#534): the longhorn-manager DS tolerates the ephemeral
     # taint (metal ephemeral nodes serve bulk replicas + kata scratch), so it lands here too and
     # crashlooped on the base image. The flag is PLUMBING (iscsi/util-linux in the image), not a
     # storage role — wk-03 gets no disk registration and serves nothing; the flip replaces the VM
     # (file_id change), which is fine: the node is cattle by design.
-    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 8, memory_mb = 8192, disk_gb = 40, longhorn = true }
+    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 12, memory_mb = 16384, disk_gb = 40, longhorn = true }
   }
 
   validation {
