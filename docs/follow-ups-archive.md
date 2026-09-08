@@ -10,6 +10,16 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-225** *(archived 2026-09-08)* — **pve host RAM: no buy, no balloon, one belt.** Filed the
+  same morning as "84 %/94 % used, ballooning off"; by evening the operator had ruled every lever:
+  no RAM in this box (too much of homelab on it — the second hypervisor is the answer, ROADMAP §HA
+  model, ADR pending), ballooning impossible (Talos ships no `virtio_balloon`, verified on wk-03),
+  right-sizing done where it is not page cache (ci-runner-01 16→12 GB, funding wk-03's 16 GB for
+  ARC — FU-218). What shipped: **`PveHostMemoryLow`** (MemAvailable < 3 GiB for 15 m; PR#1520) with
+  a behaviour fixture, because the host now commits 65 GB on 62.7 GiB and lives on KSM (~11 GB
+  shared, 7-day minimum 3.8 GiB available) with nothing watching. Supply side stays in the hardware
+  repo (R8: the Micron RDIMM lot fits either box).
+
 - **FU-222** *(archived 2026-09-07)* — **the fleet-disk probe is a recipe now**:
   `docs/runbook.md` §"Reading a fleet disk's identity and health" — an ephemeral privileged pod
   (`nodeName` + `tolerations: Exists` + `/dev` and `/sys` hostPaths, alpine + nvme-cli/smartmontools),

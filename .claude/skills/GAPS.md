@@ -115,3 +115,14 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       this extends it: a lifecycle label is never reported as activity without the pod/PR join
       (the seat-side twin of IL-T16's phantom-label lesson). Sighted 2026-08-24 (operator
       catch). Tooling half → the #628 observability-plane discussion.
+
+## tofu-apply
+
+- [ ] tofu-apply-G1 — `devbox run tf-apply -- -auto-approve` returned **exit status 127 AFTER
+      tofu printed "Apply complete!"** (2 changed, in-place VM resizes); the apply had fully
+      landed (verified on pve + the node's allocatable). A session reading the exit code alone
+      would call a successful apply failed and re-run or roll back. Sighted 2026-09-08 (seat).
+      Cause not chased (no local-exec in the root; `tf.sh` ends in `exec tofu`). Next: reproduce
+      with `tf-plan`'s exit, then either fix the wrapper or add "the Apply line is truth, verify
+      the end state" to the skill.
+
