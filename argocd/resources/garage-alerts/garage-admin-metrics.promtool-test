@@ -301,3 +301,52 @@ tests:
               pod: garage-2
             exp_annotations:
               summary: "Garage garage-2 is timing out RPCs to a peer (200m/s)"
+
+  # ── AVAILABILITY: the 2026-09-09 07:22Z rollout, replayed in shape ──────────────────────────
+  # 5 × 503 inside two minutes fires ServerErrors; 2 × 503 spread over an hour does not. Three
+  # pods with start times 15 s apart fire QuorumMembersRestarted for ~5 min, then it clears.
+  - interval: 1m
+    name: "GarageS3ServerErrors fires on a burst of 503s, not on a stray one"
+    input_series:
+      - series: 'api_s3_error_counter{status_code="503",api_endpoint="DeleteObject",pod="garage-2"}'
+        values: "0 0 0 0 0 1 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: GarageS3ServerErrors
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: GarageS3ServerErrors
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              status_code: "503"
+            exp_annotations:
+              summary: "Garage S3 returned 5 × HTTP 503 in 5m"
+      - eval_time: 70m
+        alertname: GarageS3ServerErrors
+        exp_alerts: []
+  - interval: 1m
+    name: "GarageQuorumMembersRestarted fires when two pods start within 5 minutes"
+    input_series:
+      # start times as epoch seconds on a clock that starts at 0: the three pods appear at t=10m
+      # (no sample before — a pod that does not exist yet has no series) with starts 15 s apart
+      - series: 'kube_pod_start_time{namespace="garage",pod="garage-2",uid="a"}'
+        values: "_ _ _ _ _ _ _ _ _ _ 630+0x30"
+      - series: 'kube_pod_start_time{namespace="garage",pod="garage-1",uid="b"}'
+        values: "_ _ _ _ _ _ _ _ _ _ 615+0x30"
+      - series: 'kube_pod_start_time{namespace="garage",pod="garage-0",uid="c"}'
+        values: "_ _ _ _ _ _ _ _ _ _ 600+0x30"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: GarageQuorumMembersRestarted
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: GarageQuorumMembersRestarted
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "3 Garage quorum members started within the last 5 minutes"
+      - eval_time: 17m
+        alertname: GarageQuorumMembersRestarted
+        exp_alerts: []
