@@ -127,7 +127,7 @@ per commit. Only the jail reads the bookkeeping set (meta-state, TICK-LOG, GAPS,
 and the next session reads the same on-disk tree — origin adds durability, not continuity.
 The exception keeps the old rule: **anything a CLUSTER consumer clones master for — quickfixes,
 incident pins (the FU-188 shape), agents/ script fixes — still pushes immediately.** The class
-test: does any pod need to see this? A master push runs BOTH doc lints via the committed
+test: does any pod need to see this? A master push runs the doc lints + `tofu fmt -check` via the committed
 `githooks/pre-push` (wired by `core.hooksPath` — the direct lane's only lint gate, since
 OrgAdmin pushes bypass CI); never `--no-verify` past it.
 
