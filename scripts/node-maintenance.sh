@@ -74,18 +74,29 @@ preflight() {
   degraded="$(jq -r '.items[]|select(.status.state=="attached" and .status.robustness!="healthy")|"\(.metadata.name) \(.status.robustness) on \(.status.currentNodeID)"' <<<"$vols")"
   if [ -z "$degraded" ]; then ok "Longhorn: no degraded attached volume cluster-wide"; else fail "Longhorn degraded attached volume(s):"$'\n'"$degraded"; fi
 
-  # replicas living on this node: each volume must keep ≥1 RUNNING replica elsewhere
-  local here n others v state
+  # replicas living on this node. An ATTACHED volume must keep ≥1 RUNNING replica elsewhere.
+  # A DETACHED volume has NO running replica anywhere (2026-09-09: three false FAILs on
+  # thinkcentre, one of them a 2-replica volume with a healthy sibling on wk-02) — for it the
+  # question is whether a HEALTHY (failedAt empty) replica exists elsewhere; if not, its last
+  # replica is stopped here and the drain is only allowed under node-drain-policy
+  # `allow-if-replica-is-stopped` (tofu/longhorn.tf) — the data is offline for the window and
+  # returns with the node's disk. That is a WARN (the operator accepts it), not a FAIL.
+  local here n others v state lastrep=0
   here="$(jq -r --arg n "$NODE" '.items[]|select(.spec.nodeID==$n)|.spec.volumeName' <<<"$reps" | sort -u)"
   n=0
   for v in $here; do
     n=$((n+1))
-    others="$(jq -r --arg n "$NODE" --arg v "$v" '[.items[]|select(.spec.volumeName==$v and .spec.nodeID!=$n and .status.currentState=="running")]|length' <<<"$reps")"
-    if [ "$others" -lt 1 ]; then
-      fail "volume $v ($(pvc_of "$v")): its ONLY running replica is on $NODE — drain would be blocked and the data offline"
+    state="$(jq -r --arg v "$v" '.items[]|select(.metadata.name==$v)|.status.state' <<<"$vols")"
+    if [ "$state" = attached ]; then
+      others="$(jq -r --arg n "$NODE" --arg v "$v" '[.items[]|select(.spec.volumeName==$v and .spec.nodeID!=$n and .status.currentState=="running")]|length' <<<"$reps")"
+      [ "$others" -lt 1 ] && { lastrep=1; fail "volume $v ($(pvc_of "$v")): attached, its ONLY running replica is on $NODE — drain would be blocked and the data offline"; }
+    else
+      others="$(jq -r --arg n "$NODE" --arg v "$v" '[.items[]|select(.spec.volumeName==$v and .spec.nodeID!=$n and .spec.failedAt=="")]|length' <<<"$reps")"
+      [ "$others" -lt 1 ] && { lastrep=1; warn "volume $v ($(pvc_of "$v")): detached, its last replica is stopped on $NODE — offline for the window (drain needs node-drain-policy=allow-if-replica-is-stopped); keep that disk in the box"; }
     fi
   done
-  [ "$n" -gt 0 ] && ok "Longhorn: $n replica(s) on $NODE, each volume keeps a running replica elsewhere (they go degraded for the window; rebuild timer $(kubectl -n longhorn-system get settings.longhorn.io replica-replenishment-wait-interval -o jsonpath='{.value}')s)"
+  [ "$n" -gt 0 ] && [ "$lastrep" = 1 ] && log "Longhorn: $n replica(s) on $NODE (the rest keep a healthy sibling elsewhere; rebuild timer $(kubectl -n longhorn-system get settings.longhorn.io replica-replenishment-wait-interval -o jsonpath='{.value}')s):"
+  [ "$n" -gt 0 ] && [ "$lastrep" = 0 ] && ok "Longhorn: $n replica(s) on $NODE, each volume keeps a running replica elsewhere (they go degraded for the window; rebuild timer $(kubectl -n longhorn-system get settings.longhorn.io replica-replenishment-wait-interval -o jsonpath='{.value}')s)"
   [ "$n" -eq 0 ] && ok "Longhorn: no replicas on $NODE"
   printf '%s\n' $here | sed '/^$/d' | while read -r v; do printf '         %s  %s\n' "$v" "$(pvc_of "$v")"; done
 
