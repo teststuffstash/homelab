@@ -194,7 +194,7 @@ machines:
     load_w: 54.5
     singlecore_bogo_s: 1200.4
     multicore_bogo_s: 2231.7
-    remote_power: smart-plug (switch.tuyalocal_thinkcentre); auto-boots on AC restore — NOT WoL
+    remote_power: smart-plug (switch.tuyalocal_thinkcentre — entity ids were CROSSED with hp-01's 2026-08-18→09-09, read the incident before trusting an older plug observation); auto-boots on AC restore — NOT WoL
     # ThinkCentre Edge — 120GB Kingston SV300S3 SATA SSD. ⚠️ Device name is enumeration-order
     # dependent: it's /dev/sdb when PXE-booting with NO USB stick plugged (the steady state), but
     # was /dev/sdc during the original USB-ISO onboarding (USB took sda). PXE now works reliably
@@ -245,7 +245,7 @@ machines:
       # docs/storage-ledger.md calls the one place where the honest answer is buy a disk.
       # by-id, NOT /dev/sdb: both disks are 128GB SATA and this directive partitions.
       - { device: /dev/disk/by-id/wwn-0x500080db1007e129, name: hg5d, tags: [std] }
-    notes: On the hp plug (ex-konditsioneer NOUS A1, renamed 2026-08-18) — power measurable as sensor.plug_hp_power; switch.tuyalocal_hp can cycle it, but AC-restore is flaky so WoL is the recovery path.
+    notes: On the hp plug (a NOUS A1; entity ids were crossed with thinkcentre's 2026-08-18→09-09, fixed in the HA registry) — power measurable as sensor.plug_hp_power (~24 W idle); switch.tuyalocal_hp can cycle it, but AC-restore is flaky (confirmed 2026-09-09 — did not boot after a plug cycle) and WoL cannot follow an AC cut, so a plug cycle ends at the power button. Prefer WoL from a clean shutdown.
 
   - name: m70s
     kind: metal
