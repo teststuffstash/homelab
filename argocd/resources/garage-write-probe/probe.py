@@ -32,8 +32,7 @@ PROBE_DATA = b"x" * (64 * 1024)  # 64 KiB of data
 
 def sign_request(method, bucket, key, timestamp_str):
     """
-    S3 signature v4 for path-style requests.
-    Format: GET /platform-probe/probe-<timestamp> HTTP/1.1
+    S3 signature v4 for path-style requests to Garage.
     """
     region = "garage"
     service = "s3"
@@ -42,37 +41,30 @@ def sign_request(method, bucket, key, timestamp_str):
     )
     datestamp = amz_date[:8]
 
-    canonical_request = f"""{method}
-/{bucket}/probe-{timestamp_str}
+    # Canonical request: method, path, query params (empty), headers, signed headers, payload hash
+    canonical_uri = f"/{bucket}/probe-{timestamp_str}"
+    canonical_querystring = ""
+    host_header = "garage.garage.svc.cluster.local:3900"
+    payload_hash = "UNSIGNED-PAYLOAD"
 
-host:garage.garage.svc.cluster.local:3900
-x-amz-content-sha256:UNSIGNED-PAYLOAD
-x-amz-date:{amz_date}
+    canonical_headers = f"host:{host_header}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n"
+    signed_headers = "host;x-amz-content-sha256;x-amz-date"
 
-host;x-amz-content-sha256;x-amz-date
-UNSIGNED-PAYLOAD"""
+    canonical_request = f"{method}\n{canonical_uri}\n{canonical_querystring}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
 
-    string_to_sign = f"""AWS4-HMAC-SHA256
-{amz_date}
-{datestamp}/{region}/{service}/aws4_request
-{hashlib.sha256(canonical_request.encode()).hexdigest()}"""
+    canonical_request_hash = hashlib.sha256(canonical_request.encode()).hexdigest()
+    string_to_sign = f"AWS4-HMAC-SHA256\n{amz_date}\n{datestamp}/{region}/{service}/aws4_request\n{canonical_request_hash}"
 
-    k_date = hmac.new(
-        f"AWS4{SECRET_KEY}".encode(), datestamp.encode(), hashlib.sha256
-    ).digest()
+    k_date = hmac.new(f"AWS4{SECRET_KEY}".encode(), datestamp.encode(), hashlib.sha256).digest()
     k_region = hmac.new(k_date, region.encode(), hashlib.sha256).digest()
     k_service = hmac.new(k_region, service.encode(), hashlib.sha256).digest()
     k_signing = hmac.new(k_service, b"aws4_request", hashlib.sha256).digest()
     signature = hmac.new(k_signing, string_to_sign.encode(), hashlib.sha256).hexdigest()
 
     credential_scope = f"{datestamp}/{region}/{service}/aws4_request"
-    signed_headers = "host;x-amz-content-sha256;x-amz-date"
-    authorization = (
-        f"AWS4-HMAC-SHA256 Credential={ACCESS_KEY}/{credential_scope}, "
-        f"SignedHeaders={signed_headers}, Signature={signature}"
-    )
+    authorization = f"AWS4-HMAC-SHA256 Credential={ACCESS_KEY}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
 
-    return {"Authorization": authorization, "x-amz-date": amz_date, "x-amz-content-sha256": "UNSIGNED-PAYLOAD"}
+    return {"Authorization": authorization, "x-amz-date": amz_date, "x-amz-content-sha256": payload_hash}
 
 
 def http_request(method, path, data=None, headers=None):
@@ -100,10 +92,9 @@ def push_metrics(metrics):
         print("PUSHGATEWAY_URL not set; skipping push")
         return
 
-    metric_lines = "\n".join(f"{k} {v}" for k, v in metrics.items())
-    payload = f"""{metric_lines}
-garage_write_probe_last_run_timestamp {int(time.time())}
-""".encode()
+    metric_lines = "\n".join(metrics.values())
+    metric_lines += f"\ngarage_write_probe_last_run_timestamp {int(time.time())}"
+    payload = metric_lines.encode()
 
     try:
         req = Request(
@@ -131,12 +122,12 @@ def main():
             "PUT", f"/{BUCKET}/probe-{timestamp}", data=PROBE_DATA, headers=put_headers
         )
         print(f"PUT succeeded in {put_elapsed:.2f}s")
-        metrics["garage_write_probe_seconds{leg=\"put\"} "] = put_elapsed
-        metrics["garage_write_probe_success{leg=\"put\"} "] = 1
+        metrics["put_success"] = f'garage_write_probe_success{{leg="put"}} 1'
+        metrics["put_seconds"] = f'garage_write_probe_seconds{{leg="put"}} {put_elapsed}'
     except Exception as e:
         print(f"PUT failed: {e}")
-        metrics["garage_write_probe_success{leg=\"put\"} "] = 0
-        metrics["garage_write_probe_seconds{leg=\"put\"} "] = 0
+        metrics["put_success"] = 'garage_write_probe_success{leg="put"} 0'
+        metrics["put_seconds"] = 'garage_write_probe_seconds{leg="put"} 0'
         success = False
 
     # GET
@@ -148,12 +139,12 @@ def main():
         if get_body != PROBE_DATA:
             raise RuntimeError(f"GET body mismatch: expected {len(PROBE_DATA)} bytes, got {len(get_body)}")
         print(f"GET succeeded in {get_elapsed:.2f}s")
-        metrics["garage_write_probe_seconds{leg=\"get\"} "] = get_elapsed
-        metrics["garage_write_probe_success{leg=\"get\"} "] = 1
+        metrics["get_success"] = f'garage_write_probe_success{{leg="get"}} 1'
+        metrics["get_seconds"] = f'garage_write_probe_seconds{{leg="get"}} {get_elapsed}'
     except Exception as e:
         print(f"GET failed: {e}")
-        metrics["garage_write_probe_success{leg=\"get\"} "] = 0
-        metrics["garage_write_probe_seconds{leg=\"get\"} "] = 0
+        metrics["get_success"] = 'garage_write_probe_success{leg="get"} 0'
+        metrics["get_seconds"] = 'garage_write_probe_seconds{leg="get"} 0'
         success = False
 
     # DELETE
@@ -163,12 +154,12 @@ def main():
             "DELETE", f"/{BUCKET}/probe-{timestamp}", headers=delete_headers
         )
         print(f"DELETE succeeded in {delete_elapsed:.2f}s")
-        metrics["garage_write_probe_seconds{leg=\"delete\"} "] = delete_elapsed
-        metrics["garage_write_probe_success{leg=\"delete\"} "] = 1
+        metrics["delete_success"] = f'garage_write_probe_success{{leg="delete"}} 1'
+        metrics["delete_seconds"] = f'garage_write_probe_seconds{{leg="delete"}} {delete_elapsed}'
     except Exception as e:
         print(f"DELETE failed: {e}")
-        metrics["garage_write_probe_success{leg=\"delete\"} "] = 0
-        metrics["garage_write_probe_seconds{leg=\"delete\"} "] = 0
+        metrics["delete_success"] = 'garage_write_probe_success{leg="delete"} 0'
+        metrics["delete_seconds"] = 'garage_write_probe_seconds{leg="delete"} 0'
         success = False
 
     # Push metrics (best-effort)
