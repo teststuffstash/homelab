@@ -148,6 +148,36 @@ spec:
             effect: NoSchedule
         service:
           type: ClusterIP
+        # METADATA ROTATION SEED — the init container that makes GarageDiskFillingUp on a meta
+        # volume a self-clearing condition (docs/garage.md §Metadata reclamation, as built). It runs
+        # on every pod start and is a no-op unless the controller (argocd/resources/
+        # garage-meta-rotation/, a CronJob polling the alert) has named THIS pod + a fresh
+        # generation in the runtime-owned ConfigMap garage-meta-rotation-state; then it swaps the
+        # live LMDB for the pod's latest FINISHED compacted snapshot (its own 6h auto-snapshot on
+        # the data volume) and Garage reconciles the delta from its peers. Never the native
+        # `repair tables` alone — measured 2026-09-09, that re-bloats the env 3–4× (ledger).
+        extraVolumes:
+          - name: meta-rotate-script
+            configMap: { name: garage-meta-rotate-init, defaultMode: 0755 }
+        extraInitContainers:
+          - name: meta-rotate
+            image: busybox:stable
+            command: ["/bin/sh", "/script/meta-rotate.sh"]
+            env:
+              - name: POD_NAME
+                valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            envFrom:
+              # Runtime-owned (the controller creates/patches it; NOT in git, so ArgoCD's selfHeal
+              # cannot revert a rotation order). Keys ROTATE_TARGET / ROTATE_GENERATION.
+              - configMapRef: { name: garage-meta-rotation-state, optional: true }
+            securityContext:
+              capabilities: { drop: [ALL] }
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+            volumeMounts:
+              - { name: meta, mountPath: /mnt/meta }
+              - { name: data, mountPath: /mnt/data }
+              - { name: meta-rotate-script, mountPath: /script }
   destination:
     server: https://kubernetes.default.svc
     namespace: garage

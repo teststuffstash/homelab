@@ -247,6 +247,9 @@ environment: {}
 extraVolumes: {}
 
 extraVolumeMounts: {}
+# -- LOCAL PATCH (not upstream, see VENDORED.md): extra init containers rendered verbatim after the
+# chart's own garage-init. Used for the metadata rotation seed (docs/garage.md §Metadata reclamation).
+extraInitContainers: []
 
 monitoring:
   metrics:

@@ -1,0 +1,24 @@
+# The Garage metadata rotation loop — docs/garage.md §Metadata reclamation (ADR-114 addendum,
+# FU-137). Its seed script is mounted into the garage pods by argocd/platform/garage.yaml, so this
+# app must exist alongside that one (wave 2: after the chart, before the alerts' consumers matter).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: garage-meta-rotation
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/garage-meta-rotation
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: garage
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
