@@ -259,8 +259,12 @@ For one WORKER at a time (metal or VM) — a SATA cable, a RAM swap, a BIOS chan
 deterministic path is **`devbox run node-maintenance {preflight|down|up} <node>`**
 (`scripts/node-maintenance.sh`; first run: wk-metal-04, 2026-09-06). `preflight` is read-only and
 computes "safe to pull the plug": node Ready + Talos API reachable; **no degraded attached Longhorn
-volume anywhere**; every Longhorn replica on the node has a running sibling elsewhere (else the
-`block-if-contains-last-replica` drain policy would block — the script names the volume up front);
+volume anywhere**; every ATTACHED volume with a replica on the node has a running sibling
+elsewhere (FAIL — the drain would block on it); a DETACHED volume whose last replica is stopped on
+the node is a WARN — its data is offline for the window and returns with the disk, and the drain
+is allowed because the cluster runs `node-drain-policy=allow-if-replica-is-stopped`
+(`tofu/longhorn.tf`, 2026-09-09: the default `block-if-contains-last-replica` blocked thinkcentre's
+window on two detached replica-1 transcripts volumes — replica-1 classes are by design);
 no volume attached on the node; then the workload read — StatefulSet pods, Argo/agent ride pods
 and single-replica Deployments are WARNs (`FORCE=1` accepts them). `down` runs preflight, cordons,
 drains (DaemonSets ignored), confirms Longhorn's node view, then `talosctl shutdown` and waits for
