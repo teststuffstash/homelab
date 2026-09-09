@@ -124,7 +124,7 @@ resource "helm_release" "longhorn" {
       # NodeDiskIOSaturation on wk-02's disk). Standing belt, not the fix: it balances replica
       # COUNT, and #94's imbalance is bytes-and-tiers — thinkcentre already carries 19 replicas to
       # wk-02's 15. Enabled only now that the metering exists (argocd/resources/longhorn-alerts).
-      replicaAutoBalance          = "least-effort"
+      replicaAutoBalance = "least-effort"
       # Drains: the default `block-if-contains-last-replica` blocks a maintenance window on any
       # replica-1 volume (longhorn-single/-fast/-scratch are replica-1 BY DESIGN) even when the
       # volume is detached and the replica stopped — 2026-09-09, thinkcentre held two detached
