@@ -410,9 +410,18 @@ a *deliberate* delete is the same operation:
 
 > drop one zone's metadata → let it re-sync from the other two → next zone.
 
-Quorum (2/3) serves reads and writes throughout, so there is no window, and the re-synced env is
-written fresh, so the leaked pages are gone by construction. `garage repair tables` ("do a full
-sync of metadata tables") is a supported upstream operation, not a bespoke script.
+Quorum (2/3) serves reads and writes throughout, so there is no window. `garage repair tables`
+("do a full sync of metadata tables") is a supported upstream operation, not a bespoke script —
+**but a natively re-synced env is NOT compact.** Measured 2026-09-09, identical tables (1.93 M
+objects) on all three nodes: garage-1, seeded from a finished compacted snapshot, holds **6.3 GB**;
+garage-2, synced natively from garage-1, **16.2 GB**; garage-0, rotated natively from two peers
+(step 8 of the build-out), **27.9 GB — `GarageDiskFillingUp` re-fired on it within a day of the
+rotation**. A Merkle resync is random insertion into a fresh B-tree, the same ~20 KB/object shape
+the 2026-08-24 restore measured, so a rotation that ends in `repair tables` ratchets the new env
+straight back to the size it was meant to reclaim. **The loop's seed is therefore the snapshot,
+not the resync**: copy a peer's latest *finished* snapshot into the new volume (38 s in the
+[ledger](storage-ledger.md), delta sync after in seconds) and let `repair tables/blocks` only
+verify. The native path stays the corrupt-node primitive, never the reclamation mechanism.
 
 Three things the rotation loop needs before it is armed, none of which ADR-114 carried:
 
@@ -420,8 +429,9 @@ Three things the rotation loop needs before it is armed, none of which ADR-114 c
   2026-08-24 incident's ~20.3 KB/object random-insert figure is the *S3-API* restore path, not a
   Merkle table sync, and does not transfer. This number bounds the rotation cadence and decides
   whether the loop is safe to automate; measure it on the first rf=3 node.
-- **A trigger, not a cron.** `GarageDiskFillingUp` already exists and already fires; rotating on
-  the fill threshold makes the cadence follow whatever churn the workload happens to produce.
+- **A trigger, not a cron.** `GarageDiskFillingUp` already exists and already fires (per pod —
+  the summary names the zone); rotating on the fill threshold makes the cadence follow whatever
+  churn the workload happens to produce.
 - **A health gate that refuses.** Never rotate while another zone is degraded or re-syncing;
   refuse if quorum would drop — the same discipline the layout ops already carry.
 

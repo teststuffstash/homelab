@@ -19,8 +19,9 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: Garage disk is {{ $value | humanizePercentage }} full on {{ $labels.volume }}
-          description: Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way.
+          summary: Garage {{ $labels.volume }} volume is {{ $value | humanizePercentage }} full on {{ $labels.pod }}
+          description: >-
+            Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way. At rf=3 this is ONE zone, not the store: compare the three pods (`garage stats -a` MetaAvail / kubelet_volume_stats). One pod full = rotate that zone from a finished compacted snapshot (docs/garage.md §Metadata reclamation); all three full = capacity.
       - alert: GarageTableEmpty
         expr: |
           table_size{table_name!~"multipart_upload|bucket_mpu_counter"} == 0 and max_over_time(table_size[7d]) > 0
