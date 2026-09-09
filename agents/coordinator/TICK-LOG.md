@@ -8068,7 +8068,7 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   8 days. Longhorn clean in the window (not the 09-06/07 churn class). Upstream mechanism verified
   on v2.3.0 source (Complete takes the newest mpu entry complete or not; ListParts skips
   incomplete) — worth an upstream issue, oracle side drafts it.
-- **Commands:** resync workers → defaults 1/2 on all three pods (live, ephemeral). PR
+- **Commands:** resync workers → defaults 1/2 on all three pods 05:50Z (live, ephemeral). PR
   `fix/garage-0-zone-stall`: garage.md §Metadata reclamation corrected, ledger row + the
   SA400-under-rf=3 read, `GarageDiskFillingUp` summary names the pod + rf=3 reading in the
   description (promtool test updated). homelab#903 responder diagnosis ("15 days of churn
