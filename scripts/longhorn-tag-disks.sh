@@ -153,6 +153,15 @@ for d in intel0 intel1; do
   fi
 done
 tag wk-metal-04 sata500 '["slow-bulk"]'
+# `longhorn-local-xfs` (garage's zone class) is selector-less, so a tag alone does not keep the
+# SA400 out of the candidate set on a three-disk node: it is UNSCHEDULABLE outright (2026-09-09,
+# the garage-0 rotation onto the 7600p). Existing replicas stay; nothing new lands.
+unschedule() { # node disk
+  kubectl -n longhorn-system patch nodes.longhorn.io "$1" --type=merge \
+    -p "{\"spec\":{\"disks\":{\"$2\":{\"allowScheduling\":false}}}}" >/dev/null
+  echo "  $1/$2 allowScheduling=false"
+}
+unschedule wk-metal-04 sata500
 
 # m70s: the ADR-114 third PHYSICAL Garage zone (2026-09-07). Whole-disk EPHEMERAL on a 512G
 # Micron 2300 (DRAM-cached — it clears the data-disk criterion), so the Longhorn disk is the

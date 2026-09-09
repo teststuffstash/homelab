@@ -10,6 +10,9 @@ configMapGenerator:
   - name: grafana-dashboard-garage
     files:
       - garage.json=dashboard-garage.json
+      # upstream's own dashboard (git.deuxfleurs.fr/Deuxfleurs/garage, script/telemetry/), vendored
+      # 2026-09-09 as the raw-rates companion to the SLO view: datasource uid + job label edited, else verbatim.
+      - garage-upstream.json=dashboard-garage-upstream.json
     options:
       labels:
         grafana_dashboard: "1" # the Grafana sidecar discovers this label across ALL namespaces
