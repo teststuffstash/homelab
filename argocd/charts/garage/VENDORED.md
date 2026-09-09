@@ -20,3 +20,6 @@ tag/commit above.
   compacted snapshot — the rotation loop's mechanism (docs/garage.md §Metadata reclamation,
   `argocd/resources/garage-meta-rotation/`). Upstream's chart has `extraVolumes`/`extraVolumeMounts`
   but no init-container hook (2026-09-09).
+- `templates/workload.yaml` + `values.yaml`: `minReadySeconds` on the StatefulSet (upstream has
+  none). With `readinessProbe` on `/health` it is what keeps a rollout from cycling two quorum
+  members inside the same minute (2026-09-09).
