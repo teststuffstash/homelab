@@ -35,8 +35,8 @@ tests:
               pod: garage-0
               volume: data
             exp_annotations:
-              summary: "Garage disk is 85% full on data"
-              description: "Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
+              summary: "Garage data volume is 85% full on garage-0"
+              description: "Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way. At rf=3 this is ONE zone, not the store: compare the three pods (`garage stats -a` MetaAvail / kubelet_volume_stats). One pod full = rotate that zone from a finished compacted snapshot (docs/garage.md §Metadata reclamation); all three full = capacity."
 
   # ── 2/4 — DISK RECOVERS: the alert resolves when avail rises above 20% ──────────────────────
   # Disk was at 85% (avail=15), then space is freed and avail goes to 25. The alert should
@@ -58,8 +58,8 @@ tests:
               pod: garage-0
               volume: data
             exp_annotations:
-              summary: "Garage disk is 85% full on data"
-              description: "Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way."
+              summary: "Garage data volume is 85% full on garage-0"
+              description: "Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way. At rf=3 this is ONE zone, not the store: compare the three pods (`garage stats -a` MetaAvail / kubelet_volume_stats). One pod full = rotate that zone from a finished compacted snapshot (docs/garage.md §Metadata reclamation); all three full = capacity."
       # avail jumps to 25 at t=41m → ratio = 0.25, condition clears → alert resolves
       - eval_time: 42m
         alertname: GarageDiskFillingUp
