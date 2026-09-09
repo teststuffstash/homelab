@@ -1,0 +1,106 @@
+# Test fixtures for garage-write-probe belts (homelab#1560).
+# Validates: GarageWriteProbeFailing, GarageWriteProbeSlow, GarageWriteProbeSilent.
+#
+# ⚠ BREAKING: changing an alert's fire condition, threshold, or duration is extraordinary —
+# only when the PR deliberately changes pinned behaviour (ADR-103, agents/replay/**).
+# These fixtures are the contract; they live in git.
+
+rule_files:
+  - garage-write-probe.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # FAILING: PUT and GET both fail for 15 minutes (> 10m for) → all three alert (PUT/GET/DELETE).
+  - interval: 1m
+    name: "probe legs failing for 10+ minutes trigger GarageWriteProbeFailing"
+    input_series:
+      - series: 'garage_write_probe_success{leg="put"}'
+        values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+      - series: 'garage_write_probe_success{leg="get"}'
+        values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+      - series: 'garage_write_probe_success{leg="delete"}'
+        values: "1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: GarageWriteProbeFailing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: GarageWriteProbeFailing
+        exp_alerts:
+          - exp_labels:
+              leg: get
+              severity: warning
+            exp_annotations:
+              summary: "Garage write probe failing"
+              description: "A write probe operation has failed in every 5m window for 10m. This is a client-perspective detector."
+          - exp_labels:
+              leg: put
+              severity: warning
+            exp_annotations:
+              summary: "Garage write probe failing"
+              description: "A write probe operation has failed in every 5m window for 10m. This is a client-perspective detector."
+
+  # SLOW: PUT latency > 10s for 16 minutes (> 15m for) → fires.
+  - interval: 1m
+    name: "put latency > 10s for 15+ minutes triggers GarageWriteProbeSlow"
+    input_series:
+      - series: 'garage_write_probe_seconds{leg="put"}'
+        values: "11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: GarageWriteProbeSlow
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: GarageWriteProbeSlow
+        exp_alerts:
+          - exp_labels:
+              leg: put
+              severity: warning
+            exp_annotations:
+              summary: "Garage write probe PUT latency > 10s"
+              description: "The write probe's PUT operation latency > 10s for 15m."
+
+  # SILENT: no timestamp update for 10+ minutes (> 600s ago) → fires immediately (for: 0m).
+  - interval: 1m
+    name: "probe timestamp missing for 10+ minutes triggers GarageWriteProbeSilent"
+    input_series:
+      - series: 'garage_write_probe_last_run_timestamp'
+        values: "0 0 0 0 0 0 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: GarageWriteProbeSilent
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: GarageWriteProbeSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Garage write probe has not run for >10 minutes"
+              description: "The write probe has not reported a timestamp in over 10 minutes."
+
+  # HEALTHY: all legs succeed, latency normal, heartbeat fresh → no alerts.
+  - interval: 1m
+    name: "healthy probe with fresh timestamp and normal latency does not fire"
+    input_series:
+      - series: 'garage_write_probe_success{leg="put"}'
+        values: "1 1 1 1 1"
+      - series: 'garage_write_probe_success{leg="get"}'
+        values: "1 1 1 1 1"
+      - series: 'garage_write_probe_success{leg="delete"}'
+        values: "1 1 1 1 1"
+      - series: 'garage_write_probe_seconds{leg="put"}'
+        values: "0.5 0.4 0.6 0.5 0.5"
+      - series: 'garage_write_probe_last_run_timestamp'
+        values: "200 260 320 380 440"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: GarageWriteProbeFailing
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: GarageWriteProbeSlow
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: GarageWriteProbeSilent
+        exp_alerts: []
