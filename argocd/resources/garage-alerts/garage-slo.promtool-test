@@ -1,0 +1,82 @@
+# Behaviour fixtures for garage-slo recording rules (FU-093).
+# Tests that:
+# 1. Request rate calculation works
+# 2. Availability ratio calculation works
+# 3. Volume utilization ratio calculation works
+#
+#   devbox run -- promtool test rules argocd/resources/garage-alerts/garage-slo.promtool-test
+#
+rule_files:
+  - garage-slo.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── Request rate by endpoint ───────────────────────────────────────────────────────────────────
+  - interval: 1m
+    name: request rate calculation
+    input_series:
+      # Cumulative request counts over 5m (simulating increasing counts)
+      - series: 'api_s3_request_duration_count{api_endpoint="GetObject"}'
+        values: "1000+100x5"
+      - series: 'api_s3_request_duration_count{api_endpoint="PutObject"}'
+        values: "500+50x5"
+    promql_expr_test:
+      - expr: garage:s3_requests:rate5m
+        eval_time: 5m
+        exp_samples:
+          # GetObject: 100 requests/min over 5m interval ≈ 1.6667 req/s
+          - labels: '{__name__="garage:s3_requests:rate5m",api_endpoint="GetObject"}'
+            value: 1.6666666666666667
+          # PutObject: 50 requests/min ≈ 0.8333 req/s
+          - labels: '{__name__="garage:s3_requests:rate5m",api_endpoint="PutObject"}'
+            value: 0.8333333333333334
+
+  # ── Cluster health availability ratio over 1h ───────────────────────────────────────────────
+  - interval: 1m
+    name: cluster health availability calculation
+    input_series:
+      # Simulating successful probes for garage-0: all 60 minutes successful
+      - series: 'probe_success{job="blackbox-garage-health",instance="garage-0"}'
+        values: "1+0x60"
+      # Simulating probes for garage-1: 45 successes, 15 failures over 60m
+      - series: 'probe_success{job="blackbox-garage-health",instance="garage-1"}'
+        values: "1+0x45 0+0x15"
+    promql_expr_test:
+      - expr: garage:cluster_health:availability_ratio_1h
+        eval_time: 60m
+        exp_samples:
+          # garage-0: 60/60 = 1.0 (100%)
+          - labels: '{__name__="garage:cluster_health:availability_ratio_1h",instance="garage-0",job="blackbox-garage-health"}'
+            value: 1.0
+          # garage-1: 45/60 = 0.75 (75%)
+          - labels: '{__name__="garage:cluster_health:availability_ratio_1h",instance="garage-1",job="blackbox-garage-health"}'
+            value: 0.75
+
+  # ── Volume utilization ratios ────────────────────────────────────────────────────────────────
+  - interval: 1m
+    name: volume utilization calculation
+    input_series:
+      # Meta volume: 400GB total, 350GB available (350/400 = 0.875 = 87.5% used)
+      - series: 'garage_local_disk_total{pod="garage-0",volume="metadata"}'
+        values: "400+0x10"
+      - series: 'garage_local_disk_avail{pod="garage-0",volume="metadata"}'
+        values: "50+0x10"
+      # Data volume: 1000GB total, 200GB available (800/1000 = 0.8 = 80% used)
+      - series: 'garage_local_disk_total{pod="garage-0",volume="data"}'
+        values: "1000+0x10"
+      - series: 'garage_local_disk_avail{pod="garage-0",volume="data"}'
+        values: "200+0x10"
+    promql_expr_test:
+      - expr: garage:meta_volume_used_ratio
+        eval_time: 5m
+        exp_samples:
+          # Meta: 1 - 50/400 = 0.875 (87.5% used)
+          - labels: '{__name__="garage:meta_volume_used_ratio",pod="garage-0",volume="metadata"}'
+            value: 0.875
+      - expr: garage:data_volume_used_ratio
+        eval_time: 5m
+        exp_samples:
+          # Data: 1 - 200/1000 = 0.8 (80% used)
+          - labels: '{__name__="garage:data_volume_used_ratio",pod="garage-0",volume="data"}'
+            value: 0.8

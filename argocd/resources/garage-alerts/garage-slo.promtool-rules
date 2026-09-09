@@ -1,0 +1,110 @@
+# Garage SLO recording rules (FU-093).
+# Drift-pinned copy: hand-copy recording rules into argocd/resources/garage-alerts/prometheusrule.yaml
+# (the canonical home), then re-render this file from it for promtool testing.
+#
+# Objectives (measured 2026-09-09 post-rotation):
+# - Error ratio: < 0.1% / 30 days
+# - Write p99 latency: < 10 s (measured: 4.6 s)
+# - Read p99 latency: < 2 s (measured: 0.4 s)
+# - List p99 latency: < 5 s (measured: 1.5 s)
+# - Availability: ≥99.95% (measured: 99.95% request-level, 99.87% scrape-level since 2026-08-28)
+groups:
+  - name: garage-slo
+    rules:
+      - record: garage:s3_requests:rate5m
+        expr: |
+          sum by (api_endpoint) (rate(api_s3_request_duration_count[5m]))
+
+      - record: garage:s3_server_error_ratio:rate5m
+        expr: |
+          sum by (api_endpoint) (rate(api_s3_error_counter{status_code=~"500|503"}[5m]))
+          / on (api_endpoint) group_left sum by (api_endpoint) (rate(api_s3_request_duration_count[5m]))
+
+      - record: garage:s3_latency_seconds:p99_5m
+        expr: |
+          histogram_quantile(0.99,
+            sum by (api_endpoint, le) (
+              label_replace(
+                rate(api_s3_request_duration_bucket[5m]),
+                "endpoint_class",
+                "read",
+                "api_endpoint",
+                "GetObject|HeadObject"
+              )
+            )
+          )
+          or
+          histogram_quantile(0.99,
+            sum by (api_endpoint, le) (
+              label_replace(
+                rate(api_s3_request_duration_bucket[5m]),
+                "endpoint_class",
+                "write",
+                "api_endpoint",
+                "PutObject|UploadPart|CompleteMultipartUpload|DeleteObject"
+              )
+            )
+          )
+          or
+          histogram_quantile(0.99,
+            sum by (api_endpoint, le) (
+              label_replace(
+                rate(api_s3_request_duration_bucket[5m]),
+                "endpoint_class",
+                "list",
+                "api_endpoint",
+                "ListObjectsV2|ListParts"
+              )
+            )
+          )
+
+      - record: garage:s3_latency_seconds:p50_5m
+        expr: |
+          histogram_quantile(0.50,
+            sum by (api_endpoint, le) (
+              label_replace(
+                rate(api_s3_request_duration_bucket[5m]),
+                "endpoint_class",
+                "read",
+                "api_endpoint",
+                "GetObject|HeadObject"
+              )
+            )
+          )
+          or
+          histogram_quantile(0.50,
+            sum by (api_endpoint, le) (
+              label_replace(
+                rate(api_s3_request_duration_bucket[5m]),
+                "endpoint_class",
+                "write",
+                "api_endpoint",
+                "PutObject|UploadPart|CompleteMultipartUpload|DeleteObject"
+              )
+            )
+          )
+          or
+          histogram_quantile(0.50,
+            sum by (api_endpoint, le) (
+              label_replace(
+                rate(api_s3_request_duration_bucket[5m]),
+                "endpoint_class",
+                "list",
+                "api_endpoint",
+                "ListObjectsV2|ListParts"
+              )
+            )
+          )
+
+      - record: garage:cluster_health:availability_ratio_1h
+        expr: |
+          sum_over_time(probe_success{job="blackbox-garage-health"}[1h])
+          / count_over_time(probe_success{job="blackbox-garage-health"}[1h])
+
+      - record: garage:meta_volume_used_ratio
+        expr: |
+          1 - garage_local_disk_avail{volume="metadata"} / garage_local_disk_total{volume="metadata"}
+
+      - record: garage:data_volume_used_ratio
+        expr: |
+          1 - garage_local_disk_avail{volume="data"} / garage_local_disk_total{volume="data"}
