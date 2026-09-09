@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - workspace.yaml
+  - cronjob.yaml
+  - prometheusrule.yaml
+
+# The probe script is ONE file, probe.py, shipped as a generated ConfigMap (hash-suffixed; kustomize
+# rewrites the CronJob's volume reference). It used to be inlined into cronjob.yaml as well — two
+# copies of the same script is the drift bug the routing table warns about (seat read, 2026-09-09).
+configMapGenerator:
+  - name: garage-write-probe
+    namespace: garage
+    files:
+      - probe.py
