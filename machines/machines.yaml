@@ -201,6 +201,8 @@ machines:
     # since the NIC cable was fixed (2026-06-11) — was "flaky PXE" purely because the marginal
     # link timed out netboot. (A diskSelector by serial/wwid would be more robust than /dev/sdX.)
     # Two Intel Optane M10 16GB (nvme0n1/nvme1n1) → Longhorn fast tier (replica=1 scratch).
+    # Both ride PCIe→M.2 adapter cards in the box's PCIe slots — the board has NO native M.2
+    # slot (operator, 2026-09-09); those PCIe slots are therefore spent.
     # No AVX2 (Pentium G840) — verified via /proc/cpuinfo.
     talos_metal_node: true
     install_disk: /dev/sdb
