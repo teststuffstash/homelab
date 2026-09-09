@@ -129,6 +129,23 @@ spec:
               that shadowed multipart parts and stretched UploadPart p99 to 100 s on 2026-09-08
               without any sustained outage. Read the garage Loki tenant for which node id the
               peers cannot ping, then that node's disk latency (node_disk_write_time) and load.
+        # Deletions not propagating: a table's GC backlog. GC pushes each tombstone to EVERY
+        # replica before deleting it, so an unreachable peer parks the whole queue — garage-2
+        # climbed 133k → 1.77 M across the 2026-09-08 stall day and drained at ~130k/h once
+        # garage-0 was rotated (2026-09-09). Steady state is 0–150k; the build-out peaked ~750k.
+        - alert: GarageTableGcBacklog
+          expr: |
+            sum by (pod) (table_gc_todo_queue_length) > 500000
+          for: 2h
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage {{ $labels.pod }} has {{ $value | humanize }} GC items parked for 2h"
+            description: >-
+              Table GC on this pod cannot complete its deletes — each tombstone must reach every
+              replica first, so a backlog this size means a peer has been unreachable from here
+              (the 2026-09-08 class) or the GC worker is erroring. Read this pod's log for
+              "table GC" / "try_send_and_delete" errors and the peers' health; the backlog
+              drains on its own once every replica answers (~130k/h measured).
         # The observer-side symptom, from Garage's own counters: RPCs to a peer timing out.
         - alert: GaragePeerRpcTimeouts
           expr: |

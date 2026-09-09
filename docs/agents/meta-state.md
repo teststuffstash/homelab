@@ -79,7 +79,7 @@ never the session's arc — that is TICK-LOG's.)
   Replace with a **DRAM-equipped** drive; buying criterion for ANY Garage/Longhorn data disk is
   DRAM cache, not €/GB. Pairs with the FU-137 third-zone box, and
   **the box is BOUGHT, OPENED and ONBOARDED (2026-09-07): ThinkCentre M70s SFF ≈150 €, + 2 ×
-  M.2→PCIe x4 adapters** — `m70s` @ **192.168.2.56** is a Ready Talos worker, `zone: m70s`, BGP
+  M.2→PCIe x4 adapters ordered, NOT yet arrived (2026-09-09)** — `m70s` @ **192.168.2.56** is a Ready Talos worker, `zone: m70s`, BGP
   `established`, PXE-installed on `/dev/nvme0n1` (matchbox flag applied then destroyed; BIOS is
   PXE-first by operator choice so a network wipe+reinstall needs no console). **What remains for
   FU-137 is the Garage half, not the box**: fit a data disk on one of its two free LP PCIe slots and
@@ -160,14 +160,15 @@ never the session's arc — that is TICK-LOG's.)
   design pass (WAN accounting) · #1280 held-for-evidence (kind-timing distribution first) ·
   Cloudflare: mint `Cache Purge` onto tofu-apply, or rely on oracle-fleet#414's
   Cache-Control (decision open) · Garage: delete `backups/garage-meta-20260825-prerebuild/` (20 GB) +
-  `garage-meta-forensics/` (due since ~09-01); meta volume rides rf=1 on wk-02 (FU-137's
-  ~08-31 deadline PAST — an infra sitting). **⚑ 2026-09-07 OPERATOR-OWNED: meta is at 80 % and
-  it is NOT growth** — 25.36 GB live LMDB vs a 3.95 GB compacted snapshot, 84 % leaked pages,
-  ~57 h runway at the 09-06 rate. Attended snapshot-swap (fresh `garage meta snapshot` → stop →
-  swap → start; §Durability recipe, never a stale/in-progress snapshot). **While the store is
-  down, MEASURE a full-table `garage repair tables` resync** — nobody has that number and it
-  gates whether the ADR-114 rotation loop can be armed (garage.md §Metadata reclamation); the 3 ERT giants STAY (docs/garage.md
-  §Durability).
+  `garage-meta-forensics/` (due since ~09-01). **Garage metadata is UNATTENDED since 2026-09-09**:
+  the rotation loop (PR#1549 + thresholds #1551/#1553/#1554) rotated garage-0 on its own at
+  08:45Z, 27.83 → 4.68 GB in 4 min (ledger). Residual watch: garage-2's `table_gc_todo`
+  (1.77 M earlier, GC failing while garage-0 flapped) should drain now — if it does not, that
+  is belted (PR#1558 `GarageTableGcBacklog`; draining ~130k/h, ~10 h). Acceptance PASSED:
+  garage-0 ListObjectsV2 p99 1.45 s (was 35.7). Rollouts no longer cost quorum (PR#1555 readiness
+  + PR#1556 `minReadySeconds` 300 — the 300 s spacing is untested by a rollout yet; the next
+  garage template change is its live test, `GarageQuorumMembersRestarted` must stay silent).
+  The 3 ERT giants STAY (docs/garage.md §Durability).
 - **⚑ GOALS — verdicts are the operator's, the seat recommends:**
   - **#818 G-B — HELD with a posted 4-clause verdict condition** (teeth drills deferred to
     oracle's production launch; lens posture advisory-steady-state; responder shadow; prober
@@ -237,8 +238,9 @@ never the session's arc — that is TICK-LOG's.)
     applies (unreproducible read-only; verdict = the next full apply) · hp-01
     `install_disk: /dev/sda` is a NAME with two identical disks (repin to WWID, FU-076's
     neighbourhood) · OTLP trace-export spam (`localhost:4318 refused`) in registry + 3
-    mirrors — add an `OTEL_SDK_DISABLED`-class env · garage resync worker tuning is
-    EPHEMERAL (resets on garage-0 restart) · FU-073/084/089/098 stale-archive entries, 41d old (next
+    mirrors — add an `OTEL_SDK_DISABLED`-class env · garage resync workers RESET to defaults 1/2 on
+    all three pods 2026-09-09 (the build-out's 8/0 had been left on everywhere, saturating the SA400 —
+    ledger §The SA400 zone under rf=3 load) · FU-073/084/089/098 stale-archive entries, 41d old (next
     docs-cleanup).
 - **⚑ WATCH-NOISE candidates (next meta-events touch):** FAMINE emits per count-delta not
   threshold-crossing — AND counts `iac-sentinel-edge` convoys (09-05 08:01Z: 10 Pending on the
