@@ -392,6 +392,16 @@ machines:
     install_disk: /dev/sda
     kata: true
     longhorn_default_disk: true
+    # 2026-09-09: two Intel SSD Pro 7600p 256 GB (SSDPEKKF256G8L — SM2262, 2×256 MB DDR4 DRAM, 3D TLC;
+    # the R2 lot, teststuff/hardware) on Axagon PCEM2-N x4 adapters in the two x16-length slots.
+    # Together they are the `bulk` tier's DRAM-cached replacement for the DRAM-less SA400
+    # (docs/storage-ledger.md §2026-09-05: 486 ms / 26 MB/s sustained) — the "demote": new bulk
+    # placements + garage-0's zone volumes go here, the SA400 keeps Talos + the image store + what
+    # already sits on it. by-id (eui) selectors: this directive PARTITIONS what it points at, and
+    # /dev/nvme{0,1}n1 is enumeration order. Names are the live Longhorn disk keys — never rename.
+    longhorn_disks:
+      - { device: /dev/disk/by-id/nvme-eui.5cd2e42a81a410f6, name: intel0, tags: [bulk] } # serial BTHH829402EZ256B
+      - { device: /dev/disk/by-id/nvme-eui.5cd2e42a81a35e16, name: intel1, tags: [bulk] } # serial BTHH817204JW256B
     ephemeral: true
     notes: >-
       The roomy kata node (16GB — Playwright/Chrome gate home); 500GB SATA; no AVX2 so
