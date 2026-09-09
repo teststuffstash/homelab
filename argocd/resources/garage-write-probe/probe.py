@@ -10,7 +10,6 @@ The probe does not fail: monitoring being down is not a reason to exit non-zero.
 """
 
 import os
-import json
 import time
 import hashlib
 import hmac
