@@ -24,27 +24,27 @@ spec:
           for: 10m
           labels: { severity: warning }
           annotations:
-            summary: "Garage write probe {{ $labels.leg | default \"any_leg\" }} failing"
+            summary: "Garage write probe failing"
             description: >-
-              The write probe's {{ $labels.leg | default "a" }} operation has failed in every 5m window
-              for 10m. This is a client-perspective detector: clients doing signed S3 requests against
+              A write probe operation (PUT, GET, or DELETE) has failed in every 5m window for 10m.
+              This is a client-perspective detector: clients doing signed S3 requests against
               the in-cluster ClusterIP cannot PUT, GET, or DELETE successfully. Read the probe pod's
               logs in ns garage (`kubectl -n garage logs -l app=garage-write-probe --tail=50 --all-containers`),
               then the Garage pods' logs for errors (write, quorum, auth). At rf=3 quorum still serves
               reads; the exposure is to writes on affected zones. Compare the three Garage nodes' health
               (GarageClusterDegraded/Flapping) and disk metrics (GarageDiskFillingUp).
-        # PUT LATENCY p99 > 10s for 15m. Detects write-path *performance* regression that does not
+        # PUT LATENCY > 10s for 15m. Detects write-path *performance* regression that does not
         # fully break — returns OK but takes >10s (operational risk: timeouts, stuck clients).
         # The 2026-09-08 incident peaked at 60–100s with no alert at this level.
         - alert: GarageWriteProbeSlow
           expr: |
-            histogram_quantile(0.99, rate(garage_write_probe_seconds_bucket{le="+Inf",leg="put"}[5m])) > 10
+            garage_write_probe_seconds{leg="put"} > 10
           for: 15m
           labels: { severity: warning }
           annotations:
-            summary: "Garage write probe PUT p99 > 10s"
+            summary: "Garage write probe PUT latency > 10s"
             description: >-
-              The write probe's PUT operation (64 KiB object) has a p99 latency > 10s for 15m.
+              The write probe's PUT operation (64 KiB object) has a latency > 10s for 15m.
               This is a performance regression: clients see sub-second writes on a healthy store
               and 10s+ is a red line for timeouts. The 2026-09-08 incident stretched to 60–100s.
               Read the Garage pods' logs for slow operations, quorum-member health, and disk
@@ -59,7 +59,7 @@ spec:
           for: 0m
           labels: { severity: warning }
           annotations:
-            summary: "Garage write probe has not run for {{ (time() - garage_write_probe_last_run_timestamp) | humanizeDuration }}"
+            summary: "Garage write probe has not run for >10 minutes"
             description: >-
               The write probe has not reported a timestamp in over 10 minutes — at least 11
               consecutive runs missed. The probe runs every minute and pushes a timestamp to
