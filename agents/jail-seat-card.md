@@ -68,6 +68,12 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
 ## Safety
 
 - `plan`/dry-run and review before any `apply`; this hits live machines.
+- **A stack report of a platform fault is only "there is a problem" (operator, 2026-09-09).**
+  Build order: the platform DETECTOR first (from our own metrics/logs; promtool fixture + a
+  replay query at the event's timestamps showing it fires), let it land, THEN the fix — driven by
+  that alert, not by the reporter's diagnosis. Downtime detection never depends on issue reports,
+  and the belt reaching the reporter's conclusion on its own is the fair test of the alerting
+  (oracle-fleet#228 → `GarageQuorumMembersRestarted`/`GarageS3ServerErrors`).
 - **Never `talosctl upgrade` a Proxmox *nocloud* VM** — it loses its static IP/hostname and rejoins
   as a ghost. Bake extensions into the image (`image.tf`) and recreate. Metal nodes upgrade fine.
 - Never iterate destructive OPNsense firmware endpoints (`/reboot`, `/poweroff`) to "discover" them

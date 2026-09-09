@@ -142,3 +142,44 @@ spec:
               table reads fall back to the other replica and quorum writes wait. The peer is not
               named in the metric; the pod's log is ("Error pinging <id>: Ping timeout"). On
               2026-09-08 the peers saw 2.2–2.5/s while garage-0 stalled.
+    # ── THE 2026-09-09 07:22Z CLASS — client-visible quorum loss, detected from OUR signals ──────
+    # A values change rolled the StatefulSet; with no readiness probe the three pods cycled inside
+    # 31 s and a stack's S3 delete got "Could not reach quorum of 2". A stack reported it
+    # (oracle-fleet#228) before anything here did. Operator build order since: detector first,
+    # replayed against the event (both exprs below are true at 07:25Z on the real data), then the
+    # fix from the alert. Both are symptoms; neither guesses the cause.
+    - name: garage-availability
+      rules:
+        # Server-side S3 errors in a 5m window. Background over 8 days: 30 true minutes, every one
+        # a real event (09-03 pool fill, 09-08 stall, 09-09 rollout). Deliberately for: 0m — the
+        # blip IS the event; Alertmanager's grouping folds the minutes into one delivery.
+        - alert: GarageS3ServerErrors
+          expr: |
+            sum by (status_code) (increase(api_s3_error_counter{status_code=~"500|503"}[5m])) >= 3
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage S3 returned {{ $value | humanize }} × HTTP {{ $labels.status_code }} in 5m"
+            description: >-
+              Clients got server errors from the S3 API — at rf=3 a 500 "Could not reach quorum"
+              or a 503 means a quorum member was unreachable for those requests. Read the garage
+              Loki tenant for the error text, then: did a garage pod (re)start
+              (GarageQuorumMembersRestarted), did a node drop off the mesh
+              (GarageClusterDegraded/Flapping), or is it one client's truncated bodies (the
+              2026-09-08 InvalidPart class shows as "error reading a body")?
+        # Two of the three quorum members started within 5 minutes of each other: a rollout that
+        # did not wait for the previous member to rejoin, or a node taking two pods down.
+        - alert: GarageQuorumMembersRestarted
+          expr: |
+            count(kube_pod_start_time{namespace="garage",pod=~"garage-[0-9]+"} > time() - 300) >= 2
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $value }} Garage quorum members started within the last 5 minutes"
+            description: >-
+              At rf=3 the store tolerates ONE zone down; two members restarting inside a
+              5-minute window is a quorum loss for any write in the gap. What restarted them is
+              not in this signal: read `kubectl -n garage get pods` (start times, restart
+              counts, last state — OOM-kill, eviction), `kubectl -n garage get events`, and the
+              ArgoCD garage app's last sync time. If the sync time matches, it was a rollout
+              (2026-09-09 07:22Z: no readiness probe, all three cycled in 31 s).
