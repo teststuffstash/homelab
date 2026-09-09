@@ -1,0 +1,24 @@
+# garage-meta-rotation — the unattended metadata reclamation loop for Garage at rf=3
+# (docs/garage.md §Metadata reclamation, ADR-114 addendum; FU-137). Two halves:
+#   • meta-rotate.sh — the SEED, mounted into every garage pod as an init container by
+#     argocd/platform/garage.yaml (extraInitContainers). Fixed name: the pod references it by name.
+#   • controller.py — the LOOP, a CronJob polling the GarageDiskFillingUp alert: health gate →
+#     order one zone's rotation (runtime ConfigMap garage-meta-rotation-state, NOT in git) →
+#     delete the pod → read the init container's verdict → repair tables → wait for convergence.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: garage
+
+resources:
+  - rotation.yaml
+  - prometheusrule.yaml
+
+configMapGenerator:
+  - name: garage-meta-rotate-init
+    files:
+      - meta-rotate.sh
+    options:
+      disableNameSuffixHash: true
+  - name: garage-meta-rotation-controller
+    files:
+      - controller.py
