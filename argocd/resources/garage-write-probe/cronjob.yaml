@@ -1,0 +1,63 @@
+# Garage client-perspective write probe (homelab#1560, FU-093).
+# Signed PUT→GET→DELETE round-trip every minute against http://garage.garage.svc.cluster.local:3900
+# to detect write-path failures (the 2026-09-08 class: UploadPart p99 100s). Times each leg,
+# pushes garage_write_probe_* metrics to the pushgateway. Never fails: a monitoring error is not
+# a probe error (node-fstrim precedent, argocd/resources/node-fstrim/fstrim.yaml).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: garage-write-probe
+  namespace: garage
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: garage-write-probe
+  namespace: garage
+spec:
+  # Every minute — frequent enough to catch transient failures but not overwhelm metrics.
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: garage-write-probe
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: probe
+              image: python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00
+              command: ["python3", "-u", "/probe/probe.py"]
+              env:
+                - name: GARAGE_ENDPOINT
+                  value: "http://garage.garage.svc.cluster.local:3900"
+                - name: GARAGE_BUCKET
+                  value: "platform-probe"
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom: { secretKeyRef: { name: garage-write-probe-s3, key: access_key_id } }
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom: { secretKeyRef: { name: garage-write-probe-s3, key: secret_access_key } }
+                - name: PUSHGATEWAY_URL
+                  value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: probe, mountPath: /probe }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { memory: 256Mi }
+          volumes:
+            - name: probe
+              configMap: { name: garage-write-probe, defaultMode: 0755 }
