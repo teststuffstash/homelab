@@ -76,7 +76,10 @@ spec:
                   valueFrom: { secretKeyRef: { name: garage-admin-token, key: token } }
                 # One zone per 12 h at most; the loop is a trickle, not a sweep.
                 - { name: COOLDOWN_S, value: "43200" }
-                - { name: RESYNC_QUEUE_MAX, value: "5000" }
+                # Block resync queue ceiling. Ordinary churn sits at 1–8k and peaked 23–31k per
+                # pod in the 26 h after the build-out converged (the 5000 default refused on
+                # 8081); a resync in progress is 560k–977k. 100k separates the two.
+                - { name: RESYNC_QUEUE_MAX, value: "100000" }
                 # Merkle/insert queue ceiling. Ordinary write bursts here reach 1.5–2.7k for a
                 # few minutes (measured 2026-09-09; the 1000 default refused on 2597); a resync in
                 # progress is 28k–690k (7-day maxima per pod). 10k separates the two.
