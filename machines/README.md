@@ -10,7 +10,7 @@ Benchmark = stress-ng `matrixprod` bogo-ops/s (synthetic, comparable across thes
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | opnsense | Router/FW + DHCP (dnsmasq) + DNS (Unbound) + FRR/BGP + HAProxy + ACME | HP desktop ("Big Data") | 4 | 8 | opnsense | 57 | — | — | — | — | — |
 | pve | Hypervisor for the Talos VMs + Matchbox LXC | AliExpress X99 + Intel Xeon E5-2680 v4 | 28 | 64 | pve | 127 | — | — | — | — | — |
-| thinkcentre | k8s worker + Longhorn (+ 2×Optane fast tier) | Lenovo ThinkCentre Edge | 2 | 4 | thinkcentre | 27.9 | 54.5 | 1200.4 | 2231.7 | 40.9 | smart-plug (switch.tuyalocal_thinkcentre); auto-boots on AC restore — NOT WoL |
+| thinkcentre | k8s worker + Longhorn (+ 2×Optane fast tier) | Lenovo ThinkCentre Edge | 2 | 4 | thinkcentre | 27.9 | 54.5 | 1200.4 | 2231.7 | 40.9 | smart-plug (switch.tuyalocal_thinkcentre — entity ids were CROSSED with hp-01's 2026-08-18→09-09, read the incident before trusting an older plug observation); auto-boots on AC restore — NOT WoL |
 | hp-01 | k8s worker + Longhorn (WoL-capable) | HP desktop | — | 8 | hp | — | — | — | — | — | Wake-on-LAN (PXE-booted); smart plug switch.tuyalocal_hp exists but AC-restore is flaky — prefer WoL |
 | m70s | k8s worker + Longhorn (third physical Garage zone — ADR-114) | Lenovo ThinkCentre M70s SFF | 4 | 16 | — | — | — | — | — | — | PXE-first in BIOS by operator choice — a network wipe+reinstall needs no console. WoL untested; no smart plug yet. |
 | wk-metal-01 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier | Lenovo ThinkPad X240 | 4 | 8 | laptop3 | 9.1 | 28.8 | 1182.1 | 1932.2 | 67.1 | — |

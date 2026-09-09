@@ -18,10 +18,14 @@
 #
 # Plug -> box map: pve = "K&M black 1"; opnsense = "Smart plug 2"; laptop3 = "Smart plug 3" =
 # X240 (wk-metal-01); laptop4 = "Smart plug 4" = X250 (wk-metal-02); thinkcentre / hp =
-# the two NOUS A1 sockets (RENAMED 2026-08-18 from aquarium / konditsioneer — the loads moved:
-# the ex-aquarium socket powers the ThinkCentre, the ex-konditsioneer one powers hp-01; the
-# tuyalocal_* entity ids were renamed in the HA registry the same day, so history under the
-# old names ends 2026-08-18). Device material (id/key/IP/version): wallet `tuya-local`/devices.json.
+# the two NOUS A1 sockets (RENAMED 2026-08-18 from aquarium / konditsioneer; the tuyalocal_*
+# entity ids were renamed in the HA registry, so history under the old names ends 2026-08-18).
+# ⚠ That rename was CROSSED until 2026-09-09: the id named `thinkcentre` sat on the socket feeding
+# hp-01 and vice versa — a seat session power-cycled hp-01 believing it was booting thinkcentre
+# (docs/incidents/2026-09-09-crossed-plug-hp01-outage.md). Fixed by swapping the entity ids in
+# the registry (device 06001461… = hp-01 = `tuyalocal_hp_*`, device 31743873… = thinkcentre =
+# `tuyalocal_thinkcentre_*`), so plug_* history between 08-18 and 09-09 belongs to the OTHER box.
+# Device material (id/key/IP/version): wallet `tuya-local`/devices.json.
 # Source of truth in git; copied into the HA /config PV.
 template:
   - sensor:
