@@ -178,7 +178,8 @@ spec:
             summary: "{{ $value }} Garage quorum members started within the last 5 minutes"
             description: >-
               At rf=3 the store tolerates ONE zone down; two members restarting inside a
-              5-minute window is a quorum loss for any write in the gap. On 2026-09-09 07:22Z a
-              StatefulSet rollout without a readiness probe cycled all three in 31 s. Check
-              `kubectl -n garage get pods` start times and the ArgoCD garage app's last sync;
-              the fix class is a readiness probe on /health + minReadySeconds, not a PDB.
+              5-minute window is a quorum loss for any write in the gap. What restarted them is
+              not in this signal: read `kubectl -n garage get pods` (start times, restart
+              counts, last state — OOM-kill, eviction), `kubectl -n garage get events`, and the
+              ArgoCD garage app's last sync time. If the sync time matches, it was a rollout
+              (2026-09-09 07:22Z: no readiness probe, all three cycled in 31 s).
