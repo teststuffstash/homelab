@@ -1016,6 +1016,8 @@ the block needs pruning, not more headings.
       `docs/storage-ledger.md` (tier table, pool line, quota table, the requirements rows' "today"
       figures) stamped with the read date, per `machines/generate.py`; judgments stay prose.
       Relates FU-093, FU-177 (same class: one source, generated blocks).
+      **SLO/dashboard leg (2026-09-09):** no Garage dashboard or SLO existed anywhere; queued for
+      the loop as homelab#1559 (recording rules + dashboard) and #1560 (client-perspective write probe).
 
 - [ ] **FU-212** — **Responder workflows Error on an RBAC gap and the alert gets no triage at all.**
       Four `respond-*` workflows on 2026-09-04 (08:18, 08:32, 08:37, 08:42 — all `PodSigkilled`,
