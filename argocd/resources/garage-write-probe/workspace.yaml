@@ -1,0 +1,47 @@
+# Garage bucket + key for client-perspective write probe (homelab#1560, FU-093).
+# The probe does a signed PUT→GET→DELETE round-trip every minute against the in-cluster ClusterIP
+# to detect write-path failures that the server-side metrics miss (the 2026-09-08 class).
+#
+# Pattern: ADR-076, docs/patterns/app-owned-resources.md. The writer key exists only in the
+# Workspace's connection Secret, named platform-probe-writer with a grant on this bucket only.
+apiVersion: tf.upbound.io/v1beta1
+kind: Workspace
+metadata:
+  name: garage-write-probe
+  namespace: garage
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    source: Inline
+    module: |
+      resource "garage_bucket" "probe" {
+        global_alias = "platform-probe"
+        max_size     = 10485760 # 10MiB — ADR-089; 64 KiB per object × 60 per hour + headroom
+      }
+
+      resource "garage_key" "writer" {
+        name = "platform-probe-writer"
+      }
+
+      resource "garage_bucket_permission" "writer" {
+        bucket_id     = garage_bucket.probe.id
+        access_key_id = garage_key.writer.id
+        read  = true
+        write = true
+        owner = false
+      }
+
+      output "bucket" {
+        value = garage_bucket.probe.global_alias
+      }
+      output "access_key_id" {
+        value = garage_key.writer.id
+      }
+      output "secret_access_key" {
+        value     = garage_key.writer.secret_access_key
+        sensitive = true
+      }
+  writeConnectionSecretToRef:
+    namespace: garage
+    name: garage-write-probe-s3
