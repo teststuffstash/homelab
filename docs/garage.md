@@ -404,6 +404,9 @@ Symptoms, not guessed causes; each names where to read next. In
   unauthenticated `/health`, whose body says "some storage nodes are unavailable" while its
   status stays 200. Added after 2026-09-08, when garage-0 dropped off the mesh hourly for three
   days with nothing Garage-shaped firing (ledger §The SA400 zone under rf=3 load).
+- **`GarageS3ServerErrors`** / **`GarageQuorumMembersRestarted`** — client-visible quorum loss:
+  ≥3 × 500/503 in 5m, and two quorum members (re)started inside 5 min (the 2026-09-09 07:22Z
+  rollout with no readiness probe cycled all three in 31 s; both exprs replay true on it).
 - **Node-level, not ours but load-bearing:** `NodeDiskIOSaturation` (kube-prometheus-stack;
   fired four short episodes on wk-metal-04 that week and resolved each time — the responder
   saw them, none became an issue), `LonghornVolumeDegraded/Faulted` (the volumes under the
