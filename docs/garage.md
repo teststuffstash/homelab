@@ -388,6 +388,28 @@ original pod only.
     prior-key consumer still authenticating — the §Durability grant sweep does not apply (no
     metadata was restored, it moved).
 
+### Belts — what alerts on the rf=3 store (2026-09-09)
+
+Symptoms, not guessed causes; each names where to read next. In
+[`garage-alerts/`](../argocd/resources/garage-alerts/) unless said otherwise:
+
+- **`GarageDiskFillingUp`** — a pod's data or metadata volume >80 % for 30m, per pod (at rf=3
+  one pod's metadata fill = rotate that zone, §Metadata reclamation; the loop clears it).
+- **`GarageTableEmpty`** / **`GarageAdminMetricsAbsent`** — the wipe detector and its blindness
+  belt (the 2026-08-24 class).
+- **`GarageClusterDegraded`** / **`GarageClusterFlapping`** / **`GaragePeerRpcTimeouts`** — a
+  storage node off the RPC mesh: sustained (10m), minutes-per-hour (≥5/60), and the observer's
+  own timeout counter. Source: the `garage-health` blackbox Probe
+  ([`blackbox.yaml`](../argocd/resources/blackbox/blackbox.yaml)) hitting each pod's
+  unauthenticated `/health`, whose body says "some storage nodes are unavailable" while its
+  status stays 200. Added after 2026-09-08, when garage-0 dropped off the mesh hourly for three
+  days with nothing Garage-shaped firing (ledger §The SA400 zone under rf=3 load).
+- **Node-level, not ours but load-bearing:** `NodeDiskIOSaturation` (kube-prometheus-stack;
+  fired four short episodes on wk-metal-04 that week and resolved each time — the responder
+  saw them, none became an issue), `LonghornVolumeDegraded/Faulted` (the volumes under the
+  pods), `KubeNodeUnreachable`. `GarageMetaRotation*` (the loop's own belts) are in
+  [`garage-meta-rotation/`](../argocd/resources/garage-meta-rotation/).
+
 ### Metadata reclamation — rotation, not compaction (ADR-114 addendum, 2026-09-06)
 
 **There is no in-place compaction for LMDB, and there never will be.** The only reclamation
