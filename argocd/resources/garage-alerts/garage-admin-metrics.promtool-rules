@@ -67,3 +67,21 @@ groups:
           severity: warning
         annotations:
           summary: Garage {{ $labels.pod }} is timing out RPCs to a peer ({{ $value | humanize }}/s)
+  - name: garage-availability
+    rules:
+      - alert: GarageS3ServerErrors
+        expr: |
+          sum by (status_code) (increase(api_s3_error_counter{status_code=~"500|503"}[5m])) >= 3
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: Garage S3 returned {{ $value | humanize }} × HTTP {{ $labels.status_code }} in 5m
+      - alert: GarageQuorumMembersRestarted
+        expr: |
+          count(kube_pod_start_time{namespace="garage",pod=~"garage-[0-9]+"} > time() - 300) >= 2
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} Garage quorum members started within the last 5 minutes"
