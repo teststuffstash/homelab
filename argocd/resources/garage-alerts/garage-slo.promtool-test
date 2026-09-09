@@ -115,10 +115,6 @@ tests:
             value: 0.0
 
   # ── S3 latency by endpoint class ───────────────────────────────────────────────────────────────
-  # Note: These fixtures validate that quantiles are computed correctly per endpoint and filtered
-  # by class. The endpoint_class label is added by label_replace but not validated in promtool
-  # tests due to framework limitations. In production, the rules will produce endpoint_class
-  # labels for dashboard consumption.
   - interval: 1m
     name: latency percentiles by endpoint class
     input_series:

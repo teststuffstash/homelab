@@ -208,8 +208,7 @@ spec:
     # - List p99 latency: < 5 s (measured: 1.5 s)
     # - Availability: ≥99.95% (measured: 99.95% request-level, 99.87% scrape-level since 2026-08-28)
     #
-    # These fixtures validate the error-ratio and latency-class recording rules only (the
-    # availability and volume rules are direct metric transformations — no fixtures needed).
+    # Fixtures validate request-rate, error-ratio, latency-by-class, availability, and volume-ratio rules.
     - name: garage-slo
       rules:
         # Request rate by endpoint — 5m average.
