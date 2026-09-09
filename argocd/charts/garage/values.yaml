@@ -250,6 +250,10 @@ extraVolumeMounts: {}
 # -- LOCAL PATCH (not upstream, see VENDORED.md): extra init containers rendered verbatim after the
 # chart's own garage-init. Used for the metadata rotation seed (docs/garage.md §Metadata reclamation).
 extraInitContainers: []
+# -- LOCAL PATCH (see VENDORED.md): StatefulSet minReadySeconds — the rollout waits this long
+# after a pod is Ready before touching the next, so a restarted quorum member has rejoined its
+# peers before another goes down (2026-09-09 07:22Z: all three cycled in 31 s, quorum lost).
+minReadySeconds: 0
 
 monitoring:
   metrics:
