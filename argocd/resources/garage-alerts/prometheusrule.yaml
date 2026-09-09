@@ -90,3 +90,55 @@ spec:
               Prometheus — the scrape is not working (ServiceMonitor selector, metrics token,
               or a metric-name drift), so those belts cannot fire regardless of Garage's state.
               Fix the scrape; do not silence this without confirming both families exist.
+    # ── CLUSTER HEALTH AT rf=3 — the 2026-09-08 gap (docs/garage.md §Belts) ─────────────────────
+    # garage-0 was unreachable to its peers for minutes EVERY HOUR for three days (Loki: "Too many
+    # failed pings", 165/peer in one 90-min window) and nothing Garage-shaped fired: the node
+    # belts (NodeDiskIOSaturation) caught 4 short episodes and resolved, rpc_timeout_counter
+    # crossed 0.2/s in only 5 of 72 hours. Three views of /health per minute (blackbox Probe
+    # garage-health, one target per pod) make "some storage nodes are unavailable" a metric.
+    - name: garage-cluster-health
+      rules:
+        # Acute: a node has seen the cluster degraded in every 5m window for 10m — same bridge
+        # shape and reasoning as EndpointProbeFailing (argocd/resources/blackbox/blackbox.yaml).
+        - alert: GarageClusterDegraded
+          expr: |
+            min_over_time(probe_success{job="blackbox-garage-health"}[5m]) == 0
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage cluster degraded as seen from {{ $labels.instance }}"
+            description: >-
+              This node's /health has not said "fully operational" in any 5m window for 10m — a
+              storage node is unavailable from its point of view (or the node itself is off the
+              mesh: a partitioned node reports the peers it cannot reach, so read all three
+              targets). At rf=3 quorum still serves; the exposure is a SECOND zone. Which peer
+              and why: the garage Loki tenant ("Ping timeout", "Too many failed pings from <id>"),
+              then the node — the 2026-09-08 class was wk-metal-04's SA400 at 300–760 ms writes.
+        # Chronic: the hourly-dropout pattern, which never lasts 10m at a stretch. ≥5 degraded
+        # minutes in the last hour, from any node's view.
+        - alert: GarageClusterFlapping
+          expr: |
+            count_over_time(probe_success{job="blackbox-garage-health"}[1h])
+              - sum_over_time(probe_success{job="blackbox-garage-health"}[1h]) >= 5
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage cluster degraded ≥5 min in the last hour as seen from {{ $labels.instance }}"
+            description: >-
+              A storage node keeps dropping off the RPC mesh for minutes at a time — the pattern
+              that shadowed multipart parts and stretched UploadPart p99 to 100 s on 2026-09-08
+              without any sustained outage. Read the garage Loki tenant for which node id the
+              peers cannot ping, then that node's disk latency (node_disk_write_time) and load.
+        # The observer-side symptom, from Garage's own counters: RPCs to a peer timing out.
+        - alert: GaragePeerRpcTimeouts
+          expr: |
+            sum by (pod) (rate(rpc_timeout_counter[10m])) > 0.1
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage {{ $labels.pod }} is timing out RPCs to a peer ({{ $value | humanize }}/s)"
+            description: >-
+              This pod's RPCs to some peer have been timing out at more than 0.1/s for 15m —
+              table reads fall back to the other replica and quorum writes wait. The peer is not
+              named in the metric; the pod's log is ("Error pinging <id>: Ping timeout"). On
+              2026-09-08 the peers saw 2.2–2.5/s while garage-0 stalled.

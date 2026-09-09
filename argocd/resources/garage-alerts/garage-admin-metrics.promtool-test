@@ -247,3 +247,57 @@ tests:
       - eval_time: 40m
         alertname: GarageAdminMetricsAbsent
         exp_alerts: []
+
+  # ── CLUSTER HEALTH: the hourly-dropout pattern fires Flapping but not Degraded ───────────────
+  # 6 failed probes spread over an hour (never 10 min in a row): Flapping fires, Degraded stays
+  # silent. Then a 12-min continuous outage: Degraded fires after its 10m `for:`.
+  - interval: 1m
+    name: "GarageClusterFlapping catches minutes-per-hour dropouts; GarageClusterDegraded needs a sustained one"
+    input_series:
+      # one failure every 10 minutes for the first hour, then 12 minutes down from t=70
+      - series: 'probe_success{job="blackbox-garage-health",instance="http://garage-0.garage-headless.garage.svc.cluster.local:3903/health"}'
+        values: "1 1 1 1 1 0 1 1 1 1 1 1 1 1 1 0 1 1 1 1 1 1 1 1 1 0 1 1 1 1 1 1 1 1 1 0 1 1 1 1 1 1 1 1 1 0 1 1 1 1 1 1 1 1 1 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"
+      - series: 'probe_success{job="blackbox-garage-health",instance="http://garage-1.garage-headless.garage.svc.cluster.local:3903/health"}'
+        values: "1+0x100"
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: GarageClusterFlapping
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: blackbox-garage-health
+              instance: http://garage-0.garage-headless.garage.svc.cluster.local:3903/health
+            exp_annotations:
+              summary: "Garage cluster degraded ≥5 min in the last hour as seen from http://garage-0.garage-headless.garage.svc.cluster.local:3903/health"
+      - eval_time: 59m
+        alertname: GarageClusterDegraded
+        exp_alerts: []
+      - eval_time: 81m
+        alertname: GarageClusterDegraded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: blackbox-garage-health
+              instance: http://garage-0.garage-headless.garage.svc.cluster.local:3903/health
+            exp_annotations:
+              summary: "Garage cluster degraded as seen from http://garage-0.garage-headless.garage.svc.cluster.local:3903/health"
+  # ── PEER RPC TIMEOUTS: 0.2/s sustained fires after 15m; a quiet pod does not ────────────────
+  - interval: 1m
+    name: "GaragePeerRpcTimeouts fires on a sustained timeout rate"
+    input_series:
+      - series: 'rpc_timeout_counter{pod="garage-2",rpc_endpoint="x"}'
+        values: "0+12x40"
+      - series: 'rpc_timeout_counter{pod="garage-0",rpc_endpoint="x"}'
+        values: "0+0x40"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: GaragePeerRpcTimeouts
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: GaragePeerRpcTimeouts
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              pod: garage-2
+            exp_annotations:
+              summary: "Garage garage-2 is timing out RPCs to a peer (200m/s)"
