@@ -10,6 +10,23 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-09 evening seat — the drive-fitting windows; full arc in TICK-LOG):**
+  (1) **Rotate garage-0 onto `intel0`** on wk-metal-04 (its data/meta still sit on the SA400):
+  set the `sata500` disk `allowScheduling: false` first (three schedulable disks on the node,
+  `longhorn-local-xfs` is selector-less), then the zone rotation as in `garage.md` §The build-out
+  (delete pod + PVCs, resync from two healthy peers ≈ 1 h at ~19 MB/s, or the tar seed) — expect
+  the PUT p99 to drop (the 2-of-3 quorum path becomes NVMe+NVMe). Then the ledger's "Current
+  shape" table + FU-093 line. (2) **Hardware arrival read** for the two 7600p (SMART
+  `percentage_used`, Opal) via the runbook's privileged-pod recipe → `teststuff/hardware`
+  purchases/inventory rows (the operator has an uncommitted `purchases.md` edit there — merge
+  around it). (3) **thinkcentre x16 slot never linked** (CPU root port `00:01.0` absent with the
+  7600p on the Axagon; the two Optanes sit on the closed x1 slots); untested with a known-good
+  card — abandoned for today (operator). m70s waits for a Gembird (LP). hp-01 untouched.
+  (4) **Plug ids were crossed since 08-18 → incident
+  `2026-09-09-crossed-plug-hp01-outage.md`**; swapped in the HA registry, `power` subcommand
+  refuses a loaded socket. (5) Seat reads done: #1561 merged (approved), **#1562 fixed in-PR
+  (kustomize-only source, one probe.py) and waiting on the bot's re-review → then the seat's
+  approve**; #1570 (this PR: the disks + the ride-detector fix) auto-merge armed.
 - **⚑ PICKUP (2026-09-08 late corpus session, ~19:1xZ wind-down — the five-PR read + S8 #1423 BUILT):**
   (1) **S8 #1423 is DONE** — PR#1535 (scan nomination + trigger (e) + footprint predicates +
   goal-lint), PR#1531 (reviewer depth re-key), PR#1530 (checkpoint theme play + docs); closed with
