@@ -1,9 +1,12 @@
 # Power measurements
 
 > **Plug rename 2026-08-18:** the two NOUS A1 sockets `aquarium` → **`thinkcentre`** and
-> `konditsioneer` → **`hp`** (the loads moved: ex-aquarium powers the ThinkCentre, ex-konditsioneer
-> powers hp-01). Mentions of the old names below are historical — series under
-> `sensor.plug_{thinkcentre,hp}_*` start 2026-08-18.
+> `konditsioneer` → **`hp`**. Mentions of the old names below are historical — series under
+> `sensor.plug_{thinkcentre,hp}_*` start 2026-08-18. **⚠ The rename was crossed until 2026-09-09**
+> (the `thinkcentre` id sat on hp-01's socket and vice versa — it cost a two-zone std outage, see
+> [`incidents/2026-09-09-crossed-plug-hp01-outage.md`](incidents/2026-09-09-crossed-plug-hp01-outage.md));
+> the entity ids were swapped in the HA registry that day, so `plug_*` samples between 08-18 and
+> 09-09 belong to the other box (thinkcentre idles ~32 W, hp-01 ~24 W — not the reverse).
 
 _Part of the [homelab docs](README.md). Structured inventory + generated tables:
 [`../machines/`](../machines/README.md). Why the laptops are the compute tier: [`adr.md`](adr.md) ADR-044._
