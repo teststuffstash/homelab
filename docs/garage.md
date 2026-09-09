@@ -483,7 +483,7 @@ Two halves, both in git, nothing attended:
   `ALERTS{alertname="GarageDiskFillingUp",volume="metadata"}` firing, so cadence follows churn
   (addendum (b)); an idle run is one query and a heartbeat. Gate (addendum (c)): every garage pod
   Ready and ≥10 min old, every node `isUp` and not draining, no table with >10 000 Merkle/insert
-  items queued on any node (write bursts reach ~3k; a resync is 28k–690k), every block resync queue <5 000, no rotation pending, none finished in the
+  items queued on any node (write bursts reach ~3k; a resync is 28k–690k), every block resync queue <100 000 (churn peaks ~30k; a resync is 500k+), no rotation pending, none finished in the
   last 12 h. Then, for ONE zone: write the order → `delete pod` → wait Ready → read the init
   container's verdict → `LaunchRepairOperation tables` on that node (admin API, not exec) → wait
   until its `object`/`version`/`block_ref` item counts are within 0.5 % of the peers' and its
