@@ -160,14 +160,12 @@ never the session's arc — that is TICK-LOG's.)
   design pass (WAN accounting) · #1280 held-for-evidence (kind-timing distribution first) ·
   Cloudflare: mint `Cache Purge` onto tofu-apply, or rely on oracle-fleet#414's
   Cache-Control (decision open) · Garage: delete `backups/garage-meta-20260825-prerebuild/` (20 GB) +
-  `garage-meta-forensics/` (due since ~09-01). **⚑ 2026-09-09 OPERATOR-OWNED: `GarageDiskFillingUp`
-  is garage-0 ONLY (wk-metal-04/SA400)** — its 09-07 native rotation left a 27.9 GB LMDB for
-  ~4 GB of data (garage-1, snapshot-seeded, 6.3 GB; garage-2 16.2 GB — identical tables), 3.4 GiB
-  headroom, ~1.5 GB/day. Sitting: rotate garage-0 again with the build-out's **metadata-seed
-  leg** (a peer's latest FINISHED snapshot → new volume → `repair tables/blocks` only verify;
-  never the bare native `repair tables` — garage.md §Metadata reclamation, corrected 09-09).
-  Acceptance: garage-0 meta ≈ 6 GB AND its ListObjectsV2 p99 down to garage-1's (~4.5 s vs
-  35.7 s). The resync measurement is DONE (ledger); the 3 ERT giants STAY (docs/garage.md §Durability).
+  `garage-meta-forensics/` (due since ~09-01). **Garage metadata is UNATTENDED since 2026-09-09**:
+  the rotation loop (PR#1549 + thresholds #1551/#1553/#1554) rotated garage-0 on its own at
+  08:45Z, 27.83 → 4.68 GB in 4 min (ledger). Residual watch: garage-2's `table_gc_todo`
+  (1.77 M earlier, GC failing while garage-0 flapped) should drain now — if it does not, that
+  is a belt to add; garage-0's ListObjectsV2 p99 should fall to garage-1's (~4.5 s vs 35.7 s).
+  The 3 ERT giants STAY (docs/garage.md §Durability).
 - **⚑ GOALS — verdicts are the operator's, the seat recommends:**
   - **#818 G-B — HELD with a posted 4-clause verdict condition** (teeth drills deferred to
     oracle's production launch; lens posture advisory-steady-state; responder shadow; prober

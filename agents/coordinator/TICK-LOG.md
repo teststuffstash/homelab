@@ -8080,3 +8080,36 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
 - **Open:** the snapshot-seeded rotation of garage-0 (FU-137, meta-state sitting; ~1.5 GB/day into
   3.4 GiB) and the SA400 swap (buy list). Acceptance for both handoffs = garage-0's ListObjectsV2
   p99 at garage-1's level after the rotation.
+
+## 2026-09-09 morning (~06:4x–09:0xZ) — the rotation loop built and run; belts before fixes (operator ruling)
+
+- **Condition:** operator chose "build the loop first, first run = garage-0" (FU-137). `/design`
+  read: garage.md §Metadata reclamation/§build-out, ADR-114 (+addendum b/c), ledger, upstream
+  v2.3.0 (`lmdb_adapter.rs`, `snapshot.rs`, admin `api.rs`), node-fstrim as the precedent.
+- **Built (PR#1549, reviewer caught the cooldown gap — fixed):** seed = `meta-rotate` init
+  container (vendored-chart patch `extraInitContainers`) swapping the pod's own finished
+  auto-snapshot in; loop = CronJob polling the alert with a health gate; belts
+  `GarageMetaRotation{Failed,ControllerSilent,NotReclaiming}`. Three live gate refusals tuned
+  from 7-day data (#1551 insert=1 → thresholds; #1553 Merkle 2597 → 10k; #1554 resync 8081 →
+  100k). **First unattended run 08:45Z: garage-0 27.83 → 4.68 GB, seed 76 s / Ready 100 s /
+  converge 55 s**, alert cleared, quorum served.
+- **Operator question "nothing alerted wk-metal-04 dropping out?"** → yes, a gap: node belts
+  fired briefly (NodeDiskIOSaturation ×4, resolved inside the responder's window), nothing
+  Garage-shaped. **PR#1550:** `/health`-per-pod blackbox probe (unauthenticated; body says
+  "some storage nodes are unavailable" at 200) + `GarageClusterDegraded/Flapping/PeerRpcTimeouts`.
+  ⚠ blackbox-exporter needs `POST /-/reload` after a module edit (done by hand; the pod is 5 d
+  old and does not watch its ConfigMap) — note for blackbox.yaml.
+- **Uptime question:** measurable since 08-28 only (ServiceMonitor): 99.87 % scrape-level,
+  99.95 % request-level over 12 days; the SA400 stall is latency, invisible to both. No Garage
+  dashboard/SLO exists anywhere (grepped tracker/issues/roadmap/live CMs).
+- **Operator ruling (recorded: memory, GAPS handoff-G1, seat card §Safety via PR#1552):** a
+  stack report is only "there is a problem" — build the PLATFORM detector first, replay it on
+  the event, land it, THEN fix from the alert. Applied to oracle-fleet#228's rollout-quorum-loss
+  comment: **PR#1552** `GarageS3ServerErrors` + `GarageQuorumMembersRestarted` (both replay true
+  at 07:25Z; reviewer struck an asserted fix class from the description — reworded). The fix
+  (readiness probe on `/health` + `minReadySeconds` 90; the chart ships NO readiness probe, so
+  the 07:22Z rollout cycled all three pods in 31 s) = **PR#1555**, whose rollout is the belt's
+  live test.
+- Also: adapters for m70s NOT arrived (inventory corrected: thinkcentre Optanes are PCIe cards,
+  no native M.2 anywhere); `resync_cfg` PERSISTS in the meta dir (the "ephemeral" note was
+  wrong); stale pre-rotation node id b4bea2… still in every `peer_list` (knownNodes 4/3).
