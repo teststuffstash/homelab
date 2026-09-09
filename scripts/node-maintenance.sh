@@ -17,7 +17,10 @@
 #         for it to finish (≤ SETTLE_TIMEOUT, 3600 s), node cordoned so nothing new lands
 #   MOVE  a last replica whose consumer is long-lived (StatefulSet/Deployment/DaemonSet) — settle
 #         adds a replica elsewhere (numberOfReplicas+1), waits for the rebuild, deletes the one on
-#         this node, restores the count (≤ MOVE_TIMEOUT, 1800 s per volume)
+#         this node, restores the count (≤ MOVE_TIMEOUT, 1800 s per volume). A last replica that
+#         transient pods keep re-holding (the coordinator's RWX transcripts volume: back-to-back
+#         runs, 2026-09-09) is moved the same way once it has blocked for MOVE_AFTER (600 s).
+#   bash scripts/node-maintenance.sh move <node> <volume>   # that move, by hand, for one volume
 #
 # What preflight refuses on (exit 2 — pass FORCE=1 to override a WARN-class one):
 #   FAIL  node missing / not Ready / Talos API unreachable
@@ -51,6 +54,7 @@ HEALTHY_TIMEOUT="${HEALTHY_TIMEOUT:-1800}" # s — Longhorn replica re-sync afte
 FORCE="${FORCE:-0}"
 SETTLE_TIMEOUT="${SETTLE_TIMEOUT:-3600}" # s — rides / transient consumers to finish (node cordoned meanwhile)
 MOVE_TIMEOUT="${MOVE_TIMEOUT:-1800}"     # s — per volume: the extra replica's rebuild elsewhere
+MOVE_AFTER="${MOVE_AFTER:-600}"          # s — a last replica still held by TRANSIENT pods after this long gets moved too
 DRY="${DRY:-0}"                          # settle: report what it would wait on / move, change nothing
 
 log()  { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
@@ -191,7 +195,11 @@ pvc_of() { kubectl get pvc -A -o json | jq -r --arg v "$1" '.items[]|select(.spe
 # it elsewhere — the node is cordoned, so never here), wait healthy, delete the replica on $NODE,
 # restore the count. Longhorn has no "move replica"; this is the UI's add-then-delete, scripted.
 move_replica() {
-  local v="$1" n t=0 elsewhere robust r
+  local v="$1" n t=0 elsewhere robust r state
+  state="$(kubectl -n longhorn-system get volumes.longhorn.io "$v" -o jsonpath='{.status.state}')"
+  # a DETACHED volume has no engine, so Longhorn cannot rebuild it: +1 would sit forever (the
+  # 2026-09-09 oracle transcripts move timed out exactly so) — and it does not block a drain
+  [ "$state" = attached ] || { log "move $v: volume is $state, not attached — nothing to move (a stopped last replica does not block the drain)"; return 0; }
   n="$(kubectl -n longhorn-system get volumes.longhorn.io "$v" -o jsonpath='{.spec.numberOfReplicas}')"
   log "move $v: numberOfReplicas $n → $((n+1)), rebuilding off $NODE (≤${MOVE_TIMEOUT}s)"
   kubectl -n longhorn-system patch volumes.longhorn.io "$v" --type=merge -p "{\"spec\":{\"numberOfReplicas\":$((n+1))}}" >/dev/null
@@ -209,7 +217,7 @@ move_replica() {
 }
 
 settle() {
-  local t=0 lr rides moved="" v state pvc consumer kind blocking last_report=-1000
+  local t=0 lr rides moved="" seen="" since v state pvc consumer kind blocking last_report=-1000
   if [ "$DRY" = 1 ]; then log "DRY=1: reporting only, no cordon / move"; else
     log "cordon $NODE (nothing new lands here while we wait; Longhorn follows the cordon)"; kubectl cordon "$NODE" >/dev/null; fi
   while :; do
@@ -217,8 +225,12 @@ settle() {
     while read -r v state pvc consumer; do
       [ -z "$v" ] || [ "$state" != attached ] && continue
       kind="${consumer%%:*}"
-      if ! transient_kind "$kind" && ! grep -q " $v " <<<" $moved "; then
-        if [ "$DRY" = 1 ]; then log "would MOVE $v ($pvc) — held by $consumer"; else move_replica "$v" || return 1; fi
+      grep -q " $v=" <<<" $seen " || seen="$seen $v=$t"
+      since=$(( t - $(sed -n "s/.* $v=\([0-9]*\).*/\1/p" <<<" $seen ") ))
+      if ! grep -q " $v " <<<" $moved " && { ! transient_kind "$kind" || [ "$since" -ge "$MOVE_AFTER" ]; }; then
+        if [ "$DRY" = 1 ]; then log "would MOVE $v ($pvc) — held by $consumer"; else
+          [ "$since" -ge "$MOVE_AFTER" ] && log "$v ($pvc): still held by transient pods after ${since}s (MOVE_AFTER=$MOVE_AFTER) — moving instead of waiting"
+          move_replica "$v" || return 1; fi
         moved="$moved $v"
       fi
     done <<<"$lr"
@@ -310,6 +322,7 @@ up() {
 case "$cmd" in
   preflight) preflight ;;
   settle) settle ;;
+  move) [ -n "${3:-}" ] || usage; move_replica "$3" ;;
   down) down ;;
   up) up ;;
   *) usage ;;
