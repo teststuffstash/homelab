@@ -131,15 +131,16 @@ preflight() {
 
   # replicas living on this node — the last-replica cases come from last_replicas() (see it for
   # the attached/detached distinction; the rest keep a sibling elsewhere and merely go degraded)
-  local here n lr v state pvc consumer
+  local here n lr v state pvc consumer settle_fails=0
   here="$(jq -r --arg n "$NODE" '.items[]|select(.spec.nodeID==$n)|.spec.volumeName' <<<"$reps" | sort -u)"
   n="$(printf '%s\n' $here | sed '/^$/d' | wc -l)"
   lr="$(last_replicas)"
   while read -r v state pvc consumer; do
     [ -z "$v" ] && continue
     if [ "$state" = attached ]; then
+      settle_fails=$((settle_fails+1))
       if transient_kind "${consumer%%:*}"; then
-        fail "volume $v ($pvc): attached, its ONLY running replica is on $NODE, held by $consumer — the drain would block; \`settle\` waits for that pod to finish"
+        fail "volume $v ($pvc): attached, its ONLY running replica is on $NODE, held by $consumer — the drain would block; \`settle\` waits for that pod to finish (moves it after MOVE_AFTER=${MOVE_AFTER}s)"
       else
         fail "volume $v ($pvc): attached, its ONLY running replica is on $NODE, held by $consumer — the drain would block; \`settle\` moves the replica (numberOfReplicas+1 → rebuild → drop this one)"
       fi
@@ -180,7 +181,7 @@ preflight() {
 
   echo
   if [ "$FAILS" -gt 0 ]; then
-    if [ -n "$lr" ] && [ "$FAILS" -eq "$(grep -c ' attached ' <<<"$lr")" ]; then
+    if [ "$settle_fails" -gt 0 ] && [ "$FAILS" -eq "$settle_fails" ]; then
       if [ "$WARNS" -gt 0 ] && [ "$FORCE" != 1 ]; then echo "preflight: $FAILS FAIL (all last-replica — \`settle\` handles them), $WARNS WARN — re-run with FORCE=1 to accept the WARNs"; return 2; fi
       echo "preflight: $FAILS FAIL (all last-replica — \`settle\` handles them), $WARNS WARN — NOT safe yet"; return 3; fi
     echo "preflight: $FAILS FAIL, $WARNS WARN — NOT safe"; return 2; fi
@@ -252,6 +253,9 @@ down() {
   [ "$rc" = 2 ] && return 2
   local ip; ip="$(node_ip)"
   settle || return $?
+  # DRY=1 previews the whole window: settle reported what it would wait on / move — stop here,
+  # never a real drain or power-off under a dry-run flag (reviewer, PR#1564).
+  [ "$DRY" = 1 ] && { log "DRY=1: would now cordon (if not yet), drain $NODE and talosctl shutdown — stopping"; return 0; }
   log "drain $NODE (timeout $DRAIN_TIMEOUT)"
   kubectl drain "$NODE" --ignore-daemonsets --delete-emptydir-data --timeout="$DRAIN_TIMEOUT"
   local left
