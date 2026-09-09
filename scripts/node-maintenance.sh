@@ -5,19 +5,34 @@
 # uncordon → Longhorn healthy again).
 #
 #   bash scripts/node-maintenance.sh preflight <node>   # read-only: is the node safe to take down?
-#   bash scripts/node-maintenance.sh down      <node>   # preflight → cordon → drain → talosctl shutdown
+#   bash scripts/node-maintenance.sh settle    <node>   # cordon, then DO what preflight only reports:
+#                                                        wait out rides/transient consumers, MOVE the
+#                                                        last replicas long-lived pods hold (DRY=1: report)
+#   bash scripts/node-maintenance.sh down      <node>   # preflight → settle → drain → talosctl shutdown
 #   bash scripts/node-maintenance.sh up        <node>   # WoL (metal) → wait Ready → uncordon → wait Longhorn healthy
+#
+# `down` does as much as it can before it lets a drain block (operator direction 2026-09-09):
+#   WAIT  a ride / Argo Workflow / coordinator pod, or a last replica whose consumer is such a
+#         transient pod (Job, Workflow, bare Pod, anything in an agent namespace) — settle waits
+#         for it to finish (≤ SETTLE_TIMEOUT, 3600 s), node cordoned so nothing new lands
+#   MOVE  a last replica whose consumer is long-lived (StatefulSet/Deployment/DaemonSet) — settle
+#         adds a replica elsewhere (numberOfReplicas+1), waits for the rebuild, deletes the one on
+#         this node, restores the count (≤ MOVE_TIMEOUT, 1800 s per volume). A last replica that
+#         transient pods keep re-holding (the coordinator's RWX transcripts volume: back-to-back
+#         runs, 2026-09-09) is moved the same way once it has blocked for MOVE_AFTER (600 s).
+#   bash scripts/node-maintenance.sh move <node> <volume>   # that move, by hand, for one volume
 #
 # What preflight refuses on (exit 2 — pass FORCE=1 to override a WARN-class one):
 #   FAIL  node missing / not Ready / Talos API unreachable
-#   FAIL  a Longhorn volume is ATTACHED to this node and this node holds its only replica
-#   FAIL  a Longhorn replica on this node is its volume's LAST running replica anywhere
-#         (Longhorn's `node-drain-policy=block-if-contains-last-replica` would block the drain
-#         too — we say WHICH volume, up front)
+#   FAIL  an ATTACHED Longhorn volume's only running replica is on this node (the drain would
+#         block on Longhorn's instance-manager PDB) — `settle` waits it out or moves it, see below
+#   WARN  a DETACHED volume's last replica is stopped on this node — offline for the window, back
+#         with the disk (the cluster runs node-drain-policy=allow-if-replica-is-stopped, so the
+#         drain proceeds; replica-1 classes longhorn-single/-fast/-scratch are replica-1 BY DESIGN)
 #   FAIL  any attached Longhorn volume cluster-wide is already degraded (a second outage on
 #         top of a rebuild is how a 2-replica volume loses data)
 #   WARN  a StatefulSet pod runs here (it moves, but that is a service interruption)
-#   WARN  an Argo Workflow / agent ride pod runs here (drain kills the ride; let it finish)
+#   WAIT  an Argo Workflow / agent ride / coordinator pod runs here (not a WARN: settle waits)
 #   WARN  a Deployment pod runs here with replicas==1 (drain = downtime for that service)
 #
 # This is a WORKER recipe. cp-01 is the only control plane — its window is the Proxmox
@@ -37,6 +52,10 @@ DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-600s}"
 READY_TIMEOUT="${READY_TIMEOUT:-900}"     # s — a metal box that PXE-times-out first takes ~5 min
 HEALTHY_TIMEOUT="${HEALTHY_TIMEOUT:-1800}" # s — Longhorn replica re-sync after the node returns
 FORCE="${FORCE:-0}"
+SETTLE_TIMEOUT="${SETTLE_TIMEOUT:-3600}" # s — rides / transient consumers to finish (node cordoned meanwhile)
+MOVE_TIMEOUT="${MOVE_TIMEOUT:-1800}"     # s — per volume: the extra replica's rebuild elsewhere
+MOVE_AFTER="${MOVE_AFTER:-600}"          # s — a last replica still held by TRANSIENT pods after this long gets moved too
+DRY="${DRY:-0}"                          # settle: report what it would wait on / move, change nothing
 
 log()  { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 ok()   { printf '  \033[32mOK\033[0m   %s\n' "$*"; }
@@ -51,6 +70,42 @@ WARNS=0; FAILS=0
 node_ip() { kubectl get node "$NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'; }
 node_mac() { grep -oE "\"host\": \"$NODE\", \"hwaddr\": \"[0-9a-f:]+\"" "$REPO/opnsense/dnsmasq-dhcp.py" | grep -oE '[0-9a-f:]{17}' | tr -d ':'; }
 node_ready() { kubectl get node "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null; }
+
+# Volumes whose LAST usable replica sits on $NODE, one per line:
+#   <volume> <attached|detached> <ns/pvc> <consumer>
+# consumer = <Kind>:<pod> of the live (Running/Pending) pod holding it, or "-" (Longhorn's
+# kubernetesStatus.workloadsStatus; a bare pod — the coordinator's shape — reports Kind "Pod").
+# ATTACHED: no RUNNING sibling elsewhere. DETACHED: no HEALTHY (failedAt empty) sibling elsewhere —
+# a detached volume has no running replica ANYWHERE, which is why the running-only test used to
+# flag every detached volume on the node (2026-09-09, three false FAILs on thinkcentre).
+last_replicas() {
+  local tv tr; tv="$(mktemp)"; tr="$(mktemp)"
+  kubectl -n longhorn-system get volumes.longhorn.io -o json >"$tv"
+  kubectl -n longhorn-system get replicas.longhorn.io -o json >"$tr"
+  jq -rn --arg n "$NODE" --slurpfile V "$tv" --slurpfile R "$tr" '
+    ($R[0].items) as $reps | ($V[0].items) as $vols
+    | ([$reps[]|select(.spec.nodeID==$n)|.spec.volumeName]|unique[]) as $v
+    | ($vols[]|select(.metadata.name==$v)) as $vol
+    | $vol.status.state as $state
+    | (if $state=="attached"
+       then [$reps[]|select(.spec.volumeName==$v and .spec.nodeID!=$n and .status.currentState=="running")]|length
+       else [$reps[]|select(.spec.volumeName==$v and .spec.nodeID!=$n and .spec.failedAt=="")]|length end) as $others
+    | select($others<1)
+    | ([$vol.status.kubernetesStatus.workloadsStatus[]?|select(.podStatus=="Running" or .podStatus=="Pending")]|first) as $w
+    | "\($v) \($state) \($vol.status.kubernetesStatus.namespace)/\($vol.status.kubernetesStatus.pvcName) \(if $w then ((if $w.workloadType=="" then "Pod" else $w.workloadType end)+":"+$w.podName) else "-" end)"'
+  rm -f "$tv" "$tr"
+}
+# Transient consumers/pods: settle WAITS for them. Long-lived ones hold their volume until the
+# drain moves the pod — a last replica under one of those must be MOVED instead.
+transient_kind() { case "$1" in Pod|Job|CronJob|Workflow|-) return 0;; *) return 1;; esac; }
+# Ride / Argo Workflow / coordinator pods on $NODE still running: "<ns>/<pod> <phase>"
+rides_running() {
+  kubectl get pods --field-selector "spec.nodeName=$NODE" -A -o json | jq -r '.items[]
+    | select(.status.phase=="Running" or .status.phase=="Pending")
+    | select((.metadata.ownerReferences[0].kind=="Workflow") or (.metadata.labels["workflows.argoproj.io/workflow"]!=null)
+             or ((.metadata.namespace|test("^agent-|-agents$")) and ((.metadata.ownerReferences[0].kind // "Pod")|IN("Pod","Job","Workflow"))))
+    | "\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"'
+}
 
 # ---------------------------------------------------------------- preflight
 preflight() {
@@ -74,30 +129,29 @@ preflight() {
   degraded="$(jq -r '.items[]|select(.status.state=="attached" and .status.robustness!="healthy")|"\(.metadata.name) \(.status.robustness) on \(.status.currentNodeID)"' <<<"$vols")"
   if [ -z "$degraded" ]; then ok "Longhorn: no degraded attached volume cluster-wide"; else fail "Longhorn degraded attached volume(s):"$'\n'"$degraded"; fi
 
-  # replicas living on this node. An ATTACHED volume must keep ≥1 RUNNING replica elsewhere.
-  # A DETACHED volume has NO running replica anywhere (2026-09-09: three false FAILs on
-  # thinkcentre, one of them a 2-replica volume with a healthy sibling on wk-02) — for it the
-  # question is whether a HEALTHY (failedAt empty) replica exists elsewhere; if not, its last
-  # replica is stopped here and the drain is only allowed under node-drain-policy
-  # `allow-if-replica-is-stopped` (tofu/longhorn.tf) — the data is offline for the window and
-  # returns with the node's disk. That is a WARN (the operator accepts it), not a FAIL.
-  local here n others v state lastrep=0
+  # replicas living on this node — the last-replica cases come from last_replicas() (see it for
+  # the attached/detached distinction; the rest keep a sibling elsewhere and merely go degraded)
+  local here n lr v state pvc consumer settle_fails=0
   here="$(jq -r --arg n "$NODE" '.items[]|select(.spec.nodeID==$n)|.spec.volumeName' <<<"$reps" | sort -u)"
-  n=0
-  for v in $here; do
-    n=$((n+1))
-    state="$(jq -r --arg v "$v" '.items[]|select(.metadata.name==$v)|.status.state' <<<"$vols")"
+  n="$(printf '%s\n' $here | sed '/^$/d' | wc -l)"
+  lr="$(last_replicas)"
+  while read -r v state pvc consumer; do
+    [ -z "$v" ] && continue
     if [ "$state" = attached ]; then
-      others="$(jq -r --arg n "$NODE" --arg v "$v" '[.items[]|select(.spec.volumeName==$v and .spec.nodeID!=$n and .status.currentState=="running")]|length' <<<"$reps")"
-      [ "$others" -lt 1 ] && { lastrep=1; fail "volume $v ($(pvc_of "$v")): attached, its ONLY running replica is on $NODE — drain would be blocked and the data offline"; }
+      settle_fails=$((settle_fails+1))
+      if transient_kind "${consumer%%:*}"; then
+        fail "volume $v ($pvc): attached, its ONLY running replica is on $NODE, held by $consumer — the drain would block; \`settle\` waits for that pod to finish (moves it after MOVE_AFTER=${MOVE_AFTER}s)"
+      else
+        fail "volume $v ($pvc): attached, its ONLY running replica is on $NODE, held by $consumer — the drain would block; \`settle\` moves the replica (numberOfReplicas+1 → rebuild → drop this one)"
+      fi
     else
-      others="$(jq -r --arg n "$NODE" --arg v "$v" '[.items[]|select(.spec.volumeName==$v and .spec.nodeID!=$n and .spec.failedAt=="")]|length' <<<"$reps")"
-      [ "$others" -lt 1 ] && { lastrep=1; warn "volume $v ($(pvc_of "$v")): detached, its last replica is stopped on $NODE — offline for the window (drain needs node-drain-policy=allow-if-replica-is-stopped); keep that disk in the box"; }
+      warn "volume $v ($pvc): detached, its last replica is stopped on $NODE — offline for the window (drain allowed: node-drain-policy=allow-if-replica-is-stopped); keep that disk in the box"
     fi
-  done
-  [ "$n" -gt 0 ] && [ "$lastrep" = 1 ] && log "Longhorn: $n replica(s) on $NODE (the rest keep a healthy sibling elsewhere; rebuild timer $(kubectl -n longhorn-system get settings.longhorn.io replica-replenishment-wait-interval -o jsonpath='{.value}')s):"
-  [ "$n" -gt 0 ] && [ "$lastrep" = 0 ] && ok "Longhorn: $n replica(s) on $NODE, each volume keeps a running replica elsewhere (they go degraded for the window; rebuild timer $(kubectl -n longhorn-system get settings.longhorn.io replica-replenishment-wait-interval -o jsonpath='{.value}')s)"
-  [ "$n" -eq 0 ] && ok "Longhorn: no replicas on $NODE"
+  done <<<"$lr"
+  if [ "$n" -gt 0 ]; then
+    if [ -n "$lr" ]; then log "Longhorn: $n replica(s) on $NODE (the rest keep a healthy sibling elsewhere; rebuild timer $(kubectl -n longhorn-system get settings.longhorn.io replica-replenishment-wait-interval -o jsonpath='{.value}')s):"
+    else ok "Longhorn: $n replica(s) on $NODE, each volume keeps a running replica elsewhere (they go degraded for the window; rebuild timer $(kubectl -n longhorn-system get settings.longhorn.io replica-replenishment-wait-interval -o jsonpath='{.value}')s)"; fi
+  else ok "Longhorn: no replicas on $NODE"; fi
   printf '%s\n' $here | sed '/^$/d' | while read -r v; do printf '         %s  %s\n' "$v" "$(pvc_of "$v")"; done
 
   # volumes attached to (i.e. a workload consuming them on) this node
@@ -112,8 +166,8 @@ preflight() {
   local sts rides single
   sts="$(jq -r '.items[]|select(.metadata.ownerReferences[0].kind=="StatefulSet")|"\(.metadata.namespace)/\(.metadata.name)"' <<<"$pods")"
   [ -z "$sts" ] && ok "no StatefulSet pod on $NODE" || warn "StatefulSet pod(s) on $NODE — a service interruption while they move:"$'\n'"$(sed 's/^/         /' <<<"$sts")"
-  rides="$(jq -r '.items[]|select((.metadata.ownerReferences[0].kind=="Workflow") or (.metadata.labels["workflows.argoproj.io/workflow"]!=null) or (.metadata.namespace|test("^agent-")))|"\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"' <<<"$pods")"
-  [ -z "$rides" ] && ok "no Argo Workflow / agent ride pod on $NODE" || warn "ride pod(s) on $NODE — the drain kills them mid-flight:"$'\n'"$(sed 's/^/         /' <<<"$rides")"
+  rides="$(rides_running)"
+  [ -z "$rides" ] && ok "no Argo Workflow / agent ride / coordinator pod on $NODE" || printf '  \033[36mWAIT\033[0m ride pod(s) on %s — \`settle\` waits for them (a drain would kill them mid-flight):\n%s\n' "$NODE" "$(sed 's/^/         /' <<<"$rides")"
   single="$(jq -r '.items[]|select(.metadata.ownerReferences[0].kind=="ReplicaSet")|"\(.metadata.namespace) \(.metadata.name)"' <<<"$pods" | while read -r ns p; do
       d="$(kubectl -n "$ns" get pod "$p" -o jsonpath='{.metadata.ownerReferences[0].name}' | sed 's/-[a-z0-9]*$//')"
       r="$(kubectl -n "$ns" get deploy "$d" -o jsonpath='{.spec.replicas}' 2>/dev/null || echo '?')"
@@ -126,17 +180,82 @@ preflight() {
   ok "$ds DaemonSet pod(s) (ignored by the drain)"
 
   echo
-  if [ "$FAILS" -gt 0 ]; then echo "preflight: $FAILS FAIL, $WARNS WARN — NOT safe"; return 2; fi
+  if [ "$FAILS" -gt 0 ]; then
+    if [ "$settle_fails" -gt 0 ] && [ "$FAILS" -eq "$settle_fails" ]; then
+      if [ "$WARNS" -gt 0 ] && [ "$FORCE" != 1 ]; then echo "preflight: $FAILS FAIL (all last-replica — \`settle\` handles them), $WARNS WARN — re-run with FORCE=1 to accept the WARNs"; return 2; fi
+      echo "preflight: $FAILS FAIL (all last-replica — \`settle\` handles them), $WARNS WARN — NOT safe yet"; return 3; fi
+    echo "preflight: $FAILS FAIL, $WARNS WARN — NOT safe"; return 2; fi
+  if [ -n "$rides" ]; then echo "preflight: ride pod(s) running, $WARNS WARN — \`settle\` waits for the rides"; [ "$WARNS" -gt 0 ] && [ "$FORCE" != 1 ] && return 2; return 3; fi
   if [ "$WARNS" -gt 0 ] && [ "$FORCE" != 1 ]; then echo "preflight: $WARNS WARN — re-run with FORCE=1 to accept them"; return 2; fi
   echo "preflight: safe to take $NODE down"
 }
 pvc_of() { kubectl get pvc -A -o json | jq -r --arg v "$1" '.items[]|select(.spec.volumeName==$v)|"\(.metadata.namespace)/\(.metadata.name)"' | head -1; }
 
+# ---------------------------------------------------------------- settle
+# Move ONE volume's last replica off $NODE while it stays attached: +1 replica (Longhorn rebuilds
+# it elsewhere — the node is cordoned, so never here), wait healthy, delete the replica on $NODE,
+# restore the count. Longhorn has no "move replica"; this is the UI's add-then-delete, scripted.
+move_replica() {
+  local v="$1" n t=0 elsewhere robust r state
+  state="$(kubectl -n longhorn-system get volumes.longhorn.io "$v" -o jsonpath='{.status.state}')"
+  # a DETACHED volume has no engine, so Longhorn cannot rebuild it: +1 would sit forever (the
+  # 2026-09-09 oracle transcripts move timed out exactly so) — and it does not block a drain
+  [ "$state" = attached ] || { log "move $v: volume is $state, not attached — nothing to move (a stopped last replica does not block the drain)"; return 0; }
+  n="$(kubectl -n longhorn-system get volumes.longhorn.io "$v" -o jsonpath='{.spec.numberOfReplicas}')"
+  log "move $v: numberOfReplicas $n → $((n+1)), rebuilding off $NODE (≤${MOVE_TIMEOUT}s)"
+  kubectl -n longhorn-system patch volumes.longhorn.io "$v" --type=merge -p "{\"spec\":{\"numberOfReplicas\":$((n+1))}}" >/dev/null
+  while :; do
+    elsewhere="$(kubectl -n longhorn-system get replicas.longhorn.io -o json | jq -r --arg v "$v" --arg n "$NODE" '[.items[]|select(.spec.volumeName==$v and .spec.nodeID!=$n and .status.currentState=="running" and .spec.failedAt=="")]|length')"
+    robust="$(kubectl -n longhorn-system get volumes.longhorn.io "$v" -o jsonpath='{.status.robustness}')"
+    [ "$elsewhere" -ge "$n" ] && [ "$robust" = healthy ] && break
+    sleep 15; t=$((t+15))
+    [ $t -ge "$MOVE_TIMEOUT" ] && { log "TIMEOUT: $v — $elsewhere running elsewhere, robustness=$robust; count left at $((n+1)), nothing deleted"; return 1; }
+  done
+  for r in $(kubectl -n longhorn-system get replicas.longhorn.io -o json | jq -r --arg v "$v" --arg n "$NODE" '.items[]|select(.spec.volumeName==$v and .spec.nodeID==$n)|.metadata.name'); do
+    log "move $v: deleting replica $r on $NODE"; kubectl -n longhorn-system delete replicas.longhorn.io "$r" >/dev/null; done
+  kubectl -n longhorn-system patch volumes.longhorn.io "$v" --type=merge -p "{\"spec\":{\"numberOfReplicas\":$n}}" >/dev/null
+  log "move $v: done — $n replica(s), none on $NODE"
+}
+
+settle() {
+  local t=0 lr rides moved="" seen="" since v state pvc consumer kind blocking last_report=-1000
+  if [ "$DRY" = 1 ]; then log "DRY=1: reporting only, no cordon / move"; else
+    log "cordon $NODE (nothing new lands here while we wait; Longhorn follows the cordon)"; kubectl cordon "$NODE" >/dev/null; fi
+  while :; do
+    lr="$(last_replicas)"; rides="$(rides_running)"
+    while read -r v state pvc consumer; do
+      [ -z "$v" ] || [ "$state" != attached ] && continue
+      kind="${consumer%%:*}"
+      grep -q " $v=" <<<" $seen " || seen="$seen $v=$t"
+      since=$(( t - $(sed -n "s/.* $v=\([0-9]*\).*/\1/p" <<<" $seen ") ))
+      if ! grep -q " $v " <<<" $moved " && { ! transient_kind "$kind" || [ "$since" -ge "$MOVE_AFTER" ]; }; then
+        if [ "$DRY" = 1 ]; then log "would MOVE $v ($pvc) — held by $consumer"; else
+          [ "$since" -ge "$MOVE_AFTER" ] && log "$v ($pvc): still held by transient pods after ${since}s (MOVE_AFTER=$MOVE_AFTER) — moving instead of waiting"
+          move_replica "$v" || return 1; fi
+        moved="$moved $v"
+      fi
+    done <<<"$lr"
+    blocking="$(awk '$2=="attached"' <<<"$lr" | while read -r v state pvc consumer; do
+      kind="${consumer%%:*}"; if transient_kind "$kind" || [ "$DRY" = 1 ]; then printf '  last replica %s (%s) held by %s\n' "$v" "$pvc" "$consumer"; fi; done)"
+    [ -z "$blocking" ] && [ -z "$rides" ] && { log "settled: no attached last replica, no ride pod on $NODE"; return 0; }
+    if [ "$DRY" = 1 ]; then log "would WAIT on:"; printf '%s\n' "$blocking" | sed '/^$/d' >&2; sed 's/^/  ride /;/^  ride $/d' <<<"$rides" >&2; return 0; fi
+    if [ $((t - last_report)) -ge 300 ]; then
+      log "waiting (${t}s/${SETTLE_TIMEOUT}s) on:"; printf '%s\n' "$blocking" | sed '/^$/d' >&2; sed 's/^/  ride /;/^  ride $/d' <<<"$rides" >&2; last_report=$t; fi
+    [ $t -ge "$SETTLE_TIMEOUT" ] && { log "TIMEOUT: still blocked after ${SETTLE_TIMEOUT}s — node stays cordoned; \`kubectl uncordon $NODE\` to give up"; return 1; }
+    sleep 30; t=$((t+30))
+  done
+}
+
 # ---------------------------------------------------------------- down
 down() {
-  preflight || return $?
+  local rc=0; preflight || rc=$?
+  # 2 = hard FAIL or un-FORCEd WARN → stop. 3 = only settle-able findings (last replicas, rides).
+  [ "$rc" = 2 ] && return 2
   local ip; ip="$(node_ip)"
-  log "cordon $NODE"; kubectl cordon "$NODE"
+  settle || return $?
+  # DRY=1 previews the whole window: settle reported what it would wait on / move — stop here,
+  # never a real drain or power-off under a dry-run flag (reviewer, PR#1564).
+  [ "$DRY" = 1 ] && { log "DRY=1: would now cordon (if not yet), drain $NODE and talosctl shutdown — stopping"; return 0; }
   log "drain $NODE (timeout $DRAIN_TIMEOUT)"
   kubectl drain "$NODE" --ignore-daemonsets --delete-emptydir-data --timeout="$DRAIN_TIMEOUT"
   local left
@@ -206,6 +325,8 @@ up() {
 
 case "$cmd" in
   preflight) preflight ;;
+  settle) settle ;;
+  move) [ -n "${3:-}" ] || usage; move_replica "$3" ;;
   down) down ;;
   up) up ;;
   *) usage ;;
