@@ -40,3 +40,30 @@ groups:
         annotations:
           summary: Garage admin-metrics families are absent — the disk/table belts are blind
           description: The garage-admin-metrics belts (GarageDiskFillingUp, GarageTableEmpty) read garage_local_disk_total and table_size, and at least one family is absent from Prometheus — the scrape is not working (ServiceMonitor selector, metrics token, or a metric-name drift), so those belts cannot fire regardless of Garage's state. Fix the scrape; do not silence this without confirming both families exist.
+  - name: garage-cluster-health
+    rules:
+      - alert: GarageClusterDegraded
+        expr: |
+          min_over_time(probe_success{job="blackbox-garage-health"}[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Garage cluster degraded as seen from {{ $labels.instance }}
+      - alert: GarageClusterFlapping
+        expr: |
+          count_over_time(probe_success{job="blackbox-garage-health"}[1h])
+            - sum_over_time(probe_success{job="blackbox-garage-health"}[1h]) >= 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: Garage cluster degraded ≥5 min in the last hour as seen from {{ $labels.instance }}
+      - alert: GaragePeerRpcTimeouts
+        expr: |
+          sum by (pod) (rate(rpc_timeout_counter[10m])) > 0.1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Garage {{ $labels.pod }} is timing out RPCs to a peer ({{ $value | humanize }}/s)
