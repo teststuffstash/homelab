@@ -574,7 +574,12 @@ connection", quorum-of-3 read repairs failing) — hourly, every hour, for 3 day
 mean 27 s on garage-0 vs 10.7 s on garage-2 (p99 100 s vs 50 s); ListObjectsV2 p99 35.7 s on
 garage-0 vs 4.5 s on garage-1 (store-wide p99 0.8 s → 16 s over 8 days as the env bloated);
 8 × `500 … error reading a body` on the ERT corpus-image parts. Workers reset to upstream
-defaults (1 / 2) on all three pods 2026-09-09 05:50Z; the disk swap stays the fix.
+defaults (1 / 2) on all three pods 2026-09-09 05:50Z; the disk swap stays the fix. **What alerted:
+nothing Garage-shaped.** `NodeDiskIOSaturation` fired four short episodes on the box (137 min
+in 3 days) and `NodeMemoryMajorPagesFaults` two; the responder received them and each resolved
+inside its 15-min window, so no issue. `rpc_timeout_counter` crossed 0.2/s in 5 of 72 hours;
+the hourly dropouts lived only in the peers' logs. Closed by the `/health`-per-pod probe +
+`GarageClusterDegraded/Flapping/PeerRpcTimeouts` (garage.md §Belts).
 
 Also observed while measuring (operator, Grafana "top pods by CPU throttling ratio"): `longhorn-manager`
 pods throttle 4–14 % of CFS periods at their 150m req==limit, cilium agents 4–13 %. `instance-manager`
