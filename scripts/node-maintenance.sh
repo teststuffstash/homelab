@@ -21,6 +21,9 @@
 #         transient pods keep re-holding (the coordinator's RWX transcripts volume: back-to-back
 #         runs, 2026-09-09) is moved the same way once it has blocked for MOVE_AFTER (600 s).
 #   bash scripts/node-maintenance.sh move <node> <volume>   # that move, by hand, for one volume
+#   bash scripts/node-maintenance.sh power <node> [status|cycle]   # smart-plug draw (machines.yaml `plug:`);
+#         `cycle` REFUSES a socket carrying load (FORCE=1 overrides) — 2026-09-09: crossed plug ids
+#         let a "boot thinkcentre" cycle cut hp-01 (docs/incidents/2026-09-09-crossed-plug-hp01-outage.md)
 #
 # What preflight refuses on (exit 2 — pass FORCE=1 to override a WARN-class one):
 #   FAIL  node missing / not Ready / Talos API unreachable
@@ -191,6 +194,29 @@ preflight() {
 }
 pvc_of() { kubectl get pvc -A -o json | jq -r --arg v "$1" '.items[]|select(.spec.volumeName==$v)|"\(.metadata.namespace)/\(.metadata.name)"' | head -1; }
 
+# ---------------------------------------------------------------- power
+# The plug is the box's own testimony: read the DRAW before believing a label or a switch state.
+HA_URL="${HA_URL:-https://homeassistant.teststuff.net}"
+ha_token() { [ -n "${HA_TOKEN:-}" ] && { printf '%s' "$HA_TOKEN"; return; }
+  command -v keepassxc-cli >/dev/null 2>&1 || PATH="$REPO/.devbox/nix/profile/default/bin:$PATH"
+  keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$HOME/.claude/homelab-keepass/homelab.kdbx" ha-access-token 2>/dev/null; }
+ha_state() { curl -fsS -m 10 -H "Authorization: Bearer $(ha_token)" "$HA_URL/api/states/$1" | jq -r '.state'; }
+ha_call()  { curl -fsS -m 10 -o /dev/null -X POST -H "Authorization: Bearer $(ha_token)" -H 'Content-Type: application/json' -d "{\"entity_id\":\"$2\"}" "$HA_URL/api/services/switch/$1"; }
+plug_sensor() { yq -r ".machines[] | select(.name==\"$NODE\") | .plug // \"\"" "$REPO/machines/machines.yaml"; }
+power() {
+  local sensor sw draw
+  sensor="$(plug_sensor)"
+  [ -n "$sensor" ] || { log "$NODE has no plug in machines.yaml (plug: null) — no remote power read"; return 1; }
+  sw="switch.tuyalocal_${sensor#sensor.plug_}"; sw="${sw%_power}"
+  draw="$(ha_state "$sensor")"
+  log "$NODE plug: $sensor = ${draw} W, $sw = $(ha_state "$sw")"
+  [ "${1:-status}" = cycle ] || return 0
+  if [ "${draw%.*}" -ge 3 ] 2>/dev/null && [ "$FORCE" != 1 ]; then
+    log "REFUSED: that socket is carrying ${draw} W — a running box (or the wrong socket). FORCE=1 to cycle anyway."; return 2; fi
+  log "cycling $sw (off → 8 s → on)"; ha_call turn_off "$sw"; sleep 8; ha_call turn_on "$sw"; sleep 5
+  log "$NODE plug after: $(ha_state "$sensor") W, $sw = $(ha_state "$sw")"
+}
+
 # ---------------------------------------------------------------- settle
 # Move ONE volume's last replica off $NODE while it stays attached: +1 replica (Longhorn rebuilds
 # it elsewhere — the node is cordoned, so never here), wait healthy, delete the replica on $NODE,
@@ -275,6 +301,7 @@ up() {
   local ip; ip="$(node_ip)"
   if [ "$(node_ready)" = True ]; then log "$NODE already Ready"; else
     if ping -c1 -W1 "$ip" >/dev/null 2>&1; then log "$ip answers ping — booting, no WoL needed"; else
+      power status || true   # the plug's draw, before we believe anything about the box's state
       local mac; mac="$(node_mac || true)"
       if [ -z "$mac" ]; then log "no MAC for $NODE in opnsense/dnsmasq-dhcp.py (a VM? start it on pve) — waiting for Ready anyway"; else
         log "WoL $NODE ($mac) via $PVE_HOST"
@@ -327,6 +354,7 @@ case "$cmd" in
   preflight) preflight ;;
   settle) settle ;;
   move) [ -n "${3:-}" ] || usage; move_replica "$3" ;;
+  power) power "${3:-status}" ;;
   down) down ;;
   up) up ;;
   *) usage ;;
