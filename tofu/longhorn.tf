@@ -125,6 +125,13 @@ resource "helm_release" "longhorn" {
       # COUNT, and #94's imbalance is bytes-and-tiers — thinkcentre already carries 19 replicas to
       # wk-02's 15. Enabled only now that the metering exists (argocd/resources/longhorn-alerts).
       replicaAutoBalance          = "least-effort"
+      # Drains: the default `block-if-contains-last-replica` blocks a maintenance window on any
+      # replica-1 volume (longhorn-single/-fast/-scratch are replica-1 BY DESIGN) even when the
+      # volume is detached and the replica stopped — 2026-09-09, thinkcentre held two detached
+      # coordinator-transcripts volumes. `allow-if-replica-is-stopped` lets the drain proceed when
+      # the last replica is stopped (data offline for the window, back with the disk); an
+      # ATTACHED last replica still blocks. scripts/node-maintenance.sh preflight names them.
+      nodeDrainPolicy             = "allow-if-replica-is-stopped"
       replicaSoftAntiAffinity     = true
       replicaZoneSoftAntiAffinity = true # spread the 2 replicas across zones
       defaultDataLocality         = "best-effort"
