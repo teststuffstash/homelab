@@ -8167,3 +8167,12 @@ PR oracle-fleet#541) → shutdown 18:27 → both 7600p fitted → button (WoL de
 Seat reads: #1561 approved+merged; #1562 fixed in-PR (kustomize-only, one probe.py), re-review
 pending. thinkcentre: 2 DIMM slots both filled (no RAM add), x16 slot never enumerated.
 
+**Late addendum (~19:1x–19:5xZ).** Seat reads #1561/#1562 merged (1562 fixed in-PR: the
+Application's `directory` block next to a kustomization, and probe.py inlined twice). #1570
+merged. oracle-iac#711 read: sizing sound, node-fit wrong (tainted nodes counted; no toleration
+anywhere) → **m70s freed for the delta** by rescheduling its outage-parked Deployments (2126m
+free). CPU discussion + fleet direction recorded in meta-state (7)–(8): DaemonSet request tax,
+ride preemption ruled out (coordination cost), Xeon/laptop/gaming-PC/SFF roles, equal per-box
+storage share. thinkcentre + hp-01 retirement hangs off the third std SFF. Next session: garage-0
+rotation onto intel0 (SA400 unschedulable first), then the placement rule into the ledger.
+
