@@ -75,7 +75,10 @@ node_mac() { grep -oE "\"host\": \"$NODE\", \"hwaddr\": \"[0-9a-f:]+\"" "$REPO/o
 node_ready() { kubectl get node "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null; }
 
 # Volumes whose LAST usable replica sits on $NODE, one per line:
-#   <volume> <attached|detached> <ns/pvc> <consumer>
+#   <volume> <attached|detached> <ns/pvc> <consumer> <dataLocality>
+# dataLocality=strict-local is a ZONE volume by design (ADR-114: Garage's data lives on that node,
+# replicated by the app across zones) — it can neither be moved nor should be: the pod evicts with
+# the drain, the volume detaches, the other zones serve. WARN, never MOVE (2026-09-09, garage-0).
 # consumer = <Kind>:<pod> of the live (Running/Pending) pod holding it, or "-" (Longhorn's
 # kubernetesStatus.workloadsStatus; a bare pod — the coordinator's shape — reports Kind "Pod").
 # ATTACHED: no RUNNING sibling elsewhere. DETACHED: no HEALTHY (failedAt empty) sibling elsewhere —
@@ -95,7 +98,7 @@ last_replicas() {
        else [$reps[]|select(.spec.volumeName==$v and .spec.nodeID!=$n and .spec.failedAt=="")]|length end) as $others
     | select($others<1)
     | ([$vol.status.kubernetesStatus.workloadsStatus[]?|select(.podStatus=="Running" or .podStatus=="Pending")]|first) as $w
-    | "\($v) \($state) \($vol.status.kubernetesStatus.namespace)/\($vol.status.kubernetesStatus.pvcName) \(if $w then ((if $w.workloadType=="" then "Pod" else $w.workloadType end)+":"+$w.podName) else "-" end)"'
+    | "\($v) \($state) \($vol.status.kubernetesStatus.namespace)/\($vol.status.kubernetesStatus.pvcName) \(if $w then ((if $w.workloadType=="" then "Pod" else $w.workloadType end)+":"+$w.podName) else "-" end) \($vol.spec.dataLocality // "disabled")"'
   rm -f "$tv" "$tr"
 }
 # Transient consumers/pods: settle WAITS for them. Long-lived ones hold their volume until the
@@ -138,9 +141,11 @@ preflight() {
   here="$(jq -r --arg n "$NODE" '.items[]|select(.spec.nodeID==$n)|.spec.volumeName' <<<"$reps" | sort -u)"
   n="$(printf '%s\n' $here | sed '/^$/d' | wc -l)"
   lr="$(last_replicas)"
-  while read -r v state pvc consumer; do
+  while read -r v state pvc consumer locality; do
     [ -z "$v" ] && continue
-    if [ "$state" = attached ]; then
+    if [ "$locality" = strict-local ]; then
+      warn "volume $v ($pvc): strict-local zone volume (${state}, held by $consumer) — pinned here by design; its pod evicts with the drain and the data is offline for the window (the app's other zones serve)"
+    elif [ "$state" = attached ]; then
       settle_fails=$((settle_fails+1))
       if transient_kind "${consumer%%:*}"; then
         fail "volume $v ($pvc): attached, its ONLY running replica is on $NODE, held by $consumer — the drain would block; \`settle\` waits for that pod to finish (moves it after MOVE_AFTER=${MOVE_AFTER}s)"
@@ -249,8 +254,8 @@ settle() {
     log "cordon $NODE (nothing new lands here while we wait; Longhorn follows the cordon)"; kubectl cordon "$NODE" >/dev/null; fi
   while :; do
     lr="$(last_replicas)"; rides="$(rides_running)"
-    while read -r v state pvc consumer; do
-      [ -z "$v" ] || [ "$state" != attached ] && continue
+    while read -r v state pvc consumer locality; do
+      [ -z "$v" ] || [ "$state" != attached ] || [ "$locality" = strict-local ] && continue
       kind="${consumer%%:*}"
       grep -q " $v=" <<<" $seen " || seen="$seen $v=$t"
       since=$(( t - $(sed -n "s/.* $v=\([0-9]*\).*/\1/p" <<<" $seen ") ))
@@ -261,7 +266,7 @@ settle() {
         moved="$moved $v"
       fi
     done <<<"$lr"
-    blocking="$(awk '$2=="attached"' <<<"$lr" | while read -r v state pvc consumer; do
+    blocking="$(awk '$2=="attached" && $5!="strict-local"' <<<"$lr" | while read -r v state pvc consumer locality; do
       kind="${consumer%%:*}"; if transient_kind "$kind" || [ "$DRY" = 1 ]; then printf '  last replica %s (%s) held by %s\n' "$v" "$pvc" "$consumer"; fi; done)"
     [ -z "$blocking" ] && [ -z "$rides" ] && { log "settled: no attached last replica, no ride pod on $NODE"; return 0; }
     if [ "$DRY" = 1 ]; then log "would WAIT on:"; printf '%s\n' "$blocking" | sed '/^$/d' >&2; sed 's/^/  ride /;/^  ride $/d' <<<"$rides" >&2; return 0; fi
