@@ -170,24 +170,24 @@ tests:
       - expr: garage:s3_latency_seconds:p99_5m
         eval_time: 5m
         exp_samples:
-          # p99 values by endpoint (labels will include endpoint_class in production)
-          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="GetObject"}'
+          # p99 values by endpoint and class
+          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="GetObject",endpoint_class="read"}'
             value: 1.0
-          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="HeadObject"}'
+          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="HeadObject",endpoint_class="read"}'
             value: 1.0
-          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="PutObject"}'
+          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="PutObject",endpoint_class="write"}'
             value: 10.0
-          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="ListObjectsV2"}'
+          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="ListObjectsV2",endpoint_class="list"}'
             value: 5.0
       - expr: garage:s3_latency_seconds:p50_5m
         eval_time: 5m
         exp_samples:
-          # p50 values by endpoint (computed via interpolation from bucket data)
-          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="GetObject"}'
-            value: 0.0775  # interpolated: 0.01 + 150/200 * 0.09
-          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="HeadObject"}'
-            value: 0.0775  # similar to GetObject
-          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="PutObject"}'
-            value: 0.8333  # interpolated: 0.1 + 175/270 * 0.9
-          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="ListObjectsV2"}'
-            value: 0.42    # interpolated: 0.1 + 225/250 * 0.4
+          # p50 values by endpoint and class (computed via interpolation from bucket data)
+          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="GetObject",endpoint_class="read"}'
+            value: 0.0775
+          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="HeadObject",endpoint_class="read"}'
+            value: 0.07749999999999999
+          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="PutObject",endpoint_class="write"}'
+            value: 0.8333333333333334
+          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="ListObjectsV2",endpoint_class="list"}'
+            value: 0.42000000000000004
