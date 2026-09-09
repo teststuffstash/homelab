@@ -454,6 +454,17 @@ The fleet's own controlled A/B, same rebuild traffic, same cluster:
 | wk-metal-01 | Crucial MX500 | DRAM | flat **0.6–18 ms** |
 | wk-metal-04 | Kingston SA400 | **DRAM-less** | **486 ms @ 26 MB/s** |
 
+**DONE 2026-09-09 (PR#1570): wk-metal-04 carries two Intel SSD Pro 7600p 256 GB** (SSDPEKKF256G8L,
+SM2262 + 2 × 256 MB DDR4 DRAM, 3D TLC — the R2 lot) on Axagon PCEM2-N x4 adapters in its two
+x16-length slots: `machines.yaml` `longhorn_disks` `intel0`/`intel1` (by eui; Talos partitioned +
+mounted them at `/var/lib/longhorn/intel{0,1}`, XFS, one reboot), registered `bulk` with 0
+reserved (255 G each, Ready + Schedulable); the SA400 default disk is retagged **`slow-bulk`** —
+its 408 G of existing volumes stay, nothing new lands. **Still on the SA400 until the next
+session rotates the zone: garage-0's `data`/`meta` (strict-local, selector-less
+`longhorn-local-xfs` — with three schedulable disks on the node the rotation needs the SA400
+set `allowScheduling: false` first, or it may land right back).** Arrival read (SMART
+`percentage_used`, Opal state) not yet taken — runbook §Reading a fleet disk's identity.
+
 **Remedy = replace the DRIVE with a DRAM-equipped one** (the MX500 in wk-metal-01 is the known-good
 reference in this fleet). Not the cable, not TRIM alone. ⚠ **Buying criterion for any Garage/Longhorn
 data disk from here: DRAM cache, not €/GB** — the cheap DRAM-less tier reproduces this fault exactly.
