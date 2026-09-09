@@ -21,6 +21,9 @@
 #         transient pods keep re-holding (the coordinator's RWX transcripts volume: back-to-back
 #         runs, 2026-09-09) is moved the same way once it has blocked for MOVE_AFTER (600 s).
 #   bash scripts/node-maintenance.sh move <node> <volume>   # that move, by hand, for one volume
+#   bash scripts/node-maintenance.sh power <node> [status|cycle]   # smart-plug draw (machines.yaml `plug:`);
+#         `cycle` REFUSES a socket carrying load (FORCE=1 overrides) — 2026-09-09: crossed plug ids
+#         let a "boot thinkcentre" cycle cut hp-01 (docs/incidents/2026-09-09-crossed-plug-hp01-outage.md)
 #
 # What preflight refuses on (exit 2 — pass FORCE=1 to override a WARN-class one):
 #   FAIL  node missing / not Ready / Talos API unreachable
@@ -72,7 +75,10 @@ node_mac() { grep -oE "\"host\": \"$NODE\", \"hwaddr\": \"[0-9a-f:]+\"" "$REPO/o
 node_ready() { kubectl get node "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null; }
 
 # Volumes whose LAST usable replica sits on $NODE, one per line:
-#   <volume> <attached|detached> <ns/pvc> <consumer>
+#   <volume> <attached|detached> <ns/pvc> <consumer> <dataLocality>
+# dataLocality=strict-local is a ZONE volume by design (ADR-114: Garage's data lives on that node,
+# replicated by the app across zones) — it can neither be moved nor should be: the pod evicts with
+# the drain, the volume detaches, the other zones serve. WARN, never MOVE (2026-09-09, garage-0).
 # consumer = <Kind>:<pod> of the live (Running/Pending) pod holding it, or "-" (Longhorn's
 # kubernetesStatus.workloadsStatus; a bare pod — the coordinator's shape — reports Kind "Pod").
 # ATTACHED: no RUNNING sibling elsewhere. DETACHED: no HEALTHY (failedAt empty) sibling elsewhere —
@@ -92,7 +98,7 @@ last_replicas() {
        else [$reps[]|select(.spec.volumeName==$v and .spec.nodeID!=$n and .spec.failedAt=="")]|length end) as $others
     | select($others<1)
     | ([$vol.status.kubernetesStatus.workloadsStatus[]?|select(.podStatus=="Running" or .podStatus=="Pending")]|first) as $w
-    | "\($v) \($state) \($vol.status.kubernetesStatus.namespace)/\($vol.status.kubernetesStatus.pvcName) \(if $w then ((if $w.workloadType=="" then "Pod" else $w.workloadType end)+":"+$w.podName) else "-" end)"'
+    | "\($v) \($state) \($vol.status.kubernetesStatus.namespace)/\($vol.status.kubernetesStatus.pvcName) \(if $w then ((if $w.workloadType=="" then "Pod" else $w.workloadType end)+":"+$w.podName) else "-" end) \($vol.spec.dataLocality // "disabled")"'
   rm -f "$tv" "$tr"
 }
 # Transient consumers/pods: settle WAITS for them. Long-lived ones hold their volume until the
@@ -135,9 +141,11 @@ preflight() {
   here="$(jq -r --arg n "$NODE" '.items[]|select(.spec.nodeID==$n)|.spec.volumeName' <<<"$reps" | sort -u)"
   n="$(printf '%s\n' $here | sed '/^$/d' | wc -l)"
   lr="$(last_replicas)"
-  while read -r v state pvc consumer; do
+  while read -r v state pvc consumer locality; do
     [ -z "$v" ] && continue
-    if [ "$state" = attached ]; then
+    if [ "$locality" = strict-local ]; then
+      warn "volume $v ($pvc): strict-local zone volume (${state}, held by $consumer) — pinned here by design; its pod evicts with the drain and the data is offline for the window (the app's other zones serve)"
+    elif [ "$state" = attached ]; then
       settle_fails=$((settle_fails+1))
       if transient_kind "${consumer%%:*}"; then
         fail "volume $v ($pvc): attached, its ONLY running replica is on $NODE, held by $consumer — the drain would block; \`settle\` waits for that pod to finish (moves it after MOVE_AFTER=${MOVE_AFTER}s)"
@@ -191,6 +199,34 @@ preflight() {
 }
 pvc_of() { kubectl get pvc -A -o json | jq -r --arg v "$1" '.items[]|select(.spec.volumeName==$v)|"\(.metadata.namespace)/\(.metadata.name)"' | head -1; }
 
+# ---------------------------------------------------------------- power
+# The plug is the box's own testimony: read the DRAW before believing a label or a switch state.
+HA_URL="${HA_URL:-https://homeassistant.teststuff.net}"
+ha_token() { [ -n "${HA_TOKEN:-}" ] && { printf '%s' "$HA_TOKEN"; return; }
+  command -v keepassxc-cli >/dev/null 2>&1 || PATH="$REPO/.devbox/nix/profile/default/bin:$PATH"
+  keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$HOME/.claude/homelab-keepass/homelab.kdbx" ha-access-token 2>/dev/null; }
+ha_state() { curl -fsS -m 10 -H "Authorization: Bearer $(ha_token)" "$HA_URL/api/states/$1" | jq -r '.state'; }
+ha_call()  { curl -fsS -m 10 -o /dev/null -X POST -H "Authorization: Bearer $(ha_token)" -H 'Content-Type: application/json' -d "{\"entity_id\":\"$2\"}" "$HA_URL/api/services/switch/$1"; }
+plug_sensor() { yq -r ".machines[] | select(.name==\"$NODE\") | .plug // \"\"" "$REPO/machines/machines.yaml"; }
+power() {
+  local sensor sw draw
+  sensor="$(plug_sensor)"
+  [ -n "$sensor" ] || { log "$NODE has no plug in machines.yaml (plug: null) — no remote power read"; return 1; }
+  sw="switch.tuyalocal_${sensor#sensor.plug_}"; sw="${sw%_power}"
+  draw="$(ha_state "$sensor")"
+  log "$NODE plug: $sensor = ${draw} W, $sw = $(ha_state "$sw")"
+  [ "${1:-status}" = cycle ] || return 0
+  # Fail CLOSED: a non-numeric reading (unavailable/unknown/null — real states for these Tuya
+  # plugs) is "cannot tell", which is the same reason to refuse as "carrying load" (reviewer, PR#1568).
+  case "$draw" in
+    ''|*[!0-9.]*) [ "$FORCE" = 1 ] || { log "REFUSED: plug reading is '${draw}', not a number — cannot tell whether the box is running. FORCE=1 to cycle anyway."; return 2; } ;;
+    *) if [ "${draw%.*}" -ge 3 ] 2>/dev/null && [ "$FORCE" != 1 ]; then
+         log "REFUSED: that socket is carrying ${draw} W — a running box (or the wrong socket). FORCE=1 to cycle anyway."; return 2; fi ;;
+  esac
+  log "cycling $sw (off → 8 s → on)"; ha_call turn_off "$sw"; sleep 8; ha_call turn_on "$sw"; sleep 5
+  log "$NODE plug after: $(ha_state "$sensor") W, $sw = $(ha_state "$sw")"
+}
+
 # ---------------------------------------------------------------- settle
 # Move ONE volume's last replica off $NODE while it stays attached: +1 replica (Longhorn rebuilds
 # it elsewhere — the node is cordoned, so never here), wait healthy, delete the replica on $NODE,
@@ -223,8 +259,8 @@ settle() {
     log "cordon $NODE (nothing new lands here while we wait; Longhorn follows the cordon)"; kubectl cordon "$NODE" >/dev/null; fi
   while :; do
     lr="$(last_replicas)"; rides="$(rides_running)"
-    while read -r v state pvc consumer; do
-      [ -z "$v" ] || [ "$state" != attached ] && continue
+    while read -r v state pvc consumer locality; do
+      [ -z "$v" ] || [ "$state" != attached ] || [ "$locality" = strict-local ] && continue
       kind="${consumer%%:*}"
       grep -q " $v=" <<<" $seen " || seen="$seen $v=$t"
       since=$(( t - $(sed -n "s/.* $v=\([0-9]*\).*/\1/p" <<<" $seen ") ))
@@ -235,7 +271,7 @@ settle() {
         moved="$moved $v"
       fi
     done <<<"$lr"
-    blocking="$(awk '$2=="attached"' <<<"$lr" | while read -r v state pvc consumer; do
+    blocking="$(awk '$2=="attached" && $5!="strict-local"' <<<"$lr" | while read -r v state pvc consumer locality; do
       kind="${consumer%%:*}"; if transient_kind "$kind" || [ "$DRY" = 1 ]; then printf '  last replica %s (%s) held by %s\n' "$v" "$pvc" "$consumer"; fi; done)"
     [ -z "$blocking" ] && [ -z "$rides" ] && { log "settled: no attached last replica, no ride pod on $NODE"; return 0; }
     if [ "$DRY" = 1 ]; then log "would WAIT on:"; printf '%s\n' "$blocking" | sed '/^$/d' >&2; sed 's/^/  ride /;/^  ride $/d' <<<"$rides" >&2; return 0; fi
@@ -275,6 +311,7 @@ up() {
   local ip; ip="$(node_ip)"
   if [ "$(node_ready)" = True ]; then log "$NODE already Ready"; else
     if ping -c1 -W1 "$ip" >/dev/null 2>&1; then log "$ip answers ping — booting, no WoL needed"; else
+      power status || true   # the plug's draw, before we believe anything about the box's state
       local mac; mac="$(node_mac || true)"
       if [ -z "$mac" ]; then log "no MAC for $NODE in opnsense/dnsmasq-dhcp.py (a VM? start it on pve) — waiting for Ready anyway"; else
         log "WoL $NODE ($mac) via $PVE_HOST"
@@ -327,6 +364,7 @@ case "$cmd" in
   preflight) preflight ;;
   settle) settle ;;
   move) [ -n "${3:-}" ] || usage; move_replica "$3" ;;
+  power) power "${3:-status}" ;;
   down) down ;;
   up) up ;;
   *) usage ;;
