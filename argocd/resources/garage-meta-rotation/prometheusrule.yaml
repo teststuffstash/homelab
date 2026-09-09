@@ -1,0 +1,55 @@
+# Belts on the rotation loop itself. All three read the pushgateway series the controller emits;
+# the fourth thing that can go wrong — the loop clearing nothing — is the standing
+# GarageDiskFillingUp alert still firing, so that alert IS the belt for it (NotReclaiming below
+# names the condition rather than guessing its cause).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: garage-meta-rotation
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: garage-meta-rotation
+      rules:
+        - alert: GarageMetaRotationFailed
+          expr: |
+            garage_meta_rotation_last_result == 1
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage metadata rotation of {{ $labels.pod }} failed"
+            description: >-
+              The last rotation the loop ordered for this pod did not end in a converged,
+              snapshot-seeded env. Read the controller Job's log (ns garage, CronJob
+              garage-meta-rotation) and the pod's meta-rotate init container log: a SKIP names
+              its reason (no finished snapshot, no space), a converge-timeout means the repair
+              did not catch up. State: ConfigMap garage-meta-rotation-state. Recipe:
+              docs/garage.md §Metadata reclamation.
+        - alert: GarageMetaRotationControllerSilent
+          expr: |
+            (time() - max(garage_meta_rotation_controller_last_run_timestamp) > 3600)
+              or absent(garage_meta_rotation_controller_last_run_timestamp)
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage metadata rotation controller has not run for over an hour"
+            description: >-
+              The CronJob garage-meta-rotation (ns garage, every 15 min) has not pushed its
+              heartbeat for over an hour — the loop that clears GarageDiskFillingUp on a meta
+              volume is not running. Check the CronJob and its last Job (image pull, RBAC,
+              Prometheus/pushgateway reachability).
+        - alert: GarageMetaRotationNotReclaiming
+          expr: |
+            ALERTS{alertname="GarageDiskFillingUp",alertstate="firing",volume="metadata"} == 1
+          for: 6h
+          labels: { severity: warning }
+          annotations:
+            summary: "GarageDiskFillingUp on {{ $labels.pod }} metadata has fired for 6h — the rotation loop did not clear it"
+            description: >-
+              A metadata fill should be a self-clearing condition (docs/garage.md §Metadata
+              reclamation). Six hours of firing means the loop is refusing (its gate: a peer
+              unhealthy, queued table work, cooldown, a pending rotation), the seed keeps
+              skipping (no finished snapshot — check the pod's auto-snapshots on
+              /mnt/data/meta_snapshots), or the compacted env itself no longer fits, which is
+              capacity, not leaked pages. The controller Job log says which.

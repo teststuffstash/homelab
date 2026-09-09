@@ -1,0 +1,35 @@
+# Hand copy of the garage-meta-rotation group from prometheusrule.yaml.
+# Regenerate after every expr edit with:
+#
+#   yq -o=json '{"groups": [{"name": "garage-meta-rotation", "rules": [.spec.groups[].rules[]]}]}' argocd/resources/garage-meta-rotation/prometheusrule.yaml | yq -P '.'
+#
+# ⚠ THE RECIPE ABOVE DOES NOT ROUND-TRIP COMMENTS — re-add this header BY HAND after every
+# regenerate. Drift-pinned by scripts/prometheus-rules-lint.sh (expr+for equality per alert name).
+groups:
+  - name: garage-meta-rotation
+    rules:
+      - alert: GarageMetaRotationFailed
+        expr: |
+          garage_meta_rotation_last_result == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Garage metadata rotation of {{ $labels.pod }} failed
+      - alert: GarageMetaRotationControllerSilent
+        expr: |
+          (time() - max(garage_meta_rotation_controller_last_run_timestamp) > 3600)
+            or absent(garage_meta_rotation_controller_last_run_timestamp)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Garage metadata rotation controller has not run for over an hour
+      - alert: GarageMetaRotationNotReclaiming
+        expr: |
+          ALERTS{alertname="GarageDiskFillingUp",alertstate="firing",volume="metadata"} == 1
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: GarageDiskFillingUp on {{ $labels.pod }} metadata has fired for 6h — the rotation loop did not clear it

@@ -1,0 +1,44 @@
+rule_files:
+  - garage-meta-rotation.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── a failed rotation fires after 5m; a successful one (result 0) never does ─────────────────
+  - interval: 1m
+    name: "GarageMetaRotationFailed fires on last_result==1 only"
+    input_series:
+      - series: 'garage_meta_rotation_last_result{pod="garage-0"}'
+        values: "1+0x30"
+      - series: 'garage_meta_rotation_last_result{pod="garage-1"}'
+        values: "0+0x30"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: GarageMetaRotationFailed
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: GarageMetaRotationFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              pod: garage-0
+            exp_annotations:
+              summary: "Garage metadata rotation of garage-0 failed"
+  # ── the heartbeat going stale fires; a fresh heartbeat does not ─────────────────────────────
+  - interval: 5m
+    name: "GarageMetaRotationControllerSilent fires when the heartbeat is >1h old"
+    input_series:
+      # heartbeat stamped at t=0 and never again; time() advances 5m per sample
+      - series: 'garage_meta_rotation_controller_last_run_timestamp{instance="controller"}'
+        values: "0+0x40"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: GarageMetaRotationControllerSilent
+        exp_alerts: []
+      - eval_time: 80m
+        alertname: GarageMetaRotationControllerSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Garage metadata rotation controller has not run for over an hour"
