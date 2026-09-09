@@ -1,0 +1,72 @@
+rule_files:
+  - garage-meta-rotation.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── a failed rotation fires after 5m; a successful one (result 0) never does ─────────────────
+  - interval: 1m
+    name: "GarageMetaRotationFailed fires on last_result==1 only"
+    input_series:
+      - series: 'garage_meta_rotation_last_result{pod="garage-0"}'
+        values: "1+0x30"
+      - series: 'garage_meta_rotation_last_result{pod="garage-1"}'
+        values: "0+0x30"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: GarageMetaRotationFailed
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: GarageMetaRotationFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              pod: garage-0
+            exp_annotations:
+              summary: "Garage metadata rotation of garage-0 failed"
+  # ── the heartbeat going stale fires; a fresh heartbeat does not ─────────────────────────────
+  - interval: 5m
+    name: "GarageMetaRotationControllerSilent fires when the heartbeat is >1h old"
+    input_series:
+      # heartbeat stamped at t=0 and never again; time() advances 5m per sample
+      - series: 'garage_meta_rotation_controller_last_run_timestamp{instance="controller"}'
+        values: "0+0x40"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: GarageMetaRotationControllerSilent
+        exp_alerts: []
+      - eval_time: 80m
+        alertname: GarageMetaRotationControllerSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Garage metadata rotation controller has not run for over an hour"
+  # ── the loop clearing nothing: a metadata volume >80% for 6h30m (6h past the alert's own 30m) ─
+  # 1m samples: at the 1m evaluation interval a 10m-spaced series is STALE 5 of every 10 min and
+  # resets the `for:` clock (that is a fixture artefact, not a rule property).
+  - interval: 1m
+    name: "GarageMetaRotationNotReclaiming fires once a metadata volume has sat >80% for 6h30m"
+    input_series:
+      - series: 'garage_local_disk_avail{pod="garage-0",volume="metadata"}'
+        values: "15+0x420"
+      - series: 'garage_local_disk_total{pod="garage-0",volume="metadata"}'
+        values: "100+0x420"
+      # a DATA-volume fill is not the loop's to clear — never fires here
+      - series: 'garage_local_disk_avail{pod="garage-1",volume="data"}'
+        values: "15+0x420"
+      - series: 'garage_local_disk_total{pod="garage-1",volume="data"}'
+        values: "100+0x420"
+    alert_rule_test:
+      - eval_time: 6h20m
+        alertname: GarageMetaRotationNotReclaiming
+        exp_alerts: []
+      - eval_time: 6h40m
+        alertname: GarageMetaRotationNotReclaiming
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              volume: metadata
+              pod: garage-0
+            exp_annotations:
+              summary: "GarageDiskFillingUp on garage-0 metadata has fired for 6h — the rotation loop did not clear it"
