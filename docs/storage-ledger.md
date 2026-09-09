@@ -459,11 +459,15 @@ SM2262 + 2 × 256 MB DDR4 DRAM, 3D TLC — the R2 lot) on Axagon PCEM2-N x4 adap
 x16-length slots: `machines.yaml` `longhorn_disks` `intel0`/`intel1` (by eui; Talos partitioned +
 mounted them at `/var/lib/longhorn/intel{0,1}`, XFS, one reboot), registered `bulk` with 0
 reserved (255 G each, Ready + Schedulable); the SA400 default disk is retagged **`slow-bulk`** —
-its 408 G of existing volumes stay, nothing new lands. **Still on the SA400 until the next
-session rotates the zone: garage-0's `data`/`meta` (strict-local, selector-less
-`longhorn-local-xfs` — with three schedulable disks on the node the rotation needs the SA400
-set `allowScheduling: false` first, or it may land right back).** Arrival read (SMART
-`percentage_used`, Opal state) not yet taken — runbook §Reading a fleet disk's identity.
+its 408 G of existing volumes stay, nothing new lands. **garage-0's zone ROTATED onto the 7600p
+2026-09-09 20:05Z** (garage.md §The build-out step 8, second run — the rate row in §The rf=3
+build-out as run below): the SA400 set `allowScheduling: false` first (`longhorn-tag-disks.sh`,
+because `longhorn-local-xfs` is selector-less and a tag alone leaves three candidates), then
+pod + both PVCs deleted, the StatefulSet re-created them in 31 s and Longhorn placed BOTH on
+`intel1` (its most-free-disk pick; the registry mirrors already sat on `intel0`), new node id
+`d93314cf5564e762`, layout v3. **The SA400 now carries no Longhorn replica at all** — Talos +
+the image store only. Arrival read (SMART `percentage_used`, Opal state) not yet taken —
+runbook §Reading a fleet disk's identity.
 
 **Remedy = replace the DRIVE with a DRAM-equipped one** (the MX500 in wk-metal-01 is the known-good
 reference in this fleet). Not the cable, not TRIM alone. ⚠ **Buying criterion for any Garage/Longhorn

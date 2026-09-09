@@ -303,12 +303,19 @@ spec:
               )
             )
 
-        # Cluster health availability ratio (per pod + min across pods).
-        # Objective: ≥99.95% uptime — measured 99.95% request-level, 99.87% scrape-level since 2026-08-28
+        # Availability = SERVING, per pod (dashboard takes the min): the share of the last hour
+        # in which /health answered HTTP 200. Garage answers 200 for Healthy AND Degraded (quorum
+        # serves) and 503 only when quorum is lost — so a node down, a zone rotation or a
+        # maintenance window is NOT unavailability at rf=3. `probe_success` is deliberately not
+        # used here: the garage_health module's body regex ("fully operational") turns it into the
+        # degraded detector for GarageClusterDegraded/Flapping, and reading it as availability
+        # showed 73 percent during the 2026-09-09 rotation while every request was served.
+        # Objective: ≥99.95% — measured 99.95% request-level since 2026-08-28.
         - record: garage:cluster_health:availability_ratio_1h
           expr: |
-            sum_over_time(probe_success{job="blackbox-garage-health"}[1h])
-            / count_over_time(probe_success{job="blackbox-garage-health"}[1h])
+            avg_over_time(
+              (probe_http_status_code{job="blackbox-garage-health"} == bool 200)[1h:1m]
+            )
 
         # Meta and data volume utilization ratio per pod.
         # Alert at >80% (GarageDiskFillingUp — existing alert).
