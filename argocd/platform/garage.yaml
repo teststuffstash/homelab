@@ -127,14 +127,19 @@ spec:
         # the detectors, built first and replayed on the event). /health answers 503 exactly when
         # THIS node's view has no quorum, so a pod is Ready only once it has rejoined its peers —
         # and a node stalled off the mesh drops out of the S3 Service instead of coordinating
-        # requests (the 2026-09-08 SA400 class). minReadySeconds then holds the rollout a further
-        # 90 s per pod so the next member goes down only after the previous one has been serving.
+        # requests (the 2026-09-08 SA400 class). minReadySeconds then holds the rollout after each
+        # pod is Ready so the next member goes down only after the previous one has been serving.
+        # 300 s, not 90: the live test of the first rollout (09:00–09:05Z) spaced the three starts
+        # ~2 min apart — quorum held, GarageS3ServerErrors stayed silent — but
+        # GarageQuorumMembersRestarted counts two starts inside 5 min, and a rollout must sit
+        # outside that window so the belt keeps meaning "closer than any rollout would ever do".
+        # Cost: a full roll takes ~17 min instead of ~5. It is a storage tier; that is fine.
         readinessProbe:
           httpGet: { path: /health, port: 3903 }
           initialDelaySeconds: 5
           periodSeconds: 10
           failureThreshold: 3
-        minReadySeconds: 90
+        minReadySeconds: 300
         # One pod per physical zone, ONLY on the three zone nodes. Required anti-affinity on the
         # zone key is what keeps a pod from following a dead node into another zone (it stays
         # Pending until its zone returns — correct for a zone-pinned store whose volume is
