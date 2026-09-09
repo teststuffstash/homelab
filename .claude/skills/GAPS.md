@@ -18,6 +18,17 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       matrix). Fix: add the inconsistent-answers cue to the skill's trigger list.
       Sighted 2026-08-11.
 
+## handoff
+
+- [ ] handoff-G1 — a stack handoff/issue comment that DIAGNOSES a platform fault was acted on as a
+      diagnosis: the seat fixed from oracle's reading (09-08 stall → worker reset + belts written
+      after the fact; 09-09 rollout quorum loss → readiness fix planned from oracle-fleet#228's
+      comment) without first asking what PLATFORM signal would have caught it. Operator ruling
+      2026-09-09: build order is **detect → let it fire on the real condition (replay) → fix from
+      the alert**; the report is only "there is a problem" — downtime detection never depends on
+      issue reports, and the belt reaching the reporter's conclusion independently is the fair
+      test. Fix: the skill gains that order as its first step. Sighted 2026-09-09 (operator).
+
 ## meta-coordinate
 
 - [x] meta-coordinate-G1 — platform-lane PR review read the diff but truncated the BODY; the

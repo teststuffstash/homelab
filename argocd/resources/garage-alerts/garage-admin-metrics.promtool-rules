@@ -59,6 +59,14 @@ groups:
           severity: warning
         annotations:
           summary: Garage cluster degraded ≥5 min in the last hour as seen from {{ $labels.instance }}
+      - alert: GarageTableGcBacklog
+        expr: |
+          sum by (pod) (table_gc_todo_queue_length) > 500000
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: Garage {{ $labels.pod }} has {{ $value | humanize }} GC items parked for 2h
       - alert: GaragePeerRpcTimeouts
         expr: |
           sum by (pod) (rate(rpc_timeout_counter[10m])) > 0.1

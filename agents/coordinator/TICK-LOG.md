@@ -8047,3 +8047,86 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   predicate fails closed on an unreadable blocker, #1528) gate-read + approved. Wind-down: this
   push; ctx ≈ 830k.
 
+
+## 2026-09-09 early (~05:40–06:3xZ) — the two garage handoffs: one zone, not the store
+
+- **Condition:** operator: take the new oracle handoff (09-09 InvalidPart at CompleteMultipartUpload,
+  a 7 h ERT delta lost), compare with the responder's last 8 h, and "is meta still full after
+  rf=3 — only one node? the alert doesn't say". The 09-08 listing-latency handoff (ListObjects
+  ~37 obj/s) sat unclaimed in the same inbox — same root, taken too.
+- **Read:** `GarageDiskFillingUp` = **garage-0 only** (MetaAvail 11.4 % on wk-metal-04; garage-2
+  47.9 %, garage-1 78.8 %, identical tables at 1.93 M objects). The size is the SEED METHOD:
+  snapshot-seeded garage-1 6.3 GB, natively-synced garage-2 16.2 GB, natively-rotated garage-0
+  27.9 GB — garage.md's "resynced env is compact by construction" was wrong; corrected (the loop
+  seeds meta from a snapshot). `garage` Loki tenant, 22:00–22:45Z: 8 × `500 … error reading a
+  body` on the corpus-image parts (the aborted UploadParts), and garage-0 off the RPC mesh the
+  whole window — and **every hour for 3 days** (`Too many failed pings from a79a…`). Cause: the
+  SA400 at 300–760 ms writes, load1 70, iowait 30–70 %, with `metadata_fsync` on a 28 GB
+  page-faulting env — and all three pods still on the build-out's `resync-worker-count 8 /
+  tranquility 0` (never reset). Per pod: UploadPart mean 27 s / p99 100 s on garage-0 vs 10.7 / 50
+  on garage-2; ListObjectsV2 p99 35.7 s vs 4.5 s on garage-1; store-wide listing p99 0.8 s → 16 s in
+  8 days. Longhorn clean in the window (not the 09-06/07 churn class). Upstream mechanism verified
+  on v2.3.0 source (Complete takes the newest mpu entry complete or not; ListParts skips
+  incomplete) — worth an upstream issue, oracle side drafts it.
+- **Commands:** resync workers → defaults 1/2 on all three pods 05:50Z (live, ephemeral). PR
+  `fix/garage-0-zone-stall`: garage.md §Metadata reclamation corrected, ledger row + the
+  SA400-under-rf=3 read, `GarageDiskFillingUp` summary names the pod + rf=3 reading in the
+  description (promtool test updated). homelab#903 responder diagnosis ("15 days of churn
+  regrowth, expand or fix #499") corrected in-thread — the PVC is 2 days old and born bloated;
+  #884's "transient blip" given its cause (probe landing on the stalled pod). Both handoffs →
+  `done/` with Results (client posture for s3io: read_timeout ≥ 300 s, concurrency ≤ 4, 64 MiB
+  parts, standard retries ×3, re-upload on InvalidPart). Responder's other 8 h: #1546/#1547
+  (agent platform), #1013 (known is-zero FP), #500/#100 (nix-cache/optane) — none garage.
+- **Open:** the snapshot-seeded rotation of garage-0 (FU-137, meta-state sitting; ~1.5 GB/day into
+  3.4 GiB) and the SA400 swap (buy list). Acceptance for both handoffs = garage-0's ListObjectsV2
+  p99 at garage-1's level after the rotation.
+
+## 2026-09-09 morning (~06:4x–09:0xZ) — the rotation loop built and run; belts before fixes (operator ruling)
+
+- **Condition:** operator chose "build the loop first, first run = garage-0" (FU-137). `/design`
+  read: garage.md §Metadata reclamation/§build-out, ADR-114 (+addendum b/c), ledger, upstream
+  v2.3.0 (`lmdb_adapter.rs`, `snapshot.rs`, admin `api.rs`), node-fstrim as the precedent.
+- **Built (PR#1549, reviewer caught the cooldown gap — fixed):** seed = `meta-rotate` init
+  container (vendored-chart patch `extraInitContainers`) swapping the pod's own finished
+  auto-snapshot in; loop = CronJob polling the alert with a health gate; belts
+  `GarageMetaRotation{Failed,ControllerSilent,NotReclaiming}`. Three live gate refusals tuned
+  from 7-day data (#1551 insert=1 → thresholds; #1553 Merkle 2597 → 10k; #1554 resync 8081 →
+  100k). **First unattended run 08:45Z: garage-0 27.83 → 4.68 GB, seed 76 s / Ready 100 s /
+  converge 55 s**, alert cleared, quorum served.
+- **Operator question "nothing alerted wk-metal-04 dropping out?"** → yes, a gap: node belts
+  fired briefly (NodeDiskIOSaturation ×4, resolved inside the responder's window), nothing
+  Garage-shaped. **PR#1550:** `/health`-per-pod blackbox probe (unauthenticated; body says
+  "some storage nodes are unavailable" at 200) + `GarageClusterDegraded/Flapping/PeerRpcTimeouts`.
+  ⚠ blackbox-exporter needs `POST /-/reload` after a module edit (done by hand; the pod is 5 d
+  old and does not watch its ConfigMap) — note for blackbox.yaml.
+- **Uptime question:** measurable since 08-28 only (ServiceMonitor): 99.87 % scrape-level,
+  99.95 % request-level over 12 days; the SA400 stall is latency, invisible to both. No Garage
+  dashboard/SLO exists anywhere (grepped tracker/issues/roadmap/live CMs).
+- **Operator ruling (recorded: memory, GAPS handoff-G1, seat card §Safety via PR#1552):** a
+  stack report is only "there is a problem" — build the PLATFORM detector first, replay it on
+  the event, land it, THEN fix from the alert. Applied to oracle-fleet#228's rollout-quorum-loss
+  comment: **PR#1552** `GarageS3ServerErrors` + `GarageQuorumMembersRestarted` (both replay true
+  at 07:25Z; reviewer struck an asserted fix class from the description — reworded). The fix
+  (readiness probe on `/health` + `minReadySeconds` 90; the chart ships NO readiness probe, so
+  the 07:22Z rollout cycled all three pods in 31 s) = **PR#1555**, whose rollout is the belt's
+  live test.
+- Also: adapters for m70s NOT arrived (inventory corrected: thinkcentre Optanes are PCIe cards,
+  no native M.2 anywhere); `resync_cfg` PERSISTS in the meta dir (the "ephemeral" note was
+  wrong); stale pre-rotation node id b4bea2… still in every `peer_list` (knownNodes 4/3).
+- **Tail (09:0x–09:5xZ):** **PR#1555** (readiness probe on `/health` + `minReadySeconds` 90)
+  rolled at 09:00–09:05Z: starts 09:00:48 / 09:02:52 / 09:04:50, each Ready in 25–40 s, the
+  peers' `/health` held 1 throughout, **`GarageS3ServerErrors` silent** (vs 07:22Z's stack-visible
+  quorum loss) — `GarageQuorumMembersRestarted` fired on the ~2-min spacing as designed →
+  **PR#1556** `minReadySeconds` 300 (applied without a rollout: the field is outside the pod
+  template — its live test is the next template change). Acceptance of the rotation, +50 min:
+  garage-0 ListObjectsV2 p99 **1.45 s** (was 35.7 s; peers 0.8/1.5), items converged 1,896,572 on
+  all three, meta 5.35 GB. Residual found and belted (**PR#1558** `GarageTableGcBacklog`, >500k for
+  2h): garage-2's table GC climbed 133k → 1.77 M across the stall day (GC pushes every tombstone
+  to every replica; garage-0 unreachable parked it) and drains at ~130k/h since the rotation —
+  ~10 h to clear; blackbox `/-/reload` note in blackbox.yaml. Belts live from this stint:
+  Cluster{Degraded,Flapping}, PeerRpcTimeouts, S3ServerErrors, QuorumMembersRestarted,
+  TableGcBacklog, MetaRotation{Failed,ControllerSilent,NotReclaiming}.
+- **Open for the next session:** the SA400 swap (buy list) and m70s adapters (not arrived);
+  `GetClusterHealth` knownNodes 4/3 (stale id b4bea2… in every peer_list — cosmetic); a Garage
+  SLO/dashboard exists nowhere (offered, not ordered); the loop's second run will be whichever
+  meta volume crosses 80 % next (garage-2 at 16 GB is the candidate).
