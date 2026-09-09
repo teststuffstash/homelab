@@ -24,9 +24,24 @@ never the session's arc — that is TICK-LOG's.)
   card — abandoned for today (operator). m70s waits for a Gembird (LP). hp-01 untouched.
   (4) **Plug ids were crossed since 08-18 → incident
   `2026-09-09-crossed-plug-hp01-outage.md`**; swapped in the HA registry, `power` subcommand
-  refuses a loaded socket. (5) Seat reads done: #1561 merged (approved), **#1562 fixed in-PR
-  (kustomize-only source, one probe.py) and waiting on the bot's re-review → then the seat's
-  approve**; #1570 (this PR: the disks + the ride-detector fix) auto-merge armed.
+  refuses a loaded socket. (5) Seat reads done: #1561, #1562, #1570 all MERGED. (6) **m70s was
+  freed for the oracle delta (oracle-iac#711, requests cpu 2)**: its outage-parked Deployment
+  pods moved to hp-01/wk-01 (2126m free on m70s; untainted pool otherwise <1.3 cores each) — the
+  PR's node-fit paragraph counted tainted nodes (no toleration anywhere in the path; every delta
+  ran on m70s). (7) **CPU discussion (operator, 2026-09-09 late) — write up, don't build yet:**
+  cluster 49 allocatable / 22.4 requested / 9.7 used; cilium-agent 5.5 + Longhorn IM 5.4 +
+  longhorn-manager 3.0 cores requested use 2.8 → ~1.3 cores tax per 4-core node (FU-112b
+  Guaranteed + FU-224). Levers ranked: cilium-agent Burstable 150m/500m (system-node-critical
+  already carries the OOM protection), per-node IM CPU on compute-only nodes, sleepers to p95.
+  **Ruled OUT: ride preemption** — a failed ride is a coordinator round, not a free retry.
+  Kyverno/priority-class exclusivity parked: the fleet direction makes it moot. (8) **Fleet
+  direction (operator):** Xeon-class boxes = untainted production/batch compute (never a storage
+  zone beyond ONE zone's share); laptops = control planes; gaming PC = rides/ARC/inference
+  (tainted); SFFs = std + Garage zones, storage spread equally — **placement rule to write into
+  the storage ledger + hardware §Strategy: "no box holds more than one zone's share" (Garage
+  places by capacity, Longhorn by free space — a fat box becomes the centre of gravity)**;
+  thinkcentre + hp-01 retire once m70s (Gembird → 7600p for Garage, Micron → std) and one more
+  SFF (register R3(c)) carry std; wk-02 stays the third zone until the second hypervisor.
 - **⚑ PICKUP (2026-09-08 late corpus session, ~19:1xZ wind-down — the five-PR read + S8 #1423 BUILT):**
   (1) **S8 #1423 is DONE** — PR#1535 (scan nomination + trigger (e) + footprint predicates +
   goal-lint), PR#1531 (reviewer depth re-key), PR#1530 (checkpoint theme play + docs); closed with
