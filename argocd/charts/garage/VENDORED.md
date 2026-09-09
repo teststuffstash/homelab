@@ -12,3 +12,11 @@ depends on git.deuxfleurs.fr being reachable (boot-from-git principle).
 To update: re-clone the desired tag, copy `script/helm/garage/` over this dir,
 bump the values in `argocd/platform/garage.yaml` (`helm.valuesObject`), and update the
 tag/commit above.
+
+## Local patches (re-apply after every update)
+
+- `templates/workload.yaml` + `values.yaml`: `extraInitContainers` (rendered after `garage-init`).
+  Carries the `meta-rotate` init container that seeds a zone's metadata from its own finished
+  compacted snapshot — the rotation loop's mechanism (docs/garage.md §Metadata reclamation,
+  `argocd/resources/garage-meta-rotation/`). Upstream's chart has `extraVolumes`/`extraVolumeMounts`
+  but no init-container hook (2026-09-09).
