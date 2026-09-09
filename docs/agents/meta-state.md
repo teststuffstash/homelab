@@ -164,7 +164,10 @@ never the session's arc — that is TICK-LOG's.)
   the rotation loop (PR#1549 + thresholds #1551/#1553/#1554) rotated garage-0 on its own at
   08:45Z, 27.83 → 4.68 GB in 4 min (ledger). Residual watch: garage-2's `table_gc_todo`
   (1.77 M earlier, GC failing while garage-0 flapped) should drain now — if it does not, that
-  is a belt to add; garage-0's ListObjectsV2 p99 should fall to garage-1's (~4.5 s vs 35.7 s).
+  is belted (PR#1558 `GarageTableGcBacklog`; draining ~130k/h, ~10 h). Acceptance PASSED:
+  garage-0 ListObjectsV2 p99 1.45 s (was 35.7). Rollouts no longer cost quorum (PR#1555 readiness
+  + PR#1556 `minReadySeconds` 300 — the 300 s spacing is untested by a rollout yet; the next
+  garage template change is its live test, `GarageQuorumMembersRestarted` must stay silent).
   The 3 ERT giants STAY (docs/garage.md §Durability).
 - **⚑ GOALS — verdicts are the operator's, the seat recommends:**
   - **#818 G-B — HELD with a posted 4-clause verdict condition** (teeth drills deferred to

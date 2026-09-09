@@ -8113,3 +8113,20 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
 - Also: adapters for m70s NOT arrived (inventory corrected: thinkcentre Optanes are PCIe cards,
   no native M.2 anywhere); `resync_cfg` PERSISTS in the meta dir (the "ephemeral" note was
   wrong); stale pre-rotation node id b4bea2… still in every `peer_list` (knownNodes 4/3).
+- **Tail (09:0x–09:5xZ):** **PR#1555** (readiness probe on `/health` + `minReadySeconds` 90)
+  rolled at 09:00–09:05Z: starts 09:00:48 / 09:02:52 / 09:04:50, each Ready in 25–40 s, the
+  peers' `/health` held 1 throughout, **`GarageS3ServerErrors` silent** (vs 07:22Z's stack-visible
+  quorum loss) — `GarageQuorumMembersRestarted` fired on the ~2-min spacing as designed →
+  **PR#1556** `minReadySeconds` 300 (applied without a rollout: the field is outside the pod
+  template — its live test is the next template change). Acceptance of the rotation, +50 min:
+  garage-0 ListObjectsV2 p99 **1.45 s** (was 35.7 s; peers 0.8/1.5), items converged 1,896,572 on
+  all three, meta 5.35 GB. Residual found and belted (**PR#1558** `GarageTableGcBacklog`, >500k for
+  2h): garage-2's table GC climbed 133k → 1.77 M across the stall day (GC pushes every tombstone
+  to every replica; garage-0 unreachable parked it) and drains at ~130k/h since the rotation —
+  ~10 h to clear; blackbox `/-/reload` note in blackbox.yaml. Belts live from this stint:
+  Cluster{Degraded,Flapping}, PeerRpcTimeouts, S3ServerErrors, QuorumMembersRestarted,
+  TableGcBacklog, MetaRotation{Failed,ControllerSilent,NotReclaiming}.
+- **Open for the next session:** the SA400 swap (buy list) and m70s adapters (not arrived);
+  `GetClusterHealth` knownNodes 4/3 (stale id b4bea2… in every peer_list — cosmetic); a Garage
+  SLO/dashboard exists nowhere (offered, not ordered); the loop's second run will be whichever
+  meta volume crosses 80 % next (garage-2 at 16 GB is the candidate).
