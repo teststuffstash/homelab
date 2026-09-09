@@ -26,6 +26,10 @@ POD_SELECTOR = os.environ.get("POD_SELECTOR", "app.kubernetes.io/name=garage")
 COOLDOWN = int(os.environ.get("COOLDOWN_S", "43200"))          # one zone per 12 h at most
 MIN_POD_AGE = int(os.environ.get("MIN_POD_AGE_S", "600"))
 RESYNC_QUEUE_MAX = int(os.environ.get("RESYNC_QUEUE_MAX", "5000"))
+# Table queues are never exactly zero on a live store — every write queues a Merkle update and the
+# counter tables churn on each PUT (the first live tick refused on insert=1, 2026-09-09 08:00Z).
+# A resync in progress is tens of thousands; these bound "idle" without confusing a write for it.
+TABLE_QUEUE_MAX = int(os.environ.get("TABLE_QUEUE_MAX", "1000"))
 READY_TIMEOUT = int(os.environ.get("READY_TIMEOUT_S", "1800"))
 CONVERGE_TIMEOUT = int(os.environ.get("CONVERGE_TIMEOUT_S", "3600"))
 DRY_RUN = os.environ.get("DRY_RUN", "") == "1"
@@ -191,8 +195,8 @@ def main():
         log("refuse: GetNodeStatistics errors:", errs); return 0
     for nid, s in stats.items():
         for tname, t in s["tables"].items():
-            if t.get("merkleQueueLen", 0) or t.get("insertQueueLen", 0):
-                log(f"refuse: node {nid} table {tname} has queued work merkle={t.get('merkleQueueLen')} insert={t.get('insertQueueLen')}"); return 0
+            if t.get("merkleQueueLen", 0) > TABLE_QUEUE_MAX or t.get("insertQueueLen", 0) > TABLE_QUEUE_MAX:
+                log(f"refuse: node {nid} table {tname} has queued work merkle={t.get('merkleQueueLen')} insert={t.get('insertQueueLen')} (> {TABLE_QUEUE_MAX})"); return 0
         rq = s["blocks"].get("resyncQueueLen", 0)
         if rq > RESYNC_QUEUE_MAX:
             log(f"refuse: node {nid} block resync queue {rq} > {RESYNC_QUEUE_MAX}"); return 0
@@ -250,7 +254,7 @@ def main():
         me = stats.get(target_id)
         if not me or errs:
             continue
-        busy = [t for t, s in me["tables"].items() if s.get("merkleQueueLen", 0) or s.get("insertQueueLen", 0)]
+        busy = [t for t, s in me["tables"].items() if s.get("merkleQueueLen", 0) > TABLE_QUEUE_MAX or s.get("insertQueueLen", 0) > TABLE_QUEUE_MAX]
         behind = []
         for tname in ("object", "version", "block_ref"):
             mine = me["tables"].get(tname, {}).get("items", 0)
