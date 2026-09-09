@@ -216,8 +216,13 @@ power() {
   draw="$(ha_state "$sensor")"
   log "$NODE plug: $sensor = ${draw} W, $sw = $(ha_state "$sw")"
   [ "${1:-status}" = cycle ] || return 0
-  if [ "${draw%.*}" -ge 3 ] 2>/dev/null && [ "$FORCE" != 1 ]; then
-    log "REFUSED: that socket is carrying ${draw} W — a running box (or the wrong socket). FORCE=1 to cycle anyway."; return 2; fi
+  # Fail CLOSED: a non-numeric reading (unavailable/unknown/null — real states for these Tuya
+  # plugs) is "cannot tell", which is the same reason to refuse as "carrying load" (reviewer, PR#1568).
+  case "$draw" in
+    ''|*[!0-9.]*) [ "$FORCE" = 1 ] || { log "REFUSED: plug reading is '${draw}', not a number — cannot tell whether the box is running. FORCE=1 to cycle anyway."; return 2; } ;;
+    *) if [ "${draw%.*}" -ge 3 ] 2>/dev/null && [ "$FORCE" != 1 ]; then
+         log "REFUSED: that socket is carrying ${draw} W — a running box (or the wrong socket). FORCE=1 to cycle anyway."; return 2; fi ;;
+  esac
   log "cycling $sw (off → 8 s → on)"; ha_call turn_off "$sw"; sleep 8; ha_call turn_on "$sw"; sleep 5
   log "$NODE plug after: $(ha_state "$sensor") W, $sw = $(ha_state "$sw")"
 }
