@@ -121,6 +121,20 @@ spec:
         # Platform store above per-ride pods at scheduling and eviction time (the laptops are
         # shared with kata rides). rf=3 tolerates losing one zone, but not as a routine event.
         priorityClassName: system-cluster-critical
+        # ROLLOUTS MUST NOT COST QUORUM (2026-09-09 07:22Z: the chart ships no readiness probe, so
+        # a values change cycled all three pods in 31 s and a stack's S3 delete failed on
+        # "Could not reach quorum of 2" — GarageQuorumMembersRestarted + GarageS3ServerErrors are
+        # the detectors, built first and replayed on the event). /health answers 503 exactly when
+        # THIS node's view has no quorum, so a pod is Ready only once it has rejoined its peers —
+        # and a node stalled off the mesh drops out of the S3 Service instead of coordinating
+        # requests (the 2026-09-08 SA400 class). minReadySeconds then holds the rollout a further
+        # 90 s per pod so the next member goes down only after the previous one has been serving.
+        readinessProbe:
+          httpGet: { path: /health, port: 3903 }
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+        minReadySeconds: 90
         # One pod per physical zone, ONLY on the three zone nodes. Required anti-affinity on the
         # zone key is what keeps a pod from following a dead node into another zone (it stays
         # Pending until its zone returns — correct for a zone-pinned store whose volume is

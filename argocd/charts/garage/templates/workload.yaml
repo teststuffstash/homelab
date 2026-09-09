@@ -12,6 +12,9 @@ spec:
   replicas: {{ .Values.deployment.replicaCount }}
   serviceName: {{ include "garage.fullname" . }}-headless
   podManagementPolicy: {{ .Values.deployment.podManagementPolicy }}
+  {{- with .Values.minReadySeconds }}
+  minReadySeconds: {{ . }}
+  {{- end }}
   {{- end }}
   template:
     metadata:
