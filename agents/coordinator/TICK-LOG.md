@@ -8130,3 +8130,40 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   `GetClusterHealth` knownNodes 4/3 (stale id b4bea2… in every peer_list — cosmetic); a Garage
   SLO/dashboard exists nowhere (offered, not ordered); the loop's second run will be whichever
   meta volume crosses 80 % next (garage-2 at 16 GB is the candidate).
+
+## 2026-09-09 evening (~15:0x–18:5xZ) — the drive windows: settle built, plugs crossed, wk-metal-04 demoted
+
+**Design answer first.** Two Intel 7600p + two Axagon x4 adapters arrived; operator asked where.
+Ground truth (ledger §2026-09-05, hardware R2): the only Garage box a drive can change is
+wk-metal-04 (X240 has no slot, m70s already on DRAM NVMe); at rf=3 a PUT returns at the
+second-fastest zone, so garage-0 off the SA400 is THE latency lever. Operator's better topology
+(Garage on the storage boxes thinkcentre/hp-01/m70s, laptops pure compute) was agreed, then
+parked for the day when thinkcentre's x16 would not link and hp-01 went dark; both drives went
+into wk-metal-04 (the R2 demote) instead.
+
+**node-maintenance grew up (PR#1564, #1568, #1570 + two quickfixes).** Preflight's "only running
+replica here" fired on every DETACHED volume (no replica runs anywhere); Longhorn's default
+`block-if-contains-last-replica` blocked a drain on stopped replica-1 volumes → tofu sets
+`allow-if-replica-is-stopped`. `settle` (operator: "do as much as it can"): cordon, WAIT for
+transient consumers, MOVE last replicas long-lived pods hold, MOVE_AFTER for the coordinator's
+RWX transcripts (re-held back-to-back), strict-local zone volumes = WARN never moved, any bare
+pod = a ride (the drain refused `oracle-fleet/agent-…-r2` once), `--force` only after settle.
+`power <node> [status|cycle]` reads the plug draw and refuses a loaded socket (fail closed on a
+non-numeric reading). `DRY=1` previews the whole `down`. Three live windows exercised all of it.
+
+**The incident (own miss).** #1565: the 3e51f67e quickfix left `tofu/longhorn.tf` unformatted
+→ 9/9 PRs red via the updater; pre-push now runs `tofu fmt -check`, CI runs on master pushes.
+Then the plug ids: `switch.tuyalocal_thinkcentre` sat on hp-01's socket since the 08-18 rename;
+"power it on" → the seat cycled it → hp-01 off, no AC-restore, both std zones dark ~17:17–17:4x
+(3 CNPG volumes replica-less, Alertmanager evicted). Seat had read the switch + ping, not the
+DRAW (24 W behind a "dark" box). Histories settled it; entity ids swapped in the HA registry via
+the websocket API; postmortem `docs/incidents/2026-09-09-crossed-plug-hp01-outage.md`.
+
+**wk-metal-04 (18:03–18:5xZ).** Rebuild wait → settle (ride waited 10 min then its scratch
+moved; a bare ride pod then blocked the drain → detector fixed → second run waited the ride out,
+PR oracle-fleet#541) → shutdown 18:27 → both 7600p fitted → button (WoL dead after the AC cut)
+→ `longhorn_disks` intel0/intel1 by eui → apply rebooted once → mounted XFS → registered `bulk`
+0 reserved, sata500 → `slow-bulk`. garage-0 rotation onto intel0 = next session (meta-state).
+Seat reads: #1561 approved+merged; #1562 fixed in-PR (kustomize-only, one probe.py), re-review
+pending. thinkcentre: 2 DIMM slots both filled (no RAM add), x16 slot never enumerated.
+
