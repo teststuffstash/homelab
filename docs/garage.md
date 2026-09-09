@@ -388,6 +388,26 @@ original pod only.
     prior-key consumer still authenticating — the §Durability grant sweep does not apply (no
     metadata was restored, it moved).
 
+### SLO — service level objectives (FU-093, 2026-09-09)
+
+**Objectives** (measured 2026-09-09 post-rotation, **recorded in the dashboard**):
+
+- **Availability:** ≥99.95% uptime (measured: 99.95% request-level, 99.87% scrape-level since 2026-08-28 when rf=3 opened)
+- **Error ratio:** <0.1% over 30 days (500/503 servers errors only; 4xx are client errors)
+- **Latency by operation class:**
+  - Read (`GetObject`, `HeadObject`): p99 <2 s (measured: 0.4 s)
+  - Write (`PutObject`, `UploadPart`, `CompleteMultipartUpload`, `DeleteObject`): p99 <10 s (measured: 4.6 s)
+  - List (`ListObjectsV2`, `ListParts`): p99 <5 s (measured: 1.5 s)
+
+**Dashboard:** [Grafana Garage SLO dashboard](https://grafana.teststuff.net/d/garage-slo/) — updated every 30 s, 1h rolling window. Panels: availability per pod, S3 request rate by endpoint, error ratio, latency percentiles by class, per-pod volume utilization (with 80% alert threshold), table sizes, queue backlogs, RPC timeouts, and the metadata rotation loop status (via pushgateway).
+
+**Recording rules** (`argocd/resources/garage-alerts/prometheusrule.yaml`, group `garage-slo`):
+- `garage:s3_requests:rate5m` — request rate by endpoint
+- `garage:s3_server_error_ratio:rate5m` — error ratio by endpoint
+- `garage:s3_latency_seconds:p99_5m` / `:p50_5m` — latency percentiles by endpoint
+- `garage:cluster_health:availability_ratio_1h` — cluster health from blackbox probe per pod
+- `garage:meta_volume_used_ratio` / `:data_volume_used_ratio` — volume utilization per pod
+
 ### Belts — what alerts on the rf=3 store (2026-09-09)
 
 Symptoms, not guessed causes; each names where to read next. In
