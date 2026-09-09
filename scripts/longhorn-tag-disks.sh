@@ -138,6 +138,21 @@ kubectl -n longhorn-system patch nodes.longhorn.io wk-metal-04 --type=merge -p '
 }' >/dev/null
 echo "  wk-metal-04/sata500 registered (bulk, 150Gi reserved)"
 fi
+# wk-metal-04's DEMOTE (2026-09-09): two Intel SSD Pro 7600p 256G (DRAM-cached — the buying
+# criterion, docs/storage-ledger.md §2026-09-05) mounted by Talos at /var/lib/longhorn/intel{0,1}
+# from machines.yaml `longhorn_disks`. They ARE the bulk tier on this node from now on; the
+# DRAM-less SA400 (486 ms / 26 MB/s sustained) drops to `slow-bulk`: nothing new lands on it,
+# what already sits there (registry mirrors, garage-0's zone volumes until the rotation) stays.
+# storageReserved 0: Longhorn data only, no image store on these (the hg5d shape).
+for d in intel0 intel1; do
+  if kubectl -n longhorn-system get nodes.longhorn.io wk-metal-04 -o jsonpath="{.spec.disks.$d.path}" 2>/dev/null | grep -q .; then
+    echo "  wk-metal-04/$d already registered — skip"
+  else
+    kubectl -n longhorn-system patch nodes.longhorn.io wk-metal-04 --type=merge -p "{\"spec\":{\"disks\":{\"$d\":{\"path\":\"/var/lib/longhorn/$d\",\"allowScheduling\":true,\"evictionRequested\":false,\"storageReserved\":0,\"tags\":[\"bulk\"],\"diskType\":\"filesystem\"}}}}" >/dev/null
+    echo "  wk-metal-04/$d registered (bulk, 0 reserved)"
+  fi
+done
+tag wk-metal-04 sata500 '["slow-bulk"]'
 
 # m70s: the ADR-114 third PHYSICAL Garage zone (2026-09-07). Whole-disk EPHEMERAL on a 512G
 # Micron 2300 (DRAM-cached — it clears the data-disk criterion), so the Longhorn disk is the
