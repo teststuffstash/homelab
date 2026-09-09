@@ -46,6 +46,19 @@ data:
             Origin: https://mcp.oracle.teststuff.net
           body: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"blackbox-fu099","version":"1.0"}}}'
           valid_status_codes: [200, 400, 401, 403, 406]
+      # Garage cluster health as each node sees it (docs/garage.md §Belts). /health is the one
+      # UNAUTHENTICATED admin endpoint (probed 2026-09-09: 200 without a token; GetClusterHealth
+      # is 403) and it answers 200 for BOTH "fully operational" and "operational but some storage
+      # nodes are unavailable" — only a lost quorum is a 503. The regex is what turns a degraded
+      # cluster into a failed probe. Probed per POD (the headless DNS names), because a partitioned
+      # node reports the peers it cannot reach: three views, not one.
+      garage_health:
+        prober: http
+        timeout: 10s
+        http:
+          preferred_ip_protocol: ip4
+          fail_if_body_not_matches_regexp:
+            - "fully operational"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -108,6 +121,26 @@ spec:
         - https://argo.teststuff.net
         - https://transcripts.local.teststuff.net
         - https://specs.oracle.teststuff.net
+---
+# The 2026-09-08 stall class: garage-0 dropped off the RPC mesh for minutes every hour for three
+# days and nothing at the Garage level said so (docs/storage-ledger.md §The SA400 zone under rf=3
+# load). Rules: GarageClusterDegraded / GarageClusterFlapping in argocd/resources/garage-alerts/.
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: garage-health
+  namespace: monitoring
+spec:
+  jobName: blackbox-garage-health
+  interval: 60s
+  module: garage_health
+  prober: { url: blackbox-exporter.monitoring.svc:9115 }
+  targets:
+    staticConfig:
+      static:
+        - http://garage-0.garage-headless.garage.svc.cluster.local:3903/health
+        - http://garage-1.garage-headless.garage.svc.cluster.local:3903/health
+        - http://garage-2.garage-headless.garage.svc.cluster.local:3903/health
 ---
 # DNS probe through Unbound for github names (homelab#1125). Targets Unbound's own resolver
 # at 192.168.2.1:53, not the pod resolver chain, so the belt localizes the layer the way the
@@ -206,7 +239,7 @@ spec:
         # ⚠ Same bridge, same reasoning as the rule above (this file's class block) — the two
         # differ only in which targets they select, and a roll of the single prober empties both.
         - alert: EndpointProbeFailing
-          expr: min_over_time(probe_success{instance!~"https://(mcp|specs)\\.oracle\\..*"}[5m]) == 0
+          expr: min_over_time(probe_success{instance!~"https://(mcp|specs)\\.oracle\\..*",job!="blackbox-garage-health"}[5m]) == 0
           for: 10m
           labels:
             severity: warning
