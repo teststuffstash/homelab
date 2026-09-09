@@ -79,7 +79,7 @@ never the session's arc — that is TICK-LOG's.)
   Replace with a **DRAM-equipped** drive; buying criterion for ANY Garage/Longhorn data disk is
   DRAM cache, not €/GB. Pairs with the FU-137 third-zone box, and
   **the box is BOUGHT, OPENED and ONBOARDED (2026-09-07): ThinkCentre M70s SFF ≈150 €, + 2 ×
-  M.2→PCIe x4 adapters** — `m70s` @ **192.168.2.56** is a Ready Talos worker, `zone: m70s`, BGP
+  M.2→PCIe x4 adapters ordered, NOT yet arrived (2026-09-09)** — `m70s` @ **192.168.2.56** is a Ready Talos worker, `zone: m70s`, BGP
   `established`, PXE-installed on `/dev/nvme0n1` (matchbox flag applied then destroyed; BIOS is
   PXE-first by operator choice so a network wipe+reinstall needs no console). **What remains for
   FU-137 is the Garage half, not the box**: fit a data disk on one of its two free LP PCIe slots and
