@@ -400,6 +400,12 @@ original pod only.
   - List (`ListObjectsV2`, `ListParts`): p99 <5 s (measured: 1.5 s)
 
 **Dashboard:** [Grafana Garage SLO dashboard](https://grafana.teststuff.net/d/garage-slo/) — updated every 30 s, 1h rolling window. Panels: availability per pod, S3 request rate by endpoint, error ratio, latency percentiles by class, per-pod volume utilization (with 80% alert threshold), table sizes, queue backlogs, RPC timeouts, and the metadata rotation loop status (via pushgateway).
+**Companion:** [upstream's own dashboard](https://grafana.teststuff.net/d/garage-upstream/) (vendored
+2026-09-09 from the Garage repo's `script/telemetry/`, datasource + `job` label edited) — the raw
+rates the SLO view folds away: disk I/O bytes, S3/web/RPC request rates, errors by status code,
+the resync/GC/Merkle queues, errored blocks. "Is Garage doing anything right now" reads there;
+neither has a bucket label — Garage's exporter carries none (per-bucket latency is a
+client-side measurement).
 
 **Recording rules** (`argocd/resources/garage-alerts/prometheusrule.yaml`, group `garage-slo`):
 - `garage:s3_requests:rate5m` — request rate by endpoint
@@ -527,7 +533,11 @@ Two halves, both in git, nothing attended:
 --from-literal=ROTATE_GENERATION=<last+1> -o yaml --dry-run=client | kubectl apply -f -`, then
 `kubectl -n garage delete pod garage-N`, read `kubectl logs garage-N -c meta-rotate`, then
 `garage repair --yes tables` on that pod and watch `garage stats -a` converge. The controller's
-next run sees `STATE` unset and treats the ConfigMap as history. **Never** use `repair tables`
+next run sees `STATE` unset and treats the ConfigMap as history. A step-8 zone rotation (fresh
+volumes, new node id) coexists with the loop without any order: the fresh meta volume has no live
+env, so the init container logs `SKIP reason=no-live-env` and records the generation, and the
+controller's gate refuses for the resync's whole duration (queues) — verified on the 2026-09-09
+20:05Z rotation of garage-0 onto the 7600p (ledger §The rf=3 build-out as run). **Never** use `repair tables`
 alone as the reclamation: measured 2026-09-09, a natively re-synced env is 3–4× the compacted
 size (§above), which is the fill this loop exists to clear.
 
