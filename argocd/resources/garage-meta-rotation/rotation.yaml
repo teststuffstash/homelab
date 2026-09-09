@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: garage-meta-rotation
+---
+# Exactly what one rotation needs and nothing wider: read the garage pods, delete ONE (the
+# StatefulSet recreates it), read the init container's log, own the runtime state ConfigMap.
+# Garage itself is driven over its admin API (token mounted from garage-admin-token), not exec.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: garage-meta-rotation
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, delete]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [garage-meta-rotation-state]
+    verbs: [get, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: garage-meta-rotation
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: garage-meta-rotation }
+subjects:
+  - { kind: ServiceAccount, name: garage-meta-rotation }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: garage-meta-rotation
+spec:
+  # Polls the alert; idle runs cost one Prometheus query and a heartbeat push. A rotation run holds
+  # the job for the seed + Ready + convergence waits (bounded below), and Forbid keeps a second
+  # from starting under it — the state ConfigMap is the second belt against overlap.
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 7200
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: garage-meta-rotation
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: controller
+              # Stdlib-only Python — no apk/pip at run time (local-first; the image is already
+              # pulled for other platform jobs and rides the docker.io pull-through mirror).
+              image: python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00
+              command: ["python3", "-u", "/controller/controller.py"]
+              env:
+                - name: NAMESPACE
+                  valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+                - name: PROM_URL
+                  value: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+                - name: PUSHGATEWAY_URL
+                  value: http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+                - name: GARAGE_ADMIN_TOKEN
+                  valueFrom: { secretKeyRef: { name: garage-admin-token, key: token } }
+                # One zone per 12 h at most; the loop is a trickle, not a sweep.
+                - { name: COOLDOWN_S, value: "43200" }
+                - { name: RESYNC_QUEUE_MAX, value: "5000" }
+                - { name: READY_TIMEOUT_S, value: "1800" }
+                - { name: CONVERGE_TIMEOUT_S, value: "3600" }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: controller, mountPath: /controller }
+              resources:
+                requests: { cpu: 20m, memory: 64Mi }
+                limits: { memory: 256Mi }
+          volumes:
+            - name: controller
+              configMap: { name: garage-meta-rotation-controller }

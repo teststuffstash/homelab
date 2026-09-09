@@ -447,10 +447,10 @@ verify. The native path stays the corrupt-node primitive, never the reclamation 
 
 Three things the rotation loop needs before it is armed, none of which ADR-114 carried:
 
-- **A measured full-table resync cost.** Unknown today, and nothing in the corpus has it — the
-  2026-08-24 incident's ~20.3 KB/object random-insert figure is the *S3-API* restore path, not a
-  Merkle table sync, and does not transfer. This number bounds the rotation cadence and decides
-  whether the loop is safe to automate; measure it on the first rf=3 node.
+- **A measured full-table resync cost.** Measured in the build-out (ledger §The rf=3 build-out
+  as run: ~27k items/min from healthy peers) — and found to be the wrong mechanism for
+  reclamation (it re-bloats); the loop's seed is the snapshot, the resync only reconciles the
+  ≤6 h delta.
 - **A trigger, not a cron.** `GarageDiskFillingUp` already exists and already fires (per pod —
   the summary names the zone); rotating on the fill threshold makes the cadence follow whatever
   churn the workload happens to produce.
@@ -458,8 +458,45 @@ Three things the rotation loop needs before it is armed, none of which ADR-114 c
   refuse if quorum would drop — the same discipline the layout ops already carry.
 
 **The zone gate cleared 2026-09-07** — the third physical zone is `m70s`, and step 8 of §The
-build-out was the first rotation run for real (measured in the ledger). What remains before the
-loop is armed is the trigger and the health gate above; the rf=1 interim swap is history.
+build-out was the first rotation run for real (measured in the ledger); the rf=1 interim swap is
+history.
+
+#### The loop as built (2026-09-09, `argocd/resources/garage-meta-rotation/`)
+
+Two halves, both in git, nothing attended:
+
+- **Seed** — `meta-rotate`, an init container in every garage pod (vendored-chart patch
+  `extraInitContainers`, [`garage.yaml`](../argocd/platform/garage.yaml)). A no-op on every
+  ordinary start. When the runtime ConfigMap `garage-meta-rotation-state` names THIS pod with a
+  generation it has not applied, it replaces `/mnt/meta/db.lmdb` with the pod's **own latest
+  finished** auto-snapshot (`/mnt/data/meta_snapshots/<ts>/db.lmdb` → `db.lmdb/data.mdb`) and
+  Garage reconciles the ≤6 h delta from its two peers. "Finished" = written ≥10 min ago AND
+  ≥90 % of the largest snapshot present (a pod deleted mid-snapshot leaves a truncated file of the
+  same name shape). `node_key*` and the layout files stay, so the node id and the layout do
+  not change — no `layout assign/remove` follows, unlike step 8. One greppable verdict line:
+  `ROTATED` / `SKIP reason=…` / `ROTATE-FAIL`; the generation is recorded on the volume
+  (`.meta-rotation-gen`) so a crash-loop never re-seeds.
+- **Loop** — `controller.py`, a CronJob every 15 min. Trigger: **the alert** —
+  `ALERTS{alertname="GarageDiskFillingUp",volume="metadata"}` firing, so cadence follows churn
+  (addendum (b)); an idle run is one query and a heartbeat. Gate (addendum (c)): every garage pod
+  Ready and ≥10 min old, every node `isUp` and not draining, no table with Merkle/insert work
+  queued on any node, every block resync queue <5 000, no rotation pending, none finished in the
+  last 12 h. Then, for ONE zone: write the order → `delete pod` → wait Ready → read the init
+  container's verdict → `LaunchRepairOperation tables` on that node (admin API, not exec) → wait
+  until its `object`/`version`/`block_ref` item counts are within 0.5 % of the peers' and its
+  queues are empty → record + push (`garage_meta_rotation_*` via the pushgateway). Belts:
+  `GarageMetaRotationFailed`, `…ControllerSilent` (heartbeat >1 h), `…NotReclaiming`
+  (`GarageDiskFillingUp` on metadata firing 6 h — the loop should have cleared it: gate refusing,
+  seed skipping, or a compacted env that itself no longer fits = capacity, not leak).
+
+**By hand** (the loop refusing is the normal reason): set the order and delete the pod —
+`kubectl -n garage create cm garage-meta-rotation-state --from-literal=ROTATE_TARGET=garage-N
+--from-literal=ROTATE_GENERATION=<last+1> -o yaml --dry-run=client | kubectl apply -f -`, then
+`kubectl -n garage delete pod garage-N`, read `kubectl logs garage-N -c meta-rotate`, then
+`garage repair --yes tables` on that pod and watch `garage stats -a` converge. The controller's
+next run sees `STATE` unset and treats the ConfigMap as history. **Never** use `repair tables`
+alone as the reclamation: measured 2026-09-09, a natively re-synced env is 3–4× the compacted
+size (§above), which is the fill this loop exists to clear.
 
 ## Static-website serving (3902, live 2026-07-14)
 
