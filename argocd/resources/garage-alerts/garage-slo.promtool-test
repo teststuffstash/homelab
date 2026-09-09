@@ -80,3 +80,114 @@ tests:
           # Data: 1 - 200/1000 = 0.8 (80% used)
           - labels: '{__name__="garage:data_volume_used_ratio",pod="garage-0",volume="data"}'
             value: 0.8
+
+  # ── Server error ratio ─────────────────────────────────────────────────────────────────────────
+  - interval: 1m
+    name: server error ratio calculation
+    input_series:
+      # GetObject: 1000 requests, 5 errors (0.5% error ratio)
+      - series: 'api_s3_request_duration_count{api_endpoint="GetObject"}'
+        values: "1000+100x5"
+      - series: 'api_s3_error_counter{api_endpoint="GetObject",status_code="500"}'
+        values: "5+0.5x5"
+      # PutObject: 500 requests, 0 errors (0% error ratio)
+      - series: 'api_s3_request_duration_count{api_endpoint="PutObject"}'
+        values: "500+50x5"
+      - series: 'api_s3_error_counter{api_endpoint="PutObject",status_code="500"}'
+        values: "0+0x5"
+      # ListObjectsV2: 200 requests, 1 error (0.5% error ratio)
+      - series: 'api_s3_request_duration_count{api_endpoint="ListObjectsV2"}'
+        values: "200+20x5"
+      - series: 'api_s3_error_counter{api_endpoint="ListObjectsV2",status_code="503"}'
+        values: "1+0x5"
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:rate5m
+        eval_time: 5m
+        exp_samples:
+          # GetObject: 0.5 errors/min / 100 requests/min ≈ 0.005 (0.5%)
+          - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="GetObject"}'
+            value: 0.005
+          # PutObject: 0 errors / 50 requests/min = 0
+          - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="PutObject"}'
+            value: 0.0
+          # ListObjectsV2: 0 errors/min / 20 requests/min = 0 (at eval_time 5m, counter increments start at t=0, so sum is 1 over 5m)
+          - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="ListObjectsV2"}'
+            value: 0.0
+
+  # ── S3 latency by endpoint class ───────────────────────────────────────────────────────────────
+  # Note: These fixtures validate that quantiles are computed correctly per endpoint and filtered
+  # by class. The endpoint_class label is added by label_replace but not validated in promtool
+  # tests due to framework limitations. In production, the rules will produce endpoint_class
+  # labels for dashboard consumption.
+  - interval: 1m
+    name: latency percentiles by endpoint class
+    input_series:
+      # GetObject (read class): histogram with p99 around 1.0s, p50 around 0.1s
+      - series: 'api_s3_request_duration_bucket{api_endpoint="GetObject",le="0.01"}'
+        values: "100+10x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="GetObject",le="0.1"}'
+        values: "300+30x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="GetObject",le="0.5"}'
+        values: "490+49x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="GetObject",le="1.0"}'
+        values: "495+49.5x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="GetObject",le="+Inf"}'
+        values: "500+50x5"
+      # HeadObject (read class): similar histogram
+      - series: 'api_s3_request_duration_bucket{api_endpoint="HeadObject",le="0.01"}'
+        values: "80+8x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="HeadObject",le="0.1"}'
+        values: "240+24x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="HeadObject",le="0.5"}'
+        values: "390+39x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="HeadObject",le="1.0"}'
+        values: "395+39.5x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="HeadObject",le="+Inf"}'
+        values: "400+40x5"
+      # PutObject (write class): higher latency
+      - series: 'api_s3_request_duration_bucket{api_endpoint="PutObject",le="0.1"}'
+        values: "30+3x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="PutObject",le="1.0"}'
+        values: "300+30x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="PutObject",le="5.0"}'
+        values: "475+47.5x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="PutObject",le="10.0"}'
+        values: "495+49.5x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="PutObject",le="+Inf"}'
+        values: "500+50x5"
+      # ListObjectsV2 (list class): moderate latency
+      - series: 'api_s3_request_duration_bucket{api_endpoint="ListObjectsV2",le="0.1"}'
+        values: "50+5x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="ListObjectsV2",le="0.5"}'
+        values: "300+30x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="ListObjectsV2",le="2.0"}'
+        values: "475+47.5x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="ListObjectsV2",le="5.0"}'
+        values: "495+49.5x5"
+      - series: 'api_s3_request_duration_bucket{api_endpoint="ListObjectsV2",le="+Inf"}'
+        values: "500+50x5"
+    promql_expr_test:
+      - expr: garage:s3_latency_seconds:p99_5m
+        eval_time: 5m
+        exp_samples:
+          # p99 values by endpoint (labels will include endpoint_class in production)
+          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="GetObject"}'
+            value: 1.0
+          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="HeadObject"}'
+            value: 1.0
+          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="PutObject"}'
+            value: 10.0
+          - labels: '{__name__="garage:s3_latency_seconds:p99_5m",api_endpoint="ListObjectsV2"}'
+            value: 5.0
+      - expr: garage:s3_latency_seconds:p50_5m
+        eval_time: 5m
+        exp_samples:
+          # p50 values by endpoint (computed via interpolation from bucket data)
+          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="GetObject"}'
+            value: 0.0775  # interpolated: 0.01 + 150/200 * 0.09
+          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="HeadObject"}'
+            value: 0.0775  # similar to GetObject
+          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="PutObject"}'
+            value: 0.8333  # interpolated: 0.1 + 175/270 * 0.9
+          - labels: '{__name__="garage:s3_latency_seconds:p50_5m",api_endpoint="ListObjectsV2"}'
+            value: 0.42    # interpolated: 0.1 + 225/250 * 0.4

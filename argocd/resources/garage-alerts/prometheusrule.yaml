@@ -231,37 +231,37 @@ spec:
         - record: garage:s3_latency_seconds:p99_5m
           expr: |
             histogram_quantile(0.99,
-              sum by (api_endpoint, le) (
+              sum by (endpoint_class, api_endpoint, le) (
                 label_replace(
-                  rate(api_s3_request_duration_bucket[5m]),
+                  rate(api_s3_request_duration_bucket{api_endpoint=~"GetObject|HeadObject"}[5m]),
                   "endpoint_class",
                   "read",
-                  "api_endpoint",
-                  "GetObject|HeadObject"
+                  "__name__",
+                  ".*"
                 )
               )
             )
             or
             histogram_quantile(0.99,
-              sum by (api_endpoint, le) (
+              sum by (endpoint_class, api_endpoint, le) (
                 label_replace(
-                  rate(api_s3_request_duration_bucket[5m]),
+                  rate(api_s3_request_duration_bucket{api_endpoint=~"PutObject|UploadPart|CompleteMultipartUpload|DeleteObject"}[5m]),
                   "endpoint_class",
                   "write",
-                  "api_endpoint",
-                  "PutObject|UploadPart|CompleteMultipartUpload|DeleteObject"
+                  "__name__",
+                  ".*"
                 )
               )
             )
             or
             histogram_quantile(0.99,
-              sum by (api_endpoint, le) (
+              sum by (endpoint_class, api_endpoint, le) (
                 label_replace(
-                  rate(api_s3_request_duration_bucket[5m]),
+                  rate(api_s3_request_duration_bucket{api_endpoint=~"ListObjectsV2|ListParts"}[5m]),
                   "endpoint_class",
                   "list",
-                  "api_endpoint",
-                  "ListObjectsV2|ListParts"
+                  "__name__",
+                  ".*"
                 )
               )
             )
@@ -269,37 +269,37 @@ spec:
         - record: garage:s3_latency_seconds:p50_5m
           expr: |
             histogram_quantile(0.50,
-              sum by (api_endpoint, le) (
+              sum by (endpoint_class, api_endpoint, le) (
                 label_replace(
-                  rate(api_s3_request_duration_bucket[5m]),
+                  rate(api_s3_request_duration_bucket{api_endpoint=~"GetObject|HeadObject"}[5m]),
                   "endpoint_class",
                   "read",
-                  "api_endpoint",
-                  "GetObject|HeadObject"
+                  "__name__",
+                  ".*"
                 )
               )
             )
             or
             histogram_quantile(0.50,
-              sum by (api_endpoint, le) (
+              sum by (endpoint_class, api_endpoint, le) (
                 label_replace(
-                  rate(api_s3_request_duration_bucket[5m]),
+                  rate(api_s3_request_duration_bucket{api_endpoint=~"PutObject|UploadPart|CompleteMultipartUpload|DeleteObject"}[5m]),
                   "endpoint_class",
                   "write",
-                  "api_endpoint",
-                  "PutObject|UploadPart|CompleteMultipartUpload|DeleteObject"
+                  "__name__",
+                  ".*"
                 )
               )
             )
             or
             histogram_quantile(0.50,
-              sum by (api_endpoint, le) (
+              sum by (endpoint_class, api_endpoint, le) (
                 label_replace(
-                  rate(api_s3_request_duration_bucket[5m]),
+                  rate(api_s3_request_duration_bucket{api_endpoint=~"ListObjectsV2|ListParts"}[5m]),
                   "endpoint_class",
                   "list",
-                  "api_endpoint",
-                  "ListObjectsV2|ListParts"
+                  "__name__",
+                  ".*"
                 )
               )
             )

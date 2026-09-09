@@ -19,7 +19,6 @@ spec:
     repoURL: https://github.com/teststuffstash/homelab.git
     targetRevision: master
     path: argocd/resources/garage-alerts
-    directory: { recurse: false }
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
