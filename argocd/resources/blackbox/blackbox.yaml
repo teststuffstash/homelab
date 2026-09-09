@@ -10,6 +10,10 @@ metadata:
   namespace: monitoring
 data:
   blackbox.yml: |
+    # ⚠ blackbox-exporter reads this file at START only — after editing a module here, POST
+    # http://blackbox-exporter.monitoring.svc:9115/-/reload (or roll the Deployment), or every
+    # Probe using the new module answers 400 "unknown module" (2026-09-09: garage_health sat
+    # unloaded for 10 min until reloaded by hand). ArgoCD's sync updates the ConfigMap only.
     modules:
       http_2xx_lan:
         prober: http
