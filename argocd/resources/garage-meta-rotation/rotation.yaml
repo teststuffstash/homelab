@@ -77,6 +77,10 @@ spec:
                 # One zone per 12 h at most; the loop is a trickle, not a sweep.
                 - { name: COOLDOWN_S, value: "43200" }
                 - { name: RESYNC_QUEUE_MAX, value: "5000" }
+                # Merkle/insert queue ceiling. Ordinary write bursts here reach 1.5–2.7k for a
+                # few minutes (measured 2026-09-09; the 1000 default refused on 2597); a resync in
+                # progress is 28k–690k (7-day maxima per pod). 10k separates the two.
+                - { name: TABLE_QUEUE_MAX, value: "10000" }
                 - { name: READY_TIMEOUT_S, value: "1800" }
                 - { name: CONVERGE_TIMEOUT_S, value: "3600" }
               securityContext:
