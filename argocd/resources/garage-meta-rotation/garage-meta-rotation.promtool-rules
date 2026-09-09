@@ -27,8 +27,8 @@ groups:
           summary: Garage metadata rotation controller has not run for over an hour
       - alert: GarageMetaRotationNotReclaiming
         expr: |
-          ALERTS{alertname="GarageDiskFillingUp",alertstate="firing",volume="metadata"} == 1
-        for: 6h
+          1 - garage_local_disk_avail{volume="metadata"} / garage_local_disk_total{volume="metadata"} > 0.8
+        for: 6h30m
         labels:
           severity: warning
         annotations:

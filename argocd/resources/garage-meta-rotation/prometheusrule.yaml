@@ -40,9 +40,11 @@ spec:
               volume is not running. Check the CronJob and its last Job (image pull, RBAC,
               Prometheus/pushgateway reachability).
         - alert: GarageMetaRotationNotReclaiming
+          # Re-derived from the source metric rather than ALERTS{} so the fixture can drive it:
+          # the same condition as GarageDiskFillingUp on a metadata volume, 6h past its own 30m.
           expr: |
-            ALERTS{alertname="GarageDiskFillingUp",alertstate="firing",volume="metadata"} == 1
-          for: 6h
+            1 - garage_local_disk_avail{volume="metadata"} / garage_local_disk_total{volume="metadata"} > 0.8
+          for: 6h30m
           labels: { severity: warning }
           annotations:
             summary: "GarageDiskFillingUp on {{ $labels.pod }} metadata has fired for 6h — the rotation loop did not clear it"

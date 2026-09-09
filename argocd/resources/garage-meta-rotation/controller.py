@@ -96,6 +96,14 @@ def put_state(data):
         k8s("POST", f"/api/v1/namespaces/{NS}/configmaps", body)
 
 
+def finish(state, status, result, **extra):
+    """Every terminal state stamps FINISHED_AT — the COOLDOWN gate must throttle a persistent
+    failure exactly like a success, or a SKIP would delete a pod every cron tick (reviewer, #1549)."""
+    state.update({"STATE": status, "RESULT": result, "FINISHED_AT": int(time.time())})
+    state.update({k: str(v) for k, v in extra.items()})
+    put_state(state)
+
+
 # ------------------------------------------------------------------- Prometheus
 def prom(query):
     q = urllib.parse.urlencode({"query": query})
@@ -152,11 +160,11 @@ def main():
         if age < CONVERGE_TIMEOUT + READY_TIMEOUT:
             log(f"refuse: rotation gen={state.get('ROTATE_GENERATION')} of {state.get('ROTATE_TARGET')} pending for {age}s"); return 0
         log(f"stale pending rotation ({age}s) — marking failed")
-        state.update({"STATE": "failed", "RESULT": "stale-pending"}); put_state(state)
+        finish(state, "failed", "stale-pending")
         push("garage_meta_rotation", {"pod": state.get("ROTATE_TARGET", "unknown")}, ["garage_meta_rotation_last_result 1"])
     last = int(state.get("FINISHED_AT", "0") or 0)
     if now - last < COOLDOWN:
-        log(f"refuse: last rotation finished {now - last}s ago (< COOLDOWN {COOLDOWN}s)"); return 0
+        log(f"refuse: last rotation ended {now - last}s ago with {state.get('STATE')}/{state.get('RESULT')} (< COOLDOWN {COOLDOWN}s)"); return 0
 
     ps = pods()
     by_name = {p["metadata"]["name"]: p for p in ps}
@@ -214,7 +222,7 @@ def main():
             break
     else:
         log("FAIL: pod", target, "not Ready within", READY_TIMEOUT, "s")
-        state.update({"STATE": "failed", "RESULT": "ready-timeout"}); put_state(state)
+        finish(state, "failed", "ready-timeout")
         push("garage_meta_rotation", {"pod": target}, ["garage_meta_rotation_last_result 1"]); return 1
     ready_s = int(time.time() - t0)
 
@@ -223,7 +231,7 @@ def main():
     log("init container said:", verdict or logs.strip().splitlines()[-1:] )
     kv = dict(x.split("=", 1) for x in verdict.split()[2:] if "=" in x) if verdict else {}
     if not verdict.startswith("meta-rotate: ROTATED"):
-        state.update({"STATE": "failed", "RESULT": verdict or "no-verdict"}); put_state(state)
+        finish(state, "failed", verdict or "no-verdict")
         push("garage_meta_rotation", {"pod": target}, ["garage_meta_rotation_last_result 1"])
         if verdict.startswith("meta-rotate: ROTATE-FAIL") and "LOST" in verdict:
             admin(p["status"]["podIP"], "POST", f"/v2/LaunchRepairOperation?node={target_id}", {"repairType": "tables"})
@@ -254,9 +262,8 @@ def main():
         log("not yet:", "busy" if busy else "", busy, "behind" if behind else "", behind)
     done = int(time.time())
     result = 0 if converged else 1
-    state.update({"STATE": "done" if converged else "failed", "RESULT": "converged" if converged else "converge-timeout",
-                  "FINISHED_AT": done, "OLD_BYTES": kv.get("old_bytes", "0"), "NEW_BYTES": kv.get("new_bytes", "0")})
-    put_state(state)
+    finish(state, "done" if converged else "failed", "converged" if converged else "converge-timeout",
+           OLD_BYTES=kv.get("old_bytes", "0"), NEW_BYTES=kv.get("new_bytes", "0"))
     push("garage_meta_rotation", {"pod": target}, [
         f"garage_meta_rotation_last_result {result}",
         f"garage_meta_rotation_last_success_timestamp {done if converged else 0}",
