@@ -104,11 +104,15 @@ last_replicas() {
 # Transient consumers/pods: settle WAITS for them. Long-lived ones hold their volume until the
 # drain moves the pod — a last replica under one of those must be MOVED instead.
 transient_kind() { case "$1" in Pod|Job|CronJob|Workflow|-) return 0;; *) return 1;; esac; }
-# Ride / Argo Workflow / coordinator pods on $NODE still running: "<ns>/<pod> <phase>"
+# Ride / Argo Workflow / coordinator pods on $NODE still running: "<ns>/<pod> <phase>". ANY bare
+# pod (no controller) counts: worker rides live in the STACK namespace (oracle-fleet/agent-…-r2,
+# app=agent-session), not only in the agent namespaces — 2026-09-09 the drain refused one
+# ("cannot delete Pods that declare no controller") after settle had reported no ride.
 rides_running() {
   kubectl get pods --field-selector "spec.nodeName=$NODE" -A -o json | jq -r '.items[]
     | select(.status.phase=="Running" or .status.phase=="Pending")
     | select((.metadata.ownerReferences[0].kind=="Workflow") or (.metadata.labels["workflows.argoproj.io/workflow"]!=null)
+             or ((.metadata.ownerReferences // [])|length==0)
              or ((.metadata.namespace|test("^agent-|-agents$")) and ((.metadata.ownerReferences[0].kind // "Pod")|IN("Pod","Job","Workflow"))))
     | "\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"'
 }
@@ -292,8 +296,10 @@ down() {
   # DRY=1 previews the whole window: settle reported what it would wait on / move — stop here,
   # never a real drain or power-off under a dry-run flag (reviewer, PR#1564).
   [ "$DRY" = 1 ] && { log "DRY=1: would now cordon (if not yet), drain $NODE and talosctl shutdown — stopping"; return 0; }
-  log "drain $NODE (timeout $DRAIN_TIMEOUT)"
-  kubectl drain "$NODE" --ignore-daemonsets --delete-emptydir-data --timeout="$DRAIN_TIMEOUT"
+  # --force is what lets the drain delete bare (controller-less) pods; it is safe ONLY because
+  # settle just verified no running bare pod is left — what remains are finished ride pods.
+  log "drain $NODE (timeout $DRAIN_TIMEOUT; --force for the finished bare pods settle waited on)"
+  kubectl drain "$NODE" --ignore-daemonsets --delete-emptydir-data --force --timeout="$DRAIN_TIMEOUT"
   local left
   left="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json | jq -r '.items[]|select(.metadata.ownerReferences[0].kind!="DaemonSet")|"\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"')"
   if [ -n "$left" ]; then log "non-DaemonSet pods still on $NODE after drain:"; sed 's/^/  /' <<<"$left" >&2; fi
