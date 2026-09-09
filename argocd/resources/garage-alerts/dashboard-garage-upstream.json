@@ -112,7 +112,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum(rate(block_bytes_read{job=\"garage\"}[$__rate_interval])    )",
+          "expr": "sum(rate(block_bytes_read{job=\"garage-metrics\"}[$__rate_interval])    )",
           "hide": false,
           "interval": "",
           "legendFormat": "Disk bytes read",
@@ -124,7 +124,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "-sum(rate(block_bytes_written{job=\"garage\"}[$__rate_interval])    )",
+          "expr": "-sum(rate(block_bytes_written{job=\"garage-metrics\"}[$__rate_interval])    )",
           "hide": false,
           "interval": "",
           "legendFormat": "Disk bytes written",
@@ -219,7 +219,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (api_endpoint) (rate(api_s3_request_counter {job=\"garage\"}[$__rate_interval]))",
+          "expr": "sum by (api_endpoint) (rate(api_s3_request_counter {job=\"garage-metrics\"}[$__rate_interval]))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{api_endpoint}}",
@@ -314,7 +314,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum(rate(web_request_counter {job=\"garage\"}[$__rate_interval]))",
+          "expr": "sum(rate(web_request_counter {job=\"garage-metrics\"}[$__rate_interval]))",
           "hide": false,
           "interval": "",
           "legendFormat": "Web request rate",
@@ -408,7 +408,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum by (rpc_endpoint) (rate(rpc_request_counter {job=\"garage\"}[$__rate_interval]))",
+          "expr": "sum by (rpc_endpoint) (rate(rpc_request_counter {job=\"garage-metrics\"}[$__rate_interval]))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{rpc_endpoint}}",
@@ -503,7 +503,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (api_endpoint, status_code) (rate(api_s3_error_counter {job=\"garage\"}[$__rate_interval]))",
+          "expr": "sum by (api_endpoint, status_code) (rate(api_s3_error_counter {job=\"garage-metrics\"}[$__rate_interval]))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{api_endpoint}} {{status_code}}",
@@ -598,7 +598,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum by(status_code) (rate(web_error_counter {job=\"garage\"}[$__rate_interval]))",
+          "expr": "sum by(status_code) (rate(web_error_counter {job=\"garage-metrics\"}[$__rate_interval]))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{status_code}}",
@@ -716,7 +716,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "block_resync_queue_length{job=\"garage\"}",
+          "expr": "block_resync_queue_length{job=\"garage-metrics\"}",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -808,7 +808,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum by(table_name) (table_gc_todo_queue_length{job=\"garage\"})",
+          "expr": "sum by(table_name) (table_gc_todo_queue_length{job=\"garage-metrics\"})",
           "interval": "",
           "legendFormat": "{{ table_name}}",
           "refId": "A"
@@ -900,7 +900,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum by(table_name) (table_merkle_updater_todo_queue_length{job=\"garage\"})",
+          "expr": "sum by(table_name) (table_merkle_updater_todo_queue_length{job=\"garage-metrics\"})",
           "interval": "",
           "legendFormat": "{{ table_name}}",
           "refId": "A"
@@ -992,7 +992,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "block_resync_errored_blocks{job=\"garage\"}",
+          "expr": "block_resync_errored_blocks{job=\"garage-metrics\"}",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"

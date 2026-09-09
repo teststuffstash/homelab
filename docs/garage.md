@@ -411,7 +411,7 @@ client-side measurement).
 - `garage:s3_requests:rate5m` — request rate by endpoint
 - `garage:s3_server_error_ratio:rate5m` — error ratio by endpoint
 - `garage:s3_latency_seconds:p99_5m` / `:p50_5m` — latency percentiles by endpoint
-- `garage:cluster_health:availability_ratio_1h` — cluster health from blackbox probe per pod
+- `garage:cluster_health:availability_ratio_1h` — SERVING per pod: share of the hour `/health` answered HTTP 200 (Garage's own quorum signal; Degraded serves and counts as available — a node down is the `GarageClusterDegraded`/`Flapping` belts' business, which read the same probe's "fully operational" regex instead)
 - `garage:meta_volume_used_ratio` / `:data_volume_used_ratio` — volume utilization per pod
 
 ### Belts — what alerts on the rf=3 store (2026-09-09)
