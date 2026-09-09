@@ -549,6 +549,7 @@ node's metadata lives, by two orders of magnitude.**
 | resync drain on a seeded node | `repair blocks` verifying present files | local XFS | **~255 blocks/s** |
 | **block resync, Garage-native, from a HEALTHY peer** | garage-2's `repair blocks` fetching from garage-1 (seeded, local meta + data) | garage-1 on m70s (NVMe) → wk-metal-01 (MX500), 8 workers, tranquility 0 | **~155 blocks/s ≈ 19 MB/s** — the FU-137 number |
 | **rotation of a zone, Garage-native (step 8)** | new garage-0 (`repair tables` + `repair blocks`) from two healthy peers, local volumes | onto wk-metal-04's **SA400** (the known write bottleneck), tables and blocks sharing the disk | tables **~27k items/min** (435k in 16 min → ~2 h for 3.2M); blocks **~14/s ≈ 1.7 MB/s** → ~11 h — left running at wind-down |
+| **LMDB size the seed method leaves behind** (read 2026-09-09, identical tables, 1.93 M objects) | snapshot-seeded garage-1 / natively-synced garage-2 / natively-rotated garage-0 | — | **6.3 GB / 16.2 GB / 27.9 GB** — the native path re-bloats the env it was meant to reclaim; `GarageDiskFillingUp` re-fired on garage-0 within a day (garage.md §Metadata reclamation) |
 
 **Reading:** the Garage-native resync is not slow — a node whose LMDB page faults across the network
 is. Every refcount lookup and Merkle descent on garage-0 was a scattered 4 KiB read on a volume
@@ -560,7 +561,20 @@ natively at ~155 blocks/s — 559k blocks in ~1 h, no helpers — and the step-8
 the third data point — same shape on the table side (~27k items/min from healthy peers), but the
 block side landed at 14/s on the SA400 zone against 155/s on the MX500 zone: the rotation cadence is
 set by the slowest zone's disk, and that disk is the one already on the buy list. The block seed was needed exactly once, to break the
-network-attached-source pathology; after that the supported path is fast enough on its own.
+network-attached-source pathology; after that the supported path is fast enough on its own —
+for BLOCKS. For metadata the last row overrides: the native resync is fast enough but leaves a
+3–4× bloated env, so the rotation seeds meta from a snapshot and resyncs only blocks natively.
+
+**The SA400 zone under rf=3 load (2026-09-09 read, the oracle handoffs).** With all three pods
+still on the build-out's `resync-worker-count 8 / tranquility 0` (never reset — it survives until
+a pod restart), wk-metal-04 ran at load1 up to 70, iowait 30–70 %, and `sdc` write latency
+300–760 ms for hours at a time. Consequences measured over the 2026-09-08 22:05–22:42Z upload
+window: garage-0 unreachable to both peers (ping timeouts, "Too many failed pings … closing
+connection", quorum-of-3 read repairs failing) — hourly, every hour, for 3 days; UploadPart
+mean 27 s on garage-0 vs 10.7 s on garage-2 (p99 100 s vs 50 s); ListObjectsV2 p99 35.7 s on
+garage-0 vs 4.5 s on garage-1 (store-wide p99 0.8 s → 16 s over 8 days as the env bloated);
+8 × `500 … error reading a body` on the ERT corpus-image parts. Workers reset to upstream
+defaults (1 / 2) on all three pods 2026-09-09 06:00Z; the disk swap stays the fix.
 
 Also observed while measuring (operator, Grafana "top pods by CPU throttling ratio"): `longhorn-manager`
 pods throttle 4–14 % of CFS periods at their 150m req==limit, cilium agents 4–13 %. `instance-manager`

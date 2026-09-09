@@ -27,12 +27,12 @@ spec:
           for: 30m
           labels: { severity: warning }
           annotations:
-            summary: "Garage disk is {{ $value | humanizePercentage }} full on {{ $labels.volume }}"
+            summary: "Garage {{ $labels.volume }} volume is {{ $value | humanizePercentage }} full on {{ $labels.pod }}"
             description: >-
               Garage's disk has less than 20% available. The ledger's >80% threshold
               (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn
               volume or the underlying pve thin pool is filling. A full disk makes Garage go
-              read-only — the 2026-08-24 meta wipe started this way.
+              read-only — the 2026-08-24 meta wipe started this way. At rf=3 this is ONE zone, not the store: compare the three pods (`garage stats -a` MetaAvail / kubelet_volume_stats). One pod full = rotate that zone from a finished compacted snapshot (docs/garage.md §Metadata reclamation); all three full = capacity.
         # TABLE SIZE DROP-TO-ZERO BELT — the wipe detector. A meta wipe (like the 2026-08-24
         # incident where the LMDB came back with empty tables) makes table_size drop to zero for
         # every table. This alert fires when ANY table that HELD DATA IN THE LAST 7 DAYS reports
