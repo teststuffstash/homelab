@@ -265,6 +265,12 @@ the node is a WARN — its data is offline for the window and returns with the d
 is allowed because the cluster runs `node-drain-policy=allow-if-replica-is-stopped`
 (`tofu/longhorn.tf`, 2026-09-09: the default `block-if-contains-last-replica` blocked thinkcentre's
 window on two detached replica-1 transcripts volumes — replica-1 classes are by design);
+an ATTACHED last replica and any ride / Argo Workflow / coordinator pod are the **settle** class:
+**`settle`** cordons the node, waits for transient consumers to finish (bare pods, Jobs,
+Workflows, anything in an agent namespace; ≤ `SETTLE_TIMEOUT` 3600 s) and MOVES a last replica a
+long-lived pod holds (StatefulSet/Deployment: `numberOfReplicas`+1 → rebuild elsewhere → delete
+the local replica → restore the count; `DRY=1` reports instead of acting). `down` runs it before
+the drain, so a drain is never left to block on Longhorn's PDB (operator direction 2026-09-09);
 no volume attached on the node; then the workload read — StatefulSet pods, Argo/agent ride pods
 and single-replica Deployments are WARNs (`FORCE=1` accepts them). `down` runs preflight, cordons,
 drains (DaemonSets ignored), confirms Longhorn's node view, then `talosctl shutdown` and waits for
