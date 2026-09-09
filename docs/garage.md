@@ -511,6 +511,21 @@ next run sees `STATE` unset and treats the ConfigMap as history. **Never** use `
 alone as the reclamation: measured 2026-09-09, a natively re-synced env is 3–4× the compacted
 size (§above), which is the fill this loop exists to clear.
 
+## Belts (probes + alerting)
+
+**Write-path health** — signed PUT→GET→DELETE round-trip every minute against the in-cluster
+ClusterIP (`garage.garage.svc.cluster.local:3900`) to catch failures the server-side metrics miss
+(homelab#1560, FU-093; the 2026-09-08 class: UploadPart p99 100s with no Garage alert). The probe
+is a CronJob in ns `garage` that times each leg and pushes `garage_write_probe_success`, `garage_write_probe_seconds`,
+and `garage_write_probe_last_run_timestamp` to the pushgateway (`argocd/resources/garage-write-probe/`).
+Alerts:
+- **`GarageWriteProbeFailing`** — any leg (PUT, GET, DELETE) has failed in every 5m window for 10m.
+  Detects sustained write-path breakage; at rf=3 quorum still serves reads.
+- **`GarageWriteProbeSlow`** — PUT latency > 10s for 15m. Detects performance regression without total
+  failure; operational risk (timeouts, stuck clients) precedes the full failure.
+- **`GarageWriteProbeSilent`** — probe timestamp absent for >10m (≥11 consecutive runs missed). The absence
+  detector; catches probe pod dead/stuck or Garage entirely unreachable.
+
 ## Static-website serving (3902, live 2026-07-14)
 
 `s3.web.rootDomain = ".teststuff.net"` (`argocd/platform/garage.yaml`): any **website-enabled** bucket is served
