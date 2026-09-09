@@ -8047,3 +8047,36 @@ already CLOSED). Seat miss ×2 to remember: zsh does not word-split `$VAR` comma
   predicate fails closed on an unreadable blocker, #1528) gate-read + approved. Wind-down: this
   push; ctx ≈ 830k.
 
+
+## 2026-09-09 early (~05:40–06:3xZ) — the two garage handoffs: one zone, not the store
+
+- **Condition:** operator: take the new oracle handoff (09-09 InvalidPart at CompleteMultipartUpload,
+  a 7 h ERT delta lost), compare with the responder's last 8 h, and "is meta still full after
+  rf=3 — only one node? the alert doesn't say". The 09-08 listing-latency handoff (ListObjects
+  ~37 obj/s) sat unclaimed in the same inbox — same root, taken too.
+- **Read:** `GarageDiskFillingUp` = **garage-0 only** (MetaAvail 11.4 % on wk-metal-04; garage-2
+  47.9 %, garage-1 78.8 %, identical tables at 1.93 M objects). The size is the SEED METHOD:
+  snapshot-seeded garage-1 6.3 GB, natively-synced garage-2 16.2 GB, natively-rotated garage-0
+  27.9 GB — garage.md's "resynced env is compact by construction" was wrong; corrected (the loop
+  seeds meta from a snapshot). `garage` Loki tenant, 22:00–22:45Z: 8 × `500 … error reading a
+  body` on the corpus-image parts (the aborted UploadParts), and garage-0 off the RPC mesh the
+  whole window — and **every hour for 3 days** (`Too many failed pings from a79a…`). Cause: the
+  SA400 at 300–760 ms writes, load1 70, iowait 30–70 %, with `metadata_fsync` on a 28 GB
+  page-faulting env — and all three pods still on the build-out's `resync-worker-count 8 /
+  tranquility 0` (never reset). Per pod: UploadPart mean 27 s / p99 100 s on garage-0 vs 10.7 / 50
+  on garage-2; ListObjectsV2 p99 35.7 s vs 4.5 s on garage-1; store-wide listing p99 0.8 s → 16 s in
+  8 days. Longhorn clean in the window (not the 09-06/07 churn class). Upstream mechanism verified
+  on v2.3.0 source (Complete takes the newest mpu entry complete or not; ListParts skips
+  incomplete) — worth an upstream issue, oracle side drafts it.
+- **Commands:** resync workers → defaults 1/2 on all three pods (live, ephemeral). PR
+  `fix/garage-0-zone-stall`: garage.md §Metadata reclamation corrected, ledger row + the
+  SA400-under-rf=3 read, `GarageDiskFillingUp` summary names the pod + rf=3 reading in the
+  description (promtool test updated). homelab#903 responder diagnosis ("15 days of churn
+  regrowth, expand or fix #499") corrected in-thread — the PVC is 2 days old and born bloated;
+  #884's "transient blip" given its cause (probe landing on the stalled pod). Both handoffs →
+  `done/` with Results (client posture for s3io: read_timeout ≥ 300 s, concurrency ≤ 4, 64 MiB
+  parts, standard retries ×3, re-upload on InvalidPart). Responder's other 8 h: #1546/#1547
+  (agent platform), #1013 (known is-zero FP), #500/#100 (nix-cache/optane) — none garage.
+- **Open:** the snapshot-seeded rotation of garage-0 (FU-137, meta-state sitting; ~1.5 GB/day into
+  3.4 GiB) and the SA400 swap (buy list). Acceptance for both handoffs = garage-0's ListObjectsV2
+  p99 at garage-1's level after the rotation.

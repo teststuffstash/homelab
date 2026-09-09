@@ -160,14 +160,14 @@ never the session's arc — that is TICK-LOG's.)
   design pass (WAN accounting) · #1280 held-for-evidence (kind-timing distribution first) ·
   Cloudflare: mint `Cache Purge` onto tofu-apply, or rely on oracle-fleet#414's
   Cache-Control (decision open) · Garage: delete `backups/garage-meta-20260825-prerebuild/` (20 GB) +
-  `garage-meta-forensics/` (due since ~09-01); meta volume rides rf=1 on wk-02 (FU-137's
-  ~08-31 deadline PAST — an infra sitting). **⚑ 2026-09-07 OPERATOR-OWNED: meta is at 80 % and
-  it is NOT growth** — 25.36 GB live LMDB vs a 3.95 GB compacted snapshot, 84 % leaked pages,
-  ~57 h runway at the 09-06 rate. Attended snapshot-swap (fresh `garage meta snapshot` → stop →
-  swap → start; §Durability recipe, never a stale/in-progress snapshot). **While the store is
-  down, MEASURE a full-table `garage repair tables` resync** — nobody has that number and it
-  gates whether the ADR-114 rotation loop can be armed (garage.md §Metadata reclamation); the 3 ERT giants STAY (docs/garage.md
-  §Durability).
+  `garage-meta-forensics/` (due since ~09-01). **⚑ 2026-09-09 OPERATOR-OWNED: `GarageDiskFillingUp`
+  is garage-0 ONLY (wk-metal-04/SA400)** — its 09-07 native rotation left a 27.9 GB LMDB for
+  ~4 GB of data (garage-1, snapshot-seeded, 6.3 GB; garage-2 16.2 GB — identical tables), 3.4 GiB
+  headroom, ~1.5 GB/day. Sitting: rotate garage-0 again with the build-out's **metadata-seed
+  leg** (a peer's latest FINISHED snapshot → new volume → `repair tables/blocks` only verify;
+  never the bare native `repair tables` — garage.md §Metadata reclamation, corrected 09-09).
+  Acceptance: garage-0 meta ≈ 6 GB AND its ListObjectsV2 p99 down to garage-1's (~4.5 s vs
+  35.7 s). The resync measurement is DONE (ledger); the 3 ERT giants STAY (docs/garage.md §Durability).
 - **⚑ GOALS — verdicts are the operator's, the seat recommends:**
   - **#818 G-B — HELD with a posted 4-clause verdict condition** (teeth drills deferred to
     oracle's production launch; lens posture advisory-steady-state; responder shadow; prober
@@ -237,8 +237,9 @@ never the session's arc — that is TICK-LOG's.)
     applies (unreproducible read-only; verdict = the next full apply) · hp-01
     `install_disk: /dev/sda` is a NAME with two identical disks (repin to WWID, FU-076's
     neighbourhood) · OTLP trace-export spam (`localhost:4318 refused`) in registry + 3
-    mirrors — add an `OTEL_SDK_DISABLED`-class env · garage resync worker tuning is
-    EPHEMERAL (resets on garage-0 restart) · FU-073/084/089/098 stale-archive entries, 41d old (next
+    mirrors — add an `OTEL_SDK_DISABLED`-class env · garage resync workers RESET to defaults 1/2 on
+    all three pods 2026-09-09 (the build-out's 8/0 had been left on everywhere, saturating the SA400 —
+    ledger §The SA400 zone under rf=3 load) · FU-073/084/089/098 stale-archive entries, 41d old (next
     docs-cleanup).
 - **⚑ WATCH-NOISE candidates (next meta-events touch):** FAMINE emits per count-delta not
   threshold-crossing — AND counts `iac-sentinel-edge` convoys (09-05 08:01Z: 10 Pending on the

@@ -278,11 +278,12 @@ six OVERSIZE items pointer-ized into
       zone-by-zone rotation, first executed on garage-0 as the build-out's last step — **converged
       2026-09-08 ~05:00Z** (identical tables on all three nodes; the native resync onto the SA400
       took ~6.5 h for 3.2 M items / 559 k blocks; only 3 pre-existing corrupted Loki chunks error).
-      **Next:** arm the
-      rotation loop — trigger off `GarageDiskFillingUp`, health gate (refuse while a zone is degraded
-      or resyncing), and the cadence input is "seed from the latest finished snapshot" (minutes), not
-      the Garage-native resync (unmeasured on the target topology — measure it on the first loop
-      run). Then CNPG replica-1 + required zone anti-affinity, and the backup CronJob. **Operator
+      **Next (2026-09-09):** the
+      native rotation re-bloated garage-0's env (27.9 GB vs 6.3 GB on snapshot-seeded garage-1, same
+      tables; `GarageDiskFillingUp` re-fired within a day — [`garage.md`](garage.md) §Metadata
+      reclamation, corrected) → rotate garage-0 again **seeded from a peer's finished snapshot**
+      (attended; 3.4 GiB headroom left), then arm the loop with that mechanism: trigger
+      `GarageDiskFillingUp` (per pod now), health gate. Then CNPG replica-1 + zone anti-affinity, backup CronJob. **Operator
       intent: metadata maintenance must be unattended.** Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
 
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
