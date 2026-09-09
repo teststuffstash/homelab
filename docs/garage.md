@@ -410,6 +410,13 @@ Symptoms, not guessed causes; each names where to read next. In
 - **`GarageS3ServerErrors`** / **`GarageQuorumMembersRestarted`** — client-visible quorum loss:
   ≥3 × 500/503 in 5m, and two quorum members (re)started inside 5 min (the 2026-09-09 07:22Z
   rollout with no readiness probe cycled all three in 31 s; both exprs replay true on it).
+- **`GarageWriteProbeFailing`** / **`GarageWriteProbeSlow`** / **`GarageWriteProbeSilent`** —
+  client-perspective write probe (homelab#1560) that exercises a signed PUT→GET→DELETE round-trip
+  every minute against the in-cluster ClusterIP. The 2026-09-08 UploadPart p99 100 s had no
+  Garage alert and no error returned to clients — server-side metrics alone are blind to this
+  class. The three belts: any leg fails for 10m (sustained breakage), PUT p99 > 10s for 15m
+  (performance regression that does not fully break), and no heartbeat for 10m+ (probe or Garage
+  down). Source: CronJob in [`garage-write-probe/`](../argocd/resources/garage-write-probe/).
 - **Node-level, not ours but load-bearing:** `NodeDiskIOSaturation` (kube-prometheus-stack;
   fired four short episodes on wk-metal-04 that week and resolved each time — the responder
   saw them, none became an issue), `LonghornVolumeDegraded/Faulted` (the volumes under the

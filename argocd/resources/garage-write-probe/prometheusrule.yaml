@@ -1,0 +1,70 @@
+# Garage write-probe alert rules (homelab#1560, FU-093).
+# Three belts: Failing (any leg == 0 for 10m), Slow (put p99 > 10s for 15m), Silent (no heartbeat for 10m).
+# The write probe is a client-perspective detector that catches failures the server-side metrics miss:
+# the 2026-09-08 class was UploadPart p99 stretching to 100s with no Garage alert and no error returned.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: garage-write-probe
+  namespace: monitoring
+  labels:
+    app: garage-write-probe
+spec:
+  groups:
+    - name: garage-write-probe
+      rules:
+        # ANY LEG FAILED IN EVERY 5m WINDOW FOR 10m. Same bridge as EndpointProbeFailing
+        # (blackbox.yaml comment block #288); expr reads "failed ≥1 probe every 5m for 10m".
+        # Detects sustained write-path breakage (the 2026-09-08 class, UploadPart 100s+).
+        - alert: GarageWriteProbeFailing
+          expr: |
+            (min_over_time(garage_write_probe_success{leg="put"}[5m]) == 0) or
+            (min_over_time(garage_write_probe_success{leg="get"}[5m]) == 0) or
+            (min_over_time(garage_write_probe_success{leg="delete"}[5m]) == 0)
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage write probe {{ $labels.leg | default \"any_leg\" }} failing"
+            description: >-
+              The write probe's {{ $labels.leg | default "a" }} operation has failed in every 5m window
+              for 10m. This is a client-perspective detector: clients doing signed S3 requests against
+              the in-cluster ClusterIP cannot PUT, GET, or DELETE successfully. Read the probe pod's
+              logs in ns garage (`kubectl -n garage logs -l app=garage-write-probe --tail=50 --all-containers`),
+              then the Garage pods' logs for errors (write, quorum, auth). At rf=3 quorum still serves
+              reads; the exposure is to writes on affected zones. Compare the three Garage nodes' health
+              (GarageClusterDegraded/Flapping) and disk metrics (GarageDiskFillingUp).
+        # PUT LATENCY p99 > 10s for 15m. Detects write-path *performance* regression that does not
+        # fully break — returns OK but takes >10s (operational risk: timeouts, stuck clients).
+        # The 2026-09-08 incident peaked at 60–100s with no alert at this level.
+        - alert: GarageWriteProbeSlow
+          expr: |
+            histogram_quantile(0.99, rate(garage_write_probe_seconds_bucket{le="+Inf",leg="put"}[5m])) > 10
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage write probe PUT p99 > 10s"
+            description: >-
+              The write probe's PUT operation (64 KiB object) has a p99 latency > 10s for 15m.
+              This is a performance regression: clients see sub-second writes on a healthy store
+              and 10s+ is a red line for timeouts. The 2026-09-08 incident stretched to 60–100s.
+              Read the Garage pods' logs for slow operations, quorum-member health, and disk
+              latency (node_disk_write_time on the three nodes). Do not wait for
+              GarageWriteProbeFailing; alert on performance.
+        # NO HEARTBEAT for 10 minutes. The probe runs every minute; staleness > 10m is ≥11 missed
+        # runs. Catches the probe itself dying, Garage becoming completely unavailable, or
+        # monitoring broken — the absence detector for the other two belts.
+        - alert: GarageWriteProbeSilent
+          expr: |
+            time() - garage_write_probe_last_run_timestamp > 600
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage write probe has not run for {{ (time() - garage_write_probe_last_run_timestamp) | humanizeDuration }}"
+            description: >-
+              The write probe has not reported a timestamp in over 10 minutes — at least 11
+              consecutive runs missed. The probe runs every minute and pushes a timestamp to
+              the pushgateway after each run regardless of success/failure, so this means the
+              probe pod is dead, stuck, or unable to reach Garage entirely. Check the probe pod
+              status in ns garage (`kubectl -n garage get pod -l app=garage-write-probe`,
+              `kubectl -n garage describe pod garage-write-probe`), then its logs. If the pod
+              keeps restarting, check Garage's ClusterIP Service and the probe's network policies.
