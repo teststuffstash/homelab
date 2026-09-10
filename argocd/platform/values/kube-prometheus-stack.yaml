@@ -153,6 +153,36 @@ additionalPrometheusRulesMap:
             for: 15m
             labels:
               severity: warning
+          # THE 2026-09-10 07:15Z CLASS (oracle handoff): a runner pod on wk-03 untarred a 10.6 GB
+          # image into an emptyDir on the node's 36 GB root disk and the kubelet evicted it at the
+          # nodefs threshold, 20 min into the job; nothing here said so (NodeFilesystem* are
+          # predict-24h/<5 % shapes, the pod's Failed/Evicted status is not an alert). Two belts,
+          # both replayed on the event: the eviction itself (kube_pod_status_reason samples for
+          # minutes before ARC deletes the pod, so the 1h max holds it) and the headroom that
+          # predicts it on the ephemeral pool — 16 GB = the 10.6 GB layout + the kubelet's 10 %
+          # nodefs eviction floor on a 36 GB disk + slack; wk-03 read 13.9 GB at 07:05 and 11.2 at
+          # 07:10. Pool membership joins on the taint, same as NodeSystemSaturation below.
+          - alert: PodEvicted
+            annotations:
+              description: '{{ $labels.namespace }}/{{ $labels.pod }} was evicted by the kubelet in the last hour — node pressure (ephemeral-storage on a runner node is the 2026-09-10 class: a 10 GB job on wk-03''s 36 GB disk). The pod is usually gone by the time you read this (ARC/Argo delete it); `kubectl get events -n {{ $labels.namespace }}` names the node and the resource, node_filesystem_avail_bytes{mountpoint="/var"} on that node shows the dip. Runner jobs: retry lands elsewhere by chance — large-scratch jobs belong on the metal-only scale set (arc-runners-large.yaml).'
+              summary: '{{ $labels.namespace }}/{{ $labels.pod }} evicted'
+            expr: max_over_time(kube_pod_status_reason{reason="Evicted"}[1h]) == 1
+            for: 0m
+            labels:
+              severity: warning
+          - alert: EphemeralNodeScratchLow
+            annotations:
+              description: 'Ephemeral-pool node {{ $labels.instance }} has {{ $value | printf "%.1f" }} GB free on /var — below the 16 GB a 10 GB CI job needs before the kubelet''s nodefs eviction floor. A runner landing here for such a job is evicted mid-run (2026-09-10 07:15Z, wk-03). The image store shares this disk: `crictl rmi --prune` / kubelet imageGC clears it, or the node simply must not take large-scratch jobs (arc-runners-large.yaml pins those to metal). On a pool VM every GB written here is also pve thin-pool growth (memory: read the pool first).'
+              summary: 'Ephemeral node {{ $labels.instance }} under 16 GB scratch'
+            expr: |-
+              node_filesystem_avail_bytes{job="node-exporter",mountpoint="/var"} / 1e9 < 16
+              and on (instance) (
+                node_uname_info
+                and on (nodename) label_replace(kube_node_spec_taint{key="homelab.io/ephemeral", value="true", effect="NoSchedule"}, "nodename", "$1", "node", "(.+)")
+              )
+            for: 10m
+            labels:
+              severity: warning
           # homelab#477: the stock NodeSystemSaturation (disabled above) re-added with the
           # ephemeral/kata pool excluded. The exclusion joins on the TAINT that defines the pool
           # (kube_node_spec_taint key=homelab.io/ephemeral) rather than the homelab.io/kata label:
