@@ -1,0 +1,20 @@
+# Hand copy of the registry-bucket group from prometheusrule.yaml — re-copy after every expr edit.
+groups:
+  - name: registry-bucket
+    rules:
+      - alert: RegistryBucketCommitHeadroomLow
+        expr: |
+          garage_bucket_quota_bytes{bucket="registry"} - garage_bucket_bytes{bucket="registry"} < 2 * 11e9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "registry bucket has {{ $value | humanize1024 }}B of quota headroom — the next 10 GB layer push will fail at commit"
+          description: >-
+            A blob commit needs quota − held ≥ 2 × layer (the registry copies the upload into
+            place before deleting it — header of argocd/resources/registry/prometheusrule.yaml).
+            Below that the pusher gets an opaque 500 at the last byte after the whole upload
+            (2026-09-09, 51 min). Either the stack untags what it no longer serves and the
+            registry-garbage-collect CronJob (Sun 03:00Z; ad-hoc recipe in docs/runbook.md
+            §Registry) reclaims it, or the cap in garage-workspace.yaml grows — check
+            `garage stats` DataAvail per zone first, every zone holds a full copy at rf=3.
