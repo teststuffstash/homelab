@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-229** (2026-09-10: a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-230** (2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -164,6 +164,12 @@ six OVERSIZE items pointer-ized into
       (write with fsync → hard-stop the replica → verify the last acked writes survived), before
       Garage metadata rides Longhorn. No prior FU/ADR covers Longhorn fsync semantics (grepped
       `fsync|durability|Longhorn` 2026-09-07). Link: ADR-114, FU-137.
+      **Extended 2026-09-10:** the same rig answers the OTHER open question — the engine's cost is
+      CPU, not bandwidth (ledger §2026-09-07 amendment: `instance-manager` 0.5–0.9 core per zone
+      node, 5–8× Garage; disks 7–15 % busy behind a 34–96 % busy Longhorn device). Measure **CPU
+      per fsync'd IOP at queue depth one**, raw XFS vs Longhorn replica-1, same device — one
+      experiment settles fsync honesty AND whether Garage moves to node-local storage (the
+      `user_volumes` partition, install-time only). Not on the X240: it leaves the zone role first.
 
 - [ ] **FU-224** — **`longhorn-manager` throttles at its 150m CPU limit.** Grafana's throttling
       panel (operator, 2026-09-07) shows 4–14 % of CFS periods throttled per manager pod over an
@@ -182,6 +188,21 @@ six OVERSIZE items pointer-ized into
       the oracle delta job running, volumes healthy throughout. **Next:** re-read the throttling
       panel ≈2026-09-15; if manager/cilium sit under ~5 % and the sync burst under ~20 %, archive.
       No FU/ADR matched `throttl` (grepped 2026-09-07). Link: ADR-089, FU-112.
+
+- [ ] **FU-229** — **Garage SLO is breached on its own 30-day window and nothing alerts; the
+      CI-hour write churn is unattributed.** 30-day reads 2026-09-10: availability per pod
+      garage-1 99.90 %, garage-0 98.0 %, garage-2 98.1 % (objective ≥ 99.95 %); 24 h-wide p99 read
+      4.1 s / list 10.3 s (objectives 2 s / 5 s). The rules exist since #1588
+      (`garage:cluster_health:availability_ratio_30d`, `garage:s3_server_error_ratio:30d`); no
+      burn-rate belt, deliberately — it would fire from day one on the X240 zone (FU-137's move).
+      Second half: after oracle-fleet#519 the store still sees 5k–24k PutObject + 3k–15k
+      DeleteObjects requests/h in CI hours vs ~0 outside, and 19 master runs × ~210 evidence
+      objects explains ~4k/day of it; Garage has no bucket label, and object-count gauges cannot
+      see overwrite churn. **Next:** (1) attribute one CI-hour window by bucket from the S3
+      access log (the #499 method) — candidates are the master-run `mc mirror --remove` of
+      `latest/` and the `oracle-specs` publish; (2) once garage-2 is off the laptop, add the
+      burn-rate alert on the 30d series and re-read. No FU/ADR matched `churn|access log|error
+      budget|burn rate` (grepped 2026-09-10). Link: FU-093, FU-137, oracle-fleet#499/#518/#547.
 
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 (20Gi) and 2026-09-09 (32Gi): a blob COMMIT holds the layer twice, so
