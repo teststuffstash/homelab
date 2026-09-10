@@ -1,0 +1,42 @@
+# The registry's own bucket belt (FU-203) — the 2026-09-09 failure, as a metric.
+#
+# A blob push COMMITS in two S3 steps (distribution v3, s3 driver): CompleteMultipartUpload of
+# the upload, then Move = a server-side multipart COPY of the whole blob into blobs/sha256/…
+# (UploadPartCopy ×N + a second CompleteMultipartUpload) and only then DeleteObject of the
+# upload. Between the two completes the bucket holds the layer TWICE, so the commit needs
+#   quota − held ≥ 2 × layer
+# not 1×. 2026-09-09 23:24Z: held 16.4 GB + 2 × 10.64 GB = 37.7 GB against the 34.4 GB cap →
+# Garage refused the COPY's complete (AccessDenied, quota) → the registry answered 500 at the
+# last byte of a 51-min upload, and api_s3_error_counter never moved. Prometheus shows the
+# shape: 261 UploadPartCopy + 2 CompleteMultipartUpload in that window.
+#
+# LAYER_BYTES below is the largest blob this registry is asked to hold — the oracle corpus
+# layer (10.64 GB on 2026-09-08, growing with the corpus). Bump it when a bigger one ships;
+# the gauge it reads is pushed by argocd/resources/garage-meta-rotation/controller.py.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: registry-bucket
+  namespace: registry
+  labels:
+    app: registry
+spec:
+  groups:
+    - name: registry-bucket
+      rules:
+        - alert: RegistryBucketCommitHeadroomLow
+          # 2 × 11e9: the 10.64 GB corpus layer with a little growth allowance.
+          expr: |
+            garage_bucket_quota_bytes{bucket="registry"} - garage_bucket_bytes{bucket="registry"} < 2 * 11e9
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "registry bucket has {{ $value | humanize1024 }}B of quota headroom — the next 10 GB layer push will fail at commit"
+            description: >-
+              A blob commit needs quota − held ≥ 2 × layer (the registry copies the upload into
+              place before deleting it — header of argocd/resources/registry/prometheusrule.yaml).
+              Below that the pusher gets an opaque 500 at the last byte after the whole upload
+              (2026-09-09, 51 min). Either the stack untags what it no longer serves and the
+              registry-garbage-collect CronJob (Sun 03:00Z; ad-hoc recipe in docs/runbook.md
+              §Registry) reclaims it, or the cap in garage-workspace.yaml grows — check
+              `garage stats` DataAvail per zone first, every zone holds a full copy at rf=3.

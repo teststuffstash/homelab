@@ -5,6 +5,8 @@
 #   • controller.py — the LOOP, a CronJob polling the GarageDiskFillingUp alert: health gate →
 #     order one zone's rotation (runtime ConfigMap garage-meta-rotation-state, NOT in git) →
 #     delete the pod → read the init container's verdict → repair tables → wait for convergence.
+#     Every tick also pushes the per-bucket size/quota gauges (garage_bucket_*) the bucket
+#     belts read — Garage exports none itself (the 2026-09-09 registry quota class).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: garage

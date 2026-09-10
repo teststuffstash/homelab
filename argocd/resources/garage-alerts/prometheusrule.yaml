@@ -326,3 +326,49 @@ spec:
         - record: garage:data_volume_used_ratio
           expr: |
             1 - garage_local_disk_avail{volume="data"} / garage_local_disk_total{volume="data"}
+    # ── BUCKET QUOTA — the 2026-09-09 registry class (FU-203) ─────────────────────────────────
+    # A bucket-size quota refusal is invisible to every metric Garage exports: the disk is fine
+    # (GarageDiskFillingUp cannot see it), api_s3_error_counter does not count the 403, and the
+    # consumer sees whatever its client makes of it (the registry: an opaque 500 after a 51-min
+    # upload). The counter the quota is enforced on is only on the admin API, so the
+    # garage-meta-rotation controller pushes it every 15 min (garage_bucket_bytes /
+    # garage_bucket_quota_bytes per bucket — argocd/resources/garage-meta-rotation/controller.py).
+    # Replayed at build time: ert-snapshots sat at 84 % of its 90Gi cap, one weekly ship from
+    # its wall, and nothing had said so. The bucket's OWNER is whoever claims it (grep the
+    # global_alias across argocd/ and the stack IaC repos' garage-workspace.yaml).
+    - name: garage-bucket-quota
+      rules:
+        - alert: GarageBucketQuotaNear
+          expr: |
+            garage_bucket_bytes / garage_bucket_quota_bytes > 0.8
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage bucket {{ $labels.bucket }} is at {{ $value | humanizePercentage }} of its size quota"
+            description: >-
+              The bucket's size counter is over 80% of its max_size (ADR-089: every bucket claim
+              states one). The next object that does not fit is refused by Garage with
+              AccessDenied "Bucket size quota is reached" — at COMMIT for multipart uploads, so a
+              consumer can spend a whole upload before learning it. Either the owner prunes
+              (its own retention) or the claim's max_size grows — per-zone headroom is
+              `garage stats` DataAvail, and every zone holds a full copy at rf=3.
+        # The gauges come from one CronJob tick, through the pushgateway — which re-serves the
+        # last push FOREVER, so a bare absent() would only ever catch day-one non-existence
+        # (reviewer, #1577). The group carries its own timestamp, same shape as
+        # GarageMetaRotationControllerSilent; that alert covers the CronJob not running at all,
+        # this one covers it running but the bucket push dying.
+        - alert: GarageBucketGaugesStale
+          expr: |
+            (time() - max(garage_bucket_gauges_timestamp) > 3600)
+              or absent(garage_bucket_gauges_timestamp)
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "garage_bucket_* gauges are stale or absent — the bucket-quota belts read old numbers"
+            description: >-
+              The garage-meta-rotation CronJob (ns garage, every 15 min) pushes the bucket
+              gauges with a timestamp, and that timestamp is over an hour old or missing. The
+              pushgateway re-serves the last push forever, so the quota belts are reading stale
+              numbers, not none. Read the CronJob's last Job log for "WARN bucket gauges" (admin
+              token, ListBuckets) or "WARN pushgateway". Until fixed, GarageBucketQuotaNear and
+              RegistryBucketCommitHeadroomLow reflect the last successful tick, not now.
