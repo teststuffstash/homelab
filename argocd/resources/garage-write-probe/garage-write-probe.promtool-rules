@@ -31,7 +31,8 @@ groups:
 
       - alert: GarageWriteProbeSilent
         expr: |
-          time() - garage_write_probe_last_run_timestamp > 600
+          (time() - garage_write_probe_last_run_timestamp > 600)
+          or absent(garage_write_probe_last_run_timestamp)
         for: 0m
         labels: { severity: warning }
         annotations:

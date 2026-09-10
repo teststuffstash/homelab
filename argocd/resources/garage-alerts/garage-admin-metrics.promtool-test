@@ -350,23 +350,23 @@ tests:
       - eval_time: 17m
         alertname: GarageQuorumMembersRestarted
         exp_alerts: []
-  # ── GC BACKLOG: 600k parked for 2h fires; a 150k steady state does not ─────────────────────
+  # ── GC BACKLOG: 600k parked for 26h fires; 600k for a day (the 24h tombstone delay) does not ─────────────────────
   - interval: 5m
     name: "GarageTableGcBacklog fires on a parked backlog, not on steady-state churn"
     input_series:
       - series: 'table_gc_todo_queue_length{pod="garage-2",table_name="version"}'
-        values: "600000+0x40"
+        values: "600000+0x320"
       - series: 'table_gc_todo_queue_length{pod="garage-1",table_name="version"}'
-        values: "150000+0x40"
+        values: "150000+0x320"
     alert_rule_test:
-      - eval_time: 1h55m
+      - eval_time: 25h55m
         alertname: GarageTableGcBacklog
         exp_alerts: []
-      - eval_time: 2h10m
+      - eval_time: 26h10m
         alertname: GarageTableGcBacklog
         exp_alerts:
           - exp_labels:
               severity: warning
               pod: garage-2
             exp_annotations:
-              summary: "Garage garage-2 has 600k GC items parked for 2h"
+              summary: "Garage garage-2 has 600k GC items parked for 26h"
