@@ -133,17 +133,27 @@ spec:
         # replica before deleting it, so an unreachable peer parks the whole queue — garage-2
         # climbed 133k → 1.77 M across the 2026-09-08 stall day and drained at ~130k/h once
         # garage-0 was rotated (2026-09-09). Steady state is 0–150k; the build-out peaked ~750k.
+        # ⚠ 26h, not 2h (2026-09-10): a gc_todo entry is NOT work waiting on resources — Garage
+        # holds every tombstone for TABLE_GC_DELAY = 24h before the GC worker may remove it
+        # (src/table/gc.rs), and the worker sits Idle until the next entry comes due. So the
+        # queue length reads "deletes from the last 24h", and on a CI day (or the #547 orphan
+        # reap: +770k in 4h on 2026-09-10) it exceeds 500k with nothing wrong. Only an entry
+        # older than the delay is a parked one, and the metric carries no age — so the belt
+        # waits out the delay plus a margin: a backlog that has stayed >500k for 26h contains
+        # entries the worker was due to remove and did not.
         - alert: GarageTableGcBacklog
           expr: |
             sum by (pod) (table_gc_todo_queue_length) > 500000
-          for: 2h
+          for: 26h
           labels: { severity: warning }
           annotations:
-            summary: "Garage {{ $labels.pod }} has {{ $value | humanize }} GC items parked for 2h"
+            summary: "Garage {{ $labels.pod }} has {{ $value | humanize }} GC items parked for 26h"
             description: >-
-              Table GC on this pod cannot complete its deletes — each tombstone must reach every
-              replica first, so a backlog this size means a peer has been unreachable from here
-              (the 2026-09-08 class) or the GC worker is erroring. Read this pod's log for
+              Table GC on this pod has held >500k entries for longer than Garage's 24h tombstone
+              delay, so some of them were due for removal and were not removed — each tombstone
+              must reach every replica first, so a peer has been unreachable from here (the
+              2026-09-08 class) or the GC worker is erroring. (A large backlog for LESS than 24h
+              is normal: it is the last day's deletes waiting out the delay.) Read this pod's log for
               "table GC" / "try_send_and_delete" errors and the peers' health; the backlog
               drains on its own once every replica answers (~130k/h measured).
         # The observer-side symptom, from Garage's own counters: RPCs to a peer timing out.
@@ -326,6 +336,19 @@ spec:
         - record: garage:data_volume_used_ratio
           expr: |
             1 - garage_local_disk_avail{volume="data"} / garage_local_disk_total{volume="data"}
+
+        # ── 30-DAY SLO WINDOWS (2026-09-10) — the objectives above are stated over 30 days, but
+        # every rule so far is a 5m rate or a 1h window, so the doc's "measured" figures were
+        # short-window reads. These are the series the objectives are actually judged on. (The
+        # availability one averages the recorded 1h series rather than re-running a 30d subquery.)
+        - record: garage:cluster_health:availability_ratio_30d
+          expr: |
+            avg_over_time(garage:cluster_health:availability_ratio_1h[30d])
+
+        - record: garage:s3_server_error_ratio:30d
+          expr: |
+            sum(increase(api_s3_error_counter{status_code=~"500|503"}[30d]))
+            / sum(increase(api_s3_request_duration_count[30d]))
     # ── BUCKET QUOTA — the 2026-09-09 registry class (FU-203) ─────────────────────────────────
     # A bucket-size quota refusal is invisible to every metric Garage exports: the disk is fine
     # (GarageDiskFillingUp cannot see it), api_s3_error_counter does not count the 403, and the

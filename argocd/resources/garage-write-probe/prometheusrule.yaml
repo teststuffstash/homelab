@@ -53,9 +53,14 @@ spec:
         # NO HEARTBEAT for 10 minutes. The probe runs every minute; staleness > 10m is ≥11 missed
         # runs. Catches the probe itself dying, Garage becoming completely unavailable, or
         # monitoring broken — the absence detector for the other two belts.
+        # `or absent(...)`: a pushgateway-served series is fail-open BOTH ways — it re-serves the
+        # last push forever (the GarageBucketGaugesStale lesson) AND, if no push ever landed,
+        # `time() - <nothing>` is an empty vector that never fires. The probe pushed HTTP 400s for
+        # two days (2026-09-08 → 09-10) with this belt silent; absent() is the missing half.
         - alert: GarageWriteProbeSilent
           expr: |
-            time() - garage_write_probe_last_run_timestamp > 600
+            (time() - garage_write_probe_last_run_timestamp > 600)
+            or absent(garage_write_probe_last_run_timestamp)
           for: 0m
           labels: { severity: warning }
           annotations:
