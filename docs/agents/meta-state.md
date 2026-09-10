@@ -10,6 +10,20 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-10 afternoon seat, ~14:3x–19:3xZ — the Garage lessons read + fix list; arc in
+  TICK-LOG):** landed + verified #1588 (write probe alive — it had pushed 400s since 09-08; Silent
+  absent-safe; GcBacklog 26h = the 24h tombstone delay; 30d SLO recording rules), #1589 (Garage
+  CPU request 500m, rolled clean), #1590 (ledger/garage.md currency). (1) **Watch, not act:**
+  `garage:cluster_health:availability_ratio_30d` is a ~2-day figure until its 1h source series
+  ages (rewritten 09-09) — do not quote it as 30d before ~10-09; `GarageTableGcBacklog` re-pends on
+  the new 26h timer over the #547 reap backlog (garage-2, 1.38 M, drains ~24h after each delete
+  burst). (2) **oracle-fleet#547 answered** (lifecycle rule fine; the 08-25 restore reset every
+  object timestamp → `runs/` expires from ~09-24) — nothing to do until then; `homelab-browse`
+  now has read on `allure-reports` (hand-made key, the §Durability sweep list). (3) **Open by
+  lane:** FU-229 (30d SLO breached, no burn alert until garage-2 leaves the X240; CI-hour churn
+  attribution via the access log), FU-223 extended (depth-one CPU-per-IOP A/B = the raw-XFS
+  decision), FU-137 (the garage-2 move — hardware: the 4U at 400 / SFF watch, hardware repo
+  STATE). FU-089 archive entry is past expiry (lint warning) — next docs-cleanup.
 - **⚑ PICKUP (2026-09-10 early seat, 05:1x–09:0xZ — three oracle handoffs + #884; full arc in
   TICK-LOG):** (1) **Oracle's release landed** (run 34450512688) after three walls in 12 h, all
   fixed: registry cap 48Gi (#1578, the 2× commit rule), `homelab-ephemeral-large` (#1582, #1585
