@@ -3173,7 +3173,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Dropped noisy virtual devices for readability.",
+      "description": "Bytes on the physical NIC only (device eth*/en*): what actually crosses the LAN. Every virtual device is excluded — veth/lxc pod links (an in-node Longhorn write path shows hundreds of Mbit/s there without touching the wire) and the Cilium vxlan stack (cilium_vxlan/cilium_host/cilium_net re-count the same bytes, which is why the stock Node Exporter USE dashboards over-read ~3-5×).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3239,10 +3239,13 @@
       "id": 56,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "hidden",
-          "placement": "bottom",
-          "showLegend": false
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
@@ -3258,7 +3261,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum(rate(node_network_receive_bytes_total{device!~\"(veth|azv|lxc|lo).*\", cluster=\"$cluster\", job=\"$job\"}[$__rate_interval])) by (instance)",
+          "expr": "sum(rate(node_network_receive_bytes_total{device=~\"(eth|en).*\", cluster=\"$cluster\", job=\"$job\"}[$__rate_interval])) by (instance)",
           "interval": "$resolution",
           "legendFormat": "Received bytes in {{ instance }}",
           "range": true,
@@ -3270,7 +3273,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "- sum(rate(node_network_transmit_bytes_total{device!~\"(veth|azv|lxc|lo).*\", cluster=\"$cluster\", job=\"$job\"}[$__rate_interval])) by (instance)",
+          "expr": "- sum(rate(node_network_transmit_bytes_total{device=~\"(eth|en).*\", cluster=\"$cluster\", job=\"$job\"}[$__rate_interval])) by (instance)",
           "hide": false,
           "interval": "$resolution",
           "legendFormat": "Transmitted bytes in {{ instance }}",
@@ -3306,7 +3309,7 @@
           "refId": "D"
         }
       ],
-      "title": "Network Received (without loopback)  by instance",
+      "title": "Network on the wire (physical NICs only) by instance",
       "type": "timeseries"
     },
     {
