@@ -99,6 +99,20 @@ spec:
             - { name: REGISTRY_STORAGE_S3_BUCKET, value: "registry" }
             - { name: REGISTRY_STORAGE_S3_FORCEPATHSTYLE, value: "true" }
             - { name: REGISTRY_STORAGE_S3_ENCRYPT, value: "false" }
+            # PART SIZE IS THE PUSH THROUGHPUT (oracle handoff 2026-09-10 07:56, measured on
+            # release run 34450512688): the s3 driver uploads parts SERIALLY, one buffered chunk
+            # at a time, and Garage's cost per UploadPart is per REQUEST, not per byte — mean
+            # 0.6 s on garage-1 (m70s NVMe, the 09-08 push: 15 MB/s), 1.9 s on garage-2 (the
+            # MX500 laptop zone, 09-10: 2.7 MB/s; which pod a push lands on is the registry's
+            # keep-alive connection, i.e. luck). At the 10 MiB default that is 1,064 round trips
+            # for the 10.6 GB corpus layer, 50–65 min; the delta pod pushes the same bytes to
+            # ert-snapshots in 64 MiB parts at ~26 MB/s. So: 64 MiB parts (166 per layer; the
+            # driver buffers ONE chunk per in-flight upload in RAM — the 1Gi limit below holds a
+            # dozen). The commit-time server-side copy (Move → UploadPartCopy, 32 MiB default,
+            # 16–55 s per part on 2026-09-09) gets the same chunk; its concurrency stays at the
+            # driver default — one variable at a time, the next push measures both.
+            - { name: REGISTRY_STORAGE_S3_CHUNKSIZE, value: "67108864" }
+            - { name: REGISTRY_STORAGE_S3_MULTIPARTCOPYCHUNKSIZE, value: "67108864" }
             # The s3 driver's DEFAULT redirect middleware answers blob GETs with a presigned URL
             # at the storage endpoint — garage.garage.svc.cluster.local, unreachable for every
             # actual consumer (Talos containerd, LAN clients). Found live: the seeded blob's GET
