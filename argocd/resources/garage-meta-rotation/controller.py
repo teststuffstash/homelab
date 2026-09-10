@@ -148,12 +148,13 @@ def push_bucket_gauges(pod_ip):
     """Per-bucket size vs quota — the counter Garage enforces quotas on (GetBucketInfo `bytes`).
 
     One pushgateway group for all buckets: a push REPLACES the group, so a deleted bucket's
-    series disappears instead of going stale. Best-effort like the heartbeat: a failure here
-    must not stop a rotation, and the belts' absent() clause catches a dead push."""
+    series disappears instead of going stale. The pushgateway re-serves the last push forever,
+    so the group carries its own timestamp — GarageBucketGaugesStale reads THAT, not absent().
+    Best-effort like the heartbeat: a failure here must not stop a rotation."""
     try:
-        lines = []
+        lines = [f"garage_bucket_gauges_timestamp {int(time.time())}"]
         for b in admin(pod_ip, "GET", "/v2/ListBuckets"):
-            name = (b.get("globalAliases") or [b["id"][:16]])[0]
+            name = (sorted(b.get("globalAliases") or []) or [b["id"][:16]])[0]
             info = admin(pod_ip, "GET", f"/v2/GetBucketInfo?id={b['id']}")
             lbl = f'{{bucket="{name}"}}'
             lines += [f"garage_bucket_bytes{lbl} {info.get('bytes', 0)}",

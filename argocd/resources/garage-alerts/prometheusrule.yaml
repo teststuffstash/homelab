@@ -352,19 +352,23 @@ spec:
               consumer can spend a whole upload before learning it. Either the owner prunes
               (its own retention) or the claim's max_size grows — per-zone headroom is
               `garage stats` DataAvail, and every zone holds a full copy at rf=3.
-        # The gauges come from one CronJob tick; if that push dies, the belt above goes silent
-        # exactly like a dead scrape (the FU-108/FU-125 class). GarageMetaRotationControllerSilent
-        # covers the CronJob not running at all; this covers it running but not pushing buckets.
-        - alert: GarageBucketGaugesAbsent
+        # The gauges come from one CronJob tick, through the pushgateway — which re-serves the
+        # last push FOREVER, so a bare absent() would only ever catch day-one non-existence
+        # (reviewer, #1577). The group carries its own timestamp, same shape as
+        # GarageMetaRotationControllerSilent; that alert covers the CronJob not running at all,
+        # this one covers it running but the bucket push dying.
+        - alert: GarageBucketGaugesStale
           expr: |
-            absent(garage_bucket_quota_bytes)
-          for: 1h
+            (time() - max(garage_bucket_gauges_timestamp) > 3600)
+              or absent(garage_bucket_gauges_timestamp)
+          for: 15m
           labels: { severity: warning }
           annotations:
-            summary: "garage_bucket_* gauges are absent — the bucket-quota belts are blind"
+            summary: "garage_bucket_* gauges are stale or absent — the bucket-quota belts read old numbers"
             description: >-
-              No garage_bucket_quota_bytes series for an hour. The garage-meta-rotation CronJob
-              (ns garage, every 15 min) pushes them from the admin API's GetBucketInfo; read its
-              last Job log for "WARN bucket gauges" (admin token, ListBuckets) or "WARN
-              pushgateway" (pushgateway unreachable). Until fixed, GarageBucketQuotaNear and
-              RegistryBucketCommitHeadroomLow cannot fire.
+              The garage-meta-rotation CronJob (ns garage, every 15 min) pushes the bucket
+              gauges with a timestamp, and that timestamp is over an hour old or missing. The
+              pushgateway re-serves the last push forever, so the quota belts are reading stale
+              numbers, not none. Read the CronJob's last Job log for "WARN bucket gauges" (admin
+              token, ListBuckets) or "WARN pushgateway". Until fixed, GarageBucketQuotaNear and
+              RegistryBucketCommitHeadroomLow reflect the last successful tick, not now.
