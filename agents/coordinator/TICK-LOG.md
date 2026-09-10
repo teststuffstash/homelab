@@ -8349,4 +8349,13 @@ every object timestamp, so `runs/` expires from ~09-24 (run-id age ≠ object ag
 `homelab-browse` granted read on `allure-reports` for the check (hand-made key — §Durability
 sweep list). Not done, by lane: garage-2 off the X240 (hardware, FU-137); allure `latest/`
 shape (oracle, #518); `metadata_fsync` revisit (after FU-223).
+**Landed + verified (18:36–18:55Z):** #1589 merged 18:36Z — StatefulSet rolled garage-2 → 1 → 0 at
+18:36 / 18:42 / 18:47Z (readiness + minReadySeconds spacing held; write probe 0 failures; all three
+Ready at 500m); #1590 18:43Z; #1588 18:48Z — the probe's next run logged "Pushed metrics to
+pushgateway", `garage_write_probe_last_run_timestamp` 19 s old, PUT 0.20 s;
+`garage:s3_server_error_ratio:30d` = 0.005 %, `garage:cluster_health:availability_ratio_30d`
+reads 95.9–98.0 % per pod — ⚠ the source 1h series is only ~2 days old (rewritten 09-09), so that
+"30d" is a 2-day figure until history accrues. Post-roll: `GarageClusterDegraded` pending on
+garage-0 during its rejoin (probe back to 1), `GarageTableGcBacklog` re-pending on the 26h `for`.
+Direct commits this session: FU-223/FU-229 + this journal; pushed at wind-down.
 
