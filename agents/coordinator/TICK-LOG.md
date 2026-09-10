@@ -8176,3 +8176,33 @@ ride preemption ruled out (coordination cost), Xeon/laptop/gaming-PC/SFF roles, 
 storage share. thinkcentre + hp-01 retirement hangs off the third std SFF. Next session: garage-0
 rotation onto intel0 (SA400 unschedulable first), then the placement rule into the ledger.
 
+## 2026-09-09 20:00Z → 2026-09-10 00:30Z — the garage-0 rotation onto the 7600p (operator: "garage-0 move")
+
+**Rotation (20:05Z → converged 00:08Z).** `longhorn-tag-disks.sh` gained `unschedule wk-metal-04
+sata500` (the class is selector-less; a tag alone left three candidates) → pod + both PVCs deleted
+→ StatefulSet re-created them in 31 s, Longhorn put both on `intel1` (most-free pick; mirrors on
+`intel0`) → new node id `d93314cf5564e762`, layout v3, `skip-dead-nodes`, `repair tables/blocks`
+with 8 workers on the new pod only. Blocks 562k in ≈85 min (225/s peak vs 14/s onto the SA400);
+tables 3.7 M items in 3 h 55 min, the object table the long pole (3k–20k/min, slowest during a
+consumer's 22:06–22:42Z write). The layout collapsed to one live version by itself once both
+peers synced v3 — `--allow-missing-data` never needed. Write probe 0 failures; three 10-s probe
+timeouts. Workers reset to 1/2 after. Left behind: garage-0 LMDB 15.2 GB (3.2× compacted),
+garage-2 meta 88 % (the loop's next rotation). Watcher: 3-min `stats -a` samples in the session
+scratchpad; the seat's rf=3 rotation numbers are the ledger row (PR#1575).
+
+**Observability, operator-driven en route.** (a) "Why not upstream's dashboard?" — no reason
+recorded; #1559's prior-art check never looked upstream. Vendored it (`garage-upstream`, PR#1573)
+as the raw-rates companion; the SLO view stays. Two reviewer/operator catches on it: the JSON
+escapes quotes so the job-label text replace matched NOTHING (self-check counted the wrong string;
+fixed on the parsed panels, two exprs queried live), and the author's saved `hideSeriesFrom`
+override ("all except 10.83.2.3:3903") emptied the resync-queue panel (PR#1574). "Web errors: No
+data" is genuine (counter registers on first error). (b) **"Availability (1h) 73.3 %, low for a
+long time"** — the SLO rule read `probe_success`, whose "fully operational" body regex IS the
+`GarageClusterDegraded` detector: every node-down, maintenance window and zone rotation counted as
+unavailability while quorum served every request (7-day 93 % = the SA400 dropouts + 09-09's two
+wk-metal-04 windows). Rule now = share of the hour `/health` answered HTTP 200 (Garage: 200 for
+Healthy AND Degraded, 503 only without quorum); fixture 200/503; reads 100 %. (c) Per-bucket S3
+latency: Garage's exporter has no bucket label at all — a client-side measurement (the oracle
+ingester), not a platform one; SERVICES.md + garage.md say so. Gotcha filed to memory: `gh pr
+create --body "$(cat <<EOF …)"` under zsh executes backticks — `--body-file` always.
+
