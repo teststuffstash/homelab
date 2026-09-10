@@ -3,27 +3,38 @@
 # registry namespace (no Infisical round-trip; the htpasswd push credential is the one that
 # rides Infisical, see htpasswd-externalsecret.yaml).
 #
-# Sizing (ADR-089: every bucket claim states max_size) — 32Gi, raised from 20Gi on 2026-09-07.
-# WHY IT MOVED: the corpus layer grew 6.4GB -> 10.01GB (oracle-fleet goal #418 added lõige rows
-# + a lemmatized search column), so release 2026-07-12 pushed 12.47GB(held) + 10.01GB = 22.48GB
-# against a 20Gi cap and Garage refused the object AT COMMIT, 49 minutes in:
-#   AccessDenied: Bucket size quota is reached, maximum total size ... 21474836480
-# The registry surfaced that 403 to skopeo as an opaque **500 Internal Server Error** with no
-# detail, and Garage's `api_s3_error_counter` does not move for a quota rejection — so from the
-# consumer's side the failure was indistinguishable from a timeout. Two contract gaps worth
-# remembering rather than re-deriving:
+# Sizing (ADR-089: every bucket claim states max_size) — 48Gi since 2026-09-10 (20Gi → 32Gi on
+# 2026-09-07 → 48Gi). The rule the cap has to satisfy, learned the hard way twice:
+#
+#   quota − held ≥ 2 × largest layer      (at COMMIT, not at upload)
+#
+# A blob push commits in two S3 steps (distribution v3, s3 driver): CompleteMultipartUpload of
+# the upload, then Move = a server-side multipart COPY of the whole blob into blobs/sha256/…
+# (UploadPartCopy ×N + a second complete), then DeleteObject of the upload. Between the two
+# completes the bucket holds the layer TWICE. Garage checks the quota on each complete, refuses
+# with `AccessDenied: Bucket size quota is reached` at the second one, the registry maps that
+# 403 onto an opaque **500** with no detail reaching skopeo, and `api_s3_error_counter` does not
+# move for a quota rejection — so from the consumer's side a 51-minute upload just dies at its
+# last byte. Two contract gaps worth remembering rather than re-deriving:
 #   - ADR-089 promises an over-cap PUT "fails fast with a legible error at CREATE time". On the
 #     multipart/registry path it does not: it fails slow, at commit, illegibly.
-#   - There is NO per-bucket size metric in Garage (the whole family is garage_local_disk_avail
-#     /_total, garage_replication_factor, garage_build_info), so no PrometheusRule can watch a
-#     quota. GarageDiskFillingUp cannot see this: the DISK was fine, the CAP was the limit.
-#     A real alert needs the admin API (bucket info -> size vs max_size). Parked on FU-203.
+#   - Garage exports no per-bucket size metric; GarageDiskFillingUp cannot see a CAP. The
+#     garage-meta-rotation controller pushes the admin-API counter every 15 min instead, and
+#     RegistryBucketCommitHeadroomLow (prometheusrule.yaml here) holds the 2× rule as an alert.
+# History: 2026-09-07 — 12.47 GB held + 10.01 GB against 20Gi, refused at the FIRST complete.
+# 2026-09-09 — 16.4 GB held + 2 × 10.64 GB against 32Gi, refused at the COPY's complete
+# (Prometheus: 261 UploadPartCopy + 2 CompleteMultipartUpload in the window, zero S3 errors).
 #
-# WHY 32Gi AND NOT MORE: 32Gi = 3 co-resident releases at 10GB (successive releases share almost
-# nothing — the delta REBUILDS the corpus). 48Gi was affordable on today's single node but would
-# pre-commit the ADR-114 rf=3 sizing: at rf=3 EVERY zone holds a full copy and the plan is ~100G
-# per zone with "usable = smallest zone". Garage holds 77.5GB of data today, so a 48Gi registry
-# ceiling would put ~116GB in every zone, over the plan. Revisit only alongside zone sizing.
+# WHY 48Gi: the corpus layer is ~10.6 GB and grows; the delta rebuilds the corpus weekly, so
+# successive releases share nothing. 48Gi = two held releases (the served pin + one rollback,
+# ~21 GB) + the 2× commit (~22 GB) + growth. Until the prune half runs (FU-203: the stack untags
+# with its push cred, the Sunday registry-garbage-collect CronJob collects), each unpruned
+# release eats ~10 GB of this. Storage side, read 2026-09-10: every zone holds a full copy at
+# rf=3; each zone is a 150 GiB longhorn-local-xfs volume at ~79 GiB used / ~71 GiB free, and
+# the quotas of all 16 buckets already sum to ~205 GiB against 130 GiB of declared capacity —
+# a quota is a ceiling, not a reservation. The bucket that hits the disk first is not this one:
+# ert-snapshots (stack-owned) at 82 / 97 GB and +10 GB/week. Revisit alongside zone sizing
+# (docs/storage-ledger.md).
 #
 # RETENTION OWNERSHIP (ADR-085 split: mechanism = platform, policy = IaC) — FU-203:
 #   - homelab owns the MECHANISM. Only it can run the prune: `registry garbage-collect` executes
@@ -50,7 +61,7 @@ spec:
     module: |
       resource "garage_bucket" "registry" {
         global_alias = "registry"
-        max_size     = 34359738368 # 32Gi — sizing note above (ADR-089 cap; raised 2026-09-07)
+        max_size     = 51539607552 # 48Gi — sizing note above (ADR-089 cap; raised 2026-09-10)
       }
       resource "garage_key" "registry" { name = "registry" }
       resource "garage_bucket_permission" "registry_rw" {

@@ -41,6 +41,13 @@ The `remote_power` note was trusted as a recipe; the plug sensor was never used 
   sensors evicted and stuck on volumes until a zone returned. Exactly the "not simultaneously"
   case the seat had ruled out an hour earlier for a planned hp-01 window.
 - Alerts fired unsilenced (Alertmanager was on the dead node).
+- **Loki down 11.5 h (found 2026-09-10 05:1xZ).** hp-01's hard power-off at ~17:17Z corrupted
+  the tsdb-index head WAL on `data-loki-0` (`corruption in segment
+  /loki/tsdb-index/wal/aws_2024-01-01/1788974107/00000000 … unexpected checksum`); loki-0 crash-looped
+  from 17:55Z (136 restarts), `KubePodCrashLooping`/`TargetDown` fired the whole time and no
+  responder issue appeared, and the oracle jail saw the scoped Loki door answer 502 from ~22:13Z.
+  Every tenant's logs from ~17:15Z to 05:25Z are gone (the ingester's unflushed chunks died with
+  the pod; the index WAL was the corrupt piece). Recipe: `docs/runbook.md` §Power-loss.
 
 ## Fixes
 
@@ -52,6 +59,9 @@ The `remote_power` note was trusted as a recipe; the plug sensor was never used 
   `machines.yaml`'s `plug:` and **refuses to cycle a socket that is carrying load** (FORCE=1
   overrides). `up` prints the draw before sending WoL.
 - `machines.yaml` remote-power notes corrected (hp-01: a plug cycle ends at the power button).
+- **Loki:** the corrupt WAL segment dir moved aside from a helper pod on the same node
+  (`/loki/wal-corrupt-2026-09-09/`), loki-0 Ready at 05:25Z 09-10; nothing to codify — the
+  WAL is the recovery mechanism and a hard power-off mid-write is what it cannot survive.
 
 ## Probe lesson
 
