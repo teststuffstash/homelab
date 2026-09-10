@@ -8248,3 +8248,45 @@ FU-228 for the policy), **allure-reports 89 %** (oracle-iac's), **ert-snapshots 
 (oracle-iac's, already in the handoff result). Reviewer catch worth keeping: a bare `absent()`
 on a pushgateway-served series is fail-open — the gateway re-serves the last push forever, so a
 staleness belt must read the push's own timestamp (`GarageBucketGaugesStale`).
+
+**Oracle handoff 07:31 — runner evicted on wk-03 mid-untar (10.6 GB corpus layout).** Kubelet
+nodefs floor on a 36 GB root shared with the image store; runner pods request no ephemeral
+storage, `_work` is a root-disk emptyDir. Their ask 1 (a request on the general set) cannot
+work — requests compare to allocatable, not to the disk the image store took, and scale sets
+have no labels, so placement per job is by set NAME only. Detector first (#1581: `PodEvicted`
+via a 1h max over kube_pod_status_reason, `EphemeralNodeScratchLow` < 16 GB on taint-defined
+ephemeral nodes; both replayed on the 07:05/07:10Z samples, `PodEvicted` FIRED live 08:03Z),
+fix from the alert (#1582: `homelab-ephemeral-large`, zone NotIn proxmox, 16Gi scratch request,
+0/1 runners; listener registered 08:14Z). Oracle switches `runs-on`. wk-03's real floors: the
+kubelet's 3.6 GB and the pve thin pool underneath (73 % now, 84 % peak/24h).
+
+**Oracle handoff 07:56 — LAN push at 2.7 MB/s.** Garage's UploadPart cost is per REQUEST: mean
+0.59 s on garage-1 (m70s NVMe, the 09-08 15 MB/s push) vs 1.9 s on garage-2 (MX500 laptop zone,
+today) — which pod a push hits is the registry's keep-alive connection landing on one Service
+endpoint. distribution uploads 10 MiB parts serially → 1,064 round trips per layer. #1583: 64 MiB
+parts for upload + the commit copy (copy concurrency untouched — one variable at a time), HELD
+until oracle's in-flight push (run 34450512688, on wk-metal-02) completes: the merge rolls the
+registry pod. Loose end, not filed (5-min rule fails the other way — needs a design read): the
+registry exposes no scraped metric (debug addr on localhost), so push throughput has no belt.
+
+**#884 re-fire 08:25Z — GarageClusterFlapping on garage-2 (wk-metal-01), the responder's read
+corrected.** Its node was right, its device wrong: `sdc` is the data-garage-2 Longhorn volume
+over iSCSI (sda = the MX500, 1.3 ms, 16 % busy), and what saturated was the CPU — 74 % idle at
+06:00Z → 9 % (system 37 %, iowait 19 %), `instance-manager` 1.6 of 4 cores. Oracle's release ran
+its runner on wk-metal-01 while garage-2 coordinated the S3 writes; garage-2's block resync queue
+went 23 → 11,963 during the push (lost the quorum race to the NVMe peers), and after the push it
+was OFFLOADING/DELETING blocks it no longer owns (layout v3) while the table GC backlog (547k,
+flat 6 h) churned the meta volume at 400–800 write IOPS through the engine. All S3 endpoints
+degraded (GetObject p99 28 s, List 13 s, CompleteMPU/UploadPartCopy at the 100 s bucket — the
+operator read it off the garage-slo dashboard). Seat comment on #884 with the numbers.
+Actions: #1585 (the large-scratch set PREFERS wk-metal-02 — soft); tranquility experiment on
+garage-2 (resync-tranquility 2 → 10 at 08:44:07Z, reverted 08:52Z): within 35 s idle 5.7 → 29 %,
+GetObject p99 28.8 → 0.24 s, resync 0.85 → 32/s and the queue 11.9k → 32 by 08:49 — CONFOUNDED
+with the release's copy phase ending ~08:40 and looks like `worker set` un-sticking a worker
+(the rate went UP, not down); logged, not concluded. GC backlog drains now (579k → 575k in 5 min).
+The durable answer is the fleet direction (no storage zone on a 4-core laptop; ledger §2026-09-07
+engine cost) — FU-137's pointer, nothing new filed.
+
+**Oracle handoff 07:56 closed:** #1583 merged 08:46Z after their run finished (registry rolled,
+`/v2/` answers); ask 2 answered as per-pod per-request cost (garage-1 0.59 s vs garage-2 1.9 s
+mean UploadPart), not a Garage regression.
