@@ -12,22 +12,24 @@ jointly blow the tier — which is exactly what happened.
 > **A tier's committed capacity is the sum of every cap charged against it, across every repo, and
 > exactly one ledger owns that sum.** A claim that doesn't appear in the ledger doesn't exist.
 
-## Current shape (2026-09-06; the 2026-08-25 read in parentheses)
+## Current shape (2026-09-10 00:15Z, post garage-0 rotation; the 2026-09-06 read in parentheses)
 
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
-| `std` | hp-01 **×2 disks**, thinkcentre, **wk-02** | 624G | 538G | 385G (71%) *(was 305G, 61%)* | 388G (62%) *(was 243G, 42%)* |
-| `bulk` | wk-metal-01, **wk-metal-04** | 975G | 706G | 816G (115%) ⚠ *rebuild-day figure — see below (was 580G, 88%)* | 498G (51%) *(was 620G, 68%)* |
+| `std` | hp-01 **×2 disks**, thinkcentre, wk-02 | 624G | 538G | 310G (58%) *(was 385G, 71%)* | 356G (57%) *(was 388G)* |
+| `bulk` | wk-metal-01 MX500, **wk-metal-04 intel0 + intel1** (the two 7600p) | 1009G | 902G | 816G (90%) *(was 816G on 706G, 115%)* | 399G (40%) |
+| `slow-bulk` | wk-metal-04 SA400 — **unschedulable**, holds no replica | 477G | 316G | 0 | 35G (the image store) |
 | `fast` | thinkcentre Optane ×2 | 28G | 28G | 5G | 1G |
+| *(untagged)* | m70s Micron 2300 — the `longhorn-local-xfs` Garage zone, selector-less by design | 509G | 402G | 193G | 154G |
 
 Read from the Longhorn node CRs (`storageMaximum`/`storageReserved`/`storageScheduled`/
-`storageAvailable` summed per tag; allocatable = max − reserved, committed = scheduled). The
-**bulk 115 %** is the wk-metal-04 maintenance window's transient: the mirror volumes rebuilt a
-second replica onto wk-metal-01 while the node was down and Longhorn is now placing a third on the
-returned disk before trimming — re-read after the rebuilds settle. **std grew 80 G committed in 12
-days** — 40 G of it is the PyPI cache's 2 × 20Gi (below), the rest platform volumes; `wk-02`'s std
-disk is UNSCHEDULABLE for new replicas (47 G free < its 25 % floor of 63 G), so new std placements
-have three disks, two of them in the hp-01 zone.
+`storageAvailable` summed per tag; allocatable = max − reserved, committed = scheduled; physically
+used = max − available, so it includes whatever else lives on a shared partition). The bulk tier's
+allocatable grew 196 G with the 7600p pair (0 reserved — Longhorn-only disks) and its committed
+figure is real again: the 09-06 115 % was the maintenance-window transient. On wk-metal-04 the
+registry mirrors (140 G) sit on `intel0`, garage-0's zone volumes (180 G) + the PyPI/mcr mirrors
+(60 G) on `intel1` — Longhorn's most-free-disk pick, not a choice. **std fell 75 G committed** since
+09-06 (platform volumes freed); wk-02's std disk is schedulable again.
 
 **`fast` eligibility (operator ruling 2026-08-11, FU-159):** SCRATCH for disk-write-heavy pods
 (CI builds and the like) — single-node replica-1 Optane of modest speed; NEVER load-bearing
@@ -566,6 +568,7 @@ node's metadata lives, by two orders of magnitude.**
 | **rotation of a zone, Garage-native (step 8)** | new garage-0 (`repair tables` + `repair blocks`) from two healthy peers, local volumes | onto wk-metal-04's **SA400** (the known write bottleneck), tables and blocks sharing the disk | tables **~27k items/min** (435k in 16 min → ~2 h for 3.2M); blocks **~14/s ≈ 1.7 MB/s** → ~11 h — left running at wind-down |
 | **LMDB size the seed method leaves behind** (read 2026-09-09, identical tables, 1.93 M objects) | snapshot-seeded garage-1 / natively-synced garage-2 / natively-rotated garage-0 | — | **6.3 GB / 16.2 GB / 27.9 GB** — the native path re-bloats the env it was meant to reclaim; `GarageDiskFillingUp` re-fired on garage-0 within a day (garage.md §Metadata reclamation) |
 | **the rotation LOOP's first run, unattended (2026-09-09 08:45Z, garage-0)** | `GarageDiskFillingUp` → controller gate → `delete pod` → `meta-rotate` init container swaps in the pod's own 05:14Z snapshot → `repair tables` → converge (garage.md §The loop as built) | garage-0's own auto-snapshot on its data volume (SA400) | **27.83 GB → 4.68 GB; seed 76 s (≈62 MB/s copy), Ready 100 s, converge 55 s — 4 min 08 s delete-to-DONE**, quorum served throughout, meta 11.4 % → 81.8 % free, alert cleared. Three gate refusals first (insert=1, Merkle 2597, resync 8081 → thresholds set from 7-day measurements: table queues 10k, resync 100k; a live store is never at zero) |
+| **rotation of the zone onto NVMe (step 8, second run, 2026-09-09 20:05Z → 00:08Z)** | pod + both PVCs deleted, StatefulSet re-created them on `longhorn-local-xfs` (`intel1`), `layout assign/remove/apply --version 3` + `skip-dead-nodes`, `repair tables` + `repair blocks` from two healthy peers, 8 workers / tranquility 0 on the new pod only (peers at defaults) | garage-1 (m70s NVMe) + garage-2 (MX500) → wk-metal-04 **7600p** | pod Ready in **31 s**; **blocks: 562k in ≈85 min** — 225/s for the first 10 min, ~70–120/s once the object walk shared the disk (vs 14/s onto the SA400, 155/s onto the MX500); **tables: 3.7 M items in 3 h 55 min ≈ 16k/min**, the object table the long pole (1.70 M at 3k–20k/min, slowest while a consumer wrote at 22:06–22:42Z); layout collapsed to a single live version by itself at 00:08Z once both peers synced v3 — `--allow-missing-data` never needed after `skip-dead-nodes`. Quorum served throughout: write probe 0 failures, SLO availability (HTTP 200) 100 % but for three 10-s probe timeouts. LMDB left behind: **15.2 GB** natively synced (3.2 × the 4.7 GB compacted, the last row's pattern) — and serving the sync + GC pushed **garage-2's meta to 88 % full**, the loop's next target. ⚠ "Worth it for consumers" is NOT yet measured: PutObject p99 30 min after convergence = 4.8 s (= the 09-09 baseline); the comparable read is per-pod `UploadPart`/`ListObjectsV2` latency during the next delta run against the 09-08 figures below (27 s / 35.7 s on garage-0) |
 
 **Reading:** the Garage-native resync is not slow — a node whose LMDB page faults across the network
 is. Every refcount lookup and Merkle descent on garage-0 was a scattered 4 KiB read on a volume

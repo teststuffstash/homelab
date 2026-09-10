@@ -11,12 +11,14 @@ never the session's arc — that is TICK-LOG's.)
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-09-09 evening seat — the drive-fitting windows; full arc in TICK-LOG):**
-  (1) **Rotate garage-0 onto `intel0`** on wk-metal-04 (its data/meta still sit on the SA400):
-  set the `sata500` disk `allowScheduling: false` first (three schedulable disks on the node,
-  `longhorn-local-xfs` is selector-less), then the zone rotation as in `garage.md` §The build-out
-  (delete pod + PVCs, resync from two healthy peers ≈ 1 h at ~19 MB/s, or the tar seed) — expect
-  the PUT p99 to drop (the 2-of-3 quorum path becomes NVMe+NVMe). Then the ledger's "Current
-  shape" table + FU-093 line. (2) **Hardware arrival read** for the two 7600p (SMART
+  (1) **garage-0 rotation DONE** (2026-09-09 20:05Z → 00:08Z, PR#1573/#1575, ledger row) — both
+  zone volumes on `intel1`, SA400 unschedulable + empty. Residuals: **garage-2 meta 88 % full**
+  → the rotation loop's job (alert pending at wind-down; if `GarageMetaRotationNotReclaiming`
+  fires, read the gate log); the **"worth it for consumers" read is per-pod `UploadPart` /
+  `ListObjectsV2` p99 during the NEXT delta run** vs the ledger's 09-08 figures — not taken.
+  Also landed en route: the SLO availability rule now counts HTTP 200 (was the degraded regex →
+  73 % during any node-down), upstream's Garage dashboard vendored (`garage-upstream`).
+  (2) **Hardware arrival read** for the two 7600p (SMART
   `percentage_used`, Opal) via the runbook's privileged-pod recipe → `teststuff/hardware`
   purchases/inventory rows (the operator has an uncommitted `purchases.md` edit there — merge
   around it). (3) **thinkcentre x16 slot never linked** (CPU root port `00:01.0` absent with the
