@@ -8238,3 +8238,13 @@ the board: why a 11-h `KubePodCrashLooping` in ns loki produced no issue (the re
 dedup against #811, the August loki crashloop, is the first suspect — not chased tonight).
 
 Still in the oracle inbox, unclaimed: `20260908-1857` (ARC shared uv cache EIO, third occurrence).
+
+**Belt replay, live (06:10Z).** #1577 merged 05:48Z, first controller tick 06:00Z pushed the
+gauges, `RegistryBucketCommitHeadroomLow` FIRED at 06:10Z on the real numbers (17.9 GB headroom
+< 22 GB) — the fix PR #1578 merges against a firing alert, as the ruling wants. The same tick
+found what nobody was watching: `GarageBucketQuotaNear` pending on **agent-transcripts 98 %**
+(5.3 GB of 5Gi — platform-owned, "11× actual" five weeks ago, no retention: #1579 → 20Gi,
+FU-228 for the policy), **allure-reports 89 %** (oracle-iac's), **ert-snapshots 84 %**
+(oracle-iac's, already in the handoff result). Reviewer catch worth keeping: a bare `absent()`
+on a pushgateway-served series is fail-open — the gateway re-serves the last push forever, so a
+staleness belt must read the push's own timestamp (`GarageBucketGaugesStale`).
