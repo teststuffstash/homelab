@@ -8314,3 +8314,48 @@ rule excludes only `lo` and vxlan-mode Cilium re-counts each byte on `cilium_vxl
 `_net` (wk-02 69 vs 9 Mbit/s). Fixed the Views/Global "without loopback" panel to a
 physical-NIC allowlist (`device=~"(eth|en).*"`): tofu-applied (1 ConfigMap change), Grafana
 serves it, #1587 armed. Nothing new filed — the metadata churn is FU-137's ledger line.
+
+## 2026-09-10 afternoon (~14:3x–18:4xZ) — Garage lessons-learned read, then the fix list (operator: "do the things from the garage list")
+
+**Design read first (full-context).** Operator asked what still bottlenecks Garage, hardware
+envelope for a zone, software knobs, small-write suitability (allure), raw XFS, throttling.
+Live 24 h answer: **not Garage's CPU** (0.11–0.16 core avg, 0.8 peak) — the Longhorn
+`instance-manager` is the largest consumer on every zone node (0.52/0.64/0.88 core, 5–8× Garage),
+physical disks 7–15 % busy behind a 34–96 % busy Longhorn block device, ~1,000 meta-volume writes
+per S3 request (LMDB CoW + fsync + Merkle + GC ×3 replicas). The X240 zone paces the cluster
+(PutObject mean 1.99 s vs 0.66 s; table-put p99 4.1 s vs 0.7 s; 112–287 RPC timeouts/h toward it;
+GC 1.38 M). Throttling (cilium 3–6 %, longhorn-manager 3–8 % post-FU-224) is not on the data
+path. "Why is the free X240 still slow at GC/sync": GC is a 24 h tombstone timer
+(`TABLE_GC_DELAY`, worker Idle until due — the 48 h trace lines up with deletes −24 h), resync is
+one worker at tranquility 2 by design; nothing physical binds. Zone-node envelope: ≥4 fast
+threads (clock over cores — the serial chain), ≈2 cores free at peak, 16 GB for the LMDB page
+cache (X240 at 8 GB: 200–1,800 major faults/s), DRAM NVMe, no rides. Hardware Q&A recorded in the
+hardware repo (m70s-class over the M70q Tiny; 4U at 400, RAM lot lost).
+
+**Telemetry audit found the write probe DEAD since it landed**: every push 09-08 → 09-10 got
+HTTP 400 (no trailing newline — proven from an in-cluster pod: same body 400 → 200 with `\n`),
+zero `garage_write_probe_*` series, and `Silent` could not fire on an absent series. The doc's
+SLO "measured" figures were 5m/1h reads; 30-day: availability 98.0/98.1/99.9 % per pod.
+
+**Landed (PR lane, bot-gated):** #1588 write-probe newline + `Silent` absent()-safe +
+`GarageTableGcBacklog` 26h (the 24 h delay) + 30d SLO recording rules (lint green, fixtures
+re-timed); #1589 Garage CPU request 100m → 500m (measured peaks; CFS weight on shared nodes;
+rolls the STS behind readiness + minReadySeconds); #1590 docs — ledger §2026-09-07 amendment
+(engine tax is CPU, not bandwidth), zone-node requirement row, garage.md SLO/belts/restore notes.
+**Direct:** FU-223 extended (depth-one CPU-per-IOP A/B = the one experiment), FU-229 minted
+(30d SLO breached with no burn alert; CI-hour churn unattributed). **Outward:** oracle-fleet#547
+answered — the lifecycle rule is stored/enabled and the worker runs; the 08-24/25 restore reset
+every object timestamp, so `runs/` expires from ~09-24 (run-id age ≠ object age).
+`homelab-browse` granted read on `allure-reports` for the check (hand-made key — §Durability
+sweep list). Not done, by lane: garage-2 off the X240 (hardware, FU-137); allure `latest/`
+shape (oracle, #518); `metadata_fsync` revisit (after FU-223).
+**Landed + verified (18:36–18:55Z):** #1589 merged 18:36Z — StatefulSet rolled garage-2 → 1 → 0 at
+18:36 / 18:42 / 18:47Z (readiness + minReadySeconds spacing held; write probe 0 failures; all three
+Ready at 500m); #1590 18:43Z; #1588 18:48Z — the probe's next run logged "Pushed metrics to
+pushgateway", `garage_write_probe_last_run_timestamp` 19 s old, PUT 0.20 s;
+`garage:s3_server_error_ratio:30d` = 0.005 %, `garage:cluster_health:availability_ratio_30d`
+reads 95.9–98.0 % per pod — ⚠ the source 1h series is only ~2 days old (rewritten 09-09), so that
+"30d" is a 2-day figure until history accrues. Post-roll: `GarageClusterDegraded` pending on
+garage-0 during its rejoin (probe back to 1), `GarageTableGcBacklog` re-pending on the 26h `for`.
+Direct commits this session: FU-223/FU-229 + this journal; pushed at wind-down.
+
