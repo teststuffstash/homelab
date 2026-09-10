@@ -10,6 +10,29 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-10 early seat, 05:1x–09:0xZ — three oracle handoffs + #884; full arc in
+  TICK-LOG):** (1) **Oracle's release landed** (run 34450512688) after three walls in 12 h, all
+  fixed: registry cap 48Gi (#1578, the 2× commit rule), `homelab-ephemeral-large` (#1582, #1585
+  prefers wk-metal-02) — **oracle must switch `release-corpus.yaml` to `runs-on:
+  homelab-ephemeral-large`** (told in the handoff result; unverified until Tuesday's 07:17Z run) —
+  and 64 MiB S3 parts (#1583, live 08:46Z): **Tuesday's push is the measurement** (upload phase vs
+  2.7 MB/s, commit copy vs ~15 min). (2) **Belts LIVE and replayed:** `garage_bucket_*` gauges +
+  `GarageBucketQuotaNear` / `RegistryBucketCommitHeadroomLow` / `GarageBucketGaugesStale`
+  (#1577), `PodEvicted` / `EphemeralNodeScratchLow` (#1581). **Firing by design at wind-down:**
+  `GarageBucketQuotaNear` on **ert-snapshots 84 %** and **allure-reports 89 %** — both oracle-iac's
+  (told); `GarageClusterFlapping` on garage-2 (clears with its 1h window); `GarageTableGcBacklog`
+  may fire on garage-2 (549k draining at ~120k/h, ~4.5 h from 09:00Z — the node sits at 1–5 %
+  idle meanwhile, consumer p99 inside objective; no action). (3) **agent-transcripts** was at 98 %
+  of 5Gi → 20Gi (#1579); **retention policy = FU-228** (new). (4) **Loki was down 11.5 h**
+  (hp-01 plug-cycle → index WAL corruption; logs 17:15Z→05:25Z lost for every tenant; recipe in
+  runbook §Power-loss) and **no responder issue appeared for an 11-h `KubePodCrashLooping`** —
+  open question for a board sweep (dedup against #811 is the first suspect). (5) **Unclaimed in
+  the oracle inbox:** `20260908-1857` ARC shared uv-cache `.lock` EIO (third occurrence; the RWX
+  share's advisory-lock story) — next handoff sitting. (6) Jail's oracle MCP re-pointed to the
+  host root (the 09-03 endpoint move; user-scope config in `~/.claude.json`, defined as code
+  nowhere). (7) FU-203's missing half is oracle-iac's untag (#664) — the Sunday GC CronJob
+  collects nothing until it lands. Design input, no home yet: the registry exposes no scraped
+  metric (debug addr on localhost) — push throughput has no belt; second sighting files it.
 - **⚑ PICKUP (2026-09-09 evening seat — the drive-fitting windows; full arc in TICK-LOG):**
   (1) **garage-0 rotation DONE** (2026-09-09 20:05Z → 00:08Z, PR#1573/#1575, ledger row) — both
   zone volumes on `intel1`, SA400 unschedulable + empty. Residuals: **garage-2 meta 88 % full**
