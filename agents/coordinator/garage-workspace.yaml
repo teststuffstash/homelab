@@ -28,7 +28,11 @@ spec:
     module: |
       resource "garage_bucket" "transcripts" {
         global_alias = "agent-transcripts"
-        max_size     = 5368709120 # 5Gi — ADR-089 quota-as-contract; ~11× actual (448MiB measured 2026-08-03, FU-093 tier reconciliation)
+        # 20Gi since 2026-09-10 (ADR-089 quota-as-contract). The 5Gi of 2026-08-03 was "~11× actual"
+        # (448 MiB) and the bucket stood at 5.3 GB / 26.7k objects five weeks later — 98 %, found the
+        # hour GarageBucketQuotaNear first ran (#1577). ~1 GB/week of ride exhaust with no retention
+        # (FU-228); at rf=3 every zone holds a full copy, per-zone headroom ~71 GiB on 2026-09-10.
+        max_size     = 21474836480 # 20Gi
       }
 
       resource "garage_key" "writer" { name = "agent-transcripts-writer" }
