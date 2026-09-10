@@ -8,6 +8,13 @@ and the Kubernetes API (the rotation order = a runtime-owned ConfigMap + `delete
 verdict = the meta-rotate init container's log line). Every run pushes a heartbeat to the
 pushgateway; a rotation pushes its result — the belts in prometheusrule.yaml read those.
 
+Every run ALSO pushes the per-bucket gauges Garage does not export itself (garage_bucket_bytes /
+_quota_bytes / _objects / _unfinished_multipart_bytes, from the admin API's GetBucketInfo) — the
+2026-09-09 registry class: a bucket QUOTA refusal is invisible to every Garage metric
+(api_s3_error_counter does not count it, the disk is fine), so the only detector is the counter
+the quota is enforced on. Read by the bucket belts in argocd/resources/garage-alerts/ and
+argocd/resources/registry/prometheusrule.yaml. Same token, same 15-min tick, no second poller.
+
 Trigger, not cron: this polls the ALERT — a rotation happens only while the alert says a zone's
 meta volume is >80 %, so cadence follows the workload's churn (ADR-114 addendum (b)).
 Health gate (addendum (c)): refuse while any garage pod is not Ready or young, any node is down
@@ -137,6 +144,30 @@ def admin(pod_ip, method, path, body=None):
         return json.loads(out) if out else {}
 
 
+def push_bucket_gauges(pod_ip):
+    """Per-bucket size vs quota — the counter Garage enforces quotas on (GetBucketInfo `bytes`).
+
+    One pushgateway group for all buckets: a push REPLACES the group, so a deleted bucket's
+    series disappears instead of going stale. Best-effort like the heartbeat: a failure here
+    must not stop a rotation, and the belts' absent() clause catches a dead push."""
+    try:
+        lines = []
+        for b in admin(pod_ip, "GET", "/v2/ListBuckets"):
+            name = (b.get("globalAliases") or [b["id"][:16]])[0]
+            info = admin(pod_ip, "GET", f"/v2/GetBucketInfo?id={b['id']}")
+            lbl = f'{{bucket="{name}"}}'
+            lines += [f"garage_bucket_bytes{lbl} {info.get('bytes', 0)}",
+                      f"garage_bucket_objects{lbl} {info.get('objects', 0)}",
+                      f"garage_bucket_unfinished_multipart_bytes{lbl} {info.get('unfinishedMultipartUploadBytes', 0)}"]
+            q = (info.get("quotas") or {}).get("maxSize")
+            if q:
+                lines.append(f"garage_bucket_quota_bytes{lbl} {q}")
+        push("garage_buckets", {"instance": "controller"}, lines)
+        log(f"pushed bucket gauges for {len(lines)} series")
+    except Exception as e:  # noqa: BLE001
+        log("WARN bucket gauges:", e)
+
+
 def node_stats(pod_ip):
     """{node_id: {"tables": {name: stats}, "blocks": stats}} from GetNodeStatistics?node=*."""
     res = admin(pod_ip, "GET", "/v2/GetNodeStatistics?node=*")
@@ -151,6 +182,11 @@ def node_stats(pod_ip):
 def main():
     now = int(time.time())
     push("garage_meta_rotation", {"instance": "controller"}, [f"garage_meta_rotation_controller_last_run_timestamp {now}"])
+    ready_ips = [p["status"].get("podIP") for p in pods() if pod_ready(p) and p["status"].get("podIP")]
+    if ready_ips:
+        push_bucket_gauges(ready_ips[0])
+    else:
+        log("WARN: no Ready garage pod — bucket gauges not pushed this tick")
 
     firing = prom(f'ALERTS{{alertname="{ALERT}",alertstate="firing",volume="metadata"}}')
     targets = sorted({r["metric"].get("pod", "") for r in firing} - {""})
