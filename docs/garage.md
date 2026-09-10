@@ -381,7 +381,12 @@ original pod only.
    `layout skip-dead-nodes --version 2` and, once the two live peers' own v2 sync is done,
    `--allow-missing-data` for the dead id (its data was verified present on both peers first);
    `layout history` then shows one live version. `repair tables` + `repair blocks` on the new pod
-   resync it from its two peers natively — the ledger has the rate.
+   resync it from its two peers natively — the ledger has the rate. On the second run (2026-09-09,
+   onto the 7600p) the dead id needed no forcing: `skip-dead-nodes` right after `apply` bumped its
+   Ack, and once both live peers had synced v3 (≈4 h, the object table the long pole) the layout
+   collapsed to one live version on its own. Until then `/health` says "some storage nodes are
+   unavailable" — the degraded belts fire for the whole resync by design; the SLO availability
+   (HTTP 200) does not.
 9. **Unpin:** `tofu apply -target=kubernetes_service.garage_s3_lb` restores the selector.
 10. **Verify** end to end from the LAN (`aws s3 ls`, a PUT+GET), `garage status`/`layout show`
     (3 nodes, 3 zones, `Zone redundancy: maximum`), Crossplane buckets still Ready, and every
