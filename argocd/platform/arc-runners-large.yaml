@@ -83,6 +83,17 @@ spec:
                   nodeSelectorTerms:
                     - matchExpressions:
                         - { key: topology.kubernetes.io/zone, operator: NotIn, values: [proxmox] }
+                # PREFER the laptop that carries no Garage zone. 2026-09-10 (#884): a 10 GB push
+                # ran its skopeo on wk-metal-01 while garage-2 — same 4 cores, its volumes behind
+                # Longhorn engines on the same MX500 — coordinated the S3 writes; the node hit 9 %
+                # idle (system 37 %, iowait 19 %), the zone fell 12k blocks behind its own replica
+                # and dropped off the RPC mesh (GarageClusterFlapping). A preference, not a rule:
+                # if wk-metal-02 is full the job still runs, on the slower box.
+                preferredDuringSchedulingIgnoredDuringExecution:
+                  - weight: 100
+                    preference:
+                      matchExpressions:
+                        - { key: kubernetes.io/hostname, operator: NotIn, values: [wk-metal-01] }
             tolerations:
               - key: homelab.io/ephemeral
                 operator: Exists
