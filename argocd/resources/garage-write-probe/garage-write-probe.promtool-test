@@ -80,6 +80,23 @@ tests:
               summary: "Garage write probe has not run for >10 minutes"
               description: "The write probe has not reported a timestamp in over 10 minutes."
 
+  # ABSENT: the series never reached Prometheus at all (the 2026-09-08 → 09-10 class: every push
+  # 400'd at the pushgateway) → Silent fires on absent(), from the first evaluation.
+  - interval: 1m
+    name: "no heartbeat series at all triggers GarageWriteProbeSilent via absent()"
+    input_series:
+      - series: 'garage_write_probe_success{leg="put"}'
+        values: "1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: GarageWriteProbeSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Garage write probe has not run for >10 minutes"
+              description: "The write probe has not reported a timestamp in over 10 minutes."
+
   # HEALTHY: all legs succeed, latency normal, heartbeat fresh → no alerts.
   - interval: 1m
     name: "healthy probe with fresh timestamp and normal latency does not fire"
