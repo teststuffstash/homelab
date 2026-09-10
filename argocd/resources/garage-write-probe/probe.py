@@ -92,7 +92,10 @@ def push_metrics(metrics):
         return
 
     metric_lines = "\n".join(metrics.values())
-    metric_lines += f"\ngarage_write_probe_last_run_timestamp {int(time.time())}"
+    metric_lines += f"\ngarage_write_probe_last_run_timestamp {int(time.time())}\n"
+    # The trailing newline is load-bearing: the pushgateway's text parser rejects a stream that
+    # does not end in one (HTTP 400), which is how every push 2026-09-08 → 09-10 was dropped
+    # while the probe itself passed — and why the belts below never saw a series.
     payload = metric_lines.encode()
 
     try:

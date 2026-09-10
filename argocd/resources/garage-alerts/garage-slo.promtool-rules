@@ -7,7 +7,8 @@
 # - Write p99 latency: < 10 s (measured: 4.6 s)
 # - Read p99 latency: < 2 s (measured: 0.4 s)
 # - List p99 latency: < 5 s (measured: 1.5 s)
-# - Availability: ≥99.95% (measured: 99.95% request-level, 99.87% scrape-level since 2026-08-28)
+# - Availability: ≥99.95% (2026-09-09 read: 99.95% request-level, 99.87% scrape-level since 2026-08-28;
+#   ⚠ 2026-09-10, 30-day window per pod: garage-1 99.90 %, garage-0 98.0 %, garage-2 98.1 % — breached)
 groups:
   - name: garage-slo
     rules:
@@ -109,3 +110,16 @@ groups:
       - record: garage:data_volume_used_ratio
         expr: |
           1 - garage_local_disk_avail{volume="data"} / garage_local_disk_total{volume="data"}
+
+      # ── 30-DAY SLO WINDOWS (2026-09-10) — the objectives above are stated over 30 days, but
+      # every rule so far is a 5m rate or a 1h window, so the doc's "measured" figures were
+      # short-window reads. These are the series the objectives are actually judged on. (The
+      # availability one averages the recorded 1h series rather than re-running a 30d subquery.)
+      - record: garage:cluster_health:availability_ratio_30d
+        expr: |
+          avg_over_time(garage:cluster_health:availability_ratio_1h[30d])
+
+      - record: garage:s3_server_error_ratio:30d
+        expr: |
+          sum(increase(api_s3_error_counter{status_code=~"500|503"}[30d]))
+          / sum(increase(api_s3_request_duration_count[30d]))
