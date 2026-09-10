@@ -1,0 +1,85 @@
+# Behaviour fixture for the garage-bucket-quota alerts (FU-203, the 2026-09-09 registry class).
+#
+#   devbox run -- promtool test rules argocd/resources/garage-alerts/garage-bucket-quota.promtool-test
+#
+# Replay values are the real 2026-09-10 05:17Z read: ert-snapshots 81.7 GB of 96.6 GB (84 %),
+# registry 16.4 GB of 34.4 GB (48 %). promtool's clock starts at 0, so a live push timestamp is a
+# series advancing 60/min ("0+60x…"); a dead push is that series going flat.
+rule_files:
+  - garage-bucket-quota.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    name: "GarageBucketQuotaNear fires after 30m for the bucket over 80%, not the one under"
+    input_series:
+      - series: 'garage_bucket_gauges_timestamp{instance="controller"}'
+        values: "0+60x70"
+      - series: 'garage_bucket_bytes{bucket="ert-snapshots"}'
+        values: "81700000000+0x70"
+      - series: 'garage_bucket_quota_bytes{bucket="ert-snapshots"}'
+        values: "96636764160+0x70"
+      - series: 'garage_bucket_bytes{bucket="registry"}'
+        values: "16439670203+0x70"
+      - series: 'garage_bucket_quota_bytes{bucket="registry"}'
+        values: "34359738368+0x70"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: GarageBucketQuotaNear
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: GarageBucketQuotaNear
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              bucket: ert-snapshots
+            exp_annotations:
+              summary: "Garage bucket ert-snapshots is at 84.54% of its size quota"
+              description: "The bucket's size counter is over 80% of its max_size (ADR-089: every bucket claim states one). The next object that does not fit is refused by Garage with AccessDenied \"Bucket size quota is reached\" — at COMMIT for multipart uploads, so a consumer can spend a whole upload before learning it. Either the owner prunes (its own retention) or the claim's max_size grows — per-zone headroom is `garage stats` DataAvail, and every zone holds a full copy at rf=3."
+      # a live push never trips the staleness belt
+      - eval_time: 61m
+        alertname: GarageBucketGaugesStale
+        exp_alerts: []
+  - interval: 1m
+    name: "GarageBucketGaugesStale fires 15m after the push timestamp is 1h old (pushgateway re-serves it)"
+    input_series:
+      # advances for an hour, then the push dies at t=60m and the gateway keeps serving 3600
+      - series: 'garage_bucket_gauges_timestamp{instance="controller"}'
+        values: "0+60x60 3600+0x120"
+      - series: 'garage_bucket_quota_bytes{bucket="registry"}'
+        values: "34359738368+0x180"
+    alert_rule_test:
+      # stale by 59m at t=119m — under the hour
+      - eval_time: 119m
+        alertname: GarageBucketGaugesStale
+        exp_alerts: []
+      # over the hour from t=121m; for: 15m → fires at 136m
+      - eval_time: 134m
+        alertname: GarageBucketGaugesStale
+        exp_alerts: []
+      - eval_time: 137m
+        alertname: GarageBucketGaugesStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "garage_bucket_* gauges are stale or absent — the bucket-quota belts read old numbers"
+              description: "The garage-meta-rotation CronJob (ns garage, every 15 min) pushes the bucket gauges with a timestamp, and that timestamp is over an hour old or missing. The pushgateway re-serves the last push forever, so the quota belts are reading stale numbers, not none. Read the CronJob's last Job log for \"WARN bucket gauges\" (admin token, ListBuckets) or \"WARN pushgateway\". Until fixed, GarageBucketQuotaNear and RegistryBucketCommitHeadroomLow reflect the last successful tick, not now."
+  - interval: 1m
+    name: "GarageBucketGaugesStale fires after 15m when the timestamp never existed"
+    input_series:
+      - series: 'garage_bucket_quota_bytes{bucket="registry"}'
+        values: "34359738368+0x30"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: GarageBucketGaugesStale
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: GarageBucketGaugesStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "garage_bucket_* gauges are stale or absent — the bucket-quota belts read old numbers"
+              description: "The garage-meta-rotation CronJob (ns garage, every 15 min) pushes the bucket gauges with a timestamp, and that timestamp is over an hour old or missing. The pushgateway re-serves the last push forever, so the quota belts are reading stale numbers, not none. Read the CronJob's last Job log for \"WARN bucket gauges\" (admin token, ListBuckets) or \"WARN pushgateway\". Until fixed, GarageBucketQuotaNear and RegistryBucketCommitHeadroomLow reflect the last successful tick, not now."
