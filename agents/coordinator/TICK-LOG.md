@@ -8248,3 +8248,23 @@ FU-228 for the policy), **allure-reports 89 %** (oracle-iac's), **ert-snapshots 
 (oracle-iac's, already in the handoff result). Reviewer catch worth keeping: a bare `absent()`
 on a pushgateway-served series is fail-open — the gateway re-serves the last push forever, so a
 staleness belt must read the push's own timestamp (`GarageBucketGaugesStale`).
+
+**Oracle handoff 07:31 — runner evicted on wk-03 mid-untar (10.6 GB corpus layout).** Kubelet
+nodefs floor on a 36 GB root shared with the image store; runner pods request no ephemeral
+storage, `_work` is a root-disk emptyDir. Their ask 1 (a request on the general set) cannot
+work — requests compare to allocatable, not to the disk the image store took, and scale sets
+have no labels, so placement per job is by set NAME only. Detector first (#1581: `PodEvicted`
+via a 1h max over kube_pod_status_reason, `EphemeralNodeScratchLow` < 16 GB on taint-defined
+ephemeral nodes; both replayed on the 07:05/07:10Z samples, `PodEvicted` FIRED live 08:03Z),
+fix from the alert (#1582: `homelab-ephemeral-large`, zone NotIn proxmox, 16Gi scratch request,
+0/1 runners; listener registered 08:14Z). Oracle switches `runs-on`. wk-03's real floors: the
+kubelet's 3.6 GB and the pve thin pool underneath (73 % now, 84 % peak/24h).
+
+**Oracle handoff 07:56 — LAN push at 2.7 MB/s.** Garage's UploadPart cost is per REQUEST: mean
+0.59 s on garage-1 (m70s NVMe, the 09-08 15 MB/s push) vs 1.9 s on garage-2 (MX500 laptop zone,
+today) — which pod a push hits is the registry's keep-alive connection landing on one Service
+endpoint. distribution uploads 10 MiB parts serially → 1,064 round trips per layer. #1583: 64 MiB
+parts for upload + the commit copy (copy concurrency untouched — one variable at a time), HELD
+until oracle's in-flight push (run 34450512688, on wk-metal-02) completes: the merge rolls the
+registry pod. Loose end, not filed (5-min rule fails the other way — needs a design read): the
+registry exposes no scraped metric (debug addr on localhost), so push throughput has no belt.
