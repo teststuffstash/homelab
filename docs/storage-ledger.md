@@ -378,6 +378,7 @@ for this document: keep stating the need and its evidence here, and let the supp
 | **Longhorn in-volume reclaim** | ~41 GiB one-off on wk-02 (Prometheus 12, loki 10, garage-meta 8), then the volumes' own churn | node fstrim cannot reach blocks inside replica sparse files; measured 2026-09-04 | want | FU-093 next act (`filesystem-trim` RecurringJob) |
 | **registry mirrors never wipe** | grow the PVC (ghcr 100Gi at ~19 G actual) whenever `RegistryMirrorWipedRepeatedly` fires — never lower the threshold | a wipe costs a day of slow builds (homelab#116) | want | §mirrors above |
 | **image store off the Longhorn bulk partition on the kata laptops** | a second partition or disk per laptop, or kubelet imageGC below the Longhorn reserve | <25 % free on the shared partition = no scratch PVC = every docker ride wedged (2026-09-01) | want | PR#1193's floor alert is the belt |
+| **a Garage zone node's envelope** (the register had no row; measured 2026-09-10, garage.md §Target architecture) | ≥ 4 threads at desktop-class clocks (the chain is serial: clock and IPC over core count — m70s's 2C/4T @ 4.0 GHz returns a PUT in 0.68 s, the 4-core 3.4 GHz Ivy Bridge 0.66 s, the 2C ULV X240 1.99 s); **≈ 2 cores free at peak** for Garage (0.8) + the Longhorn engine (up to 1.1) + kernel; **16 GB** so the compacted LMDB (5–6 GB, up to 24 GB before rotation) sits in page cache (X240 at 8 GB: 200–1,800 major faults/s; m70s at 16 GB: 50); DRAM NVMe; **no rides on the node** | both stall episodes (09-08 SA400 windows, 09-10 08:25Z release on wk-metal-01: node 9 % idle, every endpoint p99 28–100 s, quorum races lost) were a ride sharing the zone node; the X240 zone paces GC, resync and PutObject for the whole cluster (mean 1.99 s vs 0.66 s) | need | FU-137 (the garage-2 move), fleet direction meta-state (8): SFFs = std + Garage zones, laptops = control planes |
 | **`fast` big enough to be the scratch tier** (Optane, replica-1) | 26.7 G fits ONE 20Gi ride today; ≥ 60 G (two rides + headroom) would let the platform repos' scratch leave `bulk` — a larger Optane/NVMe in thinkcentre | FU-159 ruling: `fast` = scratch for disk-write-heavy pods, never load-bearing data; unused at 1.4 G because nothing fits | want | FU-159 |
 
 What is NOT a requirement: total bytes. Every tier is 42–68 % physically used; the pressure is
@@ -525,6 +526,22 @@ small-object and 342–354 MiB/s streaming, against a workload measured at ~150�
 (§2026-09-05) and a LAN registry push that managed 3.4 MB/s end to end. The tax is one to two orders
 of magnitude above what this workload pulls, which is why the operator took Longhorn on
 maintainability grounds and the numbers agree rather than decide.
+
+> ⚠ **Amended 2026-09-10 — the ratio above was measured on the wrong axis.** The 09-07 A/B
+> compared MB/s and IOPS at depth 32; this workload is a *serial* chain (one LMDB writer, fsync
+> per transaction, then the iSCSI → engine → replica hops) at depth one, and the engine's cost
+> there shows up as **node CPU and per-request latency, not bandwidth**. Live 24 h read, the
+> three zone nodes: the Longhorn `instance-manager` averages **0.52 / 0.64 / 0.88 core** (peak
+> 1.1) on m70s / wk-metal-04 / wk-metal-01 — the largest CPU consumer on every zone node and
+> **five to eight times Garage itself** (0.11–0.16 core avg, 0.8 peak). The physical disks sit
+> at 7–15 % utilization while the Longhorn block device in front of them reads 34–54 % (96 % on
+> wk-metal-01 in a drain): the busy-ness is the engine and the serial fsync path, not the flash.
+> Per S3 request the meta volume sees ~1,000 disk writes (1.9k–4.1k write IOPS for 1.2–2.5
+> req/s per pod). So "one to two orders of magnitude of headroom" was true of throughput and
+> false of the bill; **raw XFS is the CPU lever** (≈ one core per zone node) — it does not
+> remove LMDB's write amplification, the page ratchet, or the GC/resync churn. The missing
+> measurement is CPU per fsync'd IOP at depth one, raw vs replica-1 — the same experiment that
+> settles FU-223.
 
 ⚠ **One number that must not be quoted as a win: Longhorn is NOT 1.9× faster at durable writes.**
 Same physical device — a flushed write cannot be twice as fast through an extra layer. The plausible
