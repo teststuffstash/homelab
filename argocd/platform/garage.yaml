@@ -112,7 +112,14 @@ spec:
             # headroom must exceed the DB size, so this rises with it. docs/garage.md §Durability.
             memory: 2Gi
           requests:
-            cpu: 100m
+            # 500m (was 100m, 2026-09-10): measured 24h peaks 0.7–0.8 core per pod under a
+            # release push + GC drain, and two zone nodes are 4-thread boxes shared with rides.
+            # CFS shares follow the REQUEST on a saturated node, so at 100m the store held a
+            # tenth of a ride's weight exactly when it mattered (2026-09-10 08:25Z, wk-metal-01
+            # at 9 % idle, every S3 endpoint p99 28–100 s). Still no CPU limit — the engine
+            # (instance-manager) is the larger consumer and is unlimited too. Rolls the
+            # StatefulSet: readiness + minReadySeconds below keep quorum through the roll.
+            cpu: 500m
             # 1Gi (was 128Mi): two of the three zone nodes are kata ride nodes whose kubelet
             # evicts under memory pressure by usage-over-request first — a store using ~1Gi
             # against a 128Mi request would be the first pod out, before the ride that caused
