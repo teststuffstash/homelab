@@ -193,6 +193,12 @@ rather than competing with it. Two notes for the next time:
   ([`argocd/platform/garage.yaml`](../argocd/platform/garage.yaml)); a snapshot that suddenly gets
   *fast* is what makes an old limit too small.
 
+**What an OBJECT-COPY restore resets: every lifecycle clock.** The 2026-08-24/25 restore re-wrote
+every object, so every object's timestamp is 2026-08-25 and every `Expiration: Days` rule counts
+from there — `allure-reports`' 30-day rule on `runs/` (stored, Enabled, worker completing daily)
+deletes nothing before ~2026-09-24, which oracle-fleet#547 read as "the rule is a no-op" (it is
+not; the run-id age and the object age diverged by the restore). Expect it after any restore.
+
 **What a metadata restore does NOT bring back: grants.** Bucket↔key permissions live in the same
 metadata as everything else, and the recovery path only replays what something *declares*. App
 buckets and keys are declared in Crossplane `Workspace` CRs (ADR-076,
@@ -395,7 +401,13 @@ original pod only.
 
 ### SLO — service level objectives (FU-093, 2026-09-09)
 
-**Objectives** (measured 2026-09-09 post-rotation, **recorded in the dashboard**):
+**Objectives** (measured 2026-09-09 post-rotation, **recorded in the dashboard** — ⚠ those were
+5-minute and 1-hour reads; **the 30-day reads on 2026-09-10 say otherwise**: availability per pod
+garage-1 99.90 %, garage-0 98.0 %, garage-2 98.1 % against ≥ 99.95 %; error ratio 0.039 %
+(inside); 24 h-wide p99 read 4.1 s and list 10.3 s, both outside, because they fold in the 08:25Z
+release event that the 5-minute panel forgets. `garage:cluster_health:availability_ratio_30d` and
+`garage:s3_server_error_ratio:30d` are recorded since #1588; no error-budget alert yet — the
+breach is the laptop zone, FU-137's pointer):
 
 - **Availability:** ≥99.95% uptime (measured: 99.95% request-level, 99.87% scrape-level since 2026-08-28 when rf=3 opened)
 - **Error ratio:** <0.1% over 30 days (500/503 servers errors only; 4xx are client errors)
@@ -435,9 +447,17 @@ Symptoms, not guessed causes; each names where to read next. In
   unauthenticated `/health`, whose body says "some storage nodes are unavailable" while its
   status stays 200. Added after 2026-09-08, when garage-0 dropped off the mesh hourly for three
   days with nothing Garage-shaped firing (ledger §The SA400 zone under rf=3 load).
-- **`GarageTableGcBacklog`** — >500k GC items parked on a pod for 2h: deletions are not
-  propagating (each tombstone must reach every replica — an unreachable peer parks the queue;
-  garage-2 held 1.77 M through the 2026-09-08 stall and drained at ~130k/h after the rotation).
+- **`GarageTableGcBacklog`** — >500k GC items parked on a pod for **26h** (was 2h until #1588):
+  deletions are not propagating (each tombstone must reach every replica — an unreachable peer
+  parks the queue; garage-2 held 1.77 M through the 2026-09-08 stall and drained at ~130k/h after
+  the rotation). **Why 26h:** Garage keeps every tombstone for `TABLE_GC_DELAY = 24h` before the
+  GC worker may remove it (upstream `src/table/gc.rs`), and the worker sits Idle until the next
+  entry is due — so `gc_todo` reads "the last day's deletes", not work waiting on resources. The
+  48 h trace on 2026-09-10 lined up exactly: the 09-08 evening release's deletes drained 600k in
+  the 09-10 00–01Z window, 24 h later; the #547 orphan reap added +770k in 4 h with the worker
+  Idle and nothing wrong. The metric carries no entry age, so the belt waits out the delay plus a
+  margin. A GC that IS stuck shows as the `object GC` worker's `Errors` column in
+  `garage worker list` (287 on garage-2 from the 09-09 stall).
 - **`GarageS3ServerErrors`** / **`GarageQuorumMembersRestarted`** — client-visible quorum loss:
   ≥3 × 500/503 in 5m, and two quorum members (re)started inside 5 min (the 2026-09-09 07:22Z
   rollout with no readiness probe cycled all three in 31 s; both exprs replay true on it).
@@ -448,6 +468,12 @@ Symptoms, not guessed causes; each names where to read next. In
   class. The three belts: any leg fails for 10m (sustained breakage), PUT p99 > 10s for 15m
   (performance regression that does not fully break), and no heartbeat for 10m+ (probe or Garage
   down). Source: CronJob in [`garage-write-probe/`](../argocd/resources/garage-write-probe/).
+  ⚠ **Found 2026-09-10: every push from 09-08 to 09-10 was refused (HTTP 400 — the payload had
+  no trailing newline) and Prometheus held no `garage_write_probe_*` series at all, so all three
+  belts were inert and `Silent` could not fire on an absent series.** Fixed in #1588 (newline +
+  `or absent(...)`); the lesson generalises: a pushgateway-fed belt needs BOTH a staleness clause
+  (the gateway re-serves the last push forever) and an absence clause (a push that never landed
+  is an empty vector, not a large one).
 - **Node-level, not ours but load-bearing:** `NodeDiskIOSaturation` (kube-prometheus-stack;
   fired four short episodes on wk-metal-04 that week and resolved each time — the responder
   saw them, none became an issue), `LonghornVolumeDegraded/Faulted` (the volumes under the
