@@ -1,0 +1,35 @@
+# Behaviour fixture for RegistryBucketCommitHeadroomLow — the 2026-09-09 23:24Z replay.
+#
+#   devbox run -- promtool test rules argocd/resources/registry/registry-bucket.promtool-test
+rule_files:
+  - registry-bucket.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # The real 2026-09-10 read: held 16,439,670,203 B against a 32Gi cap = 17.9 GB headroom,
+  # under the 22 GB a 10.64 GB layer commit needs → fires. Then the cap grows to 48Gi
+  # (51,539,607,552 B) → 35.1 GB headroom → clears.
+  - interval: 1m
+    name: "fires at 32Gi with the 09-08 corpus held, clears once the cap is 48Gi"
+    input_series:
+      - series: 'garage_bucket_bytes{bucket="registry"}'
+        values: "16439670203+0x40"
+      - series: 'garage_bucket_quota_bytes{bucket="registry"}'
+        values: "34359738368+0x20 51539607552+0x20"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: RegistryBucketCommitHeadroomLow
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: RegistryBucketCommitHeadroomLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              bucket: registry
+            exp_annotations:
+              summary: "registry bucket has 16.69GiB of quota headroom — the next 10 GB layer push will fail at commit"
+              description: "A blob commit needs quota − held ≥ 2 × layer (the registry copies the upload into place before deleting it — header of argocd/resources/registry/prometheusrule.yaml). Below that the pusher gets an opaque 500 at the last byte after the whole upload (2026-09-09, 51 min). Either the stack untags what it no longer serves and the registry-garbage-collect CronJob (Sun 03:00Z; ad-hoc recipe in docs/runbook.md §Registry) reclaims it, or the cap in garage-workspace.yaml grows — check `garage stats` DataAvail per zone first, every zone holds a full copy at rf=3."
+      - eval_time: 25m
+        alertname: RegistryBucketCommitHeadroomLow
+        exp_alerts: []
