@@ -615,24 +615,16 @@ the block needs pruning, not more headings.
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 
-- [ ] **FU-218** — **ARC's honest capacity is 3, `maxRunners: 4` keeps one pod pending forever.**
-      A runner pod requests 2.5 Gi; an 8 GB laptop has ~6.2 Gi allocatable minus ~1.3 Gi DaemonSets
-      → one runner per node, and only wk-03/wk-metal-01/-02 carry the `homelab.io/ephemeral=true`
-      label (metal-03/-04 are kata-reserved by decision, `tofu/talos.tf`). Measured 2026-09-05:
-      24 h queue p90 ~10 min over 1,103 jobs while the cap was hit 0–2 % of the time — the queue is
-      memory placement, not slots. `arc-runners.yaml`'s "≈2 dind runners per metal node" is stale.
-      **Next:** `maxRunners: 3` + fix the comment (one-line PR, makes the panel truthful; does not
-      shorten the queue) — real capacity is RAM on the compute tier, see the spike's §CI side.
-      **2026-09-08 (operator): 3 slots is not enough for the bursts the operator causes while
-      working — his queue time is the cost, the daily mean measured the wrong thing.** Two levers:
-      **Done 2026-09-08 on pve as-is (PR#1518 + 09b81dd9): wk-03 8→16Gi/12c funded by ci-runner-01
-      16→12Gi, `maxRunners` 4→6** — the overcommit ceiling (no balloon in Talos; KSM ~10Gi shared);
-      "all out" waits on a second disk (thin pool) or the second hypervisor (ROADMAP §HA model,
-      operator direction 2026-09-08). Still open: (a) label wk-metal-04 ephemeral ≈ +3–4 slots
-      shared with kata (operator call); (b) re-read queue p90 at operator hours after a week.
-      **Next:** the week's re-read; close if p90 at 07–09/17–19 UTC drops under ~2 min.
-      Relates FU-208, ADR-082.
-
+- [ ] **FU-218** — **ARC capacity is RAM placement on the compute tier, not slots.** A runner
+      requests ~2.5 Gi → one per 8 GB laptop; only wk-03/wk-metal-01/-02 are `homelab.io/ephemeral`.
+      Measured 2026-09-05: queue p90 ~10 min while the cap was hit 0–2 % of the time. **Done
+      2026-09-08** (PR#1518 + 09b81dd9): wk-03 8→16Gi/12c (funded by ci-runner-01), `maxRunners`
+      4→6 — the overcommit ceiling; the sizing lives in `arc-runners.yaml`'s maxRunners comment.
+      Open: (a) label wk-metal-04 ephemeral ≈ +3–4 slots shared with kata (operator call); (b) the
+      week's re-read of queue p90 at operator hours (07–09/17–19 UTC) — close if under ~2 min.
+      **2026-09-10:** `homelab-ephemeral-large` (#1582: metal-only, 16Gi scratch request, max 1)
+      for ≥10 GB-scratch jobs — its template is a COPY of the general one, diff on every change.
+      Relates FU-208, ADR-082, `docs/spikes/kata-ci-gate.md` §CI side.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
       content.** Its documented pick has no green requirement on purpose (2026-07-10: *"a
       base-side CI fix can only reach a PR through an update"*) — true for a CONTENT red, false
