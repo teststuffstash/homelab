@@ -8206,3 +8206,35 @@ latency: Garage's exporter has no bucket label at all — a client-side measurem
 ingester), not a platform one; SERVICES.md + garage.md say so. Gotcha filed to memory: `gh pr
 create --body "$(cat <<EOF …)"` under zsh executes backticks — `--body-file` always.
 
+## 2026-09-10 early (~05:1x–06:0xZ) — oracle handoff: registry 500 again; Loki found dead
+
+**Handoff `20260909-2326` (LAN registry 500 at the last byte, 2026-09-08 delta layer).** The
+filer's arithmetic (25.2 GiB < 32Gi by listing) was right and their hypothesis (counter drift)
+wrong: `garage bucket info registry` read 15.3 GiB = the listing, 0 B unfinished. Prometheus
+had the answer Loki could not (see below): 261 `UploadPartCopy` + 2 `CompleteMultipartUpload`
+in the 23:15–23:30Z window and zero S3 errors counted — distribution's s3 driver COMMITS by
+completing the upload, then **copying** the blob into place (multipart copy), then deleting the
+upload, so the bucket holds the layer twice at commit: 16.4 + 2 × 10.64 GB > 34.4 GB. Build
+order per the 09-09 ruling (handoff-G1): **detector first** — the rotation controller now pushes
+per-bucket `garage_bucket_{bytes,quota_bytes,objects,unfinished_multipart_bytes}` from the admin
+API (no Garage metric carries a bucket), belts `GarageBucketQuotaNear` (replays live on
+ert-snapshots at 84 %), `GarageBucketGaugesAbsent`, `RegistryBucketCommitHeadroomLow` (the 2×
+rule; replays on the live 17.9 GB headroom, clears at 48Gi) — PR#1577, fixtures on the real
+numbers. **Fix from the alert:** cap 32Gi → 48Gi, header rewritten (branch pushed, PR opened once
+the belt fires live). Storage read for the raise: each zone a 150 GiB volume at ~71 GiB free,
+quotas already sum to ~205 GiB vs 130 GiB declared (a ceiling, not a reservation); the bucket
+reaching the disk first is **ert-snapshots** (82/97 GB, +10 GB/week, stack-owned) — told oracle.
+Not done: the 2026-09-01 untag (their keep-set, their credential — the ADR-085 split stands; GC
+collects Sundays). FU-203 rewritten: CronJob is LIVE (#1508, the "Next" was stale); missing =
+oracle-iac's untag half.
+
+**Loki dead 11.5 h, nobody read the alert.** hp-01's 17:17Z plug cycle (the crossed-plug
+incident) corrupted Loki's tsdb-index head WAL; loki-0 crash-looped from 17:55Z (136 restarts),
+`KubePodCrashLooping` + `TargetDown` firing throughout, **no responder issue**, the oracle jail's
+scoped door 502 from ~22:13Z (they reported it as an aside). Fixed from a same-node helper pod
+(segment moved aside, no scale-down); Ready 05:25Z. Logs 17:15Z→05:25Z lost for every tenant.
+Collateral + fix appended to the incident doc; recipe in runbook §Power-loss. Open question for
+the board: why a 11-h `KubePodCrashLooping` in ns loki produced no issue (the responder's
+dedup against #811, the August loki crashloop, is the first suspect — not chased tonight).
+
+Still in the oracle inbox, unclaimed: `20260908-1857` (ARC shared uv cache EIO, third occurrence).
