@@ -8297,3 +8297,20 @@ is paid in node CPU, not in consumer latency, once the release load is gone; ~4.
 The resync rate fell to ~0.02/s at tranquility 2 with the queue creeping to ~1k again (the queue
 now holds "fetch needed" entries waiting on peers, not the cheap deletes) — a number for the
 ledger, not an action.
+
+**Operator read 13:00Z — "why is Longhorn receiving 500+ Mbit/s, is Garage still on replicated
+Longhorn?"** Neither: Garage's six PVCs are `longhorn-local-xfs` (1 replica, strict-local,
+ADR-114 — live-verified on the Longhorn volume CRs), and the namespace panel books the host
+iSCSI-initiator → engine write path (it crosses the instance-manager pod's veth) to
+`longhorn-system`, so every Longhorn write on the cluster reads as "network received" there
+whoever owns the volume. The three hot IMs are exactly the three Garage zones: meta-garage-2
+21.7 MB/s (GC todo 379k/400k/281k object/version/block_ref — the morning's drain, garage-0/1 at
+zero), meta-garage-0/1 17–19 MB/s at 2.2k–9.5k write IOPS (block resync queue 66–72k on all
+three + LMDB page CoW under `metadata_fsync` for the small-object buckets: allure-reports 717k,
+loki 214k objects). Data volumes ≤1 MB/s; the Garage namespace itself 4 Mbit/s. Wire truth from
+node-exporter physical devices: Garage nodes 2–4 Mbit/s rx, pve host 16 — the LAN is idle.
+Second finding: no dashboard showed wire-only traffic — the stock USE dashboards' recording
+rule excludes only `lo` and vxlan-mode Cilium re-counts each byte on `cilium_vxlan`/`_host`/
+`_net` (wk-02 69 vs 9 Mbit/s). Fixed the Views/Global "without loopback" panel to a
+physical-NIC allowlist (`device=~"(eth|en).*"`): tofu-applied (1 ConfigMap change), Grafana
+serves it, #1587 armed. Nothing new filed — the metadata churn is FU-137's ledger line.
