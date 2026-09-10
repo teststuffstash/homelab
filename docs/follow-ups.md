@@ -1003,8 +1003,10 @@ the block needs pruning, not more headings.
       recreated guest; pool **71 %** after it, the 80 % warning close. **Next:** (a) a Longhorn
       `filesystem-trim` RecurringJob (node fstrim cannot reclaim inside replica sparse files);
       (b) **metal-node fstrim** (2026-09-06) — `node-fstrim` is pve-VM-only by design, and wk-metal-04's
-      never-trimmed SA400 writes 26 MB/s at 486 ms (ledger §2026-09-05): one-off trim after the
-      Garage rebuild, then weekly `nodeName` blocks if it helps. Relates ADR-089, ADR-114, homelab#934.
+      never-trimmed SA400 writes 26 MB/s at 486 ms (ledger §2026-09-05). Since 2026-09-09 the SA400
+      is `slow-bulk` + unschedulable and holds NO Longhorn replica (garage-0 rotated onto the 7600p,
+      ledger §The rf=3 build-out as run), so the trim is for the image store only — one-off, then
+      weekly `nodeName` blocks if it helps. Relates ADR-089, ADR-114, homelab#934.
 - [ ] **FU-211** — **The storage ledger's numbers are hand-typed — generate them, machines.yaml-style.**
       PR#1368 took three bot rounds on transposed/stale figures (408 vs 488 GB promised, 353 vs
       354 GB pool) in the one cell a human reads for the buy-a-disk call; the "Current shape" table
