@@ -8290,3 +8290,10 @@ engine cost) — FU-137's pointer, nothing new filed.
 **Oracle handoff 07:56 closed:** #1583 merged 08:46Z after their run finished (registry rolled,
 `/v2/` answers); ask 2 answered as per-pod per-request cost (garage-1 0.59 s vs garage-2 1.9 s
 mean UploadPart), not a Garage regression.
+Post-revert samples (08:52–08:59Z, tranquility back at 2): GC drains at ~120k/h (579k → 549k in
+15 min, the ledger's 130k/h) at 1.4–3.2k write IOPS on meta-garage-2, the node at 1–5 % idle for
+the duration, consumer GetObject p99 0.05–0.98 s (inside the 2 s objective) — so the housekeeping
+is paid in node CPU, not in consumer latency, once the release load is gone; ~4.5 h to empty.
+The resync rate fell to ~0.02/s at tranquility 2 with the queue creeping to ~1k again (the queue
+now holds "fetch needed" entries waiting on peers, not the cheap deletes) — a number for the
+ledger, not an action.
