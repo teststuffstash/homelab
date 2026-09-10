@@ -129,7 +129,10 @@ spec:
               cpu: 10m
               memory: 32Mi
             limits:
-              memory: 128Mi
+              # Bumped 128Mi -> 256Mi: PodSigkilled/OOMKilled after 6d uptime (exit 137,
+              # kubectl lastState.terminated.reason=OOMKilled) — the container hit its own
+              # limit, not node pressure. alert-fp:224d01fec17ea808
+              memory: 256Mi
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534
