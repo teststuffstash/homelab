@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-228** (the counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-229** (2026-09-10: a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -184,21 +184,15 @@ six OVERSIZE items pointer-ized into
       No FU/ADR matched `throttl` (grepped 2026-09-07). Link: ADR-089, FU-112.
 
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
-      The cap fired 2026-09-07 — a 10.01 GB corpus layer over the 20Gi bucket, refused by Garage
-      at commit 49 min in and surfaced to the pusher as an opaque **500**. Cap raised to **32Gi**;
-      sizing, the two contract gaps it exposed, and the ownership split now live in
-      [`argocd/resources/registry/garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml)'s
-      header. **Split (ADR-085, mechanism=platform/policy=IaC):** oracle-iac owns the keep-set
-      (proposed derived-not-declared in **oracle-iac#664**: pinned digest + newest date tag +
-      previous pin) and untags with its push cred; homelab runs the collector. **Mechanism ran
-      for the first time 2026-09-08** (oracle handoff): `registry garbage-collect
-      --delete-untagged` in-pod, dry-run first — bucket 30.3 → 15.3 GiB; recipe in
-      [`runbook.md`](runbook.md) §Registry (first-party) (PR#1501). Cap arithmetic: ~10 GB/week
-      unattended from 09-15, so the collector must run weekly. **Next:** the GC CronJob in
-      `argocd/resources/registry/` (weekly, off the Tuesday release window); the quota alert
-      is PARKED — Garage has no per-bucket size metric, it needs the admin API.
-      ⚠ ADR-121 states the policy too — one home wins here. Link: ADR-121, ADR-089, ADR-085.
-
+      The cap fired 2026-09-07 (20Gi) and 2026-09-09 (32Gi): a blob COMMIT holds the layer twice, so
+      `quota − held ≥ 2×layer` — rule, both failures, storage read: the header of
+      [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml); cap **48Gi** (#1578).
+      **LIVE:** the quota belts (#1577: `GarageBucketQuotaNear`, `RegistryBucketCommitHeadroomLow`) and
+      the collector (`registry-garbage-collect` CronJob, Sundays 03:00Z, #1508; ad-hoc recipe in
+      [`runbook.md`](runbook.md) §Registry). **Missing = the POLICY half (ADR-085):** oracle-iac untags
+      outside its keep-set with its push cred (oracle-iac#664, derive-don't-declare) — nothing does
+      yet, so the CronJob collects nothing and each release eats ~10 GB of cap. ⚠ ADR-121 states the
+      policy too — one home wins. Link: ADR-121, ADR-089, ADR-085.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating
@@ -847,6 +841,15 @@ the block needs pruning, not more headings.
       promtool cover; check upstream sync-manager fixes (`v4.0.7` today) before any bump.
       Relates FU-187 (sibling belt-blindness).
 
+- [ ] **FU-228** — **`agent-transcripts` has no retention — 5Gi → 20Gi bought time, not a policy.**
+      The bucket sat at 98 % (5.3 GB, 26.7k objects, ~1 GB/week of ride exhaust) the hour
+      `GarageBucketQuotaNear` first ran (2026-09-10, #1577); the 2026-08-03 claim was "11× actual".
+      A refused put is a lost transcript — the writer key is put-only, nothing retries — and the
+      transcripts feed the retro (observability-and-retro.md §A1/B) and doc-heat (FU-164). Cap raised
+      to 20Gi (#1579) ≈ 4 months at today's rate. **Next:** decide what to keep (per-issue tail? the
+      retro's window? everything, and a bigger claim?) and implement it as an S3 lifecycle rule or a
+      sync-job sweep — the design question belongs to `docs/agents/observability-and-retro.md`.
+      Sibling: `allure-reports` at 89 % of 10Gi is oracle-iac's (their alert, their retention).
 - [ ] **FU-210** — **Responder sessions leave no transcript — a triage that files nothing is
       unrecoverable.** 2026-09-03 22:29Z `CNPGInstanceNotReady`/`ExporterDown` fired for
       forgejo-pg-1 (a real pg_rewind divergence after the incident failover); the responder
