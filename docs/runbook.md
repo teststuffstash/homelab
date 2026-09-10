@@ -411,6 +411,26 @@ to attach (Multi-Attach / "driver.longhorn.io not found"). Recover with reboots:
 
 (VMs are unaffected — they get their identity from nocloud, not DHCP timing.)
 
+### Loki crash-looping after a hard node power-off (tsdb-index WAL corruption)
+
+Symptom: `loki-0` in CrashLoopBackOff, last log line `error running loki … corruption in segment
+/loki/tsdb-index/wal/<period>/<n>/<seg> … unexpected checksum` — the index head WAL took a hard
+stop mid-write (2026-09-09: hp-01's plug cycle; Loki was down 11.5 h before anyone read the
+alert). The PVC is RWO on Longhorn, so a helper pod **pinned to the same node** can mount it
+alongside the crashing pod; scaling the StatefulSet is not needed (and ArgoCD selfHeal would undo it):
+
+```bash
+K="devbox run -- kubectl --kubeconfig tofu/kubeconfig"
+NODE=$($K -n loki get pod loki-0 -o jsonpath='{.spec.nodeName}')
+# helper: busybox, nodeName=$NODE, runAsUser/fsGroup 10001, PVC data-loki-0 at /loki, sleep 600
+$K -n loki exec loki-wal-fix -- sh -c 'mkdir -p /loki/wal-corrupt-$(date +%F) && mv /loki/tsdb-index/wal/<period>/<n> /loki/wal-corrupt-$(date +%F)/'
+$K -n loki delete pod loki-wal-fix loki-0     # loki-0 restarts clean; Ready in ~1 min
+```
+
+What is lost: the unflushed chunks the ingester held (they died with the pod) and the index
+entries in that segment — for the outage window, every tenant. Nothing else needs repair.
+Multiple corrupt segments: the next restart names the next one; repeat.
+
 ## Home Assistant
 
 Deployed in-cluster (`tofu/homeassistant.tf`), VIP `192.168.40.10:8123`, HTTPS at
