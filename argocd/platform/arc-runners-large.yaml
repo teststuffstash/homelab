@@ -1,0 +1,183 @@
+# The LARGE-SCRATCH runner scale set — `runs-on: homelab-ephemeral-large` — for the handful of jobs
+# that write ≥10 GB to the runner's scratch (the oracle corpus release: a 10.6 GB OCI layout untarred
+# into `_work`, then pushed). Same image, same dind shape, same tier as `homelab-ephemeral`
+# (arc-runners.yaml) with three deltas:
+#   - placement EXCLUDES the pool VMs (`topology.kubernetes.io/zone: proxmox`): the 2026-09-10
+#     07:15Z eviction — wk-03's root disk is 36 GB shared with the image store, the kubelet's
+#     nodefs floor sat 13 GB under the job's need, and every GB written there is pve thin-pool
+#     growth besides. The metal laptops (wk-metal-01 447 GB, -02 113 GB allocatable) always fit.
+#   - the runner container REQUESTS `ephemeral-storage: 16Gi` (the layout + the kubelet floor +
+#     slack), so two large jobs cannot co-schedule onto one node's disk. Requests-not-limits, as
+#     in the general set: a limit would evict THIS pod at the line instead of not placing it.
+#   - scale-to-zero (minRunners 0, maxRunners 1): one such job a week, ~20 min; the runner image
+#     is pre-pulled on metal by runner-image-prepull.yaml so a cold start is registration only.
+# A separate scale set is the only way ARC lets a WORKFLOW choose placement — scale sets have no
+# labels, `runs-on` IS the set name — and a request on the general set cannot discriminate per job
+# (the scheduler compares requests to allocatable, never to the disk the image store already took).
+# ⚠ This is a COPY of arc-runners.yaml's template (helm values cannot inherit): on any change there
+# (image tag, dind pin, mirrors, uv cache) diff the two — `diff <(sed -n '/template:/,/destination:/p'
+# argocd/platform/arc-runners.yaml) <(sed -n '/template:/,/destination:/p' argocd/platform/arc-runners-large.yaml)`.
+# Belts: PodEvicted + EphemeralNodeScratchLow (values/kube-prometheus-stack.yaml node-health).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: arc-runners-large
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    repoURL: ghcr.io/actions/actions-runner-controller-charts
+    chart: gha-runner-scale-set
+    targetRevision: 0.14.2 # keep in lockstep with arc-controller.yaml
+    helm:
+      valuesObject:
+        githubConfigUrl: https://github.com/teststuffstash
+        githubConfigSecret: arc-github-app
+        # Point the scale set at the controller's SA explicitly. The chart otherwise tries to
+        # DISCOVER it by label at template time — which fails under ArgoCD's `helm template`
+        # (no cluster lookup): "No gha-rs-controller deployment found using label
+        # app.kubernetes.io/part-of=gha-rs-controller". Must match arc-controller (arc-systems).
+        controllerServiceAccount:
+          namespace: arc-systems
+          name: arc-controller-gha-rs-controller
+        runnerScaleSetName: homelab-ephemeral-large
+        minRunners: 0 # scale-to-zero — see header
+        maxRunners: 1 # one large job at a time — see header
+        # NO containerMode: the spec below is the chart's own dind template (rendered at 0.14.2 and
+        # transcribed), owned here because dind customization requires it (the chart APPENDS user
+        # initContainers — a name-merge dupes the dind container; render-verified). We own it to:
+        #   - FU-015: run the custom runner image (docker/arc-runner/ — nix/devbox/gh + warm store
+        #     + LAN nix substituter) instead of unpinned stock :latest (bump the tag per build);
+        #   - FU-073(c): dockerd --registry-mirror → the in-cluster docker.io pull-through mirror
+        #     (BGP VIP, ADR-091; Hub-only by dockerd design, plain http hence insecure-registry);
+        #     the ghcr mirror VIP is insecure-registry'd too (#1315): dockerd cannot mirror ghcr,
+        #     so a CI gate that wants a LAN pull of a ghcr image names the mirror path outright
+        #     (`192.168.40.21/<org>/<image>`, the kind-ci REGISTRY_MIRROR_GHCR pattern) — the
+        #     daemon must accept plain http for that VIP or the pull is refused;
+        #   - pin docker:dind (was :latest-floating via the chart);
+        #   - homelab#1299: mount the shared uv wheel cache (Longhorn RWX PVC arc-uv-cache,
+        #     argocd/resources/github-runner/uv-cache-pvc.yaml) at UV_CACHE_DIR=/uv-cache —
+        #     wheels only, never venvs; trusted CI lane only, agent sandboxes never mount it.
+        # On chart upgrades: re-render with containerMode dind and diff against this spec.
+        template:
+          spec:
+            # ndots:1 — runner jobs talk almost exclusively to EXTERNAL FQDNs; the stock
+            # ClusterFirst ndots:5 expanded every such name through 3 search domains first
+            # (measured fleet-wide 2026-08-18: 1.09M NXDOMAIN vs 448k NOERROR in 24h), 4x-ing
+            # both DNS latency and the exposure window to upstream flaps (#518's Set-up-job
+            # retry landed in the day's single SERVFAIL burst, 08:00-09:00Z). In-cluster
+            # service lookups from CI are rare-to-none; anything that needs one can use the
+            # FQDN. Evidence + diagnosis: #518 thread.
+            dnsConfig:
+              options:
+                - name: ndots
+                  value: "1"
+            nodeSelector:
+              homelab.io/ephemeral: "true"
+            # Metal only — never a pool VM (the 36 GB-root, thin-pool-backed wk-03 class). See header.
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                    - matchExpressions:
+                        - { key: topology.kubernetes.io/zone, operator: NotIn, values: [proxmox] }
+            tolerations:
+              - key: homelab.io/ephemeral
+                operator: Exists
+            # Soft spread across the two ephemeral nodes + a real memory request (2026-08-11
+            # incident: all 4 runners binpacked onto wk-metal-02 while its WAN was dead — 100% of
+            # CI on one node's failure). Requests-not-limits by intent: a runner's true footprint
+            # depends on which job lands (lint vs cold nix build vs dind), so requests state the
+            # ~2-per-node envelope for honest packing and the spread halves the blast radius;
+            # BestEffort→Burstable also keeps runners first-kill under node pressure, which is
+            # correct for retryable CI. maxRunners stays the concurrency contract.
+            topologySpreadConstraints:
+              - maxSkew: 1
+                topologyKey: kubernetes.io/hostname
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    actions.github.com/scale-set-name: homelab-ephemeral-large
+            initContainers:
+              - name: init-dind-externals
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.7-gc1ffe25de7ea
+                command: ["cp"]
+                args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+                volumeMounts:
+                  - name: dind-externals
+                    mountPath: /home/runner/tmpDir
+              - name: dind
+                image: docker:29.6.2-dind
+                resources:
+                  requests:
+                    memory: 1Gi
+                args:
+                  - dockerd
+                  - --host=unix:///var/run/docker.sock
+                  - --group=$(DOCKER_GROUP_GID)
+                  - --registry-mirror=http://192.168.40.20
+                  - --insecure-registry=192.168.40.20
+                  - --insecure-registry=192.168.40.21
+                env:
+                  - name: DOCKER_GROUP_GID
+                    value: "123"
+                securityContext:
+                  privileged: true
+                restartPolicy: Always
+                startupProbe:
+                  exec:
+                    command: [docker, info]
+                  initialDelaySeconds: 0
+                  failureThreshold: 24
+                  periodSeconds: 5
+                volumeMounts:
+                  - name: work
+                    mountPath: /home/runner/_work
+                  - name: dind-sock
+                    mountPath: /var/run
+                  - name: dind-externals
+                    mountPath: /home/runner/externals
+            containers:
+              - name: runner
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.7-gc1ffe25de7ea
+                command: ["/home/runner/run.sh"]
+                resources:
+                  requests:
+                    memory: 1536Mi
+                    ephemeral-storage: 16Gi # the 10.6 GB layout + the kubelet nodefs floor + slack — see header
+                env:
+                  - name: DOCKER_HOST
+                    value: unix:///var/run/docker.sock
+                  - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+                    value: "120"
+                  - name: UV_CACHE_DIR
+                    value: /uv-cache
+                volumeMounts:
+                  - name: work
+                    mountPath: /home/runner/_work
+                  - name: dind-sock
+                    mountPath: /var/run
+                  - name: uv-cache
+                    mountPath: /uv-cache
+            volumes:
+              - name: work
+                emptyDir: {}
+              - name: dind-sock
+                emptyDir: {}
+              - name: dind-externals
+                emptyDir: {}
+              - name: uv-cache
+                persistentVolumeClaim:
+                  claimName: arc-uv-cache
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: arc-runners
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
