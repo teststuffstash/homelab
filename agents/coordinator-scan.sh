@@ -1492,7 +1492,7 @@ elif [ -n "${HERE:-}" ] && [ -f "${HERE}/../.github/workflows/ci.yaml" ]; then
   _pci_yaml="$(cd "${HERE}/.." && pwd)/.github/workflows/ci.yaml"
 fi
 if [ -n "$_pci_yaml" ]; then
-  _pregex=$(grep -E "grep -E.*agents/" "$_pci_yaml" | sed "s/.*grep -E '//;s/'.*//" | head -1)
+  _pregex=$(grep -E "grep -E.*agents/" "$_pci_yaml" | sed "s/.*grep -E '//;s/'.*//" | head -1 || true)
   if [ -n "$_pregex" ]; then
     _proot="$(dirname "$(dirname "$(dirname "$_pci_yaml")")")"
     while IFS= read -r _pfile; do
