@@ -84,7 +84,7 @@ an ephemeral in-cluster runner** — same policy question, same per-project answ
 endpoint. When present, the Composition renders the endpoint's HOST (derived from the URL) into
 every fixer repo's worker egress CNP (`toFQDNs` leg) — the agent session connects to this server
 for tool calls (statute, search, give_feedback, etc.). The knob holds a URL (scheme + host + path,
-e.g. `https://mcp.oracle.teststuff.net/mcp`); the launcher passes it verbatim to each harness's
+e.g. `https://mcp.oracle.teststuff.net/`); the launcher passes it verbatim to each harness's
 own attach interface (#1041 — claude: a `--mcp-config` JSON file in the CLI's `mcpServers` shape;
 goose: `--with-streamable-http-extension <URL>`; the server is streamable HTTP), while the
 Composition derives the bare HOST from it for the CNP `toFQDNs` leg. **The opencode arm attaches
@@ -107,7 +107,7 @@ claudeTier lesson). Absent = no MCP attached.
 
 **Distinct from `spec.slo.endpoint`** (the FU-104 blackbox probe target). They may share a URL for
 a given stack (oracle's `slo.endpoint` and `mcp.endpoint` both point at
-`https://mcp.oracle.teststuff.net/mcp`) but serve different consumers — the SLO endpoint is a
+`https://mcp.oracle.teststuff.net/`) but serve different consumers — the SLO endpoint is a
 probe target for availability monitoring, the MCP endpoint is a tool server for agent sessions.
 Keeping them separate means a stack can have one without the other, and the schema for each
 carries only its own concerns (`slo` has `module`/`availability`; `mcp` has `tools`).
