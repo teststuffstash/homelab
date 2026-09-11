@@ -119,6 +119,15 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       Fix candidate: the live-state rule extends to ACCEPTANCE VERBS — a verdict recommendation
       verifies each Production-leg verb against an observed event, never a ship record.
       Sighted 2026-09-02 (operator catch: "most of it has not been exercised in a stack yet").
+- [ ] design-agents-G6 — the seat wrote INCIDENT HISTORY inline into a per-session brief
+      ("retro r3 F1's #915 sat 9.3h parked `agent/blocked` on exactly this input" in the
+      coordinator brief's new human-CR bullet; the same in the reviewer prompt + the rubric).
+      Every coordinator/reviewer session pays those tokens; the rationale belongs in the ADR /
+      the FSM `incidents:` field, the brief carries the rule + the ADR id. Sighted 2026-09-11
+      (operator catch: "Is the history really relevant in a coordinator brief … every coordinator
+      session uses tokens"). Candidate promotion: the output contract gains "a rule written into
+      a per-session prompt (brief, reviewer prompt, rubric, env card) cites its ADR and carries
+      no dates/issue refs of its own"; mechanical twin = a lint on those files.
 - [ ] design-agents-G2 — a lifecycle LABEL was reported as activity ("#833 is riding —
       in-progress") from a live `gh` read alone: the label is a CLAIM, and the state is the
       JOIN (label × live pod × PR state) — the issue's PR had merged 8h earlier with no pod
