@@ -4672,11 +4672,35 @@ EOF_GTHEMES_OPEN
           fi
         fi
         # <<<REPLAY:ci-red-rounds<<<
+        # >>>REPLAY:ci-red-stale-sha>>>
+        # FU-1529 sub-defect 1: before applying agent/arbitrate, verify the red conclusion's
+        # sha matches the current head (not a stale sha from a previous commit).
+        # Computed only for cases where ARBITRATE might be applied (noop_round OR red_rounds >= MAX).
+        ci_red_should_arbitrate=1
+        if [ -n "$noop_round" ] || [ "$red_rounds" -ge "$RED_MAX" ]; then
+          # Sub-defect 1: verify red conclusion's sha matches current head. Query per-sha check runs.
+          pr_head_oid="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid // ""' 2>/dev/null)" || pr_head_oid=""
+          if [ -n "$pr_head_oid" ]; then
+            red_check_status="$(gh api repos/"${slug}"/commits/"${pr_head_oid}"/check-runs \
+                --jq '[.check_runs[]? | select(.status == "completed") | select((.conclusion // "") | ascii_downcase | . == "failure" or . == "timed_out")] | length > 0' \
+                2>/dev/null)" || red_check_status=""
+            case "$red_check_status" in
+              true) :;; # Red conclusion matches current head, proceed to arbitrate check
+              *)    ci_red_should_arbitrate=0;; # No completed red run on current head, don't escalate
+            esac
+          else
+            ci_red_should_arbitrate=0 # Can't verify sha, fail-safe to not escalate
+          fi
+        fi
         if [ -n "$noop_round" ]; then
-          gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
-            && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
-            && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
-            || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
+          if [ "$ci_red_should_arbitrate" = 1 ]; then
+            gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
+              && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
+              && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
+              || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
+          else
+            orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — no completed red run on current head ${head8} (FU-1529 stale-sha): PR #${u}\n"
+          fi
         elif [ "$red_rounds" -lt "$RED_MAX" ]; then
           # CURRENCY (homelab#198) — the EXTENSION of this clause's existing content key, not a
           # second mechanism beside it. The markers above answer "did a round complete, and did it
@@ -4743,11 +4767,17 @@ EOF_GTHEMES_OPEN
           # ARBITRATE: red rounds EXHAUSTED. Reuse the review path's MP-T11 machinery — label
           # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
           # a stronger model / park / close) take over. This is the Red→arbitrate edge the FSM lacked.
-          gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
-            && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
-            && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
-            || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
+          # Apply the same sha check as the noop case (FU-1529).
+          if [ "$ci_red_should_arbitrate" = 1 ]; then
+            gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
+              && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
+              && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
+              || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
+          else
+            orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — no completed red run on current head (FU-1529 stale-sha): PR #${u}\n"
+          fi
         fi
+        # <<<REPLAY:ci-red-stale-sha<<<
       done
     else
       echo "  [$repo] PROBE_FAILED reading check rollups — ci-red clause skipped this tick (needs checks:read; fail-loud rule #6)" >&2
