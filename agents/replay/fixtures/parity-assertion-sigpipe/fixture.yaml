@@ -24,5 +24,3 @@ parts:
   - file:bridge.sh
   - block:parity-assertion
   - file:post.sh
-pins:
-  - #1547
