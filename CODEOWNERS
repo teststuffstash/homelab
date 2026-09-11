@@ -23,19 +23,23 @@
 /.github/           @RasmusSoot
 
 # ── Tier 2 — applied out-of-band (tofu apply, ansible → the router, ArgoCD app-of-apps).
-# A human reads the diff before it reaches a machine; the apply itself stays outside the cluster's
-# own dependency cone (docs/dependency-upgrades.md §"Where the runner sits").
-/tofu/              @RasmusSoot
-/ansible/           @RasmusSoot
-/opnsense/          @RasmusSoot
-/machines/          @RasmusSoot
-# argocd/platform/ carries the Applications themselves and syncs with prune: true — an edit here
-# DELETES services, which is why it is tier 2 while argocd/resources/ is tier 1.
-/argocd/platform/   @RasmusSoot
+# ⚖ TRIAL WEEK 2026-09-11 → 2026-09-18 (operator, ADR-128): tier 2 is UNOWNED for one week —
+# the codeowner-catches census (docs/spikes/codeowner-catches.md) found every outage-class catch
+# under agents/** or the operator's runtime code, and 263 human reads in 39 days for 34 findings.
+# The apply for tofu/ansible/opnsense/machines is still the seat's own act (nothing deploys on
+# merge there); argocd/platform/ DOES deploy on merge (prune: true) and rides the IAC-G04
+# sentinel + bot review + the alert belts for the trial. Re-read at the FU's date; revert = git.
+# The lines below are kept as comments so the revert is a one-line un-comment each:
+# /tofu/              @RasmusSoot
+# /ansible/           @RasmusSoot
+# /opnsense/          @RasmusSoot
+# /machines/          @RasmusSoot
+# /argocd/platform/   @RasmusSoot
 
-# ── Tier 3 (continued) — more specific than /tofu/, so they must come after it.
+# ── Tier 3 (continued) — governance stays owned through the trial (tofu/github/ is the ruleset
+# over everything; tofu/cloudflare/ is unowned for the trial with the rest of tofu/).
 /tofu/github/       @RasmusSoot
-/tofu/cloudflare/   @RasmusSoot
+# /tofu/cloudflare/   @RasmusSoot
 
 # ── Tier 1 — ArgoCD applies on merge, CI is the gate. Unowned by design:
 #   SERVICES.md   README.md
@@ -46,7 +50,11 @@
 # next session reads as ground truth, and unlike a bad manifest nothing reconciles it back.
 # Operator risk model 2026-08-04: workers doing extra or bad WORK is fine; merges to master are
 # the only thing that matters. This is a merge an agent could otherwise make alone.
-/docs/              @RasmusSoot
+# ⚖ TRIAL WEEK 2026-09-11 → 2026-09-18 (ADR-128): docs/ UNOWNED — the census found only
+# one-line doc-currency catches here (8 of 38), each cheaper as a post-merge quickfix than as a
+# read. The single-writer contract on docs/follow-ups.md is the rubric's (a worker append is
+# BLOCKING), not this file's. Revert = un-comment:
+# /docs/              @RasmusSoot
 #
 # argocd/resources/ is deliberately UNOWNED (tier 1): merge is deploy, and the gate there was
 # never review — it is the IAC-G04 policy sentinel, ENFORCING for homelab since 2026-08-18 (the

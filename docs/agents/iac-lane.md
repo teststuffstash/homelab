@@ -82,14 +82,22 @@ truth). **homelab has no such split.** It *is* the platform's own `-iac` — Arg
 too — and it is simultaneously where the loop's own machinery lives. So the lane taxonomy above
 cannot key on the repo. It keys on the **path**.
 
+> ⚖ **TRIAL WEEK 2026-09-11 → 2026-09-18 (ADR-128, operator):** the codeowner gate is narrowed
+> to `agents/**`, `policy/**`, `tofu/github/**` + the governance dotdirs (and the operator's own
+> runtime repo). `docs/**`, `argocd/platform/**`, `tofu/*.tf`, `tofu/cloudflare/**`, `ansible/**`,
+> `opnsense/**`, `machines/**` merge on CI + bot review for the week — the rubric's read is the gate
+> there, the alert belts are the net, and a post-merge quickfix is the repair. Baseline + re-read:
+> [`../spikes/codeowner-catches.md`](../spikes/codeowner-catches.md), FU-FU-233. The rows below
+> describe the pre-trial (and revert) shape.
+
 | paths | applied by | agent may author | gate |
 |---|---|---|---|
-| `docs/**` | nothing | ✅ | **codeowner** (CODEOWNERS `/docs/` since 2026-08-04 — the docs are the platform's memory) |
+| `docs/**` | nothing | ✅ | **codeowner** (CODEOWNERS `/docs/` since 2026-08-04 — the docs are the platform's memory) — *trial: CI + bot* |
 | `argocd/resources/**` | ArgoCD — merge *is* deploy | ✅ | CI (see the check-coverage caveat below) |
-| `argocd/platform/**` | ArgoCD app-of-apps, `prune: true` | ✅ | **codeowner** — an edit here *deletes* services |
-| `tofu/*.tf` (root) | `tofu apply` | ✅ | **codeowner**; apply stays out-of-band (cone rule) |
-| `ansible/**` | `opnsense-playbook.sh` → the router | ✅ | **codeowner** + windowed apply |
-| `agents/**`, `policy/**`, `tofu/github/**`, `tofu/cloudflare/**` | the loop's own machinery | ✅ | **codeowner** — see the pre-merge rule below |
+| `argocd/platform/**` | ArgoCD app-of-apps, `prune: true` | ✅ | **codeowner** — an edit here *deletes* services — *trial: CI + bot + sentinel* |
+| `tofu/*.tf` (root) | `tofu apply` | ✅ | **codeowner**; apply stays out-of-band (cone rule) — *trial: CI + bot; the apply is still the seat's* |
+| `ansible/**` | `opnsense-playbook.sh` → the router | ✅ | **codeowner** + windowed apply — *trial: CI + bot; the apply is still the seat's* |
+| `agents/**`, `policy/**`, `tofu/github/**`, `tofu/cloudflare/**` | the loop's own machinery | ✅ | **codeowner** — see the pre-merge rule below (*trial: `tofu/cloudflare/**` rides with `tofu/`*) |
 | `.github/**`, `devbox.json`, CI-invoked `scripts/**`, `.agents/**` | executes BEFORE review | ❌ **never** | operator only |
 
 ### ⚠ The trap: one root cause, N alert issues, N concurrent fixers

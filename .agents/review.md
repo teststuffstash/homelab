@@ -65,6 +65,16 @@ PR's declared footprint — real work, filed as work (during a Goal it lands in 
 pile, never a 1:1 issue). Pure style (naming, comment polish) may stay a comment with no bullet
 at all. What no longer qualifies as a follow-up: anything the branch could have fixed.
 
+**And only into a container (ADR-127, 2026-09-11).** A `Follow-ups:` section exists only where
+the PR closes an issue under an OPEN epic (Goal / [stint](../docs/glossary.md) / theme / post-launch bucket / retro
+batch) or targets a `goal/**` base — the generic reviewer computes this (`epic-container-walk`)
+and appends the NO CONTAINER rule otherwise. On a containerless master-lane PR every in-diff
+finding past the harvest bar is `CHANGES_REQUESTED`, enumerated comprehensively in ONE review;
+an out-of-diff finding on worker-authorable paths blocks too (name the paths — the coordinator
+widens the issue's `Touches` before the fix round, so the same PR absorbs it); only operator-only
+paths go under `Operator-lane (no container):` as a plain comment the codeowner lands directly —
+never a bullet the harvest would mint into a standalone inert issue that no container adopts.
+
 ## Judge these carefully rather than by rule
 
 - **`manifest-lint` SKIPS CRs it has no schema for** (Applications, AgentStacks,
@@ -77,11 +87,13 @@ at all. What no longer qualifies as a follow-up: anything the branch could have 
   record — the things the next session reads as ground truth. A doc change that contradicts what
   shipped is a real defect, not a nit. `docs/follow-ups.md` is single-writer (operator/meta): a
   worker appending to it is blocking.
-- **Path tier decides who merges, and the PR should say so.** Tier 1 (`argocd/resources/**`) merges
-  on CI; `argocd/platform/**`, `tofu/`, `ansible/`, `opnsense/`, `machines/`, **and `docs/`**
-  (CODEOWNERS `/docs/` since 2026-08-04 — the platform's memory) need a human. If the
-  diff needs a human and the body does not say it, that is a follow-up — someone will otherwise
-  wait in silence for an auto-merge that cannot come.
+- **Path tier decides who merges, and the PR should say so.** During the ADR-128 trial week
+  (2026-09-11 → 09-18) only `agents/**`, `policy/**`, `tofu/github/**` and the governance dotdirs
+  need a human; `argocd/platform/**`, `tofu/`, `ansible/`, `opnsense/`, `machines/` and `docs/`
+  merge on CI + your approval like tier 1 — so your read IS the gate there: a `docs/` line that
+  contradicts what shipped, or an `argocd/platform/**` edit that prunes a service without its
+  data story, is BLOCKING, not a nit. If the diff needs a human and the body does not say it,
+  that is a follow-up — someone will otherwise wait in silence for an auto-merge that cannot come.
 
 Greenfield bias does NOT apply here: this repo is prod-serving and public. But "better than master"
 still wins over "perfect" for a change that is contained, validated, and inside its tier.
