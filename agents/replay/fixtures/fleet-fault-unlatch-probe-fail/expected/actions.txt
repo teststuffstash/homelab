@@ -1,0 +1,4 @@
+CALL gh pr view 13 --repo teststuffstash/homelab --json comments,statusCheckRollup
+OUT REACHED: case 4 — probe fails ⇒ label held (rule #6)
+OUT Case 4 complete: agent/error label should be HELD on PR #13 (probe failed)
+RC 0
