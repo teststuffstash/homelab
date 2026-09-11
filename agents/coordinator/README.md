@@ -49,9 +49,8 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides. The label is a *condition*, not a dispatch trigger: the scan emits the unit only while the PR's `state-fp:` fingerprint has moved since the last dispatch (homelab#198), so a sticky label costs one ride per state change, not one per tick | review reflex |
 | `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2); the same ruling also opens ONE `agent-fix` issue against the platform repo naming the gate that did not fire, and links it in the comment — a fleet ruling is filed, not asked. **Dedup first, like every filing surface**: search open issues for the same gate/`error_class` and extend the existing one instead of filing a second — a recurring fleet fault must sharpen one issue, not queue N (seat quickfix at the PR#947 gate read). | any role |
 
-Invariants: **one active worker per PR**; **bounded rounds** (max 5 **logic** rounds — reviewer/CI
-verdicts; 3 until ADR-127, 2026-09-11 — the reviewer now blocks every in-diff finding on a
-containerless PR instead of deferring, so the loop runs to clean rather than parking; infra failures are **strikes** that swap the model instead of consuming a round — a second strike with the identical `(model, error_class)` pair on one issue is not a swap — it routes to the `agent/error` STRIKE-channel path (label + one `AGENT_ERROR:` comment + the one filed issue) instead of another ride; see the MODEL note in the runbook; a **no-op round** — stats posted, HEAD unmoved — is not a logic round
+Invariants: **one active worker per PR**; **bounded rounds** (max 5 **logic** rounds, ADR-127 —
+reviewer/CI verdicts; infra failures are **strikes** that swap the model instead of consuming a round — a second strike with the identical `(model, error_class)` pair on one issue is not a swap — it routes to the `agent/error` STRIKE-channel path (label + one `AGENT_ERROR:` comment + the one filed issue) instead of another ride; see the MODEL note in the runbook; a **no-op round** — stats posted, HEAD unmoved — is not a logic round
 either, §arbitrate play); idempotency key `(issue, base-sha, round)` so a re-list/redelivery never
 double-spawns.
 
@@ -375,11 +374,10 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
        2026-09-11).** The codeowner IS the tie-breaker: dispatch the fix round with the human
        review body VERBATIM as the directive (step 3 / step 5 below, `--work-branch`), never
        classify it follow-up-class, never dismiss it (guard 2 of the dismissal play), never park
-       `blocked-on: human` while its asks are unaddressed — retro r3 F1's #915 sat 9.3h parked
-       `agent/blocked` on exactly this input. After the round lands and the bot APPROVES at
-       head, the human's older request still holds `reviewDecision` at CHANGES_REQUESTED: that
-       state is the codeowner's re-read (approve → auto-merge, or a fresh request → a fresh
-       round), so write `blocked-on: human` and exit — the next human review resolves it.
+       `blocked-on: human` while its asks are unaddressed. Once the round lands and the bot
+       APPROVES at head, the human's older request still holds `reviewDecision` at
+       CHANGES_REQUESTED — that state is the codeowner's re-read: write `blocked-on: human` and
+       exit; the next human review resolves it.
      - If the findings are **follow-up-class under the policy** (pre-prod repo, PR better than
        master, findings are edge semantics / spec ambiguity / new-code corners) **and a container
        absorbs them** (a goal-lane PR, or an OPEN epic ancestor — ADR-127: on a containerless
@@ -521,11 +519,10 @@ job, in order (re-read live state first, exit clean if someone already closed it
    the store/child-set thresholds are met. The close is still the entire point of the widened clause.
 3. **Harvest the review `Follow-ups:` bullets (FU-090a).** Read every review on the merged PR
    (`gh pr view <PR> --json reviews`); each bullet under a `Follow-ups:` heading becomes ONE
-   issue on the SAME repo. **Since ADR-127 (2026-09-11) a review carries a `Follow-ups:` section
-   only where a container absorbs it** — a master-lane PR with no open epic ancestor blocks its
-   in-diff findings instead, and any out-of-diff note sits under `Out of scope (no container):`,
-   which is the codeowner's read at merge and NEVER a harvest source (do not mint from it). A
-   merged containerless PR therefore usually harvests nothing; say so in the closing comment — title from the bullet, body = the bullet verbatim + provenance
+   issue on the SAME repo. A review carries a `Follow-ups:` section only where a container
+   absorbs it (ADR-127); an `Out of scope (no container):` comment is the codeowner's read at
+   merge, NEVER a harvest source — do not mint from it. A merged containerless PR usually
+   harvests nothing; say so in the closing comment — title from the bullet, body = the bullet verbatim + provenance
    (`Harvested from PR #N review (issue #M)`), any `track/*` label inherited from the source
    issue (reporting decor only since ADR-097 — the scheduler no longer reads it).
    **The body's machine keys are the machine block, composed by the writer** (§Authoring an
