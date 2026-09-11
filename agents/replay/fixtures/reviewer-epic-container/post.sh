@@ -14,7 +14,7 @@ unset STUB_GH_api_repos_teststuffstash_test_project_issues_10
 # rows j/k/l: the rule appender mutates PROMPT only on `none`.
 PROMPT="Initial prompt."
 container-rule-append none && _rc=0 || _rc=$?
-if printf '%s' "$PROMPT" | grep -q "NO CONTAINER RULE" && ! printf '%s' "$PROMPT" | grep -q "Follow-ups: section$"; then echo "row_j none=rule-appended rc=$_rc"; else echo "row_j none=NO-RULE rc=$_rc"; fi
+if printf '%s' "$PROMPT" | grep -q "NO CONTAINER RULE" && printf '%s' "$PROMPT" | grep -q "widens the issue footprint" && ! printf '%s' "$PROMPT" | grep -q "Follow-ups: section$"; then echo "row_j none=rule-appended+widen rc=$_rc"; else echo "row_j none=NO-RULE rc=$_rc"; fi
 PROMPT="Initial prompt."
 container-rule-append "goal#10" && _rc=0 || _rc=$?
 if [ "$_rc" = 1 ] && [ "$PROMPT" = "Initial prompt." ]; then echo "row_k container=untouched rc=$_rc"; else echo "row_k container=MUTATED rc=$_rc"; fi
