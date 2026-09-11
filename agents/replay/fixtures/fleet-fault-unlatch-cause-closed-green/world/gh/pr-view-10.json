@@ -1,0 +1,11 @@
+{
+  "number": 10,
+  "comments": [
+    {
+      "body": "<!-- fleet-fault cause=teststuffstash/homelab#1000 prs=10 -->\nAGENT_ERROR: fleet fault marker test"
+    }
+  ],
+  "statusCheckRollup": [
+    {"conclusion": "SUCCESS"}
+  ]
+}

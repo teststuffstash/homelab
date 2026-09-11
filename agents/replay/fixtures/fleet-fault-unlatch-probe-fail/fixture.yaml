@@ -1,0 +1,10 @@
+# fleet-fault-unlatch case 4: cannot read PR or cause state ⇒ agent/error HELD (rule #6)
+name: fleet-fault-unlatch-probe-fail
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:fleet-fault-unlatch
+  - file:post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
