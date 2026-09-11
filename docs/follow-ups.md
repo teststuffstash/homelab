@@ -583,6 +583,15 @@ the block needs pruning, not more headings.
       a newer arbitration ruling on a LANDING PR (state-fp mutates every tick post-approval,
       3 sessions/5min) — fixed via #868 → PR#873 (SELECT excludes APPROVED+armed, "gated on
       fresh evidence"). **Next:** one CLEAN organic fire on a genuine no-op round post-#873.
+- [ ] **FU-233** — **Codeowner-gate trial week (ADR-128): re-read on 2026-09-18.** CODEOWNERS
+      narrowed 2026-09-11 to the governance core (`agents/**`, `policy/**`, `tofu/github/**`, the
+      dotdirs); `docs/**`, `argocd/platform/**`, `tofu/`, `ansible/**`, `opnsense/**`, `machines/**`
+      merge on CI + bot for the week. Baseline: [`spikes/codeowner-catches.md`](spikes/codeowner-catches.md)
+      (13.9 % finding rate on human reads, 6 outage-class of 38 — none on the freed paths).
+      **Next (2026-09-18):** count the week's catches / incidents / post-merge quickfixes on the
+      freed paths vs the baseline; revert = un-comment the five CODEOWNERS lines (one commit), or
+      promote and start ADR-100's owner→rule replacement for `docs/` currency + `argocd/platform`
+      prunes. Relates ADR-100, ADR-110, ADR-127.
 - [ ] **FU-090** — **Sprout index / issue authoring: POINTER.** All legs, the breaker-#1 gate,
       the shipped sub-issue lineage (2026-08-02), the `Touches:` contract (ADR-097) and the
       retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).

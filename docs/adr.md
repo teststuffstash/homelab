@@ -2045,3 +2045,26 @@ coordinator ride that writes `blocked-on: human` — a deterministic scan hold +
 built, re-open on the second such ride; the cap raise re-tunes, it does not relax, the 2026-09-01
 "caps remain the loop control" ruling. Homes: `agents/reviewer-session.sh`, replay
 `reviewer-epic-container`, `docs/agents/issue-authoring.md` §The sprout index rung 2.
+
+
+### ADR-128 — Trial week: the human codeowner gate narrows to the governance core; the rest merges on CI + bot review (2026-09-11 → 2026-09-18)
+
+**Status:** Accepted as a TRIAL (operator, 2026-09-11: "lets do it for a trial week, we can always
+go back in history with git"). **Decision:** for one week homelab's CODEOWNERS owns only
+`agents/**`, `policy/**`, `tofu/github/**` and the governance dotdirs (`.github/`, `.agents/`,
+`.claude/`, `scripts/`, `CODEOWNERS`); the operator's runtime repo keeps `* @RasmusSoot`.
+`docs/**`, `argocd/platform/**`, `tofu/*.tf`, `tofu/cloudflare/**`, `ansible/**`, `opnsense/**`,
+`machines/**` merge on CI + the reviewer bot; the rubric's tier paragraph makes the bot's read the
+gate there (a contradicting doc line or a pruning Application edit is BLOCKING). **Considered:**
+keep the whole tiered gate (the census: 273 human reads, 38 findings, 6 outage-class — all under
+`agents/**` or the operator's code; 8 doc-currency one-liners; ~6.7 reads/day); free everything
+(rejected: the six outage-class catches); replace owners with rules first (ADR-100's principle —
+deferred: no rule exists yet for `docs/` currency or `argocd/platform` prunes, and the operator
+chose to measure before building one). **Why:** operator-minutes are the platform's first cost
+(chainless-redesign.md cost-rethink 5); the census says the reads outside the governance core
+buy one-line fixes a post-merge quickfix delivers cheaper. **Consequences:** the un-comment lines
+sit in CODEOWNERS for a one-commit revert; `argocd/platform/**` deploys on merge with `prune:
+true` — the IAC-G04 sentinel, bot review and the alert belts are the net for the week; the re-read
+on 2026-09-18 compares catches, incidents and quickfix count against the census baseline
+(docs/spikes/codeowner-catches.md) and either reverts by git or promotes the narrowing (then
+ADR-100's owner→rule replacement is the next act, not a wider trial). Tracker: FU-233.
