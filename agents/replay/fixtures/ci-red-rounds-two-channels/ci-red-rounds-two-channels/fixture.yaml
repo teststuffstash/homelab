@@ -20,8 +20,11 @@
 #   2. noop_round = 1 — two of those three stats timestamps post-date the newest NON-MERGE commit,
 #      so the last completed round pushed nothing. The predicate now sorts mixed-channel
 #      timestamps, and the merge commit at 09:00 is still excluded (the nine-review-loop lesson).
-#   3. attempts(3) is NOT < RED_MAX(3), so the issue-keyed ceiling is SKIPPED — no `gh pr list`
+#   3. attempts(3) is NOT < RED_MAX, so the issue-keyed ceiling is SKIPPED — no `gh pr list`
 #      in the CALL stream. The fast path is a real path, and its absence is asserted for free.
+#      The fixture pins RED_ROUNDS_MAX=3 in its env so attempts sits AT the cap: the clause's
+#      DEFAULT is 5 since ADR-127 (2026-09-11), and this row is about the skip at the cap, not
+#      about the cap's value (ci-red-rounds-sibling-mention records the probe's world instead).
 #   4. Exactly ONE call, the `gh pr view`. The round counter is a READ-ONLY clause: it labels
 #      nothing and comments nothing, and a future edit that makes it write shows up here.
 pins:
@@ -38,3 +41,4 @@ env:
   - IN_SLUG=teststuffstash/circles
   - IN_REPO=circles
   - IN_PR=43
+  - RED_ROUNDS_MAX=3
