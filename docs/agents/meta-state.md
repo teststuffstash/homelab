@@ -10,14 +10,27 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-11 evening corpus session — ADR-127/128 + deepseek workers; arc in TICK-LOG):**
+  (1) **Codeowner queue is CLEAN-READ READY:** #1538, #1540, #1541, #1545 bot-approved at head with no
+  Follow-ups (re-reviewed under ADR-127 18:32–18:36Z); #1543 labels cleared (waits its master-lane
+  review turn); #1542 approved under its Goal-#1231 container. Merge order per the queue spike
+  (#1541×#1540 and #1543×#1542 each need one rebase). oracle-fleet#554 is CHANGES_REQUESTED by the
+  bot (three in-diff defects) — the oracle loop's round, not ours. (2) **Watch, then archive nothing
+  yet:** PR#1592 (widen-Touches amendment) and PR#1593 (platform claim → deepseek-v4-flash /
+  v4.1-flash) were armed at wind-down — verify merged + `kubectl get agentstack platform -o
+  jsonpath='{.spec.workerModel} {.spec.workerModelFallbacks}'` reads deepseek. (3) **ADR-128 trial
+  week runs to 2026-09-18 → FU-233** (re-read vs `docs/spikes/codeowner-catches.md`; revert = the
+  commented CODEOWNERS lines). (4) **First live signals to look for:** a containerless worker PR
+  whose reviewer names out-of-diff paths → does the coordinator widen `Touches` (brief step 7)?; a
+  stale human CHANGES_REQUESTED drawing a coordinator ride (ADR-127 says re-open the scan hold on
+  the second one); the 5-round cap's first arbitrate at 5. (5) **Design input (operator, deliberately
+  not an FU):** briefs/corpus on a diet — rules/rationale split + a no-history lint + a what-stands
+  read layer (TICK-LOG 2026-09-11 evening, memory `briefs-rules-only`); the operator calls the
+  corpus "too expensive to use" after S5.
 - **⚑ PICKUP (2026-09-11 data-gathering seat, no corpus load — NO actions taken, no GitHub
   writes; arc in TICK-LOG):** two audits in `docs/spikes/` for the next corpus session.
-  (1) **Codeowner queue** ([`codeowner-queue-audit.md`](../spikes/codeowner-queue-audit.md)): 8
-  parked PRs, suggested order #1538 → #1545 → #1540/#1541 (one rebases: `coordinator-scan.sh`) →
-  #1542/#1543 (one rebases: `rows.psv`); oracle-fleet#554 was bot-APPROVED with two in-diff defects
-  (wrong `structuredContent` path; English query on an Estonian-only index) — changes-requested it,
-  do not merge; sleep-tracking#142 is a renovate major. The spike names the section-scoped docs per
-  cluster (≈15 % of the corpus) if a full load is not wanted. (2) **Responder week**
+  (1) **Codeowner queue** ([`codeowner-queue-audit.md`](../spikes/codeowner-queue-audit.md)) —
+  ACTED ON by the evening session (ADR-127; see the pickup above). (2) **Responder week**
   ([`responder-week-audit.md`](../spikes/responder-week-audit.md)): 19 open responder issues with a
   one-line disposition each — closes: #1557, #1584, #903, #500, #1580 (drop `agent/queued`); own:
   #153 (`maxConcurrency` 20→40, one values line), #1547 (PR#1576 needs the ADR-103 replay pin, then
