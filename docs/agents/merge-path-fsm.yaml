@@ -280,6 +280,8 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "merge-conflict DEBOUNCED" }
       - desc: "null-author catch-all (homelab#602): a conflict PR whose `.author` is null (deleted/suspended account) matches neither the seat nor the worker predicate and emits a report line, never a unit — it cannot vanish from both surfaces"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'homelab#602' }
+      - desc: "the play, exactly one of three (2026-09-11): resume on the branch — a merge-only fix round; the push dismisses approvals, so the ruling names the approved head and the codeowner re-reads the resolution only — / close + re-queue (the conflict reaches the diff's substance, the PR was never approved, or a resume already failed — one resume, never two) / escalate (the conflicting master change is the seat's)"
+        anchor: { file: agents/coordinator/README.md, pattern: "The .merge-conflict. clause .MP-T06" }
 
   - id: MP-T07
     name: fix round on the PR's own branch
