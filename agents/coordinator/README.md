@@ -1154,6 +1154,36 @@ breaker count (which filters on APPROVED/CHANGES_REQUESTED) — the re-entered P
 back instead of instantly re-tripping ROUNDS_MAX. That is intended: the ruling ended the disputed
 round, it did not spend a fresh one.
 
+## The `merge-conflict` clause (MP-T06 — the play)
+
+The updater labels a worker-authored PR `merge-conflict` when its update-branch call 422s on a
+DIRTY head; the scan emits `merge-conflict|<repo>|pr-<n>` once per state (the #198 fingerprint;
+a seat-authored conflict never reaches you — report line only). A conflict is not a review
+finding and not a red: the diff is fine, master moved under it. Re-read live state first (still
+DIRTY? a human may have resolved it — exit clean). Then rule exactly one of:
+
+- **Resume on the branch — the default.** Dispatch a fix round with `--work-branch` on the PR's
+  branch whose directive is exactly this and nothing more: merge `origin/master` into the branch,
+  resolve the conflict keeping BOTH this PR's intent and master's change, run the replay
+  families and lints that cover the conflicting files, push the merge commit; change nothing
+  else. Choose this when the conflict is confined to files the PR already touches, or to
+  append-only surfaces (fixture rows, generated indexes, doc lists). **Codeowner cost, say it in
+  the ruling:** the push dismisses every approval on the PR (ruleset
+  `dismiss_stale_reviews_on_push`) — the bot re-reviews on its own; a human codeowner approval
+  must be given again, and the re-read is the resolution only
+  (`git diff <approved-head>...<new-head>`), so name the approved head in the ruling comment.
+- **Close and re-queue.** Close the PR with the reasoning and return the issue to `agent/queued`
+  (add before remove, compare-then-write) when the conflict reaches the diff's substance (the
+  same clause or function rewritten on master), when the PR was never bot-approved (nothing to
+  preserve), or when a resume round already came back still DIRTY — one resume, never two.
+- **Escalate.** `agent/blocked` + a `blocked-on: human` marker when the conflicting master change
+  is the seat's and contradicts the PR's intent — that decision belongs to the human who made it.
+
+A conflict ruling carries no `ci-cause:` line (nothing was red) and never dispatches the reviewer
+(pre-flight rule 2: a review cannot fix a conflict). Every ruling comment that orders a round
+begins with the line-anchored `ARBITRATE` word (§arbitrate marker contract) so the launcher
+delivers it.
+
 ## Escalation vocabulary — the budget label is the carrier (FU-201)
 
 The escalation carrier is the issue's `agent-budget/*` label — the coordinator RE-GRADES it
