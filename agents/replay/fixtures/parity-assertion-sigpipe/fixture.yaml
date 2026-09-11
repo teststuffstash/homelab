@@ -1,0 +1,28 @@
+# homelab#1547 — parity assertion head pipe SIGPIPE guard.
+#
+# WHY THIS FIXTURE EXISTS. The parity assertion block in coordinator-scan.sh reads
+# `.github/workflows/ci.yaml` to extract the ratchet regex from lines matching
+# `grep -E.*agents/`. The actual ci.yaml has TWO such lines (the `clause=` grep and the
+# `replay=` grep). Under `set -euo pipefail`, `head -1` can close its read end before
+# `sed`/`grep` finish writing the second match, causing SIGPIPE (exit 141) and aborting
+# the scan before any dispatch clause runs.
+#
+# The fix adds `|| true` after `head -1` so the pipe is guarded against SIGPIPE, matching
+# the pattern already used elsewhere in this file for identical reads.
+#
+# THE CONTRACT:
+#   1. REPLAY_ROOT is set (by the harness) and points to the repo root.
+#   2. clause_files contains the canonical clause file list.
+#   3. The parity assertion block runs without crashing (exit 0, not 141).
+#   4. PARITY_ISSUES is set (the actual ci.yaml has 2 matching lines, the regex
+#      extracts the first, and the find loop checks clause_files parity).
+name: parity-assertion-sigpipe
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:config-defaults
+  - file:bridge.sh
+  - block:parity-assertion
+  - file:post.sh
+pins:
+  - #1547
