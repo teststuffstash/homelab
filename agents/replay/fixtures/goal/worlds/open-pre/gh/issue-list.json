@@ -20,7 +20,8 @@
     "state": "CLOSED",
     "closedAt": "2026-08-08T12:00:00Z",
     "parent": {
-      "number": 29
+      "number": 29,
+      "url": "https://github.com/teststuffstash/circles/issues/29"
     },
     "labels": [
       {
@@ -37,7 +38,8 @@
     "state": "CLOSED",
     "closedAt": "2026-08-09T09:10:00Z",
     "parent": {
-      "number": 29
+      "number": 29,
+      "url": "https://github.com/teststuffstash/circles/issues/29"
     },
     "labels": [
       {
@@ -54,7 +56,8 @@
     "state": "OPEN",
     "closedAt": null,
     "parent": {
-      "number": 29
+      "number": 29,
+      "url": "https://github.com/teststuffstash/circles/issues/29"
     },
     "labels": []
   },
