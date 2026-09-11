@@ -129,18 +129,22 @@ expect_classify "machine-merge"    "argocd-resources"        "argocd/resources/l
 expect_classify "machine-merge"    "argocd-resources-file"   "argocd/resources/loki/values.yaml"
 
 # Tier 2 — codeowner-merge (applied out-of-band)
-expect_classify "codeowner-merge"  "docs"                    "docs/agents/iac-lane.md"
+# ⚖ ADR-128 TRIAL WEEK 2026-09-11 → 09-18: docs/, tofu/ root, ansible/, opnsense/, machines/ and
+# tofu/cloudflare/ are UNOWNED in CODEOWNERS for the week, so the classifier reads them
+# machine-merge. The rows below pin the TRIAL shape; the revert (un-commenting the CODEOWNERS
+# lines) flips these six expectations back to codeowner-merge in the same commit.
+expect_classify "machine-merge"    "docs"                    "docs/agents/iac-lane.md"
 expect_classify "machine-merge"    "argocd-platform"         "argocd/platform/arc-runners.yaml"
-expect_classify "codeowner-merge"  "tofu-root"               "tofu/main.tf"
-expect_classify "codeowner-merge"  "ansible"                 "ansible/playbook.yaml"
-expect_classify "codeowner-merge"  "opnsense"                "opnsense/config.xml"
-expect_classify "codeowner-merge"  "machines"                "machines/wk-01.yaml"
+expect_classify "machine-merge"    "tofu-root"               "tofu/main.tf"
+expect_classify "machine-merge"    "ansible"                 "ansible/playbook.yaml"
+expect_classify "machine-merge"    "opnsense"                "opnsense/config.xml"
+expect_classify "machine-merge"    "machines"                "machines/wk-01.yaml"
 
 # Tier 3 — codeowner-merge (loop's own machinery)
 expect_classify "codeowner-merge"  "agents"                  "agents/coordinator-scan.sh"
 expect_classify "codeowner-merge"  "policy"                  "policy/iac/rule.yaml"
 expect_classify "codeowner-merge"  "tofu-github"             "tofu/github/main.tf"
-expect_classify "codeowner-merge"  "tofu-cloudflare"         "tofu/cloudflare/dns.tf"
+expect_classify "machine-merge"    "tofu-cloudflare"         "tofu/cloudflare/dns.tf"
 
 # Carve-outs (unowned in CODEOWNERS — machine-merge)
 expect_classify "machine-merge"    "images-env"              "agents/images.env"
