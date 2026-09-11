@@ -5,11 +5,17 @@
 # checks clause_files parity. The harness sets REPLAY_ROOT to the repo root.
 #
 # We override REPLAY_ROOT to point at the synthetic world so the block reads
-# the synthetic ci.yaml (2000 matching lines) instead of the real one (2 lines).
-# With 2000 lines, the pipe race (head -1 closing before sed/grep finish) is a
+# the synthetic ci.yaml (500 matching lines) instead of the real one (2 lines).
+# With 500 lines, the pipe race (head -1 closing before sed/grep finish) is a
 # certainty rather than a coin flip — the fixture reliably fails against the
 # pre-fix source (no || true guard) and reliably passes with the guard.
 REPLAY_ROOT="$REPLAY_WORLD"
+#
+# Suppress stderr from sed's "Broken pipe" warning (GNU sed writes this to
+# stderr when SIGPIPE terminates it, even though || true prevents the abort).
+# Different sed versions behave differently; suppressing stderr keeps the
+# fixture portable across environments.
+exec 2>/dev/null
 #
 # clause_files is the canonical list (same as the live scan uses). The synthetic
 # ci.yaml has 2000 lines matching `grep -E.*agents/`, so the regex extracts the
