@@ -1,0 +1,9 @@
+[
+  {
+    "number": 10,
+    "labels": [{"name": "agent/error"}],
+    "statusCheckRollup": [
+      {"conclusion": "SUCCESS"}
+    ]
+  }
+]
