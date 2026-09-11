@@ -31,7 +31,7 @@ if [ -n "$PC_OVERRIDE" ]; then
 fi
 
 # `gh api` is read-or-write depending on --method/-X; everything else keys off the verb.
-IS_API_WRITE=0; PREV=''
+IS_API_WRITE=0; IS_API_PAGINATE=0; PREV=''
 [ "${WORDS%% *}" = api ] && for a in "$@"; do
   case "$PREV" in
     -X|--method) [ "$a" = GET ] || IS_API_WRITE=1 ;;
@@ -40,6 +40,7 @@ IS_API_WRITE=0; PREV=''
     -XGET|--method=GET) ;;
     -X?*|--method=*)    IS_API_WRITE=1 ;;
     -f|--field|-F|--raw-field|--input) IS_API_WRITE=1 ;;   # gh api implies POST once a field is set
+    --paginate)         IS_API_PAGINATE=1 ;;
   esac
   PREV="$a"
 done
@@ -84,9 +85,11 @@ if [ -n "$_rp_jq" ]; then
   # Served into a variable, NOT piped: `_rp_serve`'s exit 9 for an unrecorded READ would only kill
   # the left half of a pipeline, and a silently-empty read is the exact lie that whole guard exists
   # to prevent.
-  _rp_body="$(_rp_serve "$WORDS")" || exit 9
+  _rp_paginate_flag=""; [ "${IS_API_PAGINATE:-0}" = 1 ] && _rp_paginate_flag="paginate"
+  _rp_body="$(_rp_serve "$WORDS" "$_rp_paginate_flag")" || exit 9
   printf '%s' "$_rp_body" | jq -r "$_rp_jq"
   exit $?
 fi
 
-_rp_serve "$WORDS"
+_rp_paginate_flag=""; [ "${IS_API_PAGINATE:-0}" = 1 ] && _rp_paginate_flag="paginate"
+_rp_serve "$WORDS" "$_rp_paginate_flag"
