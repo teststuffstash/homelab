@@ -49,8 +49,8 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides. The label is a *condition*, not a dispatch trigger: the scan emits the unit only while the PR's `state-fp:` fingerprint has moved since the last dispatch (homelab#198), so a sticky label costs one ride per state change, not one per tick | review reflex |
 | `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2); the same ruling also opens ONE `agent-fix` issue against the platform repo naming the gate that did not fire, and links it in the comment — a fleet ruling is filed, not asked. **Dedup first, like every filing surface**: search open issues for the same gate/`error_class` and extend the existing one instead of filing a second — a recurring fleet fault must sharpen one issue, not queue N (seat quickfix at the PR#947 gate read). **FLEET-FAULT UN-LATCH (homelab#1539):** when a PR carries `agent/error` from a fleet fault with a machine-readable marker (`<!-- fleet-fault cause=<owner/repo>#<n> prs=... -->` in its AGENT_ERROR comment), the scan automatically removes the label once the cited cause issue is CLOSED and CI is green at the PR head — rule #6 holds all unreadable probes; human-applied latches (no marker) stay human-first. | any role |
 
-Invariants: **one active worker per PR**; **bounded rounds** (max 3 **logic** rounds — reviewer/CI
-verdicts; infra failures are **strikes** that swap the model instead of consuming a round — a second strike with the identical `(model, error_class)` pair on one issue is not a swap — it routes to the `agent/error` STRIKE-channel path (label + one `AGENT_ERROR:` comment + the one filed issue) instead of another ride; see the MODEL note in the runbook; a **no-op round** — stats posted, HEAD unmoved — is not a logic round
+Invariants: **one active worker per PR**; **bounded rounds** (max 5 **logic** rounds, ADR-127 —
+reviewer/CI verdicts; infra failures are **strikes** that swap the model instead of consuming a round — a second strike with the identical `(model, error_class)` pair on one issue is not a swap — it routes to the `agent/error` STRIKE-channel path (label + one `AGENT_ERROR:` comment + the one filed issue) instead of another ride; see the MODEL note in the runbook; a **no-op round** — stats posted, HEAD unmoved — is not a logic round
 either, §arbitrate play); idempotency key `(issue, base-sha, round)` so a re-list/redelivery never
 double-spawns.
 
@@ -140,7 +140,7 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > Use the CURRENT chain model for BOTH `--model` flags below. Full design:
 > [`../../docs/agents/model-routing.md`](../../docs/agents/model-routing.md). The rules:
 > - **Rounds ≠ strikes.** Reviewer `CHANGES_REQUESTED` / CI-red-on-the-change = a **round** (bounded,
->   max 3). An **infra failure** — harness-death (goose `-32602` truncation), auth-storm (401/403),
+>   max 5 since ADR-127). An **infra failure** — harness-death (goose `-32602` truncation), auth-storm (401/403),
 >   provider 404/5xx, timeout — is a **strike**: it consumes **no round**. The launcher posts the
 >   strike FOR you: a PR-less run gets one structured issue comment —
 >   `AGENT_STRIKE: model=<m> error_class=<c> round=<r> session=<pod>` (+ the log tail). That comment
@@ -370,8 +370,20 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    - **`CHANGES_REQUESTED`** → **ARBITRATE FIRST — this is your tie-breaker duty, not a relay job**
      (operator directive 2026-07-10, after PR #6 burned 3 rounds while beating empty master). Read
      the repo's `.agents/review.md` maturity policy and classify the blocking findings yourself:
+     - **A HUMAN's `CHANGES_REQUESTED` is a directive, never a verdict to arbitrate (ADR-127,
+       2026-09-11).** The codeowner IS the tie-breaker: dispatch the fix round with the human
+       review body VERBATIM as the directive (step 3 / step 5 below, `--work-branch`), never
+       classify it follow-up-class, never dismiss it (guard 2 of the dismissal play), never park
+       `blocked-on: human` while its asks are unaddressed. Once the round lands and the bot
+       APPROVES at head, the human's older request still holds `reviewDecision` at
+       CHANGES_REQUESTED — that state is the codeowner's re-read: write `blocked-on: human` and
+       exit; the next human review resolves it.
      - If the findings are **follow-up-class under the policy** (pre-prod repo, PR better than
-       master, findings are edge semantics / spec ambiguity / new-code corners): do NOT dispatch a
+       master, findings are edge semantics / spec ambiguity / new-code corners) **and a container
+       absorbs them** (a goal-lane PR, or an OPEN epic ancestor — ADR-127: on a containerless
+       master-lane PR the reviewer no longer emits follow-up-class findings at all, so a
+       `CHANGES_REQUESTED` there is blocking-class by construction; the follow-up-class ruling
+       below is the goal lane's): do NOT dispatch a
        fix round. Instead, in THIS order (ADR-086, W1 write tier):
        1. **Flag each shortfall in `specs/` on the requirement it violates** — a `⚑ gap
           (YYYY-MM-DD, PR #N → work #M): <one line>` line (spec rule 10) — **committed and pushed
@@ -507,7 +519,10 @@ job, in order (re-read live state first, exit clean if someone already closed it
    the store/child-set thresholds are met. The close is still the entire point of the widened clause.
 3. **Harvest the review `Follow-ups:` bullets (FU-090a).** Read every review on the merged PR
    (`gh pr view <PR> --json reviews`); each bullet under a `Follow-ups:` heading becomes ONE
-   issue on the SAME repo — title from the bullet, body = the bullet verbatim + provenance
+   issue on the SAME repo. A review carries a `Follow-ups:` section only where a container
+   absorbs it (ADR-127); an `Out of scope (no container):` comment is the codeowner's read at
+   merge, NEVER a harvest source — do not mint from it. A merged containerless PR usually
+   harvests nothing; say so in the closing comment — title from the bullet, body = the bullet verbatim + provenance
    (`Harvested from PR #N review (issue #M)`), any `track/*` label inherited from the source
    issue (reporting decor only since ADR-097 — the scheduler no longer reads it).
    **The body's machine keys are the machine block, composed by the writer** (§Authoring an
@@ -1101,7 +1116,8 @@ to prevent:
 1. **Follow-up-class path only.** Never to unstick a red PR, a genuinely blocking finding, or a
    round you simply want to end. Those have their own terminals above.
 2. **The loop reviewer's own verdict only** (`homelab-reviewer[bot]`). A human's
-   changes-requested is a conversation, not a stale status — escalate instead.
+   changes-requested is a directive, not a stale status — dispatch the fix round it orders
+   (step 7's human-CR bullet, ADR-127), or escalate when it asks a question rather than an edit.
 3. **The message carries the ruling AND the filed follow-up id.** Say that the finding *stands
    as correct and is being acted on*, and that it is the merge-blocking **status** that is stale
    — not the review. A bare "superseded" reads as the coordinator overruling the reviewer, which
@@ -1403,7 +1419,7 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    (not a new branch), feeding it the reviewer's comments — same round mechanics as steps 3–5 above. If
    the estimator says `⚠ ESCALATE` → `agent/blocked` + comment, stop.
 4. **Loop to green.** Worker pushes → CI re-runs → re-dispatch the reviewer. Repeat within the round
-   bound (max 3). Green + `APPROVED` is the target.
+   bound (max 5, ADR-127). Green + `APPROVED` is the target.
 5. **Hand off to the human — do NOT merge.** The PR is un-armed by design; your approval does not merge
    it. Relabel **`major/awaiting-human`** and comment "migration documented, CI green, reviewer-approved —
    ready for a human to merge" (link the reviewer's summary). A human reads the documented trail and

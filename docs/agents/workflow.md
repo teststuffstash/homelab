@@ -434,8 +434,11 @@ the changed lines is #1224's parts-coverage leg, not this gate.
 
 ### Hazards to bake in from day one
 
-- **Bounded rounds** — max review rounds (e.g. 3) then escalate; a flaky reviewer/CI otherwise burns
-  the per-project budget forever.
+- **Bounded rounds** — max logic rounds (5 since ADR-127, 2026-09-11; was 3) then escalate; a
+  flaky reviewer/CI otherwise burns the per-project budget forever. The count lives in three
+  places that must agree: the coordinator brief's invariants line, the launcher's env-card
+  default (`ROUNDS_MAX`), and the scan's `RED_ROUNDS_MAX`; the reflex's per-issue verdict
+  breaker (`REVIEW_ROUNDS_MAX`, 12) sits above them as the runaway belt.
 - **Idempotency** — webhook delivery is at-least-once; key a worker off `(issue, base-sha, round)` so
   a redelivered event doesn't spawn two pods. Enforce it mechanically, not by convention: the key
   IS the Job name (`fix-<repo>-<issue>-r<round>`) — `kubectl create` with a deterministic name is
