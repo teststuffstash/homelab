@@ -591,7 +591,12 @@ homelab#158 shape (OpenRouter capacity down → served *defers* while the ladder
 the coordinator/reviewer safety net" — §M10). The separation survives; what changes is that it is
 now a separation under *normal* conditions rather than an absolute.
 
-⚖ **Platform workers STAY on the subscription (operator ruling, 2026-08-12, v1.2 planning).**
+⚖ **Platform workers STAY on the subscription (operator ruling, 2026-08-12, v1.2 planning) —
+SUPERSEDED 2026-09-11 (operator): the platform claim rides `deepseek/deepseek-v4-flash` primary
+with `deepseek/deepseek-v4.1-flash` as the next-stronger escalation entry (`workerModelFallbacks[0]`
+— the arbitrate re-dispatch-stronger and the budget re-grade land there in shadow mode); the M12
+degrade below still returns rides to `claude/haiku` at the credit floor.** The 2026-08-12 text stands
+as history:
 The rail-move option (platform workers → OpenRouter, freeing the pool and making `Budget:` real
 money) was considered and REJECTED for now: the subscription's 5h/7d windows are budget caps that
 live OUTSIDE anything a platform ride can edit, and platform workers are exactly the rides that

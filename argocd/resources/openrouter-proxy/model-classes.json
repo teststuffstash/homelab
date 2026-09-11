@@ -207,6 +207,7 @@
   "claude/opus": "premium",
   "claude/fable": "premium",
   "deepseek/deepseek-v4-flash": "cheap",
+    "deepseek/deepseek-v4.1-flash": "cheap",
   "deepseek/deepseek-v4-pro": "large",
   "tencent/hy3": "cheap",
   "poolside/laguna-s-2.1": "cheap",
