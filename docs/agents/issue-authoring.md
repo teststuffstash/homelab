@@ -363,8 +363,10 @@ the gap, and the signals they name are what the rungs below encode:
    `stint:`, `theme:`, `post-launch:` or `retro-batch:` ancestor, or a goal-lane base; a closed
    container is none. With `none` the `Follow-ups:` channel does not exist for that review: every
    in-diff finding past the harvest bar is BLOCKING, enumerated comprehensively in ONE
-   `CHANGES_REQUESTED`; out-of-diff work lands as an `Out of scope (no container):` comment the
-   codeowner reads at merge; the harvest has nothing to mint. Evidence: the 2026-09-11 codeowner
+   `CHANGES_REQUESTED`; an out-of-diff finding on worker-authorable paths blocks too and the
+   coordinator WIDENS the issue's `Touches` before the fix round (the same PR absorbs it — no
+   follow-up issue exists); only operator-only paths land as an `Operator-lane (no container):`
+   comment the codeowner reads at merge; the harvest has nothing to mint. Evidence: the 2026-09-11 codeowner
    queue audit ([`../spikes/codeowner-queue-audit.md`](../spikes/codeowner-queue-audit.md) — 7 of
    10 latent follow-ups on the 8 parked PRs were in-diff, 0 harvested, 0 🌱 triaged since 08-31)
    and #1451's three inert days (ADR-122 (1): standalone work has no decider). Position filters the
