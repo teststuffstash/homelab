@@ -396,11 +396,15 @@ transitions:
     owner: scan ci-red clause (attempt cap) → agent/arbitrate → MP-T11 tie-break
     when: "armed ∧ CI-red ∧ fix-round attempts ≥ RED_ROUNDS_MAX (the Red→Arbitrate edge the FSM lacked — symmetric with the review loop's ROUNDS_MAX→arbitrate)"
     status: guarded
-    unreplayed: "the RED_ROUNDS_MAX cap leg — extend the ci-red fixtures on next touch"
+    replay:
+      - agents/replay/fixtures/ci-red-stale-sha-hold
+      - agents/replay/fixtures/ci-red-stale-sha-escalates
     guards:
       - desc: "scan labels agent/arbitrate + comments when red attempts hit the cap; the existing arbitrate clause + coordinator tie-break take over (re-dispatch stronger / close / escalate)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red → agent/arbitrate" }
-    incidents: ["FU-115: the red loop livelocked forever (no exhaustion edge); this is MP-T11 ported to the CI-red side"]
+      - desc: "stale-sha assertion: per-sha check-runs query verifies conclusion.head_sha == headRefOid before escalation (FU-1529 stale-sha), so a push that fixes red is not invisible during the ~1min statusCheckRollup eventual-consistency window"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "gh api repos.*check-runs" }
+    incidents: ["FU-115: the red loop livelocked forever (no exhaustion edge); this is MP-T11 ported to the CI-red side", "FU-1529: stale-sha re-escalation on the ci-red→arbitrate edge (human-ruling hold split to #1544)"]
 
   - id: MP-T14
     name: issue → review at PR-open, footprint releases
