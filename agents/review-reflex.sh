@@ -27,7 +27,7 @@
 #
 #   Env (all optional): AGENT_REPOS="sleep-tracking snore-recorder"  ORG=teststuffstash
 #                       REVIEW_CONCURRENCY=2  REVIEWER_NS=agent-coordinator  REVIEWER_LOGIN=homelab-reviewer
-#                       REVIEW_ROUNDS_MAX=8
+#                       REVIEW_ROUNDS_MAX=12
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "${HERE}/machine-comment.sh"
@@ -94,7 +94,7 @@ WORKER_AUTHOR="${WORKER_AUTHOR:-app/homelab-agents-1234}" # the worker App's PR-
 # carrying `Base: <branch>`, 2026-08-05) and is un-armed on purpose — C9 must not "repair" that.
 # Every repo in the fleet uses master; overridable rather than hardcoded at the jq call site.
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-master}"
-ROUNDS_MAX="${REVIEW_ROUNDS_MAX:-8}"                   # circuit breaker: max bot verdicts per ISSUE, ever
+ROUNDS_MAX="${REVIEW_ROUNDS_MAX:-12}"                  # circuit breaker: max bot verdicts per ISSUE, ever (8→12 with the 5-round logic cap, ADR-127)
                                                        # (summed across every PR that references it — homelab#156)
 KUBECTL="$(command -v kubectl || echo kubectl)"
 
