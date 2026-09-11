@@ -750,7 +750,7 @@ render_env_card() {
     printf '%s\n' "- **Web research: YES, via the platform endpoint** (this harness has no built-in web tool): \`curl -sS -X POST \${AGENT_SEARCH_URL}\` with \`-H \"Authorization: Bearer \$OPENROUTER_API_KEY\" -H 'Content-Type: application/json' -d '{\"q\":\"<your question>\"}'\` → JSON \`{answer, citations:[{url,title}]}\`. The search runs server-side, so it works under the egress posture above; it spends a few cents of THIS ride's budget per call, so ask few, real questions. Cite the URLs it returns, and if it returns no citations say the claim is unverified rather than filling the gap from memory."
   fi
 
-  printf '%s\n' "- **Round ${ROUND}** of ${ROUNDS_MAX:-3} (a CHANGES_REQUESTED review or CI-red-on-your-change costs a round; infra failures don't). Land one tight, correct change."
+  printf '%s\n' "- **Round ${ROUND}** of ${ROUNDS_MAX:-5} (a CHANGES_REQUESTED review or CI-red-on-your-change costs a round; infra failures don't). Land one tight, correct change."
   # WHY: the branch PREFIX is recipe-owned (fix/ fixer, research/ researcher) — the FU-126 audit
   # caught this card claiming fix/-only while a research ride legitimately pushed research/*
   # (a compliance-minded model could deadlock on the contradiction). Keyed on the RECIPE, not on
