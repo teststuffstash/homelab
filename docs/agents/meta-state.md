@@ -10,6 +10,17 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-11 data-gathering seat, no corpus load — two audits for the next
+  session, NO actions taken):** [`docs/spikes/responder-week-audit.md`](../spikes/responder-week-audit.md)
+  (every responder write 09-04→09-11: 33 writes = 5 issues + 28 comments on 14 threads; 24/33
+  noise, 19 grafts onto reporter-keyed magnets (#811/#884/#241/#103/#857); 16/19 threads already
+  covered by TICK-LOG/FU; a per-open-issue "what to do" list of 19 — #811 c2 answers the
+  meta-state (4) Loki question) and
+  [`docs/spikes/codeowner-queue-audit.md`](../spikes/codeowner-queue-audit.md) (8 parked PRs in
+  5 clusters, 2 rebase conflicts (#1541×#1540, #1543×#1542); follow-ups 7 in-diff vs 3 genuine,
+  oracle-fleet#554 approved with two in-diff defects; section-scoped corpus subset ≈15 % of the
+  full load). Structural findings are untracked (grep negative) — operator's call whether they
+  become FUs.
 - **⚑ PICKUP (2026-09-10 afternoon seat, ~14:3x–19:3xZ — the Garage lessons read + fix list; arc in
   TICK-LOG):** landed + verified #1588 (write probe alive — it had pushed 400s since 09-08; Silent
   absent-safe; GcBacklog 26h = the 24h tombstone delay; 30d SLO recording rules), #1589 (Garage
