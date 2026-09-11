@@ -221,7 +221,9 @@ below) and the track label inherited.
 Mechanism: the scan emits **`merged-closeout`** units for issues closed by a merged PR but still
 `agent/in-progress` (21-day window, cap 3/repo/scan, `agent/error` excluded). The item session's
 play (coordinator README §merged-closeout) is: verify the outcome on master → flip `agent/done` →
-file each review `Follow-ups:` bullet as an inert issue → one closing comment. Verified empty-safe
+file each `Follow-ups:` bullet of a LIVE review (never a `DISMISSED` one — an ended round, its
+bullets superseded by the re-review; 2026-09-11, #1595) as an inert, label-less issue → one
+closing comment. Verified empty-safe
 on all three stacks.
 
 **Visibility slice shipped 2026-07-18:** the scan reports 🌱 bot-authored issues lacking

@@ -527,9 +527,13 @@ job, in order (re-read live state first, exit clean if someone already closed it
    master)"`) — this close is what moves the goal's burn-down (deterministic, zero tokens since
    ADR-106 (3)) and unblocks `Depends-on:` siblings; a `goal-checkpoint` session fires only when
    the store/child-set thresholds are met. The close is still the entire point of the widened clause.
-3. **Harvest the review `Follow-ups:` bullets (FU-090a).** Read every review on the merged PR
-   (`gh pr view <PR> --json reviews`); each bullet under a `Follow-ups:` heading becomes ONE
-   issue on the SAME repo. A review carries a `Follow-ups:` section only where a container
+3. **Harvest the review `Follow-ups:` bullets (FU-090a).** Read the LIVE reviewer verdicts on
+   the merged PR — `gh pr view <PR> --json reviews`, keeping only reviews whose `state` is
+   `APPROVED` or `CHANGES_REQUESTED`; **a `DISMISSED` review is an ended round and never a
+   harvest source** (its bullets were superseded by the re-review that replaced it — the
+   ADR-127 re-read, the arbitration dismissal play — and re-minting them re-opens a deferral the
+   loop already retired; #1541 → #1595). Each bullet under a `Follow-ups:` heading in a LIVE
+   review becomes ONE issue on the SAME repo. A review carries a `Follow-ups:` section only where a container
    absorbs it (ADR-127); an `Operator-lane (no container):` comment is the codeowner's read at
    merge, NEVER a harvest source — do not mint from it. A merged containerless PR usually
    harvests nothing; say so in the closing comment — title from the bullet, body = the bullet verbatim + provenance
@@ -559,8 +563,11 @@ job, in order (re-read live state first, exit clean if someone already closed it
      2026-08-07, only the native edge gates. A failed edge-create now means the dependency does
      NOT gate: retry once, and on second failure say so in the closing comment so a human wires it.
    **INERT by loop-safety
-   breaker #1: never add `agent-fix` or `agent/queued`** — the scan's 🌱 clause surfaces them
-   for human triage.
+   breaker #1: a harvested issue carries NO label of any kind — not `agent-fix`, not
+   `agent/queued`, not a `track/*` you would otherwise inherit from a source that has none** —
+   the scan's 🌱 clause surfaces unlabelled bot-authored issues for human triage, and
+   `agent-fix` is a human suitability judgment (ADR-109), never the harvest's (#1595 arrived
+   wearing it).
    **blockedBy filing-edge (homelab#1152)**: when the filed defect wedges live work, wire the
    native `blockedBy` edge FROM the stuck issue in the same act (`gh api -X POST
    repos/<slug>/issues/<STUCK>/dependencies/blocked_by -F issue_id=<FILED's numeric .id>`) and
