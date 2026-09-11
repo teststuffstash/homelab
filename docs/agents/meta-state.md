@@ -11,7 +11,7 @@ never the session's arc — that is TICK-LOG's.)
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-09-11 evening corpus session — ADR-127/128 + deepseek workers; arc in TICK-LOG):**
-  (1) **Codeowner queue is CLEAN-READ READY:** #1538, #1540, #1541, #1545 bot-approved at head with no
+  (1) **Codeowner queue DRAINED 19:4x–20:1xZ** (#1541/#1543/#1545/#1538/#1542 + sleep-tracking#142 merged; #1540 = the loop's merge-conflict lane, now with a play — PR#1596). **Read next: #1576** — deepseek round 3 was running at 20:1xZ; if it landed the `parity-regex-sigpipe` pin, the codeowner read is the only remaining act (arm is on); if it no-op'd again, that is the first deepseek-vs-haiku data point on directive-following — record it, do not re-poke blind. Was: #1538, #1540, #1541, #1545 bot-approved at head with no
   Follow-ups (re-reviewed under ADR-127 18:32–18:36Z); #1543 labels cleared (waits its master-lane
   review turn); #1542 approved under its Goal-#1231 container. Merge order per the queue spike
   (#1541×#1540 and #1543×#1542 each need one rebase). oracle-fleet#554 is CHANGES_REQUESTED by the
