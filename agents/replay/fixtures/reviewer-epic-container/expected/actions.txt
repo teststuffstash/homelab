@@ -25,7 +25,7 @@ OUT row_f POST-LAUNCH-caps-space>child container=post-launch#90
 OUT row_g label-keyed-goal>child container=goal#100
 OUT row_h goal-lane container=goal-lane
 OUT row_i parent-unreadable container=unknown
-OUT row_j none=rule-appended rc=0
+OUT row_j none=rule-appended+widen rc=0
 OUT row_k container=untouched rc=1
 OUT row_l unknown=untouched rc=1
 OUT epic_container_walk_executed=1

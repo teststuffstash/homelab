@@ -2026,8 +2026,10 @@ F1/F2). **Decision:** (1) the reviewer's `Follow-ups:` channel exists ONLY where
 destination — a goal-lane PR or an OPEN epic ancestor (Goal, stint, theme, post-launch bucket,
 retro batch; `epic-container-walk`, a closed container is none). With no container every in-diff
 finding past the harvest bar is BLOCKING (the maturity bias decides severity only inside a
-container), out-of-diff work is a plain `Out of scope (no container):` comment for the codeowner,
-and nothing is harvested. (2) A `CHANGES_REQUESTED` enumerates EVERY blocking finding in one review
+container), out-of-diff work on worker-authorable paths blocks as well — the coordinator widens
+the issue's `Touches` before the fix round so the same PR absorbs it (amended 2026-09-11, same
+sitting: the first cut left it as a comment the codeowner would have filed by hand) — only
+operator-only paths stay an `Operator-lane (no container):` comment, and nothing is harvested. (2) A `CHANGES_REQUESTED` enumerates EVERY blocking finding in one review
 (re-scan the whole diff); a HUMAN's request on a worker PR is a directive — the coordinator
 dispatches the fix round, never rules it follow-up-class; the reviewer verifies each ask at head.
 (3) Logic rounds 3→5 (brief, env card, model-routing), `RED_ROUNDS_MAX` 3→5, the reflex's per-issue
