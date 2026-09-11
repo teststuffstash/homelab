@@ -1,0 +1,33 @@
+CALL gh api repos/teststuffstash/test-project/issues/11/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/10 --jq [(.state // ""), (.title // ""), ([.labels[]?.name] | join(","))] | @tsv
+CALL gh api repos/teststuffstash/test-project/issues/51/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/50 --jq [(.state // ""), (.title // ""), ([.labels[]?.name] | join(","))] | @tsv
+CALL gh api repos/teststuffstash/test-project/issues/61/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/60 --jq [(.state // ""), (.title // ""), ([.labels[]?.name] | join(","))] | @tsv
+CALL gh api repos/teststuffstash/test-project/issues/60/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/71/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/70 --jq [(.state // ""), (.title // ""), ([.labels[]?.name] | join(","))] | @tsv
+CALL gh api repos/teststuffstash/test-project/issues/70/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/81/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/80 --jq [(.state // ""), (.title // ""), ([.labels[]?.name] | join(","))] | @tsv
+CALL gh api repos/teststuffstash/test-project/issues/91/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/90 --jq [(.state // ""), (.title // ""), ([.labels[]?.name] | join(","))] | @tsv
+CALL gh api repos/teststuffstash/test-project/issues/101/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/100 --jq [(.state // ""), (.title // ""), ([.labels[]?.name] | join(","))] | @tsv
+CALL gh api repos/teststuffstash/test-project/issues/11/parent --jq .number
+CALL gh api repos/teststuffstash/test-project/issues/10 --jq [(.state // ""), (.title // ""), ([.labels[]?.name] | join(","))] | @tsv
+OUT row_a goal>child container=goal#10
+OUT row_b stint>child container=stint#50
+OUT row_c closed-goal>child container=none
+OUT row_d plain>child container=none
+OUT row_e goal>theme>child container=theme#80
+OUT row_f POST-LAUNCH-caps-space>child container=post-launch#90
+OUT row_g label-keyed-goal>child container=goal#100
+OUT row_h goal-lane container=goal-lane
+OUT row_i parent-unreadable container=unknown
+OUT row_j none=rule-appended rc=0
+OUT row_k container=untouched rc=1
+OUT row_l unknown=untouched rc=1
+OUT epic_container_walk_executed=1
+ERR WARN reviewer: epic-container walk could not read parent #10 (teststuffstash/test-project) — container unknown, the Follow-ups: channel stays open (ADR-127)
+RC 0
