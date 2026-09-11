@@ -8359,3 +8359,26 @@ reads 95.9–98.0 % per pod — ⚠ the source 1h series is only ~2 days old (re
 garage-0 during its rejoin (probe back to 1), `GarageTableGcBacklog` re-pending on the 26h `for`.
 Direct commits this session: FU-223/FU-229 + this journal; pushed at wind-down.
 
+
+## 2026-09-11 — data-gathering seat, no corpus (operator: "just data gathering for the next session")
+
+Two subagent audits, written to `docs/spikes/` (the scratchpad does not survive a session):
+- `responder-week-audit.md` — every responder write 09-04→11. The lane was DEAD 09-04→09-08 16:18Z
+  (FU-127 class, PR#1522). Then 33 writes on 19 threads: 5 issues + 28 comments, 19 of 28 GRAFTS
+  onto reporter-keyed magnet threads, 24/33 noise (the thinkcentre drive-window storm = 9 writes in
+  20 min; 4 seat proof-fires triaged as defects; 4 confident wrong causes), 6 genuine signal, 16/19
+  threads already covered by TICK-LOG/FU. Per-open-issue disposition list (19). #811 c2 answers the
+  09-10 meta-state (4) Loki question: the WAL triage existed at 00:19Z, ~5 h before the seat.
+- `codeowner-queue-audit.md` — 8 parked PRs in 5 clusters (homelab #1538/#1540/#1541/#1542/#1543/#1545,
+  oracle-fleet#554, sleep-tracking#142); follow-ups 7 in-diff vs 3 genuine (none harvested yet —
+  harvest runs at merged-closeout); oracle-fleet#554 APPROVED with two in-diff defects; two rebase
+  conflicts (#1541×#1540 `coordinator-scan.sh`, #1543×#1542 `rows.psv`); section-scoped corpus
+  subset ≈122 KB vs 791 KB full.
+Operator questions answered in-session (recorded in the spike): blind-reader read = ~1 in 5 writes
+actionable on its own, 9 confidently wrong, all seat-driven-change shaped; design read on "the
+responder cannot see what the seat changed" → silence + declared window (FU-230), bucket-first
+findings + a `triage` meta-events source (FU-231), reporter-keyed grafts (FU-232); handoff channel
+and an MCP server both ruled out for this (pod cannot reach the host mount; no consumer for the read
+side yet). FU-219 currency: the SIGPIPE site is named (#1547 → PR#1576). Nothing applied, nothing
+merged, no GitHub writes. Direct commits: spikes, tracker, meta-state, this journal; pushed at
+wind-down.

@@ -674,8 +674,8 @@ the block needs pruning, not more headings.
       the doorbell-collapse absorbs or the `coordinate(perstack): stack=…` banner; sibling runs
       of the same template succeed. A pipeline writer killed by an early-exiting reader under
       `set -o pipefail` in the scan preamble — the three `| grep -q` sites feed small variables,
-      so the site is not named; suspects are a `gh … | head`/`| grep -q` over a large listing
-      without `|| true`. Surfaced by the [switchboard](glossary.md) OOM read,
+      so the site was not named — **named 2026-09-09 by responder #1547: the `coordinator-scan.sh:1495`
+      parity-assertion `| head -1` (PR#1576, parked `blocked-on: human`, needs the ADR-103 replay pin).** Surfaced by the [switchboard](glossary.md) OOM read,
       [`incidents/2026-09-06-switchboard-oom-silent-failures.md`](incidents/2026-09-06-switchboard-oom-silent-failures.md).
       **Next:** on the next 141, pull the run's Loki tail with `container="main"` and bisect the
       preamble between the last printed line and the first GitHub listing; fix = `>/dev/null`
@@ -941,6 +941,33 @@ the block needs pruning, not more headings.
       #933 checkpoint-bucket defect. **Next:** after the G-B assembly, read `probe-platform`'s
       first tick; oracle's probe.md stays #289 (parked with the stack); then the
       sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
+
+- [ ] **FU-230** — **The responder cannot see seat-driven change: no maintenance silence, no
+      declared change window.** 2026-09-04→11 audit: 7 of its 9 confidently-wrong writes had a
+      cause the seat made outside the cluster's view (thinkcentre drive windows → 9 writes in
+      20 min; PVC re-cuts, the rotation loop, belts shipped 30 min earlier during the rf=3
+      rollout) and the session guessed a story (cable, spindle, churn) instead of "unknown". The
+      ArgoCD observation-window line (`responder-argo.yaml` ~L553) is the precedent — GitOps
+      changes only. **Next:** (a) `node-maintenance.sh settle/down` opens a node-scoped Alertmanager
+      silence, `up` expires it (durability = FU-195); (b) a seat-written ConfigMap window record the
+      brief prints like the WIN line. Design read: `docs/spikes/responder-week-audit.md` §Design read.
+- [ ] **FU-231** — **Responder report-only findings land as GitHub comments; route them to the
+      bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =
+      actionable, history = git/S3). 26 of 33 writes were report-only comments, 24 noise; the one
+      find ahead of the seat (#811 c2, Loki WAL, ~5 h early) sat as comment 2 on a Garage-quota
+      thread, unread. **Next:** typed finding record + transcript under FU-210's
+      `homelab/alert-<fp>/` prefix; `meta-events.sh` gains a `triage` source (new prefixes since
+      last tick); file an issue only on `fix-verdict: fix` + named surface (ADR-122) + outside an
+      FU-230 window. MCP server deliberately NOT part of this (README §Open, no consumer yet).
+      Design read: `docs/spikes/responder-week-audit.md` §Design read.
+- [ ] **FU-232** — **Reporter-keyed subject collapse: the responder's `subject:` is the metric's
+      EXPORTER, not the failing object — 19 of 28 comments this week grafted onto 5 magnet
+      threads** (kube-state-metrics → #811/#882/#542, pushgateway → #241, node-exporter → #103,
+      the cilium DaemonSet → #857, `ns:monitoring` → #884). The #149 one-subject rule is followed
+      to the letter and still lands unrelated problems on one thread. **Next:** derive the subject
+      from the alert's object labels (node / persistentvolumeclaim / pod / workflow) before the
+      reporter workload; extend `responder-behaviour-test.sh` §#149 with the five magnet shapes.
+      Evidence: `docs/spikes/responder-week-audit.md` §Totals.
 
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
 
