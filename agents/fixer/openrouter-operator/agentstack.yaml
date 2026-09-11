@@ -96,9 +96,17 @@ spec:
   # via FU-088 rather than switching rails. The deny line stays (its REVISIT condition is still
   # unmet). Re-flip to flash is a one-line claim edit when the subscription pool is the one
   # under pressure again.
+  # DEEPSEEK PRIMARY 2026-09-11 (operator: "put deepseek/deepseek-v4-flash as the default,
+  # deepseek/deepseek-v4.1-flash as the next stronger escalation model as the workers on
+  # platform"): workerModel is the round-1 ride; workerModelFallbacks[0] is the NEXT-STRONGER
+  # escalation — in shadow mode the chain IS the served walk, so an arbitrate "re-dispatch
+  # stronger" ruling and the agent-budget re-grade both land there, and a strike walks to it
+  # too. The M12 degrade still returns rides to claude/haiku LOUDLY at the OpenRouter credit
+  # floor (claudeTier stays true below for that reason). Supersedes the 2026-08-12 "platform
+  # workers stay on the subscription" ruling (model-routing.md §M12). The 0731 deny stands.
   modelDeny: [deepseek/deepseek-v4-flash-0731]
-  workerModel: claude/haiku
-  workerModelFallbacks: []
+  workerModel: deepseek/deepseek-v4-flash
+  workerModelFallbacks: [deepseek/deepseek-v4.1-flash]
   repos:
     # agent-runtime: FIXER ENABLED 2026-08-08 — the 2026-07-16 "No fixer: these build the
     # agent images" ruling (kept for agent-coordinator below) was superseded for THIS repo by
