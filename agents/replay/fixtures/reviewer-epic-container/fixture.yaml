@@ -1,0 +1,35 @@
+# Reviewer epic-container walk + the NO CONTAINER rule (ADR-127, 2026-09-11)
+#
+# THE CONTRACT. `epic-container-walk <issue> <repo_slug> <pr_base>` prints where this review's
+# deferrals could land: `goal-lane` on a goal/** base (no walk), else the nearest OPEN epic
+# ancestor as `<kind>#<n>` — kind from the `task/goal` LABEL (goal) or the TITLE prefix
+# (`Goal:` / `stint:` / `theme:` / `post-launch:` / `retro-batch:`, case-insensitive, leading
+# whitespace tolerated) — else `none`; a CLOSED container is walked past, an unreadable parent
+# prints `unknown` + one WARN (rule #6: the Follow-ups: channel stays open on unknown).
+# `container-rule-append <value>` mutates PROMPT with the NO CONTAINER RULE only on `none`.
+#
+# ONE constructed world (teststuffstash/test-project has no such issues); every parent-null read
+# is recorded (the stub would otherwise serve `…-issues-N` for `…-issues-N-parent`):
+#   #10  Goal (open, label task/goal)      ── #11 child
+#   #10  Goal ── #80 theme: (open)         ── #81 child
+#   #50  stint: (open)                     ── #51 child
+#   #60  Goal (CLOSED, label task/goal)    ── #61 child          → walked past → none
+#   #70  scan: plain work item (open)      ── #71 child          → none
+#   #90  "  POST-LAUNCH:" (open, caps+space) ── #91 child
+#   #100 label-keyed Goal, non-Goal title (open) ── #101 child
+# Rows, computed from the tree + the contract:
+#   a  #11  → goal#10          b  #51 → stint#50        c  #61 → none (closed goal, then null parent)
+#   d  #71  → none             e  #81 → theme#80 (nearest container wins, the Goal above is not reached)
+#   f  #91  → post-launch#90   g  #101 → goal#100 (label-keyed)     h  #11 on base goal/10-x → goal-lane, zero reads
+#   i  #11 with #10 unreadable (per-call STUB_GH_… override) → unknown + WARN
+#   j/k/l  container-rule-append: none → rule appended · goal#10 → untouched, rc 1 · unknown → untouched, rc 1
+pins:
+  - IL-T15
+name: reviewer-epic-container
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:epic-container-walk
+  - block:no-container-rule
+  - file:post.sh

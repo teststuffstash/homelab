@@ -2018,3 +2018,30 @@ adoption gate = wave 2 reading ≤5 interventions / 0 out-of-sitting summonses /
 the build waits for it; the dogfood is the first post-S8 platform Goal, outside the stint;
 `Origin:` + the typed defer/release are ADR-122's (subsumed). Design home:
 `docs/agents/issue-authoring.md` §Theme-branch decomposition.
+
+### ADR-127 — No container, no Follow-ups: the reviewer defers only into an open epic; elsewhere in-diff findings block, comprehensively; the round caps rise 3→5 (2026-09-11)
+
+**Status:** Accepted (operator direction 2026-09-11, from the codeowner-queue audit + retro r3
+F1/F2). **Decision:** (1) the reviewer's `Follow-ups:` channel exists ONLY where a harvest has a
+destination — a goal-lane PR or an OPEN epic ancestor (Goal, stint, theme, post-launch bucket,
+retro batch; `epic-container-walk`, a closed container is none). With no container every in-diff
+finding past the harvest bar is BLOCKING (the maturity bias decides severity only inside a
+container), out-of-diff work is a plain `Out of scope (no container):` comment for the codeowner,
+and nothing is harvested. (2) A `CHANGES_REQUESTED` enumerates EVERY blocking finding in one review
+(re-scan the whole diff); a HUMAN's request on a worker PR is a directive — the coordinator
+dispatches the fix round, never rules it follow-up-class; the reviewer verifies each ask at head.
+(3) Logic rounds 3→5 (brief, env card, model-routing), `RED_ROUNDS_MAX` 3→5, the reflex's per-issue
+verdict breaker 8→12. **Considered:** keep harvesting into standalone inert issues (status quo: 8
+parked PRs, 7 in-diff follow-ups, 0 harvested, 0 🌱 triaged since 08-31); a master-lane container
+per repo to absorb strays (one more reader on a surface ADR-122 measured unauthorable); keep the cap
+and count waivers (retro r3 F2) — rejected: the loop should run to clean, not park. **Why:** on the
+master lane a deferred in-diff finding costs a whole extra cycle and a codeowner read of a PR with
+known defects (rubric §In-diff findings BLOCK, 2026-08-12) while a harvested sprout has no decider
+(ADR-122 (1); #1451 sat three days inert); the goal lane keeps its economics because its container
+folds. **Consequences:** the depth rule is skipped on `none` (the no-container rule subsumes it);
+pre-prod stack rubrics' "each follow-up becomes its own issue" sentence is stale on the master lane
+(retire at next touch); a stale human `CHANGES_REQUESTED` under a newer bot approval still draws ONE
+coordinator ride that writes `blocked-on: human` — a deterministic scan hold + board row is NOT
+built, re-open on the second such ride; the cap raise re-tunes, it does not relax, the 2026-09-01
+"caps remain the loop control" ruling. Homes: `agents/reviewer-session.sh`, replay
+`reviewer-epic-container`, `docs/agents/issue-authoring.md` §The sprout index rung 2.

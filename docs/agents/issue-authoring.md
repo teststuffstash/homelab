@@ -358,6 +358,17 @@ the gap, and the signals they name are what the rungs below encode:
    independent. Validated on the chain that prompted it: openrouter-operator #21→#17→#14→#10 walks
    to 3/2/1/0, and #17 (depth 2) is the review that sprouted #21 — under this rule it emits nothing
    to harvest. The BUDGET half is separate and lives in the launcher (Σ child caps ≤ `Budget:`).
+   **The DESTINATION half shipped 2026-09-11 (ADR-127), in the reviewer too:** `epic-container-walk`
+   resolves whether an OPEN epic exists to absorb a deferral — a Goal (`task/goal` or `Goal:`),
+   `stint:`, `theme:`, `post-launch:` or `retro-batch:` ancestor, or a goal-lane base; a closed
+   container is none. With `none` the `Follow-ups:` channel does not exist for that review: every
+   in-diff finding past the harvest bar is BLOCKING, enumerated comprehensively in ONE
+   `CHANGES_REQUESTED`; out-of-diff work lands as an `Out of scope (no container):` comment the
+   codeowner reads at merge; the harvest has nothing to mint. Evidence: the 2026-09-11 codeowner
+   queue audit ([`../spikes/codeowner-queue-audit.md`](../spikes/codeowner-queue-audit.md) — 7 of
+   10 latent follow-ups on the 8 parked PRs were in-diff, 0 harvested, 0 🌱 triaged since 08-31)
+   and #1451's three inert days (ADR-122 (1): standalone work has no decider). Position filters the
+   tail; destination decides whether a tail may start. Replay: `reviewer-epic-container`.
 3. **The terminal is a RETRO CHECKPOINT, not a reflex revert** (operator ruling). It means "a good
    place to STOP and rethink": the goal was probably sound but unexpected complexity arose, so a
    **human retro** decides how to proceed — re-scope, collapse-in-PR, or, only in the extreme, a

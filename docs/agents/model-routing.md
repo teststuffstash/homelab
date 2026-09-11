@@ -73,7 +73,7 @@ paid pick is the one systematically failing. Reliability is a *measurement*, not
 ## Design: three rules
 
 1. **Rounds ≠ strikes.** A *logic* failure (reviewer `CHANGES_REQUESTED`, CI red on the change) is a
-   ROUND — bounded at 3, then `agent/blocked`, because that escalation is genuine: the task is
+   ROUND — bounded at 5 (ADR-127, 2026-09-11; was 3), then `agent/blocked`, because that escalation is genuine: the task is
    ambiguous or hard, a human must look. An *infra* failure (harness-death/truncation, auth-storm,
    provider 404/5xx, timeout) is a STRIKE — it consumes **no round**, blacklists that model **for
    this task only**, and triggers an **immediate same-tick re-dispatch** on the next model in the
@@ -97,7 +97,7 @@ Maps 1:1 onto the `error_class` shipped with FU-057 (live in `agent-session.sh` 
 
 | error_class | counter | reaction |
 |---|---|---|
-| `changes-requested`, `ci-failed` | **round** (max 3) | next round, same chain position |
+| `changes-requested`, `ci-failed` | **round** (max 5 — ADR-127) | next round, same chain position |
 | `harness-death` (goose `-32602`), `auth-storm` (401/403), `timeout`, provider 404/5xx | **strike** per (task, model) | same round, next chain model, re-dispatch NOW |
 | `budget-403-account` | **strike** per (task, model) | same round, next chain model, re-dispatch NOW — operator top-up needed, not an estimator fix |
 | `budget-403-key`, `budget-exhausted-key` | **key-retry** (not a strike) | same round, **same model**, fresh session key — mint defect (FU-202) |
