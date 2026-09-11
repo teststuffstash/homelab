@@ -10,17 +10,23 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-11 data-gathering seat, no corpus load — two audits for the next
-  session, NO actions taken):** [`docs/spikes/responder-week-audit.md`](../spikes/responder-week-audit.md)
-  (every responder write 09-04→09-11: 33 writes = 5 issues + 28 comments on 14 threads; 24/33
-  noise, 19 grafts onto reporter-keyed magnets (#811/#884/#241/#103/#857); 16/19 threads already
-  covered by TICK-LOG/FU; a per-open-issue "what to do" list of 19 — #811 c2 answers the
-  meta-state (4) Loki question) and
-  [`docs/spikes/codeowner-queue-audit.md`](../spikes/codeowner-queue-audit.md) (8 parked PRs in
-  5 clusters, 2 rebase conflicts (#1541×#1540, #1543×#1542); follow-ups 7 in-diff vs 3 genuine,
-  oracle-fleet#554 approved with two in-diff defects; section-scoped corpus subset ≈15 % of the
-  full load). Structural findings are untracked (grep negative) — operator's call whether they
-  become FUs.
+- **⚑ PICKUP (2026-09-11 data-gathering seat, no corpus load — NO actions taken, no GitHub
+  writes; arc in TICK-LOG):** two audits in `docs/spikes/` for the next corpus session.
+  (1) **Codeowner queue** ([`codeowner-queue-audit.md`](../spikes/codeowner-queue-audit.md)): 8
+  parked PRs, suggested order #1538 → #1545 → #1540/#1541 (one rebases: `coordinator-scan.sh`) →
+  #1542/#1543 (one rebases: `rows.psv`); oracle-fleet#554 was bot-APPROVED with two in-diff defects
+  (wrong `structuredContent` path; English query on an Estonian-only index) — changes-requested it,
+  do not merge; sleep-tracking#142 is a renovate major. The spike names the section-scoped docs per
+  cluster (≈15 % of the corpus) if a full load is not wanted. (2) **Responder week**
+  ([`responder-week-audit.md`](../spikes/responder-week-audit.md)): 19 open responder issues with a
+  one-line disposition each — closes: #1557, #1584, #903, #500, #1580 (drop `agent/queued`); own:
+  #153 (`maxConcurrency` 20→40, one values line), #1547 (PR#1576 needs the ADR-103 replay pin, then
+  codeowner-merge), #1546 (= the #554 read); reads: #857 c6/c7 (cilium-agent memory creep), #811 c2
+  (**answers the 09-10 item (4): the Loki WAL triage existed at 00:19Z, delayed ~6 h on a graft
+  thread** — verify the daily-budget-spent-on-the-storm hypothesis), #103 (one PromQL: m70s major
+  faults vs garage-1 LMDB). (3) **Direction, not decision:** FU-230/231/232 filed from the design
+  read (silence + declared window; bucket-first findings + `triage` meta-events source;
+  reporter-keyed grafts) — operator's call whether to build; FU-219 currency updated.
 - **⚑ PICKUP (2026-09-10 afternoon seat, ~14:3x–19:3xZ — the Garage lessons read + fix list; arc in
   TICK-LOG):** landed + verified #1588 (write probe alive — it had pushed 400s since 09-08; Silent
   absent-safe; GcBacklog 26h = the 24h tombstone delay; 30d SLO recording rules), #1589 (Garage
