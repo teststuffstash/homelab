@@ -96,3 +96,72 @@ Excluded (same login, not responder): #887 and #1467 timelines (coordinator agen
 | homelab#542 KubeDaemonSetRolloutStuck (kube-state-metrics magnet) | nothing (maintenance); structural: silence during `node-maintenance` windows | TICK-LOG 2026-09-09 evening |
 | homelab#882 KubeNodeNotReady wk-01 (kube-state-metrics magnet) | nothing (maintenance) | same |
 | oracle-fleet#228 GithubWorkflowRunFailed CI e2e | nothing (seat replied 09:45; belts + fix landed); oracle's own record | TICK-LOG 2026-09-09 morning |
+
+
+## Blind-reader read (2026-09-11, operator question: "if I had no TICK-LOG, is the signal good enough?")
+
+Each of the 33 writes re-judged on its own text only — could a reader with no session history act on
+it correctly?
+
+| class | writes | examples |
+|---|---|---|
+| Correct AND actionable on its own | 6 | #153 (19/20 query slots verified, concrete `maxConcurrency` bump); #1547 (+ re-fire: exact SIGPIPE line, PR#1576 opened); #811 c2/c3 (Loki WAL corruption + the exact remediation); oracle-fleet#228 (ArgoCD sync rolled all three Garage pods in 31 s → quorum delete failed); #1546's 09-11 comment (PR#554 waits on the codeowner read) |
+| Correct, right action = nothing | 8 | #114 (points at the already-filed root cause), #542, #500 (fix intact, thin sample), #241 ×2 (new belts seeing pre-existing headroom), #1546 ×2, #1580's diagnosis half |
+| Confidently WRONG — a blind reader would do the wrong thing | 9 | #1557 (belt worked as designed, says fix the belt), #903 (chronic churn → another PVC expansion; it was born bloated by seeding), #1580/#1584 (the fix the seat ruled unworkable), #884 c1 ("no fix surface") + c2 ("the sdc spindle"), #103 (spread gap; it is the LMDB page cache), #882 (bad cable), #1013 |
+| Evidence only, no conclusion | 10 | #857 ×7 (five = the maintenance storm, two = real cilium-agent memory-creep data), #100, #811 c1 |
+
+**Reading:** ~1 in 5 writes is good enough to act on blind. The 9 wrongs are not "more research
+needed" hedges — each states a wrong cause with confidence. All 7 non-duplicate wrongs share one
+shape: the cause was something a human did outside the cluster's view (a maintenance window, a PVC
+re-cut, a rotation loop just built, a belt shipped 30 min earlier) and the session filled the gap
+with a plausible story instead of "unknown". The responder is good when the fault lives inside one
+pod/log/gauge it can read; wrong whenever the cause is seat-driven change. The one find that was
+faster than the seat (#811 c2, Loki WAL, ~5 h ahead) landed as comment 2 on an unrelated Garage-quota
+thread and was not read.
+
+## Design read (2026-09-11, operator conversation — direction, NO decision, nothing built)
+
+Grounding: `agents/coordinator/responder-argo.yaml` (the clone at L336; the brief at L683 names only
+`docs/` + `stacks.json`; the ArgoCD observation-window line at L553), `agents/meta-events.sh`
+(FU-166 — the seat's consolidated 120 s event loop), `/workspace/tools/handoff.md` (host-filesystem,
+no network, "user at the keyboard on both ends"), FU-210 (responder transcript upload to the bucket
+under `homelab/alert-<fp>/`), FU-195 (silences live on an emptyDir), ADR-106 (the findings store:
+append, consume at checkpoints, never 1:1 issue mints), ADR-122 (dispatch reads the issue body
+grammar only — a `fix` verdict in a comment is inert), `docs/agents/README.md` §Open ("a homelab MCP
+capability surface — never built; revisit only if a consumer appears"). Corpus NOT loaded
+(`docs/agents/iac-lane.md` §Who owns a symptom may qualify this).
+
+Facts that shape it:
+- The responder DOES clone homelab master (all coordinator-type pods do) — that is where FU-032's
+  cable story came from. The clone gives it history (the tracker, the docs), never the present: the
+  brief does not route it to TICK-LOG/meta-state, and by the 2026-08-30 push-batching rule the
+  current session's arc is not on master until wind-down anyway. A git change log would not help.
+- The handoff channel cannot carry this: a pod cannot reach the host mount, and its contract is a
+  request-for-work with a `Result`, not a finding stream.
+- The seat's "ping me" channel already exists: `meta-events.sh` polls sources (alert, newissue,
+  seatpr, goalcmt, famine, [stint](../glossary.md), blockpark) and prints deltas; a Monitor line wakes the seat.
+
+Operator direction (2026-09-11): **GitHub issues are for ACTIONABLE things; history accumulates in
+git or an S3 bucket, never in issue threads.** Silence is part of the equation, and the seat wants to
+be told directly (during a maintenance window) about what the responder finds — with a triage
+"bucket" BEFORE any issue is filed.
+
+Shape proposed (each leg tracked: FU-230 silence + declared window, FU-231 bucket-first findings,
+FU-232 reporter-keyed subject grafts):
+1. `node-maintenance.sh settle/down` opens a node-scoped Alertmanager silence, `up` expires it —
+   deterministic, no responder change; removes 5 of the 9 wrongs and 5 of the 7 #857 comments.
+2. A seat-written cluster record (ConfigMap, the `responder-seen` shape) declaring the change window
+   — who is at the seat, what is being rolled, which objects to expect alerts on, until when — that
+   the responder brief prints exactly like the ArgoCD observation-window line. Costs no push. An
+   alert outside the declared window reads as "outside your window" (the "I knocked out hp-01"
+   signal); scoping stays per expected alert name + object, never a whole namespace (garage-2
+   flapping and the write-probe 400s were REAL during the rf=3 rollout).
+3. Report-only findings go to the transcripts bucket under FU-210's prefix as a typed finding record
+   next to the transcript; `meta-events.sh` gains a `triage` source (new prefixes since last tick →
+   the seat sees the Loki-WAL class in ≤2 min). Issues only on `fix-verdict: fix` + a named surface
+   (ADR-122 grammar) + outside a declared window. That removes the magnet threads' reason to exist.
+4. MCP stays unbuilt: the push direction needs no server (producer = responder, consumer = the
+   seat's Monitor); the read side ("what fired on hp-01 in the last hour, what did triage say") is
+   `garage-s3.sh` + jq from the jail today. An MCP server is the packaged read for a consumer without
+   jail tooling (a stack jail, a phone) — none has appeared (README's standing rule).
+Term hygiene: "seat window" / "triage bucket" are NOT coined here — glossary check (FU-163) at build.
