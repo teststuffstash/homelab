@@ -356,6 +356,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-currency/dirty-skips` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-currency/probe-fail-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-depth-lane-split` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-epic-container` | actions | - | `agents/reviewer-session.sh` | IL-T15 |
 | `reviewer-exit-contract` | table | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-go-failover/available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/explicit-model` | actions | - | `agents/reviewer-session.sh` | - |

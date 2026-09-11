@@ -429,6 +429,69 @@ sprout-depth-walk() {
 }
 # <<<REPLAY:sprout-depth-walk<<<
 
+# ADR-127 (2026-09-11): the EPIC-CONTAINER walk — is there an OPEN container to absorb this
+# review's deferrals? The Follow-ups: channel only exists where a harvest has somewhere to land: a
+# goal-lane PR (base goal/**) or an OPEN epic ancestor — a Goal (`task/goal` label, or a `Goal:`
+# title), a `stint:`, `theme:`, `post-launch:` or `retro-batch:` container. With none, a deferred
+# finding is harvested into a standalone inert issue no container adopts and no human triages
+# (ADR-122 (1): standalone maintenance work has no decider by construction — the lever is a
+# container, not a reader; homelab#1451 sat three days), while the codeowner reads a PR with the
+# defect still in it (docs/spikes/codeowner-queue-audit.md: 7 of the 10 latent follow-ups on the
+# parked queue were in-diff). Same chain reads as sprout-depth-walk, one field set per hop; a
+# CLOSED container is no container (the walk continues past it). Advisory: an unreadable hop
+# prints `unknown` and the channel stays OPEN (rule #6 — never fail INTO the narrower verdict).
+# >>>REPLAY:epic-container-walk>>>
+epic-container-walk() {
+  # Args: ISSUE REPO_SLUG PR_BASE
+  # Prints: `goal-lane` (base goal/**, no walk) · `<kind>#<n>` for the nearest OPEN container
+  #         ancestor (kind: goal | stint | theme | post-launch | retro-batch) · `none` · `unknown`.
+  local issue="$1" repo_slug="$2" pr_base="$3" _cur _par _row _state _title _labels _hop
+  case "$pr_base" in goal/*) printf '%s\n' "goal-lane"; return 0;; esac
+  _cur="$issue"
+  for _hop in 1 2 3 4 5 6; do
+    _par=$(gh api "repos/${repo_slug}/issues/${_cur}/parent" --jq '.number' 2>/dev/null || true)
+    case "$_par" in ''|*[!0-9]*) break;; esac
+    if ! _row=$(gh api "repos/${repo_slug}/issues/${_par}" --jq '[(.state // ""), (.title // ""), ([.labels[]?.name] | join(","))] | @tsv' 2>/dev/null) \
+       || [ -z "$_row" ]; then
+      echo "WARN reviewer: epic-container walk could not read parent #${_par} (${repo_slug}) — container unknown, the Follow-ups: channel stays open (ADR-127)" >&2
+      printf '%s\n' "unknown"
+      return 0
+    fi
+    IFS=$'\t' read -r _state _title _labels <<<"$_row"
+    _title="${_title#"${_title%%[![:space:]]*}"}"   # tolerate leading whitespace
+    if [ "$_state" = "open" ]; then
+      case ",${_labels}," in *,task/goal,*) printf '%s\n' "goal#${_par}"; return 0;; esac
+      case "$_title" in
+        [Gg][Oo][Aa][Ll]:*)                              printf '%s\n' "goal#${_par}"; return 0;;
+        [Ss][Tt][Ii][Nn][Tt]:*)                          printf '%s\n' "stint#${_par}"; return 0;;
+        [Tt][Hh][Ee][Mm][Ee]:*)                          printf '%s\n' "theme#${_par}"; return 0;;
+        [Pp][Oo][Ss][Tt]-[Ll][Aa][Uu][Nn][Cc][Hh]:*)     printf '%s\n' "post-launch#${_par}"; return 0;;
+        [Rr][Ee][Tt][Rr][Oo]-[Bb][Aa][Tt][Cc][Hh]:*)     printf '%s\n' "retro-batch#${_par}"; return 0;;
+      esac
+    fi
+    _cur="$_par"
+  done
+  printf '%s\n' "none"
+}
+# <<<REPLAY:epic-container-walk<<<
+
+# ADR-127: the container-conditional half of the harvest bar — the depth rule filters by
+# POSITION, this filters by DESTINATION. Appended as a MECHANISM like depth-rule-append (top-level
+# definition, injected by declare -f), only when the walk printed `none`: a container (or an
+# unreadable walk) leaves the base prompt's FOLLOW-UP class untouched.
+# >>>REPLAY:no-container-rule>>>
+container-rule-append() {
+  # Args: EPIC_CONTAINER (the walk's output)
+  # Mutates: PROMPT
+  # Returns: 0 if the NO CONTAINER rule was appended, 1 otherwise (a container exists, or unknown)
+  local container="$1"
+  [ "$container" = "none" ] || return 1
+  PROMPT="$PROMPT
+NO CONTAINER RULE (ADR-127 — the epic-container line above reads none: this PR closes no issue under an OPEN epic container, and its base is not a goal/** branch). A deferred finding would have nowhere to go, so in THIS review the FOLLOW-UP class does NOT exist, and the project rubric maturity bias (pre-prod merge-forward, approve-with-follow-ups) does not create one — that bias decides what is BLOCKING only inside a container. Classify every finding as exactly one of: BLOCKING (--request-changes: every in-diff finding that passes the harvest bar — correctness, robustness, an unhandled input the diff itself introduces, a weak or vacuous pin, a doc line that contradicts what the diff ships); a plain review COMMENT (the harvest-bar classes: inert, not-a-gap, wont-fix, style); or OUT OF SCOPE (genuinely new work outside this diff and its declared footprint) — write those under one line reading exactly Out of scope (no container): with one concrete bullet each, NEVER under a Follow-ups: heading; the codeowner triages them at the merge read. Follow-ups listed in EARLIER reviews of this same PR were never harvested (the harvest runs at merged-closeout and this PR is unmerged): re-classify them under this rule, they are not settled deferrals. Do NOT emit a Follow-ups: section at all."
+  return 0
+}
+# <<<REPLAY:no-container-rule<<<
+
 # FU-101 lens posture: read the per-stack lenses→posture map from the SAME single claim read
 # that feeds the optout gate (reviewer-optout.sh). This costs zero extra cluster calls and
 # cannot straddle a claim edit the way two reads can. Fail-closed: unreadable → empty map
@@ -521,6 +584,22 @@ if [ -n "\$ISSUE" ]; then
 fi
 export SPROUT_DEPTH
 echo "→ sprout depth: \$SPROUT_DEPTH (0 = not a follow-up of a follow-up)"
+# ── EPIC CONTAINER (ADR-127, 2026-09-11) ─────────────────────────────────────────────────────────
+# Is there an OPEN container to absorb this review's deferrals? Same chain as the depth walk, read
+# for state + title + labels; a goal/** base short-circuits to goal-lane. Injected like the depth
+# walk (declare -f, top-level definition beside it). The prompt consumes the value through the
+# NO CONTAINER rule appended below when it reads none; unknown keeps the channel open (rule #6).
+# A PR that closes NO issue has no container either — its deferrals would be issue-less sprouts.
+$(declare -f epic-container-walk)
+EPIC_CONTAINER=none
+if [ -n "\$ISSUE" ]; then
+  EPIC_CONTAINER=\$(epic-container-walk "\$ISSUE" "\${REPO_SLUG}" "\${PR_BASE}") || EPIC_CONTAINER=unknown
+  case "\$EPIC_CONTAINER" in ''|*[[:space:]]*) EPIC_CONTAINER=unknown;; esac
+elif [ "\${PR_BASE#goal/}" != "\${PR_BASE}" ]; then
+  EPIC_CONTAINER=goal-lane
+fi
+export EPIC_CONTAINER
+echo "→ epic container: \$EPIC_CONTAINER (none = the Follow-ups: channel is closed for this review, ADR-127)"
 # FU-101 review lenses: a DETERMINISTIC diff-class predicate selects externally-sourced ADVISORY
 # lens briefs (agents/lenses/*.md, platform-owned), fetched from the public homelab repo at review
 # time (no image rebuild, always current-pinned) and appended to the system prompt AFTER the
@@ -613,9 +692,9 @@ THE REQUIRED CHECKS ARE ALREADY GREEN — NEVER ASK A HUMAN TO RE-RUN THE GATE. 
 
 Otherwise (a normal code PR): run /code-review to find correctness bugs and post them as inline PR comments — then apply the MERGE-FORWARD VERDICT DOCTRINE:
   The verdict question is NOT "is this perfect?" — it is "is master better off WITH this PR than without it?" Classify every finding you made:
-    BLOCKING (--request-changes): the diff makes master WORSE or lands something unrecoverable — leaked secrets/credentials, committed binary blobs, CI red, breaking/deleting behavior that already worked on master, or (only in a repo whose rubric declares it PROD-SERVING) violating a pinned invariant in a way real consumers would ingest, OR the diff is an INCOMPLETE version of its OWN fix — a defect of the SAME CLASS this PR is fixing that the fix demonstrably missed (it guards N of N+1 sibling cases: e.g. a COALESCE guard applied to 13 of 14 band columns with the 14th left to clobber). Requesting the missed sibling COMPLETES the job this PR set out to do, on this branch — that is finishing the fix, NOT piling a new round, so it is exempt from the merge-forward backlog bias below (do not defer a finding that makes the PR self-inconsistent with its own stated fix). The project rubric (.agents/review.md) may tighten or relax this set — the rubric wins.
-    FOLLOW-UP (approve anyway): everything else — correctness edges in NEW code, unhandled input shapes you constructed, spec ambiguities you uncovered, dead code, style, missing tests. List each under a "Follow-ups:" heading in the review body, one concrete bullet each, written so it can become a backlog issue verbatim. HARVEST BAR — a Follow-up must be worth a human opening the issue: if you would yourself qualify the finding as inert (no caller reaches it), not-a-gap (existing coverage already exercises it), wont-fix (not worth guarding unless actually seen), or pure style-preference (the current code is clear as-is), it is a review COMMENT at most, NEVER a Follow-ups bullet — filing it as a tracked issue is noise that sprouts across runs without ever converging. A spec ambiguity is a proposed AMBIGUITY row for specs/, never a blocker.
-  A greenfield / pre-prod repo (the rubric says which) biases HARD toward approve-with-follow-ups: with no consumers there is no "good enough" judgment to fail — forward progress merges NOW, and each residual finding becomes its own issue with its own round budget (which is cheaper and converges faster than piling rounds onto one PR). This is what a human author would negotiate: "better than master, merge it, backlog the nits." Do NOT re-litigate follow-ups already filed from earlier reviews of this same PR.
+    BLOCKING (--request-changes): the diff makes master WORSE or lands something unrecoverable — leaked secrets/credentials, committed binary blobs, CI red, breaking/deleting behavior that already worked on master, or (only in a repo whose rubric declares it PROD-SERVING) violating a pinned invariant in a way real consumers would ingest, OR the diff is an INCOMPLETE version of its OWN fix — a defect of the SAME CLASS this PR is fixing that the fix demonstrably missed (it guards N of N+1 sibling cases: e.g. a COALESCE guard applied to 13 of 14 band columns with the 14th left to clobber). Requesting the missed sibling COMPLETES the job this PR set out to do, on this branch — that is finishing the fix, NOT piling a new round, so it is exempt from the merge-forward backlog bias below (do not defer a finding that makes the PR self-inconsistent with its own stated fix). The project rubric (.agents/review.md) may tighten or relax this set — the rubric wins. COMPREHENSIVE, in ONE review: before you submit --request-changes, re-scan the WHOLE diff against every rubric rule and list EVERY blocking finding you can see — a later CHANGES_REQUESTED naming a defect that was already present costs a worker ride, a reviewer ride and a coordinator ride. A HUMAN review that requested changes on this PR is a directive, not a finding to weigh: verify at head that each of its asks is addressed, and an unaddressed ask is BLOCKING even when the diff otherwise moves master forward.
+    FOLLOW-UP (approve anyway) — a channel that exists ONLY where a CONTAINER absorbs it (the epic-container line printed at prep reads goal-lane, or a Goal / stint / theme / post-launch / retro-batch ancestor; when it reads none, the NO CONTAINER RULE appended below REPLACES this class): everything else — correctness edges in NEW code, unhandled input shapes you constructed, spec ambiguities you uncovered, dead code, style, missing tests. List each under a "Follow-ups:" heading in the review body, one concrete bullet each, written so it can become a backlog issue verbatim. HARVEST BAR — a Follow-up must be worth a human opening the issue: if you would yourself qualify the finding as inert (no caller reaches it), not-a-gap (existing coverage already exercises it), wont-fix (not worth guarding unless actually seen), or pure style-preference (the current code is clear as-is), it is a review COMMENT at most, NEVER a Follow-ups bullet — filing it as a tracked issue is noise that sprouts across runs without ever converging. A spec ambiguity is a proposed AMBIGUITY row for specs/, never a blocker.
+  A greenfield / pre-prod repo (the rubric says which) biases HARD toward approve-with-follow-ups: with no consumers there is no "good enough" judgment to fail — forward progress merges NOW, and each residual finding becomes its own issue with its own round budget (which is cheaper and converges faster than piling rounds onto one PR). This is what a human author would negotiate: "better than master, merge it, backlog the nits." — inside a container only: with no container there is no backlog to negotiate into (the NO CONTAINER RULE). Do NOT re-litigate follow-ups already filed from earlier reviews of this same PR.
 
 STEP FINAL — submit exactly ONE native GitHub review as your verdict: run gh pr review ${PR} --approve --body with the Follow-ups: section (when non-empty) if the diff moves master forward, otherwise gh pr review ${PR} --request-changes --body with a one-paragraph summary of the BLOCKING findings only (for a dependency bump, summarise the required adaptations). Do NOT merge and do NOT push.'
 # the depth-rule-append definition is injected here at generation time (declare -f;
@@ -627,9 +706,14 @@ $(declare -f depth-rule-append)
 # worth another issue — the tail has to collapse somewhere, and the only actor who can collapse it
 # is the one deciding whether to defer or block. Appended as a MECHANISM so no recipe has to
 # remember it, and only when it applies: a depth-0 review is untouched.
-if [ "\${SPROUT_DEPTH:-0}" -ge 2 ]; then
+if [ "\${SPROUT_DEPTH:-0}" -ge 2 ] && [ "\${EPIC_CONTAINER:-unknown}" != "none" ]; then
   depth-rule-append "\${SPROUT_DEPTH}" "\${PR_BASE}" "\${ISSUE_TITLE}" "\${ISSUE_BODY}" "\${ISSUE}" "\${REPO_SLUG}" || true
 fi
+# ADR-127: the DESTINATION half — with no container the FOLLOW-UP class does not exist for this
+# review (the depth rule above is skipped on none: its Container-findings arm names an ancestor
+# that does not exist, and the no-container rule is the stronger statement of the same collapse).
+$(declare -f container-rule-append)
+container-rule-append "\${EPIC_CONTAINER:-unknown}" || true
 PREP
 )
 # Dispatch-time syntax guard (homelab#1113): verify each assembled heredoc parses before
