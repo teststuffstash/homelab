@@ -4530,7 +4530,7 @@ EOF_GTHEMES_OPEN
     # TWO CHANNELS) plus `headRefOid` (NOT from `🔴 ci-red round` markers — those were a design
     # that never shipped; stale prose caught by the #198 ride):
     #   attempts==0                    → DISPATCH (first red)
-    #   attempts>=RED_ROUNDS_MAX(3)     → ARBITRATE (exhausted — MP-T11 tie-break). The count is
+    #   attempts>=RED_ROUNDS_MAX(5)     → ARBITRATE (exhausted — MP-T11 tie-break). The count is
     #                                    keyed on the ISSUE, summed across every PR that references
     #                                    it (homelab#156) — per-PR is only the fast path, because
     #                                    close-and-re-PR would otherwise hand out a fresh budget.
@@ -4633,7 +4633,7 @@ EOF_GTHEMES_OPEN
         if [ "$attempts" -ge 1 ]; then
           noop_round="$(printf '%s' "$round_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || noop_round=""
         fi
-        RED_MAX="${RED_ROUNDS_MAX:-3}"
+        RED_MAX="${RED_ROUNDS_MAX:-5}"   # 3→5 with the logic-round cap (ADR-127, 2026-09-11)
         # ISSUE-KEYED ROUNDS CEILING (homelab#156, FU-154). `attempts` above is PER-PR, and PR
         # identity is not the unit of the work: close-and-re-PR is a DESIGNED play as of 2026-08-08
         # (#210 re-landed as #221, #214 closed and its issue re-queued, #209 superseded by #218-v2),
