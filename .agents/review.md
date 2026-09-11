@@ -70,9 +70,10 @@ the PR closes an issue under an OPEN epic (Goal / stint / theme / post-launch bu
 batch) or targets a `goal/**` base — the generic reviewer computes this (`epic-container-walk`)
 and appends the NO CONTAINER rule otherwise. On a containerless master-lane PR every in-diff
 finding past the harvest bar is `CHANGES_REQUESTED`, enumerated comprehensively in ONE review;
-genuinely new out-of-diff work goes under `Out of scope (no container):` as a plain comment the
-codeowner reads at merge — never a bullet the harvest would mint into a standalone inert issue
-that no container adopts.
+an out-of-diff finding on worker-authorable paths blocks too (name the paths — the coordinator
+widens the issue's `Touches` before the fix round, so the same PR absorbs it); only operator-only
+paths go under `Operator-lane (no container):` as a plain comment the codeowner lands directly —
+never a bullet the harvest would mint into a standalone inert issue that no container adopts.
 
 ## Judge these carefully rather than by rule
 
