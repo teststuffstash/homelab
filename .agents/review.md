@@ -65,6 +65,15 @@ PR's declared footprint — real work, filed as work (during a Goal it lands in 
 pile, never a 1:1 issue). Pure style (naming, comment polish) may stay a comment with no bullet
 at all. What no longer qualifies as a follow-up: anything the branch could have fixed.
 
+**And only into a container (ADR-127, 2026-09-11).** A `Follow-ups:` section exists only where
+the PR closes an issue under an OPEN epic (Goal / stint / theme / post-launch bucket / retro
+batch) or targets a `goal/**` base — the generic reviewer computes this (`epic-container-walk`)
+and appends the NO CONTAINER rule otherwise. On a containerless master-lane PR every in-diff
+finding past the harvest bar is `CHANGES_REQUESTED`, enumerated comprehensively in ONE review;
+genuinely new out-of-diff work goes under `Out of scope (no container):` as a plain comment the
+codeowner reads at merge — never a bullet the harvest would mint into a standalone inert issue
+that no container adopts.
+
 ## Judge these carefully rather than by rule
 
 - **`manifest-lint` SKIPS CRs it has no schema for** (Applications, AgentStacks,
