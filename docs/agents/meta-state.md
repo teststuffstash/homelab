@@ -15,10 +15,15 @@ never the session's arc — that is TICK-LOG's.)
   Follow-ups (re-reviewed under ADR-127 18:32–18:36Z); #1543 labels cleared (waits its master-lane
   review turn); #1542 approved under its Goal-#1231 container. Merge order per the queue spike
   (#1541×#1540 and #1543×#1542 each need one rebase). oracle-fleet#554 is CHANGES_REQUESTED by the
-  bot (three in-diff defects) — the oracle loop's round, not ours. (2) **Watch, then archive nothing
-  yet:** PR#1592 (widen-Touches amendment) and PR#1593 (platform claim → deepseek-v4-flash /
-  v4.1-flash) were armed at wind-down — verify merged + `kubectl get agentstack platform -o
-  jsonpath='{.spec.workerModel} {.spec.workerModelFallbacks}'` reads deepseek. (3) **ADR-128 trial
+  bot (three in-diff defects) — the oracle loop's round, not ours. (2) **PR#1592 MERGED 18:47Z; PR#1593 (platform claim →
+  deepseek-v4-flash / v4.1-flash) bot-approved + armed with CI running at wind-down** — verify it
+  merged and `kubectl get agentstack platform -o jsonpath='{.spec.workerModel}
+  {.spec.workerModelFallbacks}'` reads deepseek (it read `claude/haiku []` at 19:0xZ); if the
+  updater left it BEHIND after the 19:0x master push, `gh api -X PUT
+  repos/teststuffstash/homelab/pulls/1593/update-branch`. (2b) **Hotspot + refactor inputs** in
+  [`../spikes/change-hotspots.md`](../spikes/change-hotspots.md): proxy + exporter extraction
+  (revert class), `agents/replay/**` release from CODEOWNERS, ADR-113 scan/launcher extraction,
+  a kind gate for the Argo Sensors — operator direction pending, nothing filed. (3) **ADR-128 trial
   week runs to 2026-09-18 → FU-233** (re-read vs `docs/spikes/codeowner-catches.md`; revert = the
   commented CODEOWNERS lines). (4) **First live signals to look for:** a containerless worker PR
   whose reviewer names out-of-diff paths → does the coordinator widen `Touches` (brief step 7)?; a
