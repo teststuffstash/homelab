@@ -411,6 +411,16 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
        **step 3** with a fresh pod + fresh session key (on a `claude/` chain, steps 3–4 are skipped
        as always and you re-enter at **step 5**), **passing the reviewer's comments to the
        fixer** (feed `gh pr view <PR> --json reviews -q '.reviews[-1].body'` into its context).
+       **Widen the footprint first when the review names paths outside the issue's `Touches`
+       (ADR-127 amendment, 2026-09-11 — a containerless PR absorbs its out-of-diff findings in
+       the same round instead of minting a follow-up):** read the block
+       (`python3 /work/homelab/agents/issue_body.py get Touches --ref <slug>#<issue>`), classify
+       the UNION with `agents/footprint.sh`'s `classify_touches` — `machine-merge` or
+       `codeowner-merge` widens (`issue_body.py set "Touches=<union>"`, the `json` gate, then
+       `gh issue edit <issue> --body-file`), `codeowner-author` or a pin-only GUARDED hit does
+       not (those findings are the operator's: say so in the plan comment and dispatch the round
+       for the rest). Widen the line, never a label; the scan's footprint hold and the
+       reviewer's touches-check read the widened block on the next tick.
    - `round == max` with a genuinely blocking finding, or ambiguous → `agent/blocked` + comment.
      **`agent/blocked` is for "master would be worse off with this PR" — never for an imperfect
      PR that moves the repo forward.**
@@ -520,7 +530,7 @@ job, in order (re-read live state first, exit clean if someone already closed it
 3. **Harvest the review `Follow-ups:` bullets (FU-090a).** Read every review on the merged PR
    (`gh pr view <PR> --json reviews`); each bullet under a `Follow-ups:` heading becomes ONE
    issue on the SAME repo. A review carries a `Follow-ups:` section only where a container
-   absorbs it (ADR-127); an `Out of scope (no container):` comment is the codeowner's read at
+   absorbs it (ADR-127); an `Operator-lane (no container):` comment is the codeowner's read at
    merge, NEVER a harvest source — do not mint from it. A merged containerless PR usually
    harvests nothing; say so in the closing comment — title from the bullet, body = the bullet verbatim + provenance
    (`Harvested from PR #N review (issue #M)`), any `track/*` label inherited from the source

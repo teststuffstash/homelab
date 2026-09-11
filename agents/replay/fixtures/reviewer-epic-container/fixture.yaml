@@ -22,7 +22,7 @@
 #   d  #71  → none             e  #81 → theme#80 (nearest container wins, the Goal above is not reached)
 #   f  #91  → post-launch#90   g  #101 → goal#100 (label-keyed)     h  #11 on base goal/10-x → goal-lane, zero reads
 #   i  #11 with #10 unreadable (per-call STUB_GH_… override) → unknown + WARN
-#   j/k/l  container-rule-append: none → rule appended · goal#10 → untouched, rc 1 · unknown → untouched, rc 1
+#   j/k/l  container-rule-append: none → rule appended (incl. the out-of-diff widen clause) · goal#10 → untouched, rc 1 · unknown → untouched, rc 1
 pins:
   - IL-T15
 name: reviewer-epic-container
