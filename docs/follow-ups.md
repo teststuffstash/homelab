@@ -951,18 +951,17 @@ the block needs pruning, not more headings.
       first tick; oracle's probe.md stays #289 (parked with the stack); then the
       sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
 
-- [ ] **FU-230** — **The responder cannot see seat-driven change: no maintenance silence, no
-      declared change window.** 2026-09-04→11 audit: 7 of its 9 confidently-wrong writes had a
-      cause the seat made outside the cluster's view (thinkcentre drive windows → 9 writes in
-      20 min; PVC re-cuts, the rotation loop, belts shipped 30 min earlier during the rf=3
-      rollout) and the session guessed a story (cable, spindle, churn) instead of "unknown". The
-      ArgoCD observation-window line (`responder-argo.yaml` ~L553) is the precedent — GitOps
-      changes only. **Next:** (a) `node-maintenance.sh settle/down` opens a node-scoped Alertmanager
-      silence, `up` expires it (durability = FU-195); (b) a seat-written ConfigMap window record the
-      brief prints like the WIN line. Hand-issued AGAIN 2026-09-12 for the m70s x16 fit window
-      (`node=m70s` + `alertname=~Garage(ClusterDegraded|…)`, 3 h) — third window done by hand, and
-      the by-hand scoping had to reach past `node=` because the Garage health alerts key on
-      `instance`. Design read: `docs/spikes/responder-week-audit.md` §Design read.
+- [ ] **FU-230** — **The responder cannot see seat-driven change.** 2026-09-04→11 audit: 7 of its 9
+      confidently-wrong writes had a cause the seat made outside the cluster's view, and the session
+      guessed a story instead of "unknown". **Leg (a) DONE 2026-09-12 (PR#1601)** —
+      `node-maintenance.sh settle/down` now silence the window and `up` expires it; the label
+      taxonomy is the lesson (one 9-min m70s window = THREE triage sessions, #261/#884/#1600):
+      `node=` alone catches almost nothing, so a window silences `instance=~<ip>`, `node=`, the
+      Garage health set on a zone node, and the node's **pod names** — PodSigkilled has no node key
+      and fires up to 30m late, so that silence outlives the window. **Next:** leg (b) — a
+      seat-written ConfigMap window record the brief prints like the ArgoCD observation-window line
+      (durability caveat = FU-195). Design read: `docs/spikes/responder-week-audit.md` §Design read.
+
 - [ ] **FU-231** — **Responder report-only findings land as GitHub comments; route them to the
       bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =
       actionable, history = git/S3). 26 of 33 writes were report-only comments, 24 noise; the one
