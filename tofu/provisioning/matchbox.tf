@@ -42,12 +42,12 @@ resource "matchbox_profile" "talos_worker" {
 # must never be pointed at Matchbox for PXE unless you intend to (re)install it —
 # scope the OPNsense chainload per-host accordingly.
 #
-# NO persistent groups: every metal node (incl. thinkcentre) is transient-flagged.
-# thinkcentre USED to have a persistent group because its onboard relied on a USB ISO —
-# but that was only because its marginal NIC cable made PXE time out. With the cable fixed
-# (2026-06-11) it PXE-boots reliably AND is PXE-first in BIOS, so a persistent flag would
-# trap it in a maintenance reinstall-loop. It now boots from disk normally; re-add a group
-# below (selector mac = var.thinkcentre_mac) only to reinstall it, then remove it again.
+# NO persistent groups: every metal node is transient-flagged. The one box that used to have a
+# persistent group (thinkcentre, onboarded off a USB ISO because its marginal NIC cable made PXE
+# time out) lost it when the cable was fixed, 2026-06-11 — a persistent flag on a PXE-first box
+# traps it in a maintenance reinstall-loop. ⚠ thinkcentre left the cluster on 2026-09-12 (it is
+# the R12 management-box pilot): do NOT flag it here again. Its MAC, like every other host's,
+# lives in the one DHCP source of truth, opnsense/dnsmasq-dhcp.py.
 
 # To onboard a new metal node, add a matchbox_group here selecting its MAC (see git
 # history for the wk-metal-01 X240 / wk-metal-02 X250 onboardings), apply, PXE it into

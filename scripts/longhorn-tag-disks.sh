@@ -4,7 +4,7 @@
 # tofu-managed; the node CR is the authority).
 #
 # Tiers (tofu/longhorn.tf has the StorageClasses):
-#   std  — the three original default disks (thinkcentre, hp-01, wk-02) + hp-01's second SATA
+#   std  — the original default disks (hp-01, wk-02; thinkcentre's left with the box, below) + hp-01's second SATA
 #          (`hg5d`, 2026-08-25) + **m70s's default disk (2026-09-12**, once the Garage zone moved
 #          off it onto the dedicated PM961 — see its block below). wk-02's is still TAGGED std but
 #          `allowScheduling=false` since 2026-09-12: it is a thin volume on the pve pool and must
@@ -14,7 +14,9 @@
 #   bulk — wk-metal-01's 500G MX500 + wk-metal-04's 500G SATA, registered here explicitly
 #          (bulk-ONLY, generously reserved for the container/kata image store they share the
 #          partition with). wk-02 left this tier on 2026-08-07 — see the note below.
-#   fast — the ThinkCentre Optane pair (longhorn-register-optane.sh, untouched here).
+#   fast — the ThinkCentre Optane pair (longhorn-register-optane.sh, untouched here). ⚠ HOMELESS
+#          since 2026-09-12: the pair left with thinkcentre and has not landed on wk-metal-04 yet,
+#          so the tier has no backing disk and a longhorn-fast PVC stays Pending (FU-234).
 #
 # hp-01 carries a SECOND std disk since 2026-08-25 (`hg5d`, a 128G Toshiba HG5d) — this node was
 # the ledger's "the one place where the honest answer is buy a disk" (104% of allocatable, under
@@ -45,7 +47,11 @@ tag() { # node disk tags-json
   echo "  $1/$2 tags=$3"
 }
 
-for n in thinkcentre hp-01; do tag "$n" "$(default_disk "$n")" '["std"]'; done
+# thinkcentre was in this loop until 2026-09-12, when it left cluster duty for the R12
+# management-box pilot (16 replicas evicted, node deleted). Its default disk and the two Optanes
+# went with it — nothing here refers to the node any more, on purpose: a patch against a
+# nonexistent Longhorn node CR is a silent no-op, not an error.
+tag hp-01 "$(default_disk hp-01)" '["std"]'
 
 # m70s's DEFAULT disk joins std, 2026-09-12 — the fleet direction's "Micron → std". It became a
 # real std candidate the moment garage-1's meta+data rotated onto the dedicated PM961 (below):
@@ -90,13 +96,10 @@ else
   echo "  hp-01/intel7600p registered (std)"
 fi
 
-# thinkcentre's reservation was auto-sized at 30% (35.3G) against a node whose container image
-# store is 4.1G — it was fencing off a third of the disk from a tier that had 10.5G of scheduling
-# room left, which is why nine std replicas sat PENDING with 67G physically free (2026-08-07).
-# 15Gi still covers the images + the kubelet's 10% nodefs eviction floor (11.8G).
-kubectl -n longhorn-system patch nodes.longhorn.io thinkcentre --type=merge \
-  -p "{\"spec\":{\"disks\":{\"$(default_disk thinkcentre)\":{\"storageReserved\":16106127360}}}}" >/dev/null
-echo "  thinkcentre storageReserved -> 15Gi"
+# (thinkcentre's 15Gi storageReserved patch lived here until 2026-09-12 — it went with the node.
+# The lesson it carried is general and now sits in docs/storage-ledger.md: Longhorn's auto-sized
+# 30% reservation fenced off a third of a disk from a tier with 10.5G of scheduling room, and nine
+# std replicas sat PENDING with 67G physically free, 2026-08-07.)
 # wk-02's tier, third and final revision — STD-ONLY since 2026-08-07. The history matters because
 # each step was right about the problem in front of it:
 #   dual std+bulk  → the only disk in two tiers. Longhorn places on the disk with the most room and
@@ -130,10 +133,11 @@ echo "  wk-02 storageReserved -> 30Gi"
 # joined std above there is no reason for the scheduler to keep choosing a pooled disk — Longhorn
 # places on the disk with the most available space, and wk-02 was winning by being large.
 # allowScheduling=false is NOT an eviction: its 27 existing replicas stay, keep serving, and leave
-# organically — a rebuild or a PVC re-cut now lands on m70s/hp-01/thinkcentre instead. std keeps
-# three schedulable nodes (m70s, hp-01, thinkcentre), i.e. r=2 plus a rebuild target.
-# thinkcentre therefore STAYS in the tier for now (operator: retire it only when the replacement
-# box arrives, so the pool can be freed in the same move) — one field flips this back.
+# organically — a rebuild or a PVC re-cut now lands on m70s/hp-01 instead.
+# ⚠ UPDATE 2026-09-12 (same day, later): thinkcentre then LEFT the cluster, so std is down to TWO
+# schedulable nodes. Every r=2 std volume must therefore hold one copy on m70s and one on hp-01,
+# with no third zone to rebuild onto, and soft anti-affinity means a capacity squeeze shows up as
+# silent co-location rather than a Pending volume. That is what hp-01's 7600p (above) bought.
 kubectl -n longhorn-system patch nodes.longhorn.io wk-02 --type=merge \
   -p "{\"spec\":{\"disks\":{\"$(default_disk wk-02)\":{\"allowScheduling\":false}}}}" >/dev/null
 echo "  wk-02 allowScheduling -> false (no new std replicas on the pve pool)"

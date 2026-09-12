@@ -43,6 +43,12 @@ Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; 
 
 ## Notes relevant to PXE / provisioning
 
+- **`ThinkCentre Edge` (.53) is still cabled where the tree shows it, but is no longer a cluster
+  node** (left cluster duty 2026-09-12 → the R12 out-of-band management-box pilot, FU-097). When it
+  is stood up, R12 wants it **dual-homed** — a second NIC on a dedicated management switch — which
+  is a change to this map, not just to the box; update both the ASCII tree and the mermaid graph in
+  the same edit.
+
 - ⚠ **`m70s` (.56) is NOT on the map — uncaptured.** Onboarded 2026-09-07; which switch it hangs
   off was never recorded, and this file is the only place that would say. It PXE-booted and peers
   BGP, so it is somewhere in the flat L2 below — but "somewhere" is exactly what this document
