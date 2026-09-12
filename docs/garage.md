@@ -393,6 +393,21 @@ original pod only.
    collapsed to one live version on its own. Until then `/health` says "some storage nodes are
    unavailable" — the degraded belts fire for the whole resync by design; the SLO availability
    (HTTP 200) does not.
+   - ⚠ **Scale `resync-worker-count` to the NEW NODE's threads — the "8 workers / tranquility 0"
+     figure is not universal.** It was measured on wk-metal-04 (4-core 3.4 GHz desktop). Applied
+     unchanged to **m70s (2C/4T Pentium Gold)** on the third run (2026-09-12) it pinned the node at
+     **90 % busy within 10 minutes and held 79–86 % for the whole resync**, and consumers paid for
+     it: p99 **DeleteObject 6.93 s, ListObjectsV2 6.83 s, PutObject 4.46 s, GetObject 4.45 s**
+     against a sub-second baseline (all classes back to 0.1–0.6 s once the table walk passed).
+     Quorum never broke and the SLO availability held — this is a LATENCY cost, not an outage.
+     Rule of thumb from the two runs: **workers ≈ threads − 2** (leave the ledger's ~2 cores for
+     Garage's own request path plus the Longhorn engine), i.e. 8 on a 4-core desktop, **2 on a
+     2C/4T SFF**, and `resync-tranquility 0` only where those cores exist. The trade is duration
+     for smoothness: at 8/0 this run converged in ~1.5 h with multi-second spikes; throttling
+     mid-run costs roughly an hour more of a degraded-but-quiet window.
+   - **Reset the workers when the resync ends.** They persist on the pod, and a zone left on
+     build-out settings is a standing tax on every later write (sighted 2026-09-08: all three pods
+     were still on the build-out's 8/0 weeks later).
 9. **Unpin:** `tofu apply -target=kubernetes_service.garage_s3_lb` restores the selector.
 10. **Verify** end to end from the LAN (`aws s3 ls`, a PUT+GET), `garage status`/`layout show`
     (3 nodes, 3 zones, `Zone redundancy: maximum`), Crossplane buckets still Ready, and every
