@@ -84,27 +84,18 @@ the linchpin of the whole exercise: no-human-in-the-loop really means *the probe
 
 ### The pilot's build order (operator ruling, 2026-09-12) — step 1, split in two
 
-`thinkcentre` became the R12 pilot the day it left cluster duty. The ruling **splits step 1**: the
-coordinator earns its job on a low-consequence surface *before* the management network exists, and
-the network rollout waits until the box itself is boring. The reason is the one this whole doc is
-about — the recovery root's own recovery is manual, so the first thing to de-risk is the box, not
-the topology.
+`thinkcentre` became the R12 pilot the day it left cluster duty, and the ruling **splits step 1**:
+the coordinator earns its job on a low-consequence surface *before* the management network exists,
+and the network rollout waits until the box itself is boring. Phase A the box is maintainable,
+phase B one trivial apply (dashboard-shaped, explicitly not an unattended control-plane or router
+operation), phase C the triggers (PR merges + the drift cron), *then* this doc's original order
+resumes. The OS, install, update loop, probe set and rollback layers are **ADR-129** +
+[`../management-box.md`](../management-box.md) — not restated here.
 
-- **Phase A — the box is maintainable.** Its OS and its own maintenance come first: **SSH
-  credentials and a rotation scheme**, and **how tofu reaches the box at all** (`docs/secrets.md`
-  §Minting doctrine governs the credential's existence-and-scope; FU-012 governs what state and
-  which dangerous creds move here, and `main`'s missing out-of-cone state copy is this box's
-  reason to exist). Nothing autonomous until this is dull.
-- **Phase B — a trivial first apply.** Its first real job is a **`tofu apply` of something nobody
-  depends on** — a dashboard-shaped change, explicitly NOT an unattended control-plane or router
-  operation. The point of the first rollout is the *path*, not the change: the same reasoning as
-  the state migration's throwaway-root canary (`docs/tofu-state.md`).
-- **Phase C — triggers.** What wakes it: **homelab PR merges** (the deploy-paths gap — a merged
-  change to an unreconciled surface deploys nothing today, `ROADMAP.md` §Deploy paths) plus
-  **drift detection** (the `tofu plan` cron → alert on a non-empty diff that FU-097 asks for and
-  FU-012 unblocked for three of five roots).
-- **Then** the management network (path 2), the CARP pair (path 1), the CP/host quorum work
-  (path 4), PiKVM last — i.e. this doc's original order, resumed once the box is stable.
+What makes the split safe is a distinction that governs every recovery path below, so it belongs
+in this doc: the box must be **live** independently, but it need not be **fresh** independently.
+A remote updater — even the cluster it rescues — is therefore acceptable, while a remote
+*rollback* is not: the deadman stays local to the target, exactly as path 1 already says.
 
 ⚠ One gap this reveals in path 2's own text: its enumeration of what the segment carries
 ("Proxmox mgmt, Talos API, PiKVM, the coordinator") **omits OPNsense**, while the rule above it

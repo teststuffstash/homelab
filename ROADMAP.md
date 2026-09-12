@@ -125,7 +125,7 @@ hardware register.
 | Laptops (X250, X260) | **control planes** — low idle draw, small SSD, no other job | 🔜 still in the kata/ride pool |
 | A desktop-class box | **rides / ARC / inference**, tainted | ⬜ does not exist — the ledger's `need` row |
 | SFFs (`m70s`, + one more) | `std` + Garage zones, spread equally | ✅ partly — `thinkcentre` left 2026-09-12, `hp-01` retires when the next SFF carries std |
-| The management box (`thinkcentre`) | R12 out-of-band applier — no workloads, no storage | 🔜 pilot, gated on FU-097's table |
+| [The management box](docs/management-box.md) (`thinkcentre`) | R12 out-of-band applier — no workloads, no storage (ADR-129) | 🔜 pilot, gated on FU-097's table |
 
 ⚠ **The three-CP promotion is not free, and its bill is the ride pool, not a hypervisor.** Promoting
 `wk-metal-02`/`-03` takes the last two kata boxes that may host a ride — the other two
