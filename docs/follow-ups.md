@@ -848,16 +848,16 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
-- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: the sync manager's in-memory
-      state can corrupt under a fast-failure storm and Pending then piles up silently**
-      (2026-08-31, operator-spotted: waiters told "5/5" against a provably empty semaphore
-      for 65+ min after the #1136 exit-128 storm; controller restart drained it in minutes).
-      Postmortem + belt audit + evidence + the storm→wedge trigger note:
+- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: POINTER.** The sync manager's
+      in-memory state corrupts under a fast-failure storm and Pending piles up silently
+      (2026-08-31, "5/5" against a provably empty semaphore for 65+ min). Postmortem, belt audit,
+      trigger, and — ⚠ **2026-09-12** — a SECOND, BENIGN cause with the SAME signature
+      (rail-latched `respond-*` hold their lock across Argo's retry backoff), hence a discriminator:
       [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
-      **Next:** an alert on the wedge shape — Argo Pending high-and-not-draining while
-      `anthropic_subscription_semaphore_running` ≈ 0 — into `argo-workflows-alerts` with
-      promtool cover; check upstream sync-manager fixes (`v4.0.7` today) before any bump.
-      Relates FU-187 (sibling belt-blindness).
+      **Next:** that alert — Pending high-and-not-draining while
+      `anthropic_subscription_semaphore_running` ≈ 0 **and NOT
+      `anthropic_subscription_dispatch_limited`** — into `argo-workflows-alerts` with promtool
+      cover; check upstream sync-manager fixes (`v4.0.7`) before any bump. Relates FU-187, FU-088.
 
 - [ ] **FU-228** — **`agent-transcripts` has no retention — 5Gi → 20Gi bought time, not a policy.**
       The bucket sat at 98 % (5.3 GB, 26.7k objects, ~1 GB/week of ride exhaust) the hour
