@@ -24,11 +24,19 @@ never the session's arc — that is TICK-LOG's.)
   `replica-soft-anti-affinity=true` means a squeeze is SILENT co-location, not a Pending volume.
   wk-02's 21 remaining replicas leave organically onto the same two nodes — check co-location
   after any eviction (one-liner in the runbook recipe).
-  (3) **thinkcentre → R12 is now purely gated on FU-097's per-surface ruling table**, which is
-  unwritten. The box is idle and free; the table is the FIRST deliverable, because deciding which
-  surfaces it may reconcile precedes standing it up. ⚠ Read the R12 row in the private
-  `hardware/requirements.md` first — PILOT, not the permanent box (27.9 W idle, no AES-NI, the
-  x16 CPU root port `00:01.0` absent).
+  (3) **R12 is DESIGNED and half-BUILT — PR#1608** (ADR-129 + `docs/management-box.md`): NixOS,
+  USB install once, two pins (system closure on `nixos/flake.lock`, toolchain on the repo's
+  `devbox.lock`), box pulls a reviewed ref, **local** deadman rolls back. `nixos/` evaluates on
+  both bootloader branches; `scripts/mgmt-probe.sh` passes 5/5 from the jail; timers built, NOT
+  armed. **NEXT (operator, tomorrow): the USB stick + reboot** — before it, drop a real key in
+  `nixos/hosts/mgmt/keys/` (an empty dir fails the build on purpose) and read the firmware in the
+  installer (`[ -d /sys/firmware/efi ]`) to set `bootMode`; UEFI additionally buys the automatic
+  boot-failure rollback. Still gating the box's first REAL job: **FU-097's ruling table**, which
+  says which surfaces it may reconcile. ⚠ PILOT, not the permanent box (27.9 W idle, no AES-NI,
+  the x16 CPU root port `00:01.0` absent) — private `hardware/requirements.md` R12.
+  (3b) **The three-CP promotion is gated on a RIDE BOX**, not on a second hypervisor: it empties
+  the kata pool 4 → 0 and ARC's labelled hosts 3 → 1 (ROADMAP §Hardware strategy + the ledger's
+  new `need` row).
   (4) **Operator-hands, filed as FU-234:** the two Optane cards → wk-metal-04's free chipset root
   ports (`00:1c.0`/`00:1c.1`) as ride/ARC scratch; until then the `fast` tier has NO backing disk
   (zero consumers, so nothing broke). The x1 AIC form factor is off the market — do not discard.
