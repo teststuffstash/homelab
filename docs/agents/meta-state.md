@@ -192,8 +192,10 @@ never the session's arc — that is TICK-LOG's.)
   move Garage to a real third zone at rf=3. **Its OEM NVMe reads `MTFDHBA512TDV-1AZ15ABLA` = Micron 2300 512 GB,
   LPDDR4-DRAM + 96L TLC** (not the DRAM-less QLC 2400 the part number resembles) — it meets the
   buying criterion, so the zone can stand up on the box as delivered and is not blocked on a drive
-  purchase. Board also has 3 SATA + a second PCIe **x4** (sheet said x1), i.e. it can carry a `std`
-  Longhorn slice too. Disk read via the new privileged-pod recipe (`docs/runbook.md` §Reading a
+  purchase. Board also has 3 SATA. ⚠ **CORRECTED 2026-09-12 (operator, board-read with the
+  brackets in hand): there is NO second x4 — the `x4` silkscreen carries an x1 connector and the
+  `x1` silkscreen is unpopulated, so the x16 LP is the box's ONLY x4-capable slot** (one Gembird,
+  not two; card 2 has no home — pve's x4 is under the GPU, R9). Detail in `teststuff/hardware`. Disk read via the new privileged-pod recipe (`docs/runbook.md` §Reading a
   fleet disk's identity and health — FU-222 archived): **2% used, 3051 h, 0 media errors,
   PCIe 3.0 ×4**, near-new. Supply side, incl. a specced 25 € DRAM-cached NVMe candidate that
   would also close FU-093's pool gap: private **`teststuff/hardware`** repo on Forgejo (`STATE.md`).

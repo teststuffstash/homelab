@@ -959,7 +959,10 @@ the block needs pruning, not more headings.
       ArgoCD observation-window line (`responder-argo.yaml` ~L553) is the precedent — GitOps
       changes only. **Next:** (a) `node-maintenance.sh settle/down` opens a node-scoped Alertmanager
       silence, `up` expires it (durability = FU-195); (b) a seat-written ConfigMap window record the
-      brief prints like the WIN line. Design read: `docs/spikes/responder-week-audit.md` §Design read.
+      brief prints like the WIN line. Hand-issued AGAIN 2026-09-12 for the m70s x16 fit window
+      (`node=m70s` + `alertname=~Garage(ClusterDegraded|…)`, 3 h) — third window done by hand, and
+      the by-hand scoping had to reach past `node=` because the Garage health alerts key on
+      `instance`. Design read: `docs/spikes/responder-week-audit.md` §Design read.
 - [ ] **FU-231** — **Responder report-only findings land as GitHub comments; route them to the
       bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =
       actionable, history = git/S3). 26 of 33 writes were report-only comments, 24 noise; the one
