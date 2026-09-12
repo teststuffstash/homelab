@@ -114,6 +114,27 @@ limited by having one public IP → LAN-side CARP is the main win.
 
 ## Hardware strategy
 
+**The fleet-role assignment (operator direction, 2026-09-09 — one job per box class).** Written
+here because it governs every later purchase; the spec envelopes and the evidence live in
+[`docs/storage-ledger.md`](docs/storage-ledger.md) §Requirements, the supply side in the private
+hardware register.
+
+| Class | Job | Today |
+|---|---|---|
+| Xeon-class (`pve`) | untainted production/batch compute + the hypervisor | ✅ and it holds the fleet's only idle cores |
+| Laptops (X250, X260) | **control planes** — low idle draw, small SSD, no other job | 🔜 still in the kata/ride pool |
+| A desktop-class box | **rides / ARC / inference**, tainted | ⬜ does not exist — the ledger's `need` row |
+| SFFs (`m70s`, + one more) | `std` + Garage zones, spread equally | ✅ partly — `thinkcentre` left 2026-09-12, `hp-01` retires when the next SFF carries std |
+| The management box (`thinkcentre`) | R12 out-of-band applier — no workloads, no storage | 🔜 pilot, gated on FU-097's table |
+
+⚠ **The three-CP promotion is not free, and its bill is the ride pool, not a hypervisor.** Promoting
+`wk-metal-02`/`-03` takes the last two kata boxes that may host a ride — the other two
+(`wk-metal-01`, `wk-metal-04`) are Garage zone nodes the ledger's zone-node envelope says must carry
+none. The pool goes **4 boxes → 0** and ARC's labelled hosts **3 → 1**. So the ride box comes FIRST,
+or the promotion trades every ride for a control plane. (What it *does* decouple: `thinkcentre`
+taking the R12 job leaves both laptops free, so the second hypervisor is no longer load-bearing for
+three control planes.)
+
 - **X99 Xeon E5-2680 v4 → Proxmox host.** Great core count; ⚠️ no iGPU (needs a GPU to POST) and a
   2016 120W chip — keep it a dedicated hypervisor, not part of the zero-touch fleet.
 - **Zero-touch fleet = business mini/SFF PCs with Intel vPro/AMT** (OptiPlex Micro, EliteDesk Mini,

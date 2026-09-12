@@ -1,7 +1,9 @@
 # Spike — no human in the loop, even for OPNsense / PXE / tofu
 
 **Tracked by:** FU-097 (this is its radical end-state: the "human-applied + belt" column shrinking
-toward empty). **Status:** thought exercise, 2026-08-02 — nothing here is built or decided.
+toward empty). **Status:** thought exercise, 2026-08-02 — nothing here is built, and the only thing
+DECIDED is the pilot's build order (operator, 2026-09-12 — §The pilot's build order below, which
+splits this doc's own step 1 in two).
 **Relates:** FU-012, FU-044, FU-102, ADR-005, ADR-088, ADR-090.
 
 ## The reframe
@@ -79,6 +81,40 @@ the linchpin of the whole exercise: no-human-in-the-loop really means *the probe
 2. OPNsense CARP pair — biggest cone shrink.
 3. Third Proxmox host + 3 CPs — upgrades become rotation.
 4. PiKVM — last; only covers what plug+PXE can't.
+
+### The pilot's build order (operator ruling, 2026-09-12) — step 1, split in two
+
+`thinkcentre` became the R12 pilot the day it left cluster duty. The ruling **splits step 1**: the
+coordinator earns its job on a low-consequence surface *before* the management network exists, and
+the network rollout waits until the box itself is boring. The reason is the one this whole doc is
+about — the recovery root's own recovery is manual, so the first thing to de-risk is the box, not
+the topology.
+
+- **Phase A — the box is maintainable.** Its OS and its own maintenance come first: **SSH
+  credentials and a rotation scheme**, and **how tofu reaches the box at all** (`docs/secrets.md`
+  §Minting doctrine governs the credential's existence-and-scope; FU-012 governs what state and
+  which dangerous creds move here, and `main`'s missing out-of-cone state copy is this box's
+  reason to exist). Nothing autonomous until this is dull.
+- **Phase B — a trivial first apply.** Its first real job is a **`tofu apply` of something nobody
+  depends on** — a dashboard-shaped change, explicitly NOT an unattended control-plane or router
+  operation. The point of the first rollout is the *path*, not the change: the same reasoning as
+  the state migration's throwaway-root canary (`docs/tofu-state.md`).
+- **Phase C — triggers.** What wakes it: **homelab PR merges** (the deploy-paths gap — a merged
+  change to an unreconciled surface deploys nothing today, `ROADMAP.md` §Deploy paths) plus
+  **drift detection** (the `tofu plan` cron → alert on a non-empty diff that FU-097 asks for and
+  FU-012 unblocked for three of five roots).
+- **Then** the management network (path 2), the CARP pair (path 1), the CP/host quorum work
+  (path 4), PiKVM last — i.e. this doc's original order, resumed once the box is stable.
+
+⚠ One gap this reveals in path 2's own text: its enumeration of what the segment carries
+("Proxmox mgmt, Talos API, PiKVM, the coordinator") **omits OPNsense**, while the rule above it
+implies the router belongs there as a *target* — reachable by a path its own config change cannot
+sever. The segment must still carry no gateway, DHCP or DNS of the router's: a default route
+through OPNsense on the management network rebuilds the dependency it exists to remove.
+Control planes need **no** leg either way (quorum makes one brick a rotation, and a reinstall
+cannot ride a second NIC anyway: proxy-DHCP emits only the bootfile, the address still comes from
+the router's dnsmasq — `docs/provisioning.md`). The cheaper lever there is **static addresses in
+the CPs' machine config**, which takes dnsmasq out of the path quorum rests on for no hardware.
 
 ## What would settle it
 
