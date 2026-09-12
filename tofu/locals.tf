@@ -49,7 +49,7 @@ locals {
   # label travels with the node's machine config and survives a reinstall (boot-from-git), instead of
   # an imperative `kubectl label`. Used to schedule AVX2-only workloads (opencode's Bun runtime SIGILLs
   # without it; see agents/agent-session.sh). Verified via /proc/cpuinfo: the Xeon E5-2680v4 VMs and the
-  # Haswell/Broadwell ThinkPads have AVX2; hp-01 + thinkcentre (Pentium G840) do NOT. Keyed by node name,
+  # Haswell/Broadwell ThinkPads have AVX2; hp-01 (i3-3220) does NOT. Keyed by node name,
   # spanning both VMs and metal — membership-checked in talos.tf/metal.tf patches.
   avx2_nodes = toset([for m in local.machines : m.name if try(m.avx2, false) == true])
 
