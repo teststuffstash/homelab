@@ -8517,3 +8517,56 @@ half; FU-234 rode in it (the doc/script references would otherwise read as dangl
 
 Direct commits this session: FU-234/FU-032/FU-097 tracker edits rode PR#1607 (lint coupling);
 this journal + meta-state are the only direct writes, pushed at wind-down.
+
+
+## 2026-09-12 (late evening) — the R12 design sitting: OS ruled, config built, probe proven
+
+Operator direction across one conversation, then the build. **PR#1608** carries all of it; ADR-129
+is the fork, `docs/management-box.md` the mechanism.
+
+- **The distinction that unlocked the design (operator):** the box must be **live** independently,
+  it need not be **fresh** independently. So the cluster — the thing this box exists to rescue —
+  MAY drive its updates: if the updater is down the box just runs an older glibc. My cone argument
+  had conflated the two. The consequence is not optional though: **the apply may be remote, the
+  rollback must be LOCAL**, because a bad closure plus a dead updater leaves nothing to undo it.
+- **Ruled:** NixOS, flake in-repo, **USB install once** (`disko` + `nixos-anywhere`; the stick only
+  carries an SSH-able installer, the config comes from git). Rejected: Debian+Ansible (apt is not
+  atomic on the one box whose recovery is manual), Flatcar/FCOS (better rollback, worse fit),
+  **netboot NixOS** (no local generations — rollback becomes a server edit — and it makes the
+  recovery root depend on Matchbox + dnsmasq + the LAN *to boot*). PXE for the INSTALL is deferred,
+  not rejected: it earns its keep at the second install of a config that has stopped churning.
+- **Two pins, two revert paths, one git:** the system closure on `nixos/flake.lock`; the toolchain
+  NOT in the closure — `tofu`/`talosctl`/`ansible` ride the repo's `devbox.lock`, so jail and box
+  hold ONE pin, already bumped weekly by `devbox-update.yaml`. "A new tofu broke it" is therefore a
+  `git revert`, not an OS operation. (Renovate's nix/devbox manager stays disabled — `@latest` is
+  untrackable.)
+- **What the evaluation caught, which reading would not have:** GRUB with `device = "nodev"` +
+  `efiSupport` installs **EFI-only** — on a legacy-BIOS box (the pilot's firmware is UNVERIFIED,
+  ~2011 board) that is an unbootable system. The layout now carries a BIOS-boot partition AND an
+  ESP, and `bootMode` is a one-word switch decided in front of the hardware. Second catch: setting
+  `grub.device` alongside disko's own registration trips "duplicated devices in mirroredBoots".
+  Both bootloader branches now evaluate.
+- **The empty-key brick is a BUILD failure**, verified by evaluating with `keys/` empty: no console,
+  no password and no key would be unrecoverable, so the assertion refuses to build.
+- **`scripts/mgmt-probe.sh` — 5/5 PASS from the jail today**, and running it taught three things:
+  both env scripts must be sourced per root (`keepass-env.sh` alone dies "No valid credential
+  sources found" — the documented trap); talosctl skew must compare **minor**, not equality, or
+  every toolchain bump cries wolf (client v1.13.8 vs server v1.13.2 right now); and the probe's
+  root set is a **cone** question, not a "which roots are migrated" question — `infisical` is
+  excluded because its provider auth comes from the live cluster via a port-forward, so its plan
+  asserts the cluster is up, the opposite of what this box probes.
+- **One mechanism, two jobs:** `tofu plan` → "No changes" asserts toolchain + state + passphrase +
+  credentials + path in one read-only call, so FU-097's drift belt and the box's health probe are
+  the same probe. Publishing follows the Garage write probe's shape (verdict + a last-run timestamp
+  so staleness catches a wedged box).
+- **Timers built, NOT armed** (phase A): the creds they probe are not on the box yet.
+- **Fleet accounting, same branch:** promoting `wk-metal-02`/`-03` to control planes takes the last
+  two kata boxes that MAY host a ride — the other two are Garage zone nodes the ledger says must
+  carry none. Kata pool **4 → 0**, ARC labelled hosts **3 → 1**. So the ride box comes first; the
+  three-CP goal is gated on it, not on a second hypervisor. Filed as a `need` row with its envelope.
+- **Reviews:** two subagents over the branch (one adversarial on the nix + probe code, one on the
+  docs' factual claims against the corpus) — their findings and what was fixed close this entry.
+
+Operator does the stick + reboot tomorrow. Direct commits this session: the two bookkeeping
+batches + this journal; PR#1608 open with auto-merge armed (the bot reviewer is latched on the
+subscription's 7d window).
