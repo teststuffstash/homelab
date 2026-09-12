@@ -21,6 +21,10 @@ spec:
       name: s3-web
   selector:
     {{- include "garage.selectorLabels" . | nindent 4 }}
+    # In-cluster S3 clients only. The headless Service (peer RPC) and the metrics Service below
+    # deliberately do NOT select on this — a pod pulled from the client path stays a full peer and
+    # stays scraped, which is when its metrics matter most.
+    garage.teststuff.net/serve-s3: "true"
 {{- if .Values.monitoring.metrics.enabled }}
 ---
 apiVersion: v1
