@@ -73,6 +73,11 @@ WARNS=0; FAILS=0
 node_ip() { kubectl get node "$NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'; }
 node_mac() { grep -oE "\"host\": \"$NODE\", \"hwaddr\": \"[0-9a-f:]+\"" "$REPO/opnsense/dnsmasq-dhcp.py" | grep -oE '[0-9a-f:]{17}' | tr -d ':'; }
 node_ready() { kubectl get node "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null; }
+# Is the box answering on the network? ping is NOT available in the jail container (no iputils in
+# devbox, none in the image — 2026-09-12: the silent `ping` failure made `up` fire WoL at a box
+# that was already booting, and the ssh hop then aborted the whole wake). bash /dev/tcp needs no
+# tool: Talos apid (50000) answers as soon as the machine is up, long before Ready.
+host_up() { timeout 2 bash -c "exec 3<>/dev/tcp/$1/50000" 2>/dev/null; }
 
 # Volumes whose LAST usable replica sits on $NODE, one per line:
 #   <volume> <attached|detached> <ns/pvc> <consumer> <dataLocality>
@@ -316,13 +321,15 @@ down() {
 up() {
   local ip; ip="$(node_ip)"
   if [ "$(node_ready)" = True ]; then log "$NODE already Ready"; else
-    if ping -c1 -W1 "$ip" >/dev/null 2>&1; then log "$ip answers ping — booting, no WoL needed"; else
+    if host_up "$ip"; then log "$ip answers on :50000 — booting, no WoL needed"; else
       power status || true   # the plug's draw, before we believe anything about the box's state
       local mac; mac="$(node_mac || true)"
       if [ -z "$mac" ]; then log "no MAC for $NODE in opnsense/dnsmasq-dhcp.py (a VM? start it on pve) — waiting for Ready anyway"; else
         log "WoL $NODE ($mac) via $PVE_HOST"
-        ssh -i "$PVE_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$PVE_HOST" \
-          "python3 -c \"import socket; m=bytes.fromhex('$mac'); p=b'\\xff'*6+m*16; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.setsockopt(1,6,1); s.sendto(p,('255.255.255.255',9))\""
+        ssh -i "$PVE_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
+          -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$PVE_HOST" \
+          "python3 -c \"import socket; m=bytes.fromhex('$mac'); p=b'\\xff'*6+m*16; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.setsockopt(1,6,1); s.sendto(p,('255.255.255.255',9))\"" \
+          || log "WoL hop to $PVE_HOST failed (host key? key file?) — no magic packet sent; still waiting for Ready in case the box is already on"
       fi
     fi
     log "waiting for Ready (≤${READY_TIMEOUT}s)"
@@ -330,14 +337,27 @@ up() {
       sleep 10; t=$((t+10))
       # WoL only works from S5 on standby power: a box that was UNPLUGGED (cable swap, RAM…) has
       # no armed NIC until it has booted once — 2026-09-06, wk-metal-04 needed the button.
-      [ $t -eq 120 ] && ! ping -c1 -W1 "$ip" >/dev/null 2>&1 && log "no ping after 120s — if the box lost AC power, WoL cannot wake it: press the power button (the wait continues)"
+      [ $t -eq 120 ] && ! host_up "$ip" && log "no answer on :50000 after 120s — if the box lost AC power, WoL cannot wake it: press the power button (the wait continues)"
       [ $t -ge "$READY_TIMEOUT" ] && { log "TIMEOUT: $NODE not Ready after ${READY_TIMEOUT}s"; return 1; }
     done
     log "$NODE Ready after ~${t}s"
   fi
   log "uncordon $NODE"; kubectl uncordon "$NODE"
+  # Ready is NOT enough for a volume to come back: the Longhorn CSI plugin registers on the node
+  # SECONDS-to-MINUTES after Ready, and until it does every attach fails with "CSINode <node> does
+  # not contain driver driver.longhorn.io". The healthy test below cannot see that — a strict-local
+  # zone volume is DETACHED while its pod cannot attach, so "0 degraded ATTACHED volumes" is
+  # vacuously true and the window reads closed with garage-1 still down (2026-09-12, m70s: closed
+  # at 13:30:22, attach kept failing until the plugin registered ~13:32).
+  log "waiting for the Longhorn CSI driver to register on $NODE (≤300s)"
+  local t=0
+  until kubectl get csinode "$NODE" -o jsonpath='{.spec.drivers[*].name}' 2>/dev/null | grep -q 'driver.longhorn.io'; do
+    sleep 10; t=$((t+10))
+    [ $t -ge 300 ] && { log "TIMEOUT: driver.longhorn.io not registered on $NODE after 300s — attaches will fail"; return 1; }
+  done
+  ok "Longhorn CSI driver registered on $NODE"
   log "waiting for Longhorn: node Schedulable + every attached volume healthy (≤${HEALTHY_TIMEOUT}s)"
-  local t=0 bad sched
+  local bad sched; t=0
   while :; do
     sched="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Schedulable")].status}' 2>/dev/null)"
     bad="$(kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '[.items[]|select(.status.state=="attached" and .status.robustness!="healthy")]|length')"
