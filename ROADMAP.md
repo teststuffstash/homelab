@@ -371,7 +371,7 @@ tier actually flexes. Feature-request synthesis (so it isn't re-researched):
   Reframe: our node set is **fixed**, so this is **node suspend/resume**, not autoscaling — which
   is why CA's "terminate the instance" model doesn't fit.
 - **Targets = the tainted ephemeral laptops** (wk-metal-01/02; ADR-044). NOT the storage desktops
-  (hp-01/thinkcentre hold Longhorn).
+  (hp-01/m70s hold Longhorn; thinkcentre left cluster duty 2026-09-12).
 - **Power model** (extends ADR-013): sleep = `talosctl shutdown` (graceful S5); wake = **WoL**.
   ⚠️ Laptops have **batteries**, so smart-plug power-off doesn't work (they keep running on
   battery) — WoL is the *only* wake path. **Feasibility gate:** verify ThinkPad X240/X250

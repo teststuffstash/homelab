@@ -25,7 +25,9 @@ bgp_node_ips:                                # Talos nodes that peer (BGP neighb
   # never advertised VIPs); the Cilium BGP metrics caught it (2026-06-11). Cilium's nodeSelector
   # is all-nodes, so OPNsense must list every node here (explicit neighbors, not a listen-range).
   - 192.168.2.54   # hp-01
-  - 192.168.2.53   # thinkcentre
+  # 192.168.2.53 (thinkcentre) REMOVED 2026-09-12 — left cluster duty (→ the R12 management-box
+  # pilot). A neighbour with no cilium-agent behind it sits `active`/`connect` forever, which is
+  # indistinguishable from the onboarding miss this list exists to prevent.
   - 192.168.2.182  # wk-metal-01
   - 192.168.2.183  # wk-metal-02
   - 192.168.2.184  # wk-metal-03 (kata node, onboarded 2026-07-13)
