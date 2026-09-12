@@ -475,7 +475,9 @@ Symptoms, not guessed causes; each names where to read next. In
   `garage worker list` (287 on garage-2 from the 09-09 stall).
 - **`GarageS3ServerErrors`** / **`GarageQuorumMembersRestarted`** — client-visible quorum loss:
   ≥3 × 500/503 in 5m, and two quorum members (re)started inside 5 min (the 2026-09-09 07:22Z
-  rollout with no readiness probe cycled all three in 31 s; both exprs replay true on it).
+  rollout, which had no readiness probe yet, cycled all three in 31 s; both exprs replay true on
+  it — the `/health` readiness probe + `minReadySeconds` 90 that now serialize a rollout landed
+  afterwards, in #1555).
 - **`GarageWriteProbeFailing`** / **`GarageWriteProbeSlow`** / **`GarageWriteProbeSilent`** —
   client-perspective write probe (homelab#1560) that exercises a signed PUT→GET→DELETE round-trip
   every minute against the in-cluster ClusterIP. The 2026-09-08 UploadPart p99 100 s had no
