@@ -283,24 +283,16 @@ six OVERSIZE items pointer-ized into
       ArgoCD prune deletes the OLD hashed CM the moment the name rolls — a rollback then
       references a pruned CM (Brian Grant, itnext.io/…-1431398c0866, bookmarked). Relates ADR-083.
 
-- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** The risk fired
-      2026-08-24 — meta LMDB wiped in the pve thin-pool incident
-      ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884). **ADR-114**
-      (+ addendum, + the 2026-09-07 amendment) answers both halves. **rf=3 across three physical
-      zones is LIVE since 2026-09-07** (wk-metal-01 / wk-metal-04 / m70s, each pod on its own
-      `longhorn-local-xfs` volumes; PR#1498 + [`garage.md`](garage.md) §The build-out as run;
-      numbers in the [ledger](storage-ledger.md) §The rf=3 build-out as run). Reclamation = the
-      zone-by-zone rotation, first executed on garage-0 as the build-out's last step — **converged
-      2026-09-08 ~05:00Z** (identical tables on all three nodes; the native resync onto the SA400
-      took ~6.5 h for 3.2 M items / 559 k blocks; only 3 pre-existing corrupted Loki chunks error).
-      **The rotation loop is
-      BUILT and has RUN 2026-09-09** (`argocd/resources/garage-meta-rotation/` + the `meta-rotate`
-      init container; [`garage.md`](garage.md) §The loop as built; PR#1549 + thresholds
-      #1551/#1553/#1554): trigger = the alert, health gate, seed = the pod's own finished snapshot
-      (the native `repair tables` re-bloats 3–4× — measured). **First unattended run 08:45Z:
-      garage-0 27.83 → 4.68 GB in 4 min 08 s** (ledger row). **Next:** CNPG replica-1 + required
-      zone anti-affinity, then the backup CronJob (ADR-114's logical-deletion class). **Operator
-      intent: metadata maintenance must be unattended.** Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
+- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** The risk fired 2026-08-24
+      (meta LMDB wiped with the pve thin pool —
+      [incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884). **ADR-114**
+      + its addendum + the 2026-09-07 amendment answer both halves; mechanism and run numbers live
+      in [`garage.md`](garage.md) and the [ledger](storage-ledger.md), not here. Done: **rf=3 across
+      three physical zones (2026-09-07)**; **the rotation loop, unattended since 2026-09-09**
+      (single-actor, 12 h cooldown, all-nodes health gate); **the dedicated-spindle residual,
+      2026-09-12** — garage-1 onto its own PM961. **Next:** CNPG replica-1 + required
+      zone anti-affinity, then the backup CronJob (ADR-114's logical-deletion class). Operator
+      intent: metadata maintenance is unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
 
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
