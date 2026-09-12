@@ -8467,3 +8467,53 @@ wind-down.
 - **19:4x–20:1xZ (operator: "do the rest of codeowner reviews"):** #1545 (19:4x), #1543 (19:41Z), #1538 (19:58Z), #1542 (19:52Z) and sleep-tracking#142 (renovate major, human-merge lane) all codeowner-approved and MERGED; #1540 left to the loop's merge-conflict lane (stray `agent/arbitrate` cleared so the clause sees it). **The conflict-vs-codeowner-read question answered from the ruleset** (`dismiss_stale_reviews_on_push = true`): a resume push and a close+re-dispatch both discard the approvals; only updater API merges are exempt. #1542 was the live case (my own race: approved #1542 and #1543 minutes apart) — resolved at the read (seat merge commit keeping both `rows.psv` rows, goal family green), bot re-approved 19:51Z, re-approved on the resolution diff, merged 19:52Z: one re-review + a two-line re-read instead of a fresh ride. Ordering rule for the seat: one read per lane, merge, then the next. Operator's banked idea: pre-read stacking of conflicting parked PRs — the theme branch (ADR-126) is the sanctioned shape of it; not built, "see if ADR-128 + the proxy/exporter extraction alleviates the pain first". **The brief had NO merge-conflict play** (only the pre-flight note + merge-path.md's table; coordinators improvised — the operator has seen resume rounds and closes both) → **PR#1596 MERGED 20:09Z**: §The `merge-conflict` clause (resume-on-branch default with the approved head named, close+re-queue, escalate; one resume never two), merge-path row + MP-T06 guard anchored on it. **#1576 poke (round 3 on deepseek, dispatched 19:34Z after the human `ARBITRATE:` comment + #1547 un-blocked):** at 20:1xZ OPEN UNKNOWN head=38624926 labels= content-commits=4 newest-content=2026-09-11T19:55:38Z; pod agent-homelab-issue-1547-r4:Running:52s — outcome is the next session's read (did deepseek land the ADR-103 pin haiku no-op'd twice?).
 - **20:2xZ (operator link: #1595 "still got opened" from #1541's review):** the merged-closeout on #1529 (19:30Z) harvested the `--paginate` bullet from #1541's **09-08 approval — DISMISSED at 18:2xZ for the ADR-127 re-read**, whose 18:32Z live re-review had dropped it; the sprout also arrived wearing `agent-fix` (breaker #1 says none). Brief said "read every review" — a dismissed review counted. **PR#1597** (armed): harvest LIVE verdicts only (a DISMISSED review is an ended round, its bullets superseded), harvested issues carry no label of any kind; issue-authoring.md leg (a) same sentence. #1595 closed not-planned (harvest-bar wont-fix: no head has >30 check-runs; `--paginate` at the next touch of that call).
 
+## 2026-09-12 (evening) — thinkcentre leaves the cluster; the decommission gets a recipe
+
+Operator: "Lets continue with thinkcentre" — the pickup the morning session parked. The box left
+cluster duty to become the R12 management-box PILOT. **PR#1607** carries the whole cluster-side
+half; FU-234 rode in it (the doc/script references would otherwise read as dangling ids to
+`follow-ups-lint` on the branch).
+
+- **The eviction was the cheap part: 16 replicas, 76 G scheduled, 3 min 19 s** (18:58:42 →
+  19:02:01Z), 0 degraded volumes at any point, +45 G onto m70s `nvme` and +36 G onto hp-01
+  `intel7600p`. Co-location check after: clean. It was cheap for three reasons that are
+  preconditions, not luck — hp-01's 7600p went in the same afternoon *for this*; all 16 volumes
+  had their other copy on wk-02, so the rebuild target set could not collide with the survivor;
+  and the `fast` tier had zero consumers, so losing both Optanes with the box cost nothing. The
+  second reason expires: wk-02's 21 remaining replicas leave organically onto the same two nodes,
+  after which every std volume is m70s + hp-01 with no spare zone.
+- **The near-miss worth remembering: the plan wanted to touch hp-01.** `tofu plan` showed
+  `talos_machine_configuration_apply.metal["hp-01"]` updating in place, because master predated
+  the PARKED PR#1606 (hp-01's 7600p declaration, already applied live) — an apply would have
+  pushed a config that drops the `intel7600p` mount that had *just* taken the evicted replicas.
+  Operator: "Just force merge 1606" → merged 19:06Z, branch rebased, plan reduced to the node's
+  own two destroys. **A parked already-applied declaration PR is a landmine for the next
+  unrelated apply**, and that is now step 2's ⚠ in the recipe.
+- **The BGP neighbour needed an explicit delete.** Dropping .53 from `bgp_node_ips` reported
+  `changed=0` — the role is create-if-absent (the §Retire-a-per-name-HTTPS-entry class), so the
+  live neighbour stayed configured. A one-shot `frr_bgp_neighbor state=absent` removed it;
+  verified against `/api/quagga/bgp/get` (10 neighbours, one per remaining node). A neighbour
+  with no cilium-agent behind it sits `active` forever — indistinguishable from the onboarding
+  miss the list exists to catch.
+- **machines.yaml keeps the entry.** It is the machine inventory, not a cluster list (opnsense,
+  pve and the droplet live in it too): the Talos flags were REMOVED — which is what tofu derives
+  membership from — and the hardware facts that outlive the role stay (the Optane cards on PCIe
+  adapters, the free J7B1/J8B4 chipset slots R12's second NIC needs, no AVX2 *and* no AES-NI).
+- **New: `docs/runbook.md` §"Retire a node from cluster duty (decommission)"** — the onboarding
+  list run backwards, 7 steps with the two order-dependencies (storage out before the drain; the
+  tofu apply before the node object is deleted). No prior art existed. The onboard skill points
+  at it rather than re-deriving it.
+- **End state verified, not asserted:** 10 nodes Ready, `nodes.longhorn.io/thinkcentre` auto-GC'd
+  with the node object, eventbus-default-js-1 moved to hp-01 and Ready, 0 degraded volumes,
+  `tofu plan` "No changes", plug reads **0.0 W** (socket on — the box is in S5; it auto-boots on
+  AC restore, so it stays dark until a plug cycle or the power button).
+- **Still blocking R12, unchanged:** FU-097's per-surface ruling table. The hardware stopped being
+  the blocker today and is now idle — standing the box up before deciding which surfaces it may
+  reconcile is hardware driving design. FU-234 (Optanes → wk-metal-04) is operator-hands work.
+- **Noted, not chased:** the responder lane's `respond-*` pods have been exiting 1 all evening —
+  that is the DESIGNED typed defer, not a fault ("both rails latched (FU-088); markers written,
+  exit 1 → Argo retries with backoff"): subscription utilization 7d = 0.95 and the Go rail
+  limited. Capacity condition, already instrumented.
+
+Direct commits this session: FU-234/FU-032/FU-097 tracker edits rode PR#1607 (lint coupling);
+this journal + meta-state are the only direct writes, pushed at wind-down.
