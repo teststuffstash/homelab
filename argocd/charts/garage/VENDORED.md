@@ -23,3 +23,13 @@ tag/commit above.
 - `templates/workload.yaml` + `values.yaml`: `minReadySeconds` on the StatefulSet (upstream has
   none). With `readinessProbe` on `/health` it is what keeps a rollout from cycling two quorum
   members inside the same minute (2026-09-09).
+- `templates/workload.yaml`: the pod template carries `garage.teststuff.net/serve-s3: "true"`
+  (2026-09-12). Half of the client-path exclusion below — **drop it and the exclusion silently
+  stops working**, because removing the label from a pod would then match nothing.
+- `templates/service.yaml`: the `garage` ClusterIP's selector ALSO matches
+  `garage.teststuff.net/serve-s3: "true"` (2026-09-12), so one pod can be pulled out of the
+  in-cluster S3 client path during a zone/metadata rebuild while staying a full peer. Deliberately
+  NOT applied to `service-headless.yaml` (peer RPC) or the metrics Service in the same file — a
+  drained pod must keep its replica role and its scrape. The LAN VIP half of this lives in
+  `tofu/garage.tf` (`kubernetes_service.garage_s3_lb`), outside the chart. Recipe + the
+  one-pod-out precheck: docs/garage.md §The build-out step 8.
