@@ -1,4 +1,4 @@
-# Authorized keys for [the management box](../../../docs/management-box.md)
+# Authorized keys for [the management box](../../../../docs/management-box.md)
 
 One `*.pub` per key, read at build time by `../default.nix`. Public keys are **config, not
 secrets** (`docs/secrets.md` §Minting doctrine) — they belong in git.
