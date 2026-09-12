@@ -400,11 +400,23 @@ original pod only.
      it: p99 **DeleteObject 6.93 s, ListObjectsV2 6.83 s, PutObject 4.46 s, GetObject 4.45 s**
      against a sub-second baseline (all classes back to 0.1–0.6 s once the table walk passed).
      Quorum never broke and the SLO availability held — this is a LATENCY cost, not an outage.
-     Rule of thumb from the two runs: **workers ≈ threads − 2** (leave the ledger's ~2 cores for
-     Garage's own request path plus the Longhorn engine), i.e. 8 on a 4-core desktop, **2 on a
-     2C/4T SFF**, and `resync-tranquility 0` only where those cores exist. The trade is duration
-     for smoothness: at 8/0 this run converged in ~1.5 h with multi-second spikes; throttling
-     mid-run costs roughly an hour more of a degraded-but-quiet window.
+     **What differs between the two runs is PHYSICAL cores, not threads:** wk-metal-04 is an
+     i5-3570K, 4 cores / 4 threads (no HT) and took 8/0 without trouble; m70s is a Pentium Gold
+     G6400, **2 cores** / 4 threads, and 8/0 saturated it. Both read `cpu_cores: 4` in
+     `machines.yaml` — that field is threads, so do not size workers off it.
+     Starting point: **≈ 2 workers per physical core** (8 on wk-metal-04 = the measured-good
+     point; **4 on m70s**, which is a starting point to verify, NOT a proven figure — all this run
+     establishes is that 8 was too many there).
+     Then use the observable rather than the arithmetic: read `100 - idle` on the node
+     (`node_cpu_seconds_total`) once the repairs are running, and **halve the worker count if it
+     exceeds ~80 % while clients are active** — that is the condition that produced the 5–7 s
+     tails, and it is the only thing the two data points really agree on. `resync-tranquility 0`
+     belongs only on a node with spare cores. The trade is duration for smoothness: at 8/0 this
+     run converged in 2 h 09 min with multi-second spikes on the rebuilding node; throttling
+     mid-run costs roughly an hour more of a quieter window.
+     Cheaper still: the SEED path of step 6 above avoids the question entirely — a seeded node
+     verifies instead of walking (~255 blocks/s on verify vs 92/s fetching here), which is
+     I/O-bound rather than CPU-bound.
    - **Reset the workers when the resync ends.** They persist on the pod, and a zone left on
      build-out settings is a standing tax on every later write (sighted 2026-09-08: all three pods
      were still on the build-out's 8/0 weeks later).
