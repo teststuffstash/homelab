@@ -335,16 +335,15 @@ six OVERSIZE items pointer-ized into
       with zero anonymous requests is the trigger that makes the push-mirror the next deliverable.
 - [ ] **FU-010** — Infisical↔CNPG uses `sslmode=disable` (node-pg rejects CNPG's self-signed
       cert). Fine pod-to-pod; revisit if Cilium transparent encryption lands.
-- [ ] **FU-012** — **Remote/encrypted tofu state backend** (every root is local, gitignored state).
-      Hard prerequisite for anything that plans/applies off the operator's machine — the FU-097
-      drift belt and the out-of-cluster applier. **3 of 5 roots MIGRATED 2026-08-04** — `cloudflare`
-      (14), `provisioning` (2), `infisical` (13), each encrypted and verified with the local file
-      deleted against a pre-move baseline; wallet entries seeded in `keepass-init.sh`.
-      **Garage v2.3.0 does not enforce `If-None-Match` (measured 20/20), so all three run
-      `use_lockfile = false`** — fine at one writer, a hard block on any automated applier.
-      **Next:** the FU-097 read-only drift belt can now run for these three; ⚠ `main` stays local
-      until it has an out-of-cone state copy, `github` is host-only. Ruling, cone table, runbook:
-      [`docs/tofu-state.md`](tofu-state.md). Relates FU-097, FU-136.
+- [ ] **FU-012** — **Remote/encrypted tofu state backend + the dangerous creds off the jail:
+      POINTER.** Hard prerequisite for anything that plans/applies off the operator's machine (the
+      FU-097 drift belt, the out-of-cluster applier). Migration state, the per-root cone rulings,
+      the `use_lockfile = false` ruling and the runbook: [`docs/tofu-state.md`](tofu-state.md) —
+      3 of 5 roots on encrypted Garage state since 2026-08-04. **Next:** `main` stays local until
+      it has an out-of-cone copy, and **that copy's home is now named — the R12 pilot**, whose
+      phase A is this item's other half (SSH creds + rotation + how tofu reaches the box):
+      [`spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md) §The pilot's build order.
+      `github` is host-only. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
       doesn't DR). `tofu/homeassistant.tf`.
@@ -396,19 +395,16 @@ six OVERSIZE items pointer-ized into
       diff, liveness gauge, prPriority + `NIX_VERSION` hygiene, the pin-dependencies branch.
       `dependencyDashboard: false` by ruling 2026-08-18 (liveness = the exporter gauge ONLY).
       This item closes when that Goal launches and validates. Relates FU-046, FU-097, FU-016.
-- [ ] **FU-097** — **Write the per-surface ruling table for the surfaces ArgoCD/tofu don't
-      reconcile** (OPNsense, Proxmox host, Home Assistant, Matchbox, `tofu/` roots): automate, or
-      human-applied + a named drift belt. That table is the first deliverable; then implement the
-      automated ones one surface at a time. Surfaces + candidate shapes:
-      `ROADMAP.md` → Programs in flight → "Deploy paths"; per-root tofu split + the runner
-      dependency-cone rule: [`docs/dependency-upgrades.md`](dependency-upgrades.md); the no-human
-      end-state: [`docs/spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
-      **2026-09-12: the hardware stopped being the blocker and is now IDLE** — `thinkcentre`
-      left cluster duty the same day (drained, node deleted, powered off) purely to be the R12
-      management-box PILOT, so **this table is the only thing the build waits on**. Read the R12
-      row in the private hardware requirements register before standing it up: pilot, not the
-      permanent box (27.9 W idle, no AES-NI, an absent x16 CPU root port).
-      Relates FU-051, FU-012, ADR-093 (Argo as the candidate runner for the ansible Jobs).
+- [ ] **FU-097** — **Write the per-surface ruling table** for the surfaces ArgoCD/tofu don't
+      reconcile (OPNsense, Proxmox host, Home Assistant, Matchbox, `tofu/` roots): automate, or
+      human-applied + a named drift belt. **It is the first deliverable and is unwritten.**
+      Surfaces + candidate shapes: `ROADMAP.md` §Deploy paths; the per-root split + the
+      dependency-cone rule: [`dependency-upgrades.md`](dependency-upgrades.md); the end-state +
+      **the R12 pilot's ruled build order**, which this table precedes:
+      [`spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
+      **2026-09-12:** the hardware stopped being the blocker — `thinkcentre` left cluster duty to
+      be the pilot and sits idle — so this table is the only thing the build waits on.
+      Relates FU-051, FU-012, ADR-093.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
@@ -848,16 +844,16 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
-- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: the sync manager's in-memory
-      state can corrupt under a fast-failure storm and Pending then piles up silently**
-      (2026-08-31, operator-spotted: waiters told "5/5" against a provably empty semaphore
-      for 65+ min after the #1136 exit-128 storm; controller restart drained it in minutes).
-      Postmortem + belt audit + evidence + the storm→wedge trigger note:
+- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: POINTER.** The sync manager's
+      in-memory state corrupts under a fast-failure storm and Pending piles up silently
+      (2026-08-31, "5/5" against a provably empty semaphore for 65+ min). Postmortem, belt audit,
+      trigger, and — ⚠ **2026-09-12** — a SECOND, BENIGN cause with the SAME signature
+      (rail-latched `respond-*` hold their lock across Argo's retry backoff), hence a discriminator:
       [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
-      **Next:** an alert on the wedge shape — Argo Pending high-and-not-draining while
-      `anthropic_subscription_semaphore_running` ≈ 0 — into `argo-workflows-alerts` with
-      promtool cover; check upstream sync-manager fixes (`v4.0.7` today) before any bump.
-      Relates FU-187 (sibling belt-blindness).
+      **Next:** that alert — Pending high-and-not-draining while
+      `anthropic_subscription_semaphore_running` ≈ 0 **and NOT
+      `anthropic_subscription_dispatch_limited`** — into `argo-workflows-alerts` with promtool
+      cover; check upstream sync-manager fixes (`v4.0.7`) before any bump. Relates FU-187, FU-088.
 
 - [ ] **FU-228** — **`agent-transcripts` has no retention — 5Gi → 20Gi bought time, not a policy.**
       The bucket sat at 98 % (5.3 GB, 26.7k objects, ~1 GB/week of ride exhaust) the hour

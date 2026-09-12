@@ -59,4 +59,27 @@ semaphore still grants (Pending drains; `anthropic_subscription_semaphore_runnin
 while waiters exist). If it doesn't, restart the workflow-controller — safe for running
 workflows, and the only reconciliation that exists.
 
+## A SECOND cause with the same signature (2026-09-12) — what the belt must discriminate
+
+19:0x–19:2xZ, found by a seat looking for a missing PR review: the lock plane read **5 holders
+with zero subscription pods running**, two `review-*` workflows queued behind them (18:05Z,
+19:04Z) — the exact picture above. It was **not** a wedge. Both rails were latched
+(`/anthropic-limit`: `reason=utilization-7d`, 7d 0.95 vs threshold 0.95, 5h 0.0, header age
+~1.9 h, 7d reset 22:00Z), so five `respond-*` workflows were `Running` and each **held its
+`subscription-capacity/claude` lock across Argo's retry backoff** while its pods exited 1 on the
+designed typed defer (FU-088 latch → FU-113b retry). Holders were real Workflow objects doing
+exactly what they should.
+
+Nothing was starved — every claude-tier consumer was latched too, the reviewer included — so this
+state is benign. That is the problem for the belt this incident asks for: **"waiters + zero real
+slots consumed + not draining" is TRUE of both the corrupt sync state and a fleet-wide capacity
+latch**, and only one of them wants a controller restart. The discriminator has to be explicit —
+`anthropic_subscription_dispatch_limited == 1` (the existing `SubscriptionDispatchLimited` alert's
+expression, `argocd/resources/openrouter-proxy/prometheusrule.yaml`) is the cheap one: latched ⇒
+expected, not latched ⇒ wedge. Reading the holding workflows' latest pod phase (absent/Completed
+vs never-created) works too and is independent of the proxy.
+
+Operational rule: **never restart the workflow-controller on this shape without checking the
+latch first.** Tonight a restart would have "fixed" nothing and re-queued five defers.
+
 Residual (the belt): FU-198.
