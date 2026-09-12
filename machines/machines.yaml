@@ -282,6 +282,15 @@ machines:
     # `talosctl validate --mode metal`. Install-time only, like every field in this block.
     install_disk: /dev/disk/by-id/nvme-Micron_MTFDHBA512TDV_21052D0C4364
     longhorn_default_disk: true # registered 2026-09-07 (no tier tag: the ADR-114 zone disk — longhorn-tag-disks.sh)
+    longhorn_disks:
+      # Samsung PM961 256G on a Gembird PEX-M2-01 in the x16 LP slot, fitted 2026-09-12 —
+      # garage-1's DEDICATED data disk, the FU-137 residual. Read in place before declaring:
+      # 1% used, 3925h, hmpre 0 (real DRAM), link 8.0 GT/s x4 = its maximum, Opal-capable but
+      # unlocked, no partition table (so the `machine.disks` partitioning below needs no
+      # `talosctl wipe disk` first). NOT one of the two shelf 7600p on purpose: garage-0 already
+      # rides that batch, so the three zones stay three makers (teststuff/hardware §the lot).
+      # by-id, and an `nvme-eui.*` one: NVMe presents no `wwn-*` link in /dev/disk/by-id here.
+      - { device: /dev/disk/by-id/nvme-eui.002538b571b1c443, name: pm961, tags: [] }
     # WHOLE DISK to EPHEMERAL, deliberately. The 2026-09-07 middle state carved a 241GB
     # node-local XFS user volume here for a raw-XFS Garage zone (ADR-114 as written); the operator
     # then took Longhorn instead — placement is a measured per-workload call now, recorded in
@@ -294,6 +303,9 @@ machines:
     # ⚠ Consequence carried in the ledger: Garage data then shares this partition with the
     # containerd image store (the 2026-09-01 collision). The kubelet imageGC floor in metal.tf is
     # gated on `kata` and must widen when this node is registered as a Longhorn storage node.
+    # RESOLVED 2026-09-12 for Garage: the PM961 above is the dedicated spindle, so once garage-1's
+    # two volumes rotate onto it this partition carries Talos + the image store + (next) a `std`
+    # slice — the fleet direction's "Micron → std" — and NOT the zone's data.
     # The ephemeral_max_size / user_volumes fields stay SUPPORTED (metal.tf) for the multi-disk
     # profiling the incoming drives are for — they are simply not used here.
     notes: Third physical Garage zone (FU-137/ADR-114). Storage tier, always-on — deliberately NOT ephemeral/kata. Garage data disk (Samsung PM961) fitted in the x16 LP slot 2026-09-12; that is the box's only x4-capable slot.
