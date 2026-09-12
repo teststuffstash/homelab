@@ -167,11 +167,15 @@ only LAN DHCP.
 ## Storage (Longhorn)
 
 `tofu/longhorn.tf` — Helm 1.12.0, `longhorn` is the **default StorageClass** (replica=2, zone
-soft-anti-affinity across wk-02/thinkcentre/hp-01). All stateful services use Longhorn PVCs (not
-node-pinned). A `longhorn-fast` SC (replica=1, node-local; SCRATCH for disk-write-heavy pods —
-eligibility ruling in `docs/storage-ledger.md`, FU-159) lives on the ThinkCentre's 2×Optane,
-formatted+mounted via the ThinkCentre entry's `longhorn_disks` field in `machines/machines.yaml`
-(`tofu/metal.tf` only consumes it) and registered with `scripts/longhorn-register-optane.sh`.
+soft-anti-affinity). All stateful services use Longhorn PVCs (not node-pinned). ⚠ **Since
+2026-09-12 the `std` tier has exactly TWO schedulable nodes** (m70s + hp-01; wk-02's pooled disk
+is `allowScheduling=false` and thinkcentre left cluster duty), so every r=2 std volume must hold
+one copy on each — soft anti-affinity means a capacity squeeze surfaces as SILENT co-location,
+not a Pending volume. The `longhorn-fast` SC (replica=1, node-local; SCRATCH for disk-write-heavy
+pods — eligibility ruling in `docs/storage-ledger.md`) has **no backing disk** until the Optane
+pair lands on wk-metal-04 (FU-234); registration is `scripts/longhorn-register-optane.sh <node>`,
+the mounts come from that node's `longhorn_disks` in `machines/machines.yaml` (`tofu/metal.tf`
+only consumes it).
 
 - ⚠️ **Never `talosctl upgrade` a Proxmox *nocloud* VM** — the reboot loses the cloud-init static
   IP/hostname and it rejoins as a DHCP/default-name ghost. Add extensions by baking them into the
@@ -192,7 +196,7 @@ formatted+mounted via the ThinkCentre entry's `longhorn_disks` field in `machine
      s.sendto(p,(\"255.255.255.255\",9))"'
   ```
   Physical NIC MACs (from `opnsense/dnsmasq-dhcp.py` reservations): hp-01 `b4:b5:2f:df:01:bc`,
-  thinkcentre `8c:89:a5:23:49:da`, wk-metal-01 `50:7b:9d:01:b3:54`, wk-metal-02 `68:f7:28:80:84:09`,
+  wk-metal-01 `50:7b:9d:01:b3:54`, wk-metal-02 `68:f7:28:80:84:09`,
   m70s `e0:be:03:3d:8a:d1` (⚠ WoL **untested** on this box; its BIOS is PXE-first, so a wake that
   does reach it netboots — which is the console-free reinstall path, not a fault).
   (NB: a plain `talosctl reboot` keeps the node powered → it returns on its own; WoL is only for an
@@ -291,6 +295,61 @@ maintenance window). Two lessons from the first run:
   volume's own rebuild onto it ("insufficient storage") until the orphans were deleted.
   `orphan-resource-auto-deletion=replica-data` (tofu/longhorn.tf) now removes them after 300 s;
   `up` lists whatever is left and `DELETE_ORPHANS=1` removes them once every volume is healthy.
+
+### Retire a node from cluster duty (decommission)
+
+The reverse of the onboarding list (`.claude/skills/onboard-metal-node`) — the same "nothing
+fails when you skip it" property applies, so it is a checklist. First run: `thinkcentre`,
+2026-09-12 (it left to be the R12 management-box pilot). Order matters where noted.
+
+1. **Storage out first.** Evict the node's Longhorn replicas and let them rebuild elsewhere —
+   ⚠ check the TARGET capacity before starting, because `replica-soft-anti-affinity=true` means
+   a tier without room silently CO-LOCATES both copies of a volume instead of refusing:
+   ```bash
+   K="devbox run -- kubectl --kubeconfig tofu/kubeconfig"
+   $K -n longhorn-system patch nodes.longhorn.io <node> --type=merge \
+     -p '{"spec":{"allowScheduling":false,"evictionRequested":true}}'
+   # watch to zero (thinkcentre: 16 replicas, 3 min 19 s), degraded must stay 0
+   $K -n longhorn-system get replicas.longhorn.io -o json | jq '[.items[]|select(.spec.nodeID=="<node>")]|length'
+   ```
+   Then the co-location check — **no volume may have two running replicas on one node**:
+   ```bash
+   $K -n longhorn-system get replicas.longhorn.io -o json | jq -r \
+     '[.items[]|select(.status.currentState=="running")]|group_by(.spec.volumeName)[]
+      |{v:.[0].spec.volumeName,n:[.[].spec.nodeID]}|select((.n|unique|length)!=(.n|length))|.v'
+   ```
+2. **De-declare it in the inventory, and apply BEFORE the node object is gone.** In
+   `machines/machines.yaml` remove the Talos flags (`talos_metal_node`, `install_disk`,
+   `longhorn_disks`, `pin_hostname`, `zone`) — keep the entry itself if the box still exists; it
+   is the machine inventory, not a cluster list — then `devbox run -- python3 machines/generate.py`
+   and drop the node from `local.longhorn_zones` (`tofu/longhorn.tf`) if it was a storage node.
+   `devbox run tf-plan` must show exactly the node's own destroys (its
+   `talos_machine_configuration_apply` + `kubernetes_labels`); the label destroy PATCHes the live
+   node, so run it while the node object still exists.
+   ⚠ **Read the plan for OTHER nodes' updates**: a parked, already-applied declaration PR makes a
+   plan want to push a stale config to a different box (2026-09-12: master's hp-01 config predated
+   PR#1606 and an apply would have dropped the 7600p mount that had just taken evicted replicas).
+   Merge that PR and rebase first.
+3. **Drain + shut down with the alert window declared:**
+   `FORCE=1 devbox run node-maintenance down <node>` (§Single worker maintenance window — it
+   silences the node's alerts, so the retirement does not cost the responder lane a session).
+4. `kubectl delete node <node>` — the `nodes.longhorn.io` CR is auto-GC'd with it (verify).
+5. **BGP neighbour out.** Drop the IP from `bgp_node_ips` in `ansible/group_vars/opnsense.yml`,
+   then DELETE the live object — the role is create-if-absent, so re-running the playbook reports
+   `changed=0` and leaves the neighbour configured (same class as §Retire a per-name HTTPS entry).
+   A one-shot play with `oxlorg.opnsense.frr_bgp_neighbor: {peer_ip: <ip>, match_fields: ['ip'],
+   state: absent}`, then verify against the router:
+   `curl -sk -u "$K:$S" https://192.168.2.1/api/quagga/bgp/get | jq '.bgp.neighbors.neighbor'`
+   → one entry per remaining node, nothing else. A neighbour with no cilium-agent behind it sits
+   `active`/`connect` forever, which looks exactly like the onboarding miss the list prevents.
+6. **The DHCP reservation and the smart plug STAY** if the box stays on the LAN (`opnsense/`,
+   `homeassistant/`) — the machine still needs an address and a power path. Remove the MAC from
+   §WoL recovery above (that list is for cluster recovery) and never re-add a Matchbox group for
+   it (`tofu/provisioning/matchbox.tf`) unless you intend a reinstall.
+7. **The doc rows the onboarding list names**, in reverse: `docs/provisioning.md`,
+   `tofu/README.md`, `docs/network-physical.md`, `docs/storage-ledger.md` (tier tables + a ledger
+   row for the eviction), `SERVICES.md` (if a tier or service changed), `ROADMAP.md`. The
+   power/benchmark rows STAY — the box still draws watts.
 
 ### Re-imaging a metal node (change install extensions, e.g. drop qemu-guest-agent)
 Metal nodes **upgrade fine** (unlike nocloud VMs). To switch a metal node to a new install image
@@ -395,7 +454,7 @@ to attach (Multi-Attach / "driver.longhorn.io not found"). Recover with reboots:
 
 1. **Reboot each ghosted metal node** to reclaim its reserved hostname (dnsmasq is healthy now):
    `devbox run -- talosctl --talosconfig tofu/talosconfig -n <ip> reboot`. Do storage nodes
-   (hp-01/thinkcentre) **one at a time** (talosctl reboot blocks until healthy). The node returns
+   (hp-01/m70s) **one at a time** (talosctl reboot blocks until healthy). The node returns
    as its real name; the `talos-xxx` object goes NotReady.
 2. **If a Longhorn volume is wedged:** force-delete the stuck `discover-proc-kubelet-cmdline` pod
    (`kubectl -n longhorn-system delete pod discover-proc-kubelet-cmdline --force --grace-period=0`)

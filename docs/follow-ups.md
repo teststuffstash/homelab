@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-230** (2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-235** (2026-09-12: FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -403,8 +403,11 @@ six OVERSIZE items pointer-ized into
       `ROADMAP.md` → Programs in flight → "Deploy paths"; per-root tofu split + the runner
       dependency-cone rule: [`docs/dependency-upgrades.md`](dependency-upgrades.md); the no-human
       end-state: [`docs/spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
-      **2026-09-12: the hardware stopped being the blocker** (`thinkcentre` becomes the
-      management-box pilot) — **this table is what it waits on**.
+      **2026-09-12: the hardware stopped being the blocker and is now IDLE** — `thinkcentre`
+      left cluster duty the same day (drained, node deleted, powered off) purely to be the R12
+      management-box PILOT, so **this table is the only thing the build waits on**. Read the R12
+      row in the private hardware requirements register before standing it up: pilot, not the
+      permanent box (27.9 W idle, no AES-NI, an absent x16 CPU root port).
       Relates FU-051, FU-012, ADR-093 (Argo as the candidate runner for the ansible Jobs).
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
@@ -1123,11 +1126,11 @@ the block needs pruning, not more headings.
 ## Hardware & nodes
 
 
-- [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
-      wk-metal-02's flaky wired link. **2026-08-07 (homelab#117): wk-metal-02 had a 4.5h NIC
-      flap storm** (`carrier_changes` 2→3778, no reboot, flat plug power) — the thinkcentre
-      bad-cable class, NOT battery/power. **Next (operator, physical):** reseat/replace
-      wk-metal-02's cable / switch port; evidence + counters on homelab#117.
+- [ ] **FU-032** — Watch: **wk-metal-02's flaky wired link** (the thinkcentre half of this item
+      is moot since 2026-09-12 — that box left the cluster). **2026-08-07 (homelab#117):
+      wk-metal-02 had a 4.5h NIC flap storm** (`carrier_changes` 2→3778, no reboot, flat plug
+      power) — the thinkcentre bad-cable class, NOT battery/power. **Next (operator, physical):**
+      reseat/replace wk-metal-02's cable / switch port; evidence + counters on homelab#117.
 - [ ] **FU-155** — **PSI-stall shared-fate kills RECUR on hardened nodes: POINTER.** Mechanism,
       evidence (the broken cadence premise, the 2026-08-17 victim-surface shrink, the 08-24
       service-tier recurrence + pre-upgrade `oomactions` capture, cilium-agent's residual
@@ -1139,6 +1142,16 @@ the block needs pruning, not more headings.
       container req=limits since 07-28, pod still Burstable — folds into the same ruling). Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
+- [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel
+      Optane M10 16G cards left with `thinkcentre` when it retired from cluster duty, so a
+      `longhorn-fast` PVC stays Pending — safe only because the tier had ZERO consumers
+      (FU-159's scratch-only ruling). The StorageClass stays declared: deleting it would orphan
+      the AgentStack XRD's `fast` quota key. **Next (operator, physical):** fit both cards in
+      wk-metal-04's free chipset root ports (`00:1c.0`/`00:1c.1`), add the `longhorn_disks` rows
+      to its `machines/machines.yaml` entry + apply, then
+      `bash scripts/longhorn-register-optane.sh wk-metal-04`. Intent = ride/ARC scratch, off the
+      shared image-store partition. ⚠ The x1 AIC form factor is off the market — do not discard.
+      Detail: [`docs/storage-ledger.md`](storage-ledger.md) §thinkcentre leaves the std tier.
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
 

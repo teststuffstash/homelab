@@ -17,6 +17,9 @@ Full reference: `docs/provisioning.md`. Nodes are declared in `machines/machines
 and `tofu/metal.tf` consumes that — there is no `var.metal_nodes` map any more.
 The flow is flag → reserve IP → boot to maintenance → read disk → install → **unflag** →
 the post-install registrations below (taint, **zone label**, BGP) → the per-node doc rows.
+**Retiring one runs this list backwards** — the recipe is `docs/runbook.md` §"Retire a node from
+cluster duty (decommission)" (storage eviction + the co-location check first, then de-declare,
+drain, delete, BGP, doc rows); do not re-derive it here.
 
 ## Steps
 

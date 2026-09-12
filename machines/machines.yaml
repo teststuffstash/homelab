@@ -182,9 +182,8 @@ machines:
 
   - name: thinkcentre
     kind: metal
-    zone: thinkcentre
-    label: "`thinkcentre` (metal, PXE)"
-    role: k8s worker + Longhorn (+ 2×Optane fast tier)
+    label: "`thinkcentre` (metal, OUT of the cluster)"
+    role: R12 out-of-band management-box PILOT — left cluster duty 2026-09-12, powered off pending FU-097
     hardware: Lenovo ThinkCentre Edge
     cpu_cores: 2
     memory_gb: 4
@@ -195,22 +194,23 @@ machines:
     singlecore_bogo_s: 1200.4
     multicore_bogo_s: 2231.7
     remote_power: smart-plug (switch.tuyalocal_thinkcentre — entity ids were CROSSED with hp-01's 2026-08-18→09-09, read the incident before trusting an older plug observation); auto-boots on AC restore — NOT WoL
-    # ThinkCentre Edge — 120GB Kingston SV300S3 SATA SSD. ⚠️ Device name is enumeration-order
-    # dependent: it's /dev/sdb when PXE-booting with NO USB stick plugged (the steady state), but
-    # was /dev/sdc during the original USB-ISO onboarding (USB took sda). PXE now works reliably
-    # since the NIC cable was fixed (2026-06-11) — was "flaky PXE" purely because the marginal
-    # link timed out netboot. (A diskSelector by serial/wwid would be more robust than /dev/sdX.)
-    # Two Intel Optane M10 16GB (nvme0n1/nvme1n1) → Longhorn fast tier (replica=1 scratch).
-    # Both ride PCIe→M.2 adapter cards in the box's PCIe slots — the board has NO native M.2
-    # slot (operator, 2026-09-09); those PCIe slots are therefore spent.
-    # No AVX2 (Pentium G840) — verified via /proc/cpuinfo.
-    talos_metal_node: true
-    install_disk: /dev/sdb
-    longhorn_disks:
-      # names MUST stay optane0/optane1 — they are the live Longhorn disk keys.
-      - { device: /dev/nvme0n1, name: optane0, tags: [fast] }
-      - { device: /dev/nvme1n1, name: optane1, tags: [fast] }
-    pin_hostname: true
+    # ⚠ NO LONGER A CLUSTER MEMBER (2026-09-12). It was `k8s worker + Longhorn (+ 2×Optane fast
+    # tier)` for 101 days; the operator retired it from cluster duty once std had two other
+    # schedulable nodes (m70s 416 G + hp-01 233 G vs a ~141 G tier) and gave it the R12 role —
+    # the out-of-band management box of docs/spikes/no-human-in-the-loop.md, as a PILOT only.
+    # Decommission run: 16 Longhorn replicas evicted 18:58→19:02Z (0 degraded, no co-location),
+    # drained, shut down. Storage: docs/storage-ledger.md; the R12 row + why it is NOT the
+    # permanent box (27.9 W idle, no AES-NI, the absent x16 CPU root port) lives in the private
+    # hardware requirements register. ⚠ Standing it up waits on FU-097's per-surface ruling table.
+    # The Talos flags (talos_metal_node / install_disk / longhorn_disks / pin_hostname / zone) were
+    # REMOVED, not commented out — tofu derives cluster membership from their presence.
+    # Hardware facts that outlive the role: 120GB Kingston SV300S3 SATA SSD (/dev/sdb when
+    # PXE-booting with no USB stick — enumeration-order dependent). Two Intel Optane M10 16GB on
+    # PCIe→M.2 adapter CARDS (the board has no native M.2 slot) — queued to move to wk-metal-04
+    # as ride/ARC scratch; the x1 AIC form factor is off the market, so do not discard them.
+    # PCIe (SMBIOS type 9, five slots): J7B1 + J8B4 free on chipset root ports 5/6 → the x1 NIC
+    # R12's dual-homing needs fits; the two Optane cards free two more when they leave.
+    # No AVX2 and no AES-NI (Pentium G840) — both verified from /proc/cpuinfo flags.
     notes: >-
       Desktop — highest absolute throughput of the tested boxes, but thirsty.
       WoL is not the control path: BIOS is set to power-on after AC loss, so the box never rests

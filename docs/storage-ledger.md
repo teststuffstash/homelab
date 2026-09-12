@@ -12,14 +12,14 @@ jointly blow the tier — which is exactly what happened.
 > **A tier's committed capacity is the sum of every cap charged against it, across every repo, and
 > exactly one ledger owns that sum.** A claim that doesn't appear in the ledger doesn't exist.
 
-## Current shape (2026-09-10 00:15Z, post garage-0 rotation; the 2026-09-06 read in parentheses)
+## Current shape (2026-09-12 19:20Z, post thinkcentre decommission; the 2026-09-10 00:15Z read in parentheses)
 
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
-| `std` | hp-01 **×2 disks**, thinkcentre, wk-02 | 624G | 538G | 310G (58%) *(was 385G, 71%)* | 356G (57%) *(was 388G)* |
+| `std` | hp-01 **×3 disks** (default unschedulable), m70s `nvme`, wk-02 (unschedulable) | 1185G | 1020G | 294G (29%) *(was 310G, 58%)* | 337G (28%) *(was 356G)* |
 | `bulk` | wk-metal-01 MX500, **wk-metal-04 intel0 + intel1** (the two 7600p) | 1009G | 902G | 816G (90%) *(was 816G on 706G, 115%)* | 399G (40%) |
 | `slow-bulk` | wk-metal-04 SA400 — **unschedulable**, holds no replica | 477G | 316G | 0 | 35G (the image store) |
-| `fast` | thinkcentre Optane ×2 | 28G | 28G | 5G | 1G |
+| `fast` | **NONE — no backing disk since 2026-09-12** (the Optane pair left with thinkcentre; queued for wk-metal-04, FU-234) | 0 | 0 | 0 | 0 |
 | *(untagged)* | m70s Micron 2300 — the `longhorn-local-xfs` Garage zone, selector-less by design | 509G | 402G | 193G | 154G |
 
 Read from the Longhorn node CRs (`storageMaximum`/`storageReserved`/`storageScheduled`/
@@ -30,6 +30,13 @@ figure is real again: the 09-06 115 % was the maintenance-window transient. On w
 registry mirrors (140 G) sit on `intel0`, garage-0's zone volumes (180 G) + the PyPI/mcr mirrors
 (60 G) on `intel1` — Longhorn's most-free-disk pick, not a choice. **std fell 75 G committed** since
 09-06 (platform volumes freed); wk-02's std disk is schedulable again.
+
+⚠ **Only TWO of the std disks are schedulable, on TWO nodes** (hp-01 `hg5d` + `intel7600p`, m70s
+`nvme`): 832G raw / 732G allocatable / 147G committed. thinkcentre left cluster duty 2026-09-12
+(runbook §"Retire a node from cluster duty") and wk-02's pooled disk is fenced, so every r=2 std
+volume must hold one copy on m70s and one on hp-01 — **there is no third zone to rebuild onto, and
+`replica-soft-anti-affinity=true` makes the failure mode silent CO-LOCATION of both copies, not a
+Pending volume.** Check for it after any eviction (the one-liner is in the runbook recipe).
 
 **`fast` eligibility (operator ruling 2026-08-11, FU-159):** SCRATCH for disk-write-heavy pods
 (CI builds and the like) — single-node replica-1 Optane of modest speed; NEVER load-bearing
@@ -255,6 +262,28 @@ correctness with capacity, affordable only because wk-metal-04 joined the tier. 
 happening, `RegistryMirrorWipedRepeatedly` says the fix is a **bigger PVC, never a lower
 threshold**.
 
+### thinkcentre leaves the std tier (2026-09-12) — what an eviction of a whole node costs
+
+The operator retired `thinkcentre` from cluster duty (→ the R12 management-box pilot). The storage
+half, for the next one: **16 replicas, 76 G scheduled, evicted in 3 min 19 s** (18:58:42 →
+19:02:01Z) with `allowScheduling=false` + `evictionRequested=true` on the node CR, **0 degraded
+volumes at any point** and no client-visible effect — Longhorn rebuilds the replacement first and
+deletes the old replica after. It landed as **+45 G on m70s `nvme` and +36 G on hp-01
+`intel7600p`** (Longhorn's most-free-disk pick).
+
+Three things made it cheap, and all three are preconditions, not luck:
+
+1. **The capacity was bought first.** hp-01's 7600p went in the same afternoon precisely because
+   std would drop to two schedulable nodes (see the row above); evicting into a tier without room
+   silently co-locates both copies of a volume.
+2. **Every one of the 16 volumes had its other copy on wk-02** — a fenced but healthy disk — so
+   the rebuild target set (m70s, hp-01) could not collide with the surviving replica. Co-location
+   was structurally impossible on this pass, and the post-eviction check confirmed it. That will
+   NOT hold for the next one: wk-02's 21 remaining replicas leave organically onto the same two
+   nodes, and from then on every std volume is m70s + hp-01 with no spare zone.
+3. **The `fast` tier had zero consumers**, so losing both Optanes with the box cost nothing
+   (FU-159's scratch-only ruling is why it was empty). FU-234 re-homes them.
+
 ### The PyPI cache is in the mirror family but not on the mirror tier (2026-09-06)
 
 `pypi-cache` (homelab#1300 → #1404, consumers wired by #1457) is the fourth pull-through cache,
@@ -268,10 +297,12 @@ failed download, not data loss). Empty at wiring time (56 K used).
 **Tier:** the seat pinned it to the default `longhorn` (std) class on 2026-09-05, following the
 nix-cache shape — but ADR-091 put the registry mirrors' cache PVCs on **`longhorn-bulk`**
 ("re-warmable"), and the ledger's own reading is that `std` is the tight tier. What a warm cache
-costs on `std`: up to ~17 G physical on each of its two replica disks, one of which is
-`thinkcentre/default-disk` — **49 G free against a 29 G floor, i.e. 20 G of growth headroom for
-every std replica on that node**. A full PyPI cache alone nearly spends it, after which thinkcentre
-joins wk-02 as unschedulable and new std volumes can only place on hp-01's two disks (one zone).
+costs on `std`: up to ~17 G physical on each of its two replica disks. ⚠ **The 2026-09-05 reading
+of this paragraph is superseded** — it turned on `thinkcentre/default-disk` having only 20 G of
+growth headroom, and thinkcentre left the tier on 2026-09-12. Today the schedulable std disks have
+308 G (m70s `nvme`), 202 G (hp-01 `intel7600p`) and 74 G (hp-01 `hg5d`) of provisioning headroom,
+so a warm PyPI cache is no longer the disk-filling risk it was. The tier question stands on the
+ADR-091 argument alone (re-warmable caches belong on `bulk`), not on capacity.
 On `bulk` the same cache is noise (190 G / 288 G free on the two disks; wk-metal-04's 161 G
 reservation already protects its image store). The cheapest moment to move it is while it is empty
 — a `storageClassName: longhorn-bulk` PVC recreate (the field is immutable) costs nothing today
@@ -339,8 +370,9 @@ PVC); operator call, since the 09-05 pin was operator-approved. Requirement-regi
   `LonghornDiskFillingUp`/`LonghornDiskAlmostFull` on physical bytes (85%/93%) and
   `LonghornNodeOverProvisioned` on the provisioning sum (>150%). ⚠ Metric-shape compromise
   recorded there: Longhorn exports `scheduled` only **per node**, not per disk, so the
-  provisioning rule is node-scoped — exact for the one-disk nodes, pessimistic for thinkcentre
-  (its two Optanes sum in with its std disk).
+  provisioning rule is node-scoped — exact for the one-disk nodes, pessimistic for the
+  multi-disk ones (hp-01's three std disks and m70s's std + Garage spindle each sum together;
+  it was thinkcentre's std disk + its two Optanes until 2026-09-12).
 - **The quota half of ADR-089 — ARMED 2026-08-07, and it had never been armed before.** The XRD
   carried `spec.repos[].storage` from day one, no claim in any stack ever set it, so the
   Composition's `{{- if $r.storage }}` never fired and `kubectl get resourcequota -A` returned
@@ -379,7 +411,7 @@ for this document: keep stating the need and its evidence here, and let the supp
 | **registry mirrors never wipe** | grow the PVC (ghcr 100Gi at ~19 G actual) whenever `RegistryMirrorWipedRepeatedly` fires — never lower the threshold | a wipe costs a day of slow builds (homelab#116) | want | §mirrors above |
 | **image store off the Longhorn bulk partition on the kata laptops** | a second partition or disk per laptop, or kubelet imageGC below the Longhorn reserve | <25 % free on the shared partition = no scratch PVC = every docker ride wedged (2026-09-01) | want | PR#1193's floor alert is the belt |
 | **a Garage zone node's envelope** (the register had no row; measured 2026-09-10, garage.md §Target architecture) | ≥ 4 threads at desktop-class clocks (the chain is serial: clock and IPC over core count — m70s's 2C/4T @ 4.0 GHz returns a PUT in 0.68 s, the 4-core 3.4 GHz Ivy Bridge 0.66 s, the 2C ULV X240 1.99 s); **≈ 2 cores free at peak** for Garage (0.8) + the Longhorn engine (up to 1.1) + kernel; **16 GB** so the compacted LMDB (5–6 GB, up to 24 GB before rotation) sits in page cache (X240 at 8 GB: 200–1,800 major faults/s; m70s at 16 GB: 50); DRAM NVMe; **no rides on the node** | both stall episodes (09-08 SA400 windows, 09-10 08:25Z release on wk-metal-01: node 9 % idle, every endpoint p99 28–100 s, quorum races lost) were a ride sharing the zone node; the X240 zone paces GC, resync and PutObject for the whole cluster (mean 1.99 s vs 0.66 s) | need | FU-137 (the garage-2 move), fleet direction meta-state (8): SFFs = std + Garage zones, laptops = control planes |
-| **`fast` big enough to be the scratch tier** (Optane, replica-1) | 26.7 G fits ONE 20Gi ride today; ≥ 60 G (two rides + headroom) would let the platform repos' scratch leave `bulk` — a larger Optane/NVMe in thinkcentre | FU-159 ruling: `fast` = scratch for disk-write-heavy pods, never load-bearing data; unused at 1.4 G because nothing fits | want | FU-159 |
+| **`fast` big enough to be the scratch tier** (Optane, replica-1) | **the tier has NO disk since 2026-09-12** — the Optane pair left with thinkcentre and is queued for wk-metal-04 (FU-234), where 26.7 G still fits only ONE 20Gi ride; ≥ 60 G (two rides + headroom) would let the platform repos' scratch leave `bulk` | FU-159 ruling: `fast` = scratch for disk-write-heavy pods, never load-bearing data; it was unused at 1.4 G because nothing fits, which is what made retiring its host node safe | want | FU-234, FU-159 |
 
 What is NOT a requirement: total bytes. Every tier is 42–68 % physically used; the pressure is
 distribution (one thin pool under four VMs, one shared partition per laptop) — the same reading

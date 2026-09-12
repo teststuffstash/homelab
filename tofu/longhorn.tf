@@ -1,10 +1,13 @@
 # Longhorn distributed block storage. Replicated PVs across the always-on, real-disk
 # nodes so stateful services no longer need hostPath + node-pinning (ROADMAP storage).
 #
-# Failure domains = physical boxes (topology zones): the two standalone desktops
-# (thinkcentre, hp-01) are truly independent; wk-02 shares the single Proxmox NVMe.
-# replica=2 + zone soft-anti-affinity => the two copies always land in different zones,
-# with the third zone free to rebuild onto.
+# Failure domains = physical boxes (topology zones): the standalone boxes (m70s, hp-01) are
+# truly independent; wk-02 shares the single Proxmox NVMe. replica=2 + zone soft-anti-affinity
+# => the two copies always land in different zones. ⚠ Since thinkcentre left the cluster
+# (2026-09-12) std has exactly TWO schedulable nodes and wk-02 is `allowScheduling=false`, so
+# every r=2 std volume must hold one copy on m70s and one on hp-01 — there is no third zone to
+# rebuild onto, and replicaSoftAntiAffinity=true means the failure mode is silent co-location,
+# not a Pending volume. Re-check before adding std volumes (docs/storage-ledger.md).
 #
 # Talos: needs the iscsi-tools + util-linux-tools extensions on every node that MOUNTS a
 # Longhorn volume, not merely on the ones that serve replicas — so the set is wider than the
@@ -33,9 +36,11 @@ variable "longhorn_version" {
 # zone per physical box; wk-02's disk lives on the Proxmox host (one failure domain)
 locals {
   longhorn_zones = {
-    "wk-02"       = "proxmox"
-    "thinkcentre" = "thinkcentre"
-    "hp-01"       = "hp-01"
+    "wk-02" = "proxmox"
+    "hp-01" = "hp-01"
+    # thinkcentre was here until 2026-09-12 (retired from cluster duty → the R12 pilot). m70s is
+    # NOT in this map: it carries explicitly-registered tagged disks, not a create-default-disk
+    # default disk, so its zone label comes from kubernetes_labels.node_zone (machines.yaml).
   }
   # Bulk-tier zones (ADR-089): nodes that carry ONLY tagged bulk disks — deliberately NOT in
   # longhorn_zones (no create-default-disk label; the disk is registered explicitly on the
@@ -122,13 +127,13 @@ resource "helm_release" "longhorn" {
       # genuinely under-used, rather than continuously chasing an even spread — every move is a
       # replica REBUILD, real IO across disks that are already tight (homelab#56 was
       # NodeDiskIOSaturation on wk-02's disk). Standing belt, not the fix: it balances replica
-      # COUNT, and #94's imbalance is bytes-and-tiers — thinkcentre already carries 19 replicas to
-      # wk-02's 15. Enabled only now that the metering exists (argocd/resources/longhorn-alerts).
+      # COUNT, and #94's imbalance is bytes-and-tiers (at the time: thinkcentre 19 replicas to
+      # wk-02's 15). Enabled only now that the metering exists (argocd/resources/longhorn-alerts).
       replicaAutoBalance = "least-effort"
       # Drains: the default `block-if-contains-last-replica` blocks a maintenance window on any
       # replica-1 volume (longhorn-single/-fast/-scratch are replica-1 BY DESIGN) even when the
-      # volume is detached and the replica stopped — 2026-09-09, thinkcentre held two detached
-      # coordinator-transcripts volumes. `allow-if-replica-is-stopped` lets the drain proceed when
+      # volume is detached and the replica stopped — 2026-09-09, thinkcentre (then a storage node)
+      # held two detached coordinator-transcripts volumes. `allow-if-replica-is-stopped` lets the drain proceed when
       # the last replica is stopped (data offline for the window, back with the disk); an
       # ATTACHED last replica still blocks. scripts/node-maintenance.sh preflight names them.
       nodeDrainPolicy             = "allow-if-replica-is-stopped"
@@ -137,8 +142,8 @@ resource "helm_release" "longhorn" {
       defaultDataLocality         = "best-effort"
       # 100 → 200 (2026-08-04, homelab#94's SECOND firing). At 100 Longhorn may promise only
       # `max - reserved` per disk, and the std tier hit that wall with real free space sitting
-      # unused: thinkcentre had 87.3G free but 0.7G of provisioning headroom, wk-02 99.8G free and
-      # -0.1G headroom. A 2Gi transcripts volume could not place ANYWHERE, which stalled the
+      # unused: thinkcentre (then a storage node) had 87.3G free but 0.7G of provisioning
+      # headroom, wk-02 99.8G free and -0.1G headroom. A 2Gi transcripts volume could not place ANYWHERE, which stalled the
       # platform coordinator.
       # ⚠ This does NOT create disk. It trades a loud early failure (cannot schedule) for a late
       # destructive one (volume fills mid-write → read-only). It is only safe with metering, and
@@ -205,15 +210,21 @@ resource "helm_release" "longhorn" {
 }
 
 # ---- Fast (Optane) tier --------------------------------------------------
-# The ThinkCentre's two Intel Optane M10 16GB drives are mounted (Talos machine.disks,
-# metal.tf) at /var/lib/longhorn/optane{0,1} and registered into Longhorn with the "fast"
-# tag (scripts/longhorn-register-optane.sh — disk registration on an existing Longhorn node
-# isn't cleanly tofu-managed, so it's an idempotent kubectl-patch script, not a resource).
+# ⚠ NO BACKING DISK SINCE 2026-09-12: the two Intel Optane M10 16GB drives were thinkcentre's,
+# and thinkcentre left cluster duty (→ the R12 pilot). They are queued to move to wk-metal-04 as
+# ride/ARC scratch, physically — until then this class has ZERO schedulable disks and a
+# longhorn-fast PVC stays Pending. Kept declared (not deleted) because the move is planned and a
+# StorageClass delete/recreate would orphan the XRD's `fast` storage-quota key; the class had zero
+# consumers at retirement, which is what makes that safe (FU-159's scratch-only ruling).
+# The drives mount via Talos machine.disks (machines.yaml `longhorn_disks` → metal.tf) at
+# /var/lib/longhorn/optane{0,1} and are registered into Longhorn with the "fast" tag
+# (scripts/longhorn-register-optane.sh — disk registration on an existing Longhorn node isn't
+# cleanly tofu-managed, so it's an idempotent kubectl-patch script, not a resource).
 #
 # This StorageClass targets those disks. replica=1 + strict-local = lowest latency, no
-# redundancy: pure scratch/cache. Both Optane live on ONE node (thinkcentre), so a
-# longhorn-fast volume is bound to thinkcentre's availability and its consumer pod must be
-# schedulable there. NOT the default class — opt in by setting storageClassName: longhorn-fast.
+# redundancy: pure scratch/cache. Both Optane live on ONE node, so a longhorn-fast volume is
+# bound to that node's availability and its consumer pod must be schedulable there. NOT the
+# default class — opt in by setting storageClassName: longhorn-fast.
 resource "kubernetes_storage_class" "longhorn_fast" {
   metadata { name = "longhorn-fast" }
   storage_provisioner    = "driver.longhorn.io"
@@ -238,7 +249,7 @@ resource "kubernetes_storage_class" "longhorn_fast" {
 # survives the laptop being reprovisioned or powered off. Like the Optane tier, disk
 # registration/tagging is a node-CR patch, not tofu (see scripts/longhorn-tag-disks.sh):
 #   wk-metal-01: explicit default-path disk, tags ["bulk"]
-#   wk-02/thinkcentre/hp-01 default disks: tags ["std"] (+ "bulk" on wk-02)
+#   wk-02/hp-01 default disks: tags ["std"] (+ "bulk" on wk-02)
 # Consumers do NOT pick this class directly — stacks get capacity via their claim's
 # storage caps (ResourceQuota per StorageClass, docs/agents/agentstack.md).
 resource "kubernetes_storage_class" "longhorn_bulk" {
