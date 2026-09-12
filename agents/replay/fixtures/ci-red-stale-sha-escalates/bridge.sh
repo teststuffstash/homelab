@@ -1,4 +1,8 @@
 # ── bridge ── the per-PR loop variables the ci-red clause reads.
+# Source machine-comment.sh and pin its clock so mc_event calls are deterministic.
+. "$REPLAY_ROOT/agents/machine-comment.sh"
+mc_now() { printf '%s\n' "${MC_NOW:?fixture must pin MC_NOW}"; }
+
 slug="$IN_SLUG"
 repo="$IN_REPO"
 u="$IN_PR"

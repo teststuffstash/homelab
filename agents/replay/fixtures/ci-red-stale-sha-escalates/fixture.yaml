@@ -32,3 +32,4 @@ env:
   - IN_SLUG=teststuffstash/oracle-fleet
   - IN_REPO=oracle-fleet
   - IN_PR=1515
+  - MC_NOW=2026-09-12T14:23:00Z
