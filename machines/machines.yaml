@@ -224,9 +224,13 @@ machines:
     zone: hp-01
     label: "`hp-01` (metal, PXE)"
     role: k8s worker + Longhorn (WoL-capable)
-    hardware: HP desktop
-    cpu_cores: null
-    memory_gb: 8
+    hardware: HP Compaq Elite 8300 SFF (board 3397), i3-3220
+    cpu_cores: 4         # 2C / 4T — i3-3220 (Ivy Bridge); this field is THREADS (kubectl capacity.cpu)
+    memory_gb: 16        # ⚠ CORRECTED 2026-09-12: 2 × 8 GB DDR3-1600 in DIMM4+DIMM2 (dmidecode type
+    #                      17 + talosctl memorymodules + node capacity 16225688Ki all agree). The
+    #                      old "8" predates any board read. 4 slots, DIMM1+DIMM3 free, max 32 GB.
+    #                      PCIe (dmidecode type 9, all four EMPTY): x16 PCIe 2.0 + x4 PCIe 2.0 + x1
+    #                      + legacy PCI — i.e. TWO x4-capable low-profile slots free.
     ip: 192.168.2.54
     plug: sensor.plug_hp_power
     idle_w: null
