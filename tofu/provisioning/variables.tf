@@ -93,12 +93,6 @@ variable "talos_version" {
   default     = "v1.13.2"
 }
 
-variable "thinkcentre_mac" {
-  description = "MAC of the first bare-metal onboarding target (Lenovo ThinkCentre Edge). Lowercase, colon-separated."
-  type        = string
-  default     = "8c:89:a5:23:49:da"
-}
-
 # ---- Matchbox container ---------------------------------------------------
 variable "matchbox_vmid" {
   description = "Proxmox CTID for the Matchbox container (cluster VMs use 81xx; keep clear of them)."

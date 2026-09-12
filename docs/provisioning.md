@@ -98,7 +98,10 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
   `vmx` present. Its OEM disk arrived carrying a Windows GPT; the installer repartitioned it
   without a manual `talosctl wipe disk` (that step is for `longhorn_disks` entries, not the
   install disk).
-- `thinkcentre` — .53, `/dev/sdb` (120GB Kingston), Longhorn + 2×Optane fast tier. Originally
+- `thinkcentre` — ⚠ **RETIRED from cluster duty 2026-09-12** (→ the R12 management-box pilot;
+  runbook §"Retire a node from cluster duty"). Kept as a known-good example because the quirks
+  below are the box's, not the role's: .53, `/dev/sdb` (120GB Kingston), Longhorn + 2×Optane fast
+  tier. Originally
   onboarded via **USB ISO** (`devbox run talos-usb`) when PXE appeared broken — the culprit was a
   **bad NIC cable** (100Mbps + link flapping), replaced 2026-06-11; it PXE-onboards fine now.
 
