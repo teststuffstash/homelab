@@ -30,6 +30,7 @@
 #                       REVIEW_ROUNDS_MAX=12
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "${HERE}/machine-comment.sh"
 
 ORG="${ORG:-teststuffstash}"
 # Repos: explicit AGENT_REPOS wins; else derive ALL stack repos from agents/stacks.json —
@@ -437,8 +438,8 @@ EOF_C9
     gh label create "agent/arbitrate" --repo "$slug" --color "d93f0b" --force \
       --description "rounds exhausted / flip-flop — coordinator tie-break (merge-path escalation table)" >/dev/null 2>&1 || true
     if gh pr edit "$pick" --repo "$slug" --add-label "agent/arbitrate" >/dev/null 2>&1; then
-      gh pr comment "$pick" --repo "$slug" --body "ARBITRATE: ${rounds_total} bot review verdicts counted on ${rounds_key} (cap ${ROUNDS_MAX}) — a worker↔reviewer loop that will not converge on its own. Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. Review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with clarified instructions / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
-        || log "[$repo] WARN: arbitrate comment on #$pick failed"
+      mc_event "$slug" "$pick" arbitrate "ARBITRATE: ${rounds_total} bot review verdicts counted on ${rounds_key} (cap ${ROUNDS_MAX}) — a worker↔reviewer loop that will not converge on its own. Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. Review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with clarified instructions / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
+        || log "[$repo] WARN: arbitrate event on #$pick failed"
     else
       log "[$repo] WARN: could not add agent/arbitrate to #$pick — dispatch still skipped"
     fi
