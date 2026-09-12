@@ -281,7 +281,9 @@ machines:
     # A by-id path that stops matching fails the install loudly instead; schema-checked with
     # `talosctl validate --mode metal`. Install-time only, like every field in this block.
     install_disk: /dev/disk/by-id/nvme-Micron_MTFDHBA512TDV_21052D0C4364
-    longhorn_default_disk: true # registered 2026-09-07 (no tier tag: the ADR-114 zone disk — longhorn-tag-disks.sh)
+    longhorn_default_disk: true # registered 2026-09-07; tier tag `std` since 2026-09-12, once the
+    # zone's volumes moved to the PM961 below — the fleet direction's "Micron → std", and the
+    # capacity that lets wk-02's pooled std disk stop taking new replicas (longhorn-tag-disks.sh).
     longhorn_disks:
       # Samsung PM961 256G on a Gembird PEX-M2-01 in the x16 LP slot, fitted 2026-09-12 —
       # garage-1's DEDICATED data disk, the FU-137 residual. Read in place before declaring:
