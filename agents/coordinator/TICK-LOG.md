@@ -8360,6 +8360,75 @@ garage-0 during its rejoin (probe back to 1), `GarageTableGcBacklog` re-pending 
 Direct commits this session: FU-223/FU-229 + this journal; pushed at wind-down.
 
 
+## 2026-09-12 — the drive-fitting day: three windows, a rotation, and the alert path learns what a window is
+
+**Condition → command, in order.** The operator had the Gembird LP brackets in hand; the question
+was where the next two NVMe go.
+
+- **m70s takes ONE card, not two.** The 2026-09-07 "second PCIe x4" read was wrong — board-read
+  with the brackets in hand: the `x4` silkscreen carries an **x1 connector** and the `x1`
+  silkscreen is **unpopulated**. So the x16 LP is its only x4-capable slot. Corrected in
+  `machines.yaml`, `docs/provisioning.md` and `teststuff/hardware`.
+- **Window 1 (13:21–13:31Z): fit the PM961 in m70s.** `node-maintenance.sh down/up`. Three
+  jail-side defects found and fixed (PR#1599): `ping` does not exist in the container so `up`'s
+  "already booting" guard was silently false; the WoL hop to pve had no `known_hosts` and **exit
+  255 aborted the whole wake**; and `up` declared the window closed while the Longhorn CSI plugin
+  had not registered — every attach failing with `CSINode … does not contain driver`, invisible to
+  the healthy test because a strict-local zone volume is DETACHED while its pod cannot attach, so
+  "0 degraded ATTACHED volumes" was vacuously true.
+- **⚠ `install_disk` had become a LOADED GUN.** Fitting the PM961 made it `nvme0n1` and pushed the
+  OEM Micron to `nvme1n1`, so m70s's `install_disk: /dev/nvme0n1` named the **Garage data disk** on
+  the one box whose BIOS is PXE-first by choice. Pinned by `/dev/disk/by-id`. Proven not theoretical
+  the same day: the next reboot flipped the enumeration BACK, and the by-id path resolved correctly.
+- **The window cost three responder sessions** (#261 NodeRebooted, #884 GarageClusterFlapping ×3,
+  #1600 PodSigkilled ×5) — one of which wrote a careful "cannot determine crash vs power-loss" on a
+  reboot the seat had performed. **FU-230 leg (a) built** (PR#1601). The lesson is the label
+  taxonomy: a hand-issued `node=m70s` silence matched NOTHING, because `NodeRebooted` fires on
+  `node_boot_time_seconds` whose only node identifier is `instance=<ip>:9100`, and **PodSigkilled
+  has no node key at all** (its `instance` is kube-state-metrics' own pod IP). A window now silences
+  `instance=~<ip>`, `node=`, the Garage health set on a zone node, and the node's **pod names** —
+  that last one outliving the window, because PodSigkilled is `increase(...[30m])` and #1600's fired
+  19 min after the kill and 10 min after the node was back Ready.
+- **Rotation (14:10:54 → 16:20:15Z, 2 h 09 min).** garage-1 off the shared Micron onto the PM961.
+  Tables 2.0 M items ≈ 15.5k/min; the 441k block queue drained ≈92/s. **CPU-bound, not
+  disk-bound**: I applied the ledger's `8 workers / tranquility 0` — measured on wk-metal-04, a
+  4-core desktop — to a 2C/4T box and it sat at 79–90 % busy.
+- **The operator inverted the fix, correctly.** 8 was *fine*: it never hit 95 %, and finishing
+  sooner is the shorter exposure. The damage was that the rebuilding pod stayed in the client
+  Services and **coordinated 17 % of requests** at p99 4.86–6.94 s while its peers held 0.07–0.59 s
+  (per-pod figures — it was never a quorum effect; at rf=3 a write needs 2 acks of 3). So the
+  recipe's rule is the DRAIN, and PR#1604 shipped the mechanism: `garage.teststuff.net/serve-s3` on
+  the pod template, selected by **only** the two client Services (the LAN VIP + the chart
+  ClusterIP), never `garage-headless` or the metrics Service. Seat-driven with a one-pod-out
+  precheck; explicitly never a readiness probe (per-node logic would let several lagging nodes
+  empty the Service at once — the same interlock reasoning the metadata loop already encodes:
+  one CronJob, `Forbid`, a ConfigMap lock, a 12 h cooldown and an all-nodes health gate).
+- **Corrections I had to make, all caught by the bot reviewer and all real:** a `silence_ids`
+  pipeline under `set -euo pipefail` in a plain assignment would have **aborted a whole window** if
+  Alertmanager were down — the opposite of the best-effort promise in the same file's header;
+  "workers ≈ threads − 2" **contradicted its own worked example** (wk-metal-04 is 4C/4T, no HT, so
+  the formula yields 2 where 8 is the measured-good point); and the two new vendored-chart patches
+  were **not registered in `VENDORED.md`**, so the next chart bump would have silently deleted the
+  exclusion mechanism the PR had just built.
+- **std left the pve pool (PR#1603).** m70s's freed Micron tagged `std` (416 G), and **wk-02's
+  pooled disk set `allowScheduling=false`** — not an eviction: its 27 replicas stay and leave
+  organically. `thinkcentre` STAYS in the tier by operator ruling: it retires only when its
+  replacement box arrives, so the pool is freed in the same move.
+- **Windows 2 and 3 (17:41 / 17:56Z): hp-01's second std disk.** Board-read first (PR#1605) because
+  the record was wrong — it has **16 GB, not 8** (three independent reads), and **two** free
+  x4-capable LP slots. The 7600p went in (DRAM confirmed by `hmpre 0`, 3 % used, and **PCIe 2.0 x4**
+  because that is the board's slot, not a drive fault). Why std and not bulk: with thinkcentre
+  leaving, std has two schedulable nodes, every r=2 volume needs a copy on each, the tier is ~141 G
+  and hp-01's `hg5d` had 61 G free — and `replica-soft-anti-affinity=true` means the failure mode is
+  not a Pending volume but **silent co-location of both copies on m70s**.
+- **I applied GAPS tofu-apply-G2 to myself.** The morning's m70s apply rebooted an undrained node
+  (a `longhorn_disks` apply provisions at boot); hp-01's went cordon → settle → drain → apply → up.
+
+**Left parked:** PR#1606 (hp-01's declaration, already applied live — the record catching up).
+**Next session: thinkcentre's decommission + its build as the R12 management box** — `meta-state.md`
+carries the plan, the caveats and the co-location check.
+
+
 ## 2026-09-11 — data-gathering seat, no corpus (operator: "just data gathering for the next session")
 
 Two subagent audits, written to `docs/spikes/` (the scratchpad does not survive a session):

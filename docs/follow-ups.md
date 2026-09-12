@@ -402,8 +402,9 @@ six OVERSIZE items pointer-ized into
       automated ones one surface at a time. Surfaces + candidate shapes:
       `ROADMAP.md` → Programs in flight → "Deploy paths"; per-root tofu split + the runner
       dependency-cone rule: [`docs/dependency-upgrades.md`](dependency-upgrades.md); the no-human
-      end-state (what stays human-gated and why):
-      [`docs/spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
+      end-state: [`docs/spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
+      **2026-09-12: the hardware stopped being the blocker** (`thinkcentre` becomes the
+      management-box pilot) — **this table is what it waits on**.
       Relates FU-051, FU-012, ADR-093 (Argo as the candidate runner for the ansible Jobs).
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
