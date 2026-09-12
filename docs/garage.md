@@ -393,30 +393,46 @@ original pod only.
    collapsed to one live version on its own. Until then `/health` says "some storage nodes are
    unavailable" — the degraded belts fire for the whole resync by design; the SLO availability
    (HTTP 200) does not.
-   - ⚠ **Scale `resync-worker-count` to the NEW NODE's threads — the "8 workers / tranquility 0"
-     figure is not universal.** It was measured on wk-metal-04 (4-core 3.4 GHz desktop). Applied
-     unchanged to **m70s (2C/4T Pentium Gold)** on the third run (2026-09-12) it pinned the node at
-     **90 % busy within 10 minutes and held 79–86 % for the whole resync**, and consumers paid for
-     it: p99 **DeleteObject 6.93 s, ListObjectsV2 6.83 s, PutObject 4.46 s, GetObject 4.45 s**
-     against a sub-second baseline (all classes back to 0.1–0.6 s once the table walk passed).
-     Quorum never broke and the SLO availability held — this is a LATENCY cost, not an outage.
-     **What differs between the two runs is PHYSICAL cores, not threads:** wk-metal-04 is an
-     i5-3570K, 4 cores / 4 threads (no HT) and took 8/0 without trouble; m70s is a Pentium Gold
-     G6400, **2 cores** / 4 threads, and 8/0 saturated it. Both read `cpu_cores: 4` in
-     `machines.yaml` — that field is threads, so do not size workers off it.
-     Starting point: **≈ 2 workers per physical core** (8 on wk-metal-04 = the measured-good
-     point; **4 on m70s**, which is a starting point to verify, NOT a proven figure — all this run
-     establishes is that 8 was too many there).
-     Then use the observable rather than the arithmetic: read `100 - idle` on the node
-     (`node_cpu_seconds_total`) once the repairs are running, and **halve the worker count if it
-     exceeds ~80 % while clients are active** — that is the condition that produced the 5–7 s
-     tails, and it is the only thing the two data points really agree on. `resync-tranquility 0`
-     belongs only on a node with spare cores. The trade is duration for smoothness: at 8/0 this
-     run converged in 2 h 09 min with multi-second spikes on the rebuilding node; throttling
-     mid-run costs roughly an hour more of a quieter window.
-     Cheaper still: the SEED path of step 6 above avoids the question entirely — a seeded node
-     verifies instead of walking (~255 blocks/s on verify vs 92/s fetching here), which is
-     I/O-bound rather than CPU-bound.
+   - ⚠ **The rebuilding node must not be in the S3 client path — that, not the worker count, is
+     the lever.** On the third run (2026-09-12, m70s) `resync-worker-count 8` /
+     `resync-tranquility 0` held the node at **79–86 % busy (peak 90 %, never 95 %+)** and the
+     resync finished in 2 h 09 min. The damage was not the saturation: it was that garage-1 stayed
+     in `garage-s3`/`garage` endpoints and **coordinated 17 % of client requests** while starved —
+     p99 on that pod 4.86 s → 6.94 s, while garage-0/garage-2 held 0.07–0.59 s (per-pod figures in
+     the ledger row). Its REPLICA role is tolerant by contrast: at rf=3 a write needs 2 acks of 3,
+     so peers never wait for the rebuilding node.
+     So: **pull the pod out of the client path first, then give the resync the whole box** — a
+     saturated node that serves nobody converges sooner, which is the shorter exposure. Size
+     workers down only while the pod is still serving clients (keep `100 - idle` under ~80 % then).
+     Every pod carries `garage.teststuff.net/serve-s3: "true"` from the chart's pod template, and
+     **only the two client Services select on it** (`garage-s3`, the LAN VIP in `tofu/garage.tf`,
+     and the chart's in-cluster `garage` ClusterIP). The headless Service (peer RPC) and the
+     metrics Service do not, so a drained pod stays a full peer, keeps its replica role and keeps
+     being scraped:
+
+     ```bash
+     K="kubectl --kubeconfig tofu/kubeconfig -n garage"
+     # PRECHECK — the one-pod-out invariant. Refuse unless every OTHER pod is labelled and Ready.
+     $K get pods -l app.kubernetes.io/name=garage \
+       -o custom-columns=POD:.metadata.name,SERVE:.metadata.labels.garage\.teststuff\.net/serve-s3,READY:.status.containerStatuses[0].ready
+     $K label pod garage-N garage.teststuff.net/serve-s3-          # out of the client path
+     $K get endpointslices -l kubernetes.io/service-name=garage-s3 \
+       -o jsonpath='{range .items[*].endpoints[*]}{.targetRef.name}{" "}{end}{"\n"}'   # verify: 2 pods
+     # … repair tables / repair blocks … converge …
+     $K label pod garage-N garage.teststuff.net/serve-s3=true      # back in, verify 3 pods
+     ```
+
+     Seat-driven on purpose (operator, 2026-09-12): a rotation is rare and deliberate, so the
+     exclusion lives in one pair of hands with the precheck above. It must NEVER become a
+     readiness probe — that is per-node logic, and several lagging nodes would each pull themselves
+     out at once and empty the Service. If it is ever automated, it copies the metadata loop's
+     shape (single actor, ConfigMap lock, all-nodes health gate) with a hard one-pod-out invariant.
+     A pod re-created by the StatefulSet comes back labelled, so remove the label AFTER the new pod
+     is Running, and note the restore is what ends the window.
+     Residual exposure, deliberately not solved: CO-TENANT workloads on the same box (m70s also
+     runs loki-0, the eventbus and the sensor Deployments) still feel a saturated node. `kubectl
+     cordon` + moving the noisy neighbours would address it; not built, and not needed for Garage's
+     own clients.
    - **Reset the workers when the resync ends.** They persist on the pod, and a zone left on
      build-out settings is a standing tax on every later write (sighted 2026-09-08: all three pods
      were still on the build-out's 8/0 weeks later).
