@@ -268,12 +268,19 @@ machines:
     # OEM disk is a Micron 2300 512GB (MTFDHBA512TDV, LPDDR4 DRAM + 96L TLC — it clears the
     # DRAM-cache filter, so it is data-class, not just a boot drive). Arrived with a Windows GPT.
     # 4 DIMM slots, ONE filled (SK Hynix HMA82GU6DJR8N-WM 16GiB, ChannelA-DIMM1) — a matched second
-    # stick makes it 32GB dual-channel. 3 SATA ports, all empty. PCIe x16 LP + x4 LP, both free.
+    # stick makes it 32GB dual-channel. 3 SATA ports, all empty. PCIe: ONE x4-capable slot — the
+    # x16 LP, holding the PM961 since 2026-09-12; the `x4` silkscreen is an x1 connector and the
+    # `x1` silkscreen is unpopulated (board-read 2026-09-12; the earlier "x4 LP" read was wrong).
     # avx2 deliberately unset — /proc/cpuinfo on the installed node has NO avx/avx2 (Intel disables
     # them on Pentium Gold SKUs), same shape as wk-metal-04. `vmx` IS present, so it could host kata,
     # but it is storage tier and stays untainted/non-kata on purpose.
     talos_metal_node: true
-    install_disk: /dev/nvme0n1
+    # ⚠ BY-ID, not /dev/nvmeXn1 (2026-09-12): fitting the Samsung PM961 on a PCIe adapter made it
+    # `nvme0n1` and pushed this OEM Micron to `nvme1n1`, so the old `/dev/nvme0n1` here now named
+    # the GARAGE DATA DISK — a reinstall would have wiped the zone (and this box is PXE-first).
+    # A by-id path that stops matching fails the install loudly instead; schema-checked with
+    # `talosctl validate --mode metal`. Install-time only, like every field in this block.
+    install_disk: /dev/disk/by-id/nvme-Micron_MTFDHBA512TDV_21052D0C4364
     longhorn_default_disk: true # registered 2026-09-07 (no tier tag: the ADR-114 zone disk — longhorn-tag-disks.sh)
     # WHOLE DISK to EPHEMERAL, deliberately. The 2026-09-07 middle state carved a 241GB
     # node-local XFS user volume here for a raw-XFS Garage zone (ADR-114 as written); the operator
@@ -289,7 +296,7 @@ machines:
     # gated on `kata` and must widen when this node is registered as a Longhorn storage node.
     # The ephemeral_max_size / user_volumes fields stay SUPPORTED (metal.tf) for the multi-disk
     # profiling the incoming drives are for — they are simply not used here.
-    notes: Third physical Garage zone (FU-137/ADR-114). Storage tier, always-on — deliberately NOT ephemeral/kata. Two free low-profile PCIe slots for the Garage data disk.
+    notes: Third physical Garage zone (FU-137/ADR-114). Storage tier, always-on — deliberately NOT ephemeral/kata. Garage data disk (Samsung PM961) fitted in the x16 LP slot 2026-09-12; that is the box's only x4-capable slot.
 
   - name: wk-metal-01
     kind: metal

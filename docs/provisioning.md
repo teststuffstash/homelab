@@ -88,7 +88,9 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
   AVX2, so goose rides schedule here but opencode SIGILLs) — see the comment on its
   `machines/machines.yaml` entry, and `local.avx2_nodes` in `tofu/locals.tf`.
 - `hp-01` — .54, `/dev/sda`, Longhorn, WoL-capable.
-- `m70s` — Lenovo ThinkCentre M70s SFF, .56, **`/dev/nvme0n1`** (the first NVMe install disk in the
+- `m70s` — Lenovo ThinkCentre M70s SFF, .56, **`/dev/disk/by-id/nvme-Micron_MTFDHBA512TDV_21052D0C4364`**
+  — ⚠ by-id since 2026-09-12: the OEM Micron enumerates as `nvme1n1` now that the Garage data disk
+  (Samsung PM961, x16 LP) took `nvme0n1`. (The first NVMe install disk in the
   fleet — every earlier metal node installs to `/dev/sdX`), storage tier: **not** ephemeral, **not**
   kata, `zone: m70s`. Onboarded 2026-09-07 as ADR-114's third PHYSICAL Garage zone. UEFI PXE
   (`ipxe.efi`), and PXE-first in BIOS by operator choice so a wipe+reinstall needs no console —
