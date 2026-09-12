@@ -92,6 +92,12 @@ resource "kubernetes_service" "garage_s3_lb" {
     selector = {
       "app.kubernetes.io/name"     = "garage"
       "app.kubernetes.io/instance" = "garage"
+      # Client path only: a pod rebuilding its metadata has this label removed by hand for the
+      # duration (docs/garage.md §step 8) so it stops COORDINATING client requests while its CPU
+      # is saturated — measured 2026-09-12: the rebuilding pod served 17 % of requests at p99
+      # 4.86–6.94 s while its peers held 0.07–0.59 s. It keeps peer RPC, its replica role and its
+      # metrics scrape, which select on the base labels only.
+      "garage.teststuff.net/serve-s3" = "true"
     }
     port {
       name        = "s3-api"
