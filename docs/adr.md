@@ -2085,16 +2085,15 @@ post-update probe rolls the generation back on failure. **Considered:** *Debian/
 — matches existing practice, rejected because `apt` is not atomic and this is the one box whose
 recovery is manual; *Flatcar/FCOS* — better built-in A/B rollback, rejected on fit (read-only root
 means the tooling runs in containers, and the update cadence is the channel's, not our pin's);
-*netboot NixOS* — rejected outright: a netbooted system has no local generations (rollback becomes
-a server edit) and it would make the recovery root depend on Matchbox, dnsmasq and the LAN to boot
-at all; *PXE for the install* — deferred, not rejected: it needs a non-Talos asset class in
-Matchbox plus flag/unflag discipline, and earns its keep at the second install of a config that
-has stopped churning (the permanent Tiny). **Why:** the box must be LIVE independently but need
+*netboot NixOS* — rejected outright (no local generations, and it makes the recovery root depend
+on Matchbox + dnsmasq + the LAN to boot); *PXE for the install* — deferred, not rejected. The
+reasoning for each is [`management-box.md`](management-box.md) §OS and install, not restated here. **Why:** the box must be LIVE independently but need
 not be FRESH independently (operator) — so a remote updater is fine and a remote *rollback* is
 not; generations are the only self-update shape that needs no second machine, which is the
-spike's own criterion. **Consequences:** a tofu bump's canary is `plan`, never a first `apply` —
-state format is not symmetrically revertible (`docs/tofu-state.md`); kernel-class bumps need hands
-until systemd-boot `bootCounting` is verified in the pin; the `nixos/` tree is a new surface with
-no CI gate yet; SSH keys and host keys become declarative config, rotation a two-commit diff.
+spike's own criterion. **Consequences:** a tofu bump's canary is `plan`, never a first `apply` (a
+newer binary may write state an older one cannot read — assumed, unverified for our pin);
+**kernel-class bumps need hands on the pilot**, because boot counting is systemd-boot's and the
+box ships `bootMode = "bios"` pending a firmware read; the `nixos/` tree is a new surface with no
+CI gate yet; SSH keys and host keys become declarative config, rotation a two-commit diff.
 Mechanism, phases and the probe set: [`management-box.md`](management-box.md). Tracker: FU-097
 (which surfaces it may reconcile — still the gate), FU-012 (state + creds move here).

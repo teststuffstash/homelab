@@ -1,17 +1,31 @@
 #!/usr/bin/env bash
-# mgmt-probe — the management box's contract probe (ADR-129, docs/management-box.md §Detection).
+# mgmt-probe — the management box's contract probe (ADR-129, docs/management-box.md §MB2).
 #
 # ONE mechanism, TWO jobs: `tofu plan` returning "No changes" asserts the toolchain, the state's
 # readability, the encryption passphrase, the credentials and the network path in a single
 # read-only call — so FU-097's drift belt and this box's own health check are the same probe.
 #
-# Exit 0 = every APPLICABLE check passed (skips do not fail). Exit 1 = at least one check failed,
-# which on the box is the local deadman's signal to `nixos-rebuild --rollback` (mgmt-probe.service).
-# Read-only by construction: plan/--check/version only, never an apply.
+# TWO MODES, and keeping them apart is the whole point (review finding, 2026-09-12):
+#
+#   MODE=belt  (default) — the DRIFT BELT. Asserts the fleet: tofu plan, talosctl skew, the
+#              OPNsense --check, credentials. Its verdict is REPORTING. A failure here usually
+#              means something OUT THERE broke (Garage unreachable, a node down, real drift), and
+#              a box that reboots itself over that is a box that power-cycles precisely when the
+#              cluster is having a bad day — the inverse of ADR-129's premise.
+#   MODE=gate  — the post-update DEADMAN. Asserts only BOX-LOCAL, unrecoverable-if-lost
+#              properties, and NOTHING here may skip: sshd still listening with my keys, the
+#              network still up, systemd not degraded, the store still writable. Its failure is
+#              the signal to reboot (back into the untouched boot default, because
+#              `nixos-rebuild test` never promoted anything).
+#
+# Exit 0 = pass. Exit 1 = at least one check failed. In `gate` mode a SKIP is also a failure: on
+# the box every gate input exists by construction, so a skip means the probe could not look.
+# Read-only by construction in both modes: plan/--check/version only, never an apply.
 #
 # Usage:
-#   scripts/mgmt-probe.sh                 # run every applicable check, push metrics if configured
-#   DRY_RUN=1 scripts/mgmt-probe.sh       # never push (the jail default — see PUSHGATEWAY below)
+#   scripts/mgmt-probe.sh                  # belt: every applicable check, push metrics if configured
+#   MODE=gate scripts/mgmt-probe.sh        # the box-local gate (what mgmt-confirm.service runs)
+#   DRY_RUN=1 scripts/mgmt-probe.sh        # never push (the jail default — see PUSHGATEWAY below)
 #   ROOTS="cloudflare provisioning" scripts/mgmt-probe.sh
 #
 # Env:
@@ -30,14 +44,21 @@
 #   SKIP          space-separated check names to skip: tofu talos ansible creds
 set -uo pipefail
 
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$REPO"
+REPO="$(cd "$(dirname "$0")/.." && pwd)" || exit 1
+[ -n "$REPO" ] && [ -d "$REPO/.git" ] || { echo "FATAL not a checkout: '$REPO'" >&2; exit 1; }
+cd "$REPO" || exit 1
+
+# ⚠ systemd does not set $HOME for a system unit without User= (systemd.exec(5)), and BOTH devbox
+# and the wallet lookups need it — without this the whole probe died on `HOME: unbound variable`
+# under `set -u`, i.e. the deadman would have fired every single run (review finding, 2026-09-12).
+export HOME="${HOME:-/root}"
 
 ROOTS="${ROOTS:-cloudflare provisioning}"
 PUSHGATEWAY="${PUSHGATEWAY:-}"
 TALOS_NODE="${TALOS_NODE:-192.168.2.51}"
 SKIP="${SKIP:-}"
 DRY_RUN="${DRY_RUN:-0}"
+MODE="${MODE:-belt}"
 
 PASS=0 FAIL=0 SKIPPED=0
 declare -a RESULTS=()
@@ -131,10 +152,22 @@ check_ansible() {
   if [ -z "${OPN_API_KEY:-}" ] && [ ! -f "$HOME/.claude/homelab-keepass/homelab.kdbx" ]; then
     skipped ansible "no OPNsense credential reachable"; return
   fi
-  local out
+  local out changed
   out="$(bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml --check 2>&1)" || {
     failed ansible "--check run failed: $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"; return; }
-  passed ansible "opnsense-unbound --check clean"
+  # ⚠ `ansible-playbook --check` exits 0 even when tasks report `changed` — only a task ERROR is
+  # non-zero. So the exit code alone says "the collection, the httpx interpreter and the API
+  # credential work", NOT "the router matches git". The recap is where drift shows.
+  changed="$(printf '%s' "$out" | awk -F'changed=' '/PLAY RECAP/{f=1} f&&NF>1{split($2,a," "); print a[1]; exit}')"
+  if [ -n "$changed" ] && [ "$changed" != "0" ]; then
+    failed ansible "router DRIFT — recap says changed=$changed"
+    return
+  fi
+  # ⚠ AND the recap under-reports: `oxlorg.opnsense.raw` tasks with action:post (the Unbound
+  # advanced-settings task and the reconfigure handler) return changed=False in check mode BY
+  # CONSTRUCTION, so advanced-settings drift is invisible to --check no matter how it is parsed.
+  # This check therefore covers the plumbing + the module-shaped tasks, not the whole router.
+  passed ansible "opnsense-unbound --check: plumbing ok, recap changed=${changed:-?}"
 }
 
 # ── check: every credential the box holds is readable ────────────────────────────────────────────
@@ -149,6 +182,63 @@ check_creds() {
     passed creds "kubeconfig + talosconfig readable"
   else
     skipped creds "not provisioned yet: ${missing[*]}"
+  fi
+}
+
+# ══ MODE=gate — box-local, unskippable, the only checks a reboot may be based on ═══════════════
+# Each of these tests something whose loss cannot be recovered without carrying a USB stick to the
+# box. None may skip: on the box every input exists.
+
+gate_sshd() {
+  local out
+  out="$(ss -ltnH 2>/dev/null || true)"
+  if printf '%s' "$out" | awk '{print $4}' | grep -qE '(^|:)22$'; then
+    passed gate:sshd "listening on 22"
+  else
+    failed gate:sshd "nothing listening on 22 — an update that breaks sshd is unrecoverable here"
+  fi
+}
+
+gate_keys() {
+  local f=/root/.ssh/authorized_keys n=0
+  if [ -s "$f" ]; then
+    n="$(ssh-keygen -lf "$f" 2>/dev/null | grep -c . || true)"
+  fi
+  if [ "${n:-0}" -ge 1 ]; then
+    passed gate:keys "$n authorized key(s) parse"
+  else
+    failed gate:keys "no parseable authorized key — locked out"
+  fi
+}
+
+gate_network() {
+  local gw
+  gw="$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')"
+  if [ -z "$gw" ]; then
+    failed gate:network "no default route"
+  elif ping -c1 -W2 "$gw" >/dev/null 2>&1; then
+    passed gate:network "gateway $gw reachable"
+  else
+    failed gate:network "gateway $gw unreachable"
+  fi
+}
+
+gate_systemd() {
+  local st
+  st="$(systemctl is-system-running 2>/dev/null || true)"
+  case "$st" in
+    running|starting) passed gate:systemd "$st" ;;
+    *)                failed gate:systemd "system state '$st'" ;;
+  esac
+}
+
+gate_store() {
+  # If the store cannot be written, the reboot-into-the-old-generation path still works but no
+  # future update or repair can — worth failing loudly while someone is watching.
+  if [ -w /nix/store ] || [ ! -d /nix/store ]; then
+    passed gate:store "store writable (or absent — jail)"
+  else
+    failed gate:store "/nix/store not writable"
   fi
 }
 
@@ -174,7 +264,7 @@ publish() {
     body+="mgmt_probe_check{check=\"$name\",status=\"$status\"} 1"$'\n'
   done
   if printf '%s' "$body" | curl -sf --max-time 10 --data-binary @- \
-      "$PUSHGATEWAY/metrics/job/mgmt-probe/instance/$(hostname)" >/dev/null; then
+      "$PUSHGATEWAY/metrics/job/mgmt-probe/instance/$(uname -n)" >/dev/null; then
     log "pushed to $PUSHGATEWAY"
   else
     # Never fail the probe on a reporting failure: the deadman's verdict is about the BOX, and
@@ -184,13 +274,30 @@ publish() {
   fi
 }
 
-have devbox || { log "FATAL devbox not on PATH — the toolchain pin is unreachable"; exit 1; }
-
-check_tofu
-check_talos
-check_ansible
-check_creds
-publish
-
-log "probe: $PASS pass, $FAIL fail, $SKIPPED skip"
-[ "$FAIL" -eq 0 ]
+case "$MODE" in
+  gate)
+    # No devbox needed: every gate check is box-local on purpose.
+    gate_sshd
+    gate_keys
+    gate_network
+    gate_systemd
+    gate_store
+    publish
+    log "gate: $PASS pass, $FAIL fail, $SKIPPED skip"
+    # A skip is a failure here: on the box every input exists, so a skip means we could not look.
+    [ "$FAIL" -eq 0 ] && [ "$SKIPPED" -eq 0 ]
+    ;;
+  belt)
+    have devbox || { log "FATAL devbox not on PATH — the toolchain pin is unreachable"; exit 1; }
+    check_tofu
+    check_talos
+    check_ansible
+    check_creds
+    publish
+    log "belt: $PASS pass, $FAIL fail, $SKIPPED skip"
+    [ "$FAIL" -eq 0 ]
+    ;;
+  *)
+    log "FATAL unknown MODE='$MODE' (belt|gate)"; exit 1
+    ;;
+esac

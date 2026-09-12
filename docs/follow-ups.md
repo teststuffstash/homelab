@@ -342,7 +342,7 @@ six OVERSIZE items pointer-ized into
       3 of 5 roots on encrypted Garage state since 2026-08-04. **Next:** `main` stays local until
       it has an out-of-cone copy, and **that copy's home is now named — the R12 pilot**, whose
       phase A is this item's other half (SSH creds + rotation + how tofu reaches the box):
-      [`management-box.md`](management-box.md) §Phases (ADR-129).
+      [`management-box.md`](management-box.md) §MB1 (ADR-129).
       `github` is host-only. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it

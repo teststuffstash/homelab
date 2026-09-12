@@ -29,7 +29,7 @@ The consequence is not optional: **the apply may be remote, the rollback must be
 closure lands and the updater then dies, nothing cluster-side can undo it. Same rule the spike
 states for every deadman — local to the target.
 
-## Phases
+## MB1. Phases
 
 | | Phase | Deliverable | State |
 |---|---|---|---|
@@ -72,7 +72,7 @@ separately and roll back separately:
 
 | Layer | Pin | Bumped by | Rollback |
 |---|---|---|---|
-| Toolchain — `tofu`, `talosctl`, `ansible`, `openssl` | **`devbox.lock`** (committed, repo root) | the existing weekly [`devbox-update.yaml`](../.github/workflows/devbox-update.yaml) — one synchronized `@latest` re-resolve across repos, auto-merging CI-gated PR. ⚠ Renovate's nix/devbox manager stays disabled on purpose: `@latest` is untrackable ([`renovate.md`](renovate.md) §devbox) | `git revert` the lock commit |
+| Toolchain — `tofu`, `talosctl`, `ansible`, `openssl` | **`devbox.lock`** (committed, repo root) | the existing weekly [`devbox-update.yaml`](../.github/workflows/devbox-update.yaml) — one synchronized `@latest` re-resolve across repos, auto-merging CI-gated PR. ⚠ Renovate's nix/devbox manager stays disabled on purpose: `@latest` is untrackable ([`renovate.md`](renovate.md) §Gotchas encountered) | `git revert` the lock commit |
 | System closure — kernel, glibc, systemd | `nixos/flake.lock` | the same git flow | a generation; automatic on a never-boots, see Rollback |
 
 This is why the box runs its tools through `devbox run` from a checkout of this repo rather than
@@ -81,7 +81,11 @@ argument for `devbox.lock` being the pin, and it keeps the system closure tiny.
 
 ## The update loop: pull, and the cluster may poke
 
-The box **pulls a reviewed git ref** on a timer; the cluster at most pokes it. Not fussiness — a
+The box pulls the **operator-advanced `mgmt-release` ref** on a timer — ⚠ *not* `master`: this
+repo auto-merges bot-approved PRs, so following master would let a merged PR rewrite the recovery
+root's kernel, bootloader or sshd within the hour. `CODEOWNERS` gained a `/nixos/` row as the
+second belt, and if the ref does not exist the pull no-ops loudly rather than falling back. The
+cluster at most pokes it. Not fussiness — a
 pushed update means something inside the cluster holds a credential that can rewrite the recovery
 root, and the spike's §What stays human lists this box beside the CA keys and the Tier-0 wallet as
 a trust anchor. Pulling reviewed commits is the same automation with no inbound key, and it takes
@@ -90,24 +94,33 @@ the jail out of the loop (operator: updates should not be the jail's responsibil
 Internet egress on the box is allowed (operator, 2026-09-12), so the pull needs no in-cluster
 mirror to work.
 
-## Detection — the drift belt and the health probe are the same probe
+## MB2. Detection — the drift belt and the health probe are the same probe
 
-**`tofu plan` returning "No changes" asserts the toolchain, the state's readability, the
-credentials and the network path in one read-only call.** A non-empty diff or a non-zero exit is
+This is the **belt**, not the deadman — it reports, and nothing it says reboots the box
+(§Rollback layer 1 says why). **`tofu plan` returning "No changes" asserts the toolchain, the
+state's readability, the credentials and the network path in one read-only call.** A non-empty diff or a non-zero exit is
 the alarm either way, which is why FU-097's drift belt and this box's own health check are one
 mechanism. The probe set (`scripts/mgmt-probe.sh`, run by a systemd timer on the box):
 
 | Check | Asserts |
 |---|---|
-| `tofu plan` on each migrated root → empty | toolchain + remote state + encryption passphrase + Garage reachable + no drift |
+| `tofu plan` → empty on the **cone-clean** roots only (`cloudflare`, `provisioning`) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; `main` is local state until FU-012's copy lands here. Measured 2026-09-12: both roots plan EMPTY, which also retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
-| `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work — class 9 is the sharpest `ROADMAP.md` §Deploy paths gap, so this doubles as the router's drift belt |
+| `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | each credential it holds, read once | a rotation did not lock the box out |
 
-Results go to **Pushgateway** the way the Garage write probe already does: the verdict *and* a
-`*_last_run_timestamp`, so a staleness alert catches "the box is wedged" and not only "the box says
-no". This is FU-102's prober contract applied to its first non-stack consumer — the spike's line is
-that *the prober is the human*.
+The metric *shape* copies the Garage write probe: the verdict **and** a `*_last_run_timestamp`, so
+a staleness alert catches "the box is wedged" and not only "the box says no". This is FU-102's
+prober contract applied to its first non-stack consumer — the spike's line is that *the prober is
+the human*.
+
+⚠ **The transport is UNBUILT, and it is a decision rather than a detail.** Pushgateway is
+"cluster-internal only … never BGP-advertised — internal exhaust plumbing"
+(`argocd/resources/pushgateway/service.yaml`), and the write probe reaches it from an in-cluster
+CronJob. This box is out-of-cluster by construction, so publishing needs either a deliberate
+exposure (a VIP for internal exhaust plumbing — an ip-plan/ADR-088 call, not a config line) or a
+different sink. `scripts/mgmt-probe.sh` therefore treats a failed push as reporting-only and never
+lets it change the verdict; with `PUSHGATEWAY` unset it does not publish at all.
 
 ⚠ **Known hole:** Prometheus is in-cluster, so a cluster-down event blinds the detector. Acceptable
 for freshness-class breakage and irrelevant to the local deadman (which needs no alerting to
@@ -115,20 +128,33 @@ work), but the spike's "alerts leave by two independent paths" has no second pat
 
 ## Rollback — three layers
 
-1. **It boots but the toolchain regressed** → the post-update timer runs the probe set and, on
-   failure, `nixos-rebuild --rollback` + reboot. Commit-confirm, the same shape this repo already
-   specifies for OPNsense applies — and it works with the cluster face-down, which is the point.
-2. **It never boots** (kernel/initrd class) → systemd-boot **boot counting**: the new entry gets N
-   tries and the bootloader falls back on its own when a boot never blesses itself. ⚠ **UNVERIFIED**
-   — confirm `boot.loader.systemd-boot.bootCounting` exists in the nixpkgs pin before relying on
-   it. Until then, kernel-class bumps happen while the box is in arm's reach, because with no BMC
-   and no PiKVM nobody can pick a previous entry.
+1. **It boots but the closure is bad** → `mgmt-confirm.service`, started by the pull (never by a
+   timer), runs `MODE=gate`: sshd still listening on 22, authorized keys still parse, the gateway
+   answers, systemd not degraded, the store writable. None of those may skip. On failure its only
+   action is **`systemctl reboot`**, which lands on the untouched boot default because
+   `nixos-rebuild test` never promoted anything.
+   ⚠ Two rules from the 2026-09-12 review, both load-bearing: **never `--rollback`** (it demotes
+   the generation *before* the good one, and on a first update it exits non-zero — under systemd's
+   `set -e` script wrapper that would skip the reboot and leave the broken closure live); and the
+   gate must test only **box-local** properties, because a gate that fails on a fleet fault would
+   power-cycle this box precisely when the cluster is having a bad day. Fleet checks live in the
+   **belt** below, which reports and never acts.
+2. **It never boots** (kernel/initrd class) → ⛔ **THERE IS NO AUTOMATIC RECOVERY, in either
+   bootloader branch.** Settled 2026-09-12 rather than assumed: `bootCounting` **does not exist**
+   in this pin (`grep -rn bootCounting` over nixos-26.05 rev `21a67dc` returns nothing), and it is
+   a systemd-boot feature regardless, while the config ships `bootMode = "bios"` pending a firmware
+   read. So a kernel or initrd that activates cleanly and then fails to boot needs **hands** — with
+   no BMC and no PiKVM nobody can pick a previous entry remotely. Accepted limit of the pilot; it
+   is also the strongest argument for the permanent box being UEFI with vPro. Do kernel-class
+   bumps while someone can reach the power button.
 3. **A tool version is wrong for the fleet** → `git revert` the `devbox.lock` commit; the next pull
    returns the old version.
 
 ⚠ **The one asymmetry: tofu state format.** A newer `tofu` can write a state version an older
-binary refuses to read, and [`tofu-state.md`](tofu-state.md) is explicit that a root which loses
-its state plans to **create** everything it already owns. So a toolchain bump's canary is `plan`
+binary refuses to read — **general OpenTofu behaviour, NOT verified against our pin and recorded
+nowhere in this repo**, so treat it as the conservative assumption it is. What the corpus does say
+is the cost if it bites: a root that loses its state "does not fail loudly — it plans to **create**
+everything it already owns" ([`tofu-state.md`](tofu-state.md)). So a toolchain bump's canary is `plan`
 only — **never let a first `apply` be the test of a new tofu** — and the timestamped state backups
 are the belt. This is also why `main`'s out-of-cone copy belongs here.
 
@@ -139,8 +165,11 @@ are the belt. This is also why `main`'s out-of-cone copy belongs here.
   scope stay config, only the private half is data: [`secrets.md`](secrets.md) §Minting doctrine.
 - **SSH host keys are declared from a wallet attachment**, or a reinstall silently breaks the
   jail's `known_hosts`.
-- **Secrets on the box follow the appliance tier**: read from the Tier-0 wallet once at provision
-  and written `mode 600`, exactly as the snore-recorder device does. **Not** `sops-nix` — this lab
+- **Secrets on the box borrow the appliance tier's FILE shape, not its store**: read once at
+  provision, written `mode 600`. ⚠ The snore-recorder appliance reads from **Infisical**
+  (`secrets.md` §The three tiers) — which this box cannot use, Infisical being in-cluster, i.e.
+  the dependency it exists to escape. The store here is the **Tier-0 wallet**, which makes this a
+  NEW pattern rather than an inherited one. **Not** `sops-nix` — this lab
   rejected it for giving no real at-rest protection when the key shares the disk (`secrets.md`).
 - ⚠ The box is a **consumer** of Tier-0, never its home: the wallet stays with the operator.
 
@@ -149,8 +178,10 @@ are the belt. This is also why `main`'s out-of-cone copy belongs here.
 | Question | Why it waits |
 |---|---|
 | Which surfaces may it reconcile? | **FU-097's ruling table is the first deliverable and is unwritten.** Standing the box up before deciding is hardware driving design |
-| `bootCounting` in the pin | one `nix eval` away; the answer changes whether kernel bumps need hands |
+| **The pilot's firmware — UEFI or legacy BIOS?** | read it in the installer (`[ -d /sys/firmware/efi ]`): it sets `bootMode` AND decides whether this box can ever have automatic boot-failure rollback (§Rollback layer 2). The largest unknown in the build |
+| `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
 | The second alert path | the spike asks for two independent paths out; today there is one, and it is in-cluster |
+| How probe results leave the box at all | Pushgateway is cluster-internal and never BGP-advertised, so even the FIRST path is unbuilt — exposing it is an ip-plan/ADR-088 decision (§MB2) |
 | The management network | recovery path 2, after phase C — the topology work, not the box work |
 | A CI gate on `nixos/` | the repo's CI is a list of `devbox run` steps; a `nix flake check` step wants the nix cache warm on the runner first |
 

@@ -8,3 +8,7 @@ no lockout window — add the new key, rebuild, verify you can log in with it, t
 one in a second commit.
 
 An empty directory fails the build on purpose: no console, no password and no key is a brick.
+
+⚠ **`git add` them.** A flake sees only *tracked* files, so a key merely dropped in this directory
+is invisible to the build — and the empty-keys assertion will still fire, which is the intended
+failure but a confusing one if you have just copied a file in.
