@@ -1482,6 +1482,7 @@ agents/coordinator/deploy-revert-argo.yaml"
 # ── PARITY ASSERTION: clause_files vs ci.yaml ratchet regex (homelab#853) ──
 # The canonical ratchet regex lives in .github/workflows/ci.yaml:118 (ONE HOME).
 # Reads the regex at runtime so no copy can silently drift. Degrade honestly:
+# >>>REPLAY:parity-assertion>>>
 # if ci.yaml is unreadable, report that verification could not be done.
 # Computed once (not per-repo) since the fact is platform-wide.
 PARITY_ISSUES=""
@@ -1492,7 +1493,7 @@ elif [ -n "${HERE:-}" ] && [ -f "${HERE}/../.github/workflows/ci.yaml" ]; then
   _pci_yaml="$(cd "${HERE}/.." && pwd)/.github/workflows/ci.yaml"
 fi
 if [ -n "$_pci_yaml" ]; then
-  _pregex=$(grep -E "grep -E.*agents/" "$_pci_yaml" | sed "s/.*grep -E '//;s/'.*//" | head -1)
+  _pregex=$(grep -E "grep -E.*agents/" "$_pci_yaml" | sed "s/.*grep -E '//;s/'.*//" | head -1 || true)
   if [ -n "$_pregex" ]; then
     _proot="$(dirname "$(dirname "$(dirname "$_pci_yaml")")")"
     while IFS= read -r _pfile; do
@@ -1513,6 +1514,7 @@ if [ -n "$_pci_yaml" ]; then
 else
   PARITY_ISSUES="  PARITY FAIL: .github/workflows/ci.yaml not found — cannot verify clause_files parity\n"
 fi
+# <<<REPLAY:parity-assertion<<<
 
 for name in $(stacks_json | jq -r '.stacks[].name'); do
   # FU-080 perStack: a stack-scoped instance (the coordinate-<stack> CronWorkflow in
