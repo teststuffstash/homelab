@@ -1,0 +1,21 @@
+# homelab#1525 — agent-session.sh: PF_REVIEWS_RAW jq runs per-page, so PF_NEWEST_VERDICT and
+# reviews.md ordering break once a PR's reviews paginate.
+#
+# THE CONTRACT:
+#   1. When `gh api --paginate` returns multiple pages of reviews, both PF_NEWEST_VERDICT and
+#      PF_REVIEWS_MD must operate on the GLOBALLY sorted set, not per-page independently.
+#   2. PF_NEWEST_VERDICT picks the review with the latest submitted_at across ALL pages.
+#   3. PF_REVIEWS_MD lists reviews in newest-first order across ALL pages.
+#   4. The fixture provides two pages of reviews and verifies the filters work correctly.
+#
+# BEFORE THE FIX: jq ran independently per page, so:
+#   - PF_NEWEST_VERDICT would pick the last review OF PAGE 1 instead of globally newest
+#   - PF_REVIEWS_MD would show per-page-sorted chunks instead of globally sorted
+#
+name: agent-session-paginated-reviews
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fetch-reviews
+  - file:post.sh

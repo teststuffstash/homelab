@@ -145,6 +145,7 @@ is stale, so it cannot drift the way the prose register did.
 | `_selftest/unrecorded-read` | actions | - | `-` | - |
 | `_selftest/wrong-expectation` | actions | - | `-` | - |
 | `adopted-not-queued-surfaces/adopted-not-queued-surfaces` | actions | - | `agents/coordinator-scan.sh` | - |
+| `agent-session-paginated-reviews` | actions | - | `agents/agent-session.sh` | - |
 | `arbitrate/belt-probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/blocked-on-human-bot-comment-after` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/blocked-on-human-resolved` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -198,6 +199,8 @@ is stale, so it cannot drift the way the prose register did.
 | `ci-red-rounds-two-channels/ci-red-rerun-wake-dispatch` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rerun-wake` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
+| `ci-red-stale-sha-escalates` | actions | - | `agents/coordinator-scan.sh` | MP-T13 |
+| `ci-red-stale-sha-hold` | actions | - | `agents/coordinator-scan.sh` | MP-T13 |
 | `clause-replay-pairing/clause-replay-pairing` | table | - | `agents/coordinator-scan.sh` | - |
 | `context-prefetch-nolabels` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch` | actions | - | `agents/agent-session.sh` | - |
@@ -236,6 +239,10 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-mcp-present/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `epic-dispositions` | suite | - | `agents/epic_dispositions.py` | IL-T12 |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
+| `fleet-fault-unlatch-cause-closed-green` | actions | - | `agents/coordinator-scan.sh` | - |
+| `fleet-fault-unlatch-cause-open` | actions | - | `agents/coordinator-scan.sh` | - |
+| `fleet-fault-unlatch-no-marker` | actions | - | `agents/coordinator-scan.sh` | - |
+| `fleet-fault-unlatch-probe-fail` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-strike-reader` | actions | - | `agents/coordinator-scan.sh` | IL-T30 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
 | `footprint-hold-goal-exempt` | actions | - | `agents/coordinator-scan.sh` | - |

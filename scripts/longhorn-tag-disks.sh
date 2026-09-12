@@ -95,6 +95,28 @@ kubectl -n longhorn-system patch nodes.longhorn.io wk-02 --type=merge \
   -p "{\"spec\":{\"disks\":{\"$(default_disk wk-02)\":{\"storageReserved\":32212254720}}}}" >/dev/null
 echo "  wk-02 storageReserved -> 30Gi"
 
+# m70s: register the PM961 (the ADR-114 zone's DEDICATED data disk, fitted 2026-09-12 on a
+# Gembird PEX-M2-01 in the x16 LP slot — the box's only x4-capable slot). Talos mounts it at
+# /var/lib/longhorn/pm961 from machines.yaml's `longhorn_disks`; this is what makes Longhorn aware
+# of it. Deliberately UNTAGGED: `persistence.defaultDiskSelector=std` then fences the default
+# class off this disk, while `longhorn-local-xfs` (no diskSelector — the consumer's node affinity
+# is its fence) can still place garage-1's meta+data here. storageReserved 0: unlike the node's
+# default disk this one carries nothing but Longhorn data — no Talos, no container image store,
+# which is the whole point of buying it (the 2026-09-01 collision, ledger §2026-09-07).
+# Skip when already registered: re-patching mid disk-sync trips the longhorn validator.
+if kubectl -n longhorn-system get nodes.longhorn.io m70s -o jsonpath='{.spec.disks.pm961.path}' 2>/dev/null | grep -q .; then
+  echo "  m70s/pm961 already registered — skip"
+else
+  kubectl -n longhorn-system patch nodes.longhorn.io m70s --type=merge -p '{
+    "spec": {
+      "disks": {
+        "pm961": {"path":"/var/lib/longhorn/pm961","allowScheduling":true,"evictionRequested":false,"storageReserved":0,"tags":[],"diskType":"filesystem"}
+      }
+    }
+  }' >/dev/null
+  echo "  m70s/pm961 registered (untagged — the zone disk)"
+fi
+
 # wk-metal-01: register the MX500 (system disk; 100Gi reserved for Talos + compute-tier
 # scratch). The node CR exists even while longhorn-manager is still scheduling onto the
 # tainted node — the disk mounts once the manager pod arrives (taintToleration, longhorn.tf).

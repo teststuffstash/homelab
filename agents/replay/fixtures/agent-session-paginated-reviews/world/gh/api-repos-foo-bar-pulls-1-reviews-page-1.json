@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1,
+    "state": "COMMENTED",
+    "user": {"login": "reviewer1"},
+    "submitted_at": "2026-09-08T10:00:00Z",
+    "body": "First page, first review"
+  },
+  {
+    "id": 2,
+    "state": "COMMENTED",
+    "user": {"login": "reviewer2"},
+    "submitted_at": "2026-09-08T11:00:00Z",
+    "body": "First page, second review"
+  }
+]

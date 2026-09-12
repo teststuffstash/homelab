@@ -1426,6 +1426,7 @@ ${PF_GIT_LOG:-_(no commits or compare failed)_}"
         fi
 
         # Fetch reviews (verdicts newest-first, inline comments with file:line)
+        # >>>REPLAY:fetch-reviews>>>
         # REQUIRED: the newest review verdict must be readable — unreadable defers (homelab#1205)
         PF_REVIEWS_RAW=""
         PF_REVIEWS_RAW="$(gh api "repos/${PF_SLUG}/pulls/${PF_PR}/reviews" --paginate 2>/dev/null)" || PF_REVIEWS_RAW=""
@@ -1434,7 +1435,7 @@ ${PF_GIT_LOG:-_(no commits or compare failed)_}"
           exit 0
         fi
         # Verify the newest verdict has a readable state
-        PF_NEWEST_VERDICT="$(printf '%s' "$PF_REVIEWS_RAW" | jq -c 'sort_by(.submitted_at) | last | {state, user: .user.login, submitted_at}' 2>/dev/null)" || PF_NEWEST_VERDICT=""
+        PF_NEWEST_VERDICT="$(printf '%s' "$PF_REVIEWS_RAW" | jq -s -c '[.[][]] | sort_by(.submitted_at) | last | {state, user: .user.login, submitted_at}' 2>/dev/null)" || PF_NEWEST_VERDICT=""
         if [ -z "$PF_NEWEST_VERDICT" ] || [ "$PF_NEWEST_VERDICT" = "null" ]; then
           echo "→ dispatch deferred — directive unreadable (newest review verdict unparseable for PR #${PF_PR}) — the next pass retries (homelab#1205)" >&2
           exit 0
@@ -1451,7 +1452,7 @@ ${PF_GIT_LOG:-_(no commits or compare failed)_}"
 ### ${PF_RV_AUTHOR} — ${PF_RV_STATE} (${PF_RV_SUBMITTED})
 
 ${PF_RV_BODY}"
-          done <<< "$(printf '%s' "$PF_REVIEWS_RAW" | jq -c 'sort_by(.submitted_at) | reverse[]')"
+          done <<< "$(printf '%s' "$PF_REVIEWS_RAW" | jq -s -c '[.[][]] | sort_by(.submitted_at) | reverse[]')"
           # Fetch inline PR comments with file:line
           PF_PR_COMMENTS=""
           PF_PR_COMMENTS="$(gh api "repos/${PF_SLUG}/pulls/${PF_PR}/comments" --paginate 2>/dev/null)" || PF_PR_COMMENTS=""
@@ -1473,6 +1474,7 @@ ${PF_RV_BODY}"
             done <<< "$(printf '%s' "$PF_PR_COMMENTS" | jq -c '.[]')"
           fi
           PF_INDEX_ITEM "reviews.md" "OK"
+        # <<<REPLAY:fetch-reviews<<<
 
         # Coordinator's ruling/arbitration comment (search issue + PR comments for ARBITRATE)
         PF_ARB_MD=""

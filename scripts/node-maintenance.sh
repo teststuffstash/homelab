@@ -9,6 +9,8 @@
 #                                                        wait out rides/transient consumers, MOVE the
 #                                                        last replicas long-lived pods hold (DRY=1: report)
 #   bash scripts/node-maintenance.sh down      <node>   # preflight → settle → drain → talosctl shutdown
+#                                                        (settle also SILENCES the node's alerts in
+#                                                         Alertmanager; `up` expires the silence)
 #   bash scripts/node-maintenance.sh up        <node>   # WoL (metal) → wait Ready → uncordon → wait Longhorn healthy
 #
 # `down` does as much as it can before it lets a drain block (operator direction 2026-09-09):
@@ -21,6 +23,10 @@
 #         transient pods keep re-holding (the coordinator's RWX transcripts volume: back-to-back
 #         runs, 2026-09-09) is moved the same way once it has blocked for MOVE_AFTER (600 s).
 #   bash scripts/node-maintenance.sh move <node> <volume>   # that move, by hand, for one volume
+#   bash scripts/node-maintenance.sh silence-open  <node>   # declare the window to Alertmanager by hand
+#   bash scripts/node-maintenance.sh silence-close <node>   # expire it (both are done for you by
+#                                                             settle/down and up — FU-230 leg (a));
+#                                                             SILENCE=0 opts the whole window out
 #   bash scripts/node-maintenance.sh power <node> [status|cycle]   # smart-plug draw (machines.yaml `plug:`);
 #         `cycle` REFUSES a socket carrying load (FORCE=1 overrides) — 2026-09-09: crossed plug ids
 #         let a "boot thinkcentre" cycle cut hp-01 (docs/incidents/2026-09-09-crossed-plug-hp01-outage.md)
@@ -59,6 +65,10 @@ SETTLE_TIMEOUT="${SETTLE_TIMEOUT:-3600}" # s — rides / transient consumers to 
 MOVE_TIMEOUT="${MOVE_TIMEOUT:-1800}"     # s — per volume: the extra replica's rebuild elsewhere
 MOVE_AFTER="${MOVE_AFTER:-600}"          # s — a last replica still held by TRANSIENT pods after this long gets moved too
 DRY="${DRY:-0}"                          # settle: report what it would wait on / move, change nothing
+AM="${NM_AM:-http://192.168.40.14:9093}" # Alertmanager API (same default as agents/meta-events.sh)
+SILENCE_HOURS="${SILENCE_HOURS:-3}"      # window silence lifetime; `up` expires it early
+SILENCE="${SILENCE:-1}"                  # 0 = do not touch Alertmanager at all
+POD_GRACE_MIN="${POD_GRACE_MIN:-45}"     # the POD-scoped silence outlives the window on purpose
 
 log()  { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 ok()   { printf '  \033[32mOK\033[0m   %s\n' "$*"; }
@@ -73,6 +83,11 @@ WARNS=0; FAILS=0
 node_ip() { kubectl get node "$NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'; }
 node_mac() { grep -oE "\"host\": \"$NODE\", \"hwaddr\": \"[0-9a-f:]+\"" "$REPO/opnsense/dnsmasq-dhcp.py" | grep -oE '[0-9a-f:]{17}' | tr -d ':'; }
 node_ready() { kubectl get node "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null; }
+# Is the box answering on the network? ping is NOT available in the jail container (no iputils in
+# devbox, none in the image — 2026-09-12: the silent `ping` failure made `up` fire WoL at a box
+# that was already booting, and the ssh hop then aborted the whole wake). bash /dev/tcp needs no
+# tool: Talos apid (50000) answers as soon as the machine is up, long before Ready.
+host_up() { timeout 2 bash -c "exec 3<>/dev/tcp/$1/50000" 2>/dev/null; }
 
 # Volumes whose LAST usable replica sits on $NODE, one per line:
 #   <volume> <attached|detached> <ns/pvc> <consumer> <dataLocality>
@@ -115,6 +130,109 @@ rides_running() {
              or ((.metadata.ownerReferences // [])|length==0)
              or ((.metadata.namespace|test("^agent-|-agents$")) and ((.metadata.ownerReferences[0].kind // "Pod")|IN("Pod","Job","Workflow"))))
     | "\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"'
+}
+
+# ------------------------------------------------------- the window silence (FU-230 leg a)
+# A maintenance window is invisible to the alert path, and the responder then diagnoses OUR OWN
+# work: 2026-09-09's three thinkcentre windows cost ≥8 of the 12 daily triage sessions, and on
+# 2026-09-12 m70s's planned reboot became a careful "cannot determine crash vs power-loss" writeup
+# (homelab#261). So `settle`/`down` open a silence and `up` expires it.
+#
+# ⚠ WHICH LABEL: alerts do NOT reliably carry `node`. NodeRebooted fires on
+# node_boot_time_seconds, whose only node identifier is `instance=<ip>:9100` — a hand-issued
+# node=m70s silence matched nothing on 2026-09-12. The window therefore silences BOTH keys, and
+# for a zone node the instance-keyed Garage health alerts too (their `instance` is the blackbox
+# target, not this box). Capacity/quota/GC alerts stay LIVE on purpose: a full disk during a
+# window is still a full disk.
+# ⚠ THE POD CLASS has no node key at all. Every pod the window kills produces alerts keyed only by
+# namespace/pod/container — PodSigkilled's `instance` is KUBE-STATE-METRICS' own pod IP — so the
+# fourth silence matches the node's pod names, captured before the drain. It deliberately OUTLIVES
+# the window (POD_GRACE_MIN, default 45m): PodSigkilled is `increase(...[30m])`, so it fires up to
+# half an hour after the kill — on 2026-09-12 it fired 19 min after the SIGKILL and 10 min after the
+# node was back Ready (homelab#1600), which no window-length silence could have caught. The cost is
+# bounded and named: a StatefulSet pod returns under the SAME name, so a genuine alert about one of
+# these pods stays suppressed until the grace expires. `up` leaves it running; SILENCE_CLOSE_PODS=1
+# expires it too.
+# ⚠ DURABILITY: silences live on Alertmanager's emptyDir (FU-195) — a monitoring restart mid-window
+# drops them and alerts resume, i.e. back to the old behaviour. Best-effort by construction: an
+# unreachable Alertmanager logs and never fails the window.
+SILENCE_OWNER() { printf 'node-maintenance.sh/%s%s' "$NODE" "${1:-}"; }
+
+has_zone_volume() { last_replicas 2>/dev/null | grep -q 'strict-local'; }
+
+silence_open() {
+  [ "$SILENCE" = 1 ] || { log "SILENCE=0 — not touching Alertmanager"; return 0; }
+  local ip existing
+  existing="$(silence_ids)"
+  if [ -n "$existing" ]; then log "window silence already active for $NODE: $(tr '\n' ' ' <<<"$existing")"; return 0; fi
+  ip="$(node_ip)"
+  local matchers garage
+  matchers="$(jq -cn --arg ip "$ip" --arg n "$NODE" '[
+      {name:"instance", value:($ip+"(:[0-9]+)?"), isRegex:true,  isEqual:true},
+      {name:"node",     value:$n,                 isRegex:false, isEqual:true}]')"
+  if has_zone_volume; then
+    garage='Garage(ClusterDegraded|ClusterFlapping|PeerRpcTimeouts|QuorumMembersRestarted|AdminMetricsAbsent|TableEmpty|S3ServerErrors)'
+    log "$NODE carries a strict-local zone volume — also silencing the Garage health alerts"
+  fi
+  local m
+  while read -r m; do
+    [ -n "$m" ] || continue
+    post_silence "$m" || warn "could not open a window silence (matcher $m) — alerts will fire for this window"
+  done <<EOF
+$(jq -cn --argjson ms "$matchers" '$ms[] | [.]')
+$( [ -n "${garage:-}" ] && jq -cn --arg re "$garage" '[{name:"alertname", value:$re, isRegex:true, isEqual:true}]')
+EOF
+  # The pods this window is about to kill, by name — captured BEFORE the drain, DaemonSet pods
+  # included (they are not drained, they die with the power-off: engine-image, alloy, kmsg-reader
+  # and the prepull holds were four of the five PodSigkilled alerts on 2026-09-12).
+  local pods podre
+  # same pipefail shape as silence_ids: a failing read must not abort the window, only skip the silence
+  pods="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed '/^$/d' | sort -u || true)"
+  if [ -n "$pods" ]; then
+    podre="($(paste -sd'|' - <<<"$pods"))"
+    if post_silence "$(jq -cn --arg re "$podre" '[{name:"pod", value:$re, isRegex:true, isEqual:true}]')" '#pods' "$((POD_GRACE_MIN*60))"; then
+      log "pod-scoped silence covers $(wc -l <<<"$pods") pod name(s) for ${POD_GRACE_MIN}m"
+    else
+      warn "could not open the pod-scoped silence — PodSigkilled et al. will fire for this window"
+    fi
+  fi
+}
+
+# One silence per matcher set: Alertmanager ANDs the matchers inside a silence, and `instance` and
+# `node` never appear on the same alert.
+post_silence() {
+  local body id scope="${2:-}" secs="${3:-$((SILENCE_HOURS*3600))}"
+  body="$(jq -cn --argjson matchers "$1" --arg by "$(SILENCE_OWNER "$scope")" --arg s "$secs" \
+    --arg c "node-maintenance window on $NODE ($(date -u +%FT%TZ)) — planned cordon/drain/shutdown. Expired by \`node-maintenance.sh up $NODE\`${scope:+ (the pod-name silence self-expires later — PodSigkilled looks back 30m)}." \
+    '{matchers:$matchers, startsAt:(now|todate), endsAt:((now + ($s|tonumber))|todate), createdBy:$by, comment:$c}')"
+  id="$(curl -sf -m 10 -X POST -H 'Content-Type: application/json' -d "$body" "$AM/api/v2/silences" | jq -r '.silenceID // empty')"
+  [ -n "$id" ] || return 1
+  ok "window silence $id  $(jq -r 'map("\(.name)\(if .isRegex then "=~" else "=" end)\(.value)")|join(" ")' <<<"$1")"
+}
+
+# `|| true` is load-bearing: under this script's `set -euo pipefail` an unreachable Alertmanager
+# makes `curl -sf` fail, pipefail propagates it, and the PLAIN assignments at the call sites
+# (`existing=$(silence_ids)`, `ids=$(silence_ids)`) would abort the whole window right after the
+# cordon — the opposite of the best-effort promise above (bot review, PR#1601).
+silence_ids() {
+  curl -sf -m 10 "$AM/api/v2/silences" 2>/dev/null \
+    | jq -r --arg by "$(SILENCE_OWNER "${1:-}")" '.[]|select(.createdBy==$by and .status.state!="expired")|.id' 2>/dev/null || true
+}
+
+silence_close() {
+  [ "$SILENCE" = 1 ] || return 0
+  local ids id n=0
+  ids="$(silence_ids)"
+  if [ "${SILENCE_CLOSE_PODS:-0}" = 1 ]; then ids="$ids
+$(silence_ids '#pods')"
+  elif [ -n "$(silence_ids '#pods')" ]; then
+    log "leaving the pod-scoped silence to self-expire (≤${POD_GRACE_MIN}m) — PodSigkilled fires up to 30m after the kill; SILENCE_CLOSE_PODS=1 to expire it now"
+  fi
+  [ -n "$ids" ] || { log "no window silence to expire for $NODE"; return 0; }
+  for id in $ids; do
+    if curl -sf -m 10 -X DELETE "$AM/api/v2/silence/$id" >/dev/null; then n=$((n+1)); else warn "could not expire silence $id — it self-expires in ≤${SILENCE_HOURS}h"; fi
+  done
+  ok "expired $n window silence(s) for $NODE"
 }
 
 # ---------------------------------------------------------------- preflight
@@ -259,8 +377,9 @@ move_replica() {
 
 settle() {
   local t=0 lr rides moved="" seen="" since v state pvc consumer kind blocking last_report=-1000
-  if [ "$DRY" = 1 ]; then log "DRY=1: reporting only, no cordon / move"; else
-    log "cordon $NODE (nothing new lands here while we wait; Longhorn follows the cordon)"; kubectl cordon "$NODE" >/dev/null; fi
+  if [ "$DRY" = 1 ]; then log "DRY=1: reporting only, no cordon / move / silence"; else
+    log "cordon $NODE (nothing new lands here while we wait; Longhorn follows the cordon)"; kubectl cordon "$NODE" >/dev/null
+    silence_open; fi
   while :; do
     lr="$(last_replicas)"; rides="$(rides_running)"
     while read -r v state pvc consumer locality; do
@@ -316,13 +435,15 @@ down() {
 up() {
   local ip; ip="$(node_ip)"
   if [ "$(node_ready)" = True ]; then log "$NODE already Ready"; else
-    if ping -c1 -W1 "$ip" >/dev/null 2>&1; then log "$ip answers ping — booting, no WoL needed"; else
+    if host_up "$ip"; then log "$ip answers on :50000 — booting, no WoL needed"; else
       power status || true   # the plug's draw, before we believe anything about the box's state
       local mac; mac="$(node_mac || true)"
       if [ -z "$mac" ]; then log "no MAC for $NODE in opnsense/dnsmasq-dhcp.py (a VM? start it on pve) — waiting for Ready anyway"; else
         log "WoL $NODE ($mac) via $PVE_HOST"
-        ssh -i "$PVE_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$PVE_HOST" \
-          "python3 -c \"import socket; m=bytes.fromhex('$mac'); p=b'\\xff'*6+m*16; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.setsockopt(1,6,1); s.sendto(p,('255.255.255.255',9))\""
+        ssh -i "$PVE_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
+          -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$PVE_HOST" \
+          "python3 -c \"import socket; m=bytes.fromhex('$mac'); p=b'\\xff'*6+m*16; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.setsockopt(1,6,1); s.sendto(p,('255.255.255.255',9))\"" \
+          || log "WoL hop to $PVE_HOST failed (host key? key file?) — no magic packet sent; still waiting for Ready in case the box is already on"
       fi
     fi
     log "waiting for Ready (≤${READY_TIMEOUT}s)"
@@ -330,14 +451,27 @@ up() {
       sleep 10; t=$((t+10))
       # WoL only works from S5 on standby power: a box that was UNPLUGGED (cable swap, RAM…) has
       # no armed NIC until it has booted once — 2026-09-06, wk-metal-04 needed the button.
-      [ $t -eq 120 ] && ! ping -c1 -W1 "$ip" >/dev/null 2>&1 && log "no ping after 120s — if the box lost AC power, WoL cannot wake it: press the power button (the wait continues)"
+      [ $t -eq 120 ] && ! host_up "$ip" && log "no answer on :50000 after 120s — if the box lost AC power, WoL cannot wake it: press the power button (the wait continues)"
       [ $t -ge "$READY_TIMEOUT" ] && { log "TIMEOUT: $NODE not Ready after ${READY_TIMEOUT}s"; return 1; }
     done
     log "$NODE Ready after ~${t}s"
   fi
   log "uncordon $NODE"; kubectl uncordon "$NODE"
+  # Ready is NOT enough for a volume to come back: the Longhorn CSI plugin registers on the node
+  # SECONDS-to-MINUTES after Ready, and until it does every attach fails with "CSINode <node> does
+  # not contain driver driver.longhorn.io". The healthy test below cannot see that — a strict-local
+  # zone volume is DETACHED while its pod cannot attach, so "0 degraded ATTACHED volumes" is
+  # vacuously true and the window reads closed with garage-1 still down (2026-09-12, m70s: closed
+  # at 13:30:22, attach kept failing until the plugin registered ~13:32).
+  log "waiting for the Longhorn CSI driver to register on $NODE (≤300s)"
+  local t=0
+  until kubectl get csinode "$NODE" -o jsonpath='{.spec.drivers[*].name}' 2>/dev/null | grep -q 'driver.longhorn.io'; do
+    sleep 10; t=$((t+10))
+    [ $t -ge 300 ] && { log "TIMEOUT: driver.longhorn.io not registered on $NODE after 300s — attaches will fail"; return 1; }
+  done
+  ok "Longhorn CSI driver registered on $NODE"
   log "waiting for Longhorn: node Schedulable + every attached volume healthy (≤${HEALTHY_TIMEOUT}s)"
-  local t=0 bad sched
+  local bad sched; t=0
   while :; do
     sched="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Schedulable")].status}' 2>/dev/null)"
     bad="$(kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '[.items[]|select(.status.state=="attached" and .status.robustness!="healthy")]|length')"
@@ -345,6 +479,7 @@ up() {
     sleep 15; t=$((t+15)); [ $t -ge "$HEALTHY_TIMEOUT" ] && { log "TIMEOUT: longhorn schedulable=$sched degraded=$bad after ${HEALTHY_TIMEOUT}s"; return 1; }
   done
   log "Longhorn: $NODE schedulable, 0 degraded attached volumes. Window closed."
+  silence_close
   kubectl get node "$NODE" -o wide
   # Replicas that failed during the window get REPLACED (rebuilt elsewhere after
   # replica-replenishment-wait-interval); their directories stay on the returning disk as
@@ -373,5 +508,7 @@ case "$cmd" in
   power) power "${3:-status}" ;;
   down) down ;;
   up) up ;;
+  silence-open) silence_open ;;
+  silence-close) silence_close ;;
   *) usage ;;
 esac

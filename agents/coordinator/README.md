@@ -47,7 +47,7 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
 | `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | coordinator |
 | `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides. The label is a *condition*, not a dispatch trigger: the scan emits the unit only while the PR's `state-fp:` fingerprint has moved since the last dispatch (homelab#198), so a sticky label costs one ride per state change, not one per tick | review reflex |
-| `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2); the same ruling also opens ONE `agent-fix` issue against the platform repo naming the gate that did not fire, and links it in the comment — a fleet ruling is filed, not asked. **Dedup first, like every filing surface**: search open issues for the same gate/`error_class` and extend the existing one instead of filing a second — a recurring fleet fault must sharpen one issue, not queue N (seat quickfix at the PR#947 gate read). | any role |
+| `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2); the same ruling also opens ONE `agent-fix` issue against the platform repo naming the gate that did not fire, and links it in the comment — a fleet ruling is filed, not asked. **Dedup first, like every filing surface**: search open issues for the same gate/`error_class` and extend the existing one instead of filing a second — a recurring fleet fault must sharpen one issue, not queue N (seat quickfix at the PR#947 gate read). **FLEET-FAULT UN-LATCH (homelab#1539):** when a PR carries `agent/error` from a fleet fault with a machine-readable marker (`<!-- fleet-fault cause=<owner/repo>#<n> prs=... -->` in its AGENT_ERROR comment), the scan automatically removes the label once the cited cause issue is CLOSED and CI is green at the PR head — rule #6 holds all unreadable probes; human-applied latches (no marker) stay human-first. | any role |
 
 Invariants: **one active worker per PR**; **bounded rounds** (max 5 **logic** rounds, ADR-127 —
 reviewer/CI verdicts; infra failures are **strikes** that swap the model instead of consuming a round — a second strike with the identical `(model, error_class)` pair on one issue is not a swap — it routes to the `agent/error` STRIKE-channel path (label + one `AGENT_ERROR:` comment + the one filed issue) instead of another ride; see the MODEL note in the runbook; a **no-op round** — stats posted, HEAD unmoved — is not a logic round
@@ -1154,6 +1154,36 @@ breaker count (which filters on APPROVED/CHANGES_REQUESTED) — the re-entered P
 back instead of instantly re-tripping ROUNDS_MAX. That is intended: the ruling ended the disputed
 round, it did not spend a fresh one.
 
+## The `merge-conflict` clause (MP-T06 — the play)
+
+The updater labels a worker-authored PR `merge-conflict` when its update-branch call 422s on a
+DIRTY head; the scan emits `merge-conflict|<repo>|pr-<n>` once per state (the #198 fingerprint;
+a seat-authored conflict never reaches you — report line only). A conflict is not a review
+finding and not a red: the diff is fine, master moved under it. Re-read live state first (still
+DIRTY? a human may have resolved it — exit clean). Then rule exactly one of:
+
+- **Resume on the branch — the default.** Dispatch a fix round with `--work-branch` on the PR's
+  branch whose directive is exactly this and nothing more: merge `origin/master` into the branch,
+  resolve the conflict keeping BOTH this PR's intent and master's change, run the replay
+  families and lints that cover the conflicting files, push the merge commit; change nothing
+  else. Choose this when the conflict is confined to files the PR already touches, or to
+  append-only surfaces (fixture rows, generated indexes, doc lists). **Codeowner cost, say it in
+  the ruling:** the push dismisses every approval on the PR (ruleset
+  `dismiss_stale_reviews_on_push`) — the bot re-reviews on its own; a human codeowner approval
+  must be given again, and the re-read is the resolution only
+  (`git diff <approved-head>...<new-head>`), so name the approved head in the ruling comment.
+- **Close and re-queue.** Close the PR with the reasoning and return the issue to `agent/queued`
+  (add before remove, compare-then-write) when the conflict reaches the diff's substance (the
+  same clause or function rewritten on master), when the PR was never bot-approved (nothing to
+  preserve), or when a resume round already came back still DIRTY — one resume, never two.
+- **Escalate.** `agent/blocked` + a `blocked-on: human` marker when the conflicting master change
+  is the seat's and contradicts the PR's intent — that decision belongs to the human who made it.
+
+A conflict ruling carries no `ci-cause:` line (nothing was red) and never dispatches the reviewer
+(pre-flight rule 2: a review cannot fix a conflict). Every ruling comment that orders a round
+begins with the line-anchored `ARBITRATE` word (§arbitrate marker contract) so the launcher
+delivers it.
+
 ## Escalation vocabulary — the budget label is the carrier (FU-201)
 
 The escalation carrier is the issue's `agent-budget/*` label — the coordinator RE-GRADES it
@@ -1227,6 +1257,13 @@ names the same failing step a `ci-red` ride already ruled environmental on a DIF
 24h, stop parking per PR** — emit ONE `AGENT_ERROR: infra-class CI red on N PRs — <check>/<step>`
 listing the PRs (the fleet trigger in the `agent/error` row), and say on each other affected PR
 that it is covered by that one signal instead of giving each its own `agent/blocked` + human ask.
+**That same comment MUST also carry the un-latch marker**, on a line of its own:
+`<!-- fleet-fault cause=<owner/repo>#<n> prs=<comma-separated PR numbers> -->` — `cause=` is the ONE
+issue you filed for this fault, `prs=` the PRs you latched. The scan's fleet-fault un-latch clause
+(homelab#1539, `agent/error` row above) parses exactly that marker and clears `agent/error` once the
+cited cause is CLOSED with `ci` green at the PR head. A fleet `AGENT_ERROR:` written WITHOUT the
+marker stays human-first forever — the oracle-fleet#523 shape, four PRs parked until a human
+cleared them by hand.
 
 > **ARBITRATE marker contract (homelab#1467) also applies to ci-red** — when you post a re-dispatch
 > ruling on a red PR, it MUST begin with a line-anchored `ARBITRATE` word (§arbitrate above).
@@ -1260,8 +1297,13 @@ the same `error_class=` appears in `AGENT_STRIKE:` comments on **≥2 distinct I
 24h** (match on the structured `error_class=` field of the comment, never on log excerpts),
 stop swapping the chain per item — emit ONE `AGENT_ERROR: infra-class strike on N issues —
 error_class=<c>` comment listing the issues, apply the `agent/error` label per affected item
-(the breaker stays per-item), and make the human ask ONCE. The ≥2-in-24h threshold is
-inherited from the ci-red rule's shape, not measured optimal — same caveat as there.
+(the breaker stays per-item), and make the human ask ONCE. **That comment carries the same
+un-latch marker as the ci-red sibling** — `<!-- fleet-fault cause=<owner/repo>#<n> prs=<items> -->`
+on a line of its own, `cause=` the one issue you filed — so the fleet latch has a machine-readable
+route out instead of waiting on a human who has to notice. (The un-latch clause reads open PRs
+today; the marker on this channel records the same contract for the items it latches.) The
+≥2-in-24h threshold is inherited from the ci-red rule's shape, not measured optimal — same caveat
+as there.
 
 ## The infeasible terminal — `AGENT_INFEASIBLE` (retro r3 F4, homelab#257)
 

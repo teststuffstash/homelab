@@ -1,0 +1,8 @@
+CALL gh api repos/teststuffstash/oracle-fleet/commits/5b353fe9abcdef0123456789abcdef0123456789/check-runs --jq [.check_runs[]? | select(.status == "completed") | select((.conclusion // "") | ascii_downcase | . == "failure" or . == "timed_out")] | length > 0
+CALL gh pr edit 1515 --repo teststuffstash/oracle-fleet --add-label agent/arbitrate
+CALL gh pr comment 1515 --repo teststuffstash/oracle-fleet --body ARBITRATE (ci-red, FU-115): 3 fix rounds counted on issue #1515 (1 PR) and CI still red at 5b353fe9 (cap 3). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human).
+OUT ORPHANS [oracle-fleet] ⚠ ci-red → agent/arbitrate: PR #1515 (3 rounds on issue #1515 (1 PR), still red — exhausted)\n
+OUT UNITS 
+OUT ci_red_should_arbitrate 1
+OUT REACHED: end
+RC 0

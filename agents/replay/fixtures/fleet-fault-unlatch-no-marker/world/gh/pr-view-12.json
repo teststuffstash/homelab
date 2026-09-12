@@ -1,0 +1,11 @@
+{
+  "number": 12,
+  "comments": [
+    {
+      "body": "AGENT_ERROR: some human-applied latch (no fleet-fault marker)"
+    }
+  ],
+  "statusCheckRollup": [
+    {"conclusion": "SUCCESS"}
+  ]
+}

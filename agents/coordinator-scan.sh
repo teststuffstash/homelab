@@ -2890,7 +2890,7 @@ EOF_GOVERNANCE
               esac
             done <<<"$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
               '(($d | split(" ") | map(select(. != "")))) as $D
-               | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null)] | sort_by(.number) | .[]
+               | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null)] | sort_by((.repo, .number)) | .[]
                | [.repo, (.number | tostring), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
             if [ "$gleft" -gt 0 ]; then
               # The goal is NOT closed while work remains — see the resumability contract above.
@@ -4520,6 +4520,59 @@ EOF_GTHEMES_OPEN
     done
     # <<<REPLAY:arbitrate-ordinary-path-belt<<<
 
+    # fleet-fault un-latch (FU-069, homelab#1539): when a PR carries `agent/error` from a fleet fault
+    # and the cited cause issue is CLOSED with green CI, remove the label and post one line. Rule #6
+    # holds all unreadable probes. Human-applied latches (no marker) and anomaly latches (STEP-0,
+    # verdict-count) are untouched — those are human-first cases that stay human-first.
+    # The marker format: `<!-- fleet-fault cause=<owner/repo>#<n> prs=520,521,522,524 -->`
+    # >>>REPLAY:fleet-fault-unlatch>>>
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|.number' 2>/dev/null); do
+      # Fetch PR comments to find the fleet-fault marker
+      pr_json_ff="$(gh pr view "$u" --repo "$slug" --json comments,statusCheckRollup 2>/dev/null)" || pr_json_ff=''
+      if [ -z "$pr_json_ff" ]; then
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read PR state (rule #6). No label write; next tick.\n"
+        continue
+      fi
+      # Find the newest AGENT_ERROR: comment with fleet-fault marker
+      ff_data="$(printf '%s' "$pr_json_ff" | jq -r '[.comments[]? | select((.body // "") | test("AGENT_ERROR:") and test("fleet-fault cause="))] | sort_by(.createdAt) | last | {body: (.body // ""), exists: true} // {exists: false}' 2>/dev/null || echo '{exists: false}')"
+      if ! printf '%s' "$ff_data" | jq -e '.exists' >/dev/null 2>&1; then
+        # No fleet-fault marker — this is a human-applied or anomaly latch, hold it
+        continue
+      fi
+      # Extract cause repo and issue from fleet-fault marker
+      cause_repo="$(printf '%s' "$ff_data" | jq -r '.body | match("fleet-fault cause=([^#]+)#([0-9]+)"; "g") | .captures[0].string' 2>/dev/null)" || cause_repo=''
+      cause_issue="$(printf '%s' "$ff_data" | jq -r '.body | match("fleet-fault cause=([^#]+)#([0-9]+)"; "g") | .captures[1].string' 2>/dev/null)" || cause_issue=''
+      if [ -z "$cause_repo" ] || [ -z "$cause_issue" ]; then
+        # Marker format error — hold it
+        continue
+      fi
+      # Check if the cause issue is CLOSED
+      if ! cause_state="$(gh issue view "$cause_issue" --repo "$cause_repo" --json state 2>/dev/null | jq -r '.state' 2>/dev/null)"; then
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read cause issue ${cause_repo}#${cause_issue} (rule #6). No label write; next tick.\n"
+        continue
+      fi
+      if [ "$cause_state" != "CLOSED" ]; then
+        # Cause is still open — hold the latch
+        continue
+      fi
+      # Check if CI is green at the PR head
+      ff_ci="$(printf '%s' "$pr_json_ff" | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
+      case "$ff_ci" in ''|*[!0-9]*)
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read CI state (rule #6). No label write; next tick.\n"
+        continue
+      ;;esac
+      if [ "$ff_ci" -ne 0 ]; then
+        # CI is still red — hold the latch
+        continue
+      fi
+      # All conditions met: remove agent/error label and post a removal comment
+      gh pr edit "$u" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 \
+        && gh pr comment "$u" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
+        && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: PR #${u} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
+        || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on PR #${u} — human check\n"
+    done
+    # <<<REPLAY:fleet-fault-unlatch<<<
+
     # ci-red (FU-115 / MP-T12, CONTENT-BASED rewrite of the old ci-red-stale time-gate): an ARMED
     # red PR is invisible to the whole merge path (updater + reviewer both skip red). The OLD trigger
     # was "quiet > RED_STALE_HOURS(4h)" — a coarse LAST-ACTIVITY timer that a no-op fix round's OWN
@@ -4673,11 +4726,35 @@ EOF_GTHEMES_OPEN
           fi
         fi
         # <<<REPLAY:ci-red-rounds<<<
+        # >>>REPLAY:ci-red-stale-sha>>>
+        # FU-1529 sub-defect 1: before applying agent/arbitrate, verify the red conclusion's
+        # sha matches the current head (not a stale sha from a previous commit).
+        # Computed only for cases where ARBITRATE might be applied (noop_round OR red_rounds >= MAX).
+        ci_red_should_arbitrate=1
+        if [ -n "$noop_round" ] || [ "$red_rounds" -ge "$RED_MAX" ]; then
+          # Sub-defect 1: verify red conclusion's sha matches current head. Query per-sha check runs.
+          pr_head_oid="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid // ""' 2>/dev/null)" || pr_head_oid=""
+          if [ -n "$pr_head_oid" ]; then
+            red_check_status="$(gh api repos/"${slug}"/commits/"${pr_head_oid}"/check-runs \
+                --jq '[.check_runs[]? | select(.status == "completed") | select((.conclusion // "") | ascii_downcase | . == "failure" or . == "timed_out")] | length > 0' \
+                2>/dev/null)" || red_check_status=""
+            case "$red_check_status" in
+              true) :;; # Red conclusion matches current head, proceed to arbitrate check
+              *)    ci_red_should_arbitrate=0;; # No completed red run on current head, don't escalate
+            esac
+          else
+            ci_red_should_arbitrate=0 # Can't verify sha, fail-safe to not escalate
+          fi
+        fi
         if [ -n "$noop_round" ]; then
-          gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
-            && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
-            && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
-            || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
+          if [ "$ci_red_should_arbitrate" = 1 ]; then
+            gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
+              && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
+              && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
+              || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
+          else
+            orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — no completed red run on current head ${head8} (FU-1529 stale-sha): PR #${u}\n"
+          fi
         elif [ "$red_rounds" -lt "$RED_MAX" ]; then
           # CURRENCY (homelab#198) — the EXTENSION of this clause's existing content key, not a
           # second mechanism beside it. The markers above answer "did a round complete, and did it
@@ -4744,11 +4821,17 @@ EOF_GTHEMES_OPEN
           # ARBITRATE: red rounds EXHAUSTED. Reuse the review path's MP-T11 machinery — label
           # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
           # a stronger model / park / close) take over. This is the Red→arbitrate edge the FSM lacked.
-          gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
-            && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
-            && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
-            || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
+# Apply the same sha check as the noop case (FU-1529).
+          if [ "$ci_red_should_arbitrate" = 1 ]; then
+            gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
+              && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
+              && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
+              || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
+          else
+            orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — no completed red run on current head (FU-1529 stale-sha): PR #${u}\n"
+          fi
         fi
+        # <<<REPLAY:ci-red-stale-sha<<<
       done
     else
       echo "  [$repo] PROBE_FAILED reading check rollups — ci-red clause skipped this tick (needs checks:read; fail-loud rule #6)" >&2
