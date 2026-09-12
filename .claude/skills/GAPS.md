@@ -145,4 +145,13 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       Cause not chased (no local-exec in the root; `tf.sh` ends in `exec tofu`). Next: reproduce
       with `tf-plan`'s exit, then either fix the wrapper or add "the Apply line is truth, verify
       the end state" to the skill.
+- [ ] tofu-apply-G2 — **a `machines.yaml` `longhorn_disks` apply REBOOTS the node**, and the skill
+      does not say so. Talos provisions user disks at boot, so the provider's default (auto) mode
+      staged the config and rebooted `m70s` — a node then carrying garage-1, loki-0 and six
+      single-replica Deployments — with no cordon, no drain and every pod killed ungracefully. The
+      2026-09-10 Loki WAL corruption came from exactly that shape on hp-01; here it was luck
+      (loki-0 had already moved). Sighted 2026-09-12 (seat, the PM961 fit). Next: the skill's
+      gotcha list should route disk/volume-shaped machine-config changes through
+      `scripts/node-maintenance.sh settle` (or `down`) first — the reboot itself is fine, doing it
+      undrained is not.
 

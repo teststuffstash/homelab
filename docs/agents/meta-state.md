@@ -10,6 +10,40 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-12 seat — the drive-fitting day; full arc in TICK-LOG). NEXT SESSION IS
+  THINKCENTRE'S DECOMMISSION + its rebuild as the R12 management box (operator).**
+  (1) **Landed + verified live:** garage-1 rotated onto its own PM961 in m70s (FU-137's
+  dedicated-spindle residual MET, 2 h 09 min, ledger row); m70s's freed Micron tagged `std`;
+  **wk-02's pooled std disk `allowScheduling=false`** (operator: no new std on the pve pool);
+  hp-01 gained a second std disk (Intel 7600p, 238 G). PRs #1599, #1601, #1602, #1603, #1604,
+  #1605 merged. **`std` now: m70s 416 G + hp-01 233 G + hg5d 72 G vs a ~141 G tier.**
+  (2) **PARKED, un-reviewed: PR#1606** (hp-01's 7600p declaration) — armed, no review today; it is
+  ALREADY APPLIED live, so the PR is the record catching up, not a pending change.
+  (3) **thinkcentre decommission plan (operator, 2026-09-12):** it leaves cluster duty and becomes
+  the **R12 pilot** management box — an x1 gigabit NIC he already has gives it the dual-homing R12
+  requires (free slots verified: `J7B1`/`J8B4`, chipset root ports 5/6). ⚠ **Read the R12 row in the private
+  `teststuff/hardware` requirements register first — it is a PILOT, not the permanent box** (27.9 W idle, **no
+  AES-NI** on the G840, and the x16 slot's CPU root port `00:01.0` is absent for unexplained
+  reasons). ⚠ **Ordering: FU-097's per-surface ruling table is the FIRST deliverable and is
+  unwritten** — deciding which surfaces the box may reconcile precedes standing it up.
+  (4) **Its two Optanes move to `wk-metal-04`** as kata-ride / ARC job scratch (write-once, dropped
+  in ~30 min; FU-159's scratch-only ruling, and it decouples ride scratch from the shared
+  image-store partition). **The x1 AIC form factor is off the market** (~€3 once, gone; only M.2
+  Optanes sell now) — these two are scarce, do not discard. Landing slots verified: wk-metal-04 has
+  two free chipset root ports (`00:1c.0`, `00:1c.1`).
+  (5) **Draining thinkcentre's std replicas is the real work**: 16 replicas, every volume r=2, and
+  `replica-soft-anti-affinity=true` means Longhorn will SILENTLY co-locate both copies rather than
+  refuse — so verify zero co-location after (the one-liner over replicas.longhorn.io is in the
+  TICK-LOG entry). Capacity exists for it now; nothing is co-located today.
+  (6) **Unverified, worth one probe:** wk-metal-04's second 7600p sits on a CHIPSET root port
+  (`00:1c.4` → `06:00.0`) while the first is on the CPU x16 — so `intel1` may be negotiating a
+  narrower link than `intel0`. Read `LnkSta` on both; if they differ, the bulk pair is asymmetric
+  and the ledger's rotation numbers taken on `intel1` were on the slower of the two.
+  (7) Open from today, operator-lane: **wk-03 self-rebooted twice in ~19 h** (guest-side — the qemu
+  process has 96 h uptime; evidence + the serial-console and "booted twice in 24 h" detector
+  proposals on **#882**); `GarageClusterFlapping` was silenced to ~18:45Z while its 1 h trailing
+  window drained.
+
 - **⚑ PICKUP (2026-09-11 evening corpus session — ADR-127/128 + deepseek workers; arc in TICK-LOG):**
   (1) **Codeowner queue DRAINED 19:4x–20:1xZ** (#1541/#1543/#1545/#1538/#1542 + sleep-tracking#142 merged; #1540 = the loop's merge-conflict lane, now with a play — PR#1596). **Read next: #1576** — deepseek round 3 was running at 20:1xZ; if it landed the `parity-regex-sigpipe` pin, the codeowner read is the only remaining act (arm is on); if it no-op'd again, that is the first deepseek-vs-haiku data point on directive-following — record it, do not re-poke blind. Was: #1538, #1540, #1541, #1545 bot-approved at head with no
   Follow-ups (re-reviewed under ADR-127 18:32–18:36Z); #1543 labels cleared (waits its master-lane
@@ -192,8 +226,10 @@ never the session's arc — that is TICK-LOG's.)
   move Garage to a real third zone at rf=3. **Its OEM NVMe reads `MTFDHBA512TDV-1AZ15ABLA` = Micron 2300 512 GB,
   LPDDR4-DRAM + 96L TLC** (not the DRAM-less QLC 2400 the part number resembles) — it meets the
   buying criterion, so the zone can stand up on the box as delivered and is not blocked on a drive
-  purchase. Board also has 3 SATA + a second PCIe **x4** (sheet said x1), i.e. it can carry a `std`
-  Longhorn slice too. Disk read via the new privileged-pod recipe (`docs/runbook.md` §Reading a
+  purchase. Board also has 3 SATA. ⚠ **CORRECTED 2026-09-12 (operator, board-read with the
+  brackets in hand): there is NO second x4 — the `x4` silkscreen carries an x1 connector and the
+  `x1` silkscreen is unpopulated, so the x16 LP is the box's ONLY x4-capable slot** (one Gembird,
+  not two; card 2 has no home — pve's x4 is under the GPU, R9). Detail in `teststuff/hardware`. Disk read via the new privileged-pod recipe (`docs/runbook.md` §Reading a
   fleet disk's identity and health — FU-222 archived): **2% used, 3051 h, 0 media errors,
   PCIe 3.0 ×4**, near-new. Supply side, incl. a specced 25 € DRAM-cached NVMe candidate that
   would also close FU-093's pool gap: private **`teststuff/hardware`** repo on Forgejo (`STATE.md`).
