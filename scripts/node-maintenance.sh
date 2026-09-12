@@ -186,12 +186,15 @@ EOF
   # included (they are not drained, they die with the power-off: engine-image, alloy, kmsg-reader
   # and the prepull holds were four of the five PodSigkilled alerts on 2026-09-12).
   local pods podre
-  pods="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed '/^$/d' | sort -u)"
+  # same pipefail shape as silence_ids: a failing read must not abort the window, only skip the silence
+  pods="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed '/^$/d' | sort -u || true)"
   if [ -n "$pods" ]; then
     podre="($(paste -sd'|' - <<<"$pods"))"
-    post_silence "$(jq -cn --arg re "$podre" '[{name:"pod", value:$re, isRegex:true, isEqual:true}]')" '#pods' "$((POD_GRACE_MIN*60))" \
-      || warn "could not open the pod-scoped silence — PodSigkilled et al. will fire for this window"
-    log "pod-scoped silence covers $(wc -l <<<"$pods") pod name(s) for ${POD_GRACE_MIN}m"
+    if post_silence "$(jq -cn --arg re "$podre" '[{name:"pod", value:$re, isRegex:true, isEqual:true}]')" '#pods' "$((POD_GRACE_MIN*60))"; then
+      log "pod-scoped silence covers $(wc -l <<<"$pods") pod name(s) for ${POD_GRACE_MIN}m"
+    else
+      warn "could not open the pod-scoped silence — PodSigkilled et al. will fire for this window"
+    fi
   fi
 }
 
@@ -207,9 +210,13 @@ post_silence() {
   ok "window silence $id  $(jq -r 'map("\(.name)\(if .isRegex then "=~" else "=" end)\(.value)")|join(" ")' <<<"$1")"
 }
 
+# `|| true` is load-bearing: under this script's `set -euo pipefail` an unreachable Alertmanager
+# makes `curl -sf` fail, pipefail propagates it, and the PLAIN assignments at the call sites
+# (`existing=$(silence_ids)`, `ids=$(silence_ids)`) would abort the whole window right after the
+# cordon — the opposite of the best-effort promise above (bot review, PR#1601).
 silence_ids() {
   curl -sf -m 10 "$AM/api/v2/silences" 2>/dev/null \
-    | jq -r --arg by "$(SILENCE_OWNER "${1:-}")" '.[]|select(.createdBy==$by and .status.state!="expired")|.id' 2>/dev/null
+    | jq -r --arg by "$(SILENCE_OWNER "${1:-}")" '.[]|select(.createdBy==$by and .status.state!="expired")|.id' 2>/dev/null || true
 }
 
 silence_close() {
