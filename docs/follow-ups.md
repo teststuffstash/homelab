@@ -283,24 +283,16 @@ six OVERSIZE items pointer-ized into
       ArgoCD prune deletes the OLD hashed CM the moment the name rolls — a rollback then
       references a pruned CM (Brian Grant, itnext.io/…-1431398c0866, bookmarked). Relates ADR-083.
 
-- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** The risk fired
-      2026-08-24 — meta LMDB wiped in the pve thin-pool incident
-      ([incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884). **ADR-114**
-      (+ addendum, + the 2026-09-07 amendment) answers both halves. **rf=3 across three physical
-      zones is LIVE since 2026-09-07** (wk-metal-01 / wk-metal-04 / m70s, each pod on its own
-      `longhorn-local-xfs` volumes; PR#1498 + [`garage.md`](garage.md) §The build-out as run;
-      numbers in the [ledger](storage-ledger.md) §The rf=3 build-out as run). Reclamation = the
-      zone-by-zone rotation, first executed on garage-0 as the build-out's last step — **converged
-      2026-09-08 ~05:00Z** (identical tables on all three nodes; the native resync onto the SA400
-      took ~6.5 h for 3.2 M items / 559 k blocks; only 3 pre-existing corrupted Loki chunks error).
-      **The rotation loop is
-      BUILT and has RUN 2026-09-09** (`argocd/resources/garage-meta-rotation/` + the `meta-rotate`
-      init container; [`garage.md`](garage.md) §The loop as built; PR#1549 + thresholds
-      #1551/#1553/#1554): trigger = the alert, health gate, seed = the pod's own finished snapshot
-      (the native `repair tables` re-bloats 3–4× — measured). **First unattended run 08:45Z:
-      garage-0 27.83 → 4.68 GB in 4 min 08 s** (ledger row). **Next:** CNPG replica-1 + required
-      zone anti-affinity, then the backup CronJob (ADR-114's logical-deletion class). **Operator
-      intent: metadata maintenance must be unattended.** Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
+- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** The risk fired 2026-08-24
+      (meta LMDB wiped with the pve thin pool —
+      [incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884). **ADR-114**
+      + its addendum + the 2026-09-07 amendment answer both halves; mechanism and run numbers live
+      in [`garage.md`](garage.md) and the [ledger](storage-ledger.md), not here. Done: **rf=3 across
+      three physical zones (2026-09-07)**; **the rotation loop, unattended since 2026-09-09**
+      (single-actor, 12 h cooldown, all-nodes health gate); **the dedicated-spindle residual,
+      2026-09-12** — garage-1 onto its own PM961. **Next:** CNPG replica-1 + required
+      zone anti-affinity, then the backup CronJob (ADR-114's logical-deletion class). Operator
+      intent: metadata maintenance is unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
 
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
@@ -410,8 +402,9 @@ six OVERSIZE items pointer-ized into
       automated ones one surface at a time. Surfaces + candidate shapes:
       `ROADMAP.md` → Programs in flight → "Deploy paths"; per-root tofu split + the runner
       dependency-cone rule: [`docs/dependency-upgrades.md`](dependency-upgrades.md); the no-human
-      end-state (what stays human-gated and why):
-      [`docs/spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
+      end-state: [`docs/spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
+      **2026-09-12: the hardware stopped being the blocker** (`thinkcentre` becomes the
+      management-box pilot) — **this table is what it waits on**.
       Relates FU-051, FU-012, ADR-093 (Argo as the candidate runner for the ansible Jobs).
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
@@ -951,15 +944,17 @@ the block needs pruning, not more headings.
       first tick; oracle's probe.md stays #289 (parked with the stack); then the
       sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
 
-- [ ] **FU-230** — **The responder cannot see seat-driven change: no maintenance silence, no
-      declared change window.** 2026-09-04→11 audit: 7 of its 9 confidently-wrong writes had a
-      cause the seat made outside the cluster's view (thinkcentre drive windows → 9 writes in
-      20 min; PVC re-cuts, the rotation loop, belts shipped 30 min earlier during the rf=3
-      rollout) and the session guessed a story (cable, spindle, churn) instead of "unknown". The
-      ArgoCD observation-window line (`responder-argo.yaml` ~L553) is the precedent — GitOps
-      changes only. **Next:** (a) `node-maintenance.sh settle/down` opens a node-scoped Alertmanager
-      silence, `up` expires it (durability = FU-195); (b) a seat-written ConfigMap window record the
-      brief prints like the WIN line. Design read: `docs/spikes/responder-week-audit.md` §Design read.
+- [ ] **FU-230** — **The responder cannot see seat-driven change.** 2026-09-04→11 audit: 7 of its 9
+      confidently-wrong writes had a cause the seat made outside the cluster's view, and the session
+      guessed a story instead of "unknown". **Leg (a) DONE 2026-09-12 (PR#1601)** —
+      `node-maintenance.sh settle/down` now silence the window and `up` expires it; the label
+      taxonomy is the lesson (one 9-min m70s window = THREE triage sessions, #261/#884/#1600):
+      `node=` alone catches almost nothing, so a window silences `instance=~<ip>`, `node=`, the
+      Garage health set on a zone node, and the node's **pod names** — PodSigkilled has no node key
+      and fires up to 30m late, so that silence outlives the window. **Next:** leg (b) — a
+      seat-written ConfigMap window record the brief prints like the ArgoCD observation-window line
+      (durability caveat = FU-195). Design read: `docs/spikes/responder-week-audit.md` §Design read.
+
 - [ ] **FU-231** — **Responder report-only findings land as GitHub comments; route them to the
       bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =
       actionable, history = git/S3). 26 of 33 writes were report-only comments, 24 noise; the one
