@@ -70,6 +70,26 @@ else
   }' >/dev/null
   echo "  hp-01/hg5d registered (std)"
 fi
+# hp-01's THIRD disk — the Intel 7600p NVMe (2026-09-12), registered `std` like hg5d. Talos mounts
+# it at /var/lib/longhorn/intel7600p from machines.yaml's `longhorn_disks`. storageReserved 0 for
+# the same reason as hg5d: it holds nothing but Longhorn data (no Talos, no container image store).
+# Why it exists: thinkcentre leaves cluster duty, so std drops to two schedulable nodes and hp-01's
+# 127G hg5d cannot hold its mandatory copy of a ~141G tier. Anti-affinity is SOFT here, so without
+# the capacity Longhorn silently co-locates both replicas of a volume on m70s.
+# Skip when already registered: re-patching mid disk-sync trips the longhorn validator.
+if kubectl -n longhorn-system get nodes.longhorn.io hp-01 -o jsonpath='{.spec.disks.intel7600p.path}' 2>/dev/null | grep -q .; then
+  echo "  hp-01/intel7600p already registered — skip"
+else
+  kubectl -n longhorn-system patch nodes.longhorn.io hp-01 --type=merge -p '{
+    "spec": {
+      "disks": {
+        "intel7600p": {"path":"/var/lib/longhorn/intel7600p","allowScheduling":true,"evictionRequested":false,"storageReserved":0,"tags":["std"],"diskType":"filesystem"}
+      }
+    }
+  }' >/dev/null
+  echo "  hp-01/intel7600p registered (std)"
+fi
+
 # thinkcentre's reservation was auto-sized at 30% (35.3G) against a node whose container image
 # store is 4.1G — it was fencing off a third of the disk from a tier that had 10.5G of scheduling
 # room left, which is why nine std replicas sat PENDING with 67G physically free (2026-08-07).

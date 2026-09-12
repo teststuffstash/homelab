@@ -249,6 +249,19 @@ machines:
       # docs/storage-ledger.md calls the one place where the honest answer is buy a disk.
       # by-id, NOT /dev/sdb: both disks are 128GB SATA and this directive partitions.
       - { device: /dev/disk/by-id/wwn-0x500080db1007e129, name: hg5d, tags: [std] }
+      # Intel SSD Pro 7600p 256G (SSDPEKKF256G8L) from the 10-lot, on the spare Gembird PEX-M2-01
+      # in the x16 LP slot, fitted 2026-09-12. THE std CAPACITY FLOOR, not a preference: with
+      # thinkcentre leaving cluster duty (operator, 2026-09-12) std has two schedulable nodes, every
+      # r=2 volume needs a copy on each, the distinct std footprint is ~141G and hp-01's only std
+      # disk (hg5d) is 127G with 61G free. Longhorn's anti-affinity here is SOFT
+      # (replica-soft-anti-affinity=true), so the failure mode is not a Pending volume but SILENT
+      # co-location of both replicas on m70s — capacity is what prevents it.
+      # DRAM-cached by the drive's own answer (hmpre 0), 3% used / 4457h / 0 media errors, Opal
+      # capable but unlocked. An Intel rather than the shelf Micron 2200 on purpose: std's two
+      # copies then sit on different makers (m70s Micron 2300 + this).
+      # ⚠ Negotiates PCIe 2.0 x4 (5.0 GT/s) — this board's slot is PCIe 2.0 (dmidecode type 9), NOT
+      # a drive fault; ~2GB/s, far above what small synchronous std writes ask for.
+      - { device: /dev/disk/by-id/nvme-eui.5cd2e42a81a4111d, name: intel7600p, tags: [std] }
     notes: On the hp plug (a NOUS A1; entity ids were crossed with thinkcentre's 2026-08-18→09-09, fixed in the HA registry) — power measurable as sensor.plug_hp_power (~24 W idle); switch.tuyalocal_hp can cycle it, but AC-restore is flaky (confirmed 2026-09-09 — did not boot after a plug cycle) and WoL cannot follow an AC cut, so a plug cycle ends at the power button. Prefer WoL from a clean shutdown.
 
   - name: m70s
