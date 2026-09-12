@@ -68,6 +68,7 @@ DRY="${DRY:-0}"                          # settle: report what it would wait on 
 AM="${NM_AM:-http://192.168.40.14:9093}" # Alertmanager API (same default as agents/meta-events.sh)
 SILENCE_HOURS="${SILENCE_HOURS:-3}"      # window silence lifetime; `up` expires it early
 SILENCE="${SILENCE:-1}"                  # 0 = do not touch Alertmanager at all
+POD_GRACE_MIN="${POD_GRACE_MIN:-45}"     # the POD-scoped silence outlives the window on purpose
 
 log()  { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 ok()   { printf '  \033[32mOK\033[0m   %s\n' "$*"; }
@@ -143,10 +144,19 @@ rides_running() {
 # for a zone node the instance-keyed Garage health alerts too (their `instance` is the blackbox
 # target, not this box). Capacity/quota/GC alerts stay LIVE on purpose: a full disk during a
 # window is still a full disk.
+# ⚠ THE POD CLASS has no node key at all. Every pod the window kills produces alerts keyed only by
+# namespace/pod/container — PodSigkilled's `instance` is KUBE-STATE-METRICS' own pod IP — so the
+# fourth silence matches the node's pod names, captured before the drain. It deliberately OUTLIVES
+# the window (POD_GRACE_MIN, default 45m): PodSigkilled is `increase(...[30m])`, so it fires up to
+# half an hour after the kill — on 2026-09-12 it fired 19 min after the SIGKILL and 10 min after the
+# node was back Ready (homelab#1600), which no window-length silence could have caught. The cost is
+# bounded and named: a StatefulSet pod returns under the SAME name, so a genuine alert about one of
+# these pods stays suppressed until the grace expires. `up` leaves it running; SILENCE_CLOSE_PODS=1
+# expires it too.
 # ⚠ DURABILITY: silences live on Alertmanager's emptyDir (FU-195) — a monitoring restart mid-window
 # drops them and alerts resume, i.e. back to the old behaviour. Best-effort by construction: an
 # unreachable Alertmanager logs and never fails the window.
-SILENCE_OWNER() { printf 'node-maintenance.sh/%s' "$NODE"; }
+SILENCE_OWNER() { printf 'node-maintenance.sh/%s%s' "$NODE" "${1:-}"; }
 
 has_zone_volume() { last_replicas 2>/dev/null | grep -q 'strict-local'; }
 
@@ -172,15 +182,26 @@ silence_open() {
 $(jq -cn --argjson ms "$matchers" '$ms[] | [.]')
 $( [ -n "${garage:-}" ] && jq -cn --arg re "$garage" '[{name:"alertname", value:$re, isRegex:true, isEqual:true}]')
 EOF
+  # The pods this window is about to kill, by name — captured BEFORE the drain, DaemonSet pods
+  # included (they are not drained, they die with the power-off: engine-image, alloy, kmsg-reader
+  # and the prepull holds were four of the five PodSigkilled alerts on 2026-09-12).
+  local pods podre
+  pods="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed '/^$/d' | sort -u)"
+  if [ -n "$pods" ]; then
+    podre="($(paste -sd'|' - <<<"$pods"))"
+    post_silence "$(jq -cn --arg re "$podre" '[{name:"pod", value:$re, isRegex:true, isEqual:true}]')" '#pods' "$((POD_GRACE_MIN*60))" \
+      || warn "could not open the pod-scoped silence — PodSigkilled et al. will fire for this window"
+    log "pod-scoped silence covers $(wc -l <<<"$pods") pod name(s) for ${POD_GRACE_MIN}m"
+  fi
 }
 
 # One silence per matcher set: Alertmanager ANDs the matchers inside a silence, and `instance` and
 # `node` never appear on the same alert.
 post_silence() {
-  local body id
-  body="$(jq -cn --argjson matchers "$1" --arg by "$(SILENCE_OWNER)" --arg h "$SILENCE_HOURS" \
-    --arg c "node-maintenance window on $NODE ($(date -u +%FT%TZ)) — planned cordon/drain/shutdown. Expired by \`node-maintenance.sh up $NODE\`." \
-    '{matchers:$matchers, startsAt:(now|todate), endsAt:((now + ($h|tonumber)*3600)|todate), createdBy:$by, comment:$c}')"
+  local body id scope="${2:-}" secs="${3:-$((SILENCE_HOURS*3600))}"
+  body="$(jq -cn --argjson matchers "$1" --arg by "$(SILENCE_OWNER "$scope")" --arg s "$secs" \
+    --arg c "node-maintenance window on $NODE ($(date -u +%FT%TZ)) — planned cordon/drain/shutdown. Expired by \`node-maintenance.sh up $NODE\`${scope:+ (the pod-name silence self-expires later — PodSigkilled looks back 30m)}." \
+    '{matchers:$matchers, startsAt:(now|todate), endsAt:((now + ($s|tonumber))|todate), createdBy:$by, comment:$c}')"
   id="$(curl -sf -m 10 -X POST -H 'Content-Type: application/json' -d "$body" "$AM/api/v2/silences" | jq -r '.silenceID // empty')"
   [ -n "$id" ] || return 1
   ok "window silence $id  $(jq -r 'map("\(.name)\(if .isRegex then "=~" else "=" end)\(.value)")|join(" ")' <<<"$1")"
@@ -188,13 +209,18 @@ post_silence() {
 
 silence_ids() {
   curl -sf -m 10 "$AM/api/v2/silences" 2>/dev/null \
-    | jq -r --arg by "$(SILENCE_OWNER)" '.[]|select(.createdBy==$by and .status.state!="expired")|.id' 2>/dev/null
+    | jq -r --arg by "$(SILENCE_OWNER "${1:-}")" '.[]|select(.createdBy==$by and .status.state!="expired")|.id' 2>/dev/null
 }
 
 silence_close() {
   [ "$SILENCE" = 1 ] || return 0
   local ids id n=0
   ids="$(silence_ids)"
+  if [ "${SILENCE_CLOSE_PODS:-0}" = 1 ]; then ids="$ids
+$(silence_ids '#pods')"
+  elif [ -n "$(silence_ids '#pods')" ]; then
+    log "leaving the pod-scoped silence to self-expire (≤${POD_GRACE_MIN}m) — PodSigkilled fires up to 30m after the kill; SILENCE_CLOSE_PODS=1 to expire it now"
+  fi
   [ -n "$ids" ] || { log "no window silence to expire for $NODE"; return 0; }
   for id in $ids; do
     if curl -sf -m 10 -X DELETE "$AM/api/v2/silence/$id" >/dev/null; then n=$((n+1)); else warn "could not expire silence $id — it self-expires in ≤${SILENCE_HOURS}h"; fi
