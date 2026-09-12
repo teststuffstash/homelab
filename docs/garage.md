@@ -393,6 +393,49 @@ original pod only.
    collapsed to one live version on its own. Until then `/health` says "some storage nodes are
    unavailable" — the degraded belts fire for the whole resync by design; the SLO availability
    (HTTP 200) does not.
+   - ⚠ **The rebuilding node must not be in the S3 client path — that, not the worker count, is
+     the lever.** On the third run (2026-09-12, m70s) `resync-worker-count 8` /
+     `resync-tranquility 0` held the node at **79–86 % busy (peak 90 %, never 95 %+)** and the
+     resync finished in 2 h 09 min. The damage was not the saturation: it was that garage-1 stayed
+     in `garage-s3`/`garage` endpoints and **coordinated 17 % of client requests** while starved —
+     p99 on that pod 4.86 s → 6.94 s, while garage-0/garage-2 held 0.07–0.59 s (per-pod figures in
+     the ledger row). Its REPLICA role is tolerant by contrast: at rf=3 a write needs 2 acks of 3,
+     so peers never wait for the rebuilding node.
+     So: **pull the pod out of the client path first, then give the resync the whole box** — a
+     saturated node that serves nobody converges sooner, which is the shorter exposure. Size
+     workers down only while the pod is still serving clients (keep `100 - idle` under ~80 % then).
+     Every pod carries `garage.teststuff.net/serve-s3: "true"` from the chart's pod template, and
+     **only the two client Services select on it** (`garage-s3`, the LAN VIP in `tofu/garage.tf`,
+     and the chart's in-cluster `garage` ClusterIP). The headless Service (peer RPC) and the
+     metrics Service do not, so a drained pod stays a full peer, keeps its replica role and keeps
+     being scraped:
+
+     ```bash
+     K="kubectl --kubeconfig tofu/kubeconfig -n garage"
+     # PRECHECK — the one-pod-out invariant. Refuse unless every OTHER pod is labelled and Ready.
+     $K get pods -l app.kubernetes.io/name=garage \
+       -o custom-columns=POD:.metadata.name,SERVE:.metadata.labels.garage\.teststuff\.net/serve-s3,READY:.status.containerStatuses[0].ready
+     $K label pod garage-N garage.teststuff.net/serve-s3-          # out of the client path
+     $K get endpointslices -l kubernetes.io/service-name=garage-s3 \
+       -o jsonpath='{range .items[*].endpoints[*]}{.targetRef.name}{" "}{end}{"\n"}'   # verify: 2 pods
+     # … repair tables / repair blocks … converge …
+     $K label pod garage-N garage.teststuff.net/serve-s3=true      # back in, verify 3 pods
+     ```
+
+     Seat-driven on purpose (operator, 2026-09-12): a rotation is rare and deliberate, so the
+     exclusion lives in one pair of hands with the precheck above. It must NEVER become a
+     readiness probe — that is per-node logic, and several lagging nodes would each pull themselves
+     out at once and empty the Service. If it is ever automated, it copies the metadata loop's
+     shape (single actor, ConfigMap lock, all-nodes health gate) with a hard one-pod-out invariant.
+     A pod re-created by the StatefulSet comes back labelled, so remove the label AFTER the new pod
+     is Running, and note the restore is what ends the window.
+     Residual exposure, deliberately not solved: CO-TENANT workloads on the same box (m70s also
+     runs loki-0, the eventbus and the sensor Deployments) still feel a saturated node. `kubectl
+     cordon` + moving the noisy neighbours would address it; not built, and not needed for Garage's
+     own clients.
+   - **Reset the workers when the resync ends.** They persist on the pod, and a zone left on
+     build-out settings is a standing tax on every later write (sighted 2026-09-08: all three pods
+     were still on the build-out's 8/0 weeks later).
 9. **Unpin:** `tofu apply -target=kubernetes_service.garage_s3_lb` restores the selector.
 10. **Verify** end to end from the LAN (`aws s3 ls`, a PUT+GET), `garage status`/`layout show`
     (3 nodes, 3 zones, `Zone redundancy: maximum`), Crossplane buckets still Ready, and every
@@ -460,7 +503,9 @@ Symptoms, not guessed causes; each names where to read next. In
   `garage worker list` (287 on garage-2 from the 09-09 stall).
 - **`GarageS3ServerErrors`** / **`GarageQuorumMembersRestarted`** — client-visible quorum loss:
   ≥3 × 500/503 in 5m, and two quorum members (re)started inside 5 min (the 2026-09-09 07:22Z
-  rollout with no readiness probe cycled all three in 31 s; both exprs replay true on it).
+  rollout, which had no readiness probe yet, cycled all three in 31 s; both exprs replay true on
+  it — the `/health` readiness probe + `minReadySeconds` 90 that now serialize a rollout landed
+  afterwards, in #1555).
 - **`GarageWriteProbeFailing`** / **`GarageWriteProbeSlow`** / **`GarageWriteProbeSilent`** —
   client-perspective write probe (homelab#1560) that exercises a signed PUT→GET→DELETE round-trip
   every minute against the in-cluster ClusterIP. The 2026-09-08 UploadPart p99 100 s had no

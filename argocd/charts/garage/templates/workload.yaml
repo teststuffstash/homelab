@@ -25,6 +25,12 @@ spec:
       {{- end }}
       labels:
         {{- include "garage.labels" . | nindent 8 }}
+        # The S3 CLIENT path selects on this label as well as the base selector labels, so a
+        # single pod can be pulled out of it during a metadata/zone rebuild without losing its
+        # peer RPC (garage-headless), its replica role, or its metrics scrape. Removed by hand for
+        # the duration of a rotation — docs/garage.md §The build-out step 8. Never in the
+        # StatefulSet's own matchLabels: that field is immutable.
+        garage.teststuff.net/serve-s3: "true"
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
