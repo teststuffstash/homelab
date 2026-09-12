@@ -21,5 +21,5 @@ on:
 permissions: {} # uses the reviewer App token, not GITHUB_TOKEN
 jobs:
   approve:
-    uses: teststuffstash/homelab/.github/workflows/renovate-approve.reusable.yml@master
+    uses: teststuffstash/homelab/.github/workflows/renovate-approve.reusable.yml@b14deabb9c6662f9aaec1841fc0ab8c98ea7463e # master
     secrets: inherit
