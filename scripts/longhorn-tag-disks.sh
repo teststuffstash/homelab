@@ -43,6 +43,13 @@ tag() { # node disk tags-json
 
 for n in thinkcentre hp-01; do tag "$n" "$(default_disk "$n")" '["std"]'; done
 
+# m70s's DEFAULT disk joins std, 2026-09-12 — the fleet direction's "Micron → std". It became a
+# real std candidate the moment garage-1's meta+data rotated onto the dedicated PM961 (below):
+# 474.6G with 416G free, DRAM-cached, and on a box that is NOT the pve thin pool. Before the
+# rotation this disk held the zone's 180G and tagging it would have put platform replicas on the
+# Garage spindle — the 2026-09-01 collision, by choice instead of by accident.
+tag m70s "$(default_disk m70s)" '["std"]'
+
 # hp-01's second std disk. Skipped when already registered — re-patching mid disk-sync trips the
 # longhorn validator (same guard as wk-metal-01/mx500 below). storageReserved is 0 on purpose:
 # unlike the default disks this one holds nothing but Longhorn data (no container image store),
@@ -94,6 +101,18 @@ tag wk-02 "$(default_disk wk-02)" '["std"]'
 kubectl -n longhorn-system patch nodes.longhorn.io wk-02 --type=merge \
   -p "{\"spec\":{\"disks\":{\"$(default_disk wk-02)\":{\"storageReserved\":32212254720}}}}" >/dev/null
 echo "  wk-02 storageReserved -> 30Gi"
+# ⚠ NO NEW std REPLICAS ON THE POOL (operator direction, 2026-09-12). wk-02's std disk is an LVM
+# thin volume on pve, the pool that has filled to 100% four times (FU-093), so once m70s's Micron
+# joined std above there is no reason for the scheduler to keep choosing a pooled disk — Longhorn
+# places on the disk with the most available space, and wk-02 was winning by being large.
+# allowScheduling=false is NOT an eviction: its 27 existing replicas stay, keep serving, and leave
+# organically — a rebuild or a PVC re-cut now lands on m70s/hp-01/thinkcentre instead. std keeps
+# three schedulable nodes (m70s, hp-01, thinkcentre), i.e. r=2 plus a rebuild target.
+# thinkcentre therefore STAYS in the tier for now (operator: retire it only when the replacement
+# box arrives, so the pool can be freed in the same move) — one field flips this back.
+kubectl -n longhorn-system patch nodes.longhorn.io wk-02 --type=merge \
+  -p "{\"spec\":{\"disks\":{\"$(default_disk wk-02)\":{\"allowScheduling\":false}}}}" >/dev/null
+echo "  wk-02 allowScheduling -> false (no new std replicas on the pve pool)"
 
 # m70s: register the PM961 (the ADR-114 zone's DEDICATED data disk, fitted 2026-09-12 on a
 # Gembird PEX-M2-01 in the x16 LP slot — the box's only x4-capable slot). Talos mounts it at
