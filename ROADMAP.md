@@ -121,19 +121,28 @@ hardware register.
 
 | Class | Job | Today |
 |---|---|---|
-| Xeon-class (`pve`) | untainted production/batch compute + the hypervisor | ✅ and it holds the fleet's only idle cores |
-| Laptops (X250, X260) | **control planes** — low idle draw, small SSD, no other job | 🔜 still in the kata/ride pool |
-| A desktop-class box | **rides / ARC / inference**, tainted | ⬜ does not exist — the ledger's `need` row |
-| SFFs (`m70s`, + one more) | `std` + Garage zones, spread equally | ✅ partly — `thinkcentre` left 2026-09-12, `hp-01` retires when the next SFF carries std |
+| Xeon-class (`pve`) | untainted production/batch compute + the hypervisor — **never a storage zone beyond ONE zone's share** | ⚠ partly: it holds the fleet's only idle cores (7-day CPU-busy p95 18–23 % vs 80–92 % on the 4-thread boxes, private register §Strategy 2), but `wk-02`'s disk stays a `std`/zone member until the second hypervisor exists |
+| Laptops | **control planes** — low idle draw, small SSD, no other job | 🔜 `wk-metal-02` (X250) + `wk-metal-03` (X260) are the two candidates and are still in the ride pool. ⚠ `wk-metal-01` (X240) is also a laptop but cannot move: it is a Garage zone + the bulk MX500 |
+| The **gaming PC** | **rides / ARC / inference**, tainted | ⬜ not in the fleet — it is in `machines.yaml` neither as a node nor as a box, so whether the direction means an existing machine joining the cluster or one to acquire is an **operator question**; the ledger row carries the envelope either way |
+| SFFs (`m70s`, + one more) | `std` + Garage zones, spread equally | ⚠ partly: `thinkcentre` left 2026-09-12 and `hp-01` retires when the next SFF carries `std` — but **two of the three Garage zones are not SFFs** (`wk-metal-01` a laptop, `wk-metal-04` a desktop), which under these same classes means both zones eventually move. Unsequenced |
 | [The management box](docs/management-box.md) (`thinkcentre`) | R12 out-of-band applier — no workloads, no storage (ADR-129) | 🔜 pilot, gated on FU-097's table |
 
-⚠ **The three-CP promotion is not free, and its bill is the ride pool, not a hypervisor.** Promoting
-`wk-metal-02`/`-03` takes the last two kata boxes that may host a ride — the other two
-(`wk-metal-01`, `wk-metal-04`) are Garage zone nodes the ledger's zone-node envelope says must carry
-none. The pool goes **4 boxes → 0** and ARC's labelled hosts **3 → 1**. So the ride box comes FIRST,
-or the promotion trades every ride for a control plane. (What it *does* decouple: `thinkcentre`
-taking the R12 job leaves both laptops free, so the second hypervisor is no longer load-bearing for
-three control planes.)
+⚠ **The three-CP promotion is not free, and its bill is the ride pool, not a hypervisor.** Counted
+from live labels, 2026-09-12 (`kubectl get nodes -L homelab.io/ephemeral,homelab.io/kata`) — not
+from either doc, which disagreed:
+
+| | today (live) | after promoting `wk-metal-02`/`-03` | if the zone-node rule is honoured |
+|---|---|---|---|
+| ARC hosts (`homelab.io/ephemeral`) | 5 — `wk-03` + all four metal | **3** — `wk-03`, `wk-metal-01`, `wk-metal-04` | **1** — `wk-03` alone, a VM on the thin pool that has filled four times |
+| kata-capable (`homelab.io/kata`) | **2** — `wk-metal-01`/`-02` ⚠ though FOUR declare `kata: true` (FU-235) | **1** — `wk-metal-01` | **0** |
+
+The third column is the rule's number, not a forecast: the ledger's zone-node row says a Garage
+zone node must carry no rides, and `wk-metal-01`/`-04` are two of the three zones — so that
+requirement is *already* violated today. Either way the ride box comes before the promotion, or it
+trades every ride for a control plane. (What R12 *does* decouple: the private register's §Strategy 1
+says the third control plane falls back to "a VM on the second hypervisor, and R11 is load-bearing
+again" only **if a laptop is spent on R12** — `thinkcentre` took that job, so both laptops stay
+free and R11 is not load-bearing for the CP goal.)
 
 - **X99 Xeon E5-2680 v4 → Proxmox host.** Great core count; ⚠️ no iGPU (needs a GPU to POST) and a
   2016 120W chip — keep it a dedicated hypervisor, not part of the zero-touch fleet.
