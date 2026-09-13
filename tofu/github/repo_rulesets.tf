@@ -64,11 +64,11 @@ resource "github_repository_ruleset" "required_checks" {
           context = required_check.value
           # ADR-130 (2026-09-13): pin each context to its POSTER. Before this, any token with
           # statuses:write could satisfy `iac-sentinel` — the reviewer's, the coordinator's, the
-          # jail's. 15368 = GitHub Actions' integration id; the sentinel's is the App we mint.
-          integration_id = (
-            required_check.value == "iac-sentinel" ? tonumber(var.sentinel_gh_app_id) :
-            required_check.value == "ci" ? 15368 : null
-          )
+          # jail's. Exactly two posters exist: the sentinel App (its one context) and GitHub
+          # Actions (15368 — EVERY other required context is a workflow job: `ci`, `system-test`).
+          # No `null` branch on purpose: a new context of a third poster must be pinned here
+          # explicitly, never left forgeable by omission (review finding on PR#1613).
+          integration_id = required_check.value == "iac-sentinel" ? tonumber(var.sentinel_gh_app_id) : 15368
         }
       }
     }
