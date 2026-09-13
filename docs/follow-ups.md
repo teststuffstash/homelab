@@ -1160,13 +1160,12 @@ the block needs pruning, not more headings.
       declared-vs-labelled is a one-line PromQL over `kube_node_labels`. Relates FU-218, FU-072.
 - [ ] **FU-236** — **The `homelab-sentinel` App cutover (ADR-130).** Declared + scaffolded 2026-09-13
       (`docs/github-apps.yaml`, `agents/coordinator/sentinel-git.yaml`, bootstrap/wallet wiring);
-      the sentinel still posts under the reviewer's token. **Next, in order:** (1) operator: the
-      Create + Install clicks (`scripts/github-app-bootstrap.sh homelab-sentinel manifest` → `convert`
-      → `secrets`), fill `app_id`/`install_id` + the mint's appID/installID, regenerate the exporter
-      json, apply the chain; (2) switch `sentinel-argo.yaml`'s `SENTINEL_STATUS_TOKEN` to
-      `sentinel-git`; (3) pin `integration_id` per required context in `tofu/github/repo_rulesets.tf`
-      (sentinel App id; Actions = 15368); (4) drop `statuses:write` from the reviewer mint + App.
-      Relates FU-098, FU-106.
+      the sentinel posts under its own App since 11:17. **Steps:** (1) the App (4929271) created,
+      installed, chain applied — DONE 2026-09-13; (2) `sentinel-argo.yaml` on `sentinel-git` — DONE
+      11:14, first status under homelab-sentinel[bot] 11:17:58; (3) `integration_id` pins — APPLIED
+      2026-09-13 (11 rulesets); (4) reviewer `statuses` write→read: the console un-grant happened 11:30, BEFORE the mint
+      narrowing (PR#1614) merged — a mint requesting an ungranted permission 422s the ESO refresh,
+      so the order for a NARROWING is merge first, click second (the reverse of a widening). Relates FU-098, FU-106.
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
 
