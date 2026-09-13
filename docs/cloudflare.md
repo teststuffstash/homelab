@@ -349,6 +349,14 @@ GitHub docs + a credential-free `tofu validate` before any apply.
    not rotate on modify — then hit the endpoint the permission was for), then re-`plan`; if
    the plan shows only a policy/group reorder, it is cosmetic. Confirmed on the
    `observability-read` audit-logs fix: apply "failed", audit endpoint worked seconds later.
+   **Addendum 2026-09-13 (`jail-read-all`, 146 + 45 filtered groups):** for large lists the
+   API's read-back order is ARBITRARY — not catalog order, not by id, not by name, not reversed
+   (measured) — so no HCL expression reproduces it and the plan shows a standing permutation of
+   `~ id` lines on that one token. Read such a plan by its `+ { id = … }` / `- { id = … }`
+   elements (a real widening/narrowing); a pure `~` cascade is nothing. Never apply the mint
+   root for THAT diff alone (it re-errors identically); plan other tokens with
+   `-exclude='cloudflare_api_token.jail_read_all[0]'` when the noise is in the way. Upstream
+   #5548/#5710 are closed; the provider bump past 5.19.1 is the first thing to try.
 
 4. **(2026-09-03, goal #1302 assembly) `Composition.spec.compositeTypeRef` is IMMUTABLE.** Moving
    the PublicRoute composition from v1alpha1 to v1alpha2 in place was rejected by the API server
