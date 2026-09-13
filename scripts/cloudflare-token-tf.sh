@@ -4,6 +4,7 @@
 # One command, host-only by construction (the admin wallet does not exist in the jail):
 #
 #     devbox run cloudflare-token-tofu plan      # or: apply / <any tofu subcommand + args>
+#     CF_INCLUDE_READ_ALL=1 devbox run cloudflare-token-tofu apply   # include the read-all token (see below)
 #
 # The account-admin token lives in the SAME separate host-only wallet as the GitHub org-admin
 # token (~/Documents/homelab-admin.kdbx, keyfile ~/Documents/homelab-admin.keyx — non-interactive),
@@ -32,8 +33,34 @@ if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
 fi
 
 cd "$ROOT/tofu/cloudflare-token"
+
+# The read-all token's STANDING group-order permutation (docs/cloudflare.md gotcha 3 addendum,
+# FU-239 — the API's order for its 146+45 groups is arbitrary, not fixed by provider 5.25.0):
+# plan/apply EXCLUDE that resource by default so the rest of the root reads clean, then a
+# separate targeted plan reports whether it carries REAL (+/-) group changes — the catalog
+# widening the filter exists to pick up — so nothing is skipped silently. Off switches:
+# CF_INCLUDE_READ_ALL=1, or your own -target/-exclude on the command line.
+READ_ALL='cloudflare_api_token.jail_read_all[0]'
+excluded=0
+case "${1:-}" in plan|apply)
+  if [ "${CF_INCLUDE_READ_ALL:-0}" != 1 ] && ! printf '%s\n' "$@" | grep -qE '^-(target|exclude)='; then
+    set -- "$@" "-exclude=$READ_ALL"; excluded=1
+  fi ;;
+esac
 tofu "$@"
 rc=$?
+if [ "$excluded" -eq 1 ] && [ "$rc" -eq 0 ]; then
+  echo ""
+  echo "→ $READ_ALL was EXCLUDED (standing permutation, FU-239) — checking it for real changes"
+  out="$(tofu plan -input=false -no-color -detailed-exitcode "-target=$READ_ALL" 2>&1)"; prc=$?
+  real="$(printf '%s\n' "$out" | grep -cE '^[[:space:]]+[+-] \{')"
+  if [ "$prc" -eq 2 ] && [ "$real" -gt 0 ]; then
+    echo "  ⚠ $real ADDED/REMOVED group element(s) — a real catalog change; review + apply with: CF_INCLUDE_READ_ALL=1 devbox run cloudflare-token-tofu plan|apply"
+    printf '%s\n' "$out" | grep -E '^[[:space:]]+[+-] \{' -A1 | grep -oE 'id = "[0-9a-f]+"' | sed 's/^/    /'
+  elif [ "$prc" -eq 2 ]; then echo "  permutation only (~ id lines, no +/- elements) — nothing to do"
+  elif [ "$prc" -eq 0 ]; then echo "  clean"
+  else echo "  targeted plan failed (rc=$prc) — run it by hand: tofu plan -target=$READ_ALL"; fi
+fi
 
 case "${1:-}" in apply)
   if [ "${CF_STORE:-1}" = "1" ] && [ "$rc" -eq 0 ]; then

@@ -36,7 +36,12 @@ re-create in the dashboard before its `expires_on`, re-store in the admin wallet
 export CLOUDFLARE_API_TOKEN=<admin token>   # from the admin wallet
 devbox run cloudflare-token-tofu plan       # scripts/cloudflare-token-tf.sh
 devbox run cloudflare-token-tofu apply      # prints the per-token store checklist
+CF_INCLUDE_READ_ALL=1 devbox run cloudflare-token-tofu apply   # only when the wrapper reports REAL read-all group changes
 ```
+
+The wrapper excludes `jail_read_all` from plan/apply by default (its group order is a standing
+permutation on the API side — `docs/cloudflare.md` gotcha 3, FU-239) and reports separately
+whether that token carries real added/removed groups.
 
 Minted values flow into the ordinary wallet: `keepass-init.sh` entry → `wallet-files.sh`
 regenerates the jail cache → Infisical via ESO for cluster consumers — the apply's checklist

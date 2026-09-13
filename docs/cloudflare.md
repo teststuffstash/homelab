@@ -354,9 +354,10 @@ GitHub docs + a credential-free `tofu validate` before any apply.
    (measured) — so no HCL expression reproduces it and the plan shows a standing permutation of
    `~ id` lines on that one token. Read such a plan by its `+ { id = … }` / `- { id = … }`
    elements (a real widening/narrowing); a pure `~` cascade is nothing. Never apply the mint
-   root for THAT diff alone (it re-errors identically); plan other tokens with
-   `-exclude='cloudflare_api_token.jail_read_all[0]'` when the noise is in the way. Upstream
-   #5548/#5710 are closed; the provider bump past 5.19.1 is the first thing to try.
+   root for THAT diff alone (it re-errors identically). Upstream #5548/#5710 are closed and
+   the bump to 5.25.0 (#1636) did NOT fix it, so `scripts/cloudflare-token-tf.sh` excludes that
+   resource from plan/apply by default and runs a targeted plan afterwards that reports real
+   `+`/`-` elements; `CF_INCLUDE_READ_ALL=1` includes it (FU-239).
 
 4. **(2026-09-03, goal #1302 assembly) `Composition.spec.compositeTypeRef` is IMMUTABLE.** Moving
    the PublicRoute composition from v1alpha1 to v1alpha2 in place was rejected by the API server

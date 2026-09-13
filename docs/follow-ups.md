@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-239** (2026-09-13: FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-240** (2026-09-13: FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -419,6 +419,15 @@ six OVERSIZE items pointer-ized into
       cloudflare-token-tofu apply` (store → wallet `cloudflare-mgmt-read`) → `mgmt-provision-secrets.sh
       --push`; until then the box plans cloudflare with the write key it holds. Civo = stack repos,
       AWS no root, infisical port-forwards into the cluster (not this box). Relates FU-237, FU-012, ADR-131.
+- [ ] **FU-239** — **`homelab-jail-read-all` plans as a standing group-order permutation (2026-09-13).**
+      The API's read-back order for its 146 + 45 filtered groups is arbitrary (not catalog/id/name
+      order — measured), provider 5.x compares positionally, and 5.25.0 (#1636) did not fix it.
+      Mitigated: `scripts/cloudflare-token-tf.sh` excludes the resource from plan/apply by default
+      and runs a targeted plan that reports REAL `+`/`-` elements (`CF_INCLUDE_READ_ALL=1` to
+      include). **Next:** re-test on each provider bump; if a release normalizes group order,
+      drop the default exclude. Alternative if it never does: hard-code the id list (rejected
+      2026-08-12 as a frozen catalog) or `ignore_changes` (loses the widening signal).
+      `docs/cloudflare.md` gotcha 3 addendum. Relates FU-156, FU-157.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
