@@ -536,11 +536,12 @@ standing set below; what differs is cadence and the act rule:
   no-root `management-sentinel` in seconds, FU-237 (b)) — auto-merge armed; live proof = the
   first push after merge carries the status before the box's tick. (3) The operator applies
   master's `tofu/github` on the host (#1617 merged unapplied; makes `management-sentinel`
-  REQUIRED). (4) #1629 MERGED; the dummy is **PR#1632** (open, no auto-merge, never merge) —
-  read the box's verdict (expect "github: +0 ~1 -0 (14 not planned)" + the "Not planned on the
-  box" line), then CLOSE it unmerged. (5) FU-237 residuals left: (c) per-role user/env split, (d) doorbell edge
+  REQUIRED). (4) ~~the dummy PR~~ DONE: #1632 verdict after #1629 = "github: +0 ~1 -0 (14 not
+  planned)" + the excluded-types line, closed unmerged 17:3xZ — the github-root verdict is proven. (5) FU-237 residuals left: (c) per-role user/env split, (d) doorbell edge
   (now lower priority — #1631 removes the latency for non-tofu PRs). (6) FU-238 next: cloudflare
   (read-only mint from `tofu/cloudflare-token`, host; policy root). (7) FU-012: box-scoped mints.
   ⚠ Habits: main runs on the box (`devbox run mgmt-tf -- plan`, committed ref); `mgmt-release`
-  still absent (system checkout hand-advanced to master today, 20aaf07c); the box's
+  still absent — **the units run the SYSTEM checkout's scripts** (`/var/lib/homelab`, hand-advanced
+  to master today, last 6d71387a): a merged fix to `scripts/mgmt-*` reaches the box only when that
+  checkout advances (the loops' own clones carry policy + tooling, NOT the unit scripts); the box's
   `/root/mgmt-test` clone removed. Session context hit ~575k — fresh session next.
