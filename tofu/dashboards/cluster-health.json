@@ -3512,7 +3512,8 @@
   "schemaVersion": 39,
   "tags": [
     "Kubernetes",
-    "Prometheus"
+    "Prometheus",
+    "homelab"
   ],
   "templating": {
     "list": [

@@ -1,0 +1,59 @@
+# The management box's input allowlist (ADR-131, docs/management-box.md §MB3). READ FROM MASTER by
+# the box (`git show origin/master:policy/mgmt/plan-input.yaml`), never from the PR under judgment —
+# the sentinel principle. Codeowner-gated (/policy/): a PR that needs a wider allowlist lands the
+# widening FIRST as its own change (the policy/iac/exceptions ordering rule), or it stays red.
+#
+# Why this file exists at all: unlike the iac-sentinel (PR tree as data), `tofu plan` EXECUTES the
+# PR's chosen provider binaries and data sources with the root's credentials in the environment.
+# Stage 1 (this file, over the PR tree as DATA) is what makes stage 2 (the plan) safe to run.
+roots:                      # what the box plans; a PR path under the root's dir selects it
+  main:         { dir: tofu,              apply: true  }   # everything under tofu/ not claimed by another entry
+  provisioning: { dir: tofu/provisioning, apply: false }
+  github:       { dir: tofu/github,       apply: false,   # read-only PAT + Garage state, FU-238; applies stay on the host
+                  plan_exclude_types: [github_repository, github_organization_ruleset] }
+                  # github_repository: GitHub hides repo merge settings (allow_*_merge, delete_branch_on_merge)
+                  # from any token without admin WRITE → a read-only plan diffs all 13 repos forever.
+                  # github_organization_ruleset: the endpoint requires org Administration WRITE for a
+                  # fine-grained PAT (docs.github.com/rest/orgs/rules — "Get all organization repository
+                  # rulesets"; 403 verified 2026-09-13 with read). Both stay host-only; REPO rulesets (the
+                  # pinned required checks, ADR-130), org secrets and deploy keys read fine — the gate's parts.
+foreign_roots:              # planned elsewhere (host / jail) — a PR touching only these gets "no box-held surface"
+  - tofu/cloudflare
+  - tofu/cloudflare-token
+  - tofu/infisical
+deny_paths:                 # basename globs a PR may not touch inside a root (stage 1) — provider/backend/CLI surface
+  - ".terraform.lock.hcl"
+  - "versions.tf"
+  - "providers.tf"
+  - "backend.tf"
+  - "*.tfvars"
+  - "*.tfvars.json"      # auto-loaded like tfvars (review finding, #1619)
+  - "*.auto.tfvars*"
+  - "*.tf.json"          # config in JSON evades the ERE patterns below
+  - "*.tfrc"
+  - ".terraformrc"
+  - "*.sh"
+deny_patterns:              # ERE over the ADDED lines of the PR diff inside a root (stage 1)
+  - 'data[[:space:]]+"external"'
+  - 'data[[:space:]]+"http"'
+  - 'provisioner[[:space:]]'
+  - 'required_providers'
+  - 'backend[[:space:]]+"'
+  - 'encryption[[:space:]]*\{'
+  - '(file|fileset|filebase64|templatefile)\([[:space:]]*"(/|\.\.)'
+  - 'path\.cwd'
+  - 'local-exec|remote-exec'
+  - 'source[[:space:]]*=[[:space:]]*"(git|hg|s3|gcs|https?)::?'   # remote module sources: init would FETCH them
+apply_addresses:            # resource addresses (globs) the box may APPLY unattended — the residue (operator, 2026-09-13)
+  main:
+    - "kubernetes_config_map.*"
+    - "kubernetes_namespace.*"
+    - "kubernetes_deployment.ha"
+    - "kubernetes_service.ha"
+    - "kubernetes_persistent_volume_claim.ha"
+    - "kubernetes_deployment.unifi"
+    - "kubernetes_deployment.mongo"
+    - "kubernetes_service.unifi"
+    - "kubernetes_service.mongo"
+    - "kubernetes_persistent_volume_claim.mongo"
+    - "kubernetes_persistent_volume_claim.config"

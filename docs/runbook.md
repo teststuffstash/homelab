@@ -37,8 +37,11 @@ Gotchas:
   use `tofu -chdir=...` / absolute paths, and avoid `bash -c '<multiline>'` (mangles newlines).
   Don't put `source <(... completion)` in `init_hook` — it parse-errors under dash and breaks
   every `devbox run`.
-- Tofu in the main root needs secret vars — **don't pass them by hand, use the wrappers**:
-  `devbox run tf-plan` / `devbox run tf-apply` source them via `scripts/tf.sh` (→ `keepass-env.sh`
+- **The main root runs on the management box since 2026-09-13** (state + creds moved there,
+  ADR-129/-131): `devbox run mgmt-tf -- plan|apply` (ssh, committed ref — `MGMT_REF=origin/<branch>`);
+  `tf-plan`/`tf-apply` refuse and say so. [`management-box.md`](management-box.md) §MB3.
+- Tofu's OTHER roots still take secret vars locally — **don't pass them by hand, use the wrappers**:
+  `devbox run tf-plan` / `devbox run tf-apply` sourced them via `scripts/tf.sh` (→ `keepass-env.sh`
   reads the KeePass wallet; the GitHub-App key resolves from the cred dir). These work **in the jail
   (`~/.claude`) or on the host (`~/Projects/.claude-data`)** — same dual-path trick as `garage-s3`.
   `proxmox_api_token` + non-secret IDs stay in `tofu/terraform.tfvars`. `devbox run tf-validate`

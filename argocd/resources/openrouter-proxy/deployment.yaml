@@ -132,7 +132,15 @@ spec:
               # Bumped 128Mi -> 256Mi: PodSigkilled/OOMKilled after 6d uptime (exit 137,
               # kubectl lastState.terminated.reason=OOMKilled) — the container hit its own
               # limit, not node pressure. alert-fp:224d01fec17ea808
-              memory: 256Mi
+              # Bumped 256Mi -> 512Mi: PodSigkilled/OOMKilled again, this time after only
+              # ~22h uptime (exit 137, lastState.terminated.reason=OOMKilled, confirmed via
+              # kubectl -o json; no node MemoryPressure on any node) — still the container's
+              # own limit, not node pressure or the Talos OOM controller (SIGKILL, not the
+              # whole-cgroup kill described in docs/spikes/talos-psi-thresholds.md).
+              # Recurrence went from 6d -> 22h at the same limit; if this fires again on a
+              # similarly short cadence, that's a growth-rate signal worth profiling instead
+              # of bumping again. alert-fp:b9af4a6492222790
+              memory: 512Mi
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534

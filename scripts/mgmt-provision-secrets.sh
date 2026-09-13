@@ -19,7 +19,10 @@
 #
 # What lands where (all root:root, 0600):
 #   etc/ssh/ssh_host_ed25519_key   wallet mgmt-ssh-host (minted by scripts/keepass-init.sh)
-#   var/lib/mgmt/env               the belt's credentials — see the TABLE below
+#   var/lib/mgmt/env               the belt's + the main root's credentials — see the TABLE below
+#   var/lib/mgmt/main.tfvars       main's gitignored tfvars (proxmox token); provisioning.tfvars likewise
+#   var/lib/mgmt/runner-app/…      the runner App key ci-runner.tf reads by path
+#   var/lib/mgmt/sentinel/…        the homelab-sentinel App key (ADR-131: the box posts the verdict)
 #   var/lib/mgmt/talosconfig       copied from tofu/talosconfig in THIS checkout
 #   var/lib/mgmt/kubeconfig        copied from tofu/kubeconfig  in THIS checkout
 #
@@ -61,17 +64,34 @@ case "${1:-}" in
 esac
 
 # ── the TABLE: env var → wallet entry ──────────────────────────────────────────────────────────
-# Exactly what scripts/mgmt-probe.sh's belt needs for the cone-clean roots (cloudflare,
-# provisioning), the OPNsense --check and talosctl. NOT the main root's TF_VAR_* set — that moves
-# when FU-097's table says the box may touch main, not before.
+# What scripts/mgmt-probe.sh's belt needs for the cone-clean roots (provisioning), the OPNsense
+# --check and talosctl — PLUS, since 2026-09-13, the MAIN root's TF_VAR_* set: the operator ruled
+# the main root's raw-k8s residue the box's test surface (docs/management-box.md §The test
+# surface), so the box plans and applies main (ADR-131 sentinel + the apply loop). main's
+# proxmox token rides in main.tfvars (tfvars wins over env — the keepass-env.sh rule).
 ENV_TABLE=(
   "TOFU_STATE_KEY_ID=tofu-state-key-id"            # scripts/tofu-state-env.sh (Garage state bucket)
   "TOFU_STATE_SECRET=tofu-state-secret"
   "TOFU_STATE_PASSPHRASE=tofu-state-passphrase"    # the state's own key — shared by nature, never box-scoped
   "CLOUDFLARE_API_TOKEN=cloudflare-write-key"      # tofu/cloudflare plan
-  "TF_VAR_proxmox_api_token=pve-api-token-matchbox" # tofu/provisioning plan
   "OPN_API_KEY=opnsense-api-key"                   # scripts/opnsense-playbook.sh --check
   "OPN_API_SECRET=opnsense-api-secret"
+  # the main root (scripts/keepass-env.sh's export list, one line each — swap for box-scoped mints as FU-012 minds them)
+  "TF_VAR_grafana_admin_password=grafana-admin-password"
+  "TF_VAR_ha_prometheus_token=ha-prometheus-token"
+  "TF_VAR_infisical_encryption_key=infisical-encryption-key"
+  "TF_VAR_infisical_auth_secret=infisical-auth-secret"
+  "TF_VAR_infisical_db_password=infisical-db-password"
+  "TF_VAR_argocd_github_pat=argocd-github-pat"
+  "TF_VAR_ghcr_read_packages_token=homelab-github-actions-runner-read-packages"
+  "TF_VAR_infisical_admin_email=infisical-admin-email"
+  "TF_VAR_infisical_admin_password=infisical-admin-password"
+  "TF_VAR_forgejo_runner_token=forgejo-runner-token"
+  # the sentinel's GitHub identity — the homelab-sentinel App (ADR-130/-131; docs/github-apps.yaml)
+  "MGMT_GH_APP_ID=github-sentinel-app-id"
+  # tofu/github, plan-only on the box (FU-238): the read-only PAT minted by scripts/github-mgmt-pat-bootstrap.sh
+  "GITHUB_TOKEN=github-mgmt-readonly-pat"
+  "MGMT_GH_APP_INSTALLATION_ID=github-sentinel-installation-id"
 )
 
 # ── stage ───────────────────────────────────────────────────────────────────────────────────────
@@ -120,6 +140,18 @@ ENVF="$OUT/var/lib/mgmt/env"
   # ...and its proxmox provider SSHes into pve with the seed key (variable defaults to the jail's
   # cache, ~/.claude/homelab-pve-ssh/). THE dangerous credential FU-012 names — the point of the box.
   echo "TF_VAR_proxmox_ssh_private_key_file=/var/lib/mgmt/pve-ssh/id_ed25519"
+  # main root: ci-runner.tf reads the runner App's key by path (tf.sh's TF_VAR_github_app_private_key_file)
+  echo "TF_VAR_github_app_private_key_file=/var/lib/mgmt/runner-app/private-key.pem"
+  # the sentinel + apply loop (scripts/mgmt-sentinel.sh, scripts/mgmt-apply.sh): the App key, where
+  # main's state lives on the box (local backend via -state=, ADR-131), the provider cache
+  echo "MGMT_GH_APP_KEY_FILE=/var/lib/mgmt/sentinel/app-key.pem"
+  # tofu/github's three App keys are VALUES of tofu variables (PEM, multi-line — not env-file-safe):
+  # files under this dir, exported per root by scripts/mgmt-root-env/github.sh
+  echo "MGMT_CRED_DIR=/var/lib/mgmt/cred"
+  echo "MGMT_STATE_DIR=/var/lib/mgmt/state"
+  echo "TF_PLUGIN_CACHE_DIR=/var/lib/mgmt/plugin-cache"
+  echo "ORG=teststuffstash"
+  echo "MGMT_REPO=homelab"
 } >> "$ENVF"
 echo "  + var/lib/mgmt/env  (${#ENV_TABLE[@]} entries)"
 
@@ -136,16 +168,41 @@ install -d -m700 "$OUT/var/lib/mgmt/pve-ssh"
 kp attachment-export -q --no-password -k "$KEYF" "$DB" pve-ssh-seed id_ed25519 "$OUT/var/lib/mgmt/pve-ssh/id_ed25519" >/dev/null \
   || { echo "FATAL: wallet entry pve-ssh-seed/id_ed25519 missing" >&2; exit 1; }
 chmod 600 "$OUT/var/lib/mgmt/pve-ssh/id_ed25519"; echo "  + var/lib/mgmt/pve-ssh/id_ed25519  (← pve-ssh-seed/id_ed25519)"
+# 3a''. the two GitHub App keys the main root + the sentinel need (same wallet entries wallet-files.sh caches)
+install -d -m700 "$OUT/var/lib/mgmt/runner-app" "$OUT/var/lib/mgmt/sentinel"
+kp attachment-export -q --no-password -k "$KEYF" "$DB" github-runner-app private-key.pem "$OUT/var/lib/mgmt/runner-app/private-key.pem" >/dev/null \
+  || { echo "FATAL: wallet entry github-runner-app/private-key.pem missing" >&2; exit 1; }
+chmod 600 "$OUT/var/lib/mgmt/runner-app/private-key.pem"; echo "  + var/lib/mgmt/runner-app/private-key.pem  (← github-runner-app)"
+kp attachment-export -q --no-password -k "$KEYF" "$DB" github-sentinel-app private-key.pem "$OUT/var/lib/mgmt/sentinel/app-key.pem" >/dev/null \
+  || { echo "FATAL: wallet entry github-sentinel-app/private-key.pem missing" >&2; exit 1; }
+chmod 600 "$OUT/var/lib/mgmt/sentinel/app-key.pem"; echo "  + var/lib/mgmt/sentinel/app-key.pem  (← github-sentinel-app)"
+# 3a'''. tofu/github's App keys + ids (FU-238) — the wallet-files.sh cache layout, under /var/lib/mgmt/cred
+for app in deploy renovate reviewer; do
+  d="$OUT/var/lib/mgmt/cred/homelab-github-$app"; install -d -m700 "$OUT/var/lib/mgmt/cred" "$d"
+  kp attachment-export -q --no-password -k "$KEYF" "$DB" "github-$app-app" private-key.pem "$d/private-key.pem" >/dev/null \
+    || { echo "FATAL: wallet entry github-$app-app/private-key.pem missing" >&2; exit 1; }
+  v="$(kp_val "github-$app-app-id")"; [ -n "$v" ] || { echo "FATAL: wallet entry github-$app-app-id missing" >&2; exit 1; }
+  printf '%s' "$v" > "$d/app-id"; chmod 600 "$d/private-key.pem" "$d/app-id"
+  echo "  + var/lib/mgmt/cred/homelab-github-$app/{app-id,private-key.pem}  (← github-$app-app)"
+done
 # 3b. per-root var files the jail keeps gitignored in the checkout — a fresh clone on the box has
 #     none, and `plan` fails on the first variable without a default (ssh_public_keys, 2026-09-13).
 #     Public keys, so config not secret, but they live where the jail keeps them: ride along.
-for root in provisioning; do
-  if [ -s "$REPO/tofu/$root/terraform.tfvars" ]; then
-    install -m600 "$REPO/tofu/$root/terraform.tfvars" "$OUT/var/lib/mgmt/$root.tfvars"; echo "  + var/lib/mgmt/$root.tfvars  (← tofu/$root/terraform.tfvars)"
+for root in provisioning main; do
+  src="$REPO/tofu/$root/terraform.tfvars"; [ "$root" = main ] && src="$REPO/tofu/terraform.tfvars"
+  if [ -s "$src" ]; then
+    install -m600 "$src" "$OUT/var/lib/mgmt/$root.tfvars"; echo "  + var/lib/mgmt/$root.tfvars  (← ${src#"$REPO"/})"
   else
-    echo "  ! tofu/$root/terraform.tfvars missing — the box's plan of that root will fail on its variables" >&2
+    echo "  ! ${src#"$REPO"/} missing — the box's plan of that root will fail on its variables" >&2
   fi
 done
+# ⚠ Proxmox tokens ride in the tfvars, NEVER the env: a TF_VAR_ in the env that a tfvars overrides
+# at plan time makes `tofu apply <saved plan>` fail with "Mismatch between input and plan variable
+# value" (the env is re-read at apply, the tfvars is not — found on the box 2026-09-13). main's
+# token is in main.tfvars already; provisioning's (the jail sets it via env) is appended here.
+_pt="$(kp_val pve-api-token-matchbox)"; [ -n "$_pt" ] || { echo "FATAL: wallet entry pve-api-token-matchbox missing" >&2; exit 1; }
+grep -q '^proxmox_api_token' "$OUT/var/lib/mgmt/provisioning.tfvars" 2>/dev/null || printf 'proxmox_api_token = "%s"\n' "$_pt" >> "$OUT/var/lib/mgmt/provisioning.tfvars"
+echo "  + var/lib/mgmt/provisioning.tfvars  (+ proxmox_api_token ← pve-api-token-matchbox)"
 # 3. talosconfig + kubeconfig from this checkout (gitignored, tofu-generated)
 for f in talosconfig kubeconfig; do
   if [ -s "$REPO/tofu/$f" ]; then
@@ -168,10 +225,13 @@ fi
 # Same tree, same paths, onto the running box — tar over ssh (rsync is in neither the jail nor the
 # closure, found on the first push 2026-09-13). Root extracts with --no-same-owner, so the files
 # stop being the jail user's; modes travel in the archive (0600).
+# ⚠ chmod ONLY the provisioned files, by name: the loops' clones, worktrees and the provider cache
+# live under /var/lib/mgmt too, and a `find -type f -exec chmod 600` there stripped every
+# executable bit (devbox hooks, provider binaries) — exit 126 on the box, 2026-09-13.
 # Host-key pinning: the box's key IS the wallet's, so pin it from the staged .pub instead of TOFU.
 KH="$OUT/known_hosts"
 printf '%s %s\n' "$HOST" "$(cut -d' ' -f1,2 "$OUT/etc/ssh/ssh_host_ed25519_key.pub")" > "$KH"
 tar -C "$OUT" --exclude known_hosts -cf - . \
   | ssh -o UserKnownHostsFile="$KH" -o StrictHostKeyChecking=yes -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
-      'tar -C / --no-same-owner --no-overwrite-dir -xf - && chmod 700 /var/lib/mgmt /var/lib/mgmt/matchbox /var/lib/mgmt/pve-ssh && find /var/lib/mgmt -type f -exec chmod 600 {} + && chmod 600 /etc/ssh/ssh_host_ed25519_key && ls -lR /var/lib/mgmt'
+      'tar -C / --no-same-owner --no-overwrite-dir -xf - && chmod 700 /var/lib/mgmt /var/lib/mgmt/matchbox /var/lib/mgmt/pve-ssh /var/lib/mgmt/runner-app /var/lib/mgmt/sentinel && chmod 700 /var/lib/mgmt/cred /var/lib/mgmt/cred/* && chmod 600 /var/lib/mgmt/env /var/lib/mgmt/*.tfvars /var/lib/mgmt/talosconfig /var/lib/mgmt/kubeconfig /var/lib/mgmt/matchbox/* /var/lib/mgmt/pve-ssh/* /var/lib/mgmt/runner-app/* /var/lib/mgmt/sentinel/app-key.pem /var/lib/mgmt/cred/*/* /etc/ssh/ssh_host_ed25519_key && ls -l /var/lib/mgmt'
 echo "pushed to root@$HOST — units read /var/lib/mgmt/env at their next start; nothing to restart"
