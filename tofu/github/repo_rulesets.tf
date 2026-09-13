@@ -68,7 +68,7 @@ resource "github_repository_ruleset" "required_checks" {
           # Actions (15368 — EVERY other required context is a workflow job: `ci`, `system-test`).
           # No `null` branch on purpose: a new context of a third poster must be pinned here
           # explicitly, never left forgeable by omission (review finding on PR#1613).
-          integration_id = required_check.value == "iac-sentinel" ? tonumber(var.sentinel_gh_app_id) : 15368
+          integration_id = contains(["iac-sentinel", "management-sentinel"], required_check.value) ? tonumber(var.sentinel_gh_app_id) : 15368 # both sentinel contexts are the sentinel App's (ADR-130/-131)
         }
       }
     }
