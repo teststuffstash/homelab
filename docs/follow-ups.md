@@ -397,14 +397,12 @@ six OVERSIZE items pointer-ized into
       This item closes when that Goal launches and validates. Relates FU-046, FU-097, FU-016.
 - [ ] **FU-097** — **Write the per-surface ruling table** for the surfaces ArgoCD/tofu don't
       reconcile (OPNsense, Proxmox host, Home Assistant, Matchbox, `tofu/` roots): automate, or
-      human-applied + a named drift belt. **It is the first deliverable and is unwritten.**
-      Surfaces + candidate shapes: `ROADMAP.md` §Deploy paths; the per-root split + the
-      dependency-cone rule: [`dependency-upgrades.md`](dependency-upgrades.md); the end-state +
-      **the R12 pilot's ruled build order**, which this table precedes (ADR-129):
-      [`management-box.md`](management-box.md).
-      **2026-09-12:** the hardware stopped being the blocker — `thinkcentre` left cluster duty to
-      be the pilot and sits idle — so this table is the only thing the build waits on.
-      Relates FU-051, FU-012, ADR-093.
+      human-applied + a named drift belt. Inputs: `ROADMAP.md` §Deploy paths, the per-root split
+      in [`dependency-upgrades.md`](dependency-upgrades.md), the R12 build order it precedes
+      (ADR-129). **2026-09-13 (operator): the first rows are ruled** — OPNsense / CPs / Proxmox
+      host stay human until the CARP pair + third CP exist; the main root's raw-k8s residue is the
+      box's test surface; `provisioning` the canary — [`management-box.md`](management-box.md)
+      §The test surface. **Next:** write the table around those anchors. Relates FU-051, FU-012.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
       `homelab-sentinel`. Deferred because the policy file must land alone first and the box's
