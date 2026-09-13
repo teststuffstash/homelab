@@ -13,8 +13,9 @@ roots:                      # what the box plans; a PR path under the root's dir
                   plan_exclude_types: [github_repository, github_organization_ruleset] }
                   # github_repository: GitHub hides repo merge settings (allow_*_merge, delete_branch_on_merge)
                   # from any token without admin WRITE → a read-only plan diffs all 13 repos forever.
-                  # github_organization_ruleset: /orgs/{org}/rulesets 403s for a fine-grained PAT even with
-                  # org Administration:read (verified 2026-09-13). Both stay host-only; REPO rulesets (the
+                  # github_organization_ruleset: the endpoint requires org Administration WRITE for a
+                  # fine-grained PAT (docs.github.com/rest/orgs/rules — "Get all organization repository
+                  # rulesets"; 403 verified 2026-09-13 with read). Both stay host-only; REPO rulesets (the
                   # pinned required checks, ADR-130), org secrets and deploy keys read fine — the gate's parts.
 foreign_roots:              # planned elsewhere (host / jail) — a PR touching only these gets "no box-held surface"
   - tofu/cloudflare
