@@ -160,7 +160,11 @@ mgmt_roots_touched() {
       dir="${dirs[$i]}"
       case "$f" in "$dir"/*) [ ${#dir} -gt ${#bestdir} ] && { best="${names[$i]}"; bestdir="$dir"; } ;; esac
     done
-    [ -n "$best" ] && printf '%s\n' "$best"
+    # `if`, not `[ … ] &&`: the loop's exit status is its LAST command's, and under pipefail
+    # that status is the pipeline's — a last file outside every root returned 1 from a
+    # classifier that had read the policy fine, and the fail-closed callers (#1631) treated it
+    # as "policy unreadable": the apply loop failed every tick (box, 2026-09-13 20:52Z).
+    if [ -n "$best" ]; then printf '%s\n' "$best"; fi
   done | sort -u
 }
 # mgmt_roots_touched_at <repo-dir> <ref> <files…via stdin> → mgmt_roots_touched over the policy AT
@@ -386,7 +390,9 @@ mgmt_clone() {
   fi
   have="$(git -C "$dir" rev-parse -q --verify origin/master 2>/dev/null || true)"
   if want="$(gh_api GET branches/master 2>/dev/null | jq -r '.commit.sha // empty')" && [ -n "$want" ]; then
-    if [ "$want" = "$have" ] && [ -z "$(git -C "$dir" status --porcelain 2>/dev/null)" ] \
+    # ':!devbox.lock': the box's devbox rewrites the lock's plugin_version fields on every run
+    # (a devbox version skew box↔jail, FU-240) — a permanently "dirty" clone would fetch every tick
+    if [ "$want" = "$have" ] && [ -z "$(git -C "$dir" status --porcelain -- . ':!devbox.lock' 2>/dev/null)" ] \
        && [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" = "$have" ]; then
       return 0   # master unchanged, tree clean at it — no git traffic this tick
     fi
