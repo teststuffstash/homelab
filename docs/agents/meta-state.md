@@ -526,16 +526,12 @@ standing set below; what differs is cadence and the act rule:
   oracle-specs` shows 5Gi, then any fleet CI re-publish re-materializes the specs sites;
   close-purge of dead pr-*/ prefixes tracked oracle-fleet#318.
 
-- **R12 / sentinel pickup (2026-09-13):** (1) the MANAGEMENT SENTINEL ADR — ⚠ NOT via
-  `/design-agents` (operator: the 300–350k corpus load leaves no room to work, FU-164); read the
-  grounding set instead (~50k): `docs/agents/iac-lane.md` §Assurance layers + §L0b,
-  `docs/agents/roles.md` §Context delivery + the reviewer boundary, `docs/management-box.md`,
-  `docs/spikes/no-human-in-the-loop.md` §What stays human, `docs/secrets.md` §Minting doctrine,
-  ADR-118/-129/-130, `agents/coordinator/sentinel-argo.yaml` + the header of
-  `scripts/iac-sentinel.sh`, the `homelab-sentinel` row of `docs/github-apps.yaml`. Shape agreed
-  2026-09-13 (poke from the sentinel workflow → box evaluates PR head against rules from
-  master → verdict-only back, `homelab-sentinel` identity; input allowlist as a policy file) — mint
-  its FU then; (2) static CI: `tofu validate` per root + `nix eval` of both flake outputs (runner
+- **R12 / sentinel pickup (2026-09-13):** (1) the MANAGEMENT SENTINEL ADR is WRITTEN —
+  ADR-131 + `management-box.md` §MB3 + FU-237, **PR#1615 merged** 12:23Z.
+  FU-237's next = build-order step 1: the `policy/mgmt/` allowlist + root list (`provisioning`)
+  as its OWN PR, landed before any script — the exceptions ordering rule. The grounding read set
+  (~50k, not the corpus — FU-164) was the one listed in the previous pickup; it sufficed, with
+  `docs/tofu-state.md`'s cone table + `nixos/hosts/mgmt/default.nix`'s units added; (2) static CI: `tofu validate` per root + `nix eval` of both flake outputs (runner
   nix-cache question, management-box.md open table); (3) FU-097's ruling table gates phases B/C;
   FU-012's box-scoped creds swap; (4) oracle-fleet `evidence` job: S3 region `us-east-1` → `garage`
   (stack-side; platform detector = Garage 400-rate by key, none yet). Box: `mgmt-release` ref does

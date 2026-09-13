@@ -436,7 +436,10 @@ claim diff, never a silent flip. ⚠ **The first live dispatch is what exposed I
   This — not review — is what closes IAC-G01, because rollback is structurally blind to
   silent security holes (a public bucket never degrades a KPI).
 - **L1 — pre-merge rendered diff:** master-vs-branch manifest diff as a PR comment — grounds any
-  reader (human or lens) in the actual delta, catches plausible-YAML-wrong-effect.
+  reader (human or lens) in the actual delta, catches plausible-YAML-wrong-effect. For the tofu
+  roots the rendered diff IS `tofu plan`, and that runs nowhere but the management box — the
+  **management sentinel** (ADR-131, [`../management-box.md`](../management-box.md) §MB3): unlike
+  L0b it EXECUTES PR-chosen providers, hence its pre-execution input allowlist.
 - **L2 — post-merge machine:** sync → health → observation window (below) → promote | revert.
   Widened revert trigger (IAC-G02), cluster-verifying closeout (IAC-G03).
 - **L3 — runtime:** SLO probes + error-budget teeth (FU-104 — budget burnt already parks the

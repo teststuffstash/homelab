@@ -8659,3 +8659,28 @@ subscription's 7d window).
 Direct commits this session: FU-229, FU-236 (+archive), the sentinel-argo switch (pushed at
 once — ArgoCD consumes it), this journal + meta-state. PRs: #1608 #1609 #1610 #1611 #1612 #1613
 #1614 merged; #1597 (operator's) unblocked and merged.
+
+## 2026-09-13 (evening) — the management sentinel ADR (ADR-131)
+
+- **The seat's one job this session: the R12 sentinel ADR, written from the named ~50k read set
+  (operator: NOT the corpus load).** ADR-131 + `management-box.md` §MB3 + FU-237 + glossary row +
+  iac-lane §L1 pointer + the App row wording — **PR#1615**. The shape the operator agreed on the
+  day session, made concrete: two stages (the input allowlist evaluates the PR tree as DATA with
+  master's policy → only then `tofu plan` in an ephemeral worktree with providers from master's
+  lockfile out of a local mirror); edge+level wake with a payload-ignored doorbell (the cluster
+  holds no credential into the box); verdict-only exit (status + address/count comment under
+  `homelab-sentinel`, plan output stays in the journal); the SCOPE SPLIT — the in-cluster
+  iac-sentinel run posts `management-sentinel: success` for no-root heads off the same master
+  policy file, so the recovery root gates only what it alone can judge; the plan runs as its own
+  user with its own env file, read-only creds where the provider allows.
+- **Two rulings written into the ADR that the operator may push back on:** plan-on-PR is READ-ONLY,
+  so it precedes phase B and is NOT gated on FU-097's table (which rules who APPLIES); and the
+  `homelab-sentinel` App key lives in two stores (Infisical for the cluster poster, the box's env
+  tree) — one identity, two seats — rather than a third App.
+- Worktree under the scratchpad this time (the 2026-09-13 day lesson held); `--body-file`.
+  Two rides before merge (12:09 → 12:23Z): CI red on the FU-098 lint — `docs/github-apps.yaml`
+  has a generated twin (`argocd/resources/github-exporter/github-apps.json`, regenerate with
+  `yq -o=json`) I did not know about; then one reviewer finding, a parenthetical I had spliced
+  mid-sentence into §Credentials (made its own sentence). Both in-PR.
+
+Direct commits this session: meta-state + this journal (batched; push at wind-down). PR: #1615.
