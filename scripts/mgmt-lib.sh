@@ -190,6 +190,8 @@ mgmt_root_excludes() {
     | while IFS= read -r addr; do for t in "${types[@]}"; do case "$addr" in "$t".*) printf -- '-exclude=%s\n' "$addr" ;; esac; done; done
 }
 mgmt_root_apply() { mgmt_policy_get "$1" ".roots.\"$2\".apply // false"; }
+# mgmt_root_exclude_note <policy> <root> → the human line the verdict prints beside "not planned"
+mgmt_root_exclude_note() { mgmt_policy_get "$1" ".roots.\"$2\".plan_exclude_note // \"\""; }
 
 # mgmt_stage1 <policy> <repo-dir> <base-sha> <head-sha> → prints hits "rule<TAB>file<TAB>detail",
 # one per line; exit 0 with no output = clean; rc 1 = the classifier could not read the policy (no
@@ -286,6 +288,9 @@ mgmt_plan_root() {
     excludes=(); [ -n "$excl_out" ] && mapfile -t excludes <<<"$excl_out"
     # what this plan did NOT judge — the verdict must say so (a reviewer reads the comment, not the policy)
     printf '%s\n' "${excludes[@]#-exclude=}" | grep -v '^$' > "$out.excluded" || true
+    # every address in state — the verdict's "not planned" set is this minus what the plan carried,
+    # so an exclusion's DEPENDENTS (tofu excludes them too, silently) are named as well
+    devbox run --quiet -- tofu -chdir="$dir" state list 2>/dev/null | sort > "$out.state" || true
     # shellcheck disable=SC2086
     devbox run --quiet -- tofu -chdir="$dir" plan -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile "${excludes[@]}"
   ) >"$logf" 2>&1
@@ -314,7 +319,15 @@ mgmt_plan_changes() {
   )" || { echo "plan summary FAILED for $root: $(printf '%s' "$json" | grep -v '^\s*$' | tail -2 | tr '\n' ' ' | head -c 300)" >&2; return 1; }
   printf '%s' "$json" | jq -e '.resource_changes' >/dev/null 2>&1 \
     || { echo "plan summary FAILED for $root: show -json produced no resource_changes" >&2; return 1; }
+  # side channel for the verdict: every address the plan carried (no-ops included) — see mgmt_plan_root's $out.state
+  printf '%s' "$json" | jq -r '.resource_changes[]?.address' | sort > "$out.planned"
   printf '%s' "$json" | jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv'
+}
+# mgmt_plan_not_planned <plan-out> → the state addresses the plan did NOT carry (explicit excludes +
+# their dependents), one per line; empty when nothing was excluded or the state list is unavailable
+mgmt_plan_not_planned() {
+  [ -s "$1.state" ] && [ -f "$1.planned" ] || return 0
+  comm -23 "$1.state" "$1.planned"
 }
 # mgmt_plan_counts <changes-lines> → "add change destroy replace"
 mgmt_plan_counts() {

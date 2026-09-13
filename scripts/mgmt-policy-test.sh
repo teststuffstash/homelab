@@ -12,11 +12,11 @@ POL="$REPO/policy/mgmt/plan-input.yaml"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 git -C "$T" init -q -b master
-mkdir -p "$T/tofu/dashboards" "$T/tofu/provisioning" "$T/tofu/github" "$T/tofu/cloudflare"
+mkdir -p "$T/tofu/dashboards" "$T/tofu/provisioning" "$T/tofu/github" "$T/tofu/cloudflare" "$T/tofu/cloudflare-token"
 echo '{"title":"x"}' >"$T/tofu/dashboards/x.json"
 printf 'resource "kubernetes_config_map" "x" {\n  data = { "x.json" = file("${path.module}/dashboards/x.json") }\n}\n' >"$T/tofu/monitoring.tf"
 printf 'terraform {\n  required_providers {}\n}\n' >"$T/tofu/versions.tf"
-echo 'x' >"$T/tofu/provisioning/main.tf"; echo 'x' >"$T/tofu/github/main.tf"; echo 'x' >"$T/tofu/cloudflare/main.tf"
+echo 'x' >"$T/tofu/provisioning/main.tf"; echo 'x' >"$T/tofu/github/main.tf"; echo 'x' >"$T/tofu/cloudflare/main.tf"; echo 'x' >"$T/tofu/cloudflare-token/main.tf"
 git -C "$T" add -A && git -C "$T" commit -q -m base
 BASE="$(git -C "$T" rev-parse HEAD)"
 
@@ -57,12 +57,13 @@ case_ file-absolute     deny_patterns 'printf "output \"x\" { value = file(\"/va
 case_ file-parent       deny_patterns 'printf "output \"x\" { value = filebase64(\"../../etc/x\") }\n" >> tofu/monitoring.tf'
 case_ path-cwd          deny_patterns 'printf "output \"x\" { value = path.cwd }\n" >> tofu/monitoring.tf'
 case_ symlink           symlink       'ln -s /etc/passwd tofu/dashboards/evil.json'
-case_ foreign-only      noroot        'echo "y" > tofu/cloudflare/main.tf'
+case_ foreign-only      noroot        'echo "y" > tofu/cloudflare-token/main.tf'
+case_ cloudflare-only   none          'echo "y" > tofu/cloudflare/main.tf'
 case_ github-only       none          'echo "y" > tofu/github/main.tf'
 case_ non-tofu          noroot        'echo "y" > README.md'
 case_ provisioning-only none          'echo "y" > tofu/provisioning/main.tf'
 # a deny hit in a FOREIGN root must not fire (not this box's business)
-case_ foreign-deny      noroot        'printf "data \"external\" \"x\" {}\n" >> tofu/cloudflare/main.tf'
+case_ foreign-deny      noroot        'printf "data \"external\" \"x\" {}\n" >> tofu/cloudflare-token/main.tf'
 
 # ── the classifier FAILS CLOSED (review finding on homelab#1631): an empty root list is a SUCCESS
 # status ("no box-held surface touched"), so every way the policy read can fail must surface as a
@@ -91,7 +92,7 @@ done
 # the in-cluster half's shape: policy at a ref, temp copy cleaned up, rc preserved across the cleanup
 fail_ at-ref-no-policy 'printf "tofu/github/x.tf\n" | mgmt_roots_touched_at "$T" HEAD'
 fail_ at-ref-yq-hiccup '( cp "$POL" "$T/policy.yaml"; mkdir -p "$T/policy/mgmt" && cp "$POL" "$T/policy/mgmt/plan-input.yaml" && git -C "$T" add -A && git -C "$T" commit -q -m pol; _yq() { return 7; }; printf "tofu/github/x.tf\n" | mgmt_roots_touched_at "$T" HEAD )'
-got="$(printf 'tofu/github/x.tf\ntofu/cloudflare/y.tf\n' | mgmt_roots_touched_at "$T" HEAD)"; rc=$?
+got="$(printf 'tofu/github/x.tf\ntofu/cloudflare-token/y.tf\n' | mgmt_roots_touched_at "$T" HEAD)"; rc=$?
 if [ $rc = 0 ] && [ "$got" = github ]; then pass=$((pass+1)); echo "PASS at-ref-positive (roots: github)"
 else fail=$((fail+1)); echo "FAIL at-ref-positive — rc=$rc roots '$got'"; fi
 
