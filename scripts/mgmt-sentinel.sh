@@ -56,13 +56,16 @@ while IFS=$'\t' read -r pr sha; do
   git -C "$REPO" fetch --quiet origin "refs/pull/$pr/head:refs/mgmt/pr-$pr" || { log "[#$pr] fetch of the head failed — skipped this run"; continue; }
   base="$(git -C "$REPO" merge-base origin/master "$sha" 2>/dev/null)" || { log "[#$pr] no merge-base with master — skipped"; continue; }
   mapfile -t files < <(git -C "$REPO" diff --name-only "$base" "$sha" --)
-  mapfile -t roots < <(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$POL")
+  # the classifier's rc decides between "no box-held surface" (a success) and "could not classify"
+  # (no verdict, retried next tick) — `$(…) ||`, never mapfile over a process substitution (#1631)
+  roots_out="$(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$POL")" || { log "[#$pr] classifier failed (policy unreadable) — skipped this run"; continue; }
+  roots=(); [ -n "$roots_out" ] && mapfile -t roots <<<"$roots_out"
   if [ ${#roots[@]} -eq 0 ]; then
     mgmt_post_status "$sha" "$CTX" success "no box-held surface touched" && touch "$SDIR/done/$sha"
     continue
   fi
   # stage 1
-  hits="$(mgmt_stage1 "$POL" "$REPO" "$base" "$sha")"
+  hits="$(mgmt_stage1 "$POL" "$REPO" "$base" "$sha")" || { log "[#$pr] stage 1 could not run (policy unreadable) — skipped this run"; continue; }
   if [ -n "$hits" ]; then
     first="$(head -1 <<<"$hits")"; rule="${first%%$'\t'*}"; rest="${first#*$'\t'}"; file="${rest%%$'\t'*}"
     bodyf="$(mktemp)"

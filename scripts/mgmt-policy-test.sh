@@ -63,5 +63,27 @@ case_ non-tofu          noroot        'echo "y" > README.md'
 case_ provisioning-only none          'echo "y" > tofu/provisioning/main.tf'
 # a deny hit in a FOREIGN root must not fire (not this box's business)
 case_ foreign-deny      noroot        'printf "data \"external\" \"x\" {}\n" >> tofu/cloudflare/main.tf'
+
+# ── the classifier FAILS CLOSED (review finding on homelab#1631): an empty root list is a SUCCESS
+# status ("no box-held surface touched"), so every way the policy read can fail must surface as a
+# non-zero rc with NO output — never as an empty, success-shaped list.
+fail_() {  # <name> <shell> — the shell must exit non-zero AND print nothing on stdout
+  local name="$1" shell="$2" out rc
+  out="$(eval "$shell" 2>/dev/null)"; rc=$?
+  if [ $rc -ne 0 ] && [ -z "$out" ]; then pass=$((pass+1)); echo "PASS $name (rc=$rc, no output)"
+  else fail=$((fail+1)); echo "FAIL $name — want rc≠0 + empty, got rc=$rc output '$out'"; fi
+}
+fail_ yq-hiccup        '( _yq() { return 7; }; printf "tofu/github/x.tf\n" | mgmt_roots_touched "$POL" )'
+fail_ policy-missing   'printf "tofu/github/x.tf\n" | mgmt_roots_touched "$T/absent.yaml"'
+fail_ policy-no-roots  'echo "deny_paths: []" > "$T/empty.yaml"; printf "tofu/github/x.tf\n" | mgmt_roots_touched "$T/empty.yaml"'
+fail_ root-without-dir 'printf "roots:\n  main: { apply: true }\n" > "$T/nodir.yaml"; printf "tofu/x.tf\n" | mgmt_roots_touched "$T/nodir.yaml"'
+fail_ stage1-rc        '( _yq() { return 7; }; mgmt_stage1 "$POL" "$T" "$BASE" "$(git -C "$T" rev-parse c-versions-tf)" )'
+# the in-cluster half's shape: policy at a ref, temp copy cleaned up, rc preserved across the cleanup
+fail_ at-ref-no-policy 'printf "tofu/github/x.tf\n" | mgmt_roots_touched_at "$T" HEAD'
+fail_ at-ref-yq-hiccup '( cp "$POL" "$T/policy.yaml"; mkdir -p "$T/policy/mgmt" && cp "$POL" "$T/policy/mgmt/plan-input.yaml" && git -C "$T" add -A && git -C "$T" commit -q -m pol; _yq() { return 7; }; printf "tofu/github/x.tf\n" | mgmt_roots_touched_at "$T" HEAD )'
+got="$(printf 'tofu/github/x.tf\ntofu/cloudflare/y.tf\n' | mgmt_roots_touched_at "$T" HEAD)"; rc=$?
+if [ $rc = 0 ] && [ "$got" = github ]; then pass=$((pass+1)); echo "PASS at-ref-positive (roots: github)"
+else fail=$((fail+1)); echo "FAIL at-ref-positive — rc=$rc roots '$got'"; fi
+
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]

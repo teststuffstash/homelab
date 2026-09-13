@@ -125,8 +125,12 @@ mgmt_noroot_post() {   # <repo> <pr> <sha>
   have="$(gh api "repos/${ORG}/${repo}/commits/${sha}/status" --jq '[.statuses[]|select(.context=="management-sentinel")]|length' 2>/dev/null)" || { log "[$repo#$pr] management-sentinel: status probe failed — leaving the head to the box"; return 0; }
   [ "$have" = "0" ] || return 0
   files="$(gh api "repos/${ORG}/${repo}/pulls/${pr}/files" --paginate --jq '.[].filename' 2>/dev/null)" || { log "[$repo#$pr] management-sentinel: file list probe failed — leaving the head to the box"; return 0; }
-  # the classifier, from the trusted tree; REPO is where devbox resolves (this clone's root)
-  roots="$(REPO="${HERE}/.." bash -c '. "$1"; pol="$(mgmt_policy_load "$REPO" HEAD)" || exit 1; printf "%s\n" "$2" | mgmt_roots_touched "$pol"; rm -f "$pol"' _ "$MGMT_LIB" "$files" 2>/dev/null)" || { log "[$repo#$pr] management-sentinel: classifier failed — leaving the head to the box"; return 0; }
+  # the classifier, from the trusted tree; REPO is where devbox resolves (this clone's root).
+  # FAIL CLOSED: an empty root list is a SUCCESS status, so the classifier's rc must reach this
+  # `||` — mgmt_roots_touched_at keeps it across its temp-file cleanup and mgmt_roots_touched
+  # itself fails on any policy read error (a nested-devbox hiccup once read as "no root touched";
+  # review finding on this PR). A failure posts nothing; the box's tick judges the head instead.
+  roots="$(REPO="${HERE}/.." bash -c '. "$1"; printf "%s\n" "$2" | mgmt_roots_touched_at "$REPO" HEAD' _ "$MGMT_LIB" "$files" 2>/dev/null)" || { log "[$repo#$pr] management-sentinel: classifier failed — leaving the head to the box"; return 0; }
   if [ -z "$roots" ]; then
     post_status_ctx "$repo" "$sha" management-sentinel success "no box-held surface touched (in-cluster)"
     log "[$repo#$pr@${sha:0:8}] management-sentinel=success — no box-held surface (in-cluster half)"

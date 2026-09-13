@@ -132,17 +132,28 @@ mgmt_policy_get() { _yq -r "$2" "$1"; }
 # mgmt_roots_touched <policy> <files…via stdin, one per line> → root names, one per line (deduped)
 # A path under roots[X].dir/ (longest dir wins) → X; a path under a foreign_roots dir → none;
 # anything not under any root dir → none.
+# FAILS CLOSED (rc 1, a line on stderr) when the policy cannot be read — a yq/devbox hiccup, a
+# missing file, a roots map with no entries or a root without a dir. An EMPTY result here means
+# "no box-held surface touched" = a success status, so a read failure must never degrade into it
+# (review finding on homelab#1631: `mapfile < <(…)` discards the producer's rc and pipefail does
+# not cover process substitution). Callers capture the output with `$(…) || …`, not mapfile.
 mgmt_roots_touched() {
-  local pol="$1" f root dir best bestdir foreign
-  local -a names dirs
-  mapfile -t names < <(mgmt_policy_get "$pol" '.roots | keys | .[]')
-  mapfile -t dirs   < <(for n in "${names[@]}"; do mgmt_policy_get "$pol" ".roots.\"$n\".dir"; done)
-  local -a foreigns
-  mapfile -t foreigns < <(mgmt_policy_get "$pol" '.foreign_roots[]?')
+  local pol="$1" f root dir best bestdir foreign n d out
+  local -a names dirs foreigns
+  out="$(mgmt_policy_get "$pol" '.roots | keys | .[]')" || { echo "policy: roots unreadable ($pol)" >&2; return 1; }
+  [ -n "$out" ] || { echo "policy: no roots in $pol" >&2; return 1; }
+  mapfile -t names <<<"$out"
+  for n in "${names[@]}"; do
+    d="$(mgmt_policy_get "$pol" ".roots.\"$n\".dir")" && [ -n "$d" ] && [ "$d" != null ] \
+      || { echo "policy: root $n has no dir" >&2; return 1; }
+    dirs+=("$d")
+  done
+  out="$(mgmt_policy_get "$pol" '.foreign_roots[]?')" || { echo "policy: foreign_roots unreadable" >&2; return 1; }
+  mapfile -t foreigns <<<"$out"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     foreign=0
-    for dir in "${foreigns[@]}"; do case "$f" in "$dir"/*) foreign=1 ;; esac; done
+    for dir in "${foreigns[@]}"; do [ -n "$dir" ] || continue; case "$f" in "$dir"/*) foreign=1 ;; esac; done
     [ $foreign = 1 ] && continue
     best=""; bestdir=""
     for i in "${!names[@]}"; do
@@ -151,6 +162,16 @@ mgmt_roots_touched() {
     done
     [ -n "$best" ] && printf '%s\n' "$best"
   done | sort -u
+}
+# mgmt_roots_touched_at <repo-dir> <ref> <files…via stdin> → mgmt_roots_touched over the policy AT
+# <ref> (a temp copy, cleaned up); the classifier's rc survives the cleanup — never end a subshell
+# in `rm -f` and read its status (the #1631 fail-open).
+mgmt_roots_touched_at() {
+  local pol rc
+  pol="$(mgmt_policy_load "$1" "$2")" || return 1
+  mgmt_roots_touched "$pol"; rc=$?
+  rm -f "$pol"
+  return $rc
 }
 mgmt_root_dir()   { mgmt_policy_get "$1" ".roots.\"$2\".dir"; }
 # mgmt_root_excludes <policy> <root> <checkout-root-dir> → "-exclude=<addr>" args for every state
@@ -167,7 +188,9 @@ mgmt_root_excludes() {
 mgmt_root_apply() { mgmt_policy_get "$1" ".roots.\"$2\".apply // false"; }
 
 # mgmt_stage1 <policy> <repo-dir> <base-sha> <head-sha> → prints hits "rule<TAB>file<TAB>detail",
-# one per line; exit 0 with no output = clean. Pure: reads the trees/diff as DATA, executes nothing.
+# one per line; exit 0 with no output = clean; rc 1 = the classifier could not read the policy (no
+# verdict — the caller skips the head, never treats it as clean). Pure: reads the trees/diff as
+# DATA, executes nothing.
 # Only files inside a touched root's dir are judged (foreign roots + non-tofu paths are not this
 # box's business). Checks: deny_paths (basename glob), symlinks in the head tree, deny_patterns
 # over ADDED lines of the diff.
@@ -176,8 +199,10 @@ mgmt_stage1() {
   local -a files roots dirs denyp denyre
   mapfile -t files < <(git -C "$repo" diff --name-only "$base" "$head" --)
   [ ${#files[@]} -gt 0 ] || return 0
-  mapfile -t roots < <(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$pol")
-  [ ${#roots[@]} -gt 0 ] || return 0
+  local roots_out
+  roots_out="$(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$pol")" || return 1   # classifier failed: no verdict
+  [ -n "$roots_out" ] || return 0
+  mapfile -t roots <<<"$roots_out"
   mapfile -t dirs < <(for r in "${roots[@]}"; do mgmt_root_dir "$pol" "$r"; done)
   mapfile -t denyp  < <(mgmt_policy_get "$pol" '.deny_paths[]?')
   mapfile -t denyre < <(mgmt_policy_get "$pol" '.deny_patterns[]?')
