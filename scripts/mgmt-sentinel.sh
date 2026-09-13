@@ -53,7 +53,7 @@ while IFS=$'\t' read -r pr sha; do
   [ -n "$pr" ] || continue
   if verdicted "$sha"; then continue; fi
   log "[#$pr@${sha:0:8}] evaluating"
-  git -C "$REPO" fetch --quiet origin "refs/pull/$pr/head:refs/mgmt/pr-$pr" || { log "[#$pr] fetch of the head failed — skipped this run"; continue; }
+  mgmt_git -C "$REPO" fetch --quiet origin "refs/pull/$pr/head:refs/mgmt/pr-$pr" || { log "[#$pr] fetch of the head failed — skipped this run"; continue; }
   base="$(git -C "$REPO" merge-base origin/master "$sha" 2>/dev/null)" || { log "[#$pr] no merge-base with master — skipped"; continue; }
   files_out="$(git -C "$REPO" diff --name-only "$base" "$sha" --)" || { log "[#$pr] diff of the head failed — skipped this run"; continue; }   # an empty list reads as "no surface": never from a failed read
   files=(); [ -n "$files_out" ] && mapfile -t files <<<"$files_out"
