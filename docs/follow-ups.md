@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-236** (2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-237** (2026-09-13: FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -1161,6 +1161,15 @@ the block needs pruning, not more headings.
       (safe — no `longhorn_disks`), then -04 **inside a maintenance window**: it is a Garage zone
       node and GAPS `tofu-apply-G2` says a `longhorn_disks` apply reboots the node. Then a belt:
       declared-vs-labelled is a one-line PromQL over `kube_node_labels`. Relates FU-218, FU-072.
+- [ ] **FU-236** — **The `homelab-sentinel` App cutover (ADR-130).** Declared + scaffolded 2026-09-13
+      (`docs/github-apps.yaml`, `agents/coordinator/sentinel-git.yaml`, bootstrap/wallet wiring);
+      the sentinel still posts under the reviewer's token. **Next, in order:** (1) operator: the
+      Create + Install clicks (`scripts/github-app-bootstrap.sh homelab-sentinel manifest` → `convert`
+      → `secrets`), fill `app_id`/`install_id` + the mint's appID/installID, regenerate the exporter
+      json, apply the chain; (2) switch `sentinel-argo.yaml`'s `SENTINEL_STATUS_TOKEN` to
+      `sentinel-git`; (3) pin `integration_id` per required context in `tofu/github/repo_rulesets.tf`
+      (sentinel App id; Actions = 15368); (4) drop `statuses:write` from the reviewer mint + App.
+      Relates FU-098, FU-106.
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
 
