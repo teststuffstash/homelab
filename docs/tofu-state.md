@@ -123,7 +123,7 @@ So the roots do not migrate as a set:
 | `provisioning` | no — Matchbox LXC on Proxmox | **MIGRATED 2026-08-04** |
 | `infisical` | partly | **MIGRATED 2026-08-04** — its state holds the Infisical client secret, so getting it out of a plaintext file was the point; still slated to leave tofu (`minimize-tofu` direction) |
 | `github` | no | operator-only root, host wallet; migrate last if at all |
-| `main` | **yes, fully** | do NOT migrate on the strength of "the others worked". Needs an out-of-cone copy — the timestamped backups `tofu-state-migrate.sh` writes to `~/.claude/homelab-tofu-state-backups/` are that copy today, and something better (off-box, versioned) is what would settle it |
+| `main` | **yes, fully** | **On the management box since 2026-09-13** (ADR-129/-131, FU-012): `/var/lib/mgmt/state/main/terraform.tfstate`, local backend via `-state=`, out of the cone by construction; the jail's copy is a frozen backup (+ `~/.claude/homelab-tofu-state-backups/main-*.tfstate`). The jail plans/applies main THROUGH the box: `devbox run mgmt-tf -- plan` ([`management-box.md`](management-box.md) §MB3). Never migrate it INTO Garage — the row's original reasoning stands |
 
 ## Running a migration
 
