@@ -211,10 +211,13 @@ fi
 # Same tree, same paths, onto the running box — tar over ssh (rsync is in neither the jail nor the
 # closure, found on the first push 2026-09-13). Root extracts with --no-same-owner, so the files
 # stop being the jail user's; modes travel in the archive (0600).
+# ⚠ chmod ONLY the provisioned files, by name: the loops' clones, worktrees and the provider cache
+# live under /var/lib/mgmt too, and a `find -type f -exec chmod 600` there stripped every
+# executable bit (devbox hooks, provider binaries) — exit 126 on the box, 2026-09-13.
 # Host-key pinning: the box's key IS the wallet's, so pin it from the staged .pub instead of TOFU.
 KH="$OUT/known_hosts"
 printf '%s %s\n' "$HOST" "$(cut -d' ' -f1,2 "$OUT/etc/ssh/ssh_host_ed25519_key.pub")" > "$KH"
 tar -C "$OUT" --exclude known_hosts -cf - . \
   | ssh -o UserKnownHostsFile="$KH" -o StrictHostKeyChecking=yes -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
-      'tar -C / --no-same-owner --no-overwrite-dir -xf - && chmod 700 /var/lib/mgmt /var/lib/mgmt/matchbox /var/lib/mgmt/pve-ssh /var/lib/mgmt/runner-app /var/lib/mgmt/sentinel && find /var/lib/mgmt -type f -exec chmod 600 {} + && chmod 600 /etc/ssh/ssh_host_ed25519_key && ls -lR /var/lib/mgmt'
+      'tar -C / --no-same-owner --no-overwrite-dir -xf - && chmod 700 /var/lib/mgmt /var/lib/mgmt/matchbox /var/lib/mgmt/pve-ssh /var/lib/mgmt/runner-app /var/lib/mgmt/sentinel && chmod 600 /var/lib/mgmt/env /var/lib/mgmt/*.tfvars /var/lib/mgmt/talosconfig /var/lib/mgmt/kubeconfig /var/lib/mgmt/matchbox/* /var/lib/mgmt/pve-ssh/* /var/lib/mgmt/runner-app/* /var/lib/mgmt/sentinel/app-key.pem /etc/ssh/ssh_host_ed25519_key && ls -l /var/lib/mgmt'
 echo "pushed to root@$HOST — units read /var/lib/mgmt/env at their next start; nothing to restart"
