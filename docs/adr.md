@@ -2097,3 +2097,23 @@ box ships `bootMode = "bios"` pending a firmware read; the `nixos/` tree is a ne
 CI gate yet; SSH authorized keys become declarative config (rotation a two-commit diff); the host key and every other credential are wallet data placed as root-only files outside the store, never in the flake.
 Mechanism, phases and the probe set: [`management-box.md`](management-box.md). Tracker: FU-097
 (which surfaces it may reconcile — still the gate), FU-012 (state + creds move here).
+
+### ADR-130 — One GitHub App per writing role, and every required status context pinned to its poster (2026-09-13)
+
+**Status:** Accepted (operator, 2026-09-13). **Decision:** an identity that WRITES to the GitHub
+surface (approves, posts a status, authors, merges) is its own App, named by the role — a machine
+policy verdict never wears the approver's name. The `iac-sentinel` status (and the planned
+`management-sentinel` one) move from the reviewer App's token to a new **`homelab-sentinel`** App;
+every required status context in `tofu/github/repo_rulesets.tf` gains the `integration_id` of the
+App that posts it. **Considered:** *keep reusing the reviewer token* — rejected: attribution on
+GitHub is the identity, never the role, so "who did what" blurs; one key serving two roles rotates
+and revokes for both; and an UNPINNED required context is satisfiable by any token with statuses
+write, so every extra consumer of the reviewer token widens the set that can forge the gate.
+*Labels or body markers instead of identities* — rejected: forgeable, and invisible where GitHub's
+own semantics key on identity (self-approval, CODEOWNERS, bypass actors). **Why:** the doctrine's
+"one consumer, one token" applied one level up — the ruleset gate is only as strong as the set of
+identities that can post its context. **Consequences:** one console mint per writing role (the
+sanctioned manual class, `secrets.md` §Minting doctrine) + a `github-apps.yaml` row; the cutover
+order matters (App live → `sentinel-git` Secret → argo wiring → pin → drop `statuses:write` from
+the reviewer). ⚖ NOT decided here: coordinator identity is role × STACK (the one cross-repo
+writer) — parked with the operator's platform-request / handoff experiments. Tracker: FU-236.

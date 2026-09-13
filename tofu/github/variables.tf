@@ -115,6 +115,14 @@ variable "protected_repos" {
 # in-cluster updater sources the App KEY via Infisical→ESO; the private-key var is gone).
 # The id is NOT sensitive, so it lives here as a default instead of a github-tf.sh injection —
 # a bare `tofu apply` works without the cred dir.
+# ADR-130: required status contexts are PINNED to the App that posts them — an unpinned context is
+# satisfiable by any token with statuses:write. The sentinel's id here; Actions' fixed id inline.
+variable "sentinel_gh_app_id" {
+  description = "homelab-sentinel GitHub App id (posts the required iac-sentinel context; not sensitive)."
+  type        = string
+  default     = "4929271"
+}
+
 variable "merge_gh_app_id" {
   description = "homelab-merge GitHub App id (ruleset bypass actor; not sensitive)."
   type        = string

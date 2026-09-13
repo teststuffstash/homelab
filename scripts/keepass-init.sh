@@ -110,6 +110,9 @@ add_secret garage-browse-secret  "$(file_or "$HOME/.claude/homelab-garage/browse
 add_secret github-reviewer-app-id "$(file_or "$HOME/.claude/homelab-github-reviewer/app-id" REPLACE)"
 add_secret github-reviewer-installation-id "$(file_or "$HOME/.claude/homelab-github-reviewer/installation-id" REPLACE)"
 add_secret github-reviewer-slug  "$(file_or "$HOME/.claude/homelab-github-reviewer/slug" REPLACE)"
+add_secret github-sentinel-app-id "$(file_or "$HOME/.claude/homelab-github-sentinel/app-id" REPLACE)"
+add_secret github-sentinel-installation-id "$(file_or "$HOME/.claude/homelab-github-sentinel/installation-id" REPLACE)"
+add_secret github-sentinel-slug  "$(file_or "$HOME/.claude/homelab-github-sentinel/slug" REPLACE)"
 add_secret snore-recorder-key    "$(file_or "$HOME/.claude/homelab-snore-recorder/key.txt" REPLACE)"
 # (homelab-ha/{auth_code,esphome_flow_id} are expired one-time OAuth/flow artifacts — not migrated.)
 
@@ -172,6 +175,7 @@ add_attachment forgejo-keys        id_ed25519.pub "$HOME/.claude/homelab-forgejo
 add_attachment forgejo-keys        gpg-private.asc "$HOME/.claude/homelab-forgejo/gpg-private.asc"
 add_attachment forgejo-keys        gpg-public.asc "$HOME/.claude/homelab-forgejo/gpg-public.asc"
 add_attachment github-reviewer-app private-key.pem "$HOME/.claude/homelab-github-reviewer/private-key.pem"
+add_attachment github-sentinel-app private-key.pem "$HOME/.claude/homelab-github-sentinel/private-key.pem"
 add_attachment github-runner-app   private-key.pem "$HOME/.claude/homelab-runner-app/private-key.pem"
 # esphome flash secrets (wifi + OTA + api key — the !secret file, gitignored in-repo)
 add_attachment droplet-esphome     secrets.yaml   "$(dirname "$0")/../esphome/config/secrets.yaml"
