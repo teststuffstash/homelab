@@ -26,6 +26,7 @@ acme_dns_token           cloudflare-acme-token         cloudflare/acme-token    
 ingress_write_token      cloudflare-ingress-write      cloudflare/ingress-write      CLOUDFLARE_INGRESS_WRITE
 inventory_read_token     cloudflare-inventory-read     cloudflare/inventory-read     CLOUDFLARE_INVENTORY_READ
 jail_read_all_token      cloudflare-jail-read-all      cloudflare/jail-read-all      -
+mgmt_read_token          cloudflare-mgmt-read          cloudflare/mgmt-read          -
 "
 
 # cred root + wallet, same dual-path resolution as wallet-files.sh
