@@ -306,6 +306,60 @@ in
     };
   };
 
+  # ── the SENTINEL: plan-on-PR (ADR-131, docs/management-box.md §MB3) ──────────────────────────
+  # Plans open homelab PR heads behind the input allowlist (policy/mgmt/plan-input.yaml, read
+  # from MASTER), posts the verdict under the homelab-sentinel App. The timer is the LEVEL
+  # backstop; the cluster's doorbell is the later edge. Same env file as the belt (the
+  # per-role split is FU-237's residual); the App key sits beside it, root-only.
+  systemd.services.mgmt-sentinel = {
+    description = "management sentinel: plan open PR heads behind the input allowlist, verdict-only back";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    path = with pkgs; [ bash git devbox nix curl jq openssl util-linux coreutils gnugrep gawk gnused ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "40m";
+      Environment = [ "HOME=/root" ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ];
+    };
+    script = "${repoPath}/scripts/mgmt-sentinel.sh";
+  };
+  systemd.timers.mgmt-sentinel = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/5";
+      RandomizedDelaySec = "30s";
+      Persistent = true;
+    };
+  };
+
+  # ── the APPLY loop (phases B/C): master moved → plan → apply-allowlist → apply ────────────────
+  # Applies ONLY plans whose every changed address is on the policy's apply allowlist (the
+  # residue the operator ruled the test surface, 2026-09-13); anything else is refused with a
+  # `management-apply` status on the commit and waits for a human. Shares the sentinel's flock:
+  # the two read the same state file.
+  systemd.services.mgmt-apply = {
+    description = "management apply loop: master → plan → apply-allowlist → apply";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    path = with pkgs; [ bash git devbox nix curl jq openssl util-linux coreutils gnugrep gawk gnused ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "40m";
+      Environment = [ "HOME=/root" ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ];
+    };
+    script = "${repoPath}/scripts/mgmt-apply.sh";
+  };
+  systemd.timers.mgmt-apply = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:2/5";
+      RandomizedDelaySec = "30s";
+      Persistent = true;
+    };
+  };
+
   # ── the box holds no workloads, no storage, no container runtime ──────────────────────────────
   documentation.enable = false;
   services.xserver.enable = false;
