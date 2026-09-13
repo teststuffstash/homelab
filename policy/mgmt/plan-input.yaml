@@ -49,6 +49,14 @@ deny_patterns:              # ERE over the ADDED lines of the PR diff inside a r
   - 'path\.cwd'
   - 'local-exec|remote-exec'
   - 'source[[:space:]]*=[[:space:]]*"(git|hg|s3|gcs|https?)::?'   # remote module sources: init would FETCH them
+  # A plan READS what a data source or an import block names, with the root's credentials — for
+  # the kubernetes provider that is the cluster-admin kubeconfig (no scoped variant yet, FU-012),
+  # and a "not found" error quoted back would make the sentinel an existence oracle for any
+  # object in any namespace, from any PR (review finding on homelab#1635 — it applied to `main`
+  # since day one, not only to the cloudflare root). New ones land as their own change, planned
+  # by a human in the jail; the resources the roots already declare plan as before.
+  - 'data[[:space:]]+"kubernetes_'
+  - '^[[:space:]]*import[[:space:]]*\{'
 apply_addresses:            # resource addresses (globs) the box may APPLY unattended — the residue (operator, 2026-09-13)
   main:
     - "kubernetes_config_map.*"

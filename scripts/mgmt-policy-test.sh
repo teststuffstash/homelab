@@ -57,6 +57,10 @@ case_ file-absolute     deny_patterns 'printf "output \"x\" { value = file(\"/va
 case_ file-parent       deny_patterns 'printf "output \"x\" { value = filebase64(\"../../etc/x\") }\n" >> tofu/monitoring.tf'
 case_ path-cwd          deny_patterns 'printf "output \"x\" { value = path.cwd }\n" >> tofu/monitoring.tf'
 case_ symlink           symlink       'ln -s /etc/passwd tofu/dashboards/evil.json'
+# a plan READS what these name, with the root's credentials (the #1635 existence-oracle finding)
+case_ k8s-data-source   deny_patterns 'printf "data \"kubernetes_secret\" \"x\" { metadata { name = \"cnpg\" namespace = \"kube-system\" } }\n" >> tofu/monitoring.tf'
+case_ import-block      deny_patterns 'printf "import {\n  to = kubernetes_secret.x\n  id = \"kube-system/cnpg\"\n}\n" >> tofu/monitoring.tf'
+case_ k8s-resource-ok   none          'printf "resource \"kubernetes_secret\" \"y\" { metadata { name = \"y\" } }\n" >> tofu/monitoring.tf'
 case_ foreign-only      noroot        'echo "y" > tofu/cloudflare-token/main.tf'
 case_ cloudflare-only   none          'echo "y" > tofu/cloudflare/main.tf'
 case_ github-only       none          'echo "y" > tofu/github/main.tf'

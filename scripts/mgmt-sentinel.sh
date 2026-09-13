@@ -87,8 +87,12 @@ while IFS=$'\t' read -r pr sha; do
     if [ $rc = 1 ]; then
       state=failure; failed_roots="$failed_roots $root"
       tail3="$(tail -3 "$out.log" 2>/dev/null)"
-      { echo; echo "### \`$root\` — plan ERRORED"; 
-        if printf '%s' "$tail3" | grep -q '='; then echo "see the box journal (output withheld: it may carry values)"; else echo '```'; printf '%s\n' "$tail3"; echo '```'; fi
+      # what leaves the box on an error: the tofu error HEADLINES only (`Error: …` lines, ≤3), never
+      # the detail body — a provider's message can name live objects and values, and this comment
+      # is public (the #1635 review: an error quoted verbatim is an existence oracle)
+      heads="$(grep -E '^(│ )?Error: ' "$out.log" 2>/dev/null | sed -E 's/^│ //' | grep -v 'error running script' | head -3)"
+      { echo; echo "### \`$root\` — plan ERRORED"
+        if [ -n "$heads" ] && ! printf '%s' "$heads" | grep -q '='; then echo '```'; printf '%s\n' "$heads"; echo '```'; echo "(headlines only — the full log stays in the box journal)"; else echo "see the box journal (output withheld: it may carry values)"; fi
       } >>"$bodyf"
       log "[#$pr] $root plan errored: $(tr '\n' ' ' <<<"$tail3" | head -c 200)"
       continue
