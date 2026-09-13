@@ -15,7 +15,7 @@ let
   #
   # Read it in the installer: `ls -l /dev/disk/by-id/ | grep -v part`. NOT /dev/sdX — enumeration
   # on this box changes with a USB stick plugged in (machines.yaml), and this directive PARTITIONS.
-  device = "/dev/disk/by-id/CHANGE-ME-AT-INSTALL";
+  device = "/dev/disk/by-id/ata-KINGSTON_SV300S37A120G_50026B785500EFD9"; # read in the installer 2026-09-13
 in
 {
   disko.devices.disk.main = {

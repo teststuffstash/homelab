@@ -40,7 +40,7 @@ let
 
   # Set at install time — see the boot.loader block. "bios" is the conservative default for the
   # pilot; "uefi" is the better one on hardware that supports it.
-  bootMode = "bios";
+  bootMode = "uefi"; # read in the installer 2026-09-13: /sys/firmware/efi present
 in
 {
   # ── identity + network ────────────────────────────────────────────────────────────────────────
