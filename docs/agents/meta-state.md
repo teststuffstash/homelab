@@ -526,16 +526,21 @@ standing set below; what differs is cadence and the act rule:
   oracle-specs` shows 5Gi, then any fleet CI re-publish re-materializes the specs sites;
   close-purge of dead pr-*/ prefixes tracked oracle-fleet#318.
 
-- **R12 / sentinel pickup (2026-09-13):** (1) the MANAGEMENT SENTINEL ADR is WRITTEN —
-  ADR-131 + `management-box.md` §MB3 + FU-237, **PR#1615 merged** 12:23Z.
-  FU-237's next = build-order step 1: the `policy/mgmt/` allowlist + root list (`provisioning`)
-  as its OWN PR, landed before any script — the exceptions ordering rule. The grounding read set
-  (~50k, not the corpus — FU-164) was the one listed in the previous pickup; it sufficed, with
-  `docs/tofu-state.md`'s cone table + `nixos/hosts/mgmt/default.nix`'s units added; (2) static CI: `tofu validate` per root + `nix eval` of both flake outputs (runner
-  nix-cache question, management-box.md open table); (3) FU-097's table: its first rows are RULED (operator, 2026-09-13, PR#1616 merged
-  12:54Z): the main root's raw-k8s residue (HA/UniFi/monitoring/forgejo/kata) is the box's test
-  surface, kept in tofu on purpose; router/CP/Proxmox human until CARP pair + third CP; order =
-  box proves B/C → Renovate through the box (G-D) → ArgoCD migration + fleet growth. Phase B now
-  waits on `main`'s state reaching the box (FU-012), not on the table; FU-012's box-scoped creds swap; (4) ~~oracle-fleet `evidence` job region~~ DONE stack-side (operator, 2026-09-13). Box: `mgmt-release` ref does
-  not exist — creating it at master arms the pull loop (timers still masked by design).
-
+- **R12 pickup (2026-09-13 evening — the box's first end-to-end apply DONE):** ADR-131 (PR#1615),
+  the test-surface ruling (PR#1616), the build (PR#1619 — sentinel + apply loop + main's state on
+  the box), and **PR#1618 went PR → `management-sentinel` (box plan, 27 s) → bot review → merge
+  14:30Z → `mgmt-apply` tick 14:32Z → APPLIED 14:32:59Z → `management-apply` status on the merge
+  commit → tag verified in the cluster's ConfigMap.** Live on the box: `mgmt-sentinel.timer`
+  (*:0/5) + `mgmt-apply.timer` (*:2/5), generation promoted by `mgmt-confirm`; the system checkout
+  was fast-forwarded to master BY HAND (73ca9b8b) — `mgmt-release` still does not exist (operator's
+  ref; the pull timer stays masked). **Next, in order:** (1) **PR#1617** (the `management-sentinel`
+  required-context flip, tofu/github — OPERATOR-applied on the host; the box posts on every open
+  head now, but a box outage would hold all homelab PRs until the in-cluster no-root poster
+  exists — FU-237 (b)); (2) FU-237 residuals (b) no-root poster, (c) per-role user/env split,
+  (d) doorbell edge; (3) FU-012's box-scoped credential mints (the env table rows are the jail's);
+  (4) static CI: `tofu validate` per root + `nix eval` of both flake outputs (runner nix-cache
+  question, management-box.md open table); (5) oracle handoffs filed as homelab#1620 (read-only
+  composition token) + #1621 (`/corpus-published` doorbell), sub-issues of oracle-fleet#579 —
+  queued for the fixer lane; both merge on the codeowner read (new credential / `agents/`).
+  ⚠ **Jail-side change of habit:** `devbox run tf-plan|tf-apply` for main REFUSE — main's state is
+  on the box; `devbox run mgmt-tf -- plan|apply` (committed ref, `MGMT_REF=origin/<branch>`).
