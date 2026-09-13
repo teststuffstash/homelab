@@ -20,6 +20,9 @@ deny_paths:                 # basename globs a PR may not touch inside a root (s
   - "providers.tf"
   - "backend.tf"
   - "*.tfvars"
+  - "*.tfvars.json"      # auto-loaded like tfvars (review finding, #1619)
+  - "*.auto.tfvars*"
+  - "*.tf.json"          # config in JSON evades the ERE patterns below
   - "*.tfrc"
   - ".terraformrc"
   - "*.sh"
@@ -33,6 +36,7 @@ deny_patterns:              # ERE over the ADDED lines of the PR diff inside a r
   - '(file|fileset|filebase64|templatefile)\([[:space:]]*"(/|\.\.)'
   - 'path\.cwd'
   - 'local-exec|remote-exec'
+  - 'source[[:space:]]*=[[:space:]]*"(git|hg|s3|gcs|https?)::?'   # remote module sources: init would FETCH them
 apply_addresses:            # resource addresses (globs) the box may APPLY unattended — the residue (operator, 2026-09-13)
   main:
     - "kubernetes_config_map.*"

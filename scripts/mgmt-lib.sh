@@ -207,9 +207,16 @@ mgmt_stage1() {
 # mgmt_plan_root <checkout> <policy> <root> <plan-out> [lock:true|false] → rc 0 no-changes / 2 changes /
 # 1 error (stderr+stdout captured to <plan-out>.log). main = local state via -state=; a root
 # with backend.tf = tofu-state-env.sh in a subshell (the mgmt-probe.sh pattern).
+# ⚠ EXECUTION SURFACE (review finding on homelab#1619): <checkout> may be an UNTRUSTED PR
+# worktree. Nothing of it is ever executed — `devbox run` resolves devbox.json (its init_hook
+# runs!) from the cwd, so every tool invocation runs FROM $REPO (the loop's own clone, reset to
+# origin/master each run) and tofu is pointed at the worktree by ABSOLUTE -chdir; the state-env
+# script is $REPO's copy, never the worktree's. Stage 1 judges the tofu tree only, and this is
+# what makes that sufficient.
 mgmt_plan_root() {
   local co="$1" pol="$2" root="$3" out="$4" lock="${5:-false}" dir rel logf varfile stateargs
   rel="$(mgmt_root_dir "$pol" "$root")"; dir="$co/$rel"; logf="$out.log"
+  [ -n "${REPO:-}" ] && [ -f "$REPO/devbox.json" ] || { echo "REPO unset or not a checkout — refusing to run tooling from the plan tree" >"$logf"; return 1; }
   varfile=""; [ -n "${TOFU_VAR_DIR:-}" ] && [ -f "$TOFU_VAR_DIR/$root.tfvars" ] && varfile="-var-file=$TOFU_VAR_DIR/$root.tfvars"
   stateargs=""
   if [ ! -f "$dir/backend.tf" ]; then
@@ -220,14 +227,14 @@ mgmt_plan_root() {
   mkdir -p "${TF_PLUGIN_CACHE_DIR:-/var/lib/mgmt/plugin-cache}"; export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-/var/lib/mgmt/plugin-cache}"
   (
     set +u
-    cd "$co" || exit 1
+    cd "$REPO" || exit 1   # the TRUSTED tree: devbox.json + scripts/ from origin/master
     if [ -f "$dir/backend.tf" ]; then
-      TOFU_STATE_ROOT_DIR="$dir" . "$co/scripts/tofu-state-env.sh" >/dev/null 2>&1 || { echo "tofu-state-env.sh failed for $root" >&2; exit 1; }
+      TOFU_STATE_ROOT_DIR="$dir" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || { echo "tofu-state-env.sh failed for $root" >&2; exit 1; }
     fi
-    devbox run --quiet -- tofu -chdir="$rel" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 \
-      || { echo "tofu init failed for $root" >&2; devbox run --quiet -- tofu -chdir="$rel" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
+    devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 \
+      || { echo "tofu init failed for $root" >&2; devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
     # shellcheck disable=SC2086
-    devbox run --quiet -- tofu -chdir="$rel" plan -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile
+    devbox run --quiet -- tofu -chdir="$dir" plan -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile
   ) >"$logf" 2>&1
   local rc=$?
   case $rc in 0|2) return $rc ;; *) return 1 ;; esac
@@ -237,7 +244,7 @@ mgmt_plan_root() {
 # resource change that is not a no-op (actions joined by '+', e.g. delete+create = replace).
 mgmt_plan_changes() {
   local co="$1" rel="$2" out="$3"
-  ( cd "$co" && devbox run --quiet -- tofu -chdir="$rel" show -json "$out" ) 2>/dev/null \
+  ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$co/$rel" show -json "$out" ) 2>/dev/null \
     | jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv'
 }
 # mgmt_plan_counts <changes-lines> → "add change destroy replace"
@@ -261,7 +268,9 @@ mgmt_apply_allowed() {
   done
 }
 
-# mgmt_clone <dir> <url> — own clone for a loop (never the box's system checkout); fetch each run.
+# mgmt_clone <dir> <url> — own clone for a loop (never the box's system checkout); fetch each run
+# and RESET the working tree to origin/master: this tree is the trusted tooling (devbox.json,
+# scripts/) every plan runs from, so it must be master's, not clone-time's.
 mgmt_clone() {
   local dir="$1" url="$2"
   if [ ! -d "$dir/.git" ]; then
@@ -269,4 +278,5 @@ mgmt_clone() {
     git clone --quiet "$url" "$dir" || return 1
   fi
   git -C "$dir" fetch --quiet --prune origin || return 1
+  git -C "$dir" reset --quiet --hard origin/master || return 1
 }

@@ -218,6 +218,14 @@ exit path exists.
 pinned to `homelab-sentinel`'s integration id in `tofu/github/repo_rulesets.tf`, the in-cluster
 no-root poster in the same change; (5) the doorbell.
 
+**The execution surface, precisely** (the #1619 review finding): stage 1 judges only the tofu
+tree, so stage 2 must execute NOTHING else from the head — `devbox run` resolves `devbox.json`
+(whose `init_hook` runs) from its cwd, so every tool call runs from the loop's OWN clone reset to
+`origin/master`, tofu is pointed at the worktree by absolute `-chdir`, and the state-env script is
+master's copy. A PR's `devbox.json`, `scripts/`, hooks — never executed. The policy also denies
+the JSON/auto variants of tfvars and config (`*.tfvars.json`, `*.auto.tfvars*`, `*.tf.json`)
+and remote module sources (init would fetch them).
+
 **Built 2026-09-13 (steps 1–3 in one PR, since nothing read the policy before its reader
 existed):** `policy/mgmt/plan-input.yaml`, `scripts/mgmt-lib.sh` (App token, policy, stage 1,
 plan summary), `scripts/mgmt-sentinel.sh`, `scripts/mgmt-apply.sh`, `scripts/mgmt-policy-test.sh`
