@@ -1165,7 +1165,8 @@ the block needs pruning, not more headings.
       → `secrets`), fill `app_id`/`install_id` + the mint's appID/installID, regenerate the exporter
       json, apply the chain; (2) switch `sentinel-argo.yaml`'s `SENTINEL_STATUS_TOKEN` to
       `sentinel-git`; (3) pin `integration_id` per required context in `tofu/github/repo_rulesets.tf`
-      (sentinel App id; Actions = 15368); (4) drop `statuses:write` from the reviewer mint + App.
+      (sentinel App id; Actions = 15368); (4) reviewer `statuses` write→read: mint + declaration
+      (PR'd 2026-09-13), then the console un-grant (until then GithubAppPermissionDrift says so).
       Relates FU-098, FU-106.
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
