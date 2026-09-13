@@ -227,7 +227,12 @@ tree, so stage 2 must execute NOTHING else from the head — `devbox run` resolv
 `origin/master`, tofu is pointed at the worktree by absolute `-chdir`, and the state-env script is
 master's copy. A PR's `devbox.json`, `scripts/`, hooks — never executed. The policy also denies
 the JSON/auto variants of tfvars and config (`*.tfvars.json`, `*.auto.tfvars*`, `*.tf.json`)
-and remote module sources (init would fetch them).
+and remote module sources (init would fetch them) — and, since the #1635 review, **new
+`kubernetes_*` data sources and `import` blocks**: a plan READS what those name with the root's
+credentials, which for the kubernetes provider is the cluster-admin kubeconfig (`main` and
+`cloudflare` both ride it; no scoped variant exists yet — FU-012's next mint), and an error
+quoted back would make the sentinel an existence oracle for any object from any PR. The same
+review narrowed what an errored plan posts: the tofu `Error:` headlines only, never the body.
 
 **What the verdict covers, per root — the reviewer's expectation.** `main`: everything, and the
 apply allowlist decides what ships. `provisioning`: everything, plan only. `github`: repo rulesets

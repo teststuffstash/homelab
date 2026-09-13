@@ -94,7 +94,7 @@ for root in "${apply_roots[@]}"; do
   # the default path, an empty state, "Saved plan does not match the given state") — repeat it.
   stateargs=""; [ -f "$REPO/$rel/backend.tf" ] || stateargs="-state=$MGMT_STATE_DIR/$root/terraform.tfstate"
   # shellcheck disable=SC2086
-  if ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$rel" apply -input=false $stateargs "$out" ) >"$out.apply.log" 2>&1; then
+  if ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$rel" apply -no-color -input=false $stateargs "$out" ) >"$out.apply.log" 2>&1; then
     log "$root: APPLIED (+$a ~$c -$d)"
     mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d applied by the management box"
   else
