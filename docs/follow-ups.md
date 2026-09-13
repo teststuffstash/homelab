@@ -341,8 +341,10 @@ six OVERSIZE items pointer-ized into
       the `use_lockfile = false` ruling and the runbook: [`docs/tofu-state.md`](tofu-state.md) —
       3 of 5 roots on encrypted Garage state since 2026-08-04. **Next:** `main` stays local until
       it has an out-of-cone copy, and **that copy's home is now named — the R12 pilot**, whose
-      phase A is this item's other half (SSH creds + rotation + how tofu reaches the box):
-      [`spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md) §The pilot's build order.
+      phase A is this item's other half — the credential path is BUILT 2026-09-13
+      (`scripts/mgmt-provision-secrets.sh`, [`management-box.md`](management-box.md) §Credentials);
+      it ships the JAIL's entries, so what remains is box-scoped tokens (Garage state key,
+      Matchbox-Proxmox, OPNsense, Cloudflare) swapped in one table line each, then `main`'s copy.
       `github` is host-only. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
@@ -400,8 +402,8 @@ six OVERSIZE items pointer-ized into
       human-applied + a named drift belt. **It is the first deliverable and is unwritten.**
       Surfaces + candidate shapes: `ROADMAP.md` §Deploy paths; the per-root split + the
       dependency-cone rule: [`dependency-upgrades.md`](dependency-upgrades.md); the end-state +
-      **the R12 pilot's ruled build order**, which this table precedes:
-      [`spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
+      **the R12 pilot's ruled build order**, which this table precedes (ADR-129):
+      [`management-box.md`](management-box.md).
       **2026-09-12:** the hardware stopped being the blocker — `thinkcentre` left cluster duty to
       be the pilot and sits idle — so this table is the only thing the build waits on.
       Relates FU-051, FU-012, ADR-093.
