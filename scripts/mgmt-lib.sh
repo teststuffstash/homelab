@@ -17,7 +17,7 @@
 # never attribute values. Plan text and `tofu show -json` stay local.
 
 _mgmt_log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
-log() { _mgmt_log "$@"; }
+declare -F log >/dev/null 2>&1 || log() { _mgmt_log "$@"; }   # a sourcing script's own log() wins (iac-sentinel.sh)
 
 MGMT_API="https://api.github.com"
 _MGMT_TOKEN=""

@@ -97,6 +97,44 @@ post_status() {
   fi
 }
 
+# post_status_ctx <repo> <sha> <context> <state> <description> — same write, any context (the
+# management-sentinel no-root verdict below rides the same App token: ADR-130, one App per role).
+post_status_ctx() {
+  [ -n "$STATUS_TOKEN" ] || return 0
+  if ! curl -fsS --max-time 10 \
+       -H "Authorization: token $STATUS_TOKEN" -H "Accept: application/vnd.github+json" \
+       "https://api.github.com/repos/${ORG}/$1/statuses/$2" \
+       -d "{\"state\":\"$4\",\"context\":\"$3\",\"description\":\"$5\"}" >/dev/null 2>&1; then
+    log "[$1@$2] STATUS POST FAILED ($3=$4) — check stays pending, next tick retries"
+  fi
+}
+
+# ── management-sentinel, the IN-CLUSTER half (ADR-131, docs/management-box.md §MB3 scope split) ──
+# A homelab head that touches NO box-held root gets its `management-sentinel` success HERE, on
+# the edge's timescale (seconds after a push), so the management box — a ≤5-min tick — only ever
+# answers tofu-touching PRs, and a box outage holds only those. Same policy file (THIS clone's
+# master copy, never the PR's), same classifier (mgmt-lib's mgmt_roots_touched), same App identity.
+# The box skips a head that already carries the context, so the two never disagree: a root-touching
+# head gets NOTHING from here and waits for the box's plan. Operator, 2026-09-13 (homelab#1629: a
+# reviewer spawned and stood aside while the box's tick had not come).
+MGMT_LIB="${HERE}/mgmt-lib.sh"
+mgmt_noroot_post() {   # <repo> <pr> <sha>
+  local repo="$1" pr="$2" sha="$3" have files roots pol
+  [ "$repo" = "homelab" ] && [ "$pr" != "-" ] && [ -n "$STATUS_TOKEN" ] || return 0
+  [ -f "$MGMT_LIB" ] && [ -f "${HERE}/../policy/mgmt/plan-input.yaml" ] || return 0
+  have="$(gh api "repos/${ORG}/${repo}/commits/${sha}/status" --jq '[.statuses[]|select(.context=="management-sentinel")]|length' 2>/dev/null)" || { log "[$repo#$pr] management-sentinel: status probe failed — leaving the head to the box"; return 0; }
+  [ "$have" = "0" ] || return 0
+  files="$(gh api "repos/${ORG}/${repo}/pulls/${pr}/files" --paginate --jq '.[].filename' 2>/dev/null)" || { log "[$repo#$pr] management-sentinel: file list probe failed — leaving the head to the box"; return 0; }
+  # the classifier, from the trusted tree; REPO is where devbox resolves (this clone's root)
+  roots="$(REPO="${HERE}/.." bash -c '. "$1"; pol="$(mgmt_policy_load "$REPO" HEAD)" || exit 1; printf "%s\n" "$2" | mgmt_roots_touched "$pol"; rm -f "$pol"' _ "$MGMT_LIB" "$files" 2>/dev/null)" || { log "[$repo#$pr] management-sentinel: classifier failed — leaving the head to the box"; return 0; }
+  if [ -z "$roots" ]; then
+    post_status_ctx "$repo" "$sha" management-sentinel success "no box-held surface touched (in-cluster)"
+    log "[$repo#$pr@${sha:0:8}] management-sentinel=success — no box-held surface (in-cluster half)"
+  else
+    log "[$repo#$pr@${sha:0:8}] management-sentinel: touches $(tr '\n' ' ' <<<"$roots")— the box plans it"
+  fi
+}
+
 # evaluate <repo> <ref/sha> <pr-number-or-'-'> <author-or-'-'> → violations counted in $VIOLATIONS
 evaluate() {
   repo="$1"; ref="$2"; pr="$3"; author="$4"
@@ -288,6 +326,7 @@ for repo in $SENTINEL_REPOS; do
         fi
       fi
     fi
+    mgmt_noroot_post "$repo" "$num" "$sha"
     if evaluate "$repo" "$sha" "$num" "$author"; then
       if [ "${GITLEAKS_TOOL_ERROR:-0}" -ne 0 ] || [ "${KYVERNO_TOOL_ERROR:-0}" -ne 0 ]; then
         # an engine that could not run means the verdict is INCOMPLETE — fail closed as a probe
