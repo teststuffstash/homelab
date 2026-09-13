@@ -37,6 +37,11 @@ if [ "$(cat "$BLK/removable" 2>/dev/null || echo 0)" != "1" ]; then
   [ "${MGMT_USB_FORCE:-0}" = "1" ] || exit 1
 fi
 SIZE_B=$(( $(cat "$BLK/size") * 512 ))
+if [ "$SIZE_B" -eq 0 ]; then
+  # Seen 2026-09-13: a DataTraveler that had two partitions at plug-in re-enumerated as 0 sectors
+  # (the by-id links were stale). The kernel sees no media — nothing here can fix that.
+  echo "ERROR: the kernel reports $REAL with NO media (size 0) — re-plug the stick, ideally another port directly on the machine; if it stays 0 (check: sudo dmesg | grep -i $(basename "$REAL")) the stick is dead, use another" >&2; exit 1
+fi
 [ "$SIZE_B" -ge $((2 * 1024 * 1024 * 1024)) ] || { echo "ERROR: $REAL is $((SIZE_B / 1024 / 1024)) MiB — the ISO is ~1.5 GB" >&2; exit 1; }
 if awk -v d="$REAL" '$1 ~ "^"d {found=1} END {exit !found}' /proc/mounts; then
   echo "ERROR: $REAL has mounted partitions — unmount first:" >&2; grep "^$REAL" /proc/mounts >&2; exit 1
