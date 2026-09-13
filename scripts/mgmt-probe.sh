@@ -249,7 +249,7 @@ gate_store() {
   if [ ! -d /nix/store ]; then
     passed gate:store "no store (jail)"; return
   fi
-  if ! nix store info >/dev/null 2>&1; then
+  if ! nix --extra-experimental-features nix-command store info >/dev/null 2>&1; then
     failed gate:store "nix daemon does not answer"; return
   fi
   local free_kb
