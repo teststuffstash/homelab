@@ -2094,6 +2094,6 @@ spike's own criterion. **Consequences:** a tofu bump's canary is `plan`, never a
 newer binary may write state an older one cannot read — assumed, unverified for our pin);
 **kernel-class bumps need hands on the pilot**, because boot counting is systemd-boot's and the
 box ships `bootMode = "bios"` pending a firmware read; the `nixos/` tree is a new surface with no
-CI gate yet; SSH keys and host keys become declarative config, rotation a two-commit diff.
+CI gate yet; SSH authorized keys become declarative config (rotation a two-commit diff); the host key and every other credential are wallet data placed as root-only files outside the store, never in the flake.
 Mechanism, phases and the probe set: [`management-box.md`](management-box.md). Tracker: FU-097
 (which surfaces it may reconcile — still the gate), FU-012 (state + creds move here).

@@ -41,6 +41,8 @@
 #                 from the box is a phase-A deliverable, not a probe.
 #   PUSHGATEWAY   e.g. http://192.168.40.x:9091 — unset means "do not push" (jail-safe default)
 #   TALOS_NODE    a node IP for the client/server skew check (default: the first control plane)
+#   TALOSCONFIG / KUBECONFIG   where the file-shaped creds are (box: /var/lib/mgmt/*, set by the env
+#                 file scripts/mgmt-provision-secrets.sh writes; jail default: tofu/{talos,kube}config)
 #   SKIP          space-separated check names to skip: tofu talos ansible creds
 set -uo pipefail
 
@@ -119,9 +121,12 @@ check_tofu() {
 # misbehaves, and every recovery path through the Talos API goes with it.
 check_talos() {
   skip_requested talos && { skipped talos "SKIP requested"; return; }
-  [ -f "$REPO/tofu/talosconfig" ] || { skipped talos "no talosconfig in this checkout"; return; }
+  # On the box the file is /var/lib/mgmt/talosconfig (TALOSCONFIG from the env file); in the jail
+  # it is the tofu-generated one in the checkout.
+  local tc="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
+  [ -f "$tc" ] || { skipped talos "no talosconfig at $tc"; return; }
   local out
-  out="$(tool talosctl --talosconfig tofu/talosconfig -n "$TALOS_NODE" version --short)" || {
+  out="$(tool talosctl --talosconfig "$tc" -n "$TALOS_NODE" version --short)" || {
     failed talos "talosctl version failed: $(printf '%s' "$out" | tail -2 | tr '\n' ' ')"; return; }
   # `version --short` prints "Talos vX.Y.Z" under Client: and a "Tag: vX.Y.Z" line under Server:.
   local client server
@@ -175,8 +180,8 @@ check_ansible() {
 check_creds() {
   skip_requested creds && { skipped creds "SKIP requested"; return; }
   local missing=() f
-  for f in tofu/kubeconfig tofu/talosconfig; do
-    [ -s "$REPO/$f" ] || missing+=("$f")
+  for f in "${KUBECONFIG:-$REPO/tofu/kubeconfig}" "${TALOSCONFIG:-$REPO/tofu/talosconfig}"; do
+    [ -s "$f" ] || missing+=("$f")
   done
   if [ ${#missing[@]} -eq 0 ]; then
     passed creds "kubeconfig + talosconfig readable"

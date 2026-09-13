@@ -33,7 +33,7 @@ states for every deadman — local to the target.
 
 | | Phase | Deliverable | State |
 |---|---|---|---|
-| **A** | the box is maintainable | OS installed declaratively, SSH credentials + a rotation scheme, `main`'s tofu state and the dangerous creds moved here (FU-012's other half), the probe + the local deadman | 🔜 config in `nixos/`, install pending |
+| **A** | the box is maintainable | OS installed declaratively, SSH credentials + a rotation scheme, `main`'s tofu state and the dangerous creds moved here (FU-012's other half), the probe + the local deadman | 🔜 config in `nixos/`, the secrets path built (§Credentials), install pending |
 | **B** | one trivial apply | a `tofu apply` of something nobody depends on — dashboard-shaped, explicitly NOT an unattended control-plane or router operation. The point of the first rollout is the PATH, not the change | ⬜ gated on FU-097's table naming the surfaces |
 | **C** | triggers | homelab PR merges (the `ROADMAP.md` §Deploy paths gap: a merged change to an unreconciled surface deploys nothing today) + drift detection (the `tofu plan` cron FU-097 asks for) | ⬜ |
 | — | *then* the management network | recovery path 2 and the rest of the spike's original order, resumed once the box is dull | ⬜ |
@@ -160,18 +160,47 @@ are the belt. This is also why `main`'s out-of-cone copy belongs here.
 
 ## Credentials
 
-- **SSH authorized keys are declarative** (in the flake), so rotation is a diff: add the new key,
-  rebuild, verify, remove the old — two commits, never a lockout. The credential's existence and
-  scope stay config, only the private half is data: [`secrets.md`](secrets.md) §Minting doctrine.
-- **SSH host keys are declared from a wallet attachment**, or a reinstall silently breaks the
-  jail's `known_hosts`.
-- **Secrets on the box borrow the appliance tier's FILE shape, not its store**: read once at
-  provision, written `mode 600`. ⚠ The snore-recorder appliance reads from **Infisical**
-  (`secrets.md` §The three tiers) — which this box cannot use, Infisical being in-cluster, i.e.
-  the dependency it exists to escape. The store here is the **Tier-0 wallet**, which makes this a
-  NEW pattern rather than an inherited one. **Not** `sops-nix` — this lab
-  rejected it for giving no real at-rest protection when the key shares the disk (`secrets.md`).
-- ⚠ The box is a **consumer** of Tier-0, never its home: the wallet stays with the operator.
+**The closure holds no secrets, structurally:** the repo is public and `/nix/store` is
+world-readable, so anything the flake can see, every process can. That single fact shapes all of
+this section.
+
+- **SSH authorized keys are declarative** (`nixos/hosts/mgmt/keys/*.pub`, read by the flake), so
+  rotation is a diff: add the new key, rebuild, verify, remove the old — two commits, never a
+  lockout. Only the PUBLIC half is there — the credential's existence and scope stay config, the
+  private half is data: [`secrets.md`](secrets.md) §Minting doctrine (precedent: `tofu/ci-runner.tf`
+  commits a pubkey the same way). ⚠ Track them: a flake sees only tracked files. `jail.pub` is the
+  pve-ssh-seed key the jail already uses for Proxmox; the operator's laptop key is the second.
+- **Everything else is a FILE outside the store, placed by ONE script** —
+  `scripts/mgmt-provision-secrets.sh`. It stages a tree from the Tier-0 wallet
+  (`~/.claude/homelab-mgmt/extra-files/`: the sshd host key at `etc/ssh/`, the belt's credentials
+  as `var/lib/mgmt/env`, plus `talosconfig`/`kubeconfig` beside it, all root-only `0600`) and that
+  tree is what `nixos-anywhere --extra-files` ships at **install**; `--push` rsyncs the same tree
+  onto the running box for a **rotation**. Units read the env file via `EnvironmentFile=` at each
+  start, so a rotation restarts nothing. This borrows the appliance tier's FILE shape (read once at
+  provision, plaintext, mode 600) with the **wallet** as the store — the snore-recorder appliance
+  reads from Infisical, which this box cannot (in-cluster, i.e. the dependency it exists to escape),
+  so it is a new pattern, not an inherited one. **Not** `sops-nix`/agenix: the lab rejected them for
+  giving no real at-rest protection when the key shares the disk (`secrets.md` §Why no SOPS).
+- **The host key is wallet data, not config** (`mgmt-ssh-host`, minted once by `keepass-init.sh`):
+  `services.openssh.hostKeys` only names the path — sshd *generates* a key when the path is empty,
+  and a reinstall that regenerates it silently breaks the jail's `known_hosts`. So `--extra-files`
+  is not optional. The push path pins the box's host key from that same wallet entry instead of
+  trusting on first use.
+- **A version bump never touches a secret.** `nixos-rebuild test|boot` rebuilds the closure from
+  git and leaves `/etc/ssh`, `/var/lib/mgmt` and `/root` alone; only a *reinstall* re-provisions
+  (`--extra-files`), and only a *rotation* re-runs the script. Authorized keys are the one credential
+  that rotates through git.
+- **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
+  need (the Garage state key + the state passphrase, the Cloudflare and Matchbox-Proxmox tokens,
+  the OPNsense API pair) — the main root's `TF_VAR_*` set moves only when FU-097's table says the
+  box may touch `main`. ⚠ Today's entries are the **jail's**, a phase-A shortcut against the
+  doctrine's "one consumer, one token, at its tier"; the script's table is one line per credential
+  so each swaps for a box-scoped entry as it is minted (FU-012's next). The state passphrase is
+  shared by nature — it is the state's key, not a consumer's.
+- ⚠ The box is a **consumer** of Tier-0, never its home: the wallet stays with the operator, and the
+  scripts that read it (`keepass-env.sh`, `tofu-state-env.sh`, `opnsense-playbook.sh`) all yield to
+  a pre-set environment, which is how the same probe runs in the jail (wallet) and on the box (env
+  file). Proven 2026-09-13: the belt passes 5/5 from a home with no wallet, the env file alone.
 
 ## Open, and deliberately not built yet
 

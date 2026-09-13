@@ -277,6 +277,12 @@ in
       Type = "oneshot";
       TimeoutStartSec = "30m";
       Environment = [ "HOME=/root" "MODE=belt" ];
+      # The credentials. NOT in this closure (public repo, world-readable store): a root-only file
+      # placed by scripts/mgmt-provision-secrets.sh (--extra-files at install, --push to rotate),
+      # read at each start so a rotation needs no restart. The leading "-" means a missing file
+      # does not fail the unit — the probe then SKIPS loudly, which is the "not provisioned yet"
+      # signal, not a fault. The same line goes on the apply unit when phase B adds one.
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
     script = "${repoPath}/scripts/mgmt-probe.sh";
   };

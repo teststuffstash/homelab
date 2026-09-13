@@ -6,10 +6,11 @@
 #
 # Install (once, from a USB stick — the stick carries only an SSH-able installer). `--extra-files`
 # is not optional: sshd GENERATES a host key when none is present, and a reinstall that regenerates
-# it silently breaks the jail's known_hosts. Materialise the wallet's key first (scripts/
-# wallet-files.sh), then:
-#   mkdir -p /tmp/xf/etc/ssh && install -m600 <wallet key> /tmp/xf/etc/ssh/ssh_host_ed25519_key
-#   nix run nixpkgs#nixos-anywhere -- --extra-files /tmp/xf --flake ./nixos#mgmt root@<installer-ip>
+# it silently breaks the jail's known_hosts. The tree it ships (host key + the belt's env file +
+# talosconfig/kubeconfig) is staged from the wallet by ONE script — no secret is ever in this flake:
+#   scripts/mgmt-provision-secrets.sh          # stages ~/.claude/homelab-mgmt/extra-files, prints:
+#   nix run nixpkgs#nixos-anywhere -- --extra-files <that dir> --flake ./nixos#mgmt root@<installer-ip>
+# Rotation later = `scripts/mgmt-provision-secrets.sh --push` (same tree, onto the running box).
 # Update — the box does this itself from the operator-advanced `mgmt-release` ref
 # (mgmt-pull.service → mgmt-confirm.service). By hand, the same two steps in the same order:
 #   nixos-rebuild --flake /var/lib/homelab/nixos#mgmt test   # live now, boot default UNCHANGED
