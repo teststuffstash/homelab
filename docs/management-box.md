@@ -193,15 +193,18 @@ this section.
   that rotates through git.
 - **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
   need (the Garage state key + the state passphrase, the Cloudflare and Matchbox-Proxmox tokens,
-  the OPNsense API pair) — the main root's `TF_VAR_*` set moves only when FU-097's table says the
-  box may touch `main`. ⚠ Today's entries are the **jail's**, a phase-A shortcut against the
+  the OPNsense API pair), plus the file-shaped ones the `provisioning` root reads by path — the
+  Matchbox gRPC client files and the **Proxmox SSH seed key** (found one plan at a time on the
+  box's first day, 2026-09-13) — and the root's gitignored `terraform.tfvars`. The main root's
+  `TF_VAR_*` set moves only when FU-097's table says the box may touch `main`. ⚠ Today's entries are the **jail's**, a phase-A shortcut against the
   doctrine's "one consumer, one token, at its tier"; the script's table is one line per credential
   so each swaps for a box-scoped entry as it is minted (FU-012's next). The state passphrase is
   shared by nature — it is the state's key, not a consumer's.
 - ⚠ The box is a **consumer** of Tier-0, never its home: the wallet stays with the operator, and the
   scripts that read it (`keepass-env.sh`, `tofu-state-env.sh`, `opnsense-playbook.sh`) all yield to
   a pre-set environment, which is how the same probe runs in the jail (wallet) and on the box (env
-  file). Proven 2026-09-13: the belt passes 5/5 from a home with no wallet, the env file alone.
+  file). Proven 2026-09-13: the belt passes 4/4 **under its unit on the installed box**, the env
+  file alone; the gate 5/5 under `mgmt-confirm`, which promoted generation 2.
 
 ## Open, and deliberately not built yet
 

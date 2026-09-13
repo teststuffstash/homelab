@@ -111,9 +111,31 @@ ENVF="$OUT/var/lib/mgmt/env"
   echo "TALOSCONFIG=/var/lib/mgmt/talosconfig"
   echo "KUBECONFIG=/var/lib/mgmt/kubeconfig"
   echo "TOFU_VAR_DIR=/var/lib/mgmt"
+  # tofu/provisioning's matchbox provider reads its gRPC client files by path (variables default to
+  # the JAIL's wallet cache, ~/.claude/homelab-matchbox/ — the box's first plan failed on exactly
+  # that, 2026-09-13). Same wallet attachments, box-local paths.
+  echo "TF_VAR_matchbox_ca=/var/lib/mgmt/matchbox/ca.crt"
+  echo "TF_VAR_matchbox_client_cert=/var/lib/mgmt/matchbox/client.crt"
+  echo "TF_VAR_matchbox_client_key=/var/lib/mgmt/matchbox/client.key"
+  # ...and its proxmox provider SSHes into pve with the seed key (variable defaults to the jail's
+  # cache, ~/.claude/homelab-pve-ssh/). THE dangerous credential FU-012 names — the point of the box.
+  echo "TF_VAR_proxmox_ssh_private_key_file=/var/lib/mgmt/pve-ssh/id_ed25519"
 } >> "$ENVF"
 echo "  + var/lib/mgmt/env  (${#ENV_TABLE[@]} entries)"
 
+# 3a. the Matchbox gRPC client files (wallet entry matchbox-grpc, three attachments)
+install -d -m700 "$OUT/var/lib/mgmt/matchbox"
+for att in ca.crt client.crt client.key; do
+  kp attachment-export -q --no-password -k "$KEYF" "$DB" matchbox-grpc "$att" "$OUT/var/lib/mgmt/matchbox/$att" >/dev/null \
+    || { echo "FATAL: wallet entry matchbox-grpc/$att missing" >&2; exit 1; }
+  chmod 600 "$OUT/var/lib/mgmt/matchbox/$att"; echo "  + var/lib/mgmt/matchbox/$att  (← matchbox-grpc/$att)"
+done
+# 3a'. the Proxmox SSH seed key (wallet entry pve-ssh-seed) — ⚠ the same key the box trusts in
+#      keys/jail.pub; a box-scoped pve key is on FU-012's list with the other per-consumer mints.
+install -d -m700 "$OUT/var/lib/mgmt/pve-ssh"
+kp attachment-export -q --no-password -k "$KEYF" "$DB" pve-ssh-seed id_ed25519 "$OUT/var/lib/mgmt/pve-ssh/id_ed25519" >/dev/null \
+  || { echo "FATAL: wallet entry pve-ssh-seed/id_ed25519 missing" >&2; exit 1; }
+chmod 600 "$OUT/var/lib/mgmt/pve-ssh/id_ed25519"; echo "  + var/lib/mgmt/pve-ssh/id_ed25519  (← pve-ssh-seed/id_ed25519)"
 # 3b. per-root var files the jail keeps gitignored in the checkout — a fresh clone on the box has
 #     none, and `plan` fails on the first variable without a default (ssh_public_keys, 2026-09-13).
 #     Public keys, so config not secret, but they live where the jail keeps them: ride along.
@@ -151,5 +173,5 @@ KH="$OUT/known_hosts"
 printf '%s %s\n' "$HOST" "$(cut -d' ' -f1,2 "$OUT/etc/ssh/ssh_host_ed25519_key.pub")" > "$KH"
 tar -C "$OUT" --exclude known_hosts -cf - . \
   | ssh -o UserKnownHostsFile="$KH" -o StrictHostKeyChecking=yes -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
-      'tar -C / --no-same-owner --no-overwrite-dir -xf - && chmod 700 /var/lib/mgmt && chmod 600 /var/lib/mgmt/* /etc/ssh/ssh_host_ed25519_key && ls -l /var/lib/mgmt'
+      'tar -C / --no-same-owner --no-overwrite-dir -xf - && chmod 700 /var/lib/mgmt /var/lib/mgmt/matchbox /var/lib/mgmt/pve-ssh && find /var/lib/mgmt -type f -exec chmod 600 {} + && chmod 600 /etc/ssh/ssh_host_ed25519_key && ls -lR /var/lib/mgmt'
 echo "pushed to root@$HOST — units read /var/lib/mgmt/env at their next start; nothing to restart"
