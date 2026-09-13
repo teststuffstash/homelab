@@ -10,15 +10,20 @@ roots:                      # what the box plans; a PR path under the root's dir
   main:         { dir: tofu,              apply: true  }   # everything under tofu/ not claimed by another entry
   provisioning: { dir: tofu/provisioning, apply: false }
   github:       { dir: tofu/github,       apply: false,   # read-only PAT + Garage state, FU-238; applies stay on the host
-                  plan_exclude_types: [github_repository, github_organization_ruleset] }
+                  plan_exclude_types: [github_repository, github_organization_ruleset],
+                  plan_exclude_note: "GitHub returns these only to an admin-WRITE token; the box holds a read-only one — a change to them is judged by the host's github-tofu plan" }
                   # github_repository: GitHub hides repo merge settings (allow_*_merge, delete_branch_on_merge)
                   # from any token without admin WRITE → a read-only plan diffs all 13 repos forever.
                   # github_organization_ruleset: the endpoint requires org Administration WRITE for a
                   # fine-grained PAT (docs.github.com/rest/orgs/rules — "Get all organization repository
                   # rulesets"; 403 verified 2026-09-13 with read). Both stay host-only; REPO rulesets (the
                   # pinned required checks, ADR-130), org secrets and deploy keys read fine — the gate's parts.
+  cloudflare:   { dir: tofu/cloudflare,   apply: false,   # read-only token (mgmt-read.tf), Garage state, FU-238; applies stay in the jail
+                  plan_exclude_types: [data.cloudflare_zero_trust_tunnel_cloudflared_token],
+                  plan_exclude_note: "the tunnel TOKEN is a credential read no Read group covers (401 under the read-all token) — its two in-cluster dependents, the cloudflared Secret and Deployment, drop out with it; a change to them is judged by the jail's plan" }
+                  # ⚠ not cone-clean for the BELT (mgmt-probe.sh): half the root rides the kubernetes provider,
+                  # so its plan asserts the cluster is up — the sentinel plans it per PR head, the belt does not.
 foreign_roots:              # planned elsewhere (host / jail) — a PR touching only these gets "no box-held surface"
-  - tofu/cloudflare
   - tofu/cloudflare-token
   - tofu/infisical
 deny_paths:                 # basename globs a PR may not touch inside a root (stage 1) — provider/backend/CLI surface
