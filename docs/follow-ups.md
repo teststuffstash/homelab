@@ -415,10 +415,12 @@ six OVERSIZE items pointer-ized into
       (dependency-upgrades.md) and "migrate last if at all" (tofu-state.md). **github** first —
       operator steps: `scripts/github-mgmt-pat-bootstrap.sh create|secrets|verify` (the PAT), then
       `tofu-state-migrate github` on the host; the App keys in the wallet — **all three DONE
-      2026-09-13**, github wired (PAT + keys on the box, policy root, belt, docs). **Next:**
-      **cloudflare**, same shape, mint is code (`tofu/cloudflare-token`, host — a read-only token
-      to replace the write key the box holds today), then its policy root. Civo = stack repos;
-      AWS has no root. Relates FU-237, FU-012.
+      2026-09-13**, github wired (PAT + keys on the box, policy root, belt, docs; repos + the org
+      ruleset excluded — admin-write-only on the API). **Next:** (a) the box's github plan drifts
+      on 2 org secrets until the HOST re-applies with the wallet's deploy/renovate keys (move the
+      host's flat-file cred dirs aside → `github-tofu plan` = those 2 → `apply`); (b) **cloudflare**,
+      same shape, mint is code (`tofu/cloudflare-token`, host). Civo = stack repos; AWS has no root.
+      Relates FU-237, FU-012.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
