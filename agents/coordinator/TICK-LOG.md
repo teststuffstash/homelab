@@ -8683,4 +8683,18 @@ once — ArgoCD consumes it), this journal + meta-state. PRs: #1608 #1609 #1610 
   `yq -o=json`) I did not know about; then one reviewer finding, a parenthetical I had spliced
   mid-sentence into §Credentials (made its own sentence). Both in-PR.
 
-Direct commits this session: meta-state + this journal (batched; push at wind-down). PR: #1615.
+- **Operator ruling, recorded (PR#1616):** the main root's raw-k8s residue the ArgoCD lever left
+  (HA, UniFi, monitoring dashboards/secrets, forgejo runner, kata) is KEPT in tofu on purpose — the
+  box's nondestructive apply surface while one OPNsense + one CP make router/CP/Proxmox touches
+  cluster downtime. Order: box proves B/C on it → Renovate through the box (G-D's next run) →
+  ArgoCD migration + CARP pair / third CP / more Proxmox. FU-097's first rows ruled by it; the
+  item trimmed to the cap. Prompted by the operator's retrieval question ("wasn't there a table
+  about what can't be in ArgoCD?") — it was dependency-upgrades.md §Tofu is not one class +
+  ADR-005's governing rule; the helm half (FU-136) was done, the raw half untracked → now ruled.
+  Also: the oracle-fleet evidence-job region item is done stack-side (pickup struck).
+  #1616's one finding was a stale-docs catch dressed as a word nit: the reviewer read
+  "installed" as contradicting the phase-A row + the host table — both were stale (the box IS
+  installed; SSH-verified: hostname mgmt, NixOS 26.05, up 3.5 h, timers masked). Fixed the
+  rows + `machines.yaml` (host table regenerated), merged 12:54Z.
+
+Direct commits this session: meta-state + this journal (batched; push at wind-down). PRs: #1615, #1616.
