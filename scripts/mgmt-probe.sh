@@ -332,6 +332,10 @@ case "$MODE" in
     check_talos
     check_ansible
     check_creds
+    # devbox on the box (nixpkgs' 0.17.2) rewrites devbox.lock's plugin_version fields that the
+    # jail's 0.17.5 wrote — package pins unchanged, but the checkout is left dirty (2026-09-13).
+    # Put it back so the tree stays "what git says".
+    git -C "$REPO" checkout -q -- devbox.lock 2>/dev/null || true
     publish
     log "belt: $PASS pass, $FAIL fail, $SKIPPED skip"
     [ "$FAIL" -eq 0 ]

@@ -76,7 +76,14 @@ ENV_TABLE=(
 
 # ── stage ───────────────────────────────────────────────────────────────────────────────────────
 rm -rf "$OUT"
-install -d -m700 "$OUT" "$OUT/etc/ssh" "$OUT/var/lib/mgmt"
+# ⚠ The tree's DIRECTORY modes matter: this tree is extracted over the box's real `/`. On the first
+# push (2026-09-13) every intermediate dir was 0700, tar applied that to /, /etc, /var, /var/lib —
+# and systemd-resolved (unprivileged) lost /etc/resolv.conf: DNS dead until a chmod by hand. So the
+# intermediates mirror the real filesystem (0755); only /var/lib/mgmt (0700) and the FILES (0600)
+# are private. The push below ALSO refuses to touch existing directories (--no-overwrite-dir).
+install -d -m700 "$OUT"
+install -d -m755 "$OUT/etc" "$OUT/etc/ssh" "$OUT/var" "$OUT/var/lib"
+install -d -m700 "$OUT/var/lib/mgmt"
 
 # 1. the sshd host key (attachment — NEVER --stdout, it mangles binaries; export straight to file)
 kp attachment-export -q --no-password -k "$KEYF" "$DB" mgmt-ssh-host ssh_host_ed25519_key \
@@ -144,5 +151,5 @@ KH="$OUT/known_hosts"
 printf '%s %s\n' "$HOST" "$(cut -d' ' -f1,2 "$OUT/etc/ssh/ssh_host_ed25519_key.pub")" > "$KH"
 tar -C "$OUT" --exclude known_hosts -cf - . \
   | ssh -o UserKnownHostsFile="$KH" -o StrictHostKeyChecking=yes -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
-      'tar -C / --no-same-owner -xf - && chmod 700 /var/lib/mgmt && chmod 600 /var/lib/mgmt/* /etc/ssh/ssh_host_ed25519_key && ls -l /var/lib/mgmt'
+      'tar -C / --no-same-owner --no-overwrite-dir -xf - && chmod 700 /var/lib/mgmt && chmod 600 /var/lib/mgmt/* /etc/ssh/ssh_host_ed25519_key && ls -l /var/lib/mgmt'
 echo "pushed to root@$HOST — units read /var/lib/mgmt/env at their next start; nothing to restart"
