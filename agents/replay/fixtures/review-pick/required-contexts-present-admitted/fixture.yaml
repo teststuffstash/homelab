@@ -1,0 +1,13 @@
+# review-pick-required-contexts-present-admitted (homelab#1629, 2026-09-13) — the twin of
+# required-context-absent-held: every required context has reported SUCCESS, so the PR is green
+# and the lane picks it. Guards the new clause against over-holding (a required list that can
+# never be satisfied would starve every lane — this row would then go empty).
+name: review-pick-required-contexts-present-admitted
+mode: actions
+pins:
+  - MP-T03
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:review-pick
+  - file:../two-lanes-two-picks/post.sh

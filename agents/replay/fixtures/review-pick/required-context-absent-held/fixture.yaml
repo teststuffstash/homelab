@@ -1,0 +1,22 @@
+# review-pick-required-context-absent-held (homelab#1629, 2026-09-13) — a required context that
+# has NOT reported yet is PENDING, not green.
+#
+# WHAT THIS ROW ADDS. `green` judged only the checks that had reported; a required context still
+# to come (the management box's `management-sentinel`, posted on a ≤5-min tick) was invisible, so
+# the reflex dispatched a reviewer the moment CI went green and the reviewer stood aside at STEP 0
+# (checks-pending) — a full spawn, once per PR, for nothing. Seen live on #1629.
+#
+# CONDITION UNDER REPLAY. #150: armed, undrafted, zero reviews, `ci` + `iac-sentinel` reported
+# SUCCESS, `management-sentinel` absent from statusCheckRollup while the bridge's `required_json`
+# names all three. THE CONTRACT: NO pick line — the lane stays empty until the third context
+# reports. The sibling `required-contexts-present-admitted` is the same world with the context
+# present and must pick.
+name: review-pick-required-context-absent-held
+mode: actions
+pins:
+  - MP-T03
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:review-pick
+  - file:../two-lanes-two-picks/post.sh
