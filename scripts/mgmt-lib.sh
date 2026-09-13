@@ -177,12 +177,16 @@ mgmt_root_dir()   { mgmt_policy_get "$1" ".roots.\"$2\".dir"; }
 # mgmt_root_excludes <policy> <root> <checkout-root-dir> → "-exclude=<addr>" args for every state
 # resource of a type in roots[X].plan_exclude_types (github: the admin-only repo settings). Reads
 # the STATE's address list (never the PR tree) — the exclusion set cannot be widened by a head.
+# rc 1 when the policy or the state list cannot be read — the caller fails the plan rather than
+# running it un-excluded (a silently empty exclusion set is the #1631 fail-open class).
 mgmt_root_excludes() {
-  local pol="$1" root="$2" dir="$3" t
+  local pol="$1" root="$2" dir="$3" t types_out addrs
   local -a types
-  mapfile -t types < <(mgmt_policy_get "$pol" ".roots.\"$root\".plan_exclude_types[]?")
-  [ ${#types[@]} -gt 0 ] || return 0
-  ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$dir" state list 2>/dev/null ) \
+  types_out="$(mgmt_policy_get "$pol" ".roots.\"$root\".plan_exclude_types[]?")" || return 1
+  [ -n "$types_out" ] || return 0
+  mapfile -t types <<<"$types_out"
+  addrs="$( cd "$REPO" && devbox run --quiet -- tofu -chdir="$dir" state list 2>/dev/null )" || return 1
+  printf '%s\n' "$addrs" \
     | while IFS= read -r addr; do for t in "${types[@]}"; do case "$addr" in "$t".*) printf -- '-exclude=%s\n' "$addr" ;; esac; done; done
 }
 mgmt_root_apply() { mgmt_policy_get "$1" ".roots.\"$2\".apply // false"; }
@@ -197,15 +201,22 @@ mgmt_root_apply() { mgmt_policy_get "$1" ".roots.\"$2\".apply // false"; }
 mgmt_stage1() {
   local pol="$1" repo="$2" base="$3" head="$4"
   local -a files roots dirs denyp denyre
-  mapfile -t files < <(git -C "$repo" diff --name-only "$base" "$head" --)
-  [ ${#files[@]} -gt 0 ] || return 0
-  local roots_out
+  # EVERY read below is `$(…) || return 1` — never `mapfile < <(…)`, which discards the producer's
+  # rc: a failed git diff / policy read would otherwise judge the head CLEAN (empty file list, no
+  # dirs, no deny rules) — the #1631 fail-open class, second round.
+  local files_out roots_out dirs_out denyp_out denyre_out r
+  files_out="$(git -C "$repo" diff --name-only "$base" "$head" --)" || return 1
+  [ -n "$files_out" ] || return 0
+  mapfile -t files <<<"$files_out"
   roots_out="$(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$pol")" || return 1   # classifier failed: no verdict
   [ -n "$roots_out" ] || return 0
   mapfile -t roots <<<"$roots_out"
-  mapfile -t dirs < <(for r in "${roots[@]}"; do mgmt_root_dir "$pol" "$r"; done)
-  mapfile -t denyp  < <(mgmt_policy_get "$pol" '.deny_paths[]?')
-  mapfile -t denyre < <(mgmt_policy_get "$pol" '.deny_patterns[]?')
+  dirs_out="$(for r in "${roots[@]}"; do mgmt_root_dir "$pol" "$r" || exit 1; done)" || return 1
+  mapfile -t dirs <<<"$dirs_out"
+  denyp_out="$(mgmt_policy_get "$pol" '.deny_paths[]?')" || return 1
+  denyre_out="$(mgmt_policy_get "$pol" '.deny_patterns[]?')" || return 1
+  denyp=(); [ -n "$denyp_out" ] && mapfile -t denyp <<<"$denyp_out"
+  denyre=(); [ -n "$denyre_out" ] && mapfile -t denyre <<<"$denyre_out"
   local f inside d pat mode base_f
   local -a judged=()
   for f in "${files[@]}"; do
@@ -271,7 +282,8 @@ mgmt_plan_root() {
     [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"
     devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 \
       || { echo "tofu init failed for $root" >&2; devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
-    mapfile -t excludes < <(mgmt_root_excludes "$pol" "$root" "$dir")
+    excl_out="$(mgmt_root_excludes "$pol" "$root" "$dir")" || { echo "plan_exclude_types for $root could not be resolved (policy or state list unreadable) — not planning un-excluded" >&2; exit 1; }
+    excludes=(); [ -n "$excl_out" ] && mapfile -t excludes <<<"$excl_out"
     # what this plan did NOT judge — the verdict must say so (a reviewer reads the comment, not the policy)
     printf '%s\n' "${excludes[@]#-exclude=}" | grep -v '^$' > "$out.excluded" || true
     # shellcheck disable=SC2086

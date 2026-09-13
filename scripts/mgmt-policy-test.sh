@@ -78,6 +78,16 @@ fail_ policy-missing   'printf "tofu/github/x.tf\n" | mgmt_roots_touched "$T/abs
 fail_ policy-no-roots  'echo "deny_paths: []" > "$T/empty.yaml"; printf "tofu/github/x.tf\n" | mgmt_roots_touched "$T/empty.yaml"'
 fail_ root-without-dir 'printf "roots:\n  main: { apply: true }\n" > "$T/nodir.yaml"; printf "tofu/x.tf\n" | mgmt_roots_touched "$T/nodir.yaml"'
 fail_ stage1-rc        '( _yq() { return 7; }; mgmt_stage1 "$POL" "$T" "$BASE" "$(git -C "$T" rev-parse c-versions-tf)" )'
+fail_ stage1-bad-head  'mgmt_stage1 "$POL" "$T" "$BASE" 0000000000000000000000000000000000000000'
+# the SIBLING reads inside stage 1 (dirs / deny_paths / deny_patterns — the second-round #1631
+# finding): _yq fails only from the K-th call onward, so mgmt_roots_touched itself succeeds
+# (1 keys + N dirs + 1 foreign = its call count); with only the first k calls succeeding, the
+# failure lands on the dirs read, then deny_paths, then deny_patterns.
+eval "_yq_real() $(declare -f _yq | sed 1d)"
+nroots="$(_yq_real -r '.roots | keys | length' "$POL")"
+for k in $((nroots+2)) $((nroots+3)) $((nroots+4)); do   # the (k+1)-th call fails: dirs, deny_paths, deny_patterns
+  fail_ "stage1-sibling-read-$k" '( C="$T/yqcount"; echo 0 >"$C"; _yq() { n=$(cat "$C"); echo $((n+1)) >"$C"; [ "$n" -lt '"$k"' ] || return 7; _yq_real "$@"; }; mgmt_stage1 "$POL" "$T" "$BASE" "$(git -C "$T" rev-parse c-versions-tf)" )'
+done
 # the in-cluster half's shape: policy at a ref, temp copy cleaned up, rc preserved across the cleanup
 fail_ at-ref-no-policy 'printf "tofu/github/x.tf\n" | mgmt_roots_touched_at "$T" HEAD'
 fail_ at-ref-yq-hiccup '( cp "$POL" "$T/policy.yaml"; mkdir -p "$T/policy/mgmt" && cp "$POL" "$T/policy/mgmt/plan-input.yaml" && git -C "$T" add -A && git -C "$T" commit -q -m pol; _yq() { return 7; }; printf "tofu/github/x.tf\n" | mgmt_roots_touched_at "$T" HEAD )'
