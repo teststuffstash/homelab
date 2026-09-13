@@ -8799,3 +8799,35 @@ Issues: #1620, #1621.
   `github: +0 ~1 -0 (14 not planned)`, the snore-recorder ruleset named, the excluded types listed.
   #1632 closed unmerged. The operator applied master's tofu/github: the flip is LIVE and the
   deploy/renovate secret bindings restored (3 changed).
+
+## 2026-09-13 (night) — the fail-closed sentinel, cloudflare on the box
+
+- **Resume (17:4xZ):** #1631 (the in-cluster no-root poster) sat CHANGES_REQUESTED: the classifier
+  subshell ENDED in `rm -f`, so its rc never reached the fail-closed handler, and
+  `mapfile < <(…)` discarded yq's rc — a devbox hiccup read as "no root touched" = success.
+  **Four review rounds, all the same class, all valid:** (1) the classifier + `mgmt_roots_touched_at`
+  (rc preserved across cleanup), (2) the sibling reads in stage 1 + both `git diff` reads + the
+  plan-exclude resolution, (3) `mgmt-apply.sh` — a failed read STAMPED the sha as applied — plus
+  the root-dir reads (an empty dir planned `$co/`, "No changes"), (4) the verdict's apply-flag
+  read. Fixtures fail `_yq` from the (K+1)-th call so each read is exercised; 37/37. Merged 18:46Z;
+  proof: #1635's head (committed 18:47:26Z) carried `management-sentinel … (in-cluster)` at
+  18:49:10Z, ahead of the box's 18:50 tick. The reviewer's note that `ci` never ran the fixtures
+  → `mgmt-policy-test` is a serial, diff-gated `ci` step (direct lane, 05ce8e8a; MGMT_PATHS in
+  diff-ci.sh — one home); it ran green on #1635's next head.
+- **FU-238 cloudflare (#1633, merged):** measured from the jail — the read-all token refreshes every
+  state resource EXCEPT the tunnel TOKEN data source (a credential read, 401 under every Read
+  group); the observability token 401s exactly on DNS/DNSSEC, the redirect ruleset and the mTLS
+  pair → the mint is the write token's group set in Read form (`mgmt-read.tf`). Policy root
+  `cloudflare` (apply: false, the data source excluded, a per-root `plan_exclude_note`); the
+  verdict's "not planned" = state list minus what the plan carried, so dependents are named.
+- **The box's first cloudflare verdict errored (dummy #1634):** the ephemeral worktree has no
+  `tofu/kubeconfig` (gitignored) → `scripts/mgmt-root-env/cloudflare.sh` links the box's copy
+  (#1635); `-no-color` because the quoted tail was ANSI. **Review (valid, and older than the
+  hook):** the admin kubeconfig + no stage-1 rule against new `kubernetes_*` data sources = an
+  existence oracle for any PR — and `main` had planned PR heads that way since day one. Closed for
+  every root: stage 1 denies new `kubernetes_*` data sources + `import` blocks; an errored plan
+  posts `Error:` headlines only. Scoped read-only kubeconfig = FU-012's first mint. Re-headed
+  dummy: `cloudflare: +0 ~0 -0 (3 not planned)` at 18:55Z, note + dependents named; closed.
+- Box checkout hand-advanced twice (ccfebb86, then 5387bf50) — `mgmt-release` still absent.
+  Worktrees + local branches cleaned. Direct commits: ci step (pushed at once — CI consumes it),
+  this bookkeeping (wind-down push). PRs: #1631 #1633 #1635 merged; #1634 closed unmerged.

@@ -526,22 +526,18 @@ standing set below; what differs is cadence and the act rule:
   oracle-specs` shows 5Gi, then any fleet CI re-publish re-materializes the specs sites;
   close-purge of dead pr-*/ prefixes tracked oracle-fleet#318.
 
-- **R12 pickup (2026-09-13 wind-down 17:2xZ — the box plans main + provisioning + github, applies
-  the residue; the day's full arc in TICK-LOG).** LIVE on the box: `mgmt-sentinel` (*:0/5) +
-  `mgmt-apply` (*:2/5); first E2E apply PR#1618 done; `tofu/github` plan-only (PR#1628, clean —
-  repos + org ruleset excluded, admin-WRITE-only API); PR#1629 (plan-summary false-zero fix +
-  "not planned" transparency) riding on auto-merge. **Open at wind-down, in order:**
-  (1) **PR#1630** (review-reflex: absent required context = pending; 6 fixtures; FSM rendered) —
-  `agents/` is CODEOWNERS → the OPERATOR approves/merges. (2) **PR#1631** (iac-sentinel posts the
-  no-root `management-sentinel` in seconds, FU-237 (b)) — auto-merge armed; live proof = the
-  first push after merge carries the status before the box's tick. (3) The operator applies
-  master's `tofu/github` on the host (#1617 merged unapplied; makes `management-sentinel`
-  REQUIRED). (4) ~~the dummy PR~~ DONE: #1632 verdict after #1629 = "github: +0 ~1 -0 (14 not
-  planned)" + the excluded-types line, closed unmerged 17:3xZ — the github-root verdict is proven. (5) FU-237 residuals left: (c) per-role user/env split, (d) doorbell edge
-  (now lower priority — #1631 removes the latency for non-tofu PRs). (6) FU-238 next: cloudflare
-  (read-only mint from `tofu/cloudflare-token`, host; policy root). (7) FU-012: box-scoped mints.
-  ⚠ Habits: main runs on the box (`devbox run mgmt-tf -- plan`, committed ref); `mgmt-release`
-  still absent — **the units run the SYSTEM checkout's scripts** (`/var/lib/homelab`, hand-advanced
-  to master today, last 6d71387a): a merged fix to `scripts/mgmt-*` reaches the box only when that
-  checkout advances (the loops' own clones carry policy + tooling, NOT the unit scripts); the box's
-  `/root/mgmt-test` clone removed. Session context hit ~575k — fresh session next.
+- **R12 pickup (2026-09-13 night seat, ~17:4x–19:0xZ — the fail-closed sentinel + cloudflare on
+  the box; arc in TICK-LOG).** LIVE: **#1631** the in-cluster no-root poster (FU-237 (b); proof
+  104 s on #1635's head), **#1633** cloudflare as a plan-only root + the `homelab-mgmt-read` mint,
+  **#1635** the kubeconfig hook + stage 1 denies new `kubernetes_*` data sources / `import` blocks
+  + errored plans post `Error:` headlines only; `mgmt-policy-test` runs in `ci` (05ce8e8a, direct);
+  dummy #1634 proved `cloudflare: +0 ~0 -0 (3 not planned)`, closed. Box checkout hand-advanced to
+  master (5387bf50). **Operator, in order:** (1) host: `devbox run cloudflare-token-tofu plan|apply`
+  → wallet `cloudflare-mgmt-read` → `scripts/mgmt-provision-secrets.sh --push` (the table names the
+  new entry and FATALs without it — mint first); the box then plans cloudflare read-only (first
+  cloudflare-touching PR = the proof). (2) `mgmt-release` is ABSENT — push the ref
+  (`git push origin master:refs/heads/mgmt-release`) to start the box's pull loop; until then every
+  merged `scripts/mgmt-*` fix needs the system checkout hand-advanced (ssh, `git merge --ff-only
+  origin/master` in `/var/lib/homelab`). **Seat next:** FU-012's scoped read-only kubeconfig for the
+  box's plans (the #1635 finding), FU-237 (c) per-role env split, (d) doorbell; `follow-ups-lint`
+  shows 33 STALE archive entries (warnings) — a `/fu-sweep` + `/docs-cleanup` pass is due.
