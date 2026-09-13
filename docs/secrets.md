@@ -14,6 +14,7 @@ the operational how-to. _(SOPS+age is **not used** anywhere — see "Why no SOPS
 | **0 — root / bootstrap** | creds that create the cluster or that the secret platform itself needs | **KeePass wallet** (out-of-repo) | a human / `tofu`, never the cluster |
 | **1·2 — platform & app** | every in-cluster secret (DB creds, API keys, S3 keys, …) | **Infisical** (self-hosted) | **ESO** → a native `Secret` in the app's namespace |
 | **(appliance)** | the offline `snore-recorder` device | **Infisical** (read once at provision) | written as plaintext `mode 600` files onto the device when you flash it |
+| **(management box)** | the out-of-cluster R12 applier, ADR-129 | **KeePass wallet** (read once at provision — it must work with the cluster down) | `scripts/mgmt-provision-secrets.sh`: `--extra-files` at install, `--push` to rotate; never the flake — [`management-box.md`](management-box.md) §Credentials |
 
 **Tier 0 (KeePass).** `~/.claude/homelab-keepass/{homelab.kdbx,homelab.keyx}` — key-file-only so the
 jail reads it unattended; copy both to a laptop to open in KeePassXC. Seed/refresh with

@@ -2070,3 +2070,30 @@ true` — the IAC-G04 sentinel, bot review and the alert belts are the net for t
 on 2026-09-18 compares catches, incidents and quickfix count against the census baseline
 (docs/spikes/codeowner-catches.md) and either reverts by git or promotes the narrowing (then
 ADR-100's owner→rule replacement is the next act, not a wider trial). Tracker: FU-233.
+
+
+### ADR-129 — The management box runs NixOS, installed once from a stick, updated by a git pull it can undo by itself (2026-09-12)
+
+**Status:** Accepted (operator, 2026-09-12, across the R12 design sitting). **Decision:** the R12
+out-of-band applier runs **NixOS** from a flake in this repo (`nixos/`), installed **once from a
+USB stick** via `disko` + `nixos-anywhere` (the stick carries only an SSH-able installer; the
+config comes from git). Its **system closure** is pinned by `nixos/flake.lock`; its **toolchain**
+(`tofu`, `talosctl`, `ansible`) is NOT in that closure — it rides the repo's existing
+`devbox.lock`, so the jail and the box hold one pin. Updates are a **git pull by the box**, on a
+timer, from a reviewed ref; the cluster may poke it but holds no credential into it. A **local**
+post-update probe rolls the generation back on failure. **Considered:** *Debian/Ubuntu + Ansible*
+— matches existing practice, rejected because `apt` is not atomic and this is the one box whose
+recovery is manual; *Flatcar/FCOS* — better built-in A/B rollback, rejected on fit (read-only root
+means the tooling runs in containers, and the update cadence is the channel's, not our pin's);
+*netboot NixOS* — rejected outright (no local generations, and it makes the recovery root depend
+on Matchbox + dnsmasq + the LAN to boot); *PXE for the install* — deferred, not rejected. The
+reasoning for each is [`management-box.md`](management-box.md) §OS and install, not restated here. **Why:** the box must be LIVE independently but need
+not be FRESH independently (operator) — so a remote updater is fine and a remote *rollback* is
+not; generations are the only self-update shape that needs no second machine, which is the
+spike's own criterion. **Consequences:** a tofu bump's canary is `plan`, never a first `apply` (a
+newer binary may write state an older one cannot read — assumed, unverified for our pin);
+**kernel-class bumps need hands on the pilot**, because boot counting is systemd-boot's and the
+box ships `bootMode = "bios"` pending a firmware read; the `nixos/` tree is a new surface with no
+CI gate yet; SSH authorized keys become declarative config (rotation a two-commit diff); the host key and every other credential are wallet data placed as root-only files outside the store, never in the flake.
+Mechanism, phases and the probe set: [`management-box.md`](management-box.md). Tracker: FU-097
+(which surfaces it may reconcile — still the gate), FU-012 (state + creds move here).
