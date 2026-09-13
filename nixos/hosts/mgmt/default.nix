@@ -40,13 +40,13 @@ let
 
   # Set at install time — see the boot.loader block. "bios" is the conservative default for the
   # pilot; "uefi" is the better one on hardware that supports it.
-  # "bios" ON EVIDENCE, not for lack of UEFI (2026-09-13): the installer booted UEFI, and a UEFI
-  # install DID land (Linux Boot Manager entry written) — but this firmware is CSM-first and does
-  # not keep a BootOrder: it appended the entry LAST, and after `efibootmgr -o 0005,...` + reboot it
-  # had rewritten the order to legacy-SSD, legacy-stick, PXE, PXE, 0005 — and booted the stick.
-  # A loader that depends on NVRAM is a coin flip on this box; GRUB in the BIOS-boot partition
-  # rides the legacy "Hard Drive" entry the firmware prefers and needs no NVRAM. Nothing is lost:
-  # boot counting does not exist in this pin either way (docs/management-box.md §Rollback).
+  # "bios" ON EVIDENCE, not for lack of UEFI (2026-09-13): the installer booted UEFI and a UEFI
+  # install DID land (a "Linux Boot Manager" entry was written). But this is a CSM firmware whose
+  # BIOS-setup boot priority (operator-set: USB, disk, PXE) is authoritative — it re-derives the
+  # NVRAM BootOrder from that list on every boot, legacy device entries first, so `efibootmgr -o`
+  # was overwritten and the UEFI entry sat behind the legacy "Hard Drive" one. GRUB in the
+  # BIOS-boot partition IS what that legacy entry boots, and it needs no NVRAM at all. Nothing is
+  # lost: boot counting does not exist in this pin either way (docs/management-box.md §Rollback).
   bootMode = "bios";
 in
 {
