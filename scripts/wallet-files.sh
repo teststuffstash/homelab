@@ -60,6 +60,13 @@ att matchbox-grpc       client.key      "$CRED/homelab-matchbox/client.key"
 att github-runner-app   private-key.pem "$CRED/homelab-runner-app/private-key.pem"
 att github-cv-deploy    id_ed25519      "$CRED/homelab-cv-deploy/id_ed25519" # rasmus-soot-cv write deploy key (tofu/github/deploy_keys.tf; Forgejo publish secret)
 att github-reviewer-app private-key.pem "$CRED/homelab-github-reviewer/private-key.pem"
+# deploy + renovate Apps — in the wallet since 2026-09-13 (imported from their Infisical durable
+# copies) so the management box can plan tofu/github with the count-gated org secrets present
+# (FU-238); the cache dirs are the ones scripts/github-tf.sh's _find_cred looks for.
+att github-deploy-app   private-key.pem "$CRED/homelab-github-deploy/private-key.pem"
+val github-deploy-app-id                "$CRED/homelab-github-deploy/app-id"
+att github-renovate-app private-key.pem "$CRED/homelab-github-renovate/private-key.pem"
+val github-renovate-app-id              "$CRED/homelab-github-renovate/app-id"
 val github-reviewer-app-id              "$CRED/homelab-github-reviewer/app-id"
 val github-reviewer-installation-id     "$CRED/homelab-github-reviewer/installation-id"
 val github-reviewer-slug                "$CRED/homelab-github-reviewer/slug"
