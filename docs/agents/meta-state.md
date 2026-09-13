@@ -525,3 +525,13 @@ standing set below; what differs is cadence and the act rule:
 - **oracle-specs quota** (either jail; oracle-iac#446 merged): verify `garage bucket info
   oracle-specs` shows 5Gi, then any fleet CI re-publish re-materializes the specs sites;
   close-purge of dead pr-*/ prefixes tracked oracle-fleet#318.
+
+- **R12 / sentinel pickup (2026-09-13):** (1) `/design-agents` session: ADR for the
+  MANAGEMENT SENTINEL (poke from the sentinel workflow → box evaluates PR head against rules from
+  master → verdict-only back, `homelab-sentinel` identity; input allowlist as a policy file) — mint
+  its FU then; (2) static CI: `tofu validate` per root + `nix eval` of both flake outputs (runner
+  nix-cache question, management-box.md open table); (3) FU-097's ruling table gates phases B/C;
+  FU-012's box-scoped creds swap; (4) oracle-fleet `evidence` job: S3 region `us-east-1` → `garage`
+  (stack-side; platform detector = Garage 400-rate by key, none yet). Box: `mgmt-release` ref does
+  not exist — creating it at master arms the pull loop (timers still masked by design).
+

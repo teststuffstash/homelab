@@ -8619,3 +8619,43 @@ subscription's 7d window).
   duplicated spike block). **Merged 08:00 (#1608).** Docs: management-box §Credentials, secrets.md
   tiers row, ADR-129 consequence corrected, FU-012 next = box-scoped tokens.
 - **Left for the operator:** the laptop pubkey into `keys/`, the three installer reads, the install.
+
+## 2026-09-13 (day) — the management box is installed; the sentinel gets its own identity
+
+- **R12 install (phase A is real).** Installer ISO as a flake output (`nixos#installerIso`), built
+  FROM THE JAIL via the host nix daemon (shared /nix — the host only `dd`s; `devbox run mgmt-usb`,
+  probe the stick first). Two installs: UEFI landed but the CSM firmware's setup priority
+  re-derives BootOrder (legacy entries first), so `bootMode = "bios"` — GRUB in the BIOS-boot
+  partition, no NVRAM dependency. Box up at .53 behind the wallet host key, gen 2 promoted by
+  `mgmt-confirm` itself; belt 4/4 under its unit with the env-file creds alone (PR#1608 → #1612).
+- **What only the live units taught (PR#1612):** unit PATH lacked grep/awk/sed (gate would have
+  rebooted a healthy box forever); NixOS keeps keys in `/etc/ssh/authorized_keys.d/`; `/nix/store`
+  is ro by design; `cloudflare` is NOT cone-clean (kubernetes provider) → belt = `provisioning`;
+  a fresh clone needs `tofu init` + the gitignored tfvars + the Matchbox gRPC files + the pve seed
+  key; my first tar push wrote 0700 dir modes over `/` and killed the box's DNS (resolved lost
+  /etc/resolv.conf) — `--no-overwrite-dir` + 0755 intermediates now. `rsync` exists nowhere.
+- **ADR-130 — one App per writing role.** `homelab-sentinel` App declared/minted/installed
+  (#1613), chain live, `sentinel-argo` switched direct (guarded file → pin-only via PR), first
+  status under homelab-sentinel[bot] 11:17:58Z, `integration_id` pinned on 11 rulesets (operator
+  `github-tofu apply`), reviewer `statuses` → read (#1614, admin-merged 11:54 under the token
+  deadline). FU-236 opened and archived the same day. ⚠ The operator's console un-grant came
+  before the narrowing merged → the reviewer mint 422'd at 11:45; un-wedged by hand-applying the
+  narrowed generator (SecretSynced 11:51:30). Narrowing = merge first, click second.
+- **Design answers given, not built:** phases B/C wait on FU-097's table; plan-on-PR is L1 for
+  tofu but a `tofu plan` executes PR-chosen provider binaries + data sources with the creds → an
+  INPUT allowlist (sentinel-shaped, pre-execution) + the box as the seat + verdict-only back via
+  the sentinel workflow (operator's shape) — ADR next session; coordinator identity = role×STACK,
+  parked (operator experimenting with platform-request labels + handoff).
+- **Garage, quick look:** p99 to 69 s (PutObject) / 18 s (ListObjectsV2) during allure-reports
+  bursts (+2.5k objects on 635k, quota-near) with ARC runners + Longhorn's instance-manager on
+  wk-metal-01 (garage-2 7.9 s vs 1.7/1.9 s); garage-2 /health dark 11:27–11:42 (78 % 1h) while
+  the write probe never failed. FU-229 reordered: garage-2 off the X240 FIRST, then p50/p99 +
+  burn-rate alerts. Side find: oracle-fleet's `evidence` job signs for region `us-east-1` →
+  ~90 × 400s per pod per 10 min on `GET /allure-reports/?location=` (key allure-reports-writer).
+- **Process, twice:** I `git checkout`ed PR branches in /workspace/homelab — the OPERATOR's
+  working tree — mid `tofu apply`; worktrees from now on (memory written). And every PR today got
+  a review finding; the reviewer earned its keep on all five.
+
+Direct commits this session: FU-229, FU-236 (+archive), the sentinel-argo switch (pushed at
+once — ArgoCD consumes it), this journal + meta-state. PRs: #1608 #1609 #1610 #1611 #1612 #1613
+#1614 merged; #1597 (operator's) unblocked and merged.
