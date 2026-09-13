@@ -542,5 +542,7 @@ standing set below; what differs is cadence and the act rule:
   (now lower priority — #1631 removes the latency for non-tofu PRs). (6) FU-238 next: cloudflare
   (read-only mint from `tofu/cloudflare-token`, host; policy root). (7) FU-012: box-scoped mints.
   ⚠ Habits: main runs on the box (`devbox run mgmt-tf -- plan`, committed ref); `mgmt-release`
-  still absent (system checkout hand-advanced to master today, 20aaf07c); the box's
+  still absent — **the units run the SYSTEM checkout's scripts** (`/var/lib/homelab`, hand-advanced
+  to master today, last 6d71387a): a merged fix to `scripts/mgmt-*` reaches the box only when that
+  checkout advances (the loops' own clones carry policy + tooling, NOT the unit scripts); the box's
   `/root/mgmt-test` clone removed. Session context hit ~575k — fresh session next.
