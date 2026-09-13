@@ -354,6 +354,8 @@ is stale, so it cannot drift the way the prose register did.
 | `review-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T27 |
 | `review-pick/behind-cr-no-content-held` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/behind-first-review-admitted` | actions | - | `agents/review-reflex.sh` | MP-T03 |
+| `review-pick/required-context-absent-held` | actions | - | `agents/review-reflex.sh` | MP-T03 |
+| `review-pick/required-contexts-present-admitted` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/same-lane-oldest` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/two-lanes-two-picks` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `reviewer-currency/behind-proceeds` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
