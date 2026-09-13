@@ -69,7 +69,8 @@ for root in "${apply_roots[@]}"; do
   rel="$(mgmt_root_dir "$POL" "$root")"; out="$ADIR/plan-$root.bin"; rm -f "$out" "$out.log"
   mgmt_plan_root "$REPO" "$POL" "$root" "$out" true; rc=$?
   if [ $rc = 1 ]; then refuse "$sha" "$root: plan errored — see the box journal" "$(tail -5 "$out.log")"; exit 0; fi
-  changes="$(mgmt_plan_changes "$REPO" "$rel" "$out")"
+  if ! changes="$(mgmt_plan_changes "$REPO" "$POL" "$root" "$out")"; then refuse "$sha" "$root: plan summary failed — see the box journal"; exit 0; fi
+  if [ $rc = 2 ] && [ -z "$changes" ]; then refuse "$sha" "$root: plan exit 2 but an empty summary — inconsistent, human"; exit 0; fi
   read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
   if [ -z "$changes" ]; then log "$root: no changes"; continue; fi
   outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")"
