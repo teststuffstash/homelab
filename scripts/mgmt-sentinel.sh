@@ -119,12 +119,14 @@ while IFS=$'\t' read -r pr sha; do
     desc="$desc$root: +$a ~$c -$d ${rs}${excl_note} "
     { echo; echo "### \`$root\` — +$a to add, ~$c to change, -$d to destroy${rs:+, $r to replace}"
       if [ "$excl_n" -gt 0 ]; then
-        note="$(mgmt_root_exclude_note "$POL" "$root")"
+        note="$(mgmt_root_exclude_note "$POL" "$root")" || note="(reason unreadable this run)"
         echo; echo "⚠ **Not planned on the box** (policy \`plan_exclude_types\`${note:+ — $note}): $excl_types."
       fi
       if [ -n "$changes" ]; then echo; echo "| address | actions |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | %s |\n", $1, $2}' <<<"$changes"; else echo; echo "No changes."; fi
       echo
-      if [ "$(mgmt_root_apply "$POL" "$root")" != true ]; then echo "apply: plan only — this root is not on the box's apply list."
+      ap="$(mgmt_root_apply "$POL" "$root")" || ap=unknown   # a failed read must not print "plan only" for an apply:true root
+      if [ "$ap" = unknown ]; then echo "apply: UNKNOWN — the apply flag could not be read from the policy this run; the apply loop reads it again after merge."
+      elif [ "$ap" != true ]; then echo "apply: plan only — this root is not on the box's apply list."
       elif [ -z "$changes" ]; then echo "apply: nothing to apply."
       else
         outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")" || outside="(allowlist unreadable — the apply loop refuses until it reads)"
