@@ -416,7 +416,11 @@ six OVERSIZE items pointer-ized into
       on the host (state → Garage, commit backend.tf); the deploy + renovate App keys into the
       wallet (else the six count-gated org secrets plan as destroys). **Next (seat, after those):**
       provision rows, `github` in `policy/mgmt/plan-input.yaml` roots (`apply: false`) + the belt's
-      ROOTS, the two doc lines, a verified clean plan on the box. Relates FU-237, FU-012, ADR-131.
+      ROOTS, the two doc lines, a verified clean plan on the box. **Same shape for `cloudflare`**
+      (operator, 2026-09-13 — the rule for every external-provider root here: box-scoped READ-ONLY
+      token, state on Garage, `apply: false`; applies stay host/jail until FU-097): its mint is
+      code (`tofu/cloudflare-token`, host), and it retires the WRITE key the box holds today.
+      Civo = stack -iac repos (not this box); AWS has no root. Relates FU-237, FU-012, ADR-131.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
