@@ -140,6 +140,10 @@ Two consequences the table above glosses over:
   governing rule ("anything ArgoCD needs in order to run cannot be ArgoCD-managed") — none of the
   four charts above are things ArgoCD needs. Longhorn IS in ADR-005's substrate list, so moving it
   (even as a manual-sync app) would be an ADR-005 addendum, not a quiet migration.
+  ⚠ **The raw-`kubernetes_*` residue the helm move left behind is kept in tofu ON PURPOSE** — it
+  is the management box's nondestructive test surface, and it migrates only after the box has
+  proven itself and Renovate rides through it: [`management-box.md`](management-box.md) §The
+  test surface (operator, 2026-09-13).
 
 ### Executing the lever — the migration order and the one unverified fact
 

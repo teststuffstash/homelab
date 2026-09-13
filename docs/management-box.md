@@ -35,9 +35,33 @@ states for every deadman — local to the target.
 |---|---|---|---|
 | **A** | the box is maintainable | OS installed declaratively, SSH credentials + a rotation scheme, `main`'s tofu state and the dangerous creds moved here (FU-012's other half), the probe + the local deadman | 🔜 config in `nixos/`, the secrets path built (§Credentials), install pending |
 | **S** | the management sentinel | plan-on-PR: a required `management-sentinel` status on homelab PR heads, evaluated on this box behind an input allowlist — read-only, so it precedes B and is not gated on FU-097's table | ⬜ ADR-131, §MB3, FU-237 |
-| **B** | one trivial apply | a `tofu apply` of something nobody depends on — dashboard-shaped, explicitly NOT an unattended control-plane or router operation. The point of the first rollout is the PATH, not the change | ⬜ gated on FU-097's table naming the surfaces |
+| **B** | one trivial apply | a `tofu apply` of something nobody depends on — explicitly NOT an unattended control-plane or router operation. The point of the first rollout is the PATH, not the change. **The surface is named (operator, 2026-09-13): the main root's raw-k8s residue** — §The test surface below | ⬜ needs `main`'s state on the box (FU-012) first; FU-097's table rules the rest |
 | **C** | triggers | homelab PR merges (the `ROADMAP.md` §Deploy paths gap: a merged change to an unreconciled surface deploys nothing today) + drift detection (the `tofu plan` cron FU-097 asks for) | ⬜ |
 | — | *then* the management network | recovery path 2 and the rest of the spike's original order, resumed once the box is dull | ⬜ |
+
+## The test surface — the main root's raw-k8s residue, kept on purpose
+
+The ArgoCD lever ([`dependency-upgrades.md`](dependency-upgrades.md) §Tofu is not one class) moved
+the main root's helm releases out in 2026-08 (FU-136) and left a class of **raw `kubernetes_*`
+resources that ArgoCD does not need to run** — Home Assistant, UniFi + its Mongo, the monitoring
+namespace's dashboards and secrets, the forgejo runner and its CNPG Cluster, the kata RuntimeClass,
+the `random_password` → Secret residue. ADR-005 allows all of it to move, and **it stays in tofu
+deliberately** (operator ruling, 2026-09-13): it is the one nondestructive thing this box can apply.
+With a single OPNsense and a single control plane, anything that touches the router, the CPs or
+the Proxmox host is instant whole-cluster downtime — so phases B and C run on this residue, where a
+wrong apply costs a dashboard or a Home Assistant restart, and the quirks get ironed out there.
+
+The sequence, in this order:
+
+1. the box proves the path on the residue (phase B, then C's merge-triggered applies);
+2. **Renovate updates through the box** — the `ROADMAP.md` G-D goal's next run rides this
+   mechanism instead of a jail apply;
+3. only then the residue migrates to ArgoCD, and the fleet grows the second OPNsense (CARP pair)
+   and the third CP + more Proxmox hosts for the box to operate on — the spike's paths 2 and 3.
+
+Which means the FU-097 table's first rows are ruled: OPNsense, the control planes and the Proxmox
+host stay **human-applied until the redundancy exists**; the residue is the box's; `provisioning`
+is the belt's canary. The table still has to be written — those are its anchors.
 
 ## OS and install
 
