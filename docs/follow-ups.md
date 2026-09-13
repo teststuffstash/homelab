@@ -413,11 +413,10 @@ six OVERSIZE items pointer-ized into
       box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
       host/jail until FU-097. **github DONE 2026-09-13** (PAT via `github-mgmt-pat-bootstrap.sh`,
       state on Garage, App keys via `scripts/mgmt-root-env/github.sh`; repos + the org ruleset
-      excluded — admin-WRITE-only on the API). **Next:** (a) the box's github plan drifts on 2 org
-      secrets until the HOST re-applies with the wallet's deploy/renovate keys (move the host's
-      flat-file cred dirs aside → `github-tofu plan` shows those 2 → `apply`); (b) **cloudflare**,
-      same shape, mint is code (`tofu/cloudflare-token`, host), retiring the write key the box
-      holds. Civo = stack repos; AWS has no root. Relates FU-237, FU-012, ADR-131.
+      excluded — admin-WRITE-only on the API; the org secrets re-applied from the host onto the
+      wallet keys → the box plans it to **No changes**). **Next: cloudflare**, same shape, mint is
+      code (`tofu/cloudflare-token`, host), retiring the write key the box holds. Civo = stack
+      repos; AWS has no root. Relates FU-237, FU-012, ADR-131.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
