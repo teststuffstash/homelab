@@ -43,15 +43,18 @@ resource "cloudflare_api_token" "jail_read_all" {
   name  = "homelab-jail-read-all"
 
   # ⚠ POLICY ORDER: provider 5.x compares policies POSITIONALLY (the observability token's
-  # account-first lesson). For THIS token shape the authority is the legacy token's own API
-  # dump — zone, then user, then account (uploads/step3.json) — so that order is mirrored here.
-  # If the first re-plan shows the policies swapping, reorder to whatever the API returned;
-  # the mutation itself lands either way (upstream #5548/#5710).
+  # account-first lesson). Minted 2026-08-12 in the legacy dump's order (zone, user, account);
+  # the 2026-09-13 modify (the catalog grew "Zone Observability Read") ended in the usual two
+  # "inconsistent result" errors and the API now reads back account, user, zone — mirrored here
+  # (GET /user/tokens/<id>, the ingress-write.tf recipe: one re-plan, match the file to the
+  # read-back order, never a second apply). The mutation itself lands either way (#5548/#5710).
   policies = [
     {
+      # account.* like the legacy template (all accounts this user can see), not the single
+      # account_resource — read-only, and the template's semantics are the contract here.
       effect            = "allow"
-      permission_groups = [for gid in local.jail_read_zone_ids : { id = gid }]
-      resources         = jsonencode({ "com.cloudflare.api.account.zone.*" = "*" })
+      permission_groups = [for gid in local.jail_read_account_ids : { id = gid }]
+      resources         = jsonencode({ "com.cloudflare.api.account.*" = "*" })
     },
     {
       effect            = "allow"
@@ -59,11 +62,9 @@ resource "cloudflare_api_token" "jail_read_all" {
       resources         = jsonencode({ "com.cloudflare.api.user.${var.user_id}" = "*" })
     },
     {
-      # account.* like the legacy template (all accounts this user can see), not the single
-      # account_resource — read-only, and the template's semantics are the contract here.
       effect            = "allow"
-      permission_groups = [for gid in local.jail_read_account_ids : { id = gid }]
-      resources         = jsonencode({ "com.cloudflare.api.account.*" = "*" })
+      permission_groups = [for gid in local.jail_read_zone_ids : { id = gid }]
+      resources         = jsonencode({ "com.cloudflare.api.account.zone.*" = "*" })
     },
   ]
 
