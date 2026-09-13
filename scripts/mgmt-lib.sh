@@ -153,6 +153,17 @@ mgmt_roots_touched() {
   done | sort -u
 }
 mgmt_root_dir()   { mgmt_policy_get "$1" ".roots.\"$2\".dir"; }
+# mgmt_root_excludes <policy> <root> <checkout-root-dir> → "-exclude=<addr>" args for every state
+# resource of a type in roots[X].plan_exclude_types (github: the admin-only repo settings). Reads
+# the STATE's address list (never the PR tree) — the exclusion set cannot be widened by a head.
+mgmt_root_excludes() {
+  local pol="$1" root="$2" dir="$3" t
+  local -a types
+  mapfile -t types < <(mgmt_policy_get "$pol" ".roots.\"$root\".plan_exclude_types[]?")
+  [ ${#types[@]} -gt 0 ] || return 0
+  ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$dir" state list 2>/dev/null ) \
+    | while IFS= read -r addr; do for t in "${types[@]}"; do case "$addr" in "$t".*) printf -- '-exclude=%s\n' "$addr" ;; esac; done; done
+}
 mgmt_root_apply() { mgmt_policy_get "$1" ".roots.\"$2\".apply // false"; }
 
 # mgmt_stage1 <policy> <repo-dir> <base-sha> <head-sha> → prints hits "rule<TAB>file<TAB>detail",
@@ -235,8 +246,9 @@ mgmt_plan_root() {
     [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"
     devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 \
       || { echo "tofu init failed for $root" >&2; devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
+    mapfile -t excludes < <(mgmt_root_excludes "$pol" "$root" "$dir")
     # shellcheck disable=SC2086
-    devbox run --quiet -- tofu -chdir="$dir" plan -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile
+    devbox run --quiet -- tofu -chdir="$dir" plan -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile "${excludes[@]}"
   ) >"$logf" 2>&1
   local rc=$?
   case $rc in 0|2) return $rc ;; *) return 1 ;; esac

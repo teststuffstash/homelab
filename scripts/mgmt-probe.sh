@@ -122,8 +122,14 @@ check_tofu() {
       fi
       varfile=""
       [ -n "$TOFU_VAR_DIR" ] && [ -f "$TOFU_VAR_DIR/$root.tfvars" ] && varfile="-var-file=$TOFU_VAR_DIR/$root.tfvars"
+      # the policy's plan_exclude_types for this root (github: repo settings a read-only token cannot
+      # see — policy/mgmt/plan-input.yaml explains); the sentinel applies the same knob via mgmt-lib
+      excl=""
+      for t in $(devbox run --quiet -- yq -r ".roots.\"$root\".plan_exclude_types[]?" "$REPO/policy/mgmt/plan-input.yaml" 2>/dev/null); do
+        excl="$excl $(devbox run --quiet -- tofu -chdir="tofu/$root" state list 2>/dev/null | grep "^$t\." | sed 's/^/-exclude=/' | tr '\n' ' ')"
+      done
       # shellcheck disable=SC2086
-      devbox run --quiet -- tofu -chdir="tofu/$root" plan -detailed-exitcode -input=false -lock=false $varfile 2>&1
+      devbox run --quiet -- tofu -chdir="tofu/$root" plan -detailed-exitcode -input=false -lock=false $varfile $excl 2>&1
     )"
     rc=$?
     case $rc in
