@@ -216,7 +216,7 @@ the backlog aggregate. Deterministic `gh` reads only — a retrieval tool, not a
 
 The C6 / merged item session files each `Follow-ups:` bullet as an issue, with provenance links,
 dependencies (FU-087 — **native `blockedBy` edges** since FU-111 retired the body line, §Dependencies
-below) and the track label inherited.
+below) — and no label, the source's `track/*` included (loop-safety breaker #1, below).
 
 Mechanism: the scan emits **`merged-closeout`** units for issues closed by a merged PR but still
 `agent/in-progress` (21-day window, cap 3/repo/scan, `agent/error` excluded). The item session's

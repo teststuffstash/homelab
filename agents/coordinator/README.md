@@ -537,8 +537,8 @@ job, in order (re-read live state first, exit clean if someone already closed it
    absorbs it (ADR-127); an `Operator-lane (no container):` comment is the codeowner's read at
    merge, NEVER a harvest source — do not mint from it. A merged containerless PR usually
    harvests nothing; say so in the closing comment — title from the bullet, body = the bullet verbatim + provenance
-   (`Harvested from PR #N review (issue #M)`), any `track/*` label inherited from the source
-   issue (reporting decor only since ADR-097 — the scheduler no longer reads it).
+   (`Harvested from PR #N review (issue #M)`) — and NO label, `track/*` included (breaker #1
+   below; the source's `track/*` was reporting decor only since ADR-097 anyway).
    **The body's machine keys are the machine block, composed by the writer** (§Authoring an
    issue body above — `issue_body.py set …` then the `json` re-parse gate before `gh issue
    create`; a body the writer cannot re-parse is never posted). This harvest stamps two keys —
@@ -564,7 +564,7 @@ job, in order (re-read live state first, exit clean if someone already closed it
      NOT gate: retry once, and on second failure say so in the closing comment so a human wires it.
    **INERT by loop-safety
    breaker #1: a harvested issue carries NO label of any kind — not `agent-fix`, not
-   `agent/queued`, not a `track/*` you would otherwise inherit from a source that has none** —
+   `agent/queued`, not a `track/*` inherited from the source issue** —
    the scan's 🌱 clause surfaces unlabelled bot-authored issues for human triage, and
    `agent-fix` is a human suitability judgment (ADR-109), never the harvest's (#1595 arrived
    wearing it).
