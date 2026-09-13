@@ -12,11 +12,11 @@ POL="$REPO/policy/mgmt/plan-input.yaml"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 git -C "$T" init -q -b master
-mkdir -p "$T/tofu/dashboards" "$T/tofu/provisioning" "$T/tofu/github"
+mkdir -p "$T/tofu/dashboards" "$T/tofu/provisioning" "$T/tofu/github" "$T/tofu/cloudflare"
 echo '{"title":"x"}' >"$T/tofu/dashboards/x.json"
 printf 'resource "kubernetes_config_map" "x" {\n  data = { "x.json" = file("${path.module}/dashboards/x.json") }\n}\n' >"$T/tofu/monitoring.tf"
 printf 'terraform {\n  required_providers {}\n}\n' >"$T/tofu/versions.tf"
-echo 'x' >"$T/tofu/provisioning/main.tf"; echo 'x' >"$T/tofu/github/main.tf"
+echo 'x' >"$T/tofu/provisioning/main.tf"; echo 'x' >"$T/tofu/github/main.tf"; echo 'x' >"$T/tofu/cloudflare/main.tf"
 git -C "$T" add -A && git -C "$T" commit -q -m base
 BASE="$(git -C "$T" rev-parse HEAD)"
 
@@ -57,10 +57,11 @@ case_ file-absolute     deny_patterns 'printf "output \"x\" { value = file(\"/va
 case_ file-parent       deny_patterns 'printf "output \"x\" { value = filebase64(\"../../etc/x\") }\n" >> tofu/monitoring.tf'
 case_ path-cwd          deny_patterns 'printf "output \"x\" { value = path.cwd }\n" >> tofu/monitoring.tf'
 case_ symlink           symlink       'ln -s /etc/passwd tofu/dashboards/evil.json'
-case_ foreign-only      noroot        'echo "y" > tofu/github/main.tf'
+case_ foreign-only      noroot        'echo "y" > tofu/cloudflare/main.tf'
+case_ github-only       none          'echo "y" > tofu/github/main.tf'
 case_ non-tofu          noroot        'echo "y" > README.md'
 case_ provisioning-only none          'echo "y" > tofu/provisioning/main.tf'
 # a deny hit in a FOREIGN root must not fire (not this box's business)
-case_ foreign-deny      noroot        'printf "data \"external\" \"x\" {}\n" >> tofu/github/main.tf'
+case_ foreign-deny      noroot        'printf "data \"external\" \"x\" {}\n" >> tofu/cloudflare/main.tf'
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]

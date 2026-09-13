@@ -231,6 +231,8 @@ mgmt_plan_root() {
     if [ -f "$dir/backend.tf" ]; then
       TOFU_STATE_ROOT_DIR="$dir" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || { echo "tofu-state-env.sh failed for $root" >&2; exit 1; }
     fi
+    # per-root env hook from the TRUSTED tree (scripts/mgmt-root-env/<root>.sh) — e.g. github's App keys
+    [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"
     devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 \
       || { echo "tofu init failed for $root" >&2; devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
     # shellcheck disable=SC2086

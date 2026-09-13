@@ -9,8 +9,8 @@
 roots:                      # what the box plans; a PR path under the root's dir selects it
   main:         { dir: tofu,              apply: true  }   # everything under tofu/ not claimed by another entry
   provisioning: { dir: tofu/provisioning, apply: false }
+  github:       { dir: tofu/github,       apply: false }   # read-only PAT + Garage state, FU-238; applies stay on the host
 foreign_roots:              # planned elsewhere (host / jail) — a PR touching only these gets "no box-held surface"
-  - tofu/github
   - tofu/cloudflare
   - tofu/cloudflare-token
   - tofu/infisical

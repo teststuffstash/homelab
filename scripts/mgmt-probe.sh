@@ -31,7 +31,9 @@
 # Env:
 #   ROOTS         space-separated tofu roots to plan. Default = the roots whose plan is CONE-CLEAN,
 #                 which is not the same set as "the roots on remote state":
-#                   provisioning  Matchbox LXC on Proxmox — the ONLY one, as of the box's first run
+#                   provisioning  Matchbox LXC on Proxmox
+#                   github        org/repos/rulesets — read-only PAT (GITHUB_TOKEN) + the App keys via
+#                                 scripts/mgmt-root-env/github.sh; plan-only, applies stay on the host (FU-238)
 #                 ⛔ `cloudflare` is NOT cone-clean, contrary to the 2026-09-12 reading: half of it
 #                 is in-cluster (the cloudflared Deployment via the kubernetes provider), so its
 #                 plan reads the API server and fails with the cluster down — found 2026-09-13 on
@@ -60,7 +62,7 @@ cd "$REPO" || exit 1
 # under `set -u`, i.e. the deadman would have fired every single run (review finding, 2026-09-12).
 export HOME="${HOME:-/root}"
 
-ROOTS="${ROOTS:-provisioning}"
+ROOTS="${ROOTS:-provisioning github}"   # github: read-only PAT + Garage state since 2026-09-13 (FU-238)
 TOFU_VAR_DIR="${TOFU_VAR_DIR:-}"
 PUSHGATEWAY="${PUSHGATEWAY:-}"
 TALOS_NODE="${TALOS_NODE:-192.168.2.51}"
@@ -110,6 +112,7 @@ check_tofu() {
       set +u
       . "$REPO/scripts/keepass-env.sh" >/dev/null 2>&1 || true
       TOFU_STATE_ROOT_DIR="$REPO/tofu/$root" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || exit 90
+      [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"   # per-root env (github: the App keys)
       cd "$REPO" || exit 1
       # A fresh checkout (the box after install, 2026-09-13) has no .terraform/: plan fails with
       # "Backend initialization required". Init once, with the backend creds already in the env —
