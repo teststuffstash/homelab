@@ -317,19 +317,16 @@ six OVERSIZE items pointer-ized into
       `git revert 773ad63e` if it returns. Once soaked, drop the now-dead CNP
       LAN-resolver DNS leg and the `endpoints`-read grants. Relates FU-116, FU-187.
 
-- [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: mirror **homelab**
-      itself into Forgejo — ⚠ the `sleep-lab` pull-mirrors are **BROKEN since the 2026-08-04 DB
-      migration** (`SyncMirrors` failing; fix = the idp session's orphaned-repo recipe: remove dir on
-      the git volume, recreate via API + wallet password). **2026-09-02: second consumer** — the
-      loop's deterministic workflow clones (~700/day × ~12MB, 9 manifests, `_cu` since homelab#1136)
-      ride WAN to GitHub. Operator ruling: pull-mirroring = backup-grade, NOT live consumption
-      (≈6h stale); the live path is a **push-mirror step in `sync.yaml`** on master push
-      (in-cluster runner, seconds-fresh), pull interval = missed-push belt. ⚠ NO build yet — the
-      primary-git-location flip has side effects the operator is weighing. Next: repair mirrors +
-      verify a sync; cutover per `argocd/README.md` §Forgejo cutover; loop clone-URL flip on
-      go-ahead. **2026-09-03:** the loop's clones were anonymous-FIRST (2 anon requests each,
-      token-in-URL) — PR#1333 moved every site to preemptive `http.extraHeader` auth; a recurrence
-      with zero anonymous requests is the trigger that makes the push-mirror the next deliverable.
+- [ ] **FU-007** — **Forgejo = major-outage FALLBACK ONLY (operator ruling 2026-09-13, after
+      looking at it more than once): keep the cluster alive with the bare minimum during a GitHub
+      outage — never the live read path.** The loop and its permissions are GitHub-native; a
+      primary-git flip multiplies complexity for no day-to-day gain. WAN minimization is done IN
+      GitHub instead: authenticated, on-change fetches everywhere (PR#1333 for the loops; the
+      management box's `mgmt_clone` fetched anonymously every 5 min from two loops ≈576/day — fixed
+      2026-09-13). History: the `sleep-lab` pull-mirrors broke at the 2026-08-04 DB migration
+      (`SyncMirrors`; fix = the idp session's orphaned-repo recipe). **Next:** repair the mirrors as
+      the backup-grade belt (≈6h stale is fine for a fallback) + the cutover recipe in
+      `argocd/README.md` §Forgejo cutover stays a documented emergency procedure, not a plan.
 - [ ] **FU-010** — Infisical↔CNPG uses `sslmode=disable` (node-pg rejects CNPG's self-signed
       cert). Fine pod-to-pod; revisit if Cilium transparent encryption lands.
 - [ ] **FU-012** — **Remote/encrypted tofu state backend + the dangerous creds off the jail:
