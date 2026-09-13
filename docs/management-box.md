@@ -47,8 +47,9 @@ alternatives are ADR-129.
 
 **Installed once from a USB stick, declaratively.** The stick only gets an SSH-able installer onto
 a box with no BMC; the install itself is `disko` + the flake, driven by `nixos-anywhere` from the
-jail, so nothing is typed into an installer UI and the result is what git says. `scripts/talos-usb.sh`
-is the existing shape for writing the medium (download + `dd`, run on the HOST where the stick is).
+jail, so nothing is typed into an installer UI and the result is what git says. `devbox run mgmt-usb`
+(`scripts/mgmt-usb.sh`) writes the medium on the HOST where the stick is — it probes and confirms the
+target device BEFORE building the flake's `installerIso`, so a wrong device costs nothing.
 
 **Not PXE, yet, and not netboot ever.**
 

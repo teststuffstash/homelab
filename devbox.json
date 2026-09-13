@@ -253,6 +253,9 @@
       "talos-usb": [
         "bash scripts/talos-usb.sh"
       ],
+      "mgmt-usb": [
+        "bash scripts/mgmt-usb.sh"
+      ],
       "keepass-init": [
         "bash scripts/keepass-init.sh"
       ],

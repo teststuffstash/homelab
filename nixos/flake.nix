@@ -37,10 +37,9 @@
       ];
     };
 
-    # The stick. Build FROM THE JAIL (it talks to the host's nix daemon; /nix is shared, so the
-    # ISO lands in the host's store at the same path) and dd it ON THE HOST, where the stick is:
-    #   nix build ./nixos#installerIso --out-link /tmp/mgmt-iso && ls /tmp/mgmt-iso/iso/
-    #   sudo dd if=<that .iso> of=/dev/disk/by-id/usb-... bs=4M status=progress oflag=sync
+    # The stick: `MGMT_USB_DEV=/dev/disk/by-id/usb-... devbox run mgmt-usb` ON THE HOST where it is
+    # plugged in (scripts/mgmt-usb.sh — probes the device, THEN builds this output, dd-s, verifies).
+    # The jail can build it too (host daemon, shared /nix) but cannot see the stick.
     nixosConfigurations.installer = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
