@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-238** (2026-09-13: FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-239** (2026-09-13: FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -409,6 +409,16 @@ six OVERSIZE items pointer-ized into
       once the status posts reliably; (b) the in-cluster no-root poster so a box outage gates
       only root-touching PRs; (c) the per-role user + env split; (d) the doorbell edge.
       Design + build state: [`management-box.md`](management-box.md) §MB3. Relates FU-012, FU-097, ADR-130.
+- [ ] **FU-238** — **External-provider roots plan READ-ONLY on the box (operator, 2026-09-13):**
+      box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
+      host/jail until FU-097. Reverses "operator-only, nothing automated can even init"
+      (dependency-upgrades.md) and "migrate last if at all" (tofu-state.md). **github** first,
+      three operator steps: read-only fine-grained PAT (console) → wallet `github-mgmt-readonly-pat`;
+      `tofu-state-migrate github` on the host; deploy + renovate App keys into the wallet (else the
+      count-gated org secrets plan as destroys). **cloudflare** same shape, mint is code
+      (`tofu/cloudflare-token`, host) and retires the write key the box holds. Civo = stack repos;
+      AWS has no root. **Next (seat):** provision rows, policy roots + belt ROOTS, doc lines, a
+      verified clean plan on the box. Relates FU-237, FU-012, ADR-131.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content

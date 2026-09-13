@@ -8698,3 +8698,42 @@ once — ArgoCD consumes it), this journal + meta-state. PRs: #1608 #1609 #1610 
   rows + `machines.yaml` (host table regenerated), merged 12:54Z.
 
 Direct commits this session: meta-state + this journal (batched; push at wind-down). PRs: #1615, #1616.
+
+## 2026-09-13 (evening, cont.) — the management box plans and applies: first end-to-end run
+
+- **Operator direction:** "manage until a test tofu monitoring PR gets automatically planned and
+  deployed." Done in one stint, four PRs + one test PR:
+  **#1619** (built): `policy/mgmt/plan-input.yaml` (input allowlist / root list / apply allowlist =
+  the residue), `scripts/mgmt-{lib,sentinel,apply,policy-test}.sh` (a forked subagent wrote the
+  scripts to a spec; 23/23 fixture cases), the two units + timers, `mgmt-provision-secrets.sh`
+  carrying main's `TF_VAR_*` set + `main.tfvars` + the runner and sentinel App keys,
+  `scripts/mgmt-tf.sh` (the jail's human path through the box; `tf.sh` refuses). **main's state
+  MOVED to the box** (`/var/lib/mgmt/state/main/`, jail copy frozen + backed up).
+  **#1617** (open, operator-applied): `management-sentinel` required + pinned to the sentinel App.
+  **#1618** (the test): one dashboard tag → sentinel comment + status (box plan 27 s) → reviewer
+  approve → merge 14:30:45Z → apply tick 14:32:31Z → APPLIED 14:32:59Z → `management-apply`
+  success on 45749511 → `grafana-dashboard-cluster-health` in ns monitoring carries `homelab`.
+- **What the box taught, live (all folded into #1619):** (1) a saved plan does NOT carry the
+  `-state=` override — `apply plan.bin` read the default path (empty) → "Saved plan does not
+  match the given state"; apply repeats `-state`. (2) an env `TF_VAR_` that a tfvars overrides at
+  plan time MISMATCHES at apply-of-saved-plan ("Mismatch between input and plan variable value")
+  — Proxmox tokens ride in tfvars only. (3) the provision push's tree-wide `find … chmod 600`
+  stripped exec bits from the clones + provider cache under /var/lib/mgmt → exit 126 (devbox
+  venvShellHook); chmod by name now. (4) the reviewer's BLOCKING catch: stage 2 ran `devbox run`
+  from the PR worktree — devbox resolves devbox.json (init_hook executes) from cwd, and it
+  sourced the PR's `tofu-state-env.sh` — RCE with the box's secrets from any open PR; fixed by
+  running all tooling from the loop's trusted clone (reset to origin/master each run) with tofu
+  at an absolute `-chdir`; plus `*.tfvars.json`/`*.auto.tfvars*`/`*.tf.json` and remote module
+  sources denied. The reviewer earned its keep again.
+- **Oracle-fleet #585 (ADR-OF-004) reviewed for the operator:** shape right; the ESO-minted token
+  and the `repository_dispatch` hook were platform deliverables the ADR wrote as stack knobs →
+  filed **homelab#1620** (composition-rendered read-only token) + **#1621** (`/corpus-published`
+  platform doorbell), sub-issues of oracle-fleet#579, queued `task/build`. Also: parallel prune
+  nodes vs the quiet-window argument; the 02:30Z window is clear until homelab's 03:17Z crons.
+- **Process:** every PR again drew a real finding (#1615 twin JSON, #1616 stale install rows,
+  #1619 the RCE); worktrees under the scratchpad throughout; the subagent fork carried the full
+  context and needed no re-briefing. The system checkout on the box was advanced by hand (the
+  pull loop waits on `mgmt-release`).
+
+Direct commits this session: meta-state + journal (this push). PRs: #1615 #1616 #1619 #1618
+merged; #1617 open for the operator. Issues: #1620, #1621.
