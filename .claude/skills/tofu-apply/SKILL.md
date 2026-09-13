@@ -18,10 +18,18 @@ required `TF_VAR_*` from the KeePass wallet + cred files (`scripts/keepass-env.s
 and passes your args through. **Always `plan` and review before `apply`** — this hits live
 machines.
 
+⚠ **Since 2026-09-13 the MAIN root runs ON the management box** (its state + the dangerous
+creds live there — ADR-129/-131, FU-012): `devbox run tf-plan|tf-apply` refuse and point at
+`mgmt-tf`, which ssh-es to the box and runs tofu from a COMMITTED ref (push your branch first;
+`MGMT_REF=origin/<branch>`). The box's own loops plan every PR (`management-sentinel` status)
+and apply the allowlisted residue after merge (`management-apply` status) — a human apply is
+for what the allowlist refuses. [`docs/management-box.md`](../../../docs/management-box.md) §MB3.
+
 ```bash
-devbox run tf-plan                                    # main root (tofu/), secrets auto-sourced
-devbox run tf-plan -- -target='kubernetes_deployment.ha'
-devbox run tf-apply                                   # review the plan first
+devbox run mgmt-tf -- plan                            # main root, ON the box, origin/master
+MGMT_REF=origin/fix/foo devbox run mgmt-tf -- plan    # a pushed branch
+devbox run mgmt-tf -- apply                           # review the plan first
+devbox run mgmt-tf -- plan -target='kubernetes_deployment.ha'
 devbox run tf-validate                                # syntax-only, no backend/secrets
 devbox run github-tofu plan                           # tofu/github root (repos/rulesets/org secrets)
 ```

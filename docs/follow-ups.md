@@ -336,13 +336,12 @@ six OVERSIZE items pointer-ized into
       POINTER.** Hard prerequisite for anything that plans/applies off the operator's machine (the
       FU-097 drift belt, the out-of-cluster applier). Migration state, the per-root cone rulings,
       the `use_lockfile = false` ruling and the runbook: [`docs/tofu-state.md`](tofu-state.md) —
-      3 of 5 roots on encrypted Garage state since 2026-08-04. **Next:** `main` stays local until
-      it has an out-of-cone copy, and **that copy's home is now named — the R12 pilot**, whose
-      phase A is this item's other half — the credential path is BUILT 2026-09-13
-      (`scripts/mgmt-provision-secrets.sh`, [`management-box.md`](management-box.md) §Credentials);
-      it ships the JAIL's entries, so what remains is box-scoped credentials (Garage state key,
-      Matchbox-Proxmox token, the pve SSH seed key, OPNsense, Cloudflare) swapped in one script
-      line each, then `main`'s copy.
+      3 of 5 roots on encrypted Garage state since 2026-08-04; **`main`'s state + the dangerous
+      creds MOVED to the R12 box 2026-09-13** (first plan there: No changes; the jail applies
+      main through `devbox run mgmt-tf`). **Next:** box-scoped credentials — the entries in
+      `scripts/mgmt-provision-secrets.sh`'s table are the JAIL's (Garage state key,
+      Matchbox-Proxmox token, the pve SSH seed key, OPNsense, Cloudflare, the main root's set),
+      swapped one script line each as minted; then retire the jail's copies.
       `github` is host-only. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
@@ -405,10 +404,11 @@ six OVERSIZE items pointer-ized into
       §The test surface. **Next:** write the table around those anchors. Relates FU-051, FU-012.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
-      `homelab-sentinel`. Deferred because the policy file must land alone first and the box's
-      sentinel credential set is unminted. **Next:** step 1 of the build order — `policy/mgmt/`
-      (allowlist + root list = `provisioning`) as its own PR; then the script + unit in shadow.
-      Design + order: [`management-box.md`](management-box.md) §MB3. Relates FU-012, FU-097, ADR-130.
+      `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13** (policy, scripts, units + the apply
+      loop; `main` planned on the box). **Next:** (a) the flip — PR#1617 applied by the operator
+      once the status posts reliably; (b) the in-cluster no-root poster so a box outage gates
+      only root-touching PRs; (c) the per-role user + env split; (d) the doorbell edge.
+      Design + build state: [`management-box.md`](management-box.md) §MB3. Relates FU-012, FU-097, ADR-130.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
