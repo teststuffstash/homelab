@@ -337,12 +337,11 @@ six OVERSIZE items pointer-ized into
       FU-097 drift belt, the out-of-cluster applier). Migration state, the per-root cone rulings,
       the `use_lockfile = false` ruling and the runbook: [`docs/tofu-state.md`](tofu-state.md) —
       3 of 5 roots on encrypted Garage state since 2026-08-04; **`main`'s state + the dangerous
-      creds MOVED to the R12 box 2026-09-13** (first plan there: No changes; the jail applies
-      main through `devbox run mgmt-tf`). **Next:** box-scoped credentials — the entries in
-      `scripts/mgmt-provision-secrets.sh`'s table are the JAIL's (Garage state key,
-      Matchbox-Proxmox token, the pve SSH seed key, OPNsense, Cloudflare, the main root's set),
-      swapped one script line each as minted; then retire the jail's copies.
-      `github` is host-only. Relates FU-097, FU-136.
+      creds MOVED to the R12 box 2026-09-13** (the jail applies main through `devbox run mgmt-tf`).
+      **Next:** box-scoped credentials — the `scripts/mgmt-provision-secrets.sh` table is the JAIL's
+      entries, swapped one line each as minted; **first: a scoped read-only kubeconfig for the box's
+      plans** (the #1635 finding — `main` + `cloudflare` plan PR heads with the admin kubeconfig;
+      stage 1 denies new `kubernetes_*` data sources / `import` blocks meanwhile). Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
       doesn't DR). `tofu/homeassistant.tf`.
@@ -404,19 +403,22 @@ six OVERSIZE items pointer-ized into
       §The test surface. **Next:** write the table around those anchors. Relates FU-051, FU-012.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
-      `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13** (policy, scripts, units + the apply
-      loop; `main` planned on the box). **Next:** (a) the flip — PR#1617 applied by the operator
-      once the status posts reliably; (b) the in-cluster no-root poster so a box outage gates
-      only root-touching PRs; (c) the per-role user + env split; (d) the doorbell edge.
-      Design + build state: [`management-box.md`](management-box.md) §MB3. Relates FU-012, FU-097, ADR-130.
+      `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617, operator-applied);
+      (b) the in-cluster no-root poster LIVE (#1631, four review rounds = the fail-closed policy-read
+      class across lib/sentinel/apply; proof: #1635's head carried the status 104 s after its commit,
+      ahead of the box's tick); `mgmt-policy-test` is a `ci` step (05ce8e8a). **Next:** (c) the
+      per-role user + env split; (d) the doorbell edge (lower priority now). Design + build state:
+      [`management-box.md`](management-box.md) §MB3. Relates FU-012, FU-097, ADR-130.
 - [ ] **FU-238** — **External-provider roots plan READ-ONLY on the box (operator, 2026-09-13):**
       box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
-      host/jail until FU-097. **github DONE 2026-09-13** (PAT via `github-mgmt-pat-bootstrap.sh`,
-      state on Garage, App keys via `scripts/mgmt-root-env/github.sh`; repos + the org ruleset
-      excluded — admin-WRITE-only on the API; the org secrets re-applied from the host onto the
-      wallet keys → the box plans it to **No changes**). **Next: cloudflare**, same shape, mint is
-      code (`tofu/cloudflare-token`, host), retiring the write key the box holds. Civo = stack
-      repos; AWS has no root. Relates FU-237, FU-012, ADR-131.
+      host/jail until FU-097. **github DONE 2026-09-13** (read-only PAT + App keys via
+      `scripts/mgmt-root-env/github.sh`; repos + org ruleset excluded). **cloudflare BUILT 2026-09-13**
+      (#1633 the `homelab-mgmt-read` mint + policy root, #1635 the kubeconfig hook; proof on dummy
+      #1634: `+0 ~0 -0 (3 not planned)` — the tunnel-token data source is a credential read no Read
+      group covers, its Secret/Deployment drop with it). **Next (operator, host):** `devbox run
+      cloudflare-token-tofu apply` (store → wallet `cloudflare-mgmt-read`) → `mgmt-provision-secrets.sh
+      --push`; until then the box plans cloudflare with the write key it holds. Civo = stack repos,
+      AWS no root, infisical port-forwards into the cluster (not this box). Relates FU-237, FU-012, ADR-131.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
