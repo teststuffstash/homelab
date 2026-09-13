@@ -532,7 +532,10 @@ standing set below; what differs is cadence and the act rule:
   as its OWN PR, landed before any script — the exceptions ordering rule. The grounding read set
   (~50k, not the corpus — FU-164) was the one listed in the previous pickup; it sufficed, with
   `docs/tofu-state.md`'s cone table + `nixos/hosts/mgmt/default.nix`'s units added; (2) static CI: `tofu validate` per root + `nix eval` of both flake outputs (runner
-  nix-cache question, management-box.md open table); (3) FU-097's ruling table gates phases B/C;
-  FU-012's box-scoped creds swap; (4) ~~oracle-fleet `evidence` job region~~ DONE stack-side (operator, 2026-09-13). Box: `mgmt-release` ref does
+  nix-cache question, management-box.md open table); (3) FU-097's table: its first rows are RULED (operator, 2026-09-13, PR#1616 — verify
+  merged): the main root's raw-k8s residue (HA/UniFi/monitoring/forgejo/kata) is the box's test
+  surface, kept in tofu on purpose; router/CP/Proxmox human until CARP pair + third CP; order =
+  box proves B/C → Renovate through the box (G-D) → ArgoCD migration + fleet growth. Phase B now
+  waits on `main`'s state reaching the box (FU-012), not on the table; FU-012's box-scoped creds swap; (4) ~~oracle-fleet `evidence` job region~~ DONE stack-side (operator, 2026-09-13). Box: `mgmt-release` ref does
   not exist — creating it at master arms the pull loop (timers still masked by design).
 
