@@ -8831,3 +8831,24 @@ Issues: #1620, #1621.
 - Box checkout hand-advanced twice (ccfebb86, then 5387bf50) — `mgmt-release` still absent.
   Worktrees + local branches cleaned. Direct commits: ci step (pushed at once — CI consumes it),
   this bookkeeping (wind-down push). PRs: #1631 #1633 #1635 merged; #1634 closed unmerged.
+- **Second arc (19:2x–21:0xZ, operator on the host):** the mint applied — `homelab-mgmt-read`
+  created, `jail-read-all` widened by "Zone Observability Read" (a new catalog group), the two
+  gotcha-3 ordering errors as usual; the store step was skipped by the failed apply → run by
+  hand, wallet + cache + `--push` done; the Infisical push failure was a no-op (observability
+  token unchanged since 08-09, cluster copy = cache). The re-plan kept a `~ id` permutation:
+  measured, the API's group order for 146+45 groups is ARBITRARY (not catalog/id/name/reversed);
+  #1636 (provider 5.25.0) did not fix it → FU-239 + the wrapper excludes the token by default and
+  reports real +/- elements. **Design thread:** ArgoCD-shaped updates for the box — it already has
+  pull + gate + rollback; the ref is a second promotion, not safety (the `/nixos/` CODEOWNERS row is
+  the gate) → follow-master option recorded in the pickup; observability = node-exporter via the
+  pve-node ScrapeConfig precedent; the doorbell = one unit, two rings, the path filter on the
+  ringer. **Operator ruling: Forgejo is the major-outage fallback ONLY** (FU-007 rewritten). That
+  ruling exposed the box itself: both loops fetched ANONYMOUSLY every 5 min (≈576/day) — #1637
+  makes every git call carry the App token per invocation and the level check one API sha call,
+  fetch on change only (proven: a tick with master unchanged touches nothing). Advancing the box to
+  #1637 wedged the apply loop: the classifier's `while … | sort` returned the loop's last test
+  status under pipefail whenever the last diff file sat outside every root, and the new fail-closed
+  callers read it as "policy unreadable" — quickfix 8dc8d4c6 direct (fixture + the harness asserts
+  rc 0), box advanced, stamped 21:00Z. FU-240: the box's devbox rewrites devbox.lock plugin fields
+  (version skew) — the on-change check ignores the lock. Wind-down: worktrees removed, monitors
+  ended, bookkeeping pushed.
