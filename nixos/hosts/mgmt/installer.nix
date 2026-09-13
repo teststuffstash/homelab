@@ -22,6 +22,10 @@ in
     settings.PasswordAuthentication = lib.mkForce false;
   };
   users.users.root.openssh.authorizedKeys.keys = authorizedKeys;
+  # `nixos` EXISTS on the minimal ISO too: installation-cd-minimal → installation-cd-base →
+  # profiles/installation-device.nix, which declares it `isNormalUser` (nixpkgs 21a67dc, line 37).
+  # Verified by `nix eval .#nixosConfigurations.installer.config.users.users.nixos.isNormalUser`
+  # = true and by the ISO building (2026-09-13). Keyed here so `ssh nixos@` works as well as root.
   users.users.nixos.openssh.authorizedKeys.keys = authorizedKeys;
 
   # A stick with no key is a stick nobody can reach: fail the build, like the system config does.
