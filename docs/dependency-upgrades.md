@@ -117,7 +117,7 @@ Rows 4–6 above lump five state roots that need different rulings:
 
 | Root | Credential | Ruling |
 |---|---|---|
-| `tofu/github` | org-admin PAT, **deliberately outside the jail** | **Operator-only.** Nothing automated can even `init` — the "plan-report path rule" is impossible here by standing decision, and should stay so |
+| `tofu/github` | org-admin PAT (applies, **host only**) + a read-only PAT on the management box (plans) | **Applies operator-only; plans automated since 2026-09-13** (FU-238, ADR-131): state on Garage, the box plans every PR touching the root (`management-sentinel`) and reads drift (the belt) with a read-only token — the earlier "nothing automated can even init" line is superseded; applies still never leave the host |
 | `tofu/cloudflare` | scoped CF token, in jail | Low blast radius (one zone; a bad apply hurts `ha.teststuff.net`, not the updater). Automatable plan, arguably apply |
 | `tofu/infisical` | Infisical creds | Slated to leave tofu for ESO/Crossplane — don't invest automation here |
 | `tofu/provisioning` | PVE token | PXE content is **inert until the next netboot** — the safest root to automate |

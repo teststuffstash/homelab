@@ -89,6 +89,8 @@ ENV_TABLE=(
   "TF_VAR_forgejo_runner_token=forgejo-runner-token"
   # the sentinel's GitHub identity — the homelab-sentinel App (ADR-130/-131; docs/github-apps.yaml)
   "MGMT_GH_APP_ID=github-sentinel-app-id"
+  # tofu/github, plan-only on the box (FU-238): the read-only PAT minted by scripts/github-mgmt-pat-bootstrap.sh
+  "GITHUB_TOKEN=github-mgmt-readonly-pat"
   "MGMT_GH_APP_INSTALLATION_ID=github-sentinel-installation-id"
 )
 
@@ -143,6 +145,9 @@ ENVF="$OUT/var/lib/mgmt/env"
   # the sentinel + apply loop (scripts/mgmt-sentinel.sh, scripts/mgmt-apply.sh): the App key, where
   # main's state lives on the box (local backend via -state=, ADR-131), the provider cache
   echo "MGMT_GH_APP_KEY_FILE=/var/lib/mgmt/sentinel/app-key.pem"
+  # tofu/github's three App keys are VALUES of tofu variables (PEM, multi-line — not env-file-safe):
+  # files under this dir, exported per root by scripts/mgmt-root-env/github.sh
+  echo "MGMT_CRED_DIR=/var/lib/mgmt/cred"
   echo "MGMT_STATE_DIR=/var/lib/mgmt/state"
   echo "TF_PLUGIN_CACHE_DIR=/var/lib/mgmt/plugin-cache"
   echo "ORG=teststuffstash"
@@ -171,6 +176,15 @@ chmod 600 "$OUT/var/lib/mgmt/runner-app/private-key.pem"; echo "  + var/lib/mgmt
 kp attachment-export -q --no-password -k "$KEYF" "$DB" github-sentinel-app private-key.pem "$OUT/var/lib/mgmt/sentinel/app-key.pem" >/dev/null \
   || { echo "FATAL: wallet entry github-sentinel-app/private-key.pem missing" >&2; exit 1; }
 chmod 600 "$OUT/var/lib/mgmt/sentinel/app-key.pem"; echo "  + var/lib/mgmt/sentinel/app-key.pem  (← github-sentinel-app)"
+# 3a'''. tofu/github's App keys + ids (FU-238) — the wallet-files.sh cache layout, under /var/lib/mgmt/cred
+for app in deploy renovate reviewer; do
+  d="$OUT/var/lib/mgmt/cred/homelab-github-$app"; install -d -m700 "$OUT/var/lib/mgmt/cred" "$d"
+  kp attachment-export -q --no-password -k "$KEYF" "$DB" "github-$app-app" private-key.pem "$d/private-key.pem" >/dev/null \
+    || { echo "FATAL: wallet entry github-$app-app/private-key.pem missing" >&2; exit 1; }
+  v="$(kp_val "github-$app-app-id")"; [ -n "$v" ] || { echo "FATAL: wallet entry github-$app-app-id missing" >&2; exit 1; }
+  printf '%s' "$v" > "$d/app-id"; chmod 600 "$d/private-key.pem" "$d/app-id"
+  echo "  + var/lib/mgmt/cred/homelab-github-$app/{app-id,private-key.pem}  (← github-$app-app)"
+done
 # 3b. per-root var files the jail keeps gitignored in the checkout — a fresh clone on the box has
 #     none, and `plan` fails on the first variable without a default (ssh_public_keys, 2026-09-13).
 #     Public keys, so config not secret, but they live where the jail keeps them: ride along.
@@ -219,5 +233,5 @@ KH="$OUT/known_hosts"
 printf '%s %s\n' "$HOST" "$(cut -d' ' -f1,2 "$OUT/etc/ssh/ssh_host_ed25519_key.pub")" > "$KH"
 tar -C "$OUT" --exclude known_hosts -cf - . \
   | ssh -o UserKnownHostsFile="$KH" -o StrictHostKeyChecking=yes -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
-      'tar -C / --no-same-owner --no-overwrite-dir -xf - && chmod 700 /var/lib/mgmt /var/lib/mgmt/matchbox /var/lib/mgmt/pve-ssh /var/lib/mgmt/runner-app /var/lib/mgmt/sentinel && chmod 600 /var/lib/mgmt/env /var/lib/mgmt/*.tfvars /var/lib/mgmt/talosconfig /var/lib/mgmt/kubeconfig /var/lib/mgmt/matchbox/* /var/lib/mgmt/pve-ssh/* /var/lib/mgmt/runner-app/* /var/lib/mgmt/sentinel/app-key.pem /etc/ssh/ssh_host_ed25519_key && ls -l /var/lib/mgmt'
+      'tar -C / --no-same-owner --no-overwrite-dir -xf - && chmod 700 /var/lib/mgmt /var/lib/mgmt/matchbox /var/lib/mgmt/pve-ssh /var/lib/mgmt/runner-app /var/lib/mgmt/sentinel && chmod 700 /var/lib/mgmt/cred /var/lib/mgmt/cred/* && chmod 600 /var/lib/mgmt/env /var/lib/mgmt/*.tfvars /var/lib/mgmt/talosconfig /var/lib/mgmt/kubeconfig /var/lib/mgmt/matchbox/* /var/lib/mgmt/pve-ssh/* /var/lib/mgmt/runner-app/* /var/lib/mgmt/sentinel/app-key.pem /var/lib/mgmt/cred/*/* /etc/ssh/ssh_host_ed25519_key && ls -l /var/lib/mgmt'
 echo "pushed to root@$HOST — units read /var/lib/mgmt/env at their next start; nothing to restart"
