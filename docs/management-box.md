@@ -34,6 +34,7 @@ states for every deadman — local to the target.
 | | Phase | Deliverable | State |
 |---|---|---|---|
 | **A** | the box is maintainable | OS installed declaratively, SSH credentials + a rotation scheme, `main`'s tofu state and the dangerous creds moved here (FU-012's other half), the probe + the local deadman | 🔜 config in `nixos/`, the secrets path built (§Credentials), install pending |
+| **S** | the management sentinel | plan-on-PR: a required `management-sentinel` status on homelab PR heads, evaluated on this box behind an input allowlist — read-only, so it precedes B and is not gated on FU-097's table | ⬜ ADR-131, §MB3, FU-237 |
 | **B** | one trivial apply | a `tofu apply` of something nobody depends on — dashboard-shaped, explicitly NOT an unattended control-plane or router operation. The point of the first rollout is the PATH, not the change | ⬜ gated on FU-097's table naming the surfaces |
 | **C** | triggers | homelab PR merges (the `ROADMAP.md` §Deploy paths gap: a merged change to an unreconciled surface deploys nothing today) + drift detection (the `tofu plan` cron FU-097 asks for) | ⬜ |
 | — | *then* the management network | recovery path 2 and the rest of the spike's original order, resumed once the box is dull | ⬜ |
@@ -127,6 +128,72 @@ lets it change the verdict; with `PUSHGATEWAY` unset it does not publish at all.
 for freshness-class breakage and irrelevant to the local deadman (which needs no alerting to
 work), but the spike's "alerts leave by two independent paths" has no second path yet.
 
+## MB3. The management sentinel — plan-on-PR (ADR-131)
+
+The decision: [`adr.md`](adr.md) ADR-131. The tofu lane has no L1 today ([`agents/iac-lane.md`](agents/iac-lane.md)
+§Assurance layers — the manifest diff is the -iac repos'), and it cannot have one anywhere but
+here: a plan needs the state and the credentials, and FU-012's whole point is that those leave
+the jail for this box and never enter the cluster or the CI plane. So the box evaluates PR heads,
+and the design is shaped by the one way it differs from the iac-sentinel (§L0b): **the iac-sentinel
+never executes PR content; `tofu plan` does.** It downloads and runs the provider binaries the PR's
+`required_providers`/lockfile name, evaluates `data` sources (`external` runs a program, `http`
+exfiltrates), reads the PR's locals and var files — all with the root's credentials in the
+environment. A worker-authored head is hostile by assumption (the sentinel runs BEFORE review), so
+plan-on-PR without a pre-execution gate is remote code execution on the recovery root.
+
+**Two stages, and the first never executes anything:**
+
+| Stage | Reads | Does | Fails as |
+|---|---|---|---|
+| 1 — input allowlist | the PR tree as DATA, the policy from **master** (`git show origin/master:policy/mgmt/…`), never the PR's copy | for each touched root: the diff vs base may touch only allowlisted file classes (`*.tf` declaration bodies, `*.tfvars.example`, docs) and none of the deny list — `.terraform.lock.hcl`, `required_providers`/`terraform {}` blocks, `backend`/`encryption` config, `data "external"`/`data "http"`, any `provisioner`, `.terraformrc`/CLI-config-shaped files, symlinks, files outside the root | `failure`, rule named |
+| 2 — the plan | the head in an **ephemeral worktree** (`git worktree add` under `/var/lib/mgmt/sentinel/`, removed after) — never this box's own checkout, which is the system's source at `mgmt-release` | `tofu plan -detailed-exitcode -input=false -lock=false -lockfile=readonly` with providers from a **local mirror** pre-populated from master's lockfile (`tofu providers mirror`, refreshed by the pull loop); network reach is the provider APIs the root already needs | engine error → `error` (fail-closed, healed next run); plan error → `failure` |
+
+The first form of the policy is the iac-sentinel's own bash path-rule shape (file classes + a
+grep-shaped declaration deny list); Kyverno over `hcl2json` output is the v2 when a rule needs
+structure — the same "v2 when serial time reaches job-overhead scale" threshold as §L0b. The file
+lives in `policy/mgmt/` (a sibling of `policy/iac/`, whose `*.yaml` glob is Kyverno-only), already
+under the `/policy/` CODEOWNERS row — so it is read from master, codeowner-gated, and **lands first
+as its own change**: a PR that needs a wider allowlist is red until master's copy widens, exactly the
+`policy/iac/exceptions/*` ordering rule.
+
+**Wake — edge + level, and the doorbell carries nothing.** The in-cluster `iac-sentinel` run
+(`agents/coordinator/sentinel-argo.yaml`) pokes a socket-activated HTTP doorbell on the box after its
+own evaluation; the payload is ignored and the box re-lists open homelab heads itself (the
+`/coordinate` doctrine: a doorbell is never a work item), which is what keeps "the cluster may poke
+it but holds no credential into it" literally true. A `*:0/5` timer is the level backstop and ships
+FIRST — a box that only polls is already correct; the doorbell is the merge-wait optimization. The
+unit is a oneshot, so runs serialize by construction.
+
+**Verdict-only leaves the box.** The plan output can carry sensitive attribute values and the
+state's shape, so it stays in the journal. What leaves: the `management-sentinel` commit status
+(the `post_status` shape of `scripts/iac-sentinel.sh`) and one PR comment listing changed resource
+ADDRESSES with add/change/destroy counts from `tofu show -json`, never values — both under the
+`homelab-sentinel` App (ADR-130; the App row in [`github-apps.yaml`](github-apps.yaml) already
+grants `statuses`+`pull_requests` write for this). The box holds that App's private key as one more
+wallet-provisioned root-only file (§Credentials), so the key sits in two stores — Infisical for the
+in-cluster poster, the env tree here — one identity, two seats.
+
+**Scope split, one classifier.** A required context must be present on EVERY head, and the
+recovery root must not become the merge gate for doc PRs. So the in-cluster `iac-sentinel` run posts
+`management-sentinel: success` for heads whose diff touches no root in the policy's root list, and
+the box posts for the rest — both readers of the same master copy of the policy file, so there is
+one classifier. Today the root list is `provisioning` alone (the cone-clean set, §MB2); `main`
+joins when FU-012's copy lands here, ansible plays (`--check` of a PR head — the same executes-PR-
+content class, the same allowlist) after that.
+
+**Privilege.** The plan runs as its own unix user with its own `EnvironmentFile`
+(`/var/lib/mgmt/sentinel.env`), never as root with the belt's file: one consumer, one token, at its
+tier — and read-only credential variants where the provider's model allows (Proxmox roles do; the
+state key + passphrase cannot be less than a full state read, which is the residual ADR-131 names).
+Freshness: `mgmt_sentinel_last_run_timestamp_seconds` beside the belt's, publishable once §MB2's
+exit path exists.
+
+**Build order** (FU-237): (1) `policy/mgmt/` allowlist + root list, landed alone; (2)
+`scripts/mgmt-sentinel.sh` + unit + timer on the box in SHADOW (verdicts in the journal only);
+(3) the App key on the box, status + comment posting; (4) the flip — the context required and
+pinned to `homelab-sentinel`'s integration id in `tofu/github/repo_rulesets.tf`, the in-cluster
+no-root poster in the same change; (5) the doorbell.
+
 ## Rollback — three layers
 
 1. **It boots but the closure is bad** → `mgmt-confirm.service`, started by the pull (never by a
@@ -192,7 +259,8 @@ this section.
   (`--extra-files`), and only a *rotation* re-runs the script. Authorized keys are the one credential
   that rotates through git.
 - **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
-  need (the Garage state key + the state passphrase, the Cloudflare and Matchbox-Proxmox tokens,
+  need (the sentinel's own set — a second env file + the `homelab-sentinel` App key — is §MB3's,
+  provisioned by the same script when it is built) (the Garage state key + the state passphrase, the Cloudflare and Matchbox-Proxmox tokens,
   the OPNsense API pair), plus the file-shaped ones the `provisioning` root reads by path — the
   Matchbox gRPC client files and the **Proxmox SSH seed key** (found one plan at a time on the
   box's first day, 2026-09-13) — and the root's gitignored `terraform.tfvars`. The main root's

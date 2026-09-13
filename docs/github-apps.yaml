@@ -122,7 +122,7 @@ apps:
     permissions:
       metadata: { level: read, why: "baseline" }
       statuses: { level: write, why: "the required iac-sentinel / management-sentinel commit statuses — the enforcement write (iac-lane.md §L0b)" }
-      pull_requests: { level: write, why: "the management-sentinel verdict comment on the PR (changed addresses + counts, never values) — planned with the plan-on-PR gate" }
+      pull_requests: { level: write, why: "the management-sentinel verdict comment on the PR (changed addresses + counts, never values) — the management sentinel, ADR-131 — posted FROM the box, whose copy of this key is a wallet-provisioned file (management-box.md §MB3)" }
     installs: selected   # the sentinel's scan set: sleep-iac, oracle-iac, circles-iac, homelab (SENTINEL_REPOS in scripts/iac-sentinel.sh)
     key_locations: [Infisical SENTINEL_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-sentinel/"]
     bootstrap: { redirect_port: 8771, cred_dir: "~/.claude/homelab-github-sentinel" }

@@ -2117,3 +2117,33 @@ sanctioned manual class, `secrets.md` §Minting doctrine) + a `github-apps.yaml`
 order matters (App live → `sentinel-git` Secret → argo wiring → pin → drop `statuses:write` from
 the reviewer). ⚖ NOT decided here: coordinator identity is role × STACK (the one cross-repo
 writer) — parked with the operator's platform-request / handoff experiments. Tracker: FU-236.
+
+### ADR-131 — The management sentinel: a PR's `tofu plan` runs on the management box, behind an input allowlist, and only the verdict leaves (2026-09-13)
+
+**Status:** Accepted (operator shape 2026-09-13; written this sitting). **Decision:** homelab PR
+heads get a required **`management-sentinel`** commit status — the tofu lane's L1 (the plan IS the
+rendered diff). The evaluation runs **on the management box**, the one seat that holds the state and
+the credentials by design (FU-012), in an ephemeral worktree of the PR head, read-only (`plan`,
+`--check`), and **two-stage**: stage 1 is sentinel-shaped — PR tree as data, rules from master — an
+**input allowlist policy file** names what a PR may change inside a root before anything executes;
+stage 2 plans with providers from master's lockfile out of a local mirror. The cluster's sentinel
+workflow **pokes** (a payload-ignored doorbell — no credential into the box), a box timer is the
+level backstop, and the box re-lists open heads itself. **Only the verdict leaves**: the status plus
+a comment of changed addresses and counts under the `homelab-sentinel` identity (ADR-130); plan
+output never does. Heads touching no box-held surface get their success from the in-cluster sentinel
+run, so a box outage gates only what the box alone can judge. **Considered:** *plan in CI* — the
+runner is the semi-trusted plane and runs the PR's own workflow code (iac-lane §L0b); *plan in the
+iac-sentinel workflow* — puts state + creds inside the cone the box exists to escape (tofu-state.md
+cone table); *static analysis only, no plan* — catches nothing the reviewer cannot read, and misses
+plausible-HCL-wrong-effect; *plan without an allowlist* — the sentinel runs BEFORE review on
+worker-authored heads, so a head is hostile by assumption; *verdict via the cluster* — the box's
+exit path is unbuilt and it has egress anyway. **Why:** unlike the iac-sentinel, `tofu plan`
+EXECUTES PR-chosen provider binaries and data sources with the root's credentials, so "PR content is
+never executed" cannot hold — the allowlist is what buys the tamper-proof property back. A plan is
+read-only, so this precedes phase B and is not gated by FU-097's table (which rules who APPLIES).
+**Consequences:** the box gets its first daily job and becomes a merge wait for root-touching PRs; the
+allowlist joins the `policy/` codeowner class and is read from master, so it lands FIRST as its own
+change (the exceptions ordering rule); the sentinel gets its own credential set, read-only where the
+provider allows, and the App key sits in two stores (one identity, two seats); a compromised head
+still reads the whole state — the residual the allowlist bounds, not removes. Design:
+[`management-box.md`](management-box.md) §MB3. Tracker: FU-237.
