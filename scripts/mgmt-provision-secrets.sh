@@ -103,9 +103,20 @@ ENVF="$OUT/var/lib/mgmt/env"
   # File-shaped creds live beside this file; talosctl/kubectl honour these natively.
   echo "TALOSCONFIG=/var/lib/mgmt/talosconfig"
   echo "KUBECONFIG=/var/lib/mgmt/kubeconfig"
+  echo "TOFU_VAR_DIR=/var/lib/mgmt"
 } >> "$ENVF"
 echo "  + var/lib/mgmt/env  (${#ENV_TABLE[@]} entries)"
 
+# 3b. per-root var files the jail keeps gitignored in the checkout — a fresh clone on the box has
+#     none, and `plan` fails on the first variable without a default (ssh_public_keys, 2026-09-13).
+#     Public keys, so config not secret, but they live where the jail keeps them: ride along.
+for root in provisioning; do
+  if [ -s "$REPO/tofu/$root/terraform.tfvars" ]; then
+    install -m600 "$REPO/tofu/$root/terraform.tfvars" "$OUT/var/lib/mgmt/$root.tfvars"; echo "  + var/lib/mgmt/$root.tfvars  (← tofu/$root/terraform.tfvars)"
+  else
+    echo "  ! tofu/$root/terraform.tfvars missing — the box's plan of that root will fail on its variables" >&2
+  fi
+done
 # 3. talosconfig + kubeconfig from this checkout (gitignored, tofu-generated)
 for f in talosconfig kubeconfig; do
   if [ -s "$REPO/tofu/$f" ]; then

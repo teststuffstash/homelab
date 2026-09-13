@@ -26,17 +26,22 @@
 #   scripts/mgmt-probe.sh                  # belt: every applicable check, push metrics if configured
 #   MODE=gate scripts/mgmt-probe.sh        # the box-local gate (what mgmt-confirm.service runs)
 #   DRY_RUN=1 scripts/mgmt-probe.sh        # never push (the jail default — see PUSHGATEWAY below)
-#   ROOTS="cloudflare provisioning" scripts/mgmt-probe.sh
+#   ROOTS="provisioning" scripts/mgmt-probe.sh
 #
 # Env:
 #   ROOTS         space-separated tofu roots to plan. Default = the roots whose plan is CONE-CLEAN,
 #                 which is not the same set as "the roots on remote state":
-#                   cloudflare    external zone, no cluster dependency
-#                   provisioning  Matchbox LXC on Proxmox
-#                 ⛔ `infisical` is excluded on purpose even though its state is migrated: its
-#                 provider auth comes from the LIVE in-cluster Infisical via a port-forward
-#                 (tofu/infisical/apply.sh), so its plan asserts the cluster is up — the opposite
-#                 of what this box probes, and it would cry wolf exactly when the cluster is down.
+#                   provisioning  Matchbox LXC on Proxmox — the ONLY one, as of the box's first run
+#                 ⛔ `cloudflare` is NOT cone-clean, contrary to the 2026-09-12 reading: half of it
+#                 is in-cluster (the cloudflared Deployment via the kubernetes provider), so its
+#                 plan reads the API server and fails with the cluster down — found 2026-09-13 on
+#                 the box ("dial tcp [::1]:80: connection refused" = no kubeconfig, but WITH one it
+#                 asserts the cluster). Same class as `infisical`, whose provider auth comes from
+#                 the LIVE in-cluster Infisical via a port-forward (tofu/infisical/apply.sh). Both
+#                 would cry wolf exactly when the cluster is down — the opposite of this box's job.
+#   TOFU_VAR_DIR  directory holding optional per-root var files named <root>.tfvars (the box:
+#                 /var/lib/mgmt, placed by scripts/mgmt-provision-secrets.sh — a gitignored
+#                 terraform.tfvars in the jail's checkout is invisible to a fresh clone)
 #                 ⛔ `main` is LOCAL state until FU-012's out-of-cone copy lands here; planning it
 #                 from the box is a phase-A deliverable, not a probe.
 #   PUSHGATEWAY   e.g. http://192.168.40.x:9091 — unset means "do not push" (jail-safe default)
@@ -55,7 +60,8 @@ cd "$REPO" || exit 1
 # under `set -u`, i.e. the deadman would have fired every single run (review finding, 2026-09-12).
 export HOME="${HOME:-/root}"
 
-ROOTS="${ROOTS:-cloudflare provisioning}"
+ROOTS="${ROOTS:-provisioning}"
+TOFU_VAR_DIR="${TOFU_VAR_DIR:-}"
 PUSHGATEWAY="${PUSHGATEWAY:-}"
 TALOS_NODE="${TALOS_NODE:-192.168.2.51}"
 SKIP="${SKIP:-}"
@@ -111,7 +117,10 @@ check_tofu() {
       if [ ! -d "$REPO/tofu/$root/.terraform" ]; then
         devbox run --quiet -- tofu -chdir="tofu/$root" init -input=false -lock=false >/dev/null 2>&1 || exit 91
       fi
-      devbox run --quiet -- tofu -chdir="tofu/$root" plan -detailed-exitcode -input=false -lock=false 2>&1
+      varfile=""
+      [ -n "$TOFU_VAR_DIR" ] && [ -f "$TOFU_VAR_DIR/$root.tfvars" ] && varfile="-var-file=$TOFU_VAR_DIR/$root.tfvars"
+      # shellcheck disable=SC2086
+      devbox run --quiet -- tofu -chdir="tofu/$root" plan -detailed-exitcode -input=false -lock=false $varfile 2>&1
     )"
     rc=$?
     case $rc in
