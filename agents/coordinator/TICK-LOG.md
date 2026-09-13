@@ -8692,5 +8692,9 @@ once — ArgoCD consumes it), this journal + meta-state. PRs: #1608 #1609 #1610 
   about what can't be in ArgoCD?") — it was dependency-upgrades.md §Tofu is not one class +
   ADR-005's governing rule; the helm half (FU-136) was done, the raw half untracked → now ruled.
   Also: the oracle-fleet evidence-job region item is done stack-side (pickup struck).
+  #1616's one finding was a stale-docs catch dressed as a word nit: the reviewer read
+  "installed" as contradicting the phase-A row + the host table — both were stale (the box IS
+  installed; SSH-verified: hostname mgmt, NixOS 26.05, up 3.5 h, timers masked). Fixed the
+  rows + `machines.yaml` (host table regenerated), merged 12:54Z.
 
 Direct commits this session: meta-state + this journal (batched; push at wind-down). PRs: #1615, #1616.
