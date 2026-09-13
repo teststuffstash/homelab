@@ -128,6 +128,12 @@
       "tf-apply": [
         "sh scripts/tf.sh apply \"$@\""
       ],
+      "mgmt-tf": [
+        "bash scripts/mgmt-tf.sh \"$@\""
+      ],
+      "mgmt-policy-test": [
+        "bash scripts/mgmt-policy-test.sh"
+      ],
       "labels-handoff": [
         "bash scripts/labels-handoff.sh \"$@\""
       ],

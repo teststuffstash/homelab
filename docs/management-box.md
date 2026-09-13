@@ -33,9 +33,9 @@ states for every deadman — local to the target.
 
 | | Phase | Deliverable | State |
 |---|---|---|---|
-| **A** | the box is maintainable | OS installed declaratively, SSH credentials + a rotation scheme, `main`'s tofu state and the dangerous creds moved here (FU-012's other half), the probe + the local deadman | 🔜 **installed 2026-09-13** (NixOS from the stick, generation 2 promoted by `mgmt-confirm`, the belt 4/4 under its unit on the env-file creds; timers masked by design). Remaining: `main`'s state copy + the box-scoped credential swap (FU-012) |
-| **S** | the management sentinel | plan-on-PR: a required `management-sentinel` status on homelab PR heads, evaluated on this box behind an input allowlist — read-only, so it precedes B and is not gated on FU-097's table | ⬜ ADR-131, §MB3, FU-237 |
-| **B** | one trivial apply | a `tofu apply` of something nobody depends on — explicitly NOT an unattended control-plane or router operation. The point of the first rollout is the PATH, not the change. **The surface is named (operator, 2026-09-13): the main root's raw-k8s residue** — §The test surface below | ⬜ needs `main`'s state on the box (FU-012) first; FU-097's table rules the rest |
+| **A** | the box is maintainable | OS installed declaratively, SSH credentials + a rotation scheme, `main`'s tofu state and the dangerous creds moved here (FU-012's other half), the probe + the local deadman | 🔜 **installed 2026-09-13** (NixOS from the stick, generation 2 promoted by `mgmt-confirm`, the belt 4/4 under its unit on the env-file creds; timers masked by design). **`main`'s state + credential set moved here 2026-09-13** (first plan on the box: init 12 s, plan 17 s, No changes). Remaining: the box-scoped credential swap (FU-012) |
+| **S** | the management sentinel | plan-on-PR: a required `management-sentinel` status on homelab PR heads, evaluated on this box behind an input allowlist — read-only, so it precedes B and is not gated on FU-097's table | 🔜 BUILT 2026-09-13 (`scripts/mgmt-sentinel.sh` + `mgmt-sentinel.timer`, `policy/mgmt/plan-input.yaml`); the required-context flip is PR#1617, operator-applied — §MB3 |
+| **B** | one trivial apply | a `tofu apply` of something nobody depends on — explicitly NOT an unattended control-plane or router operation. The point of the first rollout is the PATH, not the change. **The surface is named (operator, 2026-09-13): the main root's raw-k8s residue** — §The test surface below | 🔜 BUILT 2026-09-13 as the apply LOOP (`scripts/mgmt-apply.sh` + `mgmt-apply.timer`: master moved → plan → every address on the policy's apply allowlist → apply, else refused with a `management-apply` status) — phase C's merge trigger and B's first apply are the same mechanism |
 | **C** | triggers | homelab PR merges (the `ROADMAP.md` §Deploy paths gap: a merged change to an unreconciled surface deploys nothing today) + drift detection (the `tofu plan` cron FU-097 asks for) | ⬜ |
 | — | *then* the management network | recovery path 2 and the rest of the spike's original order, resumed once the box is dull | ⬜ |
 
@@ -218,6 +218,22 @@ exit path exists.
 pinned to `homelab-sentinel`'s integration id in `tofu/github/repo_rulesets.tf`, the in-cluster
 no-root poster in the same change; (5) the doorbell.
 
+**Built 2026-09-13 (steps 1–3 in one PR, since nothing read the policy before its reader
+existed):** `policy/mgmt/plan-input.yaml`, `scripts/mgmt-lib.sh` (App token, policy, stage 1,
+plan summary), `scripts/mgmt-sentinel.sh`, `scripts/mgmt-apply.sh`, `scripts/mgmt-policy-test.sh`
+(`devbox run mgmt-policy-test` — every deny rule fires on a fixture), the two units + `*:0/5`
+timers. Deviations from the paragraphs above, each a residual on FU-237: the box posts for
+EVERY open head (the in-cluster no-root poster is unbuilt, so the flip — PR#1617, operator-
+applied — must wait until posting is reliable); both units run as root off the ONE env file
+(the per-role user + env split); no doorbell yet (the timer is the level). **`main`'s state
+lives here now** — `/var/lib/mgmt/state/main/terraform.tfstate`, local backend via `-state=`,
+the jail's copy frozen as a backup — so the jail's `devbox run tf-plan|tf-apply` REFUSE and
+point at **`devbox run mgmt-tf -- <plan|apply|…>`** (`scripts/mgmt-tf.sh`: ssh to the box, a
+COMMITTED ref — `MGMT_REF=origin/<branch>` — under the loops' flock). A human apply of main
+is therefore push-then-apply from now on; the working tree is not something the box can see.
+`management-apply` is the second status context the App posts: on the master commit the box
+applied (or refused) — the "deployed" signal a PR author reads after merge.
+
 ## Rollback — three layers
 
 1. **It boots but the closure is bad** → `mgmt-confirm.service`, started by the pull (never by a
@@ -284,15 +300,17 @@ this section.
   that rotates through git.
 - **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
   need (the Garage state key + the state passphrase, the Cloudflare and Matchbox-Proxmox tokens,
-  the OPNsense API pair), plus the file-shaped ones the `provisioning` root reads by path — the
+  the OPNsense API pair) **and, since 2026-09-13, the main root's `TF_VAR_*` set** (the
+  `keepass-env.sh` list, one table line each) + `main.tfvars` + the runner App key
+  `ci-runner.tf` reads by path + the `homelab-sentinel` App key, plus the file-shaped ones the `provisioning` root reads by path — the
   Matchbox gRPC client files and the **Proxmox SSH seed key** (found one plan at a time on the
   box's first day, 2026-09-13) — and the root's gitignored `terraform.tfvars`. The main root's
   `TF_VAR_*` set moves only when FU-097's table says the box may touch `main`. ⚠ Today's entries are the **jail's**, a phase-A shortcut against the
   doctrine's "one consumer, one token, at its tier"; the script's table is one line per credential
   so each swaps for a box-scoped entry as it is minted (FU-012's next). The state passphrase is
-  shared by nature — it is the state's key, not a consumer's. The **sentinel's** set is separate:
-  a second env file plus the `homelab-sentinel` App key, provisioned by the same script when §MB3
-  is built.
+  shared by nature — it is the state's key, not a consumer's. The **sentinel's** own env file
+  (§MB3's per-role split) is still a residual: today one env file serves the belt, the sentinel
+  and the apply loop.
 - ⚠ The box is a **consumer** of Tier-0, never its home: the wallet stays with the operator, and the
   scripts that read it (`keepass-env.sh`, `tofu-state-env.sh`, `opnsense-playbook.sh`) all yield to
   a pre-set environment, which is how the same probe runs in the jail (wallet) and on the box (env
