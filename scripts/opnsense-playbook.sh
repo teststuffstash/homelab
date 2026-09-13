@@ -23,14 +23,15 @@ export NIX_CONFIG="experimental-features = nix-command flakes"
 export ANSIBLE_CONFIG="$PWD/ansible/ansible.cfg"   # inventory + roles_path (paths are repo-root-relative)
 
 _kp_db="$HOME/.claude/homelab-keepass/homelab.kdbx"
-if [ -f "$_kp_db" ]; then
+# A pre-set pair wins: the management box carries no wallet — its units get these from
+# /var/lib/mgmt/env (scripts/mgmt-provision-secrets.sh). Otherwise the wallet is the source.
+if [ -n "${OPN_API_KEY:-}" ] && [ -n "${OPN_API_SECRET:-}" ]; then
+  :
+elif [ -f "$_kp_db" ]; then
   _kp_get() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli show -q --no-password \
                 -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$_kp_db" "$1" 2>/dev/null; }
   export OPN_API_KEY="$(_kp_get opnsense-api-key)"
   export OPN_API_SECRET="$(_kp_get opnsense-api-secret)"
-else
-  export OPN_API_KEY="$(cat "$HOME/.claude/homelab-opnsense/key")"
-  export OPN_API_SECRET="$(cat "$HOME/.claude/homelab-opnsense/secret")"
 fi
 [ -n "$OPN_API_KEY" ] && [ -n "$OPN_API_SECRET" ] || { echo "empty OPNsense API creds (wallet entry missing? run scripts/keepass-init.sh)" >&2; exit 1; }
 

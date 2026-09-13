@@ -20,6 +20,11 @@
 /agents/            @RasmusSoot
 /scripts/           @RasmusSoot
 /policy/            @RasmusSoot
+# The recovery root's own config (ADR-129). Without this row a bot-approved PR could rewrite the
+# management box's kernel, bootloader or sshd and the box would apply it on its next pull — and
+# the spike lists this box beside the CA keys as a trust anchor. The box additionally follows the
+# operator-advanced `mgmt-release` ref, not master, so the row is the second belt, not the only one.
+/nixos/             @RasmusSoot
 /.github/           @RasmusSoot
 
 # ── Tier 2 — applied out-of-band (tofu apply, ansible → the router, ArgoCD app-of-apps).
