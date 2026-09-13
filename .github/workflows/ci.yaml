@@ -68,7 +68,7 @@ jobs:
         run: |
           devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
             --paginate --jq '.[].filename' > /tmp/ci-changed-files
-          prom=false; clause=false; publicroute=false
+          prom=false; clause=false; publicroute=false; mgmt=false
           # ONE HOME (#518, the pin-only-lint pattern): the trigger regexes live in
           # scripts/diff-ci.sh (single-line, single-quoted, eval-safe by contract there) —
           # eval-extracted here so the local pre-flight and CI's skip map cannot drift.
@@ -76,12 +76,22 @@ jobs:
           eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"
           eval "$(grep -m1 '^CLAUSE_PATHS=' scripts/diff-ci.sh)"
           eval "$(grep -m1 '^PUBLICROUTE_PATHS=' scripts/diff-ci.sh)"
-          [ -n "$PROM_PATHS" ] && [ -n "$CLAUSE_PATHS" ] && [ -n "$PUBLICROUTE_PATHS" ] || { echo "FATAL: could not extract PROM_PATHS/CLAUSE_PATHS/PUBLICROUTE_PATHS from scripts/diff-ci.sh — skip map unavailable, failing closed"; exit 1; }
+          eval "$(grep -m1 '^MGMT_PATHS=' scripts/diff-ci.sh)"
+          [ -n "$PROM_PATHS" ] && [ -n "$CLAUSE_PATHS" ] && [ -n "$PUBLICROUTE_PATHS" ] && [ -n "$MGMT_PATHS" ] || { echo "FATAL: could not extract PROM_PATHS/CLAUSE_PATHS/PUBLICROUTE_PATHS/MGMT_PATHS from scripts/diff-ci.sh — skip map unavailable, failing closed"; exit 1; }
           grep -qE "$PROM_PATHS" /tmp/ci-changed-files && prom=true
           grep -qE "$CLAUSE_PATHS" /tmp/ci-changed-files && clause=true
           grep -qE "$PUBLICROUTE_PATHS" /tmp/ci-changed-files && publicroute=true
-          { echo "prom=$prom"; echo "clause=$clause"; echo "publicroute=$publicroute"; } >> "$GITHUB_OUTPUT"
-          echo "skip map: prometheus-rules-lint=$prom clause-replay=$clause publicroute-tf-validate=$publicroute ($(grep -c . /tmp/ci-changed-files) changed file(s))"
+          grep -qE "$MGMT_PATHS" /tmp/ci-changed-files && mgmt=true
+          { echo "prom=$prom"; echo "clause=$clause"; echo "publicroute=$publicroute"; echo "mgmt=$mgmt"; } >> "$GITHUB_OUTPUT"
+          echo "skip map: prometheus-rules-lint=$prom clause-replay=$clause publicroute-tf-validate=$publicroute mgmt-policy-test=$mgmt ($(grep -c . /tmp/ci-changed-files) changed file(s))"
+
+      # ADR-131: the management box's stage-1 fixtures + the fail-closed policy/classifier reads
+      # (homelab#1631's four review rounds were unverified by any required check — the reviewer
+      # read the diff). Serial and BEFORE the ∥ suites start: the test's nested `devbox run yq`
+      # calls must not overlap a background `devbox run` (the "text file busy" class, #1139).
+      - name: mgmt policy fixtures (devbox run mgmt-policy-test)
+        if: github.event_name != 'pull_request' || steps.diff.outputs.mgmt == 'true'
+        run: devbox run mgmt-policy-test
 
       # FU-158 (operator ruling 2026-08-11: promtool over more per-file self-tests): every
       # PrometheusRule's exprs must parse — kubeconform SKIPS the kind, so this is the only
