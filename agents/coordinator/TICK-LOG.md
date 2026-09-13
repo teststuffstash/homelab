@@ -8747,5 +8747,49 @@ Direct commits this session: meta-state + this journal (batched; push at wind-do
   keys per App; a rotation must revoke both. Operator steps left: the PAT mint, the github state
   migration on the host; then the wiring PR + a verified clean plan.
 
-Direct commits this session: meta-state + journal + FU-238. PRs: #1615 #1616 #1619 #1618 #1623
-#1624 merged; #1617 open for the operator. Issues: #1620, #1621.
+- **Later still (16:0xZ–16:5xZ): `tofu/github` plans on the box — FU-238's github leg DONE.**
+  The operator migrated the state (Garage, `use_lockfile=false` — the single-writer ruling; the
+  probe's refusal is the guard working) and minted the read-only PAT with the new script; two
+  host-side traps on the way, both quickfixed direct: `github-tf.sh` never sourced the state env
+  (added, with the init after the creds), and the `github-tofu` devbox task ran a BARE init
+  before the wrapper (the FU-012 tf-plan trap, again). The box side (**#1628**): the App keys are
+  PEM VALUES of tofu variables → files under `/var/lib/mgmt/cred/` exported by a per-root hook
+  (`scripts/mgmt-root-env/github.sh`) from the trusted tree; `github` a plan-only policy root;
+  the belt's default roots `provisioning github`. **Two API facts, both now `plan_exclude_types`:**
+  `GET /repos/{repo}` omits the merge settings for any token without admin WRITE (13 repos
+  diffed forever); `/orgs/{org}/rulesets` needs org Administration WRITE for a fine-grained PAT
+  (docs confirmed by the operator). Repo rulesets — the pinned required checks — org secrets and
+  deploy keys plan fine. The last drift (2 org secrets: host flat-file keys ≠ the wallet's
+  Infisical copies) closed by the operator re-applying from the host onto the wallet keys →
+  `PASS tofu:github — No changes` on the box 16:39Z. #1617's head bumped (empty commit) as the
+  first github-root PR the sentinel judges — **and it lied: "github: +0 ~0 -0" while the live
+  ruleset shows the PR's change unapplied.** Root cause (the silent-success class, FU-125/108/131
+  again): the plan ran in a subshell WITH the state env (exit 2 = changes), but the summary —
+  `tofu show -json` on the plan file — ran outside it without TF_ENCRYPTION; the github root's plan
+  file embeds an encrypted state snapshot, `show` failed with stderr suppressed, and an empty list
+  was counted as zero. main has no encryption, which is why #1618 was right. **#1629**: the summary
+  runs in the same subshell, returns 1 on failure, both loops treat that as a failed verdict, and
+  plan-exit-2-with-empty-summary is INCONSISTENT, never zero. Operator's second point, same PR: the
+  verdict must say what it did NOT plan — the comment now lists the excluded types with counts and
+  the status carries "(N not planned)"; §MB3 states the per-root coverage for workers/reviewers/
+  coordinators. Next on FU-238: cloudflare, same shape.
+
+Direct commits this session: meta-state + journal + FU-238 + the two host-wrapper quickfixes +
+backend.tf. PRs: #1615 #1616 #1619 #1618 #1623 #1624 #1628 merged; #1617 open for the operator.
+Issues: #1620, #1621.
+- **Wind-down (17:2xZ, operator: 575k context).** The #1629 stand-aside ("reviewer spawned before
+  management-sentinel reported — worse now, burns tokens": STEP 0 runs INSIDE the pod, after the
+  load) produced two PRs: **#1630** the reflex belt (rules-API required contexts, absent =
+  pending; fixtures required-context-absent-held / -present-admitted; FSM MP-T03 pinned, md
+  rendered via `merge-path-lint --write` — hand-editing the md is the trap) and **#1631** the
+  operator's preferred lever, the in-cluster no-root poster (FU-237 (b): `mgmt_noroot_post` in
+  iac-sentinel.sh, same policy/classifier/App; classifier verified on #1629 → none, #1617 →
+  github). #1617 merged by the operator's own approval (auto-merge = codeowner) but UNAPPLIED —
+  apply on the host is the flip. Dummy PR branch pushed, unopened (pickup). Journal + pickup
+  pushed; background waits killed; worktrees left: wt-dummy, wt-reflex, wt-noroot (branches on
+  origin — safe to remove).
+- **Post-wind-down note (host plan, 17:3xZ):** applying master's `tofu/github` shows THREE changes —
+  #1617's ruleset AND the deploy/renovate `secret_repositories` bindings re-adding all their repo
+  ids: the earlier value rotation (an org-secret update with `visibility: selected` through the
+  provider) DROPPED the repository selection, so those workflows had no key until this apply.
+  Rotating an org secret via tofu is two-step here; plan after any secret change.
