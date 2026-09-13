@@ -28,16 +28,21 @@ DEV="$MGMT_USB_DEV"
 [ -b "$DEV" ] || { echo "ERROR: $DEV is not a block device" >&2; exit 1; }
 REAL="$(readlink -f "$DEV")"
 case "$DEV" in /dev/disk/by-id/*) ;; *) echo "WARNING: $DEV is not a by-id path — enumeration moves with sticks plugged in (machines.yaml)" >&2 ;; esac
-if [ "$(lsblk -dno RM "$REAL" 2>/dev/null || echo 0)" != "1" ]; then
+# sysfs, not lsblk: under `devbox run` lsblk answered nothing (2026-09-13, first run), which read
+# as "not removable, 0 MiB". /sys/class/block is always there and needs no tool.
+BLK="/sys/class/block/$(basename "$REAL")"
+[ -d "$BLK" ] || { echo "ERROR: $BLK missing — is $REAL a whole disk (not a partition)?" >&2; exit 1; }
+if [ "$(cat "$BLK/removable" 2>/dev/null || echo 0)" != "1" ]; then
   echo "ERROR: $REAL is NOT flagged removable — refusing (a system disk is one typo away). MGMT_USB_FORCE=1 overrides." >&2
   [ "${MGMT_USB_FORCE:-0}" = "1" ] || exit 1
 fi
-SIZE_B="$(lsblk -dnbo SIZE "$REAL")"
+SIZE_B=$(( $(cat "$BLK/size") * 512 ))
 [ "$SIZE_B" -ge $((2 * 1024 * 1024 * 1024)) ] || { echo "ERROR: $REAL is $((SIZE_B / 1024 / 1024)) MiB — the ISO is ~1.5 GB" >&2; exit 1; }
-if lsblk -no MOUNTPOINT "$REAL" | grep -q .; then
-  echo "ERROR: $REAL has mounted partitions — unmount first:" >&2; lsblk "$REAL" >&2; exit 1
+if awk -v d="$REAL" '$1 ~ "^"d {found=1} END {exit !found}' /proc/mounts; then
+  echo "ERROR: $REAL has mounted partitions — unmount first:" >&2; grep "^$REAL" /proc/mounts >&2; exit 1
 fi
-echo "target: $DEV -> $REAL"; lsblk -o NAME,SIZE,TRAN,MODEL,RM "$REAL"
+echo "target: $DEV -> $REAL  ($((SIZE_B / 1024 / 1024 / 1024)) GiB, removable=$(cat "$BLK/removable"))"
+lsblk -o NAME,SIZE,TRAN,MODEL,RM "$REAL" 2>/dev/null || true
 read -rp "Write the mgmt installer to $REAL? This ERASES it. Type 'yes': " ok
 [ "$ok" = "yes" ] || { echo "aborted."; exit 1; }
 
