@@ -360,15 +360,39 @@ mgmt_apply_allowed() {
   done
 }
 
-# mgmt_clone <dir> <url> — own clone for a loop (never the box's system checkout); fetch each run
-# and RESET the working tree to origin/master: this tree is the trusted tooling (devbox.json,
-# scripts/) every plan runs from, so it must be master's, not clone-time's.
+# mgmt_git <git args…> — git with the App token as a per-invocation `http.extraHeader` (the
+# PR#1333 pattern: preemptive Basic auth, so GitHub never sees an ANONYMOUS request from this box —
+# the per-IP throttle that took the loops down 2026-09-02/03 counts those, and the box's two loops
+# made ≈576 of them a day at birth). Per invocation, never `git config`: the token lives ~1 h.
+# No token (SHADOW) → plain git, the old behaviour.
+mgmt_git() {
+  local tok
+  if tok="$(mgmt_gh_token 2>/dev/null)" && [ -n "$tok" ]; then
+    git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$tok" | base64 -w0)" "$@"
+  else
+    git "$@"
+  fi
+}
+# mgmt_clone <dir> <url> — own clone for a loop (never the box's system checkout); reset to
+# origin/master ONLY WHEN MASTER MOVED: the level check is one API call for master's sha (the
+# App's documented quota), not a git fetch per tick (GitHub's git per-IP limit is undocumented,
+# best-effort, and the thing to stay far away from — FU-007's ruling: WAN minimization happens
+# INSIDE GitHub). Without a token the check falls back to a fetch, the old behaviour.
 mgmt_clone() {
-  local dir="$1" url="$2"
+  local dir="$1" url="$2" have want
   if [ ! -d "$dir/.git" ]; then
     mkdir -p "$(dirname "$dir")"
-    git clone --quiet "$url" "$dir" || return 1
+    mgmt_git clone --quiet "$url" "$dir" || return 1
   fi
-  git -C "$dir" fetch --quiet --prune origin || return 1
+  have="$(git -C "$dir" rev-parse -q --verify origin/master 2>/dev/null || true)"
+  if want="$(gh_api GET branches/master 2>/dev/null | jq -r '.commit.sha // empty')" && [ -n "$want" ]; then
+    if [ "$want" = "$have" ] && [ -z "$(git -C "$dir" status --porcelain 2>/dev/null)" ] \
+       && [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" = "$have" ]; then
+      return 0   # master unchanged, tree clean at it — no git traffic this tick
+    fi
+    mgmt_git -C "$dir" fetch --quiet --prune origin master || return 1
+  else
+    mgmt_git -C "$dir" fetch --quiet --prune origin || return 1
+  fi
   git -C "$dir" reset --quiet --hard origin/master || return 1
 }
