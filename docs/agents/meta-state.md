@@ -534,8 +534,13 @@ standing set below; what differs is cadence and the act rule:
   dummy #1634 proved `cloudflare: +0 ~0 -0 (3 not planned)`, closed. Box checkout hand-advanced to
   master (5387bf50). **Operator, in order:** (1) host: `devbox run cloudflare-token-tofu plan|apply`
   → wallet `cloudflare-mgmt-read` → `scripts/mgmt-provision-secrets.sh --push` (the table names the
-  new entry and FATALs without it — mint first); the box then plans cloudflare read-only (first
-  cloudflare-touching PR = the proof). (2) `mgmt-release` is ABSENT — push the ref
+  new entry and FATALs without it — mint first) — **DONE 19:2xZ** (minted, stored, pushed; the box
+  plans cloudflare read-only now — the first cloudflare-touching PR is the proof). The apply ended
+  in the gotcha-3 ordering errors; `jail-read-all` gained "Zone Observability Read" and now shows a
+  STANDING `~ id` permutation (API order arbitrary — gotcha 3 addendum): after **#1636** (provider
+  5.19.1→5.25.0, auto-merge) merges, `git pull` on the host and re-plan the token root; still a
+  permutation → live with it per the gotcha (never apply for it alone), file an FU only then.
+  (2) `mgmt-release` is ABSENT — push the ref
   (`git push origin master:refs/heads/mgmt-release`) to start the box's pull loop; until then every
   merged `scripts/mgmt-*` fix needs the system checkout hand-advanced (ssh, `git merge --ff-only
   origin/master` in `/var/lib/homelab`). **Seat next:** FU-012's scoped read-only kubeconfig for the
