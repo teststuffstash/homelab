@@ -103,7 +103,7 @@ transitions:
       - agents/replay/fixtures/unblocked-unlabeled/blocker-open
     guards:
       - desc: "the play forbids self-labeling (loop-safety breaker #1)"
-        anchor: { file: agents/coordinator/README.md, pattern: "never add .agent-fix. or .agent/queued." }
+        anchor: { file: agents/coordinator/README.md, pattern: "a harvested issue carries NO label of any kind" }  # reworded 2026-09-13 (#1597: the label is a human judgment, ADR-109)
       - desc: "the scan surfaces untriaged bot-authored issues every pass"
         anchor: { file: agents/coordinator-scan.sh, pattern: "bot-authored, awaiting human triage" }
     incidents: ["2026-07-31 sleep harvest: 3 of 5 sprouts were noise — the triage gate is where they died"]
