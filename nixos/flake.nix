@@ -36,5 +36,18 @@
         ./hosts/mgmt/default.nix
       ];
     };
+
+    # The stick: `MGMT_USB_DEV=/dev/disk/by-id/usb-... devbox run mgmt-usb` ON THE HOST where it is
+    # plugged in (scripts/mgmt-usb.sh — probes the device, THEN builds this output, dd-s, verifies).
+    # The jail can build it too (host daemon, shared /nix) but cannot see the stick.
+    nixosConfigurations.installer = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        "${nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
+        ./hosts/mgmt/installer.nix
+      ];
+    };
+    packages.x86_64-linux.installerIso =
+      self.nixosConfigurations.installer.config.system.build.isoImage;
   };
 }

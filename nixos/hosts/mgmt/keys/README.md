@@ -1,6 +1,7 @@
 # Authorized keys for [the management box](../../../../docs/management-box.md)
 
-One `*.pub` per key, read at build time by `../default.nix`. Public keys are **config, not
+One `*.pub` per key, read at build time by `../default.nix` AND `../installer.nix` (the stick
+trusts the same keys, so the box is reachable headless from the moment it boots the installer). Public keys are **config, not
 secrets** (`docs/secrets.md` §Minting doctrine) — they belong in git.
 
 Keep **two** at all times: the operator's and the jail's (`jail.pub` = the pve-ssh-seed key,
