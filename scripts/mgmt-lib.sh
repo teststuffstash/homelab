@@ -255,7 +255,9 @@ mgmt_plan_root() {
     # so an exclusion's DEPENDENTS (tofu excludes them too, silently) are named as well
     devbox run --quiet -- tofu -chdir="$dir" state list 2>/dev/null | sort > "$out.state" || true
     # shellcheck disable=SC2086
-    devbox run --quiet -- tofu -chdir="$dir" plan -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile "${excludes[@]}"
+    # -no-color: the verdict quotes this log's tail — ANSI escapes made the first cloudflare
+    # failure unreadable in the PR comment (homelab#1634)
+    devbox run --quiet -- tofu -chdir="$dir" plan -no-color -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile "${excludes[@]}"
   ) >"$logf" 2>&1
   local rc=$?
   case $rc in 0|2) return $rc ;; *) return 1 ;; esac
