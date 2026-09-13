@@ -49,16 +49,24 @@ fi
 
 POL="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")" || exit 1  # MGMT_POLICY_REF: a TEST knob only (a branch's policy before it lands) — production reads master
 trap 'rm -f "$POL"' EXIT
-mapfile -t files < <(git -C "$REPO" diff --name-only "$last" "$sha" --)
-mapfile -t roots < <(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$POL")
+# FAIL CLOSED, no stamp (the #1631 third round): a failed diff or classifier read must never look
+# like "touches no apply root" — that path STAMPS the sha as applied and the loop would advance its
+# baseline past a master push it never classified. `$(…) ||`, never `mapfile < <(…)` (rc discarded).
+files_out="$(git -C "$REPO" diff --name-only "$last" "$sha" --)" || { log "PROBE-FAIL: diff ${last:0:8}..${sha:0:8} failed — not stamping, next run retries"; exit 1; }
+files=(); [ -n "$files_out" ] && mapfile -t files <<<"$files_out"
+roots_out="$(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$POL")" || { log "PROBE-FAIL: classifier failed (policy unreadable) — not stamping, next run retries"; exit 1; }
+roots=(); [ -n "$roots_out" ] && mapfile -t roots <<<"$roots_out"
 apply_roots=()
-for r in "${roots[@]}"; do [ "$(mgmt_root_apply "$POL" "$r")" = true ] && apply_roots+=("$r"); done
+for r in "${roots[@]}"; do
+  ap="$(mgmt_root_apply "$POL" "$r")" || { log "PROBE-FAIL: apply flag of $r unreadable — not stamping, next run retries"; exit 1; }
+  [ "$ap" = true ] && apply_roots+=("$r")
+done
 if [ ${#apply_roots[@]} -eq 0 ]; then
   log "${last:0:8}..${sha:0:8} touches no apply:true root (${#files[@]} files) — stamping"; stamp "$sha"; exit 0
 fi
 log "${last:0:8}..${sha:0:8} touches: ${apply_roots[*]}"
 
-hits="$(mgmt_stage1 "$POL" "$REPO" "$last" "$sha")"
+hits="$(mgmt_stage1 "$POL" "$REPO" "$last" "$sha")" || { log "PROBE-FAIL: stage 1 could not run (policy unreadable) — not applying, not stamping; next run retries"; exit 1; }
 if [ -n "$hits" ]; then
   first="$(head -1 <<<"$hits")"; rule="${first%%$'\t'*}"
   refuse "$sha" "stage 1: $rule on master diff — human apply" "$hits"; exit 0
@@ -66,14 +74,15 @@ fi
 
 git -C "$REPO" reset --hard --quiet "$sha" || { log "PROBE-FAIL: reset to $sha failed"; exit 1; }
 for root in "${apply_roots[@]}"; do
-  rel="$(mgmt_root_dir "$POL" "$root")"; out="$ADIR/plan-$root.bin"; rm -f "$out" "$out.log"
+  rel="$(mgmt_root_dir "$POL" "$root")" && [ -n "$rel" ] && [ "$rel" != null ] || { refuse "$sha" "$root: dir unreadable from the policy — human"; exit 0; }
+  out="$ADIR/plan-$root.bin"; rm -f "$out" "$out.log"
   mgmt_plan_root "$REPO" "$POL" "$root" "$out" true; rc=$?
   if [ $rc = 1 ]; then refuse "$sha" "$root: plan errored — see the box journal" "$(tail -5 "$out.log")"; exit 0; fi
   if ! changes="$(mgmt_plan_changes "$REPO" "$POL" "$root" "$out")"; then refuse "$sha" "$root: plan summary failed — see the box journal"; exit 0; fi
   if [ $rc = 2 ] && [ -z "$changes" ]; then refuse "$sha" "$root: plan exit 2 but an empty summary — inconsistent, human"; exit 0; fi
   read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
   if [ -z "$changes" ]; then log "$root: no changes"; continue; fi
-  outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")"
+  outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")" || { refuse "$sha" "$root: apply allowlist unreadable — human apply"; exit 0; }
   if [ -n "$outside" ]; then
     n=$(wc -l <<<"$outside")
     refuse "$sha" "$root: $n address(es) outside the apply allowlist — human apply" "$outside"; exit 0

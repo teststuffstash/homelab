@@ -17,7 +17,7 @@
 # never attribute values. Plan text and `tofu show -json` stay local.
 
 _mgmt_log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
-log() { _mgmt_log "$@"; }
+declare -F log >/dev/null 2>&1 || log() { _mgmt_log "$@"; }   # a sourcing script's own log() wins (iac-sentinel.sh)
 
 MGMT_API="https://api.github.com"
 _MGMT_TOKEN=""
@@ -132,17 +132,28 @@ mgmt_policy_get() { _yq -r "$2" "$1"; }
 # mgmt_roots_touched <policy> <files…via stdin, one per line> → root names, one per line (deduped)
 # A path under roots[X].dir/ (longest dir wins) → X; a path under a foreign_roots dir → none;
 # anything not under any root dir → none.
+# FAILS CLOSED (rc 1, a line on stderr) when the policy cannot be read — a yq/devbox hiccup, a
+# missing file, a roots map with no entries or a root without a dir. An EMPTY result here means
+# "no box-held surface touched" = a success status, so a read failure must never degrade into it
+# (review finding on homelab#1631: `mapfile < <(…)` discards the producer's rc and pipefail does
+# not cover process substitution). Callers capture the output with `$(…) || …`, not mapfile.
 mgmt_roots_touched() {
-  local pol="$1" f root dir best bestdir foreign
-  local -a names dirs
-  mapfile -t names < <(mgmt_policy_get "$pol" '.roots | keys | .[]')
-  mapfile -t dirs   < <(for n in "${names[@]}"; do mgmt_policy_get "$pol" ".roots.\"$n\".dir"; done)
-  local -a foreigns
-  mapfile -t foreigns < <(mgmt_policy_get "$pol" '.foreign_roots[]?')
+  local pol="$1" f root dir best bestdir foreign n d out
+  local -a names dirs foreigns
+  out="$(mgmt_policy_get "$pol" '.roots | keys | .[]')" || { echo "policy: roots unreadable ($pol)" >&2; return 1; }
+  [ -n "$out" ] || { echo "policy: no roots in $pol" >&2; return 1; }
+  mapfile -t names <<<"$out"
+  for n in "${names[@]}"; do
+    d="$(mgmt_policy_get "$pol" ".roots.\"$n\".dir")" && [ -n "$d" ] && [ "$d" != null ] \
+      || { echo "policy: root $n has no dir" >&2; return 1; }
+    dirs+=("$d")
+  done
+  out="$(mgmt_policy_get "$pol" '.foreign_roots[]?')" || { echo "policy: foreign_roots unreadable" >&2; return 1; }
+  mapfile -t foreigns <<<"$out"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     foreign=0
-    for dir in "${foreigns[@]}"; do case "$f" in "$dir"/*) foreign=1 ;; esac; done
+    for dir in "${foreigns[@]}"; do [ -n "$dir" ] || continue; case "$f" in "$dir"/*) foreign=1 ;; esac; done
     [ $foreign = 1 ] && continue
     best=""; bestdir=""
     for i in "${!names[@]}"; do
@@ -152,16 +163,30 @@ mgmt_roots_touched() {
     [ -n "$best" ] && printf '%s\n' "$best"
   done | sort -u
 }
+# mgmt_roots_touched_at <repo-dir> <ref> <files…via stdin> → mgmt_roots_touched over the policy AT
+# <ref> (a temp copy, cleaned up); the classifier's rc survives the cleanup — never end a subshell
+# in `rm -f` and read its status (the #1631 fail-open).
+mgmt_roots_touched_at() {
+  local pol rc
+  pol="$(mgmt_policy_load "$1" "$2")" || return 1
+  mgmt_roots_touched "$pol"; rc=$?
+  rm -f "$pol"
+  return $rc
+}
 mgmt_root_dir()   { mgmt_policy_get "$1" ".roots.\"$2\".dir"; }
 # mgmt_root_excludes <policy> <root> <checkout-root-dir> → "-exclude=<addr>" args for every state
 # resource of a type in roots[X].plan_exclude_types (github: the admin-only repo settings). Reads
 # the STATE's address list (never the PR tree) — the exclusion set cannot be widened by a head.
+# rc 1 when the policy or the state list cannot be read — the caller fails the plan rather than
+# running it un-excluded (a silently empty exclusion set is the #1631 fail-open class).
 mgmt_root_excludes() {
-  local pol="$1" root="$2" dir="$3" t
+  local pol="$1" root="$2" dir="$3" t types_out addrs
   local -a types
-  mapfile -t types < <(mgmt_policy_get "$pol" ".roots.\"$root\".plan_exclude_types[]?")
-  [ ${#types[@]} -gt 0 ] || return 0
-  ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$dir" state list 2>/dev/null ) \
+  types_out="$(mgmt_policy_get "$pol" ".roots.\"$root\".plan_exclude_types[]?")" || return 1
+  [ -n "$types_out" ] || return 0
+  mapfile -t types <<<"$types_out"
+  addrs="$( cd "$REPO" && devbox run --quiet -- tofu -chdir="$dir" state list 2>/dev/null )" || return 1
+  printf '%s\n' "$addrs" \
     | while IFS= read -r addr; do for t in "${types[@]}"; do case "$addr" in "$t".*) printf -- '-exclude=%s\n' "$addr" ;; esac; done; done
 }
 mgmt_root_apply() { mgmt_policy_get "$1" ".roots.\"$2\".apply // false"; }
@@ -169,20 +194,31 @@ mgmt_root_apply() { mgmt_policy_get "$1" ".roots.\"$2\".apply // false"; }
 mgmt_root_exclude_note() { mgmt_policy_get "$1" ".roots.\"$2\".plan_exclude_note // \"\""; }
 
 # mgmt_stage1 <policy> <repo-dir> <base-sha> <head-sha> → prints hits "rule<TAB>file<TAB>detail",
-# one per line; exit 0 with no output = clean. Pure: reads the trees/diff as DATA, executes nothing.
+# one per line; exit 0 with no output = clean; rc 1 = the classifier could not read the policy (no
+# verdict — the caller skips the head, never treats it as clean). Pure: reads the trees/diff as
+# DATA, executes nothing.
 # Only files inside a touched root's dir are judged (foreign roots + non-tofu paths are not this
 # box's business). Checks: deny_paths (basename glob), symlinks in the head tree, deny_patterns
 # over ADDED lines of the diff.
 mgmt_stage1() {
   local pol="$1" repo="$2" base="$3" head="$4"
   local -a files roots dirs denyp denyre
-  mapfile -t files < <(git -C "$repo" diff --name-only "$base" "$head" --)
-  [ ${#files[@]} -gt 0 ] || return 0
-  mapfile -t roots < <(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$pol")
-  [ ${#roots[@]} -gt 0 ] || return 0
-  mapfile -t dirs < <(for r in "${roots[@]}"; do mgmt_root_dir "$pol" "$r"; done)
-  mapfile -t denyp  < <(mgmt_policy_get "$pol" '.deny_paths[]?')
-  mapfile -t denyre < <(mgmt_policy_get "$pol" '.deny_patterns[]?')
+  # EVERY read below is `$(…) || return 1` — never `mapfile < <(…)`, which discards the producer's
+  # rc: a failed git diff / policy read would otherwise judge the head CLEAN (empty file list, no
+  # dirs, no deny rules) — the #1631 fail-open class, second round.
+  local files_out roots_out dirs_out denyp_out denyre_out r
+  files_out="$(git -C "$repo" diff --name-only "$base" "$head" --)" || return 1
+  [ -n "$files_out" ] || return 0
+  mapfile -t files <<<"$files_out"
+  roots_out="$(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$pol")" || return 1   # classifier failed: no verdict
+  [ -n "$roots_out" ] || return 0
+  mapfile -t roots <<<"$roots_out"
+  dirs_out="$(for r in "${roots[@]}"; do mgmt_root_dir "$pol" "$r" || exit 1; done)" || return 1
+  mapfile -t dirs <<<"$dirs_out"
+  denyp_out="$(mgmt_policy_get "$pol" '.deny_paths[]?')" || return 1
+  denyre_out="$(mgmt_policy_get "$pol" '.deny_patterns[]?')" || return 1
+  denyp=(); [ -n "$denyp_out" ] && mapfile -t denyp <<<"$denyp_out"
+  denyre=(); [ -n "$denyre_out" ] && mapfile -t denyre <<<"$denyre_out"
   local f inside d pat mode base_f
   local -a judged=()
   for f in "${files[@]}"; do
@@ -228,7 +264,10 @@ mgmt_stage1() {
 # what makes that sufficient.
 mgmt_plan_root() {
   local co="$1" pol="$2" root="$3" out="$4" lock="${5:-false}" dir rel logf varfile stateargs
-  rel="$(mgmt_root_dir "$pol" "$root")"; dir="$co/$rel"; logf="$out.log"
+  logf="$out.log"
+  # an unreadable/empty dir would plan "$co/" — the repo root, no .tf files, "No changes": fail-open
+  rel="$(mgmt_root_dir "$pol" "$root")" && [ -n "$rel" ] && [ "$rel" != null ] || { echo "dir of root $root unreadable from the policy — refusing to plan" >"$logf"; return 1; }
+  dir="$co/$rel"
   [ -n "${REPO:-}" ] && [ -f "$REPO/devbox.json" ] || { echo "REPO unset or not a checkout — refusing to run tooling from the plan tree" >"$logf"; return 1; }
   varfile=""; [ -n "${TOFU_VAR_DIR:-}" ] && [ -f "$TOFU_VAR_DIR/$root.tfvars" ] && varfile="-var-file=$TOFU_VAR_DIR/$root.tfvars"
   stateargs=""
@@ -248,7 +287,8 @@ mgmt_plan_root() {
     [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"
     devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 \
       || { echo "tofu init failed for $root" >&2; devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
-    mapfile -t excludes < <(mgmt_root_excludes "$pol" "$root" "$dir")
+    excl_out="$(mgmt_root_excludes "$pol" "$root" "$dir")" || { echo "plan_exclude_types for $root could not be resolved (policy or state list unreadable) — not planning un-excluded" >&2; exit 1; }
+    excludes=(); [ -n "$excl_out" ] && mapfile -t excludes <<<"$excl_out"
     # what this plan did NOT judge — the verdict must say so (a reviewer reads the comment, not the policy)
     printf '%s\n' "${excludes[@]#-exclude=}" | grep -v '^$' > "$out.excluded" || true
     # every address in state — the verdict's "not planned" set is this minus what the plan carried,
@@ -272,7 +312,8 @@ mgmt_plan_root() {
 # +0 ~0 -0 on homelab#1617 while the plan had exit code 2. Same env as the plan, same subshell.
 mgmt_plan_changes() {
   local co="$1" pol="$2" root="$3" out="$4" rel dir json
-  rel="$(mgmt_root_dir "$pol" "$root")"; dir="$co/$rel"
+  rel="$(mgmt_root_dir "$pol" "$root")" && [ -n "$rel" ] && [ "$rel" != null ] || { echo "plan summary FAILED for $root: dir unreadable from the policy" >&2; return 1; }
+  dir="$co/$rel"
   json="$(
     set +u
     cd "$REPO" || exit 1
@@ -300,10 +341,14 @@ mgmt_plan_counts() {
 }
 # mgmt_apply_allowed <policy> <root> <changes-lines on stdin> → prints the addresses OUTSIDE the
 # apply allowlist (empty = all allowed). apply:false roots → every address is outside.
+# rc 1 when the allowlist cannot be read — callers treat that as "nothing is allowed", never as
+# "all allowed" (an unreadable allowlist reads as EMPTY otherwise, which here is fail-closed by
+# accident — every address outside — but the caller must not mistake the rc for a verdict).
 mgmt_apply_allowed() {
-  local pol="$1" root="$2" addr acts ok pat
+  local pol="$1" root="$2" addr acts ok pat globs_out
   local -a globs
-  mapfile -t globs < <(mgmt_policy_get "$pol" ".apply_addresses.\"$root\"[]?")
+  globs_out="$(mgmt_policy_get "$pol" ".apply_addresses.\"$root\"[]?")" || return 1
+  globs=(); [ -n "$globs_out" ] && mapfile -t globs <<<"$globs_out"
   while IFS=$'\t' read -r addr acts; do
     [ -n "$addr" ] || continue
     ok=0

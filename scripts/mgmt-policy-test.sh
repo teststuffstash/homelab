@@ -68,5 +68,37 @@ case_ non-tofu          noroot        'echo "y" > README.md'
 case_ provisioning-only none          'echo "y" > tofu/provisioning/main.tf'
 # a deny hit in a FOREIGN root must not fire (not this box's business)
 case_ foreign-deny      noroot        'printf "data \"external\" \"x\" {}\n" >> tofu/cloudflare-token/main.tf'
+
+# ── the classifier FAILS CLOSED (review finding on homelab#1631): an empty root list is a SUCCESS
+# status ("no box-held surface touched"), so every way the policy read can fail must surface as a
+# non-zero rc with NO output — never as an empty, success-shaped list.
+fail_() {  # <name> <shell> — the shell must exit non-zero AND print nothing on stdout
+  local name="$1" shell="$2" out rc
+  out="$(eval "$shell" 2>/dev/null)"; rc=$?
+  if [ $rc -ne 0 ] && [ -z "$out" ]; then pass=$((pass+1)); echo "PASS $name (rc=$rc, no output)"
+  else fail=$((fail+1)); echo "FAIL $name — want rc≠0 + empty, got rc=$rc output '$out'"; fi
+}
+fail_ yq-hiccup        '( _yq() { return 7; }; printf "tofu/github/x.tf\n" | mgmt_roots_touched "$POL" )'
+fail_ policy-missing   'printf "tofu/github/x.tf\n" | mgmt_roots_touched "$T/absent.yaml"'
+fail_ policy-no-roots  'echo "deny_paths: []" > "$T/empty.yaml"; printf "tofu/github/x.tf\n" | mgmt_roots_touched "$T/empty.yaml"'
+fail_ root-without-dir 'printf "roots:\n  main: { apply: true }\n" > "$T/nodir.yaml"; printf "tofu/x.tf\n" | mgmt_roots_touched "$T/nodir.yaml"'
+fail_ stage1-rc        '( _yq() { return 7; }; mgmt_stage1 "$POL" "$T" "$BASE" "$(git -C "$T" rev-parse c-versions-tf)" )'
+fail_ stage1-bad-head  'mgmt_stage1 "$POL" "$T" "$BASE" 0000000000000000000000000000000000000000'
+# the SIBLING reads inside stage 1 (dirs / deny_paths / deny_patterns — the second-round #1631
+# finding): _yq fails only from the K-th call onward, so mgmt_roots_touched itself succeeds
+# (1 keys + N dirs + 1 foreign = its call count); with only the first k calls succeeding, the
+# failure lands on the dirs read, then deny_paths, then deny_patterns.
+eval "_yq_real() $(declare -f _yq | sed 1d)"
+nroots="$(_yq_real -r '.roots | keys | length' "$POL")"
+for k in $((nroots+2)) $((nroots+3)) $((nroots+4)); do   # the (k+1)-th call fails: dirs, deny_paths, deny_patterns
+  fail_ "stage1-sibling-read-$k" '( C="$T/yqcount"; echo 0 >"$C"; _yq() { n=$(cat "$C"); echo $((n+1)) >"$C"; [ "$n" -lt '"$k"' ] || return 7; _yq_real "$@"; }; mgmt_stage1 "$POL" "$T" "$BASE" "$(git -C "$T" rev-parse c-versions-tf)" )'
+done
+# the in-cluster half's shape: policy at a ref, temp copy cleaned up, rc preserved across the cleanup
+fail_ at-ref-no-policy 'printf "tofu/github/x.tf\n" | mgmt_roots_touched_at "$T" HEAD'
+fail_ at-ref-yq-hiccup '( cp "$POL" "$T/policy.yaml"; mkdir -p "$T/policy/mgmt" && cp "$POL" "$T/policy/mgmt/plan-input.yaml" && git -C "$T" add -A && git -C "$T" commit -q -m pol; _yq() { return 7; }; printf "tofu/github/x.tf\n" | mgmt_roots_touched_at "$T" HEAD )'
+got="$(printf 'tofu/github/x.tf\ntofu/cloudflare-token/y.tf\n' | mgmt_roots_touched_at "$T" HEAD)"; rc=$?
+if [ $rc = 0 ] && [ "$got" = github ]; then pass=$((pass+1)); echo "PASS at-ref-positive (roots: github)"
+else fail=$((fail+1)); echo "FAIL at-ref-positive — rc=$rc roots '$got'"; fi
+
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]

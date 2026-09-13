@@ -55,14 +55,18 @@ while IFS=$'\t' read -r pr sha; do
   log "[#$pr@${sha:0:8}] evaluating"
   git -C "$REPO" fetch --quiet origin "refs/pull/$pr/head:refs/mgmt/pr-$pr" || { log "[#$pr] fetch of the head failed — skipped this run"; continue; }
   base="$(git -C "$REPO" merge-base origin/master "$sha" 2>/dev/null)" || { log "[#$pr] no merge-base with master — skipped"; continue; }
-  mapfile -t files < <(git -C "$REPO" diff --name-only "$base" "$sha" --)
-  mapfile -t roots < <(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$POL")
+  files_out="$(git -C "$REPO" diff --name-only "$base" "$sha" --)" || { log "[#$pr] diff of the head failed — skipped this run"; continue; }   # an empty list reads as "no surface": never from a failed read
+  files=(); [ -n "$files_out" ] && mapfile -t files <<<"$files_out"
+  # the classifier's rc decides between "no box-held surface" (a success) and "could not classify"
+  # (no verdict, retried next tick) — `$(…) ||`, never mapfile over a process substitution (#1631)
+  roots_out="$(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$POL")" || { log "[#$pr] classifier failed (policy unreadable) — skipped this run"; continue; }
+  roots=(); [ -n "$roots_out" ] && mapfile -t roots <<<"$roots_out"
   if [ ${#roots[@]} -eq 0 ]; then
     mgmt_post_status "$sha" "$CTX" success "no box-held surface touched" && touch "$SDIR/done/$sha"
     continue
   fi
   # stage 1
-  hits="$(mgmt_stage1 "$POL" "$REPO" "$base" "$sha")"
+  hits="$(mgmt_stage1 "$POL" "$REPO" "$base" "$sha")" || { log "[#$pr] stage 1 could not run (policy unreadable) — skipped this run"; continue; }
   if [ -n "$hits" ]; then
     first="$(head -1 <<<"$hits")"; rule="${first%%$'\t'*}"; rest="${first#*$'\t'}"; file="${rest%%$'\t'*}"
     bodyf="$(mktemp)"
@@ -119,15 +123,17 @@ while IFS=$'\t' read -r pr sha; do
     desc="$desc$root: +$a ~$c -$d ${rs}${excl_note} "
     { echo; echo "### \`$root\` — +$a to add, ~$c to change, -$d to destroy${rs:+, $r to replace}"
       if [ "$excl_n" -gt 0 ]; then
-        note="$(mgmt_root_exclude_note "$POL" "$root")"
+        note="$(mgmt_root_exclude_note "$POL" "$root")" || note="(reason unreadable this run)"
         echo; echo "⚠ **Not planned on the box** (policy \`plan_exclude_types\`${note:+ — $note}): $excl_types."
       fi
       if [ -n "$changes" ]; then echo; echo "| address | actions |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | %s |\n", $1, $2}' <<<"$changes"; else echo; echo "No changes."; fi
       echo
-      if [ "$(mgmt_root_apply "$POL" "$root")" != true ]; then echo "apply: plan only — this root is not on the box's apply list."
+      ap="$(mgmt_root_apply "$POL" "$root")" || ap=unknown   # a failed read must not print "plan only" for an apply:true root
+      if [ "$ap" = unknown ]; then echo "apply: UNKNOWN — the apply flag could not be read from the policy this run; the apply loop reads it again after merge."
+      elif [ "$ap" != true ]; then echo "apply: plan only — this root is not on the box's apply list."
       elif [ -z "$changes" ]; then echo "apply: nothing to apply."
       else
-        outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")"
+        outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")" || outside="(allowlist unreadable — the apply loop refuses until it reads)"
         if [ -z "$outside" ]; then echo "apply: all addresses inside the apply allowlist — the box applies after merge."
         else n=$(wc -l <<<"$outside"); echo "apply: $n address(es) OUTSIDE the apply allowlist — human apply: $(tr '\n' ' ' <<<"$outside" | sed 's/ $//' | sed 's/ /, /g')"; fi
       fi
