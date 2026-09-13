@@ -147,7 +147,6 @@
         "bash scripts/github-secrets-sync.sh \"$@\""
       ],
       "github-tofu": [
-        "tofu -chdir=tofu/github init -input=false",
         "sh scripts/github-tf.sh \"$@\""
       ],
       "cloudflare-token-tofu": [
