@@ -8852,3 +8852,62 @@ Issues: #1620, #1621.
   rc 0), box advanced, stamped 21:00Z. FU-240: the box's devbox rewrites devbox.lock plugin fields
   (version skew) — the on-change check ignores the lock. Wind-down: worktrees removed, monitors
   ended, bookkeeping pushed.
+
+## 2026-09-13 (late) — the deepseek loop day read; PR#1639 exacto, PR#1638 /tmp, Goal #1640
+
+- **Operator ask:** why the loop stopped (oracle-fleet#587, homelab#1622: `fleet-strike error_class=unknown`).
+  Read-only until 21:0xZ (another seat held the tree); three sub-agents + one corpus fork.
+- **Root cause:** five of five build rides on `deepseek/deepseek-v4-flash` @ provider `open-inference`
+  (oracle-fleet #550/#572/#581 12:08–14:58Z, homelab #1620/#1621 14:43/14:50Z) looped on ONE tool call
+  (`cat` of the context bundle ~200×, goose harness) to `GOOSE_MAX_TURNS=200`; goose's own cap line
+  ("I've reached the maximum number of actions…") ended each, exit 0, nothing produced. Finalize →
+  `no-output` → the strike poster rewrites to `unknown` → FU-200 reader latched `agent/error` on all
+  five + filed the two fleet-strike issues. Same model on other providers was clean this week;
+  v4.1-flash @ `deepseek` 3/3 clean the same morning. The pin is cached per MODEL fleet-wide (1 h,
+  `PIN_TTL_S`), cheapest tools-capable endpoint ≥ 95 % uptime — open-inference. Upstream 200s
+  throughout: no HTTP-fed belt could see it; the watchdog's line-keyed repetition rules read 5–8 %
+  on a 35-line repeated block. The router store never saw the strikes (`no-output` ∉ STRIKE_CLASSES;
+  enforcement behind the unset `ROUTER_STRIKE_ENFORCE`). Adjacent, not causal: the GitHub
+  outage 08:52–10:45Z (one stray review on of#551, one zombie CI run 34748702282 → CiDispatchStalled,
+  the of#301 coordinator ride killed at the 1 h deadline in `git clone`); the proxy OOM 15:20Z
+  (PR#1625) — the five loops pushed ~17.7 M accumulated input tokens each through it (unverified
+  contributor). Meta-state's "both rails latched" was stale: subscription 5h 27 % / 7d 19 %.
+- **Design read (corpus fork):** every carrier is tier- or model-shaped; the one provider carrier
+  (#783 pair-exclusion) is unarmed; a no-output ride costs a coordinator session because the loop has
+  ONE re-entry. Operator rulings tonight: attribution by RETRY OUTCOME never by inspection (the
+  HTTP cooldown separates "us bad" from "provider bad" and cannot be re-purposed); the retry rung is
+  the next cheapest eligible CELL (model × provider) — an expensive model's next provider may cost
+  more than the next model; slots stay the experiment instrument (round-1 picks are jittered,
+  provider rankings drift), a retry is an EXCLUSION; the finalizer's salvage verdict `none` IS the
+  "nothing produced" predicate (it commits uncommitted state + pushes); homelab is NOT chainless
+  (platform claim: chain + `routerMode: shadow` — the charter's "rode the same wave" line is wrong),
+  kept one step ahead on purpose (opencode-go, subscription as the spending cap); `Base: master`
+  Goals rejected for the codeowner tax → THEMED Goal (ADR-126, the first live theme).
+- **Landed:** **PR#1639** `provider_policy: exacto` ON for coding (FU-186 step 1; operator: today's
+  five ARE the trial) — the self-test caught the suffix riding EVERY coding pick (`:free:exacto`,
+  `claude/haiku:exacto`, `opencode-go/…:exacto`, cloaked `openrouter/…:exacto`): guarded to paid
+  OpenRouter picks; row (a) had passed role="audit" (a class, not a role → coding) — vacuous until
+  the flip. **PR#1638** emptyDir at `/tmp`: readOnlyRootFilesystem left sqlite no temp dir → every
+  60 s router aggregate `disk I/O error` → `[]` since 09-10 (belt inputs silently blank; prior-art
+  negative). **Goal #1640** "the router routes, the launcher retries" (Budget 24, human verdict,
+  themed): theme #1641 `router` (branch `goal/1640-router` cut, disposition adopted), theme 2
+  `launcher` forms after theme 1 soaks; 8 acceptances (vocabulary + block-repetition watchdog;
+  pin per (session, model) = the `x-opencode-session` id, Go rail back on; strikes enforced per
+  task + cell pricing; launcher retry at worker-terminal; pair cooldown + reader re-keyed to
+  provider/model/us; platform claim chainless+authoritative; model-routing.md rules-only; exacto
+  standing re-read). UNQUEUED by operator order: #1231 verdict, S8 and the codeowner reads first.
+  goal-lint 0 FAIL. ROADMAP row G-H.
+- **Closing act (21:1x–21:2xZ):** #1639 merged 21:11:15Z, #1638 21:17:43Z; proxy pod
+  `openrouter-proxy-d8bc558b-hcwxz` up 21:18:27Z with `provider_policy: exacto` in its mounted
+  classes file, `/tmp` an emptyDir, zero `disk I/O error` lines after the roll. `agent/error`
+  stripped on the five, #587/#1622 closed to #1640; the four phantom `agent/in-progress` (no pods,
+  verified) cleared by hand → `agent/queued`. **Finding, recorded in the pickup:** the exacto
+  policy rides the ROUTED model string (`/route` appends `:exacto`), and the platform claim is
+  `routerMode: shadow` — its launcher keeps the coordinator's static `--model`, so NO platform ride
+  carries the suffix: the flip protects the three authoritative stacks only; a new platform issue
+  still starts at bare v4-flash → the price pin → open-inference. #1620/#1621 escape it only because
+  their chain-walk lands on v4.1-flash. Interim options are the operator's (primary → v4.1-flash on
+  the claim, or the completion-time policy read that is #1640 theme-1 work).
+- **Process:** the other seat pruned my worktree metadata mid-commit (`.git/worktrees/` shared);
+  rebuilt from the remote branch, nothing lost. `| tail` on a self-test masked one red run into a
+  pushed commit (the pipe-filter rule, again) — fixed with an explicit exit check.

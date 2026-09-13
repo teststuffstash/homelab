@@ -10,6 +10,26 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-13 late seat — the deepseek loop day; arc in TICK-LOG).** (1) **Goal #1640**
+  (themed; theme #1641 `router`, branch `goal/1640-router` exists) is UNQUEUED by operator order:
+  first #1231's checkpoint verdict (acceptances 3+5 built-not-live; #1237/#1238 stay its legs), the
+  S8 read, the parked codeowner PRs — then file theme 1's level-3 children from #1641's member list
+  (`Base: goal/1640-router`, `Class: build`), update the theme branch from master, queue. Theme 2
+  (`agents/**`) forms only after theme 1 merges + soaks. (2) **PR#1639** (exacto on coding) and
+  **PR#1638** (proxy `/tmp` emptyDir) — verify merged + rolled: proxy log shows `exacto:no-pin` on
+  the next coding completion and NO new `disk I/O error` lines. (3) Interim conditions: `unknown`
+  still latches issues via the FU-200 reader — two `unknown` strikes in 24 h re-latch until #1640
+  acceptance 1 lands; the pin cache is 1 h; **and exacto does NOT reach the platform claim** —
+  `/route` appends `:exacto` to the routed model, platform is `routerMode: shadow` so its launcher
+  keeps the static `--model`: a NEW platform issue starts at bare v4-flash → price pin →
+  open-inference again (#1620/#1621 escape only via the chain-walk to v4.1-flash). Operator call:
+  platform primary → v4.1-flash (one claim line + stacks.json mirror), or wait for #1640 theme 1
+  (the policy read at completion time, keyed on the worker ref). (4) Loose ends NOT in the Goal, all still owed: zombie
+  CI run 34748702282 (`gh run cancel` → CiDispatchStalled clears); the `GithubVendorOutage` regex
+  lacks "Pull Requests" (the one component at major_outage today); of#572 drew no re-entry for 2 h
+  (12:08→14:08Z, unexplained); the fifteen responder noise threads from the 21:xxZ board read
+  (1546 1557 1580 1584 903 500 1594 811 542 261 100 1013 114 121 241) + #121's plug-sensor edit.
+
 - **⚑ PICKUP (2026-09-12, two seats — the drive-fitting day, then thinkcentre's decommission;
   full arcs in TICK-LOG).** Storage work for the day is DONE and verified live.
   (1) **Landed:** garage-1 on its own PM961 (FU-137's dedicated-spindle residual MET); m70s's
