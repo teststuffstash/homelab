@@ -259,15 +259,16 @@ this section.
   (`--extra-files`), and only a *rotation* re-runs the script. Authorized keys are the one credential
   that rotates through git.
 - **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
-  need (the sentinel's own set — a second env file + the `homelab-sentinel` App key — is §MB3's,
-  provisioned by the same script when it is built) (the Garage state key + the state passphrase, the Cloudflare and Matchbox-Proxmox tokens,
+  need (the Garage state key + the state passphrase, the Cloudflare and Matchbox-Proxmox tokens,
   the OPNsense API pair), plus the file-shaped ones the `provisioning` root reads by path — the
   Matchbox gRPC client files and the **Proxmox SSH seed key** (found one plan at a time on the
   box's first day, 2026-09-13) — and the root's gitignored `terraform.tfvars`. The main root's
   `TF_VAR_*` set moves only when FU-097's table says the box may touch `main`. ⚠ Today's entries are the **jail's**, a phase-A shortcut against the
   doctrine's "one consumer, one token, at its tier"; the script's table is one line per credential
   so each swaps for a box-scoped entry as it is minted (FU-012's next). The state passphrase is
-  shared by nature — it is the state's key, not a consumer's.
+  shared by nature — it is the state's key, not a consumer's. The **sentinel's** set is separate:
+  a second env file plus the `homelab-sentinel` App key, provisioned by the same script when §MB3
+  is built.
 - ⚠ The box is a **consumer** of Tier-0, never its home: the wallet stays with the operator, and the
   scripts that read it (`keepass-env.sh`, `tofu-state-env.sh`, `opnsense-playbook.sh`) all yield to
   a pre-set environment, which is how the same probe runs in the jail (wallet) and on the box (env
