@@ -52,8 +52,11 @@ repositories"** and pick the agent repos (tried the tofu route 2026-07-01; remov
 | **ghcr pull** | classic PAT | `read:packages` | — | Infisical `SLEEP_GHCR_PULL_TOKEN` → ESO → pod |
 | **github-exporter** | fine-grained PAT | org **Administration: read** (the enhanced-billing usage endpoint — *not* "Plan", that's the pre-enhanced permission) + repo **Actions: read** / Metadata: read / **Issues: read** (FU-108 queue-liveness counts) on **All repositories** → the in-cluster GitHub poller (`argocd/resources/github-exporter/`): workflow-run conclusions + billing usage → Prometheus (alerts replace GitHub's failure emails) | expires (≤1y) — the `GithubExporterStale` alert is the rotation reminder. Deliberately a PAT, not an App: the billing endpoint wants an org-admin user token, which App installation tokens don't get | Infisical `GITHUB_EXPORTER_TOKEN` → ESO → `monitoring/github-exporter-token`; mint/rotate via `scripts/github-exporter-pat-bootstrap.sh` |
 
-**Click-only:** minting the **ghcr classic PAT** (GitHub has no API to create classic PATs) and
-the **github-exporter fine-grained PAT** (same — the bootstrap script drives the clicks).
+| **management box read-only** | fine-grained PAT | every read `tofu/github` refreshes — repo Administration/Contents/Actions: read, org Administration + Secrets: read, All repositories → the box PLANS the root (FU-238, ADR-131) | any write (verified: PATCH repo 403) — applies stay on the host | wallet `github-mgmt-readonly-pat` (+ `-expiry`) → `mgmt-provision-secrets.sh` → the box's env as `GITHUB_TOKEN` |
+
+**Click-only:** minting the **ghcr classic PAT** (GitHub has no API to create classic PATs), the
+**github-exporter fine-grained PAT** and the **management box's read-only PAT** (same — the
+bootstrap scripts `github-exporter-pat-bootstrap.sh` / `github-mgmt-pat-bootstrap.sh` drive the clicks).
 
 ## 4. Org Actions settings (Settings → Actions)
 
