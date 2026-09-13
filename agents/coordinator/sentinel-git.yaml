@@ -1,0 +1,77 @@
+# Sentinel git token (ADR-130): mints the `sentinel-git` Secret the iac-sentinel WorkflowTemplate
+# reads as SENTINEL_STATUS_TOKEN — the POLICY-VERDICT identity, homelab-sentinel[bot]. Split out of
+# reviewer-git ON PURPOSE (2026-09-13): a machine verdict must not wear the approver's name, the
+# reviewer's key must not serve two roles, and the required status contexts get pinned to THIS
+# App's integration id (tofu/github). Same ESO chain shape as reviewer-git.yaml.
+#
+# ⚠️ SCAFFOLD — prereqs (one-time, FU-236): the homelab-sentinel App is created + installed on the
+# sentinel's scan set (scripts/github-app-bootstrap.sh homelab-sentinel) and its key is in Infisical.
+# Fill appID/installID below from `github-app-bootstrap.sh homelab-sentinel secrets`. Applied with
+# kubectl (not ArgoCD), like reviewer-git.yaml:
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/sentinel-git.yaml
+# ⚠ CUTOVER ORDER: only after the `sentinel-git` Secret EXISTS may sentinel-argo.yaml switch its
+# SENTINEL_STATUS_TOKEN to it — the secretKeyRef is `optional`, and an absent Secret is SHADOW mode,
+# i.e. the required `iac-sentinel` context is never posted and every PR in the scan set is blocked.
+---
+# 1) App private key: Infisical → a k8s Secret in this namespace the generator reads.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: sentinel-github-app
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: sentinel-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: SENTINEL_GH_APP_PRIVATE_KEY }
+---
+# 2) The generator: mint an installation token with ONLY the verdict writes.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: sentinel-git-gen
+  namespace: agent-coordinator
+spec:
+  appID: "4929271"           # homelab-sentinel App (github-app-bootstrap.sh homelab-sentinel, 2026-09-13)
+  installID: "161337293"     # the teststuffstash installation of homelab-sentinel
+  auth:
+    privateKey:
+      secretRef: { name: sentinel-github-app, key: privateKey }
+  permissions:
+    statuses: write          #   the required iac-sentinel / management-sentinel commit statuses
+    pull_requests: write     #   the management-sentinel verdict comment (planned)
+  repositories:              #   the sentinel's scan set — SENTINEL_REPOS in scripts/iac-sentinel.sh
+    - sleep-iac              #   (reads stay on coordinator-git; this token WRITES only)
+    - oracle-iac
+    - circles-iac
+    - homelab
+---
+# 3) Drive the generator → the Secret the sentinel reads (key `token` → GH_TOKEN).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: sentinel-git
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 45m
+  target:
+    name: sentinel-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        GH_TOKEN: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: sentinel-git-gen
