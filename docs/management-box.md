@@ -208,7 +208,7 @@ this section.
 | Question | Why it waits |
 |---|---|
 | Which surfaces may it reconcile? | **FU-097's ruling table is the first deliverable and is unwritten.** Standing the box up before deciding is hardware driving design |
-| **The pilot's firmware — UEFI or legacy BIOS?** | read it in the installer (`[ -d /sys/firmware/efi ]`): it sets `bootMode` AND decides whether this box can ever have automatic boot-failure rollback (§Rollback layer 2). The largest unknown in the build |
+| **The pilot's firmware — UEFI or legacy BIOS?** | **Read 2026-09-13: UEFI-capable, CSM-first, and it does not keep a BootOrder** — a UEFI install landed, the firmware appended its entry last and rewrote an explicit `efibootmgr -o` on the next reboot, booting the stick instead. So `bootMode = "bios"`: GRUB in the BIOS-boot partition rides the legacy entry the firmware prefers and needs no NVRAM. Automatic boot-failure rollback stays unavailable (it was in this pin regardless) |
 | `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
 | The second alert path | the spike asks for two independent paths out; today there is one, and it is in-cluster |
 | How probe results leave the box at all | Pushgateway is cluster-internal and never BGP-advertised, so even the FIRST path is unbuilt — exposing it is an ip-plan/ADR-088 decision (§MB2) |
