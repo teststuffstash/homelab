@@ -8777,3 +8777,14 @@ Direct commits this session: meta-state + this journal (batched; push at wind-do
 Direct commits this session: meta-state + journal + FU-238 + the two host-wrapper quickfixes +
 backend.tf. PRs: #1615 #1616 #1619 #1618 #1623 #1624 #1628 merged; #1617 open for the operator.
 Issues: #1620, #1621.
+- **Wind-down (17:2xZ, operator: 575k context).** The #1629 stand-aside ("reviewer spawned before
+  management-sentinel reported — worse now, burns tokens": STEP 0 runs INSIDE the pod, after the
+  load) produced two PRs: **#1630** the reflex belt (rules-API required contexts, absent =
+  pending; fixtures required-context-absent-held / -present-admitted; FSM MP-T03 pinned, md
+  rendered via `merge-path-lint --write` — hand-editing the md is the trap) and **#1631** the
+  operator's preferred lever, the in-cluster no-root poster (FU-237 (b): `mgmt_noroot_post` in
+  iac-sentinel.sh, same policy/classifier/App; classifier verified on #1629 → none, #1617 →
+  github). #1617 merged by the operator's own approval (auto-merge = codeowner) but UNAPPLIED —
+  apply on the host is the flip. Dummy PR branch pushed, unopened (pickup). Journal + pickup
+  pushed; background waits killed; worktrees left: wt-dummy, wt-reflex, wt-noroot (branches on
+  origin — safe to remove).
