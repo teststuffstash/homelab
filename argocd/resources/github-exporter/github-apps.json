@@ -212,8 +212,8 @@
     },
     {
       "slug": "homelab-sentinel",
-      "app_id": null,
-      "install_id": null,
+      "app_id": 4929271,
+      "install_id": 161337293,
       "purpose": "The policy-verdict identity (ADR-130): homelab-sentinel[bot] posts the required `iac-sentinel` commit status (and, planned, the management-sentinel status + verdict comment). Split OUT of homelab-reviewer 2026-09-13 so a machine policy verdict never wears the approver's name, the reviewer's key stops serving two roles, and the required contexts can be PINNED to this App's integration id (tofu/github repo_rulesets.tf) — today any statuses-writer can satisfy them.",
       "permissions": {
         "metadata": {

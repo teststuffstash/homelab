@@ -111,8 +111,8 @@ apps:
     bootstrap: { redirect_port: 8770, cred_dir: "~/.claude/homelab-github-renovate" }
 
   - slug: homelab-sentinel
-    app_id: null      # FILL after the one Create click (scripts/github-app-bootstrap.sh homelab-sentinel)
-    install_id: null  # FILL after the one Install click
+    app_id: 4929271
+    install_id: 161337293
     purpose: >-
       The policy-verdict identity (ADR-130): homelab-sentinel[bot] posts the required `iac-sentinel`
       commit status (and, planned, the management-sentinel status + verdict comment). Split OUT of

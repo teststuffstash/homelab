@@ -40,8 +40,8 @@ metadata:
   name: sentinel-git-gen
   namespace: agent-coordinator
 spec:
-  appID: "FILL-AFTER-CREATE"     # homelab-sentinel App id (github-app-bootstrap.sh homelab-sentinel)
-  installID: "FILL-AFTER-INSTALL" # the teststuffstash installation of homelab-sentinel
+  appID: "4929271"           # homelab-sentinel App (github-app-bootstrap.sh homelab-sentinel, 2026-09-13)
+  installID: "161337293"     # the teststuffstash installation of homelab-sentinel
   auth:
     privateKey:
       secretRef: { name: sentinel-github-app, key: privateKey }
