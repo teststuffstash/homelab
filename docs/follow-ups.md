@@ -413,7 +413,7 @@ six OVERSIZE items pointer-ized into
       box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
       host/jail until FU-097. Reverses "operator-only, nothing automated can even init"
       (dependency-upgrades.md) and "migrate last if at all" (tofu-state.md). **github** first,
-      three operator steps: read-only fine-grained PAT (console) → wallet `github-mgmt-readonly-pat`;
+      three operator steps: `scripts/github-mgmt-pat-bootstrap.sh create|secrets|verify` (the PAT);
       `tofu-state-migrate github` on the host; deploy + renovate App keys into the wallet (else the
       count-gated org secrets plan as destroys). **cloudflare** same shape, mint is code
       (`tofu/cloudflare-token`, host) and retires the write key the box holds. Civo = stack repos;
