@@ -8735,5 +8735,17 @@ Direct commits this session: meta-state + this journal (batched; push at wind-do
   context and needed no re-briefing. The system checkout on the box was advanced by hand (the
   pull loop waits on `mgmt-release`).
 
-Direct commits this session: meta-state + journal (this push). PRs: #1615 #1616 #1619 #1618
-merged; #1617 open for the operator. Issues: #1620, #1621.
+- **Later (15:0xZ–15:3xZ): the box plans `tofu/github` — FU-238.** Operator ruling: every
+  external-provider root plans READ-ONLY on the box (box-scoped token, state on Garage,
+  `apply: false`); github first, cloudflare same shape (mint is code), Civo = stack repos, AWS has
+  no root. Reverses two standing doc lines (the wiring PR updates them). The App keys the root's
+  count-gated org secrets need were in Infisical all along (the register said "org secrets +
+  KeePass") — deploy + renovate imported into the wallet, sha256 round-trip verified, cache rows +
+  register fixed (**#1624**). **#1623**: `scripts/github-mgmt-pat-bootstrap.sh` (the exporter-PAT
+  pattern: click-only mint → wallet + expiry → verify reads AND a refused write). Side finding: the
+  wallet's reviewer + sentinel keys differ from Infisical's copies and both paths work — two valid
+  keys per App; a rotation must revoke both. Operator steps left: the PAT mint, the github state
+  migration on the host; then the wiring PR + a verified clean plan.
+
+Direct commits this session: meta-state + journal + FU-238. PRs: #1615 #1616 #1619 #1618 #1623
+#1624 merged; #1617 open for the operator. Issues: #1620, #1621.
