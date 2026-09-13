@@ -526,21 +526,21 @@ standing set below; what differs is cadence and the act rule:
   oracle-specs` shows 5Gi, then any fleet CI re-publish re-materializes the specs sites;
   close-purge of dead pr-*/ prefixes tracked oracle-fleet#318.
 
-- **R12 pickup (2026-09-13 evening — the box's first end-to-end apply DONE):** ADR-131 (PR#1615),
-  the test-surface ruling (PR#1616), the build (PR#1619 — sentinel + apply loop + main's state on
-  the box), and **PR#1618 went PR → `management-sentinel` (box plan, 27 s) → bot review → merge
-  14:30Z → `mgmt-apply` tick 14:32Z → APPLIED 14:32:59Z → `management-apply` status on the merge
-  commit → tag verified in the cluster's ConfigMap.** Live on the box: `mgmt-sentinel.timer`
-  (*:0/5) + `mgmt-apply.timer` (*:2/5), generation promoted by `mgmt-confirm`; the system checkout
-  was fast-forwarded to master BY HAND (73ca9b8b) — `mgmt-release` still does not exist (operator's
-  ref; the pull timer stays masked). **Next, in order:** (1) **PR#1617** (the `management-sentinel`
-  required-context flip, tofu/github — OPERATOR-applied on the host; the box posts on every open
-  head now, but a box outage would hold all homelab PRs until the in-cluster no-root poster
-  exists — FU-237 (b)); (2) FU-237 residuals (b) no-root poster, (c) per-role user/env split,
-  (d) doorbell edge; (3) FU-012's box-scoped credential mints (the env table rows are the jail's);
-  (4) static CI: `tofu validate` per root + `nix eval` of both flake outputs (runner nix-cache
-  question, management-box.md open table); (5) oracle handoffs filed as homelab#1620 (read-only
-  composition token) + #1621 (`/corpus-published` doorbell), sub-issues of oracle-fleet#579 —
-  queued for the fixer lane; both merge on the codeowner read (new credential / `agents/`).
-  ⚠ **Jail-side change of habit:** `devbox run tf-plan|tf-apply` for main REFUSE — main's state is
-  on the box; `devbox run mgmt-tf -- plan|apply` (committed ref, `MGMT_REF=origin/<branch>`).
+- **R12 pickup (2026-09-13 wind-down 17:2xZ — the box plans main + provisioning + github, applies
+  the residue; the day's full arc in TICK-LOG).** LIVE on the box: `mgmt-sentinel` (*:0/5) +
+  `mgmt-apply` (*:2/5); first E2E apply PR#1618 done; `tofu/github` plan-only (PR#1628, clean —
+  repos + org ruleset excluded, admin-WRITE-only API); PR#1629 (plan-summary false-zero fix +
+  "not planned" transparency) riding on auto-merge. **Open at wind-down, in order:**
+  (1) **PR#1630** (review-reflex: absent required context = pending; 6 fixtures; FSM rendered) —
+  `agents/` is CODEOWNERS → the OPERATOR approves/merges. (2) **PR#1631** (iac-sentinel posts the
+  no-root `management-sentinel` in seconds, FU-237 (b)) — auto-merge armed; live proof = the
+  first push after merge carries the status before the box's tick. (3) The operator applies
+  master's `tofu/github` on the host (#1617 merged unapplied; makes `management-sentinel`
+  REQUIRED). (4) #1629 MERGED; the dummy is **PR#1632** (open, no auto-merge, never merge) —
+  read the box's verdict (expect "github: +0 ~1 -0 (14 not planned)" + the "Not planned on the
+  box" line), then CLOSE it unmerged. (5) FU-237 residuals left: (c) per-role user/env split, (d) doorbell edge
+  (now lower priority — #1631 removes the latency for non-tofu PRs). (6) FU-238 next: cloudflare
+  (read-only mint from `tofu/cloudflare-token`, host; policy root). (7) FU-012: box-scoped mints.
+  ⚠ Habits: main runs on the box (`devbox run mgmt-tf -- plan`, committed ref); `mgmt-release`
+  still absent (system checkout hand-advanced to master today, 20aaf07c); the box's
+  `/root/mgmt-test` clone removed. Session context hit ~575k — fresh session next.
