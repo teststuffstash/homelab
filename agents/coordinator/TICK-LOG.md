@@ -8788,3 +8788,8 @@ Issues: #1620, #1621.
   apply on the host is the flip. Dummy PR branch pushed, unopened (pickup). Journal + pickup
   pushed; background waits killed; worktrees left: wt-dummy, wt-reflex, wt-noroot (branches on
   origin — safe to remove).
+- **Post-wind-down note (host plan, 17:3xZ):** applying master's `tofu/github` shows THREE changes —
+  #1617's ruleset AND the deploy/renovate `secret_repositories` bindings re-adding all their repo
+  ids: the earlier value rotation (an org-secret update with `visibility: selected` through the
+  provider) DROPPED the repository selection, so those workflows had no key until this apply.
+  Rotating an org secret via tofu is two-step here; plan after any secret change.
