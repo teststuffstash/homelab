@@ -412,13 +412,13 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-238** — **External-provider roots plan READ-ONLY on the box (operator, 2026-09-13):**
       box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
       host/jail until FU-097. Reverses "operator-only, nothing automated can even init"
-      (dependency-upgrades.md) and "migrate last if at all" (tofu-state.md). **github** first,
-      three operator steps: `scripts/github-mgmt-pat-bootstrap.sh create|secrets|verify` (the PAT);
-      `tofu-state-migrate github` on the host; deploy + renovate App keys into the wallet (else the
-      count-gated org secrets plan as destroys). **cloudflare** same shape, mint is code
-      (`tofu/cloudflare-token`, host) and retires the write key the box holds. Civo = stack repos;
-      AWS has no root. **Next (seat):** provision rows, policy roots + belt ROOTS, doc lines, a
-      verified clean plan on the box. Relates FU-237, FU-012, ADR-131.
+      (dependency-upgrades.md) and "migrate last if at all" (tofu-state.md). **github** first —
+      operator steps: `scripts/github-mgmt-pat-bootstrap.sh create|secrets|verify` (the PAT), then
+      `tofu-state-migrate github` on the host; the deploy + renovate App keys are in the wallet
+      (DONE 2026-09-13, from Infisical). **cloudflare** same shape, mint is code
+      (`tofu/cloudflare-token`, host), retiring the write key the box holds. Civo = stack repos;
+      AWS has no root. **Next (seat):** provision rows (`GITHUB_TOKEN` + the three App keys as
+      `TF_VAR_*`), policy roots + belt ROOTS, doc lines, a verified clean plan. Relates FU-237, FU-012.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
