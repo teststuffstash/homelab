@@ -58,15 +58,26 @@ nix build "$REPO/nixos#installerIso" --out-link "$LINK"
 ISO="$(readlink -f "$LINK"/iso/*.iso)"
 echo "    $ISO ($(du -h "$ISO" | cut -f1))"
 
-# ── 3. write + verify ───────────────────────────────────────────────────────────────────────────
-echo "==> dd"
-sudo dd if="$ISO" of="$REAL" bs=4M status=progress oflag=sync conv=fsync
+# ── 3. re-probe, write, verify ──────────────────────────────────────────────────────────────────
+# The build above can take minutes; a re-plug or an sdX reassignment in that window (the stale
+# by-id links seen on this very hardware) would leave $REAL naming a DIFFERENT disk. So the
+# identity is re-derived right before the write and must match what was confirmed.
+REAL2="$(readlink -f "$DEV" 2>/dev/null || true)"
+[ -b "$REAL2" ] || { echo "ERROR: $DEV vanished after the build — re-plug and re-run" >&2; exit 1; }
+[ "$REAL2" = "$REAL" ] || { echo "ERROR: $DEV now resolves to $REAL2, was $REAL when confirmed — re-run" >&2; exit 1; }
+SIZE2=$(( $(cat "/sys/class/block/$(basename "$REAL2")/size") * 512 ))
+[ "$SIZE2" -eq "$SIZE_B" ] || { echo "ERROR: $REAL2 changed size ($SIZE2 vs $SIZE_B) since it was confirmed — re-run" >&2; exit 1; }
+if awk -v d="$REAL2" '$1 ~ "^"d {found=1} END {exit !found}' /proc/mounts; then
+  echo "ERROR: $REAL2 got mounted meanwhile (desktop automount?) — unmount and re-run" >&2; exit 1
+fi
+echo "==> dd ($REAL2, re-verified)"
+sudo dd if="$ISO" of="$REAL2" bs=4M status=progress oflag=sync conv=fsync
 sync
 echo "==> verify (byte-compare the written image)"
-if sudo cmp -n "$(stat -c %s "$ISO")" "$ISO" "$REAL"; then
-  echo "OK: $REAL matches $ISO"
+if sudo cmp -n "$(stat -c %s "$ISO")" "$ISO" "$REAL2"; then
+  echo "OK: $REAL2 matches $ISO"
 else
-  echo "ERROR: $REAL does NOT match the ISO — bad stick or interrupted write" >&2; exit 1
+  echo "ERROR: $REAL2 does NOT match the ISO — bad stick or interrupted write" >&2; exit 1
 fi
 echo "Boot the box from the stick (one-time boot menu — PXE is out of its boot order), then from the jail:"
 echo "  ssh -i ~/.claude/homelab-pve-ssh/id_ed25519 root@192.168.2.53   # the DHCP reservation"
