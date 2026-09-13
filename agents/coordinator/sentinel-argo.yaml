@@ -90,10 +90,13 @@ spec:
           - { name: SENTINEL_WAKE, value: "{{inputs.parameters.wake}}" }
           - name: GH_TOKEN
             valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
-          # The enforcement write identity — the REVIEWER App's token (reads stay on
-          # coordinator-git above). Optional: absent secret = shadow mode.
+          # The enforcement write identity — the SENTINEL App's token (ADR-130, 2026-09-13; was
+          # the reviewer's, which made a policy verdict wear the approver's name). Reads stay on
+          # coordinator-git above. Optional: absent secret = shadow mode — so this line switched
+          # only AFTER the sentinel-git Secret existed (FU-236's cutover order). Guarded file:
+          # pin-only via PR, so this edit landed DIRECT (the documented lane for a real edit).
           - name: SENTINEL_STATUS_TOKEN
-            valueFrom: { secretKeyRef: { name: reviewer-git, key: GH_TOKEN, optional: true } }
+            valueFrom: { secretKeyRef: { name: sentinel-git, key: GH_TOKEN, optional: true } }
         volumeMounts:
           - { name: work, mountPath: /work }
         resources:

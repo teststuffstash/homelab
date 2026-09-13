@@ -189,21 +189,18 @@ six OVERSIZE items pointer-ized into
       panel ≈2026-09-15; if manager/cilium sit under ~5 % and the sync burst under ~20 %, archive.
       No FU/ADR matched `throttl` (grepped 2026-09-07). Link: ADR-089, FU-112.
 
-- [ ] **FU-229** — **Garage SLO is breached on its own 30-day window and nothing alerts; the
-      CI-hour write churn is unattributed.** 30-day reads 2026-09-10: availability per pod
-      garage-1 99.90 %, garage-0 98.0 %, garage-2 98.1 % (objective ≥ 99.95 %); 24 h-wide p99 read
-      4.1 s / list 10.3 s (objectives 2 s / 5 s). The rules exist since #1588
-      (`garage:cluster_health:availability_ratio_30d`, `garage:s3_server_error_ratio:30d`); no
-      burn-rate belt, deliberately — it would fire from day one on the X240 zone (FU-137's move).
-      Second half: after oracle-fleet#519 the store still sees 5k–24k PutObject + 3k–15k
-      DeleteObjects requests/h in CI hours vs ~0 outside, and 19 master runs × ~210 evidence
-      objects explains ~4k/day of it; Garage has no bucket label, and object-count gauges cannot
-      see overwrite churn. **Next:** (1) attribute one CI-hour window by bucket from the S3
-      access log (the #499 method) — candidates are the master-run `mc mirror --remove` of
-      `latest/` and the `oracle-specs` publish; (2) once garage-2 is off the laptop, add the
-      burn-rate alert on the 30d series and re-read. No FU/ADR matched `churn|access log|error
-      budget|burn rate` (grepped 2026-09-10). Link: FU-093, FU-137, oracle-fleet#499/#518/#547.
-
+- [ ] **FU-229** — **Garage SLO breached on its own 30-day window and nothing alerts; CI-hour
+      write churn unattributed.** 30-day reads 2026-09-10: availability garage-1 99.90 %, garage-0
+      98.0 %, garage-2 98.1 % (objective ≥ 99.95 %); p99 read 4.1 s / list 10.3 s (objectives 2 s /
+      5 s). Rules exist since #1588; **no latency/burn-rate belt yet, by ordering (operator,
+      2026-09-13): garage-2 leaves the X240 FIRST, or the alert fires on every CI run** — 2026-09-13
+      09:30–11:05 showed why: an `allure-reports` burst (+2.5k objects on 635k) with ARC runners on
+      the same laptop → PutObject p99 69 s, ListObjectsV2 18 s, garage-2 7.9 s vs 1.7/1.9 s on the
+      other pods, Longhorn's instance-manager at 1.5 cores. **Next, in order:** (1) garage-2 off the
+      X240 (the third std SFF, fleet-roles direction; ledger via FU-137); (2) THEN alerts on
+      `garage:s3_latency_seconds:{p50,p99}_5m` per endpoint + the 30d burn rate, and re-read;
+      (3) attribute one CI-hour window by bucket from the S3 access log (the #499 method).
+      Link: FU-093, FU-137, oracle-fleet#499/#518/#547.
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 (20Gi) and 2026-09-09 (32Gi): a blob COMMIT holds the layer twice, so
       `quota − held ≥ 2×layer` — rule, both failures, storage read: the header of
