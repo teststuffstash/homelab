@@ -130,7 +130,7 @@ mechanism. The probe set (`scripts/mgmt-probe.sh`, run by a systemd timer on the
 
 | Check | Asserts |
 |---|---|
-| `tofu plan` → empty on the **cone-clean** roots only (`provisioning`, and **`github`** since 2026-09-13 — read-only PAT + the three App keys via `scripts/mgmt-root-env/github.sh`, FU-238) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; **`cloudflare` is the same class** (its cloudflared Deployment half rides the kubernetes provider — found 2026-09-13 on the box, retracting the 2026-09-12 reading that it was cone-clean); `main` is local state until FU-012's copy lands here. Measured 2026-09-12 from the jail: `cloudflare` and `provisioning` both plan EMPTY, which retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
+| `tofu plan` → empty on the **cone-clean** roots only (`provisioning`, and **`github`** since 2026-09-13 — read-only PAT + the three App keys via `scripts/mgmt-root-env/github.sh`, FU-238) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; **`cloudflare` is the same class** (its cloudflared Deployment half rides the kubernetes provider — found 2026-09-13 on the box, retracting the 2026-09-12 reading that it was cone-clean; the SENTINEL still plans it per PR head with the read-only `homelab-mgmt-read` token, §MB3 — a plan-on-PR may assert the cluster, the belt may not); `main` is local state until FU-012's copy lands here. Measured 2026-09-12 from the jail: `cloudflare` and `provisioning` both plan EMPTY, which retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
 | `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | each credential it holds, read once | a rotation did not lock the box out |
@@ -202,8 +202,10 @@ recovery root must not become the merge gate for doc PRs. So the in-cluster `iac
 `management-sentinel: success` for heads whose diff touches no root in the policy's root list, and
 the box posts for the rest — both readers of the same master copy of the policy file, so there is
 one classifier. The root list: `main` (apply-allowlisted), `provisioning` and, since 2026-09-13,
-`github` (both plan-only — FU-238: the box holds a read-only PAT and the App keys the count-gated
-org secrets need, so its plan is clean; applies stay on the host); ansible plays (`--check` of a PR head — the same executes-PR-
+`github` and `cloudflare` (all plan-only — FU-238: the box holds a read-only PAT plus the App keys the
+count-gated org secrets need, and the read-only twin of the Cloudflare write token
+(`tofu/cloudflare-token/mgmt-read.tf`), so both plans are clean; applies stay on the host / in the
+jail); ansible plays (`--check` of a PR head — the same executes-PR-
 content class, the same allowlist) after that.
 
 **Privilege.** The plan runs as its own unix user with its own `EnvironmentFile`
@@ -230,10 +232,16 @@ and remote module sources (init would fetch them).
 **What the verdict covers, per root — the reviewer's expectation.** `main`: everything, and the
 apply allowlist decides what ships. `provisioning`: everything, plan only. `github`: repo rulesets
 (the pinned required checks), org secrets, deploy keys — **not** the 13 `github_repository` settings
-nor the org ruleset (GitHub returns those only to an admin-WRITE token, `plan_exclude_types`); the
-comment lists what was not planned, with counts, and the status description carries the count. A
-worker, reviewer or coordinator reading a green `management-sentinel` on a PR that edits repo
-settings should read it as "the parts the box can see are clean", never as "applied-equivalent".
+nor the org ruleset (GitHub returns those only to an admin-WRITE token, `plan_exclude_types`).
+`cloudflare`: the tunnel, its remote config, DNS + DNSSEC, the mTLS pair, the rulesets and the zone
+settings — **not** the tunnel TOKEN data source (a credential read no Read group covers; 401 even
+under the jail's read-all token) nor its two in-cluster dependents, the cloudflared Secret and
+Deployment, which tofu drops with it. In both cases the comment lists what was not planned, with
+counts — the set is *state minus what the plan carried*, so an exclusion's dependents are named,
+not just the policy's types — with the policy's per-root `plan_exclude_note` as the reason, and
+the status description carries the count. A worker, reviewer or coordinator reading a green
+`management-sentinel` on a PR that edits repo settings or the cloudflared half should read it as
+"the parts the box can see are clean", never as "applied-equivalent".
 
 **Built 2026-09-13 (steps 1–3 in one PR, since nothing read the policy before its reader
 existed):** `policy/mgmt/plan-input.yaml`, `scripts/mgmt-lib.sh` (App token, policy, stage 1,
@@ -316,7 +324,8 @@ this section.
   (`--extra-files`), and only a *rotation* re-runs the script. Authorized keys are the one credential
   that rotates through git.
 - **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
-  need (the Garage state key + the state passphrase, the Cloudflare and Matchbox-Proxmox tokens,
+  need (the Garage state key + the state passphrase, the Cloudflare token — the read-only
+  `homelab-mgmt-read` since FU-238's cloudflare leg, the write key before — and the Matchbox-Proxmox token,
   the OPNsense API pair) **and, since 2026-09-13, the main root's `TF_VAR_*` set** (the
   `keepass-env.sh` list, one table line each) + `main.tfvars` + the runner App key
   `ci-runner.tf` reads by path + the `homelab-sentinel` App key, plus the file-shaped ones the `provisioning` root reads by path — the
