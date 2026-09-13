@@ -19,7 +19,8 @@ export NIX_CONFIG="${NIX_CONFIG:-experimental-features = nix-command flakes}"
 # ── 1. probe: the device, before anything else ──────────────────────────────────────────────────
 if [ -z "${MGMT_USB_DEV:-}" ]; then
   echo "Pick the USB stick (NOT a system disk) and re-run with MGMT_USB_DEV=/dev/disk/by-id/usb-...:"
-  ls -l /dev/disk/by-id/ 2>/dev/null | awk '/usb-/ && !/-part[0-9]+$/ {print "  /dev/disk/by-id/" $9 "  -> " $11}'
+  # `|| true`: no by-id dir at all (the jail) must still list nothing and exit clean under set -e.
+  ls -l /dev/disk/by-id/ 2>/dev/null | awk '/usb-/ && !/-part[0-9]+$/ {print "  /dev/disk/by-id/" $9 "  -> " $11}' || true
   echo "(nothing built — set the variable first)"
   exit 0
 fi
