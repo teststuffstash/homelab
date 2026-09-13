@@ -343,8 +343,9 @@ six OVERSIZE items pointer-ized into
       it has an out-of-cone copy, and **that copy's home is now named — the R12 pilot**, whose
       phase A is this item's other half — the credential path is BUILT 2026-09-13
       (`scripts/mgmt-provision-secrets.sh`, [`management-box.md`](management-box.md) §Credentials);
-      it ships the JAIL's entries, so what remains is box-scoped tokens (Garage state key,
-      Matchbox-Proxmox, OPNsense, Cloudflare) swapped in one table line each, then `main`'s copy.
+      it ships the JAIL's entries, so what remains is box-scoped credentials (Garage state key,
+      Matchbox-Proxmox token, the pve SSH seed key, OPNsense, Cloudflare) swapped in one script
+      line each, then `main`'s copy.
       `github` is host-only. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it

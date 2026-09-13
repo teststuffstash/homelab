@@ -105,7 +105,7 @@ mechanism. The probe set (`scripts/mgmt-probe.sh`, run by a systemd timer on the
 
 | Check | Asserts |
 |---|---|
-| `tofu plan` → empty on the **cone-clean** roots only (`cloudflare`, `provisioning`) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; `main` is local state until FU-012's copy lands here. Measured 2026-09-12: both roots plan EMPTY, which also retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
+| `tofu plan` → empty on the **cone-clean** roots only (`provisioning`) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; **`cloudflare` is the same class** (its cloudflared Deployment half rides the kubernetes provider — found 2026-09-13 on the box, retracting the 2026-09-12 reading that it was cone-clean); `main` is local state until FU-012's copy lands here. Measured 2026-09-12 from the jail: `cloudflare` and `provisioning` both plan EMPTY, which retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
 | `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | each credential it holds, read once | a rotation did not lock the box out |
@@ -193,15 +193,18 @@ this section.
   that rotates through git.
 - **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
   need (the Garage state key + the state passphrase, the Cloudflare and Matchbox-Proxmox tokens,
-  the OPNsense API pair) — the main root's `TF_VAR_*` set moves only when FU-097's table says the
-  box may touch `main`. ⚠ Today's entries are the **jail's**, a phase-A shortcut against the
+  the OPNsense API pair), plus the file-shaped ones the `provisioning` root reads by path — the
+  Matchbox gRPC client files and the **Proxmox SSH seed key** (found one plan at a time on the
+  box's first day, 2026-09-13) — and the root's gitignored `terraform.tfvars`. The main root's
+  `TF_VAR_*` set moves only when FU-097's table says the box may touch `main`. ⚠ Today's entries are the **jail's**, a phase-A shortcut against the
   doctrine's "one consumer, one token, at its tier"; the script's table is one line per credential
   so each swaps for a box-scoped entry as it is minted (FU-012's next). The state passphrase is
   shared by nature — it is the state's key, not a consumer's.
 - ⚠ The box is a **consumer** of Tier-0, never its home: the wallet stays with the operator, and the
   scripts that read it (`keepass-env.sh`, `tofu-state-env.sh`, `opnsense-playbook.sh`) all yield to
   a pre-set environment, which is how the same probe runs in the jail (wallet) and on the box (env
-  file). Proven 2026-09-13: the belt passes 5/5 from a home with no wallet, the env file alone.
+  file). Proven 2026-09-13: the belt passes 4/4 **under its unit on the installed box**, the env
+  file alone; the gate 5/5 under `mgmt-confirm`, which promoted generation 2.
 
 ## Open, and deliberately not built yet
 
