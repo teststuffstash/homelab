@@ -48,6 +48,9 @@ resource "cloudflare_api_token" "jail_read_all" {
   # "inconsistent result" errors and the API now reads back account, user, zone — mirrored here
   # (GET /user/tokens/<id>, the ingress-write.tf recipe: one re-plan, match the file to the
   # read-back order, never a second apply). The mutation itself lands either way (#5548/#5710).
+  # ⚠ The GROUP order inside each policy is arbitrary on the API side for lists this size
+  # (measured 2026-09-13: not catalog/id/name order) — expect a standing `~ id` permutation on
+  # this token until the provider normalizes; docs/cloudflare.md gotcha 3 says how to read it.
   policies = [
     {
       # account.* like the legacy template (all accounts this user can see), not the single
