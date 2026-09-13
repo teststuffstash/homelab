@@ -156,6 +156,14 @@ spec:
               readOnly: true
             - name: data
               mountPath: /data
+            # readOnlyRootFilesystem leaves NO writable temp dir (python: "No usable temporary
+            # directory found"); sqlite spills GROUP BY temp files there, so every 60 s router
+            # aggregate over generations/provider_events failed with "disk I/O error" since
+            # 2026-09-10 and _read() returned [] — silently blank belt inputs. Route-path reads
+            # were unaffected (tiny). An emptyDir at /tmp is the class fix (anything needing a
+            # temp dir), not a sqlite-only PRAGMA.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: script
           configMap:
@@ -163,3 +171,5 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: openrouter-proxy-data
+        - name: tmp
+          emptyDir: {}
