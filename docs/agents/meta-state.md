@@ -527,7 +527,7 @@ standing set below; what differs is cadence and the act rule:
   close-purge of dead pr-*/ prefixes tracked oracle-fleet#318.
 
 - **R12 / sentinel pickup (2026-09-13):** (1) the MANAGEMENT SENTINEL ADR is WRITTEN —
-  ADR-131 + `management-box.md` §MB3 + FU-237, **PR#1615** (riding at wind-down; verify merged).
+  ADR-131 + `management-box.md` §MB3 + FU-237, **PR#1615 merged** 12:23Z.
   FU-237's next = build-order step 1: the `policy/mgmt/` allowlist + root list (`provisioning`)
   as its OWN PR, landed before any script — the exceptions ordering rule. The grounding read set
   (~50k, not the corpus — FU-164) was the one listed in the previous pickup; it sufficed, with

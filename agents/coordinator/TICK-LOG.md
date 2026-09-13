@@ -8678,5 +8678,9 @@ once — ArgoCD consumes it), this journal + meta-state. PRs: #1608 #1609 #1610 
   `homelab-sentinel` App key lives in two stores (Infisical for the cluster poster, the box's env
   tree) — one identity, two seats — rather than a third App.
 - Worktree under the scratchpad this time (the 2026-09-13 day lesson held); `--body-file`.
+  Two rides before merge (12:09 → 12:23Z): CI red on the FU-098 lint — `docs/github-apps.yaml`
+  has a generated twin (`argocd/resources/github-exporter/github-apps.json`, regenerate with
+  `yq -o=json`) I did not know about; then one reviewer finding, a parenthetical I had spliced
+  mid-sentence into §Credentials (made its own sentence). Both in-PR.
 
 Direct commits this session: meta-state + this journal (batched; push at wind-down). PR: #1615.
