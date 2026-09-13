@@ -10,6 +10,13 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-236** *(archived 2026-09-13)* — **`homelab-sentinel` App cutover (ADR-130), all four steps
+  the same day:** App 4929271 created/installed + ESO chain (`sentinel-git.yaml`); `sentinel-argo`
+  switched direct (guarded file), first status under homelab-sentinel[bot] 11:17:58Z;
+  `integration_id` pinned on 11 rulesets (`github-tofu apply`); reviewer `statuses` write→read
+  (#1614). Gotcha: the console un-grant came BEFORE the mint narrowing merged → the reviewer
+  mint 422'd at its 11:45 refresh; un-wedged by applying the narrowed generator by hand. For a
+  NARROWING: merge first, click second (the reverse of a widening).
 - **FU-225** *(archived 2026-09-08)* — **pve host RAM: no buy, no balloon, one belt.** Filed the
   same morning as "84 %/94 % used, ballooning off"; by evening the operator had ruled every lever:
   no RAM in this box (too much of homelab on it — the second hypervisor is the answer, ROADMAP §HA
