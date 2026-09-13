@@ -88,7 +88,7 @@ variable "protected_repos" {
     #     waits for a human. That is the intended reading of those tiers, not an accident.
     #   • Renovate's Actions SHA-pinning PRs touch .github/workflows/ — OWNED, likewise. Arguably
     #     the single change you most want eyes on (the Trivy-class mitigation, renovate.md).
-    homelab = { required_checks = ["ci", "iac-sentinel"], require_approval = true, require_code_owner_review = true } # public → no push ruleset possible (flag comment above)
+    homelab = { required_checks = ["ci", "iac-sentinel", "management-sentinel"], require_approval = true, require_code_owner_review = true } # management-sentinel = the box's plan-on-PR verdict (ADR-131), posted by the same sentinel App # public → no push ruleset possible (flag comment above)
     # The three below flipped require_code_owner_review=true 2026-08-11 (the reviewer-enable
     # retrace): with the platform stack's bot reviewer ON, require_approval alone lets a bot
     # approval auto-merge — the codeowner flag is what turns the bot review into input-only on
