@@ -36,5 +36,19 @@
         ./hosts/mgmt/default.nix
       ];
     };
+
+    # The stick. Build FROM THE JAIL (it talks to the host's nix daemon; /nix is shared, so the
+    # ISO lands in the host's store at the same path) and dd it ON THE HOST, where the stick is:
+    #   nix build ./nixos#installerIso --out-link /tmp/mgmt-iso && ls /tmp/mgmt-iso/iso/
+    #   sudo dd if=<that .iso> of=/dev/disk/by-id/usb-... bs=4M status=progress oflag=sync
+    nixosConfigurations.installer = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        "${nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
+        ./hosts/mgmt/installer.nix
+      ];
+    };
+    packages.x86_64-linux.installerIso =
+      self.nixosConfigurations.installer.config.system.build.isoImage;
   };
 }
