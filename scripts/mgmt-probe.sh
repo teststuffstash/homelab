@@ -104,13 +104,21 @@ check_tofu() {
       set +u
       . "$REPO/scripts/keepass-env.sh" >/dev/null 2>&1 || true
       TOFU_STATE_ROOT_DIR="$REPO/tofu/$root" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || exit 90
-      cd "$REPO" && devbox run --quiet -- tofu -chdir="tofu/$root" plan -detailed-exitcode -input=false -lock=false 2>&1
+      cd "$REPO" || exit 1
+      # A fresh checkout (the box after install, 2026-09-13) has no .terraform/: plan fails with
+      # "Backend initialization required". Init once, with the backend creds already in the env —
+      # the same thing scripts/tf.sh does for the main root on every call.
+      if [ ! -d "$REPO/tofu/$root/.terraform" ]; then
+        devbox run --quiet -- tofu -chdir="tofu/$root" init -input=false -lock=false >/dev/null 2>&1 || exit 91
+      fi
+      devbox run --quiet -- tofu -chdir="tofu/$root" plan -detailed-exitcode -input=false -lock=false 2>&1
     )"
     rc=$?
     case $rc in
       0)  passed "tofu:$root" "No changes" ;;
       2)  failed "tofu:$root" "DRIFT — plan is non-empty" ;;
       90) skipped "tofu:$root" "no state credential reachable (wallet absent?)" ;;
+      91) failed "tofu:$root" "tofu init failed (backend creds, provider download, or egress)" ;;
       *)  failed "tofu:$root" "plan errored (rc=$rc): $(printf '%s' "$out" | tail -3 | tr '\n' ' ')" ;;
     esac
   done
@@ -129,9 +137,12 @@ check_talos() {
   out="$(tool talosctl --talosconfig "$tc" -n "$TALOS_NODE" version --short)" || {
     failed talos "talosctl version failed: $(printf '%s' "$out" | tail -2 | tr '\n' ' ')"; return; }
   # `version --short` prints "Talos vX.Y.Z" under Client: and a "Tag: vX.Y.Z" line under Server:.
-  local client server
-  client="$(printf '%s' "$out" | awk '/^Talos /{print $2; exit}')"
-  server="$(printf '%s' "$out" | awk '/Tag:/{print $2; exit}')"
+  # Unanchored + ANSI/CR-stripped: under the systemd unit the first run's captured output carried
+  # devbox install chatter around these lines and the anchored match found nothing (2026-09-13).
+  local client server clean
+  clean="$(printf '%s' "$out" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g')"
+  client="$(printf '%s' "$clean" | awk '/Talos v[0-9]/{for(i=1;i<=NF;i++) if($i ~ /^v[0-9]/){print $i; exit}}')"
+  server="$(printf '%s' "$clean" | awk '/Tag:/{for(i=1;i<=NF;i++) if($i ~ /^v[0-9]/){print $i; exit}}')"
   [ -n "$client" ] && [ -n "$server" ] || { failed talos "unparseable version output"; return; }
   # PATCH skew is fine and normal (the devbox pin moves ahead of the cluster — 2026-09-12: client
   # v1.13.8 vs server v1.13.2, which is FU-155's pin). MINOR skew is the one that breaks the API,
@@ -163,7 +174,7 @@ check_ansible() {
   # ⚠ `ansible-playbook --check` exits 0 even when tasks report `changed` — only a task ERROR is
   # non-zero. So the exit code alone says "the collection, the httpx interpreter and the API
   # credential work", NOT "the router matches git". The recap is where drift shows.
-  changed="$(printf '%s' "$out" | awk -F'changed=' '/PLAY RECAP/{f=1} f&&NF>1{split($2,a," "); print a[1]; exit}')"
+  changed="$(printf '%s' "$out" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g' | awk -F'changed=' '/PLAY RECAP/{f=1} f&&NF>1{split($2,a," "); print a[1]; exit}')"
   if [ -n "$changed" ] && [ "$changed" != "0" ]; then
     failed ansible "router DRIFT — recap says changed=$changed"
     return
@@ -205,11 +216,15 @@ gate_sshd() {
 }
 
 gate_keys() {
-  local f=/root/.ssh/authorized_keys n=0
-  if [ -s "$f" ]; then
-    n="$(ssh-keygen -lf "$f" 2>/dev/null | grep -c . || true)"
-  fi
-  if [ "${n:-0}" -ge 1 ]; then
+  # NixOS writes declared keys to /etc/ssh/authorized_keys.d/<user>, NOT ~/.ssh/authorized_keys
+  # (found by the first live gate run, 2026-09-13: "locked out" on a box with two working keys).
+  # Both locations count; sshd reads both.
+  local n=0 f
+  for f in /etc/ssh/authorized_keys.d/root /root/.ssh/authorized_keys; do
+    [ -s "$f" ] || continue
+    n=$((n + $(ssh-keygen -lf "$f" 2>/dev/null | grep -c . || true)))
+  done
+  if [ "$n" -ge 1 ]; then
     passed gate:keys "$n authorized key(s) parse"
   else
     failed gate:keys "no parseable authorized key — locked out"
@@ -238,12 +253,22 @@ gate_systemd() {
 }
 
 gate_store() {
-  # If the store cannot be written, the reboot-into-the-old-generation path still works but no
-  # future update or repair can — worth failing loudly while someone is watching.
-  if [ -w /nix/store ] || [ ! -d /nix/store ]; then
-    passed gate:store "store writable (or absent — jail)"
+  # "Can a future update or repair still land?" — NOT `[ -w /nix/store ]`: on NixOS the store is a
+  # read-only bind mount by design (the daemon writes through its own remount), so that test fails
+  # on every healthy box (first live gate run, 2026-09-13). The real properties: the daemon answers,
+  # and the store's filesystem has headroom (default.nix sets nix.settings.min-free = 5 GiB).
+  if [ ! -d /nix/store ]; then
+    passed gate:store "no store (jail)"; return
+  fi
+  if ! nix --extra-experimental-features nix-command store info >/dev/null 2>&1; then
+    failed gate:store "nix daemon does not answer"; return
+  fi
+  local free_kb
+  free_kb="$(df -Pk /nix/store 2>/dev/null | awk 'NR==2{print $4}')"
+  if [ -n "$free_kb" ] && [ "$free_kb" -lt $((5 * 1024 * 1024)) ]; then
+    failed gate:store "only $((free_kb / 1024)) MiB free on the store — below min-free, no update can build"
   else
-    failed gate:store "/nix/store not writable"
+    passed gate:store "daemon answers, $((${free_kb:-0} / 1024 / 1024)) GiB free"
   fi
 }
 
