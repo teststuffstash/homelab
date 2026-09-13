@@ -536,10 +536,9 @@ standing set below; what differs is cadence and the act rule:
   no-root `management-sentinel` in seconds, FU-237 (b)) — auto-merge armed; live proof = the
   first push after merge carries the status before the box's tick. (3) The operator applies
   master's `tofu/github` on the host (#1617 merged unapplied; makes `management-sentinel`
-  REQUIRED). (4) **Dummy PR branch `test/mgmt-sentinel-github-dummy` (65f7cf42, a bogus
-  required check on snore-recorder) is pushed but NOT opened** — open it AFTER #1629 merges,
-  expect the verdict "github: +0 ~1 -0 (14 not planned)" + the "Not planned on the box" line,
-  then CLOSE unmerged. (5) FU-237 residuals left: (c) per-role user/env split, (d) doorbell edge
+  REQUIRED). (4) #1629 MERGED; the dummy is **PR#1632** (open, no auto-merge, never merge) —
+  read the box's verdict (expect "github: +0 ~1 -0 (14 not planned)" + the "Not planned on the
+  box" line), then CLOSE it unmerged. (5) FU-237 residuals left: (c) per-role user/env split, (d) doorbell edge
   (now lower priority — #1631 removes the latency for non-tofu PRs). (6) FU-238 next: cloudflare
   (read-only mint from `tofu/cloudflare-token`, host; policy root). (7) FU-012: box-scoped mints.
   ⚠ Habits: main runs on the box (`devbox run mgmt-tf -- plan`, committed ref); `mgmt-release`
