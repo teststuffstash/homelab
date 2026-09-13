@@ -105,15 +105,18 @@ while IFS=$'\t' read -r pr sha; do
     fi
     read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
     excl_n=0; excl_types=""
-    if [ -s "$out.excluded" ]; then
-      excl_n=$(wc -l <"$out.excluded")
-      excl_types="$(sed 's/\..*//' "$out.excluded" | sort | uniq -c | awk '{printf "%s%s `%s`", (NR>1?", ":""), $1, $2}')"
+    notplanned="$(mgmt_plan_not_planned "$out")"
+    if [ -n "$notplanned" ]; then
+      excl_n=$(wc -l <<<"$notplanned")
+      # type = the address minus its name (a data source keeps its `data.` prefix)
+      excl_types="$(sed -E 's/^((data\.)?[^.]+)\..*/\1/' <<<"$notplanned" | sort | uniq -c | awk '{printf "%s%s `%s`", (NR>1?", ":""), $1, $2}')"
     fi
     excl_note=""; [ "$excl_n" -gt 0 ] && excl_note=" ($excl_n not planned)"
     desc="$desc$root: +$a ~$c -$d ${rs}${excl_note} "
     { echo; echo "### \`$root\` — +$a to add, ~$c to change, -$d to destroy${rs:+, $r to replace}"
       if [ "$excl_n" -gt 0 ]; then
-        echo; echo "⚠ **Not planned on the box** (policy \`plan_exclude_types\` — GitHub returns these only to an admin-WRITE token; the box holds a read-only one): $excl_types. A change to them is judged by the host's \`github-tofu plan\`, not here."
+        note="$(mgmt_root_exclude_note "$POL" "$root")"
+        echo; echo "⚠ **Not planned on the box** (policy \`plan_exclude_types\`${note:+ — $note}): $excl_types."
       fi
       if [ -n "$changes" ]; then echo; echo "| address | actions |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | %s |\n", $1, $2}' <<<"$changes"; else echo; echo "No changes."; fi
       echo

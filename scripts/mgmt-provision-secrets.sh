@@ -73,7 +73,7 @@ ENV_TABLE=(
   "TOFU_STATE_KEY_ID=tofu-state-key-id"            # scripts/tofu-state-env.sh (Garage state bucket)
   "TOFU_STATE_SECRET=tofu-state-secret"
   "TOFU_STATE_PASSPHRASE=tofu-state-passphrase"    # the state's own key — shared by nature, never box-scoped
-  "CLOUDFLARE_API_TOKEN=cloudflare-write-key"      # tofu/cloudflare plan
+  "CLOUDFLARE_API_TOKEN=cloudflare-mgmt-read"      # tofu/cloudflare plan on PR heads (the sentinel, FU-238): the READ-ONLY twin of the write key, minted by tofu/cloudflare-token/mgmt-read.tf on the host — mint BEFORE the next --push
   "OPN_API_KEY=opnsense-api-key"                   # scripts/opnsense-playbook.sh --check
   "OPN_API_SECRET=opnsense-api-secret"
   # the main root (scripts/keepass-env.sh's export list, one line each — swap for box-scoped mints as FU-012 minds them)

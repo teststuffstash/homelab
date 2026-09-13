@@ -1,6 +1,8 @@
 # Cloudflare auth = CLOUDFLARE_API_TOKEN env var, set to the scoped homelab-tofu-apply
 # write token (see tofu/cloudflare-token/). Never put the token in tfvars/git.
 #     source scripts/keepass-env.sh   # exports CLOUDFLARE_API_TOKEN (wallet: cloudflare-write-key)
+# The management box PLANS this root on PR heads with the read-only twin (homelab-mgmt-read,
+# tofu/cloudflare-token/mgmt-read.tf) — the tunnel-token data source is excluded there (FU-238).
 provider "cloudflare" {}
 
 # This root is separate from tofu/ (own state), so it can't read the in-state Talos

@@ -35,7 +35,9 @@
 #                   github        org/repos/rulesets — read-only PAT (GITHUB_TOKEN) + the App keys via
 #                                 scripts/mgmt-root-env/github.sh; plan-only, applies stay on the host (FU-238)
 #                 ⛔ `cloudflare` is NOT cone-clean, contrary to the 2026-09-12 reading: half of it
-#                 is in-cluster (the cloudflared Deployment via the kubernetes provider), so its
+#                 is in-cluster (the cloudflared Deployment via the kubernetes provider) — the
+#                 SENTINEL plans it per PR head (policy root, read-only token, FU-238), the belt
+#                 does not — so its
 #                 plan reads the API server and fails with the cluster down — found 2026-09-13 on
 #                 the box ("dial tcp [::1]:80: connection refused" = no kubeconfig, but WITH one it
 #                 asserts the cluster). Same class as `infisical`, whose provider auth comes from
