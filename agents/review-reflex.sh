@@ -233,10 +233,24 @@ $(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" --arg default "$DEFAU
         | .number')
 EOF_C9
 
+  # REQUIRED CONTEXTS (2026-09-13, homelab#1629 stand-aside): `green` used to mean "every check
+  # that REPORTED is green", which dispatched a reviewer the moment CI finished while a required
+  # context that had not reported yet — the management box's `management-sentinel`, a ≤5-min
+  # tick, unlike the edge-triggered iac-sentinel — was simply invisible. The reviewer then loaded
+  # the PR and stood aside at STEP 0 (checks-pending): a full spawn paid for nothing, once per
+  # PR. So the base branch's required contexts are read ONCE per repo (REST, the rules API) and
+  # an ABSENT required context is PENDING. Probe failure is fail-OPEN to the old predicate, loudly
+  # (a GitHub blip must not stop every review); the replay bridge sets `required_json` directly.
+  required_json="$(gh api "repos/$slug/rules/branches/$DEFAULT_BRANCH" \
+      --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[]? | .context] | unique' 2>/dev/null)" \
+    || required_json=""
+  case "$required_json" in \[*) ;; *) log "[$repo] WARN: required-contexts probe failed — treating none as required (fail-open)"; required_json="[]" ;; esac
   # >>>REPLAY:review-pick>>>
   # Reviewable = armed ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits )
   #              ∧ NOT `automerge`-labelled.  CURRENCY IS NOT A PRECONDITION.
-  #   green: every check present is a success-equivalent AND at least one check ran (never rubber-stamp a no-CI PR).
+  #   green: every check present is a success-equivalent AND at least one check ran (never rubber-stamp a no-CI PR)
+  #          AND every REQUIRED context of the base branch has reported (absent = pending, 2026-09-13 — fixtures
+  #          required-context-absent-held / required-contexts-present-admitted).
   #   DIRTY → conflict (coordinator's job); APPROVED → already merging.
   #   BEHIND USED TO SKIP HERE, and does not any more (2026-09-05, homelab#1422). The skip was
   #   designed against `dismiss_stale_reviews_on_push = true` (tofu/github/repo_rulesets.tf:138)
@@ -275,11 +289,13 @@ EOF_C9
   #   bumps (devbox-update.sh gate, FU-022) are HUMAN-GATED and COORDINATOR-owned — the coordinator
   #   dispatches their investigation review directly (even while red) and hands off to a human; the reflex
   #   must NOT reach across the arming wall for them, or the two would fight over one PR. See merge-path.md.
-  picks="$(printf '%s' "$prs" | jq -r --arg bot "$REVIEWER_LOGIN" --arg default "$DEFAULT_BRANCH" '
+  picks="$(printf '%s' "$prs" | jq -r --arg bot "$REVIEWER_LOGIN" --arg default "$DEFAULT_BRANCH" --argjson required "${required_json:-[]}" '
     def green:
       ([ .statusCheckRollup[]? | (.conclusion // .state // "") ]) as $c
+      | ([ .statusCheckRollup[]? | (.name // .context // "") ]) as $names
       | ($c | length) > 0
-        and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0;
+        and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0
+        and ([ $required[] | select(. as $r | ($names | index($r)) == null) ] | length) == 0;
     def newest_review_at:
       ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
     def newest_commit_at:
