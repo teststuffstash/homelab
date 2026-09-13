@@ -1468,10 +1468,12 @@ def route(payload: dict, ctx: dict) -> dict:
     # model sidesteps M4 already (pin_for returns None — nothing to skip, and ":free:exacto" is
     # a stacked variant upstream never promised), and a subscription-rail pick is not an
     # OpenRouter model id at all (claude/haiku:exacto would reach the claude CLI verbatim;
-    # opencode-go/* rides the Go subscription leg — its coarse `rail` reads "openrouter" here).
+    # opencode-go/* rides the Go subscription leg — its coarse `rail` reads "openrouter" here;
+    # openrouter/<codename> is a cloaked/aggregate id OpenRouter serves itself — one upstream,
+    # no provider ordering to delegate).
     if (result and cinfo.get("provider_policy") == "exacto"
             and result.get("rail") == "openrouter"
-            and not result["model"].startswith("opencode-go/")
+            and not result["model"].startswith(("opencode-go/", "openrouter/"))
             and not result["model"].endswith(":free")):
         result["model"] += ":exacto"
     if result:
@@ -2296,6 +2298,10 @@ def self_test() -> int:
              "claude/haiku"]
     base = {"stack": "sleep", "task": "issue-42", "role": "worker", "session": "t-route",
             "chain": CHAIN}
+    # The LIVE model-classes.json carries provider_policy: exacto on coding (2026-09-13 flip).
+    # The routing-mechanics rows below assert bare model ids; the policy rows ((a)/(b)/(c) under
+    # "FU-186 step 1") set the policy explicitly on a copy — so the baseline here is policy-free.
+    _classes["classes"]["coding"].pop("provider_policy", None)
     d = route(dict(base), CTX)
     assert d["decision"] == "dispatch" and d["model"] == "inclusionai/ling-3.0-flash:free", d
     assert d["rail"] == "openrouter" and d["class"] == "coding", d
@@ -2324,9 +2330,12 @@ def self_test() -> int:
     assert _def["decision"] == "defer" and _def.get("resolved") is None, \
         f"defer must not carry resolved: {_def.get('resolved')}"
     # ── FU-186 step 1: provider_policy knob — exacto skips pin injection ──
-    # (a) With no class carrying provider_policy, an audit/research route serving
-    #     openrouter/fusion is pin-preserving (no :exacto suffix, no provider_policy key).
-    _audit = route(dict(base, role="audit", chain=["openrouter/fusion"]), CTX)
+    # (a) A class WITHOUT provider_policy (audit — role "retro" in role_defaults; "audit" is a
+    #     class name, not a role, and an unknown role defaults to coding, which made this row
+    #     vacuous until the coding flip exposed it) serving openrouter/fusion is pin-preserving
+    #     (no :exacto suffix, no provider_policy key).
+    _audit = route(dict(base, role="retro", chain=["openrouter/fusion"]), CTX)
+    assert _audit["class"] == "audit", f"retro role must resolve the audit class: {_audit}"
     assert _audit["decision"] == "dispatch" and _audit["model"] == "openrouter/fusion", \
         f"audit route must serve openrouter/fusion without :exacto: {_audit}"
     assert _audit.get("provider_policy") is None, \
