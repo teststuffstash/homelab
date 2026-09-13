@@ -131,8 +131,9 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
 4. Create + install the **runner-registrar App** (ADR-082) → private key → Infisical.
 5. Runner group **Default**: All repositories **+ Allow public repositories**.
 6. **Fork-PR approval** = require approval for outside collaborators.
-7. Create + install the **homelab-agents** and **homelab-reviewer** Apps (manifest flow) → keys →
-   Infisical (`scripts/github-app-bootstrap.sh homelab-agents`, `scripts/github-app-bootstrap.sh homelab-reviewer`).
+7. Create + install the **homelab-agents**, **homelab-reviewer** and **homelab-sentinel** Apps (manifest flow) → keys →
+   Infisical (`scripts/github-app-bootstrap.sh homelab-agents`, `… homelab-reviewer`, `… homelab-sentinel` — one App per
+   writing role, ADR-130).
    Install each as **"Only select repositories"** and pick the agent repos — the install's repo scope
    is click-only (fine-grained PATs 403 on the `/user/installations` API; see §2).
 8. **Branch protection** is code in [`tofu/github/`](../tofu/github/) (org ruleset targets `~ALL`, so

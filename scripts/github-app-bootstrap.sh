@@ -153,6 +153,11 @@ cmd_secrets() {
       say "Pushing the review App private key into Infisical (homelab/prod)"
       devbox run infisical-secret "REVIEWER_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
       say "Paste appID=$APP_ID installID=$INSTALL_ID into agents/coordinator/reviewer-git.yaml, then apply it" ;;
+    homelab-sentinel)
+      need gh; _resolve_install_id
+      say "Pushing the sentinel App private key into Infisical (homelab/prod)"
+      devbox run infisical-secret "SENTINEL_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
+      say "Paste appID=$APP_ID installID=$INSTALL_ID into agents/coordinator/sentinel-git.yaml + app_id/install_id in $DECLARED, then apply it" ;;
     homelab-merge)
       # No install-id: the updater's create-github-app-token resolves it from app-id+key+repo.
       say "Pushing the merge App private key into Infisical (homelab/prod) — source of truth"
@@ -192,6 +197,11 @@ cmd_verify() {
       say "reviewer-git ESO chain (ns agent-coordinator)"
       $KC -n agent-coordinator get externalsecret reviewer-github-app reviewer-git 2>/dev/null || warn "ExternalSecrets not applied (reviewer-git.yaml)"
       $KC -n agent-coordinator get secret reviewer-git 2>/dev/null && echo "  → reviewer-git Secret present" || warn "no reviewer-git Secret yet" ;;
+    homelab-sentinel)
+      need devbox
+      say "sentinel-git ESO chain (ns agent-coordinator)"
+      $KC -n agent-coordinator get externalsecret sentinel-github-app sentinel-git 2>/dev/null || warn "ExternalSecrets not applied (sentinel-git.yaml)"
+      $KC -n agent-coordinator get secret sentinel-git 2>/dev/null && echo "  → sentinel-git Secret present" || warn "no sentinel-git Secret yet" ;;
     homelab-merge)
       need gh
       # The one END-TO-END signal: a green updater run needs install + secrets + perms at once.

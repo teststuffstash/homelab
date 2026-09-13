@@ -211,6 +211,35 @@
       }
     },
     {
+      "slug": "homelab-sentinel",
+      "app_id": null,
+      "install_id": null,
+      "purpose": "The policy-verdict identity (ADR-130): homelab-sentinel[bot] posts the required `iac-sentinel` commit status (and, planned, the management-sentinel status + verdict comment). Split OUT of homelab-reviewer 2026-09-13 so a machine policy verdict never wears the approver's name, the reviewer's key stops serving two roles, and the required contexts can be PINNED to this App's integration id (tofu/github repo_rulesets.tf) — today any statuses-writer can satisfy them.",
+      "permissions": {
+        "metadata": {
+          "level": "read",
+          "why": "baseline"
+        },
+        "statuses": {
+          "level": "write",
+          "why": "the required iac-sentinel / management-sentinel commit statuses — the enforcement write (iac-lane.md §L0b)"
+        },
+        "pull_requests": {
+          "level": "write",
+          "why": "the management-sentinel verdict comment on the PR (changed addresses + counts, never values) — planned with the plan-on-PR gate"
+        }
+      },
+      "installs": "selected",
+      "key_locations": [
+        "Infisical SENTINEL_GH_APP_PRIVATE_KEY",
+        "~/.claude/homelab-github-sentinel/"
+      ],
+      "bootstrap": {
+        "redirect_port": 8771,
+        "cred_dir": "~/.claude/homelab-github-sentinel"
+      }
+    },
+    {
       "slug": "homelab-labels",
       "app_id": 4314419,
       "install_id": 146964959,
