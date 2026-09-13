@@ -251,7 +251,10 @@ in
   # wrapper) would skip the reboot entirely, leaving a broken closure live with no console.
   systemd.services.mgmt-confirm = {
     description = "post-activation gate: promote the closure, or reboot back to the boot default";
-    path = with pkgs; [ bash iproute2 iputils openssh systemd nix nixos-rebuild coreutils ];
+    # ⚠ gnugrep/gawk/gnused are NOT in coreutils. The probe's every parse uses them; without them
+    # the gate's sshd + network checks fail on a healthy box → reboot loop (found 2026-09-13 by
+    # running the belt under its unit: "unparseable version output" was awk missing, not talosctl).
+    path = with pkgs; [ bash iproute2 iputils openssh systemd nix nixos-rebuild coreutils gnugrep gawk gnused ];
     serviceConfig = {
       Type = "oneshot";
       TimeoutStartSec = "15m";
@@ -279,7 +282,7 @@ in
     description = "drift belt: tofu plan + talosctl skew + opnsense --check (report only)";
     after = [ "mgmt-checkout.service" ];
     wants = [ "mgmt-checkout.service" ];
-    path = with pkgs; [ bash git devbox nix curl jq coreutils ];
+    path = with pkgs; [ bash git devbox nix curl jq coreutils gnugrep gawk gnused ]; # same reason as the gate
     serviceConfig = {
       Type = "oneshot";
       TimeoutStartSec = "30m";

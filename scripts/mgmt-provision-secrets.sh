@@ -76,7 +76,14 @@ ENV_TABLE=(
 
 # ── stage ───────────────────────────────────────────────────────────────────────────────────────
 rm -rf "$OUT"
-install -d -m700 "$OUT" "$OUT/etc/ssh" "$OUT/var/lib/mgmt"
+# ⚠ The tree's DIRECTORY modes matter: this tree is extracted over the box's real `/`. On the first
+# push (2026-09-13) every intermediate dir was 0700, tar applied that to /, /etc, /var, /var/lib —
+# and systemd-resolved (unprivileged) lost /etc/resolv.conf: DNS dead until a chmod by hand. So the
+# intermediates mirror the real filesystem (0755); only /var/lib/mgmt (0700) and the FILES (0600)
+# are private. The push below ALSO refuses to touch existing directories (--no-overwrite-dir).
+install -d -m700 "$OUT"
+install -d -m755 "$OUT/etc" "$OUT/etc/ssh" "$OUT/var" "$OUT/var/lib"
+install -d -m700 "$OUT/var/lib/mgmt"
 
 # 1. the sshd host key (attachment — NEVER --stdout, it mangles binaries; export straight to file)
 kp attachment-export -q --no-password -k "$KEYF" "$DB" mgmt-ssh-host ssh_host_ed25519_key \
@@ -103,9 +110,42 @@ ENVF="$OUT/var/lib/mgmt/env"
   # File-shaped creds live beside this file; talosctl/kubectl honour these natively.
   echo "TALOSCONFIG=/var/lib/mgmt/talosconfig"
   echo "KUBECONFIG=/var/lib/mgmt/kubeconfig"
+  echo "TOFU_VAR_DIR=/var/lib/mgmt"
+  # tofu/provisioning's matchbox provider reads its gRPC client files by path (variables default to
+  # the JAIL's wallet cache, ~/.claude/homelab-matchbox/ — the box's first plan failed on exactly
+  # that, 2026-09-13). Same wallet attachments, box-local paths.
+  echo "TF_VAR_matchbox_ca=/var/lib/mgmt/matchbox/ca.crt"
+  echo "TF_VAR_matchbox_client_cert=/var/lib/mgmt/matchbox/client.crt"
+  echo "TF_VAR_matchbox_client_key=/var/lib/mgmt/matchbox/client.key"
+  # ...and its proxmox provider SSHes into pve with the seed key (variable defaults to the jail's
+  # cache, ~/.claude/homelab-pve-ssh/). THE dangerous credential FU-012 names — the point of the box.
+  echo "TF_VAR_proxmox_ssh_private_key_file=/var/lib/mgmt/pve-ssh/id_ed25519"
 } >> "$ENVF"
 echo "  + var/lib/mgmt/env  (${#ENV_TABLE[@]} entries)"
 
+# 3a. the Matchbox gRPC client files (wallet entry matchbox-grpc, three attachments)
+install -d -m700 "$OUT/var/lib/mgmt/matchbox"
+for att in ca.crt client.crt client.key; do
+  kp attachment-export -q --no-password -k "$KEYF" "$DB" matchbox-grpc "$att" "$OUT/var/lib/mgmt/matchbox/$att" >/dev/null \
+    || { echo "FATAL: wallet entry matchbox-grpc/$att missing" >&2; exit 1; }
+  chmod 600 "$OUT/var/lib/mgmt/matchbox/$att"; echo "  + var/lib/mgmt/matchbox/$att  (← matchbox-grpc/$att)"
+done
+# 3a'. the Proxmox SSH seed key (wallet entry pve-ssh-seed) — ⚠ the same key the box trusts in
+#      keys/jail.pub; a box-scoped pve key is on FU-012's list with the other per-consumer mints.
+install -d -m700 "$OUT/var/lib/mgmt/pve-ssh"
+kp attachment-export -q --no-password -k "$KEYF" "$DB" pve-ssh-seed id_ed25519 "$OUT/var/lib/mgmt/pve-ssh/id_ed25519" >/dev/null \
+  || { echo "FATAL: wallet entry pve-ssh-seed/id_ed25519 missing" >&2; exit 1; }
+chmod 600 "$OUT/var/lib/mgmt/pve-ssh/id_ed25519"; echo "  + var/lib/mgmt/pve-ssh/id_ed25519  (← pve-ssh-seed/id_ed25519)"
+# 3b. per-root var files the jail keeps gitignored in the checkout — a fresh clone on the box has
+#     none, and `plan` fails on the first variable without a default (ssh_public_keys, 2026-09-13).
+#     Public keys, so config not secret, but they live where the jail keeps them: ride along.
+for root in provisioning; do
+  if [ -s "$REPO/tofu/$root/terraform.tfvars" ]; then
+    install -m600 "$REPO/tofu/$root/terraform.tfvars" "$OUT/var/lib/mgmt/$root.tfvars"; echo "  + var/lib/mgmt/$root.tfvars  (← tofu/$root/terraform.tfvars)"
+  else
+    echo "  ! tofu/$root/terraform.tfvars missing — the box's plan of that root will fail on its variables" >&2
+  fi
+done
 # 3. talosconfig + kubeconfig from this checkout (gitignored, tofu-generated)
 for f in talosconfig kubeconfig; do
   if [ -s "$REPO/tofu/$f" ]; then
@@ -125,12 +165,13 @@ EOF
 fi
 
 # ── push ────────────────────────────────────────────────────────────────────────────────────────
-# Same tree, same paths, onto the running box. --chown because the stage is owned by the jail user.
+# Same tree, same paths, onto the running box — tar over ssh (rsync is in neither the jail nor the
+# closure, found on the first push 2026-09-13). Root extracts with --no-same-owner, so the files
+# stop being the jail user's; modes travel in the archive (0600).
 # Host-key pinning: the box's key IS the wallet's, so pin it from the staged .pub instead of TOFU.
 KH="$OUT/known_hosts"
 printf '%s %s\n' "$HOST" "$(cut -d' ' -f1,2 "$OUT/etc/ssh/ssh_host_ed25519_key.pub")" > "$KH"
-SSH="ssh -o UserKnownHostsFile=$KH -o StrictHostKeyChecking=yes -i $CRED/homelab-pve-ssh/id_ed25519"
-rsync -rlpt --chown=root:root -e "$SSH" \
-  --exclude known_hosts "$OUT/" "root@$HOST:/"
-$SSH "root@$HOST" 'chmod 700 /var/lib/mgmt && chmod 600 /var/lib/mgmt/* /etc/ssh/ssh_host_ed25519_key && ls -l /var/lib/mgmt'
+tar -C "$OUT" --exclude known_hosts -cf - . \
+  | ssh -o UserKnownHostsFile="$KH" -o StrictHostKeyChecking=yes -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
+      'tar -C / --no-same-owner --no-overwrite-dir -xf - && chmod 700 /var/lib/mgmt /var/lib/mgmt/matchbox /var/lib/mgmt/pve-ssh && find /var/lib/mgmt -type f -exec chmod 600 {} + && chmod 600 /etc/ssh/ssh_host_ed25519_key && ls -lR /var/lib/mgmt'
 echo "pushed to root@$HOST — units read /var/lib/mgmt/env at their next start; nothing to restart"
