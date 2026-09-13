@@ -1160,7 +1160,7 @@ the block needs pruning, not more headings.
       declared-vs-labelled is a one-line PromQL over `kube_node_labels`. Relates FU-218, FU-072.
 - [ ] **FU-236** — **The `homelab-sentinel` App cutover (ADR-130).** Declared + scaffolded 2026-09-13
       (`docs/github-apps.yaml`, `agents/coordinator/sentinel-git.yaml`, bootstrap/wallet wiring);
-      the sentinel still posts under the reviewer's token. **Steps:** (1) the App (4929271) created,
+      the sentinel posts under its own App since 11:17. **Steps:** (1) the App (4929271) created,
       installed, chain applied — DONE 2026-09-13; (2) `sentinel-argo.yaml` on `sentinel-git` — DONE
       11:14, first status under homelab-sentinel[bot] 11:17:58; (3) `integration_id` pins — APPLIED
       2026-09-13 (11 rulesets); (4) reviewer `statuses` write→read: the console un-grant happened 11:30, BEFORE the mint
