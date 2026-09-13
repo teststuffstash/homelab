@@ -74,7 +74,6 @@ ENV_TABLE=(
   "TOFU_STATE_SECRET=tofu-state-secret"
   "TOFU_STATE_PASSPHRASE=tofu-state-passphrase"    # the state's own key — shared by nature, never box-scoped
   "CLOUDFLARE_API_TOKEN=cloudflare-write-key"      # tofu/cloudflare plan
-  "TF_VAR_proxmox_api_token=pve-api-token-matchbox" # tofu/provisioning plan
   "OPN_API_KEY=opnsense-api-key"                   # scripts/opnsense-playbook.sh --check
   "OPN_API_SECRET=opnsense-api-secret"
   # the main root (scripts/keepass-env.sh's export list, one line each — swap for box-scoped mints as FU-012 minds them)
@@ -183,6 +182,13 @@ for root in provisioning main; do
     echo "  ! ${src#"$REPO"/} missing — the box's plan of that root will fail on its variables" >&2
   fi
 done
+# ⚠ Proxmox tokens ride in the tfvars, NEVER the env: a TF_VAR_ in the env that a tfvars overrides
+# at plan time makes `tofu apply <saved plan>` fail with "Mismatch between input and plan variable
+# value" (the env is re-read at apply, the tfvars is not — found on the box 2026-09-13). main's
+# token is in main.tfvars already; provisioning's (the jail sets it via env) is appended here.
+_pt="$(kp_val pve-api-token-matchbox)"; [ -n "$_pt" ] || { echo "FATAL: wallet entry pve-api-token-matchbox missing" >&2; exit 1; }
+grep -q '^proxmox_api_token' "$OUT/var/lib/mgmt/provisioning.tfvars" 2>/dev/null || printf 'proxmox_api_token = "%s"\n' "$_pt" >> "$OUT/var/lib/mgmt/provisioning.tfvars"
+echo "  + var/lib/mgmt/provisioning.tfvars  (+ proxmox_api_token ← pve-api-token-matchbox)"
 # 3. talosconfig + kubeconfig from this checkout (gitignored, tofu-generated)
 for f in talosconfig kubeconfig; do
   if [ -s "$REPO/tofu/$f" ]; then

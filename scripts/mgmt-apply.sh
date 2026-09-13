@@ -80,7 +80,11 @@ for root in "${apply_roots[@]}"; do
   log "$root: +$a ~$c -$d ${rs} — all inside the apply allowlist"
   printf '%s\n' "$changes" | sed 's/^/    /'
   if [ "${MGMT_SHADOW:-0}" = 1 ]; then log "[shadow] would apply $root now"; continue; fi
-  if ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$rel" apply -input=false "$out" ) >"$out.apply.log" 2>&1; then
+  # ⚠ a saved plan does NOT carry the -state= override (found on the box, 2026-09-13: apply read
+  # the default path, an empty state, "Saved plan does not match the given state") — repeat it.
+  stateargs=""; [ -f "$REPO/$rel/backend.tf" ] || stateargs="-state=$MGMT_STATE_DIR/$root/terraform.tfstate"
+  # shellcheck disable=SC2086
+  if ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$rel" apply -input=false $stateargs "$out" ) >"$out.apply.log" 2>&1; then
     log "$root: APPLIED (+$a ~$c -$d)"
     mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d applied by the management box"
   else
