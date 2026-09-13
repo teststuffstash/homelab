@@ -1464,7 +1464,17 @@ def route(payload: dict, ctx: dict) -> dict:
     # FU-186 step 1: class-level provider_policy — append :exacto suffix when the resolved
     # class carries provider_policy: "exacto", so the completion path skips pin injection
     # (the :exacto suffix is already handled at openrouter-proxy.py L3232/L3302).
-    if result and cinfo.get("provider_policy") == "exacto":
+    # Only a PAID OpenRouter pick carries it (2026-09-13, the flip's self-test catch): a :free
+    # model sidesteps M4 already (pin_for returns None — nothing to skip, and ":free:exacto" is
+    # a stacked variant upstream never promised), and a subscription-rail pick is not an
+    # OpenRouter model id at all (claude/haiku:exacto would reach the claude CLI verbatim;
+    # opencode-go/* rides the Go subscription leg — its coarse `rail` reads "openrouter" here;
+    # openrouter/<codename> is a cloaked/aggregate id OpenRouter serves itself — one upstream,
+    # no provider ordering to delegate).
+    if (result and cinfo.get("provider_policy") == "exacto"
+            and result.get("rail") == "openrouter"
+            and not result["model"].startswith(("opencode-go/", "openrouter/"))
+            and not result["model"].endswith(":free")):
         result["model"] += ":exacto"
     if result:
         half_open = bool(_read(
@@ -2288,6 +2298,10 @@ def self_test() -> int:
              "claude/haiku"]
     base = {"stack": "sleep", "task": "issue-42", "role": "worker", "session": "t-route",
             "chain": CHAIN}
+    # The LIVE model-classes.json carries provider_policy: exacto on coding (2026-09-13 flip).
+    # The routing-mechanics rows below assert bare model ids; the policy rows ((a)/(b)/(c) under
+    # "FU-186 step 1") set the policy explicitly on a copy — so the baseline here is policy-free.
+    _classes["classes"]["coding"].pop("provider_policy", None)
     d = route(dict(base), CTX)
     assert d["decision"] == "dispatch" and d["model"] == "inclusionai/ling-3.0-flash:free", d
     assert d["rail"] == "openrouter" and d["class"] == "coding", d
@@ -2316,30 +2330,43 @@ def self_test() -> int:
     assert _def["decision"] == "defer" and _def.get("resolved") is None, \
         f"defer must not carry resolved: {_def.get('resolved')}"
     # ── FU-186 step 1: provider_policy knob — exacto skips pin injection ──
-    # (a) With no class carrying provider_policy, an audit/research route serving
-    #     openrouter/fusion is pin-preserving (no :exacto suffix, no provider_policy key).
-    _audit = route(dict(base, role="audit", chain=["openrouter/fusion"]), CTX)
+    # (a) A class WITHOUT provider_policy (audit — role "retro" in role_defaults; "audit" is a
+    #     class name, not a role, and an unknown role defaults to coding, which made this row
+    #     vacuous until the coding flip exposed it) serving openrouter/fusion is pin-preserving
+    #     (no :exacto suffix, no provider_policy key).
+    _audit = route(dict(base, role="retro", chain=["openrouter/fusion"]), CTX)
+    assert _audit["class"] == "audit", f"retro role must resolve the audit class: {_audit}"
     assert _audit["decision"] == "dispatch" and _audit["model"] == "openrouter/fusion", \
         f"audit route must serve openrouter/fusion without :exacto: {_audit}"
     assert _audit.get("provider_policy") is None, \
         f"audit class has no provider_policy: {_audit}"
-    # (b) A class that DOES carry provider_policy: "exacto" appends :exacto and echoes the policy.
+    # (b) A class that DOES carry provider_policy: "exacto" appends :exacto to a PAID OpenRouter
+    #     pick and echoes the policy — and leaves a :free pick and a subscription pick BARE
+    #     (a :free model has no pin to skip; claude/* is not an OpenRouter id). Live since the
+    #     coding class carries the policy (2026-09-13).
     _saved_classes = copy.deepcopy(_classes)
     _classes["classes"]["coding"]["provider_policy"] = "exacto"
-    _exacto = route(dict(base), CTX)  # role=worker → class coding
-    assert _exacto["decision"] == "dispatch" and _exacto["model"] == "inclusionai/ling-3.0-flash:free:exacto", \
-        f"coding with provider_policy=exacto must append :exacto: {_exacto}"
+    _exacto = route(dict(base, chain=["deepseek/deepseek-v4-flash"]), CTX)  # role=worker → coding
+    assert _exacto["decision"] == "dispatch" and _exacto["model"] == "deepseek/deepseek-v4-flash:exacto", \
+        f"coding with provider_policy=exacto must append :exacto to a paid pick: {_exacto}"
     assert _exacto.get("provider_policy") == "exacto", \
         f"decision must echo provider_policy: {_exacto}"
+    _exacto_free = route(dict(base), CTX)  # chain head is the :free model
+    assert _exacto_free["model"] == "inclusionai/ling-3.0-flash:free", \
+        f":free pick must stay bare under exacto (no pin to skip): {_exacto_free}"
+    _exacto_sub = route(dict(base, chain=["claude/haiku"]), CTX)
+    assert _exacto_sub["decision"] == "dispatch" and _exacto_sub["model"] == "claude/haiku", \
+        f"subscription pick must stay bare under exacto: {_exacto_sub}"
     _classes.clear()
     _classes.update(copy.deepcopy(_saved_classes))
     # (c) NON-VACUOUS: cooldown/breaker bookkeeping under the BARE id, not the :exacto-suffixed id.
     #     This assertion goes RED against the pre-fix source (where or_model kept the suffix) and
     #     GREEN after the fix (openrouter-proxy.py strips :exacto from the bookkeeping key).
     _classes["classes"]["coding"]["provider_policy"] = "exacto"
-    _exacto2 = route(dict(base), CTX)
-    _exacto_model = _exacto2["model"]  # e.g. "inclusionai/ling-3.0-flash:free:exacto"
-    _bare_model = _exacto_model.removesuffix(":exacto")  # e.g. "inclusionai/ling-3.0-flash:free"
+    _exacto2 = route(dict(base, chain=["deepseek/deepseek-v4-flash"]), CTX)
+    _exacto_model = _exacto2["model"]  # "deepseek/deepseek-v4-flash:exacto"
+    _bare_model = _exacto_model.removesuffix(":exacto")  # "deepseek/deepseek-v4-flash"
+    assert _bare_model != _exacto_model, f"paid pick must carry :exacto here: {_exacto2}"
     # Trip a cooldown using the model as it arrives on the completion path (suffixed).
     for _ in range(8):
         record_provider_event(_exacto_model, "novita", 429)
