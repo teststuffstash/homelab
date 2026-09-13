@@ -77,5 +77,11 @@ if [ -z "${GITHUB_TOKEN:-}" ]; then
 fi
 [ -n "${GITHUB_TOKEN:-}" ] || { echo "github-tf: no GITHUB_TOKEN (wallet entry '$GH_ADMIN_KP_ENTRY' empty?) — need org Administration:R/W + Issues:R/W." >&2; exit 1; }
 
+# FU-238 (2026-09-13): the root's state moved to the encrypted Garage backend (tofu/github/backend.tf,
+# use_lockfile=false — the single-writer ruling, docs/tofu-state.md). Same as scripts/tf.sh: source
+# the per-ROOT state env (S3 credential + TF_ENCRYPTION, wallet-read; a pre-set environment wins)
+# and init here, after the credentials exist — a bare `tofu init` has none and dies first.
+TOFU_STATE_ROOT_DIR="$ROOT/tofu/github" . "$ROOT/scripts/tofu-state-env.sh" || exit 1
+tofu -chdir="$ROOT/tofu/github" init -input=false >&2
 echo "github-tf: GITHUB_TOKEN set → tofu -chdir=tofu/github $*" >&2
 exec tofu -chdir="$ROOT/tofu/github" "$@"
