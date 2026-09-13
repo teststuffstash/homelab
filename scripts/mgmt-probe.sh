@@ -205,11 +205,15 @@ gate_sshd() {
 }
 
 gate_keys() {
-  local f=/root/.ssh/authorized_keys n=0
-  if [ -s "$f" ]; then
-    n="$(ssh-keygen -lf "$f" 2>/dev/null | grep -c . || true)"
-  fi
-  if [ "${n:-0}" -ge 1 ]; then
+  # NixOS writes declared keys to /etc/ssh/authorized_keys.d/<user>, NOT ~/.ssh/authorized_keys
+  # (found by the first live gate run, 2026-09-13: "locked out" on a box with two working keys).
+  # Both locations count; sshd reads both.
+  local n=0 f
+  for f in /etc/ssh/authorized_keys.d/root /root/.ssh/authorized_keys; do
+    [ -s "$f" ] || continue
+    n=$((n + $(ssh-keygen -lf "$f" 2>/dev/null | grep -c . || true)))
+  done
+  if [ "$n" -ge 1 ]; then
     passed gate:keys "$n authorized key(s) parse"
   else
     failed gate:keys "no parseable authorized key — locked out"
@@ -238,12 +242,22 @@ gate_systemd() {
 }
 
 gate_store() {
-  # If the store cannot be written, the reboot-into-the-old-generation path still works but no
-  # future update or repair can — worth failing loudly while someone is watching.
-  if [ -w /nix/store ] || [ ! -d /nix/store ]; then
-    passed gate:store "store writable (or absent — jail)"
+  # "Can a future update or repair still land?" — NOT `[ -w /nix/store ]`: on NixOS the store is a
+  # read-only bind mount by design (the daemon writes through its own remount), so that test fails
+  # on every healthy box (first live gate run, 2026-09-13). The real properties: the daemon answers,
+  # and the store's filesystem has headroom (default.nix sets nix.settings.min-free = 5 GiB).
+  if [ ! -d /nix/store ]; then
+    passed gate:store "no store (jail)"; return
+  fi
+  if ! nix store info >/dev/null 2>&1; then
+    failed gate:store "nix daemon does not answer"; return
+  fi
+  local free_kb
+  free_kb="$(df -Pk /nix/store 2>/dev/null | awk 'NR==2{print $4}')"
+  if [ -n "$free_kb" ] && [ "$free_kb" -lt $((5 * 1024 * 1024)) ]; then
+    failed gate:store "only $((free_kb / 1024)) MiB free on the store — below min-free, no update can build"
   else
-    failed gate:store "/nix/store not writable"
+    passed gate:store "daemon answers, $((${free_kb:-0} / 1024 / 1024)) GiB free"
   fi
 }
 
