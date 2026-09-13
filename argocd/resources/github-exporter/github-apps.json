@@ -202,8 +202,10 @@
       },
       "installs": "selected",
       "key_locations": [
-        "org Actions secrets RENOVATE_APP_ID/RENOVATE_APP_PRIVATE_KEY",
-        "KeePass"
+        "Infisical RENOVATE_GH_APP_PRIVATE_KEY",
+        "KeePass github-renovate-app",
+        "~/.claude/homelab-github-renovate/",
+        "org Actions secrets RENOVATE_APP_*"
       ],
       "bootstrap": {
         "redirect_port": 8770,
@@ -284,8 +286,10 @@
       },
       "installs": "selected",
       "key_locations": [
-        "org Actions secrets DEPLOY_APP_*",
-        "KeePass"
+        "Infisical DEPLOY_GH_APP_PRIVATE_KEY",
+        "KeePass github-deploy-app",
+        "~/.claude/homelab-github-deploy/",
+        "org Actions secrets DEPLOY_APP_*"
       ],
       "bootstrap": {
         "redirect_port": 8769,

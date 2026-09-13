@@ -107,7 +107,7 @@ apps:
     absent:
       vulnerability_alerts: "DECIDED — vulnerability data comes from Renovate's OSV alerts, not GitHub Dependabot (docs/renovate.md §OSV: 'we use OSV instead and ignore that warning'; self-host ethos, no repo Dependency-graph settings needed)"
     installs: selected
-    key_locations: [org Actions secrets RENOVATE_APP_ID/RENOVATE_APP_PRIVATE_KEY, KeePass]
+    key_locations: [Infisical RENOVATE_GH_APP_PRIVATE_KEY, KeePass github-renovate-app, "~/.claude/homelab-github-renovate/", org Actions secrets RENOVATE_APP_*]
     bootstrap: { redirect_port: 8770, cred_dir: "~/.claude/homelab-github-renovate" }
 
   - slug: homelab-sentinel
@@ -147,7 +147,7 @@ apps:
       contents: { level: write, why: "push the bump branch" }
       pull_requests: { level: write, why: "open + auto-merge the bump PR" }
     installs: selected
-    key_locations: [org Actions secrets DEPLOY_APP_*, KeePass]
+    key_locations: [Infisical DEPLOY_GH_APP_PRIVATE_KEY, KeePass github-deploy-app, "~/.claude/homelab-github-deploy/", org Actions secrets DEPLOY_APP_*]
     bootstrap: { redirect_port: 8769, cred_dir: "~/.claude/homelab-github-deploy", verify_repos: [homelab, sleep-iac, oracle-iac] }
 
   - slug: homelab-arc
