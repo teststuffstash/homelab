@@ -226,7 +226,7 @@
         },
         "pull_requests": {
           "level": "write",
-          "why": "the management-sentinel verdict comment on the PR (changed addresses + counts, never values) — planned with the plan-on-PR gate"
+          "why": "the management-sentinel verdict comment on the PR (changed addresses + counts, never values) — the management sentinel, ADR-131 — posted FROM the box, whose copy of this key is a wallet-provisioned file (management-box.md §MB3)"
         }
       },
       "installs": "selected",
