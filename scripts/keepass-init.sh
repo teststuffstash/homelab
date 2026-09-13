@@ -146,6 +146,18 @@ add_attachment() {
   fi
 }
 
+# The management box's sshd host key (ADR-129) — GENERATED here when absent, like the state
+# passphrase: it must outlive reinstalls (a regenerated key breaks the jail's known_hosts), and it
+# reaches the box only via scripts/mgmt-provision-secrets.sh (--extra-files at install).
+if ! kp attachment-export -q --no-password -k "$KEY" --stdout "$DB" mgmt-ssh-host ssh_host_ed25519_key >/dev/null 2>&1; then
+  _mgmt_tmp="$(mktemp -d)"
+  ssh-keygen -q -t ed25519 -N '' -C mgmt -f "$_mgmt_tmp/ssh_host_ed25519_key"
+  add_attachment mgmt-ssh-host ssh_host_ed25519_key     "$_mgmt_tmp/ssh_host_ed25519_key"
+  add_attachment mgmt-ssh-host ssh_host_ed25519_key.pub "$_mgmt_tmp/ssh_host_ed25519_key.pub"
+  rm -rf "$_mgmt_tmp"
+else
+  echo "  = mgmt-ssh-host/ssh_host_ed25519_key (exists, kept)"
+fi
 add_attachment pve-ssh-seed        id_ed25519     "$HOME/.claude/homelab-pve-ssh/id_ed25519"
 add_attachment pve-ssh-seed        id_ed25519.pub "$HOME/.claude/homelab-pve-ssh/id_ed25519.pub"
 add_attachment matchbox-grpc       ca.crt         "$HOME/.claude/homelab-matchbox/ca.crt"

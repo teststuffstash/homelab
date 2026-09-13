@@ -1,7 +1,10 @@
 # Spike — no human in the loop, even for OPNsense / PXE / tofu
 
 **Tracked by:** FU-097 (this is its radical end-state: the "human-applied + belt" column shrinking
-toward empty). **Status:** thought exercise, 2026-08-02 — nothing here is built or decided.
+toward empty). **Status:** thought exercise, 2026-08-02 — except for path 5's pilot, which is DECIDED and
+part-BUILT (ADR-129 + [`../management-box.md`](../management-box.md): the OS, the update loop and
+the rollback layers are ruled, the config evaluates, the probe runs; the box is not installed).
+Everything else here remains a thought exercise.
 **Relates:** FU-012, FU-044, FU-102, ADR-005, ADR-088, ADR-090.
 
 ## The reframe
@@ -79,6 +82,24 @@ the linchpin of the whole exercise: no-human-in-the-loop really means *the probe
 2. OPNsense CARP pair — biggest cone shrink.
 3. Third Proxmox host + 3 CPs — upgrades become rotation.
 4. PiKVM — last; only covers what plug+PXE can't.
+
+### The pilot's build order (operator ruling, 2026-09-12) — step 1, split in two
+
+`thinkcentre` became the R12 pilot the day it left cluster duty, and the ruling **splits step 1**:
+the management box earns its job on a low-consequence surface *before* the management network
+exists, and the network rollout waits until the box itself is boring. The phases, the OS, the
+install, the update loop, the probe set and the rollback layers are **ADR-129** +
+[`../management-box.md`](../management-box.md) §MB1 — deliberately not restated here.
+
+What makes the split safe is one distinction, and it governs every path above: the box must be
+**live** independently, but it need not be **fresh** independently. A remote updater — even the
+cluster it rescues — is therefore acceptable, while a remote *rollback* is not.
+
+⚠ Path 2's enumeration of what the management segment carries ("Proxmox mgmt, Talos API, PiKVM,
+the coordinator") does not name **OPNsense**. Path 3 covers its *console* transitively (router in
+a VM on a dual-homed host), but a console is not an apply path: driving the canary/probe/failback
+sequence needs the router's API reachable by something its own config change cannot sever. Worth
+settling explicitly when the segment is built, rather than inferring either way.
 
 ## What would settle it
 
