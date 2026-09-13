@@ -62,7 +62,13 @@ resource "github_repository_ruleset" "required_checks" {
         for_each = each.value.required_checks
         content {
           context = required_check.value
-          # integration_id = 15368  # pin the check source to GitHub Actions if a name ever collides
+          # ADR-130 (2026-09-13): pin each context to its POSTER. Before this, any token with
+          # statuses:write could satisfy `iac-sentinel` — the reviewer's, the coordinator's, the
+          # jail's. 15368 = GitHub Actions' integration id; the sentinel's is the App we mint.
+          integration_id = (
+            required_check.value == "iac-sentinel" ? tonumber(var.sentinel_gh_app_id) :
+            required_check.value == "ci" ? 15368 : null
+          )
         }
       }
     }
