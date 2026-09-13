@@ -12,7 +12,7 @@
 # the read-all token included), so the policy excludes it on the box (`plan_exclude_types`,
 # policy/mgmt/plan-input.yaml) and the cloudflared Secret + Deployment fall out with it as its
 # dependents; the verdict names all three as "not planned". Same zone set as the write token
-# (var.zone_id — one zone), same expiry (rotated together, FU-156).
+# (local.apply_zone_resources — both product zones), same expiry (rotated together, FU-156).
 
 data "cloudflare_api_token_permission_groups_list" "dns_read" {
   name  = "DNS%20Read"
