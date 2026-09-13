@@ -533,7 +533,6 @@ standing set below; what differs is cadence and the act rule:
   (~50k, not the corpus — FU-164) was the one listed in the previous pickup; it sufficed, with
   `docs/tofu-state.md`'s cone table + `nixos/hosts/mgmt/default.nix`'s units added; (2) static CI: `tofu validate` per root + `nix eval` of both flake outputs (runner
   nix-cache question, management-box.md open table); (3) FU-097's ruling table gates phases B/C;
-  FU-012's box-scoped creds swap; (4) oracle-fleet `evidence` job: S3 region `us-east-1` → `garage`
-  (stack-side; platform detector = Garage 400-rate by key, none yet). Box: `mgmt-release` ref does
+  FU-012's box-scoped creds swap; (4) ~~oracle-fleet `evidence` job region~~ DONE stack-side (operator, 2026-09-13). Box: `mgmt-release` ref does
   not exist — creating it at master arms the pull loop (timers still masked by design).
 
