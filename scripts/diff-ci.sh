@@ -24,6 +24,8 @@ CLAUSE_PATHS='^(agents/|devbox\.(json|lock)$)'
 # #1315: the Composition, the two cluster pins it renders with (functions + provider version),
 # the gate's own script/fixtures, and the devbox closure that ships the nix provider.
 PUBLICROUTE_PATHS='^(argocd/resources/publicroute/|argocd/resources/crossplane/(providerconfig|functions)\.yaml$|argocd/platform/crossplane\.yaml$|scripts/publicroute-tf-validate\.sh$|scripts/fixtures/publicroute/|devbox\.(json|lock)$)'
+# the management box's policy + its readers (ADR-131): the stage-1 fixtures + the fail-closed reads
+MGMT_PATHS='^(policy/mgmt/|scripts/mgmt-[a-z-]*\.sh$|scripts/mgmt-root-env/|scripts/iac-sentinel\.sh$|devbox\.(json|lock)$)'
 
 # task:trigger-regex (first `:` splits; task may carry args and is word-split at run time).
 # Buckets are deliberately COARSE (agents/ runs the whole agents suite, ~10 quick tasks) —
@@ -33,6 +35,7 @@ MAP=(
   "argocd-validate-pins:^argocd/"
   "manifest-lint:^argocd/"
   "sentinel-smoke:^(policy/iac/|scripts/iac-sentinel\.sh|devbox\.(json|lock)$)"
+  "mgmt-policy-test:$MGMT_PATHS"
   "prometheus-rules-lint:$PROM_PATHS"
   "exporter-self-test:^argocd/resources/github-exporter/"
   "edge-probe-self-test:^argocd/resources/cloudflare-exporter/"
