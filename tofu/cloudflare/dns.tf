@@ -37,3 +37,5 @@ resource "cloudflare_dns_record" "wildcard_local" {
   ttl     = 300
   comment = "Local self-signed TLS dev environments (work). DNS-only — do not proxy."
 }
+
+# dummy (homelab: the box's first cloudflare verdict — FU-238 proof, closed unmerged)
