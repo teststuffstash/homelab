@@ -127,7 +127,7 @@ while IFS=$'\t' read -r pr sha; do
       if [ "$(mgmt_root_apply "$POL" "$root")" != true ]; then echo "apply: plan only — this root is not on the box's apply list."
       elif [ -z "$changes" ]; then echo "apply: nothing to apply."
       else
-        outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")"
+        outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")" || outside="(allowlist unreadable — the apply loop refuses until it reads)"
         if [ -z "$outside" ]; then echo "apply: all addresses inside the apply allowlist — the box applies after merge."
         else n=$(wc -l <<<"$outside"); echo "apply: $n address(es) OUTSIDE the apply allowlist — human apply: $(tr '\n' ' ' <<<"$outside" | sed 's/ $//' | sed 's/ /, /g')"; fi
       fi

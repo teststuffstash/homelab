@@ -264,7 +264,10 @@ mgmt_stage1() {
 # what makes that sufficient.
 mgmt_plan_root() {
   local co="$1" pol="$2" root="$3" out="$4" lock="${5:-false}" dir rel logf varfile stateargs
-  rel="$(mgmt_root_dir "$pol" "$root")"; dir="$co/$rel"; logf="$out.log"
+  logf="$out.log"
+  # an unreadable/empty dir would plan "$co/" — the repo root, no .tf files, "No changes": fail-open
+  rel="$(mgmt_root_dir "$pol" "$root")" && [ -n "$rel" ] && [ "$rel" != null ] || { echo "dir of root $root unreadable from the policy — refusing to plan" >"$logf"; return 1; }
+  dir="$co/$rel"
   [ -n "${REPO:-}" ] && [ -f "$REPO/devbox.json" ] || { echo "REPO unset or not a checkout — refusing to run tooling from the plan tree" >"$logf"; return 1; }
   varfile=""; [ -n "${TOFU_VAR_DIR:-}" ] && [ -f "$TOFU_VAR_DIR/$root.tfvars" ] && varfile="-var-file=$TOFU_VAR_DIR/$root.tfvars"
   stateargs=""
@@ -307,7 +310,8 @@ mgmt_plan_root() {
 # +0 ~0 -0 on homelab#1617 while the plan had exit code 2. Same env as the plan, same subshell.
 mgmt_plan_changes() {
   local co="$1" pol="$2" root="$3" out="$4" rel dir json
-  rel="$(mgmt_root_dir "$pol" "$root")"; dir="$co/$rel"
+  rel="$(mgmt_root_dir "$pol" "$root")" && [ -n "$rel" ] && [ "$rel" != null ] || { echo "plan summary FAILED for $root: dir unreadable from the policy" >&2; return 1; }
+  dir="$co/$rel"
   json="$(
     set +u
     cd "$REPO" || exit 1
@@ -335,10 +339,14 @@ mgmt_plan_counts() {
 }
 # mgmt_apply_allowed <policy> <root> <changes-lines on stdin> → prints the addresses OUTSIDE the
 # apply allowlist (empty = all allowed). apply:false roots → every address is outside.
+# rc 1 when the allowlist cannot be read — callers treat that as "nothing is allowed", never as
+# "all allowed" (an unreadable allowlist reads as EMPTY otherwise, which here is fail-closed by
+# accident — every address outside — but the caller must not mistake the rc for a verdict).
 mgmt_apply_allowed() {
-  local pol="$1" root="$2" addr acts ok pat
+  local pol="$1" root="$2" addr acts ok pat globs_out
   local -a globs
-  mapfile -t globs < <(mgmt_policy_get "$pol" ".apply_addresses.\"$root\"[]?")
+  globs_out="$(mgmt_policy_get "$pol" ".apply_addresses.\"$root\"[]?")" || return 1
+  globs=(); [ -n "$globs_out" ] && mapfile -t globs <<<"$globs_out"
   while IFS=$'\t' read -r addr acts; do
     [ -n "$addr" ] || continue
     ok=0
