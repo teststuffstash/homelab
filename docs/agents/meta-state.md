@@ -526,23 +526,27 @@ standing set below; what differs is cadence and the act rule:
   oracle-specs` shows 5Gi, then any fleet CI re-publish re-materializes the specs sites;
   close-purge of dead pr-*/ prefixes tracked oracle-fleet#318.
 
-- **R12 pickup (2026-09-13 night seat, ~17:4x–19:0xZ — the fail-closed sentinel + cloudflare on
-  the box; arc in TICK-LOG).** LIVE: **#1631** the in-cluster no-root poster (FU-237 (b); proof
-  104 s on #1635's head), **#1633** cloudflare as a plan-only root + the `homelab-mgmt-read` mint,
-  **#1635** the kubeconfig hook + stage 1 denies new `kubernetes_*` data sources / `import` blocks
-  + errored plans post `Error:` headlines only; `mgmt-policy-test` runs in `ci` (05ce8e8a, direct);
-  dummy #1634 proved `cloudflare: +0 ~0 -0 (3 not planned)`, closed. Box checkout hand-advanced to
-  master (5387bf50). **Operator, in order:** (1) host: `devbox run cloudflare-token-tofu plan|apply`
-  → wallet `cloudflare-mgmt-read` → `scripts/mgmt-provision-secrets.sh --push` (the table names the
-  new entry and FATALs without it — mint first) — **DONE 19:2xZ** (minted, stored, pushed; the box
-  plans cloudflare read-only now — the first cloudflare-touching PR is the proof). The apply ended
-  in the gotcha-3 ordering errors; `jail-read-all` gained "Zone Observability Read" and now shows a
-  STANDING `~ id` permutation (API order arbitrary — gotcha 3 addendum): after **#1636** (provider
-  5.19.1→5.25.0, auto-merge) merges, `git pull` on the host and re-plan the token root; still a
-  permutation → live with it per the gotcha (never apply for it alone), file an FU only then.
-  (2) `mgmt-release` is ABSENT — push the ref
-  (`git push origin master:refs/heads/mgmt-release`) to start the box's pull loop; until then every
-  merged `scripts/mgmt-*` fix needs the system checkout hand-advanced (ssh, `git merge --ff-only
-  origin/master` in `/var/lib/homelab`). **Seat next:** FU-012's scoped read-only kubeconfig for the
-  box's plans (the #1635 finding), FU-237 (c) per-role env split, (d) doorbell; `follow-ups-lint`
-  shows 33 STALE archive entries (warnings) — a `/fu-sweep` + `/docs-cleanup` pass is due.
+- **R12 pickup (2026-09-13 night seat, ~17:4x–21:0xZ — the fail-closed sentinel, cloudflare on
+  the box, the box's GitHub traffic; arc in TICK-LOG).** LIVE: #1631 in-cluster no-root poster
+  (FU-237 (b), proof 104 s), #1633 + #1635 cloudflare plan-only root + `homelab-mgmt-read` (MINTED,
+  stored, pushed to the box 19:2xZ — the box plans cloudflare read-only now), #1637 the box's git
+  traffic AUTHENTICATED + ON-CHANGE (was ≈576 anonymous fetches/day; now one API sha check per
+  tick, fetch only when master moved — proven on the box 21:00Z), quickfix 8dc8d4c6 (the
+  classifier's pipefail rc wedged the apply loop for ~8 min after #1637 — un-wedged, stamped).
+  `mgmt-policy-test` is a `ci` step. Direct: FU-007 rewritten to the operator ruling (Forgejo =
+  major-outage fallback ONLY, never the live read path — memory `forgejo-fallback-only`); FU-239
+  (`jail-read-all`'s standing `~ id` permutation, API order arbitrary, 5.25.0 did not fix it —
+  `cloudflare-token-tofu` excludes it by default + reports real +/- elements; CF_INCLUDE_READ_ALL=1
+  includes); FU-240 (devbox version skew box↔jail rewrites devbox.lock on the box). Box checkout at
+  8dc8d4c6. **Operator:** (1) `mgmt-release` ABSENT — design discussion 21:xxZ leaned to FOLLOW
+  MASTER gated by `git diff -- nixos/` (the `/nixos/` CODEOWNERS row is the human gate; the ref
+  adds a second promotion, not safety) → an ADR-129 amendment PR next corpus session, then arm
+  `mgmt-pull.timer` (needs the mgmt_git auth header too). (2) the doorbell (FU-237 d): ONE socket
+  unit, two paths (/sentinel from the iac-sentinel run, /update from the merged-PR workflow on
+  the in-cluster runner); the PATH FILTER lives on the RINGER using the inbound webhook payload
+  (coarse superset nixos/ tofu/ policy/mgmt/ scripts/mgmt-*), never a fetch on the box; then the
+  5-min timers slow to hourly. (3) observability = node-exporter on the box scraped by the
+  pve-node `ScrapeConfig` precedent (pull, no credential on the box) + textfile metrics for
+  activated commit / belt / sentinel — settles §MB2's "transport UNBUILT"; offered, not built.
+  **Seat next:** FU-012's scoped kubeconfig; FU-237 (c) per-role env; `/fu-sweep` (33 STALE
+  archive entries, FU-227 oversize).

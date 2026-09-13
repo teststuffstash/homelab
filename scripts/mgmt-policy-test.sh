@@ -26,7 +26,9 @@ case_() {  # <name> <expected-rule|none|noroot> <shell to make the change>
   git -C "$T" checkout -q -b "c-$name" "$BASE"
   ( cd "$T" && eval "$shell" ) >/dev/null 2>&1
   git -C "$T" add -A && git -C "$T" commit -q -m "$name" && head="$(git -C "$T" rev-parse HEAD)"
-  roots="$(git -C "$T" diff --name-only "$BASE" "$head" | mgmt_roots_touched "$POL" | tr '\n' ' ')"
+  roots="$(git -C "$T" diff --name-only "$BASE" "$head" | mgmt_roots_touched "$POL")"; rrc=$?
+  [ $rrc = 0 ] || { fail=$((fail+1)); echo "FAIL $name — mgmt_roots_touched rc=$rrc (must be 0 whenever the policy is readable)"; git -C "$T" checkout -q "$BASE"; return; }
+  roots="$(printf '%s' "$roots" | tr '\n' ' ')"
   hits="$(mgmt_stage1 "$POL" "$T" "$BASE" "$head")"
   got="$(printf '%s' "$hits" | awk -F'\t' '{print $1}' | sort -u | tr '\n' ' ')"
   case "$want" in
@@ -65,6 +67,9 @@ case_ foreign-only      noroot        'echo "y" > tofu/cloudflare-token/main.tf'
 case_ cloudflare-only   none          'echo "y" > tofu/cloudflare/main.tf'
 case_ github-only       none          'echo "y" > tofu/github/main.tf'
 case_ non-tofu          noroot        'echo "y" > README.md'
+# the last diff file (git sorts names) outside every root, an earlier one inside — the loop's
+# last-command status must not become the classifier's rc (the 2026-09-13 apply-loop wedge)
+case_ last-file-outside none          'echo "y" > tofu/monitoring.tf; mkdir -p zzz; echo "y" > zzz/README.md'
 case_ provisioning-only none          'echo "y" > tofu/provisioning/main.tf'
 # a deny hit in a FOREIGN root must not fire (not this box's business)
 case_ foreign-deny      noroot        'printf "data \"external\" \"x\" {}\n" >> tofu/cloudflare-token/main.tf'
