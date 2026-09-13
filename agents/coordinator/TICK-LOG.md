@@ -8793,3 +8793,9 @@ Issues: #1620, #1621.
   ids: the earlier value rotation (an org-secret update with `visibility: selected` through the
   provider) DROPPED the repository selection, so those workflows had no key until this apply.
   Rotating an org secret via tofu is two-step here; plan after any secret change.
+- **Closing act (17:3xZ):** #1629 merged 17:25:58Z; the dummy PR#1632's first verdict (17:31) still
+  came from the OLD code — the units run the SYSTEM checkout's scripts, not the loops' clones —
+  so the checkout was hand-advanced (6d71387a) and the head bumped: 17:36 verdict
+  `github: +0 ~1 -0 (14 not planned)`, the snore-recorder ruleset named, the excluded types listed.
+  #1632 closed unmerged. The operator applied master's tofu/github: the flip is LIVE and the
+  deploy/renovate secret bindings restored (3 changed).
