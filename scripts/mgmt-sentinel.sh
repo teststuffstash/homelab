@@ -93,10 +93,28 @@ while IFS=$'\t' read -r pr sha; do
       log "[#$pr] $root plan errored: $(tr '\n' ' ' <<<"$tail3" | head -c 200)"
       continue
     fi
-    changes="$(mgmt_plan_changes "$wt" "$(mgmt_root_dir "$POL" "$root")" "$out")"
+    if ! changes="$(mgmt_plan_changes "$wt" "$POL" "$root" "$out")"; then
+      state=failure; failed_roots="$failed_roots $root"
+      { echo; echo "### \`$root\` — plan SUMMARY failed (the plan ran; its summary did not — see the box journal)"; } >>"$bodyf"
+      log "[#$pr] $root plan summary failed"; continue
+    fi
+    if [ $rc = 2 ] && [ -z "$changes" ]; then   # the plan says "changes", the summary says none — never trust the zero
+      state=failure; failed_roots="$failed_roots $root"
+      { echo; echo "### \`$root\` — INCONSISTENT: plan exit 2 (changes) but an empty summary — see the box journal"; } >>"$bodyf"
+      log "[#$pr] $root inconsistent: plan rc=2, summary empty"; continue
+    fi
     read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
-    desc="$desc$root: +$a ~$c -$d ${rs} "
+    excl_n=0; excl_types=""
+    if [ -s "$out.excluded" ]; then
+      excl_n=$(wc -l <"$out.excluded")
+      excl_types="$(sed 's/\..*//' "$out.excluded" | sort | uniq -c | awk '{printf "%s%s `%s`", (NR>1?", ":""), $1, $2}')"
+    fi
+    excl_note=""; [ "$excl_n" -gt 0 ] && excl_note=" ($excl_n not planned)"
+    desc="$desc$root: +$a ~$c -$d ${rs}${excl_note} "
     { echo; echo "### \`$root\` — +$a to add, ~$c to change, -$d to destroy${rs:+, $r to replace}"
+      if [ "$excl_n" -gt 0 ]; then
+        echo; echo "⚠ **Not planned on the box** (policy \`plan_exclude_types\` — GitHub returns these only to an admin-WRITE token; the box holds a read-only one): $excl_types. A change to them is judged by the host's \`github-tofu plan\`, not here."
+      fi
       if [ -n "$changes" ]; then echo; echo "| address | actions |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | %s |\n", $1, $2}' <<<"$changes"; else echo; echo "No changes."; fi
       echo
       if [ "$(mgmt_root_apply "$POL" "$root")" != true ]; then echo "apply: plan only — this root is not on the box's apply list."

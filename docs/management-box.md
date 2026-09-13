@@ -227,6 +227,14 @@ master's copy. A PR's `devbox.json`, `scripts/`, hooks — never executed. The p
 the JSON/auto variants of tfvars and config (`*.tfvars.json`, `*.auto.tfvars*`, `*.tf.json`)
 and remote module sources (init would fetch them).
 
+**What the verdict covers, per root — the reviewer's expectation.** `main`: everything, and the
+apply allowlist decides what ships. `provisioning`: everything, plan only. `github`: repo rulesets
+(the pinned required checks), org secrets, deploy keys — **not** the 13 `github_repository` settings
+nor the org ruleset (GitHub returns those only to an admin-WRITE token, `plan_exclude_types`); the
+comment lists what was not planned, with counts, and the status description carries the count. A
+worker, reviewer or coordinator reading a green `management-sentinel` on a PR that edits repo
+settings should read it as "the parts the box can see are clean", never as "applied-equivalent".
+
 **Built 2026-09-13 (steps 1–3 in one PR, since nothing read the policy before its reader
 existed):** `policy/mgmt/plan-input.yaml`, `scripts/mgmt-lib.sh` (App token, policy, stage 1,
 plan summary), `scripts/mgmt-sentinel.sh`, `scripts/mgmt-apply.sh`, `scripts/mgmt-policy-test.sh`

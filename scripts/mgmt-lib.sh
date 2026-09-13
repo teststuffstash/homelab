@@ -247,6 +247,8 @@ mgmt_plan_root() {
     devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 \
       || { echo "tofu init failed for $root" >&2; devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
     mapfile -t excludes < <(mgmt_root_excludes "$pol" "$root" "$dir")
+    # what this plan did NOT judge — the verdict must say so (a reviewer reads the comment, not the policy)
+    printf '%s\n' "${excludes[@]#-exclude=}" | grep -v '^$' > "$out.excluded" || true
     # shellcheck disable=SC2086
     devbox run --quiet -- tofu -chdir="$dir" plan -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile "${excludes[@]}"
   ) >"$logf" 2>&1
@@ -254,12 +256,28 @@ mgmt_plan_root() {
   case $rc in 0|2) return $rc ;; *) return 1 ;; esac
 }
 
-# mgmt_plan_changes <checkout> <root-rel-dir> <plan-out> → lines "address<TAB>actions" for every
+# mgmt_plan_changes <checkout> <policy> <root> <plan-out> → lines "address<TAB>actions" for every
 # resource change that is not a no-op (actions joined by '+', e.g. delete+create = replace).
+# ⚠ Returns 1 (and prints why on stderr) when `tofu show -json` fails — the caller MUST treat that
+# as a failed verdict, never as "no changes". The 2026-09-13 false negative: the github root's
+# plan file embeds an ENCRYPTED state snapshot, `show` ran without TF_ENCRYPTION (only the plan
+# subshell sourced the state env), failed with stderr suppressed, and an empty list was counted as
+# +0 ~0 -0 on homelab#1617 while the plan had exit code 2. Same env as the plan, same subshell.
 mgmt_plan_changes() {
-  local co="$1" rel="$2" out="$3"
-  ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$co/$rel" show -json "$out" ) 2>/dev/null \
-    | jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv'
+  local co="$1" pol="$2" root="$3" out="$4" rel dir json
+  rel="$(mgmt_root_dir "$pol" "$root")"; dir="$co/$rel"
+  json="$(
+    set +u
+    cd "$REPO" || exit 1
+    if [ -f "$dir/backend.tf" ]; then
+      TOFU_STATE_ROOT_DIR="$dir" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || { echo "tofu-state-env.sh failed for $root (show)" >&2; exit 1; }
+    fi
+    [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"
+    devbox run --quiet -- tofu -chdir="$dir" show -json "$out" 2>&1
+  )" || { echo "plan summary FAILED for $root: $(printf '%s' "$json" | grep -v '^\s*$' | tail -2 | tr '\n' ' ' | head -c 300)" >&2; return 1; }
+  printf '%s' "$json" | jq -e '.resource_changes' >/dev/null 2>&1 \
+    || { echo "plan summary FAILED for $root: show -json produced no resource_changes" >&2; return 1; }
+  printf '%s' "$json" | jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv'
 }
 # mgmt_plan_counts <changes-lines> → "add change destroy replace"
 mgmt_plan_counts() {
