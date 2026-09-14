@@ -32,7 +32,19 @@ never the session's arc — that is TICK-LOG's.)
   `kubectl auth can-i create configmaps -n agent-coordinator --as=system:serviceaccount:argo:argo-workflows-workflow-controller`
   → yes. Still open on the responder side: #1546 (oracle items footprint-held — stack lane),
   #241 (oracle prune dry-run — stack lane), #857/#103 graft threads (reads only).
-  (8) Unchanged from the late-morning pickup: theme 1 queued (#1665–#1669, first ride reads
+  (8) **wk-02 = compute-only, disks resizing (operator, 2026-09-14 midday):** transcripts PVCs
+  recreated off wk-02, its Longhorn disk evicted + removed (0 replicas), VM kubelet image GC
+  60/50 LIVE. **NEXT, after PR#1683 + PR#1684 merge — apply from MASTER only** (their branches
+  predate PR#1681; a branch apply reverts the kubelet GC): plan must show ONLY the wk-02 label
+  swap + wk-02 VM/talos-apply replace + wk-03 disk 40→80. Then the windows: **wk-02** `devbox run
+  node-maintenance down wk-02` → `kubectl delete node wk-02` → `devbox run mgmt-tf -- apply
+  '-replace=proxmox_virtual_environment_vm.node["wk-02"]'
+  '-replace=talos_machine_configuration_apply.node["wk-02"]'` → wait Ready → `up wk-02`
+  (image store re-pulls; HA/Prometheus/Infisical/UniFi ride on wk-01 meanwhile); **wk-03**
+  `down wk-03` → `ssh root@192.168.2.3 qm start 8113` → `up wk-03` (EPHEMERAL grows to 80 G at
+  boot; serial log confirms). Pool promise after: 368 G on 380 G. Verify #1675's fixer targets
+  trim cadence.
+  (9) Unchanged from the late-morning pickup: theme 1 queued (#1665–#1669, first ride reads
   `exacto:no-pin`); fleet un-latched; #1237 re-home question at the next sweep; oracle-fleet
   PR#591/#395 human-directive path; #1651 unqueued.
 - **⚑ PICKUP (2026-09-14 afternoon, same session — wound down at ~600k ctx; arc in TICK-LOG).**

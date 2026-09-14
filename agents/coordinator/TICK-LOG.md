@@ -9029,4 +9029,23 @@ Issues: #1620, #1621.
   · pointer on #857 (wk-02 = same class) · left as-is: #1546 (oracle-fleet items held by the
   footprint gate, stack lane), #1594 (agent-fix, alert cleared), #241 (oracle prune dry-run,
   stack lane), #103 (read-only graft thread), #857 (FU-155's symptom thread).
+- **Midday, cont. 2 (operator directions: wk-02 out of std, VM image GC, disk resize):** the
+  design read first — with r=2 a std replica on the pve pool takes no write off the network
+  (measured: local-replica and remote-only volumes both 0.2–1.9 ms), the pve consumers read ~0,
+  the pool is the tightest resource, zone `proxmox` = the consumers' own failure domain → the
+  Xeon is compute-only. **Done live:** the four detached `coordinator-transcripts` PVCs deleted
+  (the record is Garage — FU-132) and recreated by Crossplane/the manifest at 10:53Z off wk-02
+  (pvc-protection held them ~9 min on SUCCEEDED pods still referencing them — deleting the
+  finished janitor/crashnet/coordinator pods released them; the platform coordinator's #1620 run
+  sat Pending on the terminating PVC meanwhile); wk-02's Longhorn disk evicted (oracle's r=1
+  volume rebuilt on hp-01, uv-cache's copy on m70s) and REMOVED from the node CR — 0 replicas;
+  **PR#1681 (kubelet image GC 60/50 on the VM tier) APPLIED** via the box (four in-place,
+  configz verified 60/50 on wk-02/wk-03) — wk-02's 89 GB image store (299 images, kubelet default
+  85/80 on a 236 G /var) was the "120 GB"; **PR#1678 merged** (Argo `writeConfigMaps`, `can-i`
+  → yes). **Parked on merges (apply from MASTER, the branches predate #1681 and would revert the
+  kubelet config):** PR#1683 (wk-02 out of `longhorn_zones` — plan = label swap only once
+  rebased), PR#1684 (wk-02 240→80 G RECREATE + wk-03 40→80 G; operator sizes; wk-01 stays 80).
+  Windows: wk-02 = `node-maintenance down` → `kubectl delete node wk-02` → `mgmt-tf apply
+  -replace=` VM + its `talos_machine_configuration_apply` → `up`; wk-03 = down → `qm start` (the
+  pending disk grows at qemu start; Talos grows EPHEMERAL) → `up`.
 
