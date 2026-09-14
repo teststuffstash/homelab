@@ -1104,6 +1104,70 @@ def active_cooldowns(now: float | None = None, role: str | None = None) -> dict[
             for m, u, s, r in rows}
 
 
+# ── Goal #1640 acceptance 5 (router half): the (model, provider) PAIR cooldown ────────────────
+# A SEPARATE, coarser mechanism from the transport belt above. `model_cooldowns` is HTTP-fed and
+# keyed (model, role); ANY 2xx clears it. This one is keyed (model, provider), tripped by the
+# STRIKE evidence (>= pair_min_tasks DISTINCT tasks striking the pair with a SERVING_CLASSES
+# class inside pair_window_s), and cleared ONLY by a clean ride — never by a 2xx. The two must
+# never be conflated: a 2xx from a provider that is serving a model badly behind HTTP 200 is
+# exactly the 2026-09-13 failure this cooldown exists to route around.
+#
+# STATE IS THE EXISTING `strikes` TABLE — no new table (the Goal's design pin). The hold is a
+# DERIVED view: for each pair, the distinct tasks that struck it with a serving class inside the
+# window, minus any strike a later clean ride refuted. streak = distinct_tasks - min_tasks + 1,
+# hold = base_s doubling per streak up to max_s, until = the pair's newest surviving strike + hold.
+# Expiry is HALF-OPEN: the pair is eligible again (one ride is the probe) and a strike during
+# half-open raises the distinct-task count, which doubles the hold — the acceptance's third leg.
+def _pair_cooldown_cfg() -> dict:
+    cfg = _classes.get("cooldown") or {}
+    return {"window_s": int(cfg.get("pair_window_s", 86400)),
+            "min_tasks": max(2, int(cfg.get("pair_min_tasks", 2))),
+            "base_s": int(cfg.get("pair_base_s", 21600)),
+            "max_s": int(cfg.get("pair_max_s", 604800))}
+
+
+def pair_cooldowns(now: float | None = None) -> dict[tuple[str, str], dict]:
+    """Active (model, provider) pair cooldowns, derived from the strikes table. Keyed by the
+    (model, provider) tuple; each value carries until/remaining_s/streak/reason. A pair whose
+    hold has expired is ABSENT (half-open — eligible again). A clean ride (a run_report with
+    outcome 'pr' for the same model+served_provider) after the pair's newest strike refutes the
+    whole set, so the pair is absent until it is struck afresh."""
+    now = now or time.time()
+    cfg = _pair_cooldown_cfg()
+    since = now - cfg["window_s"]
+    # The ONLY clear: a clean ride. Keyed on the same (model, served_provider) the strike uses.
+    # Bounded to the window: a clean ride older than `since` is older than every strike the query
+    # below can return, so it can refute none of them.
+    clean = {(m, p): (ts or 0.0) for m, p, ts in _read(
+        "SELECT model, served_provider, MAX(ts) FROM run_reports "
+        "WHERE outcome='pr' AND served_provider != '' AND ts > ? "
+        "GROUP BY model, served_provider", (since,))}
+    _ph = ",".join("?" * len(SERVING_CLASSES))
+    rows = _read(
+        f"SELECT model, provider, task, MAX(ts) FROM strikes "
+        f"WHERE ts > ? AND provider != '' AND error_class IN ({_ph}) "
+        f"GROUP BY model, provider, task",
+        (since, *sorted(SERVING_CLASSES)))
+    agg: dict[tuple[str, str], dict[str, float]] = {}
+    for m, p, task, ts in rows:
+        if ts <= clean.get((m, p), 0.0):
+            continue  # a clean ride after this strike refutes it
+        agg.setdefault((m, p), {})[task] = ts
+    out: dict[tuple[str, str], dict] = {}
+    for (m, p), tasks in agg.items():
+        if len(tasks) < cfg["min_tasks"]:
+            continue  # one task is a task-local strike, not a provider verdict
+        streak = len(tasks) - cfg["min_tasks"] + 1
+        hold = min(cfg["base_s"] * (2 ** (streak - 1)), cfg["max_s"])
+        until = max(tasks.values()) + hold
+        if until <= now:
+            continue  # expired → half-open: eligible again, one ride is the probe
+        out[(m, p)] = {"model": m, "provider": p, "until": until,
+                       "remaining_s": round(until - now), "streak": streak,
+                       "reason": "pair-strike"}
+    return out
+
+
 def _rotation_candidates(cinfo: dict) -> list[str]:
     """P5: the class candidate list when the caller passes NO chain — rotation-fed. Universe =
     model_tiers keys (the human-approved set; graduation stays human), ordered: class chain_head
@@ -1403,6 +1467,11 @@ def route(payload: dict, ctx: dict) -> dict:
         if len(_providers) >= 2:
             struck_models.add(_m)
     cool = active_cooldowns(now, role=role)
+    # Goal #1640 acceptance 5: the (model, provider) pair cooldowns, derived from the strikes
+    # table. A cooled pair joins the exclusion set beside the task's struck pairs, so the model
+    # is priced by the provider it lands on AFTER both exclusions — and a cooled pair is never
+    # pinned (the proxy unions strike_excluded + cooldown_excluded for the pin).
+    cooled = pair_cooldowns(now)
     skipped: list[dict] = list(pre_skipped)
     eligible: list[tuple[str, str]] = []
     # model → the providers struck for it (serving-shaped classes). The model stays eligible and
@@ -1438,10 +1507,19 @@ def route(payload: dict, ctx: dict) -> dict:
             # Serving-shaped strikes exclude the (model, provider) PAIR, not the model: it stays
             # eligible and is priced by the provider it lands on AFTER the exclusion. The struck
             # pair(s) are recorded so the decision row shows WHY the cell was skipped.
-            if m in struck_pairs:
-                for _p in sorted(struck_pairs[m]):
-                    skipped.append({"model": m, "provider": _p, "reason": "strike"})
-                _excl[m] = frozenset(struck_pairs[m])
+            _struck = struck_pairs.get(m, set())
+            _cooled = {p for (cm, p) in cooled if cm == m}
+            for _p in sorted(_struck):
+                skipped.append({"model": m, "provider": _p, "reason": "strike"})
+            # Goal #1640 acceptance 5: a cooled pair is excluded under its OWN reason, so a
+            # decision row tells a strike exclusion from a cooldown exclusion (the issue's
+            # "distinct reason" requirement). A pair that is BOTH struck and cooled is reported
+            # once, as a strike — the strike is the sharper, task-local fact.
+            for _p in sorted(_cooled - _struck):
+                skipped.append({"model": m, "provider": _p, "reason": "cooldown-pair",
+                                "retry_after_s": cooled[(m, _p)]["remaining_s"]})
+            if _struck or _cooled:
+                _excl[m] = frozenset(_struck | _cooled)
             eligible.append((m, rail))
     capacity_block: dict | None = None
     result: dict | None = None
@@ -1507,6 +1585,10 @@ def route(payload: dict, ctx: dict) -> dict:
     # the completion to the same post-exclusion provider the decision priced (never the struck
     # one). Captured before the :exacto suffix is appended (the exclusion keys the bare id).
     _picked_excl = sorted(_excl.get(result["model"], ())) if result else []
+    # Split the picked model's exclusions by CAUSE so the proxy can pin against both and a
+    # decision row still says which mechanism excluded which provider (Goal #1640 acceptance 5).
+    _picked_struck = sorted(struck_pairs.get(result["model"], ())) if result else []
+    _picked_cooled = sorted(set(_picked_excl) - set(_picked_struck))
     # FU-186 step 1: class-level provider_policy — append :exacto suffix when the resolved
     # class carries provider_policy: "exacto", so the completion path skips pin injection
     # (the :exacto suffix is already handled at openrouter-proxy.py L3232/L3302).
@@ -1537,7 +1619,8 @@ def route(payload: dict, ctx: dict) -> dict:
             (result["model"], role, now)))
         decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
                     "half_open": half_open, "skipped": skipped, "jitter": jitter_on,
-                    "strike_excluded": _picked_excl,
+                    "strike_excluded": _picked_struck,
+                    "cooldown_excluded": _picked_cooled,
                     "provider_policy": cinfo.get("provider_policy"), **result}
     else:
         if decorrelate_family and not eligible and skipped and \
@@ -1546,10 +1629,12 @@ def route(payload: dict, ctx: dict) -> dict:
             retry = None
         elif capacity_block:
             reason, retry = capacity_block["reason"], capacity_block.get("retry_after_s") or 900
-        elif any(s["reason"].startswith("cooldown:") for s in skipped):
+        elif any(s["reason"].startswith("cooldown") for s in skipped):
+            # Both cooldown mechanisms defer as `cooldown` with a retry_after: the transport
+            # belt's `cooldown:<reason>` rows and the pair cooldown's `cooldown-pair` rows.
             reason = "cooldown"
             retry = min(s.get("retry_after_s") or 900
-                        for s in skipped if s["reason"].startswith("cooldown:"))
+                        for s in skipped if s["reason"].startswith("cooldown"))
         else:
             reason = "chain-exhausted"  # deny/strike only — the one defer that escalates
             retry = None
@@ -1656,6 +1741,14 @@ def status_summary() -> dict:
             "worker": active_cooldowns(now, role="worker"),
             "probe": active_cooldowns(now, role="probe"),
         },
+        # Goal #1640 acceptance 5: the (model, provider) pair cooldown table, so the seat reads
+        # it without the sqlite file. `until` is the epoch the hold expires (half-open); `streak`
+        # is the doubling count (2 distinct tasks → 1, 3 → 2, …).
+        "pair_cooldowns": [
+            {"model": v["model"], "provider": v["provider"], "until": v["until"],
+             "remaining_s": v["remaining_s"], "streak": v["streak"]}
+            for v in sorted(pair_cooldowns(now).values(),
+                            key=lambda x: (x["model"], x["provider"]))],
         "decisions_24h": [
             {"decision": d, "rail": rl, "model": m, "reason": rs, "n": n}
             for d, rl, m, rs, n in decisions_24h],
@@ -1740,6 +1833,17 @@ def metrics_lines() -> list[str]:
               "# HELP router_cooldowns_active Models currently held out of the routing pool per role (addendum-4 temporary blacklist)."]
     for _role in ("worker", "probe"):
         lines.append(f'router_cooldowns_active{{role="{_role}"}} {len(active_cooldowns(now, role=_role))}')
+    # Goal #1640 acceptance 5: the (model, provider) pair cooldown as a per-cell gauge — the
+    # monitoring surface the fleet-strike reader keys on instead of walking issue comments.
+    lines += ["# TYPE router_cell_cooldown gauge",
+              "# HELP router_cell_cooldown Seconds remaining on a (model, provider) pair cooldown (Goal #1640 acceptance 5); one series per cooled pair, 0 when none is cooled."]
+    _pc = pair_cooldowns(now)
+    if _pc:
+        lines += [f'router_cell_cooldown{{model="{v["model"]}",provider="{v["provider"]}"}} '
+                  f'{v["remaining_s"]}' for v in sorted(_pc.values(),
+                                                        key=lambda x: (x["model"], x["provider"]))]
+    else:
+        lines.append("router_cell_cooldown 0")
     lines += ["# TYPE router_decisions_total counter",
               "# HELP router_decisions_total /route outcomes by decision and defer reason."]
     dec = _read("SELECT decision, COALESCE(NULLIF(reason,''),'-'), COUNT(*) FROM decisions "
@@ -2636,6 +2740,15 @@ def self_test() -> int:
     assert _sm["decision"] == "dispatch" and _sm["model"] == "tencent/hy3", _sm
     assert {"model": "deepseek/deepseek-v4-flash", "reason": "strike"} in _sm["skipped"], \
         _sm["skipped"]
+    # Goal #1640 acceptance 5: fixtures (1)-(3) struck (deepseek-v4-flash, open-inference) from
+    # three distinct tasks with serving classes, which trips the PAIR cooldown. The tests between
+    # here and fixture (5) are about OTHER mechanisms (capability floors, rotation), so refute the
+    # cooldown with a clean ride — the same explicit-cleanup pattern the fixtures above use. The
+    # pair cooldown's own assertions live after fixture (7), where the fixtures re-trip it.
+    record_report({"session": "t-pc-clean-early", "task": "issue-91", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "outcome": "pr"})
+    assert ("deepseek/deepseek-v4-flash", "open-inference") not in pair_cooldowns()
     # subscription-limited defers with retry_after when only claude/* remains
     lim = {**CTX, "subscription_ok": lambda tier: (False, "utilization-5h", 1200)}
     ds = route(dict(base, chain=["claude/haiku"]), lim)
@@ -2721,6 +2834,93 @@ def self_test() -> int:
             "reason": "strike"} in _sdc["skipped"], _sdc["skipped"]
     assert _sdc.get("strike_excluded") == ["open-inference"], \
         f"strike_excluded must record the struck provider: {_sdc.get('strike_excluded')}"
+    # ── Goal #1640 acceptance 5: the (model, provider) PAIR cooldown ──
+    # Fixtures (5)-(7) struck (deepseek-v4-flash, open-inference) from three distinct tasks with
+    # serving classes — exactly the trip condition (>= pair_min_tasks DISTINCT tasks inside
+    # pair_window_s). The pair is cooled, and /route excludes it under its OWN reason, distinct
+    # from a task-local strike.
+    _pc_fix = pair_cooldowns()
+    assert ("deepseek/deepseek-v4-flash", "open-inference") in _pc_fix, _pc_fix
+    assert _pc_fix[("deepseek/deepseek-v4-flash", "open-inference")]["streak"] == 2, _pc_fix
+    # …and /route excludes it as a COOLDOWN, not a strike: the route's task (issue-92) has no
+    # strike of its own, so strike_excluded is empty and cooldown_excluded names the cooled
+    # provider — the issue's "distinct reason so a decision row tells the two apart".
+    _pcr = route({"stack": "sleep", "task": "issue-92", "role": "worker",
+                  "session": "t-pc-route", "chain": ["deepseek/deepseek-v4-flash"]}, _CELL_CTX)
+    assert _pcr["decision"] == "dispatch" and _pcr["model"] == "deepseek/deepseek-v4-flash", _pcr
+    assert _pcr["provider"] == "deepinfra" and _pcr["price_per_mtok"] == 0.05, _pcr
+    assert any(s.get("model") == "deepseek/deepseek-v4-flash"
+               and s.get("provider") == "open-inference" and s.get("reason") == "cooldown-pair"
+               for s in _pcr["skipped"]), _pcr["skipped"]
+    assert _pcr["cooldown_excluded"] == ["open-inference"], _pcr
+    assert _pcr["strike_excluded"] == [], \
+        "a cooldown exclusion must NOT be reported as a strike exclusion"
+    # /router-status exposes the table (pair, until, streak) so the seat reads it without sqlite.
+    _pc_status = status_summary()["pair_cooldowns"]
+    assert any(e["model"] == "deepseek/deepseek-v4-flash" and e["provider"] == "open-inference"
+               and e["streak"] == 2 and e["until"] > time.time() for e in _pc_status), _pc_status
+    # …and the per-cell gauge is scraped from /metrics (the fleet-strike reader's surface).
+    assert 'router_cell_cooldown{model="deepseek/deepseek-v4-flash",provider="open-inference"}' \
+        in "\n".join(metrics_lines()), "the pair cooldown must surface as a per-cell gauge"
+    # ── the three acceptance behaviours, on a DEDICATED pair so they are controlled ──
+    # A synthetic model id, so this pair cannot collide with any other fixture's model.
+    _PM, _PP = "cooldown/model-a", "prov-x"
+    _PC_CELLS = {"cooldown/model-a": [("prov-x", 0.02), ("prov-y", 0.05)]}
+
+    def _pc_price(m, exclude=frozenset()):
+        for _prov, _price in _PC_CELLS.get(m, []):
+            if _prov not in exclude:
+                return _price, "market", _prov
+        return None, None, None
+
+    _PC_CTX = {**CTX, "price": _pc_price}
+    # (a) two strikes on one pair inside the window → the pair is excluded from /route.
+    for _t in ("issue-93", "issue-94"):
+        record_report({"session": f"t-pc-{_t}", "task": _t, "stack": "sleep", "role": "worker",
+                       "round": 1, "model": _PM, "served_provider": _PP,
+                       "error_class": "provider-5xx", "outcome": "no-output"})
+    _pc1 = pair_cooldowns()
+    assert (_PM, _PP) in _pc1 and _pc1[(_PM, _PP)]["streak"] == 1, _pc1
+    # a SECOND strike on the SAME task must not raise the streak — the trip is per DISTINCT task
+    record_report({"session": "t-pc-issue-93b", "task": "issue-93", "stack": "sleep",
+                   "role": "worker", "round": 2, "model": _PM, "served_provider": _PP,
+                   "error_class": "timeout", "outcome": "no-output"})
+    assert pair_cooldowns()[(_PM, _PP)]["streak"] == 1, \
+        "the trip counts DISTINCT tasks, not strikes"
+    # the pair is excluded from /route, priced at the provider it lands on AFTER the exclusion
+    _pcr2 = route({"stack": "sleep", "task": "issue-98", "role": "worker",
+                   "session": "t-pc-route-2", "chain": [_PM]}, _PC_CTX)
+    assert _pcr2["decision"] == "dispatch" and _pcr2["provider"] == "prov-y", _pcr2
+    assert _pcr2["price_per_mtok"] == 0.05, _pcr2
+    assert any(s.get("model") == _PM and s.get("provider") == _PP
+               and s.get("reason") == "cooldown-pair" for s in _pcr2["skipped"]), _pcr2["skipped"]
+    # (b) expiry → half-open: the pair is eligible again (absent from the table)
+    _pc_until = pair_cooldowns()[(_PM, _PP)]["until"]
+    assert (_PM, _PP) not in pair_cooldowns(now=_pc_until + 1), \
+        "an expired hold is half-open — the pair is eligible again"
+    # (c) a strike DURING half-open doubles the hold (streak 2 → 12 h)
+    record_report({"session": "t-pc-issue-95", "task": "issue-95", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": _PM, "served_provider": _PP,
+                   "error_class": "provider-5xx", "outcome": "no-output"})
+    _pc2 = pair_cooldowns()
+    assert _pc2[(_PM, _PP)]["streak"] == 2, _pc2
+    assert _pc2[(_PM, _PP)]["remaining_s"] > 11 * 3600, \
+        f"a strike during half-open must double the hold to 12 h: {_pc2[(_PM, _PP)]}"
+    # (d) a 2xx does NOT clear it — the transport belt's rule does not apply to a pair cooldown
+    for _ in range(8):
+        record_provider_event(_PM, _PP, 200)
+    assert (_PM, _PP) in pair_cooldowns(), "a 2xx must NOT clear a pair cooldown"
+    # …only a CLEAN RIDE does
+    record_report({"session": "t-pc-clean", "task": "issue-96", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": _PM, "served_provider": _PP,
+                   "outcome": "pr"})
+    assert (_PM, _PP) not in pair_cooldowns(), "a clean ride clears the pair cooldown"
+    # Clean up the fixtures' cooldown so the downstream tests (which are about other mechanisms)
+    # are not polluted — the same pattern the capability/cooldown fixtures above use.
+    record_report({"session": "t-pc-clean-ds", "task": "issue-97", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "outcome": "pr"})
+    assert ("deepseek/deepseek-v4-flash", "open-inference") not in pair_cooldowns()
     # ── M11 shadow ladder (homelab#159): free → subscription-headroom → paid, per (class, urgency) ──
     # Every assertion here is about the SHADOW block. The served pick is asserted unchanged beside
     # each one — that is the acceptance criterion of this leg, not a nicety.
@@ -3063,7 +3263,10 @@ def self_test() -> int:
     # Goal #1640 acceptance 3 MOVES them again by the five strike fixtures (t-strike-pair-1/2,
     # t-strike-pair-3a/3b, t-strike-model-1): each is a run_report AND a strike, so 20→25 and
     # 6→11. Round 3 adds t-strike-cool-1, t-strike-floor-1, t-strike-decor-1: 25→28 and 11→14.
-    assert summary["rows"]["run_reports"] == 28 and summary["rows"]["strikes"] == 14  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1 + t-strike-cool-1 + t-strike-floor-1 + t-strike-decor-1
+    # Goal #1640 acceptance 5 MOVES them by the pair-cooldown fixtures: four strikes
+    # (t-pc-issue-93/94/93b/95) and three clean rides (t-pc-clean-early, t-pc-clean,
+    # t-pc-clean-ds) — seven run_reports, four strikes: 28→35 and 14→18.
+    assert summary["rows"]["run_reports"] == 35 and summary["rows"]["strikes"] == 18  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1 + t-strike-cool-1 + t-strike-floor-1 + t-strike-decor-1 + t-pc-clean-early + t-pc-issue-93 + t-pc-issue-94 + t-pc-issue-93b + t-pc-issue-95 + t-pc-clean + t-pc-clean-ds
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():

@@ -189,7 +189,12 @@
   "min_events": 6,
   "bad_share": 0.5,
   "base_s": 300,
-  "max_s": 3600
+  "max_s": 3600,
+  "_comment_pair": "Goal #1640 acceptance 5 (router half): the (model, provider) PAIR cooldown. A SEPARATE, coarser mechanism from the transport belt above — keyed (model, provider), tripped by >= pair_min_tasks DISTINCT tasks striking the pair with a SERVING_CLASSES class inside pair_window_s, held pair_base_s doubling per streak up to pair_max_s, and cleared ONLY by a clean ride (a run_report with outcome 'pr'), never by a 2xx. State is the existing strikes table (no new table): the hold is derived from the pair's distinct-task strike set, and a clean ride after the last strike refutes it. Expiry is half-open — the pair is eligible again and a strike during half-open doubles the hold. Durations are the operator's numbers as recorded on the Goal (6 h doubling to 7 d).",
+  "pair_window_s": 86400,
+  "pair_min_tasks": 2,
+  "pair_base_s": 21600,
+  "pair_max_s": 604800
  },
  "circuit_breaker": {
   "_comment": "ADR-096 addendum 3: in-flight 4XX breaker per (session, model). auth (401/403) trips fast — an auth failure never self-heals mid-session (the 140-401 laguna:free storm); generic 4xx gets more rope; 429 NEVER counts (fail-over/back-off, not session-abort). hold_s = how long forwarding stays stopped.",

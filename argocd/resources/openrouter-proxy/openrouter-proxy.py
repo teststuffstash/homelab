@@ -3220,9 +3220,11 @@ class Proxy(BaseHTTPRequestHandler):
                     and decision.get("rail") == "openrouter" \
                     and not str(decision.get("model", "")).endswith(":free"):
                 # Goal #1640 acceptance 3: pin the SAME post-exclusion provider the decision priced —
-                # never the struck pair the router just excluded.
+                # never the struck pair the router just excluded. Goal #1640 acceptance 5: a COOLED
+                # (model, provider) pair is excluded too, so a cooled pair is never pinned.
                 pin = pin_for(str(decision["model"]),
-                              frozenset(decision.get("strike_excluded") or ()),
+                              frozenset(decision.get("strike_excluded") or ())
+                              | frozenset(decision.get("cooldown_excluded") or ()),
                               _route_session)
                 if pin:
                     decision["pin"] = pin["provider"]
@@ -6169,6 +6171,35 @@ data: [DONE]
     o = seen.get("openrouter") or {}
     check(o.get("model") == "gpt-4o",
           "exacto strip: non-exacto model forwarded without suffix modification")
+
+    # ── Goal #1640 acceptance 5: a COOLED (model, provider) pair is never pinned ──
+    # The router's /route decision carries `cooldown_excluded` beside `strike_excluded`; the
+    # proxy unions BOTH into the pin's exclusion set. Drive the REAL /route handler against an
+    # in-memory router store holding a pair cooldown and assert the pinned provider is the one
+    # that remains — the deliverable's "the cooldown feeds the per-session pin" clause.
+    print("\n=== Pair cooldown feeds the pin (Goal #1640 acceptance 5) ===")
+    router.init(None, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "model-classes.json"))
+    _endpoints[_EP_MODEL] = [_endpoint_row("ProviderA", "providera", 0.10, 0.01),
+                             _endpoint_row("ProviderB", "providerb", 0.30, 0.03)]
+    for _t in ("issue-1668-a", "issue-1668-b"):
+        router.record_report({"session": f"t-cool-{_t}", "task": _t, "stack": "sleep",
+                              "role": "worker", "round": 1, "model": _EP_MODEL,
+                              "served_provider": "providera", "error_class": "provider-5xx",
+                              "outcome": "no-output"})
+    _cooled = router.pair_cooldowns()
+    check((_EP_MODEL, "providera") in _cooled,
+          f"pair cooldown: two distinct tasks trip it (got {_cooled})")
+    _pins.clear()
+    # class=audit carries no provider_policy, so the decision's model stays bare (the coding
+    # class's :exacto suffix would otherwise reach the endpoints fetch).
+    _d = route_call({"stack": "sleep", "task": "issue-1668-c", "role": "worker",
+                     "class": "audit", "session": "t-cool-route", "chain": [_EP_MODEL]})
+    check(_d.get("decision") == "dispatch", f"pair cooldown: /route dispatches (got {_d})")
+    check(_d.get("cooldown_excluded") == ["providera"],
+          f"pair cooldown: the decision names the cooled provider (got {_d.get('cooldown_excluded')})")
+    check((_d.get("pin") or {}).get("order", [None])[0] == "providerb",
+          f"pair cooldown: the cooled provider is never pinned (got {_d.get('pin')})")
 
     print()
     if not fails:
