@@ -9011,4 +9011,22 @@ Issues: #1620, #1621.
   the gap is cadence (~80 GB/7 h regrowth, 62 GB wk-02's), steer posted · wk-02's std disk holds
   five leftover replicas incl. FOUR r=1 coordinator-transcripts volumes (sleep/circles/platform/
   agent-coordinator) whose only copy is there — placement call reported, not moved.
+- **Midday, cont. (operator: "only the alerts/responder updates", no sweep, no delegation):**
+  crosscheck green; triage budget 11/12 used by the morning storm (`ResponderTriageBudgetExhausted`
+  = the designed ceiling, not a fault) · **SILENT class found by hand:** every `respond-*` run
+  carrying the 22-alert `PodSigkilled` group (payload 58–65 KB) died since 09:26Z — Argo v4.0
+  offloads an oversized template into a ConfigMap the controller's ClusterRole cannot create
+  (`configmaps is forbidden`, 5 retries; 49 smaller runs fine) → the wk-02 spree never got a
+  responder issue; **PR#1678** `controller.rbac.writeConfigMaps: true` (the crosscheck cannot see
+  this class — the ledger entry precedes the run; `AgentLoopWorkflowsFailing` did fire) ·
+  **#114 FIXED after 5 weeks:** the inline `renovate-approve.yaml` replaced by the reusable caller
+  in sleep-tracking (#149) + circles (#95), admin-merged (App lacks `workflows`); `agent/error`
+  stripped from sleep-tracking#148; closed · **closed on substance:** #811 (loki stable since
+  09-12, quota 20Gi), #1013 (rule has the `max_over_time[7d]` guard), #542 (node churn, both
+  nodes gone/Ready), #100 (Optanes left with thinkcentre → FU-234), #261 (single reboot; the
+  repeat-class detectors exist), #121 (annotation already post-FU-038; thinkcentre is the mgmt
+  box), #153 (Prometheus HAS the 8Gi limit; the query-slots graft → **PR#1679** maxConcurrency 40)
+  · pointer on #857 (wk-02 = same class) · left as-is: #1546 (oracle-fleet items held by the
+  footprint gate, stack lane), #1594 (agent-fix, alert cleared), #241 (oracle prune dry-run,
+  stack lane), #103 (read-only graft thread), #857 (FU-155's symptom thread).
 

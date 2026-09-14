@@ -26,7 +26,13 @@ never the session's arc — that is TICK-LOG's.)
   only); `node-maintenance.sh move wk-02 <volume>` is the recipe. (6) **OOMController on the VM
   tier** (wk-02 09:15Z, 11 kills, instance-manager first — #1672 class B; wk-metal-03 #1664) —
   FU-155's tune-vs-accept ruling is where it lands; VMs are outside the pin experiment.
-  (7) Unchanged from the late-morning pickup: theme 1 queued (#1665–#1669, first ride reads
+  (7) **Responder pass done** (operator-scoped, no sweep): #114/#811/#1013/#542/#100/#261/#121/#153
+  closed on substance; **PR#1678** (Argo controller `writeConfigMaps` — oversized responder payloads
+  died silently) + **PR#1679** (Prometheus maxConcurrency 40) armed — verify merged, then
+  `kubectl auth can-i create configmaps -n agent-coordinator --as=system:serviceaccount:argo:argo-workflows-workflow-controller`
+  → yes. Still open on the responder side: #1546 (oracle items footprint-held — stack lane),
+  #241 (oracle prune dry-run — stack lane), #857/#103 graft threads (reads only).
+  (8) Unchanged from the late-morning pickup: theme 1 queued (#1665–#1669, first ride reads
   `exacto:no-pin`); fleet un-latched; #1237 re-home question at the next sweep; oracle-fleet
   PR#591/#395 human-directive path; #1651 unqueued.
 - **⚑ PICKUP (2026-09-14 afternoon, same session — wound down at ~600k ctx; arc in TICK-LOG).**
