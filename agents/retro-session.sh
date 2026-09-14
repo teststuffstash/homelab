@@ -170,8 +170,8 @@ else
   SESSION="retro-${RUN_ID}${REVIEW:+-xrev}-$(printf '%s' "${MODEL##*/}" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9.-')"
   KEY_CR="$(mktemp /tmp/retro-key-XXXX.yaml)"
   # THE TIER IS FORCED, and that is the deliberate part. estimate_budget.py's band models a FIXER
-  # round — requests_per_round × context × rounds — and on a real brief it returns ~$0.54 → tier lg
-  # ($2.00), which caps nothing on a lane whose measured spend is $0.02–0.08 per cell (runs 1+2
+  # round — requests_per_round × context × rounds — and on a real brief it returns ~$0.54 → ×2.0 = $1.08 → tier lg
+  # ($4.00 enforced since PR#1650), which caps nothing on a lane whose measured spend is $0.02–0.08 per cell (runs 1+2
   # over 9 models, observability-and-retro.md §B2). The retro lane has direct measurement where the
   # estimator has a heuristic, so the sizing comes from the measurement: $0.08 × the estimator's own
   # ×2.0 buffer = $0.16 → the smallest tier, xs/$0.50 (#248 finding 1's arithmetic, verbatim). That
