@@ -1517,10 +1517,19 @@ def route(payload: dict, ctx: dict) -> dict:
     # opencode-go/* rides the Go subscription leg — its coarse `rail` reads "openrouter" here;
     # openrouter/<codename> is a cloaked/aggregate id OpenRouter serves itself — one upstream,
     # no provider ordering to delegate).
+    # homelab#1693: IDEMPOTENT for an id that ALREADY carries the suffix. The platform claim's
+    # `workerModel` is `deepseek/deepseek-v4.1-flash:exacto` (verified 2026-09-14), so a chain
+    # entry arriving from the claim gets a SECOND `:exacto` — printed live on the PR#1685 ride's
+    # launcher line (`deepseek/deepseek-v4.1-flash:exacto:exacto`). Inert while the claim is
+    # `routerMode: shadow` (the doubled id is printed and discarded); Goal #1640 acceptance 6
+    # flips the claim to `authoritative`, at which point the doubled id is what OpenRouter
+    # receives and it serves no `:exacto:exacto` variant. The rail/`:free`/`opencode-go/`/
+    # `openrouter/` exclusions are unchanged.
     if (result and cinfo.get("provider_policy") == "exacto"
             and result.get("rail") == "openrouter"
             and not result["model"].startswith(("opencode-go/", "openrouter/"))
-            and not result["model"].endswith(":free")):
+            and not result["model"].endswith(":free")
+            and not result["model"].endswith(":exacto")):
         result["model"] += ":exacto"
     if result:
         half_open = bool(_read(
@@ -2450,6 +2459,32 @@ def self_test() -> int:
     _exacto_sub = route(dict(base, chain=["claude/haiku"]), CTX)
     assert _exacto_sub["decision"] == "dispatch" and _exacto_sub["model"] == "claude/haiku", \
         f"subscription pick must stay bare under exacto: {_exacto_sub}"
+    # (b2) homelab#1693: the append is IDEMPOTENT. The platform claim's `workerModel` is
+    #      `deepseek/deepseek-v4.1-flash:exacto` (verified 2026-09-14), so a chain entry that
+    #      ALREADY carries the suffix must route to a SINGLE-suffixed id — never
+    #      `…:exacto:exacto` (the doubled id observed live on the PR#1685 ride's launcher line,
+    #      inert only while the claim is `routerMode: shadow`; Goal #1640 acceptance 6 flips it
+    #      to `authoritative`, where the doubled id reaches OpenRouter). Non-vacuous: without the
+    #      guard this row reads `deepseek/deepseek-v4.1-flash:exacto:exacto` and goes RED.
+    _pre = route(dict(base, chain=["deepseek/deepseek-v4.1-flash:exacto"]), CTX)
+    assert _pre["decision"] == "dispatch" and \
+        _pre["model"] == "deepseek/deepseek-v4.1-flash:exacto", \
+        f"a pre-suffixed chain entry must stay single-suffixed under exacto: {_pre}"
+    # …and the bookkeeping path keys it under the BARE id: record_provider_event strips ONE
+    # :exacto (router.py:521), which lands on the bare id only because the guard above kept the
+    # id single-suffixed. A doubled id would key cooldowns under `…flash:exacto`.
+    for _ in range(8):
+        record_provider_event(_pre["model"], "novita", 429)
+    assert cooldown_note("deepseek/deepseek-v4.1-flash", 429, role="worker") == "tripped", \
+        "a pre-suffixed entry's cooldown must key under the bare id"
+    assert "deepseek/deepseek-v4.1-flash" in active_cooldowns(role="worker"), \
+        "bare id must be in active_cooldowns for a pre-suffixed entry"
+    assert "deepseek/deepseek-v4.1-flash:exacto" not in active_cooldowns(role="worker"), \
+        "the single-suffixed id must NOT be a cooldown key"
+    for _ in range(8):
+        record_provider_event("deepseek/deepseek-v4.1-flash", "novita", 200)
+    assert cooldown_note("deepseek/deepseek-v4.1-flash", 200, role="worker") == "cleared", \
+        "cooldown must clear for the bare id"
     _classes.clear()
     _classes.update(copy.deepcopy(_saved_classes))
     # (c) NON-VACUOUS: cooldown/breaker bookkeeping under the BARE id, not the :exacto-suffixed id.
