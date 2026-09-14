@@ -30,8 +30,8 @@
       ],
       "mainRepo": "homelab",
       "coordinatorModel": "opus",
-      "workerModel": "deepseek/deepseek-v4-flash",
-      "workerModelFallbacks": ["deepseek/deepseek-v4.1-flash"],
+      "workerModel": "deepseek/deepseek-v4.1-flash:exacto",
+      "workerModelFallbacks": ["claude/haiku"],
       "modelDeny": [
         "deepseek/deepseek-v4-flash-0731"
       ],

@@ -105,8 +105,19 @@ spec:
   # floor (claudeTier stays true below for that reason). Supersedes the 2026-08-12 "platform
   # workers stay on the subscription" ruling (model-routing.md §M12). The 0731 deny stands.
   modelDeny: [deepseek/deepseek-v4-flash-0731]
-  workerModel: deepseek/deepseek-v4-flash
-  workerModelFallbacks: [deepseek/deepseek-v4.1-flash]
+  # 2026-09-14 (operator, homelab#1653): round-1 PRIMARY → v4.1-flash. Every round-1 ride on
+  # v4-flash since 09-13 landed on the price pin's cheapest cell (open-inference) and looped to the
+  # turn cap with nothing produced (#1620 #1621 #1649; oracle-fleet #550 #572 #581) — the exacto
+  # flip (PR#1639) never reaches this stack in routerMode: shadow, the launcher keeps this static
+  # chain. v4.1-flash @ deepseek was clean 3/3 the same morning. Fallback = the subscription
+  # degrade, NOT v4-flash (that would walk straight back into the bad cell). Interim until Goal
+  # #1640 theme 1 (per-session pin + enforced strikes) makes the pick self-correcting.
+  # `:exacto` ON THE STATIC STRING (operator, 2026-09-14): the router appends the suffix only to
+  # its own decision, which shadow discards — but the proxy honours the suffix on the REQUEST
+  # (exacto_no_pin: forwarded untouched, no price pin, bookkeeping keys stripped), so this is how
+  # a shadow stack rides FU-186 step 1 at all. #1649 struck at 07:54Z today on the pinned cell.
+  workerModel: deepseek/deepseek-v4.1-flash:exacto
+  workerModelFallbacks: [claude/haiku]
   repos:
     # agent-runtime: FIXER ENABLED 2026-08-08 — the 2026-07-16 "No fixer: these build the
     # agent images" ruling (kept for agent-coordinator below) was superseded for THIS repo by

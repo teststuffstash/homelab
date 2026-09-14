@@ -606,6 +606,8 @@ budgets on [the platform stack](agentstack.md) stay cap-phantom until SUBSCRIPTI
 subscription budgets working" direction — rides the post-FU-131 rail-aware-summation charter on
 #278), and the FU-168 famine fixes carry the throughput load alone.
 
+**Superseded 2026-09-14 (homelab#1653):** the platform primary is `deepseek/deepseek-v4.1-flash:exacto` (the `:exacto` suffix on the STATIC model is what carries the FU-186 policy through a `shadow` stack — the proxy honours it on the request, `openrouter-proxy.py` `exacto_no_pin`) with `claude/haiku` as the fallback — every round-1 ride on v4-flash since 09-13 pinned to open-inference and looped to the turn cap; the exacto flip does not reach a `shadow` stack. Interim until #1640 theme 1.
+
 **§M11 above is the general case; this is the emergency one, and it is what actually shipped**
 (homelab#158, in the launcher + the proxy). M11's ladder makes the subscription an ordinary
 route candidate priced at ~0 while it has headroom; this section only answers "the OpenRouter rail
