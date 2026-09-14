@@ -9160,3 +9160,10 @@ Issues: #1620, #1621.
   PR#1711 adds ledger §"Garage bucket quotas vs the layout (2026-09-14)" — the sum-of-quotas
   table, logical/physical, ceilings, the ruling. Not filed: the artifact-bucket split (oracle's
   call, recorded in their claim comment) and the 150 GB capacity ask (Requirements row exists).
+- **Closeout:** `GarageBucketQuotaNear ert-snapshots` RESOLVED once the exporter read the 120Gi;
+  agent-base deploy-pin #1708 (2026.9.14-gf4e0bbe) landed → the #1705 classifier fix is what pods
+  run now. Reviewer catch on #1711 (round 2, fixed on the branch): the zone ceilings are NOT
+  symmetric — wk-metal-04's `intel1` already carries the PyPI + mcr mirror volumes beside
+  garage-0's data + meta (258 GB scheduled on 256 GB), so that zone has ZERO room to grow and is
+  the smallest zone; pm961 ~60 GB, mx500 ~90 GB shared. Cheap interim = move the two mirror
+  volumes off intel1 (intel0 has ~50 GB); the real answer stays the SFF zone-disk item.
