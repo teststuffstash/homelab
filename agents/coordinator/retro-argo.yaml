@@ -63,7 +63,7 @@ spec:
         - { name: cellB, value: "goose:deepseek/deepseek-v4-pro" }
         # A PRE-MINTED OpenRouterKey Secret to pin for the API cell. Empty (the default) no longer
         # means "spend the stack's fixer budget key" — since homelab#270 retro-session.sh mints the
-        # cell its OWN ephemeral xs/$0.25 key and refuses the ride if it can't. Set this only to
+        # cell its OWN ephemeral xs/$0.50 key (the xs ENFORCED cap since PR#1650) and refuses the ride if it can't. Set this only to
         # override that (e.g. a hand-minted key with a different cap).
         - { name: retroKeySecret, value: "" }
         - { name: minNewTasks, value: "8" } # level-trigger: skip when the ledger grew less than this

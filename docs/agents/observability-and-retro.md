@@ -577,7 +577,7 @@ agent-base ships every harness plus the full toolkit, so retro-er and reviewer a
 Standing guardrails: outside the fixer namespace and WIP slot, bounded output tokens, reports land
 in `docs/agents/retros/` via PR, the retro token is the stack jail's read-only REPOS boundary, and
 **each OpenRouter cell rides an ephemeral key it mints itself** — `retro-session.sh` applies an
-`xs`/$0.25 `OpenRouterKey` per (run, cell) and refuses the ride if the operator does not stamp it
+`xs`/$0.50 `OpenRouterKey` per (run, cell) and refuses the ride if the operator does not stamp it
 (homelab#270). The cap is the lane's own measurement (an audit cell costs $0.02–0.08) × the
 estimator's ×2.0 buffer, NOT `estimate_budget.py`'s band — that band models a fixer round and would
 cap nothing at ~$0.54. Before #270 the key was an operator step with a warning behind it, and the

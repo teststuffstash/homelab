@@ -100,13 +100,27 @@ _MODEL_PRICE: dict[str, float] = {
 }
 _DEFAULT_PRICE = 1.0  # conservative fallback for an unknown paid model
 
-# Budget tiers: name -> hard cap (USD). The smallest tier whose cap ≥ estimate×buffer wins. An
-# estimate above the top tier escalates (flagged) rather than silently minting a huge cap.
-TIERS: list[tuple[str, float]] = [
-    ("xs", 0.25),
-    ("sm", 0.50),
-    ("md", 1.00),
-    ("lg", 2.00),
+# Budget tiers: name -> (selection ceiling, enforced cap), both USD. The smallest tier whose
+# SELECTION ceiling ≥ estimate×buffer wins; the key is minted at the ENFORCED cap. An estimate
+# above the top selection ceiling escalates (flagged) rather than silently minting a huge cap.
+#
+# Why two numbers (operator ruling 2026-09-14, retro r4 F5 / deepseek r4 F3): the cap is a
+# guardrail, not a forecast — its job is to stop a $0.25 task running to $5 and to stop one bad
+# child eating a Goal's whole `Budget:`; 2–3× over the estimate is fine when it is rare. The old
+# single number was both the selector and the cap, so every estimator-picked ride sat at 72–105 %
+# of its cap after the r3 headroom raise (two over cap, both at the `sm` ceiling; oracle-fleet#1
+# died at $0.5086 on a $0.50 cap, oracle-fleet#355 at $0.7092). Doubling the ceilings ALONE would
+# have shifted the tier picks too (a $0.20 estimate ×2.0 = $0.40 lands in `sm` today and would
+# land in `xs` under a doubled ladder), and the selection ceilings are what keep ordinary work on
+# the cheap tiers — a cheaper model with more turns is preferred over an `md`/`lg` pick. So the
+# selection thresholds stay where they were and only the enforced cap doubles. Re-read after
+# Goal #1640 (router) and the effort theme land; a token-denominated cap was considered and
+# rejected as too complicated for a guardrail.
+TIERS: list[tuple[str, float, float]] = [
+    ("xs", 0.25, 0.50),
+    ("sm", 0.50, 1.00),
+    ("md", 1.00, 2.00),
+    ("lg", 2.00, 4.00),
 ]
 
 
@@ -163,19 +177,20 @@ def estimate_cost(
 
 def pick_tier(estimate_usd: float, *, label: str | None = None) -> tuple[str, float, bool]:
     """Choose (tier, cap, escalate). A `agent-budget/<tier>` label forces that tier; otherwise the
-    smallest tier whose cap ≥ estimate×buffer. Above the top tier → top cap + escalate=True."""
+    smallest tier whose SELECTION ceiling ≥ estimate×buffer, minted at that tier's ENFORCED cap
+    (2× the ceiling). Above the top ceiling → top cap + escalate=True."""
     if label:
         forced = label.rsplit("/", 1)[-1]
-        for name, cap in TIERS:
+        for name, _select, cap in TIERS:
             if name == forced:
                 return name, cap, False
-        raise ValueError(f"unknown budget label tier: {label!r} (valid: {[n for n, _ in TIERS]})")
+        raise ValueError(f"unknown budget label tier: {label!r} (valid: {[n for n, _, _ in TIERS]})")
 
     needed = estimate_usd * BUFFER
-    for name, cap in TIERS:
-        if needed <= cap:
+    for name, select, cap in TIERS:
+        if needed <= select:
             return name, cap, False
-    top_name, top_cap = TIERS[-1]
+    top_name, _top_select, top_cap = TIERS[-1]
     return top_name, top_cap, True
 
 
@@ -724,7 +739,7 @@ def _self_test() -> None:
     # the autopsy scenario: paid qwen, looping, no cache → a real (capped) cost
     paid = estimate(issue_tokens=1000, model="qwen/qwen3-coder", price_override=1.15)
     # 90 req × 3 rounds × 20k tok × $1.15/M = ~$6.21 → above top tier → escalate, capped at lg
-    assert paid.estimate_usd > 2.0 and paid.escalate and paid.cap_usd == 2.00
+    assert paid.estimate_usd > 2.0 and paid.escalate and paid.cap_usd == 4.00
 
     # caching crushes the bill: same run at 90% cache hit drops below a tier boundary
     cached = estimate(
@@ -739,7 +754,18 @@ def _self_test() -> None:
 
     # label override forces the tier regardless of estimate
     forced = estimate(issue_tokens=100, model="qwen/qwen3-coder:free", label="agent-budget/lg")
-    assert forced.tier == "lg" and forced.cap_usd == 2.00
+    assert forced.tier == "lg" and forced.cap_usd == 4.00
+
+    # retro r4 F5's two over-cap ledger rows, replayed through pick_tier (2026-09-14). Selection
+    # thresholds are UNCHANGED from the single-number ladder, so neither row moves tier; only the
+    # rope doubles. oracle-fleet#1: estimate $0.3024 → ×2.0 = $0.6048 > sm's $0.50 ceiling → md,
+    # enforced $2.00 ≥ the $0.5086 it died at (it sat in sm under the 1.5 headroom of its day).
+    # The #355 shape: a $0.20 estimate → $0.40 → sm, enforced $1.00 ≥ the $0.7092 it died at on
+    # the old $0.50 cap.
+    assert pick_tier(0.3024) == ("md", 2.00, False)
+    assert pick_tier(0.20) == ("sm", 1.00, False)
+    assert pick_tier(0.10) == ("xs", 0.50, False)
+    assert pick_tier(0.30, label="agent-budget/xs") == ("xs", 0.50, False)
 
     # unknown label tier is rejected
     try:
