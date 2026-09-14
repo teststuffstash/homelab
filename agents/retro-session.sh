@@ -174,9 +174,9 @@ else
   # ($2.00), which caps nothing on a lane whose measured spend is $0.02–0.08 per cell (runs 1+2
   # over 9 models, observability-and-retro.md §B2). The retro lane has direct measurement where the
   # estimator has a heuristic, so the sizing comes from the measurement: $0.08 × the estimator's own
-  # ×2.0 buffer = $0.16 → the smallest tier, xs/$0.25 (#248 finding 1's arithmetic, verbatim). That
+  # ×2.0 buffer = $0.16 → the smallest tier, xs/$0.50 (#248 finding 1's arithmetic, verbatim). That
   # also clears the $0.05 floor run 1 taught by 5×. The estimate is still computed and still lands
-  # in the ride log next to the cap: the day a cell's true cost approaches $0.25, the log says so
+  # in the ride log next to the cap: the day a cell's true cost approaches $0.50, the log says so
   # before the 403 does. --rounds 1 because a cell is one ride and there are no fix rounds.
   if ! python3 "$HERE/estimate_budget.py" --model "$MODEL" --rounds 1 --issue-file "$BRIEF" \
        --label agent-budget/xs --project "$PROJECT" --session "$SESSION" --emit-cr > "$KEY_CR"; then

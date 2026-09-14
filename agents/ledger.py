@@ -28,7 +28,7 @@ LEDGER = "s3://%s/_ledger.jsonl" % BUCKET
 TERMINAL_LABELS = ("agent/done", "agent/blocked")
 # Budget tiers — kept in lockstep with agents/estimate_budget.py TIERS (the source of truth). Used to
 # turn an `agent-budget/<tier>` dispatch label into the cap the actual cost is calibrated against.
-TIERS = {"xs": 0.25, "sm": 0.50, "md": 1.00, "lg": 2.00}
+TIERS = {"xs": 0.50, "sm": 1.00, "md": 2.00, "lg": 4.00}  # the ENFORCED caps (PR#1650, 2026-09-14): what the key allows, so calibration_error = spend / cap stays honest; the selection ceilings are half these and live only in estimate_budget.py
 TS_RE = re.compile(r"(\d{8}T\d{6}Z)")
 
 
