@@ -49,7 +49,9 @@ spec:
         # ARC slots at once). Go higher only by ADDING ephemeral capacity (the second hypervisor,
         # or labelling wk-metal-04), not by overpacking the laptops; watch wk-03's 40G disk (the
         # thin pool is the binding constraint) for DiskPressure evictions under concurrent dind.
-        maxRunners: 6
+        # 2026-09-14: wk-03 back to 8Gi/6c (pve host out of memory headroom, and ~4 concurrent
+        # dind on its 40G disk WAS the #1657/#1659 eviction wave) → 4 = 1 + 1 + ~2.
+        maxRunners: 4
         # NO containerMode: the spec below is the chart's own dind template (rendered at 0.14.2 and
         # transcribed), owned here because dind customization requires it (the chart APPENDS user
         # initContainers — a name-merge dupes the dind container; render-verified). We own it to:
