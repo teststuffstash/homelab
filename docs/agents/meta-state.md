@@ -10,6 +10,35 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-14 late morning, session end at ~650k ctx — the G-H launch; arc in TICK-LOG).**
+  (1) **Goal #1640 theme 1 IS QUEUED** (09:3xZ): #1665 → #1666 → #1667 → #1668 → #1669 (native
+  blockedBy chain, `Base: goal/1640-router`, adopted on the Goal's store; #1238 re-homed under the
+  Goal beside acceptance 8, `task/build`); `goal/1640-router` = master 861ec246; goal-lint 0 FAIL.
+  The first ride is the first live test of the new claim: **platform primary
+  `deepseek-v4.1-flash:exacto`, fallback `claude/haiku` (PR#1655, live 09:30Z)** — read the ride's
+  proxy line for `exacto:no-pin` and the provider it lands on. Theme 2 forms after theme 1 merges
+  + soaks (the two 09-14 direction comments on #1640: cell health = router, fleet strike = a
+  dispatch-blocking ALERT; effort = a checkpoint-formed theme 3 after #1237 + theme 1).
+  (2) **Fleet un-latched:** platform #1620/#1621/#1649 + oracle #550/#572/#581/#232/#325 —
+  `AGENT_STRIKE:` comments QUOTED (history kept, reader + chain-walk blind to them), `agent/error`
+  gone fleet-wide, #1653/#1642/#1622 + of#588/#590 closed to #1640. If a new `unknown` lands on the
+  new cell, that is the next data point — do not re-quote blind.
+  (3) **#1231 `goal/validated` (operator), #1162 validated + closed (operator).** The #1231 close
+  sweep: #1237 stays adopted seat-run under the closed Goal — decide at the next sweep whether it
+  re-homes to #1640 (theme 3's input) too.
+  (4) **PR#1654 MERGED 09:12Z** — `NodeRebootedTwiceIn24h` / `NodeRebootingRepeatedly` live (the
+  7 d rule fires on 192.168.2.63 now); descriptions are symptom + checks by rubric. **wk-03 serial
+  capture NOT started** (the #882 next act, VM-config only: `serial_device {}` on wk-03 in
+  `tofu/proxmox.tf` + a pve socat logger role; apply via the box).
+  (5) **The management box hand-advance is still the next seat's FIRST act** (PR#1652 merged; the
+  box runs the old generation with the timer off — recipe in the afternoon pickup below).
+  (6) **oracle-fleet PR#591 / #395 — the first live arbitrate at cap 5, escalated `blocked-on:
+  human`:** the human-directive path moves it (re-grade #395 to `agent-budget/lg`, one comment on
+  the PR with the round-5 edit verbatim); the design read (round-3 re-grade trigger + the
+  reviewer's comprehensiveness KPI, and whether the re-review prompt carries the whole diff)
+  is r5's to score Monday — one PR is not a pattern.
+  (7) Unchanged: #1651 unqueued under #1101; #1649 queued (its strike quoted); the 14:51Z note is
+  moot (strikes quoted instead).
 - **⚑ PICKUP (2026-09-14 afternoon, same session — wound down at ~600k ctx; arc in TICK-LOG).**
   (1) **PR#1652 (mgmt box follows master, ADR-129 amended) MERGED 08:3xZ (bd74bdd4)** — the box
   is still on the OLD generation (timer disabled, pull ref absent), so nothing moves until the
