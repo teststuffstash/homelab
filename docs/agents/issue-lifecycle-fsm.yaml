@@ -498,11 +498,15 @@ transitions:
       deadlock backstop, carried from the retired per-closure clause), or (ADR-122 (4)) >= 1
       UNDISPOSITIONED tree MEMBER — a bound child the container has never ruled, which WAKES the
       checkpoint and never blocks it (it is excluded from the completion predicate, so trigger
-      (b) fires in the same tick). Keeps working after IL-T18: the goal is still open and still
-      shipping."
+      (b) fires in the same tick), or (e) (ADR-126 v1.3.1, homelab#1423) an open `theme:` container
+      whose descendants are ALL closed and whose `goal/<goal-n>-<slug>` branch has NO PR yet
+      (`theme-complete=<theme-n>` on the unit — the assembly PR is DUE). Theme NOMINATION is NOT a
+      trigger: on a default-branch Goal the scan groups open work-item descendants by shared
+      footprint surface and rides `themes=<surface>:<n1>+<n2>;…` on a unit that fired for
+      (a)/(b)/(c). Keeps working after IL-T18: the goal is still open and still shipping."
     status: guarded
     replay:
-      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row checkpoint-due (the positive trigger, findings >= N) / row nonassembly-merge-inert (burn-down written, NO per-closure unit) / row assembly-complete (…and none for a goal the lifecycle just acted on) / the ADR-122 (4) reader rows undispositioned-wakes (trigger c isolated), deferred-excluded, adopted-by-label (no unit: the member counts), dispositions-unreadable (c held, b unchanged)
+      - agents/replay/fixtures/goal   # THE TABLE (move-2 rollout): row checkpoint-due (the positive trigger, findings >= N) / row nonassembly-merge-inert (burn-down written, NO per-closure unit) / row assembly-complete (…and none for a goal the lifecycle just acted on) / the ADR-122 (4) reader rows undispositioned-wakes (trigger c isolated), deferred-excluded, adopted-by-label (no unit: the member counts), dispositions-unreadable (c held, b unchanged) / the ADR-126 v1.3.1 theme rows theme-nominated (the `themes=` side value on a (c)-woken unit), theme-singleton (an undeclared `*` member is excluded before grouping — one candidate is no theme), theme-complete (trigger (e) fires, ONE unit), theme-complete-pr-exists (a PR for the branch retires (e) by itself)
       - agents/replay/fixtures/epic-dispositions   # the STORE's own shape contract (parse/serialize/upsert, the closed vocabularies, the three-way read split)
     guards:
       - desc: "descendant fixpoint walk (the budget-gate bug-shape, fixed here too)"
@@ -519,6 +523,18 @@ transitions:
         anchor: { file: agents/epic_dispositions.py, pattern: "FAIL-CLOSED EVERYWHERE" }
       - desc: "the play disposes the MEMBERS before it disposes the store; decompose/mint write adopted at authoring"
         anchor: { file: agents/coordinator/README.md, pattern: "FIRST, dispose the MEMBERS" }
+      - desc: "ADR-126 v1.3.1 (S8 #1423): theme NOMINATION is a side value, never a trigger — the scan's goal lane groups the open, unlabelled/queued WORK-item descendants of a default-branch Goal (containers by title, riding/terminal members and members already on a `goal/**` base excluded) into connected components of the Touches-conflict graph, size ≥ 2 (`fp_theme_groups`; an EMPTY list or the `*` sentinel is exclusive and never themed — it would otherwise swallow every group), and rides `themes=` on a checkpoint that fired for (a)/(b)/(c). Byte-identical output for identical input: the delta between the two rows IS the nomination (replay: goal rows theme-nominated / theme-singleton)"
+        anchor: { file: agents/footprint.sh, pattern: "fp_theme_groups — stdin" }
+      - desc: "the scan side of the nomination: ONE body read per candidate, candidates = the GOAL's-repo members only (a footprint is repo-relative and the theme branch lives in the goal's repo, homelab#1451), an unreadable `Base:` or malformed block SKIPS the nomination with one ⚠ (rule #6); the side value reaches the session on the `--item` string exactly like the harvest verdict"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "THEME nominated" }
+      - desc: "membership (v1.3.1 delta 2) = the child's `Touches:` ⊆ the theme's fix-surface with the implicit PIN-surface allowance — `agents/replay/**`, the top-level suite pins and the FSM models are exempt, so a pin-only sprout fits every theme; an EMPTY list or `*` is never a member, and a surface that normalises to everything covers nothing"
+        anchor: { file: agents/footprint.sh, pattern: "fp_theme_member <touches-list>" }
+      - desc: "trigger (e): an open `theme:` container whose descendants are ALL closed (≥ 1, walked by qualified parentKey) and whose branch has NO PR (`--state all`: a closed PR counts — re-opening is a human's call, not a re-summons) emits `theme-complete=<theme-n>`, folded into the goal's ONE unit per pass; the PR's existence is the RETIRING EDGE, which is what keeps (e) from becoming another #1450 (replay: goal rows theme-complete / theme-complete-pr-exists)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "trigger .e.: a THEME whose tree is done" }
+      - desc: "the play, formation half: nominate → judge → mint → branch → queue — the grouping is the scan's, the JUDGMENT is the session's (a nomination may be declined without a marker: the next sprout re-wakes (c), nothing re-fires forever); minted children carry the theme's `Base`, the theme is a level-2 `theme:` container adopted at authoring"
+        anchor: { file: agents/coordinator/README.md, pattern: "THEN, form themes" }
+      - desc: "the play, assembly half: re-read live state FIRST (a PR for the branch already exists → exit clean, the trigger is stale), verify every member CLOSED and `ci` green at the branch head, pull master into the branch before arming (the theme's master-refresh hop — the in-cluster updater only brings a merge-ready PR current, homelab#1452), then open `goal/<goal-n>-<slug> → master` non-draft with the literal `Fixes #<theme-n>` — never `Assembly-for:` and never the Goal's number (a theme assembly is an ordinary master PR, ADR-126; the Goal's own midpoint is IL-T18's key (2))"
+        anchor: { file: agents/coordinator/README.md, pattern: "THEN, assemble a complete theme" }
 
   - id: IL-T13
     name: assembly-complete → assembly PR opened ARMED
@@ -654,8 +670,8 @@ transitions:
   - id: IL-T15
     name: goal-lane findings APPEND to the store at harvest — minting is the checkpoint's (ADR-106 (3); was the selfqueue grant)
     owner: scan harvest-disposition block (decides) → merged-closeout play (obeys)
-    when: "the scan resolved a goal ancestor (task/goal label OR a machine-readable Budget: line —
-      homelab#367) for the closeout item → `harvest=store` while the goal is OPEN (the play appends
+    when: "the scan resolved a goal ancestor (task/goal label, OR a machine-readable Budget: line ONLY
+      on an issue with no native parent to climb past — homelab#367, narrowed by PR#1398) for the closeout item → `harvest=store` while the goal is OPEN (the play appends
       findings to the goal's findings store, mints NOTHING); closed/terminal goal → `harvest=inert`
       (prose in the closing comment, human triage). The queue right moved to the goal-checkpoint
       play — budget-gated THERE, children parented to the finding's ORIGIN (ADR-106 (2))."
@@ -663,6 +679,7 @@ transitions:
     replay:
       - agents/replay/fixtures/harvest   # THE TABLE (move-2 rollout): rows goal-open-funded / goal-open-exhausted / goal-closed — open → store, closed → inert
       - agents/replay/fixtures/reviewer-epic-container   # ADR-127: the reviewer-side destination test — no container ⇒ no Follow-ups: to harvest
+      - agents/replay/fixtures/reviewer-sprout-depth   # ADR-126 themes (S8 #1423 leg B): the rule-7 depth guard's re-key — hops MINUS theme hops, one constructed tree, rows a–g (b is THE re-key, e the unreadable-title fallback, g the only-theme:-is-subtracted bound)
     guards:
       - desc: "the verdict is DETERMINISTIC and rides --item; the play is ordered, never asked (replay: harvest-goal-open-funded / -exhausted / -closed)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "harvest APPENDS, never mints" }
@@ -674,6 +691,8 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "goal_resolve_ancestor" }
       - desc: "the reviewer emits NO Follow-ups at depth ≥2 — the tree is capped at sprouts-of-children"
         anchor: { file: agents/reviewer-session.sh, pattern: "depth-conditional half of the harvest bar" }
+      - desc: "…and the depth is measured MINUS `theme:` hops (ADR-126, S8 #1423): the sprout-depth walk subtracts a parent hop whose parent is a `theme:` container (case-insensitive, leading whitespace tolerated; ONLY `theme:` — the other container titles, post-launch:/stint:/retro-batch: ([glossary](../glossary.md)), have children that base master and ride the organic lane), so `Goal → theme → child` reads depth 1 and KEEPS its Follow-ups: channel while `Goal → theme → child → sprout` reads 2 and is suppressed; an unreadable parent TITLE counts the hop with one WARN — advisory, never blocking, fails toward the pre-theme behaviour (replay: reviewer-sprout-depth rows a–g)"
+        anchor: { file: agents/reviewer-session.sh, pattern: "REPLAY:sprout-depth-walk" }
       - desc: "…and NONE outside a container (ADR-127, 2026-09-11): with no open epic ancestor and no goal-lane base the reviewer BLOCKS in-diff findings instead of deferring them, so nothing reaches this harvest from a containerless master-lane PR (replay: reviewer-epic-container)"
         anchor: { file: agents/reviewer-session.sh, pattern: "the container-conditional half of the harvest bar" }
     incidents:

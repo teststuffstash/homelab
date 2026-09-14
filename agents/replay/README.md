@@ -378,7 +378,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-absent` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-adopted` | actions | - | `agents/reviewer-session.sh` | - |
-| `reviewer-sprout-depth` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-sprout-depth` | actions | - | `agents/reviewer-session.sh` | IL-T15 |
 | `reviewer-touches/block-authored` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/block-malformed` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/escapes-computed` | actions | - | `agents/reviewer-session.sh` | - |

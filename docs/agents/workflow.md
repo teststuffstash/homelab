@@ -306,9 +306,10 @@ predicate gains footprint intersection in place of `lane-free`:
   lane hold); the `wip_busy` pod probe stays as the liveness belt underneath, now counting
   against the raised limit rather than 1.
 - **Ceilings stack**: scan sets `AGENT_WIP_LIMIT` = concurrent dispatches (launcher pre-flight
-  belt matches); hard per-repo max (default 3) and the ≤3-open-PR bound (updater churn is
-  O(open PRs × merges) — oracle TRACKS rule 1) hold regardless of footprints; FU-088 capacity
-  semaphore caps globally.
+  belt matches); hard per-repo max (default 3) and the ≤3-open-PR bound — counted per
+  **(repo, base) lane** since homelab#849 (ADR-125 (4): master-based PRs never hold a `goal/**`-based
+  issue and vice versa; updater churn is O(open PRs × merges) — oracle TRACKS rule 1) hold regardless of
+  footprints; FU-088 capacity semaphore caps globally.
 - **The COMPELLED-COUNTERPART classes are EXEMPT from footprint semantics on both sides** —
   `agents/replay/**`, top-level `agents/*-test.sh`/`*-replay.sh` suite pins, and
   `docs/agents/*-fsm.{yaml,md}` (ADR-097 addendum 2, 2026-08-19/homelab#601 widening the
