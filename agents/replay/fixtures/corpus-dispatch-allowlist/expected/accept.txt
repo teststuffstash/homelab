@@ -1,0 +1,4 @@
+CALL gh api -X POST repos/teststuffstash/oracle-fleet/dispatches --input /tmp/dispatch.json
+OUT corpus-published: ringing teststuffstash/oracle-fleet (prefix='{{prefix}}') as the coordinator identity
+OUT {"event_type":"corpus-published","client_payload":{"repo":"teststuffstash/oracle-fleet","prefix":"{{prefix}}"}}
+RC 0

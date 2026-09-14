@@ -144,6 +144,7 @@ spec:
             # corpus repo; anything else refuses LOUDLY — exit 1 marks the workflow Failed, which
             # the argo-workflows-alerts Failed rule already watches, so a widened ring is a visible
             # signal rather than a silently dropped release.
+            # >>>REPLAY:corpus-dispatch-allowlist>>>
             case "${RING_REPO:-teststuffstash/oracle-fleet}" in
               oracle-fleet|teststuffstash/oracle-fleet) TARGET="teststuffstash/oracle-fleet" ;;
               "") TARGET="teststuffstash/oracle-fleet" ;;
@@ -158,6 +159,7 @@ spec:
               '{event_type: $et, client_payload: {repo: $repo, prefix: $prefix}}' > /tmp/dispatch.json
             echo "corpus-published: ringing $TARGET (prefix='${RING_PREFIX}') as the coordinator identity"
             gh api -X POST "repos/$TARGET/dispatches" --input /tmp/dispatch.json
+            # <<<REPLAY:corpus-dispatch-allowlist<<<
             echo "→ repository_dispatch sent: event_type=corpus-published repo=$TARGET"
         resources:
           requests: { cpu: "50m", memory: "128Mi" }

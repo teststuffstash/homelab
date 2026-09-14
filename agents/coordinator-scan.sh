@@ -1478,7 +1478,8 @@ agents/coordinator/coordinate-argo.yaml
 agents/coordinator/responder-argo.yaml
 agents/coordinator/retro-argo.yaml
 agents/coordinator/fix-debounce-argo.yaml
-agents/coordinator/deploy-revert-argo.yaml"
+agents/coordinator/deploy-revert-argo.yaml
+agents/coordinator/corpus-dispatch-argo.yaml"
 
 # ── PARITY ASSERTION: clause_files vs ci.yaml ratchet regex (homelab#853) ──
 # The canonical ratchet regex lives in .github/workflows/ci.yaml:118 (ONE HOME).

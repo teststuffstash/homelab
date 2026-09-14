@@ -211,6 +211,7 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/fix-round-with-arbitration` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
+| `corpus-dispatch-allowlist` | table | - | `agents/coordinator/corpus-dispatch-argo.yaml` | - |
 | `decorrelate-resolution/empty-report` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/malformed-json` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/no-model` | actions | - | `agents/review-reflex.sh` | - |
@@ -630,12 +631,13 @@ S5 heat pass; the per-instance prose is in git and in the cited PRs):
   `node.longhorn.io/create-default-disk=true` nodes), **homelab#974 / PR#1000**
   (`limits.memory` 512Mi → 1Gi on the `coordinate` WorkflowTemplate's main container),
   **homelab#1621** (the `/corpus-published` endpoint added to the `agent-loop` EventSource in
-  `review-argo.yaml` — the ratchet's clause file here — plus a NEW, non-clause file
-  (`corpus-dispatch-argo.yaml`: a Sensor + a one-step WorkflowTemplate). No `>>>REPLAY:` sentinel
-  exists in either diff, so the harness has no clause to extract and no action stream to assert;
-  the endpoint is a declaration the controller reads, and the dispatch step's one `gh api` call
-  runs in a workflow spec no fixture world reaches — the `/sentinel`, `/fix-verdict` and
-  `/deploy-degraded` endpoints entered the same class earlier, for the same reason).
+  `review-argo.yaml` — the ratchet's clause file here. No `>>>REPLAY:` sentinel exists in that
+  diff, so the harness has no clause to extract and no action stream to assert; the endpoint is a
+  declaration the controller reads — the `/sentinel`, `/fix-verdict` and `/deploy-degraded`
+  endpoints entered the same class earlier, for the same reason. The SAME PR's
+  `corpus-dispatch-argo.yaml` is NOT this class: its allowlist gate branches on the ring body and
+  emits an action stream, so it ships with the `corpus-dispatch-allowlist` family — see the
+  fixture index above).
 - **Class B — text OUTSIDE every `>>>REPLAY:` sentinel.** LLM-prompt prose, comments and
   redirections inside the `claude -p` invocations: the extracted clauses are byte-identical
   before and after, and prompt text emits no `gh`/`kubectl` calls. Instances: **homelab#536**
