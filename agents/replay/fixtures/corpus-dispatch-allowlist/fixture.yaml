@@ -1,0 +1,29 @@
+# corpus-dispatch-allowlist — the allowlist gate on the platform's corpus doorbell (homelab#1621).
+#
+# THE CONTRACT: the `dispatch` step of corpus-dispatch-argo.yaml turns an in-cluster
+# "corpus published" ring into a GitHub `repository_dispatch` on the corpus repo, made with the
+# coordinator's `contents: write` identity (the stack never holds a write token — ING-RT-PUBLISH +
+# FU-089). The block under replay is the gate that decides whether that write token is spent at
+# all:
+#
+#   * the ALLOWLIST `case` — the bare short name and the slug both resolve to
+#     `teststuffstash/oracle-fleet`; an empty/absent `repo` takes the `:-` default; ANY other name
+#     exits 1 (loud — a Failed workflow the argo-workflows-alerts Failed rule already watches) and
+#     must emit NO `gh api …/dispatches` call. That absence is the point of the pin: a widened ring
+#     never spends the coordinator's write token.
+#   * the FAIL-CLOSED `GH_TOKEN` check — no token is exit 1, never a silent no-op (the whole reason
+#     this doorbell exists is that the release must not wait on GitHub's `schedule:`).
+#   * the `jq`-built dispatch body — `gh api … --input` names a FILE, so the CALL line alone would
+#     pin "a dispatch happened" without pinning WHAT it dispatched; post.sh prints the bytes.
+#
+# Six rows: accept-bare / accept-slug / accept-empty-repo / accept-absent-repo (the four ways a
+# ring resolves to the corpus repo) and reject-other-repo / reject-no-token (the two refusals, each
+# asserting exit 1 AND the absence of a dispatch in the action stream).
+name: corpus-dispatch-allowlist
+mode: table
+source: agents/coordinator/corpus-dispatch-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:corpus-dispatch-allowlist
+  - file:post.sh
+rows: rows.psv

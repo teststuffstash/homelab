@@ -3,6 +3,7 @@ board — stack platform (1 repos) · 2026-08-18T12:00:00Z
 § REVIEW (codeowner queue)
 circles#201 human gate pending (17d)
 circles#202 awaiting human (17d)
+circles#211 aside park (approve then comment) (17d)
 
 § FIX (seat PRs awaiting your fix round)
 circles#207 seat pr awaiting fix (2d)
@@ -31,4 +32,4 @@ public-edge.abuse-fairness
   circles#117 circles edge fairness (8d)
   — 1 stacks, oldest 17d
 
-totals — review: 2 · fix: 2 · solve: 5 · triage: 2 · verdict-due: 1 · backlog: 3 · demand: 1
+totals — review: 3 · fix: 2 · solve: 5 · triage: 2 · verdict-due: 1 · backlog: 3 · demand: 1

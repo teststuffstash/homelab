@@ -142,6 +142,18 @@ absent "backlog: agent/queued-without-agent-fix is not suitable-unqueued (no age
 absent "solve: agent/error overrides agent/blocked (no double line)"      "⏸ circles#103" "$SEC_SOLVE"
 # ── the FIX row (2026-08-19): seat-authored changes-requested PRs are the seat's own queue ───
 # (an operator-lane PR has no machine owner — the between-sessions backstop for the PR#568 class)
+# ── the REVIEW park arm (homelab#1649): the board reads the codeowner-park predicate off
+# `reviews[]`, never `latestReviews[]` (the PR#235 aside trap — a bot that APPROVEs and then posts
+# a COMMENTED review reads non-APPROVED in latestReviews while reviews[] still carries the
+# APPROVED). #211 is that shape and MUST list; #201 is the plain park and must keep listing. The
+# whole-file diff above already pins both — these two assertions name the arm so a future edit that
+# swaps the field back reds with a sentence instead of a render diff.
+SEC_REVIEW="$(section '§ REVIEW (codeowner queue)' "$BOARD_OUT")"
+present "review: a plain bot-approved park lists (the human gate)" "circles#201" "$SEC_REVIEW"
+present "review: an approve-then-comment park still lists (reviews[], not latestReviews[])" \
+  "circles#211 aside park (approve then comment)" "$SEC_REVIEW"
+absent  "review: an APPROVED PR is not a park (the gate is satisfied)" "circles#204" "$SEC_REVIEW"
+absent  "review: a draft park is not on the human gate" "circles#205" "$SEC_REVIEW"
 SEC_FIX="$(section '§ FIX (seat PRs awaiting your fix round)' "$BOARD_OUT")"
 present "fix: a seat-authored changes-requested PR lists"           "circles#207" "$SEC_FIX"
 absent  "fix: a bot-authored changes-requested PR is machine-owned" "circles#203" "$SEC_FIX"
