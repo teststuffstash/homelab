@@ -9070,4 +9070,12 @@ Issues: #1620, #1621.
   transient kube-API failure during ref resolve → 503 + Retry-After, never a cred count
   (`_kube_get_secret` seam, classification, self-test PASS) · **PR#1690 merged** (Argo default
   Workflow TTL 2 d) · #1689 (cp-01 12 GiB, already applied from the branch) in review.
+- **Afternoon (operator: "how many responder issues are still actionable"):** 24 open → six more
+  closed on substance (#1584/#1657/#1659 — wk-03 at 80 G + VM image GC + maxRunners 4;
+  #1643/#1644 — the FU-208 pool gate released as designed; #1598 — PR#1576 merged 06:02Z) → 18
+  open: 6 actionable (#1664 csi-plugin limits key, #1672 class A cron stagger, #1675 trim
+  cadence, #1594 fixtures — all fixer-lane `agent-fix`; #1661 in review = PR#1673; #530 = the
+  operator's UI cancel of zombie run 34748702282), 1 waiting on evidence (#1687, 24 h), 11
+  report-only / symptom / stack-lane (#103 #241 #1546 #857 #860 #538 #1662 #884 #882 #1663 + the
+  FU-155 class).
 
