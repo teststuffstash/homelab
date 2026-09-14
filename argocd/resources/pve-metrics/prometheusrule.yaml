@@ -23,6 +23,43 @@ metadata:
     app: pve-metrics
 spec:
   groups:
+    - name: node-reboots
+      # A box that reboots ITSELF, seen from its own node_exporter (node_boot_time_seconds moves).
+      # NodeRebooted (kube-prometheus-stack values, node-health) fires on every boot and cannot
+      # tell a planned seat window (scripts/node-maintenance.sh — one boot, silenced) from a VM
+      # rebooting on its own: on 2026-09-12 both landed on collapsed subject threads within one
+      # hour (#261, #882). These two count boots per node instead. Replay at the event
+      # (#882, wk-03 = 192.168.2.63): boots 09-10 09:39Z + 18:58Z, 09-11 18:53Z, 09-12 13:44Z,
+      # 09-13 21:15Z → `changes(...[24h])` = 2 on 09-10 and 09-11 (fires), 1 on the other days
+      # (quiet); `changes(...[7d])` = 5 today (fires). A DaemonSet node_exporter keeps its pod
+      # name across a node reboot, so one series carries the boots; the sum by (instance)
+      # absorbs a re-created pod. No `for:`: changes() over a window is not a blip.
+      rules:
+        - alert: NodeRebootedTwiceIn24h
+          expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[24h])) >= 2
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.instance }} booted {{ $value }} times in 24 h — a box rebooting itself"
+            description: >-
+              Two or more boots of the same node inside 24 h. A planned window is ONE boot; this is
+              the #882 class (a pve VM rebooting from inside the guest, the qemu process untouched,
+              the kmsg ring buffer lost with it). What settles the cause is the VM's serial console
+              (`serial0: socket` + the host-side logger) — the guest's `console=ttyS0` already
+              points there. Read `node_boot_time_seconds{instance="{{ $labels.instance }}"}[24h]`
+              for the exact boot times, then the load/steal/memory series just before each.
+        - alert: NodeRebootingRepeatedly
+          expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[7d])) >= 3
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.instance }} booted {{ $value }} times in 7 d"
+            description: >-
+              Three or more boots in a week — the slow-cadence twin of NodeRebootedTwiceIn24h
+              (wk-03 went to one self-reboot a DAY after its 09-10/09-11 pairs, which the 24 h
+              rule cannot see). Same read: boot times from node_boot_time_seconds, then the serial
+              console log on the hypervisor for the panic that `kernel.panic=10` turns into a
+              silent reboot.
     - name: pve-thin-pool
       rules:
         - alert: PveThinPoolFillingUp
