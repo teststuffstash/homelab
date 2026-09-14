@@ -1,0 +1,57 @@
+# Behaviour fixture for node-reboots.promtool-rules (FU-158 shape): `devbox run prometheus-rules-lint`
+# runs it. The series are wk-03's own week (#882), compressed: node_boot_time_seconds is a step
+# function whose VALUE is the boot epoch, so a reboot is one step. Boot epochs below are the real
+# ones (2026-09-10 09:39:04Z = 1789119544, 18:58:44Z = 1789153124, 09-11 18:53:23Z = 1789239203,
+# 09-12 13:44:18Z = 1789307058, 09-13 21:15:25Z = 1789420525), the clock is compressed to 1h per
+# sample so a 7-day window is 168 samples.
+rule_files:
+  - node-reboots.promtool-rules
+evaluation_interval: 1h
+
+tests:
+  # ── wk-03's week, 1 sample = 1 h, with the PRIOR boot (09-08 13:07:16Z = 1788959236) as the
+  #    first sample — `changes()` counts value CHANGES inside the window, and a boot is a change
+  #    only against the value before it. promtool's `vxN` is N+1 samples, so the steps land at
+  #    h=2 (09-10 09:39), h=12 (18:58), h=37 (09-11 18:53), h=57 (09-12 13:44), h=90 (09-13
+  #    21:15). wk-01 boots ONCE at h=2 from the same
+  #    prior value and stays up — a planned window is one boot and must never fire either rule.
+  - interval: 1h
+    input_series:
+      - series: 'node_boot_time_seconds{job="node-exporter",instance="192.168.2.63:9100",pod="node-exporter-wk03"}'
+        values: '1788959236x1 1789119544x9 1789153124x24 1789239203x19 1789307058x32 1789420525x84'
+      - series: 'node_boot_time_seconds{job="node-exporter",instance="192.168.2.61:9100",pod="node-exporter-wk01"}'
+        values: '1788959236x1 1789119544x168'
+    alert_rule_test:
+      # h=13: boots at h=2 and h=12 both inside 24 h → 2 changes → fires. wk-01: 1 change, quiet.
+      - eval_time: 13h
+        alertname: NodeRebootedTwiceIn24h
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: "192.168.2.63:9100" }
+            exp_annotations:
+              summary: "192.168.2.63:9100 booted 2 times in 24 h — a box rebooting itself"
+      # h=13: two boots in the 7 d window so far → below 3, quiet.
+      - eval_time: 13h
+        alertname: NodeRebootingRepeatedly
+        exp_alerts: []
+      # h=38: the 09-11 boot (h=37) is 1 h old; the 09-10 pair is 26 h / 36 h old → ONE change in
+      # 24 h → the 24 h rule is quiet: this is the one-boot-a-day cadence it cannot see.
+      - eval_time: 38h
+        alertname: NodeRebootedTwiceIn24h
+        exp_alerts: []
+      # h=38: three boots inside 7 d → the weekly rule fires (wk-01 still quiet).
+      - eval_time: 38h
+        alertname: NodeRebootingRepeatedly
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: "192.168.2.63:9100" }
+            exp_annotations:
+              summary: "192.168.2.63:9100 booted 3 times in 7 d"
+      # h=100: all five boots inside 7 d → 5; the 24 h rule quiet (the h=90 boot is alone).
+      - eval_time: 100h
+        alertname: NodeRebootingRepeatedly
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: "192.168.2.63:9100" }
+            exp_annotations:
+              summary: "192.168.2.63:9100 booted 5 times in 7 d"
+      - eval_time: 100h
+        alertname: NodeRebootedTwiceIn24h
+        exp_alerts: []
