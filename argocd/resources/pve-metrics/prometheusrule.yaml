@@ -23,6 +23,44 @@ metadata:
     app: pve-metrics
 spec:
   groups:
+    - name: node-reboots
+      # A box that reboots ITSELF, seen from its own node_exporter (node_boot_time_seconds moves).
+      # NodeRebooted (kube-prometheus-stack values, node-health) fires on every boot and cannot
+      # tell a planned seat window (scripts/node-maintenance.sh — one boot, silenced) from a VM
+      # rebooting on its own: on 2026-09-12 both landed on collapsed subject threads within one
+      # hour (#261, #882). These two count boots per node instead. Replay at the event
+      # (#882, wk-03 = 192.168.2.63): boots 09-10 09:39Z + 18:58Z, 09-11 18:53Z, 09-12 13:44Z,
+      # 09-13 21:15Z → `changes(...[24h])` = 2 on 09-10 and 09-11 (fires), 1 on the other days
+      # (quiet); `changes(...[7d])` = 5 today (fires). A DaemonSet node_exporter keeps its pod
+      # name across a node reboot, so one series carries the boots; the sum by (instance)
+      # absorbs a re-created pod. No `for:`: changes() over a window is not a blip.
+      rules:
+        - alert: NodeRebootedTwiceIn24h
+          expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[24h])) >= 2
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.instance }} booted {{ $value }} times in 24 h — a box rebooting itself"
+            description: >-
+              Two or more boots of the same node inside 24 h — a SYMPTOM, not a diagnosis. A planned
+              maintenance window is one boot (scripts/node-maintenance.sh). What to check, in order:
+              the exact boot times (`node_boot_time_seconds{instance="{{ $labels.instance }}"}[24h]`),
+              then load / CPU steal / MemAvailable / filesystem free in the 30 min before each
+              (`node_load1`, `node_cpu_seconds_total{mode="steal"}`, `node_memory_MemAvailable_bytes`,
+              `node_filesystem_avail_bytes`), the hypervisor's task log and journal for the VM if it
+              is one (`qm list`, `journalctl` on pve), and the kmsg-reader's previous-container tail
+              on the node. If a serial console log exists for the VM, read it first. Thread: #882.
+        - alert: NodeRebootingRepeatedly
+          expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[7d])) >= 3
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.instance }} booted {{ $value }} times in 7 d"
+            description: >-
+              Three or more boots of the same node in 7 d — the slow-cadence twin of
+              NodeRebootedTwiceIn24h (one self-reboot a day never trips the 24 h rule). Same read:
+              boot times from `node_boot_time_seconds`, the resource series before each boot, the
+              hypervisor's log, the kmsg-reader tail, and a serial console log if one exists.
     - name: pve-thin-pool
       rules:
         - alert: PveThinPoolFillingUp

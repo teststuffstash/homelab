@@ -1,0 +1,19 @@
+# HAND COPY of the node-reboots group in prometheusrule.yaml (this dir) — the drift pin in
+# scripts/prometheus-rules-lint.sh asserts expr+for equality per alert name against the CR.
+# Re-render with:  devbox run -- yq '.spec.groups[] | select(.name == "node-reboots")' prometheusrule.yaml
+# Loaded by node-reboots.promtool-test.
+groups:
+  - name: node-reboots
+    rules:
+      - alert: NodeRebootedTwiceIn24h
+        expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[24h])) >= 2
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.instance }} booted {{ $value }} times in 24 h — a box rebooting itself"
+      - alert: NodeRebootingRepeatedly
+        expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[7d])) >= 3
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.instance }} booted {{ $value }} times in 7 d"
