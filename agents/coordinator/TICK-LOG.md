@@ -9062,4 +9062,12 @@ Issues: #1620, #1621.
   apiserver's size is 224 CRDs + 10.3k objects, 666 of them Workflows (review-* 142 older than
   2 d on the 7 d default) → **PR#1690 default TTL 7 d → 2 d** (record = S3 + ledger, no archive
   DB) · post-blackout: all 10 Ready, 0 degraded volumes, controllers re-electing.
+- **Midday, cont. 4 (the cp-01 blackout's echo):** the 12:29Z round-2 strike on #1620 was the
+  seat's own cp-01 power-cycle: four fresh `ref: resolve` misses on "Connection refused" 7 s apart
+  (one per negative-TTL expiry) → `circuit OPEN (cred)` 900 s (the #1020 count covered only blips
+  shorter than the TTL); the ride had already opened PR#1688 (merged 12:25Z, issue closed) and
+  died wrapping up — post-merge noise, corrected on #1620 · **PR#1691** openrouter-proxy:
+  transient kube-API failure during ref resolve → 503 + Retry-After, never a cred count
+  (`_kube_get_secret` seam, classification, self-test PASS) · **PR#1690 merged** (Argo default
+  Workflow TTL 2 d) · #1689 (cp-01 12 GiB, already applied from the branch) in review.
 

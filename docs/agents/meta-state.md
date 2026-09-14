@@ -34,7 +34,9 @@ never the session's arc — that is TICK-LOG's.)
   #241 (oracle prune dry-run — stack lane), #857/#103 graft threads (reads only).
   (8) **wk-02 = compute-only DONE, disks DONE (2026-09-14 midday):** wk-02 recreated at 80 G,
   wk-03 grown to 80 G, cp-01 at 12 GiB (#1687), VM kubelet image GC 60/50 live, pool 37 %.
-  Verify at the next sitting: PR#1689 + PR#1690 merged; `kubectl get wf -A | wc -l` trending
+  Verify at the next sitting: PR#1689 + PR#1691 (proxy: transient ref-resolve → 503, no cred
+  count — the #1620 round-2 strike was the cp-01 blackout) merged and the proxy rolled;
+  PR#1690 (TTL 2 d) MERGED; `kubectl get wf -A | wc -l` trending
   down from ~800 (the 2 d TTL); no cp-01 `allocatableMemory.available` eviction in 24 h → close
   #1687; #1675's fixer targets trim cadence; wk-02's image store stays under 50 % of 75 G.
   (9) Unchanged from the late-morning pickup: theme 1 queued (#1665–#1669, first ride reads
