@@ -309,24 +309,29 @@ def routing_suffix(model: str, priced: str) -> str | None:
     return normalized[len(base):] if base and normalized.startswith(base + ":") else None
 
 
-def registry_key(registry: dict | None, model: str) -> str:
-    """The key `registry` carries for `model`: the first of `lookup_ids` it knows, else the
-    normalized id (no registry to match against → the static table does the retry)."""
+def registry_hit(registry: dict | None, model: str) -> str | None:
+    """The lookup id `registry` actually CARRIES for `model`, or None when it carries none — the
+    hit/miss signal `registry_key`'s fallback return cannot give (a miss and an absent registry
+    both return the normalized id, so a caller deciding "did the registry price this?" needs
+    this, not that)."""
     models = (registry or {}).get("models") or {}
-    if not models:
-        return normalize_model(model)
-    for candidate in lookup_ids(model):
-        if candidate in models:
-            return candidate
-    return normalize_model(model)
+    return next((c for c in lookup_ids(model) if c in models), None)
+
+
+def registry_key(registry: dict | None, model: str) -> str:
+    """The key `registry` carries for `model`, else the normalized id — for the dict lookups that
+    want a key which simply misses. Use `registry_hit` when a MISS must be distinguishable."""
+    return registry_hit(registry, model) or normalize_model(model)
 
 
 def priced_as(model: str, registry: dict | None) -> str:
-    """The id the price actually came from: the registry key when the registry carries one of the
-    lookup ids, else the static-table candidate, else the normalized id (→ the $1.0/M default).
-    Equals `normalize_model(model)` whenever no suffix had to be dropped. Reported by `--lookup`."""
-    if registry and (registry.get("models") or {}):
-        return registry_key(registry, model)
+    """The id the price actually came from — the same fallback chain `resolve_price` walks, so the
+    two cannot disagree: the registry hit, else the static-table candidate, else the normalized id
+    (→ the $1.0/M default). Equals `normalize_model(model)` whenever no suffix had to be dropped.
+    Reported by `--lookup`."""
+    hit = registry_hit(registry, model)
+    if hit is not None:
+        return hit
     return next((c for c in lookup_ids(model) if c in _MODEL_PRICE), normalize_model(model))
 
 
@@ -1040,6 +1045,21 @@ def _self_test() -> None:
     # and its disclosure is the same one line; a genuinely unpriced id keeps the $1.0/M default.
     assert resolve_price("deepseek/deepseek-v4-flash:exacto", None, None, h=0.8)[0:2] == (0.10, "static")
     assert resolve_price("qwen/qwen3-coder:free", None, None, h=0.8)[0] == 0.0  # variant, not base
+    # A NON-EMPTY registry that does not carry the model at all: the static table prices it, and
+    # `priced_as`/`routing_suffix` must agree with the note `resolve_price` already discloses —
+    # `registry_key`'s miss return is indistinguishable from its no-registry return, which is why
+    # `registry_hit` exists. Without it `priced_as` reports the un-stripped id and `routing_suffix`
+    # reports None, contradicting `price_note` in the same `--lookup` blob and silently disarming
+    # `session_pin`'s suffix suppression.
+    price, source, note = resolve_price("deepseek/deepseek-v4-flash:exacto", None, fixture, h=0.8)
+    assert (price, source) == (0.10, "static") and ":exacto" in note
+    assert priced_as("deepseek/deepseek-v4-flash:exacto", fixture) == "deepseek/deepseek-v4-flash"
+    assert routing_suffix(
+        "deepseek/deepseek-v4-flash:exacto",
+        priced_as("deepseek/deepseek-v4-flash:exacto", fixture),
+    ) == ":exacto"
+    assert registry_hit(fixture, "deepseek/deepseek-v4-flash:exacto") is None
+    assert registry_hit(fixture, "deepseek/deepseek-v4.1-flash:exacto") == "deepseek/deepseek-v4.1-flash"
     # a DOUBLED suffix (homelab#1693: the router re-appending `:exacto` to an already-suffixed chain
     # entry — the platform primary IS pre-suffixed) reduces all the way to the paid id, nearest
     # truncation first, so a doubling cannot re-open the phantom escalation either.
