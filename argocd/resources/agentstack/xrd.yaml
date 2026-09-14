@@ -580,6 +580,49 @@ spec:
                                   ENFORCED. Flip only after clean monitored rides; drops
                                   manifest as worker HANGS, watch
                                   hubble_drop_total{reason=POLICY_DENIED}.
+                          readOnlyGrants:
+                            type: array
+                            default: []
+                            description: >-
+                              Downscoped READ-ONLY GitHub App installation tokens (homelab-agents)
+                              delivered as a Secret in THIS namespace — for a stack workload that
+                              is not a worker pod (first consumer: oracle-fleet's nightly
+                              retention CronWorkflow, ADR-OF-004, which reads oracle-iac contents
+                              + oracle-fleet actions). Each grant mints ONE token scoped to
+                              `repositories` and mirrors it in-namespace as Secret
+                              `agent-git-readonly-<index>` (0-based position in this list; data key
+                              `token`), refreshed ~45m like agent-git. READ-ONLY IS ENFORCED AT THE
+                              GENERATOR: the permission VALUES are ignored — every listed
+                              permission is minted as `read`, so a claim cannot express a write on
+                              this token. The App private key never enters this namespace (FU-089):
+                              the generator lives in agent-coordinator and the token reaches the
+                              namespace through the kubernetes-provider mirror the transcripts key
+                              and retro-git already use. Omit for no token.
+                            items:
+                              type: object
+                              required: [repositories, permissions]
+                              properties:
+                                repositories:
+                                  type: array
+                                  minItems: 1
+                                  items:
+                                    type: string
+                                  description: >-
+                                    GitHub repo names (teststuffstash org) the token is scoped to.
+                                    Every name must be covered by the homelab-agents installation
+                                    or the whole mint 422s (the reviewer-git.yaml trap).
+                                permissions:
+                                  type: object
+                                  minProperties: 1
+                                  description: >-
+                                    Permission NAMES to grant, e.g. {contents: read, actions: read}.
+                                    The VALUES are documentation only — the Composition mints every
+                                    listed permission as `read` (read-only is enforced at the
+                                    generator, never trusted from the claim), and the schema
+                                    rejects any value other than `read`.
+                                  additionalProperties:
+                                    type: string
+                                    enum: [read]
             status:
               type: object
               properties:

@@ -1346,6 +1346,163 @@ spec:
                       apiVersion: generators.external-secrets.io/v1alpha1
                       kind: GithubAccessToken
                       name: agent-git-{{ $r.name }}-gen
+            {{- range $i, $g := default (list) (get $fx "readOnlyGrants") }}
+            ---
+            # homelab#1620: a DOWNSCONED, READ-ONLY installation token for a stack workload that
+            # is NOT a worker pod (first consumer: oracle-fleet's nightly retention CronWorkflow,
+            # ADR-OF-004 — contents:read on oracle-iac + actions:read on oracle-fleet). Same
+            # central-mint rule as agent-git-<repo> above (FU-089: the App private key never enters
+            # a stack namespace), so the generator lives in agent-coordinator and the token reaches
+            # ns {{ $r.name }} as a Secret through the kubernetes-provider mirror the transcripts
+            # key (transcripts-store.yaml) and retro-git (agents/coordinator/retro-git.yaml) use.
+            # READ-ONLY IS ENFORCED HERE, at the generator: the permission VALUES below are the
+            # literal `read`, never the claim's — a claim cannot express a write on this token.
+            apiVersion: generators.external-secrets.io/v1alpha1
+            kind: GithubAccessToken
+            metadata:
+              name: agent-git-readonly-{{ $r.name }}-{{ $i }}-gen
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-gen-{{ $i }}
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              appID: "4150968"       # homelab-agents (docs/github-apps.yaml); repositories does the scoping
+              installID: "142724430"
+              auth:
+                privateKey:
+                  secretRef: { name: agents-github-app, key: privateKey }
+              permissions:
+                {{- range $p := keys (get $g "permissions") | sortAlpha }}
+                {{ $p }}: read
+                {{- end }}
+              repositories:
+                {{- range $repo := get $g "repositories" }}
+                - {{ $repo }}
+                {{- end }}
+            ---
+            # Drive the generator → the CENTRAL Secret the in-namespace mirror below reads.
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: agent-git-readonly-{{ $r.name }}-{{ $i }}
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-es-{{ $i }}
+            spec:
+              refreshInterval: 45m
+              target:
+                name: agent-git-readonly-{{ $r.name }}-{{ $i }}
+                creationPolicy: Owner
+                template:
+                  engineVersion: v2
+                  data:
+                    token: {{ `'{{ .token }}'` }}
+              dataFrom:
+                - sourceRef:
+                    generatorRef:
+                      apiVersion: generators.external-secrets.io/v1alpha1
+                      kind: GithubAccessToken
+                      name: agent-git-readonly-{{ $r.name }}-{{ $i }}-gen
+            ---
+            # The in-namespace mirror (the FU-080 (a) shape): the stack workload secretKeyRefs this
+            # IN-NAMESPACE — no launcher or workflow step ever reads the value. Real Ready kept, so
+            # AgentStack READY ⇒ the token Secret exists in ns {{ $r.name }}.
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: agent-git-readonly-{{ $i }}
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-mirror-{{ $i }}
+            spec:
+              refreshInterval: 45m
+              secretStoreRef: { name: agent-git-readonly-{{ $r.name }}, kind: ClusterSecretStore }
+              target:
+                name: agent-git-readonly-{{ $i }}
+                creationPolicy: Owner
+              data:
+                - secretKey: token
+                  remoteRef: { key: agent-git-readonly-{{ $r.name }}-{{ $i }}, property: token }
+            {{- end }}
+            {{- if $fx.readOnlyGrants }}
+            ---
+            # The mirror plumbing (transcripts-store.yaml / retro-git.yaml precedent): a
+            # kubernetes-provider ClusterSecretStore whose SA can read EXACTLY this repo's
+            # read-only token Secrets in agent-coordinator — never the App private key.
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: eso-git-readonly-{{ $r.name }}
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-sa
+                gotemplating.fn.crossplane.io/ready: "True"
+            ---
+            # Exactly the read-only token Secrets, by name.
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: eso-git-readonly-{{ $r.name }}
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [""]
+                resources: ["secrets"]
+                resourceNames:
+                  {{- range $i, $g := $fx.readOnlyGrants }}
+                  - agent-git-readonly-{{ $r.name }}-{{ $i }}
+                  {{- end }}
+                verbs: ["get", "list", "watch"]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: eso-git-readonly-{{ $r.name }}
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-rb
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: eso-git-readonly-{{ $r.name }} }
+            subjects:
+              - { kind: ServiceAccount, name: eso-git-readonly-{{ $r.name }}, namespace: agent-coordinator }
+            ---
+            # ESO's kubernetes provider validates itself with a SelfSubjectRulesReview — bind this
+            # SA to the generic ClusterRole transcripts-store.yaml ships (retro-git.yaml precedent).
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: eso-git-readonly-{{ $r.name }}-ssrr
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-ssrr
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: eso-transcripts-reader-ssrr }
+            subjects:
+              - { kind: ServiceAccount, name: eso-git-readonly-{{ $r.name }}, namespace: agent-coordinator }
+            ---
+            apiVersion: external-secrets.io/v1
+            kind: ClusterSecretStore
+            metadata:
+              name: agent-git-readonly-{{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-store
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              provider:
+                kubernetes:
+                  remoteNamespace: agent-coordinator
+                  server:
+                    caProvider:
+                      type: ConfigMap
+                      name: kube-root-ca.crt
+                      key: ca.crt
+                      namespace: agent-coordinator
+                  auth:
+                    serviceAccount:
+                      name: eso-git-readonly-{{ $r.name }}
+                      namespace: agent-coordinator
+            {{- end }}
             ---
             # FU-089: the worker pod's identity for the proxy's TokenReview on /git-token.
             # No RBAC grants — the SA exists purely so a worker can PROVE "I am a worker pod in
