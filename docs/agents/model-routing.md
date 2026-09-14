@@ -594,7 +594,6 @@ now a separation under *normal* conditions rather than an absolute.
 ⚖ **Platform workers STAY on the subscription (operator ruling, 2026-08-12, v1.2 planning) —
 SUPERSEDED 2026-09-11 (operator): the platform claim rides `deepseek/deepseek-v4-flash` primary
 with `deepseek/deepseek-v4.1-flash` as the next-stronger escalation entry (`workerModelFallbacks[0]`
-**Superseded 2026-09-14 (homelab#1653):** the platform primary is `deepseek/deepseek-v4.1-flash:exacto` (the `:exacto` suffix on the STATIC model is what carries the FU-186 policy through a `shadow` stack — the proxy honours it on the request, `openrouter-proxy.py` `exacto_no_pin`) with `claude/haiku` as the fallback — every round-1 ride on v4-flash since 09-13 pinned to open-inference and looped to the turn cap; the exacto flip does not reach a `shadow` stack. Interim until #1640 theme 1.
 — the arbitrate re-dispatch-stronger and the budget re-grade land there in shadow mode); the M12
 degrade below still returns rides to `claude/haiku` at the credit floor.** The 2026-08-12 text stands
 as history:
@@ -606,6 +605,8 @@ CRs). Independence-from-the-code-under-change is the property that decides it. C
 budgets on [the platform stack](agentstack.md) stay cap-phantom until SUBSCRIPTION budgets are built (the "get
 subscription budgets working" direction — rides the post-FU-131 rail-aware-summation charter on
 #278), and the FU-168 famine fixes carry the throughput load alone.
+
+**Superseded 2026-09-14 (homelab#1653):** the platform primary is `deepseek/deepseek-v4.1-flash:exacto` (the `:exacto` suffix on the STATIC model is what carries the FU-186 policy through a `shadow` stack — the proxy honours it on the request, `openrouter-proxy.py` `exacto_no_pin`) with `claude/haiku` as the fallback — every round-1 ride on v4-flash since 09-13 pinned to open-inference and looped to the turn cap; the exacto flip does not reach a `shadow` stack. Interim until #1640 theme 1.
 
 **§M11 above is the general case; this is the emergency one, and it is what actually shipped**
 (homelab#158, in the launcher + the proxy). M11's ladder makes the subscription an ordinary
