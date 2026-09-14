@@ -10,6 +10,26 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-14 afternoon, same session — wound down at ~600k ctx; arc in TICK-LOG).**
+  (1) **PR#1652 (mgmt box follows master, ADR-129 amended)** — bot CR round fixed (CODEOWNERS
+  comment), pushed at ~08:2xZ, its re-verdict NOT observed; after bot approval it parks for the
+  SEAT's codeowner read (nixos/, CODEOWNERS). **Then the box:** its checkout still points at the
+  absent `mgmt-release`, so ONE hand-advance over the `mgmt-tf` ssh path (`scripts/mgmt-tf.sh`
+  shape, root@192.168.2.53): `git -C /var/lib/homelab fetch origin master && git reset --hard
+  origin/master`, `nixos-rebuild test --flake /var/lib/homelab/nixos#mgmt`, let `mgmt-confirm`
+  gate + `boot`; verify `systemctl list-timers mgmt-pull` armed and the first tick's journal
+  ("advanced the checkout" / "already at"). (2) **PR#1654 (NodeRebootedTwiceIn24h +
+  NodeRebootingRepeatedly)** — armed, CI + bot, no park; verify it merged and the 7 d rule fires
+  on 192.168.2.63. (3) **wk-03 serial console — NOT started (the #882 next act):**
+  `serial_device {}` on wk-03 in `tofu/proxmox.tf` (conditional per node, the ci-runner.tf
+  shape) + an Ansible role `pve-serial-log` (socat template unit on pve → /var/log/qemu-serial/
+  <vmid>.log; the guest already has `console=ttyS0`); apply via the box (`devbox run mgmt-tf --
+  plan`); the fix follows the first captured panic. Probe results on #882. (4) **#1620/#1621:
+  strip `agent/error` after 14:51Z** (the 09-13 strikes age out of the reader's 24 h window; a
+  strip before that re-latches within a tick). (5) **PR#1650 MERGED 08:00Z** — caps live (xs
+  0.50 / sm 1 / md 2 / lg 4 enforced, selection unchanged); the ledger mirror + 6 test assertions
+  re-pinned. (6) Still the operator's: the #1231 verdict (then #1238 re-parent + theme-1 filing +
+  queue), the #1162 verdict (recommendation posted), #1101's #1651 (unqueued).
 - **⚑ PICKUP (2026-09-14 morning corpus session — SELECTIVE corpus load, the heat trial;
   arc in TICK-LOG).** (1) **#1231 verdict is the operator's** — seat recommendation posted on the
   Goal (validated, narrowed: acceptance-1 leg observed under #1640 acceptance 6; #1238 re-parents
