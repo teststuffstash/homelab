@@ -329,9 +329,10 @@ migrate through).
 > shadow re-reviews homelab#923, the G-E fan-out arm; matrix row has the caveats). FU-181 holds
 > the post-reset hygiene legs; the P4 flip is DE-GATED from Sep-13 by the same ruling.
 >
-> **PARKED 2026-09-04 (FU-213):** both opencode.ai legs are off at the egress proxy
-> (`OPENCODE_RAIL_DISABLED=1`) until the `x-opencode-session` header question is settled —
-> vendor-side pause, posture unchanged. Status + next action: FU-213.
+> **UN-PARKED 2026-09-14 (FU-213 closed, homelab#1640 acceptance 2 / #1667):** the header
+> question is settled — the proxy now attaches `x-opencode-session: <the ride's session ref>`
+> on both legs, so `OPENCODE_RAIL_DISABLED` is back to `"0"` and the rail is live again
+> (posture unchanged; the knob stays as the operator's kill switch).
 
 ### The `x-opencode-session` header (the park's cause, 2026-09-04)
 
@@ -362,6 +363,12 @@ fixed 2026-05-22):
   the Go/Zen arms leave `cb_session` **None** (it is computed on the OpenRouter/breaker arms
   only), and a direct-key ride degrades to `direct:<key-hash>` — one bucket for every ride sharing
   that key, i.e. the hardcoded-id trap by another route.
+
+**CLOSED 2026-09-14 (homelab#1640 acceptance 2 / #1667):** both gaps are shut — `cb_session` is
+computed once for every arm (the Go/Zen arms no longer leave it `None`) and `_forward_upstream`
+attaches `x-opencode-session: <that ref>` on both legs, so the rail is un-parked
+(`OPENCODE_RAIL_DISABLED="0"`). The direct-key `direct:<key-hash>` bucket remains the one seam
+(one bucket per key, not per ride) — recorded, not fixed here.
 
 ### What the probing settled (2026-08-13; the numbers live in the matrix spike)
 

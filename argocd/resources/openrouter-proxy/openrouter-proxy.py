@@ -76,8 +76,11 @@ ZEN_PREFIX = "opencode/"
 # FU-213 (operator, 2026-09-04): the opencode.ai KILL SWITCH. OpenCode mailed that requests
 # from this proxy's client (`User-Agent: homelab-openrouter-proxy`, the UA both legs send —
 # set because Cloudflare 1010-blocks python-urllib's own) carry no `x-opencode-session` header
-# and "may error" from 2026-09-06. Until that header question is settled the whole vendor parks
-# behind one env var — BOTH legs by default, because they share the account, the key and the UA:
+# and "may error" from 2026-09-06. The park was the holding pattern; the header question is now
+# ANSWERED (Goal #1640 acceptance 2, 2026-09-14): `_forward_upstream` attaches
+# `x-opencode-session: <the ride's session ref>` on both opencode legs, so the deployment's
+# `OPENCODE_RAIL_DISABLED` is back to "0". The knob STAYS as the operator's kill switch — BOTH
+# legs by default, because they share the account, the key and the UA:
 #   OPENCODE_RAIL_DISABLED=1|all|both  → Go + Zen off
 #   OPENCODE_RAIL_DISABLED=go|zen      → that leg only (comma/space list accepted)
 #   unset|0|false|no                   → live (the default; nothing changes for a normal deploy)
@@ -282,6 +285,7 @@ PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
 UPTIME_FLOOR = float(os.environ.get("UPTIME_FLOOR", "95"))
 PIN_TTL_S = int(os.environ.get("PIN_TTL_S", "3600"))  # pin cache; providers/prices drift slowly
+PIN_CACHE_MAX = int(os.environ.get("PIN_CACHE_MAX", "512"))  # (session, model) keys are per-ride
 PIN_FAIL_TTL_S = int(os.environ.get("PIN_FAIL_TTL_S", "300"))  # don't hammer a failing endpoint
 MAX_PRICE_FACTOR = float(os.environ.get("MAX_PRICE_FACTOR", "2.0"))  # guard vs fallback lottery
 READ_TIMEOUT_S = int(os.environ.get("READ_TIMEOUT_S", "300"))  # idle timeout per upstream read
@@ -637,8 +641,13 @@ def _cb_config() -> dict:
 
 
 def _cb_session(headers) -> str:
-    """The breaker's session identity: the opaque ref for injected sessions (per-session/-project
-    secret name — exactly the granularity the storm had), a key-hash bucket for direct keys."""
+    """The ride's session identity: the opaque ref for injected sessions (per-session/-project
+    secret name — exactly the granularity the storm had), a key-hash bucket for direct keys.
+
+    Goal #1640 acceptance 2: this ONE identity has three consumers — the breaker's (session,
+    model) key, the pin cache's (session, model) key (`pin_for`), and the `x-opencode-session`
+    provider-affinity header sent to opencode.ai (FU-213). A constant here would be the
+    hardcoded-id trap the FU-213 thread names (affinity bound to the client, not the ride)."""
     auth = next((v for k, v in headers.items() if k.lower() == "authorization"), "")
     if auth.startswith("Bearer ref:"):
         return auth[len("Bearer ref:"):].strip()
@@ -739,9 +748,12 @@ _DROP_REQ = {
 }
 _DROP_RESP = {"connection", "keep-alive", "transfer-encoding", "content-length"}
 
-# (model, struck-provider tuple) -> (expires_epoch, provider block|None). The tuple key carries
-# the Goal #1640 acceptance 3 pair exclusion; the empty tuple is the ordinary per-model entry.
-_pins: dict[tuple[str, tuple[str, ...]], tuple[float, dict | None]] = {}
+# (session, model, struck-provider tuple) -> (expires_epoch, provider block|None). Goal #1640
+# acceptance 2 puts the RIDE in the key: the pre-fix entry was per MODEL alone, so one 1 h cache
+# hit served the whole fleet — a retry is a NEW session and still got the dead provider's pin
+# (the five 2026-09-13 deepseek-v4-flash rides). The tuple carries acceptance 3's pair exclusion;
+# the empty tuple is the ordinary entry.
+_pins: dict[tuple[str, str, tuple[str, ...]], tuple[float, dict | None]] = {}
 _pins_lock = threading.Lock()
 
 # ADR-096 market pricing (operator direction 2026-07-27): the pin's price basis upgrades from a
@@ -1414,19 +1426,24 @@ def compute_pin(model: str, exclude: frozenset = frozenset()) -> dict | None:
     return None
 
 
-def pin_for(model: str, exclude: frozenset = frozenset()) -> dict | None:
+def pin_for(model: str, exclude: frozenset = frozenset(), session: str | None = None) -> dict | None:
     """{"provider": <routing block>, "max_completion": int|None} for the model, or None
     (free model / no eligible endpoint / fetch failure).
 
     `exclude` (Goal #1640 acceptance 3) is the set of provider slugs struck for this task; the
-    pin is computed against the providers that remain, so a struck pair is never re-pinned. The
-    cache is keyed by (model, exclude) — the empty set is the common path and keeps its old key
-    shape in effect (one entry per model)."""
+    pin is computed against the providers that remain, so a struck pair is never re-pinned.
+
+    `session` (Goal #1640 acceptance 2) is the ride's session id — `_cb_session()`'s opaque ref,
+    the same value that becomes the `x-opencode-session` header. It is the CACHE key's first
+    element, so the pin is per (session, model) and a retry (a new session, a new pod) misses the
+    cache and computes its OWN pin. The pre-fix key was the model alone with `PIN_TTL_S` 1 h: one
+    entry served the whole fleet, which is why five re-dispatched rides on 2026-09-13 all landed
+    on the same provider. Only the cache key changed — the TTL and the pin math are untouched."""
     model = normalize_model(model)
     if model.endswith(":free"):
         return None  # $0 either way — free models sidestep M4 (model-routing.md)
     now = time.time()
-    key = (model, tuple(sorted(exclude)))
+    key = (str(session or ""), model, tuple(sorted(exclude)))
     with _pins_lock:
         hit = _pins.get(key)
         if hit and hit[0] > now:
@@ -1438,6 +1455,12 @@ def pin_for(model: str, exclude: frozenset = frozenset()) -> dict | None:
         log(f"pin: endpoints fetch failed for {model}: {e} — passthrough")
         pin, ttl = None, PIN_FAIL_TTL_S
     with _pins_lock:
+        if len(_pins) >= PIN_CACHE_MAX:  # per-ride session keys never repeat — sweep, then hard-cap
+            for k in [k for k, v in _pins.items() if v[0] <= now]:
+                del _pins[k]
+            if len(_pins) >= PIN_CACHE_MAX:  # all still live: evict soonest-to-expire to make room
+                for k, _ in sorted(_pins.items(), key=lambda kv: kv[1][0])[:len(_pins) - PIN_CACHE_MAX + 1]:
+                    del _pins[k]
         _pins[key] = (now + ttl, pin)
     return pin
 
@@ -2247,6 +2270,17 @@ class Proxy(BaseHTTPRequestHandler):
                 allowed["x-api-key"] = rail_key
                 allowed["Authorization"] = f"Bearer {rail_key}"
                 note += "+zen-auth-swap" if zen_leg else "+go-auth-swap"
+                # FU-213 (closed by Goal #1640 acceptance 2): the vendor's PROVIDER-AFFINITY key,
+                # not auth — opencode routes requests carrying the same id to the same upstream
+                # provider so the prompt cache hits, and absent it falls back to CLIENT-IP
+                # affinity (the whole fleet egresses one IP, which is why the mail read "may
+                # error"). A constant would be the hardcoded-id trap the FU-213 thread names
+                # (affinity bound to the installation, not the conversation), so the value is the
+                # RIDE's session ref — `_cb_session()`, the same id that keys the (session, model)
+                # pin. The note carries the id so one proxy log line evidences the header.
+                if cb_session:
+                    allowed["x-opencode-session"] = cb_session
+                    note += f"+oc-session:{cb_session}"
             elif or_leg:
                 # or_leg: resolve ref-auth and guard against subscription oauth egress
                 # Copy the inbound Authorization header into allowed BEFORE resolving the ref
@@ -3161,6 +3195,11 @@ class Proxy(BaseHTTPRequestHandler):
                             return False, "openrouter-budget-exhausted"
                 return True, None  # unknown ref = fail-open (the key's hard limit is the belt)
 
+            # Goal #1640 acceptance 2: the pin cache is keyed per (session, model), so the
+            # decision's pricing pin is the RIDE's — the launcher sends its session id in the
+            # /route body (agent-session.sh: agent-<project>-<task>-r<round>).
+            _route_session = str(req_body.get("session") or "")
+
             def _price(model, exclude=frozenset()):
                 # Goal #1640 acceptance 3: `exclude` is the task's struck provider slugs, so the
                 # price is the CELL's — the provider the model lands on AFTER the exclusion — and
@@ -3168,7 +3207,7 @@ class Proxy(BaseHTTPRequestHandler):
                 m = normalize_model(model)
                 if m.endswith(":free"):
                     return 0.0, "free", None
-                pin = pin_for(m, exclude)
+                pin = pin_for(m, exclude, _route_session)
                 if pin and pin.get("eff_in") is not None:
                     return pin["eff_in"], pin.get("basis"), pin["provider"]["order"][0]
                 return None, None, None
@@ -3183,7 +3222,8 @@ class Proxy(BaseHTTPRequestHandler):
                 # Goal #1640 acceptance 3: pin the SAME post-exclusion provider the decision priced —
                 # never the struck pair the router just excluded.
                 pin = pin_for(str(decision["model"]),
-                              frozenset(decision.get("strike_excluded") or ()))
+                              frozenset(decision.get("strike_excluded") or ()),
+                              _route_session)
                 if pin:
                     decision["pin"] = pin["provider"]
             # ADR-104: a DRAW logs its provenance — pool#slot@version is what makes a research
@@ -3244,7 +3284,12 @@ class Proxy(BaseHTTPRequestHandler):
         note = "passthrough"
         or_model = None
         or_provider = None
-        cb_session = None
+        # Goal #1640 acceptance 2 + FU-213: the ride's session identity is computed ONCE, here, for
+        # every arm — the breaker's key, the (session, model) pin key and the
+        # `x-opencode-session` header all read the same value. The Go/Zen arms used to leave it
+        # None (it was assigned only on the OpenRouter/breaker arm), which is what FU-213's
+        # "our client sends no x-opencode-session" was.
+        cb_session = _cb_session(self.headers)
         _cred_was_cached = False  # homelab#1020: set below before _guardrail_reject calls _resolve_ref
         go_leg = False  # ADR-107 (homelab#421): Go rail routing by model prefix
         zen_leg = False  # homelab#445: Zen free rail routing by model prefix
@@ -3304,7 +3349,7 @@ class Proxy(BaseHTTPRequestHandler):
                             # the caller's slot walk needs a clean end.
                             _slot = int(_at_tok)
                             _nm = normalize_model(_m_base)
-                            _sp = pin_for(_nm)
+                            _sp = pin_for(_nm, session=cb_session)
                             if _sp is None and _nm.endswith(":free"):
                                 # pin_for short-circuits :free (M4 sidestep) before ranking —
                                 # but a slot ride is EVIDENCE work and free candidates are
@@ -3332,7 +3377,7 @@ class Proxy(BaseHTTPRequestHandler):
                             # Best-effort cap lookup for an explicit slug: its ranked entry, when
                             # the M4 machinery knows one; an unranked slug keeps the global floor.
                             _nm = normalize_model(_m_base)
-                            _sp = pin_for(_nm)
+                            _sp = pin_for(_nm, session=cb_session)
                             if _sp is None and _nm.endswith(":free"):
                                 # Same :free fallback as the numeric slot arm above — pin_for
                                 # short-circuits :free before ranking, and without the ranked
@@ -3391,7 +3436,6 @@ class Proxy(BaseHTTPRequestHandler):
                         # ADR-096 addendum 3: a tripped breaker answers WITHOUT forwarding — the
                         # storm's other ~130 calls never reach the provider, and the error body
                         # carries the circuit-open marker the in-pod watchdog kills on.
-                        cb_session = _cb_session(self.headers)
                         tripped = _cb_open(cb_session, or_model)
                         if tripped:
                             code = 502 if tripped["class"] == "cred" else (401 if tripped["class"] == "auth" else 400)
@@ -3413,7 +3457,10 @@ class Proxy(BaseHTTPRequestHandler):
                             self.wfile.write(reject)
                             self.close_connection = True
                             return
-                        pin = None if exacto_no_pin else pin_for(str(payload["model"]))
+                        # Goal #1640 acceptance 2: the injected pin is the RIDE's — keyed by
+                        # the session id, so a retry is not served the dead session's pin.
+                        pin = (None if exacto_no_pin
+                               else pin_for(str(payload["model"]), session=cb_session))
                         # An explicit `provider` (a harness/opencode.json that CAN carry prefs, a
                         # hand-crafted request, or the @provider suffix above) always wins — never
                         # overwrite policy already in the body.
@@ -3500,7 +3547,6 @@ class Proxy(BaseHTTPRequestHandler):
                         body = json.dumps(translated).encode()
                         note = "or-translate-leg"
                         or_model = bare  # For logging, use the bare model id
-                        cb_session = _cb_session(self.headers)
             except ValueError:
                 pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
@@ -3669,12 +3715,45 @@ def _self_test() -> int:
 
     seen = {}
 
+    # Goal #1640 acceptance 2: the OpenRouter stub must answer the pin's endpoints fetch
+    # (`GET {UPSTREAM}/api/v1/models/<model>/endpoints`), so the self-test can drive the REAL
+    # `compute_pin` and observe which provider a ride's completion is pinned to. `_endpoints`
+    # maps a model id to its endpoint rows and is MUTABLE — a row flipping mid-test is how the
+    # test models "the fleet-wide cache served a dead provider" (the 2026-09-13 shape).
+    _endpoints = {}
+
+    def _endpoint_row(provider, slug, prompt, cache_read=None, maxc=8192, uptime=100.0):
+        row = {"provider_name": provider, "tag": slug + "/standard", "uptime_last_30m": uptime,
+               "supported_parameters": ["tools", "max_tokens"], "max_completion_tokens": maxc,
+               "pricing": {"prompt": str(prompt), "completion": str(prompt * 3)}}
+        if cache_read is not None:
+            row["pricing"]["input_cache_read"] = str(cache_read)
+        return row
+
     class Stub(BaseHTTPRequestHandler):
         name = ""
         protocol_version = "HTTP/1.1"
 
         def log_message(self, *_):
             pass
+
+        def do_GET(self):
+            path = self.path.split("?", 1)[0]
+            if path.startswith("/api/v1/models/") and path.endswith("/endpoints"):
+                model = path[len("/api/v1/models/"):-len("/endpoints")]
+                rows = _endpoints.get(model)
+                if rows is not None:
+                    out = json.dumps({"data": {"endpoints": rows}}).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(out)))
+                    self.end_headers()
+                    self.wfile.write(out)
+                    return
+            # Everything else keeps the handler's own default (501): the market pricing fetch
+            # fail-softs to the list basis and the /generation harvest gives up quietly, exactly
+            # as before this stub learned the endpoints route.
+            self.send_error(501, "Unsupported method ('GET')")
 
         def do_POST(self):
             length = int(self.headers.get("Content-Length") or 0)
@@ -3685,6 +3764,9 @@ def _self_test() -> int:
                 "auth": self.headers.get("Authorization"),
                 "x_api_key": self.headers.get("x-api-key"),
                 "user_agent": self.headers.get("User-Agent"),
+                # Goal #1640 acceptance 2 / FU-213: the opencode provider-affinity header the
+                # proxy attaches on the Go/Zen legs (never to OpenRouter).
+                "x_opencode_session": self.headers.get("x-opencode-session"),
                 "model": parsed.get("model") if body else None,
                 "body_raw": body,
             }
@@ -3740,6 +3822,9 @@ def _self_test() -> int:
                 "auth": self.headers.get("Authorization"),
                 "x_api_key": self.headers.get("x-api-key"),
                 "user_agent": self.headers.get("User-Agent"),
+                # Goal #1640 acceptance 2 / FU-213: the opencode provider-affinity header the
+                # proxy attaches on the Go/Zen legs (never to OpenRouter).
+                "x_opencode_session": self.headers.get("x-opencode-session"),
                 "model": parsed.get("model") if body else None,
                 "body_raw": body,
             }
@@ -3778,6 +3863,9 @@ def _self_test() -> int:
                 "auth": self.headers.get("Authorization"),
                 "x_api_key": self.headers.get("x-api-key"),
                 "user_agent": self.headers.get("User-Agent"),
+                # Goal #1640 acceptance 2 / FU-213: the opencode provider-affinity header the
+                # proxy attaches on the Go/Zen legs (never to OpenRouter).
+                "x_opencode_session": self.headers.get("x-opencode-session"),
                 "model": parsed.get("model") if body else None,
                 "body_raw": body,
             }
@@ -4716,6 +4804,164 @@ data: [DONE]
     c.close()
     check(resp["reason"] != "rail-disabled",
           f"rail-disabled: cleared knob drops the reason (got {resp['reason']})")
+
+    # ── Goal #1640 acceptance 2 (FU-213 closes): the pin is keyed (session, model) and the
+    # ride's session ref IS the `x-opencode-session` header ─────────────────────────────────────
+    print("\n=== pin keyed (session, model) + x-opencode-session (Goal #1640 acceptance 2) ===")
+    _EP_MODEL = "vendor/pin-model"
+    # The endpoints fixture: ProviderA is the cheapest tooled cell, ProviderB the next. The rows
+    # are what the REAL compute_pin ranks, so the assertions below read the pin the proxy would
+    # actually inject.
+    _endpoints[_EP_MODEL] = [_endpoint_row("ProviderA", "providera", 0.10, 0.01),
+                             _endpoint_row("ProviderB", "providerb", 0.30, 0.03)]
+    # Two ride refs, the granularity _cb_session() derives from an injected credential
+    # (acceptance: "two concurrent rides on one model ... self-test with two session ids").
+    for _r in ("agent-egress/ride-a-worker", "agent-egress/ride-b-worker"):
+        _refs[_r] = (time.time() + 3600, {"key": "test-or-key-" + _r[-1], "guardrail": "",
+                                          "kind": "openrouter", "has_cr": False})
+
+    def _pin_of(model, ref, path="/api/v1/chat/completions"):
+        """Drive the real proxy once and return (pinned provider slug|None, forwarded body)."""
+        seen.clear()
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("POST", path,
+                  body=json.dumps({"model": model,
+                                   "messages": [{"role": "user", "content": "hi"}]}),
+                  headers={"Content-Type": "application/json",
+                           "Authorization": f"Bearer ref:{ref}"})
+        r = c.getresponse()
+        r.read()
+        c.close()
+        o = seen.get("openrouter") or {}
+        try:
+            prov = ((json.loads(o.get("body_raw") or b"{}").get("provider") or {})
+                    .get("order") or [None])[0]
+        except (ValueError, TypeError):
+            prov = None
+        return prov, o
+
+    # (a) THE DISCRIMINATOR — the pre-fix cache was keyed by the MODEL alone, so one 1 h entry
+    # served the whole fleet and no retry could change provider (the five 2026-09-13 rides).
+    # Ride A pins ProviderA; the eligible set then changes (the struck pair is excluded from the
+    # candidate pool, acceptance 3's exclusion); ride B — a NEW session, the retry — must compute
+    # its OWN pin, not be handed A's. Pre-fix this read ProviderA (RED).
+    _pins.clear()
+    _pa = pin_for(_EP_MODEL, session="agent-egress/ride-a-worker")
+    check(_pa is not None and _pa["provider"]["order"][0] == "providera",
+          f"pin(session,model): ride A pins the cheapest cell providera (got {(_pa or {}).get('provider')})")
+    _endpoints[_EP_MODEL] = [_endpoint_row("ProviderB", "providerb", 0.05, 0.005)]
+    _pb = pin_for(_EP_MODEL, session="agent-egress/ride-b-worker")
+    check(_pb is not None and _pb["provider"]["order"][0] == "providerb",
+          "pin(session,model): a NEW session computes its own pin (the fleet-wide entry is gone) "
+          f"— got {(_pb or {}).get('provider')}")
+    check(_pa["provider"]["order"][0] == "providera",
+          "pin(session,model): the first session keeps ITS OWN pin (its entry was not overwritten)")
+    _model_keys = [k for k in _pins if k[1] == _EP_MODEL]
+    check(len(_model_keys) == 2,
+          f"pin(session,model): one cache entry per (session, model) — pre-fix this was 1 "
+          f"(got {len(_model_keys)}: {sorted(k[0] for k in _model_keys)})")
+
+    # (b) the acceptance sentence, end-to-end through the proxy: two concurrent rides on ONE
+    # model whose tasks differ in whether the pair is struck pin to DIFFERENT providers, and each
+    # ride's completion is pinned by its OWN session key.
+    _pins.clear()
+    _endpoints[_EP_MODEL] = [_endpoint_row("ProviderA", "providera", 0.10, 0.01),
+                             _endpoint_row("ProviderB", "providerb", 0.30, 0.03)]
+    _pa_e2e, _o_a = _pin_of(_EP_MODEL, "agent-egress/ride-a-worker")
+    check(_pa_e2e == "providera",
+          f"pin end-to-end: ride A's forwarded body carries the pinned provider (got {_pa_e2e})")
+    # Ride A's task strikes the pair: ProviderA leaves the eligible set for THAT cell. (The
+    # shadow request deliberately does not pass an exclude, so the fixture models the strike the
+    # way the excited pool sees it.)
+    _endpoints[_EP_MODEL] = [_endpoint_row("ProviderB", "providerb", 0.30, 0.03)]
+    _pb_e2e, _o_b = _pin_of(_EP_MODEL, "agent-egress/ride-b-worker")
+    check(_pb_e2e == "providerb",
+          f"pin end-to-end: ride B (the struck pair's next cell) pins elsewhere (got {_pb_e2e})")
+    check(_pa_e2e != _pb_e2e,
+          "pin end-to-end: two rides on ONE model pin to DIFFERENT providers after a pair strike")
+    _pins.clear()
+    _endpoints.pop(_EP_MODEL, None)
+
+    # (c) the ride's session ref IS the `x-opencode-session` header on the Go/Zen legs (FU-213).
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/kimi-k3",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:agent-egress/ride-a-worker"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    g = seen.get("go") or {}
+    check(g.get("x_opencode_session") == "agent-egress/ride-a-worker",
+          "FU-213: Go leg carries x-opencode-session = the ride's session ref "
+          f"(got {g.get('x_opencode_session')!r} — pre-acceptance-2 this was None)")
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode/nemotron-3-ultra-free",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:agent-egress/ride-b-worker"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    z = seen.get("zen") or {}
+    check(z.get("x_opencode_session") == "agent-egress/ride-b-worker",
+          "FU-213: Zen leg carries x-opencode-session = the ride's session ref "
+          f"(got {z.get('x_opencode_session')!r})")
+    # A direct-key ride has no ref name, so the identity degrades to `direct:<key-hash>` — the
+    # point is that it is NEVER None (a missing header is the exact defect the vendor mailed
+    # about). The hash bucket is deliberately the FU-213 doc's remaining seam, not this fix.
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/kimi-k3",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json", "Authorization": "Bearer test-key"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check((seen.get("go") or {}).get("x_opencode_session", "").startswith("direct:"),
+          "FU-213: a direct-key ride still carries the header (direct:<hash>) — never None "
+          f"(got {(seen.get('go') or {}).get('x_opencode_session')!r})")
+    # ... and the header is opencode-specific: OpenRouter must not see it.
+    seen.clear()
+    _o_or = _pin_of("vendor/pin-model", "agent-egress/ride-a-worker")[1]
+    check(_o_or.get("x_opencode_session") is None,
+          "FU-213: the affinity header never reaches the OpenRouter leg "
+          f"(got {_o_or.get('x_opencode_session')!r})")
+
+    # (d) the cache is BOUNDED (reviewer blocking finding, round 2): `session` is minted fresh
+    # per ride/round, so the (session, model) key never repeats — without eviction `_pins` grows
+    # monotonically for the pod's life, on a container with a documented OOM history. Seed past
+    # the cap, drive one real pin, and assert the bound holds and the just-written entry survives.
+    _pins.clear()
+    _endpoints[_EP_MODEL] = [_endpoint_row("ProviderA", "providera", 0.10, 0.01)]
+    _now = time.time()
+    # (d1) a mix of expired and live entries: the expiry sweep alone must bring it under the cap.
+    for _i in range(PIN_CACHE_MAX + 50):
+        _exp = _now - 10 if _i % 2 == 0 else _now + 3600
+        _pins[("seed-ride-%d" % _i, _EP_MODEL, ())] = (_exp, None)
+    pin_for(_EP_MODEL, session="agent-egress/ride-d-worker")
+    check(len(_pins) <= PIN_CACHE_MAX,
+          f"pin cache bounded: a write past the cap stays within it after the sweep "
+          f"(got {len(_pins)}, cap {PIN_CACHE_MAX})")
+    check(("agent-egress/ride-d-worker", _EP_MODEL, ()) in _pins,
+          "pin cache bounded: the entry just written is present after the sweep")
+    # (d2) ALL entries live: the sweep frees nothing, so the hard cap must evict down to the bound.
+    _pins.clear()
+    for _i in range(PIN_CACHE_MAX + 50):
+        _pins[("seed-live-%d" % _i, _EP_MODEL, ())] = (_now + 3600, None)
+    pin_for(_EP_MODEL, session="agent-egress/ride-d-worker")
+    check(len(_pins) <= PIN_CACHE_MAX,
+          f"pin cache bounded: an all-live seed is hard-capped at PIN_CACHE_MAX "
+          f"(got {len(_pins)}, cap {PIN_CACHE_MAX})")
+    check(("agent-egress/ride-d-worker", _EP_MODEL, ()) in _pins,
+          "pin cache bounded: the entry just written survives the hard-cap eviction")
+    _pins.clear()
+    _endpoints.pop(_EP_MODEL, None)
 
     # ── Zen metering (homelab#445): usd=0.0, gometer.price skipped, extract_usage kept ───────────
     print("\n=== Zen metering tests (homelab#445) ===")

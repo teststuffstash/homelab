@@ -451,8 +451,8 @@ never the session's arc — that is TICK-LOG's.)
   churn, not a wedge) → the quiet-month window (FU-150) restarts from 09-05 · FU-192 per-tenant ingest sizing (due ~09-03, PAST) · **paid-flash REVERT EXECUTED 2026-09-05 07:54Z** (PR#1395 — none of #715's three
   triggers had fired; operator-ordered; the FU-095 flip child, if wanted, mints from here;
   Go re-flip = FU-181) · opencode.ai
-  rails PARKED behind `OPENCODE_RAIL_DISABLED` since 09-04 (FU-213; the vendor's 09-06
-  header deadline; the jail shim stays live as the test bench).
+  rails UN-PARKED 2026-09-14 (`OPENCODE_RAIL_DISABLED` back to `"0"`; FU-213 closed by
+  homelab#1640 acceptance 2 / #1667 — the proxy now sends `x-opencode-session`).
 
 ## Durable warnings — EVICTED (S4 #765, 2026-08-23)
 

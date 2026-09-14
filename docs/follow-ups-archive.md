@@ -10,6 +10,19 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-213** *(archived 2026-09-14)* — **opencode.ai un-parked: the client now sends
+  `x-opencode-session`.** Parked 2026-09-04 (operator mail: our UA sent no such header, "may
+  error" from 09-06) behind `OPENCODE_RAIL_DISABLED=1`; closed by homelab#1640 acceptance 2
+  (homelab#1667). What shipped: `_forward_upstream` attaches `x-opencode-session: <the ride's
+  session ref>` on BOTH opencode legs (never to OpenRouter), the value being `_cb_session()`'s
+  opaque ref — the SAME id that keys the breaker and the (session, model) pin, so affinity is
+  bound to the ride, not the installation (the hardcoded-id trap the thread named); the Go/Zen
+  arms now compute `cb_session` (they left it `None`); `OPENCODE_RAIL_DISABLED` back to `"0"`
+  (the knob stays as the operator's kill switch). Evidence: `devbox run proxy-self-test` — Go
+  and Zen legs carry the header, a direct-key ride degrades to `direct:<hash>` (never `None`),
+  OpenRouter never sees it. Gotcha: a direct-key ride's identity is a key-hash bucket, not a
+  per-ride id — the remaining seam, not this fix. Prior art: earendil-works/pi#4847.
+
 - **FU-236** *(archived 2026-09-13)* — **`homelab-sentinel` App cutover (ADR-130), all four steps
   the same day:** App 4929271 created/installed + ESO chain (`sentinel-git.yaml`); `sentinel-argo`
   switched direct (guarded file), first status under homelab-sentinel[bot] 11:17:58Z;
