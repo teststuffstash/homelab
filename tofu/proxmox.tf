@@ -43,6 +43,13 @@ resource "proxmox_virtual_environment_vm" "node" {
     bridge = var.network_bridge
   }
 
+  # Serial console for the nodes flagged `serial` (variables.tf) — the guest kernel already logs
+  # to ttyS0; the socket is tailed on pve by ansible/roles/pve-serial-log.
+  dynamic "serial_device" {
+    for_each = each.value.serial ? [1] : []
+    content {}
+  }
+
   operating_system {
     type = "l26"
   }

@@ -44,6 +44,7 @@ because their real values are here, not baked in).
 | `matchbox-talos-assets.yml` | `matchbox-talos-assets` | Talos kernel/initramfs into Matchbox assets |
 | `pve-upgrade.yml` | — | in-major Proxmox dist-upgrade + `/etc/pve` snapshot (never reboots); `devbox run -- ansible-playbook ansible/pve-upgrade.yml` |
 | `pve-node-exporter.yml` | `pve-node-exporter` | the pve thin-pool meter (FU-093): node_exporter + textfile timer on the hypervisor; `devbox run -- ansible-playbook ansible/pve-node-exporter.yml` |
+| `pve-serial-log.yml` | `pve-serial-log` | serial-console capture for the VMs flagged `serial = true` in `tofu/variables.tf` (#882): a `qemu-serial-log@<vmid>` socat unit per vmid → `/var/log/qemu-serial/<vmid>.log`; `devbox run -- ansible-playbook ansible/pve-serial-log.yml` |
 
 ## Running
 
