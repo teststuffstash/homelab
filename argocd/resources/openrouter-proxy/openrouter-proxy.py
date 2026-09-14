@@ -331,6 +331,7 @@ _gen_stats_lock = threading.Lock()
 _SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 _refs: dict[str, tuple[float, dict | None]] = {}  # "ns/name" -> (expires_epoch, {key,guardrail}|None)
 _refs_lock = threading.Lock()
+_refs_transient: set[str] = set()  # homelab#1620: refs whose cached miss was a kube-API failure (guarded by _refs_lock)
 
 
 def _cr_guardrail(ns: str, secret_name: str) -> tuple[str | None, bool | None, str | None]:
@@ -384,16 +385,23 @@ def _resolve_ref(ref: str) -> dict | None:
         if hit and hit[0] > now:
             return hit[1]
     resolved = None
+    transient = False  # homelab#1620: the kube API itself unreachable — NOT a credential verdict
     try:
         ns, name = ref.split("/", 1)
-        token = open(f"{_SA_DIR}/token").read().strip()
-        ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
-        req = urllib.request.Request(
-            f"https://kubernetes.default.svc/api/v1/namespaces/{ns}/secrets/{name}",
-            headers={"Authorization": "Bearer " + token},
-        )
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
-            secret = json.load(resp)
+        try:
+            secret = _kube_get_secret(ns, name)
+        except urllib.error.HTTPError as e:
+            # 404/403 = a definitive verdict on the ref (missing Secret, RBAC); 5xx = the API
+            # server itself failing — the same class as unreachable.
+            transient = e.code >= 500
+            raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            # Connection refused / reset / timeout: the control plane is away (2026-09-14: a
+            # 70 s cp-01 power-cycle produced four of these 7 s apart, one per negative-TTL
+            # expiry, and the cred circuit locked the (session, model) for 900 s). Deliberately
+            # NOT every OSError: a missing SA token file is the proxy misconfigured — definitive.
+            transient = True
+            raise
         if (secret.get("metadata", {}).get("labels") or {}).get(SESSION_KEY_LABEL) == "true":
             data = secret.get("data") or {}
             # OPENROUTER_API_KEY = the standing/session OpenRouter keys; AUTH_TOKEN = the
@@ -418,14 +426,40 @@ def _resolve_ref(ref: str) -> dict | None:
                     router.enroll_key_ref(ref)
         else:
             log(f"ref: {ref} exists but lacks {SESSION_KEY_LABEL} — refusing (not a session key)")
-    except Exception as e:  # noqa: BLE001 — a failed resolve degrades to passthrough (upstream 401s the ref)
-        log(f"ref: resolve failed for {ref}: {e}")
+    except Exception as e:  # noqa: BLE001 — a failed resolve is refused locally by the callers (homelab#1004)
+        log(f"ref: resolve failed for {ref}{' (transient — kube API unreachable)' if transient else ''}: {e}")
     with _refs_lock:
         # homelab#1004: negative entries (resolved is None) get a short TTL so a transient k8s
         # API blip doesn't poison the cache for the full window — the next request retries naturally.
         ttl = REF_CACHE_TTL_S if resolved is not None else NEGATIVE_CACHE_TTL_S
         _refs[ref] = (now + ttl, resolved)
+        # homelab#1620: remember WHY it is unresolved so the callers can answer a transient with
+        # a retriable 503 and keep it out of the cred circuit (a definitive miss still counts).
+        if resolved is None and transient:
+            _refs_transient.add(ref)
+        else:
+            _refs_transient.discard(ref)
     return resolved
+
+
+def _kube_get_secret(ns: str, name: str) -> dict:
+    """The one kube-API read behind _resolve_ref — a seam so the self-test can make the control
+    plane 'unreachable' without a CA file (homelab#1620)."""
+    token = open(f"{_SA_DIR}/token").read().strip()
+    ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
+    req = urllib.request.Request(
+        f"https://kubernetes.default.svc/api/v1/namespaces/{ns}/secrets/{name}",
+        headers={"Authorization": "Bearer " + token},
+    )
+    with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+        return json.load(resp)
+
+
+def _ref_unresolved_transient(ref: str) -> bool:
+    """True when the last (cached) miss for `ref` was the kube API being unreachable, not a
+    verdict on the ref (homelab#1620)."""
+    with _refs_lock:
+        return ref in _refs_transient
 
 
 def _is_negative_cache_hit(ref: str) -> bool:
@@ -589,6 +623,10 @@ def _inject_ref_auth(headers: dict) -> str:
     # homelab#1004: fail CLOSED — remove the header so it is never forwarded credential-less.
     # A typed local refusal (502) is louder than a laundered upstream 401 that latches the breaker.
     del headers[auth]
+    # homelab#1620: the kube API being away is a transient for the CLIENT to retry (503), never a
+    # credential verdict — it must not count toward the cred circuit.
+    if _ref_unresolved_transient(ref):
+        return "+cred-unresolved-transient"
     return "+cred-unresolved"
 
 
@@ -699,7 +737,10 @@ def _cb_cred_unresolved(session: str, model: str) -> None:
     A permanently unresolvable ref (deleted Secret, RBAC drift) must still fire
     router.record_circuit_open so the FU-021 storm watchdog keeps its signal.  Cached
     negative hits (transient blips inside NEGATIVE_CACHE_TTL_S) are handled by the caller
-    and must NOT reach this function — the transient case must not regress.
+    and must NOT reach this function — the transient case must not regress. Neither may a FRESH
+    miss whose cause is the kube API being unreachable (homelab#1620: a 70 s control-plane
+    power-cycle = four fresh misses 7 s apart = a 900 s lockout): those answer 503 upstream of
+    this function and never reach it.
 
     The cred axis uses the same threshold as auth (both mean "the proxy could not
     authenticate the request"), but is counted separately because the failure is local
@@ -2236,6 +2277,17 @@ class Proxy(BaseHTTPRequestHandler):
                 if auth_v:
                     allowed["Authorization"] = auth_v
                 _inject_suffix = _inject_ref_auth(allowed)
+                # homelab#1620: the kube API unreachable while resolving the ref — a retriable
+                # 503 for the client, no breaker count (it is not the credential that failed).
+                if "+cred-unresolved-transient" in _inject_suffix:
+                    log(f"{self.command} {self.path} → 503 [or-leg] model={or_model or '-'} - "
+                        f"credential ref resolve hit a transient kube-API failure — retry in "
+                        f"{NEGATIVE_CACHE_TTL_S}s (homelab#1620, no breaker count)")
+                    self._reply_json(503, {
+                        "error": "credential ref could not be resolved — kube API unreachable, retry",
+                        "retry_after_s": NEGATIVE_CACHE_TTL_S,
+                    }, retry_after=NEGATIVE_CACHE_TTL_S)
+                    return
                 # homelab#1004: fail CLOSED — a ref that cannot be resolved must never be
                 # forwarded credential-less (a single upstream 401 latches the circuit-breaker).
                 if "+cred-unresolved" in _inject_suffix:
@@ -2269,6 +2321,16 @@ class Proxy(BaseHTTPRequestHandler):
             headers = {k: v for k, v in headers.items() if k.lower() != "anthropic-beta"}
         else:
             _inject_suffix = _inject_ref_auth(headers)
+            # homelab#1620: transient kube-API failure → retriable 503, no breaker count.
+            if "+cred-unresolved-transient" in _inject_suffix:
+                log(f"{self.command} {self.path} → 503 [ref-unresolved-transient] - "
+                    f"credential ref resolve hit a transient kube-API failure — retry in "
+                    f"{NEGATIVE_CACHE_TTL_S}s (homelab#1620, no breaker count)")
+                self._reply_json(503, {
+                    "error": "credential ref could not be resolved — kube API unreachable, retry",
+                    "retry_after_s": NEGATIVE_CACHE_TTL_S,
+                }, retry_after=NEGATIVE_CACHE_TTL_S)
+                return
             # homelab#1004: fail CLOSED — a ref that cannot be resolved must never be forwarded
             # credential-less (a single upstream 401 latches the circuit-breaker).
             if "+cred-unresolved" in _inject_suffix:
@@ -2951,11 +3013,13 @@ class Proxy(BaseHTTPRequestHandler):
             return
         self._forward(None, "passthrough")
 
-    def _reply_json(self, status: int, payload: dict) -> None:
+    def _reply_json(self, status: int, payload: dict, retry_after: int | None = None) -> None:
         body = json.dumps(payload).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        if retry_after is not None:
+            self.send_header("Retry-After", str(retry_after))
         self.end_headers()
         self.wfile.write(body)
 
@@ -5656,6 +5720,61 @@ data: [DONE]
     # Clean up breaker state
     with _cb_lock:
         _cb.clear()
+
+    # ── #1620: a transient kube-API failure during ref resolve must NOT count as cred ──────────
+    # 2026-09-14: cp-01 power-cycled for 70 s; the proxy's four fresh resolve misses (one per
+    # negative-TTL expiry) tripped the cred circuit for 900 s and a ride died on it ten minutes
+    # later. The API being away is a 503-retry for the client, never a credential verdict.
+    print("\n=== Transient kube-API failure during ref resolve → 503, no breaker (homelab#1620) ===")
+    with _cb_lock:
+        _cb.clear()
+    with _refs_lock:
+        _refs.clear()
+        _refs_transient.clear()
+    _real_kube_get_secret = globals()["_kube_get_secret"]
+
+    def _refused(ns, name):  # the control plane is away
+        raise urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+
+    globals()["_kube_get_secret"] = _refused
+    transient_ref = "default/test-transient-cred"
+    try:
+        for i in range(5):  # one past the auth threshold — the circuit must still not open
+            seen.clear()
+            with _refs_lock:
+                _refs.pop(transient_ref, None)  # each call is a FRESH miss, as after the TTL
+            st, data = call("gpt-4o", extra_headers={
+                "Authorization": f"Bearer ref:{transient_ref}",
+            })
+            check(st == 503, f"transient-cred: fresh miss {i+1}/5 returns 503 (got {st})")
+            check(not seen, "transient-cred: no upstream received the request (fail-closed)")
+        with _cb_lock:
+            transient_key = next((k for k in _cb if transient_ref in k[0]), None)
+        check(transient_key is None,
+              "transient-cred: five fresh transient misses created NO breaker state")
+        check(_ref_unresolved_transient(transient_ref),
+              "transient-cred: the miss is remembered as transient")
+        # And a DEFINITIVE miss on the same ref afterwards still counts (the #1020 contract).
+        globals()["_kube_get_secret"] = _real_kube_get_secret
+        with _refs_lock:
+            _refs.pop(transient_ref, None)
+        st, data = call("gpt-4o", extra_headers={
+            "Authorization": f"Bearer ref:{transient_ref}",
+        })
+        check(st == 502, f"transient-cred: a definitive miss afterwards returns 502 again (got {st})")
+        check(not _ref_unresolved_transient(transient_ref),
+              "transient-cred: the definitive miss clears the transient marker")
+        with _cb_lock:
+            transient_key = next((k for k in _cb if transient_ref in k[0]), None)
+        check(transient_key is not None,
+              "transient-cred: the definitive miss DID create breaker state")
+    finally:
+        globals()["_kube_get_secret"] = _real_kube_get_secret
+        with _cb_lock:
+            _cb.clear()
+        with _refs_lock:
+            _refs.pop(transient_ref, None)
+            _refs_transient.discard(transient_ref)
 
     print("\n=== Headroom re-mint detection (issue #1260) ===")
     # Acceptance: a re-minted key (new hash) is NOT served the previous key's exhausted snapshot.
