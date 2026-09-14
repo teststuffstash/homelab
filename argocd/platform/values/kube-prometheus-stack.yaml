@@ -380,12 +380,17 @@ grafana:
         cpu: 20m
         memory: 64Mi
 kube-state-metrics:
+  # 192Mi → 384Mi 2026-09-14: enabling customResourceState (below) lifted the steady state from
+  # ≤100Mi to a flat ~204Mi (KSM's CRD discovery over every installed group — the upjet provider
+  # alone carries hundreds), so the pod OOM-looped at the old limit within 13 s of start and
+  # every kube_* belt went blind for ~15 min. Measured under a 1Gi limit: plateau 204Mi, no
+  # growth — this is headroom over the plateau, not a leak allowance (oversize caches lesson).
   resources:
     limits:
-      memory: 192Mi
+      memory: 384Mi
     requests:
       cpu: 20m
-      memory: 64Mi
+      memory: 128Mi
   # AgentStack XR health as a metric (homelab#1620 closeout, 2026-09-14): a Composition branch
   # that has never executed carries no evidence its RBAC exists, and the failure mode is the
   # WHOLE claim parked at Synced=False ("failed waiting for Informer to sync") — found five times
