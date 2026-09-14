@@ -9085,4 +9085,13 @@ Issues: #1620, #1621.
   honours; human apply), #1672 (class A stagger only). No Goal — unrelated alert-born fixes = the
   maintenance stream (ADR-126 themes). `docs/spikes/responder-week-audit.md` gained the executed
   section + the two machinery defects (PR#1678, PR#1691).
+- **Wind-down (operator: review PR#1676, then stop):** codeowner read of **PR#1676** (the
+  #1621 corpus-published doorbell — endpoint + Sensor + WorkflowTemplate + prune-listed
+  kustomization + clause_files + the 6-row replay fixture round 2 added): mechanical, loud
+  allowlist, fail-closed token, write identity stays in the coordinator ns → admin-merged on CI
+  green. Operator question "too much oracle-fleet in homelab?": the mechanism is generic, the
+  stack is data-as-code in three places (endpoint name, event_type, the `case` allowlist);
+  generalisation BANKED for the second publisher (`/dispatch` + `{repo,event_type,payload}` +
+  allowlist from the claims) — not filed (contracts emerge from ≥2 consumers). #1621 stays open
+  for its live acceptance. Session ends here; pickup in meta-state.
 

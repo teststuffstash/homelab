@@ -39,7 +39,11 @@ never the session's arc — that is TICK-LOG's.)
   PR#1690 (TTL 2 d) MERGED; `kubectl get wf -A | wc -l` trending
   down from ~800 (the 2 d TTL); no cp-01 `allocatableMemory.available` eviction in 24 h → close
   #1687; #1675's fixer targets trim cadence; wk-02's image store stays under 50 % of 75 G.
-  (9) Unchanged from the late-morning pickup: theme 1 queued (#1665–#1669, first ride reads
+  (9) **PR#1676 (the #1621 doorbell) codeowner-merged at wind-down** — #1621 stays open for the
+  live acceptance (the next oracle corpus publish rings `/corpus-published` → `release-corpus.yaml`
+  runs on `repository_dispatch`); the generic `/dispatch` knob is banked on #1621 for a second
+  publisher. Four fixer items queued by hand (#1675 #1594 #1664 #1672) — watch their rides.
+  (10) Unchanged from the late-morning pickup: theme 1 queued (#1665–#1669, first ride reads
   `exacto:no-pin`); fleet un-latched; #1237 re-home question at the next sweep; oracle-fleet
   PR#591/#395 human-directive path; #1651 unqueued.
 - **⚑ PICKUP (2026-09-14 afternoon, same session — wound down at ~600k ctx; arc in TICK-LOG).**
