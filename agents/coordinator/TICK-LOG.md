@@ -9167,3 +9167,19 @@ Issues: #1620, #1621.
   garage-0's data + meta (258 GB scheduled on 256 GB), so that zone has ZERO room to grow and is
   the smallest zone; pm961 ~60 GB, mx500 ~90 GB shared. Cheap interim = move the two mirror
   volumes off intel1 (intel0 has ~50 GB); the real answer stays the SFF zone-disk item.
+- **Night queue read (operator: "anything to queue for the night?"; board showed #1697/#1709/#1710
+  parked-blocked/operator):** parked-blocked = a queued item whose dependency is still OPEN — they
+  unpark by themselves: #1697 waits on #1670 (PR#1698: bot-approved after two rounds, CI green,
+  BEHIND — waits on the CODEOWNER read, which this corpus-less session does not execute); #1709 on
+  #1692 AND theme-1 assembly (by design); #1710 on #1692. **#1692's PR#1699 was ci-red terminal**
+  (two no-op rounds, blocked-on human): `governance-lint` failed closed because the haiku ride's
+  40-file branch re-pointed a docstring in `scripts/claude-model-shim.py` (never-touch tier) —
+  the seat dropped that one file from the branch (441c6d95; the pointer lands operator-direct
+  after merge, exactly as #1710 scopes it) and the same branch already carries #1710's 37
+  re-points, so #1710 closes on that merge. **#1707** = the same three explained strikes
+  re-filed after #1705 closed: the reader dedups on an OPEN filing only and re-applies
+  `agent/error` every tick inside the 24h window → left OPEN as the anchor until 2026-09-15
+  16:45Z; the tail defect filed + queued as **#1712** (agent-fix, the night's one queue item).
+  Operator picks pending: #1675 (fstrim cadence — the guard #1673 landed 3 min before the
+  hand-queue directive and already covers the stated purpose per the worker's live read →
+  recommend close as superseded); #1669 stays blocked by design (≥2026-09-20 + theme 1 deployed).
