@@ -16,7 +16,9 @@ a legit fix.
 Pricing (FU-062, docs/agents/model-routing.md §M3): a LIVE registry of OpenRouter's /models +
 /models/<id>/endpoints, cached 24h in one JSON file, prices any model by its cache-aware effective
 input $/M — min over cache-supporting providers ≥95% uptime of (1−h)·prompt + h·cache_read.
-Lookup order: --price-per-mtok override > registry > the static offline table > $1.0/M default.
+Lookup order: --price-per-mtok override > registry > the static offline table > $1.0/M default —
+and every table is tried for the id AS GIVEN first, then for its base id (a provider-routing suffix
+stripped: `:exacto` pins provider routing, never price; see `base_id`).
 
 Pure core (`estimate_cost`, `requests_per_round`, `pick_tier`, and the registry math on a plain
 dict) has no I/O and is covered by `--self-test`. The CLI wraps it and can emit a ready ephemeral
@@ -154,10 +156,11 @@ def requests_per_round(issue_tokens: int) -> int:
 
 def model_price(model: str, override: float | None) -> float:
     """Effective input $/M for a model (explicit override wins; unknown paid model → conservative).
-    Static-table-only form kept for pure-core callers; the CLI resolves via `resolve_price`."""
+    Static-table-only form kept for pure-core callers; the CLI resolves via `resolve_price`. Same
+    miss-driven candidate order as that path: the id as given first, then its base id."""
     if override is not None:
         return override
-    return _MODEL_PRICE.get(model, _DEFAULT_PRICE)
+    return next((_MODEL_PRICE[c] for c in lookup_ids(model) if c in _MODEL_PRICE), _DEFAULT_PRICE)
 
 
 def estimate_cost(
@@ -243,6 +246,90 @@ def normalize_model(model: str) -> str:
     return model_id.parse(model)["model"]
 
 
+# ── Provider-routing suffixes (the PRICING-path half of FU-127; homelab#1670) ────────────────────
+# OpenRouter overloads an id with routing shorthands — `:exacto` (tool-call-quality provider
+# ordering), `:nitro` (throughput), `:floor` (price), `:online` (web plugin). They pin ROUTING,
+# never PRICE, and the registry keys a model by its BARE id. So an id this platform's own router
+# appends — `:exacto` from FU-186 `provider_policy` on the coding class, the PR#1639 flip — used to
+# miss every lookup in this file, price at the conservative $1.0/M default, and print a PHANTOM
+# `⚠ ESCALATE`: 31× the real price on the #1665 ride, which a coordinator following
+# `agents/coordinator/README.md` step 3 ("stop, label agent/blocked") turns into every queued item
+# on the stack parked for a human, with correct numbers and a wrong conclusion.
+#
+# The retry is MISS-DRIVEN, and that is the whole safety argument: the id AS GIVEN is tried first
+# against the registry and the static table, and only an id NOTHING carries is retried as its base.
+# `:free` is therefore never degraded to its paid sibling — it is a variant OpenRouter lists in its
+# own right (`tencent/hy3:free`), priced as itself while any table still carries it — and a
+# genuinely unknown model still reaches the $1.0/M default and can still escalate.
+#
+# ONE HOME for the pricing path: `base_id`/`lookup_ids` below are the single definition the
+# registry read, the static table and `--lookup`'s report all go through, so those three can never
+# disagree about what an id costs. The two BOOKKEEPING sites (the proxy's cooldown/breaker key, the
+# router's `record_provider_event`) still strip `:exacto` inline, and the hoist that would give the
+# rule ONE home platform-wide is the FU-127 parser (`agents/model_id.py`) — a governance path
+# outside this issue's declared `Touches:` footprint, so it is sibling child homelab#1697, not this
+# diff. These three functions move there verbatim.
+def base_id(model: str) -> str | None:
+    """`model` truncated at its last `:` — the id a lookup RETRIES when nothing carries `model`
+    itself. Pricing-only: the suffix pins provider routing, so the FULL id stays the dispatch id
+    (`Estimate.model`, the claim, the routed model)."""
+    base, sep, _suffix = model.rpartition(":")
+    return base if sep and base else None
+
+
+def base_ids(model: str) -> list[str]:
+    """Every id `model` reduces to by dropping ONE colon-suffix at a time, nearest first (#1693's
+    doubled `:exacto` on a pre-suffixed chain entry reduces to the paid id, and `tencent/hy3:free`
+    reduces to `tencent/hy3` only AFTER itself has been tried)."""
+    out: list[str] = []
+    rest = base_id(model)
+    while rest and rest not in out:
+        out.append(rest)
+        rest = base_id(rest)
+    return out
+
+
+def lookup_ids(model: str) -> list[str]:
+    """The ids a PRICE lookup tries for `model`, in order: the id as given, its rail-normalized
+    form, then each one's successive base ids — best first, never degrading an id a table already
+    carries."""
+    out: list[str] = []
+    for candidate in (model, normalize_model(model)):
+        for one in (candidate, *base_ids(candidate)):
+            if one and one not in out:
+                out.append(one)
+    return out
+
+
+def routing_suffix(model: str, priced: str) -> str | None:
+    """The routing suffix `priced` dropped from `model` (e.g. ':exacto'), or None when `priced` is
+    not `model`'s base id — a rail prefix normalized away is NOT a routing suffix. Both sides are
+    normalized, so `priced` may be a candidate carrying the rail prefix itself."""
+    normalized, base = normalize_model(model), normalize_model(priced)
+    return normalized[len(base):] if base and normalized.startswith(base + ":") else None
+
+
+def registry_key(registry: dict | None, model: str) -> str:
+    """The key `registry` carries for `model`: the first of `lookup_ids` it knows, else the
+    normalized id (no registry to match against → the static table does the retry)."""
+    models = (registry or {}).get("models") or {}
+    if not models:
+        return normalize_model(model)
+    for candidate in lookup_ids(model):
+        if candidate in models:
+            return candidate
+    return normalize_model(model)
+
+
+def priced_as(model: str, registry: dict | None) -> str:
+    """The id the price actually came from: the registry key when the registry carries one of the
+    lookup ids, else the static-table candidate, else the normalized id (→ the $1.0/M default).
+    Equals `normalize_model(model)` whenever no suffix had to be dropped. Reported by `--lookup`."""
+    if registry and (registry.get("models") or {}):
+        return registry_key(registry, model)
+    return next((c for c in lookup_ids(model) if c in _MODEL_PRICE), normalize_model(model))
+
+
 def _blend(prompt: float, cache_read: float, h: float) -> float:
     """Effective input $/M when a fraction h of input tokens hit the provider's prompt cache."""
     return (1.0 - h) * prompt + h * cache_read
@@ -315,12 +402,30 @@ def pinned_provider(
     return None
 
 
+def session_pin(
+    endpoints: list[dict] | None,
+    *,
+    suffix: str | None,
+    h: float = REGISTRY_CACHE_HIT,
+    market: dict | None = None,
+) -> dict | None:
+    """`pinned_provider` as reported to a SESSION (agent-session.sh's opencode config): the pin
+    itself, or None when `suffix` marks a provider-routing suffix on the id. Two reasons, one skip:
+    the suffix pins routing upstream (`:exacto` = tool-call-quality ordering, FU-186), so a provider
+    order derived from the BASE id's endpoints would fight it; and those endpoints are the base
+    model's, i.e. a pin for an id we are not dispatching. The proxy applies the same skip
+    (exacto_no_pin, openrouter-proxy.py); this is its estimator-side twin."""
+    if suffix is not None:
+        return None
+    return pinned_provider(endpoints, h=h, market=market) if endpoints else None
+
+
 def registry_model(registry: dict, model: str) -> dict | None:
-    return (registry.get("models") or {}).get(normalize_model(model))
+    return (registry.get("models") or {}).get(registry_key(registry, model))
 
 
 def registry_endpoints(registry: dict, model: str) -> list[dict] | None:
-    entry = (registry.get("endpoints") or {}).get(normalize_model(model))
+    entry = (registry.get("endpoints") or {}).get(registry_key(registry, model))
     return entry.get("endpoints") if entry else None
 
 
@@ -347,20 +452,38 @@ def registry_price(registry: dict, model: str, *, h: float) -> tuple[float, str]
     return entry["prompt"], "(no caching provider)"
 
 
+def _pricing_note(given: str, priced: str, note: str) -> str:
+    """Append the routing-suffix disclosure whenever the price came from the base id: a stripped
+    suffix must never be silent in the verdict line the coordinator reads. Silent otherwise — a
+    rail prefix normalized away is the pre-existing, documented behaviour, not news."""
+    suffix = routing_suffix(given, priced)
+    if suffix is None:
+        return note
+    return f"{note} (priced as {priced} — {suffix!r} pins provider routing, not price)".strip()
+
+
 def resolve_price(
     model: str, override: float | None, registry: dict | None, *, h: float
 ) -> tuple[float, str, str]:
     """(price $/M, source, note) — lookup order: explicit override > live registry > the static
-    offline table > the $1.0/M conservative default ("unpriced", not "forbidden")."""
+    offline table > the $1.0/M conservative default ("unpriced", not "forbidden"). Every table is
+    tried for the id AS GIVEN first, only then for its base id (`lookup_ids`), so a provider-routing
+    suffix cannot manufacture an unpriced model — while an id no table carries still lands on the
+    conservative default and can still escalate."""
     if override is not None:
         return override, "override", ""
     if registry:
         got = registry_price(registry, model, h=h)
         if got is not None:
             price, note = got
-            return price, "registry", note
-    if model in _MODEL_PRICE:
-        return _MODEL_PRICE[model], "static", "(offline fallback table)"
+            return price, "registry", _pricing_note(model, registry_key(registry, model), note)
+    for candidate in lookup_ids(model):
+        if candidate in _MODEL_PRICE:
+            return (
+                _MODEL_PRICE[candidate],
+                "static",
+                _pricing_note(model, candidate, "(offline fallback table)"),
+            )
     return _DEFAULT_PRICE, "default", "(unpriced model — conservative $1.0/M)"
 
 
@@ -455,7 +578,7 @@ def load_registry(path: str, *, refresh: bool = False) -> dict | None:
 def ensure_endpoints(registry: dict, model: str, path: str, *, refresh: bool = False) -> None:
     """Lazily fetch per-provider endpoints for ONE model into the same cache file (fetching all ~340
     models' endpoints per refresh would be 340 requests for data we never read)."""
-    model_id = normalize_model(model)
+    model_id = registry_key(registry, model)
     if model_id not in (registry.get("models") or {}):
         return  # not a registry model — nothing to fetch
     entry = registry.setdefault("endpoints", {}).get(model_id)
@@ -503,7 +626,7 @@ def fetch_market(registry: dict, model: str) -> dict | None:
     by lowercased providerSlug AND providerName. Live fetch at lookup time (never cached in the
     registry file: 30d averages don't belong in a 24h cache shape), fail-soft → None (list-blend
     basis). Twin of the proxy's market_for — keep in step."""
-    entry = (registry.get("endpoints") or {}).get(normalize_model(model)) or {}
+    entry = (registry.get("endpoints") or {}).get(registry_key(registry, model)) or {}
     permaslug = entry.get("permaslug")
     if not permaslug:
         return None
@@ -641,13 +764,21 @@ def _run_cli(argv: list[str]) -> int:
             )
 
     if args.lookup:
+        priced = priced_as(args.model, registry)
+        suffix = routing_suffix(args.model, priced)
         endpoints = registry_endpoints(registry, args.model) if registry else None
         market = fetch_market(registry, args.model) if registry and endpoints else None
-        pin = pinned_provider(endpoints, h=h, market=market) if endpoints else None
+        # The endpoints a suffixed id resolves to are the BASE model's — the same model on the same
+        # providers (the suffix ORDERS them, it does not restrict them), so reporting them is honest.
+        # What must not be reported is the pin the bare id would get: that would override the ordering
+        # the suffix asked for (session_pin = the estimator-side twin of the proxy's exacto_no_pin).
+        pin = session_pin(endpoints, suffix=suffix, h=h, market=market)
         print(
             json.dumps(
                 {
                     "model": normalize_model(args.model),
+                    "priced_as": priced,
+                    "routing_suffix": suffix,
                     "price_per_mtok": round(price, 4),
                     "price_source": source,
                     "price_note": note,
@@ -783,6 +914,11 @@ def _self_test() -> None:
             "acme/coder": {"prompt": 0.22, "input_cache_read": None, "context_length": 262144, "tools": True},
             "acme/chatty": {"prompt": 0.50, "input_cache_read": None, "context_length": 8192, "tools": False},
             "qwen/qwen3-coder": {"prompt": 0.22, "input_cache_read": 0.05, "context_length": 262144, "tools": True},
+            # #1670: the routing-suffix pair. The registry carries the BARE id; `:free` is a
+            # VARIANT listed in its own right (a different price from its paid sibling).
+            "deepseek/deepseek-v4.1-flash": {"prompt": 0.09, "input_cache_read": 0.018, "context_length": 163840, "tools": True},
+            "tencent/hy3": {"prompt": 0.14, "input_cache_read": None, "context_length": 163840, "tools": True},
+            "tencent/hy3:free": {"prompt": 0.0, "input_cache_read": None, "context_length": 163840, "tools": True},
         },
         "endpoints": {
             "acme/coder": {
@@ -862,6 +998,59 @@ def _self_test() -> None:
     assert resolve_price("qwen/qwen3-coder", None, None, h=0.8)[0:2] == (0.30, "static")
     assert resolve_price("gone/model", None, None, h=0.8)[0:2] == (_DEFAULT_PRICE, "default")
     assert resolve_price("gone/model", None, fixture, h=0.8)[1] == "default"  # in no table at all
+
+    # ── homelab#1670: the provider-routing suffix is priced as the BASE id, never as an unknown
+    #    model. The #1665 reproduction (31× over-price, `⚠ ESCALATE` on a $0.5-cap `xs` item): a
+    #    suffixed id the registry does not carry must resolve through the registry, not the $1.0/M
+    #    default — and the note must SAY so, or the coordinator reads a bare price line.
+    suffix_price, _ = registry_price(fixture, "deepseek/deepseek-v4.1-flash:exacto", h=0.8)
+    bare_price, _ = registry_price(fixture, "deepseek/deepseek-v4.1-flash", h=0.8)
+    assert suffix_price == bare_price == _blend(0.09, 0.018, 0.8)  # $0.0324/M — the #1670 read
+    assert registry_key(fixture, "deepseek/deepseek-v4.1-flash:exacto") == "deepseek/deepseek-v4.1-flash"
+    assert priced_as("deepseek/deepseek-v4.1-flash:exacto", fixture) == "deepseek/deepseek-v4.1-flash"
+    assert routing_suffix("deepseek/deepseek-v4.1-flash:exacto", "deepseek/deepseek-v4.1-flash") == ":exacto"
+    # a rail prefix normalized away is NOT a routing suffix (no disclosure for it)
+    assert routing_suffix("openrouter/acme/coder", "acme/coder") is None
+    price, source, note = resolve_price("deepseek/deepseek-v4.1-flash:exacto", None, fixture, h=0.8)
+    assert (price, source) == (suffix_price, "registry") and ":exacto" in note
+    # the SAME issue text lands on the same tier with and without the suffix
+    with_suffix = estimate(issue_tokens=1000, model="deepseek/deepseek-v4.1-flash:exacto",
+                           price_override=price)
+    without = estimate(issue_tokens=1000, model="deepseek/deepseek-v4.1-flash", price_override=price)
+    assert (with_suffix.tier, with_suffix.cap_usd, with_suffix.escalate) == (
+        without.tier, without.cap_usd, without.escalate) and not with_suffix.escalate
+
+    # ...and the candidate order NEVER degrades a variant to its sibling: the miss-driven retry
+    # tries the id as given FIRST, so `:free` is priced as `:free` (0.0) while a genuine routing
+    # suffix on the same family falls back to the paid base id — both directions, one rule.
+    assert registry_price(fixture, "tencent/hy3:free", h=0.8)[0] == 0.0
+    assert registry_key(fixture, "tencent/hy3:free") == "tencent/hy3:free"
+    assert registry_price(fixture, "tencent/hy3:exacto", h=0.8)[0] == 0.14
+    assert registry_tools(fixture, "tencent/hy3:exacto") is True  # resolves, so no typo warning
+    assert registry_key(fixture, "tencent/hy3:thinking") == "tencent/hy3"
+    # the SESSION pin is suppressed under a routing suffix: the endpoints read are the BASE id's, so
+    # their provider order would route a model we are not dispatching (FU-186's exacto skip, the
+    # estimator-side twin of the proxy's exacto_no_pin) — agent-session.sh reads this field.
+    _eps = fixture["endpoints"]["acme/coder"]["endpoints"]
+    assert session_pin(_eps, suffix=None, h=0.8)["provider"] == "DeepInfra"
+    assert session_pin(_eps, suffix=":exacto", h=0.8) is None
+    assert session_pin(None, suffix=None, h=0.8) is None
+
+    # the static offline table retries the base id too (registry unreachable: cold CI, air-gapped),
+    # and its disclosure is the same one line; a genuinely unpriced id keeps the $1.0/M default.
+    assert resolve_price("deepseek/deepseek-v4-flash:exacto", None, None, h=0.8)[0:2] == (0.10, "static")
+    assert resolve_price("qwen/qwen3-coder:free", None, None, h=0.8)[0] == 0.0  # variant, not base
+    # a DOUBLED suffix (homelab#1693: the router re-appending `:exacto` to an already-suffixed chain
+    # entry — the platform primary IS pre-suffixed) reduces all the way to the paid id, nearest
+    # truncation first, so a doubling cannot re-open the phantom escalation either.
+    assert resolve_price("deepseek/deepseek-v4-flash:exacto:exacto", None, None, h=0.8)[0:2] == (0.10, "static")
+    assert registry_price(fixture, "tencent/hy3:free:exacto", h=0.8)[0] == 0.0  # variant survives
+    assert registry_price(fixture, "tencent/hy3:exacto:exacto", h=0.8)[0] == 0.14
+    price, source, note = resolve_price("gone/model:exacto", None, fixture, h=0.8)
+    assert (price, source) == (_DEFAULT_PRICE, "default") and "unpriced" in note
+    # ...and that default still ESCALATES: the conservative path is correct and stays reachable.
+    unpriced = estimate(issue_tokens=3000, model="gone/model:exacto")
+    assert unpriced.escalate and unpriced.cap_usd == 4.00
 
 
 if __name__ == "__main__":
