@@ -11,9 +11,9 @@ never the session's arc — that is TICK-LOG's.)
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-09-14 afternoon, same session — wound down at ~600k ctx; arc in TICK-LOG).**
-  (1) **PR#1652 (mgmt box follows master, ADR-129 amended)** — bot CR round fixed (CODEOWNERS
-  comment), pushed at ~08:2xZ, its re-verdict NOT observed; after bot approval it parks for the
-  SEAT's codeowner read (nixos/, CODEOWNERS). **Then the box:** its checkout still points at the
+  (1) **PR#1652 (mgmt box follows master, ADR-129 amended) MERGED 08:3xZ (bd74bdd4)** — the box
+  is still on the OLD generation (timer disabled, pull ref absent), so nothing moves until the
+  hand-advance; safe as it sits. **The box, next seat:** its checkout still points at the
   absent `mgmt-release`, so ONE hand-advance over the `mgmt-tf` ssh path (`scripts/mgmt-tf.sh`
   shape, root@192.168.2.53): `git -C /var/lib/homelab fetch origin master && git reset --hard
   origin/master`, `nixos-rebuild test --flake /var/lib/homelab/nixos#mgmt`, let `mgmt-confirm`
