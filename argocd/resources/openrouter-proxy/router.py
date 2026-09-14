@@ -1425,14 +1425,6 @@ def route(payload: dict, ctx: dict) -> dict:
             skipped.append({"model": m, "reason": "claim-deny"})
         elif m in struck_models:
             skipped.append({"model": m, "reason": "strike"})
-        elif m in struck_pairs:
-            # Serving-shaped strikes exclude the (model, provider) PAIR, not the model: it stays
-            # eligible and is priced by the provider it lands on AFTER the exclusion. The struck
-            # pair(s) are recorded so the decision row shows WHY the cell was skipped.
-            for _p in sorted(struck_pairs[m]):
-                skipped.append({"model": m, "provider": _p, "reason": "strike"})
-            _excl[m] = frozenset(struck_pairs[m])
-            eligible.append((m, rail))
         elif m in cool:
             skipped.append({"model": m, "reason": f"cooldown:{cool[m]['reason']}",
                             "retry_after_s": cool[m]["remaining_s"]})
@@ -1446,6 +1438,13 @@ def route(payload: dict, ctx: dict) -> dict:
             else:
                 eligible.append((m, rail))
         else:
+            # Serving-shaped strikes exclude the (model, provider) PAIR, not the model: it stays
+            # eligible and is priced by the provider it lands on AFTER the exclusion. The struck
+            # pair(s) are recorded so the decision row shows WHY the cell was skipped.
+            if m in struck_pairs:
+                for _p in sorted(struck_pairs[m]):
+                    skipped.append({"model": m, "provider": _p, "reason": "strike"})
+                _excl[m] = frozenset(struck_pairs[m])
             eligible.append((m, rail))
     capacity_block: dict | None = None
     result: dict | None = None
@@ -2638,6 +2637,42 @@ def self_test() -> int:
     assert capability_floor_block("coding", "lowcap/model:free") == "coding=9.0<30"
     assert record_task_market([{"tag": "code:devops_config", "model": "xiaomi/mimo-v2.5",
                                 "rank": 1, "usage_share": 0.182, "token_share": 0.183}]) == 1
+    # ── Goal #1640 acceptance 3: pair strike + active cooldown / capability-floor edge cases ──
+    # (5) pair strike + active cooldown: cooldown takes precedence in the filter order. The
+    #     struck pair is recorded in skipped before the model is excluded by cooldown.
+    record_report({"session": "t-strike-cool-1", "task": "issue-84", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "error_class": "provider-5xx",
+                   "outcome": "no-output"})
+    for _ in range(8):
+        record_provider_event("deepseek/deepseek-v4-flash", "deepinfra", 429)
+    assert cooldown_note("deepseek/deepseek-v4-flash", 429, role="worker") == "tripped"
+    _sc = route({"stack": "sleep", "task": "issue-84", "role": "worker",
+                 "session": "t-strike-cool-1", "chain": _PAIR_CHAIN}, _CELL_CTX)
+    assert _sc["decision"] == "dispatch" and _sc["model"] == "tencent/hy3", _sc
+    # Cooldown is the filter that stops it from being eligible
+    assert any(s["reason"].startswith("cooldown:") for s in _sc["skipped"]), \
+        f"cooldown must block the pair-struck model: {_sc['skipped']}"
+    # Clear the cooldown for subsequent tests
+    assert cooldown_note("deepseek/deepseek-v4-flash", 200, role="worker") == "cleared"
+    # (6) pair strike + capability-floor fail: capability-floor takes precedence. The struck
+    #     pair is recorded in skipped before the model is excluded by capability-floor.
+    record_report({"session": "t-strike-floor-1", "task": "issue-85", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "error_class": "timeout",
+                   "outcome": "no-output"})
+    # Set up a capability record for deepseek that fails the existing coding floor
+    record_capability("artificial-analysis", [
+        {"model": "deepseek/deepseek-v4-flash", "intelligence": 25.0, "coding": 9.0, "agentic": 5.0}])
+    _sf = route({"stack": "sleep", "task": "issue-85", "role": "worker",
+                 "session": "t-strike-floor-1", "chain": _PAIR_CHAIN}, _CELL_CTX)
+    assert _sf["decision"] == "dispatch" and _sf["model"] == "tencent/hy3", _sf
+    # Capability-floor is the filter that stops it from being eligible
+    assert any(s["reason"].startswith("capability-floor:") for s in _sf["skipped"]), \
+        f"capability-floor must block the pair-struck model: {_sf['skipped']}"
+    # Clean up: remove the deepseek capability record so it doesn't affect subsequent tests
+    _write("DELETE FROM capability WHERE model=? AND source=?",
+           ("deepseek/deepseek-v4-flash", "artificial-analysis"))
     # ── M11 shadow ladder (homelab#159): free → subscription-headroom → paid, per (class, urgency) ──
     # Every assertion here is about the SHADOW block. The served pick is asserted unchanged beside
     # each one — that is the acceptance criterion of this leg, not a nicety.
@@ -2980,7 +3015,7 @@ def self_test() -> int:
     # Goal #1640 acceptance 3 MOVES them again by the five strike fixtures (t-strike-pair-1/2,
     # t-strike-pair-3a/3b, t-strike-model-1): each is a run_report AND a strike, so 20→25 and
     # 6→11. Kept, not dropped.
-    assert summary["rows"]["run_reports"] == 25 and summary["rows"]["strikes"] == 11  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1
+    assert summary["rows"]["run_reports"] == 27 and summary["rows"]["strikes"] == 13  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1 + t-strike-cool-1 + t-strike-floor-1
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
