@@ -441,6 +441,10 @@ jobs:
         run: devbox run model-id-test
       - name: GitHub App mint sites ⊆ declared permissions (FU-098)
         run: devbox run github-apps-lint
+      # Every kind the AgentStack Composition renders has a crossplane grant in rbac.yaml — a
+      # missing one parks the whole claim at Synced=False (fifth hand-found instance, homelab#1620).
+      - name: AgentStack composed kinds ⊆ crossplane RBAC (devbox run agentstack-rbac-lint)
+        run: devbox run agentstack-rbac-lint
       # ADR-096 router: DB round-trip + model-classes.json parse/threshold sanity — the same
       # self-test a deployed pod's module carries.
       - name: Router self-test (devbox run router-self-test)
