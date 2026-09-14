@@ -332,14 +332,13 @@ never the session's arc — that is TICK-LOG's.)
     (proposed). oracle-iac#485 (mcp api claim) is the oracle jail's. Operator read, not owned
     here: public `/metrics` on the api hostname (fleet).
   - G-A #775 + G-F #1039 VALIDATED and closed — nothing left here.
-- **⚑ CONTAINERS TO CLOSE:** **#1418 S8** — closeout 1 done 2026-09-14; holds #1649; close ≥72 h after it lands · **#979 S5** [stint](chainless-redesign.md) — quiet window passed 09-02, but a FIFTH original
-  (**#1393**, the post-S5 heat-cited trims, filed 2026-09-05 from this sitting's measurement) re-opens
-  the tree; close ≥72h after it lands · **#741 S7 closeout-1 OVERDUE since ~08-29** (5/5
-  originals done, cutover 08-26, no closeout comment ever posted) — needs the closeout
-  sitting (docs-cleanup over merge-path.md/FSM + `agents/update-pr-branch.sh`, FU sweep,
-  built-vs-left comment), then its window · **#949 + #1101** retro batches close at the
-  post-r3 sweep (r3 fires Mon 09-07 unattended under the PR#1127 cost-model ranking;
-  predecessor-scoring is the closeout read).
+- **⚑ CONTAINERS TO CLOSE:** **#1418 S8** — closeout 1 done 2026-09-14; holds #1649 (QUEUED
+  2026-09-14, operator); close ≥72 h after it lands · **#1101 retro r2** — closeout 1 done
+  2026-09-14; holds #1651 (r4 F2, the IL-T28 reconcile not firing; `agent-fix`, unqueued); close
+  ≥72 h after it lands · CLOSED 2026-09-14 at this session's sweep: **#979 S5** (five originals,
+  quiet since 09-05), **#949 retro r1** (scored by r2/r3), the G-A/G-F post-launch buckets
+  **#787 / #1048** (Goals validated + closed, empty trees). Left alone: oracle-fleet#416
+  (post-launch child of closed #386 — a real regeneration item, the oracle jail's).
 - **⚑ ORACLE (the platform's half only):** Goal #418 — #432/#433/#428/#429 done; research
   PRs #425/#426 wait on the operator's `specs/` read (by design); #416 regeneration is
   operator-attended (blockers closed). #414 inert (operator queues). **homelab#1381 in
