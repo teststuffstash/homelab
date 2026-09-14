@@ -18,7 +18,7 @@ http://127.0.0.1:$SHIM_PORT, and each request routes by the MODEL ID in its body
                          headers passed through VERBATIM (the CLI's oauth + beta headers)
 
 It is also the jail-scale prototype of the multi-subscription rail split the egress proxy
-grows under the chainless redesign (model-routing-history.md §M11; FU-127 structured rail) — the
+grows under the chainless redesign (model-routing.md §M11; FU-127 structured rail) — the
 routing rule here is deliberately the same shape: rail by model-id prefix, credential per
 rail, model id translated at the boundary.
 
