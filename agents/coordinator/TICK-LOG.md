@@ -8911,3 +8911,44 @@ Issues: #1620, #1621.
 - **Process:** the other seat pruned my worktree metadata mid-commit (`.git/worktrees/` shared);
   rebuilt from the remote branch, nothing lost. `| tail` on a self-test masked one red run into a
   pushed commit (the pipe-filter rule, again) — fixed with an explicit exit check.
+
+## 2026-09-14 (morning) — S8 closeout 1 + the codeowner reads on a SELECTIVE corpus (the heat trial)
+
+- **Operator ask:** the S8 read and the codeowner reads, but on a heat-selected corpus SUBSET as a
+  deliberate trial of the 2026-08-10 full-corpus ruling's counterfactual. Method + verdict in
+  `docs/spikes/doc-heat.md` run 4: whole-file heat is flat (the skill's own load), the grep channel
+  + the codeowner-queue audit's CORPUS-SUBSET map selected ≈235 KB; **192k ctx at load-end vs
+  299k/346k measured for the full plan**. Nothing the two reads needed sat in a skipped doc — but
+  both were scan-clause + fixture PRs, the topic the map had sectioned; no design fork was ruled on
+  the subset, so the trial is evidence for the codeowner-read stream only. The one design question
+  of the sitting (effort as a theme) hit exactly a skipped doc (`model-routing.md`) — grepped on
+  demand, and it turned out to have no effort section at all (FU-174: the home lands with the build).
+- **Codeowner reads (ADR-110):** #1576 (parity-assertion SIGPIPE guard — pin verified by running
+  the fixture against master with only the sentinel comments added: RC 141 3/3, RC 0 on the branch)
+  and #1540 (ARBITRATE notices → agent-summary `mc_event`; new fixture fails on master
+  `NOOP_RESULT=1`) approved 05:5xZ, both merged 06:02Z. Neither needed the deepseek round-3 re-poke:
+  #1576's round 3 HAD landed the synthetic-world pin on 09-11 (bot APPROVED 20:57Z) — the pickup's
+  "if it no-op'd" branch never applied.
+- **S8:** #1424's residue delegated (subagent, PR flow granted) → **PR#1648 merged 06:36Z**
+  (IL-T12 trigger (e) + nomination guards, IL-T15 theme re-key, ROADMAP S8 DONE + dogfood
+  #1640/#1641, two per-repo→per-lane prose fixes; one bot round: the seat's UNPUSHED bookkeeping
+  commit rode the clone's branch — miss-ledger row, rule: cut from `gh/master`, a clone's `origin`
+  is the shared checkout). **Closeout 1:** 12 dispositions `adopted --by closeout`, built-vs-left
+  posted on #1418; **#1649** filed + bound (the #1452 merge-ready skip not holding — #1576 took ~90
+  updater merges while parked; r3 F3's evidence, "unfiled" since 09-08). Quiet window from #1649's fix.
+- **Seat miss:** a scratch clone's `origin` is `/workspace/homelab`; a `push -u origin` landed a
+  stray branch ref in the shared checkout (deleted 06:0xZ, tree untouched, master stayed checked
+  out). The subagent was corrected by message before its push. Rule recorded in the miss ledger.
+- **Goal #1231:** verdict recommendation posted (validated, narrowed; #1238 → #1640 beside
+  acceptance 8 — its `default-pin` arm and the Go rail both change under theme 1; #1237 any
+  sitting). Theme-1 children drafted through the writer, NOT filed (operator order: after the verdict).
+- **Operator rulings (afternoon thread):** no interim unfreeze of the oracle lane (5 `agent/error`
+  re-latched 21:25Z, three minutes after the 09-13 strip — leave until theme 1);
+  `goose-32602-truncation` is a per-CELL signal never a fleet latch (#1640 acceptance 5; joins the
+  serving set in acceptance 1); effort = a checkpoint-formed theme 3 after #1237 + theme 1
+  (round-1-max as an `effort_map` row on round-state; later-round failures attributed by theme
+  2's retry ladder, never by inspection). Retro r4 read: F3/F4/F6 + deepseek F1/F4/F5 = #1640's
+  acceptances; F1 → #1627; F2/F5 unfiled.
+- **Loose ends:** PR#1646 (`GithubVendorOutage` + `Pull Requests`) merged 06:12Z; five audited
+  responder closes (#1580 #1584 #1557 #500 #903); zombie run 34748702282 uncancellable (409 on
+  cancel + force-cancel); proxy verified rolled (0 `disk I/O error` in 9 h, `exacto:no-pin` live).

@@ -163,6 +163,43 @@ script header or fixture; and *dated evidence* whose verdict is stated above it)
 is the acceptance: `session-ctx.sh --big` on the first corpus session after this merge, against
 run 2's 299k/346k.
 
+## Settle test — run 4 (2026-09-14, the SELECTIVE corpus-load trial — operator-ordered)
+
+**Question:** can the heat data pick a design-agents SUBSET for a codeowner session, and what goes
+wrong without the whole corpus (the 2026-08-10 full-corpus ruling's counterfactual, run once on
+purpose)? **Method:** the run-2 windowing recipe (`DOC_HEAT_SRC` = the 42 transcripts since
+2026-09-05) → per-file whole / ranged / grep heat. Whole-file heat is FLAT across the read plan
+(every corpus file whole-read in ~40 of 215 sessions — that is the skill's own load, not a
+signal), and ranged heat on the big files is the run-2 instrument artifact (100 % "targeted"),
+so selection used the GREP channel (which files a session actually consults: meta-state 77,
+issue-authoring 45, coordinator brief 21, roles 13, agentstack/merge-path 9, model-routing 8,
+workflow 8; chainless 2, fixer-context/research-and-specs 0) plus the codeowner-queue audit's
+CORPUS-SUBSET map (owning sections per PR topic).
+
+**Loaded (≈235 KB):** CONTEXT + ARCHITECTURE + glossary; meta-state whole; issue-authoring whole
+(the hottest doc by consultation); the two generated FSM views whole (the session's edit
+surface, #1424); coordinator brief §State machine, §goal-checkpoint, §arbitrate → §infeasible,
+§Blocked-on (≈75 of 132 KB); chainless-redesign §The corpus batch session / §The jail stint;
+ADR-110/126/127/128 blocks. **Skipped, grep-only:** model-routing, observability-and-retro,
+merge-path.md, roles, workflow, iac-lane, agentstack, platform-and-stacks, research-and-specs,
+fixer-context, spec-gate-tiering, both READMEs, replay README (index grepped).
+
+**Cost (`session-ctx.sh`):** 192k ctx at the end of the load (162k cache-creation, board + PR
+reads included) against run 2's 299k / 346k for the full plan — about half. The stint's work on
+that context: two codeowner reads (#1576, #1540 — each with an isolated replay probe against
+master, both merged), the #1231 verdict recommendation, the #1640 theme-1 child drafts, the #1424
+delegation, five audited responder closes, PR#1646.
+
+**What went wrong, honestly:** nothing the two reads needed sat in a skipped doc — but both PRs
+were scan-clause + fixture work, exactly the topic the audit's map had already sectioned; the
+one ambiguity met (the proxy's shadow `served=` log line) was settled by grepping the code, not
+the corpus; the session's one real miss (a scratch clone's `origin` is the shared checkout, not
+GitHub — a push landed a stray ref there, removed) was process, not context. **Unexercised:** no
+design fork was ruled this sitting, so the trial says nothing about the 2026-08-10 miss class
+(claims about unread files — the FSM `replay:` fields, model-routing §M1a). Verdict input: for
+the CODEOWNER-READ stream the topic map + grep heat is a sufficient selector at half the cost;
+for design questions the trial is not evidence either way. The call stays the operator's.
+
 ## Links
 
 FU-164 (pointer) · [context-repos.md](context-repos.md) (the shared sweep — FU-117 archived) ·

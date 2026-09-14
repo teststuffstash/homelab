@@ -10,25 +10,36 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-13 late seat — the deepseek loop day; arc in TICK-LOG).** (1) **Goal #1640**
-  (themed; theme #1641 `router`, branch `goal/1640-router` exists) is UNQUEUED by operator order:
-  first #1231's checkpoint verdict (acceptances 3+5 built-not-live; #1237/#1238 stay its legs), the
-  S8 read, the parked codeowner PRs — then file theme 1's level-3 children from #1641's member list
-  (`Base: goal/1640-router`, `Class: build`), update the theme branch from master, queue. Theme 2
-  (`agents/**`) forms only after theme 1 merges + soaks. (2) **PR#1639** (exacto on coding) and
-  **PR#1638** (proxy `/tmp` emptyDir) — verify merged + rolled: proxy log shows `exacto:no-pin` on
-  the next coding completion and NO new `disk I/O error` lines. (3) Interim conditions: `unknown`
-  still latches issues via the FU-200 reader — two `unknown` strikes in 24 h re-latch until #1640
-  acceptance 1 lands; the pin cache is 1 h; **and exacto does NOT reach the platform claim** —
-  `/route` appends `:exacto` to the routed model, platform is `routerMode: shadow` so its launcher
-  keeps the static `--model`: a NEW platform issue starts at bare v4-flash → price pin →
-  open-inference again (#1620/#1621 escape only via the chain-walk to v4.1-flash). Operator call:
-  platform primary → v4.1-flash (one claim line + stacks.json mirror), or wait for #1640 theme 1
-  (the policy read at completion time, keyed on the worker ref). (4) Loose ends NOT in the Goal, all still owed: zombie
-  CI run 34748702282 (`gh run cancel` → CiDispatchStalled clears); the `GithubVendorOutage` regex
-  lacks "Pull Requests" (the one component at major_outage today); of#572 drew no re-entry for 2 h
-  (12:08→14:08Z, unexplained); the fifteen responder noise threads from the 21:xxZ board read
-  (1546 1557 1580 1584 903 500 1594 811 542 261 100 1013 114 121 241) + #121's plug-sensor edit.
+- **⚑ PICKUP (2026-09-14 morning corpus session — SELECTIVE corpus load, the heat trial;
+  arc in TICK-LOG).** (1) **#1231 verdict is the operator's** — seat recommendation posted on the
+  Goal (validated, narrowed: acceptance-1 leg observed under #1640 acceptance 6; #1238 re-parents
+  to #1640 beside acceptance 8 because its `default-pin` arm and the Go rail both change under
+  theme 1; #1237 stays seat-run, any sitting). **After the label:** re-parent #1238, file theme
+  1's five children from the gated drafts (scratchpad `theme1/*.final.md` — re-draft if lost:
+  `Base=goal/1640-router`, `Class=build`, `Origin=…#1641`, order 1 → 3 → 2 → 5 → 8), `git merge
+  master` onto `goal/1640-router`, queue. **Operator rulings 2026-09-14:** NO interim unfreeze of
+  the oracle lane (its five `agent/error` re-latch until theme 1 lands — leave them);
+  `goose-32602-truncation` is a per-CELL signal, never a fleet latch (= #1640 acceptance 5; and it
+  joins the serving set in acceptance 1 — record on the Goal); effort (FU-174) = a checkpoint-
+  formed THEME 3 after #1237's rows + theme 1's merge, round-1-max as an `effort_map` row keyed
+  on round-state, later-round "environmental" attributed by theme 2's retry ladder, never by
+  inspection. (2) **S8 #1418 closeout 1 DONE** (12 dispositions, built-vs-left posted; #1424 →
+  PR#1648 merged 06:36Z); the tree holds **#1649** (updater park-skip not holding — r3 F3's
+  evidence) → quiet window arms from its fix; parent closes at a later sweep. (3) **Retro r4
+  (PR#1645, two reports) READ, nothing filed:** opus F3/F4/F6 + deepseek F1/F4/F5 ARE #1640
+  acceptances 1/2/3/5 (file as evidence on the Goal, not a batch); **r4 F1** (rounds-exhausted
+  park fires on converging PRs, 7/7 human un-parks merged, ~€40/wk) → extend **#1627**; F2
+  (ledger stale rows) + F5 (tier-edge guard) standalone-honest, unfiled; r3 F3 = #1649. (4)
+  Codeowner reads: #1576 + #1540 merged 06:02Z (isolated replay probes against master, both
+  pins non-vacuous); PR#1646 (`GithubVendorOutage` gains `Pull Requests`) merged 06:12Z; five
+  audited responder threads closed (#1580 #1584 #1557 #500 #903). (5) Still owed from 09-13: the
+  zombie run 34748702282 is UNCANCELLABLE by API (409 "not queued yet" on cancel AND force-cancel
+  — the 08-19 class, operator UI or ignore; `CiDispatchStalled runner=unknown` firing on it);
+  of#572's 2 h no-re-entry unexplained; the remaining responder threads (1546 = the of#554 read,
+  1594 811 542 261 100 1013 114 121 241) + #121's plug-sensor edit → a board-sweep. (6) Live
+  facts read this morning: platform claim `deepseek-v4-flash | [v4.1-flash] | shadow`; proxy pod
+  up since 21:18Z with 0 `disk I/O error` lines in 9 h and `exacto:no-pin` on coding
+  completions; the shadow log's `served=` is the router's decision, not the launcher's model.
 
 - **⚑ PICKUP (2026-09-12, two seats — the drive-fitting day, then thinkcentre's decommission;
   full arcs in TICK-LOG).** Storage work for the day is DONE and verified live.
@@ -174,32 +185,6 @@ never the session's arc — that is TICK-LOG's.)
   places by capacity, Longhorn by free space — a fat box becomes the centre of gravity)**;
   thinkcentre + hp-01 retire once m70s (Gembird → 7600p for Garage, Micron → std) and one more
   SFF (register R3(c)) carry std; wk-02 stays the third zone until the second hypervisor.
-- **⚑ PICKUP (2026-09-08 late corpus session, ~19:1xZ wind-down — the five-PR read + S8 #1423 BUILT):**
-  (1) **S8 #1423 is DONE** — PR#1535 (scan nomination + trigger (e) + footprint predicates +
-  goal-lint), PR#1531 (reviewer depth re-key), PR#1530 (checkpoint theme play + docs); closed with
-  the built-vs-left comment (themes form within the Goal's own repo by decision; the pre-assembly
-  theme-branch refresh is a seat push — stated as inference, verify on the first live theme).
-  NEXT corpus session: **#1424** (FSM + doc currency: `issue-lifecycle-fsm.yaml` gains the theme
-  rows — nomination side value, trigger (e) — with `replay:` on the four new `goal/theme-*` rows
-  and `reviewer-sprout-depth`; merge-path FSM per-lane guards from #1422; chainless-redesign
-  §The jail stint closeout act; README doc table; ROADMAP S8 row → DONE + dogfood pointer), then
-  **closeout 1** (docs-cleanup over S8's surfaces, the FU sweep: FU-168 fence half, FU-199 board
-  faces, FU-201/FU-174 cross-refs; built-vs-left comment on #1418; `epic_dispositions.py` rows;
-  the ≥72h quiet window arms the close). (2) **Retro r3 batch container NOT yet authored**
-  (PR#1524 merged 18:04Z; opus F1 carrier = PR#1514 shipped; F3 churn held today — the updater
-  merged master into un-reviewed #1513/#1515/#1530/#1535 repeatedly: #1452's merge-ready-only
-  skip is NOT holding, read `agents/update-pr-branch.sh` before filing) — `retro-batch:
-  platform-r3` parent + children per finding, bind-at-filing. (3) **#1527** (reflex/scan
-  `ARBITRATE` notices served as the fix round's directive after PR#1514) filed inert under #1467 —
-  the subtraction (notices onto the agent-summary comment) is corpus work. (4) Loop findings
-  recorded on FU-199 (ruled-but-never-dispatched face: the 13:14Z Anthropic 522 killed both
-  arbitrate sessions after their ruling) and here: #1532 (minted by #1162's checkpoint, riding)
-  carries NO `Base` — the mint play skipped the inherited `Base=master`; the ci-red re-label on
-  #1515 at 18:10 was applied against a sha 100s dead (a scan racing a seat push). Subagent card
-  fact: no shellcheck gate exists in devbox.json/ci.yaml despite FU-185's "shellcheck-gated".
-  (5) Handoff inbox: the circles ADR request (real-content seam; operator decision) — unchanged.
-  (6) #946 A5 evidence seed, the oracle pin ping-pong, 23 stale archive entries → `/docs-cleanup`
-  — unchanged.
 - **⚑ PICKUP (2026-09-08 evening seat — the failing-workflows read): DONE, nothing to pick up.**
   Updater (PR#1521), responder model (PR#1522), agent-session bundle vars (PR#1523) merged and
   verified live (16:30 cron green on 12 repos; retro PR#1524 harvested; `respond-wm2cf` ran a real
@@ -213,18 +198,6 @@ never the session's arc — that is TICK-LOG's.)
   hardware repo) — write it only once the operator says the box is bought; (b) FU-218 re-read
   of ARC queue p90 at 07–09/17–19 UTC after ~09-15; (c) FU-224 throttling-panel re-read ~09-15
   → archive; (d) GAPS tofu-apply-G1 (tf-apply exit 127 after a successful apply) is unchased.
-- **⚑ S8 IN FLIGHT (sixth sitting 2026-09-08, corpus session; stint #1418, Size 3):** originals
-  1a/2/3/5/6 + sprout #1452 DONE; **#1420 DONE (PR#1502, 09:27Z — card = three acts, scratch-Goal
-  lint 0/0 recorded on the PR)**; 1b = PR#1459 merged + residue #1460: legs 1–2 in **PR#1503**
-  (armed; bot CR at 09:30Z fixed in-PR — the resumable-goal-child loop now holds on a malformed
-  block, row `block-class-malformed`), legs 4–6 = **PR#1510** (armed, bot review pending). #1424 half 1+2 merged
-  (PR#1461/#1479); its residue is the closeout leg. **#1423 UN-HELD 2026-09-08 (wave-2 gate PASSED — readout on the issue; operator chose option 2: build it
-  inside S8)** — NEXT corpus session: fan the build to subagents (scan nomination predicate + rows ·
-  checkpoint theme-formation play · membership test · rule-7 re-key · master-refresh hop doc), then
-  #1424's closeout leg + closeout 1. Bot-waits at
-  exit: PR#1510, PR#1506 (approved, armed — the issue_body setext-fence
-  fix), the loop's PR#1508 (#1505, seat-approved — verify one triggered GC run post-merge if
-  this session did not) and PR#1509 (#1507 — needs the codeowner read: agents/** + FSM).
 - **⚑ OPERATOR — circles-iac PR#108 is UN-ARMED and waiting on you (2026-09-07):** circles' claim
   `egress.profile: none → python`. Its rationale ("static page + helm gate … no pypi") went stale
   when circles gained a uv chassis; flipping `enforce` with `none` would HANG every ride at its
@@ -359,7 +332,7 @@ never the session's arc — that is TICK-LOG's.)
     (proposed). oracle-iac#485 (mcp api claim) is the oracle jail's. Operator read, not owned
     here: public `/metrics` on the api hostname (fleet).
   - G-A #775 + G-F #1039 VALIDATED and closed — nothing left here.
-- **⚑ CONTAINERS TO CLOSE:** **#979 S5** [stint](chainless-redesign.md) — quiet window passed 09-02, but a FIFTH original
+- **⚑ CONTAINERS TO CLOSE:** **#1418 S8** — closeout 1 done 2026-09-14; holds #1649; close ≥72 h after it lands · **#979 S5** [stint](chainless-redesign.md) — quiet window passed 09-02, but a FIFTH original
   (**#1393**, the post-S5 heat-cited trims, filed 2026-09-05 from this sitting's measurement) re-opens
   the tree; close ≥72h after it lands · **#741 S7 closeout-1 OVERDUE since ~08-29** (5/5
   originals done, cutover 08-26, no closeout comment ever posted) — needs the closeout
