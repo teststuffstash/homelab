@@ -8972,3 +8972,18 @@ Issues: #1620, #1621.
   host under CI load is the correlation; `console=ttyS0` already on the cmdline so the serial
   capture is a VM-config-only change · **PR#1654** the two per-node reboot detectors (fixture =
   wk-03's week; live replay fires the 7 d rule on .63 only) · wound down at ~600k ctx.
+- **Late morning (the G-H launch):** operator validated #1231 (+ #1162 closed) → **#1238 re-homed to
+  #1640**; **PR#1655** platform primary → `deepseek-v4.1-flash:exacto` / fallback `claude/haiku`
+  (the `:exacto` suffix on the STATIC string is how a `shadow` stack rides FU-186 — the router's
+  suffix dies with its discarded decision; router self-test needed the `model_tiers` entry; one
+  doc-splice CR) merged 09:30Z, claim read live 09:30:44Z · **fleet un-latched** by QUOTING the
+  `AGENT_STRIKE:` comments (reader + chain-walk anchor on the first characters) on platform
+  #1620/#1621/#1649 + oracle #550/#572/#581/#232/#325, `agent/error` stripped, #1653/of#588/of#590
+  closed to #1640 · **theme 1 FILED + QUEUED** (#1665–#1669, chain 1→3→2→5→8, `goal/1640-router`
+  refreshed to master) · **PR#1654 merged 09:12Z** (descriptions rewritten to symptom+checks on
+  the bot's rubric catch) · two design rulings on #1640 (cell health = router, fleet strike = a
+  dispatch-blocking alert; the responsibility split router / exporter / operator / ledger) ·
+  oracle-fleet PR#591 read: five LOGIC rounds (2 regressions-from-the-fix by v4-flash, 2 late
+  reviewer findings present since round 1) — G-H changes nothing for that class; the levers are
+  the round-3 label re-grade (the built #1231 carrier) and the reviewer's comprehensiveness (a
+  KPI for r5) · session ended ~650k ctx.
