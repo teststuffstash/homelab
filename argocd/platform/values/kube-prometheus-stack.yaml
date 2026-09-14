@@ -147,7 +147,7 @@ additionalPrometheusRulesMap:
               severity: warning
           - alert: ContainerMemoryNearLimit
             annotations:
-              description: Container {{ $labels.container }} has sat at {{ $value | humanizePercentage }} of its memory limit for 15m — self-cgroup-OOM risk. If it's a FU-112(b) Guaranteed platform daemon (cilium-agent / longhorn-manager / longhorn-driver), RAISE its limit in tofu/cilium.tf or tofu/longhorn.tf before it OOMs and takes networking/storage down on that node.
+              description: Container {{ $labels.container }} has sat at {{ $value | humanizePercentage }} of its memory limit for 15m — self-cgroup-OOM risk. If it's a FU-112(b) Guaranteed platform daemon (cilium-agent / longhorn-manager / longhorn-csi-plugin and its CSI sidecars), RAISE its limit in tofu/cilium.tf or tofu/longhorn.tf before it OOMs and takes networking/storage down on that node — cilium-agent and longhorn-manager via their own `resources` keys, the CSI components via `defaultSettings.systemManagedCSIComponentsResourceLimits` (the old `longhornDriver.resources` key was inert — no chart template consumed it — and is gone).
               summary: '{{ $labels.namespace }}/{{ $labels.pod }} near its memory limit'
             expr: container_memory_working_set_bytes{namespace=~"kube-system|longhorn-system", container!="", container!="POD"} / on (namespace, pod, container) kube_pod_container_resource_limits{namespace=~"kube-system|longhorn-system", resource="memory"} > 0.85
             for: 15m

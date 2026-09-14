@@ -1,0 +1,9 @@
+# corpus-dispatch-allowlist — the decision table (family contract in fixture.yaml). Row state
+# (RING_REPO, RING_PREFIX, GH_TOKEN) lives in rows/<id>/vars.sh, not in this table.
+# id                | world | patch | env | expect           | params
+accept-bare         |       |       |     | accept           | prefix=2026-09-14
+accept-slug         |       |       |     | accept           | prefix=2026-09-14
+accept-empty-repo   |       |       |     | accept           | prefix=2026-09-14
+accept-absent-repo  |       |       |     | accept           | prefix=2026-09-14
+reject-other-repo   |       |       |     | reject-allowlist |
+reject-no-token     |       |       |     | reject-token     |

@@ -23,6 +23,7 @@ resources:
   - agent-read-rbac.yaml
   - claude-token.yaml
   - coordinate-argo.yaml
+  - corpus-dispatch-argo.yaml
   - deploy-revert-argo.yaml
   - egress-cnp.yaml
   - fix-debounce-argo.yaml

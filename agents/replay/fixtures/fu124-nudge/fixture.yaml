@@ -1,15 +1,33 @@
-# fu124-nudge — the FU-124 deterministic nudge (homelab#1006, third call site of the #986 defect class)
+# fu124-nudge — the FU-124 deterministic nudge (homelab#1006, third call site of the #986 defect
+# class; #1649, the sibling-site miss of the #1452 merge-ready predicate)
 #
 # WHAT IT PINS. The coordinator-scan's FU-124 nudge loop calls `gh api -X PUT .../update-branch`
-# for every armed+BEHIND PR. After homelab#1006, it passes `expected_head_sha` from the PR's
-# `headRefOid` (fetched in the `prsjson` snapshot), preventing the clobber-race that #986 fixed
-# in `update-pr-branch.sh`. The failure message is reworded to acknowledge 422 as a safe race
-# outcome rather than misreporting it as a token-scope gap.
+# for the armed+BEHIND PRs that are MERGE-READY. After homelab#1006, it passes `expected_head_sha`
+# from the PR's `headRefOid` (fetched in the `prsjson` snapshot), preventing the clobber-race that
+# #986 fixed in `update-pr-branch.sh`. The failure message is reworded to acknowledge 422 as a safe
+# race outcome rather than misreporting it as a token-scope gap.
+#
+# ⚠ #1649 — WHY THE SELECTOR IS NOT JUST armed ∧ BEHIND. This loop is the THIRD call site of the
+# update-branch mutation (the other two are `agents/update-pr-branch.sh` legs 1 and 2) and a
+# SIBLING of leg 1's pick, so it carries leg 1's predicate or it bypasses the merge queue. It
+# bypassed it: nudging every armed+BEHIND PR kept codeowner parks current on every master push
+# (PR#1576 ×87, PR#1540 ×92, PR#1541 ×50 merge commits, each with its own `ci` run — the churn
+# #1452 exists to end), and because the commits are authored by THIS loop's identity
+# (coordinator-git) rather than the updater's (homelab-merge), the churn was attributed to the
+# updater for a week. The selector now takes the half of leg 1's predicate the snapshot can decide
+# — `reviewDecision == "APPROVED"` — and leaves the rest to the updater, which owns the full
+# predicate (the `bot_approved_head` arm needs `reviews` + a per-candidate commits probe this fetch
+# does not carry; duplicating it here would be a second reader of one predicate).
 #
 # THE CONTRACT:
 #   1. No armed+BEHIND PRs → no call, no output (level-triggered idempotency)
-#   2. One armed+BEHIND PR → nudge called with expected_head_sha, success message printed
+#   2. One armed+BEHIND MERGE-READY (APPROVED) PR → nudge called with expected_head_sha, success
+#      message printed
 #   3. One armed+BEHIND PR, API fails → failure message printed (422 = race safe; other = investigate)
+#   4. One armed+BEHIND CODEOWNER PARK (REVIEW_REQUIRED, bot-approved at head) → NO call, no output
+#      (#1649 — the park waits for its human; leg 1 leaves it BEHIND by design)
+#   5. One armed+BEHIND UNREVIEWED PR (reviewDecision "") → NO call, no output (#1649 — not
+#      merge-ready; the updater's `bot_approved_head` arm owns it)
 #
 # The `prsjson` snapshot is set up by the bridge from the world file. The `gh api` call is a
 # mutation (PUT), so the stub records it and returns success by default. For the failure row,

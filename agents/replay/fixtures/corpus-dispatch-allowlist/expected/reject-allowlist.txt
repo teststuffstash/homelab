@@ -1,0 +1,2 @@
+OUT FATAL: corpus-published ring names 'teststuffstash/sleep-iac' — not on the dispatch allowlist (only teststuffstash/oracle-fleet); refusing to spend the coordinator's write token on it
+RC 1
