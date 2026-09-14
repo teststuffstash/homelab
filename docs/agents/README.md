@@ -79,7 +79,7 @@ growing without bound.
 | [`iac-lane.md`](iac-lane.md) + [`iac-lane-fsm.md`](iac-lane-fsm.md) | The `-iac` deploy lane — no humans in the path, the IAC-G gap register |
 | [`agentstack.md`](agentstack.md) | The `AgentStack` claim — what a stack declares, what the Composition renders |
 | [`platform-and-stacks.md`](platform-and-stacks.md) | Platform ⟷ stack separation; the composition axes; the credential airlock |
-| [`model-routing.md`](model-routing.md) | Chains, strikes, the live registry, the scout, the task-class pilots |
+| [`model-routing.md`](model-routing.md) | Model choice rules, failure taxonomy, fallback chains, provider pinning, the scout; see [`../spikes/model-routing-history.md`](../spikes/model-routing-history.md) for investigation history |
 | [`chainless-redesign.md`](chainless-redesign.md) | The ADR-107 charter — a harness matrix, N subscription rails, every role routed; claim-knob ledger, Go-rail evidence, build order |
 | [`observability-and-retro.md`](observability-and-retro.md) | Session capture, the ledger, the retro loop |
 | [`fixer-context.md`](fixer-context.md) | The three context layers a worker actually receives |

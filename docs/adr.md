@@ -1550,7 +1550,7 @@ codeowner economics. **Consequences:** ADR-102's bucket text is fully correct ag
 IL-T15/T17 master-lane disposition simplifies away; the ADR-097 footprint HOLD and the #270
 replay coupling retire (conflicts route via the updater/MP-T06 as measured); FU-090's gauge =
 the exporter's existing walk over now-native depth; build items = Bucket A4/A2 then the next
-Goal's children; doc homes: issue-authoring.md, model-routing.md §M10, workflow.md.
+Goal's children; doc homes: issue-authoring.md, model-routing-history.md §M10, workflow.md.
 
 ### ADR-103 — The platform develops itself like a stack: replay-gated clauses, human-only timelines, weekly self-KPIs
 
@@ -1638,7 +1638,7 @@ doctrine changes stay operator-gated except plain factual wrongness.
 
 ### ADR-115 — Provider selection prices the JOB: Exacto delegated for cheap classes, an overhead-cost pin for priced ones
 
-**Status:** Accepted (2026-08-26, the 0731 intake session — evidence in model-routing.md §M14).
+**Status:** Accepted (2026-08-26, the 0731 intake session — evidence in model-routing-history.md §M14).
 
 **Decision.** Provider choice is priced per successful JOB, not per token:
 `expected_cost = eff_price × tokens + p(fail | provider, model) × C_overhead`, where C_overhead

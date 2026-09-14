@@ -1,7 +1,7 @@
 # Goal lane v1.1 — the FU-165 pilot (homelab#278), measured
 
 **Status:** SETTLED — ADR-106 (2026-08-12) is the v1.2 design this evidence produced; kept as its evidence record. Original framing: feeds the v1.2 design (FU-168, FU-166, the #295
-bucket-semantics question, FU-090's §M10 phase-not-clause block). Version register:
+bucket-semantics question, FU-090's docs/spikes/model-routing-history.md §M10 phase-not-clause block). Version register:
 [`../agents/issue-authoring.md`](../agents/issue-authoring.md) §Goal lane versions.
 
 The pilot ran the ADR-102 lifecycle end-to-end on [the platform stack](../agents/agentstack.md): 12 direct children,
@@ -82,7 +82,7 @@ exhibit is a claude.ai artifact ("Goal #278 — sprout DAG") — THIS file is th
 
 The v1.2 design session (ADR-106; FU-168 carries the build/soak residue — its (a) concurrency
 half shipped 2026-08-12, the soak read failed 2026-08-25 and the emitter hunt rides #459), plus the sibling decisions it composes with: #295 bucket semantics
-(finding 1), the typed worker-findings disposition gate (finding 2), §M10 checkpoint cadence
+(finding 1), the typed worker-findings disposition gate (finding 2), docs/spikes/model-routing-history.md §M10 checkpoint cadence
 (finding 3), FU-166(b) event-driven seat watches (finding 6). Plus the stack-scope question
 (operator, 2026-08-12): v1.1 ran ONE cross-repo child end-to-end (agent-runtime#66 → its PR#67,
 native lineage + budget walk + ride all held), but no sibling platform repo has a merge doorbell

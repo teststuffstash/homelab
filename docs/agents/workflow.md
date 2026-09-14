@@ -122,7 +122,7 @@ for the whole of 2026-07/08 and nothing said so. It is deliberately **fail-open*
 balance is available (unreachable proxy, dead credit leg, or a value held past the proxy's
 `credit_max_age_s`), and since #190 it says so in one line on the dispatch path naming the URL, so
 "no floor right now" is never again indistinguishable from a healthy account. Full mechanism:
-[`model-routing.md`](model-routing.md) §M12. Observability: Grafana
+[`model-routing.md`](model-routing.md) docs/spikes/model-routing-history.md §M12. Observability: Grafana
 `claude-subscription` (utilization vs threshold, data age, deferral state) + the
 `SubscriptionDispatchLimited` (deferring >15m) and `SubscriptionWeeklyPoolLow` alerts.
 

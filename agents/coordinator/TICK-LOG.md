@@ -5529,7 +5529,7 @@ first live ADR-110 maintenance session before the ADR existed.
   (subtractive — drop the pin, keep max_price); priced classes get pin-v2 (band +
   quality tie-break + benchmark floor + live tool-call-error floor + #783 pair-cooldowns);
   experiments keep the `@` arms; the scout canary rides its class's provider policy
-  (representativeness = same policy). Doc: model-routing.md §M14; build pointer FU-186;
+  (representativeness = same policy). Doc: model-routing-history.md §M14; build pointer FU-186;
   live decision-table receipts: today's pick = Relace-fp4 over first-party for $0.0012/M.
 - **PR#963 (scout intake + @arms) review round:** all four findings fixed (void stays void;
   intake-honest digest intro; :free @slot resolution past pin_for's sidestep; @-pin

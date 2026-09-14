@@ -75,7 +75,7 @@ if [ -n "$PR" ] && [ -z "$PROJECT" ]; then
   exit 2
 fi
 
-# Derive rail from model id via model_id.py (ADR-096 §M10 explicit-override semantics).
+# Derive rail from model id via model_id.py (ADR-096 docs/spikes/model-routing-history.md §M10 explicit-override semantics).
 # The --model flag IS the override — the route call is skipped entirely.
 eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
 # MODEL_RAIL, MODEL_HARNESS, MODEL_MODEL are now set.

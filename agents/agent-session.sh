@@ -231,7 +231,7 @@ if [ "$AGENT_ROUTER" != "off" ]; then
   # git-owned urgency_map it already falls back to, so the table keeps exactly one reader — and
   # an EXPLICIT `urgency` only where this launcher knows a round-state fact no label carries:
   # --work-branch means a fix round on an existing PR (ci-red retry / changes-requested), which is
-  # deadline-tight by §M11's own examples. Best-effort by construction: an unreadable or non-array
+  # deadline-tight by docs/spikes/model-routing-history.md §M11's own examples. Best-effort by construction: an unreadable or non-array
   # label set degrades to [] (the router's default-tight path) — a labels read must never block or
   # skew a dispatch, and jq -e validates the shape so a gh error string cannot torpedo the jq -nc
   # below into an empty body.
@@ -284,7 +284,7 @@ if [ "$AGENT_ROUTER" != "off" ]; then
 fi
 
 # ── homelab#158: an OpenRouter capacity outage DEGRADES to the haiku subscription rail ────────────────
-# (Operator directive, 2026-08-08; the reasoning and the doctrine amendment: model-routing.md §M12.)
+# (Operator directive, 2026-08-08; the reasoning and the doctrine amendment: model-routing-history.md docs/spikes/model-routing-history.md §M12)
 #
 # The evening it comes from: OpenRouter went hard-down for workers (provisioning keys-modify daily
 # limit + a $0.17 balance) and the ENTIRE fleet's dispatch deferred for hours, while the
@@ -1672,7 +1672,7 @@ fi
 # `openrouter/<codename>` keeps its prefix because that id really does live under that namespace.
 GOOSE_MODEL="$MODEL_MODEL"
 
-# ADR-081 v1 (FU-062 §M4, GOOSE ONLY): goose cannot carry OpenRouter `provider` prefs, so its
+# ADR-081 v1 (FU-062 docs/spikes/model-routing-history.md §M4 GOOSE ONLY): goose cannot carry OpenRouter `provider` prefs, so its
 # OpenRouter traffic rides the in-cluster egress proxy, which injects the per-model provider pin
 # into chat/completions bodies (argocd/resources/openrouter-proxy/ — provider-injection only in
 # v1; cred injection + Cilium lockdown stay FU-018/FU-020). Opt out with
@@ -1815,7 +1815,7 @@ fi
 # standing token in a workbench-admin namespace was the cross-stack escalation the airlock exists
 # to prevent). The per-op proxy fetch TokenReviews the pod's SA (GIT_TOKEN_REQUIRE_AUTH=1).
 
-# FU-018 interim leg (FU-062 / model-routing.md §M4, OPENCODE ONLY): the prompt cache lives at the
+# FU-018 interim leg (FU-062 / model-routing-history.md docs/spikes/model-routing-history.md §M4 OPENCODE ONLY): the prompt cache lives at the
 # provider, so per-request provider roulette destroys it — pin the SESSION to the registry's
 # effective-cheapest cache-supporting tools-capable provider. Rendered as a per-session opencode
 # config (OPENCODE_CONFIG merges under the repo's own opencode.json, so a project override wins);
@@ -2237,7 +2237,7 @@ if [ "$HARNESS" = "claude" ]; then
           *)
             # CAPACITY: a window is latched (the monthly reset is ~25 days out) or homelab#600's
             # observed-429/402 fired — deferring parks every Go-primary dispatch for the whole
-            # window. REROUTE through the M12 degrade path (docs/agents/model-routing.md §M12)
+            # window. REROUTE through the M12 degrade path (docs/spikes/model-routing-history.md docs/spikes/model-routing-history.md docs/spikes/model-routing-history.md §M12
             # instead, with the SAME bounds. ⚠ This is a FAITHFUL DUPLICATION of the rail-degrade
             # block's bounds (:404-438) — the replay ratchet extracts the two sentinels
             # independently, so a shared helper defined in one block is invisible to the other's
@@ -2824,7 +2824,7 @@ if [ -n "$RUN_CMD" ]; then
   # <<<REPLAY:post-merge-push<<<
 
   # >>>REPLAY:strike-scope>>>
-  # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates with a
+  # STRIKE BOOKKEEPING (FU-062, docs/spikes/model-routing-history.md docs/spikes/model-routing-history.md §M1: a run that terminates with a
   # harness death is an infra strike candidate — classify it and post ONE structured comment to the ISSUE.
   # That comment IS the strike store: state lives in GitHub, and the coordinator greps `AGENT_STRIKE:`
   # in issue comments to blacklist the model for this task and pick the next chain entry. Keep the first

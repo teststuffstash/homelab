@@ -5,7 +5,7 @@ multi-model fan-out, evaluated, woven, hardened by implementation, and handed to
 **First-pass record (2026-08-10) from ONE full run** — circles, 2026-08-03..08 — plus the design
 rulings from the operator session that harvested it. Per the ≥2-projects rule, the *unsettled
 register* at the bottom is deliberate: the second run (idp, FU-126) settles it. Model selection
-mechanics live in [`model-routing.md`](model-routing.md) §M13 (ADR-104); the researcher role's
+mechanics live in [`model-routing.md`](model-routing.md) docs/spikes/model-routing-history.md §M13 (ADR-104); the researcher role's
 machinery in [`roles.md`](roles.md); branch/lineage mechanics in
 [`issue-authoring.md`](issue-authoring.md) §`Base:`.
 
@@ -70,7 +70,7 @@ As run on circles (the worked example — PR numbers are circles'):
    over-provisioned form (see Principles).
 5. **Implementation experiment** — build against the woven contract as a TEST of the spec (and
    of goal decomposition: circles ran a decomposed goal #17 vs a one-shot arm #21 — the
-   evidence behind §M10's "a goal small enough for one ride is not a goal").
+   evidence behind docs/spikes/model-routing-history.md §M10's "a goal small enough for one ride is not a goal").
 6. **Harvest** — fold what implementation taught back into the specs (#28: 3 new rulings,
    ⚖ 49→52, palette fix), **discard the implementations** ("the contract is the artifact"),
    merge the specs-only PR to master, freeze the experiment branches as benchmark arms.
@@ -84,7 +84,7 @@ sonnet reviews, sonnet/opus coordinates, opus/fable meta-coordinates) — transp
 whose cost shape is inverted: the FIRST step carries the volume, each later step shrinks in
 tokens while growing in leverage, so unit cost may rise:
 
-| step | token volume | selection (bands: §M13 pools) |
+| step | token volume | selection (bands: docs/spikes/model-routing-history.md §M13 pools) |
 |---|---|---|
 | fan-out arms | largest (N × full tree) | `regular` pool, slots 1..N — diversity is the product |
 | downstream proxy | small × N | `instrument` — one fixed cheap model, constant by construction |
@@ -92,7 +92,7 @@ tokens while growing in leverage, so unit cost may rise:
 | weave assist / synthesis | smallest | `ultra` — top tier, subscription |
 
 Callers name **zero models** — `class` + `slot` + `jitter:false` against the scout-curated pools
-(§M13; the draw verb + pools build is tracked by FU-162, shipped 2026-08-11 in homelab#290). The
+(docs/spikes/model-routing-history.md §M13; the draw verb + pools build is tracked by FU-162, shipped 2026-08-11 in homelab#290). The
 bands are disjoint *by curation convention*, which structurally prevents run-1's two selection
 slips (below) without router enforcement.
 
@@ -101,7 +101,7 @@ In practice, for step 1: `bash agents/research-fanout.sh <project> <mission-issu
 defer and stays EMPTY — over-provision covers it; nothing is substituted. Record the arm table it
 prints, `pool-version` included: that triple is what re-draws the mission. ⚠ The hand-seeded
 `regular` band is 6 deep today, so a 7-arm ask visibly defers its last slot until the scout's
-weekly refresh (§M7 leg 5) deepens it.
+weekly refresh (docs/spikes/model-routing-history.md §M7 leg 5) deepens it.
 
 ## Principles (rulings, 2026-08-10)
 
@@ -127,7 +127,7 @@ weekly refresh (§M7 leg 5) deepens it.
 
 - **The roster was hand-applied and unvalidated**: arm #2 rode deepseek-v4-**flash**-0731 where
   the intent was **pro** — a one-token slug slip nothing displayed (TICK-LOG 2026-08-03: "draw =
-  AA intelligence tier ∩ own reliability evidence; operator picked"). Fix = the §M13 draw +
+  AA intelligence tier ∩ own reliability evidence; operator picked"). Fix = the docs/spikes/model-routing-history.md §M13 draw +
   recorded arm table, not enforcement.
 - **The proxy graded its own arm**: the instrument (deepseek-v4-flash) was also arm #2. Fixed
   structurally by band disjointness (`instrument` ∉ `regular`).

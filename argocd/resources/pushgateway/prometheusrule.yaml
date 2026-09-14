@@ -76,7 +76,7 @@ spec:
         # `openrouter-operator`, agents/model-scout.sh:37) against brand-new, unproven models, and
         # `agents/model-scout.sh` already treats a canary failure as expected — "a canary failure never
         # fails the tick". Three of them failing in one 6-minute tick is ONE scout-infra datum, not a
-        # fleet infra-death burst (docs/agents/model-routing.md §M7 rule 4, common-cause rule; FU-161),
+        # fleet infra-death burst (docs/agents/model-routing-history.md §M7 rule 4, common-cause rule; FU-161),
         # yet it tripped this alert on a project where nothing was broken. `issue` is a PUSHGATEWAY
         # GROUPING-KEY label = `AGENT_TASK` with a leading `issue-` stripped, and canaries push
         # `--task "scout-<mangled-id>"` (model-scout.sh:55), which never starts with `issue-` — so the
