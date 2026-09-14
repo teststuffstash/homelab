@@ -193,8 +193,8 @@ check(row["worker_exit_statuses"] == ["clean", "no-artifact", "clean", "clean", 
 check(row["ci_sequence"] == [True, None, True, True, False], "row ci_sequence aligned")
 check(row["retry_storms"] == 1, "row retry_storms counts the strike-only auth-storm")
 check(row["total_cost_usd"] == 0.65, "row total_cost_usd = 0.10+0.05+0.20+0.30 = 0.65")
-check(row["budget_tier"] == "sm" and row["budget_cap_usd"] == 0.5, "row budget tier/cap present")
-check(row["calibration_error"] == round(0.65 / (0.5 * 5), 3), "row calibration_error = 0.65/(0.5*5) — per-round utilisation, not cumulative")
+check(row["budget_tier"] == "sm" and row["budget_cap_usd"] == 1.0, "row budget tier/cap present (sm ENFORCED cap $1.00 since PR#1650 — the CR-label fallback reads ledger.TIERS)")
+check(row["calibration_error"] == round(0.65 / (1.0 * 5), 3), "row calibration_error = 0.65/(1.0*5) — per-round utilisation against the ENFORCED cap, not cumulative")
 
 # ci_causes: harvested from both issue and PR comments (homelab#1286). proj#7 has no
 # ci-cause markers on its own issue comments, but its PR (proj#1) has three markers:
@@ -235,13 +235,13 @@ ledger.sh = fake_sh_budget
 cr92 = ledger._budget_from_cr("proj", "92")
 check(cr92 is not None, "_budget_from_cr('proj', '92') found a CR")
 check(cr92[0] == "xs", "_budget_from_cr('proj', '92') returns tier xs (not md from 929)")
-check(cr92[1] == 0.25, "_budget_from_cr('proj', '92') returns cap 0.25 (xs tier)")
+check(cr92[1] == 0.5, "_budget_from_cr('proj', '92') returns cap 0.5 (xs ENFORCED cap, PR#1650)")
 check(cr92[2] == 0.08, "_budget_from_cr('proj', '92') returns estimate 0.08")
 
 cr929 = ledger._budget_from_cr("proj", "929")
 check(cr929 is not None, "_budget_from_cr('proj', '929') found a CR")
 check(cr929[0] == "md", "_budget_from_cr('proj', '929') returns tier md")
-check(cr929[1] == 1.0, "_budget_from_cr('proj', '929') returns cap 1.0 (md tier)")
+check(cr929[1] == 2.0, "_budget_from_cr('proj', '929') returns cap 2.0 (md ENFORCED cap, PR#1650)")
 check(cr929[2] == 0.50, "_budget_from_cr('proj', '929') returns estimate 0.50")
 
 # No matching CR for issue 1 (no CR with prefix proj-issue-1-round-)
@@ -272,7 +272,7 @@ ledger.sh = fake_sh_tiebreak
 cr42 = ledger._budget_from_cr("proj", "42")
 check(cr42 is not None, "_budget_from_cr('proj', '42') found a CR (tie-break test)")
 check(cr42[0] == "md", "_budget_from_cr('proj', '42') returns tier md (highest round 3, not xs from round 1)")
-check(cr42[1] == 1.0, "_budget_from_cr('proj', '42') returns cap 1.0 (md tier)")
+check(cr42[1] == 2.0, "_budget_from_cr('proj', '42') returns cap 2.0 (md ENFORCED cap, PR#1650)")
 check(cr42[2] == 0.50, "_budget_from_cr('proj', '42') returns estimate 0.50 (from round 3)")
 
 # ── 8. _budget_from_cr() malformed label handling (homelab#988) ──────────────────────────
@@ -296,7 +296,7 @@ ledger.sh = fake_sh_malformed
 cr99 = ledger._budget_from_cr("proj", "99")
 check(cr99 is not None, "_budget_from_cr('proj', '99') found a CR despite malformed label on round 1")
 check(cr99[0] == "sm", "_budget_from_cr('proj', '99') returns tier sm (from valid round 2, not crashed by round 1)")
-check(cr99[1] == 0.5, "_budget_from_cr('proj', '99') returns cap 0.5 (sm tier)")
+check(cr99[1] == 1.0, "_budget_from_cr('proj', '99') returns cap 1.0 (sm ENFORCED cap, PR#1650)")
 check(cr99[2] == 0.25, "_budget_from_cr('proj', '99') returns estimate 0.25 (from valid round 2)")
 
 # All CRs malformed — must return None, not crash
