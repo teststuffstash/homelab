@@ -7,5 +7,5 @@ OUT CANDIDATE inclusionai/ling-3.0-flash
 OUT CANDIDATE inclusionai/ling-3.0-tiny:free
 OUT CANDIDATES 2
 OUT SUPPRESSED batch=20 variant=0
-OUT DIGEST-LINE *Suppressed by the base-id diff (docs/spikes/model-routing-history.md §M7 leg 1): 20 `:batch` re-listing(s) — an async endpoint cannot serve an interactive session — and 0 other suffix variant(s) of a base already known or already listed above. A variant is not a newcomer.*
+OUT DIGEST-LINE *Suppressed by the base-id diff (§M7 leg 1): 20 `:batch` re-listing(s) — an async endpoint cannot serve an interactive session — and 0 other suffix variant(s) of a base already known or already listed above. A variant is not a newcomer.*
 RC 0
