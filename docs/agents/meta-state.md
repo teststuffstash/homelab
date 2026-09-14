@@ -33,7 +33,7 @@ never the session's arc — that is TICK-LOG's.)
 - **⚑ PICKUP (2026-09-14 morning corpus session — SELECTIVE corpus load, the heat trial;
   arc in TICK-LOG).** (1) **#1231 verdict is the operator's** — seat recommendation posted on the
   Goal (validated, narrowed: acceptance-1 leg observed under #1640 acceptance 6; #1238 re-parents
-  to #1640 beside acceptance 8 because its `default-pin` arm and the Go rail both change under
+  to #1640 beside acceptance 8 because its `default-pin` arm and the [Go rail](../glossary.md) both change under
   theme 1; #1237 stays seat-run, any sitting). **After the label:** re-parent #1238, file theme
   1's five children from the gated drafts (scratchpad `theme1/*.final.md` — re-draft if lost:
   `Base=goal/1640-router`, `Class=build`, `Origin=…#1641`, order 1 → 3 → 2 → 5 → 8), `git merge
@@ -43,7 +43,7 @@ never the session's arc — that is TICK-LOG's.)
   joins the serving set in acceptance 1 — record on the Goal); effort (FU-174) = a checkpoint-
   formed THEME 3 after #1237's rows + theme 1's merge, round-1-max as an `effort_map` row keyed
   on round-state, later-round "environmental" attributed by theme 2's retry ladder, never by
-  inspection. (2) **S8 #1418 closeout 1 DONE** (12 dispositions, built-vs-left posted; #1424 →
+  inspection. (2) **S8 #1418 ([stint](chainless-redesign.md)) closeout 1 DONE** (12 dispositions, built-vs-left posted; #1424 →
   PR#1648 merged 06:36Z); the tree holds **#1649** (updater park-skip not holding — r3 F3's
   evidence) → quiet window arms from its fix; parent closes at a later sweep. (3) **Retro r4
   (PR#1645, two reports) READ, nothing filed:** opus F3/F4/F6 + deepseek F1/F4/F5 ARE #1640
