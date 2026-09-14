@@ -2097,6 +2097,18 @@ box ships `bootMode = "bios"` pending a firmware read; the `nixos/` tree is a ne
 CI gate yet; SSH authorized keys become declarative config (rotation a two-commit diff); the host key and every other credential are wallet data placed as root-only files outside the store, never in the flake.
 Mechanism, phases and the probe set: [`management-box.md`](management-box.md). Tracker: FU-097
 (which surfaces it may reconcile — still the gate), FU-012 (state + creds move here).
+**Amended 2026-09-14 (operator, from the 2026-09-13 night design thread): the box follows
+`master`, not a reviewed ref.** The original "from a reviewed ref" became an operator-advanced
+`mgmt-release` branch that was never created in two days, while the box already had the three
+things an ArgoCD-shaped updater needs — pull, a gate, a local rollback. The human gate moves to
+where it already was: the `/nixos/` CODEOWNERS row (plus `scripts/` and `policy/`, owned through
+the ADR-128 trial), so every file the box executes from its checkout is a human read at merge;
+the ref was a second promotion of reviewed commits, not safety. Activation stays deliberate —
+`mgmt-pull` re-activates the closure only when `nixos/` changed since the last activated
+revision, and every fetch carries the App token (#1637). **Considered:** keep `mgmt-release` and
+advance it by hand (rejected: a promotion step with no second reviewer, and the box's whole point
+is fewer operator touches); a cluster-pushed update (rejected as before — an inbound credential to
+a trust anchor). The `mgmt-pull` timer is armed with this amendment.
 
 ### ADR-130 — One GitHub App per writing role, and every required status context pinned to its poster (2026-09-13)
 
