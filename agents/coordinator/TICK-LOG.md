@@ -9048,4 +9048,18 @@ Issues: #1620, #1621.
   Windows: wk-02 = `node-maintenance down` → `kubectl delete node wk-02` → `mgmt-tf apply
   -replace=` VM + its `talos_machine_configuration_apply` → `up`; wk-03 = down → `qm start` (the
   pending disk grows at qemu start; Talos grows EPHEMERAL) → `up`.
+- **Midday, cont. 3 (the windows):** PR#1683 (wk-02 out of `longhorn_zones`; one bot round — a
+  stale "schedulable again" sibling line, fixed) + PR#1684 (disks) merged; plan from master =
+  exactly the label swap + wk-02 replace + wk-03 grow · **wk-02 RECREATED at 80 G** 12:0x–12:12Z
+  (`node-maintenance down` → `mgmt-tf apply -replace=` VM + talos-apply → `up`; Node object
+  KEPT — the label create targets it and the fresh kubelet re-registers under the same name;
+  HA/Prometheus → hp-01, Infisical → hp-01/m70s, UniFi → wk-01 during the window; EPHEMERAL 75 G,
+  CSI registered, no orphaned replica dirs) · **wk-03 grown to 80 G** (down → `qm start` → up;
+  EPHEMERAL 75 G) · pool **37 %** (from 90 % at 10:00Z; wk-02 LV 7 %, wk-03 32 %) · **#1687
+  cp-01 eviction storm** = apiserver 4.1 GiB of 5.98 allocatable (7 d avg 3.9, max 5.5) → **cp-01
+  12 GiB** (PR#1689, applied from the branch — the first apply from master was a no-op, the PR
+  had not merged; 70 s control-plane blackout under a cp-01 silence, operator-approved) · the
+  apiserver's size is 224 CRDs + 10.3k objects, 666 of them Workflows (review-* 142 older than
+  2 d on the 7 d default) → **PR#1690 default TTL 7 d → 2 d** (record = S3 + ledger, no archive
+  DB) · post-blackout: all 10 Ready, 0 degraded volumes, controllers re-electing.
 
