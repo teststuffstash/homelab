@@ -193,8 +193,8 @@ check(row["worker_exit_statuses"] == ["clean", "no-artifact", "clean", "clean", 
 check(row["ci_sequence"] == [True, None, True, True, False], "row ci_sequence aligned")
 check(row["retry_storms"] == 1, "row retry_storms counts the strike-only auth-storm")
 check(row["total_cost_usd"] == 0.65, "row total_cost_usd = 0.10+0.05+0.20+0.30 = 0.65")
-check(row["budget_tier"] == "sm" and row["budget_cap_usd"] == 0.5, "row budget tier/cap present")
-check(row["calibration_error"] == round(0.65 / (0.5 * 5), 3), "row calibration_error = 0.65/(0.5*5) — per-round utilisation, not cumulative")
+check(row["budget_tier"] == "sm" and row["budget_cap_usd"] == 1.0, "row budget tier/cap present (sm ENFORCED cap $1.00 since PR#1650 — the CR-label fallback reads ledger.TIERS)")
+check(row["calibration_error"] == round(0.65 / (1.0 * 5), 3), "row calibration_error = 0.65/(1.0*5) — per-round utilisation against the ENFORCED cap, not cumulative")
 
 # ci_causes: harvested from both issue and PR comments (homelab#1286). proj#7 has no
 # ci-cause markers on its own issue comments, but its PR (proj#1) has three markers:
