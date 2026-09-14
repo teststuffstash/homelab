@@ -1,0 +1,19 @@
+# Drift-pinned copy of argocd/resources/agentstack/prometheusrule.yaml's groups for
+# `promtool test rules` (scripts/prometheus-rules-lint.sh runs the fixture beside it).
+groups:
+  - name: agentstack-health
+    rules:
+      - alert: AgentStackNotSynced
+        expr: |
+          kube_agentstack_status_condition{type="Synced"} == 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "AgentStack {{ $labels.name }} has been Synced=False ({{ $labels.reason }}) for 15m"
+      - alert: AgentStackHealthMetricAbsent
+        expr: |
+          absent(kube_agentstack_status_condition{type="Synced"})
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "No AgentStack Synced condition series for 30m — the XR health belt is blind"
