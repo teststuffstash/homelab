@@ -9129,3 +9129,20 @@ Issues: #1620, #1621.
 - Durable homes: `docs/agents/agentstack.md` gotcha bullet (the two new-KIND instances + the
   belt), the rbac.yaml row comment, the values-file comment on the KSM sizing. No FU filed:
   nothing deferred (grep `clustersecretstore|readOnlyGrants|kube-state-metrics.*OOM` negative).
+- **Evening, cont. (operator: homelab#1705 fleet-strike `goose-32602-truncation`; then "claude/haiku
+  cannot have a goose truncation — it still got flagged"):** read the three struck rides' run.logs
+  from S3 — every `-32602` was CONTENT (router tests/docs spelling the class name; the haiku ride's
+  own report line), all three rides finished (#1668 → PR#1704 merged; #1692 → PR#1699), one on
+  HARNESS=claude. `agent-finalize` grepped the bare code anywhere in the log. **Fix merged:**
+  agent-runtime#133 (harness gate + real-shape lookbehind, tests on the three live shapes) +
+  homelab#1706 (launcher raw-log mirror, two replay rows, 20/20); reaches pods with the next
+  agent-base deploy-pin (build 18:14Z). `agent/error` stripped from #1668/#1692, #1705 closed
+  with the finding. **oracle-fleet#604 (operator: "it has the fix"):** the worker's pushed branch
+  restored ErtPipeline* on POD PHASE — blind on the real shape (a Failed step pod is GC'd after
+  ~1 min; `for: 5m` never holds; 7-day replay: 0 firings vs 2 failed steps). Seat amendment
+  69b6704: Failed on `increase(argo_workflows_total_count{phase=~"Failed|Error",
+  exported_namespace="oracle-fleet"}[15m]) > 0` (fires on all 5 Failed workflows of the week,
+  the AgentLoopWorkflowsFailing shape), Stuck stays on pod series; oracle-fleet CI green;
+  **PR oracle-fleet#605** opened through pr-open.sh, `Refs #604` (item 3 waits on the roll).
+  ⚠ #604's two `unknown` strikes = `Upstream idle timeout exceeded` on the same deepseek exacto
+  cell, after #588 closed — a recurrence for the router read; not filed (needs a second issue).
