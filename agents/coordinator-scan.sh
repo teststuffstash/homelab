@@ -1838,6 +1838,9 @@ EOF_DBCAND
     # field it was not asked for as absent -> jq reads null -> the selector matched nothing, ever
     # (found 2026-08-05; the nudge had been silently falling back to the GitHub cron it exists to
     # stop depending on). Adding a selector field without adding it to --json is the failure mode.
+    # `reviewDecision` is the nudge's OTHER selector field since #1649 (the merge-ready half of
+    # leg 1's predicate) — same rule: it is in this fetch, and a selector added without it here
+    # would match nothing.
     # ⚠ It happened AGAIN the very next commit to touch a selector: 671a053 (2026-08-02) scoped
     # the changes-requested clause on .author.login WITHOUT adding author here — the clause
     # matched NOTHING for four days (fixed 2026-08-06, with headRefName added for the FU-143
@@ -3324,8 +3327,21 @@ EOF_GTHEMES_OPEN
     # DETERMINISTIC nudge: call the update-branch API directly — idempotent at GitHub (422 =
     # already current), self-limiting (a nudged PR stops being BEHIND), FAIL-LOUD on 403 (a
     # token-scope gap must be visible, not silent). No LLM, no unit, no session.
+    # ⚠ MERGE-READY ONLY (#1649) — this loop is the THIRD call site of the update-branch mutation
+    # (the other two are `agents/update-pr-branch.sh` legs 1 and 2) and it is a SIBLING of leg 1's
+    # pick, so it carries leg 1's predicate or it bypasses the merge queue. It did bypass it: the
+    # selector was armed ∧ BEHIND alone, so every armed+BEHIND PR was nudged on every master push —
+    # including the codeowner parks leg 1 deliberately leaves BEHIND (measured #1649: PR#1576 ×87,
+    # PR#1540 ×92, PR#1541 ×50 merge commits, each with its own `ci` run; the commits are authored
+    # by THIS loop's identity, coordinator-git, not by the updater's homelab-merge — which is how
+    # the churn was attributed to the updater for a week). The nudge now takes the half of leg 1's
+    # predicate the snapshot can decide — `reviewDecision == APPROVED`, "nothing but currency + CI
+    # left" — and leaves everything else to the updater, which owns the full predicate (the
+    # `bot_approved_head` arm needs `reviews` + a per-candidate commits probe this fetch does not
+    # carry, and duplicating it here would be a second reader of one predicate). A park
+    # (REVIEW_REQUIRED) is therefore never nudged: it waits for its human, as leg 1 intends.
     # >>>REPLAY:fu124-nudge>>>
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|select((.autoMergeRequest!=null) and (.mergeStateStatus=="BEHIND"))|.number'); do
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|select((.autoMergeRequest!=null) and (.mergeStateStatus=="BEHIND") and (.reviewDecision=="APPROVED"))|.number'); do
       u_oid="$(printf '%s' "$prsjson" | jq -r --argjson u "$u" '.[]|select(.number==$u)|.headRefOid//""')"
       if gh api -X PUT "repos/${slug}/pulls/${u}/update-branch" \
         ${u_oid:+-f expected_head_sha="$u_oid"} >/dev/null 2>&1; then

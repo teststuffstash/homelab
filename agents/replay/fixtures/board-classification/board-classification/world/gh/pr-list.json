@@ -15,6 +15,14 @@
         }
       }
     ],
+    "reviews": [
+      {
+        "state": "APPROVED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
     "author": {
       "is_bot": true,
       "login": "homelab-agents[bot]"
@@ -33,6 +41,7 @@
     "isDraft": false,
     "autoMergeRequest": null,
     "latestReviews": [],
+    "reviews": [],
     "author": {
       "is_bot": true,
       "login": "homelab-agents[bot]"
@@ -47,6 +56,7 @@
     "isDraft": false,
     "autoMergeRequest": null,
     "latestReviews": [],
+    "reviews": [],
     "author": {
       "is_bot": true,
       "login": "homelab-agents[bot]"
@@ -61,6 +71,14 @@
     "isDraft": false,
     "autoMergeRequest": null,
     "latestReviews": [
+      {
+        "state": "APPROVED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
+    "reviews": [
       {
         "state": "APPROVED",
         "author": {
@@ -89,6 +107,14 @@
         }
       }
     ],
+    "reviews": [
+      {
+        "state": "APPROVED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
     "author": {
       "is_bot": true,
       "login": "homelab-agents[bot]"
@@ -107,6 +133,7 @@
     "isDraft": false,
     "autoMergeRequest": null,
     "latestReviews": [],
+    "reviews": [],
     "author": {
       "is_bot": true,
       "login": "homelab-agents[bot]"
@@ -121,6 +148,14 @@
     "isDraft": false,
     "autoMergeRequest": null,
     "latestReviews": [
+      {
+        "state": "CHANGES_REQUESTED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
+    "reviews": [
       {
         "state": "CHANGES_REQUESTED",
         "author": {
@@ -153,6 +188,14 @@
         }
       }
     ],
+    "reviews": [
+      {
+        "state": "CHANGES_REQUESTED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
     "author": {
       "is_bot": false,
       "login": "RasmusSoot"
@@ -171,6 +214,7 @@
     "isDraft": false,
     "autoMergeRequest": null,
     "latestReviews": [],
+    "reviews": [],
     "author": {
       "is_bot": false,
       "login": "RasmusSoot"
@@ -189,6 +233,44 @@
     "isDraft": false,
     "autoMergeRequest": null,
     "latestReviews": [],
+    "reviews": [],
+    "author": {
+      "is_bot": true,
+      "login": "homelab-agents[bot]"
+    }
+  },
+  {
+    "number": 211,
+    "title": "aside park (approve then comment)",
+    "labels": [],
+    "createdAt": "2026-08-01T00:00:00Z",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "isDraft": false,
+    "autoMergeRequest": null,
+    "latestReviews": [
+      {
+        "state": "COMMENTED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        }
+      }
+    ],
+    "reviews": [
+      {
+        "state": "APPROVED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        },
+        "submittedAt": "2026-08-01T06:00:00Z"
+      },
+      {
+        "state": "COMMENTED",
+        "author": {
+          "login": "homelab-reviewer[bot]"
+        },
+        "submittedAt": "2026-08-01T06:30:00Z"
+      }
+    ],
     "author": {
       "is_bot": true,
       "login": "homelab-agents[bot]"

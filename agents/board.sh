@@ -91,7 +91,9 @@ for repo in $repos; do
     echo "WARN board: $slug issue list PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" >&2
     issues='[]'; nfail=$((nfail + 1))
   fi
-  prs="$(gh pr list --repo "$slug" --state open --limit 100 --json number,title,labels,createdAt,reviewDecision,isDraft,autoMergeRequest,latestReviews,author 2>/dev/null)" || prs=""
+  # `reviews` (the full history), not `latestReviews` (latest per author) — § REVIEW's park arm is
+  # the reader; see the note there (#1649, the PR#235 aside trap).
+  prs="$(gh pr list --repo "$slug" --state open --limit 100 --json number,title,labels,createdAt,reviewDecision,isDraft,autoMergeRequest,reviews,author 2>/dev/null)" || prs=""
   jq -e . >/dev/null 2>&1 <<<"${prs:-null}" || prs=""
   if [ -z "$prs" ]; then
     echo "WARN board: $slug PR list PROBE-FAILED — repo skipped (an empty board can be a probe, not a clean queue)" >&2
@@ -100,10 +102,19 @@ for repo in $repos; do
 
   # § REVIEW — bot-approved head still on the human gate (require_code_owner_review
   # holds), plus PRs explicitly parked `major/awaiting-human`.
+  # ⚠ `reviews[]`, NEVER `latestReviews[]` (#1649, the PR#235 aside trap). This arm is a reader of
+  # the SAME codeowner-park predicate the exporter bakes into `github_pull_request_codeowner_park`
+  # (REVIEW_REQUIRED ∧ bot APPROVED) and the updater's leg 1 enforces — and `latestReviews` is the
+  # latest review PER AUTHOR, so a bot that APPROVEs and then posts a COMMENTED review (the aside
+  # sequence) reads non-APPROVED there while `reviews[]` still carries the APPROVED. A park in that
+  # shape silently dropped off the operator's board — the "silent jq-predicate break that EMPTIES a
+  # section while the board still renders healthy" class this fixture exists for. The fetch above
+  # asks for `reviews` for exactly this arm; a selector field added here without adding it there
+  # matches nothing, ever (the coordinator-scan `--json` rule).
   rline="$(printf '%s' "$prs" | jq -r --arg repo "$repo" "$JQ"'[
       .[] | select(.isDraft == false) | select(
         ((.reviewDecision == "REVIEW_REQUIRED")
-         and ([.latestReviews[]? | select(.state == "APPROVED" and (.author.login | startswith("homelab-reviewer")))] | length > 0))
+         and ([.reviews[]? | select(.state == "APPROVED" and (.author.login | startswith("homelab-reviewer")))] | length > 0))
         or (haslab("major/awaiting-human")))
       | "\($repo)#\(.number) \(.title) (\(age))" ] | unique | .[]')"
   [ -n "$rline" ] && sec_review="${sec_review}${rline}"$'\n'

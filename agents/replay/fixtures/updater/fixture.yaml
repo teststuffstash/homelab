@@ -17,6 +17,14 @@
 #      `merge-ready-only-off-legacy-pick` holds UPDATER_MERGE_READY_ONLY=0 (the old pick) for the
 #      L-scenario comparison. The FIFO/lane rows carry bot approvals now so their subject stays
 #      the ORDERING, not the predicate.
+#      ⚠ #1649: the PARK is decided by `reviewDecision` (REVIEW_REQUIRED ⇒ never merge-ready, no
+#      probe), not by the candidate pre-filter's `latestReviews` arm — that arm is a probe-cost
+#      filter and the two disagreed on the approve-then-aside shape (the PR#235 trap), so a park
+#      got a probe and an update per master push. Two park rows, deliberately: `park-skip`
+#      (latestReviews reading APPROVED — the pre-filter's cost path) and
+#      `parked-head-approved-no-update` (latestReviews reading non-APPROVED while `reviews[]` holds
+#      the APPROVED at head — the shape that LEAKED, and the non-vacuous pin: it reds on the
+#      pre-#1649 source).
 #   2. unstrand (the CR∧BEHIND crack, narrowed 2026-08-17): armed ∧ BEHIND ∧ CHANGES_REQUESTED,
 #      breaker labels excluded, updated ONLY when the newest NON-merge commit post-dates the
 #      newest homelab-reviewer verdict; unreadable commit/review data HOLDS (rule #6).
