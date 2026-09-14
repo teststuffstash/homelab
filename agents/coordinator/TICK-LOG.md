@@ -9095,3 +9095,37 @@ Issues: #1620, #1621.
   allowlist from the claims) — not filed (contracts emerge from ≥2 consumers). #1621 stays open
   for its live acceptance. Session ends here; pickup in meta-state.
 
+
+## 2026-09-14 (evening) — /handoff: oracle's readOnlyGrants rendered nothing → detector first, then the grant
+
+- **Handoff `.handoff/oracle` 20260914-1530 (oracle-iac#794 merged 15:10Z, nothing rendered
+  45 min later; the filer could not read the XR).** Read: the field IS live in the XR; the
+  Composition (PR#1688) composes a `ClusterSecretStore` for the first time and the crossplane SA
+  had no grant for the kind → `Synced=False: failed waiting for *unstructured.Unstructured
+  Informer to sync`, the whole reconcile aborted after the first ExternalSecret (the RoleBinding
+  "not found" in the same event stream = Role-before-binding escalation ordering, self-clearing;
+  proven with a server dry-run as the crossplane SA). Fifth hand-found instance of the
+  `rbac.yaml` header class, zero belts — grep negative for any XR-health alert or crossplane
+  metric scrape.
+- **Detector first (the 2026-09-09 ruling, handoff-G1): PR#1701 merged 15:54Z** — kube-state-metrics
+  custom-resource-state on AgentStack `.status.conditions` →
+  `kube_agentstack_status_condition{name,type,reason}` + `AgentStackNotSynced` (15m) +
+  `AgentStackHealthMetricAbsent`; promtool fixture replays the shape. **Fallout:** the CRS config
+  lifted KSM's steady state ≤100Mi → flat ~204Mi (CRD discovery across every installed group),
+  OOM-loop at 192Mi within 13 s, every kube_* belt blind ~15 min → measured under a temporary 1Gi
+  patch (plateau, no growth), **quickfix direct to master 0606bbb3: 384Mi / request 128Mi**;
+  ArgoCD had self-healed the patch back to 192Mi before seeing the commit — refresh-annotated.
+  **The belt fired on the live condition 16:30Z** (`oracle ReconcileError`, pending since 16:15).
+- **Then the fix: PR#1703 merged 16:45Z** — `clustersecretstores(+/status)` on
+  external-secrets.io + `scripts/agentstack-rbac-lint.py` (`devbox run agentstack-rbac-lint`:
+  every composed apiVersion+kind must have a rule with observe+apply+GC verbs; reds on the
+  pre-fix tree exactly at composition.yaml:1485, allow-list = the XR + provider MRs, both
+  `auth can-i`-verified). CI step landed direct (c0255d76, workflow files are operator-direct).
+  Within 2 s of the grant: SA/Role/RoleBinding/CRB/ClusterSecretStore/generator all rendered;
+  ESO re-synced at 16:50Z → **Secret `agent-git-readonly-0` in ns oracle-fleet, XR Ready=True,
+  alert inactive.** Token probed from the Secret: installation lists exactly oracle-fleet +
+  oracle-iac; POST issue 403, contents read 200, actions read 200, issues read 403 — the
+  read-only contract holds end to end. Consumer: oracle-fleet#582 (02:30Z retention tick).
+- Durable homes: `docs/agents/agentstack.md` gotcha bullet (the two new-KIND instances + the
+  belt), the rbac.yaml row comment, the values-file comment on the KSM sizing. No FU filed:
+  nothing deferred (grep `clustersecretstore|readOnlyGrants|kube-state-metrics.*OOM` negative).
