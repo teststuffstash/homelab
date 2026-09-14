@@ -9078,4 +9078,11 @@ Issues: #1620, #1621.
   operator's UI cancel of zombie run 34748702282), 1 waiting on evidence (#1687, 24 h), 11
   report-only / symptom / stack-lane (#103 #241 #1546 #857 #860 #538 #1662 #884 #882 #1663 + the
   FU-155 class).
+- **Afternoon, cont. (operator: update the audit; queue or Goal?):** the currency gate (FU-133 leg
+  c) is why #1675/#1594 sat un-queued ("alert resolved — say the defect outlives it and queue by
+  hand"); #1664/#1672 unjudged. **Queued by hand, targets narrowed in the comments**: #1675 (trim
+  CADENCE, not the RecurringJob), #1594 (fixtures only), #1664 (the chart key the CSI DaemonSet
+  honours; human apply), #1672 (class A stagger only). No Goal — unrelated alert-born fixes = the
+  maintenance stream (ADR-126 themes). `docs/spikes/responder-week-audit.md` gained the executed
+  section + the two machinery defects (PR#1678, PR#1691).
 
