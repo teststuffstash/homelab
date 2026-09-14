@@ -9146,3 +9146,17 @@ Issues: #1620, #1621.
   **PR oracle-fleet#605** opened through pr-open.sh, `Refs #604` (item 3 waits on the roll).
   ⚠ #604's two `unknown` strikes = `Upstream idle timeout exceeded` on the same deepseek exacto
   cell, after #588 closed — a recurrence for the router read; not filed (needs a second issue).
+- **Late evening (operator: "can I increase the ert-delta quota … ~150 GB later … split into
+  smaller buckets for placement?"):** read live — ert-snapshots 92 GB of 97 GB (the bucket
+  ert-delta and its step artifacts write to; `GarageBucketQuotaNear` had been FIRING on it since
+  2026-09-10 06:00Z, unacted for four days), all quotas 252 GB promised / 146 GB logical stored /
+  88 GB physical per zone of the 140 GB rf=3 layout (~1.65× compression on this mix), two zones on
+  256 GB disks (data 161 GB + meta 32 GB). Answer: raise is fine within ~52 GB/zone headroom;
+  splitting buys NO placement (rf=3 puts every block on every zone) — only quota isolation
+  (artifacts out of ert-snapshots, the workflow's own v1 deviation); 150 GB does not fit the
+  layout (ceiling ~215 GB data on the 256 GB disks) → the SFF larger-zone-disk capacity item.
+  **Operator: do 120Gi, comments say the pool math is homelab's.** oracle-iac#800 merged
+  (`max_size` 120Gi, claim comment points at the ledger) → Garage reports 120 GiB live; homelab
+  PR#1711 adds ledger §"Garage bucket quotas vs the layout (2026-09-14)" — the sum-of-quotas
+  table, logical/physical, ceilings, the ruling. Not filed: the artifact-bucket split (oracle's
+  call, recorded in their claim comment) and the 150 GB capacity ask (Requirements row exists).
