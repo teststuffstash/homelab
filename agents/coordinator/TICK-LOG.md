@@ -9095,3 +9095,100 @@ Issues: #1620, #1621.
   allowlist from the claims) — not filed (contracts emerge from ≥2 consumers). #1621 stays open
   for its live acceptance. Session ends here; pickup in meta-state.
 
+
+## 2026-09-14 (evening) — /handoff: oracle's readOnlyGrants rendered nothing → detector first, then the grant
+
+- **Handoff `.handoff/oracle` 20260914-1530 (oracle-iac#794 merged 15:10Z, nothing rendered
+  45 min later; the filer could not read the XR).** Read: the field IS live in the XR; the
+  Composition (PR#1688) composes a `ClusterSecretStore` for the first time and the crossplane SA
+  had no grant for the kind → `Synced=False: failed waiting for *unstructured.Unstructured
+  Informer to sync`, the whole reconcile aborted after the first ExternalSecret (the RoleBinding
+  "not found" in the same event stream = Role-before-binding escalation ordering, self-clearing;
+  proven with a server dry-run as the crossplane SA). Fifth hand-found instance of the
+  `rbac.yaml` header class, zero belts — grep negative for any XR-health alert or crossplane
+  metric scrape.
+- **Detector first (the 2026-09-09 ruling, handoff-G1): PR#1701 merged 15:54Z** — kube-state-metrics
+  custom-resource-state on AgentStack `.status.conditions` →
+  `kube_agentstack_status_condition{name,type,reason}` + `AgentStackNotSynced` (15m) +
+  `AgentStackHealthMetricAbsent`; promtool fixture replays the shape. **Fallout:** the CRS config
+  lifted KSM's steady state ≤100Mi → flat ~204Mi (CRD discovery across every installed group),
+  OOM-loop at 192Mi within 13 s, every kube_* belt blind ~15 min → measured under a temporary 1Gi
+  patch (plateau, no growth), **quickfix direct to master 0606bbb3: 384Mi / request 128Mi**;
+  ArgoCD had self-healed the patch back to 192Mi before seeing the commit — refresh-annotated.
+  **The belt fired on the live condition 16:30Z** (`oracle ReconcileError`, pending since 16:15).
+- **Then the fix: PR#1703 merged 16:45Z** — `clustersecretstores(+/status)` on
+  external-secrets.io + `scripts/agentstack-rbac-lint.py` (`devbox run agentstack-rbac-lint`:
+  every composed apiVersion+kind must have a rule with observe+apply+GC verbs; reds on the
+  pre-fix tree exactly at composition.yaml:1485, allow-list = the XR + provider MRs, both
+  `auth can-i`-verified). CI step landed direct (c0255d76, workflow files are operator-direct).
+  Within 2 s of the grant: SA/Role/RoleBinding/CRB/ClusterSecretStore/generator all rendered;
+  ESO re-synced at 16:50Z → **Secret `agent-git-readonly-0` in ns oracle-fleet, XR Ready=True,
+  alert inactive.** Token probed from the Secret: installation lists exactly oracle-fleet +
+  oracle-iac; POST issue 403, contents read 200, actions read 200, issues read 403 — the
+  read-only contract holds end to end. Consumer: oracle-fleet#582 (02:30Z retention tick).
+- Durable homes: `docs/agents/agentstack.md` gotcha bullet (the two new-KIND instances + the
+  belt), the rbac.yaml row comment, the values-file comment on the KSM sizing. No FU filed:
+  nothing deferred (grep `clustersecretstore|readOnlyGrants|kube-state-metrics.*OOM` negative).
+- **Evening, cont. (operator: homelab#1705 fleet-strike `goose-32602-truncation`; then "claude/haiku
+  cannot have a goose truncation — it still got flagged"):** read the three struck rides' run.logs
+  from S3 — every `-32602` was CONTENT (router tests/docs spelling the class name; the haiku ride's
+  own report line), all three rides finished (#1668 → PR#1704 merged; #1692 → PR#1699), one on
+  HARNESS=claude. `agent-finalize` grepped the bare code anywhere in the log. **Fix merged:**
+  agent-runtime#133 (harness gate + real-shape lookbehind, tests on the three live shapes) +
+  homelab#1706 (launcher raw-log mirror, two replay rows, 20/20); reaches pods with the next
+  agent-base deploy-pin (build 18:14Z). `agent/error` stripped from #1668/#1692, #1705 closed
+  with the finding. **oracle-fleet#604 (operator: "it has the fix"):** the worker's pushed branch
+  restored ErtPipeline* on POD PHASE — blind on the real shape (a Failed step pod is GC'd after
+  ~1 min; `for: 5m` never holds; 7-day replay: 0 firings vs 2 failed steps). Seat amendment
+  69b6704: Failed on `increase(argo_workflows_total_count{phase=~"Failed|Error",
+  exported_namespace="oracle-fleet"}[15m]) > 0` (fires on all 5 Failed workflows of the week,
+  the AgentLoopWorkflowsFailing shape), Stuck stays on pod series; oracle-fleet CI green;
+  **PR oracle-fleet#605** opened through pr-open.sh, `Refs #604` (item 3 waits on the roll).
+  ⚠ #604's two `unknown` strikes = `Upstream idle timeout exceeded` on the same deepseek exacto
+  cell, after #588 closed — a recurrence for the router read; not filed (needs a second issue).
+- **Late evening (operator: "can I increase the ert-delta quota … ~150 GB later … split into
+  smaller buckets for placement?"):** read live — ert-snapshots 92 GB of 97 GB (the bucket
+  ert-delta and its step artifacts write to; `GarageBucketQuotaNear` had been FIRING on it since
+  2026-09-10 06:00Z, unacted for four days), all quotas 252 GB promised / 146 GB logical stored /
+  88 GB physical per zone of the 140 GB rf=3 layout (~1.65× compression on this mix), two zones on
+  256 GB disks (data 161 GB + meta 32 GB). Answer: raise is fine within ~52 GB/zone headroom;
+  splitting buys NO placement (rf=3 puts every block on every zone) — only quota isolation
+  (artifacts out of ert-snapshots, the workflow's own v1 deviation); 150 GB does not fit the
+  layout (ceiling ~215 GB data on the 256 GB disks) → the SFF larger-zone-disk capacity item.
+  **Operator: do 120Gi, comments say the pool math is homelab's.** oracle-iac#800 merged
+  (`max_size` 120Gi, claim comment points at the ledger) → Garage reports 120 GiB live; homelab
+  PR#1711 adds ledger §"Garage bucket quotas vs the layout (2026-09-14)" — the sum-of-quotas
+  table, logical/physical, ceilings, the ruling. Not filed: the artifact-bucket split (oracle's
+  call, recorded in their claim comment) and the 150 GB capacity ask (Requirements row exists).
+- **Closeout:** `GarageBucketQuotaNear ert-snapshots` RESOLVED once the exporter read the 120Gi;
+  agent-base deploy-pin #1708 (2026.9.14-gf4e0bbe) landed → the #1705 classifier fix is what pods
+  run now. Reviewer catch on #1711 (round 2, fixed on the branch): the zone ceilings are NOT
+  symmetric — wk-metal-04's `intel1` already carries the PyPI + mcr mirror volumes beside
+  garage-0's data + meta (258 GB scheduled on 256 GB), so that zone has ZERO room to grow and is
+  the smallest zone; pm961 ~60 GB, mx500 ~90 GB shared. Cheap interim = move the two mirror
+  volumes off intel1 (intel0 has ~50 GB); the real answer stays the SFF zone-disk item.
+- **Night queue read (operator: "anything to queue for the night?"; board showed #1697/#1709/#1710
+  parked-blocked/operator):** parked-blocked = a queued item whose dependency is still OPEN — they
+  unpark by themselves: #1697 waits on #1670 (PR#1698: bot-approved after two rounds, CI green,
+  BEHIND — waits on the CODEOWNER read, which this corpus-less session does not execute); #1709 on
+  #1692 AND theme-1 assembly (by design); #1710 on #1692. **#1692's PR#1699 was ci-red terminal**
+  (two no-op rounds, blocked-on human): `governance-lint` failed closed because the haiku ride's
+  40-file branch re-pointed a docstring in `scripts/claude-model-shim.py` (never-touch tier) —
+  the seat dropped that one file from the branch (441c6d95; the pointer lands operator-direct
+  after merge, exactly as #1710 scopes it) and the same branch already carries #1710's 37
+  re-points, so #1710 closes on that merge. **#1707** = the same three explained strikes
+  re-filed after #1705 closed: the reader dedups on an OPEN filing only and re-applies
+  `agent/error` every tick inside the 24h window → left OPEN as the anchor until 2026-09-15
+  16:45Z; the tail defect filed + queued as **#1712** (agent-fix, the night's one queue item).
+  Operator picks pending: #1675 (fstrim cadence — the guard #1673 landed 3 min before the
+  hand-queue directive and already covers the stated purpose per the worker's live read →
+  recommend close as superseded); #1669 stays blocked by design (≥2026-09-20 + theme 1 deployed).
+- **Night queue, cont. — the ci-red on #1699 was NOT the shim alone:** after dropping it the
+  lint listed `ci.yaml`, `devbox.json`, `scripts/agentstack-rbac-lint.py` — this session's own
+  direct commits — because PR CI checks out the MERGE ref and diffs it two-dot from the
+  fork-time base.sha (#1441's fix assumed a branch-tip HEAD). Every worker branch forked before
+  today would have gone red on its next push. **Fixed direct (governance path):** the file list
+  is GitHub's three-dot compare in CI, `BASE...HEAD` locally, fail-closed; verified on both
+  #1699 heads + a local probe. `pin-only-lint` shares the shape → operator-lane issue filed.
+  ⚠ self-note: the local probe briefly branch-switched the shared checkout (seconds, back on
+  master, nothing lost) — the rule says worktree; noted, not repeated.

@@ -82,6 +82,58 @@ Two accountings against the same ~150Gi bulk tier:
 
 Live caps to reconcile: `kubectl get workspaces.tf.upbound.io` (8 garage workspaces).
 
+### Garage bucket quotas vs the layout (2026-09-14) — the sum is homelab's to keep
+
+The stacks state what they need (ADR-089: every bucket claim carries `max_size`); **whether the
+cluster can honour the sum is answered here, not in any one claim** (operator, 2026-09-14 — the
+oracle-iac `ert-snapshots` note used to carry its own pool math and it went stale the day the
+three-zone layout replaced the bulk volume). Read from `garage_bucket_quota_bytes` /
+`garage_bucket_bytes` and `garage layout show`:
+
+| bucket | quota | used | owner |
+|---|---|---|---|
+| ert-snapshots | **120Gi** *(97 GB → 129 GB, oracle-iac#800)* | 92 GB | oracle-iac |
+| registry | 52 GB | 27 GB | homelab (FU-203) |
+| agent-transcripts | 21 GB | 6 GB | homelab (FU-228) |
+| jail-transcripts | 21 GB | 1 GB | homelab |
+| loki | 17 GB | 11 GB | homelab |
+| allure-reports | 11 GB | 8 GB | oracle-iac |
+| argo-artifacts (+ per-repo) | 13 GB | 0 | homelab |
+| the rest (specs, sleep-*, tofu-state, probe) | 20 GB | 1 GB | mixed |
+| **sum promised** | **≈284 GB logical** *(252 GB before #800)* | **146 GB logical** | |
+| **the layout** | **130.4 GiB (140 GB) per zone, rf=3 → usable = one zone** | **88 GB physical per zone** | homelab |
+
+Two numbers make the table honest. **Logical vs physical:** the store holds 146 GB of objects in
+88 GB per zone — Garage's block compression on the ERT dumps, ~1.65×, measured on THIS mix (delta
+output may compress differently; measure before leaning on it). **Promised vs possible:** quotas
+are over-committed 2× against the layout on purpose (the same posture as the bulk tier's
+registry mirrors above); the belt that makes that safe is `GarageBucketQuotaNear` (80 % of a
+quota) plus the disk-fill belts in `garage-alerts/`. A quota counts LOGICAL bytes and frees the
+moment an object is deleted; the physical blocks are reclaimed by Garage's block GC after its
+grace period (upstream durability doc), so disk headroom lags quota headroom by about a day —
+a cleanup job does not buy the concurrent writer room the same hour.
+
+**Ceilings — per zone, because the zones are not symmetric** (Longhorn node CRs, 2026-09-14;
+scheduled = provisioned, not bytes):
+
+| zone | disk | scheduled / max | what else is on it | room to grow garage's 161 GB data volume |
+|---|---|---|---|---|
+| wk-metal-04 | `intel1` 256 GB | **258 / 256 GB** | garage-0 data 161 + meta 32, **PyPI + mcr mirrors 21 + 43** (Longhorn's most-free pick at the time, L30) | **none** — the disk is over-committed today; the mirrors would have to move (intel0 has ~50 GB) before this zone can grow |
+| m70s | `pm961` 256 GB | 193 / 256 GB | garage-1 data + meta only (dedicated) | ~60 GB → data ≈ 215 GB |
+| wk-metal-01 | `mx500` 498 GB | 408 / 498 GB, 107 GB reserved | garage-2 data + meta, the image store, four scratch/bulk replicas | ~90 GB nominal, shared with the scratch tier |
+
+The data PVC is 161 GB against the 140 GB layout, so ≈20 GB of slack per zone is a layout bump
+away without touching any disk. Beyond that, **usable = the smallest zone, and the smallest zone is
+wk-metal-04 at zero** — a 150 GB bucket does not fit this layout: at today's ratio it is ~90 GB
+physical plus ~55 GB for everything else, i.e. every data volume at ~200 GB, which intel1 cannot
+hold at all and pm961 barely. That ask is the capacity item the Requirements table already names
+(dedicated, larger zone disks in the SFFs — FU-137's residual, the fleet-role assignment), not a
+quota edit; the cheap interim on wk-metal-04 is moving the two mirror volumes off intel1.
+**Splitting a bucket
+buys no placement** — rf=3 over three zones puts every block on every zone regardless of bucket;
+split only for quota isolation (e.g. the ert-delta step artifacts out of `ert-snapshots`) or
+retention.
+
 ## The other half: nothing meters it
 
 A ledger that isn't measured is a spreadsheet. Four sightings in six days, all the same class —

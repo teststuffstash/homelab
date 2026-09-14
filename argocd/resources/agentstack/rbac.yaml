@@ -38,6 +38,16 @@ rules:
   - apiGroups: [external-secrets.io]
     resources: [externalsecrets, externalsecrets/status]
     verbs: [get, list, watch, create, update, patch, delete]
+  # homelab#1620 readOnlyGrants (PR#1688): the Composition composes a per-repo kubernetes-provider
+  # ClusterSecretStore (the in-namespace mirror of the read-only token) — the FIFTH instance of
+  # "a branch that never executed has no RBAC evidence": the first claim to set the field (oracle,
+  # 2026-09-14) parked the whole XR at "failed waiting for Informer to sync" for the store's GVK,
+  # and NOTHING of the grant rendered (the RoleBinding "not found" in the same event stream is
+  # only the Role-before-binding escalation-check ordering, which clears once the Role exists).
+  # The AgentStackNotSynced belt (prometheusrule.yaml beside this file) now watches the class.
+  - apiGroups: [external-secrets.io]
+    resources: [clustersecretstores, clustersecretstores/status]
+    verbs: [get, list, watch, create, update, patch, delete]
   - apiGroups: [generators.external-secrets.io]
     resources: [githubaccesstokens, githubaccesstokens/status]
     verbs: [get, list, watch, create, update, patch, delete]

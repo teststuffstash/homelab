@@ -1,0 +1,66 @@
+# Behaviour fixture for the AgentStack XR health belt (homelab#1620 closeout).
+#
+#   devbox run -- promtool test rules argocd/resources/agentstack/agentstack-health.promtool-test
+#
+# Replays the 2026-09-14 shape: the oracle claim parks at Synced=False (a composed kind with no
+# crossplane RBAC → "failed waiting for Informer to sync") while the other claims stay True.
+rule_files:
+  - agentstack-health.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    name: a parked claim fires after 15m, healthy claims do not
+    input_series:
+      - series: 'kube_agentstack_status_condition{name="oracle",type="Synced",reason="ReconcileError"}'
+        values: "0+0x30"
+      - series: 'kube_agentstack_status_condition{name="platform",type="Synced",reason="ReconcileSuccess"}'
+        values: "1+0x30"
+      - series: 'kube_agentstack_status_condition{name="oracle",type="Ready",reason="Available"}'
+        values: "1+0x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AgentStackNotSynced
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: AgentStackNotSynced
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              name: oracle
+              type: Synced
+              reason: ReconcileError
+            exp_annotations:
+              summary: "AgentStack oracle has been Synced=False (ReconcileError) for 15m"
+      - eval_time: 16m
+        alertname: AgentStackHealthMetricAbsent
+        exp_alerts: []
+
+  - interval: 1m
+    name: a transient flip shorter than 15m stays quiet
+    input_series:
+      - series: 'kube_agentstack_status_condition{name="oracle",type="Synced",reason="ReconcileError"}'
+        values: "1+0x5 0+0x8 1+0x10"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: AgentStackNotSynced
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: AgentStackNotSynced
+        exp_alerts: []
+
+  - interval: 1m
+    name: the belt going blind is itself an alert
+    input_series:
+      - series: 'up{job="kube-state-metrics"}'
+        values: "1+0x40"
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: AgentStackHealthMetricAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              type: Synced # absent() carries the selector's equality labels
+            exp_annotations:
+              summary: "No AgentStack Synced condition series for 30m — the XR health belt is blind"

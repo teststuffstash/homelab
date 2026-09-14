@@ -334,8 +334,14 @@ GitHub and the authoritative claim fights it back.
   gaps surface on onboarding, not on edit): the loop SA's `pods/exec/pvc` verbs (2026-07-17 — the
   proxy Role had slipped by on core's secrets access), `argoproj.io/workflows` **create** for the
   sensor Role, and `endpoints` get/list for the FU-072 claims-read binding (2026-07-26 — oracle's
-  older ClusterRoleBinding had masked it). Header note lives in
-  [`agentstack/rbac.yaml`](../../argocd/resources/agentstack/rbac.yaml).
+  older ClusterRoleBinding had masked it), then a NEW composed KIND twice — ResourceQuota (the
+  first claim to set `storage`, 2026-08-07) and ClusterSecretStore (the first `readOnlyGrants`
+  claim, 2026-09-14) — which parks the WHOLE claim at Synced=False on "failed waiting for
+  Informer to sync". Header note lives in
+  [`agentstack/rbac.yaml`](../../argocd/resources/agentstack/rbac.yaml). **The belt is
+  `AgentStackNotSynced`** (kube-state-metrics custom-resource-state on the XR conditions,
+  [`agentstack/prometheusrule.yaml`](../../argocd/resources/agentstack/prometheusrule.yaml),
+  2026-09-14): every instance above was found by hand, none by an alert.
 - **⚠ Argo Events string data-filter values are REGEX**, not literals. `""` and `!=` are rejected;
   use `.+` to mean "present and non-empty" (this is how the graduated-loop routing selects on
   `body.loop_ns`).

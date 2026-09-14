@@ -2878,7 +2878,12 @@ if [ -n "$RUN_CMD" ]; then
       # with this signature is a harness-startup death — should never be classified "clean".
       elif grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG"; then
         ERR_CLASS="harness-death"
-      elif grep -qiE -e '-32602|EOF while parsing|response may have been truncated|context_length_exceeded|panicked at' "$RUNLOG"; then
+      # homelab#1705: `-32602` is goose's MCP JSON-RPC code — only a goose ride can die of it, and
+      # only in its real shape (`-32602: <msg>` / `"code": -32602`), never the class NAME echoed
+      # in content (an issue body, docs, router tests, the ride's own report). Mirrors
+      # agent-finalize's harness-gated predicate (agent-runtime#133).
+      elif { [ "${HARNESS:-}" = "goose" ] && grep -qE -e '(^|[^A-Za-z0-9_`-])-32602([[:space:]:,]|$)' "$RUNLOG"; } \
+           || grep -qiE -e 'EOF while parsing|response may have been truncated|context_length_exceeded|panicked at' "$RUNLOG"; then
         ERR_CLASS="harness-death"
       # homelab#866: provider-5xx error signature (harness-side UnknownError from the model API).
       # Zero cost, sub-30s duration, no new artifact — a startup death like config-invalid.

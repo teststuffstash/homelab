@@ -349,6 +349,9 @@
       "github-apps-lint": [
         "python3 scripts/github-apps-lint.py"
       ],
+      "agentstack-rbac-lint": [
+        "python3 scripts/agentstack-rbac-lint.py"
+      ],
       "hubble": [
         "bash scripts/hubble-observe.sh \"$@\""
       ],
