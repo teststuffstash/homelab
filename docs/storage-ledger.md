@@ -82,6 +82,48 @@ Two accountings against the same ~150Gi bulk tier:
 
 Live caps to reconcile: `kubectl get workspaces.tf.upbound.io` (8 garage workspaces).
 
+### Garage bucket quotas vs the layout (2026-09-14) — the sum is homelab's to keep
+
+The stacks state what they need (ADR-089: every bucket claim carries `max_size`); **whether the
+cluster can honour the sum is answered here, not in any one claim** (operator, 2026-09-14 — the
+oracle-iac `ert-snapshots` note used to carry its own pool math and it went stale the day the
+three-zone layout replaced the bulk volume). Read from `garage_bucket_quota_bytes` /
+`garage_bucket_bytes` and `garage layout show`:
+
+| bucket | quota | used | owner |
+|---|---|---|---|
+| ert-snapshots | **120Gi** *(97 GB → 129 GB, oracle-iac#800)* | 92 GB | oracle-iac |
+| registry | 52 GB | 27 GB | homelab (FU-203) |
+| agent-transcripts | 21 GB | 6 GB | homelab (FU-228) |
+| jail-transcripts | 21 GB | 1 GB | homelab |
+| loki | 17 GB | 11 GB | homelab |
+| allure-reports | 11 GB | 8 GB | oracle-iac |
+| argo-artifacts (+ per-repo) | 13 GB | 0 | homelab |
+| the rest (specs, sleep-*, tofu-state, probe) | 20 GB | 1 GB | mixed |
+| **sum promised** | **≈284 GB logical** *(252 GB before #800)* | **146 GB logical** | |
+| **the layout** | **130.4 GiB (140 GB) per zone, rf=3 → usable = one zone** | **88 GB physical per zone** | homelab |
+
+Two numbers make the table honest. **Logical vs physical:** the store holds 146 GB of objects in
+88 GB per zone — Garage's block compression on the ERT dumps, ~1.65×, measured on THIS mix (delta
+output may compress differently; measure before leaning on it). **Promised vs possible:** quotas
+are over-committed 2× against the layout on purpose (the same posture as the bulk tier's
+registry mirrors above); the belt that makes that safe is `GarageBucketQuotaNear` (80 % of a
+quota) plus the disk-fill belts in `garage-alerts/`. A quota counts LOGICAL bytes and frees the
+moment an object is deleted; the physical blocks are reclaimed by Garage's block GC after its
+grace period (upstream durability doc), so disk headroom lags quota headroom by about a day —
+a cleanup job does not buy the concurrent writer room the same hour.
+
+**Ceilings.** The data PVC is 161 GB per zone against the 140 GB layout (≈20 GB of slack a layout
+bump can release); two of the three zones sit on 256 GB disks (wk-metal-04 `intel1`, m70s
+`pm961`) that also carry the 32 GB meta volume, so a data volume there tops out near 215 GB —
+**a 150 GB bucket does not fit this layout**: at today's ratio it is ~90 GB physical plus ~55 GB
+for everything else, only after growing all three data volumes to ~200 GB with nothing left. That
+ask is the capacity item the Requirements table already names (dedicated, larger zone disks in
+the SFFs — FU-137's residual, the fleet-role assignment), not a quota edit. **Splitting a bucket
+buys no placement** — rf=3 over three zones puts every block on every zone regardless of bucket;
+split only for quota isolation (e.g. the ert-delta step artifacts out of `ert-snapshots`) or
+retention.
+
 ## The other half: nothing meters it
 
 A ledger that isn't measured is a spreadsheet. Four sightings in six days, all the same class —
