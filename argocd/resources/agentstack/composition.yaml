@@ -817,7 +817,17 @@ spec:
                 gotemplating.fn.crossplane.io/ready: "True"
             spec:
               schedules:
-                - "*/15 * * * *"
+                # homelab#1672 (2026-09-14): PER-STACK MINUTE OFFSET. Every graduated stack
+                # rendered the byte-identical `*/15 * * * *`, so all review backstops fired on
+                # the same :00/:15/:30/:45 boundary and hit the shared reviewer App installation
+                # (142724430) within seconds of each other — the 09:30Z tick tripped GitHub's
+                # secondary rate limit for sleep/oracle/circles/platform simultaneously.
+                # The offset is DERIVED from the stack name (adler32 mod 15 → minutes
+                # N, N+15, N+30, N+45), so a new stack needs no edit here and no two stacks
+                # share a tick by hand. `N-59/15` is the standard cron range-with-step form
+                # (robfig/cron, which Argo's CronWorkflow validator uses): N ≤ 14 always
+                # yields exactly four ticks per hour, 15 min apart.
+                - "{{ mod (adler32sum $stack) 15 }}-59/15 * * * *"
               concurrencyPolicy: Forbid
               startingDeadlineSeconds: 60
               workflowSpec:
