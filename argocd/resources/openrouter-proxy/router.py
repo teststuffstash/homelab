@@ -37,16 +37,30 @@ import time
 # AST; never a third copy.
 import model_id
 
-# Strike taxonomy (model-routing.md §M1): these error classes are INFRA failures — they blacklist
-# the (task, model) pair without consuming a round. Kept in step with agent-session.sh's
-# classifier and agent-finalize (the authoritative signature copy).
-STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown"}
+# ── STRIKE VOCABULARY — THE ONE HOME (Goal #1640 acceptance 1) ────────────────────────────────
+# These error classes are INFRA failures (model-routing.md §M1): they blacklist the (task, model)
+# pair without consuming a round. This set IS the vocabulary — `/report` stores a strike under a
+# member of it, the finalizer (agent-runtime `agent-finalize`) reports a member of it, and the
+# scan's fleet-strike reader keys on a member of it. Neither keeps a second copy: the router
+# serves this list on GET /router-status (`strike_classes`/`serving_classes`, status_summary) so
+# both cite it instead of re-listing it. Extend the vocabulary HERE, nowhere else.
+#
+# `turn-cap` (homelab#1665): a goose ride that died at the turn cap. `tool-loop`: a cap death
+# with zero tool-result progress — the same tool call repeated to the cap — which is a SERVING
+# shape (below), not a model verdict. Both replace the `unknown` a cap death used to be rewritten
+# to, which is why `router_strikes_total{error_class="tool-loop"}` was empty on 2026-09-13 while
+# five rides looped. `unknown` stays: it is still the unclassified-death class the FU-200 reader
+# latches on (the goal's interim condition).
+STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr",
+                  "unknown", "turn-cap", "tool-loop"}
 
 # FU-201 c: serving-shaped strike classes — provider-side failures that exclude the (model,
 # provider) PAIR rather than the model entirely. A model-level blacklist needs ≥2-provider
 # evidence (the #783 rule). These classes are the ADR-115 evidence set: provider 4xx/5xx
-# responses and tool-call malformation that the serving provider caused.
-SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm"}
+# responses and tool-call malformation that the serving provider caused. NOT a second
+# vocabulary: this is a SUBSET VIEW of STRIKE_CLASSES (self-test pins `SERVING_CLASSES <=
+# STRIKE_CLASSES`), so the two can never drift into disagreeing about what a strike is.
+SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm", "tool-loop"}
 
 # ── #1259: tier ordering for label_map tier_floor enforcement ──
 # Ordered from cheapest to most expensive. Used to compare a model's model_tiers grade against
@@ -1358,10 +1372,10 @@ def route(payload: dict, ctx: dict) -> dict:
     decorrelate_family = None
     if decorrelate_from:
         decorrelate_family = vendor_family(decorrelate_from)
-    # FU-201 c: strike rows carry provider + error_class. Serving-shaped strikes (provider-5xx,
-    # timeout, auth-storm) exclude the (model, provider) PAIR — the model stays eligible for
-    # re-pick with a different provider. Infra-shaped strikes (harness-death, no-pr, unknown)
-    # exclude the model entirely. A model with serving-shaped strikes from ≥2 providers is
+    # FU-201 c: strike rows carry provider + error_class. Serving-shaped strikes (the
+    # SERVING_CLASSES subset of the one strike vocabulary) exclude the (model, provider) PAIR —
+    # the model stays eligible for re-pick with a different provider. Every other strike class
+    # excludes the model entirely. A model with serving-shaped strikes from ≥2 providers is
     # excluded at model level (the #783 rule: model-level verdicts need multi-provider evidence).
     # Recorded always, ACTED ON only when STRIKE_ENFORCE (see the constant's note): today this is
     # an empty set, which is exactly the behaviour the loop has had all along — now on purpose.
@@ -1618,6 +1632,10 @@ def status_summary() -> dict:
         "rotation": [{"source": s, "entries": n,
                       "age_s": round(now - (ts or now))} for s, n, ts in rot],
         "classes_loaded": bool(_classes),
+        # Goal #1640 acceptance 1: the ONE strike vocabulary, served so the finalizer and the
+        # fleet-strike reader cite this list instead of keeping a copy that drifts.
+        "strike_classes": sorted(STRIKE_CLASSES),
+        "serving_classes": sorted(SERVING_CLASSES),
         "tier_thresholds": _classes.get("tier_thresholds") or {},
         # M11 shadow (homelab#159) — the soak review reads THESE two: the learned ladder per cell,
         # and where the would-be pick disagreed with what actually got served.
@@ -1835,6 +1853,37 @@ def self_test() -> int:
         f"strike provider must be 'Fireworks' from provider_events lookup, got {_p_row}"
     assert provider5 == "Fireworks", \
         f"record_report must RETURN the resolved provider (the /report reply's third value), got {provider5!r}"
+    # ── Goal #1640 acceptance 1: the cap-death vocabulary ──
+    # A goose ride that dies at the turn cap now reports `turn-cap`; a cap death with zero
+    # tool-result progress reports `tool-loop`, which is serving-shaped (the pair exclusion).
+    # Each must STRIKE and must store UNDER ITS OWN CLASS: `router_strikes_total{error_class=
+    # "tool-loop"}` is the goal's evidence line, so a report that landed as a sub-type or as
+    # `unknown` (the rewrite this vocabulary retires) would leave the metric empty — exactly the
+    # 2026-09-13 miss. Table-driven so every future vocabulary member is covered the same way.
+    # `outcome` is the REAL cap-death shape, `no-output` — deliberately NOT a strike class, so
+    # the row can only pass because the CLASS ITSELF is in the vocabulary: with the pre-#1665
+    # set this report does not strike at all (the 2026-09-13 miss), which is the pin-vacuity bar.
+    for _cls, _task, _serving in (("turn-cap", "issue-70", False),
+                                  ("tool-loop", "issue-71", True)):
+        _st, _sk, _pv = record_report({
+            "session": f"t-{_cls}", "task": _task, "stack": "sleep", "role": "worker",
+            "round": 1, "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.02,
+            "error_class": _cls, "outcome": "no-output"})
+        assert _st and _sk, f"cap-death class {_cls} must store + strike"
+        _cls_row = _read("SELECT error_class FROM strikes WHERE session=?", (f"t-{_cls}",))
+        assert _cls_row and _cls_row[0][0] == _cls, \
+            f"strike must store under its own class, got {_cls_row}"
+        assert (_cls in SERVING_CLASSES) is _serving, \
+            f"{_cls} serving-shaped={_serving} — the pair-vs-model split is the goal's pin"
+    # ONE VOCABULARY: the serving set is a subset VIEW of the strike vocabulary, never a second
+    # copy — drift here silently changes which strikes exclude a PAIR vs a whole MODEL.
+    assert SERVING_CLASSES <= STRIKE_CLASSES, \
+        f"SERVING_CLASSES must be a subset of STRIKE_CLASSES: {SERVING_CLASSES - STRIKE_CLASSES}"
+    # …and the home is served, so the finalizer / reader can cite it (the "one home" half).
+    _vocab = status_summary()
+    assert _vocab["strike_classes"] == sorted(STRIKE_CLASSES) and \
+        _vocab["serving_classes"] == sorted(SERVING_CLASSES), \
+        "the strike vocabulary must surface on /router-status for the finalizer/reader to cite"
     # THE MIGRATED STORE, on a side connection. Everything above runs against a FRESH database, so
     # it only ever proves the CREATE TABLE path — but the live store is a PVC sqlite that will take
     # this column by ALTER, and the two layouts have to agree for a positional INSERT to be valid.
@@ -2794,7 +2843,9 @@ def self_test() -> int:
     # + the 5 M11 ladder-cell fixtures, + the 2 homelab#577 deployed-pod pod-name shapes,
     # + null-rail-1) and 3 strikes (issue-9/sleep from the vocabulary fixture,
     # issue-19/circles from the real one, issue-42/sleep from the ladder's degradation step).
-    assert summary["rows"]["run_reports"] == 18 and summary["rows"]["strikes"] == 4  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1
+    # homelab#1665 MOVES both counts by the two cap-death fixtures (t-turn-cap, t-tool-loop):
+    # each is a run_report AND a strike, so 18→20 and 4→6. The assertion is kept, not dropped.
+    assert summary["rows"]["run_reports"] == 20 and summary["rows"]["strikes"] == 6  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
