@@ -4234,6 +4234,10 @@ EOF_GTHEMES_OPEN
     # DEDUP: before filing, check for an existing OPEN issue in the repo whose title starts
     # with "fleet-strike:" and whose body names the same error_class. If one exists, extend it
     # (add a comment listing the new affected issues) instead of creating a new filing.
+    # RESOLUTION SUBTRACTION (homelab#1712): a CLOSED filing for the same error_class whose
+    # `issues=` marker covers the affected set, closed NEWER than the newest strike in the set,
+    # means the class was resolved inside the window — the reader neither re-files nor re-applies
+    # `agent/error`. Closing a filing is the resolution signal; it is not a licence to mint the next.
     # >>>REPLAY:fleet-strike-reader>>>
     # Read all open issues with agent-fix label (already fetched as $openall). For each, fetch
     # comments and extract AGENT_STRIKE lines with error_class=. Group by error_class and check
@@ -4327,6 +4331,49 @@ EOF_GTHEMES_OPEN
                   fi
               fi
               if [ "$all_within_24h" = 1 ]; then
+                # RESOLUTION SUBTRACTION (homelab#1712) — the BACKWARD half of the dedup below.
+                # Dedup looks only for an OPEN filing, so CLOSING a filing for this class minted the
+                # next one on the following tick, and the `agent/error` apply loop undid a human's
+                # strip on every tick the class stayed inside its 24h window. Subtraction, not
+                # another rule: a CLOSED filing for this `error_class` whose `issues=` marker covers
+                # this affected set, closed NEWER than the newest strike in the set, means the class
+                # was RESOLVED inside the window — neither re-file nor re-apply. A strike newer than
+                # the close re-arms it normally (max_ts > closed_s ⇒ this does not fire).
+                fs_resolved=0
+                closed_filings="$(gh issue list --repo "$slug" --state closed --limit 50 \
+                  --json number,title,closedAt 2>/dev/null)" || closed_filings='[]'
+                jq -e 'type == "array"' >/dev/null 2>&1 <<<"${closed_filings:-null}" || closed_filings='[]'
+                while IFS= read -r cl_entry; do
+                  [ -n "$cl_entry" ] || continue
+                  cl_n="${cl_entry%%=*}"; cl_at="${cl_entry#*=}"
+                  case "$cl_n" in ''|*[!0-9]*) continue;; esac
+                  cl_s="$(jq -rn --arg t "$cl_at" '($t | fromdateiso8601? // null) // -1' 2>/dev/null || echo -1)"
+                  case "$cl_s" in ''|*[!0-9-]*) continue;; esac
+                  # The close must be NEWER than the newest strike in the set, or the class was
+                  # re-armed after the resolution and the normal path below owns it.
+                  [ "$cl_s" -gt "$max_ts" ] || continue
+                  # The filing's covered set is its `fleet-strike-fp:` marker comment (the extend
+                  # path writes one on the filing; the create path writes one on the first affected
+                  # issue). No marker ⇒ no machine record of the set ⇒ not a resolution we honour.
+                  cl_cmt="$(gh api "repos/${slug}/issues/${cl_n}/comments?per_page=100" 2>/dev/null)" || cl_cmt=''
+                  jq -e 'type == "array"' >/dev/null 2>&1 <<<"${cl_cmt:-null}" || continue
+                  cl_set="$(jq -r --arg ec "$ec" '
+                    [.[] | (.body // "") | select(startswith("fleet-strike-fp: error_class=\($ec)"))
+                     | capture("issues=(?<s>[0-9,]+)") | .s] | last // ""
+                  ' <<<"$cl_cmt" 2>/dev/null || true)"
+                  [ -n "$cl_set" ] || continue
+                  cl_covers=1
+                  for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
+                    [ -n "$fn" ] || continue
+                    case ",${cl_set}," in *",${fn},"*) : ;; *) cl_covers=0;; esac
+                  done
+                  if [ "$cl_covers" = 1 ]; then fs_resolved=1; break; fi
+                done <<< "$(printf '%s' "$closed_filings" | jq -r --arg ec "$ec" \
+                  '[.[] | select(.title | startswith("fleet-strike: error_class=\($ec)"))] | .[] | "\(.number)=\(.closedAt // "")"' 2>/dev/null || true)"
+                if [ "$fs_resolved" = 1 ]; then
+                  orphans="${orphans}[$repo] ✓ FLEET STRIKE RESOLVED: error_class=${ec} on issues $(printf '%s' "$nums" | tr ',' '\n' | sed 's/^/#/' | tr '\n' ' ' | sed 's/ $//') — filing #${cl_n} closed ${cl_at} newer than the newest strike; no re-file, no agent/error re-apply\n"
+                  continue
+                fi
                 fleet_strike_issues="${fleet_strike_issues}${ec}=${nums} "
                 orphans="${orphans}[$repo] ⚠ FLEET STRIKE: error_class=${ec} on issues $(printf '%s' "$nums" | tr ',' '\n' | sed 's/^/#/' | tr '\n' ' ' | sed 's/ $//') — applying agent/error, commenting, filing\n"
               fi
