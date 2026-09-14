@@ -6,7 +6,7 @@ STDIN metadata: {labels: { budget-tier: xs, budget-estimate-usd: "0.3" }, name: 
 STDIN 
 STDIN spec:
 STDIN   project: oracle-fleet
-STDIN   budgetUSD: 0.25            # tier xs; estimate $0.3
+STDIN   budgetUSD: 0.5            # tier xs; estimate $0.3
 STDIN   ephemeral: true
 STDIN   session: retro-r4-deepseek-v4-pro
 STDIN   secretName: oracle-fleet-session-retro-r4-deepseek-v4-pro-openrouter
@@ -15,7 +15,7 @@ CALL kubectl -n oracle-fleet get openrouterkey oracle-fleet-retro-r4-deepseek-v4
 OUT → key: minted oracle-fleet-retro-r4-deepseek-v4-pro (ns oracle-fleet) → Secret oracle-fleet-session-retro-r4-deepseek-v4-pro-openrouter
 OUT HANDOFF: agent-session.sh oracle-fleet --harness goose --model deepseek/deepseek-v4-pro --openrouter-secret oracle-fleet-session-retro-r4-deepseek-v4-pro-openrouter
 ERR 
-ERR → OK — tier xs, cap $0.25, estimate $0.3 (no escalation).
+ERR → OK — tier xs, cap $0.5, estimate $0.3 (no escalation).
 ERR → model priced at $0.3/M in (source: override)
 ERR → session Secret (pass verbatim to --openrouter-secret): oracle-fleet-session-retro-r4-deepseek-v4-pro-openrouter
 ERR → dispatch:  bash agents/agent-session.sh oracle-fleet --openrouter-secret oracle-fleet-session-retro-r4-deepseek-v4-pro-openrouter --run "<recipe …>"
