@@ -9183,3 +9183,12 @@ Issues: #1620, #1621.
   Operator picks pending: #1675 (fstrim cadence — the guard #1673 landed 3 min before the
   hand-queue directive and already covers the stated purpose per the worker's live read →
   recommend close as superseded); #1669 stays blocked by design (≥2026-09-20 + theme 1 deployed).
+- **Night queue, cont. — the ci-red on #1699 was NOT the shim alone:** after dropping it the
+  lint listed `ci.yaml`, `devbox.json`, `scripts/agentstack-rbac-lint.py` — this session's own
+  direct commits — because PR CI checks out the MERGE ref and diffs it two-dot from the
+  fork-time base.sha (#1441's fix assumed a branch-tip HEAD). Every worker branch forked before
+  today would have gone red on its next push. **Fixed direct (governance path):** the file list
+  is GitHub's three-dot compare in CI, `BASE...HEAD` locally, fail-closed; verified on both
+  #1699 heads + a local probe. `pin-only-lint` shares the shape → operator-lane issue filed.
+  ⚠ self-note: the local probe briefly branch-switched the shared checkout (seconds, back on
+  master, nothing lost) — the rule says worktree; noted, not repeated.
