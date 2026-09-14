@@ -1432,11 +1432,8 @@ def route(payload: dict, ctx: dict) -> dict:
             skipped.append({"model": m, "reason": f"capability-floor:{floor_fail}"})
         elif rail not in rails:
             skipped.append({"model": m, "reason": f"rail-{rail}-not-in-class-{cls}"})
-        elif decorrelate_family:
-            if vendor_family(m) == decorrelate_family:
-                skipped.append({"model": m, "reason": f"decorrelate:{decorrelate_family}"})
-            else:
-                eligible.append((m, rail))
+        elif decorrelate_family and vendor_family(m) == decorrelate_family:
+            skipped.append({"model": m, "reason": f"decorrelate:{decorrelate_family}"})
         else:
             # Serving-shaped strikes exclude the (model, provider) PAIR, not the model: it stays
             # eligible and is priced by the provider it lands on AFTER the exclusion. The struck
@@ -2673,6 +2670,22 @@ def self_test() -> int:
     # Clean up: remove the deepseek capability record so it doesn't affect subsequent tests
     _write("DELETE FROM capability WHERE model=? AND source=?",
            ("deepseek/deepseek-v4-flash", "artificial-analysis"))
+    # (7) pair strike + decorrelate_from set to an unrelated family: the struck provider must be
+    #     excluded even when the model is not in the decorrelated family. The decision carries
+    #     skipped with the strike row, and the model is priced/pinned at the post-exclusion cell.
+    record_report({"session": "t-strike-decor-1", "task": "issue-86", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "error_class": "provider-5xx",
+                   "outcome": "no-output"})
+    _sdc = route({"stack": "sleep", "task": "issue-86", "role": "worker",
+                  "session": "t-strike-decor-1", "chain": ["deepseek/deepseek-v4-flash"],
+                  "decorrelate_from": "moonshotai/kimi-k3"}, _CELL_CTX)
+    assert _sdc["decision"] == "dispatch" and _sdc["model"] == "deepseek/deepseek-v4-flash", _sdc
+    assert _sdc["provider"] == "deepinfra" and _sdc["price_per_mtok"] == 0.05, _sdc
+    assert {"model": "deepseek/deepseek-v4-flash", "provider": "open-inference",
+            "reason": "strike"} in _sdc["skipped"], _sdc["skipped"]
+    assert _sdc.get("strike_excluded") == ["open-inference"], \
+        f"strike_excluded must record the struck provider: {_sdc.get('strike_excluded')}"
     # ── M11 shadow ladder (homelab#159): free → subscription-headroom → paid, per (class, urgency) ──
     # Every assertion here is about the SHADOW block. The served pick is asserted unchanged beside
     # each one — that is the acceptance criterion of this leg, not a nicety.
@@ -3014,8 +3027,8 @@ def self_test() -> int:
     # each is a run_report AND a strike, so 18→20 and 4→6. The assertion is kept, not dropped.
     # Goal #1640 acceptance 3 MOVES them again by the five strike fixtures (t-strike-pair-1/2,
     # t-strike-pair-3a/3b, t-strike-model-1): each is a run_report AND a strike, so 20→25 and
-    # 6→11. Kept, not dropped.
-    assert summary["rows"]["run_reports"] == 27 and summary["rows"]["strikes"] == 13  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1 + t-strike-cool-1 + t-strike-floor-1
+    # 6→11. Round 3 adds t-strike-cool-1, t-strike-floor-1, t-strike-decor-1: 25→28 and 11→14.
+    assert summary["rows"]["run_reports"] == 28 and summary["rows"]["strikes"] == 14  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1 + t-strike-cool-1 + t-strike-floor-1 + t-strike-decor-1
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
