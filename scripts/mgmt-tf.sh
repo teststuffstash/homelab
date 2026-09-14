@@ -30,10 +30,12 @@ case "$1" in
   plan|apply|destroy|refresh|import|console|output|taint|untaint) extra=(-state=/var/lib/mgmt/state/main/terraform.tfstate -var-file=/var/lib/mgmt/main.tfvars) ;;
   state) extra=(-state=/var/lib/mgmt/state/main/terraform.tfstate) ;;
 esac
-# the remote script: env file → checkout the ref in the box's apply clone → flock → tofu
+# the remote script: env file → checkout the ref in the box's apply clone → flock → tofu.
+# ssh joins its arguments into ONE command line for the remote shell, so the positionals must
+# travel inside an explicit `bash -c <script> _ <args…>` (found 2026-09-14: the bare form left
+# `$1` unbound on the first real plan). `printf %q` keeps every arg intact across the hop.
 # shellcheck disable=SC2016
-exec ssh -t -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
-  'set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
+remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    REF="$1"; shift
    R=/var/lib/mgmt/apply/homelab
    [ -d "$R/.git" ] || git clone -q https://github.com/teststuffstash/homelab.git "$R"
@@ -41,5 +43,6 @@ exec ssh -t -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed2
    cd "$R"
    [ -d tofu/.terraform ] || devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >&2
    echo "mgmt-tf: $(git rev-parse --short HEAD) on $(hostname) — tofu $*" >&2
-   exec flock /var/lib/mgmt/sentinel/.lock devbox run --quiet -- tofu -chdir=tofu "$@"' \
-  _ "$REF" "$1" "${extra[@]}" "${@:2}"
+   exec flock /var/lib/mgmt/sentinel/.lock devbox run --quiet -- tofu -chdir=tofu "$@"'
+exec ssh -t -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
+  "bash -c $(printf '%q' "$remote") _ $(printf '%q ' "$REF" "$1" "${extra[@]}" "${@:2}")"
