@@ -10,10 +10,30 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-14 afternoon, same session — wound down at ~600k ctx; arc in TICK-LOG).**
+  (1) **PR#1652 (mgmt box follows master, ADR-129 amended)** — bot CR round fixed (CODEOWNERS
+  comment), pushed at ~08:2xZ, its re-verdict NOT observed; after bot approval it parks for the
+  SEAT's codeowner read (nixos/, CODEOWNERS). **Then the box:** its checkout still points at the
+  absent `mgmt-release`, so ONE hand-advance over the `mgmt-tf` ssh path (`scripts/mgmt-tf.sh`
+  shape, root@192.168.2.53): `git -C /var/lib/homelab fetch origin master && git reset --hard
+  origin/master`, `nixos-rebuild test --flake /var/lib/homelab/nixos#mgmt`, let `mgmt-confirm`
+  gate + `boot`; verify `systemctl list-timers mgmt-pull` armed and the first tick's journal
+  ("advanced the checkout" / "already at"). (2) **PR#1654 (NodeRebootedTwiceIn24h +
+  NodeRebootingRepeatedly)** — armed, CI + bot, no park; verify it merged and the 7 d rule fires
+  on 192.168.2.63. (3) **wk-03 serial console — NOT started (the #882 next act):**
+  `serial_device {}` on wk-03 in `tofu/proxmox.tf` (conditional per node, the ci-runner.tf
+  shape) + an Ansible role `pve-serial-log` (socat template unit on pve → /var/log/qemu-serial/
+  <vmid>.log; the guest already has `console=ttyS0`); apply via the box (`devbox run mgmt-tf --
+  plan`); the fix follows the first captured panic. Probe results on #882. (4) **#1620/#1621:
+  strip `agent/error` after 14:51Z** (the 09-13 strikes age out of the reader's 24 h window; a
+  strip before that re-latches within a tick). (5) **PR#1650 MERGED 08:00Z** — caps live (xs
+  0.50 / sm 1 / md 2 / lg 4 enforced, selection unchanged); the ledger mirror + 6 test assertions
+  re-pinned. (6) Still the operator's: the #1231 verdict (then #1238 re-parent + theme-1 filing +
+  queue), the #1162 verdict (recommendation posted), #1101's #1651 (unqueued).
 - **⚑ PICKUP (2026-09-14 morning corpus session — SELECTIVE corpus load, the heat trial;
   arc in TICK-LOG).** (1) **#1231 verdict is the operator's** — seat recommendation posted on the
   Goal (validated, narrowed: acceptance-1 leg observed under #1640 acceptance 6; #1238 re-parents
-  to #1640 beside acceptance 8 because its `default-pin` arm and the Go rail both change under
+  to #1640 beside acceptance 8 because its `default-pin` arm and the [Go rail](../glossary.md) both change under
   theme 1; #1237 stays seat-run, any sitting). **After the label:** re-parent #1238, file theme
   1's five children from the gated drafts (scratchpad `theme1/*.final.md` — re-draft if lost:
   `Base=goal/1640-router`, `Class=build`, `Origin=…#1641`, order 1 → 3 → 2 → 5 → 8), `git merge
@@ -23,7 +43,7 @@ never the session's arc — that is TICK-LOG's.)
   joins the serving set in acceptance 1 — record on the Goal); effort (FU-174) = a checkpoint-
   formed THEME 3 after #1237's rows + theme 1's merge, round-1-max as an `effort_map` row keyed
   on round-state, later-round "environmental" attributed by theme 2's retry ladder, never by
-  inspection. (2) **S8 #1418 closeout 1 DONE** (12 dispositions, built-vs-left posted; #1424 →
+  inspection. (2) **S8 #1418 ([stint](chainless-redesign.md)) closeout 1 DONE** (12 dispositions, built-vs-left posted; #1424 →
   PR#1648 merged 06:36Z); the tree holds **#1649** (updater park-skip not holding — r3 F3's
   evidence) → quiet window arms from its fix; parent closes at a later sweep. (3) **Retro r4
   (PR#1645, two reports) READ, nothing filed:** opus F3/F4/F6 + deepseek F1/F4/F5 ARE #1640
@@ -332,14 +352,13 @@ never the session's arc — that is TICK-LOG's.)
     (proposed). oracle-iac#485 (mcp api claim) is the oracle jail's. Operator read, not owned
     here: public `/metrics` on the api hostname (fleet).
   - G-A #775 + G-F #1039 VALIDATED and closed — nothing left here.
-- **⚑ CONTAINERS TO CLOSE:** **#1418 S8** — closeout 1 done 2026-09-14; holds #1649; close ≥72 h after it lands · **#979 S5** [stint](chainless-redesign.md) — quiet window passed 09-02, but a FIFTH original
-  (**#1393**, the post-S5 heat-cited trims, filed 2026-09-05 from this sitting's measurement) re-opens
-  the tree; close ≥72h after it lands · **#741 S7 closeout-1 OVERDUE since ~08-29** (5/5
-  originals done, cutover 08-26, no closeout comment ever posted) — needs the closeout
-  sitting (docs-cleanup over merge-path.md/FSM + `agents/update-pr-branch.sh`, FU sweep,
-  built-vs-left comment), then its window · **#949 + #1101** retro batches close at the
-  post-r3 sweep (r3 fires Mon 09-07 unattended under the PR#1127 cost-model ranking;
-  predecessor-scoring is the closeout read).
+- **⚑ CONTAINERS TO CLOSE:** **#1418 S8** — closeout 1 done 2026-09-14; holds #1649 (QUEUED
+  2026-09-14, operator); close ≥72 h after it lands · **#1101 retro r2** — closeout 1 done
+  2026-09-14; holds #1651 (r4 F2, the IL-T28 reconcile not firing; `agent-fix`, unqueued); close
+  ≥72 h after it lands · CLOSED 2026-09-14 at this session's sweep: **#979 S5** (five originals,
+  quiet since 09-05), **#949 retro r1** (scored by r2/r3), the G-A/G-F post-launch buckets
+  **#787 / #1048** (Goals validated + closed, empty trees). Left alone: oracle-fleet#416
+  (post-launch child of closed #386 — a real regeneration item, the oracle jail's).
 - **⚑ ORACLE (the platform's half only):** Goal #418 — #432/#433/#428/#429 done; research
   PRs #425/#426 wait on the operator's `specs/` read (by design); #416 regeneration is
   operator-attended (blockers closed). #414 inert (operator queues). **homelab#1381 in

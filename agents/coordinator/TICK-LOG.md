@@ -8952,3 +8952,23 @@ Issues: #1620, #1621.
 - **Loose ends:** PR#1646 (`GithubVendorOutage` + `Pull Requests`) merged 06:12Z; five audited
   responder closes (#1580 #1584 #1557 #500 #903); zombie run 34748702282 uncancellable (409 on
   cancel + force-cancel); proxy verified rolled (0 `disk I/O error` in 9 h, `exacto:no-pin` live).
+- **Afternoon thread (operator questions → acts):** retro r4 F5 landed as the cap-ceiling change
+  (**PR#1650**, armed — enforced cap 2× the selection ceiling, selection thresholds unchanged so
+  no tier drift; token-denominated caps REJECTED as too complicated for a guardrail; re-read after
+  G-H + effort) · **#1649 QUEUED** (operator) · closed at the sweep: **#787** + **#1048** (G-A/G-F
+  post-launch buckets, Goals validated, empty), **#979** (S5: five dispositions + closeout 2),
+  **#949** (retro r1: six dispositions; scored by r2/r3) · **#1101** (retro r2) closeout 1: six
+  dispositions + **#1651** filed as its bound defect (r4 F2 / the r3 predecessor score's "#1106 not
+  firing"), stays open until it lands · #1627 extended with r4 F1 · goal-lint on a STINT parent
+  reports 7 Goal-card FAILs by construction (no `task/goal`, `Budget:`, …) — noise, not a finding.
+- **Afternoon, cont. (operator thread → acts):** **PR#1650 MERGED 08:00Z** (four bot rounds, each a
+  stale comment sibling; one pipe-filtered red push owned) · **#1162** verdict recommendation posted
+  (validated; egress soak re-read live: only oracle-fleet's own enforcing profile drops, none in the
+  loop namespaces) · **#1642** closed to #1640 (the dedup-leak duplicate) · **PR#1652** mgmt box
+  follows MASTER (ADR-129 amended; diff-gated activation on nixos/, authenticated fetch, timer
+  armed; bot CR on the CODEOWNERS comment fixed, re-verdict unobserved) · **wk-03 self-reboot #5:**
+  probes (boot epochs, MemAvail, /var, steal, pve journal, qm tasks, kmsg previous tail, Talos
+  sysctls, VM config diff) on #882 — memory/disk/host ruled out; 12 vCPU on a 30/28 overcommitted
+  host under CI load is the correlation; `console=ttyS0` already on the cmdline so the serial
+  capture is a VM-config-only change · **PR#1654** the two per-node reboot detectors (fixture =
+  wk-03's week; live replay fires the 7 d rule on .63 only) · wound down at ~600k ctx.

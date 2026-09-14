@@ -26,12 +26,16 @@ let
   repoPath = "/var/lib/homelab";
   repoUrl = "https://github.com/teststuffstash/homelab.git";
 
-  # The ref the box follows. ⚠ NOT master: this repo auto-merges bot-approved PRs, and `/nixos/`
-  # would otherwise let a merged PR rewrite the recovery root's kernel, bootloader or sshd within
-  # the hour — against ADR-129's "a reviewed ref" and the spike's listing of this box as a trust
-  # anchor. The operator advances this branch deliberately; if it does not exist, mgmt-pull
-  # no-ops loudly rather than falling back. CODEOWNERS also gained a `/nixos/` row.
-  mgmtRef = "mgmt-release";
+  # The ref the box follows: MASTER (ADR-129 as amended 2026-09-14). The human gate is the
+  # `/nixos/` CODEOWNERS row — every change to this closure is a human read before it merges —
+  # plus `scripts/` and `policy/` staying owned through the ADR-128 trial, so everything the box
+  # executes from its checkout is codeowner-gated at merge. The operator-advanced `mgmt-release`
+  # ref this was born with (2026-09-12) was a SECOND promotion of already-reviewed commits, not
+  # safety: it was never created, and the box had pull + gate + rollback the whole time. What
+  # stays deliberate is the ACTIVATION: mgmt-pull rebuilds the closure only when `nixos/` changed
+  # between the activated revision and the target; a master move that touches only scripts or
+  # policy advances the checkout (the units read those files at each start) and activates nothing.
+  mgmtRef = "master";
 
   # Written after a successful `nixos-rebuild test`, read to decide whether a promotion is even
   # allowed. Without it, a crash between `git reset` and `test` silently stops updates forever,
@@ -195,37 +199,52 @@ in
     '';
   };
 
-  # ── the pull loop (BUILT, NOT ARMED) ──────────────────────────────────────────────────────────
-  # Fetch the operator-advanced ref, ACTIVATE it without promoting it (`test` leaves the boot
-  # default alone), then hand the verdict to the deadman. ⚠ Timer disabled until phase A is done.
+  # ── the pull loop (ARMED 2026-09-14 — ADR-129 amended: follow master) ──────────────────
+  # Fetch master AUTHENTICATED (the #1637 rule: never an anonymous request from this box),
+  # advance the checkout, and ACTIVATE the closure only when `nixos/` changed since the last
+  # activated revision (`test` leaves the boot default alone); then hand the verdict to the
+  # deadman. A move that touches nothing under nixos/ only moves the checkout + the stamp.
   systemd.services.mgmt-pull = {
-    description = "activate the reviewed ref without promoting it";
+    description = "follow master; re-activate the closure only when nixos/ changed";
     after = [ "mgmt-checkout.service" "network-online.target" ];
     wants = [ "mgmt-checkout.service" "network-online.target" ];
-    path = with pkgs; [ git nix nixos-rebuild systemd coreutils ];
+    # bash/curl/jq/openssl: scripts/mgmt-lib.sh's mgmt_git mints the App token (JWT → installation
+    # token) for the per-invocation auth header; no token (unprovisioned box) → plain git, loudly.
+    path = with pkgs; [ bash git nix nixos-rebuild systemd curl jq openssl coreutils gnugrep gawk gnused ];
     serviceConfig = {
       Type = "oneshot";
       TimeoutStartSec = "45m"; # Type=oneshot has NO default timeout; an unreachable cache would hang forever
       Environment = [ "HOME=/root" ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ]; # the App id/installation/key path, root-only, never in the store
     };
     script = ''
       set -euo pipefail
       cd ${repoPath}
-      if ! git fetch --quiet origin ${mgmtRef}; then
-        echo "ref '${mgmtRef}' does not exist on origin — nothing to do (the operator advances it)" >&2
-        exit 0
+      # The lib is read from the checkout BEFORE the reset — the shape the sentinel/apply units
+      # already rely on; a broken lib on master is a merged, codeowner-read commit, not a surprise.
+      . ${repoPath}/scripts/mgmt-lib.sh
+      if ! mgmt_gh_token >/dev/null 2>&1; then
+        echo "no App token available (/var/lib/mgmt/env unprovisioned?) — fetching unauthenticated" >&2
       fi
+      mgmt_git fetch --quiet origin ${mgmtRef} || { echo "fetch of origin/${mgmtRef} FAILED — leaving the checkout as is" >&2; exit 1; }
       target="$(git rev-parse FETCH_HEAD)"
       # Compare against what was actually ACTIVATED, not against pre-fetch HEAD: a crash between
       # the reset and the activation would otherwise look like "no new commits" forever.
       activated=""
       [ -f ${activatedStamp} ] && activated="$(cat ${activatedStamp})"
       if [ "$target" = "$activated" ]; then
-        echo "already activated $target"
+        echo "already at $target"
+        exit 0
+      fi
+      if [ -n "$activated" ] && git cat-file -e "$activated^{commit}" 2>/dev/null \
+         && git diff --quiet "$activated" "$target" -- nixos/; then
+        git reset --hard --quiet "$target"
+        printf '%s' "$target" > ${activatedStamp}
+        echo "advanced the checkout to $target — nixos/ unchanged since $activated, closure not re-activated"
         exit 0
       fi
       git reset --hard --quiet "$target"
-      echo "activating $target (boot default unchanged)"
+      echo "activating $target (nixos/ changed; boot default unchanged until the gate passes)"
       nixos-rebuild test --flake ${repoPath}/nixos#mgmt
       printf '%s' "$target" > ${activatedStamp}
       # --no-block: this oneshot must not wait on a unit that may reboot the machine.
@@ -233,7 +252,7 @@ in
     '';
   };
   systemd.timers.mgmt-pull = {
-    enable = false; # phase A: built, not armed
+    enable = true; # armed 2026-09-14 (the ADR-129 amendment); hourly level, the doorbell (FU-237 d) is the later edge
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "hourly";

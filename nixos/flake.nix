@@ -11,7 +11,8 @@
 #   scripts/mgmt-provision-secrets.sh          # stages ~/.claude/homelab-mgmt/extra-files, prints:
 #   nix run nixpkgs#nixos-anywhere -- --extra-files <that dir> --flake ./nixos#mgmt root@<installer-ip>
 # Rotation later = `scripts/mgmt-provision-secrets.sh --push` (same tree, onto the running box).
-# Update — the box does this itself from the operator-advanced `mgmt-release` ref
+# Update — the box does this itself from MASTER (ADR-129 amended 2026-09-14; the `/nixos/`
+# CODEOWNERS row is the gate), re-activating the closure only when nixos/ changed
 # (mgmt-pull.service → mgmt-confirm.service). By hand, the same two steps in the same order:
 #   nixos-rebuild --flake /var/lib/homelab/nixos#mgmt test   # live now, boot default UNCHANGED
 #   nixos-rebuild --flake /var/lib/homelab/nixos#mgmt boot    # promote, then reboot

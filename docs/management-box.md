@@ -107,14 +107,21 @@ argument for `devbox.lock` being the pin, and it keeps the system closure tiny.
 
 ## The update loop: pull, and the cluster may poke
 
-The box pulls the **operator-advanced `mgmt-release` ref** on a timer — ⚠ *not* `master`: this
-repo auto-merges bot-approved PRs, so following master would let a merged PR rewrite the recovery
-root's kernel, bootloader or sshd within the hour. `CODEOWNERS` gained a `/nixos/` row as the
-second belt, and if the ref does not exist the pull no-ops loudly rather than falling back. The
-cluster at most pokes it. Not fussiness — a
+The box pulls **`master`** on a timer (hourly level; the doorbell of FU-237 (d) is the later edge)
+— ADR-129 as **amended 2026-09-14**. The gate is at MERGE, not at a second ref: `CODEOWNERS`
+owns `/nixos/`, and `scripts/` + `policy/` stay owned through the ADR-128 trial, so every file the
+box executes from its checkout was a human read before it landed. The operator-advanced
+`mgmt-release` ref the design was born with (2026-09-12) was a second promotion of commits already
+reviewed, not a safety layer — in its two days it was never created, and the box had pull + gate
++ rollback the whole time (the ArgoCD shape: follow the branch, gate the merge, roll back locally).
+Two things stay deliberate: **activation is diff-gated** — `mgmt-pull` runs `nixos-rebuild test`
+only when `nixos/` changed between the last activated revision and the target, otherwise it just
+advances the checkout (the units read `scripts/` and `policy/` at each start, no activation
+needed); and **every fetch is authenticated** (`mgmt_git`, the #1637 rule), failing loudly rather
+than falling back to anonymous. The cluster at most pokes it. Not fussiness — a
 pushed update means something inside the cluster holds a credential that can rewrite the recovery
 root, and the spike's §What stays human lists this box beside the CA keys and the Tier-0 wallet as
-a trust anchor. Pulling reviewed commits is the same automation with no inbound key, and it takes
+a trust anchor. Pulling merged commits is the same automation with no inbound key, and it takes
 the jail out of the loop (operator: updates should not be the jail's responsibility).
 
 Internet egress on the box is allowed (operator, 2026-09-12), so the pull needs no in-cluster
@@ -170,7 +177,7 @@ plan-on-PR without a pre-execution gate is remote code execution on the recovery
 | Stage | Reads | Does | Fails as |
 |---|---|---|---|
 | 1 — input allowlist | the PR tree as DATA, the policy from **master** (`git show origin/master:policy/mgmt/…`), never the PR's copy | for each touched root: the diff vs base may touch only allowlisted file classes (`*.tf` declaration bodies, `*.tfvars.example`, docs) and none of the deny list — `.terraform.lock.hcl`, `required_providers`/`terraform {}` blocks, `backend`/`encryption` config, `data "external"`/`data "http"`, any `provisioner`, `.terraformrc`/CLI-config-shaped files, symlinks, files outside the root | `failure`, rule named |
-| 2 — the plan | the head in an **ephemeral worktree** (`git worktree add` under `/var/lib/mgmt/sentinel/`, removed after) — never this box's own checkout, which is the system's source at `mgmt-release` | `tofu plan -detailed-exitcode -input=false -lock=false -lockfile=readonly` with providers from a **local mirror** pre-populated from master's lockfile (`tofu providers mirror`, refreshed by the pull loop); network reach is the provider APIs the root already needs | engine error → `error` (fail-closed, healed next run); plan error → `failure` |
+| 2 — the plan | the head in an **ephemeral worktree** (`git worktree add` under `/var/lib/mgmt/sentinel/`, removed after) — never this box's own checkout, which is the system's source at `master` | `tofu plan -detailed-exitcode -input=false -lock=false -lockfile=readonly` with providers from a **local mirror** pre-populated from master's lockfile (`tofu providers mirror`, refreshed by the pull loop); network reach is the provider APIs the root already needs | engine error → `error` (fail-closed, healed next run); plan error → `failure` |
 
 The first form of the policy is the iac-sentinel's own bash path-rule shape (file classes + a
 grep-shaped declaration deny list); Kyverno over `hcl2json` output is the v2 when a rule needs
