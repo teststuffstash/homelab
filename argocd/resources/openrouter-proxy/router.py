@@ -1836,7 +1836,7 @@ def metrics_lines() -> list[str]:
     # Goal #1640 acceptance 5: the (model, provider) pair cooldown as a per-cell gauge — the
     # monitoring surface the fleet-strike reader keys on instead of walking issue comments.
     lines += ["# TYPE router_cell_cooldown gauge",
-              "# HELP router_cell_cooldown Seconds remaining on a (model, provider) pair cooldown (Goal #1640 acceptance 5); absent when the pair is not cooled."]
+              "# HELP router_cell_cooldown Seconds remaining on a (model, provider) pair cooldown (Goal #1640 acceptance 5); one series per cooled pair, 0 when none is cooled."]
     _pc = pair_cooldowns(now)
     if _pc:
         lines += [f'router_cell_cooldown{{model="{v["model"]}",provider="{v["provider"]}"}} '
