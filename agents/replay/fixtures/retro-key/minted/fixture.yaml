@@ -10,7 +10,7 @@
 #   1. The CR is DELETED before it is applied. Re-minting an existing name takes the operator's
 #      PATCH path and OpenRouter's PATCH cannot extend a key's real expires_at
 #      (openrouter-operator#6) — a re-fired cell would inherit a key that dies mid-ride.
-#   2. The applied CR is `budgetUSD: 0.25` — the xs tier, forced. This is the assertion that would
+#   2. The applied CR is `budgetUSD: 0.5` — the xs tier, forced. This is the assertion that would
 #      catch the estimator's fixer-shaped band (~$0.54 → tier lg/$2.00) silently sizing this lane.
 #      It arrives on STDIN because the clause applies with `-f -`, which is what makes the cap
 #      itself part of the action stream rather than a claim in a comment.

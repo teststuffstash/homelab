@@ -82,7 +82,7 @@ is a **per-session hard cap**: mint a fresh, single-shot, self-expiring OpenRout
    ```
 
    It bands the issue by size (`cost ≈ rounds × requests/round × context_tokens × eff_$/M ×
-   (1−cache)`), applies a buffer, and maps to a tier — `xs $0.25 / sm $0.50 / md $1 / lg $2` (force
+   (1−cache)`), applies a buffer, and selects a tier on `xs $0.25 / sm $0.50 / md $1 / lg $2` and mints the key at 2× — `xs $0.50 / sm $1 / md $2 / lg $4` — a guardrail, not a forecast (operator, 2026-09-14) (force
    one with `--label agent-budget/sm`; an estimate above `lg` sets `escalate` for a human to eyeball).
    `--emit-cr` prints an **ephemeral `OpenRouterKey`** sized to the cap.
 
