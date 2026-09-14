@@ -1,0 +1,4 @@
+[2026-09-14T16:20:00Z] → ready: branch=fix/issue-1668-pair-cooldown
+    assert strikes_for("issue-19", "circles") == [("deepseek/deepseek-v4-flash", "", "goose-32602-truncation")]
+| `harness-death` (goose `-32602`), `auth-storm` (401/403) | **strike** per (task, model) |
+- `goose-32602-truncation`: operator 2026-09-14 direction

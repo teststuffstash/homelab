@@ -18,3 +18,7 @@ stats-http-403-other-with-pr  |       |       |     | stats-http-403-other-with-
 stats-provider-5xx-with-provider |       |       |     | stats-provider-5xx-with-provider |
 stats-budget-403-residual       |       |       |     | stats-budget-403-residual       |
 rawlog-budget-403-residual      |       |       |     | rawlog-budget-403-residual      |
+# homelab#1705: `-32602` is goose's CODE — the class NAME in content is text (goose row), and a
+# claude ride cannot die of it even in the real shape (claude row); neither is harness-death.
+rawlog-32602-content-echo-goose |       |       |     | rawlog-32602-content-echo-goose |
+rawlog-32602-claude-harness     |       |       |     | rawlog-32602-claude-harness     |
