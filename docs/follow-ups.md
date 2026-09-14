@@ -673,6 +673,8 @@ the block needs pruning, not more headings.
       Measured 2026-09-05: queue p90 ~10 min while the cap was hit 0–2 % of the time. **Done
       2026-09-08** (PR#1518 + 09b81dd9): wk-03 8→16Gi/12c (funded by ci-runner-01), `maxRunners`
       4→6 — the overcommit ceiling; the sizing lives in `arc-runners.yaml`'s maxRunners comment.
+      **2026-09-14 (operator, PR#1671): wk-03 back to 8Gi/6c, maxRunners 6→4** — the pve host
+      sat at 0.5–1 GiB MemAvailable (`PveHostMemoryLow`) and 16 Gi packed ~4 dind onto the 40 G LV.
       Open: (a) label wk-metal-04 ephemeral ≈ +3–4 slots shared with kata (operator call); (b) the
       week's re-read of queue p90 at operator hours (07–09/17–19 UTC) — close if under ~2 min.
       **2026-09-10:** `homelab-ephemeral-large` (#1582: metal-only, 16Gi scratch request, max 1)

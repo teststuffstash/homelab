@@ -287,6 +287,18 @@ Check 2 in particular converts this whole document from "mechanism that fits the
   hp-01's cilium-envoy also took an OOMController kill (18:03Z, requests-only Burstable —
   §2's known victim class; §5's "give cilium-envoy limits" option remains open).
 
+- **2026-09-14 — an 11-kill spree on a nocloud VM (wk-02), 5 GiB MemAvailable, in 12 s**: the
+  OOMController triggered on every 500 ms sample from 09:15:12Z to 09:15:24Z and SIGKILLed one
+  cgroup per tick — FIRST the Longhorn instance-manager (every replica process on the node), then
+  longhorn-manager, cilium-agent (twice), the four CSI controllers, the CSI plugin, engine-image
+  and the Argo Events JetStream pod (`agent-coordinator/eventbus-default-js-2`). `node_memory_
+  MemAvailable_bytes` sat at 5.1 GiB of 12 throughout (09:08–09:18Z), so the trigger was a PSI
+  stall, not exhaustion; the top working set was Prometheus at 2.2 GiB. Downstream: openrouter-
+  proxy's RWO volume multi-attached for 15 min and two coordinate ticks failed (homelab#1672
+  class B) — the VM tier is excluded from Option A's pin, so this is the shared-fate kill landing
+  on the tier the mitigation does not cover. Evidence: `talosctl -n 192.168.2.62 dmesg | grep
+  OOMController` (11 triggers, victim cgroups = pod UIDs), `kube_pod_info{uid=…}` at 09:14Z.
+
 ## Related
 
 FU-155 (tracker), FU-139 / FU-112 / FU-082 (archived — the reservation hardening this builds on),
