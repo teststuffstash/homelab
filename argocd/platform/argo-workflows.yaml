@@ -28,16 +28,29 @@ spec:
         controller:
           workflowNamespaces:
             - agent-coordinator
+          # The controller must be able to CREATE ConfigMaps in the workflow namespaces: since
+          # app v4.0 an oversized pod template (the responder's Alertmanager payload past ~58 KB —
+          # a 22-alert PodSigkilled group on 2026-09-14) is offloaded into a ConfigMap instead of
+          # the ARGO_TEMPLATE env, and the chart's default ClusterRole only grants get/list/watch —
+          # every such respond-* run died at "error in entry template execution: configmaps is
+          # forbidden" while the small-payload runs succeeded (the SILENT class: the spree got no
+          # triage issue). `writeConfigMaps` is the chart's knob for exactly this grant.
+          rbac:
+            writeConfigMaps: true
           # Controller-level retention defaults (#491 — the durable fix deferred from #487).
-          # Every submitted Workflow that doesn't set its own spec.ttlStrategy ages out 7 days
-          # after completion (604800s); completed workflow pods are GC'd at workflow completion.
-          # The coordinator reflex CronWorkflows already set shorter per-workflow TTLs
-          # (3600s–86400s) and those spec-level values win over this default. Only the
-          # etcd-resident Workflow objects age out — S3 artifact retention (ADR-089) is untouched.
+          # Every submitted Workflow that doesn't set its own spec.ttlStrategy ages out 2 days
+          # after completion (172800s; was 7 d until 2026-09-14 — 666 Workflow objects, 142 of
+          # them review-* older than 2 d, were the largest cache line behind kube-apiserver's
+          # 4 GiB working set on cp-01, homelab#1687). The record is NOT these objects: the
+          # transcripts bucket + the agent-ride check-run/ledger (ADR-103) hold the history; the
+          # Monday retro reads S3. Completed workflow pods are GC'd at workflow completion. The
+          # coordinator reflex CronWorkflows already set shorter per-workflow TTLs (3600s–86400s)
+          # and those spec-level values win over this default. Only the etcd-resident Workflow
+          # objects age out — S3 artifact retention (ADR-089) is untouched.
           workflowDefaults:
             spec:
               ttlStrategy:
-                secondsAfterCompletion: 604800
+                secondsAfterCompletion: 172800
               podGC:
                 strategy: OnWorkflowCompletion
           resources:

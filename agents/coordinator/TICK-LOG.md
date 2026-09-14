@@ -8987,3 +8987,102 @@ Issues: #1620, #1621.
   reviewer findings present since round 1) — G-H changes nothing for that class; the levers are
   the round-3 label re-grade (the built #1231 carrier) and the reviewer's comprehensiveness (a
   KPI for r5) · session ended ~650k ctx.
+- **Midday (fresh session after /clear — the box + wk-03 window; operator thread):** **mgmt box
+  hand-advanced** to master d7cfefb8 (authenticated fetch via `mgmt_git`, `nixos-rebuild test`,
+  gate PASS → gen 4 promoted, `mgmt-pull.timer` armed; first tick 10:03Z "advanced the checkout
+  to 115794f4 — nixos/ unchanged, closure not re-activated") · **`scripts/mgmt-tf.sh` never worked**
+  (ssh joined the positionals into the remote command line → `$1: unbound`; fixed with
+  `bash -c <script> _ <args>` + `printf %q`, direct) · **wk-03 window 09:50–09:55Z (PR#1671,
+  MERGED):** `serial = true` node flag → `serial_device {}` + `ansible/roles/pve-serial-log`
+  (`qemu-serial-log@8113` socat → `/var/log/qemu-serial/8113.log`, first kernel line captured);
+  **right-size 16Gi/12c → 8Gi/6c** (operator: pve host at 0.5–1 GiB MemAvailable, 64.5 GiB
+  dedicated on 64, 30 vCPU/28 threads) via `node-maintenance down` → `mgmt-tf apply` (branch
+  ref; the plan's extra `kubernetes_node_taint` diff = cilium's unreachable taints on the stopped
+  node, field-manager conflict, no action) → `up`; post-window plan clean; host now 10.3 GiB
+  available · **`maxRunners` 6 → 4 direct** (115794f4 — `arc-runners.yaml` is pin-only-guarded,
+  the PR's `ci` said so) · **iowait/thrash hypothesis for the reboots REJECTED** (PSI io ≈ 0,
+  iowait ≤ 0.06 %, PSI mem 0 in the 30 min before each of the five boots; posted on #882) · the
+  drain **cancelled oracle-fleet run 34829496525** mid-job (ARC runner pods were evictable to
+  settle) → **PR#1674** (busy EphemeralRunner = a ride; oracle re-runs on its own, operator) ·
+  **#1672 class B = the OOMController** on wk-02: 11 kills in 12 s at 09:15Z with 5 GiB free —
+  instance-manager FIRST, then longhorn-manager, cilium ×2, the CSI set, JetStream (spike §7,
+  FU-155's VM-tier exclusion) · **#1675 (pool 90 %)**: manual `fstrim` jobs on wk-02/wk-03 →
+  90.4 → **69.2 %** (wk-02 LV 74.7 → 48.9 %); discard passdown verified live on all five VMs —
+  the gap is cadence (~80 GB/7 h regrowth, 62 GB wk-02's), steer posted · wk-02's std disk holds
+  five leftover replicas incl. FOUR r=1 coordinator-transcripts volumes (sleep/circles/platform/
+  agent-coordinator) whose only copy is there — placement call reported, not moved.
+- **Midday, cont. (operator: "only the alerts/responder updates", no sweep, no delegation):**
+  crosscheck green; triage budget 11/12 used by the morning storm (`ResponderTriageBudgetExhausted`
+  = the designed ceiling, not a fault) · **SILENT class found by hand:** every `respond-*` run
+  carrying the 22-alert `PodSigkilled` group (payload 58–65 KB) died since 09:26Z — Argo v4.0
+  offloads an oversized template into a ConfigMap the controller's ClusterRole cannot create
+  (`configmaps is forbidden`, 5 retries; 49 smaller runs fine) → the wk-02 spree never got a
+  responder issue; **PR#1678** `controller.rbac.writeConfigMaps: true` (the crosscheck cannot see
+  this class — the ledger entry precedes the run; `AgentLoopWorkflowsFailing` did fire) ·
+  **#114 FIXED after 5 weeks:** the inline `renovate-approve.yaml` replaced by the reusable caller
+  in sleep-tracking (#149) + circles (#95), admin-merged (App lacks `workflows`); `agent/error`
+  stripped from sleep-tracking#148; closed · **closed on substance:** #811 (loki stable since
+  09-12, quota 20Gi), #1013 (rule has the `max_over_time[7d]` guard), #542 (node churn, both
+  nodes gone/Ready), #100 (Optanes left with thinkcentre → FU-234), #261 (single reboot; the
+  repeat-class detectors exist), #121 (annotation already post-FU-038; thinkcentre is the mgmt
+  box), #153 (Prometheus HAS the 8Gi limit; the query-slots graft → **PR#1679** maxConcurrency 40)
+  · pointer on #857 (wk-02 = same class) · left as-is: #1546 (oracle-fleet items held by the
+  footprint gate, stack lane), #1594 (agent-fix, alert cleared), #241 (oracle prune dry-run,
+  stack lane), #103 (read-only graft thread), #857 (FU-155's symptom thread).
+- **Midday, cont. 2 (operator directions: wk-02 out of std, VM image GC, disk resize):** the
+  design read first — with r=2 a std replica on the pve pool takes no write off the network
+  (measured: local-replica and remote-only volumes both 0.2–1.9 ms), the pve consumers read ~0,
+  the pool is the tightest resource, zone `proxmox` = the consumers' own failure domain → the
+  Xeon is compute-only. **Done live:** the four detached `coordinator-transcripts` PVCs deleted
+  (the record is Garage — FU-132) and recreated by Crossplane/the manifest at 10:53Z off wk-02
+  (pvc-protection held them ~9 min on SUCCEEDED pods still referencing them — deleting the
+  finished janitor/crashnet/coordinator pods released them; the platform coordinator's #1620 run
+  sat Pending on the terminating PVC meanwhile); wk-02's Longhorn disk evicted (oracle's r=1
+  volume rebuilt on hp-01, uv-cache's copy on m70s) and REMOVED from the node CR — 0 replicas;
+  **PR#1681 (kubelet image GC 60/50 on the VM tier) APPLIED** via the box (four in-place,
+  configz verified 60/50 on wk-02/wk-03) — wk-02's 89 GB image store (299 images, kubelet default
+  85/80 on a 236 G /var) was the "120 GB"; **PR#1678 merged** (Argo `writeConfigMaps`, `can-i`
+  → yes). **Parked on merges (apply from MASTER, the branches predate #1681 and would revert the
+  kubelet config):** PR#1683 (wk-02 out of `longhorn_zones` — plan = label swap only once
+  rebased), PR#1684 (wk-02 240→80 G RECREATE + wk-03 40→80 G; operator sizes; wk-01 stays 80).
+  Windows: wk-02 = `node-maintenance down` → `kubectl delete node wk-02` → `mgmt-tf apply
+  -replace=` VM + its `talos_machine_configuration_apply` → `up`; wk-03 = down → `qm start` (the
+  pending disk grows at qemu start; Talos grows EPHEMERAL) → `up`.
+- **Midday, cont. 3 (the windows):** PR#1683 (wk-02 out of `longhorn_zones`; one bot round — a
+  stale "schedulable again" sibling line, fixed) + PR#1684 (disks) merged; plan from master =
+  exactly the label swap + wk-02 replace + wk-03 grow · **wk-02 RECREATED at 80 G** 12:0x–12:12Z
+  (`node-maintenance down` → `mgmt-tf apply -replace=` VM + talos-apply → `up`; Node object
+  KEPT — the label create targets it and the fresh kubelet re-registers under the same name;
+  HA/Prometheus → hp-01, Infisical → hp-01/m70s, UniFi → wk-01 during the window; EPHEMERAL 75 G,
+  CSI registered, no orphaned replica dirs) · **wk-03 grown to 80 G** (down → `qm start` → up;
+  EPHEMERAL 75 G) · pool **37 %** (from 90 % at 10:00Z; wk-02 LV 7 %, wk-03 32 %) · **#1687
+  cp-01 eviction storm** = apiserver 4.1 GiB of 5.98 allocatable (7 d avg 3.9, max 5.5) → **cp-01
+  12 GiB** (PR#1689, applied from the branch — the first apply from master was a no-op, the PR
+  had not merged; 70 s control-plane blackout under a cp-01 silence, operator-approved) · the
+  apiserver's size is 224 CRDs + 10.3k objects, 666 of them Workflows (review-* 142 older than
+  2 d on the 7 d default) → **PR#1690 default TTL 7 d → 2 d** (record = S3 + ledger, no archive
+  DB) · post-blackout: all 10 Ready, 0 degraded volumes, controllers re-electing.
+- **Midday, cont. 4 (the cp-01 blackout's echo):** the 12:29Z round-2 strike on #1620 was the
+  seat's own cp-01 power-cycle: four fresh `ref: resolve` misses on "Connection refused" 7 s apart
+  (one per negative-TTL expiry) → `circuit OPEN (cred)` 900 s (the #1020 count covered only blips
+  shorter than the TTL); the ride had already opened PR#1688 (merged 12:25Z, issue closed) and
+  died wrapping up — post-merge noise, corrected on #1620 · **PR#1691** openrouter-proxy:
+  transient kube-API failure during ref resolve → 503 + Retry-After, never a cred count
+  (`_kube_get_secret` seam, classification, self-test PASS) · **PR#1690 merged** (Argo default
+  Workflow TTL 2 d) · #1689 (cp-01 12 GiB, already applied from the branch) in review.
+- **Afternoon (operator: "how many responder issues are still actionable"):** 24 open → six more
+  closed on substance (#1584/#1657/#1659 — wk-03 at 80 G + VM image GC + maxRunners 4;
+  #1643/#1644 — the FU-208 pool gate released as designed; #1598 — PR#1576 merged 06:02Z) → 18
+  open: 6 actionable (#1664 csi-plugin limits key, #1672 class A cron stagger, #1675 trim
+  cadence, #1594 fixtures — all fixer-lane `agent-fix`; #1661 in review = PR#1673; #530 = the
+  operator's UI cancel of zombie run 34748702282), 1 waiting on evidence (#1687, 24 h), 11
+  report-only / symptom / stack-lane (#103 #241 #1546 #857 #860 #538 #1662 #884 #882 #1663 + the
+  FU-155 class).
+- **Afternoon, cont. (operator: update the audit; queue or Goal?):** the currency gate (FU-133 leg
+  c) is why #1675/#1594 sat un-queued ("alert resolved — say the defect outlives it and queue by
+  hand"); #1664/#1672 unjudged. **Queued by hand, targets narrowed in the comments**: #1675 (trim
+  CADENCE, not the RecurringJob), #1594 (fixtures only), #1664 (the chart key the CSI DaemonSet
+  honours; human apply), #1672 (class A stagger only). No Goal — unrelated alert-born fixes = the
+  maintenance stream (ADR-126 themes). `docs/spikes/responder-week-audit.md` gained the executed
+  section + the two machinery defects (PR#1678, PR#1691).
+

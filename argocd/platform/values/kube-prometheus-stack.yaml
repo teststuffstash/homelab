@@ -428,6 +428,12 @@ prometheus:
             name: prometheus-kube-prometheus-stack-prometheus-db
     podMonitorSelectorNilUsesHelmValues: false
     probeSelectorNilUsesHelmValues: false
+    # PrometheusHighQueryLoad fired at 19/20 slots (homelab#153, 2026-09-08): the default
+    # --query.max-concurrency=20 is shared by Grafana, the responder's triage probes, the
+    # coordinator's belts and the prober. 40 = headroom for the burst, not a capacity change —
+    # the 8Gi limit above is the real ceiling (responder-week audit row #153).
+    query:
+      maxConcurrency: 40
     replicas: 1
     resources:
       limits:

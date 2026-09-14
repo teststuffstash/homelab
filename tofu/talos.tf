@@ -83,6 +83,12 @@ data "talos_machine_configuration" "node" {
               "nodefs.available"   = "10%"
               "nodefs.inodesFree"  = "5%"
             }
+            # The metal nodes' image-GC floor (metal.tf) for the VMs too (operator, 2026-09-14):
+            # the kubelet default (85/80 %) let wk-02's image store grow to 89 GB of 299 images on
+            # its 236 G /var — 60/50 % keeps the store bounded on any disk size, and on wk-03 (the
+            # dind tier, 40 G) it is the belt the #1657/#1659 evictions were missing.
+            imageGCHighThresholdPercent = 60
+            imageGCLowThresholdPercent  = 50
           }
         }
       }

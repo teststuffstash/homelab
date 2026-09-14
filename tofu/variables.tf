@@ -125,7 +125,11 @@ variable "nodes" {
     serial = optional(bool, false)
   }))
   default = {
-    cp-01 = { role = "controlplane", vm_id = 8101, ip_cidr = "192.168.2.51/24", cores = 4, memory_mb = 8192, disk_gb = 40 }
+    # memory 8→12 GiB (2026-09-14, #1687): kube-apiserver alone holds ~4.1 GiB (10 nodes, the
+    # agent-platform CRDs + list-watches), all pods ~4.9 GiB of 5.98 allocatable — ~1.1 GiB above
+    # the 768Mi allocatable eviction line, so any blip evicts the DaemonSets (22 evictions in
+    # 100 s at 11:17Z). Funded by wk-03's 16→8 GiB the same day; host at 17.6 GiB available.
+    cp-01 = { role = "controlplane", vm_id = 8101, ip_cidr = "192.168.2.51/24", cores = 4, memory_mb = 12288, disk_gb = 40 }
     # wk-01 keeps longhorn=true although it is in NEITHER longhorn.tf zone map (no
     # create-default-disk label, no disk on its nodes.longhorn.io CR, no replica). That looks
     # stale and is not: wk-01 is the untainted general-purpose worker, so it is the busiest
@@ -135,10 +139,14 @@ variable "nodes" {
     # in proxmox.tf, REPLACE the VM, and bring it back unable to mount any Longhorn PVC.
     # Asked and settled twice now (#296 round 2, #302) — leave it alone.
     wk-01 = { role = "worker", vm_id = 8111, ip_cidr = "192.168.2.61/24", cores = 4, memory_mb = 16384, disk_gb = 80, longhorn = true }
-    # disk 80→240 (ADR-089 bulk tier): pairs with wk-metal-01's 500G MX500 for longhorn-bulk
-    # 2-replica volumes. pve thin pool had 244G free at resize (2026-07-13). Grow-only in place;
-    # Talos grows EPHEMERAL into it on the next reboot.
-    wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 12288, disk_gb = 240, longhorn = true }
+    # disk 240→80 (2026-09-14, operator): the 240 G was the ADR-089 bulk pairing with wk-metal-01;
+    # wk-02 left the bulk tier and then std altogether (PR#1683 — the pve box is compute-only, its
+    # volumes are mounted, never served). XFS cannot shrink and Talos never re-partitions, so this
+    # is a VM RECREATE (`mgmt-tf apply -replace=` on the VM AND its talos_machine_configuration_apply
+    # — the apply resource has no attribute keyed on the VM, so it will not re-run on its own),
+    # inside a node-maintenance window; 80 G = wk-01's size for the same workload class, image
+    # store bounded by the 60/50 kubelet GC (PR#1681). Grow-only from here.
+    wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 12288, disk_gb = 80, longhorn = true }
     # Ephemeral CI/runner tier VM (2026-08-18): 8 cores is deliberate CPU overprovision (host was
     # 20/28 vCPU allocated at load ~4; CI is burst work, throttling is safe) — memory is the
     # careful number (host had ~12Gi free; 8Gi leaves ~4Gi buffer). 2026-09-08: 8→16Gi + 8→12
@@ -161,7 +169,11 @@ variable "nodes" {
     # LV (#1659/#1657 disk-pressure wave). Half the box = ~2 runners; arc-runners.yaml maxRunners
     # follows (6 → 4, a direct master push — the file is pin-only-guarded). The reboot cause is NOT this (IO/memory PSI ≈ 0 before every boot) — that
     # is the serial console's job.
-    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 6, memory_mb = 8192, disk_gb = 40, longhorn = true, serial = true }
+    # disk 40→80 (2026-09-14, operator): the dind tier's imagefs evictions (#1657/#1659) were a
+    # 36 G /var under ~4 concurrent runners; 80 G with maxRunners 4 (≤2 here) + the 60/50 image
+    # GC. Grow-only in place; Talos grows EPHEMERAL into it on the next reboot (a stop/start —
+    # the VM's pending disk resize lands at qemu start, not at a guest reboot).
+    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 6, memory_mb = 8192, disk_gb = 80, longhorn = true, serial = true }
   }
 
   validation {

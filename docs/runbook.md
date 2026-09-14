@@ -171,8 +171,8 @@ only LAN DHCP.
 
 `tofu/longhorn.tf` — Helm 1.12.0, `longhorn` is the **default StorageClass** (replica=2, zone
 soft-anti-affinity). All stateful services use Longhorn PVCs (not node-pinned). ⚠ **Since
-2026-09-12 the `std` tier has exactly TWO schedulable nodes** (m70s + hp-01; wk-02's pooled disk
-is `allowScheduling=false` and thinkcentre left cluster duty), so every r=2 std volume must hold
+2026-09-12 the `std` tier has exactly TWO schedulable nodes** (m70s + hp-01; wk-02 left the tier
+for good on 2026-09-14 and thinkcentre left cluster duty), so every r=2 std volume must hold
 one copy on each — soft anti-affinity means a capacity squeeze surfaces as SILENT co-location,
 not a Pending volume. The `longhorn-fast` SC (replica=1, node-local; SCRATCH for disk-write-heavy
 pods — eligibility ruling in `docs/storage-ledger.md`) has **no backing disk** until the Optane
