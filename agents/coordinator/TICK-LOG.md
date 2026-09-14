@@ -9192,3 +9192,13 @@ Issues: #1620, #1621.
   #1699 heads + a local probe. `pin-only-lint` shares the shape → operator-lane issue filed.
   ⚠ self-note: the local probe briefly branch-switched the shared checkout (seconds, back on
   master, nothing lost) — the rule says worktree; noted, not repeated.
+- **Wind-down (operator: "wind down after this merges" — it did NOT merge):** #1699 went CI-green
+  after the governance-lint fix (the replay expectations for the re-pointed scout digest were
+  re-pinned on the branch, 478/478), then the bot requested changes: the ride's §M sweep
+  matched BARE `§M` — 69 substitutions across 20 files, ≥6 re-pointing OTHER docs' sections
+  (`§MODEL`, `§MB1/3`, `§MVP`), two literal duplicate insertions, the single-writer tracker
+  touched. That is the worker's content defect → a fix round, not a wind-down rewrite; recipe
+  posted on #1692 (anchored pattern, verbatim spike, tracker/shim excluded). Finding 1 done by
+  hand (`Fixes #1710` on the PR, #1710's Touches widened). The round cannot dispatch until
+  `agent/error` stops being re-applied (2026-09-15 16:45Z, or #1712 landing). #1675 closed
+  (operator). Session ends; pickup in meta-state.

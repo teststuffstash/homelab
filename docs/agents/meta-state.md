@@ -46,6 +46,21 @@ never the session's arc — that is TICK-LOG's.)
   (10) Unchanged from the late-morning pickup: theme 1 queued (#1665–#1669, first ride reads
   `exacto:no-pin`); fleet un-latched; #1237 re-home question at the next sweep; oracle-fleet
   PR#591/#395 human-directive path; #1651 unqueued.
+- **⚑ PICKUP (2026-09-14 evening handoff/board session — no corpus load; arc in TICK-LOG).**
+  (1) **#1692 / PR#1699 fix round** — changes-requested (bare-`§M` sweep, recipe on #1692);
+  dispatch is blocked by the fleet-strike reader re-applying `agent/error` until **2026-09-15
+  16:45Z** (or #1712 landing) — strip after that if the reader has not stopped; then close
+  **#1707** (kept open as the dedup anchor). After the merge: the one-word docstring pointer in
+  `scripts/claude-model-shim.py` (`model-routing.md §M11` → `model-routing-history.md §M11`)
+  lands operator-direct; #1710 closes with it. (2) **PR#1698 codeowner read** (#1670,
+  bot-approved after two rounds, CI green, BEHIND) — the corpus-loaded seat merges it; #1697
+  unparks by itself. (3) **#1713** pin-only-lint's merge-ref two-dot (operator lane, sibling of
+  fadb0ff6). (4) **oracle-fleet#605** (ErtPipeline rules on the Argo counter) in the oracle
+  reviewer's hands; #604 item 3 after the chart rolls. (5) **Garage capacity**: the 150 GB
+  ert-delta ask is the SFF zone-disk item (ledger §"Garage bucket quotas vs the layout");
+  cheap interim = move the PyPI + mcr mirror volumes off wk-metal-04 `intel1` (258 GB scheduled
+  on 256) — not filed, operator's call. (6) Still the operator's: #1669 stays blocked until
+  theme 1 deploys + ≥2026-09-20.
 - **⚑ PICKUP (2026-09-14 afternoon, same session — wound down at ~600k ctx; arc in TICK-LOG).**
   (1) **PR#1652 (mgmt box follows master, ADR-129 amended) MERGED 08:3xZ (bd74bdd4)** — the box
   is still on the OLD generation (timer disabled, pull ref absent), so nothing moves until the
