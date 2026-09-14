@@ -180,6 +180,41 @@ resource "helm_release" "longhorn" {
       # on the next full-detach window (e.g. a Longhorn upgrade); the manual patch is
       # equivalent and idempotent until then.
       taintToleration = "homelab.io/ephemeral=true:NoSchedule"
+      # System-managed CSI components (FU-112(b), homelab#1664): the CSI node DaemonSet
+      # `longhorn-csi-plugin` is NOT chart-rendered — `helm template` of the pinned chart emits only
+      # longhorn-manager (DaemonSet), longhorn-driver-deployer and longhorn-ui (Deployments), and the
+      # live DS carries no helm.sh/chart annotation (only longhorn.io/managed-by=longhorn-manager).
+      # It is created and reconciled at runtime by longhorn-driver-deployer, so NO `longhornDriver.*`
+      # values key can ever reach it — which is why the `resources` key on that line did nothing for
+      # seven weeks (see the note there). This setting is the knob that does:
+      #   chart 1.12.0 templates/default-setting.yaml:
+      #     {{- if not (kindIs "invalid" .Values.defaultSettings.systemManagedCSIComponentsResourceLimits) }}
+      #     system-managed-csi-components-resource-limits: {{ .Values.defaultSettings.systemManagedCSIComponentsResourceLimits | quote }}
+      # and longhorn-manager acts on it directly — controller/setting_controller.go
+      # `updateSystemManagedCSIComponentsResourceLimits()` patches the longhorn-csi-plugin DaemonSet's
+      # containers (and the csi-attacher/-provisioner/-resizer/-snapshotter Deployments) in place and
+      # rolls them; the keys are the Go struct json tags in types/setting.go
+      # (`ComponentResourceLimits`: longhorn-csi-plugin, node-driver-registrar,
+      # longhorn-liveness-probe, csi-attacher, csi-provisioner, csi-resizer, csi-snapshotter).
+      # ⚠ The setting is the SOURCE OF TRUTH: a component omitted from this JSON has its resources
+      # CLEARED (same function, `targetResources = corev1.ResourceRequirements{}`) — list every
+      # component you want limited, and re-check on any Longhorn upgrade that the tags still match.
+      # GUARANTEED (req==limit) per FU-112(b) — and the memory limit is the load-bearing half: the
+      # Talos OOMController ranks `memory_max.hasValue() ? 0.0 : ...`, so a limit is what takes a pod
+      # OUT of its victim list (docs/spikes/talos-psi-thresholds.md §1.2). All seven components were
+      # BestEffort until 2026-09-14 and were picked ahead of the ride in the #63/#65 bursts and the
+      # wk-02 11-kill spree (homelab#1664/#1672). Limits ~2× plausible peaks (csi-plugin is a small
+      # Go node service); CPU limits are ceilings, so if the throttling panel (FU-224's 9–21 % read)
+      # shows them throttling, raise the number HERE — this setting is live, unlike the dead key.
+      systemManagedCSIComponentsResourceLimits = jsonencode({
+        "longhorn-csi-plugin"     = { requests = { cpu = "300m", memory = "256Mi" }, limits = { cpu = "300m", memory = "256Mi" } }
+        "node-driver-registrar"   = { requests = { cpu = "100m", memory = "128Mi" }, limits = { cpu = "100m", memory = "128Mi" } }
+        "longhorn-liveness-probe" = { requests = { cpu = "100m", memory = "128Mi" }, limits = { cpu = "100m", memory = "128Mi" } }
+        "csi-attacher"            = { requests = { cpu = "100m", memory = "128Mi" }, limits = { cpu = "100m", memory = "128Mi" } }
+        "csi-provisioner"         = { requests = { cpu = "300m", memory = "256Mi" }, limits = { cpu = "300m", memory = "256Mi" } }
+        "csi-resizer"             = { requests = { cpu = "100m", memory = "128Mi" }, limits = { cpu = "100m", memory = "128Mi" } }
+        "csi-snapshotter"         = { requests = { cpu = "100m", memory = "128Mi" }, limits = { cpu = "100m", memory = "128Mi" } }
+      })
     }
     persistence = {
       defaultClass             = true # make `longhorn` the default StorageClass
@@ -198,14 +233,23 @@ resource "helm_release" "longhorn" {
     # FU-112(b): GUARANTEED (req==limit) so the OOMController evicts the ~5Gi tenant ride, not
     # Longhorn's control/CSI plane (homelab#66/#65). BestEffort longhorn-manager/csi died first in the
     # #48 kata-ride OOM → block-device attach broke (FU-116a). Limits ~2× observed peaks (manager
-    # ~352Mi, csi small). ⚠ VERIFY post-apply the pods actually gained the resources — if the chart
-    # ignores these keys, instance-manager/engine-image also stay BestEffort (Longhorn-managed; a
-    # residual needing a Longhorn setting/patch — see FU-116).
+    # ~352Mi, csi small). ⚠ VERIFY post-apply the pods actually gained the resources. VERIFIED
+    # 2026-09-14 (homelab#1664): longhorn-manager DID inherit these (container-level limits); the CSI
+    # node DaemonSet did NOT — it is not chart-rendered, and is fixed by
+    # defaultSettings.systemManagedCSIComponentsResourceLimits below, not by any key on this line.
+    # instance-manager/engine-image stay BestEffort: Longhorn-managed, and 1.12 has no memory-resource
+    # setting for them (only guaranteed-instance-manager-cpu, CPU-only) — the FU-116 residual.
     # FU-224 (2026-09-08): manager cpu 150m → 300m (req==limit kept, Guaranteed QoS per FU-112b) — the
     # 150m was sized for memory, and the throttling panel read 9–21 % of CFS periods throttled per
     # manager pod (attach/rebuild/scheduling plane, not the data path — instance-manager is unlimited).
     longhornManager = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }], resources = { requests = { cpu = "300m", memory = "512Mi" }, limits = { cpu = "300m", memory = "512Mi" } } }
-    longhornDriver  = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }], resources = { requests = { cpu = "100m", memory = "256Mi" }, limits = { cpu = "100m", memory = "256Mi" } } }
+    # ⚠ Only the toleration on this line reaches anything: `longhornDriver` maps to the chart's
+    # longhorn-driver-deployer Deployment (longhorn-1.12.0 templates/deployment-driver.yaml consumes
+    # .Values.longhornDriver.{log.format,priorityClass,tolerations,nodeSelector} — and nothing else).
+    # A `resources` key here is DEAD: it sat here from FU-112(b) until 2026-09-14 and reached no pod
+    # (homelab#1664 — `helm template` with it set renders the deployer's container as
+    # `resources: null`). The CSI node plane's resources come from the setting above.
+    longhornDriver = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }] }
     # Prometheus ServiceMonitor for longhorn-manager (:9500 longhorn_* metrics: volume
     # robustness/state, node storage, replica counts). Scraped via the relaxed selector
     # (monitoring.tf); alerts on degraded/faulted volumes + low storage live there.
