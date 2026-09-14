@@ -125,7 +125,11 @@ variable "nodes" {
     serial = optional(bool, false)
   }))
   default = {
-    cp-01 = { role = "controlplane", vm_id = 8101, ip_cidr = "192.168.2.51/24", cores = 4, memory_mb = 8192, disk_gb = 40 }
+    # memory 8→12 GiB (2026-09-14, #1687): kube-apiserver alone holds ~4.1 GiB (10 nodes, the
+    # agent-platform CRDs + list-watches), all pods ~4.9 GiB of 5.98 allocatable — ~1.1 GiB above
+    # the 768Mi allocatable eviction line, so any blip evicts the DaemonSets (22 evictions in
+    # 100 s at 11:17Z). Funded by wk-03's 16→8 GiB the same day; host at 17.6 GiB available.
+    cp-01 = { role = "controlplane", vm_id = 8101, ip_cidr = "192.168.2.51/24", cores = 4, memory_mb = 12288, disk_gb = 40 }
     # wk-01 keeps longhorn=true although it is in NEITHER longhorn.tf zone map (no
     # create-default-disk label, no disk on its nodes.longhorn.io CR, no replica). That looks
     # stale and is not: wk-01 is the untainted general-purpose worker, so it is the busiest
