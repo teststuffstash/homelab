@@ -283,7 +283,7 @@ spec:
         # print for a component that is degrading.
         - alert: GithubVendorOutage
           expr: >-
-            max by (component) (max_over_time(github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"}[10m])) >= 2
+            max by (component) (max_over_time(github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Pull Requests|Webhooks|Packages"}[10m])) >= 2
           for: 10m
           labels:
             severity: warning

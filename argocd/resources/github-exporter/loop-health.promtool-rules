@@ -48,7 +48,7 @@ groups:
           summary: GitHub workflow {{ $labels.repo }}/{{ $labels.workflow }} failed
           description: 'Run #{{ $labels.number }} ({{ $labels.event }} on {{ $labels.branch }}) concluded {{ $labels.conclusion }}: https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/actions/runs/{{ $labels.id }} — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip).'
       - alert: GithubVendorOutage
-        expr: max by (component) (max_over_time(github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"}[10m])) >= 2
+        expr: max by (component) (max_over_time(github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Pull Requests|Webhooks|Packages"}[10m])) >= 2
         for: 10m
         labels:
           severity: warning
@@ -183,7 +183,7 @@ groups:
         annotations:
           summary: GitHub App {{ $labels.app }} permissions differ from the declared state
       - alert: GithubVendorOutagePre331
-        expr: github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"} >= 2
+        expr: github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Pull Requests|Webhooks|Packages"} >= 2
         for: 10m
         labels:
           severity: warning
