@@ -22,8 +22,9 @@
 /policy/            @RasmusSoot
 # The recovery root's own config (ADR-129). Without this row a bot-approved PR could rewrite the
 # management box's kernel, bootloader or sshd and the box would apply it on its next pull — and
-# the spike lists this box beside the CA keys as a trust anchor. The box additionally follows the
-# operator-advanced `mgmt-release` ref, not master, so the row is the second belt, not the only one.
+# the spike lists this box beside the CA keys as a trust anchor. The box follows MASTER (ADR-129 amended
+# 2026-09-14), so this row IS the gate for the recovery root's closure, not a second belt: the box
+# re-activates only when nixos/ changed, and every file it executes from its checkout is owned here.
 /nixos/             @RasmusSoot
 /.github/           @RasmusSoot
 
