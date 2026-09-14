@@ -1,0 +1,2 @@
+OUT FATAL: coordinator-git GH_TOKEN absent — cannot ring teststuffstash/oracle-fleet (fail-closed, never a silent no-op)
+RC 1
