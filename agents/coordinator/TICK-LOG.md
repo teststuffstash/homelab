@@ -8987,3 +8987,28 @@ Issues: #1620, #1621.
   reviewer findings present since round 1) — G-H changes nothing for that class; the levers are
   the round-3 label re-grade (the built #1231 carrier) and the reviewer's comprehensiveness (a
   KPI for r5) · session ended ~650k ctx.
+- **Midday (fresh session after /clear — the box + wk-03 window; operator thread):** **mgmt box
+  hand-advanced** to master d7cfefb8 (authenticated fetch via `mgmt_git`, `nixos-rebuild test`,
+  gate PASS → gen 4 promoted, `mgmt-pull.timer` armed; first tick 10:03Z "advanced the checkout
+  to 115794f4 — nixos/ unchanged, closure not re-activated") · **`scripts/mgmt-tf.sh` never worked**
+  (ssh joined the positionals into the remote command line → `$1: unbound`; fixed with
+  `bash -c <script> _ <args>` + `printf %q`, direct) · **wk-03 window 09:50–09:55Z (PR#1671,
+  MERGED):** `serial = true` node flag → `serial_device {}` + `ansible/roles/pve-serial-log`
+  (`qemu-serial-log@8113` socat → `/var/log/qemu-serial/8113.log`, first kernel line captured);
+  **right-size 16Gi/12c → 8Gi/6c** (operator: pve host at 0.5–1 GiB MemAvailable, 64.5 GiB
+  dedicated on 64, 30 vCPU/28 threads) via `node-maintenance down` → `mgmt-tf apply` (branch
+  ref; the plan's extra `kubernetes_node_taint` diff = cilium's unreachable taints on the stopped
+  node, field-manager conflict, no action) → `up`; post-window plan clean; host now 10.3 GiB
+  available · **`maxRunners` 6 → 4 direct** (115794f4 — `arc-runners.yaml` is pin-only-guarded,
+  the PR's `ci` said so) · **iowait/thrash hypothesis for the reboots REJECTED** (PSI io ≈ 0,
+  iowait ≤ 0.06 %, PSI mem 0 in the 30 min before each of the five boots; posted on #882) · the
+  drain **cancelled oracle-fleet run 34829496525** mid-job (ARC runner pods were evictable to
+  settle) → **PR#1674** (busy EphemeralRunner = a ride; oracle re-runs on its own, operator) ·
+  **#1672 class B = the OOMController** on wk-02: 11 kills in 12 s at 09:15Z with 5 GiB free —
+  instance-manager FIRST, then longhorn-manager, cilium ×2, the CSI set, JetStream (spike §7,
+  FU-155's VM-tier exclusion) · **#1675 (pool 90 %)**: manual `fstrim` jobs on wk-02/wk-03 →
+  90.4 → **69.2 %** (wk-02 LV 74.7 → 48.9 %); discard passdown verified live on all five VMs —
+  the gap is cadence (~80 GB/7 h regrowth, 62 GB wk-02's), steer posted · wk-02's std disk holds
+  five leftover replicas incl. FOUR r=1 coordinator-transcripts volumes (sleep/circles/platform/
+  agent-coordinator) whose only copy is there — placement call reported, not moved.
+
