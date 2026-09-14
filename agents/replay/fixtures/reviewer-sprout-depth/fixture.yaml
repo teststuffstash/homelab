@@ -26,6 +26,8 @@
 #   g  #41  Goal→post-launch:→child         2 hops, 0 theme → 2   (only theme: is subtracted)
 # The hop SEQUENCE is asserted too: one `/parent` read per hop plus one title read per found
 # parent, and the walk stops at the Goal's null parent.
+pins:
+  - IL-T15
 name: reviewer-sprout-depth
 mode: actions
 source: agents/reviewer-session.sh

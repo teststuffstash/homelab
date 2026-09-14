@@ -314,7 +314,8 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    the worker crash-loops on `secret … not found`.
 > **Steps 6–7 are now DETERMINISTIC REFLEXES, not coordinator turns** (FU-041,
 > [`../../docs/agents/merge-path.md`](../../docs/agents/merge-path.md)). `agent-session.sh` arms
-> auto-merge at PR open; the per-repo **updater workflow** keeps a behind PR current; the **review path
+> auto-merge at PR open; the per-repo **updater workflow** keeps a behind PR current (one armed+BEHIND
+> PR per **(repo, base) lane** per pass — ADR-125 (2)); the **review path
 > is event-driven** (ADR-093, generalizing the ADR-084 webhook pattern): the github-exporter POSTs a
 > reviewable PR (green ∧ current ∧ unapproved ∧ armed — incl. `changes_requested` re-review rounds) to
 > an **Argo Events** webhook → Sensor → the `review` WorkflowTemplate → `reviewer-session.sh <repo>
