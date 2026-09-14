@@ -16,7 +16,7 @@ jointly blow the tier — which is exactly what happened.
 
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
-| `std` | hp-01 **×3 disks** (default unschedulable), m70s `nvme`, wk-02 (unschedulable) | 1185G | 1020G | 294G (29%) *(was 310G, 58%)* | 337G (28%) *(was 356G)* |
+| `std` | hp-01 **×3 disks** (default unschedulable), m70s `nvme` — wk-02 left the tier 2026-09-14 (disk evicted + removed; the pve box is compute-only) | 1185G | 1020G | 294G (29%) *(was 310G, 58%)* | 337G (28%) *(was 356G)* |
 | `bulk` | wk-metal-01 MX500, **wk-metal-04 intel0 + intel1** (the two 7600p) | 1009G | 902G | 816G (90%) *(was 816G on 706G, 115%)* | 399G (40%) |
 | `slow-bulk` | wk-metal-04 SA400 — **unschedulable**, holds no replica | 477G | 316G | 0 | 35G (the image store) |
 | `fast` | **NONE — no backing disk since 2026-09-12** (the Optane pair left with thinkcentre; queued for wk-metal-04, FU-234) | 0 | 0 | 0 | 0 |
@@ -33,7 +33,7 @@ registry mirrors (140 G) sit on `intel0`, garage-0's zone volumes (180 G) + the 
 
 ⚠ **Only TWO of the std disks are schedulable, on TWO nodes** (hp-01 `hg5d` + `intel7600p`, m70s
 `nvme`): 832G raw / 732G allocatable / 147G committed. thinkcentre left cluster duty 2026-09-12
-(runbook §"Retire a node from cluster duty") and wk-02's pooled disk is fenced, so every r=2 std
+(runbook §"Retire a node from cluster duty") and wk-02 left the std tier 2026-09-14, so every r=2 std
 volume must hold one copy on m70s and one on hp-01 — **there is no third zone to rebuild onto, and
 `replica-soft-anti-affinity=true` makes the failure mode silent CO-LOCATION of both copies, not a
 Pending volume.** Check for it after any eviction (the one-liner is in the runbook recipe).
