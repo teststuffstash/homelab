@@ -739,7 +739,9 @@ _DROP_REQ = {
 }
 _DROP_RESP = {"connection", "keep-alive", "transfer-encoding", "content-length"}
 
-_pins: dict[str, tuple[float, dict | None]] = {}  # model -> (expires_epoch, provider block|None)
+# (model, struck-provider tuple) -> (expires_epoch, provider block|None). The tuple key carries
+# the Goal #1640 acceptance 3 pair exclusion; the empty tuple is the ordinary per-model entry.
+_pins: dict[tuple[str, tuple[str, ...]], tuple[float, dict | None]] = {}
 _pins_lock = threading.Lock()
 
 # ADR-096 market pricing (operator direction 2026-07-27): the pin's price basis upgrades from a
@@ -1321,9 +1323,14 @@ def _opencode_scrub(payload: dict, note_tag: str) -> list[str]:
     return notes
 
 
-def compute_pin(model: str) -> dict | None:
+def compute_pin(model: str, exclude: frozenset = frozenset()) -> dict | None:
     """The M4 session pin as an OpenRouter `provider` routing block, or None (no eligible
-    provider). Raises on fetch failure (caller caches the failure briefly)."""
+    provider). Raises on fetch failure (caller caches the failure briefly).
+
+    `exclude` is the set of provider slugs struck for this task (Goal #1640 acceptance 3): the
+    (model, provider) PAIR exclusion. The best provider NOT in the set is pinned, so the model is
+    priced by the provider it actually lands on AFTER the exclusion — the next cheapest CELL, not
+    the model's default provider. An empty set (the common case) is the pre-existing behaviour."""
     url = f"{UPSTREAM}/api/v1/models/{model}/endpoints"
     req = urllib.request.Request(url, headers={"User-Agent": "homelab-openrouter-proxy"})
     with urllib.request.urlopen(req, timeout=15) as resp:
@@ -1351,7 +1358,12 @@ def compute_pin(model: str) -> dict | None:
             }
         )
 
-    tooled = [e for e in endpoints if e["tools"]]
+    # Goal #1640 acceptance 3: drop the struck (model, provider) pairs before ranking, so the
+    # pinned provider (and its eff_in) is the one the model lands on after the exclusion. The
+    # strike stores `slug or provider` (the same expression the pin's `order[0]` uses), so match
+    # on that.
+    tooled = [e for e in endpoints if e["tools"]
+              and (e["slug"] or e["provider"]) not in exclude]
     market = market_for(model, permaslug)
 
     def eff(e: dict) -> float:
@@ -1402,25 +1414,31 @@ def compute_pin(model: str) -> dict | None:
     return None
 
 
-def pin_for(model: str) -> dict | None:
+def pin_for(model: str, exclude: frozenset = frozenset()) -> dict | None:
     """{"provider": <routing block>, "max_completion": int|None} for the model, or None
-    (free model / no eligible endpoint / fetch failure)."""
+    (free model / no eligible endpoint / fetch failure).
+
+    `exclude` (Goal #1640 acceptance 3) is the set of provider slugs struck for this task; the
+    pin is computed against the providers that remain, so a struck pair is never re-pinned. The
+    cache is keyed by (model, exclude) — the empty set is the common path and keeps its old key
+    shape in effect (one entry per model)."""
     model = normalize_model(model)
     if model.endswith(":free"):
         return None  # $0 either way — free models sidestep M4 (model-routing.md)
     now = time.time()
+    key = (model, tuple(sorted(exclude)))
     with _pins_lock:
-        hit = _pins.get(model)
+        hit = _pins.get(key)
         if hit and hit[0] > now:
             return hit[1]
     try:
-        pin = compute_pin(model)
+        pin = compute_pin(model, exclude)
         ttl = PIN_TTL_S
     except Exception as e:  # noqa: BLE001 — any failure degrades to passthrough
         log(f"pin: endpoints fetch failed for {model}: {e} — passthrough")
         pin, ttl = None, PIN_FAIL_TTL_S
     with _pins_lock:
-        _pins[model] = (now + ttl, pin)
+        _pins[key] = (now + ttl, pin)
     return pin
 
 
@@ -3143,14 +3161,17 @@ class Proxy(BaseHTTPRequestHandler):
                             return False, "openrouter-budget-exhausted"
                 return True, None  # unknown ref = fail-open (the key's hard limit is the belt)
 
-            def _price(model):
+            def _price(model, exclude=frozenset()):
+                # Goal #1640 acceptance 3: `exclude` is the task's struck provider slugs, so the
+                # price is the CELL's — the provider the model lands on AFTER the exclusion — and
+                # the third element names that provider for the decision row.
                 m = normalize_model(model)
                 if m.endswith(":free"):
-                    return 0.0, "free"
-                pin = pin_for(m)
+                    return 0.0, "free", None
+                pin = pin_for(m, exclude)
                 if pin and pin.get("eff_in") is not None:
-                    return pin["eff_in"], pin.get("basis")
-                return None, None
+                    return pin["eff_in"], pin.get("basis"), pin["provider"]["order"][0]
+                return None, None, None
 
             decision = router.route(req_body, {
                 "price": _price, "subscription_ok": _subscription_ok,
@@ -3159,7 +3180,10 @@ class Proxy(BaseHTTPRequestHandler):
             if decision.get("decision") == "dispatch" \
                     and decision.get("rail") == "openrouter" \
                     and not str(decision.get("model", "")).endswith(":free"):
-                pin = pin_for(str(decision["model"]))
+                # Goal #1640 acceptance 3: pin the SAME post-exclusion provider the decision priced —
+                # never the struck pair the router just excluded.
+                pin = pin_for(str(decision["model"]),
+                              frozenset(decision.get("strike_excluded") or ()))
                 if pin:
                     decision["pin"] = pin["provider"]
             # ADR-104: a DRAW logs its provenance — pool#slot@version is what makes a research
