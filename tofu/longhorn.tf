@@ -2,9 +2,9 @@
 # nodes so stateful services no longer need hostPath + node-pinning (ROADMAP storage).
 #
 # Failure domains = physical boxes (topology zones): the standalone boxes (m70s, hp-01) are
-# truly independent; wk-02 shares the single Proxmox NVMe. replica=2 + zone soft-anti-affinity
+# truly independent. replica=2 + zone soft-anti-affinity
 # => the two copies always land in different zones. ⚠ Since thinkcentre left the cluster
-# (2026-09-12) std has exactly TWO schedulable nodes and wk-02 is `allowScheduling=false`, so
+# (2026-09-12) and wk-02 left the std tier (2026-09-14) std has exactly TWO nodes, so
 # every r=2 std volume must hold one copy on m70s and one on hp-01 — there is no third zone to
 # rebuild onto, and replicaSoftAntiAffinity=true means the failure mode is silent co-location,
 # not a Pending volume. Re-check before adding std volumes (docs/storage-ledger.md).
@@ -33,10 +33,14 @@ variable "longhorn_version" {
   default     = "1.12.0"
 }
 
-# zone per physical box; wk-02's disk lives on the Proxmox host (one failure domain)
+# zone per physical box. wk-02 (zone "proxmox") left this map 2026-09-14 (operator): with r=2 a
+# std replica on the pve pool took no write off the network (both replicas ack), its consumers
+# barely read, the pool is the fleet's tightest resource, and zone "proxmox" is the same failure
+# domain as the VMs that mount the volumes — the box is compute, the SFFs are the storage zones.
+# Its default disk was evicted + removed on the node CR first; `longhorn = true` STAYS on the VM
+# (it mounts volumes: Home Assistant, Prometheus, Infisical, UniFi).
 locals {
   longhorn_zones = {
-    "wk-02" = "proxmox"
     "hp-01" = "hp-01"
     # thinkcentre was here until 2026-09-12 (retired from cluster duty → the R12 pilot). m70s is
     # NOT in this map: it carries explicitly-registered tagged disks, not a create-default-disk
