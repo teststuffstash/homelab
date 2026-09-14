@@ -1,0 +1,75 @@
+# pve-serial-log — tail each flagged VM's `serial0: socket` into /var/log/qemu-serial/<vmid>.log
+# (#882). One socat per VM, as a systemd template instance (qemu-serial-log@<vmid>), restarting
+# forever: the socket exists only while the qemu process runs, so the unit simply reconnects after
+# every VM stop/start. A VM gets its serial device from tofu (`serial = true` in variables.tf →
+# proxmox.tf `serial_device {}`), applied at a full stop/start; this role only reads the socket.
+# ⚠ The chardev accepts ONE client — while the logger holds it, `qm terminal <vmid>` is refused;
+# stop the instance first (`systemctl stop qemu-serial-log@<vmid>`) for an interactive console.
+# Idempotent — re-run any time; instances for vmids dropped from the list are stopped + disabled.
+---
+- name: Log directory exists
+  ansible.builtin.file:
+    path: "{{ pve_serial_log_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: socat present (Debian package, bookworm main)
+  ansible.builtin.apt:
+    name: socat
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install the logger template unit
+  ansible.builtin.template:
+    src: qemu-serial-log@.service.j2
+    dest: /etc/systemd/system/qemu-serial-log@.service
+    mode: "0644"
+  register: pve_serial_unit
+
+- name: Rotate the logs (copytruncate — socat keeps the fd open, O_APPEND survives the truncate)
+  ansible.builtin.template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/qemu-serial
+    mode: "0644"
+
+- name: Reload systemd when the unit changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: pve_serial_unit.changed
+
+- name: Logger instances enabled + running (restarted when the unit changed)
+  ansible.builtin.systemd:
+    name: "qemu-serial-log@{{ item }}.service"
+    enabled: true
+    state: "{{ 'restarted' if pve_serial_unit.changed else 'started' }}"
+  loop: "{{ pve_serial_log_vmids }}"
+
+- name: Instances for vmids no longer listed are stopped + disabled
+  ansible.builtin.shell: |
+    set -eu
+    for u in $(systemctl list-units --all --plain --no-legend 'qemu-serial-log@*.service' | awk '{print $1}'); do
+      id="${u#qemu-serial-log@}"; id="${id%.service}"
+      case " {{ pve_serial_log_vmids | join(' ') }} " in *" $id "*) ;; *) systemctl disable --now "$u"; echo "retired $u";; esac
+    done
+  register: pve_serial_retired
+  changed_when: "'retired' in pve_serial_retired.stdout"
+
+- name: Verify each logger is attached (the VM must already carry serial0 — a flagged VM that has
+    not had its stop/start yet shows `activating (auto-restart)` here; that is the pending apply,
+    not a role failure)
+  ansible.builtin.command: systemctl is-active "qemu-serial-log@{{ item }}.service"
+  loop: "{{ pve_serial_log_vmids }}"
+  register: pve_serial_active
+  changed_when: false
+  failed_when: pve_serial_active.stdout not in ['active', 'activating']
+
+- name: Report (last lines of each log — Talos boot/kernel text proves the console is wired)
+  ansible.builtin.shell: "tail -n 3 {{ pve_serial_log_dir }}/{{ item }}.log 2>/dev/null || echo '(no log yet)'"
+  loop: "{{ pve_serial_log_vmids }}"
+  register: pve_serial_tail
+  changed_when: false
+
+- name: Show
+  ansible.builtin.debug:
+    msg: "{{ pve_serial_active.results | map(attribute='stdout') | zip(pve_serial_tail.results | map(attribute='stdout')) | list }}"

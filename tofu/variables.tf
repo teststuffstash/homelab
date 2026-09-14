@@ -117,6 +117,12 @@ variable "nodes" {
     # TOUCHES Longhorn volumes", NOT "this VM serves replicas" — mounting a volume needs
     # iscsiadm + nsenter on the node just as much as hosting one does. See the wk-01 note below.
     longhorn = optional(bool, false)
+    # Attach a serial console (`serial0: socket`, the ci-runner.tf shape). Talos already boots
+    # with `console=ttyS0`, so the kernel's last words on a panic land in the host-side log the
+    # pve-serial-log Ansible role tails (/var/log/qemu-serial/<vmid>.log) instead of dying with
+    # the ring buffer. Takes effect at the next full stop/start of the VM (a guest-initiated
+    # reboot keeps the qemu process, so pending hardware never applies that way). #882.
+    serial = optional(bool, false)
   }))
   default = {
     cp-01 = { role = "controlplane", vm_id = 8101, ip_cidr = "192.168.2.51/24", cores = 4, memory_mb = 8192, disk_gb = 40 }
@@ -147,7 +153,15 @@ variable "nodes" {
     # crashlooped on the base image. The flag is PLUMBING (iscsi/util-linux in the image), not a
     # storage role — wk-03 gets no disk registration and serves nothing; the flip replaces the VM
     # (file_id change), which is fine: the node is cattle by design.
-    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 12, memory_mb = 16384, disk_gb = 40, longhorn = true }
+    # serial=true (2026-09-14): five silent self-reboots in a week with the qemu process untouched
+    # (#882, NodeRebootingRepeatedly) — the serial console is the instrument that catches the panic.
+    # 16Gi/12c → 8Gi/6c (2026-09-14, operator): the pve host sat at 0.5–1 GiB MemAvailable with
+    # 64.5 GiB dedicated across five VMs (no balloon in Talos guests, KSM ~6 GiB), 30 vCPU on 28
+    # threads; and wk-03's RAM was what packed ~4 concurrent dind runners onto its one 40 G thin
+    # LV (#1659/#1657 disk-pressure wave). Half the box = ~2 runners; arc-runners.yaml maxRunners
+    # follows (6 → 4, a direct master push — the file is pin-only-guarded). The reboot cause is NOT this (IO/memory PSI ≈ 0 before every boot) — that
+    # is the serial console's job.
+    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 6, memory_mb = 8192, disk_gb = 40, longhorn = true, serial = true }
   }
 
   validation {

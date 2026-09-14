@@ -428,6 +428,17 @@ snapshots `/etc/pve` to `~/.claude/homelab-pve-backup/`, runs an IN-MAJOR `apt d
 never reboots. The host's thin pool is metered the same way — `devbox run -- ansible-playbook
 ansible/pve-node-exporter.yml` puts node_exporter + a textfile timer on pve (FU-093; alerts
 `PveThinPool*`/`PveVmIoError` in `argocd/resources/pve-metrics/`; re-run after a reinstall).
+**A VM that reboots itself with nothing in the ring buffer** (wk-03, five times in a week —
+homelab#882, `NodeRebootingRepeatedly`) gets a **serial console**: `serial = true` on the node in
+`tofu/variables.tf` (→ `serial_device {}` in `proxmox.tf`; Talos already boots with
+`console=ttyS0`), applied at a FULL stop/start of the VM — a guest reboot keeps the qemu
+process, so pending hardware never lands that way; use `scripts/node-maintenance.sh down <node>`
+→ `devbox run mgmt-tf -- apply` (the provider starts the stopped VM) → `up <node>`. The host
+side is `devbox run -- ansible-playbook ansible/pve-serial-log.yml` (vmid list in
+`ansible/group_vars/pve.yml`): a `qemu-serial-log@<vmid>` socat unit on pve appends the console
+to `/var/log/qemu-serial/<vmid>.log` (logrotate weekly ×8) — the kernel's last words on a panic
+are there, read them with `ssh root@192.168.2.3 tail -n 200 /var/log/qemu-serial/8113.log`. The
+chardev takes one client, so `qm terminal <vmid>` needs the logger stopped first.
 When a pool VM goes NotReady with its Talos API "no route to host", read the hypervisor FIRST:
 `qm status <vmid> --verbose | grep qmpstatus` (`io-error` = paused on a failed write) and
 `lvs -o lv_name,data_percent pve`. The reboot is a window (first run: 2026-08-18, ~15 min total outage):
