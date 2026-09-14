@@ -3,3 +3,8 @@
 noop      | board |                                           |     | noop         |
 success   | board | gh/pr-list.json @ patches/add-behind.jq   |     | success      |
 fail-422  | board | gh/pr-list.json @ patches/add-behind.jq   | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | fail-422 |
+# ── #1649: the nudge carries leg 1's merge-ready predicate (it is the third call site of the
+# update-branch mutation, and a sibling of leg 1's pick). The two rows below are the pin: on the
+# pre-#1649 source (selector = armed ∧ BEHIND alone) BOTH were nudged, so both red on base.
+park-noop       | board | gh/pr-list.json @ patches/add-parked-behind.jq     | | noop |
+unreviewed-noop | board | gh/pr-list.json @ patches/add-unreviewed-behind.jq | | noop |
