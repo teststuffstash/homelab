@@ -42,12 +42,14 @@ spec:
           annotations:
             summary: "{{ $labels.instance }} booted {{ $value }} times in 24 h — a box rebooting itself"
             description: >-
-              Two or more boots of the same node inside 24 h. A planned window is ONE boot; this is
-              the #882 class (a pve VM rebooting from inside the guest, the qemu process untouched,
-              the kmsg ring buffer lost with it). What settles the cause is the VM's serial console
-              (`serial0: socket` + the host-side logger) — the guest's `console=ttyS0` already
-              points there. Read `node_boot_time_seconds{instance="{{ $labels.instance }}"}[24h]`
-              for the exact boot times, then the load/steal/memory series just before each.
+              Two or more boots of the same node inside 24 h — a SYMPTOM, not a diagnosis. A planned
+              maintenance window is one boot (scripts/node-maintenance.sh). What to check, in order:
+              the exact boot times (`node_boot_time_seconds{instance="{{ $labels.instance }}"}[24h]`),
+              then load / CPU steal / MemAvailable / filesystem free in the 30 min before each
+              (`node_load1`, `node_cpu_seconds_total{mode="steal"}`, `node_memory_MemAvailable_bytes`,
+              `node_filesystem_avail_bytes`), the hypervisor's task log and journal for the VM if it
+              is one (`qm list`, `journalctl` on pve), and the kmsg-reader's previous-container tail
+              on the node. If a serial console log exists for the VM, read it first. Thread: #882.
         - alert: NodeRebootingRepeatedly
           expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[7d])) >= 3
           for: 0m
@@ -55,11 +57,10 @@ spec:
           annotations:
             summary: "{{ $labels.instance }} booted {{ $value }} times in 7 d"
             description: >-
-              Three or more boots in a week — the slow-cadence twin of NodeRebootedTwiceIn24h
-              (wk-03 went to one self-reboot a DAY after its 09-10/09-11 pairs, which the 24 h
-              rule cannot see). Same read: boot times from node_boot_time_seconds, then the serial
-              console log on the hypervisor for the panic that `kernel.panic=10` turns into a
-              silent reboot.
+              Three or more boots of the same node in 7 d — the slow-cadence twin of
+              NodeRebootedTwiceIn24h (one self-reboot a day never trips the 24 h rule). Same read:
+              boot times from `node_boot_time_seconds`, the resource series before each boot, the
+              hypervisor's log, the kmsg-reader tail, and a serial console log if one exists.
     - name: pve-thin-pool
       rules:
         - alert: PveThinPoolFillingUp
