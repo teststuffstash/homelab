@@ -28,7 +28,7 @@ never the session's arc — that is TICK-LOG's.)
   evidence) → quiet window arms from its fix; parent closes at a later sweep. (3) **Retro r4
   (PR#1645, two reports) READ, nothing filed:** opus F3/F4/F6 + deepseek F1/F4/F5 ARE #1640
   acceptances 1/2/3/5 (file as evidence on the Goal, not a batch); **r4 F1** (rounds-exhausted
-  park fires on converging PRs, 7/7 human un-parks merged, ~€40/wk) → extend **#1627**; F2
+  park fires on converging PRs, 7/7 human un-parks merged, ~€40/wk) → **#1627 EXTENDED 2026-09-14** (still unqueued: wave-2 dispatch belts or a human queues it); F2
   (ledger stale rows) + F5 (tier-edge guard) standalone-honest, unfiled; r3 F3 = #1649. (4)
   Codeowner reads: #1576 + #1540 merged 06:02Z (isolated replay probes against master, both
   pins non-vacuous); PR#1646 (`GithubVendorOutage` gains `Pull Requests`) merged 06:12Z; five
