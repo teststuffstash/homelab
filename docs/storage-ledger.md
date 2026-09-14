@@ -29,7 +29,7 @@ allocatable grew 196 G with the 7600p pair (0 reserved — Longhorn-only disks) 
 figure is real again: the 09-06 115 % was the maintenance-window transient. On wk-metal-04 the
 registry mirrors (140 G) sit on `intel0`, garage-0's zone volumes (180 G) + the PyPI/mcr mirrors
 (60 G) on `intel1` — Longhorn's most-free-disk pick, not a choice. **std fell 75 G committed** since
-09-06 (platform volumes freed); wk-02's std disk is schedulable again.
+09-06 (platform volumes freed); wk-02's std disk was briefly schedulable again before it left the tier for good on 2026-09-14.
 
 ⚠ **Only TWO of the std disks are schedulable, on TWO nodes** (hp-01 `hg5d` + `intel7600p`, m70s
 `nvme`): 832G raw / 732G allocatable / 147G committed. thinkcentre left cluster duty 2026-09-12
