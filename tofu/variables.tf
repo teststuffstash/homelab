@@ -155,7 +155,13 @@ variable "nodes" {
     # (file_id change), which is fine: the node is cattle by design.
     # serial=true (2026-09-14): five silent self-reboots in a week with the qemu process untouched
     # (#882, NodeRebootingRepeatedly) — the serial console is the instrument that catches the panic.
-    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 12, memory_mb = 16384, disk_gb = 40, longhorn = true, serial = true }
+    # 16Gi/12c → 8Gi/6c (2026-09-14, operator): the pve host sat at 0.5–1 GiB MemAvailable with
+    # 64.5 GiB dedicated across five VMs (no balloon in Talos guests, KSM ~6 GiB), 30 vCPU on 28
+    # threads; and wk-03's RAM was what packed ~4 concurrent dind runners onto its one 40 G thin
+    # LV (#1659/#1657 disk-pressure wave). Half the box = ~2 runners; arc-runners.yaml maxRunners
+    # follows (6 → 4). The reboot cause is NOT this (IO/memory PSI ≈ 0 before every boot) — that
+    # is the serial console's job.
+    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 6, memory_mb = 8192, disk_gb = 40, longhorn = true, serial = true }
   }
 
   validation {
