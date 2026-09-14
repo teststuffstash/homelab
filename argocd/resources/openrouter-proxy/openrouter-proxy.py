@@ -285,6 +285,7 @@ PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
 UPTIME_FLOOR = float(os.environ.get("UPTIME_FLOOR", "95"))
 PIN_TTL_S = int(os.environ.get("PIN_TTL_S", "3600"))  # pin cache; providers/prices drift slowly
+PIN_CACHE_MAX = int(os.environ.get("PIN_CACHE_MAX", "512"))  # (session, model) keys are per-ride
 PIN_FAIL_TTL_S = int(os.environ.get("PIN_FAIL_TTL_S", "300"))  # don't hammer a failing endpoint
 MAX_PRICE_FACTOR = float(os.environ.get("MAX_PRICE_FACTOR", "2.0"))  # guard vs fallback lottery
 READ_TIMEOUT_S = int(os.environ.get("READ_TIMEOUT_S", "300"))  # idle timeout per upstream read
@@ -1454,6 +1455,12 @@ def pin_for(model: str, exclude: frozenset = frozenset(), session: str | None = 
         log(f"pin: endpoints fetch failed for {model}: {e} — passthrough")
         pin, ttl = None, PIN_FAIL_TTL_S
     with _pins_lock:
+        if len(_pins) >= PIN_CACHE_MAX:  # per-ride session keys never repeat — sweep, then hard-cap
+            for k in [k for k, v in _pins.items() if v[0] <= now]:
+                del _pins[k]
+            if len(_pins) >= PIN_CACHE_MAX:  # all still live: evict soonest-to-expire to make room
+                for k, _ in sorted(_pins.items(), key=lambda kv: kv[1][0])[:len(_pins) - PIN_CACHE_MAX + 1]:
+                    del _pins[k]
         _pins[key] = (now + ttl, pin)
     return pin
 
@@ -4925,6 +4932,36 @@ data: [DONE]
     check(_o_or.get("x_opencode_session") is None,
           "FU-213: the affinity header never reaches the OpenRouter leg "
           f"(got {_o_or.get('x_opencode_session')!r})")
+
+    # (d) the cache is BOUNDED (reviewer blocking finding, round 2): `session` is minted fresh
+    # per ride/round, so the (session, model) key never repeats — without eviction `_pins` grows
+    # monotonically for the pod's life, on a container with a documented OOM history. Seed past
+    # the cap, drive one real pin, and assert the bound holds and the just-written entry survives.
+    _pins.clear()
+    _endpoints[_EP_MODEL] = [_endpoint_row("ProviderA", "providera", 0.10, 0.01)]
+    _now = time.time()
+    # (d1) a mix of expired and live entries: the expiry sweep alone must bring it under the cap.
+    for _i in range(PIN_CACHE_MAX + 50):
+        _exp = _now - 10 if _i % 2 == 0 else _now + 3600
+        _pins[("seed-ride-%d" % _i, _EP_MODEL, ())] = (_exp, None)
+    pin_for(_EP_MODEL, session="agent-egress/ride-d-worker")
+    check(len(_pins) <= PIN_CACHE_MAX,
+          f"pin cache bounded: a write past the cap stays within it after the sweep "
+          f"(got {len(_pins)}, cap {PIN_CACHE_MAX})")
+    check(("agent-egress/ride-d-worker", _EP_MODEL, ()) in _pins,
+          "pin cache bounded: the entry just written is present after the sweep")
+    # (d2) ALL entries live: the sweep frees nothing, so the hard cap must evict down to the bound.
+    _pins.clear()
+    for _i in range(PIN_CACHE_MAX + 50):
+        _pins[("seed-live-%d" % _i, _EP_MODEL, ())] = (_now + 3600, None)
+    pin_for(_EP_MODEL, session="agent-egress/ride-d-worker")
+    check(len(_pins) <= PIN_CACHE_MAX,
+          f"pin cache bounded: an all-live seed is hard-capped at PIN_CACHE_MAX "
+          f"(got {len(_pins)}, cap {PIN_CACHE_MAX})")
+    check(("agent-egress/ride-d-worker", _EP_MODEL, ()) in _pins,
+          "pin cache bounded: the entry just written survives the hard-cap eviction")
+    _pins.clear()
+    _endpoints.pop(_EP_MODEL, None)
 
     # ── Zen metering (homelab#445): usd=0.0, gometer.price skipped, extract_usage kept ───────────
     print("\n=== Zen metering tests (homelab#445) ===")
