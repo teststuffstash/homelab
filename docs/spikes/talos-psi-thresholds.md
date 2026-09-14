@@ -131,7 +131,7 @@ Composing §1 with what this repo declares for those nodes:
 |---|---|---|
 | the agent ride + dind (`agents/agent-session.sh` `AGENT_LIMITS`, ~L1535-1545, requests **=** limits) | Guaranteed, limit set | **0.0** (and likely not even enumerated, §1.3) |
 | `cilium-agent` (`tofu/cilium.tf:88`, 512Mi req=limit) | Guaranteed, limit set | **0.0** |
-| `longhorn-manager` / `longhorn-driver` (`tofu/longhorn.tf` ~L180-181) | Guaranteed, limit set | **0.0** |
+| `longhorn-manager` (`tofu/longhorn.tf:245`) / `longhorn-csi-plugin` + its CSI sidecars (`tofu/longhorn.tf:209`, `defaultSettings.systemManagedCSIComponentsResourceLimits`) | Guaranteed, limit set | **0.0** |
 | `cilium-envoy` (`tofu/cilium.tf:79`, requests only) | **Burstable, no limit** | 0.5 × ~20Mi |
 | `hubble-relay` (`tofu/cilium.tf:75`), `node-exporter` (`kube-prometheus-stack.yaml` ~L424) | **Burstable, no limit** | 0.5 × ~30Mi |
 | `longhorn` `instance-manager` / `engine-image` — Longhorn-managed, the chart's resource keys don't reach them (`tofu/longhorn.tf` ~L175-179) | **BestEffort, no limit** | 1.0 × current — the **top-ranked victim on any node they run on** |
