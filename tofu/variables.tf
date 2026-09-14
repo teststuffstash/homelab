@@ -159,7 +159,7 @@ variable "nodes" {
     # 64.5 GiB dedicated across five VMs (no balloon in Talos guests, KSM ~6 GiB), 30 vCPU on 28
     # threads; and wk-03's RAM was what packed ~4 concurrent dind runners onto its one 40 G thin
     # LV (#1659/#1657 disk-pressure wave). Half the box = ~2 runners; arc-runners.yaml maxRunners
-    # follows (6 → 4). The reboot cause is NOT this (IO/memory PSI ≈ 0 before every boot) — that
+    # follows (6 → 4, a direct master push — the file is pin-only-guarded). The reboot cause is NOT this (IO/memory PSI ≈ 0 before every boot) — that
     # is the serial console's job.
     wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 6, memory_mb = 8192, disk_gb = 40, longhorn = true, serial = true }
   }
