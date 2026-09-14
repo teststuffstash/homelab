@@ -4357,8 +4357,16 @@ EOF_GTHEMES_OPEN
                   # issue). No marker ⇒ no machine record of the set ⇒ not a resolution we honour.
                   cl_cmt="$(gh api "repos/${slug}/issues/${cl_n}/comments?per_page=100" 2>/dev/null)" || cl_cmt=''
                   jq -e 'type == "array"' >/dev/null 2>&1 <<<"${cl_cmt:-null}" || continue
+                  # AUTHOR FILTER (review, homelab#1712). The marker is a MACHINE ruling, so only
+                  # the loop's own bot may author it — same discipline as the arbitrate ruling read
+                  # (L4568). Without this, this repo being public with issues enabled means any
+                  # GitHub user can open a correctly-titled issue, post a wide `issues=` marker and
+                  # close it, and suppress the circuit breaker for that class at zero cost. The
+                  # REST comments response carries the App login with a `[bot]` suffix, so strip it
+                  # before comparing (the GraphQL reads elsewhere see it without).
                   cl_set="$(jq -r --arg ec "$ec" '
-                    [.[] | (.body // "") | select(startswith("fleet-strike-fp: error_class=\($ec)"))
+                    [.[] | select(((.user.login // "") | sub("\\[bot\\]$"; "")) == "homelab-agents-1234")
+                     | (.body // "") | select(startswith("fleet-strike-fp: error_class=\($ec)"))
                      | capture("issues=(?<s>[0-9,]+)") | .s] | last // ""
                   ' <<<"$cl_cmt" 2>/dev/null || true)"
                   [ -n "$cl_set" ] || continue
