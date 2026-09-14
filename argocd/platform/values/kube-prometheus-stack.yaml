@@ -386,6 +386,41 @@ kube-state-metrics:
     requests:
       cpu: 20m
       memory: 64Mi
+  # AgentStack XR health as a metric (homelab#1620 closeout, 2026-09-14): a Composition branch
+  # that has never executed carries no evidence its RBAC exists, and the failure mode is the
+  # WHOLE claim parked at Synced=False ("failed waiting for Informer to sync") — found five times
+  # by hand, never by a belt (argocd/resources/agentstack/rbac.yaml header). kube-state-metrics'
+  # custom-resource-state turns `.status.conditions` into
+  # `kube_agentstack_status_condition{name,type,reason}` (True=1, False=0, Unknown=NaN);
+  # the AgentStackNotSynced rule (argocd/resources/agentstack/prometheusrule.yaml) is the belt.
+  rbac:
+    extraRules:
+      - apiGroups: [platform.teststuff.net]
+        resources: [agentstacks]
+        verbs: [list, watch]
+  customResourceState:
+    enabled: true
+    config:
+      spec:
+        resources:
+          - groupVersionKind:
+              group: platform.teststuff.net
+              version: v1alpha1
+              kind: AgentStack
+            metricNamePrefix: kube_agentstack
+            labelsFromPath:
+              name: [metadata, name]
+            metrics:
+              - name: status_condition
+                help: "AgentStack status condition — 1 when the condition is True, 0 when False"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, conditions]
+                    labelsFromPath:
+                      type: [type]
+                      reason: [reason]
+                    valueFrom: [status]
 kubeControllerManager:
   endpoints:
     - 192.168.2.51
