@@ -235,13 +235,13 @@ ledger.sh = fake_sh_budget
 cr92 = ledger._budget_from_cr("proj", "92")
 check(cr92 is not None, "_budget_from_cr('proj', '92') found a CR")
 check(cr92[0] == "xs", "_budget_from_cr('proj', '92') returns tier xs (not md from 929)")
-check(cr92[1] == 0.25, "_budget_from_cr('proj', '92') returns cap 0.25 (xs tier)")
+check(cr92[1] == 0.5, "_budget_from_cr('proj', '92') returns cap 0.5 (xs ENFORCED cap, PR#1650)")
 check(cr92[2] == 0.08, "_budget_from_cr('proj', '92') returns estimate 0.08")
 
 cr929 = ledger._budget_from_cr("proj", "929")
 check(cr929 is not None, "_budget_from_cr('proj', '929') found a CR")
 check(cr929[0] == "md", "_budget_from_cr('proj', '929') returns tier md")
-check(cr929[1] == 1.0, "_budget_from_cr('proj', '929') returns cap 1.0 (md tier)")
+check(cr929[1] == 2.0, "_budget_from_cr('proj', '929') returns cap 2.0 (md ENFORCED cap, PR#1650)")
 check(cr929[2] == 0.50, "_budget_from_cr('proj', '929') returns estimate 0.50")
 
 # No matching CR for issue 1 (no CR with prefix proj-issue-1-round-)
@@ -272,7 +272,7 @@ ledger.sh = fake_sh_tiebreak
 cr42 = ledger._budget_from_cr("proj", "42")
 check(cr42 is not None, "_budget_from_cr('proj', '42') found a CR (tie-break test)")
 check(cr42[0] == "md", "_budget_from_cr('proj', '42') returns tier md (highest round 3, not xs from round 1)")
-check(cr42[1] == 1.0, "_budget_from_cr('proj', '42') returns cap 1.0 (md tier)")
+check(cr42[1] == 2.0, "_budget_from_cr('proj', '42') returns cap 2.0 (md ENFORCED cap, PR#1650)")
 check(cr42[2] == 0.50, "_budget_from_cr('proj', '42') returns estimate 0.50 (from round 3)")
 
 # ── 8. _budget_from_cr() malformed label handling (homelab#988) ──────────────────────────
@@ -296,7 +296,7 @@ ledger.sh = fake_sh_malformed
 cr99 = ledger._budget_from_cr("proj", "99")
 check(cr99 is not None, "_budget_from_cr('proj', '99') found a CR despite malformed label on round 1")
 check(cr99[0] == "sm", "_budget_from_cr('proj', '99') returns tier sm (from valid round 2, not crashed by round 1)")
-check(cr99[1] == 0.5, "_budget_from_cr('proj', '99') returns cap 0.5 (sm tier)")
+check(cr99[1] == 1.0, "_budget_from_cr('proj', '99') returns cap 1.0 (sm ENFORCED cap, PR#1650)")
 check(cr99[2] == 0.25, "_budget_from_cr('proj', '99') returns estimate 0.25 (from valid round 2)")
 
 # All CRs malformed — must return None, not crash
