@@ -107,7 +107,7 @@ data:
     # Single host-wide series — all four pool VMs read the same number.
     pool_pct=$(wget -q -O- --timeout=10 \
       "${PROM}/api/v1/query?query=pve_lvm_thin_pool_data_percent%7Bjob%3D%22pve-node%22%2Cvg%3D%22pve%22%2Clv%3D%22data%22%7D" \
-      2>/dev/null | sed -n 's/.*"value":\[[0-9]*,"\([0-9.]*\)"\].*/\1/p' | head -1)
+      2>/dev/null | sed -n 's/.*"value":\[[^,]*,"\([0-9.]*\)"\].*/\1/p' | head -1)
 
     if [ -z "${pool_pct}" ]; then
       # FAIL OPEN: if we cannot read the pool, trim anyway. Rationale: matching trim.sh's
