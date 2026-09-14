@@ -542,7 +542,9 @@ the block needs pruning, not more headings.
       (c) provider outranks model class — strikes gain the served-provider column, serving-shaped
       strikes exclude the (model, provider) pair on re-pick (#783 legs; quality = FU-186/ADR-115
       pin-v2 + M14 pair-cooldowns). Rejected: task/build as routing basis, `model/strong`,
-      attempt-count auto-escalation (banked, feed-4). Relates FU-174, FU-186, ADR-094/096/115.
+      attempt-count auto-escalation (banked, feed-4). (c) is BUILT but dead in production twice
+      (#1268; 2026-09-13 `no-output` ∉ STRIKE_CLASSES, enforce flag unset) → homelab#1640
+      acceptances 1+3. Relates FU-174, FU-186, ADR-094/096/115.
 
 - [ ] **FU-202** — **A key-class failure strikes the MODEL, losing the primary rail for the
       whole task** (#1151, 2026-09-01): r1's xs session key died mid-ride
@@ -659,7 +661,9 @@ the block needs pruning, not more headings.
       the operator + seat did it by hand via #330's triage. Prose-warned classes recur,
       executable gates hold (ADR-103). **Next:** a scan-side fleet-window count (the scan
       already greps `AGENT_STRIKE:` per issue for the chain-walk) emitting the breaker +
-      filing per the brief's contract; same surface as the #1163 scan theme. Relates FU-199,
+      filing per the brief's contract; same surface as the #1163 scan theme. Reader BUILT
+      (#1235); 2026-09-13 it latched five ISSUES for one PROVIDER fault — re-key to
+      provider/model/us = homelab#1640 acceptance 5. Relates FU-199,
       agent-runtime#85 (the `unknown` classifier), model-routing §M1a (strike store).
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
@@ -826,9 +830,10 @@ the block needs pruning, not more headings.
       evidence + 4-step build order: [`docs/agents/model-routing.md`](agents/model-routing.md)
       §M14 (Exacto delegated for cheap coding; pin-v2 with the overhead-cost term for priced
       classes; the scout rides its class's provider policy; `@` arms = the experiment
-      instrument, shipped PR#963). **Next:** step 1 — the `provider_policy` class knob + the
-      no-pin/Exacto flip, then the 0731 matrix run (step 2) whose verdict is the model_tiers
-      re-admission PR. Relates ADR-115, ADR-096 §M4/M8, FU-095, homelab#966 (intake digest),
+      instrument, shipped PR#963). **Step 1 FLIPPED 2026-09-13 (PR#1639; operator: the five
+      open-inference tool-loops ARE the trial) — the suffix rides paid OpenRouter picks only.
+      Next:** the standing re-read = homelab#1640 acceptance 8; the 0731 matrix run (step 2,
+      #1238) stays #1231's leg. Relates ADR-115, ADR-096 §M4/M8, FU-095, homelab#966 (intake digest),
       the #783 provider-attribution legs.
 
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design,
@@ -1119,7 +1124,8 @@ the block needs pruning, not more headings.
       ([earendil-works/pi#4847](https://github.com/earendil-works/pi/issues/4847), same defect,
       fixed 2026-05-22), and where the id comes from:
       [`agents/chainless-redesign.md`](agents/chainless-redesign.md) §The `x-opencode-session`
-      header. **Next:** send it (+ `x-opencode-client`) and re-enable with `"0"`, or drop the rail.
+      header. **Next:** homelab#1640 acceptance 2 — the ride's session id becomes BOTH the
+      per-(session, model) pin key and this header, then re-enable with `"0"`.
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
