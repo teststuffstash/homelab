@@ -28,6 +28,15 @@ spec:
         controller:
           workflowNamespaces:
             - agent-coordinator
+          # The controller must be able to CREATE ConfigMaps in the workflow namespaces: since
+          # app v4.0 an oversized pod template (the responder's Alertmanager payload past ~58 KB —
+          # a 22-alert PodSigkilled group on 2026-09-14) is offloaded into a ConfigMap instead of
+          # the ARGO_TEMPLATE env, and the chart's default ClusterRole only grants get/list/watch —
+          # every such respond-* run died at "error in entry template execution: configmaps is
+          # forbidden" while the small-payload runs succeeded (the SILENT class: the spree got no
+          # triage issue). `writeConfigMaps` is the chart's knob for exactly this grant.
+          rbac:
+            writeConfigMaps: true
           # Controller-level retention defaults (#491 — the durable fix deferred from #487).
           # Every submitted Workflow that doesn't set its own spec.ttlStrategy ages out 7 days
           # after completion (604800s); completed workflow pods are GC'd at workflow completion.
