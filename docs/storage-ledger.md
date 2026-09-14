@@ -113,13 +113,23 @@ moment an object is deleted; the physical blocks are reclaimed by Garage's block
 grace period (upstream durability doc), so disk headroom lags quota headroom by about a day —
 a cleanup job does not buy the concurrent writer room the same hour.
 
-**Ceilings.** The data PVC is 161 GB per zone against the 140 GB layout (≈20 GB of slack a layout
-bump can release); two of the three zones sit on 256 GB disks (wk-metal-04 `intel1`, m70s
-`pm961`) that also carry the 32 GB meta volume, so a data volume there tops out near 215 GB —
-**a 150 GB bucket does not fit this layout**: at today's ratio it is ~90 GB physical plus ~55 GB
-for everything else, only after growing all three data volumes to ~200 GB with nothing left. That
-ask is the capacity item the Requirements table already names (dedicated, larger zone disks in
-the SFFs — FU-137's residual, the fleet-role assignment), not a quota edit. **Splitting a bucket
+**Ceilings — per zone, because the zones are not symmetric** (Longhorn node CRs, 2026-09-14;
+scheduled = provisioned, not bytes):
+
+| zone | disk | scheduled / max | what else is on it | room to grow garage's 161 GB data volume |
+|---|---|---|---|---|
+| wk-metal-04 | `intel1` 256 GB | **258 / 256 GB** | garage-0 data 161 + meta 32, **PyPI + mcr mirrors 21 + 43** (Longhorn's most-free pick at the time, L30) | **none** — the disk is over-committed today; the mirrors would have to move (intel0 has ~50 GB) before this zone can grow |
+| m70s | `pm961` 256 GB | 193 / 256 GB | garage-1 data + meta only (dedicated) | ~60 GB → data ≈ 215 GB |
+| wk-metal-01 | `mx500` 498 GB | 408 / 498 GB, 107 GB reserved | garage-2 data + meta, the image store, four scratch/bulk replicas | ~90 GB nominal, shared with the scratch tier |
+
+The data PVC is 161 GB against the 140 GB layout, so ≈20 GB of slack per zone is a layout bump
+away without touching any disk. Beyond that, **usable = the smallest zone, and the smallest zone is
+wk-metal-04 at zero** — a 150 GB bucket does not fit this layout: at today's ratio it is ~90 GB
+physical plus ~55 GB for everything else, i.e. every data volume at ~200 GB, which intel1 cannot
+hold at all and pm961 barely. That ask is the capacity item the Requirements table already names
+(dedicated, larger zone disks in the SFFs — FU-137's residual, the fleet-role assignment), not a
+quota edit; the cheap interim on wk-metal-04 is moving the two mirror volumes off intel1.
+**Splitting a bucket
 buys no placement** — rf=3 over three zones puts every block on every zone regardless of bucket;
 split only for quota isolation (e.g. the ert-delta step artifacts out of `ert-snapshots`) or
 retention.
