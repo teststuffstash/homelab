@@ -20,7 +20,7 @@
 # What lands where (all root:root, 0600):
 #   etc/ssh/ssh_host_ed25519_key   wallet mgmt-ssh-host (minted by scripts/keepass-init.sh)
 #   var/lib/mgmt/env               the belt's + the main root's credentials — see the TABLE below
-#   var/lib/mgmt/main.tfvars       main's gitignored tfvars (proxmox token); provisioning.tfvars likewise
+#   var/lib/mgmt/main.tfvars       main's gitignored tfvars (BOTH hypervisor tokens); provisioning.tfvars likewise
 #   var/lib/mgmt/runner-app/…      the runner App key ci-runner.tf reads by path
 #   var/lib/mgmt/sentinel/…        the homelab-sentinel App key (ADR-131: the box posts the verdict)
 #   var/lib/mgmt/talosconfig       copied from tofu/talosconfig in THIS checkout
@@ -203,6 +203,13 @@ done
 _pt="$(kp_val pve-api-token-matchbox)"; [ -n "$_pt" ] || { echo "FATAL: wallet entry pve-api-token-matchbox missing" >&2; exit 1; }
 grep -q '^proxmox_api_token' "$OUT/var/lib/mgmt/provisioning.tfvars" 2>/dev/null || printf 'proxmox_api_token = "%s"\n' "$_pt" >> "$OUT/var/lib/mgmt/provisioning.tfvars"
 echo "  + var/lib/mgmt/provisioning.tfvars  (+ proxmox_api_token ← pve-api-token-matchbox)"
+# main's SECOND hypervisor token (2026-09-15) — same rule, same reason: a Proxmox token in the env
+# instead of the tfvars makes `tofu apply <saved plan>` fail on "Mismatch between input and plan
+# variable value". Appended from the WALLET rather than inherited from the copied tfvars, so a
+# rotation is one wallet edit + one --push and never a hand-edited file on two machines.
+_nt="$(kp_val nx-02-api-token-tofu)"; [ -n "$_nt" ] || { echo "FATAL: wallet entry nx-02-api-token-tofu missing" >&2; exit 1; }
+grep -q '^nx02_api_token' "$OUT/var/lib/mgmt/main.tfvars" 2>/dev/null || printf 'nx02_api_token = "%s"\n' "$_nt" >> "$OUT/var/lib/mgmt/main.tfvars"
+echo "  + var/lib/mgmt/main.tfvars  (+ nx02_api_token ← nx-02-api-token-tofu)"
 # 3. talosconfig + kubeconfig from this checkout (gitignored, tofu-generated)
 for f in talosconfig kubeconfig; do
   if [ -s "$REPO/tofu/$f" ]; then

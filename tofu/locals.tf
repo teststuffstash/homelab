@@ -2,6 +2,11 @@ locals {
   controlplane = { for k, n in var.nodes : k => n if n.role == "controlplane" }
   workers      = { for k, n in var.nodes : k => n if n.role == "worker" }
 
+  # Split by hypervisor: one resource block per provider instance (a provider cannot be chosen
+  # per for_each key). Only the INFRA layer splits — talos.tf still spans all of var.nodes.
+  pve_nodes  = { for k, n in var.nodes : k => n if n.hypervisor == "pve" }
+  nx02_nodes = { for k, n in var.nodes : k => n if n.hypervisor == "nx-02" }
+
   # IP (without CIDR mask) per node.
   node_ip = { for k, n in var.nodes : k => split("/", n.ip_cidr)[0] }
 

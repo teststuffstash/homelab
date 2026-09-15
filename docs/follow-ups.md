@@ -404,8 +404,17 @@ six OVERSIZE items pointer-ized into
       (b) the in-cluster no-root poster LIVE (#1631, four review rounds = the fail-closed policy-read
       class across lib/sentinel/apply; proof: #1635's head carried the status 104 s after its commit,
       ahead of the box's tick); `mgmt-policy-test` is a `ci` step (05ce8e8a). **Next:** (c) the
-      per-role user + env split; (d) the doorbell edge (lower priority now). Design + build state:
+      per-role user + env split; (d) the doorbell edge (lower priority now); **(e) a stage-1 REFUSAL
+      wedges the PR** — §MB3 "When the box refuses" (found on #1718, 2026-09-15); a policy call.
+      Design + build state:
       [`management-box.md`](management-box.md) §MB3. Relates FU-012, FU-097, ADR-130.
+- [ ] **FU-241** — **One SSH seed key now opens root on BOTH hypervisors.** `tofu/providers.tf`'s
+      `nx02` alias reuses `var.proxmox_ssh_private_key_file` (the pve seed), so a compromise of the
+      jail/box key is a compromise of pve AND nx-02. Deferred, not ignored: the key is already the
+      root-of-trust for pve and splitting it buys nothing until the two boxes differ in trust (a
+      guest-workload hypervisor, or nx-02 leaving after the R11 noise trial). **Next:** mint a
+      second seed at the first reason to distinguish them; until then the DR step is written down
+      in both `providers.tf` and the nx-02 row of `machines/machines.yaml`. Relates FU-012.
 - [ ] **FU-238** — **External-provider roots plan READ-ONLY on the box (operator, 2026-09-13):**
       box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
       host/jail until FU-097. **github DONE 2026-09-13** (read-only PAT + App keys via
