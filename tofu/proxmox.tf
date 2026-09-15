@@ -1,7 +1,8 @@
-# Proxmox VMs — the hardware-specific layer. One VM per node in var.nodes.
-# Each boots from a clone of the imported Talos disk image.
+# Proxmox VMs on `pve` — the hardware-specific layer. One VM per var.nodes entry whose
+# `hypervisor` is "pve" (the default). Each boots from a clone of the imported Talos disk image.
+# The nodes on the second hypervisor are the same shape in tofu/nx02.tf.
 resource "proxmox_virtual_environment_vm" "node" {
-  for_each = var.nodes
+  for_each = local.pve_nodes
 
   name      = each.key
   vm_id     = each.value.vm_id

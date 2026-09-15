@@ -29,6 +29,7 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 | `wk-01` (VM) | 192.168.2.61 | k8s worker |
 | `wk-02` (VM) | 192.168.2.62 | k8s worker (left the Longhorn std tier 2026-09-14 — compute-only; mounts volumes, serves none) |
 | `wk-03` (VM) | 192.168.2.63 | k8s worker, ephemeral/CI-runner tier (tainted; removable — no Longhorn disks, no kata) |
+| `wk-04` (VM on nx-02) | 192.168.2.64 | k8s worker, untainted batch compute (the second hypervisor's first VM) |
 | `thinkcentre` (metal, OUT of the cluster) | 192.168.2.53 | R12 out-of-band management-box PILOT — left cluster duty 2026-09-12, NixOS installed 2026-09-13 (ADR-129); its first apply waits on FU-012's state copy |
 | `hp-01` (metal, PXE) | 192.168.2.54 | k8s worker + Longhorn (WoL-capable) |
 | `m70s` (Lenovo ThinkCentre M70s SFF, PXE) | 192.168.2.56 | k8s worker + Longhorn (third physical Garage zone — ADR-114) |
@@ -37,6 +38,7 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 | `wk-metal-03` (ThinkPad X260, PXE) | 192.168.2.184 | k8s worker, ephemeral/compute tier (tainted; kata node) |
 | `wk-metal-04` (desktop i5-3570K 16GB, PXE) | 192.168.2.186 | k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier |
 | `nx-01` (Nutanix NX-6035-G5 node 1, 2U twin, PXE) | 192.168.2.58 | k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — no Longhorn |
+| `nx-02` (Nutanix NX-6035-G5 node 2, same 2U twin) | 192.168.2.59 | Proxmox hypervisor — the SECOND one (ROADMAP §Hardware strategy); hosts `wk-04` |
 | `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 | pop-os | 192.168.2.10 / .57 | the Docker host running this jail |
