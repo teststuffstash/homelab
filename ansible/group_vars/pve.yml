@@ -24,9 +24,10 @@ pve_node_exporter_port: 9100
 pve_textfile_dir: /var/lib/prometheus/node-exporter
 
 # --- pve-serial-log (#882, the serial-console capture) ---
-# The vmids whose serial0 socket gets tailed to pve_serial_log_dir/<vmid>.log. A vmid belongs here
-# iff its node is `serial = true` in tofu/variables.tf (the device comes from tofu, the tail from
-# this role — change both). 8113 = wk-03.
+# The vmids whose serial0 socket gets tailed to pve_serial_log_dir/<vmid>.log. A vmid belongs in
+# the list iff its node is `serial = true` in tofu/variables.tf (the device comes from tofu, the
+# tail from this role — change both). The list is PER HOST (host_vars/<host>.yml): a vmid only
+# exists on the hypervisor that runs it, so a group-wide list would make the role chase a socket
+# that is not there. Default empty ⇒ a hypervisor with no flagged VM is a clean no-op.
 pve_serial_log_dir: /var/log/qemu-serial
-pve_serial_log_vmids:
-  - 8113
+pve_serial_log_vmids: []

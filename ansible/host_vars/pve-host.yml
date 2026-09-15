@@ -1,0 +1,5 @@
+# Per-host values for the pve hypervisor (group `pve`; shared values in ../group_vars/pve.yml).
+
+# 8113 = wk-03, the only node with `serial = true` in tofu/variables.tf (#882).
+pve_serial_log_vmids:
+  - 8113

@@ -20,3 +20,8 @@ spec:
   staticConfigs:
     - targets: ["192.168.2.3:9100"]
       labels: { host: pve }
+    # The SECOND hypervisor (nx-02, 2026-09-15). Its own thin pool carries wk-04, so it needs its
+    # own meter — an unmetered pool is the state that produced the four fills. Same role, same
+    # port, one more target; the `host` label is what keeps the two pools apart in every alert.
+    - targets: ["192.168.2.59:9100"]
+      labels: { host: nx-02 }
