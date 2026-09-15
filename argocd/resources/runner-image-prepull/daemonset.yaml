@@ -102,10 +102,10 @@ data:
       if [ -z "${v:-}" ]; then
         echo "pool-gate: no pve_lvm_thin_pool_data_percent sample from $PROM (meter down or stale) — holding, fail closed"
       elif [ "$v" -lt "$MAX" ]; then
-        echo "pool-gate: pve thin pool at ${v}% < ${MAX}% — pulling on ${NODE_NAME:-?}"
+        echo "pool-gate: fullest hypervisor thin pool at ${v}% < ${MAX}% — pulling on ${NODE_NAME:-?}"
         exit 0
       else
-        echo "pool-gate: pve thin pool at ${v}% >= ${MAX}% — holding the pull on ${NODE_NAME:-?}"
+        echo "pool-gate: fullest hypervisor thin pool at ${v}% >= ${MAX}% — holding the pull on ${NODE_NAME:-?}"
       fi
       sleep 60
     done
