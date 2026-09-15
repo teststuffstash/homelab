@@ -82,6 +82,10 @@ HOSTS = [  # static reservations preserved from ISC
     # install path, deliberately left without a disk. Same standing caveat — LAN-only, never
     # routed, firmware unpatchable (no Nutanix LCM entitlement).
     {"host": "nx-02-bmc", "hwaddr": "ac:1f:6b:60:e5:8e", "ip": "192.168.2.173"},
+    # NX-6035-G5 node 2 itself (eno1). NOT a Talos node: this is the Proxmox trial box, installed
+    # unattended from an answer-file ISO served to the BMC over NFS. .5x cluster-node range like
+    # its sibling nx-01 (.58). eno2 deliberately unreserved, same reason as node 1.
+    {"host": "nx-02", "hwaddr": "ac:1f:6b:60:ed:fe", "ip": "192.168.2.59"},
     # --- pinned so they survive the .10->.100 pool move (were dynamic leases <.100) ---
     # UniFi network backbone — keep the switch + APs at stable IPs.
     {"host": "USW-Lite-8-PoE", "hwaddr": "68:d7:9a:5d:bb:48", "ip": "192.168.2.11"},
