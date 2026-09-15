@@ -164,7 +164,10 @@ resource "talos_machine_configuration_apply" "node" {
   node                        = local.node_ip[each.key]
   endpoint                    = local.node_ip[each.key]
 
-  depends_on = [proxmox_virtual_environment_vm.node]
+  depends_on = [
+    proxmox_virtual_environment_vm.node,
+    proxmox_virtual_environment_vm.nx02_node,
+  ]
 }
 
 resource "talos_machine_bootstrap" "this" {

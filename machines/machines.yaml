@@ -180,6 +180,18 @@ machines:
                          # is the RIDE pool's requirement), and reclaiming the RAM later is
                          # drain + tofu destroy of this one VM (nothing stateful lands here).
 
+  - name: wk-04
+    kind: vm
+    zone: nx-02        # the nx-02 BOX is the failure domain. ⚠ nx-01 and nx-02 are the two nodes
+                       # of ONE 2U twin chassis (shared backplane, 1+1 shared PSUs), so zones
+                       # nx-01 and nx-02 are not fully independent — harmless today (neither
+                       # carries a Longhorn disk), but it bounds what may ever be placed here.
+    label: "`wk-04` (VM on nx-02)"
+    role: k8s worker, untainted batch compute (the second hypervisor's first VM)
+    hardware: Talos VM on nx-02
+    ip: 192.168.2.64
+    avx2: true           # Xeon E5-2640 v4 (Broadwell) — same family as the pve VMs
+
   - name: thinkcentre
     kind: metal
     label: "`thinkcentre` (metal, OUT of the cluster)"
@@ -482,6 +494,32 @@ machines:
     install_disk: /dev/disk/by-id/ata-ADATA_SU630_2J4720061320
     avx2: true           # Broadwell-EP — AVX2 present (unlike the Pentium Gold boxes)
     notes: Nutanix NX-6035-G5 node 1; compute-only burn-in for the noise/idle trial; BMC 192.168.2.123; onboarded 2026-09-15.
+
+  - name: nx-02
+    kind: metal
+    # No `zone:` — this box is a hypervisor, not a cluster member (same as `pve`); tofu's
+    # kubernetes_labels.node_zone would try to label a Kubernetes node that does not exist.
+    label: "`nx-02` (Nutanix NX-6035-G5 node 2, same 2U twin)"
+    role: Proxmox hypervisor — the SECOND one (ROADMAP §Hardware strategy); hosts `wk-04`
+    hardware: Supermicro X10DRT-P-G5-NI22 (Nutanix NX-6035-G5, CSE-827HD+ 2U twin), 2 × Xeon E5-2640 v4
+    cpu_cores: 40        # 2 sockets × 10C/20T
+    memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
+    ip: 192.168.2.59
+    plug: null
+    idle_w: null         # BMC/DCMI reads only; this column holds WALL-METER numbers. Method +
+                         # the per-node ladder: private hardware register docs/nx-6035-g5.md.
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    remote_power: "IPMI/BMC: `ipmitool -I lanplus -H 192.168.2.173 -U ADMIN -P ADMIN chassis power on|off|cycle`. BMC `nx-02-bmc` 192.168.2.173 (DHCP-reserved)."
+    # Installed unattended 2026-09-15 from an answer-file ISO mounted over the BMC's NFS virtual
+    # media — no console, no Java iKVM (private register docs/nx-6035-g5.md). Proxmox VE 9.2.2.
+    # Storage: `nvme-thin` (233Gi Micron NVMe thin pool — the VM tier) + `local-lvm` (337Gi on the
+    # WD5000AAKX boot spinner, deliberately unused by VMs). BIOS boot order was fixed the same day
+    # (Hard Disk #1, Network #2) so a mounted virtual CD can never hijack a boot again.
+    # ⚠ BMC still on the factory ADMIN/ADMIN — LAN-only and never routed (ADR-013 posture),
+    # to change before the box is load-bearing.
+    notes: Nutanix NX-6035-G5 node 2; Proxmox VE 9.2.2 hypervisor for wk-04; BMC 192.168.2.173; installed 2026-09-15.
 
   - name: ci-runner-01
     kind: vm

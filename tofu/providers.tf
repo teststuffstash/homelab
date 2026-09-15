@@ -17,4 +17,22 @@ provider "proxmox" {
   }
 }
 
+# The SECOND hypervisor (ROADMAP §Hardware strategy). nx-02 is the other node of the NX-6035-G5
+# twin; it runs its own Proxmox and its own API token, so it needs its own provider instance —
+# bpg has no per-resource endpoint. Nodes pick their hypervisor with `hypervisor` in var.nodes
+# (default "pve"); the alias is wired in tofu/nx02.tf. Same SSH seed key as pve: authorized in
+# nx-02 root's authorized_keys the same one-time way.
+provider "proxmox" {
+  alias     = "nx02"
+  endpoint  = var.nx02_endpoint
+  api_token = var.nx02_api_token # KeePass `nx-02-api-token-tofu`; via TF_VAR_nx02_api_token / main.tfvars
+  insecure  = var.proxmox_insecure
+
+  ssh {
+    agent       = false
+    username    = "root"
+    private_key = file(var.proxmox_ssh_private_key_file)
+  }
+}
+
 provider "talos" {}
