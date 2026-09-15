@@ -405,7 +405,7 @@ six OVERSIZE items pointer-ized into
       class across lib/sentinel/apply; proof: #1635's head carried the status 104 s after its commit,
       ahead of the box's tick); `mgmt-policy-test` is a `ci` step (05ce8e8a). **Next:** (c) the
       per-role user + env split; (d) the doorbell edge (lower priority now). Design + build state:
-      [`management-box.md`](management-box.md) §MB3. Relates FU-012, FU-097, ADR-130.
+      [`management-box.md`](management-box.md) docs/spikes/model-routing-history.md §MB3. Relates FU-012, FU-097, ADR-130.
 - [ ] **FU-238** — **External-provider roots plan READ-ONLY on the box (operator, 2026-09-13):**
       box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
       host/jail until FU-097. **github DONE 2026-09-13** (read-only PAT + App keys via
@@ -619,7 +619,7 @@ the block needs pruning, not more headings.
       **Next:** the exporter sprout-RATE gauge + the depth-aware harvest gate reading it.
       **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue`;
       the goal lane's PHASE-keyed model/checkpoint design (a `GOAL_MODEL` knob turns the wrong
-      axis — [`model-routing.md`](agents/model-routing.md) §M10 ⚖, 2026-08-11; design before wiring).
+      axis — [`model-routing.md`](agents/model-routing.md) docs/spikes/model-routing-history.md §M10 ⚖, 2026-08-11; design before wiring).
       Relates FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
 - [ ] **FU-129** — **`gh issue view <n> --comments` renders EMPTY (exit 0) — ROOT CAUSE CONFIRMED
       2026-08-05: it is gh SEMANTICS, not the image or the token.** `--comments` switches to a
@@ -664,7 +664,7 @@ the block needs pruning, not more headings.
       filing per the brief's contract; same surface as the #1163 scan theme. Reader BUILT
       (#1235); 2026-09-13 it latched five ISSUES for one PROVIDER fault — re-key to
       provider/model/us = homelab#1640 acceptance 5. Relates FU-199,
-      agent-runtime#85 (the `unknown` classifier), model-routing §M1a (strike store).
+      agent-runtime#85 (the `unknown` classifier), model-routing docs/spikes/model-routing-history.md §M1a (strike store).
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 
@@ -820,7 +820,7 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-161** — **Scout v3: POINTER.** Design + mechanism (variant filter, benchmark
       cross-check, typed cell-keyed canary verdicts, the ⚖ filing gate's evidence-bearing
-      partition): [`model-routing.md`](agents/model-routing.md) §M7. Legs 1–2 shipped 2026-08-11
+      partition): [`model-routing.md`](agents/model-routing.md) docs/spikes/model-routing-history.md §M7. Legs 1–2 shipped 2026-08-11
       (#282); legs 3–4 + the filing gate (operator, 2026-08-17: an all-unbenched, uncanaried
       digest posts nowhere but the log) shipped via #469→PR#499 + #506's whole-set common-cause
       rule. ⚠ Written-not-proven: no organic scout fire since the merge; every 08-10..08-17
@@ -830,16 +830,16 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-186** — **Provider selection priced per successful job (ADR-115): POINTER.** Design +
       evidence + 4-step build order: [`docs/agents/model-routing.md`](agents/model-routing.md)
-      §M14 (Exacto delegated for cheap coding; pin-v2 with the overhead-cost term for priced
+      docs/spikes/model-routing-history.md §M14 (Exacto delegated for cheap coding; pin-v2 with the overhead-cost term for priced
       classes; the scout rides its class's provider policy; `@` arms = the experiment
       instrument, shipped PR#963). **Step 1 FLIPPED 2026-09-13 (PR#1639; operator: the five
       open-inference tool-loops ARE the trial) — the suffix rides paid OpenRouter picks only.
       Next:** the standing re-read = homelab#1640 acceptance 8; the 0731 matrix run (step 2,
-      #1238) stays #1231's leg. Relates ADR-115, ADR-096 §M4/M8, FU-095, homelab#966 (intake digest),
+      #1238) stays #1231's leg. Relates ADR-115, ADR-096 docs/spikes/model-routing-history.md §M4/M8, FU-095, homelab#966 (intake digest),
       the #783 provider-attribution legs.
 
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design,
-      pilots, the strike/§M10 rulings: [`docs/agents/model-routing.md`](agents/model-routing.md)
+      pilots, the strike/docs/spikes/model-routing-history.md §M10 rulings: [`docs/agents/model-routing.md`](agents/model-routing.md)
       + ADR-096/ADR-112. Legs (b)+(c) ride G-A child #778 (the scout's 3-harness cells ARE the
       (b) surface). Flip evidence COMPLETE (2026-08-25, #775 — the 123 deferred rows are
       `chain-exhausted` on subscription-only classes, a served-walk candidate-injection gap,

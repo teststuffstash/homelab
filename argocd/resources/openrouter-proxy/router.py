@@ -37,7 +37,7 @@ import time
 # AST; never a third copy.
 import model_id
 
-# Strike taxonomy (model-routing.md §M1): these error classes are INFRA failures — they blacklist
+# Strike taxonomy (model-routing-history.md §M1): these error classes are INFRA failures — they blacklist
 # the (task, model) pair without consuming a round. Kept in step with agent-session.sh's
 # classifier and agent-finalize (the authoritative signature copy).
 STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown"}
@@ -62,7 +62,7 @@ _TIER_ORDER = {"free": 0, "cheap": 1, "large": 2, "premium": 3}
 # work, i.e. "N strikes and you're out" is not supported by the evidence; "retry, or fan out N
 # parallel and keep the survivor" may well be cheaper than the next model in the chain.
 # So: RECORD the strikes (we need the data to decide), do NOT act on them yet. Flip this on only
-# with a policy decision behind it — see docs/agents/model-routing.md §M1a.
+# with a policy decision behind it — see docs/agents/model-routing-history.md §M1a.
 STRIKE_ENFORCE = os.environ.get("ROUTER_STRIKE_ENFORCE", "0").strip().lower() not in ("", "0", "false", "no", "off")
 # Retention (days): the FU-057 ledger (pushgateway + transcripts) is the long-horizon store;
 # this DB answers "recent enough to route on".
@@ -129,7 +129,7 @@ CREATE INDEX IF NOT EXISTS ix_pe_model_ts ON provider_events(model, ts);
 # in-rail ordering uses: a :free model costs nothing, the claude subscription is already bought (so
 # a slot with headroom is also ~$0 at the margin — bounded by the FU-088 gates, which are the
 # safety net's, not the ladder's, to spend), and paid OpenRouter is the reliable spender of last
-# resort. See docs/agents/model-routing.md §M11.
+# resort. See docs/agents/model-routing-history.md §M11.
 LADDER = ("free", "subscription", "paid")
 URGENCIES = ("tight", "elastic")
 
@@ -336,7 +336,7 @@ def record_report(d: dict, session_ref: str = "") -> tuple[bool, bool, str]:
     # infra death never struck: router_strikes_total sat at 1 while three harness deaths landed on
     # 2026-08-06/07. Two of this set's own members (`harness-death`, `no-pr`) are `outcome`
     # vocabulary, so it was never coherent with the single field it was compared against.
-    # model-routing.md §M1 settles that this is a bug, not a policy: its taxonomy table names
+    # model-routing-history.md §M1 settles that this is a bug, not a policy: its taxonomy table names
     # "harness-death (goose -32602)" as ONE thing.
     # FU-201 c: the served provider is sourced proxy-side from provider_events via the session
     # key ref (not the pod name — those two id-spaces never intersect). provider_events is

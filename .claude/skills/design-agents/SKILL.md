@@ -17,7 +17,7 @@ description: >
 The sibling of [`../design/SKILL.md`](../design/SKILL.md), specialized for the agent platform.
 Why it exists (operator ruling, 2026-08-10): the agents subsystem is so tightly coupled that any
 major change requires the full context anyway — selective closure kept under-reading (the FSM
-`replay:` fields, `model-routing.md` §M1a: both misses were claims about files not read), and the
+`replay:` fields, `model-routing.md` docs/spikes/model-routing-history.md §M1a: both misses were claims about files not read), and the
 per-file grounding list had grown into an audit burden the operator had to verify by memory.
 Fixed cost beats itemized honesty here: **~300–350k tokens measured** (session-ctx `--big` on the 2026-09-03/04 corpus loads; the "~110k" this line carried since the 2026-08-18 trim was never re-measured), pre-authorized, paid ONCE per session
 (prompt caching amortizes every follow-up question).

@@ -14,7 +14,7 @@ ORG="teststuffstash"
 DIGEST_REPO="homelab"
 CANARY="0"
 CANARY_BLOCK=""
-SUPPRESSED_LINE=$'\n\n*Suppressed by the base-id diff (§M7 leg 1): 3 `:batch` re-listing(s) — an async endpoint cannot serve an interactive session — and 1 other suffix variant(s) of a base already known or already listed above. A variant is not a newcomer.*'
+SUPPRESSED_LINE=$'\n\n*Suppressed by the base-id diff (docs/spikes/model-routing-history.md §M7 leg 1): 3 `:batch` re-listing(s) — an async endpoint cannot serve an interactive session — and 1 other suffix variant(s) of a base already known or already listed above. A variant is not a newcomer.*'
 
 log() { printf '%s\n' "$*"; }   # shipped `log` stamps a wall clock; only that is dropped
 

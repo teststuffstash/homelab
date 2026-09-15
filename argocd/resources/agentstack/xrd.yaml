@@ -125,7 +125,7 @@ spec:
                         per-stack review reflex as REVIEW_GOAL_MODEL; every other PR keeps
                         the reviewer default (sonnet). NB must DIFFER from the model that
                         decomposed the goal (goal-decompose runs GOAL_MODEL, default opus) —
-                        model-routing.md §M10.
+                        model-routing-history.md §M10.
                 slo:
                   type: object
                   description: >-

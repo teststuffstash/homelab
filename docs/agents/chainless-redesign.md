@@ -6,13 +6,13 @@ routes), oracle + sleep run chainless (oracle-iac#387, sleep-iac#77), and the pl
 chainless flip rode the same wave; what remains is flip acceptance 2–4, the FU-186/ADR-115
 provider legs, and build-order item 6 (the legacy-deletion sweep). This doc owns the redesign's
 decisions, the claim-knob ledger, the OpenCode Go rail evidence, and the build plan — so the
-direction survives any one session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (§M8–M13) and the
+direction survives any one session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (docs/spikes/model-routing-history.md §M8–M13) and the
 claim by [`agentstack.md`](agentstack.md); this doc records what CHANGES in each and why. The
 decision record is **ADR-107** (decision 3 superseded by **ADR-112**, the harness matrix); the
 day's probe evidence is TICK-LOG 2026-08-13.
 
 Trigger: the Anthropic 7d window at 87–89% while the router could steer nothing that mattered —
-67% of the pool is the jail seat, ~28% platform roles that never call `/route` (§M10), and the one
+67% of the pool is the jail seat, ~28% platform roles that never call `/route` (docs/spikes/model-routing-history.md §M10), and the one
 routed lane ran shadow. Plus the same day's proof of how expensive fused model semantics are: every
 `claude/haiku` worker ride had run the CLI default (opus-5[1m]) for 23 days because the model rode
 an env var only goose read (PR#407).
@@ -23,7 +23,7 @@ an env var only goose read (PR#407).
    (`workerModel`/`workerModelFallbacks`) are deleted, not deprecated-in-place — "do all the
    model-routing work that chainless needs, drop all legacy at once."
 2. **Every role routes.** Coordinator, reviewer, responder, retro, prober wire to `/route`
-   (closing §M10's unrouted-lane gap — the lanes holding ~28% of the subscription pool). Doctrine
+   (closing docs/spikes/model-routing-history.md §M10's unrouted-lane gap — the lanes holding ~28% of the subscription pool). Doctrine
    (safety net, decorrelation, audit bands) moves to git-owned class policy
    (`model-classes.json` floors/rails + the claim's constraints), never hardcoded models.
 3. **Harness support is a MATRIX, not a monoculture — ADR-112 (2026-08-23), superseding
@@ -296,7 +296,7 @@ dollars. Three directions replace it (they refine the ledger's per-rail `budgets
    typing* — wall time, tool-call failures, and a €0.03 bill ("the worker is a
    `chmod +x opus-script.sh` executor"). RULING: **the router follow-up set builds BEFORE
    further process machinery** — FU-201 (escalation carrier: size-label re-grade), FU-174
-   (the effort knob), FU-186/ADR-115 (provider-quality legs), and the §M8 feed-4 per-JOB
+   (the effort knob), FU-186/ADR-115 (provider-quality legs), and the docs/spikes/model-routing-history.md §M8 feed-4 per-JOB
    pricing ($/successful-job with the failure-overhead term) — right model for the job
    first, then redesign the processes around capable workers. Corollaries: (a)
    ROUNDS_MAX=3 + escalate-to-human is scar tissue from unstable-worker history — re-read
@@ -323,7 +323,7 @@ migrate through).
 
 > **POSTURE RULED (operator, 2026-08-25 — pinned on homelab#778):** Go serves
 > **janitorial/low-cache roles + failover backup, permanently** — window-draw at list-on-raw
-> prices cache-heavy work out (§M8 feed-4's rail affinity, measured: Go review rounds ≈$1 vs
+> prices cache-heavy work out (docs/spikes/model-routing-history.md §M8 feed-4's rail affinity, measured: Go review rounds ≈$1 vs
 > OR-flash worker rides $0.03–0.05); deepseek+OpenRouter stays the economical worker ride. The
 > best find of the rail saga is the ZEN sibling's **big-pickle as deepseek's $0 shadow** (A5
 > shadow re-reviews homelab#923, the G-E fan-out arm; matrix row has the caveats). FU-181 holds
@@ -382,7 +382,7 @@ What stands here is the doctrine the probe produced:
   the jail shim: string-shorthand message content and claude-code's `?beta=true` decorations.
 - **The rail is registry-POOR.** `/v1/models` returns ids only — no pricing, no multipliers, no
   quota API; the usage multipliers appear only in the vendor client's picker. So the Go-rail
-  registry must be a **curated snapshot** (the §M8 gated-data pattern — docs table + picker
+  registry must be a **curated snapshot** (the docs/spikes/model-routing-history.md §M8 gated-data pattern — docs table + picker
   multipliers + our own canary matrix) with windows **self-metered from per-request usage**,
   never discovered. Billing resolved to list ×1 for every model, while badged models draw the
   WINDOWS at half their billed list-$ — favorable, and unverified at the limit boundary (the
@@ -416,7 +416,7 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
 2. **Rail-aware accounting** — `AGENT_RAIL` folded into stats/`run_reports` (M12's
    declared-unconsumed surfaces), then #278's summation across three currencies (window-draw /
    usage-value / USD). FU-131's sweep relates.
-3. **A rail-probe canary per (model, class) cell on the Go rail** (§M7 leg 3 machinery) before
+3. **A rail-probe canary per (model, class) cell on the Go rail** (docs/spikes/model-routing-history.md §M7 leg 3 machinery) before
    fleet exposure — compat fidelity is per-model, as the glm shorthand bug showed.
 4. **P4-flip evidence** — the shadow ladder read with real urgency data (the caller gap closed
    2026-08-13, PR#408: labels + work-branch urgency now ride `/route` bodies).
@@ -441,8 +441,8 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
    `model-classes.json` grows rails/class policy.
 5. Role wiring (coordinator/reviewer/responder/retro launchers call `/route`).
 6. Legacy deletion in one sweep: chains, `claudeTier`, `guardrail`, the M12 branch, the M10
-   case-maps, `REVIEW_GOAL_MODEL`, `GOOSE_MODEL` threading, and the retired
-   `ROUTER_STRIKE_ENFORCE` read + filter branch (ruled 2026-08-23, §M1a) — each deletion site
+   case-maps, `REVIEW_GOAL_MODEL`, `GOOSE_MODEL` threading, and the
+   `ROUTER_STRIKE_ENFORCE` read + filter branch (unenforced: #1666, PR #1685) — each deletion site
    is already named in its own doc. **Sweep additions + the ONE trap (goal #775 findings-store
    entry 5, surfaced here so the sweep session needs no graph read):** three post-wiring
    `--fallback` literals ARE sweep targets (`--fallback sonnet` on the responder + dispatch-unit
@@ -453,7 +453,7 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
 
 ## Related
 
-ADR-107 (decision record) · [`model-routing.md`](model-routing.md) §M8–M13 (mechanism home; M11
+ADR-107 (decision record) · [`model-routing.md`](model-routing.md) docs/spikes/model-routing-history.md §M8–M13 (mechanism home; M11
 generalizes, M12 folds in) · [`agentstack.md`](agentstack.md) (claim) · FU-095 (routing program
 pointer) · FU-127 (structured `{rail, harness, model}`) · FU-131/#278 (accounting) · FU-168
 (dispatch throughput) · the banked tier-thesis revision (TICK-LOG 2026-08-13 — review leverage =
@@ -464,7 +464,7 @@ decorrelation + tool-grounding, not tier; feeds class policy when piloted).
 **LIVE.** Chunks A–H shipped in the 2026-08-14 completion wave (PRs #429–#443, #528), and the
 2026-08-17 operator dogfood narrowed Go's subscription scope to **flash-only** ("see how the
 monthly cap holds up") with the PLATFORM claim on `opencode-go/deepseek-v4-flash` /
-fallback `claude/haiku` — a TEMPORARY amendment of the §M12 independence ruling, since platform
+fallback `claude/haiku` — a TEMPORARY amendment of the docs/spikes/model-routing-history.md §M12 independence ruling, since platform
 carries the most issue traffic and therefore produces metrics fastest. The reviewer's failover
 model is deliberately NOT flash (a flash failover would review flash-authored code —
 decorrelation wins). The `#448` OpenAI-surface translator shipped after all (PR#465), as did Go

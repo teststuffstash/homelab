@@ -157,7 +157,7 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 >   `agent/blocked` for a pure infra failure while chain entries remain;
 >   only a fully-struck chain escalates (comment the strike list — that IS a human's problem).
 > - **Pricing:** the estimator prices ANY model live (the OpenRouter registry, cache-aware effective
->   $/M — FU-062 §M3); `python3 agents/estimate_budget.py --model <m> --lookup` shows the verdict +
+>   $/M — FU-062 docs/spikes/model-routing-history.md §M3); `python3 agents/estimate_budget.py --model <m> --lookup` shows the verdict +
 >   provider pin. A `$1.0/M (source: default)` price means the model is *unpriced/unknown to the
 >   registry* (typo? rotated out?) — fix the model id, or pass `--price-per-mtok` if you truly know
 >   better. `:free` models are $0 → smallest tier by design.

@@ -88,7 +88,7 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   `ROUTER_STRIKE_ENFORCE` retired as a blacklist knob — 16-day store read = six strikes, five one
   goose-harness class; enforcement would have changed ~1 decision for cents. Strikes stay
   RECORDED; cooldowns carry the residual class. Code deletion rides the G-A legacy sweep
-  (deletion site named in `model-routing.md` §M1a). Re-open = post-flip per-model class the
+  (deletion site named in `model-routing.md` docs/spikes/model-routing-history.md §M1a). Re-open = post-flip per-model class the
   cooldowns miss → new design with the provider dimension (the #783 thread's legs; future home =
   the ROADMAP G-E candidate). Fan-out → the free-model evidence lane, same candidate.
 
@@ -168,7 +168,7 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   Acceptance ride = FU-126's run 2 (its ordinary work; a defer there files fresh).
 - **FU-165** *(archived 2026-08-12)* — the pilot RAN: goal #278 closed VALIDATED 2026-08-12
   (first validated terminal). Evidence dossier = docs/spikes/goal-lane-v1.1-fu165-pilot.md +
-  issue-authoring.md §Goal lane versions; v1.2 design = FU-168 + #295 + §M10; the subscription
+  issue-authoring.md §Goal lane versions; v1.2 design = FU-168 + #295 + docs/spikes/model-routing-history.md §M10; the subscription
   budget blind spot (gap a) is chartered post-FU-131 on #278.
 - **FU-133** *(archived 2026-08-11)* — Alert-lane correlation, all legs shipped: resolve/dedup/
   dispatch halves earlier; leg (a) filing-side `group_by: [alertname]` pinned (PR#263 — proved
@@ -495,7 +495,7 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   pointers, README ADR mirror table replaced with a link to docs/adr.md (the updater decision-logic
   flowchart KEPT — it documents one transition's logic, not the FSM, no drift pair); (c)
   superseded tracts deleted with git-history pointers (merge-path §Rollout → 6-line done-summary,
-  §Open questions → §Decisions, workflow §MVP + polling-first bullets); (d) §Scaling model moved
+  §Open questions → §Decisions, workflow docs/spikes/model-routing-history.md §MVP + polling-first bullets); (d) §Scaling model moved
   → platform-and-stacks.md §Stack economics; (e) generated-tables leg moved into FU-049 (same
   generation class). Deviation note: (b)'s "generate" intent satisfied by removing the drift
   pairs instead of building generators.
