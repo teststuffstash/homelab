@@ -70,6 +70,12 @@ HOSTS = [  # static reservations preserved from ISC
     # the firmware can't be patched (Nutanix LCM wants an entitled cluster).
     # Box detail: hardware repo docs/nx-6035-g5.md. Node 2's BMC follows when it is cabled.
     {"host": "nx-01-bmc", "hwaddr": "ac:1f:6b:60:e5:5c", "ip": "192.168.2.123"},
+    # Nutanix NX-6035-G5 node 1 itself — bare-metal Talos worker, compute-only (no Longhorn).
+    # eno1 only: eno2 is the second onboard I350 port and is deliberately NOT reserved, so a
+    # second cable cannot hand this node an ambiguous second address. Takes a .5x cluster-node
+    # address (docs/ip-plan.md: .51-.99) like m70s/hp-01, and maintenance IP == node IP so the
+    # tofu apply target is clean.
+    {"host": "nx-01", "hwaddr": "ac:1f:6b:60:ed:9a", "ip": "192.168.2.58"},
     # --- pinned so they survive the .10->.100 pool move (were dynamic leases <.100) ---
     # UniFi network backbone — keep the switch + APs at stable IPs.
     {"host": "USW-Lite-8-PoE", "hwaddr": "68:d7:9a:5d:bb:48", "ip": "192.168.2.11"},
