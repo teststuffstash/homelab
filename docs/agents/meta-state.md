@@ -10,58 +10,41 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-15 night — the NX box, overnight run).** Operator handed off to continue
-  **unattended on `nx-02` only**; `nx-01` is parked for the morning (his call). Box facts and the
-  full story live in the private **hardware** repo `docs/nx-6035-g5.md` — read that, not this bullet.
+- **⚑ PICKUP (2026-09-15 night — nx-02, unattended run).** Box facts live in the private
+  **hardware** repo `docs/nx-6035-g5.md` §"nx-02 put to work"; the arc is in TICK-LOG.
 
-  **STATE RIGHT NOW**
-  - **`nx-02` = Proxmox VE 9.2.2, UP at `192.168.2.59`** (`nx-02-bmc` `192.168.2.173`). Installed
-    unattended from an answer-file ISO. Root password: KeePass **`nx-02-root-password`**. It holds
-    **one** NVMe (`nvme?n1-thin`, 233Gi) + `local-lvm` 337Gi on the WD boot disk. Not in tofu, not
-    in the cluster, no VMs yet.
-  - **`nx-01` = POWERED OFF, cordoned, NotReady, and CANNOT BOOT.** After the operator moved one
-    NVMe out of nx-02 into nx-01, its BIOS sees **no hard disk at all** (Boot Override lists only
-    the NIC; `Legacy Boot Order #5 [Hard Disk]` has no device and there is no `Hard Disk Drive BBS
-    Priorities` submenu — compare nx-02 which has both). It booted off that same ADATA for 6h53m
-    before the chassis was opened, so the likely cause is a **disturbed drive/caddy**, needing
-    hands. ⚠ It is still **flagged in Matchbox** (`matchbox_group.nx_01_diag`, and
-    `tofu/provisioning/matchbox.tf` is left MODIFIED in the working tree on purpose so config
-    matches state) — so powering it on boots **Talos maintenance in RAM, disk untouched**, which is
-    the right state to diagnose from: `talosctl -n 192.168.2.58 get disks --insecure`.
-  - **PR #1717 `fix/nx-01-ride-box` is OPEN and deliberately NOT auto-merged.** It converts nx-01 to
-    the ride/ARC box (kata + ephemeral + `ephemeral_disk_selector`). **Do not merge until nx-01's
-    disk situation is resolved** — applying it WIPES nx-01, and its `install_disk` is the ADATA that
-    currently does not enumerate.
+  **DONE tonight:** nx-02's BIOS boot order (`Hard Disk` #1, `Network` #2 — a mounted BMC virtual
+  CD can no longer hijack a boot; SOL driver at `pve:/root/bootorder.py`); the stale
+  `nvme0n1-thin` storage removed and the surviving pool renamed device-independently to
+  **`nvme-thin`**; a tofu API token minted (KeePass `nx-02-api-token-tofu`, on the box via
+  `mgmt-provision-secrets.sh --push`) and the pve SSH seed key authorized; **PR#1719 merged** —
+  nx-02's thin pool is metered end-to-end (`pve_lvm_thin_pool_data_percent{host="nx-02"}` live in
+  Prometheus, `PveMetricsAbsent` now one arm per host); **nx-01 added to `bgp_node_ips`** (736167cd
+  — it was never added at onboarding, peer `idle`; ⚠ NOT verifiable as `established` until nx-01
+  boots).
 
-  **THE OVERNIGHT PLAN (nx-02 only), in order:**
-  1. **Fix nx-02's BIOS boot order** — `Hard Disk` above `USB CD/DVD`, so a mounted ISO can never
-     hijack a boot again; then drop the persistent IPMI override
-     (`ipmitool ... chassis bootdev none`). Scriptable: the SOL driver lives on **pve** at
-     `/root/{solwalk,bios2,soldrive,bootchk}.py` — navigate by SEEKING the help pane, never by
-     counting (tabs wrap; selection persists across SOL sessions). Enter setup with
-     `chassis bootdev bios`, never by racing DEL (`Setup Prompt Timeout` is 1 s).
-  2. **Remove the stale Proxmox storage** for the NVMe that left for nx-01 (one of
-     `nvme0n1-thin`/`nvme1n1-thin` now has no device).
-  3. **Talos worker VMs on nx-02, joining the cluster.** ⚠ This is the substantial one and it is
-     main-root tofu, so it is **PR + `mgmt-tf` apply**, not an imperative build (principle 1a).
-     Needs, in order: (a) an API token minted on nx-02 and stored in the KeePass wallet;
-     (b) a **second `bpg/proxmox` provider alias** — today `tofu/` only knows `pve` at
-     192.168.2.3; (c) VM definitions on the NVMe thin pool; (d) Talos config apply + join.
-     ⚠ **Make them WORKERS, not a control plane.** Going 1 CP → 2 CPs makes availability *worse*
-     (2-member etcd tolerates zero failures). cp-02 only makes sense as part of a 1 → 3 move, which
-     is the ROADMAP's three-CP plan and needs the ride box first.
-     ⚠ Do not put Longhorn replicas on these VMs without a deliberate decision — "a VM on a thin
-     pool" is exactly the `wk-02` failure domain the storage ledger complains about.
+  **THE ONE THING WAITING ON YOU — PR#1718 (`fix/nx-02-worker`, `wk-04`) cannot merge.** It is
+  reviewed (a `/code-review` high pass; nine findings, the substantive ones fixed in `d7c81107`),
+  CI + iac-sentinel green, and re-planned on the box: `5 to add, 1 to change, 0 to destroy`. But
+  `management-sentinel` is a REQUIRED context and reports `failure` — stage 1 refuses to plan any
+  PR touching `tofu/providers.tf`, which this must (a second provider instance for the second
+  hypervisor). That refusal is CORRECT; the consequence is not: the merge is blocked AND
+  `review-reflex` never dispatches (needs green) AND `reviewer-session` stands aside at STEP 0 —
+  both observed. So the PR got no bot review either. Written up as **FU-237 (e)** +
+  `docs/management-box.md` §"When the box refuses", with the two candidate fixes; both are policy
+  calls (the obvious one weakens the gate), so it was NOT force-merged.
+  **Your move, either:** rule on FU-237 (e), or `gh pr merge 1718 --repo teststuffstash/homelab
+  --admin --squash` and then the **two-phase** apply (the label resource does not depend on the VM
+  and fails with `nodes "wk-04" not found` if applied in one pass — exact commands in the PR body).
 
-  **Also open, low priority:** `wk-metal-02` is **NotReady** ("Kubelet stopped posting node status")
-  — one of four kata hosts, down. And **FU-235 is stale**: it says the kata pool is 2; live it is 4
-  (all four carry `homelab.io/kata=true`, and the RuntimeClass gates on exactly that) — close it on
-  evidence.
+  **Also open:** `nx-01` is still powered off and cannot see a boot disk (untouched tonight, per
+  the handover); **PR#1717** (`fix/nx-01-ride-box`) still deliberately un-armed — applying it wipes
+  nx-01 and targets the ADATA that does not enumerate. **FU-235 is still stale** (says the kata pool
+  is 2; live it is 4) — close it on evidence. `wk-metal-02` recovered on its own (Ready again).
 
   **Do NOT re-derive:** the Matchbox profile sets `console=ttyS0` (COM1) but these boards have COM1
-  **disabled** and COM2/SOL enabled (= ttyS1), which is why Talos is invisible over SOL on both
-  nodes while BIOS output shows fine. A `console=ttyS1,115200` kernel arg would fix it; it cost
-  real time tonight.
+  disabled and COM2/SOL enabled (= ttyS1), which is why Talos is invisible over SOL on both nodes
+  while BIOS output shows fine. A `console=ttyS1,115200` kernel arg would fix it.
 
 - **⚑ PICKUP (2026-09-14 midday session — the box + wk-03 window; arc in TICK-LOG).**
   (1) **Box hand-advance DONE** — gen 4, `mgmt-pull` hourly live (first tick advanced to

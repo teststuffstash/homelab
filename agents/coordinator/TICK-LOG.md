@@ -9202,3 +9202,66 @@ Issues: #1620, #1621.
   hand (`Fixes #1710` on the PR, #1710's Touches widened). The round cannot dispatch until
   `agent/error` stops being re-applied (2026-09-15 16:45Z, or #1712 landing). #1675 closed
   (operator). Session ends; pickup in meta-state.
+
+## 2026-09-15 night — nx-02 (unattended; operator handoff "continue with nx-02")
+
+- **The handover's three items, in order.** (1) **BIOS boot order** on nx-02: was `CD/DVD` /
+  `USB CD/DVD:ATEN V…` / … / `Hard Disk` #5, i.e. a virtual CD left mounted at the BMC outranked
+  the installed OS on every boot; now `Hard Disk` #1, `Network` #2 (kept so a one-shot
+  `chassis bootdev pxe` is not the only route back to netboot). Saved with F4 and verified by the
+  reboot — Proxmox in 45 s. The reusable bit is the DRIVER, not the setting: the seven FIXED BOOT
+  ORDER rows all answer the same help text, so `bios2.py`'s seek-on-help-pane cannot tell them
+  apart. Seek the unique row ABOVE them (`Setup Prompt Timeout`), step down `SLOT+1`, read values
+  off the LEFT pane by label, match by PREFIX (`Hard Disk:#0100 I...` ≠ `Hard Disk` — an equality
+  match cycles straight past it) and re-read after every `+`, because the other slots re-shuffle.
+  `pve:/root/bootorder.py`. Also: a warm reboot of this board is 45 s where a COLD POST is ~5 min.
+  (2) **Storage**: the stale `nvme0n1-thin` removed (its NVMe left for nx-01) and the survivor
+  renamed `nvme1n1-thin` → **`nvme-thin`** (VG + thin LV) — a VG named after `/dev/nvmeXn1` is a
+  landmine in a chassis whose drives are expected to move. Empty pool, no VMs.
+  (3) **wk-04** as code — below.
+- **The second hypervisor in tofu (PR#1718).** bpg has no per-resource endpoint, so a second
+  Proxmox needs a second provider INSTANCE: a `proxmox.nx02` alias + a `hypervisor` field per node
+  (`local.pve_nodes` / `local.nx02_nodes`), with `tofu/nx02.tf` a deliberate literal near-copy of
+  `proxmox.tf` — a module buys nothing when the provider cannot be parameterised, and the literal
+  form keeps drift visible in review. talos.tf is unchanged in shape and still spans all of
+  `var.nodes`, which is the property that keeps a DR rebuild a providers.tf edit. Token
+  `tofu@pve!provisioner` minted on nx-02 (⚠ **PVE 9 removed the `VM.Monitor` privilege** — pve's
+  `TerraformProv` role does not copy verbatim), wallet `nx-02-api-token-tofu`, onto the box via
+  `mgmt-provision-secrets.sh --push`. Planned from the branch: `5 to add, 1 to change, 0 to destroy`.
+- **`/code-review` found nine things; the review was worth more than the PR.** Fixed in the branch:
+  wk-04 missing from `bgp_node_ips`; `discard=on` with no reclaim path (the fstrim CronJobs were
+  pinned to the four pve VMs, and the reactive guard hardcoded pve's pool — now `POOL_QUERY`, per
+  node, because trimming wk-04 returns blocks to nx-02 and nothing else); `nx02_api_token` supplied
+  by no committed code (keepass-env + mgmt-provision-secrets now do); no `hypervisor` validation (a
+  typo created NO VM while talos.tf still tried to reach the IP); 16 flat vCPU on a dual-socket host
+  (now `sockets = 2` + `numa = true`). Filed: **FU-241** (one seed key opens root on both
+  hypervisors) and a storage-ledger requirement row — **nx-01 and nx-02 are ONE failure domain
+  wearing two zone labels**; collapse them to one zone BEFORE any replica lands, never after.
+  And a live defect that was not this PR's: **nx-01 was never added to `bgp_node_ips`** at
+  onboarding (#1716) — its peer read `idle`. Fixed direct (736167cd) + playbook applied; ⚠ cannot
+  be verified `established` until nx-01 boots. Third time this list is the onboarding miss.
+- **Detector before the fix, as the rule says.** The reviewer's own point: nx-02 arrived with an
+  unmetered thin pool, which is the state that produced four fills. **PR#1719 merged** — nx-02 in
+  the ansible `pve` group (the group is "Proxmox hosts", not the box named pve; the serial-log vmid
+  list moved to `host_vars` because a vmid only exists on the hypervisor that runs it), a second
+  scrape target, every pool alert per SERIES naming `{{ $labels.host }}` (the prose was the bug —
+  the exprs already fired per series), `PveMetricsAbsent` with one arm PER HOST (an unqualified
+  `absent()` goes quiet the moment either hypervisor reports — exactly the state it must catch),
+  the prepull DaemonSet split made "thin pool underneath" rather than the literal zone `proxmox`
+  (wk-04 would otherwise have rejoined the UNGATED tier — FU-208's bug with a new name), and the
+  runbook recipe generalised off pve (the reviewer's blocking find: the alerts pointed at a section
+  titled "(pve `local-lvm`)" whose worked example is wk-02/8112). Verified live:
+  `pve_lvm_thin_pool_data_percent{host="nx-02",vg="nvme-thin"}` in Prometheus, the new absent rule
+  loaded, no Pve alert firing.
+- **PR#1718 did not merge, and that is a governance finding, not a blocker to route around.**
+  `management-sentinel` is REQUIRED and reports `failure` because stage 1 refuses to plan a PR
+  touching `tofu/providers.tf`. The refusal is correct — a provider block is credential + endpoint
+  surface and a plan EXECUTES it — but a required failure also means `review-reflex` never
+  dispatches (it needs green) and `reviewer-session` stands aside at STEP 0, so the PR gets no
+  review either. The policy's own escape hatch, "or gets a human plan in the jail", has no
+  mechanism behind it: a pasted plan turns no check green. Recorded as **FU-237 (e)** +
+  `management-box.md` §"When the box refuses" with two candidate fixes. NOT force-merged: the seat
+  has OrgAdmin and could, but "a refusal is advisory" is a policy ruling on the first instance of
+  the class, and gate semantics are the operator's. Left reviewed, re-planned and one command from
+  done.
+
