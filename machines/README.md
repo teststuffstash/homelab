@@ -17,4 +17,5 @@ Benchmark = stress-ng `matrixprod` bogo-ops/s (synthetic, comparable across thes
 | wk-metal-02 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) | Lenovo ThinkPad X250 | 4 | 8 | laptop4 | — | — | — | — | — | — |
 | wk-metal-03 | k8s worker, ephemeral/compute tier (tainted; kata node) | Lenovo ThinkPad X260 (20F600A2MS), i5-6200U (Skylake, VT-x/KVM + AVX2) | 4 | 8 | — | — | — | — | — | — | — |
 | wk-metal-04 | k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier | desktop, i5-3570K (Ivy Bridge, VT-x/EPT, no AVX2) | 4 | 16 | — | — | — | — | — | — | — |
+| nx-01 | k8s worker, compute-only (no Longhorn — holds no data, drains instantly) | Supermicro X10DRT-P-G5-NI22 (Nutanix NX-6035-G5, CSE-827HD+ 2U twin), 2 × Xeon E5-2640 v4 | 40 | 64 | — | — | — | — | — | — | IPMI/BMC — the fleet's FIRST (ADR-013 assumed none): `ipmitool -I lanplus -H 192.168.2.123 -U ADMIN -P ADMIN chassis power on\|off\|cycle`. No WoL or smart plug needed. |
 | pop-os | the Docker host running this jail | workstation (Pop!_OS) | — | — | — | — | — | — | — | — | — |
