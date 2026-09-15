@@ -17,13 +17,18 @@
 # the pool hit 100 %: cp-01/wk-01/wk-02 paused on io-error, the API was down ~8 min
 # (docs/incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md). The headroom that matters for a
 # pool VM is the POOL's, never the guest filesystem's, and no DaemonSet knob reads it — hence:
-#   • `runner-image-prepull`     — the metal workers (zone != proxmox): real disks, two at a time.
-#   • `runner-image-prepull-pve` — the pool VMs (zone == proxmox): ONE at a time, and each pod's
+#   • `runner-image-prepull`     — the metal workers (a zone with real disks): two at a time.
+#   • `runner-image-prepull-pve` — the POOL VMs: ONE at a time, and each pod's
 #     init container holds the 4.9 GiB pull until Prometheus says the pool is under 75 %
 #     (pve_lvm_thin_pool_data_percent, the FU-093 meter; argocd/resources/pve-metrics/). No sample =
 #     no pull (fail closed): an unmetered pool is exactly the state that produced the incident.
 #     kubelet pulls a container's image when it STARTS that container, so the main image is not
 #     fetched until the gate exits 0.
+#
+# ⚠ The split is "LVM thin pool underneath" vs "a real disk", not the literal zone `proxmox`. With
+# the second hypervisor (nx-02, 2026-09-15) that is TWO zones — `proxmox` and `nx-02` — and the
+# POOL_ZONES list below is the one place that fact lives. A new hypervisor's zone joins both lists
+# or its VMs silently rejoin the ungated tier, which is exactly the FU-208 bug with a new name.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -48,7 +53,8 @@ spec:
             nodeSelectorTerms:
               - matchExpressions:
                   - { key: node-role.kubernetes.io/control-plane, operator: DoesNotExist }
-                  - { key: topology.kubernetes.io/zone, operator: NotIn, values: ["proxmox"] }
+                  # POOL_ZONES — keep in lockstep with the -pve DaemonSet's In list below.
+                  - { key: topology.kubernetes.io/zone, operator: NotIn, values: ["proxmox", "nx-02"] }
       tolerations:
         - { key: homelab.io/ephemeral, operator: Exists }
       securityContext:
@@ -75,9 +81,16 @@ metadata:
   name: runner-image-prepull-gate
   namespace: arc-runners
 data:
-  # The pool gate: block until the pve thin pool has headroom, or forever if nobody can say.
+  # The pool gate: block until the thin pools have headroom, or forever if nobody can say.
   # Runs in the -pve DaemonSet's init container (busybox: wget + sed). Threshold sits under the
-  # PveThinPoolFillingUp warning (80 %) so a warm-up never pushes the pool into the alert band.
+  # PveThinPoolFillingUp warning (80 %) so a warm-up never pushes a pool into the alert band.
+  #
+  # `max(...)` spans EVERY hypervisor pool, not the one under this node (2026-09-15, two
+  # hypervisors). One DaemonSet cannot parameterise a query per node, and the failure directions
+  # are not symmetric: over-holding costs a slow warm-up, under-holding cost the 2026-09-03
+  # outage. So the gate is deliberately conservative — a full pool anywhere holds every pool-VM
+  # pull. If that ever becomes the binding annoyance, the fix is a per-zone DaemonSet with its own
+  # query, not a looser gate.
   gate.sh: |
     #!/bin/sh
     set -u
@@ -119,7 +132,8 @@ spec:
             nodeSelectorTerms:
               - matchExpressions:
                   - { key: node-role.kubernetes.io/control-plane, operator: DoesNotExist }
-                  - { key: topology.kubernetes.io/zone, operator: In, values: ["proxmox"] }
+                  # POOL_ZONES — keep in lockstep with the metal DaemonSet's NotIn list above.
+                  - { key: topology.kubernetes.io/zone, operator: In, values: ["proxmox", "nx-02"] }
       tolerations:
         - { key: homelab.io/ephemeral, operator: Exists }
       securityContext:
