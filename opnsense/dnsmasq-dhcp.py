@@ -63,6 +63,13 @@ HOSTS = [  # static reservations preserved from ISC
     # integration that's addressed at .245). Any HA/integration device referenced by a
     # fixed IP needs a reservation here.
     {"host": "office-plants-irrigation", "hwaddr": "30:c6:f7:22:a8:fc", "ip": "192.168.2.245"},
+    # Nutanix NX-6035-G5 node 1 BMC — the fleet's FIRST BMC. Shipped carrying the previous
+    # owner's static 10.98.152.206/23, switched to DHCP 2026-09-15 and pinned at the address
+    # it took. Kept IN the pool deliberately: docs/ip-plan.md has no BMC class yet, and
+    # inventing one is a decision this pin does not need to make. LAN-only, never routed —
+    # the firmware can't be patched (Nutanix LCM wants an entitled cluster).
+    # Box detail: hardware repo docs/nx-6035-g5.md. Node 2's BMC follows when it is cabled.
+    {"host": "nx-01-bmc", "hwaddr": "ac:1f:6b:60:e5:5c", "ip": "192.168.2.123"},
     # --- pinned so they survive the .10->.100 pool move (were dynamic leases <.100) ---
     # UniFi network backbone — keep the switch + APs at stable IPs.
     {"host": "USW-Lite-8-PoE", "hwaddr": "68:d7:9a:5d:bb:48", "ip": "192.168.2.11"},
