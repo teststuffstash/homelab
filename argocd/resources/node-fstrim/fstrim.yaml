@@ -29,11 +29,14 @@
 # There is no `talosctl fstrim`, and Talos' VolumeConfig for EPHEMERAL exposes no discard mount
 # option. A privileged pod with /var hostPath'd is the mechanism.
 #
-# SCOPE: the four Talos VMs on the pool (machines.yaml `zone: proxmox`). The metal nodes are
-# deliberately absent — they have real disks with no thin pool underneath, so a trim there would
-# be wear-levelling housekeeping, not the failure this addresses. ci-runner-01 shares the pool but
-# is not a k8s node; it is a normal Linux guest and is covered by its own systemd fstrim.timer —
-# verify that separately, this CronJob cannot reach it.
+# SCOPE: every Talos VM whose disk sits on an LVM thin pool — the four on pve (`zone: proxmox`)
+# and, since 2026-09-15, wk-04 on nx-02's `nvme-thin` (`zone: nx-02`). The membership test is "a
+# thin pool underneath", NOT the literal zone `proxmox`: a second hypervisor's VM needs reclaim for
+# exactly the same reason, and `discard=on` in tofu is as insufficient there as it is here. The
+# metal nodes are deliberately absent — real disks, no pool, so a trim there would be
+# wear-levelling housekeeping rather than this failure. ci-runner-01 shares pve's pool but is not a
+# k8s node; it is a normal Linux guest covered by its own systemd fstrim.timer — verify that
+# separately, this CronJob cannot reach it.
 #
 # One CronJob per node because a Job cannot pin different pods to different nodes, and `nodeName`
 # is what puts a pod on a specific box. They are staggered so four simultaneous discards do not
@@ -103,10 +106,15 @@ data:
     PG="${PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
     PROM="${PROMETHEUS_URL:-http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090}"
     THRESHOLD="${GUARD_THRESHOLD:-79}"
+    # The series for THIS node's pool, url-encoded. Default = pve's, so the four pve VMs are
+    # unchanged; a VM on another hypervisor passes its own (POOL_QUERY on its CronJob). It must be
+    # the node's OWN pool, not `max()` over all of them: trimming wk-04 returns nothing to pve, so
+    # a shared query would make every guard fire on a pool it cannot help (and stay silent on the
+    # one it can).
+    POOL_QUERY="${POOL_QUERY:-pve_lvm_thin_pool_data_percent%7Bjob%3D%22pve-node%22%2Chost%3D%22pve%22%2Cvg%3D%22pve%22%2Clv%3D%22data%22%7D}"
 
-    # Single host-wide series — all four pool VMs read the same number.
     pool_pct=$(wget -q -O- --timeout=10 \
-      "${PROM}/api/v1/query?query=pve_lvm_thin_pool_data_percent%7Bjob%3D%22pve-node%22%2Cvg%3D%22pve%22%2Clv%3D%22data%22%7D" \
+      "${PROM}/api/v1/query?query=${POOL_QUERY}" \
       2>/dev/null | sed -n 's/.*"value":\[[^,]*,"\([0-9.]*\)"\].*/\1/p' | head -1)
 
     if [ -z "${pool_pct}" ]; then
@@ -532,6 +540,96 @@ spec:
               env:
                 - name: NODE_NAME
                   valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+# ── wk-04, on the SECOND hypervisor (nx-02, 2026-09-15) ────────────────────────────────────────
+# Same pair as every pool VM above, with one difference: `POOL_QUERY` points the guard at nx-02's
+# own pool. Trimming wk-04 returns blocks to `nvme-thin` on nx-02 and to nothing else, so reading
+# pve's number here would be the wrong signal in both directions.
+# The stagger is kept for readability, not for I/O: this is a different NVMe in a different box.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-wk-04
+  namespace: node-maintenance
+spec:
+  schedule: "41 3,15 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          nodeName: wk-04
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-guard-wk-04
+  namespace: node-maintenance
+spec:
+  schedule: "12,27,42,57 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          nodeName: wk-04
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim-guard
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/reactive-trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+                # nx-02's pool, url-encoded: {job="pve-node",host="nx-02",vg="nvme-thin",lv="data"}
+                - name: POOL_QUERY
+                  value: "pve_lvm_thin_pool_data_percent%7Bjob%3D%22pve-node%22%2Chost%3D%22nx-02%22%2Cvg%3D%22nvme-thin%22%2Clv%3D%22data%22%7D"
               securityContext:
                 privileged: true
               volumeMounts:

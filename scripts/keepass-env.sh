@@ -39,6 +39,12 @@ export ACME_CF_TOKEN="${ACME_CF_TOKEN:-$(_kp_get cloudflare-acme-token)}"       
 # tofu/provisioning (matchbox-scoped token). The MAIN root is unaffected: its broader token comes
 # from terraform.tfvars, and tfvars takes precedence over TF_VAR_* env.
 export TF_VAR_proxmox_api_token="${TF_VAR_proxmox_api_token:-$(_kp_get pve-api-token-matchbox)}"
+# The SECOND hypervisor's token (tofu/providers.tf alias `nx02`, 2026-09-15). Unlike the line
+# above this one is for the MAIN root: `nx02_api_token` is a required variable with no default, so
+# without it every main-root plan from a fresh checkout dies on "No value for required variable".
+# tofu/terraform.tfvars still wins where it exists (the tfvars-over-env rule) — this is what makes
+# a checkout that has no tfvars work at all.
+export TF_VAR_nx02_api_token="${TF_VAR_nx02_api_token:-$(_kp_get nx-02-api-token-tofu)}"
 
 export TF_VAR_grafana_admin_password="$(_kp_get grafana-admin-password)"
 export TF_VAR_ha_prometheus_token="$(_kp_get ha-prometheus-token)"
@@ -51,6 +57,6 @@ export TF_VAR_infisical_admin_email="$(_kp_get infisical-admin-email)"
 export TF_VAR_infisical_admin_password="$(_kp_get infisical-admin-password)"
 export TF_VAR_forgejo_runner_token="$(_kp_get forgejo-runner-token)"
 
-echo "keepass-env: exported TF_VAR_{grafana_admin_password,ha_prometheus_token,infisical_*,argocd_github_pat,ghcr_read_packages_token,infisical_admin_*,forgejo_runner_token} from $_kp_db" >&2
+echo "keepass-env: exported TF_VAR_{grafana_admin_password,ha_prometheus_token,infisical_*,argocd_github_pat,ghcr_read_packages_token,infisical_admin_*,forgejo_runner_token,nx02_api_token} from $_kp_db" >&2
 unset -f _kp _kp_get
 unset _kp_dir _kp_db _kp_key _d

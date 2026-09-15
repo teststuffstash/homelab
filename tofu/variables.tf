@@ -221,6 +221,14 @@ variable "nodes" {
     condition     = length([for n in var.nodes : n if n.role == "controlplane"]) >= 1
     error_message = "At least one controlplane node is required."
   }
+
+  # A typo puts a node in NEITHER hypervisor map, so no VM resource is created for it — while
+  # talos.tf still iterates every entry and blocks applying a machine config to an IP with nothing
+  # behind it. Silent at plan time; a long hang at apply time. Fail at plan instead.
+  validation {
+    condition     = alltrue([for n in var.nodes : contains(["pve", "nx-02"], n.hypervisor)])
+    error_message = "nodes[*].hypervisor must be \"pve\" (tofu/proxmox.tf) or \"nx-02\" (tofu/nx02.tf) — a value with no provider block creates no VM."
+  }
 }
 
 # ---- ArgoCD + Infisical bootstrap (the GitOps seam, tofu/argocd.tf) --------
