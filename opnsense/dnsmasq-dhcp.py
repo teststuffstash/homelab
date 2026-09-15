@@ -76,6 +76,12 @@ HOSTS = [  # static reservations preserved from ISC
     # address (docs/ip-plan.md: .51-.99) like m70s/hp-01, and maintenance IP == node IP so the
     # tofu apply target is clean.
     {"host": "nx-01", "hwaddr": "ac:1f:6b:60:ed:9a", "ip": "192.168.2.58"},
+    # NX-6035-G5 node 2 BMC. Same story as node 1: shipped on the previous owner's static
+    # (10.98.152.205 — one below node 1's .206), switched to DHCP 2026-09-15 and pinned where it
+    # landed. The node itself is NOT in the cluster: it is the trial box for the BMC virtual-media
+    # install path, deliberately left without a disk. Same standing caveat — LAN-only, never
+    # routed, firmware unpatchable (no Nutanix LCM entitlement).
+    {"host": "nx-02-bmc", "hwaddr": "ac:1f:6b:60:e5:8e", "ip": "192.168.2.173"},
     # --- pinned so they survive the .10->.100 pool move (were dynamic leases <.100) ---
     # UniFi network backbone — keep the switch + APs at stable IPs.
     {"host": "USW-Lite-8-PoE", "hwaddr": "68:d7:9a:5d:bb:48", "ip": "192.168.2.11"},
