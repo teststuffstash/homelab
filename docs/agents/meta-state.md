@@ -10,32 +10,13 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-15 — the NX box bring-up; blocked on the push credential).** The Nutanix
-  **NX-6035-G5** arrived (€399); full box detail + measurements live in the **hardware** repo,
-  `docs/nx-6035-g5.md` — read that first, not this bullet. State left live:
-  (1) **BMC on the LAN at `192.168.2.123`** (`nx-01-bmc`, `ADMIN`/`ADMIN` — password change
-  deliberately deferred by the operator while the box is on the bench; **it must not stay default
-  in use**). Reservation committed, applied, verified (`8f1d83a2`).
-  (2) **`nx-01` reserved at `192.168.2.58`** (eno1 only; `b068e222`, applied+verified). The node is
-  sitting in **Talos maintenance mode, RAM-only, disk untouched**.
-  (3) ⚠ **A transient Matchbox flag is ARMED and its declaration is UNCOMMITTED** —
-  `matchbox_group.nx_01` is live in `tofu/provisioning` state, and `tofu/provisioning/matchbox.tf`
-  is left modified in the working tree ON PURPOSE so config matches state (the committed file holds
-  no per-node group by design). Either finish the onboarding or
-  `tofu -chdir=tofu/provisioning destroy -target=matchbox_group.nx_01` and revert the file.
-  (4) ⚠ **BLOCKED: the install never ran.** `machines.yaml` + regenerated tables are committed on
-  the LOCAL branch **`fix/nx-01-onboard`** (`6f2ff3a9`, worktree under the session scratchpad),
-  deliberately NOT on master because the node is not installed and the card forbids committing an
-  unapplied change. The main root applies only from a **pushed** ref via the management box and the
-  **operator's push credential is expired** (he will refresh it next session). Resume: push the
-  branch → `MGMT_REF=origin/fix/nx-01-onboard devbox run mgmt-tf -- plan` → PR → merge →
-  `devbox run mgmt-tf -- apply -target='talos_machine_configuration_apply.metal["nx-01"]'` →
-  **remove the Matchbox flag** before the post-install reboot.
-  (5) **Unpushed master commits** from this session: `8f1d83a2`, `b068e222` + bookkeeping.
-  (6) The box is **powered on and idle at ~104 W**; only one of the two nodes is cabled, and the
-  second mains cord is not plugged (PSUs are chassis-level 1+1 shared by both nodes). Power it down
-  with `ipmitool -I lanplus -H 192.168.2.123 -U ADMIN -P ADMIN chassis power off` if it should not
-  idle overnight.
+- **⚑ (2026-09-15) `nx-01` is IN THE CLUSTER — done, nothing to pick up.** The Nutanix
+  NX-6035-G5 node 1 is a Ready compute-only worker at `192.168.2.58` (PR#1716, applied via the
+  management box, Matchbox flag removed, zone label applied). **It holds no Longhorn disk on
+  purpose**: the box is on a noise trial and may be removed, so a drain must stay instant — do not
+  give it storage without revisiting that. BMC at `192.168.2.123` (⚠ still `ADMIN`/`ADMIN`, operator
+  deferred; LAN-only, firmware unpatchable). Box detail lives in the private **hardware** repo,
+  `docs/nx-6035-g5.md` — not here.
 
 - **⚑ PICKUP (2026-09-14 midday session — the box + wk-03 window; arc in TICK-LOG).**
   (1) **Box hand-advance DONE** — gen 4, `mgmt-pull` hourly live (first tick advanced to
