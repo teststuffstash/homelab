@@ -183,9 +183,12 @@ machines:
   - name: wk-04
     kind: vm
     zone: nx-02        # the nx-02 BOX is the failure domain. ⚠ nx-01 and nx-02 are the two nodes
-                       # of ONE 2U twin chassis (shared backplane, 1+1 shared PSUs), so zones
-                       # nx-01 and nx-02 are not fully independent — harmless today (neither
-                       # carries a Longhorn disk), but it bounds what may ever be placed here.
+                       # of ONE 2U twin chassis (shared backplane, 1+1 shared PSUs), so as zone
+                       # labels they are NOT the independent domains Longhorn/Garage anti-affinity
+                       # reads them as. Harmless while neither carries data — both are declared
+                       # storage-free — so the rule is: BEFORE any replica is placed on either
+                       # node, collapse the two to ONE zone name. Renaming a zone after replicas
+                       # land makes Longhorn see a new empty disk and declare the old one missing.
     label: "`wk-04` (VM on nx-02)"
     role: k8s worker, untainted batch compute (the second hypervisor's first VM)
     hardware: Talos VM on nx-02
@@ -463,7 +466,11 @@ machines:
 
   - name: nx-01
     kind: metal
-    zone: nx-01
+    zone: nx-01        # ⚠ SAME 2U twin chassis as nx-02 (shared backplane + 1+1 PSUs), so these
+                       # two zone labels are NOT the independent domains Longhorn/Garage
+                       # anti-affinity reads them as. Both nodes are declared storage-free, which
+                       # is what keeps it harmless; before any replica lands on either, collapse
+                       # the two to ONE zone name (docs/storage-ledger.md §Requirements).
     label: "`nx-01` (Nutanix NX-6035-G5 node 1, 2U twin, PXE)"
     role: k8s worker, compute-only (no Longhorn — holds no data, drains instantly)
     hardware: Supermicro X10DRT-P-G5-NI22 (Nutanix NX-6035-G5, CSE-827HD+ 2U twin), 2 × Xeon E5-2640 v4
@@ -519,6 +526,9 @@ machines:
     # (Hard Disk #1, Network #2) so a mounted virtual CD can never hijack a boot again.
     # ⚠ BMC still on the factory ADMIN/ADMIN — LAN-only and never routed (ADR-013 posture),
     # to change before the box is load-bearing.
+    # ⚠ DR: tofu reaches this box over SSH with the shared pve seed key, and no Proxmox API can
+    # inject it — a rebuilt nx-02 needs `ssh-copy-id -i ~/.claude/homelab-pve-ssh/id_ed25519.pub
+    # root@192.168.2.59` before the first apply, or the apply dies mid-run at disk import.
     notes: Nutanix NX-6035-G5 node 2; Proxmox VE 9.2.2 hypervisor for wk-04; BMC 192.168.2.173; installed 2026-09-15.
 
   - name: ci-runner-01

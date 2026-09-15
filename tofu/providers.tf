@@ -20,8 +20,13 @@ provider "proxmox" {
 # The SECOND hypervisor (ROADMAP §Hardware strategy). nx-02 is the other node of the NX-6035-G5
 # twin; it runs its own Proxmox and its own API token, so it needs its own provider instance —
 # bpg has no per-resource endpoint. Nodes pick their hypervisor with `hypervisor` in var.nodes
-# (default "pve"); the alias is wired in tofu/nx02.tf. Same SSH seed key as pve: authorized in
-# nx-02 root's authorized_keys the same one-time way.
+# (default "pve"); the alias is wired in tofu/nx02.tf.
+#
+# ⚠ SSH: the same seed key as pve, so ONE key now opens root on both hypervisors. There is no
+# Proxmox API to inject it, so a rebuilt nx-02 must be re-seeded by hand before the first apply —
+# it fails mid-run at disk import otherwise. The step, verbatim:
+#   ssh-copy-id -i ~/.claude/homelab-pve-ssh/id_ed25519.pub root@192.168.2.59
+# (machines.yaml carries the same note on the nx-02 row; splitting the two keys is FU-241.)
 provider "proxmox" {
   alias     = "nx02"
   endpoint  = var.nx02_endpoint

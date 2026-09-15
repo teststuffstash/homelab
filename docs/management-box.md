@@ -271,6 +271,36 @@ is therefore push-then-apply from now on; the working tree is not something the 
 `management-apply` is the second status context the App posts: on the master commit the box
 applied (or refused) — the "deployed" signal a PR author reads after merge.
 
+### When the box refuses — the wedge (found 2026-09-15, FU-237 (e))
+
+A stage-1 refusal posts `failure` on `management-sentinel`, which is a **required** context. Three
+mechanisms then interlock and the PR cannot move at all:
+
+1. branch protection blocks the merge (correct — the box has not judged the change);
+2. `agents/review-reflex.sh` requires every present check green, so it never dispatches a reviewer;
+3. `agents/reviewer-session.sh` stands aside at STEP 0 on a concluded-failure check ("not mine to
+   adjudicate").
+
+So a PR the box legitimately declines to plan gets **no merge and no review** — and the policy
+file's own escape hatch, *"or gets a human plan in the jail"*, has no mechanism behind it: a human
+plan pasted on the PR turns no check green. First hit on **#1718** (a second `proxmox` provider
+instance for the nx-02 hypervisor — `tofu/providers.tf` is a `deny_paths` entry, so the refusal is
+exactly right); every `providers.tf` / `versions.tf` / `backend.tf` / `*.tfvars` / `*.sh` change
+under a planned root is the same shape.
+
+The refusal is a statement about **what the box may execute**, not about the change — so
+"refused" and "planned and bad" should not be the same verdict. Both fixes are policy calls, not
+quickfixes, because the obvious one (make a refusal non-blocking) weakens a gate that is
+deliberately conservative:
+
+- a distinct NEUTRAL/"not planned" conclusion for stage-1 refusals, leaving the merge gate to the
+  reviewer + CI, with the human plan as the recorded evidence; or
+- an explicit operator-direct lane for deny_paths changes, stated here and in the seat card beside
+  the existing "governance files the bot cannot gate" class.
+
+Until one is chosen, such a PR lands by an operator decision, with the jail's `mgmt-tf` plan posted
+on it.
+
 ## Rollback — three layers
 
 1. **It boots but the closure is bad** → `mgmt-confirm.service`, started by the pull (never by a

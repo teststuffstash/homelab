@@ -46,8 +46,16 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
   }
 
   cpu {
-    cores = each.value.cores
-    type  = "host"
+    # nx-02 is DUAL-socket (2 × E5-2640 v4, 10C/20T each, 32 GiB of RDIMMs per socket) where pve is
+    # single-socket — the one place the two VM blocks must differ. A flat 16-vCPU single-socket VM
+    # cannot fit inside one physical socket, so QEMU spreads its threads and its 32 GiB across both
+    # NUMA nodes while the guest sees a uniform machine and schedules as if memory were local.
+    # sockets=2 + numa=true make the guest topology match the host's, so Linux keeps a task's memory
+    # on its own node. `cores` is therefore PER SOCKET here; the node's total is cores × sockets.
+    cores   = each.value.cores / 2
+    sockets = 2
+    numa    = true
+    type    = "host"
   }
 
   memory {
