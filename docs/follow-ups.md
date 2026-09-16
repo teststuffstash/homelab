@@ -1195,12 +1195,12 @@ the block needs pruning, not more headings.
 - [ ] **FU-246** — **Talos ≥ v1.13.10 on the workers — the `page_table_check` reboot bug: POINTER.**
       Cause + evidence: [`docs/incidents/2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md)
       (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done 2026-09-16:** nx-01 +
-      wk-metal-02 `talosctl upgrade`d (verified `CONFIG_PAGE_TABLE_CHECK_ENFORCED` unset, kata intact);
-      wk-03 SHUT DOWN (a VM — recreate, never `talosctl upgrade`); **PR#1740** splits the declared
-      version by role (control plane v1.13.2 / workers v1.13.10). **Next (human apply, one at a
-      time):** `mgmt-tf apply -target` wk-03's recreate first, then wk-01/wk-02/wk-04 + the metal
-      config updates; the remaining metal workers via `talosctl upgrade` at convenience; Matchbox PXE
-      assets to v1.13.10 before the next metal reinstall. Subsumes FU-155 Option A; FU-033 gates 1.14.
+      wk-metal-02 `talosctl upgrade`d; PR#1740 (version by role, CP v1.13.2 / workers v1.13.10) merged;
+      **all four VM workers on v1.13.10 by 18:50Z** — wk-03 by design, wk-01/02/04 by the FU-248
+      incident (recovered as the upgrade, no data lost). Verified on every node: `CONFIG_PAGE_TABLE_CHECK_ENFORCED`
+      unset, kata intact where declared. **Next:** the 7 metal config updates (in place) + the remaining
+      metal workers via `talosctl upgrade` at convenience; Matchbox PXE assets to v1.13.10 before the next
+      metal reinstall; then a week's soak of `NodeRebootingRepeatedly` → archive. Subsumes FU-155 Option A; FU-033 gates 1.14.
 - [ ] **FU-248** — **`mgmt-tf apply` must apply a PLANNED command; VM recreates are `-exclude`-shaped.**
       2026-09-16: a `-target` apply for wk-03's config pulled the whole VM resource (dependency at
       resource granularity) and replaced wk-01/02/04 — [`docs/incidents/2026-09-16-targeted-apply-replaced-three-vms.md`](incidents/2026-09-16-targeted-apply-replaced-three-vms.md).
