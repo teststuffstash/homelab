@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-245** (2026-09-16: FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-248** (2026-09-16: FU-246 the workers' Talos version, FU-247 the kernel-oops alert; FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -21,6 +21,9 @@ tracker.
 - **An archive entry may stamp the date after the id or at the end of the entry** — both
   `- **FU-NNN** *(archived YYYY-MM-DD)* — …` and `- **FU-NNN** — … *(archived YYYY-MM-DD)*` are
   read by the freshness check. Prefer the first; it sorts and scans better.
+- **Terms link on first use, items link their evidence.** A ⚓ term from [`glossary.md`](glossary.md)
+  used in an item links its owning doc or the glossary on first use (`docs-graph-lint` check #3 reads
+  this file as one doc); a doc an item links back to must mention the id (`follow-ups-lint`).
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -357,21 +360,16 @@ six OVERSIZE items pointer-ized into
       planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
       `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on
       public repos), applied outside the jail. `oracle-iac` stays private permanently.
-- [ ] **FU-215** — **Unbound SERVFAILs `github.com` names in ~2-min windows — probable cause
-      WAN-wide upstream UDP loss; confirm from the resolver log.** Four windows 2026-09-05
-      (08:17, 09:19, 10:28 fired, 17:56Z), all self-cleared, one AFTER a restart → restart is no
-      remedy. DNSSEC is OFF (validation theory dead); the infra cache holds 99/385 IPv4 upstreams
-      timeout-inflated (root servers too) — github shows first because `api.github.com` (TTL
-      60 s) is recursed every minute. Evidence: TICK-LOG 2026-09-05 ~17:55Z. **Done:**
-      `log-servfail` pinned as code (PR#1454, `unbound_advanced`). **Next:** after the next
-      `UnboundGithubServfail` window read `diagnostics/log/core/resolver` (search `SERVFAIL`;
-      stamps are UTC+3); "upstream server timeout"/"all servers failed" → belt = `serveexpired`
-      (+ client-timeout) via the same var; optionally enable WAN gateway monitoring for a loss series.
-      **Seen again 2026-09-16 ~16:35–17:00Z** (operator's browser + the jail's `gh`/`git`; probe 16:56–17:00;
-      TICK-LOG) — the API log read returned `[]`, so the GUI read is still the open step.
-
-
-## CI & dependency automation
+- [ ] **FU-215** — **Unbound SERVFAILs `github.com` names in short windows — reason READ 2026-09-16:
+      `exceeded the maximum number of sends`; belt applied; root cause = do-ip6 on a v4-only WAN.**
+      Windows 09-05 ×4, 09-16 16:35–17:00Z (browser, jail `gh`/`git`, CI's Actions results-receiver).
+      Operator's resolver-log export: 39 SERVFAILs, every one "exceeded the maximum number of sends"
+      (retry exhaustion — the nsone authoritatives answered the LAN directly throughout). **Belt
+      LIVE** (PR pending, `unbound_advanced`): `prefetch` + `serveexpired` (stale ≤ 1 d, reply TTL 30,
+      client-timeout 1800 ms — RFC 8767). **Root cause (evidence):** infra cache holds 389 IPv6
+      name-server entries at the never-measured 376 ms placeholder while the WAN has NO IPv6 — OPNsense
+      sets `do-ip6` from Interfaces → Settings → *Allow IPv6* (`unbound.inc`), a legacy page with no
+      API. **Next (operator, GUI — no code path exists):** untick *Allow IPv6*, then watch the window rate.
 
 - [ ] **FU-051** — **Prove a dep bump flows E2E for the operator-chart and pod-image shapes**
       (the app+chart shape is proven — sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
