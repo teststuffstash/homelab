@@ -182,3 +182,14 @@ unbound_hosts:
 # at verbosity 1). Cheap: nothing is logged unless a query actually fails.
 unbound_advanced:
   logservfail: "1"
+  # FU-215's belt, applied 2026-09-16 once the reason was read: every github SERVFAIL window
+  # (16:56–16:58Z that day: github.com, api.github.com, the Actions results-receiver — 39 lines)
+  # is `exceeded the maximum number of sends` — Unbound exhausting its retries against the
+  # authoritatives while the WAN path itself still answers a direct query. The belt is RFC 8767:
+  # keep the hot names warm (`prefetch`) and answer from the expired cache while a resolution is
+  # still failing (`serveexpired`, stale for ≤ 1 day, TTL 30 in the reply, after 1.8 s of trying).
+  prefetch: "1"
+  serveexpired: "1"
+  serveexpiredreplyttl: "30"
+  serveexpiredttl: "86400"
+  serveexpiredclienttimeout: "1800"
