@@ -54,9 +54,23 @@ Correlation the tables missed: on wk-03 two or more ARC runners are present 7 % 
   threshold 2.43 V — BIOS settings will not survive an AC loss), PS2 "failure" = only PS1 cabled,
   PS1 chronically flaky in the 2021 entries. Worth the hardware register, not this incident.
 - wk-03's serial console (09-14) was the right instrument, armed one day before the fault moved
-  to nx-01. nx-01's equivalent is `ipmitool … sol activate` (its cmdline already has `console=ttyS0`).
+  to nx-01. nx-01's equivalent is `ipmitool … sol activate` — but NOT as first armed here: on the
+  X10DRT the BMC's SOL rides the second UART (`ttyS1`, 0x2F8), the v1.13.2 cmdline said `console=ttyS0`,
+  and the v1.13.10 metal image drops `console=ttyS0` altogether (`console=tty0` only) — the capture
+  saw nothing through nx-01's upgrade reboot. A metal console capture needs `console=ttyS1,115200`
+  as an image-factory `extraKernelArgs` (install-time), which FU-247 carries.
 - The cilium-agent CPU-throttle / restart loop and the ride kills were symptoms; kata guests cannot
   oops the host, and the three pre-kata reboots rule the kata upgrade out.
+
+## Fix, verified
+
+nx-01 `talosctl upgrade`d to v1.13.10 at 16:00Z (kata schematic kept): kernel 6.18.48-talos with
+`CONFIG_PAGE_TABLE_CHECK=y` but `CONFIG_PAGE_TABLE_CHECK_ENFORCED is not set` — the check is off
+unless `page_table_check=on` is passed, which Talos does not. wk-metal-02 followed at 16:20Z (its
+drain first stalled twice on a runner pod Terminating since its own 09-10 reboot — a Failed pod with
+no finalizer the kubelet never confirmed; `--force --grace-period=0` cleared it); wk-03 was shut down
+at 16:04Z until its VM is recreated from the v1.13.10 image (PR#1740 splits the declared
+version by role: control planes stay v1.13.2 until ADR-133's move, workers declare v1.13.10).
 
 ## Residual actions
 

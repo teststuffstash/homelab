@@ -9446,3 +9446,22 @@ was a symptom. wk-03 went quiet 09-14 because nx-01 took the jobs, not because o
 Records: incident doc, FU-246 (upgrade — same action as FU-155 Option A) + FU-247 (oops alert),
 comments on #1735 + #882, variables.tf/machines.yaml comment corrections, ipmitool into the jail
 Dockerfile. nx-01 stays cordoned; SOL capture armed from the jail. Bookkeeping committed, not pushed.
+
+## 2026-09-16 ~15:55–16:25Z — the quickfix: nx-01 + wk-metal-02 to v1.13.10, wk-03 stopped, the version split PR
+
+Operator: quickfix nx-01 + wk-metal-02, stop wk-03, three-CP migration another session, two Talos
+version variables (control plane / workers) meanwhile, the rollout's declared-vs-live gap accepted.
+**nx-01** `talosctl upgrade` 15:56→16:00Z (kata schematic kept; the upgrade uncordons); kernel
+6.18.48-talos, `CONFIG_PAGE_TABLE_CHECK_ENFORCED is not set` — the fix is a kernel-config default,
+no cmdline flag. **wk-metal-02** settled (no rides) then upgraded — the client-side drain stalled
+twice on `homelab-ephemeral-vkjf9-runner-kxrvg`: Failed, Terminating since 09-10 19:09 (ten minutes
+after that node's own bug reboot), no finalizer, the kubelet never confirmed it; plain delete no-op,
+`--force --grace-period=0` cleared it; done 16:20Z, verified the same way. **wk-03** `node-maintenance
+down` (FORCE=1 past the single-replica forgejo-runner WARN) 16:04Z — a nocloud VM, so the fix is the
+recreate, not an upgrade. **PR#1740** `talos_version_controlplane` v1.13.2 / `talos_version_worker`
+v1.13.10 (secrets + CP configs + plain nocloud image ← CP; worker configs + metal schematics +
+longhorn nocloud image ← worker; generate.py renders both); sentinel plan: 4 worker-VM replaces, 2
+image files, 7 metal config updates, 3 taint updates — 16 addresses outside the allowlist, human
+apply by target. The SOL capture was stopped: the X10DRT's SOL is ttyS1, and v1.13.10's metal
+cmdline dropped `console=ttyS0` — it never could have caught the panic (FU-247 carries the fix).
+Bookkeeping committed, not pushed (push after #1740 lands).

@@ -9,16 +9,18 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
-- **⚑ PICKUP (2026-09-16 ~16:00Z) — nx-01 reboots: ROOT CAUSE FOUND, node still CORDONED.**
-  It is the upstream `page_table_check` kernel bug (siderolabs/talos#13496), not the hardware and
-  not the burn-in — `docs/incidents/2026-09-16-page-table-check-reboots.md`; fix = **FU-246**
-  (Talos ≥ v1.13.10 on nx-01, wk-metal-02, wk-03; operator picks the window), detector = FU-247.
-  Posted on homelab#1735 + #882. **Keep nx-01 cordoned until it runs the fixed kernel** — every CI
-  job on it is a coin-flip reboot that kills the rides sharing the box (the ARC pool is wk-03 +
-  wk-metal-02 meanwhile; wk-metal-02 can hit the same bug). A SOL console capture runs from the
-  jail (`scratchpad/sol.sh` → `nx-01-sol.log`, dies with the container; wk-03 has the pve serial
-  log). `ipmitool` is baked into the claude-jail image now (the BMC at .123 was never operator-only).
-  FU-230 leg (b) second sighting stands as written in TICK-LOG (the 13:29:52 planned reboot).
+- **⚑ PICKUP (2026-09-16 ~16:25Z) — the page_table_check reboots: FIXED on the ARC metal nodes, wk-03 DOWN, PR#1740 open.**
+  Cause: siderolabs/talos#13496 (incident `docs/incidents/2026-09-16-page-table-check-reboots.md`),
+  not the hardware. nx-01 + wk-metal-02 run v1.13.10 (verified) and are uncordoned; **wk-03 is shut
+  down on purpose** — do NOT `node-maintenance up wk-03`; its path is the VM RECREATE from the
+  v1.13.10 image (`mgmt-tf apply -target='proxmox_virtual_environment_vm.node["wk-03"]'` + its
+  machine-config apply) once PR#1740 merges. **PR#1740** (two version variables by role; sentinel
+  plan = 4 worker-VM replaces + 7 metal config updates + the taint noise, all human-apply) waits on
+  the reviewer + auto-merge (squash armed); the box loop refuses until a human applies — apply by
+  target, one VM at a time (FU-246). FU-247 = alert on captured oopses + the console half (BMC SOL
+  is `ttyS1`; the v1.13.10 metal image ships `console=tty0` only). The three-CP program (ADR-133,
+  FU-243) is deferred to its own session by the operator; ⚠ operator named `wk-metal-02` as the
+  laptop CP today, ADR-133 says `wk-metal-03` — settle before that session starts.
 
 
 - **⚑ PICKUP (2026-09-16 corpus session — the responder rebuild; arc in TICK-LOG).**
