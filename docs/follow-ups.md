@@ -183,7 +183,7 @@ six OVERSIZE items pointer-ized into
       2 % five minutes later: agent start-up at its 250m limit, transient). The steady-state
       picture is the FU's: cilium agents 11–17 % on the slow-CPU boxes (wk-metal-03, hp-01, m70s),
       longhorn-manager 9–21 %, and `transcripts-viewer` 55 % at a 1-CPU limit on hp-01 (all of it
-      the bucket-sync container, 62 %). **DONE 2026-09-08 (operator: "run all of it"), PR#1519:
+      the bucket-sync container, 62 %). **Applied 2026-09-08 (operator: "run all of it"), PR#1519:
       manager 150m→300m, cilium agent 250m→500m, bucket-sync 1→2** — both DaemonSets rolled with
       the oracle delta job running, volumes healthy throughout. **Next:** re-read the throttling
       panel ≈2026-09-15; if manager/cilium sit under ~5 % and the sync burst under ~20 %, archive.
@@ -746,7 +746,7 @@ the block needs pruning, not more headings.
       of the same template succeed. A pipeline writer killed by an early-exiting reader under
       `set -o pipefail` in the scan preamble — the three `| grep -q` sites feed small variables,
       so the site was not named — **named 2026-09-09 by responder #1547: the `coordinator-scan.sh:1495`
-      parity-assertion `| head -1` (PR#1576, parked `blocked-on: human`, needs the ADR-103 replay pin).** Surfaced by the [switchboard](glossary.md) OOM read,
+      parity-assertion `| head -1` (PR#1576, parked `blocked-on: human`, needs the ADR-103 replay pin).** Surfaced by the switchboard OOM read,
       [`incidents/2026-09-06-switchboard-oom-silent-failures.md`](incidents/2026-09-06-switchboard-oom-silent-failures.md).
       **Next:** on the next 141, pull the run's Loki tail with `container="main"` and bisect the
       preamble between the last printed line and the first GitHub listing; fix = `>/dev/null`
