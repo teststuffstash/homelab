@@ -400,12 +400,14 @@ six OVERSIZE items pointer-ized into
       §The test surface. **Next:** write the table around those anchors. Relates FU-051, FU-012.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
-      `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617, operator-applied);
-      (b) the in-cluster no-root poster LIVE (#1631, four review rounds = the fail-closed policy-read
-      class across lib/sentinel/apply; proof: #1635's head carried the status 104 s after its commit,
-      ahead of the box's tick); `mgmt-policy-test` is a `ci` step (05ce8e8a). **Next:** (c) the
-      per-role user + env split; (d) the doorbell edge (lower priority now). Design + build state:
-      [`management-box.md`](management-box.md) §MB3. Relates FU-012, FU-097, ADR-130.
+      `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617); (b) the
+      in-cluster no-root poster LIVE (#1631); `mgmt-policy-test` is a `ci` step; **(e) the
+      stage-1-refusal wedge (no merge, no review — #1718) RULED + BUILT 2026-09-16, PR#1721:**
+      gate unchanged, `devbox run mgmt-human-plan -- <pr>` posts the human plan's verdict, a full
+      `mgmt-tf apply` stamps the apply baseline, `provider "…" {}` denied everywhere — §MB3 "When
+      the box refuses". **Next:** (c) the per-role user + env split; (d) the doorbell edge (lower
+      priority). Design + build state: [`management-box.md`](management-box.md) §MB3. Relates
+      FU-012, FU-097, ADR-130.
 - [ ] **FU-238** — **External-provider roots plan READ-ONLY on the box (operator, 2026-09-13):**
       box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
       host/jail until FU-097. **github DONE 2026-09-13** (read-only PAT + App keys via
