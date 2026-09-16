@@ -1,4 +1,4 @@
-# FU-232 (homelab#1734) — a reporter's pod with NO object label falls through to the target.
+# FU-232 (homelab#1733) — a reporter's pod with NO object label falls through to the target.
 #
 # CONDITION UNDER REPLAY. The live 2026-09-16 firing set, verbatim: NodeMemoryMajorPagesFaults
 # carries namespace=monitoring (the EXPORTER's namespace — node_vmstat_pgmajfault has no namespace

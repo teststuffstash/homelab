@@ -143,11 +143,11 @@ transitions:
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "Replaces selfQueue" }
       - desc: "a REOPENED thread is stripped back to a record — only a fresh verdict may re-earn the labels (replay: responder-reopen-fix-verdict / -report-only)"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "only a fresh verdict may re-queue it" }
-      - desc: "…but a thread a PERSON closed is RESTORED, never reopened — the newest close event's actor TYPE decides, and the belt re-closes after the session (homelab#1734; #103 had been operator-closed and lane-reopened 5x)"
+      - desc: "…but a thread a PERSON closed is RESTORED, never reopened — the newest close event's actor TYPE decides, and the belt re-closes after the session (homelab#1733; #103 had been operator-closed and lane-reopened 5x)"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "the person's decision stands" }
-      - desc: "DECIDED-ONCE: an OPEN issue whose TITLE names this alert and whose body carries a fix-verdict line means the condition is judged — the re-fire is one rewritten still-firing body line, no session, no budget (homelab#1734)"
+      - desc: "DECIDED-ONCE: an OPEN issue whose TITLE names this alert and whose body carries a fix-verdict line means the condition is judged — the re-fire is one rewritten still-firing body line, no session, no budget (homelab#1733)"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "already carries a verdict for" }
-      - desc: "the resolve leg's engagement split reads REST `.user.type`, never the `[bot]` login suffix — the suffix is a rendering GraphQL omits, and testing it against `gh issue view --json comments` made every machine comment count as a human for two months (homelab#1734)"
+      - desc: "the resolve leg's engagement split reads REST `.user.type`, never the `[bot]` login suffix — the suffix is a rendering GraphQL omits, and testing it against `gh issue view --json comments` made every machine comment count as a human for two months (homelab#1733)"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "REST is the authority" }
       - desc: "…and an unreadable comments probe never closes (rule #6 — never fail INTO a write; the probe-failed replay pins it)"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "never close on a failed read" }

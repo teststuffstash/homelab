@@ -1,4 +1,4 @@
-# FU-232 (homelab#1734) — an OBJECT label beats the REPORTER's pod label.
+# FU-232 (homelab#1733) — an OBJECT label beats the REPORTER's pod label.
 #
 # CONDITION UNDER REPLAY. The live 2026-09-16 firing set, verbatim: KubeDaemonSetRolloutStuck
 # carries namespace=arc-runners and daemonset=runner-image-prepull-pve (the failing object, from

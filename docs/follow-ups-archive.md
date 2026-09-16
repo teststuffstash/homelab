@@ -15,7 +15,7 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   the metric's EXPORTER whenever the failing object had no pod dimension of its own, so 19 of 28
   triage comments in the 09-04→11 week grafted onto five reporter threads (#811/#882/#542
   kube-state-metrics, #241 pushgateway, #103 node-exporter, #884 `ns:monitoring`). Shipped in
-  homelab#1734: the cascade reads the object's own labels (`daemonset`/`statefulset`/`deployment`/
+  homelab#1733: the cascade reads the object's own labels (`daemonset`/`statefulset`/`deployment`/
   `job_name`) BEFORE `pod`, and skips `pod` entirely when `job` names a monitoring scrape job —
   structural rather than a pod-name regex, because kube-state-metrics is scraped with honorLabels,
   so a metric that HAS a pod dimension legitimately keeps it. With no object label the key falls to

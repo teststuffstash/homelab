@@ -1,4 +1,4 @@
-# homelab#1734 — rule #6: never fail INTO a close.
+# homelab#1733 — rule #6: never fail INTO a close.
 #
 # CONDITION UNDER REPLAY. The comments probe is refused (`STUB_GH_… = fail`), which is the shape of
 # an RBAC denial, a rate-limit, or an API blip.

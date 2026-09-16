@@ -1,4 +1,4 @@
-# FU-232 (homelab#1734) — the WITNESS. A pod that really IS the object still wins.
+# FU-232 (homelab#1733) — the WITNESS. A pod that really IS the object still wins.
 #
 # WHY A GREEN-PATH FIXTURE. The re-key can be misread as "a pod label is never trustworthy", and
 # that misreading would be a worse bug than the one it fixes: kube-state-metrics is scraped with

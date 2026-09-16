@@ -18,7 +18,7 @@
 #   key        = THREE keys, cheapest first, all checked before a session is spawned. TWO live in
 #                the responder-seen ConfigMap (24h window): the alert fingerprint AND the FU-133
 #                subject (the RESOURCE), because a fingerprint is per-instance — one failing
-#                workflow mints a new one per run. The THIRD is DECIDED-ONCE (#1734): an OPEN issue
+#                workflow mints a new one per run. The THIRD is DECIDED-ONCE (#1733): an OPEN issue
 #                whose title names THIS alert and whose body carries a `fix-verdict:` line means
 #                the condition is already judged, so the re-fire lands as one rewritten
 #                `still-firing:` body line and no session is spawned at all. The ledger keys are
@@ -29,7 +29,7 @@
 #                `subject:<subj>` open-issue searches in the brief are the belts BEHIND all three,
 #                not the guard.
 #   reopen     = the fp/subject belts REOPEN a closed thread so a flapping alert restores its own
-#                record instead of churning issues — EXCEPT one a person closed (#1734). A human
+#                record instead of churning issues — EXCEPT one a person closed (#1733). A human
 #                close is a decision: the pre-snapshot reads each candidate's newest `closed` event
 #                actor (REST `.actor.type` — the `[bot]` suffix is a rendering, the type is the
 #                fact) and the post-session belt re-closes any reopen of a User-closed thread, with
@@ -82,7 +82,7 @@
 #                alert carries neither — RetroReportOverdue dispatched a ride at the retro belt
 #                and latched agent/error (homelab#237). The label is declared where the fact is
 #                known; the pairing is asserted in responder-behaviour-test.sh §#239.
-#   subject    = the FAILING OBJECT, never the metric's EXPORTER (FU-232, closed #1734). The
+#   subject    = the FAILING OBJECT, never the metric's EXPORTER (FU-232, closed #1733). The
 #                cascade reads the object's own labels — persistentvolumeclaim, workflow,
 #                daemonset, statefulset, deployment, job_name — BEFORE `pod`, and skips `pod`
 #                entirely when `job` names a monitoring scrape job, because kube-state-metrics and
@@ -327,7 +327,7 @@ spec:
               # Human engagement = a commenter GitHub types as a User rather than a Bot.
               #
               # ⚠ THIS TEST WAS DEAD FOR THE WHOLE OF 2026-08/09, AND ITS OWN COMMENT SAID WHY IT
-              # WAS SAFE (homelab#1734). It read `.comments[].author.login | test("\\[bot\\]$")`
+              # WAS SAFE (homelab#1733). It read `.comments[].author.login | test("\\[bot\\]$")`
               # off `gh issue view --json body,comments` and asserted "gh renders App logins with a
               # [bot] suffix HERE (REST)". That endpoint is **GraphQL**, and GraphQL returns a Bot's
               # bare login — `homelab-agents-1234`, no suffix — while REST returns
@@ -585,7 +585,7 @@ spec:
               fi
 
               # >>>REPLAY:responder-decided-once>>>
-              # ── DECIDED-ONCE — a standing condition is triaged ONCE, not once a day (#1734) ───
+              # ── DECIDED-ONCE — a standing condition is triaged ONCE, not once a day (#1733) ───
               # The subject ledger above keys on `triaged-<TODAY>`, so a condition that outlives a
               # UTC midnight buys a fresh sonnet session every day, forever. The sessions said so
               # themselves: homelab#1598 carries five daily comments reading "Re-fired with
@@ -837,7 +837,7 @@ spec:
               done
               [ -n "$PRECLOSED" ] && echo "→ $NAME ($FP): closed thread(s) a reopen could restore:$PRECLOSED"
 
-              # ── WHICH OF THOSE A HUMAN CLOSED (#1734) ────────────────────────────────────────
+              # ── WHICH OF THOSE A HUMAN CLOSED (#1733) ────────────────────────────────────────
               # The reopen belt exists so a FLAPPING alert reopens its own record instead of
               # churning new issues — a good rule with no opinion about WHO closed the thread. The
               # cost of that missing opinion, measured 2026-09-16 over the lane's long-lived
@@ -874,7 +874,7 @@ spec:
               # still the guard — this is the ADR-094 pairing, not a substitute for it.
               RECLOSE_NOTE=""
               [ -n "$HUMANCLOSED" ] && RECLOSE_NOTE="
-            ⚠ HUMAN-CLOSED THREADS — do NOT reopen these:$HUMANCLOSED. A person closed each of them deliberately, and the shell RE-CLOSES any reopen of them after your session (homelab#1734). If one of them is the right record for what you found, COMMENT on it and leave it closed. If what you found is genuinely new, file your own issue with a 'related: #N' line. Reopening is for a thread the resolve leg closed when its alert cleared — machinery undoing machinery — never for a human's decision."
+            ⚠ HUMAN-CLOSED THREADS — do NOT reopen these:$HUMANCLOSED. A person closed each of them deliberately, and the shell RE-CLOSES any reopen of them after your session (homelab#1733). If one of them is the right record for what you found, COMMENT on it and leave it closed. If what you found is genuinely new, file your own issue with a 'related: #N' line. Reopening is for a thread the resolve leg closed when its alert cleared — machinery undoing machinery — never for a human's decision."
 
               echo "── triaging $NAME ($FP) — route default: stack=$ROUTE_STACK repo=$ROUTE_REPO (the named fix surface may move it)"
               # The routed answer is a rail-prefixed id (`claude/sonnet`); the claude CLI takes the BARE
@@ -975,7 +975,7 @@ spec:
                 else
                   echo "→ reopened $pc: no stale lifecycle labels — already a clean record"
                 fi
-                # ── RESTORE A HUMAN CLOSE (#1734) ──────────────────────────────────────────────
+                # ── RESTORE A HUMAN CLOSE (#1733) ──────────────────────────────────────────────
                 # The session reopened a thread a person had closed. It may have had a good reason,
                 # and it does not get to act on it: the human's close is restored and the evidence
                 # survives as the session's own comment on the thread, which a person reads when
@@ -986,7 +986,7 @@ spec:
                     printf '%s\n' \
                       "🔁 **Reopen reverted** — this thread was closed by a person, and the responder's fingerprint/subject belt reopened it while triaging \`$NAME\` (alert-fp:\`$FP\`)." \
                       "" \
-                      "A human close is a decision, so the belt restores it (homelab#1734). The triage's own findings stay on this thread above; if the condition really is new, it belongs in a new issue rather than in a reopened verdict." \
+                      "A human close is a decision, so the belt restores it (homelab#1733). The triage's own findings stay on this thread above; if the condition really is new, it belongs in a new issue rather than in a reopened verdict." \
                       > /tmp/reclose.md
                     gh issue comment "$pnum" --repo "$prepo" --body-file /tmp/reclose.md >/dev/null 2>&1 || true
                     gh issue close "$pnum" --repo "$prepo" --reason completed >/dev/null 2>&1 \

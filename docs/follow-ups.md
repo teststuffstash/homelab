@@ -1016,8 +1016,8 @@ the block needs pruning, not more headings.
       **Leg (a) DONE 2026-09-12 (PR#1601)**: `node-maintenance.sh settle/down` silence the window,
       `up` expires it. ⚠ It still leaks the DaemonSet-rollout class (2026-09-16, #542 r3 — that
       alert carries neither `node` nor `instance`); leg (b) is the general fix, not more arms.
-      ⚖ **Re-weighed 2026-09-16 (#1734): real, no longer binding** — one of twenty filed issues,
-      against seven operator-close reversals and nine daily re-confirmations that #1734 fixed
+      ⚖ **Re-weighed 2026-09-16 (#1733): real, no longer binding** — one of twenty filed issues,
+      against seven operator-close reversals and nine daily re-confirmations that #1733 fixed
       deterministically. **Next:** leg (b) — a seat-written ConfigMap window record the brief
       prints like the ArgoCD observation-window line (durability caveat = FU-195) — when a SECOND
       window class leaks. Detail: `docs/spikes/responder-week-audit.md` §The 2026-09-16 pass.
@@ -1026,11 +1026,12 @@ the block needs pruning, not more headings.
       bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =
       actionable, history = git/S3). ⚠ **BLOCKED on FU-210** (no responder transcripts exist, so
       there is no `homelab/alert-<fp>/` prefix to write beside — verified empty 2026-09-16) and
-      **re-scoped by #1734**: the binding cost was the lane RE-DECIDING settled conditions, not
+      **re-scoped by #1733**: the binding cost was the lane RE-DECIDING settled conditions, not
       where a finding landed, and the decided-once gate removed that without a bucket.
-      **Next:** re-read once #1734 has soaked and FU-210 has landed — is the residual comment
+      **Next:** re-read once #1733 has soaked and FU-210 has landed — is the residual comment
       volume still worth re-routing? Mechanism, evidence and the MCP exclusion:
       `docs/spikes/responder-week-audit.md` §Design read + §The 2026-09-16 pass.
+
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
 
 - [ ] **FU-216** — **Rides' test IO rides virtiofs onto the shared laptop disk — try a memory-backed

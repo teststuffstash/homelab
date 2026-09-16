@@ -78,12 +78,12 @@ if [ "$1" = "api" ]; then
                   f="$H/gh/verdict-list-$(printf '%s' "$r" | tr / _).json"
                   { [ -f "$f" ] && cat "$f" || printf '[]'; } | _emit; exit 0 ;;
     */issues/*/events)
-                  # The human-close probe (#1734). Absent ⇒ exit 1, which the clause reads as
+                  # The human-close probe (#1733). Absent ⇒ exit 1, which the clause reads as
                   # "close actor unreadable" and treats as machine-closed — i.e. exactly today's
                   # reopen behaviour. The guard may only ever ADD a restore.
                   [ -f "$H/gh/events.json" ] && { _emit < "$H/gh/events.json"; exit 0; }; exit 1 ;;
     */issues/77/comments)
-                  # The resolve leg's engagement probe (#1734). REST is the authority here — it is
+                  # The resolve leg's engagement probe (#1733). REST is the authority here — it is
                   # the only endpoint that types a commenter (`.user.type`), which is what the
                   # GraphQL `gh issue view --json comments` the leg used to call cannot do. An
                   # ABSENT recording exits 1 so the rule-#6 "never close on a failed read" branch
@@ -144,7 +144,7 @@ alert()     { printf '{"alerts":[{"status":"firing","fingerprint":"%s","labels":
 resolved()  { printf '{"alerts":[{"status":"resolved","fingerprint":"%s","labels":{"alertname":"%s"}}]}' "$1" "$2"; }
 searchhit() { printf '[{"repository":{"nameWithOwner":"%s"},"number":%s}]' "$1" "$2" > "$H/gh/search.json"; }
 # `$2` is the REST comments payload — `[{"user":{"login":…,"type":"Bot"|"User"}}]`. The TYPE is
-# what the engagement probe reads (#1734): GraphQL returns a Bot's bare login while REST returns
+# what the engagement probe reads (#1733): GraphQL returns a Bot's bare login while REST returns
 # both the `[bot]` suffix AND the type, and the leg used to test the suffix against the GraphQL
 # endpoint, so every machine comment counted as a human for two months. Writing the type at each
 # call site is deliberate — it keeps the distinction visible in the scenario rather than hidden in
@@ -369,7 +369,7 @@ section "#149 — subject identity: a related-but-different subject files FRESH 
 # its own, and (b) instruct filing fresh + linking whenever the thread found does not already carry
 # it. A regression that deleted the boundary would fail here even though no issue is ever touched.
 
-# ⚠ UPDATED 2026-09-16 (#1734, FU-232). This scenario used to send the alert WITHOUT its `job`
+# ⚠ UPDATED 2026-09-16 (#1733, FU-232). This scenario used to send the alert WITHOUT its `job`
 # label and assert `subject=workload:monitoring/kube-prometheus-stack-prometheus-node-exporter` —
 # i.e. it asserted the GRAFT as correct behaviour, because the shape it sent could not reach the
 # reporter discriminator. The payload below is the live one, read off Alertmanager 2026-09-16:
@@ -576,7 +576,7 @@ wantnocall "already bound → no /sub_issues POST" "/sub_issues"
 want       "already bound → logged as 'skip re-link'" "skip re-link"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
-section "#1734 — a HUMAN's close is a decision the session is told about"
+section "#1733 — a HUMAN's close is a decision the session is told about"
 # The reopen belt (FU-133 subject + alert-fp) restores a closed thread so a FLAPPING alert does not
 # churn new issues — and it had no opinion about WHO closed the thread. Measured on the live board
 # 2026-09-16: homelab#103 closed by the operator and reopened by this lane FIVE times since

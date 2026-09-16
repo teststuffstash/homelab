@@ -1,4 +1,4 @@
-# homelab#1734 — the resolve leg closes a thread nobody but the machine touched.
+# homelab#1733 — the resolve leg closes a thread nobody but the machine touched.
 #
 # CONDITION UNDER REPLAY. homelab#1723: a PodSigkilled on loki/kmsg-reader filed 2026-09-16 07:02Z,
 # its alert cleared 17 minutes later, one comment on the thread and that comment is the lane`s own.

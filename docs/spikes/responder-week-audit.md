@@ -223,7 +223,7 @@ alert-born fixes are the maintenance stream, not a theme (ADR-126); (6) #1456's 
 closed by #1547/PR#1576.
 
 
-## The 2026-09-16 pass — a second week measured, and the four legs that shipped (#1734)
+## The 2026-09-16 pass — a second week measured, and the four legs that shipped (#1733)
 
 Operator, 2026-09-16: *"it still does mostly noise. Either turn it off completely or do the build
 that was planned."* This section is the second measurement and what it changed about the plan; the
@@ -294,7 +294,7 @@ to write beside (verified empty). So the order flipped, and the principle the ev
 
 | leg | what | pinned by |
 |---|---|---|
-| **R1** | the pre-snapshot reads each reopen candidate's newest `closed` event actor; the post-session belt re-closes any reopen of a User-closed thread, with one comment that is also the last word. The session is TOLD which threads those are, so it spends no turns on a reopen that gets reverted | `responder-reopen/human-closed`; `responder-behaviour-test.sh` §#1734 |
+| **R1** | the pre-snapshot reads each reopen candidate's newest `closed` event actor; the post-session belt re-closes any reopen of a User-closed thread, with one comment that is also the last word. The session is TOLD which threads those are, so it spends no turns on a reopen that gets reverted | `responder-reopen/human-closed`; `responder-behaviour-test.sh` §#1733 |
 | **R2** | DECIDED-ONCE: an OPEN issue whose title names THIS alert and whose body carries a `fix-verdict:` line means the condition is judged — the re-fire becomes one rewritten `still-firing:` body line and no session is spawned. Title-anchored on purpose, so a DIFFERENT alert class on one subject still triages (the #1686 shape) | `responder-decided-once/{decided,witness-different-alert}` |
 | **R3** | the engagement probe moves to REST and keys on `.user.type`; an unreadable probe never closes (rule #6) | `responder-engagement/{bots-only,human-engaged,probe-failed}` |
 | **R4** | FU-232: object labels before `pod`, `pod` skipped when `job` names a monitoring scrape job, then node → `instance:` → per-class `alert:<name>` | `responder-subject/{daemonset-reporter-pod,node-exporter-instance,statefulset,witness-pod-owned}` |
@@ -315,5 +315,5 @@ Two things worth carrying forward from the build itself:
 
 - **FU-230 leg (b)** (the declared-window ConfigMap): real, re-weighed to non-binding — build it
   when a second window class leaks.
-- **FU-231's bucket**: blocked on FU-210; re-read after #1734 soaks.
+- **FU-231's bucket**: blocked on FU-210; re-read after #1733 soaks.
 - **The MCP server**: unchanged, no consumer (`docs/agents/README.md` §Open).

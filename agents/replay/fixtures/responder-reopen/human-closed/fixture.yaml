@@ -1,4 +1,4 @@
-# homelab#1734 — a HUMAN's close is a decision, and the belt restores it.
+# homelab#1733 — a HUMAN's close is a decision, and the belt restores it.
 #
 # CONDITION UNDER REPLAY. Byte-for-byte the world of `responder-reopen-report-only` — same alert,
 # same two closed candidates, same reopen of #103 by the FU-133 subject belt — with exactly one
@@ -15,7 +15,7 @@
 # THE CONTRACT:
 #   1. The actor TYPE is the fact, not the login suffix. `[bot]` is a REST rendering that GraphQL
 #      omits — the same mismatch that killed the resolve leg's engagement test for two months
-#      (#1734's sibling fix) — so this reads `.actor.type` and nothing else.
+#      (#1733's sibling fix) — so this reads `.actor.type` and nothing else.
 #   2. The label strip still runs FIRST: the thread ends as a clean CLOSED record, not a closed one
 #      wearing a dead life's `agent/queued`.
 #   3. ONE comment, and it is also the last word, because the thread ends closed — the #148 rule

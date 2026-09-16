@@ -1,4 +1,4 @@
-# homelab#1734 — a STANDING condition is triaged ONCE, not once a day.
+# homelab#1733 — a STANDING condition is triaged ONCE, not once a day.
 #
 # CONDITION UNDER REPLAY. The live homelab#1598. `BlockingCodeownerParkWaiting` has been firing
 # continuously since 2026-09-11; its issue is OPEN and already carries `fix-verdict: report-only`.

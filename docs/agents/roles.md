@@ -224,7 +224,7 @@ never harder posture on quiet ones.
   → ONE inert issue on the stack's -iac/app repo → homelab only for platform namespaces or
   needs-platform (routing = alert namespace → stacks.json); backstop = none (alerts refire
   ≤3h); key = 24h fp ledger (`responder-seen` cm, namespaced RBAC) + fp-issue search belt
-  + **DECIDED-ONCE** (2026-09-16, homelab#1734): an OPEN issue whose title names THIS alert and
+  + **DECIDED-ONCE** (2026-09-16, homelab#1733): an OPEN issue whose title names THIS alert and
   whose body carries a `fix-verdict:` line means the condition is already judged, so the re-fire
   lands as one rewritten `still-firing:` body line and spawns NO session. The ledger keys are
   per-UTC-day and so re-armed every midnight, which made a standing condition cost a judgment

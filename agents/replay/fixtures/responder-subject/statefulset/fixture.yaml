@@ -1,4 +1,4 @@
-# FU-232 (homelab#1734) — the statefulset arm, the #811 magnet's own shape.
+# FU-232 (homelab#1733) — the statefulset arm, the #811 magnet's own shape.
 #
 # CONDITION UNDER REPLAY. KubeStatefulSetReplicasMismatch on loki/loki: kube_statefulset_status_*
 # carries `statefulset` and the object's `namespace`, and has no pod dimension, so the scrape
