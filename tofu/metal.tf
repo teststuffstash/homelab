@@ -200,14 +200,17 @@ resource "kubernetes_node_taint" "ephemeral" {
     value  = "true"
     effect = "NoSchedule"
   }
-  # ⚠ NEVER `force = true` here (tried 2026-09-16, reverted the same hour): `.spec.taints` is an
-  # ATOMIC list, so a forced server-side apply makes this resource the owner of the WHOLE list —
-  # the next apply drops every taint it did not declare (nx-01's cordon showed up as "- taint
-  # node.kubernetes.io/unschedulable"), and because it shares the default "Terraform" field
-  # manager with kubernetes_labels, the same patch pruned the zone labels off all six ephemeral
-  # nodes. The standing conflict on a node cilium-operator has already untainted ("conflict with
-  # cilium-operator-generic using v1: .spec.taints") is real and unsolved here — the taint's
-  # proper home is the Talos machine config (machine.nodeTaints), tracked on FU-235.
+  # Its OWN field manager (2026-09-16): both this resource and kubernetes_labels default to the
+  # server-side-apply manager "Terraform", and SSA prunes every field that manager owns and the
+  # new patch omits — so ANY re-apply of this taint stripped `topology.kubernetes.io/zone` off the
+  # node (all six ephemeral nodes, then wk-03 again on a non-forced re-test), and a labels apply
+  # could do the reverse to the taint. A distinct manager confines the prune to this resource's
+  # own fields. ⚠ NEVER `force = true` here either: `.spec.taints` is an atomic list, so a forced
+  # apply makes this resource the owner of the WHOLE list and the next apply drops the cordon and
+  # cilium's taints (nx-01 planned "- taint node.kubernetes.io/unschedulable"). The standing
+  # conflict on a node cilium-operator has already untainted is unsolved here — the taint's proper
+  # home is the Talos machine config (machine.nodeTaints), FU-235.
+  field_manager = "tofu-node-taint"
 }
 
 # State moves for the four resources the for_each above replaces (same node, same taint, same

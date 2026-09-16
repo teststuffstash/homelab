@@ -1196,8 +1196,9 @@ the block needs pruning, not more headings.
       pool is 2, not 4 (`tofu/kata.tf:30` nodeSelector). (2) **2026-09-16:** `kubernetes_node_taint.ephemeral`
       cannot own `.spec.taints` on a node cilium-operator has untainted (nx-01: `Field manager
       conflict`, Ready 18 h) — `force = true` was tried and reverted the same hour: taints are an
-      ATOMIC list (a forced owner drops the cordon + cilium's taints next apply) and the shared
-      "Terraform" manager pruned the zone labels off all six ephemeral nodes (restored). **Next:**
+      ATOMIC list (a forced owner drops the cordon + cilium's taints next apply); and the shared
+      "Terraform" SSA manager made EVERY taint re-apply prune the zone labels (six nodes, then
+      wk-03 on a non-forced re-test; restored; own `field_manager` since 39afa57f+1). **Next:**
       move BOTH labels and taints into the Talos machine config (`machine.nodeLabels` already
       carries kata; add `machine.nodeTaints`) and retire the k8s-provider taint resource; the
       -03 apply is safe, -04 inside a maintenance window (Garage zone, GAPS `tofu-apply-G2`);
