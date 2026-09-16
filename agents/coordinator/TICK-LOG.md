@@ -9318,3 +9318,12 @@ Issues: #1620, #1621.
   nx-02's `TerraformProv` role gained `VM.GuestAgent.Audit` (PVE 9 priv the VM agent read wants);
   the nx-01-diag Matchbox group committed (f844711a — was live + in state, in git nowhere).
   nx-01 itself is NOT reinstalled — the metal config applied in place; the wipe is the PXE path.
+- **Addendum, the real cause (08:1xZ):** the label prune was never the `force` flag — a
+  non-forced re-apply of the wk-03 taint stripped its zone label again. `kubernetes_node_taint`
+  and `kubernetes_labels` both defaulted to the SSA field manager "Terraform", and server-side
+  apply prunes every field that manager owns and the new patch omits. Fix d4b350f3: the taint
+  resource gets `field_manager = "tofu-node-taint"`; the five non-nx-01 taints re-applied under
+  it, every zone label survived (re-read). Remaining plan: the nx-01 taint alone (cilium-operator
+  conflict, FU-235 — never force). The apply loop will refuse master on it until FU-235 moves
+  the taint into the Talos machine config; a human `mgmt-tf apply` on that resource errors, so
+  the baseline stays at 95b3159a by design for now.
