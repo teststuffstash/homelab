@@ -1,0 +1,38 @@
+# homelab#1733 — a STANDING condition is triaged ONCE, not once a day.
+#
+# CONDITION UNDER REPLAY. The live homelab#1598. `BlockingCodeownerParkWaiting` has been firing
+# continuously since 2026-09-11; its issue is OPEN and already carries `fix-verdict: report-only`.
+# The alert re-fires on a new UTC day, which is the ONLY thing that changed.
+#
+# WHAT IT REDS ON. The subject ledger keys on `triaged-<TODAY>`, so before this gate a condition
+# that outlived a midnight bought a fresh sonnet session every day, forever. #1598 carries five of
+# them, each saying so in its own words — "Re-fired with identical state — confirming, not
+# re-deriving" (09-12), "Re-fired again … same continuous instance" (09-13), and on. #1663 has the
+# same shape ("Same signature as the last two triages"). Measured 2026-09-11→16: ~40 % of the
+# lane's sessions were re-confirmations, while 32 OTHER alerts were dropped unread at the FU-149
+# daily cap. Paying a judgment session to re-confirm a judgment already on file is the worst trade
+# in this lane, and it was starving the alerts that had no judgment at all.
+#
+# THE CONTRACT:
+#   1. NO SESSION. The gate `continue`s, so the sentinel `reached.sh` never prints. That absence is
+#      the assertion — everything downstream (the fp ledger, the FU-149 budget check, the triage
+#      itself) is skipped, which is where the saving actually is.
+#   2. The re-fire lands in the BODY as ONE `still-firing:` line, drop-then-append exactly like the
+#      resolve leg's `last-cleared:`. N re-fires stay one line; a comment here would repeat once per
+#      fire on a thread that never closes, which is the #148 rule this lane already learned once.
+#   3. A ledger marker is written (`decided-`), per FU-113(a): a deliberate stop must be
+#      distinguishable from a drop, or `meta-alert-crosscheck.sh` reads it as stuck machinery. The
+#      prefix matches neither the FU-149 cap's `<date>|` arithmetic nor the subject ledger's
+#      `triaged-` value, so a decided alert costs no budget and re-arms no dedup.
+#   4. The decision is re-opened by the ISSUE CLOSING, nothing else — which is what makes the
+#      resolve leg's auto-close (fixed in this same change) load-bearing rather than cosmetic.
+pins:
+  - IL-T03
+name: responder-decided-once-decided
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-decided-once
+  - file:reached.sh
+  - file:post.sh

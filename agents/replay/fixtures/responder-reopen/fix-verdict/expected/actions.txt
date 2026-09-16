@@ -1,5 +1,7 @@
 CALL gh search issues --owner teststuffstash --match body subject:node:wk-01 --state closed --json repository,number --limit 20
 CALL gh search issues --owner teststuffstash --match body alert-fp:1f3a9c72b0d45e86 --state closed --json repository,number --limit 20
+CALL gh api repos/teststuffstash/homelab/issues/103/events --paginate --jq [.[] | select(.event == "closed")] | last | "\(.actor.type // "?")"
+CALL gh api repos/teststuffstash/homelab/issues/77/events --paginate --jq [.[] | select(.event == "closed")] | last | "\(.actor.type // "?")"
 CALL gh api repos/teststuffstash/homelab/issues/103 --jq .state + "|" + ([.labels[]?.name] | join(","))
 CALL gh issue edit 103 --repo teststuffstash/homelab --remove-label agent/queued,agent/done,agent-fix
 CALL gh api repos/teststuffstash/homelab/issues/77 --jq .state + "|" + ([.labels[]?.name] | join(","))

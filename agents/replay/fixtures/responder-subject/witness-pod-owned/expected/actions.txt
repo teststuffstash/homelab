@@ -1,0 +1,2 @@
+OUT → KubePodNotReady (c0bb40a7032f4b58): subject=workload:loki/alloy
+RC 0
