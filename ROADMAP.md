@@ -100,9 +100,10 @@ integrations over cloud ones. Live today; the remaining WAN-down gap is ArgoCD's
 
 ## HA model (target end-state — re-phased 2026-09-16, ADR-132/-133)
 
-Three independent failure layers — keep them distinct. **Order (operator, 2026-09-16): the management
-box first, three control planes second, router HA last** — the box is what fixes the other two when they
-fail, and three CPs make the router work survivable.
+Four independent failure layers (1–4) — keep them distinct — and, before any of them, the thing that
+operates them (0). **Order (operator, 2026-09-16): the management box first, three control planes second,
+router HA last** — the box is what fixes the other layers when they fail, and three CPs make the router
+work survivable.
 
 0. **The management box as reconciler** (ADR-132, [`docs/management-box.md`](docs/management-box.md) §MB4):
    the declared-vs-live diff (FU-235) → the controller-substrate spike (FU-242) → the pre-merge impact line →
