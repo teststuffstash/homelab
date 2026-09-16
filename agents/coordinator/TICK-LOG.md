@@ -9379,3 +9379,50 @@ kata half is the deferred `machines.yaml` change, and wk-metal-04 waits on the n
   conflict, FU-235 — never force). The apply loop will refuse master on it until FU-235 moves
   the taint into the Talos machine config; a human `mgmt-tf apply` on that resource errors, so
   the baseline stays at 95b3159a by design for now.
+
+## 2026-09-16 — the responder, measured a second time and rebuilt (corpus session)
+
+Operator: *"it still does mostly noise. Either turn it off completely or do the build that was
+planned."* Corpus loaded; the answer was neither exactly — the PLANNED build (FU-231's
+bucket-first findings) was aimed at the wrong half, and the measurement is what said so.
+
+**The window 09-11→16:** 40 triage sessions, 20 homelab issues, **32 alerts dropped unread** at
+the FU-149 daily cap (25 on 09-14, 7 by midday today). ~8 of the 20 were genuinely actionable, so
+the catch rate is real; the budget was going to re-deciding settled conditions.
+
+**Four generators, each measured rather than inferred** (full audit:
+`docs/spikes/responder-week-audit.md` §The 2026-09-16 pass):
+1. the reopen belt undoes the operator's own closes — **#103 closed by the operator and reopened
+   by the lane 5×** since 08-05, #100/#121 3× each, #542/#811/#241/#538 all reopened after an
+   operator close (two within 48 h of the 09-14 pass). Untracked.
+2. the subject ledger keys on `triaged-<TODAY>`, so a standing condition buys a session every UTC
+   day forever — #1598 carries five *"confirming, not re-deriving"* comments. ~40 % of sessions.
+   Untracked.
+3. the resolve leg's auto-close **has never worked**: it tested the `[bot]` suffix against
+   `gh issue view --json comments`, which is GraphQL and omits it, while its own comment asserted
+   that endpoint was REST. Every machine comment counted as a human. Untracked; same class as
+   FU-069, which the dead comment cited as the reason it did not apply.
+4. FU-232's reporter-keyed subject, still live (#1644's subject was literally
+   `workload:arc-runners/kube-prometheus-stack-kube-state-metrics`).
+
+FU-230's class produced ONE of the twenty (#1600) — real, no longer binding.
+
+**Shipped as PR#1733** (4 legs, all deterministic shell in `responder-argo.yaml`): human-close
+guard, decided-once gate, REST engagement probe, FU-232 subject re-key (**FU-232 archived**).
+Replay: 10 new/changed fixtures, 6 red on master by stream move; behaviour test 126/126.
+FU-230/FU-231 re-pointed at the spike with their reasons — FU-231 is BLOCKED on FU-210 (no
+responder transcripts exist; the `homelab/alert-<fp>/` prefix is empty, verified).
+
+**Two lessons worth the ink.** The ADR-103 ratchet caught a defect in *this* change before it
+shipped — the decided-once predicate was written `test(…; "im")` and matched nothing, because on
+jq 1.6 `^` is string-anchored and jq's `m` means "dot matches newline"; `(?m)` inline is required.
+And `responder-behaviour-test.sh` §#149's graft scenario had been sending its alert WITHOUT the
+`job` label and asserting the GRAFT as the expected subject — **a test asserting a bug as
+correct**, green through the whole of FU-232's life.
+
+**Board drain, seat-side:** #1546, #530, #1547 closed (alert cleared, zero human engagement;
+#1547's fix merged 09-14 and the belt had reopened it afterwards). Open 🚨 24 → 21.
+
+**Quickfix, direct:** `devbox run diff-ci` was FAILING on master for everyone — `ci.yaml` runs
+`agentstack-rbac-lint` and the path→task map had no row for it, which its own one-home invariant
+reds on. One row added (`scripts/**` is codeowner-author, so PR is not a route).
