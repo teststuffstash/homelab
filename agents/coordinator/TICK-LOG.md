@@ -9477,3 +9477,24 @@ entries at rtt ≈830 ms, no timeouts. `UnboundGithubServfail` reached `pending`
 `[]` with every parameter shape — the `log-servfail` line the FU waits for is still unread (GUI
 read — the API key lacks the log privilege: the system log returns `[]` the same way). Self-cleared,
 as every FU-215 window has. No config touched.
+
+## 2026-09-16 ~17:10–17:40Z — FU-215 closed in on: the log reason, the belt, the IPv6 root
+
+Operator uploaded the resolver log ("nothing interesting there") — it was the line FU-215 waited
+for since 09-05: 39 × `SERVFAIL <…>: exceeded the maximum number of sends` 16:56–16:58Z
+(github.com, api.github.com, results-receiver.actions.githubusercontent.com, a glb-* CNAME). The
+operator then pasted three generic suggestions; checked each against evidence: (1) 0x20
+`use-caps-for-id` — not exposed in this OPNsense's Unbound settings at all; (2) forwarding mode —
+would work by sidestepping recursion, a design change, not taken; (3) IPv6 — CONFIRMED: the WAN
+(`em0`) has no IPv6 config and the router has only an IPv4 default route, yet Unbound's infra cache
+carries 389 IPv6 name-server entries (all at the 376 ms "never measured" placeholder), i.e.
+`do-ip6: yes` — and `opnsense/core` `unbound.inc` sets `do-ip6` from `is_ipv6_allowed()` =
+Interfaces → Settings → Allow IPv6, a legacy page with no API (NLnetLabs/unbound#422 is the same
+failure). Belt applied meanwhile as code — `prefetch` + `serveexpired` (RFC 8767 values) via the
+opnsense-unbound playbook from branch `fix/unbound-serve-expired`, read back from the API; the
+oxlorg.opnsense collection had to be installed from GitHub (galaxy.ansible.com 502 all afternoon —
+the wrapper's silent install and mine corrupted its cache). Also: the tracker counter was stale
+(FU-245 filed without bumping it; now FU-248), and my FU-219 backlink fix had removed the one
+glossary link `docs-graph-lint` check #3 needed — master was red on that lint for ~35 min; fixed by a
+conventions line that names glossary.md outside any item (check #3 is per-file, the backlink rule
+is per-item). Both PRs' second CI runs failed on exactly that; re-merging master into them.
