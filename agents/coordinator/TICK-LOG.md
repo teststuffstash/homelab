@@ -9426,3 +9426,54 @@ correct**, green through the whole of FU-232's life.
 **Quickfix, direct:** `devbox run diff-ci` was FAILING on master for everyone — `ci.yaml` runs
 `agentstack-rbac-lint` and the path→task map had no row for it, which its own one-home invariant
 reds on. One row added (`scripts/**` is codeowner-author, so PR is not a route).
+
+## 2026-09-16 ~15:30–16:00Z — the nx-01 investigation: a kernel bug, not the burn-in
+
+Picked up the meta-state handover. The "operator-only" BMC read was one `apt-get install ipmitool`
+away — .123 answers from the jail. SEL: nothing for today's resets (no PSU/thermal/ECC/watchdog
+event, BMC clock continuous since the 09-15 power-on; the dated `PEF Action` at BMC 14:32 = real
+06:37 is the morning power-on); real-but-irrelevant facts: VBAT 1.16 V (dead CMOS cell), PS2
+"failure" = uncabled. IPMI watchdog stopped. So: a **software** reboot (`panic_on_oops=1`,
+`panic=10`). Prometheus added a boot the handover missed (14:27:55 → the cadence was 43/15/15 min).
+Operator's mid-turn cue — "wk-03 had unexplained reboots, I attributed them to VM overprovisioning
+but it might be arc + talos + more than one runner" — was right: 2+ runners are on wk-03 7 % of the
+time, yet 4/6 of its reboots and 3/4 of nx-01's had 2–5. Loki's kmsg before three resets (wk-03
+09-10, nx-01 14:25 + 14:40): `kernel BUG at mm/page_table_check.c:143` in `free_time_ns`, Comm
+`crossplane` uid 65532 in an ARC job — siderolabs/talos#13496, fixed by `page_table_check=off`
+from Talos 1.13.4 (kernel patch in 1.14); cluster is v1.13.2. Rides were victims (kata guests
+cannot oops the host); the three pre-kata reboots rule the kata upgrade out; the cilium throttle
+was a symptom. wk-03 went quiet 09-14 because nx-01 took the jobs, not because of the right-size.
+Records: incident doc, FU-246 (upgrade — same action as FU-155 Option A) + FU-247 (oops alert),
+comments on #1735 + #882, variables.tf/machines.yaml comment corrections, ipmitool into the jail
+Dockerfile. nx-01 stays cordoned; SOL capture armed from the jail. Bookkeeping committed, not pushed.
+
+## 2026-09-16 ~15:55–16:25Z — the quickfix: nx-01 + wk-metal-02 to v1.13.10, wk-03 stopped, the version split PR
+
+Operator: quickfix nx-01 + wk-metal-02, stop wk-03, three-CP migration another session, two Talos
+version variables (control plane / workers) meanwhile, the rollout's declared-vs-live gap accepted.
+**nx-01** `talosctl upgrade` 15:56→16:00Z (kata schematic kept; the upgrade uncordons); kernel
+6.18.48-talos, `CONFIG_PAGE_TABLE_CHECK_ENFORCED is not set` — the fix is a kernel-config default,
+no cmdline flag. **wk-metal-02** settled (no rides) then upgraded — the client-side drain stalled
+twice on `homelab-ephemeral-vkjf9-runner-kxrvg`: Failed, Terminating since 09-10 19:09 (ten minutes
+after that node's own bug reboot), no finalizer, the kubelet never confirmed it; plain delete no-op,
+`--force --grace-period=0` cleared it; done 16:20Z, verified the same way. **wk-03** `node-maintenance
+down` (FORCE=1 past the single-replica forgejo-runner WARN) 16:04Z — a nocloud VM, so the fix is the
+recreate, not an upgrade. **PR#1740** `talos_version_controlplane` v1.13.2 / `talos_version_worker`
+v1.13.10 (secrets + CP configs + plain nocloud image ← CP; worker configs + metal schematics +
+longhorn nocloud image ← worker; generate.py renders both); sentinel plan: 4 worker-VM replaces, 2
+image files, 7 metal config updates, 3 taint updates — 16 addresses outside the allowlist, human
+apply by target. The SOL capture was stopped: the X10DRT's SOL is ttyS1, and v1.13.10's metal
+cmdline dropped `console=ttyS0` — it never could have caught the panic (FU-247 carries the fix).
+Bookkeeping committed, not pushed (push after #1740 lands).
+
+## 2026-09-16 ~16:35–17:00Z — FU-215 window, live: github.com SERVFAIL on Unbound
+
+Operator: `DNS_PROBE_FINISHED_NXDOMAIN` for github.com; the jail's master push hung on the same.
+`dig @192.168.2.1 github.com` → SERVFAIL (api.github.com too); google.com/example.com NOERROR; LAN
+overrides fine; 1.1.1.1/8.8.8.8 resolve github. GitHub's nsone authoritatives answered the LAN
+directly (UDP + TCP, NOERROR) while Unbound still failed — the infra cache at 17:00 showed the nsone
+entries at rtt ≈830 ms, no timeouts. `UnboundGithubServfail` reached `pending` only (probe 1/min:
+0 from ~16:56, back at 17:00:34; `for: 3m`). `diagnostics/log/core/resolver` via the API returned
+`[]` with every parameter shape — the `log-servfail` line the FU waits for is still unread (GUI
+read — the API key lacks the log privilege: the system log returns `[]` the same way). Self-cleared,
+as every FU-215 window has. No config touched.

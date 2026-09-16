@@ -205,6 +205,8 @@ variable "nodes" {
     # (file_id change), which is fine: the node is cattle by design.
     # serial=true (2026-09-14): five silent self-reboots in a week with the qemu process untouched
     # (#882, NodeRebootingRepeatedly) — the serial console is the instrument that catches the panic.
+    # Cause found 2026-09-16: the kernel page_table_check bug under ARC jobs, fixed by Talos ≥ v1.13.4
+    # (docs/incidents/2026-09-16-page-table-check-reboots.md, FU-246) — not the pve overcommit.
     # 16Gi/12c → 8Gi/6c (2026-09-14, operator): the pve host sat at 0.5–1 GiB MemAvailable with
     # 64.5 GiB dedicated across five VMs (no balloon in Talos guests, KSM ~6 GiB), 30 vCPU on 28
     # threads; and wk-03's RAM was what packed ~4 concurrent dind runners onto its one 40 G thin

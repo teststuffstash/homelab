@@ -9,62 +9,18 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
-- **⚑ INVESTIGATION HANDOVER (2026-09-16 ~14:5xZ) — nx-01 reboots on its own, escalating. CORDONED.**
-  Opened for a fresh investigation session; arc in TICK-LOG, triage in **homelab#1735** (report-only,
-  evidence is good — read it first, it already did the cheap reads).
-
-  **The fact that settles it:** nx-01's boot time moved to **14:43:06Z** and again at 14:12:53Z —
-  BOTH after the seat's own planned 13:29:52 reboot. Intervals are shrinking:
-
-  | boot (UTC) | gap | cause |
-  |---|---|---|
-  | 06:40:34 · 09:07:36 · 10:53:47 | — | unexplained (predate any seat action) |
-  | **13:29:52** | 2h36m | **the seat's** — `talosctl upgrade` to the kata image (see below) |
-  | 14:12:53 | 43m | unexplained |
-  | **14:43:06** | 31m | unexplained — the boot it is on now |
-
-  **Already ruled out by #1735 — do NOT re-derive:** CPU steal flat 0 across 40 vCPUs (bare metal,
-  no hypervisor contention); MemAvailable 56–64 GB of 64 GB throughout (no OOM); no low-space
-  signal; kmsg (current + `--previous`) carries NO panic/oops/MCE/thermal-throttle/soft-lockup —
-  only a `sd 1:0:0:0: Power-on or device reset occurred`, i.e. a HARD reset rather than a logged
-  panic. Load hit 5–8 on a 40-core box before one reboot (not saturation).
-
-  **The ONE read that settles the cause, and it is operator-only** (no in-cluster path — #1735
-  recorded it as a `TOOL_GAP`, correctly, instead of guessing): the BMC System Event Log —
-  `ipmitool -I lanplus -H 192.168.2.123 -U ADMIN -P ADMIN sel list`. That separates PSU brownout
-  (the chassis is 1+1 SHARED with the deliberately-unpowered second node) from thermal from
-  firmware. `machines.yaml` carries the BMC recipe on the nx-01 row.
-
-  **The verdict is the operator's, and the box was bought for exactly this question**:
-  `machines.yaml` says nx-01 is a BURN-IN — "whether a 2U twin is liveable in the house over days
-  and nights under moderate load" — carrying NO Longhorn disk so that "if the noise verdict is no,
-  this node leaves without taking data with it". This is that question arriving.
-
-  **State left behind:** node **cordoned** (not drained, not powered off — draining is the burn-in
-  call). It had been taking ARC runners and oracle rides and dropping them mid-flight
-  (`agent-oracle-fleet-issue-443-r4` was `Init:0/1` on it at cordon time — the 4th round of one
-  ride). Cordon costs: the **kata pool drops 4 → 3** (wk-metal-02/-03/-04, all 8 GB laptops) and the
-  ARC pool loses its only large node — nx-01 is the storage-ledger's "RIDE/ARC box", the one place
-  rides and runners do not contend (40 threads / 62 Gi). Expect ARC queueing and kata pressure while
-  it is out.
-
-  ⚠ **The kata upgrade is DONE and CORRECT — do not redo it.** nx-01 runs schematic `f1aa29f1…`
-  with `kata-containers` + `containerd-shim-kata-v2` + `/etc/cri/conf.d/10-kata-containers.part`,
-  verified identical to wk-metal-02. That closed #1730/#1731/#1732 (install-time drift: the config
-  already DECLARED the kata image; Talos honours `install.image` only on the next install).
-  The reboots are a separate, pre-existing fault — three of them predate the upgrade.
-
-  ⚠ **A seat mis-attribution to correct if it resurfaces:** the seat first read nx-01's
-  cilium-agent restart loop (5×, exit 137 behind `Timeout while waiting probe`) as CPU throttling
-  at the FU-224 500m limit (401m/500m observed). That throttle is REAL but it is a SYMPTOM — the
-  agent restarts because the node keeps resetting under it. Do not chase the 500m ceiling as the
-  cause here; it remains a valid separate lever (meta-state (7)–(8), "cilium-agent Burstable").
-
-  **FU-230 leg (b), second sighting today.** #1735's table lists the seat's 13:29:52 upgrade as
-  unplanned and asserts "no `node-maintenance.sh` silence marker for a planned window" — a silence
-  WAS open (13:28:24, three arms). Leg (a) cannot fix this shape: `NodeRebootedTwiceIn24h` counts
-  boots over a rolling 24h, so a planned reboot keeps contributing long after its silence expires.
-  The declared-window record is what would. (First sighting today: the #542 DaemonSet class.)
+- **⚑ PICKUP (2026-09-16 ~16:25Z) — the page_table_check reboots: FIXED on the ARC metal nodes, wk-03 DOWN, PR#1740 open.**
+  Cause: siderolabs/talos#13496 (incident `docs/incidents/2026-09-16-page-table-check-reboots.md`),
+  not the hardware. nx-01 + wk-metal-02 run v1.13.10 (verified) and are uncordoned; **wk-03 is shut
+  down on purpose** — do NOT `node-maintenance up wk-03`; its path is the VM RECREATE from the
+  v1.13.10 image (`mgmt-tf apply -target='proxmox_virtual_environment_vm.node["wk-03"]'` + its
+  machine-config apply) once PR#1740 merges. **PR#1740** (two version variables by role; sentinel
+  plan = 4 worker-VM replaces + 7 metal config updates + the taint noise, all human-apply) waits on
+  the reviewer + auto-merge (squash armed); the box loop refuses until a human applies — apply by
+  target, one VM at a time (FU-246). FU-247 = alert on captured oopses + the console half (BMC SOL
+  is `ttyS1`; the v1.13.10 metal image ships `console=tty0` only). The three-CP program (ADR-133,
+  FU-243) is deferred to its own session by the operator; ⚠ operator named `wk-metal-02` as the
+  laptop CP today, ADR-133 says `wk-metal-03` — settle before that session starts.
 
 
 - **⚑ PICKUP (2026-09-16 corpus session — the responder rebuild; arc in TICK-LOG).**

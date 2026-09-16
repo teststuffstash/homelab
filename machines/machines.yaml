@@ -514,6 +514,9 @@ machines:
     singlecore_bogo_s: null
     multicore_bogo_s: null
     remote_power: "IPMI/BMC — the fleet's FIRST (ADR-013 assumed none): `ipmitool -I lanplus -H 192.168.2.123 -U ADMIN -P ADMIN chassis power on|off|cycle`. No WoL or smart plug needed."
+    # 2026-09-16: the day-one reboot storm was the Talos v1.13.2 kernel's page_table_check bug under
+    # ARC jobs (docs/incidents/2026-09-16-page-table-check-reboots.md, FU-246), NOT this hardware —
+    # cordoned until it runs Talos ≥ v1.13.10. SEL notes: CMOS cell dead (VBAT 1.16 V), PS2 uncabled.
     # Bought 2026-09-14 (€399) against the hardware register's own "no" — the objections were noise
     # and idle draw, never function. Onboarded 2026-09-15 as a BURN-IN: the open question is whether
     # a 2U twin is liveable in the house over days and nights under moderate load, which is why it
