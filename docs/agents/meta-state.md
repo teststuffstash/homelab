@@ -10,8 +10,14 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 - **⚑ PICKUP (2026-09-16 ~16:25Z) — the page_table_check reboots: FIXED on the ARC metal nodes, wk-03 DOWN, PR#1740 open.**
-  **Update 18:00Z:** PR#1742 (FU-215 Unbound belt) MERGED; PR#1740 back in review after the image-axis fix
-  (bd3b8ed4 — the reviewer's one blocking finding); FU-215 root fixed (Turn off IPv6, do-ip6 off).
+  **Update 18:10Z: ALL THREE MERGED** — #1733 (responder), #1742 (FU-215 belt), #1740 (version split, incl.
+  the image-axis fix). **Next act = wk-03's recreate on v1.13.10**, human apply by target from the box
+  (`devbox run mgmt-tf -- apply -target='proxmox_download_file.talos["longhorn-v1.13.10"]'
+  -target='proxmox_virtual_environment_vm.node["wk-03"]' -target='talos_machine_configuration_apply.node["wk-03"]'`)
+  — READ THE PVE THIN POOL FIRST (`pve_lvm_thin_pool_data_percent`, the 2026-09-03 rule); the box loop
+  refuses master until the whole plan is human-applied (VM replaces wk-01/02/04 stay pending, one at a
+  time). Three seat silences (`seat/wk-03-down`) cover wk-03's absence until 2026-09-17 02:03Z — expire
+  them when it is back. Remove image.tf/nx02.tf `moved` blocks in the PR that next moves a version.
   Cause: siderolabs/talos#13496 (incident `docs/incidents/2026-09-16-page-table-check-reboots.md`),
   not the hardware. nx-01 + wk-metal-02 run v1.13.10 (verified) and are uncordoned; **wk-03 is shut
   down on purpose** — do NOT `node-maintenance up wk-03`; its path is the VM RECREATE from the
