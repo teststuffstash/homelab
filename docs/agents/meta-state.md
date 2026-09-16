@@ -42,14 +42,10 @@ never the session's arc — that is TICK-LOG's.)
   open 🚨 24 → 21. Of the 17 open-with-cleared-alert threads, only 3 qualified for an unattended
   close — the other 14 have genuine human comments, so the `[bot]`-suffix bug's blast radius was
   smaller than the 13 `A human is engaged` body lines suggested.
-  (8) **PR#1733 (the responder rebuild) is APPROVED but went DIRTY** when #1698 + #1715 merged
-  under it — `docs/follow-ups.md` is the likely conflict (this PR archives FU-232 and pointer-ises
-  FU-230/231). Author == sole codeowner, so it auto-merges on green once resolved (MP-T08 waiver);
-  the codeowner read is DONE (four rounds of reviewer findings, all fixed in-PR). Next act: resolve
-  the conflict on `fix/responder-decide-once`, push, let CI+auto-merge finish. Worktree is at
-  `/tmp/claude-1000/-workspace-homelab/8ce7b148-*/scratchpad/wt` (host-side git PRUNES scratchpad
-  worktrees — re-add with `git worktree add -B fix/responder-decide-once <dir> origin/fix/responder-decide-once`
-  if it has vanished).
+  (8) **PR#1733 (the responder rebuild): conflict RESOLVED 2026-09-16 17:06Z** (`docs/follow-ups-archive.md`,
+  both sides' new entries kept; merge 97b1dc3d pushed), auto-merge armed (squash), CI re-running —
+  the codeowner read was already done (four reviewer rounds fixed in-PR). If it is still open:
+  read CI, fix in-PR. Worktree `/tmp/claude-1000/-workspace-homelab/8ce7b148-*/scratchpad/wt`.
   (6) **Codeowner reads executed this session (ADR-110) — the PR board:**
   **#1698** (`estimate_budget`: price `:exacto` as its base id) APPROVED — a price-lookup defect,
   not budget semantics; miss-driven retry so `:free` never degrades, unknown models still escalate.
