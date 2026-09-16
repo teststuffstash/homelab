@@ -7,12 +7,20 @@
 #   2. Posts ONE comment on the first affected issue listing all of them.
 #   3. Files ONE deduped inert platform issue (or extends an existing open match).
 #
-# THREE TICKS under replay:
+# SIX TICKS under replay:
 #   TICK 1 — first pass against the #326 four-strike world (no prior action). 18 actions.
 #   TICK 2 — second pass against the POST-ACTION world (agent/error applied, marker present,
 #            filing exists). ZERO actions (idempotency guards fire).
 #   TICK 3 — stale world (same strikes but now_s >24h after the newest). ZERO actions
 #            (live-window check fires).
+#   TICK 4 — RESOLVED inside the window (homelab#1712): a CLOSED filing for the class covers the
+#            set and its close is NEWER than the newest strike. ZERO writes (resolution
+#            subtraction fires).
+#   TICK 5 — RE-ARMED: the same closed filing, but a NEW strike newer than the close. The normal
+#            path owns the class again (labels + comment + a new filing).
+#   TICK 6 — SPOOFED: the same closed filing whose `issues=` marker is authored by a FOREIGN user.
+#            The marker is a machine ruling, so the resolution subtraction must not honour it —
+#            the normal path owns the class. This row is the pin on the author filter.
 #
 # THE #326 FOUR-STRIKE WORLD (recorded fixture). Four issues (#326, #327, #328, #329) each carry
 # an AGENT_STRIKE: comment with `error_class=unknown`, all within 24h. The scan detects the
@@ -35,6 +43,16 @@
 #   • MARKER-BASED IDEMPOTENCY: the comment body starts with a `fleet-strike-fp:` marker
 #     carrying the group identity. A repeat tick finds the identical marker and skips the
 #     post (same discipline as state-fp:, homelab#244/IL-T26).
+#   • RESOLUTION SUBTRACTION (homelab#1712): dedup looks only for an OPEN filing, so CLOSING a
+#     filing for a class used to mint the next one on the following tick and re-apply
+#     `agent/error` over a human's strip. A CLOSED filing for the same `error_class` whose
+#     `issues=` marker covers the affected set, closed NEWER than the newest strike in the set,
+#     means the class was resolved inside the window: neither re-file nor re-apply. A strike
+#     newer than the close re-arms it. Ticks 4 and 5 pin the two halves.
+#   • MARKER AUTHORSHIP (homelab#1712 review): the marker is a MACHINE ruling, so the subtraction
+#     honours it only when the loop's own bot authored it. A public repo otherwise lets any user
+#     suppress the circuit breaker for a class by opening a correctly-titled issue, posting a wide
+#     `issues=` marker and closing it. Tick 6 pins the filter.
 pins:
   - IL-T30
 name: fleet-strike-reader
@@ -46,6 +64,12 @@ parts:
   - file:tick2.sh
   - block:fleet-strike-reader
   - file:tick3.sh
+  - block:fleet-strike-reader
+  - file:tick4.sh
+  - block:fleet-strike-reader
+  - file:tick5.sh
+  - block:fleet-strike-reader
+  - file:tick6.sh
   - block:fleet-strike-reader
   - file:post.sh
 scrub:
