@@ -1014,13 +1014,13 @@ the block needs pruning, not more headings.
 - [ ] **FU-230** — **The responder cannot see seat-driven change.** 2026-09-04→11 audit: 7 of its 9
       confidently-wrong writes had a cause the seat made outside the cluster's view, and the session
       guessed a story instead of "unknown". **Leg (a) DONE 2026-09-12 (PR#1601)** —
-      `node-maintenance.sh settle/down` now silence the window and `up` expires it; the label
-      taxonomy is the lesson (one 9-min m70s window = THREE triage sessions, #261/#884/#1600):
-      `node=` alone catches almost nothing, so a window silences `instance=~<ip>`, `node=`, the
-      Garage health set on a zone node, and the node's **pod names** — PodSigkilled has no node key
-      and fires up to 30m late, so that silence outlives the window. **Next:** leg (b) — a
-      seat-written ConfigMap window record the brief prints like the ArgoCD observation-window line
-      (durability caveat = FU-195). Design read: `docs/spikes/responder-week-audit.md` §Design read.
+      `node-maintenance.sh settle/down` silence the window, `up` expires it; the label taxonomy is
+      the lesson (one 9-min m70s window = THREE triage sessions, #261/#884/#1600). ⚠ **Leg (a)
+      still leaks the DaemonSet-rollout class** (2026-09-16, #542 r3: `KubeDaemonSetRolloutStuck`
+      carries neither `node` nor `instance`, and its stuck pod postdates the silence) — leg (b) is
+      the general fix, not more label arms. **Next:** leg (b) — a seat-written ConfigMap window
+      record the brief prints like the ArgoCD observation-window line (durability caveat = FU-195).
+      Design read: `docs/spikes/responder-week-audit.md` §Design read.
 
 - [ ] **FU-231** — **Responder report-only findings land as GitHub comments; route them to the
       bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =

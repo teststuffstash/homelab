@@ -153,6 +153,19 @@ Shape proposed (each leg tracked: FU-230 silence + declared window, FU-231 bucke
 FU-232 reporter-keyed subject grafts):
 1. `node-maintenance.sh settle/down` opens a node-scoped Alertmanager silence, `up` expires it —
    deterministic, no responder change; removes 5 of the 9 wrongs and 5 of the 7 #857 comments.
+   **Shipped as PR#1601, 2026-09-12 — the label taxonomy is the lesson.** One 9-min `m70s` window
+   cost THREE triage sessions (#261/#884/#1600) because `node=` alone catches almost nothing, so a
+   window now silences `instance=~<ip>`, `node=<name>`, the Garage health set on a zone node, and
+   the node's **pod names**; `PodSigkilled` carries no node key and fires up to 30 m late, so that
+   last silence deliberately outlives the window.
+   ⚠ **It still leaks the DaemonSet-rollout class — sighted 2026-09-16 (#542 recurrence #3).** An
+   `nx-01` wipe+reinstall window silenced all four arms at 08:08:46Z and `KubeDaemonSetRolloutStuck`
+   fired anyway, costing a responder session. That alert is labelled by namespace + daemonset: it
+   carries neither `node` nor `instance`, and the pod that went Pending (`cilium-przdf`) was minted
+   AFTER the silence, so the pod-name arm held only its predecessors. Every arm the taxonomy keys on
+   is absent by construction, so any multi-reboot window leaks this class. Leg 2 is the fix that
+   generalises — match on the DECLARED WINDOW, not on labels the alert does not carry; enumerating
+   `daemonset=~…` arms per alert name is the losing game this sighting demonstrates.
 2. A seat-written cluster record (ConfigMap, the `responder-seen` shape) declaring the change window
    — who is at the seat, what is being rolled, which objects to expect alerts on, until when — that
    the responder brief prints exactly like the ArgoCD observation-window line. Costs no push. An
