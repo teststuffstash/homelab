@@ -9265,3 +9265,31 @@ Issues: #1620, #1621.
   the class, and gate semantics are the operator's. Left reviewed, re-planned and one command from
   done.
 
+
+## 2026-09-16 morning — seat: the stage-1 escape hatch built, the lock plane unwedged, the FU-198 belt shipped
+
+- **PR#1718's wedge got its ruling and its mechanism (operator, then PR#1721):** the gate stays —
+  the timer never plans a stage-1-refused head, no bot-vs-human relaxation ("too messy"), no
+  non-blocking verdict class. `devbox run mgmt-human-plan -- <pr>` ssh-es to the box and runs its
+  sentinel in `--human-plan` mode: stage 1 reported (terminal + comment, "overridden"), stage 2
+  planned, the plan shown for the human to READ, the verdict posted under `homelab-sentinel` as
+  HUMAN PLAN after y/N on the exact head sha. Same PR: a full `mgmt-tf apply` of master stamps the
+  apply loop's baseline (the apply-side twin of the wedge — refused-rev would otherwise have held
+  every later master), and the **probed gap**: a `provider "x" {}` block in ANY other .tf passed
+  stage 1 (providers.tf deny = basename only) — `deny_patterns` gains the block, meta-argument
+  stays allowed, 43/43 fixtures. Review round 1 (prompt timeout under the lock; stamp inside the
+  lock span) fixed in-PR; still in review at the time of writing.
+- **The Argo lock plane was wedged for two days and nothing said so** (operator: "137 pending" on
+  the agent-running dashboard). Third instance of the 08-31 incident: `fix-debounce-backstop-
+  1789388220` Running since 09-14 12:17Z with its `decide` pod Errored and never finalised, holding
+  a `subscription-capacity/claude` slot AND the `fix-debounce-decide` mutex (the fixer's decide
+  waited 30 h); the sync manager reported 4/5 with ONE real holder. Discriminator read first:
+  `dispatch_limited` 0, `semaphore_running` 1 → wedge, not latch. No `respond-*` completed in 24 h;
+  four `review-*` queued since 09-15 13:25Z. Recovery 06:49–06:52Z: 132 stale queued `respond-*`
+  deleted (>1 h; alerts re-notify at repeat_interval; 132 triages 5-wide = hours of pool + budget),
+  the wedged holder deleted, controller `rollout restart` → 144→4 Pending in 90 s, the stale decide
+  Succeeded. **The belt (PR#1722, FU-198): `ArgoLockPlaneWedged`** — replayed over 7 d: fires from
+  09-15 03:00Z (27 h before the read), quiet on the 09-12 latch day and every other hour.
+  Alertmanager fans to ha-webhook too, so it reaches a human while the responder is a waiter.
+- Also: `/workspace/homelab`'s worktree registry lost every entry mid-session (only master + a
+  prunable stale one remained; cause not chased) — branches were pushed, nothing lost; re-registered.

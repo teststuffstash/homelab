@@ -400,12 +400,14 @@ six OVERSIZE items pointer-ized into
       §The test surface. **Next:** write the table around those anchors. Relates FU-051, FU-012.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
-      `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617, operator-applied);
-      (b) the in-cluster no-root poster LIVE (#1631, four review rounds = the fail-closed policy-read
-      class across lib/sentinel/apply; proof: #1635's head carried the status 104 s after its commit,
-      ahead of the box's tick); `mgmt-policy-test` is a `ci` step (05ce8e8a). **Next:** (c) the
-      per-role user + env split; (d) the doorbell edge (lower priority now). Design + build state:
-      [`management-box.md`](management-box.md) §MB3. Relates FU-012, FU-097, ADR-130.
+      `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617); (b) the
+      in-cluster no-root poster LIVE (#1631); `mgmt-policy-test` is a `ci` step; **(e) the
+      stage-1-refusal wedge (no merge, no review — #1718) RULED + BUILT 2026-09-16, PR#1721:**
+      gate unchanged, `devbox run mgmt-human-plan -- <pr>` posts the human plan's verdict, a full
+      `mgmt-tf apply` stamps the apply baseline, `provider "…" {}` denied everywhere — §MB3 "When
+      the box refuses". **Next:** (c) the per-role user + env split; (d) the doorbell edge (lower
+      priority). Design + build state: [`management-box.md`](management-box.md) §MB3. Relates
+      FU-012, FU-097, ADR-130.
 - [ ] **FU-238** — **External-provider roots plan READ-ONLY on the box (operator, 2026-09-13):**
       box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
       host/jail until FU-097. **github DONE 2026-09-13** (read-only PAT + App keys via
@@ -878,16 +880,15 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
-- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: POINTER.** The sync manager's
-      in-memory state corrupts under a fast-failure storm and Pending piles up silently
-      (2026-08-31, "5/5" against a provably empty semaphore for 65+ min). Postmortem, belt audit,
-      trigger, and — ⚠ **2026-09-12** — a SECOND, BENIGN cause with the SAME signature
-      (rail-latched `respond-*` hold their lock across Argo's retry backoff), hence a discriminator:
-      [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
-      **Next:** that alert — Pending high-and-not-draining while
-      `anthropic_subscription_semaphore_running` ≈ 0 **and NOT
-      `anthropic_subscription_dispatch_limited`** — into `argo-workflows-alerts` with promtool
-      cover; check upstream sync-manager fixes (`v4.0.7`) before any bump. Relates FU-187, FU-088.
+- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: POINTER.** Three instances: the sync
+      manager's in-memory state corrupted under a failure storm (2026-08-31, "5/5" against an empty
+      semaphore); a BENIGN twin with the same signature (2026-09-12, latched `respond-*` holding
+      their lock across retry backoff); a Running holder with an Errored pod + phantom slots
+      (2026-09-15/16, 137 queued, no responder run in 24 h). **Belt SHIPPED 2026-09-16 (PR#1722):
+      `ArgoLockPlaneWedged`** — Pending ≥10 while the pool has free slots and no rail is latched;
+      replayed: fires 27 h before the operator's read, quiet on the latch day. Postmortem + all
+      three: [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
+      **Next:** check upstream sync-manager fixes (`v4.0.7`) before any bump. Relates FU-187, FU-088.
 
 - [ ] **FU-228** — **`agent-transcripts` has no retention — 5Gi → 20Gi bought time, not a policy.**
       The bucket sat at 98 % (5.3 GB, 26.7k objects, ~1 GB/week of ride exhaust) the hour
