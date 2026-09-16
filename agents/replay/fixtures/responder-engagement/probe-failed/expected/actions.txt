@@ -1,0 +1,4 @@
+CALL gh api repos/teststuffstash/homelab/issues/1723/comments --paginate --jq [.[] | select((.user.type // "") != "Bot")] | length
+OUT → resolved PodSigkilled (4cafb4ee21e29ace): could not read teststuffstash/homelab#1723's comments — left alone (never close on a failed read)
+OUT REACHED: end
+RC 0

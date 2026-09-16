@@ -1,0 +1,21 @@
+# FU-232 (homelab#1734) — the WITNESS. A pod that really IS the object still wins.
+#
+# WHY A GREEN-PATH FIXTURE. The re-key can be misread as "a pod label is never trustworthy", and
+# that misreading would be a worse bug than the one it fixes: kube-state-metrics is scraped with
+# honorLabels, so a metric that HAS a pod dimension (KubePodNotReady, KubeContainerWaiting,
+# PodSigkilled) carries the FAILING pod and the reporter's is overwritten. Two things must hold for
+# this fixture to stay green, and each is a separate way the rule could be widened wrongly:
+#   1. `pod` is still consulted when no object label is present — the arm was not deleted;
+#   2. the reporter test keys on the SCRAPE JOB, not on the pod's name. `job=kubelet` here is not a
+#      monitoring job, so the pod stands. A pod-name regex (`*kube-state*`, `*exporter*`) would rot
+#      one workload at a time and would also wrongly skip a genuine PodSigkilled on an exporter —
+#      the shape homelab#153 was, correctly, filed under.
+#
+# THE CONTRACT: subject = workload:loki/alloy (the live homelab#1686 subject, unchanged by the
+# re-key), RC 0.
+name: responder-subject-witness-pod-owned
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

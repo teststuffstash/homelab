@@ -1,0 +1,25 @@
+# homelab#1734 — rule #6: never fail INTO a close.
+#
+# CONDITION UNDER REPLAY. The comments probe is refused (`STUB_GH_… = fail`), which is the shape of
+# an RBAC denial, a rate-limit, or an API blip.
+#
+# WHY A FIXTURE FOR A FAILURE. The rewrite that fixed the engagement test also made a wrong answer
+# CHEAPER to produce: `gh api … | awk "{s+=\$1} END {print s+0}"` prints 0 on empty input, and 0
+# humans is exactly the condition that closes the thread. Guarding the pipeline`s exit instead of
+# the CALL`s would have turned every unreadable probe into a close — the `src_alert` class
+# (meta-events, 2026-08-25: `curl | jq | sort > tmp` tests sort, and a 10s blip served an empty set
+# as truth, mass-clearing five live alerts).
+#
+# THE CONTRACT: the probe fails, the leg says so by name and moves on. No comment, no close, no
+# body write. The alert-fp belt reopens nothing because nothing was closed.
+pins:
+  - IL-T03
+name: responder-engagement-probe-failed
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-engagement
+  - file:post.sh
+env:
+  - STUB_GH_api_repos_teststuffstash_homelab_issues_1723_comments=fail

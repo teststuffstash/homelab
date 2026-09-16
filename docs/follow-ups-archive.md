@@ -10,6 +10,23 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-232** *(archived 2026-09-16)* — **Reporter-keyed subject collapse: fixed at the cascade.**
+  The responder's `subject:` — which IS an issue's identity under the #149 one-subject rule — was
+  the metric's EXPORTER whenever the failing object had no pod dimension of its own, so 19 of 28
+  triage comments in the 09-04→11 week grafted onto five reporter threads (#811/#882/#542
+  kube-state-metrics, #241 pushgateway, #103 node-exporter, #884 `ns:monitoring`). Shipped in
+  homelab#1734: the cascade reads the object's own labels (`daemonset`/`statefulset`/`deployment`/
+  `job_name`) BEFORE `pod`, and skips `pod` entirely when `job` names a monitoring scrape job —
+  structural rather than a pod-name regex, because kube-state-metrics is scraped with honorLabels,
+  so a metric that HAS a pod dimension legitimately keeps it. With no object label the key falls to
+  node, then `instance:` (the failing target, verbatim), then per-class `alert:<name>`. Evidence:
+  the live 2026-09-16 label sets — `KubeDaemonSetRolloutStuck` arrives carrying
+  `daemonset=runner-image-prepull-pve` AND `pod=…kube-state-metrics…`. Pinned by
+  `agents/replay/fixtures/responder-subject/{daemonset-reporter-pod,node-exporter-instance,statefulset,witness-pod-owned}`
+  and by `responder-behaviour-test.sh` §#149, whose graft scenario had been asserting the pre-fix
+  subject as correct behaviour. ⚠ The re-key RETIRES the magnet threads: each affected
+  (alert, object) files one fresh issue on its next fire and the magnets stop collecting.
+
 - **FU-236** *(archived 2026-09-13)* — **`homelab-sentinel` App cutover (ADR-130), all four steps
   the same day:** App 4929271 created/installed + ESO chain (`sentinel-git.yaml`); `sentinel-argo`
   switched direct (guarded file), first status under homelab-sentinel[bot] 11:17:58Z;

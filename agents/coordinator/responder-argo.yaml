@@ -15,11 +15,27 @@
 #   predicate  = Alertmanager firing (fan-out route in tofu/monitoring.tf)
 #   edge       = /alert webhook (review-argo.yaml EventSource) → this Sensor
 #   backstop   = NONE by design — alerts are level-triggered (repeat_interval refires ≤3h)
-#   key        = TWO ledger keys in the responder-seen ConfigMap (24h window): the alert
-#                fingerprint AND the FU-133 subject (the RESOURCE), because a fingerprint is
-#                per-instance — one failing workflow mints a new one per run. Both are checked
-#                before a session is spawned; the `alert-fp:<fp>` + `subject:<subj>` open-issue
-#                searches in the brief are the belts BEHIND them, not the guard.
+#   key        = THREE keys, cheapest first, all checked before a session is spawned. TWO live in
+#                the responder-seen ConfigMap (24h window): the alert fingerprint AND the FU-133
+#                subject (the RESOURCE), because a fingerprint is per-instance — one failing
+#                workflow mints a new one per run. The THIRD is DECIDED-ONCE (#1734): an OPEN issue
+#                whose title names THIS alert and whose body carries a `fix-verdict:` line means
+#                the condition is already judged, so the re-fire lands as one rewritten
+#                `still-firing:` body line and no session is spawned at all. The ledger keys are
+#                per-UTC-day and so re-armed every midnight — measured 2026-09-11→16, ~40% of the
+#                lane's sessions were a standing condition being re-confirmed daily (homelab#1598
+#                carries five such comments, each saying "confirming, not re-deriving") while 32
+#                OTHER alerts were dropped unread at the daily cap. The `alert-fp:<fp>` +
+#                `subject:<subj>` open-issue searches in the brief are the belts BEHIND all three,
+#                not the guard.
+#   reopen     = the fp/subject belts REOPEN a closed thread so a flapping alert restores its own
+#                record instead of churning issues — EXCEPT one a person closed (#1734). A human
+#                close is a decision: the pre-snapshot reads each candidate's newest `closed` event
+#                actor (REST `.actor.type` — the `[bot]` suffix is a rendering, the type is the
+#                fact) and the post-session belt re-closes any reopen of a User-closed thread, with
+#                one comment that is also the last word. homelab#103 had been closed by the
+#                operator and reopened by this lane FIVE times since 2026-08-05; #100 and #121
+#                three times each.
 #   capacity   = Sensor rateLimit 6/min + subscription-capacity semaphore + the FU-088 latch
 #                + the FU-149 DAILY BUDGET LATCH (agents/responder-budget.sh): a binding
 #                RESPONDER_DAILY_MAX=12 sessions/day, checked before any per-alert work and again
@@ -66,6 +82,17 @@
 #                alert carries neither — RetroReportOverdue dispatched a ride at the retro belt
 #                and latched agent/error (homelab#237). The label is declared where the fact is
 #                known; the pairing is asserted in responder-behaviour-test.sh §#239.
+#   subject    = the FAILING OBJECT, never the metric's EXPORTER (FU-232, closed #1734). The
+#                cascade reads the object's own labels — persistentvolumeclaim, workflow,
+#                daemonset, statefulset, deployment, job_name — BEFORE `pod`, and skips `pod`
+#                entirely when `job` names a monitoring scrape job, because kube-state-metrics and
+#                node-exporter leave their OWN target labels on any metric with no matching
+#                dimension. Live-verified 2026-09-16: KubeDaemonSetRolloutStuck arrives with
+#                daemonset=runner-image-prepull-pve AND pod=…kube-state-metrics…, so the old
+#                cascade keyed 19 of 28 triage comments onto five reporter threads (#811/#882/#542
+#                kube-state, #241 pushgateway, #103 node-exporter, #884 ns:monitoring). With no
+#                object label the key falls to node, then `instance:` (the failing scrape target,
+#                verbatim — never renamed to a node), then the per-class `alert:<name>`.
 #   identity   = ONE subject marker per thread (#149, 2026-08-08). The subject IS an issue's
 #                identity and the dedup search greps COMMENTS, so a triage that comments its own
 #                'subject:' onto a thread born of a DIFFERENT subject makes that thread the
@@ -269,8 +296,12 @@ spec:
                      --limit 5 2>/dev/null | jq -r '.[] | "\(.repository.nameWithOwner)#\(.number)"' | head -1)"
               if [ -z "$hit" ]; then echo "→ resolved $rname ($rfp): no open issue — nothing to close"; continue; fi
               rrepo="${hit%#*}"; rnum="${hit#*#}"
-              # ONE read serves both tests below (verdict + human engagement).
-              rmeta="$(gh issue view "$rnum" --repo "$rrepo" --json body,comments 2>/dev/null || printf '{}')"
+              # The issue BODY, over REST. It used to be one `gh issue view --json body,comments`
+              # serving both tests below; the comments half moved to its own REST call because
+              # `gh issue view --json` is GRAPHQL and the engagement test cannot be answered there
+              # (the `humans=` block further down says why). The body half is identical either way,
+              # and `_record_clear` reads `.body` off whatever shape this is.
+              rmeta="$(gh api "repos/$rrepo/issues/$rnum" 2>/dev/null || printf '{}')"
               # "$rmeta = {}" catches the `|| printf '{}'` fallback; the jq -e catches a read that
               # came back PARTIAL (truncated/interleaved output still exits 0), which would
               # otherwise fall through to the report-only branch with 0 humans and close blind.
@@ -292,11 +323,35 @@ spec:
                 continue
               fi
               # ── report-only (or no verdict recorded): split on ENGAGEMENT ────────────────────
-              # Human engagement = anyone whose login is not a bot. gh renders App logins with a
-              # [bot] suffix HERE (REST); the reviewer's REST-vs-GraphQL mismatch (FU-069) does not
-              # apply to this endpoint, but the test stays suffix-tolerant on purpose.
-              humans="$(printf '%s' "$rmeta" \
-                        | jq -r '[.comments[]? | select((.author.login // "") | test("\\[bot\\]$") | not)] | length' 2>/dev/null || echo 0)"
+              # >>>REPLAY:responder-engagement>>>
+              # Human engagement = a commenter GitHub types as a User rather than a Bot.
+              #
+              # ⚠ THIS TEST WAS DEAD FOR THE WHOLE OF 2026-08/09, AND ITS OWN COMMENT SAID WHY IT
+              # WAS SAFE (homelab#1734). It read `.comments[].author.login | test("\\[bot\\]$")`
+              # off `gh issue view --json body,comments` and asserted "gh renders App logins with a
+              # [bot] suffix HERE (REST)". That endpoint is **GraphQL**, and GraphQL returns a Bot's
+              # bare login — `homelab-agents-1234`, no suffix — while REST returns
+              # `homelab-agents-1234[bot]` AND a `.user.type` of `Bot`. So every machine comment
+              # counted as a human, the leg took the "someone owns it" branch on its OWN prior
+              # comment, and the bots-only auto-close below could only ever fire on a thread with
+              # ZERO comments. Measured 2026-09-16: of 24 open 🚨 issues, 17 had a cleared alert and
+              # 13 carried this leg's own `A human is engaged` line. It is the same REST-vs-GraphQL
+              # login mismatch the reviewer hit (FU-069) — which the dead comment cited as the
+              # reason it did not apply here.
+              #
+              # REST is the authority, and `.user.type` is read instead of the suffix: the suffix is
+              # a rendering, the type is the fact. One extra call per resolved fingerprint, on a
+              # leg that already makes two.
+              # Rule #6 — never fail INTO a write: an unreadable probe must not read as "no humans"
+              # and close the thread. The `if` guards the CALL's exit, not the pipeline's (the
+              # meta-events `src_alert` lesson: `curl | jq | sort > tmp` tests sort, and a blip
+              # served an empty set as truth). `--paginate` emits one count per page; awk sums.
+              if hraw="$(gh api "repos/$rrepo/issues/$rnum/comments" --paginate \
+                         --jq '[.[] | select((.user.type // "") != "Bot")] | length' 2>/dev/null)"; then
+                humans="$(printf '%s\n' "$hraw" | awk '{s+=$1} END {print s+0}')"
+              else
+                echo "→ resolved $rname ($rfp): could not read $hit's comments — left alone (never close on a failed read)"; continue
+              fi
               if [ "${humans:-0}" -eq 0 ]; then
                 # Bots only → the comment is also the LAST word on the thread, so it is bounded by
                 # the close that follows it. This half is unchanged.
@@ -318,6 +373,7 @@ spec:
                   *) echo "→ resolved $rname ($rfp): $hit left OPEN — $humans human comment(s), someone owns it; no comment (body carries no alert-fp marker, left untouched)";;
                 esac
               fi
+              # <<<REPLAY:responder-engagement<<<
             done
 
             COUNT="$(jq -r '[.alerts[]? | select(.status == "firing")] | length' /tmp/alerts.json 2>/dev/null || echo 0)"
@@ -451,12 +507,60 @@ spec:
               _node="$(printf '%s' "$a" | jq -r '.labels.node // empty')"
               _repo="$(printf '%s' "$a" | jq -r '.labels.repo // empty')"
               _wf="$(printf '%s' "$a" | jq -r '.labels.workflow // empty')"
+              # ── FU-232: the FAILING OBJECT's own labels, and the REPORTER discriminator ───────
+              # The cascade below used to reach `_pod` third, and on every kube-state-metrics- or
+              # node-exporter-derived alert that `pod` is the EXPORTER's, not the object's — so the
+              # subject, which IS an issue's identity (#149), collapsed onto the reporter and made
+              # five threads the org-wide search hit for everything that reporter scrapes. Measured
+              # 2026-09-04→11: 19 of 28 triage comments grafted onto #811/#882/#542 (kube-state),
+              # #241 (pushgateway), #103 (node-exporter), #857 (the cilium DS), #884 (ns:monitoring).
+              #
+              # Why `pod` survives at all: kube-state-metrics is scraped with honorLabels, so a
+              # metric that HAS a pod dimension (KubePodNotReady, KubeContainerWaiting) wins and the
+              # pod really is the object. A metric that has NO pod dimension
+              # (kube_daemonset_status_*, node_vmstat_pgmajfault) leaves the SCRAPE TARGET's pod in
+              # place. Both shapes arrive here looking identical, so the rule is structural rather
+              # than a pod-name regex (which rots one workload at a time):
+              #   1. an OBJECT label present ⇒ it is the subject and `pod` is the reporter;
+              #   2. no object label ⇒ `pod` is the subject UNLESS `job` names a monitoring scrape
+              #      job, which is declared in the scrape config and is the honest tell.
+              # Live-verified 2026-09-16 against the firing set:
+              #   KubeDaemonSetRolloutStuck  namespace=arc-runners daemonset=runner-image-prepull-pve
+              #                              pod=kube-prometheus-stack-kube-state-metrics-… job=kube-state-metrics
+              #   NodeMemoryMajorPagesFaults namespace=monitoring  (no object label) instance=192.168.2.182:9100
+              #                              pod=…node-exporter-l6rns job=node-exporter
+              # ⚠ THIS RE-KEYS EXISTING THREADS. The magnets above stop matching, so each affected
+              # (alert, object) files ONE fresh issue on its next fire and the magnets stop
+              # collecting — which is the point of FU-232, paid once.
+              _ds="$(printf '%s' "$a" | jq -r '.labels.daemonset // empty')"
+              _sts="$(printf '%s' "$a" | jq -r '.labels.statefulset // empty')"
+              _dep="$(printf '%s' "$a" | jq -r '.labels.deployment // empty')"
+              _jn="$(printf '%s' "$a" | jq -r '.labels.job_name // empty')"
+              _inst="$(printf '%s' "$a" | jq -r '.labels.instance // empty')"
+              _job="$(printf '%s' "$a" | jq -r '.labels.job // empty')"
+              # The scrape jobs whose target labels ride along on every alert they derive. Adding a
+              # name here is how a new exporter opts in; it is never inferred from the pod name.
+              _reporter_job() {
+                case "$1" in kube-state-metrics|node-exporter|prometheus-pushgateway|pushgateway) return 0;; esac
+                return 1
+              }
               _strip() { printf '%s' "$1" | sed -E 's/-[a-z0-9]{5}$//; s/-[0-9]{4,}$//; s/-[a-f0-9]{8,10}$//'; }
               if   [ -n "$_pvc" ];                    then SUBJ="pvc:${_ns}/${_pvc}"
               elif [ -n "$_repo" ] && [ -n "$_wf" ];  then SUBJ="workflow:${_repo}/${_wf}"
-              elif [ -n "$_pod" ];                    then SUBJ="workload:${_ns}/$(_strip "$_pod")"
+              elif [ -n "$_ds" ];                     then SUBJ="workload:${_ns}/${_ds}"
+              elif [ -n "$_sts" ];                    then SUBJ="workload:${_ns}/${_sts}"
+              elif [ -n "$_dep" ];                    then SUBJ="workload:${_ns}/${_dep}"
+              elif [ -n "$_jn" ];                     then SUBJ="workload:${_ns}/$(_strip "$_jn")"
+              elif [ -n "$_pod" ] && ! _reporter_job "$_job"; then SUBJ="workload:${_ns}/$(_strip "$_pod")"
               elif [ -n "$_node" ];                   then SUBJ="node:${_node}"
-              elif [ -n "$_ns" ];                     then SUBJ="ns:${_ns}"
+              # The failing SCRAPE TARGET, verbatim. Never renamed to a node: for node-exporter it
+              # is the node's ip:port, for blackbox it is the probed URL, and inventing a node name
+              # from either would key two different things the same way.
+              elif [ -n "$_inst" ];                   then SUBJ="instance:${_inst}"
+              # A reporter-job alert's `namespace` is the EXPORTER's (monitoring), which is how
+              # `ns:monitoring` became #884's magnet. Guarded, it falls to the per-class key, which
+              # grafts nothing.
+              elif [ -n "$_ns" ] && ! _reporter_job "$_job"; then SUBJ="ns:${_ns}"
               else                                         SUBJ="alert:${NAME}"; fi
               echo "→ $NAME ($FP): subject=$SUBJ"
               # <<<REPLAY:responder-subject<<<
@@ -479,6 +583,77 @@ spec:
                 kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"subjdup-$TODAY\"}}" >/dev/null 2>&1 || true
                 echo "→ $NAME ($FP): subject $SUBJ already triaged today — skip (the open issue is the record; a second session would only re-comment)"; continue
               fi
+
+              # >>>REPLAY:responder-decided-once>>>
+              # ── DECIDED-ONCE — a standing condition is triaged ONCE, not once a day (#1734) ───
+              # The subject ledger above keys on `triaged-<TODAY>`, so a condition that outlives a
+              # UTC midnight buys a fresh sonnet session every day, forever. The sessions said so
+              # themselves: homelab#1598 carries five daily comments reading "Re-fired with
+              # identical state — confirming, not re-deriving", #1663 "Same signature as the last
+              # two triages". Measured 2026-09-11→16: ~40 % of the lane's sessions were that, while
+              # 32 OTHER alerts were dropped unread at the FU-149 daily cap. Paying a judgment
+              # session to re-confirm a judgment already on file is the worst trade in the lane.
+              #
+              # The rule: a condition with an OPEN issue that already carries a `fix-verdict:` line
+              # is DECIDED. The re-fire is a fact ABOUT that issue, so it lands in the BODY as one
+              # rewritten `still-firing:` line — the #148 rule the resolve leg already turns on,
+              # applied to the firing side. No session, no comment, no budget.
+              #
+              # Scoped to the SAME alertname on purpose. The subject is the resource; a DIFFERENT
+              # alert class on one resource is a different problem (#1686 took PodEvicted and then
+              # KubePodNotReady on `workload:loki/alloy`), and suppressing that would re-create the
+              # graft this lane spent FU-232 removing. The title is the alertname's home — the
+              # responder writes `🚨 <alertname>: …` — so the match is title-anchored.
+              #
+              # What re-opens the decision: the issue CLOSING. Then the next fire finds no open
+              # record and triages normally, which is also what makes the resolve leg's auto-close
+              # (fixed in the same change) load-bearing rather than cosmetic.
+              #
+              # FAIL-OPEN, and deliberately so: a search that errors, lags (the index is cold for a
+              # just-filed issue — irrelevant here, a standing condition's issue is hours to days
+              # old), matches nothing, or whose body will not read falls through to an ordinary
+              # triage. The failure direction is "one more session", never a dropped alert.
+              DEC_HIT=""
+              if DEC_RAW="$(gh search issues --owner "$ORG" --match body "subject:$SUBJ" --state open \
+                              --json repository,number,title,body --limit 10 2>/dev/null)"; then
+                # ⚠ `(?m)` is INLINE and load-bearing on jq 1.6: `^` is STRING-anchored by default
+                # there, and jq's own `"m"` flag means "dot matches newline", not "anchors match at
+                # line boundaries". Written as `test(…; "im")` first, this predicate silently
+                # matched nothing and the gate fell through on every alert — caught by
+                # `responder-decided-once-decided` before it shipped, which is the ADR-103 ratchet
+                # earning its keep on a check the author wrote and believed.
+                DEC_HIT="$(printf '%s' "$DEC_RAW" | jq -r --arg t "🚨 $NAME:" '
+                  [ .[]
+                    | select((.title // "") | startswith($t))
+                    | select((.body // "") | test("(?im)^fix-verdict:[ \t]*(fix|report-only)[ \t]*$"))
+                    | "\(.repository.nameWithOwner)#\(.number)" ] | first // empty' 2>/dev/null || true)"
+              fi
+              if [ -n "$DEC_HIT" ]; then
+                DEC_REPO="${DEC_HIT%#*}"; DEC_NUM="${DEC_HIT#*#}"
+                DEC_BODY="$(gh api "repos/$DEC_REPO/issues/$DEC_NUM" --jq '.body // ""' 2>/dev/null || true)"
+                if [ -n "$DEC_BODY" ]; then
+                  # Drop-then-append, exactly like the resolve leg's `_record_clear`: N re-fires stay
+                  # ONE line. Guarded on the verdict marker — the line this branch was selected by —
+                  # so a body that came back short is left untouched rather than half-written.
+                  printf '%s' "$DEC_BODY" | grep -v '^still-firing:' > /tmp/sfbody.md || true
+                  printf 'still-firing: %s — %s is still firing on this subject (alert-fp:%s). Already triaged; the verdict above stands until this issue closes.\n' \
+                    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$NAME" "$FP" >> /tmp/sfbody.md
+                  if [ -s /tmp/sfbody.md ] && grep -qi '^fix-verdict:' /tmp/sfbody.md; then
+                    gh issue edit "$DEC_NUM" --repo "$DEC_REPO" --body-file /tmp/sfbody.md >/dev/null 2>&1 \
+                      && echo "→ $NAME ($FP): DECIDED — $DEC_HIT already carries a verdict for $SUBJ; still-firing line updated, no session" \
+                      || echo "→ $NAME ($FP): DECIDED — $DEC_HIT already carries a verdict for $SUBJ; no session (body edit failed, non-fatal)"
+                  else
+                    echo "→ $NAME ($FP): DECIDED — $DEC_HIT already carries a verdict for $SUBJ; no session (body carries no verdict marker, left untouched)"
+                  fi
+                  # FU-113(a): a deliberate stop writes a marker, so meta-alert-crosscheck.sh can
+                  # tell it from a drop. `decided-` matches neither the cap's `<date>|` arithmetic
+                  # nor the subject ledger's `triaged-` value.
+                  kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"decided-$TODAY\"}}" >/dev/null 2>&1 || true
+                  continue
+                fi
+                echo "→ $NAME ($FP): $DEC_HIT matched subject $SUBJ but its body could not be read — falling through to triage"
+              fi
+              # <<<REPLAY:responder-decided-once<<<
 
               # Ledger dedup: one TRIAGE per fingerprint per 24h (value = date or date|incident;
               # marker values — deferred-/cap-/none-/subjdup-/budget- prefixed — deliberately do
@@ -661,7 +836,45 @@ spec:
                 done
               done
               [ -n "$PRECLOSED" ] && echo "→ $NAME ($FP): closed thread(s) a reopen could restore:$PRECLOSED"
+
+              # ── WHICH OF THOSE A HUMAN CLOSED (#1734) ────────────────────────────────────────
+              # The reopen belt exists so a FLAPPING alert reopens its own record instead of
+              # churning new issues — a good rule with no opinion about WHO closed the thread. The
+              # cost of that missing opinion, measured 2026-09-16 over the lane's long-lived
+              # threads: homelab#103 closed by the operator and reopened by this lane FIVE times
+              # since 08-05; #100 and #121 three times each; #542/#811/#241/#538 all reopened after
+              # an operator close, two of them within 48 h of the 2026-09-14 responder pass. A
+              # machine that undoes a human's close on a weekly cycle is not deduplicating, it is
+              # arguing.
+              #
+              # So: a close by a User is a DECISION and is restored below. A close by the lane's own
+              # resolve leg is machinery and stays reopenable, which is the flap case the belt was
+              # built for. The actor TYPE is the fact (REST `.actor.type`), never the login suffix —
+              # the same distinction the resolve leg's engagement test now makes.
+              #
+              # Unreadable ⇒ treated as machine-closed, i.e. exactly today's behaviour: this guard
+              # may only ever ADD a restore, never suppress one it cannot justify.
+              HUMANCLOSED=""
+              for pc in $PRECLOSED; do
+                hrepo="${pc%#*}"; hnum="${pc#*#}"
+                hactor="$(gh api "repos/$hrepo/issues/$hnum/events" --paginate \
+                            --jq '[.[] | select(.event == "closed")] | last | "\(.actor.type // "?")"' 2>/dev/null \
+                          | tail -1 || true)"
+                case "$hactor" in
+                  Bot) : ;;
+                  ""|"?"|null) echo "→ $NAME ($FP): $pc — close actor unreadable, treated as machine-closed (belt unchanged)";;
+                  *) HUMANCLOSED="$HUMANCLOSED $pc";;
+                esac
+              done
+              [ -n "$HUMANCLOSED" ] && echo "→ $NAME ($FP): HUMAN-CLOSED — a reopen of these is restored:$HUMANCLOSED"
               # <<<REPLAY:responder-reopen-presnap<<<
+
+              # The session is TOLD which threads the belt will restore, so it spends no turns on a
+              # reopen that gets reverted and so its own record reads honestly. The belt above is
+              # still the guard — this is the ADR-094 pairing, not a substitute for it.
+              RECLOSE_NOTE=""
+              [ -n "$HUMANCLOSED" ] && RECLOSE_NOTE="
+            ⚠ HUMAN-CLOSED THREADS — do NOT reopen these:$HUMANCLOSED. A person closed each of them deliberately, and the shell RE-CLOSES any reopen of them after your session (homelab#1734). If one of them is the right record for what you found, COMMENT on it and leave it closed. If what you found is genuinely new, file your own issue with a 'related: #N' line. Reopening is for a thread the resolve leg closed when its alert cleared — machinery undoing machinery — never for a human's decision."
 
               echo "── triaging $NAME ($FP) — route default: stack=$ROUTE_STACK repo=$ROUTE_REPO (the named fix surface may move it)"
               # The routed answer is a rail-prefixed id (`claude/sonnet`); the claude CLI takes the BARE
@@ -695,6 +908,7 @@ spec:
 
             $SELF_NOTE
             $EGRESS_NOTE
+            $RECLOSE_NOTE
 
             ${WIN:+⚠ OBSERVATION WINDOW: ArgoCD app '$WIN' synced into this namespace within the last 120 minutes, so a deploy is the prime suspect and the -iac lane already owns this symptom — its deterministic revert (FU-044) may be acting on it right now. Do NOT open a fix PR and do NOT propose one: a revert racing a fix at the same symptom is the failure this rule exists to prevent. Report your evidence, name the app, and stop.}
 
@@ -705,7 +919,7 @@ spec:
             (c) needs real work → file EXACTLY ONE issue on the repo STEP 1's rule selects — the owner of your named fix surface, defaulting to '$ROUTE_REPO' when you named none: title '🚨 <alertname>: <one-line summary>', body = evidence + your diagnosis + the literal marker 'alert-fp:$FP' + a 'Touches:' line (ADR-097) declaring the write surface a fix would need, as repo-relative paths or globs — e.g. 'Touches: argocd/resources/registry-cache/**'. Declare the NARROWEST surface your diagnosis actually supports; it is the footprint the scan uses to avoid double-dispatch and the reviewer uses to flag escapes, so a vague one is worse than none. Then CLASSIFY it before you file: source '/work/homelab/agents/footprint.sh' and, with 'CLASSIFY_CODEOWNERS=/work/homelab/CODEOWNERS' set, call 'classify_touches \"<the Touches: value you just wrote>\"'. A 'codeowner-author' verdict (the operator-author set: '.github/', '.agents/', 'devbox.json'/'.lock', 'scripts/') or an intersection with '/work/homelab/scripts/pin-only-lint.sh's GUARDED set means no worker can ever land this as a PR, so say so in the body as ONE plain sentence naming the classifier and its verdict (e.g. 'classify_touches: codeowner-author — needs an operator push to master, not a PR') — never a new body line for it; the issue is inert anyway, so this sentence is the only place the verdict reaches the issue itself rather than sitting in the scan log alone (homelab#1207). If you genuinely cannot tell which paths a fix would touch, say so in the body and omit the line rather than guessing wide — an undeclared footprint is treated as exclusive, which is the safe default. ALSO end the body with a verdict line, exactly one of: 'fix-verdict: fix' (a code/manifest change in a repo would durably fix this) or 'fix-verdict: report-only' (transient, vendor-side, or needs a human decision first). The verdict is a DIAGNOSIS, not a dispatch — queueing is the platform's job, never yours. When your diagnosis identifies a SINGLE causing issue in the same repo — not a guess, an uncertainty, or a stack of suspects — include the line 'Cause: #<n>' in the body (exact format, one line, same repo only; the shell will bind it as a native sub-issue edge). Omit the line when uncertain; an honest standalone issue is better than a wrong lineage. NO agent labels — the issue is inert; the shell reads your verdict after.
             (d) whenever the repo you filed on is NOT the computed default '$ROUTE_REPO' — stack-ward or platform-ward, the rule is symmetric (see STEP 1) — the body must carry the one-line reason: the fix surface that took you there.
 
-            HARD RULES: before filing, search the agent repos ORG-WIDE (same reason as the subject search above — the route can move between fires) for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only. Name your tool gaps as evidence, not lobbying (homelab#536): when a NAMED diagnostic or tool is unavailable in-pod — RBAC-denied verb, a binary this image lacks, an egress-blocked fetch — and its absence changed what you could verify, add ONE line to your issue body (or your stdout report, when report-only) whose FIRST characters are exactly 'TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>'. Once per session per tool; never a request for the grant itself — the janitor aggregates these into the operator's inventory, and a gap already ruled stays listed with its ruling.
+            HARD RULES: before filing, search the agent repos ORG-WIDE (same reason as the subject search above — the route can move between fires) for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. ⚠ EXCEPT a thread a PERSON closed — the HUMAN-CLOSED list above, when present, names them: comment, never reopen; a human close is a decision and the shell restores it after your session. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only. Name your tool gaps as evidence, not lobbying (homelab#536): when a NAMED diagnostic or tool is unavailable in-pod — RBAC-denied verb, a binary this image lacks, an egress-blocked fetch — and its absence changed what you could verify, add ONE line to your issue body (or your stdout report, when report-only) whose FIRST characters are exactly 'TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>'. Once per session per tool; never a request for the grant itself — the janitor aggregates these into the operator's inventory, and a gap already ruled stays listed with its ruling.
 
             REMEDIATION-WOULD MARKER — when your verdict names a mechanical remediation you WOULD have performed had the dial been armed (an IMPERATIVE cluster action the #834 dial would have granted — delete a wedged pod, restart a crashlooping workload, clear a stuck resource; a GitOps quick fix — revert/bump PR — is ALREADY a sanctioned outcome of yours and takes NO marker), emit ONE structured line at the start of a line in your output:
               REMEDIATION-WOULD: <verb> <namespace>/<kind>/<name> — <one-clause reason>
@@ -754,12 +968,32 @@ spec:
                 for pl in agent/queued agent/in-progress agent/done agent-fix; do
                   case "$plabels" in *",$pl,"*) pstrip="${pstrip:+$pstrip,}$pl";; esac
                 done
-                if [ -z "$pstrip" ]; then
-                  echo "→ reopened $pc: no stale lifecycle labels — already a clean record"; continue
+                if [ -n "$pstrip" ]; then
+                  gh issue edit "$pnum" --repo "$prepo" --remove-label "$pstrip" >/dev/null 2>&1 \
+                    && echo "→ reopened $pc: stripped stale lifecycle labels ($pstrip) — a RECORD again; only a fresh verdict may re-queue it" \
+                    || echo "→ reopened $pc: strip of ($pstrip) FAILED (non-fatal) — the FU-069 breaker is still behind this"
+                else
+                  echo "→ reopened $pc: no stale lifecycle labels — already a clean record"
                 fi
-                gh issue edit "$pnum" --repo "$prepo" --remove-label "$pstrip" >/dev/null 2>&1 \
-                  && echo "→ reopened $pc: stripped stale lifecycle labels ($pstrip) — a RECORD again; only a fresh verdict may re-queue it" \
-                  || echo "→ reopened $pc: strip of ($pstrip) FAILED (non-fatal) — the FU-069 breaker is still behind this"
+                # ── RESTORE A HUMAN CLOSE (#1734) ──────────────────────────────────────────────
+                # The session reopened a thread a person had closed. It may have had a good reason,
+                # and it does not get to act on it: the human's close is restored and the evidence
+                # survives as the session's own comment on the thread, which a person reads when
+                # they next look. ONE comment, and it is also the last word (the thread ends
+                # closed), so the #148 unbounded-comment rule is satisfied by construction.
+                case " $HUMANCLOSED " in
+                  *" $pc "*)
+                    printf '%s\n' \
+                      "🔁 **Reopen reverted** — this thread was closed by a person, and the responder's fingerprint/subject belt reopened it while triaging \`$NAME\` (alert-fp:\`$FP\`)." \
+                      "" \
+                      "A human close is a decision, so the belt restores it (homelab#1734). The triage's own findings stay on this thread above; if the condition really is new, it belongs in a new issue rather than in a reopened verdict." \
+                      > /tmp/reclose.md
+                    gh issue comment "$pnum" --repo "$prepo" --body-file /tmp/reclose.md >/dev/null 2>&1 || true
+                    gh issue close "$pnum" --repo "$prepo" --reason completed >/dev/null 2>&1 \
+                      && echo "→ reopened $pc: HUMAN-CLOSED — re-closed, the person's decision stands" \
+                      || echo "→ reopened $pc: HUMAN-CLOSED — re-close FAILED (non-fatal); it is open against a human's close"
+                    ;;
+                esac
               done
               # <<<REPLAY:responder-reopen-strip<<<
 

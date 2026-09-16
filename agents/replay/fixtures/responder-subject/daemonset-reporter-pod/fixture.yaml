@@ -1,0 +1,25 @@
+# FU-232 (homelab#1734) — an OBJECT label beats the REPORTER's pod label.
+#
+# CONDITION UNDER REPLAY. The live 2026-09-16 firing set, verbatim: KubeDaemonSetRolloutStuck
+# carries namespace=arc-runners and daemonset=runner-image-prepull-pve (the failing object, from
+# kube-state-metrics' own metric labels under honorLabels) AND pod=kube-prometheus-stack-kube-
+# state-metrics-78785fbc4b-j52fx with job=kube-state-metrics (the SCRAPE TARGET's labels, which
+# ride along because kube_daemonset_status_* has no pod dimension for them to overwrite).
+#
+# WHAT IT REDS ON. Before the re-key the cascade reached `_pod` third and computed
+# `workload:arc-runners/kube-prometheus-stack-kube-state-metrics` — the exporter. That is the
+# FU-232 collapse, and it is exactly the subject homelab#1644 was filed under: every kube-state-
+# derived alert in every namespace shares one identity, so the #149 dedup lands unrelated problems
+# on one thread forever.
+#
+# THE CONTRACT:
+#   1. `daemonset` is the subject; `pod` is not consulted at all when an object label is present.
+#   2. The namespace is the OBJECT's (arc-runners), not the exporter's — honorLabels already
+#      gave us that, and the cascade must not re-derive it.
+#   3. RC 0 — subject computation always succeeds.
+name: responder-subject-daemonset-reporter-pod
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

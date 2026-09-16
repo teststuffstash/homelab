@@ -77,6 +77,19 @@ if [ "$1" = "api" ]; then
     *"/issues?"*) r="${_p#repos/}"; r="${r%%/issues?*}"
                   f="$H/gh/verdict-list-$(printf '%s' "$r" | tr / _).json"
                   { [ -f "$f" ] && cat "$f" || printf '[]'; } | _emit; exit 0 ;;
+    */issues/*/events)
+                  # The human-close probe (#1734). Absent ⇒ exit 1, which the clause reads as
+                  # "close actor unreadable" and treats as machine-closed — i.e. exactly today's
+                  # reopen behaviour. The guard may only ever ADD a restore.
+                  [ -f "$H/gh/events.json" ] && { _emit < "$H/gh/events.json"; exit 0; }; exit 1 ;;
+    */issues/77/comments)
+                  # The resolve leg's engagement probe (#1734). REST is the authority here — it is
+                  # the only endpoint that types a commenter (`.user.type`), which is what the
+                  # GraphQL `gh issue view --json comments` the leg used to call cannot do. An
+                  # ABSENT recording exits 1 so the rule-#6 "never close on a failed read" branch
+                  # stays reachable, exactly as the issue read below does.
+                  [ -f "$H/gh/issue-77-comments.json" ] && { _emit < "$H/gh/issue-77-comments.json"; exit 0; }; exit 1 ;;
+    */issues/77)    [ -f "$H/gh/issue-77.json" ] && { _emit < "$H/gh/issue-77.json"; exit 0; }; exit 1 ;;
     */issues/123)   { printf '{"id":"123123"}'; } | _emit; exit 0 ;;  # cause issue
     */issues/999)   { cat "$H/gh/verdict-issue.json" 2>/dev/null || printf '{}'; } | _emit; exit 0 ;;  # filed issue
     */issues/*)     { cat "$H/gh/verdict-issue.json" 2>/dev/null || printf '{}'; } | _emit; exit 0 ;;
@@ -130,7 +143,13 @@ wantnocall(){ grep -qF -- "$2" "$H/calls.log" 2>/dev/null && bad "$1" "unexpecte
 alert()     { printf '{"alerts":[{"status":"firing","fingerprint":"%s","labels":%s}]}' "$1" "$2"; }
 resolved()  { printf '{"alerts":[{"status":"resolved","fingerprint":"%s","labels":{"alertname":"%s"}}]}' "$1" "$2"; }
 searchhit() { printf '[{"repository":{"nameWithOwner":"%s"},"number":%s}]' "$1" "$2" > "$H/gh/search.json"; }
-issuebody() { jq -n --arg b "$1" --argjson c "$2" '{body:$b, comments:$c}' > "$H/gh/issue-77.json"; }
+# `$2` is the REST comments payload — `[{"user":{"login":…,"type":"Bot"|"User"}}]`. The TYPE is
+# what the engagement probe reads (#1734): GraphQL returns a Bot's bare login while REST returns
+# both the `[bot]` suffix AND the type, and the leg used to test the suffix against the GraphQL
+# endpoint, so every machine comment counted as a human for two months. Writing the type at each
+# call site is deliberate — it keeps the distinction visible in the scenario rather than hidden in
+# a helper.
+issuebody() { jq -n --arg b "$1" '{body:$b}' > "$H/gh/issue-77.json"; printf '%s' "$2" > "$H/gh/issue-77-comments.json"; }
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "LEG 1 — AgentWorkerEgressDropped: source IS the namespace, so subject + route recover"
@@ -350,9 +369,20 @@ section "#149 — subject identity: a related-but-different subject files FRESH 
 # its own, and (b) instruct filing fresh + linking whenever the thread found does not already carry
 # it. A regression that deleted the boundary would fail here even though no issue is ever touched.
 
+# ⚠ UPDATED 2026-09-16 (#1734, FU-232). This scenario used to send the alert WITHOUT its `job`
+# label and assert `subject=workload:monitoring/kube-prometheus-stack-prometheus-node-exporter` —
+# i.e. it asserted the GRAFT as correct behaviour, because the shape it sent could not reach the
+# reporter discriminator. The payload below is the live one, read off Alertmanager 2026-09-16:
+# `job=node-exporter` (the scrape job, which is what declares the pod a REPORTER) and
+# `instance=192.168.2.182:9100` (the failing node, the only label that names the object at all).
+# The #149 boundary the rest of this scenario asserts is unchanged and is the reason it still
+# exists — FU-232 makes the subject name the right thing, #149 keeps one subject per thread, and
+# they are independent.
 scenario subject-identity-graft
-go "$(alert f15 '{"alertname":"NodeMemoryMajorPagesFaults","namespace":"monitoring","pod":"kube-prometheus-stack-prometheus-node-exporter-x7k2p"}')"
-want      "the grafted alert computes its OWN subject (not #103's node/workload one)" \
+go "$(alert f15 '{"alertname":"NodeMemoryMajorPagesFaults","namespace":"monitoring","pod":"kube-prometheus-stack-prometheus-node-exporter-x7k2p","job":"node-exporter","instance":"192.168.2.182:9100"}')"
+want      "the reporter's pod is NOT the subject — the failing target is (FU-232)" \
+          "subject=instance:192.168.2.182:9100"
+wantnot   "…and the node-exporter workload key that made #103 a magnet is gone" \
           "subject=workload:monitoring/kube-prometheus-stack-prometheus-node-exporter"
 wantbrief "comment ONLY where the alert's own subject marker is already on the thread" \
           "is ALREADY a marker on that thread"
@@ -400,7 +430,7 @@ scenario resolve-report-only
 searchhit teststuffstash/homelab 77
 issuebody 'evidence
 alert-fp:r2
-fix-verdict: report-only' '[{"author":{"login":"homelab-agents-1234[bot]"}}]'
+fix-verdict: report-only' '[{"user":{"login":"homelab-agents-1234[bot]","type":"Bot"}}]'
 go "$(resolved r2 PVCNearFull)"
 want     "report-only, bots only → commented + CLOSED (unchanged)" "commented + CLOSED"
 wantcall "report-only, bots only → the ✅ comment is still posted" "issue comment"
@@ -414,7 +444,7 @@ scenario resolve-report-only-human
 searchhit teststuffstash/homelab 77
 issuebody 'evidence
 alert-fp:r3
-fix-verdict: report-only' '[{"author":{"login":"RasmusSoot"}}]'
+fix-verdict: report-only' '[{"user":{"login":"RasmusSoot","type":"User"}}]'
 go "$(resolved r3 PVCNearFull)"
 want       "report-only + a human → left OPEN (unchanged)" "left OPEN"
 wantnocall "report-only + a human → not closed" "issue close"
@@ -431,7 +461,7 @@ searchhit teststuffstash/homelab 77
 issuebody 'evidence
 alert-fp:r3
 fix-verdict: report-only
-last-cleared: 2026-08-07T23:00:00Z — PVCNearFull stopped firing (alert-fp:r3). A human is engaged.' '[{"author":{"login":"RasmusSoot"}}]'
+last-cleared: 2026-08-07T23:00:00Z — PVCNearFull stopped firing (alert-fp:r3). A human is engaged.' '[{"user":{"login":"RasmusSoot","type":"User"}}]'
 go "$(resolved r3 PVCNearFull)"
 wantnocall "second clear on an OPEN human-engaged issue → ZERO new comments (the flap case)" "issue comment"
 n="$(grep -c '^last-cleared:' /tmp/rbody.md 2>/dev/null || echo 0)"
@@ -439,7 +469,7 @@ n="$(grep -c '^last-cleared:' /tmp/rbody.md 2>/dev/null || echo 0)"
 
 scenario resolve-report-only-human-no-marker
 searchhit teststuffstash/homelab 77
-issuebody 'a body the search matched via a COMMENT — it carries no alert-fp line of its own' '[{"author":{"login":"RasmusSoot"}}]'
+issuebody 'a body the search matched via a COMMENT — it carries no alert-fp line of its own' '[{"user":{"login":"RasmusSoot","type":"User"}}]'
 go "$(resolved r8 PVCNearFull)"
 want       "no alert-fp in the body → left untouched, never half-written" "left untouched"
 wantnocall "…and still no comment (an unguarded body is not a reason to churn)" "issue comment"
@@ -461,7 +491,7 @@ wantnocall "unreadable issue → not commented" "issue comment"
 
 scenario resolve-partial-read
 searchhit teststuffstash/homelab 77
-printf '{"body":"alert-fp:r6","comments":[' > "$H/gh/issue-77.json"   # truncated, still exit 0
+printf '{"body":"alert-fp:r6","labels":[' > "$H/gh/issue-77.json"   # truncated, still exit 0
 go "$(resolved r6 PVCNearFull)"
 want       "PARTIAL read → left alone (the jq -e parse guard)" "left alone"
 wantnocall "PARTIAL read → not closed" "issue close"
@@ -544,6 +574,42 @@ go "$(alert c4 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentv
 want       "already bound → issue filed normally" "labelled agent-fix"
 wantnocall "already bound → no /sub_issues POST" "/sub_issues"
 want       "already bound → logged as 'skip re-link'" "skip re-link"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "#1734 — a HUMAN's close is a decision the session is told about"
+# The reopen belt (FU-133 subject + alert-fp) restores a closed thread so a FLAPPING alert does not
+# churn new issues — and it had no opinion about WHO closed the thread. Measured on the live board
+# 2026-09-16: homelab#103 closed by the operator and reopened by this lane FIVE times since
+# 2026-08-05; #100 and #121 three times each; #542/#811/#241/#538 all reopened after an operator
+# close, two of them within 48 h of the 2026-09-14 responder pass.
+#
+# The BELT is the guard and is pinned by `agents/replay/fixtures/responder-reopen/human-closed`
+# (it re-closes after the session, ADR-094: the LLM judges, the shell acts). What THIS section
+# asserts is the other half — that the session is TOLD, so it spends no turns on a reopen that gets
+# reverted and its own record reads honestly.
+
+scenario human-closed-note
+searchhit teststuffstash/homelab 103
+printf '[{"event":"closed","actor":{"login":"RasmusSoot","type":"User"},"created_at":"2026-08-30T20:19:41Z"}]' > "$H/gh/events.json"
+go "$(alert f20 '{"alertname":"NodeSystemSaturation","namespace":"monitoring","node":"wk-01"}')"
+want      "the human close is named in the log" "HUMAN-CLOSED"
+wantbrief "the brief names the threads the belt will restore" "HUMAN-CLOSED THREADS"
+wantbrief "…and says what to do instead of reopening" "COMMENT on it and leave it closed"
+wantbrief "…and keeps the flap case legal (machinery undoing machinery)" \
+          "Reopening is for a thread the resolve leg closed when its alert cleared"
+
+scenario machine-closed-no-note
+searchhit teststuffstash/homelab 103
+printf '[{"event":"closed","actor":{"login":"homelab-agents-1234[bot]","type":"Bot"},"created_at":"2026-08-04T10:07:11Z"}]' > "$H/gh/events.json"
+go "$(alert f21 '{"alertname":"NodeSystemSaturation","namespace":"monitoring","node":"wk-01"}')"
+wantnot   "a lane-closed thread is NOT flagged — the flap case is untouched" "HUMAN-CLOSED"
+wantbrief "…and the ordinary reopen instruction still stands" "REOPEN that one"
+
+scenario close-actor-unreadable
+searchhit teststuffstash/homelab 103
+go "$(alert f22 '{"alertname":"NodeSystemSaturation","namespace":"monitoring","node":"wk-01"}')"
+want      "an unreadable close actor says so by name" "close actor unreadable"
+wantnot   "…and does NOT claim a human close it cannot prove" "HUMAN-CLOSED"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "#1274 — REMEDIATION-WOULD shadow marker (dial trial, leg 1)"

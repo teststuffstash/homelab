@@ -1,0 +1,5 @@
+[
+  {"event": "closed", "actor": {"login": "homelab-agents-1234[bot]", "type": "Bot"}, "created_at": "2026-08-04T10:07:11Z"},
+  {"event": "reopened", "actor": {"login": "homelab-agents-1234[bot]", "type": "Bot"}, "created_at": "2026-08-17T06:10:02Z"},
+  {"event": "closed", "actor": {"login": "RasmusSoot", "type": "User"}, "created_at": "2026-08-30T20:19:41Z"}
+]
